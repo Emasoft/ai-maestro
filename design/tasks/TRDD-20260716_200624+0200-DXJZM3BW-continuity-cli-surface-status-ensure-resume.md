@@ -1,9 +1,9 @@
 ---
 trdd-id: DXJZM3BW
 title: Continuity CLI surface — aimaestro-continuity.sh status + ensure-resume behind the frozen layer
-column: planned
+column: testing
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T20:06:24+0200
+updated: 2026-07-16T20:45:07+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,17 +23,26 @@ npt: []
 eht: []
 blocked-by: [Y916N7WL]
 release-via: none
+implementation-commits: [03c40474]
 ---
 
 # Continuity CLI surface — aimaestro-continuity.sh status + ensure-resume behind the frozen layer
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-16
 
-The ONLY new script surface the whole Family-A absorption adds (R23/R42-clean). Two
-self-scoped verbs on a new `aimaestro-continuity.sh`, plus the server route behind the frozen
-CLI layer. Blocked on [[Y916N7WL]] (it supplies the metadata `status` reports). **NEXT ACTION:**
-add `aimaestro-continuity.sh` with `status <self>` + `ensure-resume <self>`, wire each to a
-server route, register it in SCRIPT-MANIFEST.md, install-glob picks it up automatically.
+The ONLY new script surface the whole Family-A absorption adds (R23/R42-clean).
+
+**✅ IMPLEMENTED 2026-07-16 (commit `03c40474`) — `column: testing`.** `scripts/aimaestro-continuity.sh`
+carries `status <self>` + `ensure-resume <self>` (self-contained `_resolve_agent_id` + common.sh
+sourcing, same as the other frozen-layer scripts; auto-installed by the `scripts/*.sh` glob).
+Behind them: `GET /api/agents/[id]/continuity/status` (composes the 5-field contract via
+`lib/continuity-status.ts` — 4 observables from [[Y916N7WL]] + `next_action` computed
+server-side, interim from observables until [[1GGQ4HWY]]) and `POST .../ensure-resume`
+(idempotent REAL actuation: `getAgentSessionStatus` → `wakeAgent`, no stub). Both enforce R42
+self-only. Registered in `docs/SCRIPT-LAYER.md`; 7 unit tests; tsc/lint/shellcheck clean.
+
+**NEXT:** `next_action` gains the cascade states once [[1GGQ4HWY]] lands; live end-to-end
+route test needs an authenticated caller (deferred to a scenario/USER).
 
 ## Problem / Goal
 

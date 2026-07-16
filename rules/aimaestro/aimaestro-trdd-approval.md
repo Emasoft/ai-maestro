@@ -124,10 +124,13 @@ ADDS the multi-agent specifics:
 - Proposals carry **`min-approval-requirement: <title>`** in frontmatter
   (`orchestrator`/`chief-of-staff`/`manager`/`user` by definition — a
   `none` task is authored directly in `design/tasks/`).
-- The **`amama-proposal-approvals`** skill (MANAGER plugin) is the
-  batch listing/decision tool, and `amama_proposal_approvals.py
-  archive --state <completed|cancelled|superseded>` operationalizes
-  archival.
+- The **`amama-approval-workflows`** skill (MANAGER plugin; its script
+  is `amama_proposal_approvals.py`) is the batch listing/decision tool,
+  and `amama_proposal_approvals.py archive --state
+  <completed|cancelled|superseded>` operationalizes archival. (Corrected
+  2026-07-16, ai-maestro#65 B2 — this rule previously named a skill
+  `amama-proposal-approvals` that AMAMA never shipped; the rule follows
+  the published reality rather than forcing a breaking skill rename.)
 - **Grandfathering:** TRDDs already in `design/tasks/` before this
   rule existed are treated as `planned`; do not move them back.
 
@@ -293,11 +296,18 @@ min-approval-requirement: manager   # WHO WAS REQUIRED to decide (the D3 floor)
 `approval-judge` and `approval-datetime` are new information: no other field records
 who signed off or when, and without them an `## Approval log` line is the only
 evidence — prose, not greppable. `min-approval-requirement` is the floor from §D3;
-its values are the authority ladder in lowercase kebab, with the human owner named
-as this project names them: `maestro | manager | chief-of-staff | orchestrator |
-none`. (The USER also wrote this field as `approval-requirement`; the `min-` prefix
-is kept because §D3 and §D4 compare against it as a *floor*, not as a fixed
-requirement.)
+its values are the authority ladder in lowercase kebab, matching
+`agent.governanceTitle`: `user | manager | chief-of-staff | orchestrator | none`.
+**`user` is the canonical top-rung spelling** — it is what R41.4 fixes
+(`none(0) < … < user(4)`), what the §D3 floor table computes, and what the server's
+`manage-trdd` enum enforces. `maestro` (an earlier spelling of the same human-owner
+rung in this section) is a deprecated READ-alias: accept it when reading a legacy
+card and normalize to `user`; never write it. (Ruled 2026-07-16 — ai-maestro#65 B1 /
+#66 Q4: the ladder must have ONE canonical spelling or
+`authority(mandated-by) >= authority(min-approval-requirement)` silently
+mis-evaluates on the highest-stakes rung. The USER also wrote this field as
+`approval-requirement`; the `min-` prefix is kept because §D3 and §D4 compare
+against it as a *floor*, not as a fixed requirement.)
 
 `approved:` is DENORMALIZED, on the same terms as `derived:` — it buys a one-pass
 query (`grep -l "^approved: rejected"`) and it owes an invariant:

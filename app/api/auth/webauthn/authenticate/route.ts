@@ -25,7 +25,7 @@ import type { AuthenticationResponseJSON } from '@simplewebauthn/types'
 // GET — Generate authentication options (unauthenticated)
 // ============================================================================
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // If no passkeys registered, return a helpful error
     if (!hasRegisteredCredentials()) {
@@ -35,7 +35,8 @@ export async function GET() {
       )
     }
 
-    const options = await generateWebAuthnAuthenticationOptions()
+    // TRDD-OC9ELGSO P2: derive rpId/origin from the request Host (allow-listed).
+    const options = await generateWebAuthnAuthenticationOptions(request.headers.get('host'))
     return NextResponse.json(options, {
       headers: { 'Cache-Control': 'no-store' },
     })
@@ -109,9 +110,12 @@ export async function POST(request: Request) {
 
     const { response } = parsed.data
 
-    // Verify the authentication response
+    // Verify the authentication response. The Host must match the one used at
+    // generate time (TRDD-OC9ELGSO P2 — same allow-list).
     const authInfo = await verifyWebAuthnAuthentication(
       response as unknown as AuthenticationResponseJSON,
+      undefined,
+      request.headers.get('host'),
     )
 
     // Success: reset only the per-source bucket; the global bucket

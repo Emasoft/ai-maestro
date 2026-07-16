@@ -18,9 +18,11 @@ import { mintTrddDecisionToken } from '@/lib/trdd-approval-token'
  * back, and the mint happens HERE because this route is the one place the server
  * has already established that the caller really holds the authority to approve.
  *
- * Body (all optional): `{approver?, tier?, rationale?, agentId?}`. `approver`
- * defaults to the authenticated caller. STRICT — mutates git-tracked authorized
- * state (a promoted TRDD is now cleared to execute).
+ * Body (all optional): `{approver?, rationale?, agentId?}`. `approver` defaults
+ * to the authenticated caller. The approval requirement is read from the card's
+ * own `min-approval-requirement:` (the retired numeric `tier` body field is gone —
+ * ai-maestro#66 Q9). STRICT — mutates git-tracked authorized state (a promoted
+ * TRDD is now cleared to execute).
  */
 export async function POST(
   request: NextRequest,
@@ -64,7 +66,6 @@ export async function POST(
 
   const result = promoteTrdd(designDir, id, {
     approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
-    tier: typeof body.tier === 'number' ? body.tier : undefined,
     rationale: typeof body.rationale === 'string' ? body.rationale : undefined,
     iso: new Date().toISOString(),
     approvalToken,

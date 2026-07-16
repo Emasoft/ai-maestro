@@ -213,7 +213,7 @@ describe('trdd-store lifecycle transitions', () => {
   it('promote moves a proposal → tasks/, sets column=planned, logs APPROVED', () => {
     const id = 'PROM0001'
     writeProposal(id, 'promote-me')
-    const r = promoteTrdd(designDir, id, { approver: 'manager', tier: 2, rationale: 'looks good', iso: ISO })
+    const r = promoteTrdd(designDir, id, { approver: 'manager', rationale: 'looks good', iso: ISO })
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(r.from).toBe('proposals')
@@ -224,7 +224,9 @@ describe('trdd-store lifecycle transitions', () => {
     expect(t.zone).toBe('tasks')
     expect(t.column).toBe('planned')
     const raw = fs.readFileSync(t.filePath, 'utf-8')
-    expect(raw).toContain('APPROVED by manager (tier 2)')
+    // The fixture carries legacy `approval-tier: 2`, which the write side decodes to
+    // the TITLE vocabulary (ai-maestro#66 Q9) — never the retired `(tier 2)`.
+    expect(raw).toContain('APPROVED by manager (min-approval-requirement: manager)')
     expect(fs.existsSync(path.join(designDir, 'proposals', path.basename(t.filePath)))).toBe(false)
   })
 

@@ -45,7 +45,6 @@ export async function POST(
 
   const result = refuseTrdd(designDir, id, {
     approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
-    tier: typeof body.tier === 'number' ? body.tier : undefined,
     reason: typeof body.reason === 'string' ? body.reason : undefined,
     iso: new Date().toISOString(),
   })

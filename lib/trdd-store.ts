@@ -344,11 +344,28 @@ function editAt(filePath: string, edits: Array<[string, string]>, logLine: strin
   fs.writeFileSync(filePath, content)
 }
 
+/**
+ * The retired `approval-tier: N` decoded to the ladder title, for the LOG LINE
+ * only (never written as a card field). An absent requirement emits nothing — the
+ * log records what the card DECLARED, not the authz default of `manager`.
+ */
+const LEGACY_TIER_LABEL: Record<string, string> = { '0': 'none', '1': 'chief-of-staff', '2': 'manager', '3': 'user' }
+function minApprovalSuffix(fm: Record<string, unknown>): string {
+  const raw = fm['min-approval-requirement']
+  let label = typeof raw === 'string' ? raw.trim() : ''
+  if (!label) {
+    const legacy = fm['approval-tier']
+    const key = typeof legacy === 'number' ? String(legacy) : typeof legacy === 'string' ? legacy.trim() : ''
+    label = LEGACY_TIER_LABEL[key] ?? ''
+  }
+  return label ? ` (min-approval-requirement: ${label})` : ''
+}
+
 /** APPROVE / PROMOTE a proposal → planned (git mv proposals/ → tasks/). */
 export function promoteTrdd(
   designDir: string,
   id: string,
-  opts: { approver: string; tier?: number; rationale?: string; iso: string; approvalToken?: string | null },
+  opts: { approver: string; rationale?: string; iso: string; approvalToken?: string | null },
 ): TrddResult {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
@@ -356,7 +373,10 @@ export function promoteTrdd(
     return { ok: false, error: `Only a proposal can be approved; ${trdd.id} is in ${trdd.zone}`, status: 409 }
   }
   const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'tasks')
-  const tierStr = opts.tier != null ? ` (tier ${opts.tier})` : ''
+  // Record the card's approval requirement by its TITLE, never the retired numeric
+  // tier (MANAGER ruling ai-maestro#65-B1/#69; ai-maestro#66 Q9 — the read side
+  // lib/trdd-authz.ts already speaks the title ladder; this is the write side).
+  const reqStr = minApprovalSuffix(trdd.frontmatter)
 
   // The APPROVAL RECORD the governance rules define (`approved:` / `approval-judge:`
   // / `approval-datetime:`), plus `approval-token:` — the id of the host-signed,
@@ -376,7 +396,7 @@ export function promoteTrdd(
   editAt(
     newPath,
     fields,
-    `- ${opts.iso} — APPROVED by ${opts.approver}${tierStr}. ${opts.rationale ?? 'promoted proposal → planned'}.` +
+    `- ${opts.iso} — APPROVED by ${opts.approver}${reqStr}. ${opts.rationale ?? 'promoted proposal → planned'}.` +
       (opts.approvalToken
         ? ` Verifiable: approval-token ${opts.approvalToken} (aimaestro-trdd.sh verify ${trdd.id}).`
         : ''),
@@ -389,7 +409,7 @@ export function promoteTrdd(
 export function refuseTrdd(
   designDir: string,
   id: string,
-  opts: { approver: string; tier?: number; reason?: string; iso: string },
+  opts: { approver: string; reason?: string; iso: string },
 ): TrddResult {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
@@ -397,11 +417,11 @@ export function refuseTrdd(
     return { ok: false, error: `Only a proposal can be refused; ${trdd.id} is in ${trdd.zone}`, status: 409 }
   }
   const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'refused')
-  const tierStr = opts.tier != null ? ` (tier ${opts.tier})` : ''
+  const reqStr = minApprovalSuffix(trdd.frontmatter)
   editAt(
     newPath,
     [['column', 'refused'], ['updated', opts.iso]],
-    `- ${opts.iso} — REFUSED by ${opts.approver}${tierStr}. ${opts.reason ?? 'refused at proposal gate'}.`,
+    `- ${opts.iso} — REFUSED by ${opts.approver}${reqStr}. ${opts.reason ?? 'refused at proposal gate'}.`,
   )
   if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: 'proposals', to: 'refused', column: 'refused', filePath: newPath }

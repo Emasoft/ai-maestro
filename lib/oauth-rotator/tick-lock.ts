@@ -136,3 +136,27 @@ export async function withTickLock<T>(fn: () => Promise<T>): Promise<T | null> {
     lock.release()
   }
 }
+
+/**
+ * Acquire the server rotation-tick lock, WAITING up to `timeoutMs` for a current holder to
+ * release (polling every `pollMs`). Returns the {@link TickLock} on success, or null on
+ * timeout. Unlike {@link tryAcquireTickLock}'s skip-on-contention, this is for the CAPTURE
+ * path (`fileSlot`): a freshly captured account must not be silently dropped just because a
+ * rotation tick momentarily holds the lock, so it waits — the semantic of rotator.py's
+ * `oauth_rotator_lock_wait(timeout_s)` (a blocking-with-timeout flock), realised here as a
+ * bounded poll on the server-internal lock (poll latency is why the janitor's kernel flock
+ * woke instantly and this does not — immaterial at the 60 s capture timeout).
+ */
+export async function tryAcquireTickLockWait(
+  timeoutMs: number,
+  opts: { pollMs?: number } = {},
+): Promise<TickLock | null> {
+  const pollMs = Math.max(1, opts.pollMs ?? 50)
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const lock = tryAcquireTickLock()
+    if (lock) return lock
+    if (Date.now() >= deadline) return null
+    await new Promise(resolve => setTimeout(resolve, pollMs))
+  }
+}

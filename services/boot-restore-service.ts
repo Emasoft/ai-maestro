@@ -2,6 +2,7 @@ import { existsSync } from 'fs'
 import { loadAgents } from '@/lib/agent-registry'
 import { checkAuthorizedAgentWorkdir } from '@/lib/agent-workdir-policy'
 import { wakeAgent } from '@/services/agents-core-service'
+import { retryTransient } from '@/lib/retry-transient'
 
 // TRDD-WLWHVMKT: the local AGENTS_ROOT const that used to live here was a COPY of the
 // same invariant enforced in lib/agent-runtime.ts — and the two drifted, which is the
@@ -43,6 +44,16 @@ import { wakeAgent } from '@/services/agents-core-service'
 
 /** Delay between successive wakes so we don't spawn N clients at once. */
 const STAGGER_MS = Number(process.env.AIM_BOOT_RESTORE_STAGGER_MS) || 1500
+
+// TRDD-JAU1ES1C — transient-failure retry for the per-session wake. A reboot RACES the tmux
+// server + pm2 coming back up, so a wakeAgent that THROWS at boot (tmux not ready, transient
+// IO) must not permanently drop the agent from the fleet — retry with backoff before recording
+// it failed. A governance-gate refusal comes back as a RETURNED `{ error }` (a correct terminal
+// skip) and is NEVER retried. This is the boot half of "immortality"; mid-turn-429 and
+// network-drop are RUNTIME events handled by the fleet-recovery / account-switcher NPTs
+// (TRDD-CHN16JXZ / TRDD-9ZIF82HI), not by boot-restore.
+const WAKE_ATTEMPTS = Math.max(1, Number(process.env.AIM_BOOT_RESTORE_WAKE_ATTEMPTS) || 3)
+const WAKE_BACKOFF_MS = Number(process.env.AIM_BOOT_RESTORE_WAKE_BACKOFF_MS) || 1000
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -131,11 +142,24 @@ export async function restoreActiveAgentsOnBoot(): Promise<BootRestoreResult> {
     for (const sessionIndex of indexes) {
       const label = `${name}[${sessionIndex}]`
       try {
-        const res = await wakeAgent(agent.id, {
-          sessionIndex,
-          startProgram: true,
-          authContext: { isSystemOwner: true },
-        })
+        const res = await retryTransient(
+          () =>
+            wakeAgent(agent.id, {
+              sessionIndex,
+              startProgram: true,
+              authContext: { isSystemOwner: true },
+            }),
+          {
+            attempts: WAKE_ATTEMPTS,
+            baseDelayMs: WAKE_BACKOFF_MS,
+            onRetry: (attempt, err, delay) =>
+              console.log(
+                `[BootRestore] transient wake failure for ${label} ` +
+                  `(attempt ${attempt}/${WAKE_ATTEMPTS}), retrying in ${delay}ms: ` +
+                  `${err instanceof Error ? err.message : String(err)}`,
+              ),
+          },
+        )
 
         if (res.error) {
           // Gate refusal (e.g. R10.5 manager gate, R17 core-plugin gate).

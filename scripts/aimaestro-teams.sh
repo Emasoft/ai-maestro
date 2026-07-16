@@ -119,6 +119,7 @@ Commands:
   update <teamId> [flags]       Update a team (PUT)
       --name N | --description D | --agents u1,u2
       --orchestrator UUID|null  set/clear the orchestrator slot
+      --cos UUID | --remove-cos assign/clear the chief-of-staff (#64; MANAGER by AID, no password)
       --gh-owner O --gh-repo R
   delete <teamId> [flags]       Delete a team (governance action)
       --password P              governance password
@@ -130,8 +131,8 @@ Commands:
       --set <columns-json>      set columns (inline JSON array, 1..20 items)
       --set-file <path>         set columns from a JSON-array file
   tasks <teamId>                List the team's kanban tasks (GET /api/teams/<id>/tasks)
-  reassign-cos <teamId> <agentUUID> --password P
-                                Reassign the team's chief-of-staff (POST chief-of-staff)
+  reassign-cos <teamId> <agentUUID> [--password P]
+                                Alias of `update --cos` (MANAGER by AID; --password is USER/UI only)
   help
 
 Environment:
@@ -191,6 +192,7 @@ cmd_update() {
     local id="${1:-}"; shift || true
     [ -z "$id" ] && { echo "Error: teamId required" >&2; return 1; }
     local name="" description="" agents="" agents_set="false" orchestrator="" orchestrator_set="false" gh_owner="" gh_repo=""
+    local cos="" cos_set="false"
     while [ $# -gt 0 ]; do
         case "$1" in
             --name)         name="$2";        shift 2 ;;
@@ -199,11 +201,28 @@ cmd_update() {
             --orchestrator) orchestrator="$2"; orchestrator_set="true"; shift 2 ;;
             --gh-owner)     gh_owner="$2";    shift 2 ;;
             --gh-repo)      gh_repo="$2";     shift 2 ;;
+            --cos)          cos="$2"; cos_set="true"; shift 2 ;;
+            --remove-cos)   cos=""; cos_set="true"; shift ;;
             *) echo "Error: unknown flag for 'update': $1" >&2; return 1 ;;
         esac
     done
     if { [ -n "$gh_owner" ] && [ -z "$gh_repo" ]; } || { [ -z "$gh_owner" ] && [ -n "$gh_repo" ]; }; then
         echo "Error: --gh-owner and --gh-repo must be given together" >&2; return 1
+    fi
+    # --cos routes to the dedicated chief-of-staff route (#64 canonical surface).
+    # The team PUT deliberately STRIPS chiefOfStaffId (defense-in-depth), so moving
+    # the COS slot MUST go through POST /api/teams/<id>/chief-of-staff. AID-MANAGER
+    # auth, NO governance password (R29/R32) — RIFM4UXN Option A. `--cos ""` /
+    # `--remove-cos` clears the slot (agentId: null). Runs before the field PUT so
+    # a failure fails fast, and an agent supplies no password (the route reads AID).
+    if [ "$cos_set" = "true" ]; then
+        local cos_body
+        if [ -n "$cos" ]; then
+            cos_body="$(jq -nc --arg a "$cos" '{agentId: $a}')"
+        else
+            cos_body="$(jq -nc '{agentId: null}')"
+        fi
+        _api POST "/api/teams/${id}/chief-of-staff" "$cos_body" || return 1
     fi
     # orchestrator: literal "null" clears the slot (JSON null); a UUID sets it.
     local orch_json="null"
@@ -224,7 +243,12 @@ cmd_update() {
         + (if $agents_set == "true" then {agentIds: $agents} else {} end)
         + (if $orch_set == "true" then {orchestratorId: $orch} else {} end)
         + (if $gho != "" then {githubProject: {owner: $gho, repo: $ghr}} else {} end)')"
-    _api PUT "/api/teams/${id}" "$body"
+    # Only PUT team fields when at least one non-COS field was given. When --cos
+    # was the ONLY flag, the body is "{}" and the chief-of-staff POST above already
+    # did the work — skip the redundant empty PUT.
+    if [ "$body" != "{}" ]; then
+        _api PUT "/api/teams/${id}" "$body"
+    fi
 }
 
 cmd_delete() {
@@ -347,11 +371,13 @@ cmd_tasks() {
     _api GET "/api/teams/${id}/tasks"
 }
 
-# reassign-cos <teamId> <agentUUID> --password P — reassign the team's
-# chief-of-staff via the dedicated canonical route (POST
-# /api/teams/<id>/chief-of-staff with {agentId, password}). #45: in-host COS
-# reassignment. NOT a --cos flag on `update` — `update` PUTs team fields and
-# does not move the COS slot; the chief-of-staff route is the only correct one.
+# reassign-cos <teamId> <agentUUID> [--password P] — reassign the team's
+# chief-of-staff via the dedicated route (POST /api/teams/<id>/chief-of-staff).
+# ALIAS of the #64-canonical `update --cos <uuid>` (RIFM4UXN Option A). Both hit
+# the same route; `update --cos` is the surface the CORE skills teach. Kept as a
+# thin alias so existing callers keep working. --password is OPTIONAL — a MANAGER
+# authenticates by AID (R32), the flag is the USER/UI path only. The team PUT
+# deliberately STRIPS chiefOfStaffId, so moving the COS slot always goes here.
 cmd_reassign_cos() {
     local id="${1:-}" agent="${2:-}"; shift 2 2>/dev/null || true
     [ -z "$id" ] || [ -z "$agent" ] && { echo "Error: teamId and the new COS agentUUID are required" >&2; return 1; }
@@ -362,9 +388,16 @@ cmd_reassign_cos() {
             *) echo "Error: unknown flag for 'reassign-cos': $1" >&2; return 1 ;;
         esac
     done
-    [ -z "$password" ] && { echo "Error: reassign-cos requires --password <governance-password>" >&2; return 1; }
+    # RIFM4UXN Option A: --password is OPTIONAL. A MANAGER agent authenticates by
+    # AID (AID_AUTH Bearer, sent by _api) and supplies NO governance password
+    # (R32 — an agent never supplies the governance password). --password is only
+    # the USER/UI convenience path; include it in the body only when given.
     local body
-    body="$(jq -nc --arg a "$agent" --arg p "$password" '{agentId: $a, password: $p}')"
+    if [ -n "$password" ]; then
+        body="$(jq -nc --arg a "$agent" --arg p "$password" '{agentId: $a, password: $p}')"
+    else
+        body="$(jq -nc --arg a "$agent" '{agentId: $a}')"
+    fi
     _api POST "/api/teams/${id}/chief-of-staff" "$body"
 }
 

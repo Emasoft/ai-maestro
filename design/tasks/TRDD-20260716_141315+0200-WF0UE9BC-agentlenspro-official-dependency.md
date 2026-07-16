@@ -16,7 +16,7 @@ approval-datetime: 2026-07-16T14:13:15+0200
 relevant-rules: [32, 23]
 labels: [dependency, observability, install, agentlenspro, supply-chain]
 external-refs: [Emasoft/ai-maestro#70, Emasoft/AgentlensPro#2, Emasoft/ai-maestro-janitor#78]
-implementation-commits: []
+implementation-commits: [5d889dc5]
 ---
 
 # Ship AgentlensPro as an official ai-maestro dependency (npm CLI, installed alongside the stack)

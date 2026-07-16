@@ -1,35 +1,46 @@
 ---
 trdd-id: RIFM4UXN
 title: COS-reassign route requires the governance password — contradicts R29/R32 and defeats MANAGER ruling #64
-column: proposal
+column: testing
 created: 2026-07-16T12:48:13+0200
-updated: 2026-07-16T13:22:00+0200
+updated: 2026-07-16T16:02:18+0200
 current-owner: ai-maestro
 task-type: audit
 scope: project
 min-approval-requirement: user
-approved: false
+approved: true
+approval-judge: user
+approval-datetime: 2026-07-16T16:02:18+0200
+implementation-commits: [20f5ba72]
 relevant-rules: [29, 32, 9]
 labels: [governance, security, core-readiness, script-decoupling, decouple-blocked]
-external-refs: [Emasoft/ai-maestro-plugin#29, Emasoft/ai-maestro#64]
+external-refs: [Emasoft/ai-maestro-plugin#29, Emasoft/ai-maestro#64, Emasoft/ai-maestro#69]
 ---
 
 # COS-reassign route requires the governance password — contradicts R29/R32 and defeats MANAGER ruling #64
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-16
 
-**A finding, awaiting a USER ruling — NOT a mandate.** Surfaced 2026-07-16 while
-verifying (USER ask) whether the ai-maestro plugins call any script command the
-frozen CLI layer lacks. Answer: **no missing commands.** But the one script verb the
-plugins flag as "pending" (`assign/remove COS on an existing team`, MANAGER ruling
-ai-maestro#64) **did ship** as `aimaestro-teams.sh reassign-cos` — and it calls a
-route that is **governance-password-gated**, so agents (even a MANAGER) cannot use
-it. That contradicts the ratified design.
+**▶ RULED (USER, 2026-07-16) = Option A + self-assign ban. SHIPPED — `column: testing`.**
+Commit `20f5ba72`: the route now authorizes via `authorize('manage-team')` (MANAGER by
+AID / human system-owner), password OPTIONAL, an agent may not self-assign, and the
+human/UI keeps its password confirmation unchanged (a strict superset — zero human-side
+weakening). The CLI gained the #64-canonical `aimaestro-teams.sh update --cos <uuid>`
+(+ `--remove-cos`) routed to the chief-of-staff POST; `reassign-cos` kept as a thin alias
+with `--password` now optional. 6-case route test
+(`tests/unit/cos-reassign-authorization.test.ts`) green; tsc clean.
 
-**NEXT ACTION:** USER (or MANAGER, if within tier) rules Option A vs B below. The
-follow-through is trivial either way (one route flag + one core-plugin doc marker).
-Held until then; do NOT edit the route or the core doc before the ruling (either
-would silently encode one side of a governance decision).
+**NEXT ACTION — the ai-maestro side is DONE; what remains is CORE's, gated on DEPLOYMENT.**
+CORE (ai-maestro#69) holds the same discipline it applied to `verify`: it drops the stale
+DECOUPLE-BLOCKED markers (SKILL.md L60, REFERENCE.md L36/L69/L122/L126) and teaches
+`update --cos` the moment the CLI verb is on a DEPLOYED host (i.e. `governance-rules`
+merged to `main` + installed to `~/.local/bin/`). That deploy is USER/ops-gated (the whole
+governance-rules branch), the same trigger as SCRIPT-MANIFEST.md landing on `main`.
+
+**Originally surfaced** 2026-07-16 while verifying (USER ask) whether the ai-maestro plugins
+call any script command the frozen CLI layer lacks. Answer was **no missing commands**, but
+the #64 verb shipped password-gated, so a MANAGER agent couldn't call it — the contradiction
+this TRDD fixed.
 
 **▶ 2026-07-16 — CORE INDEPENDENTLY CONFIRMED Option A + added a missing guard
 (`Emasoft/ai-maestro#69`, comment 11:05Z).** Told by the USER to "rewrite the
@@ -131,3 +142,7 @@ asked for (a MANAGER agent assigning a COS) does not exist.
   ratified security rule (R32) and a MANAGER ruling (#64).
 
 ## Approval log
+- 2026-07-16T16:02:18+0200 — RULED by USER: **Option A + self-assign ban** (CORE #69 and
+  ai-maestro independently converged on the same). Implemented in `20f5ba72` (route + CLI +
+  6-case test). Moved `proposal → testing`. The core-plugin marker-drop + `update --cos`
+  teaching (ai-maestro#69) follows on deployment of `governance-rules` to `main`.

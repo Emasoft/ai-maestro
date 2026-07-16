@@ -1,9 +1,9 @@
 ---
 trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
-column: planned
+column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T20:49:06+0200
+updated: 2026-07-16T23:48:00+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -14,41 +14,65 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-07-16T19:21:48+0200
 relevant-rules: [16, 23, 42]
-labels: [family-a, continuity, oauth, keychain, credentials, security, npt, token-touching]
+labels: [family-a, continuity, oauth, keychain, credentials, security, npt, token-touching, daemon-port]
 external-refs: [Emasoft/ai-maestro-janitor#100, Emasoft/ai-maestro-janitor#82]
 parent-trdd: KCRMSNL7
 derived: true
 derived-kind: npt
 npt: []
 eht: []
-blocked-by: [DXJZM3BW]
+blocked-by: []
 release-via: none
+implementation-commits: [ddec060f]
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-16
 
-**Token-touching — the implement gate is CLEARED.** The USER signed off all four design
-decisions of [[TRDD-H24DF6ZC]] on 2026-07-16 (D1-D4), which explicitly UNBLOCKED this NPT. This
-is a **mandate** (`mandated-by: user`, `approval-datetime` = the D4 sign-off). **Build to the
-SIGNED design; do NOT re-derive it.** [[DXJZM3BW]] is DONE (`03c40474`, testing) — the `status`
-verb + the `next_action` seam this manager feeds now exist.
+**▶ REFRAMED by the USER (2026-07-16): REPLACE the janitor daemon — don't coordinate with it.**
+Verbatim: *"look at the janitor source code for the daemon and convert the code into typescript as
+an ai-maestro server function … reproduced internally as part of the ai-maestro server api."* So
+this NPT is a FAITHFUL Python→TS PORT of the janitor's OAuth-rotation subsystem
+(`scripts/oauth_rotator/*.py` + `daemon.py`, ~7000 lines) into `lib/oauth-rotator/` + a
+server-internal tick. The server BECOMES the rotation writer; it is NOT a detector that delegates
+to the external daemon.
 
-**▶ SPEC IS COMPLETE (H24DF6ZC signed + janitor#100 Q5 exact posture, captured below).** Two
-things make this the one NPT to build WITH the owner's awareness, not purely autonomously:
-1. **It writes the owner's LIVE Claude credential** (`Claude Code-credentials` keychain item) —
-   the single irreversible op in all of Family-A; a bug LOCKS THE OWNER OUT of Claude Code, and
-   it cannot be end-to-end tested without risking that live credential.
-2. **The one-writer lock needs the janitor's EXACT lock-FILE PATH** (`oauth_rotator/`/`daemon.py`)
-   — a CROSS-REPO item to get from the janitor, never guessed (a wrong path lets server + `#N`
-   daemon both write the live credential → corruption).
+**This DISSOLVES the old "blocked on the janitor's flock-path" gate.** The lock path is IN the
+source: `global_state.oauth_rotator_lock()` → `<DATA>/global-state/oauth-rotator.lock`
+(DATA = `~/.claude/plugins/data/ai-maestro-janitor-ai-maestro-plugins/`). [[TRDD-H24DF6ZC]]-D3
+("take the daemon's EXACT tested lock") is SATISFIED by reading that path from source — the
+CROSS-REPO ASK on janitor#100 is no longer needed. The server takes the SAME machine-wide flock so
+it and any residual janitor `#N` fallback-when-no-server stay mutually-exclusive writers by
+construction. The other three H24DF6ZC invariants (D1 detached/model-free — the Node server is not
+a Claude context; D2 keychain-only; D4 the 3-tier cascade) still hold — the port satisfies them.
 
-**NEXT ACTION:** obtain the janitor's exact `daemon.flock` path (cross-repo), then implement the
-detached model-free cascade to the posture below — non-destructive parts FIRST (lock acquire,
-slot READ/index, cascade orchestration, `next_action` into `lib/continuity-status.ts`,
-validate-then-backup) and the single `write_live_blob` LAST, with the owner aware before it
-first runs live.
+**Architecture map (3-model ensemble, the porting spec):**
+`reports/llm-externalizer/20260716_233614+0200-code_task-cascade.py-6a8fb7.md` — per-file roles,
+the exact ROTATE/RENEW/REAUTH control flow, keychain custody (`security` argv rules), the ONE live
+write, the lock, and the state.json schema.
+
+**Phasing (safest-first; the live write is LAST + owner-aware):**
+- **A ✅ DONE (`ddec060f`)** — `lib/oauth-rotator/cascade.ts`: pure ROTATE/RENEW/REAUTH classifier
+  (faithful port of `cascade.py`), 19 unit tests, tsc + next-lint clean. Zero credential risk.
+- **B** — `safe-storage.ts` (port `safe_storage.py`, 625 ln): macOS `security` / Linux libsecret /
+  Win DPAPI + keychain-denied latch, READ side + backend-detect. PRESERVE: ACL only on CREATE,
+  secret on argv (`-w`, stdin truncates at 128B), base64-wrap, three-valued OK/NO_BACKEND/FAILED,
+  fail-closed (never plaintext on macOS FAILED).
+- **C** — machine-wide flock at `<DATA>/global-state/oauth-rotator.lock` (port
+  `global_state.oauth_rotator_lock`); mutual-exclusion with any `#N` fallback.
+- **D** — slot writes + `-backup`/`-livebak` mirrors (rotator-owned, reversible; LOW risk).
+- **E** — THE LIVE WRITE: `write_live_blob` + `_switch_blob` (ROTATE) + `_keepalive_refresh`
+  (RENEW). **R16 — checkpoint with the OWNER before it first runs live.** Safety net = the
+  `-livebak` mirror (refreshed from the CURRENT live at tick start, so it holds the previous
+  credential); validate the alternate (usage probe + local-expiry) BEFORE the switch.
+- **F** — REAUTH + bootstrap browser tier (`reauth.py`/`slot_capture_browser.py`/`cookie_vault.py`
+  via Node CDP/tmux) — the "only human step".
+- **G** — the 60s `cmd_tick` as a server-internal task, **config-gated OFF by default**; feeds
+  [[DXJZM3BW]]'s `next_action` (cascade states: ok | rotating | reauth-needed).
+
+**NEXT ACTION:** Phase B — read `scripts/oauth_rotator/safe_storage.py` in full, then port its
+READ path + the keychain-denied latch to `lib/oauth-rotator/safe-storage.ts`. No live write yet.
 
 ## Problem / Goal
 
@@ -142,3 +166,8 @@ daemon (Python) uses, so the two coordinate rather than fight:
   absorption "including the oauth key rotations" and signed off [[TRDD-H24DF6ZC]] D1-D4, which
   explicitly UNBLOCKED this NPT (#2 OAuth manager). Authored directly as `planned`; no approval
   round-trip — the issuer's authority (user) meets the floor (`min-approval-requirement: user`).
+- 2026-07-16T23:48:00+0200 — **REFRAME (mandated-by: user).** The USER corrected the approach:
+  REPLACE the janitor daemon by PORTING its source Python→TS as an internal server function, not
+  coordinate/authenticate with it. Same tier/mandate (user); this narrows the implementation to a
+  faithful port and dissolves the janitor#100 lock-path dependency (path read from source). Moved
+  `planned → dev`; Phase A (cascade port) landed as `ddec060f`.

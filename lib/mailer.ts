@@ -153,3 +153,23 @@ export async function sendCodeEmail(to: string, code: string, purpose: string, a
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
 }
+
+/**
+ * Send a verification code to a NORMAL/FOREIGN user's own email THROUGH the MAESTRO relay
+ * (TRDD-7U927FCM 2B — the role-split). The user supplied ONLY a destination address; the
+ * host authenticates and sends as the MAESTRO's own mail provider — so `to` is the user and
+ * the SMTP `from`/account is the MAESTRO's recovery email (autoConfig resolves the stored
+ * relay because accountEmail === that email).
+ *
+ * Gated on a VERIFIED MAESTRO relay: `verified` means the MAESTRO already sent+received a
+ * code through this provider, i.e. it is PROVEN to send. With no verified relay there is no
+ * trustworthy way to reach the user by email, so this returns {ok:false, skipped:true} and
+ * the caller MUST fall back to another factor — never a silent success on a relay that may
+ * not work. (An unverified or unconfigured relay is treated the same as an unconfigured
+ * mailer, matching sendCodeEmail's skipped contract.)
+ */
+export async function sendUserCodeEmail(userEmail: string, code: string, purpose: string): Promise<SendResult> {
+  const relay = getRecoveryEmail()
+  if (!relay?.email || !relay.verified) return { ok: false, skipped: true }
+  return sendCodeEmail(userEmail, code, purpose, relay.email)
+}

@@ -146,6 +146,24 @@ export async function saveUser(rec: UserRecord): Promise<UserRecord> {
 }
 
 /**
+ * Set (or clear, with null) a user's 2FA/recovery email (TRDD-7U927FCM 2B). Serialized via
+ * withLock and re-reads inside the lock so it never clobbers a concurrent save. Stores only
+ * the DESTINATION address — the code is relayed through the MAESTRO's provider, so no SMTP
+ * credential is ever written here. Returns the updated record, or null if the user did not
+ * exist / was already soft-deleted.
+ */
+export async function setUserEmail(id: string, email: string | null): Promise<UserRecord | null> {
+  return withLock('users', () => {
+    const users = loadUsers()
+    const idx = users.findIndex(u => u.id === id)
+    if (idx < 0 || users[idx].deletedAt) return null
+    users[idx] = { ...users[idx], email: email ? email.trim() : null }
+    writeUsers(users)
+    return users[idx]
+  })
+}
+
+/**
  * Soft-delete a user (sets deletedAt). R39.6: deleting the USER cascades a soft
  * delete to that user's bound ASSISTANT agent — the ASSISTANT cannot be deleted
  * independently and must not outlive its user. The cascade delegates to the

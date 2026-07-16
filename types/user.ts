@@ -39,6 +39,14 @@ export interface UserRecord {
   name: string
   /** Optional avatar identifier (AvatarPicker value, /public path, or URL). */
   avatar?: string
+  /**
+   * The user's 2FA / recovery email — a DESTINATION address, NEVER an SMTP credential
+   * (TRDD-7U927FCM 2B). A normal/foreign user supplies ONLY this; their verification codes
+   * are RELAYED through the MAESTRO's own mail provider (sendUserCodeEmail), so they never
+   * enter provider config. Absent/null → no email on file, so email-based 2FA is unavailable
+   * for this user and the caller must fall back to another factor.
+   */
+  email?: string | null
   /** Authority title (R36/R37). */
   title: UserTitle
   /** True when this user was registered on THIS host; false when foreign (R35/R40). */

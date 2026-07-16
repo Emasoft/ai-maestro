@@ -43,7 +43,7 @@ interface DetectPreview {
   note?: string | null
 }
 
-export default function RecoveryEmailSection() {
+export default function RecoveryEmailSection({ onRecoveryComplete }: { onRecoveryComplete?: () => void } = {}) {
   const { requestSudoToken } = useSudo()
 
   const [status, setStatus] = useState<EmailStatus | null>(null)
@@ -191,6 +191,10 @@ export default function RecoveryEmailSection() {
       setAwaitingCode(false)
       setNotice(null)
       setStatus((prev) => (prev ? { ...prev, verified: true } : { configured: true, email: email.trim(), verified: true }))
+      // TRDD-7U927FCM 2A: a verified recovery email IS a completed recovery setup, so the
+      // first-run required-recovery gate can advance the owner into the app. Optional — the
+      // Settings usage of this panel passes no callback and this is a no-op there.
+      onRecoveryComplete?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed')
     } finally {

@@ -2,9 +2,68 @@
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import PasswordDialog from './governance/PasswordDialog'
+import RecoveryEmailSection from './settings/RecoveryEmailSection'
 
 interface LoginGateProps {
   children: ReactNode
+}
+
+/**
+ * RecoveryGate (TRDD-7U927FCM 2A) — the first-run REQUIRED-recovery step. After the owner
+ * bootstraps a governance password, LoginGate keeps them here (never in the app) until they
+ * either configure a verified recovery email OR explicitly opt out to console/passkey recovery.
+ *
+ * It is NOT a hard block: the opt-out is the escape hatch so a host whose SMTP is unreachable
+ * never dead-ends. `/api/governance/recovery-optout` is owner-gated only (a plain cookie'd
+ * fetch — deliberately not strict, so a remote owner mid-first-run is never locked out).
+ */
+function RecoveryGate({ onComplete }: { onComplete: () => void }) {
+  const [optingOut, setOptingOut] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const optOut = async () => {
+    setOptingOut(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/governance/recovery-optout', { method: 'POST' })
+      if (!res.ok) {
+        setError(`Could not record the choice (${res.status}).`)
+        return
+      }
+      onComplete()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Request failed')
+    } finally {
+      setOptingOut(false)
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-950 p-4">
+      <div className="w-full max-w-md">
+        <h1 className="text-lg font-semibold text-gray-100 mb-1">Set up account recovery</h1>
+        <p className="text-sm text-gray-400 mb-1">
+          Configure a way to reset the governance password if you ever forget it — even from a
+          remote device. Add a recovery email below, then verify the emailed code.
+        </p>
+        <p className="text-xs text-gray-500 mb-3">
+          No mail server on this host? Choose console/passkey recovery instead — you can always
+          add a recovery email later from Settings.
+        </p>
+        <RecoveryEmailSection onRecoveryComplete={onComplete} />
+        <div className="mt-4 flex items-center justify-between gap-2">
+          {error ? <span className="text-xs text-red-400">{error}</span> : <span />}
+          <button
+            onClick={optOut}
+            disabled={optingOut}
+            className="text-xs text-gray-400 hover:text-gray-200 underline disabled:opacity-50"
+          >
+            {optingOut ? 'Saving…' : 'Use console/passkey recovery instead'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -19,7 +78,7 @@ interface LoginGateProps {
  * mid-session-expiry poll). One dialog, one place to debug.
  */
 export default function LoginGate({ children }: LoginGateProps) {
-  const [status, setStatus] = useState<'checking' | 'authenticated' | 'login'>('checking')
+  const [status, setStatus] = useState<'checking' | 'authenticated' | 'login' | 'recovery'>('checking')
   // UI2-MAJ-18: track mount state so async setState (checkSession, 30s session-poll)
   // doesn't fire on the unmounted component (e.g. navigating between LoginGate routes).
   const isMountedRef = useRef(true)
@@ -33,7 +92,16 @@ export default function LoginGate({ children }: LoginGateProps) {
       const res = await fetch('/api/auth/session', signal ? { signal } : undefined)
       if (signal?.aborted) return
       if (!isMountedRef.current) return
-      setStatus(res.ok ? 'authenticated' : 'login')
+      if (!res.ok) { setStatus('login'); return }
+      const data = await res.json().catch(() => ({} as Record<string, unknown>))
+      // Open access (no governance password yet) → no account to protect, so no recovery gate.
+      if (data.passwordNotSet) { setStatus('authenticated'); return }
+      // A real account exists: hold the owner on the first-run required-recovery step
+      // (TRDD-7U927FCM 2A) until recovery setup is complete — a verified recovery email OR
+      // an explicit opt-out. An older server that omits the field (undefined) is treated as
+      // complete so it never blocks a pre-2A deployment.
+      if (data.recoverySetupComplete === false) { setStatus('recovery'); return }
+      setStatus('authenticated')
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return
       // CC-GOV-003: Network error must NOT grant access — show login form
@@ -87,6 +155,13 @@ export default function LoginGate({ children }: LoginGateProps) {
   // Authenticated — render the app
   if (status === 'authenticated') {
     return <>{children}</>
+  }
+
+  // First-run required-recovery gate (TRDD-7U927FCM 2A) — the owner has a password but has
+  // not yet completed recovery setup. Advance to the app only when they configure+verify a
+  // recovery email or opt out to console/passkey recovery.
+  if (status === 'recovery') {
+    return <RecoveryGate onComplete={() => { if (isMountedRef.current) setStatus('authenticated') }} />
   }
 
   // Login screen — the unified dialog. A successful login OR a completed password reset

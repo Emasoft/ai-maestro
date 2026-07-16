@@ -1,9 +1,9 @@
 ---
 trdd-id: JAU1ES1C
 title: Session-resurrection hardening — extend boot-restore toward reboot / mid-turn-429 / network-drop immortality
-column: planned
+column: testing
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T20:06:24+0200
+updated: 2026-07-16T20:56:02+0200
 current-owner: ai-maestro
 task-type: refactor
 scope: project
@@ -23,6 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
+implementation-commits: [166bd8a4]
 ---
 
 # Session-resurrection hardening — extend boot-restore toward reboot / mid-turn-429 / network-drop immortality
@@ -30,10 +31,27 @@ release-via: none
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-16
 
 **Parallel** in the Family-A topological order — session-resurrection ALREADY exists partially,
-so this HARDENS it, it does not rebuild. Light (non-blocking) dep on [[DXJZM3BW]] for the
-`ensure-resume` route; kept out of `blocked-by:` deliberately so it can proceed in parallel.
-**NEXT ACTION:** extend `services/boot-restore-service.ts::restoreActiveAgentsOnBoot` to cover
-the three durability cases below, sourcing from the existing `session-history.json`.
+so this HARDENS it, it does not rebuild.
+
+**▶ SCOPE CORRECTED after investigation (2026-07-16).** The original 3-case framing
+(reboot / mid-turn-429 / network-drop) was too broad for boot-restore: **only REBOOT is a boot
+event.** Mid-turn-429 and network-drop are RUNTIME events — an agent's turn dies but the process
+lives (TRDD-1222f06a §9), or a transient outage — and they are detected+actuated by the
+fleet-recovery liveness scan ([[CHN16JXZ]]) + the account switcher ([[9ZIF82HI]]), NOT by
+boot-restore. Forcing them into boot-restore would duplicate those NPTs. So this NPT hardens the
+REBOOT path; the other two cases are correctly owned elsewhere.
+
+**✅ IMPLEMENTED 2026-07-16 — `column: testing`.** Found `restoreActiveAgentsOnBoot` already
+solid (wired at `server.mjs:2078`; registry `status:'active'` SSOT → workdir-policy gate →
+idempotent `wakeAgent`, per-agent error isolation, stagger). The genuine gap was **no retry on a
+transient boot-wake throw**: a reboot races tmux/pm2 coming up, so a thrown `wakeAgent` dropped
+the agent permanently. Added `lib/retry-transient.ts` (pure, generic, 7 tests) and wrapped the
+per-session wake in it (3 attempts, exp backoff, env-tunable). A governance-gate refusal returns
+`{ error }` (a value, not a throw) so it is NEVER retried — correct terminal skips are preserved.
+tsc/lint clean.
+
+**NEXT:** none for boot-restore itself; the runtime-durability cases live in [[CHN16JXZ]] /
+[[9ZIF82HI]].
 
 ## Problem / Goal
 

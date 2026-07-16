@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T23:48:00+0200
+updated: 2026-07-17T00:02:00+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -23,7 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [ddec060f]
+implementation-commits: [ddec060f, 59ebd182]
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
@@ -55,12 +55,16 @@ write, the lock, and the state.json schema.
 **Phasing (safest-first; the live write is LAST + owner-aware):**
 - **A ✅ DONE (`ddec060f`)** — `lib/oauth-rotator/cascade.ts`: pure ROTATE/RENEW/REAUTH classifier
   (faithful port of `cascade.py`), 19 unit tests, tsc + next-lint clean. Zero credential risk.
-- **B** — `safe-storage.ts` (port `safe_storage.py`, 625 ln): macOS `security` / Linux libsecret /
-  Win DPAPI + keychain-denied latch, READ side + backend-detect. PRESERVE: ACL only on CREATE,
-  secret on argv (`-w`, stdin truncates at 128B), base64-wrap, three-valued OK/NO_BACKEND/FAILED,
-  fail-closed (never plaintext on macOS FAILED).
-- **C** — machine-wide flock at `<DATA>/global-state/oauth-rotator.lock` (port
-  `global_state.oauth_rotator_lock`); mutual-exclusion with any `#N` fallback.
+- **B ✅ DONE (`59ebd182`)** — `lib/oauth-rotator/safe-storage.ts` (full port of `safe_storage.py`)
+  + `lib/oauth-rotator/global-state.ts` (the `global_state_dir()` ladder): macOS `security` /
+  Linux libsecret / Win DPAPI + keychain-denied latch (half-open recovery), `runSecurity`
+  choke-point, base64-wrap, three-valued OK/NO_BACKEND/FAILED, fail-closed. 17 tests, tsc+lint
+  clean. PRESERVED: ACL only on CREATE, secret on argv (stdin truncates at 128B), never log a token.
+- **C** — machine-wide flock at `<DATA>/global-state/`**`oauth-rotator-tick.lock`** (port
+  `global_state.oauth_rotator_lock`/`acquire_oauth_rotator_lock`). ⚠ The file is
+  **`oauth-rotator-tick.lock`**, NOT `oauth-rotator.lock` (the LLM map guessed wrong; the real name
+  is in `global_state.py` `_MIGRATION_SKIP`) — a wrong name = two live-cred writers. Extend
+  `global-state.ts` with the flock; mutual-exclusion with any janitor `#N` fallback.
 - **D** — slot writes + `-backup`/`-livebak` mirrors (rotator-owned, reversible; LOW risk).
 - **E** — THE LIVE WRITE: `write_live_blob` + `_switch_blob` (ROTATE) + `_keepalive_refresh`
   (RENEW). **R16 — checkpoint with the OWNER before it first runs live.** Safety net = the
@@ -71,8 +75,10 @@ write, the lock, and the state.json schema.
 - **G** — the 60s `cmd_tick` as a server-internal task, **config-gated OFF by default**; feeds
   [[DXJZM3BW]]'s `next_action` (cascade states: ok | rotating | reauth-needed).
 
-**NEXT ACTION:** Phase B — read `scripts/oauth_rotator/safe_storage.py` in full, then port its
-READ path + the keychain-denied latch to `lib/oauth-rotator/safe-storage.ts`. No live write yet.
+**NEXT ACTION:** Phase C — read `global_state.py::acquire_oauth_rotator_lock` (the flock impl),
+then extend `lib/oauth-rotator/global-state.ts` with a mutual-exclusion flock on
+`<globalStateDir>/oauth-rotator-tick.lock` (Node `fs`/`flock` via a lockfile or `proper-lockfile`
+equiv). No live write yet.
 
 ## Problem / Goal
 

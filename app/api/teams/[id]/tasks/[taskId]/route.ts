@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getTeamTask, updateTeamTask, deleteTeamTask, UpdateTaskParams } from '@/services/teams-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
+import { authorizeKanbanFieldWrite, touchesGateField } from '@/lib/kanban-field-authority'
 import { isValidUuid } from '@/lib/validation'
 
 const UpdateTaskSchema = z.object({
@@ -116,6 +118,34 @@ export async function PUT(
     )
   }
   const body = parsed.data
+
+  // ai-maestro#47 verb 3 — title-keyed field-write authority. Both amp-kanban-move
+  // (status only) and amp-kanban-edit (arbitrary field bag) reach THIS route, so the
+  // gate here covers both. `checkTeamAccess` (team membership) still runs inside
+  // updateTeamTask and is unchanged; this ADDS the judgment gate on top, enforcing
+  // the already-ratified NON-EXEMPT Y/Z transitions + the self-review ban. Only load
+  // the card's current state when a gate-relevant field is actually touched — an
+  // ordinary edit (subject/priority/labels/…) pays no extra GitHub read.
+  const requestedFields = body as Record<string, unknown>
+  if (touchesGateField(requestedFields)) {
+    const current = await getTeamTask(id, taskId, requestingAgentId, buildAuthContext(auth))
+    if (current.error) {
+      return NextResponse.json({ error: current.error }, { status: current.status })
+    }
+    const currentTask = current.data?.task
+    const gate = authorizeKanbanFieldWrite({
+      requesterAgentId: requestingAgentId,
+      // MANAGER-by-AID or the human system-owner — the exact predicate manage-team
+      // resolves to (system-owner granted early, manager at its branch, else denied).
+      requesterIsManagerOrOwner: authorize(auth, 'manage-team').allowed,
+      currentStatus: typeof currentTask?.status === 'string' ? currentTask.status : undefined,
+      assigneeAgentId: currentTask?.assigneeAgentId ?? null,
+      requested: requestedFields,
+    })
+    if (gate) {
+      return NextResponse.json({ error: gate.error, field: gate.field }, { status: gate.status })
+    }
+  }
 
   // Whitelist only known UpdateTaskParams fields to avoid passing arbitrary data
   const safeParams: UpdateTaskParams = {

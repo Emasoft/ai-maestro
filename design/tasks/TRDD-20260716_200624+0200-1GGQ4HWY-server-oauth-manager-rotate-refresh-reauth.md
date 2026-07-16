@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T00:02:00+0200
+updated: 2026-07-17T00:32:00+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -23,7 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [ddec060f, 59ebd182]
+implementation-commits: [ddec060f, 59ebd182, 69ce68cb]
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
@@ -60,11 +60,14 @@ write, the lock, and the state.json schema.
   Linux libsecret / Win DPAPI + keychain-denied latch (half-open recovery), `runSecurity`
   choke-point, base64-wrap, three-valued OK/NO_BACKEND/FAILED, fail-closed. 17 tests, tsc+lint
   clean. PRESERVED: ACL only on CREATE, secret on argv (stdin truncates at 128B), never log a token.
-- **C** — machine-wide flock at `<DATA>/global-state/`**`oauth-rotator-tick.lock`** (port
-  `global_state.oauth_rotator_lock`/`acquire_oauth_rotator_lock`). ⚠ The file is
-  **`oauth-rotator-tick.lock`**, NOT `oauth-rotator.lock` (the LLM map guessed wrong; the real name
-  is in `global_state.py` `_MIGRATION_SKIP`) — a wrong name = two live-cred writers. Extend
-  `global-state.ts` with the flock; mutual-exclusion with any janitor `#N` fallback.
+- **C ✅ DONE (`69ce68cb`)** — `lib/oauth-rotator/tick-lock.ts`: **server-internal** rotation-tick
+  lock (USER decision 2026-07-17). Node has no `fcntl.flock`; sharing the janitor's kernel flock
+  needs a native addon (rejected under the Node-22 ABI constraint), and an O_EXCL lockfile can't
+  interoperate with a POSIX flock anyway. Pure-JS O_EXCL lockfile (pid+ts) serialising the
+  SERVER's own ticks, non-blocking, stale-reclaim. DISTINCT filename
+  `oauth-rotator-server-tick.lock` (NEVER the janitor's `oauth-rotator-tick.lock`) so it never
+  implies cross-mechanism coordination. Server-vs-`#N` safety = presence/delegation, not this
+  lock. Supersedes H24DF6ZC-D3's "shared kernel flock" (consistent with the reframe). 10 tests.
 - **D** — slot writes + `-backup`/`-livebak` mirrors (rotator-owned, reversible; LOW risk).
 - **E** — THE LIVE WRITE: `write_live_blob` + `_switch_blob` (ROTATE) + `_keepalive_refresh`
   (RENEW). **R16 — checkpoint with the OWNER before it first runs live.** Safety net = the
@@ -75,10 +78,12 @@ write, the lock, and the state.json schema.
 - **G** — the 60s `cmd_tick` as a server-internal task, **config-gated OFF by default**; feeds
   [[DXJZM3BW]]'s `next_action` (cascade states: ok | rotating | reauth-needed).
 
-**NEXT ACTION:** Phase C — read `global_state.py::acquire_oauth_rotator_lock` (the flock impl),
-then extend `lib/oauth-rotator/global-state.ts` with a mutual-exclusion flock on
-`<globalStateDir>/oauth-rotator-tick.lock` (Node `fs`/`flock` via a lockfile or `proper-lockfile`
-equiv). No live write yet.
+**NEXT ACTION:** Phase D — read `rotator.py`'s slot I/O (`read_slot`, `write_slot`, `file_slot`,
+`fingerprint`, `load_state`/`save_state`, the state.json schema + the `-backup`/`-livebak` mirror
+writes), then port the SLOT read/write path (rotator-owned, reversible; NOT the live credential)
+to `lib/oauth-rotator/`. Keychain service names: slots = `Claude Code-rotator-slot` (+`-backup`
+mirror); live = `Claude Code-credentials` (+`-livebak`) — the LIVE write stays Phase E (R16). Use
+the [[safe-storage.ts]] primitive + [[tick-lock.ts]] for the locked slot+state write.
 
 ## Problem / Goal
 

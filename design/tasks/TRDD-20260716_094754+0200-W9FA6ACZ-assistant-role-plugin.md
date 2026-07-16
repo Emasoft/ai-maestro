@@ -3,7 +3,7 @@ trdd-id: W9FA6ACZ
 title: ASSISTANT role-plugin — ai-maestro-assistant-role-agent (MANAGER+MAINTAINER, ungoverned, user-bound) (R39)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-16T09:47:54+0200
+updated: 2026-07-16T10:39:44+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [39, 46, 41, 26, 6, 11]
@@ -30,38 +30,61 @@ those 4 locked fields. R39.4 was LEFT INTACT (= KEEP). **Recommendation: KEEP** 
 re-title/re-role their own agent, breaking R26 + host security. Confirm KEEP vs STRIP with the USER
 before building the panel locks. This is the only design fork in the cohort still open.
 
-**NEXT ACTION when unheld:** scaffold the role-plugin `ai-maestro-assistant-role-agent` with full
-quad-identity (folder = plugin.json `name` = `.agent.toml` `[agent].name` =
-`agents/<name>-main-agent.md` frontmatter `name`), `compatible-titles: ["ASSISTANT"]`, and register
-it. Add the ASSISTANT title to the governance enum + ecosystem-constants.
+**⚠ CORRECTION (2026-07-16, verified) — THIS TRDD WAS WRONG: the plugin ALREADY EXISTS.**
+Authored claiming the role-plugin "does not exist yet" and needed scaffolding from scratch into its
+own GitHub repo. **Both claims are false**, and R39.2's own "(still to be created)" parenthetical is
+stale. VERIFIED on disk:
+`~/agents/role-plugins/roles-marketplace/ai-maestro-assistant-role-agent/` (created 2026-06-19) is
+**quad-identity complete** — `.claude-plugin/plugin.json`, `ai-maestro-assistant-role-agent.agent.toml`
+(`compatible-titles = ["ASSISTANT"]`, `compatible-clients = ["claude-code"]`), and
+`agents/ai-maestro-assistant-role-agent-main-agent.md`. It is a **LOCAL source (decision D4)** —
+intentionally NOT a published GitHub repo and correctly absent from `PREDEFINED_ROLE_PLUGIN_NAMES`
+(`lib/ecosystem-constants.ts:280-288`), so `Emasoft/ai-maestro-assistant-role-agent` returning 404 is
+BY DESIGN, not a gap. Much of R39 is also already BUILT: **R39.5/R39.6/R39.7 are ENFORCED** (guards in
+`lib/communication-graph.ts` — incl. `AssistantSenderContext`, the ASSISTANT-may-message-only-its-user
+block — and `services/element-management-service.ts`). Only **R39.1-R39.4 are UNENFORCED**.
+
+**⚠ THE REAL BLOCKER — a 3-way composition drift the USER must rule on (escalated):**
+| Source | Composition |
+|---|---|
+| **R39.2** (v4.4.0, today) | MANAGER + **MAINTAINER** |
+| `lib/ecosystem-constants.ts:283` | MANAGER (planning) + **AUTONOMOUS** (programming) |
+| **the built plugin** (2026-06-19) | persona references **autonomous** → built to the OLD spec |
+R39.2 is USER-set IRON; no agent may resolve this. **Do NOT re-compose or rebuild the plugin until
+the USER rules.** Reported to the MANAGER in `ai-maestro-assistant-manager-agent` issue #28 §3.
+
+**NEXT ACTION when unheld:** do NOT scaffold. (1) Get the USER's ruling on the composition drift
+above; (2) get the USER's R39.4 ruling below; (3) THEN reconcile the existing plugin's persona to the
+ruled composition and build only the genuinely-missing R39.1-R39.4 surfaces.
 
 ## Problem
 
 R39.1 auto-assigns every non-MAESTRO user an ASSISTANT agent (users are human — no terminal/client
-of their own, R39). R39.2 says the ASSISTANT runs `ai-maestro-assistant-role-agent` — a
-MANAGER+MAINTAINER combination **without** agent/team-creation privileges and **without** governing
-powers — **which does not exist yet**. Until it does, users have no working agent.
+of their own, R39). The role-plugin **exists** (above) but was built to the **superseded**
+MANAGER+AUTONOMOUS composition, while R39.2 now mandates MANAGER+**MAINTAINER** — without
+agent/team-creation privileges and without governing powers (R46.3). So the gap is NOT "create the
+plugin"; it is **reconcile the drift** and build the still-unenforced R39.1-R39.4.
 
-## Approach (design sketch)
+## Approach (design sketch — pending the USER rulings)
 
-1. **Create the role-plugin** `ai-maestro-assistant-role-agent` (predefined → its own
-   `Emasoft/ai-maestro-assistant-role-agent` repo, mirroring the other 8; or Haephestos-authored
-   local). Quad-identity enforced. `compatible-titles: ["ASSISTANT"]`, `compatible-clients` per
-   target. Persona = union of MANAGER (planning/coordination) + MAINTAINER (project maintenance)
-   capabilities, MINUS agent/team creation, MINUS governing powers (R46.3).
-2. **Register the ASSISTANT title.** Add `ASSISTANT` to the governance-title enum, `TITLE_PLUGIN_MAP`
-   and `PLUGIN_COMPATIBLE_TITLES` (`lib/ecosystem-constants.ts` + `scripts/ecosystem-config.sh`).
-3. **Persona rules (R39.5/R39.7).** Obeys ONLY its bound user — no one else, not even the MAESTRO.
-   Isolation. Outside the governance chain: never a mandate target (R41), needs no MANAGER/COS/
-   MAESTRO approval to act. Messages ONLY its own user. Inherits the user's kanban tasks + granted
-   permissions and works the user's TRDDs **as its user's** (R39.7). Invisible to other agents.
-4. **Comm graph (R6).** Add an ASSISTANT node whose ONLY edge is ASSISTANT ↔ its bound user (both
-   directions); no edge to any other agent. Update `lib/communication-graph.ts` and the adjacency
-   matrix in CLAUDE.md + GOVERNANCE-RULES.
-5. **Lifecycle (R39.6).** Auto-created when a user is created/registered (wire into
-   `lib/user-registry.ts` + the CreateAgent pipeline). Cannot be deleted independently; only
-   deleting the USER cascades a soft-delete to the ASSISTANT.
-6. **R39.4 identity locks** — build the four read-only-to-user fields per the OPEN DECISION above.
+1. **Resolve the composition drift (USER ruling required).** Then align the ONE surviving answer
+   across all three sources: R39.2's text, the `ecosystem-constants.ts:280-288` comment, and the
+   built persona. Whichever wins, the other two are corrected in the same change — this drift exists
+   precisely because they were allowed to disagree.
+2. **Reconcile the existing plugin** (do not recreate): persona = the ruled composition, MINUS
+   agent/team creation, MINUS governing powers (R46.3). Keep its LOCAL/D4 nature — do NOT publish it
+   to GitHub or add it to `PREDEFINED_ROLE_PLUGIN_NAMES`.
+3. **Persona rules (R39.5/R39.7) — already enforced server-side; make the persona MATCH.** Obeys ONLY
+   its bound user — not even the MAESTRO. Isolation. Outside the governance chain: never a mandate
+   target (R41), needs no MANAGER/COS/MAESTRO approval. Messages ONLY its own user. Inherits the
+   user's tasks/permissions (R39.7). Invisible to other agents.
+4. **Comm graph (R6) — VERIFY before touching.** `lib/communication-graph.ts` ALREADY carries the
+   ASSISTANT sender/recipient logic (R39.5 ENFORCED). Do not re-add a node; audit the existing one
+   against the final rule and sync the adjacency matrix in CLAUDE.md + GOVERNANCE-RULES if it drifts.
+5. **Lifecycle (R39.6) — already ENFORCED** in `services/element-management-service.ts` (no
+   independent delete; USER delete cascades). Verify, do not rebuild.
+6. **Build the genuinely-missing R39.1-R39.4:** auto-create-on-user-creation (R39.1), the
+   no-terminal/no-other-agent-access UI (R39.3), and the R39.4 identity locks per the OPEN DECISION.
 
 ## Verification
 - Role-plugin passes CPV quad-identity + strict validation.
@@ -86,3 +109,15 @@ R47) · TRDD-40CUZA1Z (sidebar R46) · TRDD-PLOVIPZE (console gates R48) · TRDD
   Implementation HELD. R39.4 KEEP/STRIP flagged as an open decision inside this TRDD.
 
 ## Notes and lessons learned
+
+- 2026-07-16 — DO NOT infer "X is not built" from a rule's prose, BECAUSE this TRDD was authored
+  asserting the ASSISTANT role-plugin "does not exist yet" (echoing R39.2's stale "(still to be
+  created)") and planned a from-scratch scaffold into a GitHub repo — while the plugin had existed
+  as a complete LOCAL/D4 plugin since 2026-06-19 and R39.5/R39.6/R39.7 were already ENFORCED with
+  real guards. A rule states INTENT; only the filesystem, the enforcement map, and the code state
+  FACT. DO check the disk + `docs/GOVERNANCE-ENFORCEMENT-MAP.md` verdicts before writing "not built"
+  into a plan. Caught only because the USER demanded verification before acting.
+- 2026-07-16 — A rule, a code comment, and the artifact can all disagree at once (R39.2 says
+  MANAGER+MAINTAINER; `ecosystem-constants.ts:283` says MANAGER+AUTONOMOUS; the built persona says
+  autonomous). When they do, the drift itself is the finding — escalate it rather than picking the
+  source that happens to be newest.

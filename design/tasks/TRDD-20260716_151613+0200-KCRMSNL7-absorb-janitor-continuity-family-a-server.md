@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-16T15:16:13+0200
+updated: 2026-07-16T20:06:24+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -16,7 +16,7 @@ approval-datetime: 2026-07-16T15:16:13+0200
 relevant-rules: [16, 23, 42]
 labels: [janitor-absorption, continuity, oauth, resurrection, family-a, server, guardian]
 external-refs: [Emasoft/ai-maestro-janitor#100, Emasoft/ai-maestro#68, Emasoft/ai-maestro#70, Emasoft/AgentlensPro#3]
-npt: [H24DF6ZC]
+npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C]
 release-via: none
 ---
 
@@ -42,8 +42,23 @@ moves under the janitor's TRDD and nothing of theirs moves under this one.
 
 **Process gate (USER, 2026-07-16):** coordinate via issues → write TRDDs → **only then**
 plan-mode the design. Coordination is DONE (all three Claudes aligned on #100 / AgentlensPro#3).
-This file is the TRDD. **NEXT ACTION = enter plan mode on THIS scope to decompose it into
-implementation NPTs.** Nothing is implemented yet.
+This file is the TRDD. **DECOMPOSED (2026-07-16) into 6 implementation NPTs** — all authored as
+`planned`, depth-1 derived, siblings ordered via `blocked-by:`:
+
+| id | NPT | blocked-by | tier |
+|---|---|---|---|
+| [[Y916N7WL]] | AgentlensPro status-metadata consumption | — | none (self) |
+| [[DXJZM3BW]] | Continuity CLI surface (`status` + `ensure-resume`) | Y916N7WL | none (self) |
+| [[1GGQ4HWY]] | Server OAuth manager (ROTATE/REFRESH/REAUTH, keychain, one-writer lock) | DXJZM3BW | **user (mandate)** |
+| [[9ZIF82HI]] | Account switcher (passive rotation on 429/dead-refresh/net-drop) | 1GGQ4HWY | **user (mandate)** |
+| [[CHN16JXZ]] | Fleet recovery (liveness + `ensure-resume` actuation) | DXJZM3BW, 1GGQ4HWY | none (self) |
+| [[JAU1ES1C]] | Session-resurrection hardening (boot-restore → immortality) | — (parallel) | none (self) |
+
+Topological order: Y916N7WL → DXJZM3BW → 1GGQ4HWY → {9ZIF82HI, CHN16JXZ}; JAU1ES1C parallel.
+The two token-touching NPTs (1GGQ4HWY, 9ZIF82HI) carry the USER mandate and are built to the
+signed [[TRDD-H24DF6ZC]] design (D1-D4). **NEXT ACTION = start [[Y916N7WL]] (root of the order,
+unblocked).** This TRDD cannot reach `complete` until every NPT is terminal (the completion gate);
+it stays in `design` as the umbrella while the flock executes.
 
 **Hard gate before any OAuth-rotation code:** the token-handling design
 (**[[TRDD-H24DF6ZC]]**, this TRDD's NPT) must be **explicitly signed off by the USER** first

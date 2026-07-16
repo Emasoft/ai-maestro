@@ -215,6 +215,12 @@ export function requireSudoToken(
  */
 export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
   'POST /api/governance/password',
+  // TRDD-P7XKV3N9: setting/removing the recovery email establishes (or tears down) the
+  // MAESTRO's remote password-reset relay. Both handlers gate on enforceSystemOwner —
+  // owner-only, never an agent — so classifying them strict (security-registry.json)
+  // requires declaring them here too (Risk R-2 superset guardrail).
+  'POST /api/governance/email/configure',
+  'DELETE /api/governance/email',
   'PATCH /api/settings/security',
   'DELETE /api/settings/marketplaces',
   'PATCH /api/settings/auto-update',

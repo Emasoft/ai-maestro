@@ -121,6 +121,25 @@ auth path in these scripts at all**. That gap was a nuisance before R42; it is n
 the single thing standing between the USER and their own fleet, which is why
 teaching `get_auth_args` about the `aim_session` cookie stopped being optional.
 
+### `aimaestro-continuity.sh` — the agent-continuity surface (TRDD-DXJZM3BW)
+
+The ONLY new script surface the Family-A continuity absorption adds (TRDD-KCRMSNL7).
+Two **self-scoped** verbs (R42 — `<self>` must be the caller's own agent; the human
+owner may target any). The ai-maestro-tailored janitor's `#J` shim calls these; the
+server owns all actuation. Everything else (waking, injecting) reuses
+`aimaestro-session.sh`.
+
+| Subcommand | Does |
+|---|---|
+| `status <self>` | the 5 continuity-status fields for this host's account: `account_healthy`, `window_5h_pct`, `window_7d_pct`, `cache_ttl_minutes`, `next_action`. A DELIBERATE metadata ceiling (TRDD-H24DF6ZC) — **no OAuth token can leak through it** |
+| `ensure-resume <self>` | idempotently ensure THIS agent is resumed — no-op (`already-live`) if live, else the server resumes it via the existing wake path |
+
+`status`'s window/cache fields come from the AgentlensPro CLI (observe-only, no token —
+TRDD-Y916N7WL); `next_action` is computed server-side (interim from observables until the
+OAuth manager TRDD-1GGQ4HWY lands). The server-INTERNAL fleet-wide liveness scan +
+cross-agent actuation is TRDD-CHN16JXZ — never a call from this self-scoped surface, because
+an agent must not drive another (R42).
+
 ### `aimaestro-panel.sh` — drive the dashboard HTML side panel
 
 | Subcommand | Does |

@@ -1,8 +1,9 @@
 ---
-version: "4.3.0"
-date: 2026-07-14
+version: "4.4.0"
+date: 2026-07-16
 branch: governance-rules
 changelog:
+  - "4.4.0: Added R43-R48 (IRON, USER-set, 2026-07-16) — the MULTI-HOST governance model — and revised R39.2. Many hosts on one Tailscale VPN, each with its own MAESTRO user + MANAGER agent. R43: governance is HOST-SCOPED — a MAESTRO (and its MANAGER) governs (approve/mandate TRDDs, create/destroy/configure agents+users) ONLY its own host's agents+users; another host's agents are governed only by THAT host's MAESTRO. R44: cross-host agent MIGRATION — every agent is relocatable (export bundle = conversation JSONL + workdir-installed extensions + any agent-managed Docker container + zipped workdir); requires DOUBLE approval (source-host MANAGER AND destination-host MANAGER), after which the two ai-maestro servers coordinate the transfer automatically; the destination's acceptance of the arriving foreign AID is R35-gated; DISTINCT from R5 intra-host team transfer. R45: TEAMS are same-host only; GROUPS may span hosts (a group is a cross-host chat room — no titles/COS/kanban). R46: the sidebar is ONE unified list of all agents AND users across hosts (desktop or mobile remote browser), divided only by teams/groups; a user and its paired agent both appear (MAESTRO+MANAGER, normal-user+ASSISTANT — distinct entities); the MANAGER governs, the ASSISTANT does not. R47: user names are unique across the WHOLE VPN; a normal user may register AND change their own password remotely. R48 (CRITICAL): the MAESTRO is registered ONLY from the physical host, presence verified at least once and on every MAESTRO password change (console-presence, TRDD-P7XKV3N9 §2b) — so a MAESTRO password change is console-only, never remote (a normal user's is not so restricted); extends R16. R39.2 REVISED (USER): the ASSISTANT role-plugin (still TO BE CREATED) is a combination of the MANAGER + MAINTAINER role-plugins (was 'MANAGER planning + AUTONOMOUS programming'), without agent/team-creation and without governing powers. R39.5 REVISED (USER): the ASSISTANT obeys ONLY its bound user — NOT the MAESTRO, NOT the MANAGER — works in isolation, executes no mandates (R41), and needs no MANAGER/COS/MAESTRO approval to act for its user; it messages only its own user (was 'obeys only its user AND the MAESTRO'). OPEN EDGE flagged to the USER: R39.4/R26 still give the MAESTRO host-admin control over the ASSISTANT's four locked identity fields (NAME/TITLE/ROLE/TEAM) — identity administration, distinct from operational obedience — pending USER confirmation whether that survives 'not even the MAESTRO'. STAGED ROLLOUT: this commit lands the SPEC only; the implementation (cross-host migration automation, the ASSISTANT role-plugin, cross-host groups, VPN-unique-username enforcement, the unified cross-host sidebar, the MAESTRO registration/login console-gates) and the §0 mirror-sync (comm graph, element-management, personas, scenarios) are tracked as follow-on TRDDs — the new rules describe not-yet-built behavior, so no existing mirror is CONTRADICTED, only extended."
   - "4.3.0: Added R42 (CRITICAL — IRON, USER-set): NO AGENT MAY DRIVE ANOTHER AGENT. Messaging is the ONLY channel by which one agent may influence another, governed by the R6 comm graph. ABSOLUTE — no title-based exemption: neither MANAGER nor CHIEF-OF-STAFF. Self-drive stays permitted (an agent may /compact itself, paint its own panel); the prohibition targets ANOTHER agent. Sole exception: the janitor's few GLOBAL operations (disarm/re-arm, pause/unpause the heartbeat, globally reload plugins+skills) — machine-wide switches, not commands aimed at an agent. MANAGER/COS retain their SEPARATE, non-injection authority to change an agent's CONFIGURATION (local skills, subagents, MCP, hooks) and its TEAM/TITLE — configuring an agent is not driving it. WHY ABSOLUTE: a message lands in an inbox and the recipient DECIDES whether to act; an injected command IS the recipient's own action, bypassing its judgment, its rules and its title — one agent typing into another's pane can do anything the victim may do, which makes every other rule in this document advisory. The comm graph is only a boundary if messaging is the only channel. SUPERSEDES the prior send-command design (MANAGER could drive ANY agent, COS its own team) across six routes: POST …/[id]/{queue,panel,prompt/answer}, PATCH …/[id]/session ('types arbitrary text straight into a live pane'), POST /api/sessions/[id]/{stop,restart} — see TRDD-BF3JN4TL. HONEST LIMIT, stated rather than implied: the TMUX channel is NOT closed. All agents share one OS uid, so `tmux send-keys -t <other>` succeeds regardless of API policy, and no in-process guard can stop it (agent-shell-guard.sh overrides the `cd` SHELL FUNCTION; a binary called by absolute path ignores it). R42 therefore ships ENFORCED AT THE API and MANDATED BY RULE (a directive in rules/aimaestro/aimaestro-agent-rules.md, seeded read-only into every agent workdir and injected into every agent's context on every turn) — tamper-EVIDENT, not tamper-PROOF. NEVER describe R42 as a sandbox. Real containment needs OS-level isolation (per-agent uid → tmux's 0700 socket dir makes cross-agent send-keys a kernel EPERM; or a sandbox-exec seatbelt profile fencing each agent's socket, which sidesteps the per-user-keychain problem; or containers, TRDD-a1019073)."
   - "4.2.1: CORRECTED R29.1, which was WRONG and had been propagating (USER-authorized, 2026-07-14). It read 'Creating a team auto-creates the CHIEF-OF-STAFF + the 5 basic team members' — wrong TWICE. (a) MISCOUNT: that reads as six agents (COS + 5), while R12.1 (CRITICAL) defines the base as FIVE agents INCLUDING the COS — 1 CHIEF-OF-STAFF, 1 ARCHITECT, 1 ORCHESTRATOR, 1 INTEGRATOR, 1 MEMBER. (b) WRONG ACTOR: 'auto-creates' says the SYSTEM builds them all, while R12.2 ('the CHIEF-OF-STAFF must immediately add the missing agents') and R31.1 ('until the COS finishes creating + configuring all basic members') both put that duty on the COS. As written, R29.1 contradicted R12.1, R12.2, R30.2 and R31.1 simultaneously. It now reads: the MANAGER creates the team + the CHIEF-OF-STAFF and ONLY the CHIEF-OF-STAFF; the COS then creates the other 4. No behavior change is intended — R12.1 always governed; the document was the thing that was wrong. WHY IT MATTERS BEYOND WORDING: the error propagated and did real damage. `createNewTeam` creating only the auto-COS (CORRECT, per R12.2/R31.1) was reported as a bug because the code had been audited against R29.1 instead of R12.1; and the miscount was laundered into the project memory corpus, where it re-read as independent corroboration. The general lesson, now recorded: when a rule USES a term ('the 5 basic members'), the rule that DEFINES that term governs — a governance corpus is a system of claims, not a list, and an error in one rule stays invisible until two are read side by side. NOTE: the 4.0.0 changelog entry below still paraphrases the old, wrong R29 ('auto-creating COS + 5 base members'); it is left intact as history — this entry supersedes it. Separately, the ENFORCEMENT of R12.1/R30.1/R31 is a different matter and is largely absent — see TRDD-F1SL03CK, TRDD-0KMDJVON, TRDD-8K68E16G."
   - "4.2.0: R41 is now AUTHENTICATED, not just authorized — the second half of Emasoft/ai-maestro#47. Approving a card MINTS a portfolio token (R28): Ed25519-signed by the host, anchored in the host-signed ledger (R34), scoped `trdd:approve`, PINNED to that card's id, and recorded as `approval-token:` in its frontmatter. `aimaestro-trdd.sh verify <trdd-id>` (new) reads it back and exits NON-ZERO when the approval does not verify. It answers FROM THE TOKEN, never from the card's prose — `approval-judge:` and the `## Approval log` line are precisely what a forger rewrites, so only the token id is taken from the file; who approved, under what title, and for which card come from the signature. It also checks the issuer's authority against the card's `min-approval-requirement:` on the R41.4 ladder, so a COS-issued token cannot satisfy a manager-tier card and NO agent token can ever satisfy a `user`-tier one (the human owner's tokens record `issuer_title: user`; a latent bug made an owner-minted token unverifiable forever, and it is fixed here). A card with a perfectly-formed APPROVED line and no token now reports UNVERIFIED — which is the entire point. Also: `aimaestro-portfolio.sh` (new — mint/list/verify/revoke), and the portfolio routes gained the headless twins they never had (the whole surface 404'd on a worker node, so a verifier could not be reached at all — the worst failure direction, since the caller cannot tell 'forged' from 'verification unavailable'). LIMITS, stated rather than implied: (a) the token binds an approval to a card's IDENTITY, not its CONTENT — a body edited after approval still verifies, because that authority did approve that card; freezing content needs a card digest in the token (`attestation_ref`, reserved). (b) `OPERATIONS_REQUIRING_TOKEN` stays EMPTY: #47 asked for verification, and making a token MANDATORY for an operation is a separate governance decision, deliberately not slipped in beside a refactor."
@@ -1403,10 +1404,10 @@ Read-only operations (queries, lookups, calculations) do NOT need AIO functions 
 | ID | Rule | Source |
 |----|------|--------|
 | R39.1 | Users (being human) have **no terminal and no chat page** on their own profile. Each user is auto-assigned an **ASSISTANT**-title agent when created/registered (the MAESTRO user is exempt — it already has the MANAGER agent) | Explicit (USER) |
-| R39.2 | The ASSISTANT runs the **`ai-maestro-assistant-role-agent`** role-plugin — a mix of the MANAGER role-plugin (planning) + the AUTONOMOUS role-plugin (programming), but **without** agent/team-creation privileges | Explicit (USER) |
+| R39.2 | The ASSISTANT runs the **`ai-maestro-assistant-role-agent`** role-plugin (**still to be created**) — a **combination of the MANAGER and MAINTAINER** role-plugins, **without** agent/team-creation privileges and **without governing powers** (R46.3). *(USER 2026-07-16 revised the composition from the earlier "MANAGER planning + AUTONOMOUS programming".)* | Explicit (USER) |
 | R39.3 | The user interacts with their ASSISTANT by selecting their own profile and typing in its terminal. The user may **not** access any other agent's terminal or join any team; selecting any non-own agent shows the profile with **no terminal** and **no** ability to edit that agent's profile panel | Explicit (USER) |
 | R39.4 | The ASSISTANT has **no team affiliation**; its profile shows `Assistant of <user name>` where the team label would be. The user MAY edit the ASSISTANT's profile panel **except** NAME, TITLE, ROLE-PLUGIN, and TEAM — those four stay **read-only to the user** and may be changed **only by the MAESTRO** user, with the sudo password (consistent with R26) | Explicit (USER) |
-| R39.5 | The ASSISTANT obeys **only its user and the MAESTRO**, is aware of the user's kanban tasks, shares TRDDs sent to the user, and may message **only** its user and the MAESTRO | Explicit (USER) |
+| R39.5 | The ASSISTANT obeys **ONLY its bound user — no one else, NOT even the MAESTRO**, and works in **isolation** under that user. It is **outside the governance chain**: it is never a direct target of a mandate (R41) and needs **no MANAGER / COS / MAESTRO approval** to act for its user. It is aware of the user's kanban tasks and shares TRDDs sent to the user, which it works on **as its user's** (R39.7) — never on any other authority's command. It may message **only its own user** | Explicit (USER, 2026-07-16 revised — was "obeys only its user and the MAESTRO") |
 | R39.6 | An ASSISTANT agent **cannot be deleted independently** — every user MUST always have exactly one ASSISTANT for as long as the user exists. Its lifecycle is **bound to its user**: only deleting the **USER** cascades a (soft) delete to that user's ASSISTANT (consistent with the cemetery soft-delete model) | Explicit (USER) |
 | R39.7 | A user's ASSISTANT is **invisible to the other agents**, but it **inherits all tasks and permissions sent to the user** — the user's kanban tasks and granted permissions flow through to their ASSISTANT | Explicit (USER) |
 
@@ -1541,6 +1542,74 @@ else. There is **no title-based exemption** — not MANAGER, not CHIEF-OF-STAFF.
 > isolation lands (per-agent uid, a seatbelt profile fencing the tmux socket, or containers —
 > `TRDD-a1019073`). **Do not describe R42 as a sandbox.** Closing the API while leaving tmux
 > open is a locked door beside an open window; the danger is believing the window is shut.
+
+---
+
+## R43. Multi-Host Governance Scope (IRON, USER-set)
+
+**The invariant:** governance authority is HOST-SCOPED. A MAESTRO — and the MANAGER that obeys it — governs only the agents and users registered on its OWN host.
+
+| ID | Rule | Source |
+|----|------|--------|
+| R43.1 | Many hosts may run inside the same Tailscale VPN; each host has exactly **one MAESTRO user and one MANAGER agent** (consistent with R36.2) | Explicit (USER) |
+| R43.2 | A MAESTRO (and its MANAGER) may **govern** — approve/mandate TRDDs, and create / destroy / configure agents and users — **only** the agents and users registered on its **own host** | Explicit (USER) |
+| R43.3 | An agent or user registered on **another** host can be governed **only** by **that host's** MAESTRO. No MAESTRO has governing authority over another host's agents or users | Explicit (USER) |
+| R43.4 | Multiple MAESTROs coexist across hosts without conflict — each on its own unique host, each a unique identity (name + AID). The **only** sanctioned channels crossing the host boundary are cross-host MANAGER↔MANAGER coordination for migration (R44) and cross-host **groups** (R45); neither grants governance over the other host's agents | Explicit (USER) |
+
+---
+
+## R44. Cross-Host Agent Migration (IRON, USER-set)
+
+**The invariant:** every ai-maestro agent is relocatable; moving one between hosts requires BOTH hosts' MANAGERs to approve, after which the two servers coordinate the transfer automatically.
+
+| ID | Rule | Source |
+|----|------|--------|
+| R44.1 | All ai-maestro agents are **relocatable by design**. The migration export bundle is: the **conversation JSONL**, all **extensions installed in the workdir**, any **Docker container the agent manages**, and the **zipped workdir** | Explicit (USER) |
+| R44.2 | A cross-host migration requires **DOUBLE approval — the source host's MANAGER AND the destination host's MANAGER must both approve**. Each MANAGER approves under its own MAESTRO's authority (R37.1) | Explicit (USER) |
+| R44.3 | Only after both MANAGERs approve do the two ai-maestro servers **permit the transfer to start**; the actual move is then **automated coordination between the two hosts** (export → transfer → import) | Explicit (USER) |
+| R44.4 | The destination host accepting the arriving agent is subject to **R35** — it is a foreign agent, so its AID is accepted only via the R35 MAESTRO-approval + signed-ledger path | Derived (R35) |
+| R44.5 | Cross-host migration (R44) is **distinct from intra-host team transfer (R5)**: R5 moves an agent between **teams on the same host** (COS-approved); R44 moves an agent between **hosts** (dual-MANAGER-approved) | Clarifying |
+
+---
+
+## R45. Teams Are Same-Host; Groups May Span Hosts (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R45.1 | A **team** requires all its agents to be on the **same host** — the 5-role base (R12) is host-local. To place an agent in a team on another host it must first be **migrated** there (R44) | Explicit (USER) |
+| R45.2 | A **group** MAY include agents from **different hosts**. A group is a broadcast **chat room** (like a Slack channel), not a governance unit — no titles, no COS, no kanban | Explicit (USER) |
+
+---
+
+## R46. Unified Cross-Host Sidebar; User and Paired Agent Both Listed (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R46.1 | The left sidebar shows **one unified list** of all agents AND users — same-host or cross-host, viewed from a desktop or mobile remote browser — divided **only** by teams/groups | Explicit (USER) |
+| R46.2 | A **user and its paired agent both appear** in the list, as **distinct entities**: a **MAESTRO user** alongside its **MANAGER agent**; a **normal user** alongside its **ASSISTANT agent** (R39). A user is not its agent | Explicit (USER) |
+| R46.3 | The paired agent's authority differs by pairing: the **MANAGER governs** its host; the **ASSISTANT does not govern** and works only for its bound user (R39.5) | Explicit (USER) |
+
+---
+
+## R47. VPN-Unique User Names; Remote Normal-User Registration (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R47.1 | **User names are unique across the ENTIRE Tailscale VPN** (all hosts), not merely per-host. Registration MUST reject a name already taken on any peer host | Explicit (USER) |
+| R47.2 | A **normal (non-MAESTRO) user** may be **registered remotely** on any host (then bound by all R38/R40 restrictions), and may **change their own password remotely** | Explicit (USER) |
+
+---
+
+## R48. MAESTRO Console-Presence — Registration and Password Change Are Local-Only (CRITICAL — IRON, USER-set)
+
+**The invariant:** the MAESTRO is too powerful to be seized remotely — physical presence at the host is required to become MAESTRO and to change the MAESTRO password.
+
+| ID | Rule | Source |
+|----|------|--------|
+| R48.1 | A **MAESTRO user may be registered ONLY from the physical host machine** — never over a remote browser. This cannot be changed by any setting | Explicit (USER) |
+| R48.2 | **Physical presence must be verified at least once** (at MAESTRO registration / first login) **and every time the MAESTRO changes their password** — via the host's OS presence channel (console-presence, TRDD-P7XKV3N9 §2b) | Explicit (USER) |
+| R48.3 | Consequently a **MAESTRO password change cannot be made remotely** — only from the host console. A **normal user's** password change is **not** so restricted (R47.2 — remote allowed) | Explicit (USER) |
+| R48.4 | R48 **extends R16** (password never shared with agents) and the TRDD-P7XKV3N9 console-presence work: invalidate/reset are already console-gated; R48 additionally binds **MAESTRO registration and MAESTRO login** to console presence (the not-yet-built halves) | Explicit (USER) + Implementation note |
 
 ---
 

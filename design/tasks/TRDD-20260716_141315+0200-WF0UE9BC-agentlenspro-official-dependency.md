@@ -3,7 +3,7 @@ trdd-id: WF0UE9BC
 title: Ship AgentlensPro as an official ai-maestro dependency (npm CLI, installed alongside the stack)
 column: planned
 created: 2026-07-16T14:13:15+0200
-updated: 2026-07-16T14:22:00+0200
+updated: 2026-07-16T15:05:00+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -92,6 +92,16 @@ tab/enrichment is a follow-up UI TRDD that consumes the surface below.
 - conversation view → `get_conversation` (verbatim per-turn from the .jsonl)
 - realtime burn (janitor already consumes) → `get_burn_status`, `investigate_burn`,
   `get_heartbeat_cost`
+
+**Canonical field paths — AgentlensPro corrected my initial guesses (AgentlensPro#3,
+2026-07-16); now LOCKED in their `cliContract.aimaestro.test.ts` @ `098b458` (a reshape
+fails their CI). Consume THESE, not the guessed names:**
+- `get_agent_tokens` → `inputTokens`/`outputTokens`/`cacheReadTokens`/`cacheCreateTokens`/`totalTokens`/`cost_usd` (snake_case)
+- `get_cost_rollup` → `groups[].{input,output,cacheRead,cacheCreation,costUsd}` (+ `totals`); `costUsd`, not `cost`
+- `get_context_growth` → `perTurn[].{cacheReadTokens,cacheCreateTokens}` + `totalCacheCreatedTokens` + `overallCacheHitRatePct`
+- `get_account_status` → `account`/`plan`/`mode`/`cacheTtl` (+ `account.billingType`); per-window %s at `usageWindows.{fiveHourPct,sevenDayPct,windowSource}`
+- `get_window_budget` → `capacitySource`/`machineWide.capacitySource`/`accounts[]` (no fiveHour/sevenDay keys) — read %s from `get_account_status.usageWindows` / `get_burn_status.accountWindows`
+- `get_conversation` → `sessionId`/`turnCount`/`compactions[]`/`turns[].{turn,role,messageId,model,ts,usage,blocks[]}`, `blocks[].kind` ∈ userText/assistantText/thinking/toolUse/toolResult
 
 **SECURITY GUARDRAIL (R16 — load-bearing):** AgentlensPro's "account tracking / OAuth-token
 rotation" touches CREDENTIALS. ai-maestro may consume account **metadata** (which account,

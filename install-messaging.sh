@@ -850,6 +850,26 @@ if [ -f "$TOOLING_INSTALLER" ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
+# OPTIONAL: AgentlensPro observability CLI (TRDD-WF0UE9BC, USER mandate)
+#
+# `agentlenspro` npm CLI — machine-scope agent observability (burn/cost
+# forensics, OTEL ingest), an official ai-maestro dependency consumed by the
+# janitor (ai-maestro-janitor#78). The dedicated installer is FAIL-SOFT (a
+# failure here NEVER aborts the ai-maestro install), idempotent, and no-ops
+# cleanly until the pinned 2.8.0 floor is published to npm (owner-gated).
+# ═══════════════════════════════════════════════════════════════
+AGENTLENS_INSTALLER="$SCRIPT_DIR/scripts/install-agentlens.sh"
+if [ -f "$AGENTLENS_INSTALLER" ]; then
+    if [ "$NON_INTERACTIVE" = true ]; then
+        bash "$AGENTLENS_INSTALLER" -y \
+            || print_warning "AgentlensPro install returned non-zero (continuing)"
+    else
+        bash "$AGENTLENS_INSTALLER" \
+            || print_warning "AgentlensPro install returned non-zero (continuing)"
+    fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
 # Set up ALL local marketplaces (R20.3 v3.7.0 per-client layout)
 #
 # Two containers, each with per-client marketplace dirs:

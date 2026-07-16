@@ -358,3 +358,12 @@ export const MARKETPLACE_REPO_URL = `https://github.com/${MARKETPLACE_REPO}`
 export function rolePluginRepoUrl(pluginName: string): string {
   return `https://github.com/Emasoft/${pluginName}.git`
 }
+
+/**
+ * AgentlensPro — official ai-maestro observability CLI dependency (TRDD-WF0UE9BC).
+ * npm CLI (NOT a Claude Code plugin), installed by scripts/install-agentlens.sh.
+ * VERSION_FLOOR is the release carrying the locked janitor-consumed CLI contract.
+ */
+export const AGENTLENS_NPM_PKG = 'agentlenspro'
+export const AGENTLENS_VERSION_FLOOR = '2.8.0'
+export const AGENTLENS_REPO = 'https://github.com/Emasoft/AgentlensPro'

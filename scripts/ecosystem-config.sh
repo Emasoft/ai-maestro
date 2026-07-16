@@ -56,3 +56,10 @@ ROLE_PLUGIN_AUTONOMOUS="ai-maestro-autonomous-agent"
 # If the project owner changes repos, update the TS file first, then this one.
 AI_MAESTRO_REPO="https://github.com/23blocks-OS/ai-maestro"
 MARKETPLACE_REPO_URL="https://github.com/${MARKETPLACE_REPO}"
+
+# AgentlensPro — official observability CLI dependency (TRDD-WF0UE9BC).
+# Mirrors lib/ecosystem-constants.ts AGENTLENS_* (source of truth). npm CLI,
+# installed by scripts/install-agentlens.sh; floor = the locked-contract release.
+AGENTLENS_NPM_PKG="agentlenspro"
+AGENTLENS_VERSION_FLOOR="2.8.0"
+AGENTLENS_REPO="https://github.com/Emasoft/AgentlensPro"

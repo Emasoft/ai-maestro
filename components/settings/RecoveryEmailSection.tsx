@@ -29,13 +29,14 @@ interface EmailStatus {
   configured: boolean
   email?: string
   verified?: boolean
-  provider?: { host: string; port: number; secure: boolean } | null
+  provider?: { host: string; port: number; secure: boolean; username?: string | null } | null
 }
 
 interface DetectPreview {
   host: string
   port: number
   secure: boolean
+  usernameFormat?: 'full' | 'local'
   label?: string
   known?: boolean
   appPasswordUrl?: string | null
@@ -52,6 +53,7 @@ export default function RecoveryEmailSection() {
 
   // Add / configure form
   const [email, setEmail] = useState('')
+  const [userid, setUserid] = useState('') // explicit SMTP login id; blank ⇒ server derives from the email
   const [appPassword, setAppPassword] = useState('')
   const [preview, setPreview] = useState<DetectPreview | null>(null)
   const [detecting, setDetecting] = useState(false)
@@ -77,6 +79,7 @@ export default function RecoveryEmailSection() {
         const data = (await res.json()) as EmailStatus
         setStatus(data)
         if (data.configured && data.email) setEmail(data.email)
+        setUserid(data.provider?.username ?? '') // show the stored login id (blank when it was derived)
         // Configured-but-unverified means the owner must still confirm a code
         // (or Remove and re-add if the earlier code expired).
         setAwaitingCode(!!data.configured && !data.verified)
@@ -125,7 +128,7 @@ export default function RecoveryEmailSection() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim(), appPassword }),
+          body: JSON.stringify({ email: email.trim(), appPassword, userid: userid.trim() }),
         },
         (reason) => requestSudoToken(reason),
       )
@@ -212,6 +215,7 @@ export default function RecoveryEmailSection() {
       setStatus({ configured: false })
       setAwaitingCode(false)
       setEmail('')
+      setUserid('')
       setAppPassword('')
       setPreview(null)
       setInstructions(null)
@@ -327,6 +331,9 @@ export default function RecoveryEmailSection() {
                     {preview.secure ? ' (TLS)' : ''}
                     {preview.label ? ` — ${preview.label}` : ''}
                   </div>
+                  {preview.usernameFormat === 'local' && (
+                    <div className="text-amber-300/80">This provider signs in with just the part before &ldquo;@&rdquo; — set the userid accordingly (or leave it blank to auto-derive).</div>
+                  )}
                   {preview.note && <div className="text-gray-500">{preview.note}</div>}
                   {preview.appPasswordUrl && (
                     <a
@@ -348,6 +355,19 @@ export default function RecoveryEmailSection() {
                 </div>
               )}
 
+              <div>
+                <input
+                  type="text"
+                  value={userid}
+                  onChange={(e) => setUserid(e.target.value)}
+                  placeholder="Mail login / userid"
+                  autoComplete="off"
+                  className="w-full px-2 py-1 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 focus:outline-none focus:border-emerald-500"
+                />
+                <p className="mt-1 text-xs text-gray-600">
+                  Your provider&apos;s SMTP login. Leave blank if it&apos;s your email address.
+                </p>
+              </div>
               <input
                 type="password"
                 value={appPassword}

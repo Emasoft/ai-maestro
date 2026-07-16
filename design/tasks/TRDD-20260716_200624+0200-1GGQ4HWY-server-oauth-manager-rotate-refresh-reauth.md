@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T00:32:00+0200
+updated: 2026-07-17T00:52:00+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -23,12 +23,12 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [ddec060f, 59ebd182, 69ce68cb]
+implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06]
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-16
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
 
 **▶ REFRAMED by the USER (2026-07-16): REPLACE the janitor daemon — don't coordinate with it.**
 Verbatim: *"look at the janitor source code for the daemon and convert the code into typescript as
@@ -68,22 +68,39 @@ write, the lock, and the state.json schema.
   `oauth-rotator-server-tick.lock` (NEVER the janitor's `oauth-rotator-tick.lock`) so it never
   implies cross-mechanism coordination. Server-vs-`#N` safety = presence/delegation, not this
   lock. Supersedes H24DF6ZC-D3's "shared kernel flock" (consistent with the reframe). 10 tests.
-- **D** — slot writes + `-backup`/`-livebak` mirrors (rotator-owned, reversible; LOW risk).
+- **D ✅ DONE (`699e5f06`)** — the rotator-owned, REVERSIBLE slot store + state index:
+  `lib/oauth-rotator/integrity.ts` (port of `janitor_integrity.py` — `.bak`+`.sha256` sidecar,
+  mirror-first ordering, corruption-recovering `readOrRestore`), `keychain.ts` (the ACL-aware
+  macOS `security` custody — the TRDD-EQJPPZ2L create-vs-update `-A`/`-T` rule; gated on
+  `detectBackend()==='macos'`), `slots.ts` (ROOT resolver + `state.json` schema/load/save +
+  `fingerprint`/`oauthOf`/`expiresInH` + `writeSlot`/`readSlot` primary+`-slot-backup` mirror +
+  plaintext fallback + fail-closed on a present-but-refusing keychain + `fileSlot` locked
+  capture), and `tick-lock.ts` gained `tryAcquireTickLockWait` (a capture WAITS for the lock,
+  never skips). BYTE-COMPAT with the janitor `#N`: slots stored as RAW compact JSON (no base64),
+  `state.json` sidecars match. 28 tests, 0-IMPACT (temp HOME + forced-off backend + hard guard);
+  tsc + `yarn build` clean. The LIVE credential is NOT touched — that is Phase E.
 - **E** — THE LIVE WRITE: `write_live_blob` + `_switch_blob` (ROTATE) + `_keepalive_refresh`
-  (RENEW). **R16 — checkpoint with the OWNER before it first runs live.** Safety net = the
-  `-livebak` mirror (refreshed from the CURRENT live at tick start, so it holds the previous
-  credential); validate the alternate (usage probe + local-expiry) BEFORE the switch.
+  (RENEW), plus the `-livebak` LIVE-credential mirror. **R16 — checkpoint with the OWNER before
+  it first runs live.** Safety net = the `-livebak` mirror (refreshed from the CURRENT live at
+  tick start, so it holds the previous credential); validate the alternate (usage probe +
+  local-expiry) BEFORE the switch. Reuses Phase D's `keychain.ts` (the `-T` live-family ACL
+  branch) + `integrity.ts`.
 - **F** — REAUTH + bootstrap browser tier (`reauth.py`/`slot_capture_browser.py`/`cookie_vault.py`
   via Node CDP/tmux) — the "only human step".
 - **G** — the 60s `cmd_tick` as a server-internal task, **config-gated OFF by default**; feeds
   [[DXJZM3BW]]'s `next_action` (cascade states: ok | rotating | reauth-needed).
 
-**NEXT ACTION:** Phase D — read `rotator.py`'s slot I/O (`read_slot`, `write_slot`, `file_slot`,
-`fingerprint`, `load_state`/`save_state`, the state.json schema + the `-backup`/`-livebak` mirror
-writes), then port the SLOT read/write path (rotator-owned, reversible; NOT the live credential)
-to `lib/oauth-rotator/`. Keychain service names: slots = `Claude Code-rotator-slot` (+`-backup`
-mirror); live = `Claude Code-credentials` (+`-livebak`) — the LIVE write stays Phase E (R16). Use
-the [[safe-storage.ts]] primitive + [[tick-lock.ts]] for the locked slot+state write.
+**NEXT ACTION:** Phase E — **THE ONE IRREVERSIBLE WRITE. R16 CHECKPOINT: get an explicit USER
+go-ahead BEFORE any code path can run live against `Claude Code-credentials`.** Read
+`rotator.py`'s `_read_live_primary`/`_live_backup_read`/`_live_backup_write`/`read_live_blob*`
+(485–605), `write_live_blob` (694), `_switch_blob` (ROTATE — merges to PRESERVE the live
+`mcpOAuth`), and `_keepalive_refresh` (1770, RENEW_REFRESH). Port the LIVE read + the `-livebak`
+mirror FIRST (a read/mirror is reversible), then gate the actual switch behind the R16 checkpoint
++ the pre-switch validation (usage probe + `-livebak` snapshot of the CURRENT live). Live service
+= `Claude Code-credentials` (account = macOS username, NOT the email); live mirror =
+`Claude Code-credentials-livebak`. Reuse Phase D's [[keychain.ts]] (`allowAny:false` → the `-T`
+live-family ACL), [[integrity.ts]], [[slots.ts]] (`loadState`/`saveState`/`readSlot`), and
+[[tick-lock.ts]]. DO NOT run the switch live without the USER checkpoint.
 
 ## Problem / Goal
 

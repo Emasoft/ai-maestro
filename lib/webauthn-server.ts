@@ -11,7 +11,12 @@
  *   3. Server consumes challenge from memory (one-shot) and verifies the response
  *
  * RP configuration:
- *   - rpID: 'localhost' (WebAuthn Level 3 supports localhost without SSL)
+ *   - rpID / origin: DERIVED per-request from the Host header by
+ *     resolveWebAuthnRp() against a strict allow-list (localhost always; one
+ *     optional `*.ts.net` host via AIM_WEBAUTHN_TS_HOST). With no host threaded
+ *     — and for every localhost request — it returns `localhost` /
+ *     `http://localhost:23000`, so single-operator behaviour is byte-identical
+ *     to the previous hardcode. TRDD-OC9ELGSO P2.
  *   - rpName: 'AI Maestro'
  *   - User: single system-owner (no multi-user)
  *
@@ -40,29 +45,125 @@ import { getStateDir } from '@/lib/ecosystem-constants'
 
 const CREDENTIALS_FILENAME = 'webauthn-credentials.json'
 const RP_NAME = 'AI Maestro'
-// LIB2-MIN-04: RP_ID and ORIGIN are hardcoded to `localhost`. WebAuthn
-// REQUIRES that the relying-party ID match the page's effective domain
-// at registration AND authentication time. This means passkeys ONLY
-// work when the user accesses the dashboard via `http://localhost:23000`.
-// Tailscale-routed access (e.g. `http://100.99.233.43:23000` or a
-// `*.ts.net` MagicDNS hostname) cannot use passkeys with this config —
-// the browser will reject the credential because the RP_ID doesn't match
-// the URL's hostname.
-//
-// To enable passkeys over Tailscale, this would need to derive RP_ID
-// from `request.headers.host` (with a strict allow-list of permissible
-// hostnames to prevent RP-spoofing attacks). The allow-list MUST include
-// localhost and the user's Tailscale hostnames; arbitrary host headers
-// MUST be rejected. Given Tailscale traffic is end-to-end encrypted
-// inside the VPN, the practical risk of NOT supporting passkeys over
-// Tailscale is low — operators can use the governance password as a
-// fallback. Document the limitation; do not silently widen the allow-
-// list without security review.
-const RP_ID = 'localhost'
-const ORIGIN = 'http://localhost:23000'
+// TRDD-OC9ELGSO P2: rpId + origin are DERIVED per-request from the Host header
+// by resolveWebAuthnRp() (below), against a strict allow-list. These two
+// localhost defaults are exactly what that resolver returns for a localhost
+// request (and when no host is threaded), so single-operator behaviour is
+// byte-identical to the previous hardcode until a `*.ts.net` host is added to
+// the allow-list via the AIM_WEBAUTHN_TS_HOST env var. Deriving instead of
+// hardcoding is what lets a passkey work over Tailscale HTTPS without letting a
+// forged Host header bind a credential to a foreign relying party.
+const RP_ID_LOCALHOST = 'localhost'
+const ORIGIN_LOCALHOST = 'http://localhost:23000'
 const CHALLENGE_TTL_MS = 60_000 // 60 seconds
 const USER_ID = 'system-owner'
 const USER_DISPLAY_NAME = 'System Owner'
+
+// ============================================================================
+// Relying-Party resolution (TRDD-OC9ELGSO P2) — host-derived rpId + origin
+// ============================================================================
+
+export interface WebAuthnRp {
+  /** WebAuthn relying-party ID — a bare hostname, never a scheme / port / IP. */
+  rpId: string
+  /** Expected origin (scheme + host + port); MUST equal the browser's origin. */
+  origin: string
+}
+
+// Env var holding the ONE allowed `*.ts.net` host. EMPTY by default.
+const TS_HOST_ENV = 'AIM_WEBAUTHN_TS_HOST'
+
+/**
+ * A syntactically valid Tailscale MagicDNS host: DNS labels ending in `.ts.net`,
+ * with NO scheme, port, path, or userinfo. Used to validate the CONFIGURED host
+ * so a malformed env var can never widen the allow-list beyond localhost.
+ */
+function isValidTsHost(host: string): boolean {
+  return /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+ts\.net$/.test(host)
+}
+
+/**
+ * The single configured `*.ts.net` host, read from AIM_WEBAUTHN_TS_HOST. EMPTY
+ * by default ⇒ only `localhost` resolves ⇒ behaviour identical to the historical
+ * hardcode. A malformed value is IGNORED — it must never widen the allow-list,
+ * and a bad env var must never break localhost login. FAIL CLOSED to localhost.
+ */
+export function getAllowedTsHost(): string | undefined {
+  const raw = process.env[TS_HOST_ENV]?.trim().toLowerCase()
+  if (!raw) return undefined
+  return isValidTsHost(raw) ? raw : undefined
+}
+
+/**
+ * Derive the WebAuthn relying-party {rpId, origin} from the request Host header
+ * against a STRICT allow-list. FAIL CLOSED: a host not on the list THROWS.
+ *
+ *   - `localhost` (ALWAYS)  → { rpId: 'localhost', origin: 'http://localhost:<port>' }
+ *       localhost is a WebAuthn "secure context" over plain HTTP.
+ *   - the ONE configured `*.ts.net` host (when `allowedTsHost` is set) →
+ *       { rpId: '<host>.ts.net', origin: 'https://<host>.ts.net:<port>' }
+ *       a real registrable domain requires HTTPS (a secure context).
+ *
+ * REJECTED (throws `webauthn_host_not_allowed`):
+ *   - a bare IP host (e.g. `100.99.233.43`) — an IP is NOT a valid WebAuthn RP_ID
+ *     per spec, so it can never be an allowed relying party;
+ *   - ANY host that is neither `localhost` nor THE configured `*.ts.net` name —
+ *     the anti-RP-spoofing guard, so a forged Host cannot bind a credential to a
+ *     foreign relying party.
+ *
+ * When `hostHeader` is absent the localhost default is returned unchanged, so a
+ * caller that does not thread the host — and every localhost request — behaves
+ * exactly as the previous hardcode did.
+ */
+export function resolveWebAuthnRp(
+  hostHeader?: string | null,
+  allowedTsHost?: string,
+): WebAuthnRp {
+  const header = hostHeader?.trim()
+  if (!header) {
+    // No host to derive from ⇒ historical localhost default (byte-identical).
+    return { rpId: RP_ID_LOCALHOST, origin: ORIGIN_LOCALHOST }
+  }
+
+  // Parse via URL so ports and IPv6 brackets are handled uniformly. An
+  // unparseable Host is REJECTED (fail closed), never silently defaulted.
+  let hostname: string
+  let port: string
+  try {
+    const u = new URL(`http://${header}`)
+    hostname = u.hostname.toLowerCase()
+    port = u.port
+  } catch {
+    throw new Error(`webauthn_host_not_allowed: unparseable Host "${header}"`)
+  }
+
+  if (hostname === 'localhost') {
+    // Keep plain HTTP — localhost is a secure context without TLS.
+    return {
+      rpId: RP_ID_LOCALHOST,
+      origin: port ? `http://localhost:${port}` : 'http://localhost',
+    }
+  }
+
+  const allowed = allowedTsHost?.trim().toLowerCase()
+  if (allowed && isValidTsHost(allowed) && hostname === allowed) {
+    // A real registrable domain over Tailscale HTTPS. rpId is the bare hostname.
+    return {
+      rpId: hostname,
+      origin: port ? `https://${hostname}:${port}` : `https://${hostname}`,
+    }
+  }
+
+  // Bare IP, unknown hostname, or a non-configured `*.ts.net` — all rejected.
+  throw new Error(
+    `webauthn_host_not_allowed: host "${hostname}" is not on the WebAuthn allow-list`,
+  )
+}
+
+/** Resolve {rpId, origin} for a request using the env-configured allow-list. */
+function resolveRp(hostHeader?: string | null): WebAuthnRp {
+  return resolveWebAuthnRp(hostHeader, getAllowedTsHost())
+}
 
 // ============================================================================
 // Types
@@ -216,8 +317,9 @@ function writeCredentials(creds: StoredCredential[]): void {
  * Generate WebAuthn registration options for the system owner.
  * Excludes already-registered credentials to prevent duplicate registration.
  */
-export async function generateWebAuthnRegistrationOptions() {
+export async function generateWebAuthnRegistrationOptions(hostHeader?: string | null) {
   const existingCreds = loadCredentials()
+  const { rpId } = resolveRp(hostHeader)
 
   const excludeCredentials = existingCreds.map(c => ({
     id: c.credentialID,
@@ -226,7 +328,7 @@ export async function generateWebAuthnRegistrationOptions() {
 
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
-    rpID: RP_ID,
+    rpID: rpId,
     userName: USER_ID,
     userDisplayName: USER_DISPLAY_NAME,
     attestationType: 'none',
@@ -251,6 +353,7 @@ export async function generateWebAuthnRegistrationOptions() {
 export async function verifyWebAuthnRegistration(
   response: RegistrationResponseJSON,
   expectedChallenge?: string,
+  hostHeader?: string | null,
 ) {
   // If no explicit challenge provided, consume from store
   const challenge = expectedChallenge ?? consumeChallenge(USER_ID)
@@ -258,11 +361,13 @@ export async function verifyWebAuthnRegistration(
     throw new Error('webauthn_challenge_expired: no pending challenge found or challenge expired')
   }
 
+  const { rpId, origin } = resolveRp(hostHeader)
+
   const verification = await verifyRegistrationResponse({
     response,
     expectedChallenge: challenge,
-    expectedOrigin: ORIGIN,
-    expectedRPID: RP_ID,
+    expectedOrigin: origin,
+    expectedRPID: rpId,
     requireUserVerification: false,
   })
 
@@ -281,8 +386,9 @@ export async function verifyWebAuthnRegistration(
  * Generate WebAuthn authentication options.
  * Includes all registered credentials as allowCredentials.
  */
-export async function generateWebAuthnAuthenticationOptions() {
+export async function generateWebAuthnAuthenticationOptions(hostHeader?: string | null) {
   const existingCreds = loadCredentials()
+  const { rpId } = resolveRp(hostHeader)
 
   const allowCredentials = existingCreds.map(c => ({
     id: c.credentialID,
@@ -290,7 +396,7 @@ export async function generateWebAuthnAuthenticationOptions() {
   }))
 
   const options = await generateAuthenticationOptions({
-    rpID: RP_ID,
+    rpID: rpId,
     allowCredentials,
     userVerification: 'preferred',
   })
@@ -308,6 +414,7 @@ export async function generateWebAuthnAuthenticationOptions() {
 export async function verifyWebAuthnAuthentication(
   response: AuthenticationResponseJSON,
   expectedChallenge?: string,
+  hostHeader?: string | null,
 ) {
   const challenge = expectedChallenge ?? consumeChallenge(USER_ID)
   if (!challenge) {
@@ -331,11 +438,13 @@ export async function verifyWebAuthnAuthentication(
     transports: matchingCred.transports as AuthenticatorTransportFuture[],
   }
 
+  const { rpId, origin } = resolveRp(hostHeader)
+
   const verification = await verifyAuthenticationResponse({
     response,
     expectedChallenge: challenge,
-    expectedOrigin: ORIGIN,
-    expectedRPID: RP_ID,
+    expectedOrigin: origin,
+    expectedRPID: rpId,
     credential,
     requireUserVerification: false,
   })

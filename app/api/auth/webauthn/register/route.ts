@@ -87,7 +87,8 @@ export async function GET(request: NextRequest) {
   if (authErr) return authErr
 
   try {
-    const options = await generateWebAuthnRegistrationOptions()
+    // TRDD-OC9ELGSO P2: derive rpId/origin from the request Host (allow-listed).
+    const options = await generateWebAuthnRegistrationOptions(request.headers.get('host'))
     return NextResponse.json(options, {
       headers: { 'Cache-Control': 'no-store' },
     })
@@ -160,9 +161,12 @@ export async function POST(request: NextRequest) {
 
     const { response, label } = parsed.data
 
-    // Verify the registration response with the stored challenge
+    // Verify the registration response with the stored challenge. The Host must
+    // match the one used at generate time (TRDD-OC9ELGSO P2 — same allow-list).
     const registrationInfo = await verifyWebAuthnRegistration(
       response as unknown as RegistrationResponseJSON,
+      undefined,
+      request.headers.get('host'),
     )
 
     // Build the credential record for storage

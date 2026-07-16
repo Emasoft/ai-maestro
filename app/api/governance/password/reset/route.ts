@@ -159,7 +159,8 @@ export async function POST(request: NextRequest) {
     // private key that must sign it, which only the owner's authenticator holds.
     if (!body.assertion) {
       try {
-        const options = await generateWebAuthnAuthenticationOptions()
+        // TRDD-OC9ELGSO P2: derive rpId/origin from the request Host (allow-listed).
+        const options = await generateWebAuthnAuthenticationOptions(request.headers.get('host'))
         return NextResponse.json({ assertionRequired: true, options })
       } catch {
         // FAIL CLOSED — if a challenge cannot be started, the caller cannot prove possession.
@@ -179,7 +180,12 @@ export async function POST(request: NextRequest) {
     // challenge and checks the signature. A forged, replayed, expired, or unknown-credential
     // assertion is rejected here and resets NOTHING.
     try {
-      await verifyWebAuthnAuthentication(body.assertion as unknown as AuthenticationResponseJSON)
+      // Host must match the one used at generate time (TRDD-OC9ELGSO P2).
+      await verifyWebAuthnAuthentication(
+        body.assertion as unknown as AuthenticationResponseJSON,
+        undefined,
+        request.headers.get('host'),
+      )
     } catch (err) {
       const message = err instanceof Error ? err.message : ''
       // Surface only well-known webauthn protocol CODES (mirrors the authenticate route). Any

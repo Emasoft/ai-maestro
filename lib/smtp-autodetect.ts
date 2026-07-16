@@ -207,9 +207,19 @@ async function verifyOnce(config: SmtpConfig, authUser: string, password: string
  * (EU carriers block 587; some Asian hosts drop 465), with no infinite flip. Returns the
  * config that actually worked so the caller stores exactly that.
  */
-export async function verifyCredentials(config: SmtpConfig, email: string, password: string): Promise<VerifyCredsResult> {
-  const localPart = email.slice(0, email.lastIndexOf('@'))
-  const authUser = config.usernameFormat === 'local' ? localPart : email
+export function resolveAuthUser(email: string, usernameFormat: 'full' | 'local', explicitUsername?: string): string {
+  // An explicit login id, when the owner entered one, ALWAYS wins — it is the only way
+  // to reach a provider whose SMTP userid is neither the full address nor its local-part
+  // (TRDD-P7XKV3N9). Trim so a stray space in the form field can't silently break auth.
+  const explicit = explicitUsername?.trim()
+  if (explicit) return explicit
+  // No explicit userid ⇒ derive: 'local' = the part before '@' (some EU telcos), else the
+  // full address (the overwhelming default). This is exactly the prior behavior.
+  return usernameFormat === 'local' ? email.slice(0, email.lastIndexOf('@')) : email
+}
+
+export async function verifyCredentials(config: SmtpConfig, email: string, password: string, explicitUsername?: string): Promise<VerifyCredsResult> {
+  const authUser = resolveAuthUser(email, config.usernameFormat, explicitUsername)
   const first = await verifyOnce(config, authUser, password, email)
   if (first.status !== 'FAILED') return first // SUCCESS or AUTH_REQUIRED — host/port are right
   // Reachability failed → try the alternate submission profile ONCE (guarded, no flip loop).

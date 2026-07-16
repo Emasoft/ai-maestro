@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseIspdbSmtp, mapMxToSmtp, autodetectSMTP, authRequiredInstructions } from '@/lib/smtp-autodetect'
+import { parseIspdbSmtp, mapMxToSmtp, autodetectSMTP, authRequiredInstructions, resolveAuthUser } from '@/lib/smtp-autodetect'
 
 /**
  * Dynamic SMTP autodetection (TRDD-P7XKV3N9). Tests the OFFLINE, deterministic surface:
@@ -118,5 +118,32 @@ describe('autodetectSMTP — curated table fast-path (offline, no network)', () 
   })
   it('returns null for a malformed address', async () => {
     expect(await autodetectSMTP('not-an-email')).toBeNull()
+  })
+})
+
+// TRDD-P7XKV3N9: the single source of truth for the SMTP login id, shared by the verify
+// path (verifyCredentials) and the send path (lib/mailer). An explicit userid must win
+// over the usernameFormat derivation so a provider whose login is neither the full email
+// nor its local-part can authenticate.
+describe('resolveAuthUser — explicit login id wins over usernameFormat derivation', () => {
+  it("'full' with no explicit userid → the full email", () => {
+    expect(resolveAuthUser('mario@example.com', 'full')).toBe('mario@example.com')
+  })
+  it("'local' with no explicit userid → the local-part only", () => {
+    expect(resolveAuthUser('mario@alice.it', 'local')).toBe('mario')
+  })
+  it('an explicit userid overrides the full-address derivation', () => {
+    expect(resolveAuthUser('mario@corp.example', 'full', 'mario.rossi.login')).toBe('mario.rossi.login')
+  })
+  it('an explicit userid overrides even the local-part derivation', () => {
+    expect(resolveAuthUser('mario@alice.it', 'local', 'weird-login-id')).toBe('weird-login-id')
+  })
+  it('trims surrounding whitespace on the explicit userid', () => {
+    expect(resolveAuthUser('mario@corp.example', 'full', '  spaced.login  ')).toBe('spaced.login')
+  })
+  it('an empty / whitespace-only explicit userid falls through to the derivation', () => {
+    expect(resolveAuthUser('mario@alice.it', 'local', '')).toBe('mario')
+    expect(resolveAuthUser('mario@alice.it', 'local', '   ')).toBe('mario')
+    expect(resolveAuthUser('mario@example.com', 'full', undefined)).toBe('mario@example.com')
   })
 })

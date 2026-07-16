@@ -22,6 +22,10 @@ import { startSetupFlow } from '@/lib/setup-bootstrap'
 const BodySchema = z.object({
   email: z.email().max(254),
   appPassword: z.string().min(1).max(256),
+  // The mail-provider SMTP login id (TRDD-P7XKV3N9). Optional: blank/absent ⇒ the server
+  // derives the login from usernameFormat (the prior behavior). Present ⇒ used verbatim,
+  // for providers whose login is neither the full email nor its local-part.
+  userid: z.string().trim().max(256).optional(),
 }).strict()
 
 export async function POST(request: NextRequest) {
@@ -36,7 +40,7 @@ export async function POST(request: NextRequest) {
   }
   const parsed = BodySchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body', detail: parsed.error.issues }, { status: 400 })
-  const { email, appPassword } = parsed.data
+  const { email, appPassword, userid } = parsed.data
 
   const detected = await autodetectSMTP(email)
   if (!detected) return NextResponse.json({ status: 'FAILED', error: 'no_smtp_detected' }, { status: 200 })
@@ -45,6 +49,7 @@ export async function POST(request: NextRequest) {
     { host: detected.host, port: detected.port, secure: detected.secure, usernameFormat: detected.usernameFormat },
     email,
     appPassword,
+    userid,
   )
 
   if (status !== 'SUCCESS') {
@@ -56,7 +61,16 @@ export async function POST(request: NextRequest) {
   // Verified — persist ONCE. Password → OS credential store (survives a governance reset);
   // settings → governance (UNVERIFIED until the owner confirms receipt of the code below).
   storeSmtpPassword(email, appPassword)
-  await setRecoveryEmail(email, { host: config.host, port: config.port, secure: config.secure, usernameFormat: config.usernameFormat })
+  // Persist the verified server settings, plus the explicit login id ONLY when the MAESTRO
+  // supplied one (userid is zod-trimmed). Omitting the key keeps the stored object clean and
+  // means the send path derives the login from usernameFormat (the prior behavior).
+  await setRecoveryEmail(email, {
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    usernameFormat: config.usernameFormat,
+    ...(userid ? { username: userid } : {}),
+  })
   const flow = await startSetupFlow({ email, purpose: 'email verification' })
   // The password is verified + stored; only the confirmation-code DELIVERY can still degrade.
   // If the mailer fell back to the host file (channel !== 'email'), a REMOTE owner cannot read

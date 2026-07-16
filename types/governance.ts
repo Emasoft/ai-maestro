@@ -32,6 +32,14 @@ export interface RecoverySmtpConfig {
   port: number
   secure: boolean // true = implicit TLS (465); false = STARTTLS (587)
   usernameFormat: 'full' | 'local'
+  /**
+   * The explicit SMTP login id, when the MAESTRO entered one (TRDD-P7XKV3N9). Some
+   * providers authenticate with a userid that is NEITHER the full email nor its
+   * local-part, so `usernameFormat` cannot derive it. When present it is used verbatim
+   * at both verify and send time (see resolveAuthUser); absent ⇒ derive from
+   * usernameFormat (backward-compatible with configs stored before this field existed).
+   */
+  username?: string
 }
 
 /** Governance configuration stored at ~/.aimaestro/governance.json */

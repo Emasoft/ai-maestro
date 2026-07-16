@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     configured: true,
     email: rec.email,
     verified: rec.verified,
-    provider: rec.smtp ? { host: rec.smtp.host, port: rec.smtp.port, secure: rec.smtp.secure } : null,
+    provider: rec.smtp ? { host: rec.smtp.host, port: rec.smtp.port, secure: rec.smtp.secure, username: rec.smtp.username ?? null } : null,
   })
 }
 

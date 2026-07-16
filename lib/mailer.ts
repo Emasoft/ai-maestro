@@ -31,6 +31,7 @@ import nodemailer from 'nodemailer'
 import { detectProvider } from './email-providers'
 import { getSmtpPassword } from './smtp-credential'
 import { getRecoveryEmail } from './governance'
+import { resolveAuthUser } from './smtp-autodetect'
 
 export interface MailerConfig {
   host: string
@@ -74,9 +75,13 @@ function autoConfig(accountEmail: string): MailerConfig | null {
   const pass = getSmtpPassword(accountEmail)
   if (!pass) return null
   let host: string, port: number, secure: boolean, usernameFormat: 'full' | 'local'
+  // The MAESTRO's explicit SMTP login id, when stored (TRDD-P7XKV3N9). Only the stored
+  // recovery config can carry it; the curated table knows only usernameFormat.
+  let explicitUsername: string | undefined
   const rec = getRecoveryEmail()
   if (rec && rec.email.toLowerCase() === accountEmail.toLowerCase() && rec.smtp) {
     ({ host, port, secure, usernameFormat } = rec.smtp)
+    explicitUsername = rec.smtp.username
   } else {
     const provider = detectProvider(accountEmail)
     if (!provider) return null
@@ -85,8 +90,8 @@ function autoConfig(accountEmail: string): MailerConfig | null {
     secure = provider.secure
     usernameFormat = provider.usernameFormat ?? 'full' // most providers use the full address; some regional telcos use the local part
   }
-  // Some regional providers (Alice/TIM, …) authenticate with the local part only.
-  const user = usernameFormat === 'local' ? accountEmail.slice(0, accountEmail.lastIndexOf('@')) : accountEmail
+  // An explicit userid wins; else derive (local-part for a few EU telcos, full address otherwise).
+  const user = resolveAuthUser(accountEmail, usernameFormat, explicitUsername)
   return { host, port, secure, user, from: accountEmail, pass }
 }
 

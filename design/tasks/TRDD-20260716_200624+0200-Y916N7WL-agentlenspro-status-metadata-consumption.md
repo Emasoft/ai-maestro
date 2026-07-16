@@ -1,9 +1,9 @@
 ---
 trdd-id: Y916N7WL
 title: Derive continuity status metadata from the AgentlensPro CLI (observe-only source)
-column: planned
+column: testing
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T20:06:24+0200
+updated: 2026-07-16T20:35:34+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,6 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
+implementation-commits: [fbf28fb0]
 ---
 
 # Derive continuity status metadata from the AgentlensPro CLI (observe-only source)
@@ -30,9 +31,15 @@ release-via: none
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-16
 
 Root of the Family-A topological order (nothing blocks it; dep AgentlensPro#3 landed via
-TRDD-WF0UE9BC). It builds the **metadata source** that `DXJZM3BW`'s `status` verb reads —
-so it lands first. **NEXT ACTION:** implement the AgentlensPro-CLI read that yields the four
-account/window/cache fields, behind a CI-locked contract test.
+TRDD-WF0UE9BC). It builds the **metadata source** that `DXJZM3BW`'s `status` verb reads.
+
+**✅ IMPLEMENTED 2026-07-16 (commit `fbf28fb0`) — `column: testing`.** `lib/agentlens-status.ts`
+reads `agentlenspro get_account_status --full` and maps the CI-locked canonical paths
+(`usageWindows.{fiveHourPct,sevenDayPct,windowSource}` + `.cacheTtl.minutes`) to the four
+observable `status` fields; verified against the live CLI shape (Max-20x machine). Split into
+pure `parseAgentlensStatus` + `deriveAccountHealthy` (12 unit tests, `tests/unit/agentlens-status.test.ts`);
+tsc + `next lint` clean. **NEXT: consumed by [[DXJZM3BW]]'s `status` verb** (the 5th field
+`next_action` is added there once [[1GGQ4HWY]] exists).
 
 ## Problem / Goal
 

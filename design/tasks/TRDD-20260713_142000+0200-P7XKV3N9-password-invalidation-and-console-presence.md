@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:20:00+0200
 created: 2026-07-13T14:20:00+0200
-updated: 2026-07-13T15:10:00+0200
+updated: 2026-07-16T04:03:50+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -19,7 +19,7 @@ task-type: security
 release-via: none
 derived: false
 npt: []
-eht: []
+eht: [7U927FCM]
 blocked-by: []
 implementation-commits: [13dfbb92, 0d2d421f, 76e738f9, fdeee818]
 relevant-rules: []

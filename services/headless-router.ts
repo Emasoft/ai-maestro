@@ -222,6 +222,16 @@ import { verifyHostAttestation } from '@/lib/host-keys'
 import { verifyPassword, loadGovernance, getManagerId, isChiefOfStaffAnywhere, isManager, isChiefOfStaff } from '@/lib/governance'
 import { getTeam, updateTeam, isAgentInAnyTeam, TeamValidationException } from '@/lib/team-registry'
 import { getAgent, getAgentBySession } from '@/lib/agent-registry'
+import { sessionExistsSync } from '@/lib/agent-runtime'
+import { computeSessionName } from '@/types/agent'
+import { evaluateExitGate, readSubagentCount } from '@/lib/session-safe-state'
+import {
+  isValidProgramArgs,
+  resolveRestartBin,
+  sanitizePersonaName,
+  buildRelaunchCommand,
+  runRestartSequence,
+} from '@/lib/session-restart'
 // SF2 drift-fix: the role-plugins install/delete headless handlers must mirror the
 // Next.js routes' agent-path RBAC. Those routes gate agents via requireSudoToken →
 // requireAidTitle → authorize(auth, 'manage-skills') (lib/sudo-guard.ts STRICT_AGENT_RULES).
@@ -892,6 +902,63 @@ const routes: Route[] = [
     } catch (error: unknown) {
       sendJson(res, 500, { error: (error as Error).message })
     }
+  }},
+  // Self-restart — SELF-ONLY-BY-CONSTRUCTION (TRDD-4P1M8I18). MUST precede the
+  // generic /sessions/[id]/restart entry below, else 'me' would be caught as a
+  // session name (the headless table matches in order; Next.js prefers the
+  // static segment automatically). The target is derived from auth.agentId — no
+  // path/body/query field can name another agent — so it is NOT sudo-strict
+  // (R32: agents never sudo; self-only has no cross-target to protect). Uses the
+  // SHARED lib/session-restart.ts, so it cannot diverge from the app route.
+  { method: 'POST', pattern: /^\/api\/sessions\/me\/restart$/, paramNames: [], handler: async (req, res, _params, query) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // AGENT-only: the system-owner has no "me" agent session — use [id]/restart.
+    if (!auth.agentId) {
+      sendJson(res, 400, { error: 'no_self_agent', message: 'me/restart is for agents restarting themselves. Use /api/sessions/[id]/restart to restart a named session.' })
+      return
+    }
+    const agent = getAgent(auth.agentId)
+    if (!agent) { sendJson(res, 404, { error: 'agent_not_found' }); return }
+    // The caller's OWN session, computed from its own record — never the request.
+    const primary = agent.sessions?.find((s) => s.status === 'online') ?? agent.sessions?.[0]
+    const sessionName = computeSessionName(agent.name, primary?.index ?? 0)
+    if (!sessionExistsSync(sessionName)) {
+      sendJson(res, 409, { error: 'no_live_session', message: 'This agent has no live tmux session to restart.' })
+      return
+    }
+    // Manager-gate + subagent-gate parity with [id]/restart.
+    if (!getManagerId() && isAgentInAnyTeam(agent.id)) {
+      sendJson(res, 403, { error: 'Cannot restart team agent: no MANAGER exists on this host. Assign a MANAGER first.' })
+      return
+    }
+    const force = query?.force === 'true'
+    const gate = evaluateExitGate(readSubagentCount(agent.workingDirectory || agent.sessions?.[0]?.workingDirectory), force)
+    if (gate.blocked) {
+      sendJson(res, 409, { error: 'subagents_running', message: `Refusing to restart: ${gate.subagentCount} background subagent(s) still running. Retry with ?force=true to restart anyway.`, subagentCount: gate.subagentCount })
+      return
+    }
+    let body: { program?: string; programArgs?: string } = {}
+    try { body = await readJsonBody(req) } catch { /* optional body */ }
+    if (body.program !== undefined && typeof body.program !== 'string') { sendJson(res, 400, { error: 'Invalid program: must be a string' }); return }
+    if (body.programArgs !== undefined && typeof body.programArgs !== 'string') { sendJson(res, 400, { error: 'Invalid programArgs: must be a string' }); return }
+    const program = body.program || agent.program || 'claude'
+    const programArgs = body.programArgs || agent.programArgs || ''
+    if (!isValidProgramArgs(programArgs)) { sendJson(res, 400, { error: 'Invalid programArgs: contains disallowed characters' }); return }
+    const bin = resolveRestartBin(program)
+    const personaName = sanitizePersonaName(agent.label || agent.name || sessionName, sessionName)
+    const command = buildRelaunchCommand(bin, programArgs, personaName)
+    const outcome = await runRestartSequence(sessionName, command)
+    if (outcome.status === 'timeout') {
+      sendJson(res, 504, { error: 'Timeout: program did not exit within 15s', hint: 'The session may be sitting on a confirmation dialog (e.g. background subagents still running). Check the terminal, or retry.' })
+      return
+    }
+    if (outcome.status === 'error') {
+      console.error('[headless me/restart] tmux command failed:', { detail: outcome.detail })
+      sendJson(res, 500, { error: 'Session restart failed' })
+      return
+    }
+    sendJson(res, 200, { success: true, sessionName, command: outcome.command })
   }},
   // Restart session — /exit, poll for shell prompt, relaunch
   { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/restart$/, paramNames: ['id'], handler: async (req, res, params) => {

@@ -3,14 +3,14 @@ trdd-id: YY6M8Z16
 title: Analytics panel-restriction — proxy-side X-Agentlens-Viewer signing (deferred, waits on AgentlensPro npm verifier)
 column: testing
 created: 2026-07-17T09:00:31+0200
-updated: 2026-07-17T10:02:38+0200
+updated: 2026-07-17T10:32:58+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
 parent-trdd:
 labels: [analytics, agentlenspro, embed, security]
 relevant-rules: [16]
-implementation-commits: [5d972107, f7104bc9, afbb13b9]
+implementation-commits: [5d972107, f7104bc9, afbb13b9, 02a8192c]
 external-refs:
   - https://github.com/Emasoft/AgentlensPro/issues/4
   - AgentlensPro TRDD-KDGJ0R38 (basePath — retires our CSP rewrite)
@@ -18,21 +18,35 @@ external-refs:
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
 
-**FOLLOW-UP FIX (2026-07-17, commit `afbb13b9`) — the panel falsely said "AgentlensPro isn't
-running" in the browser even though the upstream was up.** Root cause: `AnalyticsSection.tsx`
-health-probes the reverse proxy (main port + 1) with `fetch(..., {credentials:'include'})`
-BEFORE framing. That fetch is cross-ORIGIN (the port differs); the proxy sent no
-`Access-Control-Allow-Origin`, so the browser DISCARDED even the healthy 200 and the probe's
-promise REJECTED → `.catch()` → `probe='down'` → the "isn't running" card. The iframe itself was
-never the problem (iframes are CSP/frame-ancestors gated, not CORS gated). Fix: the proxy now
-echoes ACAO for the ai-maestro origin ONLY (same derivation as `frameAncestorsFor` — same Host,
-pinned main port) with `Allow-Credentials`, on every response INCLUDING the 401/403/503 error
-paths (so the probe reads those statuses too). Never `*`; a mismatched origin/host gets nothing —
-this widens no trust (the caller is already past the IP filter + session gate). `corsHeadersFor`
-is a pure fn (8 unit tests, all green); `deny()` gained an `extraHeaders` arg. VERIFIED live:
-matching Origin → ACAO echoed on the 401; wrong port / no Origin → no ACAO. tsc 0, 18/18 analytics
-tests, `yarn build` exit 0, pm2 restarted. The panel now mounts the iframe on Reload — NO client
-rebuild needed (server-side only). This was the last blocker for the browser round-trip below.
+**"ISN'T RUNNING" BUG — ROOT-CAUSED + FIXED (2026-07-17, commit `02a8192c`; SUPERSEDES the
+`afbb13b9` CORS attempt, which `02a8192c` reverts).** The panel showed "AgentlensPro isn't
+running" while AgentlensPro was up. `AnalyticsSection.tsx` health-probed the reverse proxy on the
+NEXT port with a credentialed `fetch` — a cross-ORIGIN request. **Reproduced authenticated in a
+headless browser** (the decisive step; my first CORS fix was wrong because I only ever tested the
+UNauthenticated path): the cross-port probe REJECTS with `TypeError: Failed to fetch`. WHY only
+authenticated: on the 200 path the proxy PIPES AgentlensPro's OWN loopback-scoped CORS headers
+through, and that ACAO does not match the ai-maestro origin (and collided with the one `afbb13b9`
+added) → the browser discards a 200 with a conflicting `Access-Control-Allow-Origin`.
+UNauthenticated the probe RESOLVED (the 401 comes from the proxy's own `deny()`, one clean
+response) — which is exactly why curl and an unauthenticated headless probe looked fine and HID
+the bug for two rounds. Safari tracking-prevention + ad/privacy extensions reject the same
+cross-origin credentialed fetch independently, so the cross-port probe was fragile by design.
+
+**THE FIX — probe SAME-ORIGIN.** `server.mjs` serves `GET /api/analytics/status` (BOTH modes,
+same process as the proxy, same session-cookie gate as `/api/internal/pty-sessions`) by checking
+loopback :3000 directly via `checkAnalyticsUpstream()` (exported from `lib/analytics-proxy.mjs`,
+so the port/host stay single-source). `AnalyticsSection.tsx` fetches that RELATIVE URL → no
+cross-origin fetch → CORS/Safari/extensions can no longer make it falsely reject. The IFRAME
+still loads the dashboard cross-origin (an iframe is CSP/frame-ancestors gated, NOT CORS gated).
+The `afbb13b9` cross-port CORS patch is REVERTED (it targeted the wrong path and created the
+duplicate ACAO); its `corsHeadersFor` + test are removed.
+
+**VERIFIED authenticated in headless (dev-browser, real login):** cross-port probe → `TypeError`
+(bug reproduced); same-origin `/api/analytics/status` → `200 {up:true,keyLoaded:true}`; direct
+proxy nav → the AgentLens dashboard renders end-to-end with live telemetry (screenshot in
+`reports/analytics-verify/`). tsc 0, `yarn build` 0, pm2 restarted. Awaiting the USER's final
+in-browser confirmation (a fresh headless session hits the unrelated first-run recovery-setup
+gate, which the USER's own session is already past).
 
 **IMPLEMENTED + VERIFIED (2026-07-17, commit `f7104bc9`), `column: testing`.** The USER first
 chose "B" (defer until the verifier shipped to npm); AgentlensPro published **2.10.0 with the

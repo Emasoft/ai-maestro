@@ -1725,13 +1725,28 @@ All optional, with sensible defaults:
 PORT=23000                           # Server port (default 23000, set in PM2 config)
 NODE_ENV=development|production      # Next.js environment
 HOSTNAME=127.0.0.1                   # Bind address (default 127.0.0.1; auto-upgraded to :: when Tailscale detected)
-WS_RECONNECT_DELAY=3000              # WebSocket reconnect delay (ms)
-WS_MAX_RECONNECT_ATTEMPTS=5          # Max reconnection attempts
-TERMINAL_FONT_SIZE=14                # xterm.js font size
-TERMINAL_SCROLLBACK=10000            # Terminal scrollback buffer
+MAESTRO_MODE=full|headless           # full = Next.js UI + API; headless = API only (default full)
+ENABLE_LOGGING=true                  # Session logging; ONLY the exact string "true" enables it (default false)
+NOTIFICATIONS_ENABLED=false          # AMP tmux push; ONLY the exact string "false" disables it (default true)
+AIMAESTRO_ORG=default                # AMP tenant (the "org" in alice@org.local)
 ```
 
-Set via `.env.local` (gitignored). Never commit `.env.local`.
+**`.example.env` is the canonical, verified list** — it documents every
+user-facing variable with the default read from source, and each entry is
+commented out because the code defaults are the safe ones. The block above is
+a summary; when the two disagree, `.example.env` wins.
+
+**Do not add a variable to either file without grepping that the code reads
+it.** Both files previously documented four knobs — `WS_RECONNECT_DELAY`,
+`WS_MAX_RECONNECT_ATTEMPTS`, `TERMINAL_FONT_SIZE`, `TERMINAL_SCROLLBACK` —
+that nothing has ever read from `process.env`. (`WS_MAX_RECONNECT_ATTEMPTS`
+is a real symbol, but a local const derived from `WS_RECONNECT_BACKOFF.length`
+in `hooks/useWebSocket.ts` — same name, not configuration.) A phantom knob is
+worse than an undocumented one: someone sets it, nothing happens, and they
+debug the wrong layer.
+
+Set via `.env.local` (gitignored). Never commit `.env.local`. `.example.env`
+IS committed — never put a real secret in it (see `TRDD-44RGLOO8`).
 
 ## Server Modes
 

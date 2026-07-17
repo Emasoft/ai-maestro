@@ -16,7 +16,7 @@ import { statePath } from './lib/ecosystem-state-paths.mjs'
 import { hostHints } from './lib/host-hints-server.mjs'
 import { getOrCreateBuffer } from './lib/cerebellum/session-bridge.mjs'
 import { validateSessionCookie } from './lib/session-validate-server.mjs'
-import { createAnalyticsProxy } from './lib/analytics-proxy.mjs'
+import { createAnalyticsProxy, checkAnalyticsUpstream } from './lib/analytics-proxy.mjs'
 import {
   sessionActivity,
   terminalSessions,
@@ -662,6 +662,26 @@ async function startServer(handleRequest) {
           sessions: sessionInfo,
           timestamp: new Date().toISOString()
         }))
+        return
+      }
+
+      // Analytics panel liveness — served directly here (both modes, same process as the
+      // reverse proxy) so the Settings UI can health-check AgentlensPro SAME-ORIGIN. It used to
+      // fetch the proxy on the next port, but that cross-ORIGIN request is blocked by CORS /
+      // Safari tracking-prevention / ad-privacy extensions in some browsers, so the panel falsely
+      // read "isn't running" while AgentlensPro was up. A same-origin question the server answers
+      // by checking loopback :3000 has none of that fragility. Same session-cookie gate as above.
+      if (parsedUrl.pathname === '/api/analytics/status') {
+        if (!validateSessionCookie(req.headers.cookie || '')) {
+          res.statusCode = 401
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Authentication required' }))
+          return
+        }
+        const status = await checkAnalyticsUpstream()
+        res.setHeader('Content-Type', 'application/json')
+        res.setHeader('Cache-Control', 'no-store')
+        res.end(JSON.stringify(status))
         return
       }
 

@@ -33,23 +33,30 @@ export default function AnalyticsSection() {
   useEffect(() => {
     const { protocol, hostname, port } = window.location
     const mainPort = Number(port || (protocol === 'https:' ? 443 : 80))
-    const origin = `${protocol}//${hostname}:${mainPort + 1}`
-    setSrc(`${origin}/?embed=1&tab=${INITIAL_TAB}`)
+    // The iframe loads the dashboard through the reverse proxy on the NEXT port. Cross-origin is
+    // fine for an iframe — it is CSP/frame-ancestors gated, not CORS gated — so it renders even
+    // when a cross-origin *fetch* would be blocked.
+    setSrc(`${protocol}//${hostname}:${mainPort + 1}/?embed=1&tab=${INITIAL_TAB}`)
 
-    // Probe before framing. Without this, a stopped AgentlensPro renders as an unexplained
-    // blank rectangle — a silent failure, and the operator has no way to know the fix is
-    // `agentlenspro`. The proxy answers 503 with a named cause exactly for this.
+    // Probe before framing. Without this, a stopped AgentlensPro renders as an unexplained blank
+    // rectangle — a silent failure, and the operator has no way to know the fix is `agentlenspro`.
+    //
+    // The probe is SAME-ORIGIN (`/api/analytics/status` on the main port), never the cross-port
+    // proxy. A cross-origin fetch is subject to CORS, Safari's tracking-prevention, and ad/privacy
+    // extensions — any of which makes it REJECT and the panel falsely read "isn't running" while
+    // AgentlensPro is up. server.mjs answers this by checking loopback :3000 directly. (TRDD-YY6M8Z16)
     let cancelled = false
     setProbe('checking')
-    fetch(`${origin}/`, { credentials: 'include' })
-      .then((r) => {
+    fetch('/api/analytics/status', { credentials: 'include' })
+      .then(async (r) => {
         if (cancelled) return
-        if (r.status === 401) setProbe('unauthorized')
-        else if (r.ok) setProbe('up')
-        else setProbe('down')
+        if (r.status === 401) { setProbe('unauthorized'); return }
+        if (!r.ok) { setProbe('down'); return }
+        const data = await r.json().catch(() => ({ up: false }))
+        setProbe(data?.up ? 'up' : 'down')
       })
       .catch(() => {
-        // The proxy itself is unreachable (port busy at boot, or the server predates it).
+        // Same-origin request failed at the network layer — treat as down.
         if (!cancelled) setProbe('down')
       })
     return () => {

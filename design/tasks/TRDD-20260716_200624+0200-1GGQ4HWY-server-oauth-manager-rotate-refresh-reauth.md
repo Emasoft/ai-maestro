@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T00:52:00+0200
+updated: 2026-07-17T02:05:00+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -23,7 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06]
+implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e963487f]
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
@@ -79,28 +79,40 @@ write, the lock, and the state.json schema.
   never skips). BYTE-COMPAT with the janitor `#N`: slots stored as RAW compact JSON (no base64),
   `state.json` sidecars match. 28 tests, 0-IMPACT (temp HOME + forced-off backend + hard guard);
   tsc + `yarn build` clean. The LIVE credential is NOT touched — that is Phase E.
-- **E** — THE LIVE WRITE: `write_live_blob` + `_switch_blob` (ROTATE) + `_keepalive_refresh`
-  (RENEW), plus the `-livebak` LIVE-credential mirror. **R16 — checkpoint with the OWNER before
-  it first runs live.** Safety net = the `-livebak` mirror (refreshed from the CURRENT live at
-  tick start, so it holds the previous credential); validate the alternate (usage probe +
-  local-expiry) BEFORE the switch. Reuses Phase D's `keychain.ts` (the `-T` live-family ACL
-  branch) + `integrity.ts`.
+- **E ✅ CODE DONE — NOT RUN LIVE (`67650e06` E.1, `e963487f` E.2)** — the LIVE custody + the
+  ROTATE/RENEW actuators, ported as INFRA and gated: **no code path is wired to a tick/route, so
+  nothing runs against the real `Claude Code-credentials` yet.** USER greenlit "write Phase E code
+  + 0-impact tests now" (2026-07-17); the first LIVE activation still needs a separate R16 go-ahead.
+  - **E.1 `live.ts`** — `readLivePrimary` (macOS keychain, account=$USER, skipped when headless) →
+    credentials-file → keyring; `liveBackupRead/Write` (`-livebak` mirror via the exported slot
+    helpers); `readLiveBlobWithSource` (F1: mirror = untrusted identity for decisions);
+    `primaryLiveItemAbsent` (proven-absent only); `writeLiveBlob` (THE irreversible write — `-T`
+    live ACL on create only, FULL blob incl mcpOAuth, credentials-file only when `security` absent
+    so the macOS live-re-read is preserved, fail-closed `LiveKeychainWriteError`, then `-livebak`).
+  - **E.2 `network.ts`** — `accountEmail`/`usageRequest` (status-preserving: 429 = rotate-away)/
+    `refreshOauthToken` (RENEW exchange, required UA, keeps old refresh if omitted)/`util`;
+    injectable `fetch`. **`rotate.ts`** — `switchLiveTo` (`_switch_blob`): merge slot claudeAiOauth
+    into live PRESERVING mcpOAuth → `writeLiveBlob` → state (`live_email`/`live_fp`/`last_switch_*`/
+    `live_429_streak=0`) → identity beacon.
+  - 27 tests (live 7 + network 11 + rotate 2 + the slots/keychain deltas); every one 0-IMPACT
+    (forced-off backend + HOME→temp + a hard guard, or a stub fetch) — no test touches the real
+    credential or the network. tsc + `yarn build` clean.
 - **F** — REAUTH + bootstrap browser tier (`reauth.py`/`slot_capture_browser.py`/`cookie_vault.py`
   via Node CDP/tmux) — the "only human step".
 - **G** — the 60s `cmd_tick` as a server-internal task, **config-gated OFF by default**; feeds
   [[DXJZM3BW]]'s `next_action` (cascade states: ok | rotating | reauth-needed).
 
-**NEXT ACTION:** Phase E — **THE ONE IRREVERSIBLE WRITE. R16 CHECKPOINT: get an explicit USER
-go-ahead BEFORE any code path can run live against `Claude Code-credentials`.** Read
-`rotator.py`'s `_read_live_primary`/`_live_backup_read`/`_live_backup_write`/`read_live_blob*`
-(485–605), `write_live_blob` (694), `_switch_blob` (ROTATE — merges to PRESERVE the live
-`mcpOAuth`), and `_keepalive_refresh` (1770, RENEW_REFRESH). Port the LIVE read + the `-livebak`
-mirror FIRST (a read/mirror is reversible), then gate the actual switch behind the R16 checkpoint
-+ the pre-switch validation (usage probe + `-livebak` snapshot of the CURRENT live). Live service
-= `Claude Code-credentials` (account = macOS username, NOT the email); live mirror =
-`Claude Code-credentials-livebak`. Reuse Phase D's [[keychain.ts]] (`allowAny:false` → the `-T`
-live-family ACL), [[integrity.ts]], [[slots.ts]] (`loadState`/`saveState`/`readSlot`), and
-[[tick-lock.ts]]. DO NOT run the switch live without the USER checkpoint.
+**NEXT ACTION:** Phase F/G — the cascade-driven ORCHESTRATION + tick that COMPOSES the E-actuators
+(no NEW irreversible primitive; the switch/refresh are already ported). Read `rotator.py`'s
+`_refresh_and_heal_slot` (1528), `_keepalive_refresh` (1770, the RENEW loop over accounts), and
+`cmd_auto` (1574 — the ROTATE decision: it consumes [[cascade.ts]]'s classifier + `usageRequest`
+to pick a safe alternate, then calls `switchLiveTo`). Port them as a server-internal task
+**config-gated OFF by default** (Phase G) that emits [[DXJZM3BW]]'s `next_action`
+(ok | rotating | reauth-needed). Reuse [[live.ts]]/[[rotate.ts]]/[[network.ts]]/[[slots.ts]]/
+[[tick-lock.ts]]/[[cascade.ts]]. **The tick MUST stay OFF until the R16 USER go-ahead** — wiring it
+to fire is what makes `switchLiveTo`/`writeLiveBlob` run live. Phase F (REAUTH browser tier via Node
+CDP/tmux) is the lower-priority "only human step" and can follow. `reauth.py`/`slot_capture_browser.py`/
+`cookie_vault.py` are the sources.
 
 ## Problem / Goal
 

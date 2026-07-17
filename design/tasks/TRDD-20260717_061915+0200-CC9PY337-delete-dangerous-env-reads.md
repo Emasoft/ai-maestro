@@ -3,7 +3,7 @@ trdd-id: CC9PY337
 title: Delete every security-risk env read — dashboard-only settings, non-env test seams
 column: dev
 created: 2026-07-17T06:19:15+0200
-updated: 2026-07-17T06:19:15+0200
+updated: 2026-07-17T07:52:00+0200
 current-owner: ai-maestro
 task-type: security
 parent-trdd: QZL828OD
@@ -68,30 +68,40 @@ rule, not a one-off cleanup.
   can judge whether prose named a concrete defect — reasoning recorded in the map's notes), and
   3 TRDDs moved `planned|testing → blocked` + `pre-block-column:` after VERIFYING every blocker
   is genuinely still open.
+- `a50984b4` — **phase 3 DONE.** All 7 rotator seams gated to the test runner across 4 files:
+  `safe-storage.ts` (`CLAUDE_SAFE_STORAGE_BACKEND` in `detectBackend`, `JANITOR_ROTATOR_KEYCHAIN`
+  in `keychainScopeArgs`), `slots.ts` (the 2 `CLAUDE_ROTATOR_SLOT*_KEYCHAIN_SERVICE`, module-level
+  consts), `live.ts` (`CLAUDE_ROTATOR_LIVE_BACKUP_KEYCHAIN_SERVICE`), `global-state.ts`
+  (`JANITOR_GLOBAL_STATE_DIR`, BOTH reads — `globalStateDir` + `legacyReadPath` — gated together).
+  - **LANDMINE CLEARED.** Grepped shell/pm2/scenario/ecosystem configs for a setter of any of the
+    5 coordination vars → the only hits are doc-comments, ZERO real setters. So in production the
+    TS server and the Python `#N` daemon both take the default state-dir ladder and agree.
+    `$XDG_STATE_HOME` (the shared branch that must not diverge) is left UNGATED — a standard OS
+    var both honor identically.
+  - **0-IMPACT PROVEN BY DELTA, not by a passing suite.** Counted `Claude Code-rotator-slot` items
+    in the live keychain (12, the real daemon's legit state), ran slots/live/safe-storage (36
+    tests), recounted → **DELTA 0/0.** The tests wrote nothing to the real keychain, which proves
+    both that the gate holds AND that the tests genuinely exercise the forced-`none` backend
+    (temp-dir plaintext). SMTP control: `find-generic-password -s ai-maestro-smtp` → "could not be
+    found" (phase-2 property holds).
+  - Verified: tsc 0; full suite 205/205, 3028 passed; `yarn build` exit 0.
 
-**NEXT ACTION:** Phase 3 — the rotator seams. `lib/oauth-rotator/`: `safe-storage.ts:283`
-(`CLAUDE_SAFE_STORAGE_BACKEND`, returned UNVALIDATED — `none` = plaintext tokens), `:299`
-(`JANITOR_ROTATOR_KEYCHAIN`), `slots.ts:40,42` + `live.ts:36` (the 3
-`CLAUDE_ROTATOR_*_KEYCHAIN_SERVICE`), `global-state.ts:68,91` (`JANITOR_GLOBAL_STATE_DIR`).
-Swap each `process.env.X` for `testOnlyEnv('X')` and run the 6 `oauth-rotator-*` suites.
+**NEXT ACTION:** Phase 4 — the last 3 reads + the regression fence + boot wiring.
+1. Gate `AIM_JSONL_READER_PATH` (`lib/jsonl-reader.ts:58` — RCE), `CLAUDE_MARKETPLACE_PLUGINS_DIR`
+   (`services/plugin-builder-service.ts:56`), `OPENCLAW_TMUX_SOCKET_DIR`
+   (`services/sessions-service.ts:519`) via `testOnlyEnv('X')`. All 3 are already in `TEST_ONLY_ENV`.
+2. **The regression fence (the durable value):** a test asserting NO name in `TEST_ONLY_ENV` is
+   read via a bare `process.env.X` anywhere in `lib/`+`services/` — the ONLY legal reader is
+   `test-only-env.ts` itself. Grep the source; fail red on any re-introduced hatch. This is what
+   makes the rule survive the next contributor.
+3. Wire `reportIgnoredTestEnv()` into `server.mjs` boot (the tamper-evidence summary line).
+4. Re-run the 0-IMPACT delta for the 3 new seams (jsonl-reader spawns a binary — count nothing new
+   is spawned/written; the reader test must force the stub path).
 
-**PHASE 3 LANDMINE — verify BEFORE editing `global-state.ts`.** Its doc-comment says
-`globalStateDir()` *"Matches global_state.py::global_state_dir exactly"* — a PYTHON
-implementation (the janitor daemon, a SEPARATE repo we must not edit) must agree on the same
-STRING. Nothing in ai-maestro sets `JANITOR_GLOBAL_STATE_DIR` when spawning anything (grepped:
-zero hits outside the module itself), so in production both sides take the default and agree.
-But CONFIRM that before gating, and confirm the TS/Python pair cannot disagree in a scenario
-run. If they could, gating the TS side alone would split the daemon's state dir from the
-server's — a worse bug than the vector.
-
-**THE 0-IMPACT TRAP (cost me nothing only because I checked — repeat it every phase).** Passing
-tests do NOT prove isolation held. If `testOnlyEnv()` returned undefined inside the runner, the
-rotator suites would transact against the REAL login keychain and still pass, silently polluting
-it. After each phase, prove it directly:
-`security dump-keychain 2>/dev/null | grep -c 'Claude Code-rotator-slot'` → expect 0, and
-`security find-generic-password -s ai-maestro-smtp -a me@gmail.com` → "could not be found".
-On macOS the keychain is used UNLESS the hatch forces otherwise, so absence proves BOTH that
-isolation held and that the hatch works.
+**THE 0-IMPACT TRAP (still binding for phase 4).** Passing tests do NOT prove isolation. The
+proof is the DELTA: snapshot the affected real resource, run the affected suite, re-snapshot,
+require 0. For phase 3 that was keychain items; for `AIM_JSONL_READER_PATH` it is "no unexpected
+binary spawned as the server UID."
 
 **SUPERSEDED — do NOT carry forward:**
 - *"A release-mode gate is the answer."* Twice wrong. (a) It still READS the var in development,

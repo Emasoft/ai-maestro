@@ -22,7 +22,6 @@ import { backupAndWrite, readOrRestore } from './integrity'
 import { securityWrite, securityReadRaw, securityDelete, KeychainWriteResult } from './keychain'
 import { detectBackend } from './safe-storage'
 import { tryAcquireTickLockWait } from './tick-lock'
-import { testOnlyEnv } from '../test-only-env'
 
 /** True iff the Linux Secret Service (`secret-tool`) is the active backend. The slot tiers gate
  * their `secret-tool` spawns on this so they are reached ONLY when it is genuinely the store —
@@ -34,17 +33,19 @@ function secretToolActive(): boolean {
 }
 
 // --------------------------------------------------------------------------
-// Keychain services. The env overrides are a TEST-ONLY seam so a test can target a throwaway
-// service — now MECHANICALLY enforced via testOnlyEnv (TRDD-CC9PY337), not merely intended:
-// honored inside the test runner, IGNORED in dev/production, where an inherited value would
-// redirect OAuth slot tokens into an attacker-named keychain service. Ignored ⇒ the defaults
-// below. Read once at import, matching rotator.py's module-level constants (vitest sets
-// NODE_ENV=test before any import, so the test value is captured; pm2's production run is not).
+// Keychain services — FIXED constants (TRDD-CC9PY337). They were env-overridable
+// (CLAUDE_ROTATOR_SLOT*_KEYCHAIN_SERVICE), but verification found NO test sets them (the tests
+// force CLAUDE_SAFE_STORAGE_BACKEND=none, so slot I/O uses the temp-dir plaintext path and the
+// service NAME is never exercised) and nothing in production sets them either. An env read that
+// no test needs and no operator uses is pure attack surface — an inherited value would redirect
+// OAuth slot tokens into an attacker-named keychain service — so the read is DELETED, not gated.
+// Deleting also STRENGTHENS the byte-compat with the janitor `#N` daemon: TS now uses these exact
+// strings unconditionally, so it can never diverge from the daemon's identical defaults. To
+// relocate the slots one day, both sides change the constant (or it becomes a dashboard setting),
+// never an inherited env var. Match rotator.py's module-level constants.
 // --------------------------------------------------------------------------
-export const SLOT_KEYCHAIN_SERVICE =
-  testOnlyEnv('CLAUDE_ROTATOR_SLOT_KEYCHAIN_SERVICE')?.trim() || 'Claude Code-rotator-slot'
-export const SLOT_BACKUP_KEYCHAIN_SERVICE =
-  testOnlyEnv('CLAUDE_ROTATOR_SLOT_BACKUP_KEYCHAIN_SERVICE')?.trim() || 'Claude Code-rotator-slot-backup'
+export const SLOT_KEYCHAIN_SERVICE = 'Claude Code-rotator-slot'
+export const SLOT_BACKUP_KEYCHAIN_SERVICE = 'Claude Code-rotator-slot-backup'
 
 // The janitor plugin's OWN data dir, resolved by its FIXED install name (the stable per-plugin
 // DATA path — survives version updates, purged only on uninstall).

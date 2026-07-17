@@ -1675,6 +1675,19 @@ async function startServer(handleRequest) {
       console.log(`> Localhost-only mode (Tailscale: ${tailscaleIp ? 'available but not needed' : 'not detected'})`)
     }
 
+    // Tamper-evidence sweep (TRDD-CC9PY337): touch every gated + forbidden env hatch once at boot
+    // so an operator gets ONE summary line if a dangerous override was exported into this
+    // process's environment (a poisoned dotfile, a stale debugging export). A clean host prints
+    // nothing; an affected host prints the list with each risk — the difference is visible in the
+    // log without anyone knowing to look. Pure read; it changes no behavior (the hatches are
+    // already ignored outside the test runner) — it only makes the ignoring VISIBLE.
+    try {
+      const { reportIgnoredTestEnv } = await import('./lib/test-only-env.ts')
+      reportIgnoredTestEnv()
+    } catch (err) {
+      console.warn('[SECURITY] env tamper-evidence sweep failed (non-fatal):', err?.message || err)
+    }
+
     // Verify signed ledger chains before any registry writes (configurable)
     try {
       const { loadSecurityConfig } = await import('./lib/security-config.ts')

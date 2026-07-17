@@ -50,15 +50,15 @@ export const IDLE_SESSION_TTL_MS = 30 * 60 * 1000
 const IDLE_SWEEP_INTERVAL_MS = 60 * 1000
 
 /**
- * Path to the Rust binary. Phase 1 build hook drops it here.
- * Respect BUILD_TARGET= override if set by the build script, but default
- * to the stable scripts/aim-jsonl-reader location.
+ * Path to the Rust binary. `scripts/build-jsonl-reader.sh` compiles it and drops it at
+ * scripts/aim-jsonl-reader — the first candidate below. No env override (TRDD-CC9PY337): the old
+ * AIM_JSONL_READER_PATH read let an inherited value point the spawn at an ARBITRARY binary run as
+ * the server's UID (RCE), and nothing needed it — no test set it and the build uses this fixed
+ * path. If the install location ever moves, change the candidate list; never read it from the
+ * environment, which an agent sharing the server's UID can poison via a dotfile.
  */
 function resolveBinaryPath(): string {
-  const override = process.env.AIM_JSONL_READER_PATH
-  if (override && override.length > 0) return override
-  // Walk up from cwd to find project root (identified by scripts/aim-jsonl-reader sibling of package.json)
-  // Fallback: <cwd>/scripts/aim-jsonl-reader
+  // Walk up from cwd to find project root (scripts/aim-jsonl-reader sibling of package.json).
   const candidates = [
     path.resolve(process.cwd(), 'scripts', 'aim-jsonl-reader'),
     path.resolve(__dirname, '..', 'scripts', 'aim-jsonl-reader'),

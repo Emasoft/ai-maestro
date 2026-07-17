@@ -26,18 +26,17 @@ import { spawnSync } from 'child_process'
 import { securityWrite, securityReadRaw, keychainItemExists, KeychainWriteResult } from './keychain'
 import { detectBackend } from './safe-storage'
 import { slotKeychainRead, slotKeychainWrite, type CredentialBlob } from './slots'
-import { testOnlyEnv } from '../test-only-env'
 
 /** The live credential's keychain service — Claude Code owns this item; the rotator switches it.
  * A plain constant (no env override), matching rotator.py. */
 export const KEYCHAIN_SERVICE = 'Claude Code-credentials'
 
-/** The redundant `-livebak` mirror service. The env override is a TEST-ONLY seam, now
- * mechanically enforced via testOnlyEnv (TRDD-CC9PY337): honored inside the test runner, IGNORED
- * in dev/production, where an inherited value would redirect the live-token backup to an
- * attacker-named keychain service. Ignored ⇒ the production default below. */
-export const LIVE_BACKUP_KEYCHAIN_SERVICE =
-  testOnlyEnv('CLAUDE_ROTATOR_LIVE_BACKUP_KEYCHAIN_SERVICE')?.trim() || 'Claude Code-credentials-livebak'
+/** The redundant `-livebak` mirror service — a FIXED constant (TRDD-CC9PY337). It was
+ * env-overridable (CLAUDE_ROTATOR_LIVE_BACKUP_KEYCHAIN_SERVICE), but no test sets it and nothing
+ * in production sets it; an inherited value would redirect the live-token backup to an
+ * attacker-named service, so the read is DELETED, not gated. Fixed also keeps it byte-compatible
+ * with the janitor `#N` daemon's identical default unconditionally. Matches rotator.py. */
+export const LIVE_BACKUP_KEYCHAIN_SERVICE = 'Claude Code-credentials-livebak'
 
 /** A live `-w` read may be slower than a slot read (the ACL-restricted primary) — a longer bound
  * than the 5 s probe, matching rotator.py's `timeout=10`. */

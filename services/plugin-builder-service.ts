@@ -47,14 +47,11 @@ const BUILDS_DIR = path.join(os.tmpdir(), 'ai-maestro-plugin-builds')
 /** Claude Code global config directory — where Claude installs plugins/marketplaces */
 const CLAUDE_DIR = path.join(os.homedir(), '.claude')
 
-/**
- * Base directory where Claude Code marketplace plugins are installed.
- * Override via CLAUDE_MARKETPLACE_PLUGINS_DIR env var when running in
- * environments where the process user's home directory differs from the
- * intended plugin installation location.
- */
-const MARKETPLACE_PLUGINS_DIR = process.env.CLAUDE_MARKETPLACE_PLUGINS_DIR
-  || path.join(os.homedir(), '.claude', 'plugins', 'marketplaces')
+// The CLAUDE_MARKETPLACE_PLUGINS_DIR env override and its MARKETPLACE_PLUGINS_DIR const were
+// DELETED (TRDD-CC9PY337): the const was already dead (nothing read it) AND honoring an inherited
+// value would have loaded plugins — executable build scripts — from an attacker-chosen directory,
+// with an agent sharing the server's UID as the vector. Plugin install location is MARKETPLACE_CACHE
+// above; a non-home dir, if ever needed, is a dashboard setting, never an env var.
 
 /** Max builds to keep in memory before evicting oldest */
 const MAX_BUILD_RESULTS = 50

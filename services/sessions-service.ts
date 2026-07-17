@@ -514,10 +514,14 @@ async function fetchLocalSessions(hostId: string): Promise<Session[]> {
       // Docker not available
     }
 
-    // Discover OpenClaw sessions (custom tmux sockets)
+    // Discover OpenClaw sessions (custom tmux sockets). The socket dir is FIXED at OpenClaw's
+    // documented default (CHANGELOG: "/tmp/clawdbot-tmux-sockets/") — TRDD-CC9PY337. It was
+    // OPENCLAW_TMUX_SOCKET_DIR-overridable, but the env override was never part of the integration
+    // contract (the CHANGELOG names the fixed path), no test set it, and honoring an inherited
+    // value would run `tmux -S <attacker-socket> list-sessions` against an attacker-controlled
+    // tmux server — session spoofing. The read is DELETED; the documented default is the contract.
     try {
-      const openclawSocketDir = process.env.OPENCLAW_TMUX_SOCKET_DIR
-        || path.join(os.tmpdir(), 'clawdbot-tmux-sockets')
+      const openclawSocketDir = path.join(os.tmpdir(), 'clawdbot-tmux-sockets')
 
       if (fs.existsSync(openclawSocketDir)) {
         const socketFiles = fs.readdirSync(openclawSocketDir)

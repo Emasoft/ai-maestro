@@ -35,6 +35,11 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 
+# .env.example: local-only template on this machine — keep it out of git so
+# local edits never show as dirty and never get committed (USER 2026-07-17).
+# Root-anchored so it does NOT affect agent-container/.env.example (kept tracked below).
+/.env.example
+
 # Vercel
 .vercel
 

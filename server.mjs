@@ -16,6 +16,7 @@ import { statePath } from './lib/ecosystem-state-paths.mjs'
 import { hostHints } from './lib/host-hints-server.mjs'
 import { getOrCreateBuffer } from './lib/cerebellum/session-bridge.mjs'
 import { validateSessionCookie } from './lib/session-validate-server.mjs'
+import { createAnalyticsProxy } from './lib/analytics-proxy.mjs'
 import {
   sessionActivity,
   terminalSessions,
@@ -97,6 +98,11 @@ process.on('SIGPIPE', () => {
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = process.env.HOSTNAME || '127.0.0.1' // Primary bind address (localhost-only by default)
 const port = parseInt(process.env.PORT || '23000', 10)
+// Settings → Analytics reverse proxy (lib/analytics-proxy.mjs). Derived from PORT rather than
+// read from its own env var: one knob to move, and no second name an inherited environment
+// could point somewhere else (TRDD-CC9PY337 — a var that redirects what renders inside an
+// ai-maestro page does not get to exist).
+const ANALYTICS_PROXY_PORT = port + 1
 
 // Auto-detect Tailscale IP for VPN access (iPad, mobile, remote hosts)
 let tailscaleIp = null
@@ -1639,6 +1645,24 @@ async function startServer(handleRequest) {
       }
     })
   }
+
+  // Settings → Analytics: reverse-proxy the AgentlensPro dashboard so it is embeddable from a
+  // REMOTE browser. It gets its OWN port because their dashboard.js fetches root-absolute
+  // `/api/*` paths, which under a prefix on this port would hit AI-MAESTRO's /api instead —
+  // see lib/analytics-proxy.mjs for the full reasoning. Same bind + same IP filter as above,
+  // plus a deep-validated session cookie.
+  const analyticsProxy = createAnalyticsProxy({
+    port: ANALYTICS_PROXY_PORT,
+    mainPort: port,
+    bindAddress,
+    needsIpFilter,
+    isAllowedSource,
+  })
+  analyticsProxy.on('error', (err) => {
+    // Never take the dashboard down for an optional panel: a busy port is a degraded Analytics
+    // tab, not a dead server. Reported, not swallowed — the tab shows the failure.
+    console.warn(`[analytics-proxy] not listening on :${ANALYTICS_PROXY_PORT} (${err.code || err.message}) — the Analytics tab will be unavailable`)
+  })
 
   server.listen(port, bindAddress, async () => {
     console.log(`> Ready on http://${hostname}:${port}`)

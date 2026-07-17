@@ -367,3 +367,37 @@ export function rolePluginRepoUrl(pluginName: string): string {
 export const AGENTLENS_NPM_PKG = 'agentlenspro'
 export const AGENTLENS_VERSION_FLOOR = '2.8.0'
 export const AGENTLENS_REPO = 'https://github.com/Emasoft/AgentlensPro'
+
+/**
+ * The AgentlensPro dashboard's loopback port + its EMBED contract (AgentlensPro#3,
+ * their commit 8b4a464 / TRDD-FMIZO8Y4). Verified live against 2.9.0 before use:
+ * `GET http://localhost:3000/?embed=1&tab=analytics` → 200 with
+ * `Content-Security-Policy: frame-ancestors 'self' http://localhost:* http://127.0.0.1:* …`
+ * so ai-maestro on ANY loopback port (:23000) is inside their allowlist.
+ *
+ * The port is a CONSTANT, deliberately NOT an env var. An env-settable iframe origin is a
+ * var that redirects what renders inside an ai-maestro page — exactly the class of read
+ * TRDD-CC9PY337 deletes ("when in doubt, remove it"). If this ever needs to vary it becomes
+ * a dashboard setting in the encrypted store, never `process.env`.
+ */
+export const AGENTLENS_DASHBOARD_PORT = 3000
+
+/** Valid `?tab=` deep-link ids, per their locked contract. Unknown values fall back to
+ *  `sessions` on their side, so an invalid link can never blank the panel. */
+export const AGENTLENS_EMBED_TABS = [
+  'sessions',
+  'context',
+  'cache',
+  'history',
+  'analytics',
+  'patterns',
+  'export',
+  'import',
+] as const
+export type AgentlensEmbedTab = (typeof AGENTLENS_EMBED_TABS)[number]
+
+/** Build the embed URL for the dashboard reachable at `origin` (default: this host's loopback). */
+export function agentlensEmbedUrl(tab: AgentlensEmbedTab, origin?: string): string {
+  const base = origin ?? `http://localhost:${AGENTLENS_DASHBOARD_PORT}`
+  return `${base}/?embed=1&tab=${tab}`
+}

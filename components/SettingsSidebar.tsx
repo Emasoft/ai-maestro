@@ -1,8 +1,8 @@
 'use client'
 
-import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield, Activity, RefreshCw } from 'lucide-react'
+import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield, Activity, RefreshCw, BarChart3 } from 'lucide-react'
 
-type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics' | 'plugin-updates'
+type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics' | 'analytics' | 'plugin-updates'
 
 interface SettingsSidebarProps {
   activeSection: SectionId
@@ -89,6 +89,15 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
       label: 'Diagnostics',
       icon: Activity,
       description: 'Ledger health + integrity',
+    },
+    {
+      // The AgentlensPro dashboard, embedded (its server runs independently, so it is an
+      // iframe over ai-maestro's own reverse proxy). Sits beside Diagnostics — both are
+      // "inspect what the system is actually doing" panels.
+      id: 'analytics' as const,
+      label: 'Analytics',
+      icon: BarChart3,
+      description: 'Sessions, cost & cache health',
     },
     {
       id: 'experiments' as const,

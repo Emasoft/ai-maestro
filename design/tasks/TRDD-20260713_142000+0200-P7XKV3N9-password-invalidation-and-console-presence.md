@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:20:00+0200
 created: 2026-07-13T14:20:00+0200
-updated: 2026-07-16T04:03:50+0200
+updated: 2026-07-17T11:02:15+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -21,13 +21,24 @@ derived: false
 npt: []
 eht: [7U927FCM]
 blocked-by: []
-implementation-commits: [13dfbb92, 0d2d421f, 76e738f9, fdeee818]
+implementation-commits: [13dfbb92, 0d2d421f, 76e738f9, fdeee818, 396b5d10]
 relevant-rules: []
 ---
 
 # TRDD-P7XKV3N9 — rotation as a product feature, and presence as the second factor
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-13
+
+**RECOVERY-EMAIL FOLLOW-UP (2026-07-17, commit `396b5d10`):** the USER hit first-run recovery
+setup with a Google address and got "the smtp server address was wrong" — a `FAILED`/unreachable
+verify whose copy said "check the address" while the form had NO server field to check. Root
+cause verified empirically: `@gmail.com` detects `smtp.gmail.com` correctly and a bad password
+routes to the helpful `AUTH_REQUIRED` path, so the FAILED verdict was a mis/undetected server
+(custom-domain relay likely) with no override. FIX: `RecoveryEmailSection` now has an editable
+SMTP host/port/TLS override (auto-filled by Detect); `POST /api/governance/email/configure`
+accepts optional `host`/`port`/`secure` and, when `host` is set, uses it verbatim and SKIPS
+autodetection (blank host ⇒ prior autodetect path unchanged). tsc 0, build 0, route tests 6/6
+(2 new cover the override-vs-autodetect branch). AWAITING the USER's retry with their real server.
 
 **MANDATED by the USER on 2026-07-13, born approved.** Verbatim:
 

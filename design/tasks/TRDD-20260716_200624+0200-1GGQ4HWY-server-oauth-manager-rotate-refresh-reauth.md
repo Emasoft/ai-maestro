@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T12:53:00+0200
+updated: 2026-07-17T18:17:58+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -23,7 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e963487f, 45725da7, 1e65a9b3]
+implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e963487f, 45725da7, 1e65a9b3, 2b325a11]
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
@@ -119,15 +119,21 @@ write, the lock, and the state.json schema.
   forced-off backend + temp HOME + hard escape guard); full oauth-rotator suite 106/106; tsc 0;
   `yarn build` 0. **NO code path CALLS runTick yet — nothing runs against the real credential.**
 
-**NEXT ACTION:** Phase G is COMPLETE (`1e65a9b3`) — the Python→TS port is now a WORKING but INERT
-server mechanism: the whole ROTATE/RENEW cascade ships wired, and the FIRST LIVE ACTIVATION
-(the human creating `~/.aimaestro/oauth-rotator-tick.enabled`) is the single R16 go-ahead, the
-USER's alone to make (it is what makes `switchLiveTo`/`writeLiveBlob` run live against `Claude
-Code-credentials`). Remaining, in priority order:
-1. **Feed `next_action` to [[DXJZM3BW]]'s `status` verb** — `runTick()` already returns
-   ok | rotating | reauth-needed; surface it so status/AgentlensPro consumers see the cascade state.
-2. **Family-A NPT chain (#49):** assess the 2 testing NPTs — [[Y916N7WL]] (status consumption) and
-   [[JAU1ES1C]] (session-resurrection hardening).
+**NEXT ACTION:** Phase G is COMPLETE (`1e65a9b3`) AND the `next_action` surfacing is DONE
+(`2b325a11`) — `lib/continuity-status.ts` reads the persisted OAuth-cascade stamp via
+`lib/oauth-rotator/tick-status.ts` (PERSIST-THEN-READ: `server-tick.ts` stamps the beat's cascade
+conclusion; a status GET only READS it, never runs the tick — R16-safe). The Python→TS port is a
+WORKING but INERT server mechanism; the FIRST LIVE ACTIVATION (the human creating
+`~/.aimaestro/oauth-rotator-tick.enabled`) is the single R16 go-ahead, the USER's alone.
+**Flock re-assessed 2026-07-17 — the four testing NPTs are code-complete:** [[Y916N7WL]]
+(`fbf28fb0`), [[DXJZM3BW]] (`03c40474`+`2b325a11`), [[JAU1ES1C]] (`166bd8a4`), [[P7RPOR5O]]
+(`f47d2ff4`). Remaining Family-A work, in priority order:
+1. **[[9ZIF82HI]] account switcher** (passive rotation on 429 / dead-refresh / net-drop) — the big
+   unbuilt infra piece; builds on this NPT's rotator machinery ([[TRDD-H24DF6ZC]] signed, so
+   buildable as gated INFRA like Phases E/G, live-activation still R16).
+2. **restart-self ([[TRDD-4P1M8I18]], #59)** — a self-only-by-construction restart the janitor `#J`
+   needs; agents CANNOT self-restart today (`restart-session` ∉ SELF_DRIVE_ACTIONS). Design grounded
+   + TRDD authored 2026-07-17; sequenced behind the now-FINAL janitor#100 ratification.
 3. **Phase F** — the REAUTH browser tier (`reauth.py`/`slot_capture_browser.py`/`cookie_vault.py`
    via Node CDP/tmux), the lower-priority "only human step".
 Do NOT flip the flag on (R16 — USER's call). Do NOT push (this is the app, not a plugin).

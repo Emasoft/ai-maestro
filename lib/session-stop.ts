@@ -56,11 +56,14 @@ const CODEX_CTRLC_GAP_MS = 400
  *   - else (claude / gemini / opencode / kiro) → C-c, `-l /exit`, Enter — Ctrl+D
  *     does NOT exit Claude Code; only `/exit` does. `-l` sends literal text.
  *
- * The codex branch matches the program EXACTLY (`=== 'codex'`) to preserve the
- * app route's current behavior byte-for-byte; a non-codex program falls through
- * to the Claude sequence, as it did inline. Never throws — exec failures are
- * caught and surfaced as { status: 'error' } so the caller maps them to a generic
- * HTTP 500 (API-MIN-03: raw exec text leaks socket paths / absolute layout).
+ * The codex branch matches the program name after case-normalization + trim; any
+ * non-codex program falls through to the Claude sequence, exactly as the inline
+ * code did. The registry stores canonical lowercased program names ('claude',
+ * 'codex', …), so in practice this is the app route's original `=== 'codex'`
+ * decision plus trivial-whitespace robustness (never a real divergence). Never
+ * throws — exec failures are caught and surfaced as { status: 'error' } so the
+ * caller maps them to a generic HTTP 500 (API-MIN-03: raw exec text leaks socket
+ * paths / absolute layout).
  */
 export async function runStopSequence(
   sessionName: string,

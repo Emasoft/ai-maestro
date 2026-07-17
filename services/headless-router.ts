@@ -232,6 +232,7 @@ import {
   buildRelaunchCommand,
   runRestartSequence,
 } from '@/lib/session-restart'
+import { runStopSequence } from '@/lib/session-stop'
 // SF2 drift-fix: the role-plugins install/delete headless handlers must mirror the
 // Next.js routes' agent-path RBAC. Those routes gate agents via requireSudoToken →
 // requireAidTitle → authorize(auth, 'manage-skills') (lib/sudo-guard.ts STRICT_AGENT_RULES).
@@ -239,7 +240,6 @@ import {
 // system-owner web session (no agentId) is granted by authorize() just as isSystemOwner is
 // — the headless router has no sudo layer (see the orchestrator handler note ~2381).
 import { authorize } from '@/lib/authorization'
-import { execSync } from 'child_process'
 // Atomic rate limiting for auth endpoints
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
 import { isValidUuid } from '@/lib/validation'
@@ -873,17 +873,18 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     sendServiceResult(res, await renameSession(params.id, body.name))
   }},
-  // Stop session — Ctrl+C clears partial input, then /exit as literal text exits Claude Code
-  { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/stop$/, paramNames: ['id'], handler: async (req, res, params) => {
+  // Stop session — client-aware graceful exit via the SHARED lib/session-stop.ts
+  // (execFileSync, no shell) so it CANNOT diverge from the Next.js app route
+  // (TRDD-OPNDCKVA). Codex exits on a double Ctrl+C; claude/gemini/opencode/kiro
+  // use C-c + literal /exit + Enter.
+  { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/stop$/, paramNames: ['id'], handler: async (req, res, params, query) => {
     const sessionName = decodeURIComponent(params.id)
-    // CC-GOV-001 (headless-parity, TRDD-4P1M8I18 Phase 2b): validate the session
-    // name FIRST — the app /stop route validates it (route.ts:46) before
-    // authenticating (:51). This copy interpolated it RAW into
-    // `execSync("tmux send-keys -t \"${sessionName}\"…")`, so a crafted name
-    // (e.g. `x";$(cmd);"` via %-encoding) was a shell-injection surface. The
-    // allowlist excludes every metachar, so after this gate the interpolation
-    // below is provably safe. Deeper parity (execFileSync + subagent gate +
-    // codex-aware exit) is a follow-up TRDD; this gate closes the injection now.
+    // CC-GOV-001 (headless-parity): validate the session name FIRST — the app
+    // /stop route validates it (route.ts:46) before authenticating (:51), so with
+    // no sudo layer this is the faithful mirror order. runStopSequence passes the
+    // name to execFileSync (no shell) so a metachar can never be interpreted, but
+    // rejecting an out-of-charset name up front means a bad target is never acted
+    // on and the two modes answer 400 identically.
     if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) { sendJson(res, 400, { error: 'Invalid session name' }); return }
     // SVC2-MAJ-12 (2026-05-06): authenticate before sending Ctrl+C / /exit to a tmux pane.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
@@ -901,16 +902,30 @@ const routes: Route[] = [
     const stopTarget = getAgentBySession(sessionName)
     const stopAuthz = authorize(auth, 'send-command', stopTarget?.id)
     if (!stopAuthz.allowed) { sendJson(res, 403, { error: stopAuthz.reason || 'Forbidden' }); return }
-    try {
-      // BUG-3 fix: mirror the 3-command sequence from the Next.js stop route
-      // Ctrl+C clears any partial input, -l flag sends literal text (not key names)
-      execSync(`tmux send-keys -t "${sessionName}" C-c`, { timeout: 5000 })
-      execSync(`tmux send-keys -t "${sessionName}" -l '/exit'`, { timeout: 5000 })
-      execSync(`tmux send-keys -t "${sessionName}" Enter`, { timeout: 5000 })
-      sendJson(res, 200, { success: true, sessionName })
-    } catch (error: unknown) {
-      sendJson(res, 500, { error: (error as Error).message })
+    // TRDD-O8NCNRWO subagent gate (parity with the app /stop route, added
+    // TRDD-OPNDCKVA — the prior copy had none): CC ≥2.1.198 runs subagents in the
+    // background, so an idle-looking session may still have live subagents and
+    // /exit would land on Claude's abandon-confirmation dialog. Refuse with 409
+    // when the hook counter PROVES live subagents (a null/0 counter never blocks —
+    // it can be stale-low per plugin#17). ?force=true keeps the old behavior.
+    const force = query?.force === 'true'
+    const gate = evaluateExitGate(readSubagentCount(stopTarget?.workingDirectory || stopTarget?.sessions?.[0]?.workingDirectory), force)
+    if (gate.blocked) {
+      sendJson(res, 409, { error: 'subagents_running', message: `Refusing to stop: ${gate.subagentCount} background subagent(s) still running. Retry with ?force=true to stop anyway.`, subagentCount: gate.subagentCount })
+      return
     }
+    // SCEN-013: codex exits on a double C-c; claude/gemini/opencode/kiro use /exit.
+    // The lib normalizes the program, so pass it lowercased (mirrors the app route).
+    const program = (stopTarget?.program || 'claude').toLowerCase()
+    const outcome = await runStopSequence(sessionName, program)
+    if (outcome.status === 'error') {
+      // API-MIN-03: the prior copy returned the raw exec message here, leaking
+      // socket paths / absolute layout. Log detail server-side, return generic.
+      console.error('[headless stop] tmux command failed:', { detail: outcome.detail })
+      sendJson(res, 500, { error: 'Session stop failed' })
+      return
+    }
+    sendJson(res, 200, { success: true, sessionName, program })
   }},
   // Self-restart — SELF-ONLY-BY-CONSTRUCTION (TRDD-4P1M8I18). MUST precede the
   // generic /sessions/[id]/restart entry below, else 'me' would be caught as a

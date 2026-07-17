@@ -593,4 +593,11 @@ describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8
     expect(res.bodyJson()?.error).not.toBe('auth_required')
     expect(res.bodyJson()?.success).toBeUndefined()
   })
+
+  it('stop: a well-formed name still falls through to the auth gate (401), proving the 400 is the name gate (TRDD-OPNDCKVA parity)', async () => {
+    const res = await call('POST', '/api/sessions/valid-session/stop', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401) // valid name passes the gate → forged token rejected by handler auth
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
 })

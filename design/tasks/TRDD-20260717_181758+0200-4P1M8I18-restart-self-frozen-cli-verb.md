@@ -3,7 +3,7 @@ trdd-id: 4P1M8I18
 title: restart-self — self-only-by-construction agent self-restart (me/restart route + frozen CLI verb)
 column: planned
 created: 2026-07-17T18:17:58+0200
-updated: 2026-07-17T18:44:47+0200
+updated: 2026-07-17T18:57:21+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -21,17 +21,17 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [2af0aabf, 1981abf8]
+implementation-commits: [2af0aabf, 1981abf8, 1fdc3603]
 ---
 
 # restart-self — self-only-by-construction agent self-restart (me/restart route + frozen CLI verb)
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
 
-**IN PROGRESS — Phases 1 + 2 DONE (`2af0aabf`, `1981abf8`); Phase 2b + Phase 3 NEXT.** A self-mandate (Tier 0: the frozen-layer
-script surface + a self-derived route are the ai-maestro server's own scope, reversible, self-only).
-Unblocked by the now-FINAL janitor#100 co-ratification (I committed on janitor#75 that restart-self
-lands after ratification).
+**IN PROGRESS — Phases 1 + 2 + 2b DONE (`2af0aabf`, `1981abf8`, `1fdc3603`); Phase 3 NEXT.** A self-mandate
+(Tier 0: the frozen-layer script surface + a self-derived route are the ai-maestro server's own scope,
+reversible, self-only). Unblocked by the now-FINAL janitor#100 co-ratification (I committed on janitor#75
+that restart-self lands after ratification).
 
 **✅ Phase 1 (`2af0aabf`):** `lib/session-restart.ts` extracted from `[id]/restart` — the ONE
 definition of the CC-GOV-002 `programArgs` allowlist (`isValidProgramArgs`), the API-MAJ-03 persona
@@ -58,26 +58,26 @@ self-only has no cross-target). Reuses `lib/session-restart.ts` (P1) so it canno
 command; manager-gate + subagent-gate parity. 12 security tests pin the four invariants (a self-works,
 b hostile body ignored, c `[id]/restart` self-deny unchanged, d owner refused). tsc 0, `yarn build` 0.
 
-**NEXT ACTION — Phase 2b (hardening) then Phase 3 (CLI + docs):**
+**✅ Phase 2b (`1fdc3603`):** the headless `[id]/restart` copy in `services/headless-router.ts` (a THIRD,
+divergent copy — raw `execSync("tmux send-keys -t \"${sessionName}\"…")`, no CC-GOV-001 session-name gate,
+no CC-GOV-002 programArgs allowlist, no API-MAJ-03 persona sanitization, no subagent gate, raw error leak)
+is now refactored onto the shared `lib/session-restart.ts` — decision-for-decision identical to the app
+route (validation + `isValidProgramArgs` + `sanitizePersonaName` + `buildRelaunchCommand` +
+`runRestartSequence` + subagent gate via `query.force` + generic 500). The session-name gate moved BEFORE
+auth to mirror the app route's sudo→validate→auth order (headless has no sudo → validate→auth). Same pass
+also closed the SAME-class shell-injection in the adjacent headless `/stop` copy with the CC-GOV-001 gate.
+3 new mirror tests in `headless-router-auth-mirror.test.ts` drive the REAL router (metachar name → 400,
+well-formed name → 401 auth gate). tsc 0, vitest 78/78 (3 restart suites), `yarn build` 0.
 
-**Phase 2b — SECURITY: unify the headless `[id]/restart` copy to `lib/session-restart.ts`.**
-Discovered building P2: `services/headless-router.ts` `POST /api/sessions/[id]/restart` (the entry
-right AFTER the new me/restart one) is a THIRD, DIVERGENT copy of the restart machinery and is
-**less safe than the app route** — a pre-existing shell-injection surface:
-- uses `execSync` with **shell interpolation** (`tmux send-keys -t "${sessionName}" …`) — app route
-  uses `execFileSync` (no shell);
-- **no session-name validation** (`decodeURIComponent(params.id)` with no `^[a-zA-Z0-9_@.-]+$` gate);
-- **no programArgs allowlist** (CC-GOV-002) and **no persona-name sanitization** (API-MAJ-03) — a
-  permissive `agent.label` flows RAW into the `--name "…"` and then into the `execSync` shell string;
-- no subagent gate, no abandon-confirmation handling, leaks the raw exec error (API-MIN-03).
-Fix: refactor that handler to the shared lib (add the validation + `isValidProgramArgs` +
-`sanitizePersonaName` + `buildRelaunchCommand` + `runRestartSequence`, subagent gate via `query.force`),
-mirroring the app route — completing P1's One-Source-of-Truth and fixing the injection divergence in one
-move. This is a pre-existing bug adjacent to P1's goal; do it before P3. tsc + build + mirror test green.
+**The deeper `/stop` parity** (execFileSync instead of execSync, the TRDD-O8NCNRWO subagent gate, and the
+codex double-`C-c` client-aware exit — none of which is a live injection once gated) is a separate atomic
+task, authored as **[[TRDD-OPNDCKVA]]** (headless /stop parity — extract `lib/session-stop.ts`, wire both
+modes, add the subagent gate).
 
-**Phase 3 — the no-arg `aimaestro-continuity.sh restart-self` verb** (`POST /api/sessions/me/restart`
-with `AID_AUTH`, no target arg — sits beside `status`/`ensure-resume` on the frozen script) +
-`docs/SCRIPT-LAYER.md` / `SCRIPT-MANIFEST.md` registration + a CLI/route smoke test.
+**NEXT ACTION — Phase 3: the no-arg `aimaestro-continuity.sh restart-self` verb** (`POST
+/api/sessions/me/restart` with `AID_AUTH`, no target arg — sits beside `status`/`ensure-resume` on the
+frozen continuity script) + `docs/SCRIPT-LAYER.md` / `SCRIPT-MANIFEST.md` registration + a CLI/route smoke
+test. Then this TRDD reaches `complete` (no NPT/EHT — depth-0). Do NOT push (app, not a plugin).
 
 ## Problem / Goal
 

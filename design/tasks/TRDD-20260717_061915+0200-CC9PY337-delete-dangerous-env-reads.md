@@ -26,31 +26,53 @@ a dashboard setting, saved in the encrypted settings file. because if there is t
 doubt, you can be sure it can be exploited by malicious actors. security is paramount in
 ai-maestro, value number 1."*
 
+**SECOND USER DIRECTIVE (2026-07-17), refining the first:** *"even a dev environment is at risk
+of being exploited. but you can slightly relax the criteria for those env var needed for testing
+and scenarios runs."*
+
 **THE RULE THIS RATIFIES (apply to every future env var):** an env var that can weaken a
 security property is not gated, not validated, not documented — it is DELETED. Doubt resolves
 toward removal, never toward a check. A setting that must be configurable lives in the
-dashboard, in the encrypted settings file. This is a standing rule, not a one-off cleanup.
+dashboard, in the encrypted settings file. **A DEV BOX IS NOT A SAFE HOST** — it runs agents
+under the same UID as the server, so "delete" means delete in every mode, not just release.
+The ONE relaxation: a var a TEST genuinely needs, which has NO dashboard equivalent (it is a
+seam, not a setting), may survive — honored only inside the test runner. This is a standing
+rule, not a one-off cleanup.
+
+**THE DECISION PROCEDURE for any env var, present or future:**
+1. Does honoring it weaken a security property? **No** → ordinary config, leave it alone
+   (`PORT`, `MAESTRO_MODE`, `NOTIFICATION_*`). Gating these breaks deployments and buys nothing.
+2. **Yes**, and it has a dashboard equivalent? → **DELETE the read.** The dashboard owns it.
+   (`AIM_SMTP_*`, phase 1.)
+3. **Yes**, no dashboard equivalent, but a test needs it for 0-IMPACT isolation? → `TEST_ONLY_ENV`,
+   honored only when `NODE_ENV=test`.
+4. Anything else / any doubt → **DELETE.**
 
 **PROGRESS:**
-- `4e2e90b4` — `lib/release-env-guard.ts`: a release-mode gate that IGNORES dangerous vars when
-  `NODE_ENV=production`. **SUPERSEDED IN PART by this TRDD** (see "Superseded" below). It is
-  wired to nothing, so nothing regresses while it stands.
+- `4e2e90b4` — `lib/release-env-guard.ts`: a release-mode gate. **SUPERSEDED** — see below.
+- `8e124445` — **phase 1 DONE.** The six `AIM_SMTP_*` reads deleted from `lib/mailer.ts`;
+  `envOverride()` gone, `getMailerConfig()` collapsed to `autoConfig()`. Mostly reverts
+  `3536afef`. 15/15 mailer tests; tsc + build clean. Template + intro rewritten.
+- **Guard inverted → `lib/test-only-env.ts`** (rename of `release-env-guard.ts`). ALLOWLIST on
+  `NODE_ENV === 'test'`, not a blocklist on production — so dev is now covered too. Vitest sets
+  `NODE_ENV=test` itself (verified EMPIRICALLY with a probe; `vitest.config.ts` does NOT set it,
+  so a test pins the property — if vitest ever drops it, every hatch silently dies and the suite
+  starts writing to the developer's REAL keychain). 17/17; tsc clean.
 
-**NEXT ACTION:** Phase 1 — delete the six `AIM_SMTP_*` env reads from `lib/mailer.ts`
-(`envOverride()` + its merge in `getMailerConfig()`), leaving the dashboard/keychain path as the
-only source. Then drop the now-dead `AIM_SMTP_*` stubs from `tests/unit/mailer.test.ts` and the
-7 per-field cases added in `3536afef`.
+**NEXT ACTION:** Phase 2 — `lib/smtp-credential.ts:52`, swap `process.env.AIM_SMTP_CRED_BACKEND`
+for `testOnlyEnv('AIM_SMTP_CRED_BACKEND')`, then run the mailer + smtp-credential + email-route
+suites. It is the smallest wiring and proves the pattern before phase 3 touches token custody.
 
 **SUPERSEDED — do NOT carry forward:**
-- *"The guard is the answer."* It is not. A guard IGNORES the var in release but still READS it
-  in development — and dev machines run agents too, so the vector survives where the guard
-  claims to help. Deleting the read closes it in BOTH modes. The guard's only durable residue
-  is a regression fence (Phase 4).
+- *"A release-mode gate is the answer."* Twice wrong. (a) It still READS the var in development,
+  and the USER ruled dev is at risk too. (b) For a var with a dashboard equivalent, gating is
+  strictly weaker than deleting. `release-env-guard.ts` no longer exists; `test-only-env.ts`
+  replaces it with the inverted predicate.
 - *"`AIM_SMTP_*` is legitimate operator config for a self-hosted relay."* The USER ruled the
-  dashboard is the only release path. The per-field override built in `3536afef` is therefore
-  reverted, not extended.
-- *"Env vars must be gated in release mode."* Weaker than the ratified rule. They are DELETED,
-  not gated.
+  dashboard is the only path. The per-field override built in `3536afef` is reverted, not
+  extended.
+- *"Gate on `NODE_ENV !== 'production'`."* Use `NODE_ENV === 'test'`. The difference IS the
+  dev-box exposure.
 
 ## Problem
 

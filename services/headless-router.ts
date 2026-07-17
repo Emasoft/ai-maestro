@@ -875,10 +875,19 @@ const routes: Route[] = [
   }},
   // Stop session — Ctrl+C clears partial input, then /exit as literal text exits Claude Code
   { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/stop$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const sessionName = decodeURIComponent(params.id)
+    // CC-GOV-001 (headless-parity, TRDD-4P1M8I18 Phase 2b): validate the session
+    // name FIRST — the app /stop route validates it (route.ts:46) before
+    // authenticating (:51). This copy interpolated it RAW into
+    // `execSync("tmux send-keys -t \"${sessionName}\"…")`, so a crafted name
+    // (e.g. `x";$(cmd);"` via %-encoding) was a shell-injection surface. The
+    // allowlist excludes every metachar, so after this gate the interpolation
+    // below is provably safe. Deeper parity (execFileSync + subagent gate +
+    // codex-aware exit) is a follow-up TRDD; this gate closes the injection now.
+    if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) { sendJson(res, 400, { error: 'Invalid session name' }); return }
     // SVC2-MAJ-12 (2026-05-06): authenticate before sending Ctrl+C / /exit to a tmux pane.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    const sessionName = decodeURIComponent(params.id)
     // TRDD-HGE9T6VT / TRDD-BF3JN4TL (R42): AUTHENTICATION IS NOT AUTHORIZATION.
     // SVC2-MAJ-12 added the authenticate() above and stopped there — so in
     // headless mode ANY authenticated agent could /exit the MANAGER and get a 200,
@@ -960,12 +969,28 @@ const routes: Route[] = [
     }
     sendJson(res, 200, { success: true, sessionName, command: outcome.command })
   }},
-  // Restart session — /exit, poll for shell prompt, relaunch
-  { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/restart$/, paramNames: ['id'], handler: async (req, res, params) => {
+  // Restart session — /exit, poll for shell prompt, relaunch. Uses the SHARED
+  // lib/session-restart.ts (execFileSync, no shell) so it CANNOT diverge from the
+  // Next.js app route (TRDD-4P1M8I18 Phase 2b). The prior copy here was a third,
+  // less-safe implementation: raw `execSync("tmux send-keys -t \"${sessionName}\"…")`
+  // with no CC-GOV-001 session-name gate, no CC-GOV-002 programArgs allowlist, no
+  // API-MAJ-03 persona sanitization (agent.label flowed RAW into --name), no
+  // subagent gate, and a raw error leak — a shell-injection surface the app route
+  // did not have. This handler now mirrors the app route decision-for-decision.
+  { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/restart$/, paramNames: ['id'], handler: async (req, res, params, query) => {
+    const sessionName = decodeURIComponent(params.id)
+    // CC-GOV-001 (headless-parity): validate the session name FIRST — the app
+    // route validates it (route.ts:55) before authenticating (:60), so with no
+    // sudo layer this is the faithful mirror order. runRestartSequence passes the
+    // name to execFileSync (no shell) so a metachar can never be interpreted, but
+    // rejecting an out-of-charset name up front means a bad target is never acted
+    // on and the two modes answer 400 identically.
+    if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) { sendJson(res, 400, { error: 'Invalid session name' }); return }
+
     // SVC2-MAJ-12 (2026-05-06): authenticate before relaunching the agent client.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    const sessionName = decodeURIComponent(params.id)
+
     const agent = getAgentBySession(sessionName)
 
     // TRDD-HGE9T6VT / TRDD-BF3JN4TL (R42): same missing-authz hole as /stop above —
@@ -975,13 +1000,9 @@ const routes: Route[] = [
     if (!restartAuthz.allowed) { sendJson(res, 403, { error: restartAuthz.reason || 'Forbidden' }); return }
 
     // R10 manager-gate (governance audit, 2026-07-14 — headless-parity): the
-    // Next.js twin (app/api/sessions/[id]/restart/route.ts:97-107) refuses to
-    // restart a team agent when no MANAGER exists on the host. R10's cascade
-    // hibernates every team agent until a MANAGER is assigned, and reviving one
-    // via restart would bypass that freeze. Headless authorize()'d the caller but
-    // dropped this second gate, so a team agent could be relaunched on a
-    // MANAGER-less host — an invariant enforced in full mode but not headless (the
-    // same class as the R17.14 core-plugin-uninstall parity fix). Mirror the exact
+    // Next.js twin refuses to restart a team agent when no MANAGER exists on the
+    // host. R10's cascade hibernates every team agent until a MANAGER is assigned,
+    // and reviving one via restart would bypass that freeze. Mirror the exact
     // full-mode decision: same helpers, same 403.
     if (agent && !getManagerId() && isAgentInAnyTeam(agent.id)) {
       sendJson(res, 403, { error: 'Cannot restart team agent: no MANAGER exists on this host. Assign a MANAGER first.' })
@@ -990,76 +1011,46 @@ const routes: Route[] = [
 
     let body: { program?: string; programArgs?: string } = {}
     try { body = await readJsonBody(req) } catch { /* optional body */ }
+    // CC-GOV-002 type-confusion guard (parity with the app route).
+    if (body.program !== undefined && typeof body.program !== 'string') { sendJson(res, 400, { error: 'Invalid program: must be a string' }); return }
+    if (body.programArgs !== undefined && typeof body.programArgs !== 'string') { sendJson(res, 400, { error: 'Invalid programArgs: must be a string' }); return }
+
+    // TRDD-O8NCNRWO subagent gate (parity with the app route): a PROVEN positive
+    // counter refuses with 409; a null/0 counter never blocks (stale-low per
+    // plugin#17); ?force=true overrides.
+    const force = query?.force === 'true'
+    const gate = evaluateExitGate(readSubagentCount(agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory), force)
+    if (gate.blocked) {
+      sendJson(res, 409, { error: 'subagents_running', message: `Refusing to restart: ${gate.subagentCount} background subagent(s) still running. Retry with ?force=true to restart anyway.`, subagentCount: gate.subagentCount })
+      return
+    }
 
     const program = body.program || agent?.program || 'claude'
     const programArgs = body.programArgs || agent?.programArgs || ''
+    // CC-GOV-002 allowlist — the single shared definition, so the two surfaces
+    // cannot validate differently.
+    if (!isValidProgramArgs(programArgs)) { sendJson(res, 400, { error: 'Invalid programArgs: contains disallowed characters' }); return }
 
-    const resolveBin = (p: string): string => {
-      const lower = p.toLowerCase()
-      if (lower.includes('claude')) return 'claude'
-      if (lower.includes('codex')) return 'codex'
-      if (lower.includes('aider')) return 'aider'
-      if (lower.includes('gemini')) return 'gemini'
-      return 'claude'
+    // Build via the shared, security-validated construction (bin + API-MAJ-03
+    // persona-name allowlist + --name injection) and run the mechanical
+    // stop→poll→relaunch sequence — identical to the app route, so the two cannot
+    // construct different commands.
+    const bin = resolveRestartBin(program)
+    const personaName = sanitizePersonaName(agent?.label || agent?.name || sessionName, sessionName)
+    const command = buildRelaunchCommand(bin, programArgs, personaName)
+    const outcome = await runRestartSequence(sessionName, command)
+    if (outcome.status === 'timeout') {
+      sendJson(res, 504, { error: 'Timeout: program did not exit within 15s', hint: 'The session may be sitting on a confirmation dialog (e.g. background subagents still running). Check the terminal, or retry.' })
+      return
     }
-
-    const SHELL_COMMANDS = new Set(['zsh', 'bash', 'sh', 'fish', '-zsh', '-bash'])
-
-    try {
-      // 1. Ctrl+C clears partial input, /exit as literal text exits Claude Code
-      // BUG-4 fix (stop portion): mirror the 3-command sequence with C-c and -l flag
-      execSync(`tmux send-keys -t "${sessionName}" C-c`, { timeout: 5000 })
-      execSync(`tmux send-keys -t "${sessionName}" -l '/exit'`, { timeout: 5000 })
-      execSync(`tmux send-keys -t "${sessionName}" Enter`, { timeout: 5000 })
-
-      // 2. Poll until the program exits (shell prompt visible)
-      const maxWait = 15000
-      const pollInterval = 500
-      let elapsed = 0
-      let exited = false
-
-      while (elapsed < maxWait) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval))
-        elapsed += pollInterval
-        let paneCmd: string | null = null
-        try {
-          paneCmd = execSync(`tmux display-message -p -t "${sessionName}" '#{pane_current_command}'`, { timeout: 5000, encoding: 'utf8' }).trim() || null
-        } catch { paneCmd = null }
-        if (!paneCmd || SHELL_COMMANDS.has(paneCmd)) {
-          exited = true
-          break
-        }
-      }
-
-      if (!exited) {
-        sendJson(res, 504, { error: 'Timeout: program did not exit within 15s' })
-        return
-      }
-
-      // 3. Brief pause for shell readiness
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      // 4. Build and send relaunch command
-      const bin = resolveBin(program)
-      // BUG-4 fix (--name injection): ensure --name <persona> is always present in args
-      const personaName = agent?.label || agent?.name || sessionName
-      let finalArgs = programArgs
-      if (!finalArgs.includes('--name ')) {
-        // Insert --name before any -- divider (raw prompt passthrough), or at the end
-        const dividerIdx = finalArgs.indexOf(' -- ')
-        if (dividerIdx !== -1) {
-          finalArgs = finalArgs.slice(0, dividerIdx) + ` --name "${personaName}"` + finalArgs.slice(dividerIdx)
-        } else {
-          finalArgs = `${finalArgs} --name "${personaName}"`.trim()
-        }
-      }
-      const cmd = `${bin} ${finalArgs}`.trim()
-      execSync(`tmux send-keys -t "${sessionName}" '${cmd.replace(/'/g, "'\\''")}' Enter`, { timeout: 5000 })
-
-      sendJson(res, 200, { success: true, sessionName, command: cmd })
-    } catch (error: unknown) {
-      sendJson(res, 500, { error: (error as Error).message })
+    if (outcome.status === 'error') {
+      // API-MIN-03: log detail server-side; return a generic message (exec errors
+      // leak socket paths / absolute layout).
+      console.error('[Headless restart] tmux command failed:', { detail: outcome.detail })
+      sendJson(res, 500, { error: 'Session restart failed' })
+      return
     }
+    sendJson(res, 200, { success: true, sessionName, command: outcome.command })
   }},
 
   // =========================================================================

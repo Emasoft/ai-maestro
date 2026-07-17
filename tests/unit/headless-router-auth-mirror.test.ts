@@ -549,3 +549,48 @@ describe('headless-router auth mirror — team-update + session-restart parity (
     expect(res.bodyJson()?.success).toBeUndefined()
   })
 })
+
+/**
+ * CC-GOV-001 session-name injection gate — headless parity for /stop and /restart
+ * (TRDD-4P1M8I18 Phase 2b). Before this fix, the headless /stop and /restart
+ * handlers interpolated the raw, %-decoded session name straight into
+ * `execSync("tmux send-keys -t \"${sessionName}\"…")` — a shell-injection surface
+ * the Next.js twins did NOT have (they validate the name against
+ * `^[a-zA-Z0-9_@.-]+$` and drive tmux via execFileSync, no shell). The fix mirrors
+ * the app-route order: validate the name FIRST — before auth, since headless has
+ * no sudo layer the app route's sudo→validate→auth collapses to validate→auth — so
+ * a name carrying a shell metachar is rejected with 400 before it can reach tmux.
+ *
+ * The forged bearer PASSES the structural gate and reaches the handler; because
+ * validation now precedes auth, a malicious name yields 400 (not 401) — exactly
+ * the app route's behavior. A well-formed name still falls through to the auth
+ * gate (401), proving the 400 is the NAME gate and not a blanket rejection. Both
+ * assertions run end-to-end through the REAL router — no service mocking, and the
+ * 400 lands before any tmux call, so nothing is ever restarted/stopped.
+ */
+describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8I18 Phase 2b)', () => {
+  // decodeURIComponent('victim%24%28whoami%29') === 'victim$(whoami)', which fails
+  // ^[a-zA-Z0-9_@.-]+$ ($, (, ) are all excluded) → the metachar gate must fire.
+  const EVIL = 'victim%24%28whoami%29'
+
+  it('restart: a session name with shell metachars is rejected with 400 before reaching tmux', async () => {
+    const res = await call('POST', `/api/sessions/${EVIL}/restart`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(400)
+    expect(res.bodyJson()?.error).toMatch(/Invalid session name/i)
+    expect(res.bodyJson()?.success).toBeUndefined() // never restarted
+  })
+
+  it('stop: a session name with shell metachars is rejected with 400 before reaching tmux', async () => {
+    const res = await call('POST', `/api/sessions/${EVIL}/stop`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(400)
+    expect(res.bodyJson()?.error).toMatch(/Invalid session name/i)
+    expect(res.bodyJson()?.success).toBeUndefined() // never stopped
+  })
+
+  it('restart: a well-formed name still falls through to the auth gate (401), proving the 400 is the name gate', async () => {
+    const res = await call('POST', '/api/sessions/valid-session/restart', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401) // valid name passes the gate → forged token rejected by handler auth
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
+})

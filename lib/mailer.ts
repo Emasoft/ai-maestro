@@ -66,7 +66,10 @@ function autoConfig(accountEmail: string): MailerConfig | null {
   // recovery config can carry it; the curated table knows only usernameFormat.
   let explicitUsername: string | undefined
   const rec = getRecoveryEmail()
-  if (rec && rec.email.toLowerCase() === accountEmail.toLowerCase() && rec.smtp) {
+  // Guard `rec.email` is a string before `.toLowerCase()`: a hand-corrupted governance store must
+  // fall through to the curated table, never THROW out of this non-try path and 500 a password
+  // reset (the one flow that must degrade to another factor, not crash).
+  if (rec && typeof rec.email === 'string' && rec.email.toLowerCase() === accountEmail.toLowerCase() && rec.smtp) {
     ({ host, port, secure, usernameFormat } = rec.smtp)
     explicitUsername = rec.smtp.username
   } else {

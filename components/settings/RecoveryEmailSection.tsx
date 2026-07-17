@@ -167,12 +167,25 @@ export default function RecoveryEmailSection({ onRecoveryComplete }: { onRecover
           // remote owner would never receive the code, so warn explicitly.
           setNotice('Saved, but the confirmation email could not be sent. Check your SMTP configuration, then Remove and re-add.')
         }
-      } else if (data?.status === 'AUTH_REQUIRED') {
-        setInstructions(data.instructions || 'The mail server rejected the password. Enable SMTP access / use an app-specific password.')
       } else {
-        setError(data?.error === 'no_smtp_detected'
-          ? 'No SMTP server was detected for that email domain — enter the SMTP server and port below, then try again.'
-          : 'Could not reach that SMTP server. Check the SMTP server and port below — edit them if the auto-detected values are wrong — then try again.')
+        // Non-SUCCESS (AUTH_REQUIRED or FAILED). Surface the SMTP server the backend actually
+        // TRIED — echoed in data.detected — into the now-relevant fields. Without this, an owner
+        // who left the host blank to auto-detect is told "check the SMTP server below" while those
+        // fields sit EMPTY: they never see (and cannot correct) the server that was attempted.
+        // That blank-fields-plus-"check the address" mismatch is the exact reported confusion.
+        // (no_smtp_detected carries no `detected` — nothing to fill, and the message says so.)
+        if (data?.detected && typeof data.detected === 'object') {
+          if (data.detected.host) setHost(String(data.detected.host))
+          if (typeof data.detected.port === 'number') setPort(String(data.detected.port))
+          if (typeof data.detected.secure === 'boolean') setSecure(data.detected.secure)
+        }
+        if (data?.status === 'AUTH_REQUIRED') {
+          setInstructions(data.instructions || 'The mail server rejected the password. Enable SMTP access / use an app-specific password.')
+        } else {
+          setError(data?.error === 'no_smtp_detected'
+            ? 'No SMTP server was detected for that email domain — enter the SMTP server and port below, then try again.'
+            : 'Could not reach that SMTP server. Check the SMTP server and port below — edit them if the auto-detected values are wrong — then try again.')
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')

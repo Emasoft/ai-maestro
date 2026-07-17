@@ -1,9 +1,10 @@
 ---
 trdd-id: CHN16JXZ
 title: Fleet recovery — server-internal liveness detection + ensure-resume actuation across the fleet
-column: planned
+column: blocked
+pre-block-column: planned
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T20:06:24+0200
+updated: 2026-07-17T06:34:21+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project

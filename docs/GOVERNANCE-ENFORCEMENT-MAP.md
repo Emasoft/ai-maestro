@@ -345,8 +345,33 @@ Row format is fixed so a regex parses each line:
 | R48.2 | UNENFORCED | — | — |
 | R48.3 | UNENFORCED | — | — |
 | R48.4 | UNENFORCED | — | — |
+| R49.1 | BEHAVIOURAL | — | — |
+| R49.2 | BEHAVIOURAL | — | — |
+| R49.3 | BEHAVIOURAL | — | — |
+| R49.4 | BEHAVIOURAL | — | — |
+| R49.5 | BEHAVIOURAL | — | — |
+| R49.6 | BEHAVIOURAL | — | — |
 
 ## Notes on individual rows
+
+- **R49.1-R49.6 (BEHAVIOURAL)** — the refusal protocol binds what an approver
+  WRITES when it declines a proposal: name the precise defect, state the bar for
+  acceptance, invite a re-proposal, stay in the thread. No code surface can judge
+  whether prose named a *concrete* defect rather than "insufficiently secure" —
+  that is the whole substance of the rule, and it is a judgment. R49.3 binds the
+  proposer symmetrically (a defect-less refusal does not authorize destroying the
+  dependent work), which is equally unjudgeable by a guard.
+
+  **R49.6 is the closest to mechanizable, and is still BEHAVIOURAL — honestly.**
+  It requires the refusal *and its named defect* to be recorded on the governing
+  GitHub issue and/or the TRDD `## Approval log`. A guard could check that a
+  `column: refused` TRDD carries an approval-log line at all; it cannot check that
+  the line names a defect, and it cannot see the GitHub-issue channel R49.4 makes
+  co-equal (a plugin session ↔ MANAGER has no AMP thread, so the cross-repo issue
+  IS the channel). A presence-only check would turn "the refusal explained itself"
+  into "a line exists" — passing a bare "denied", which is the exact failure R49
+  exists to stop. A guard that green-lights the violation is worse than no guard,
+  so this row stays BEHAVIOURAL rather than claiming a hole a checkbox could fill.
 
 - **R25.2 (ENFORCED, tested)** — only the vocab-equality half is test-enforced:
   `tests/unit/trdd-doctor.test.ts` pins `DEFAULT_STATUSES` (the 17 columns) equal

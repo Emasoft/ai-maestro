@@ -9,7 +9,7 @@
 # script, never the HTTP API directly (R23): the CLI here is immutable; the server
 # API behind it may change freely.
 #
-# Two self-scoped verbs — a deliberate, minimal contract:
+# Three self-scoped verbs — a deliberate, minimal contract:
 #   status <self>          the 5 continuity-status metadata fields for THIS host's
 #                          account (account_healthy, window_5h_pct, window_7d_pct,
 #                          cache_ttl_minutes, next_action). A DELIBERATE ceiling
@@ -18,9 +18,19 @@
 #   ensure-resume <self>   idempotently ensure THIS agent is resumed. If already
 #                          live it is a no-op; otherwise the server resumes it via
 #                          the existing wake path. The server owns the actuation.
+#   restart-self [--force] restart THIS agent's OWN tmux session (stop the client,
+#                          wait for the shell, relaunch with the stored persona).
+#                          SELF-ONLY BY CONSTRUCTION (TRDD-4P1M8I18): it hits
+#                          POST /api/sessions/me/restart, whose target is DERIVED
+#                          from the caller's AID — there is NO agent argument, so no
+#                          invocation can name another agent (stronger than
+#                          self-only-by-authorization). The janitor `#J` continuity
+#                          path uses this to recover a stuck self. --force overrides
+#                          the running-subagents refusal (?force=true).
 #
-# R42 self-only: <self> must resolve to the CALLER's own agent (its own AID). An
-# agent may act ONLY on itself; the human owner may target any. Cross-agent
+# R42 self-only: `status`/`ensure-resume` take a <self> that must resolve to the
+# CALLER's own agent (its own AID); `restart-self` takes NO target at all. An agent
+# may act ONLY on itself; the human owner may target any. Cross-agent
 # liveness/actuation is the SERVER's job (TRDD-CHN16JXZ), never a call from here.
 #
 # Auth: agent callers export AID_AUTH (Bearer); the local owner needs none.
@@ -29,6 +39,7 @@
 # Usage:
 #   aimaestro-continuity.sh status <self>
 #   aimaestro-continuity.sh ensure-resume <self>
+#   aimaestro-continuity.sh restart-self [--force]
 #
 # <self> is the caller's own agent UUID, or a name/alias resolved via /api/agents?q=.
 #
@@ -94,6 +105,22 @@ cmd_ensure_resume() {
     _api POST "/api/agents/${id}/continuity/ensure-resume" '{}'
 }
 
+# restart-self — SELF-ONLY BY CONSTRUCTION. Takes NO target: it hits
+# POST /api/sessions/me/restart, which derives the session from auth.agentId, so
+# there is no path/body argument through which another agent could ever be named.
+# Deliberately NOT _resolve_agent_id'd — resolving a ref would re-introduce a
+# targetable parameter, defeating the whole point. --force maps to ?force=true
+# (override the running-subagents refusal). Any other argument is rejected.
+cmd_restart_self() {
+    local qs=""
+    case "${1:-}" in
+        "")        ;;                       # no arg — the normal path
+        --force)   qs="?force=true" ;;
+        *) echo "Error: restart-self takes no target (self-derived); only optional --force" >&2; return 1 ;;
+    esac
+    _api POST "/api/sessions/me/restart${qs}" '{}'
+}
+
 show_help() {
     cat <<'EOF'
 aimaestro-continuity.sh — AI Maestro agent-continuity CLI
@@ -102,14 +129,18 @@ aimaestro-continuity.sh — AI Maestro agent-continuity CLI
                          (account_healthy, window_5h_pct, window_7d_pct,
                          cache_ttl_minutes, next_action) — metadata only, no token
   ensure-resume <self>   idempotently ensure THIS agent is resumed (no-op if live)
+  restart-self [--force] restart THIS agent's OWN session (self-only by construction —
+                         no target; --force overrides the running-subagents refusal)
 
-R42 self-only: <self> must be the CALLER's own agent. Agent callers export AID_AUTH.
+R42 self-only: `status`/`ensure-resume` take the CALLER's own <self>; `restart-self`
+takes no target (server derives it from the caller's AID). Agent callers export AID_AUTH.
 EOF
 }
 
 case "${1:-help}" in
     status)        shift; cmd_status "$@" ;;
     ensure-resume) shift; cmd_ensure_resume "$@" ;;
+    restart-self)  shift; cmd_restart_self "$@" ;;
     help|--help|-h) show_help ;;
     --version|-v) echo "aimaestro-continuity.sh v1.0.0" ;;
     *) echo "Error: unknown command: $1" >&2; echo "" >&2; show_help; exit 1 ;;

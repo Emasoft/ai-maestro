@@ -11,9 +11,9 @@ Generated from `scripts/*.sh` **in this repo** — deliberately *not* from a hos
 `~/.local/bin/`. A deployed directory is one machine's snapshot; using it as the source
 of truth is exactly what §5 shows going wrong.
 
-- Source of truth: `scripts/*.sh` (75 files at the time of writing)
+- Source of truth: `scripts/*.sh` (77 files at the time of writing)
 - Install target: `~/.local/bin/` (via `install-messaging.sh`, by glob)
-- Last reconciled: 2026-07-14 — commit `abc3514c`
+- Last reconciled: 2026-07-17 — added `aimaestro-continuity.sh` (Tier A) + `install-agentlens.sh` (Tier C)
 
 ---
 
@@ -38,16 +38,16 @@ MCP server. That rule has no element-level exception, including the core plugin.
 
 | Tier | Promise |
 |---|---|
-| **A — frozen CLI** (§2, 43 scripts) | a contract. Call these. |
+| **A — frozen CLI** (§2, 44 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
-| **C — operator/dev** (§4, 20 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
+| **C — operator/dev** (§4, 21 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
-43 + 12 + 20 = 75, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+44 + 12 + 21 = 77, the whole of `scripts/*.sh`. Every file is in exactly one tier.
 
 ---
 
-## 2. Tier A — the frozen skill-facing CLI (43 scripts)
+## 2. Tier A — the frozen skill-facing CLI (44 scripts)
 
 ### 2.1 `aimaestro-*` — the server surface (8)
 
@@ -90,6 +90,19 @@ Shared flag vocabulary (all frozen where they appear):
 | `queue-cancel <agent> <entryId>` | — |
 
 `queue` is the reason a hibernated agent is **never waited on** — see SCRIPT-LAYER.md.
+
+#### `aimaestro-continuity.sh <command> [args]` — agent-continuity (self-scoped)
+
+| Subcommand | Args / flags |
+|---|---|
+| `status <self>` | — |
+| `ensure-resume <self>` | — |
+| `restart-self` | `--force` |
+
+`status`/`ensure-resume` take the caller's own `<self>` (R42 self-only). `restart-self`
+takes **no target** — it calls `POST /api/sessions/me/restart`, whose session is DERIVED
+from the caller's AID, so no invocation can name another agent (self-only by construction,
+TRDD-4P1M8I18). `--force` overrides the running-subagents refusal. See SCRIPT-LAYER.md.
 
 #### `aimaestro-panel.sh <command> <agent> [flags]` — the dashboard side panel
 
@@ -311,14 +324,14 @@ API (`ChangePlugin`). It still works; do not build on it.
 
 ---
 
-## 4. Tier C — operator / dev scripts (20) — **not** a plugin API
+## 4. Tier C — operator / dev scripts (21) — **not** a plugin API
 
 `install-messaging.sh` copies `scripts/*.sh` by glob, so these land in `~/.local/bin` too.
 Being on `PATH` does **not** make them a contract. A plugin must never call them.
 
 | Script | What it is |
 |---|---|
-| `remote-install.sh` · `install-code-analysis-tooling.sh` · `distribute-code-analysis-skill.sh` | installers |
+| `remote-install.sh` · `install-code-analysis-tooling.sh` · `distribute-code-analysis-skill.sh` · `install-agentlens.sh` | installers |
 | `setup-tmux.sh` · `setup-tailscale.sh` · `setup-tailscale-serve.sh` · `setup-gateway.sh` · `start-with-ssh.sh` | host setup |
 | `with-node.sh` · `build-jsonl-reader.sh` · `bump-version.sh` | build / release (`bash scripts/with-node.sh <cmd>` — the repo needs Node 22) |
 | `migrate-r20-disk-layout.sh` · `index-all-agents.sh` | one-shot migrations / maintenance |

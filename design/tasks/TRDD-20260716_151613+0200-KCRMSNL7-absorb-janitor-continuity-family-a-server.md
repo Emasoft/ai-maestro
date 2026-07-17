@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-16T20:06:24+0200
+updated: 2026-07-17T13:40:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -88,9 +88,41 @@ including bringing the ai-maestro server back up. Locked pattern:
 > server owns Family A when up; `#N` daemon owns it when there is no server; the two
 > **NEVER write the live credential concurrently**.
 
-That last clause is the single highest-risk seam. The server's OAuth manager MUST acquire the
-**same machine-wide lock** the daemon uses (`daemon.flock` equivalent), so "server up" and
-"daemon fallback" are mutually-exclusive credential writers **by construction, not by timing**.
+That last clause is the single highest-risk seam. The server's OAuth manager MUST acquire a
+**shared machine-wide lock** on the live-credential write (see the coordination model below for
+why it is a shared O_EXCL lockfile, not the daemon's `fcntl.flock`), so "server up" and "daemon
+fallback" are mutually-exclusive credential writers **by construction, not by timing**.
+
+## Daemon coordination model — once-per-machine vs per-population (USER, 2026-07-17)
+
+The USER refined how the server's janitor daemon-function and the external `#N` daemon **coexist
+on one machine without doubling work.** The discriminator is **not** Family A vs B — it is **how
+many times a chore must run per machine:**
+
+- **ONCE-PER-MACHINE (single-owner)** — OAuth rotation, `claude plugin marketplace update` (all
+  marketplaces), `~/.claude` config monitoring, and any chore that must execute exactly once per
+  host. Rule: **when the ai-maestro server is ACTIVE, the `#N` daemon DEACTIVATES these** and the
+  server's daemon-function owns them; with **no server, `#N` owns them** (the no-server fallback).
+  This EXTENDS the Family-A "server-when-up / `#N`-when-not" pattern to the once-only Family-B
+  chores (marketplace / self-update / `~/.claude`) purely to **de-duplicate** — Family B's
+  OWNERSHIP on a non-ai-maestro machine is unchanged, so the #56 mirror still holds.
+- **PER-POPULATION (both-run)** — global reload-plugins, global disarm, global rearm, global
+  pause, global reload-skills, global restart-claude. These run on **BOTH** daemons over
+  **DISJOINT agent sets**, so there is nothing to de-dup: **agents INSIDE the ai-maestro harness →
+  the server's janitor daemon-function; agents OUTSIDE → the `#N` daemon.**
+
+**Reconciles the one-writer seam (supersedes the "same `daemon.flock`" wording).** Presence-based
+deactivation is the COARSE coordination the USER directs, but it has a transition WINDOW (server
+coming up while `#N` is mid-rotation, or `#N` starting before it observes the server) in which both
+could write the live credential — the exact corruption janitor#100 warned of. So the OAuth
+live-write ALSO takes a **shared machine-wide lock layered UNDER** the presence model: a **shared
+O_EXCL lockfile** at the resolved rotator-lock path — cross-language because both Node and Python
+`open(O_CREAT|O_EXCL)` the same file, needing **no `fcntl.flock` and thus no native Node addon**
+(this dissolves the Node-22 ABI blocker that pushed [[1GGQ4HWY]] to a server-INTERNAL lock).
+Layered guarantee: presence deactivation prevents steady-state doubling; the shared lockfile makes
+a handoff-window concurrent write impossible **by construction**. Both, not either — and the
+janitor's `#N` side must (a) deactivate its once-only chores when it observes a live server and
+(b) honor the same shared O_EXCL lockfile on its own live-credential write. Relayed to janitor#100.
 
 ## The `#J → server` contract (janitor #100 Q3, CONFIRMED) — the ONLY new script surface
 

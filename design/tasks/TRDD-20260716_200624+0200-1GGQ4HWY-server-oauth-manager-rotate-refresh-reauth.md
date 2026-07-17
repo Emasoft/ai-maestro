@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T12:36:00+0200
+updated: 2026-07-17T12:53:00+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -23,7 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e963487f, 45725da7]
+implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e963487f, 45725da7, 1e65a9b3]
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
@@ -99,8 +99,15 @@ write, the lock, and the state.json schema.
     credential or the network. tsc + `yarn build` clean.
 - **F** — REAUTH + bootstrap browser tier (`reauth.py`/`slot_capture_browser.py`/`cookie_vault.py`
   via Node CDP/tmux) — the "only human step".
-- **G** — the 60s `cmd_tick` as a server-internal task, **config-gated OFF by default**; feeds
-  [[DXJZM3BW]]'s `next_action` (cascade states: ok | rotating | reauth-needed).
+- **G ✅ CODE DONE — NOT ACTIVATED (`1e65a9b3`)** — `lib/oauth-rotator/server-tick.ts` wires
+  `runTick` into `server.mjs` as a 60s `setInterval().unref()` task. Gate ORDER inside each beat:
+  flag-file `oauthTickEnabled()` → `claudeRunning()` (fail-closed `pgrep -x claude`, self-match-free)
+  → `withTickLock(runTick)`; the whole beat is try/caught so it NEVER throws to the server. The
+  opt-in is a FLAG FILE `~/.aimaestro/oauth-rotator-tick.enabled` (NOT an env var — TRDD-CC9PY337);
+  ABSENT = the R16-safe default (every beat no-ops: nothing written, no network). The timer STARTS
+  unconditionally at boot (the gate lives INSIDE the beat), so the default stays OFF with no
+  startup runTick call. 6 new 0-IMPACT tests (temp HOME + forced-off backend + stubbed runTickImpl);
+  tsc 0, vitest 18/18, build 0. Feeds [[DXJZM3BW]]'s `next_action` (ok | rotating | reauth-needed).
 
 - **ORCHESTRATION TICK ✅ CODE DONE — NOT WIRED LIVE (`45725da7`)** — `lib/oauth-rotator/tick.ts`:
   the faithful port of `cmd_auto` (ROTATE), `_keepalive_refresh` (RENEW), `_refresh_and_heal_slot`,
@@ -112,15 +119,18 @@ write, the lock, and the state.json schema.
   forced-off backend + temp HOME + hard escape guard); full oauth-rotator suite 106/106; tsc 0;
   `yarn build` 0. **NO code path CALLS runTick yet — nothing runs against the real credential.**
 
-**NEXT ACTION:** Phase G — WIRE `runTick` into the server as a ~60 s interval task **config-gated
-OFF by default**, under `withTickLock` (serialise the server's own ticks) and only when the real
-`claude` binary is running (port `claude_running()`). The config flag defaults OFF, so the safe
-default is "the server never calls runTick"; flipping it ON is the single R16 activation and is
-the USER's to make (it makes `switchLiveTo`/`writeLiveBlob` run live against `Claude
-Code-credentials`). Seams: `server.mjs` startup (beside the agent-invariants sweep), a config
-read, `lib/oauth-rotator/tick-lock.ts::withTickLock`. Then feed `next_action` to [[DXJZM3BW]]'s
-`status` verb. Phase F (REAUTH browser tier via Node CDP/tmux — `reauth.py`/
-`slot_capture_browser.py`/`cookie_vault.py`) is the lower-priority "only human step" and follows.
+**NEXT ACTION:** Phase G is COMPLETE (`1e65a9b3`) — the Python→TS port is now a WORKING but INERT
+server mechanism: the whole ROTATE/RENEW cascade ships wired, and the FIRST LIVE ACTIVATION
+(the human creating `~/.aimaestro/oauth-rotator-tick.enabled`) is the single R16 go-ahead, the
+USER's alone to make (it is what makes `switchLiveTo`/`writeLiveBlob` run live against `Claude
+Code-credentials`). Remaining, in priority order:
+1. **Feed `next_action` to [[DXJZM3BW]]'s `status` verb** — `runTick()` already returns
+   ok | rotating | reauth-needed; surface it so status/AgentlensPro consumers see the cascade state.
+2. **Family-A NPT chain (#49):** assess the 2 testing NPTs — [[Y916N7WL]] (status consumption) and
+   [[JAU1ES1C]] (session-resurrection hardening).
+3. **Phase F** — the REAUTH browser tier (`reauth.py`/`slot_capture_browser.py`/`cookie_vault.py`
+   via Node CDP/tmux), the lower-priority "only human step".
+Do NOT flip the flag on (R16 — USER's call). Do NOT push (this is the app, not a plugin).
 
 ## Problem / Goal
 

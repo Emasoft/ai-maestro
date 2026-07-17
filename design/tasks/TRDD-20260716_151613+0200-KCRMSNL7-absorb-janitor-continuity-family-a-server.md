@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T17:29:52+0200
+updated: 2026-07-17T17:36:30+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -37,17 +37,25 @@ file. I refined rev 1: filled **§6** (server-side contracts) + a **§2 conflict
    janitor's marketplace-refresh/user-plugins-update/version-update — the exact "token without its
    live chore" failure #100's load-bearing rule forbids. Fix: gate the 2 OAuth tasks on `family-a`,
    the 3 marketplace/version tasks on `singleton-chores` (server emits it NEVER today → janitor keeps them).
-2. **ME (task #59-adjacent):** add `aimaestro-agent.sh session command <tmux> --newline -- <cmd>` —
-   your `fleet_inject.py:143` targets it; the ROUTE `POST /api/sessions/[id]/command` EXISTS, only the
-   CLI verb is missing → thin wrapper, your shipped code runs unchanged.
-3. **ME:** deploy `aimaestro-continuity.sh` to `~/.local/bin` (installer `scripts/*.sh` glob) — it is
-   repo-only on this machine, so your Phase-D `on-stop-failure → ensure-resume` is a feature-detected
-   **no-op** until installed.
+2. **ME:** deploy `aimaestro-continuity.sh` to `~/.local/bin` (installer `scripts/*.sh` glob) — it is
+   repo-only on this machine (`ls ~/.local/bin/aimaestro-continuity.sh` fails), so the janitor's
+   Phase-D `on-stop-failure → ensure-resume` is a feature-detected **no-op** until installed. Joint
+   first-run verify step, not a code task.
+
+**CORRECTION (2026-07-17, #100 comment 5004880793):** my §6.4 originally claimed the CLI verb
+`aimaestro-agent.sh session command` was missing and owed by me — **WRONG.** It EXISTS and is DEPLOYED
+(`~/.local/bin/agent-session.sh:210` `cmd_session_command`, commit `77883371`, → `POST
+/api/sessions/<name>/command`), matching the janitor's `fleet_inject` argv. I had grepped
+`aimaestro-session.sh` (a separate standalone CLI) instead of the `agent-session.sh` module
+`aimaestro-agent.sh` sources. That convergence item is WITHDRAWN; the throwaway TRDD-FUYUP38L I opened
+for it is CANCELLED + archived. **The lesson: `aimaestro-agent.sh` sources `agent-*.sh` modules — grep
+the MODULE, not the standalone `aimaestro-session.sh`, before claiming a `session` sub-verb is absent.**
 
 Nothing is urgent: the probe ships advertising `capabilities: []`, so the safe default (janitor keeps
 every chore) holds until each class is proven live. Everything landed is SAFE regardless of rev 2
-(OAuth port INERT via the R16 flag; probe inert-on-disk until a server restart). **NEXT = land my two
-items (2, 3) + await the janitor's rev 2 (§2 de-delegation), then post `RATIFIED rev 2`.**
+(OAuth port INERT via the R16 flag; probe inert-on-disk until a server restart). **NEXT = await the
+janitor's rev 2 (§2 de-delegation); the continuity-CLI deploy is a joint install step. Then post
+`RATIFIED rev 2`.**
 
 **🔒 PER-PROJECT CHANNELING — binding invariant (USER via janitor#100 / janitor TRDD-X92VBFNF,
 2026-07-17).** Every AUTOMATIC surface (heartbeat/drift line, detector finding, injected nudge,

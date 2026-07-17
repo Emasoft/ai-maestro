@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T15:31:36+0200
+updated: 2026-07-17T15:55:21+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -33,6 +33,22 @@ the outcome: the OAuth port is INERT (R16 flag off), and the probe file [[P7RPOR
 `capabilities: []` today and is inert-on-disk until a server restart — nothing forces a design. The
 server-side liveness/capability file is agnostic to one-plugin-vs-two (both consume the same file),
 so it likely survives; confirm against the janitor's revised design before assuming so.
+
+**🔒 PER-PROJECT CHANNELING — binding invariant (USER via janitor#100 / janitor TRDD-X92VBFNF,
+2026-07-17).** Every AUTOMATIC surface (heartbeat/drift line, detector finding, injected nudge,
+proposal/task, notification, session-start report) may carry information about EXACTLY the
+agent/project it fires in — NEVER another project's findings, names, or even aggregate counts.
+Four reasons, each sufficient: wrong skills; forbidden cross-actuation on other workdirs/gits/repos;
+token-budget contamination; **DATA EXFILTRATION** into projects with weaker (possibly zero) data
+protections. Only an EXPLICIT HUMAN surface (the dashboard, a human command) may present a
+machine-wide view. **Server audit 2026-07-17:** existing automatic per-agent surfaces are
+point-to-point (`tmux send-keys -t <one agent>`; AMP push per recipient) and [[P7RPOR5O]] carries
+chore CLASSES not per-agent findings — COMPLIANT, nothing to fix. The report-surfacing feature
+(reqs #4-6 of the redesign) is built per-project-isolated FROM THE START: a finding routes only to
+the affected agent's own session OR (if it is not running) the HUMAN — never through another agent;
+the dashboard daemon section is the ONE sanctioned human-aggregate view; session-start reports are
+own-project-only AND concise; storage is per-project-partitioned so cross-project leakage is
+impossible by construction, not by filtering.
 
 **Born approved — USER mandate (2026-07-16), verbatim intent:** *"coordinate with the
 janitor plugin to incorporate [a] version of the janitor that is tailored for ai-maestro

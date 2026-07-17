@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T14:47:58+0200
+updated: 2026-07-17T15:31:36+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,6 +23,16 @@ release-via: none
 # Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-16
+
+**⛔ HOLD — architecture under janitor-side revision (USER, 2026-07-17).** The USER is redesigning
+the janitor packaging live with the janitor Claude — likely collapsing the `#J` (thin local) + `#N`
+(scope-flip) two-plugin split into **ONE janitor plugin that adapts to the ai-maestro harness when
+inside an ai-maestro agent**, plus more. **Do NOT build further absorption (singleton-chores, etc.)
+until the janitor Claude brings this side up to speed.** What is already landed is SAFE regardless of
+the outcome: the OAuth port is INERT (R16 flag off), and the probe file [[P7RPOR5O]] advertises
+`capabilities: []` today and is inert-on-disk until a server restart — nothing forces a design. The
+server-side liveness/capability file is agnostic to one-plugin-vs-two (both consume the same file),
+so it likely survives; confirm against the janitor's revised design before assuming so.
 
 **Born approved — USER mandate (2026-07-16), verbatim intent:** *"coordinate with the
 janitor plugin to incorporate [a] version of the janitor that is tailored for ai-maestro

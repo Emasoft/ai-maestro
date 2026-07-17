@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T13:40:00+0200
+updated: 2026-07-17T14:47:58+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -16,7 +16,7 @@ approval-datetime: 2026-07-16T15:16:13+0200
 relevant-rules: [16, 23, 42]
 labels: [janitor-absorption, continuity, oauth, resurrection, family-a, server, guardian]
 external-refs: [Emasoft/ai-maestro-janitor#100, Emasoft/ai-maestro#68, Emasoft/ai-maestro#70, Emasoft/AgentlensPro#3]
-npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C]
+npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RPOR5O]
 release-via: none
 ---
 
@@ -43,7 +43,9 @@ moves under the janitor's TRDD and nothing of theirs moves under this one.
 **Process gate (USER, 2026-07-16):** coordinate via issues → write TRDDs → **only then**
 plan-mode the design. Coordination is DONE (all three Claudes aligned on #100 / AgentlensPro#3).
 This file is the TRDD. **DECOMPOSED (2026-07-16) into 6 implementation NPTs** — all authored as
-`planned`, depth-1 derived, siblings ordered via `blocked-by:`:
+`planned`, depth-1 derived, siblings ordered via `blocked-by:`. A **7th NPT (P7RPOR5O)** was added
+2026-07-17 when the daemon-coordination refinement (janitor#100) surfaced the need for the
+auth-free liveness+capability probe file both janitor backends read:
 
 | id | NPT | blocked-by | tier |
 |---|---|---|---|
@@ -53,8 +55,9 @@ This file is the TRDD. **DECOMPOSED (2026-07-16) into 6 implementation NPTs** �
 | [[9ZIF82HI]] | Account switcher (passive rotation on 429/dead-refresh/net-drop) | 1GGQ4HWY | **user (mandate)** |
 | [[CHN16JXZ]] | Fleet recovery (liveness + `ensure-resume` actuation) | DXJZM3BW, 1GGQ4HWY | none (self) |
 | [[JAU1ES1C]] | Session-resurrection hardening (boot-restore → immortality) | — (parallel) | none (self) |
+| [[P7RPOR5O]] | Liveness+capability probe file (janitor#100 coordination seam) | — (parallel) | none (self) |
 
-Topological order: Y916N7WL → DXJZM3BW → 1GGQ4HWY → {9ZIF82HI, CHN16JXZ}; JAU1ES1C parallel.
+Topological order: Y916N7WL → DXJZM3BW → 1GGQ4HWY → {9ZIF82HI, CHN16JXZ}; JAU1ES1C, P7RPOR5O parallel.
 The two token-touching NPTs (1GGQ4HWY, 9ZIF82HI) carry the USER mandate and are built to the
 signed [[TRDD-H24DF6ZC]] design (D1-D4). **NEXT ACTION = start [[Y916N7WL]] (root of the order,
 unblocked).** This TRDD cannot reach `complete` until every NPT is terminal (the completion gate);

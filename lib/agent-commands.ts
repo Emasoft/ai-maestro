@@ -96,6 +96,25 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
     requiresIdle: true,
     description: 'Run the janitor drift/security detectors once now.',
   },
+  // Registered for the janitor #J soft-send migration to `queue --command-key`
+  // (janitor#100 rev 2). Both are self-scoped janitor self-maintenance commands,
+  // safe at idle, non-destructive. The other requested keys (reload-skills, and a
+  // --force variant of reload-plugins) are pending the janitor's exact command
+  // strings — do NOT guess a command string (verified allowlist is the boundary).
+  {
+    key: 'janitor-resume',
+    label: 'Janitor: resume',
+    command: '/janitor-resume',
+    requiresIdle: true,
+    description: 'Fire the janitor resume cue now (continue the pending task after a compact / rate-limit clear).',
+  },
+  {
+    key: 'janitor-write-handoff',
+    label: 'Janitor: write handoff',
+    command: '/janitor-write-handoff',
+    requiresIdle: true,
+    description: 'Author a rich agent handoff to .janitor/state before a delicate compaction.',
+  },
 ] as const
 
 /** Resolve a command by key. Returns undefined for any key not in the allowlist. */

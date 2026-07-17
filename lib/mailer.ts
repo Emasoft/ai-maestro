@@ -14,18 +14,30 @@
  * and the password read from the OS credential store (lib/smtp-credential). gmail →
  * Gmail SMTP, icloud → iCloud SMTP, and so on — no manual server config.
  *
- * Resolution order (first that resolves wins):
- *   1. AIM_SMTP_* env — an explicit override for a custom/self-hosted relay.
+ * Resolution is PER FIELD, not all-or-nothing. For each field:
+ *   1. The AIM_SMTP_* env var for THAT field, when set — an independent override.
  *   2. Auto-config — detectProvider(accountEmail) + the stored app-password.
- *   3. Not configured → DORMANT: sendCodeEmail() is a no-op {ok:false, skipped:true}
- *      and the caller falls back to the console channel. So the feature builds, tests,
- *      and ships with NO credentials, lighting up the moment the owner adds them. Email
- *      is one recovery channel among three (console, email, passkey), never a hard dep.
+ *   3. The merged result must still be COMPLETE (host+port+user+pass). If it is not,
+ *      the mailer is DORMANT: sendCodeEmail() is a no-op {ok:false, skipped:true} and
+ *      the caller falls back to the console channel. So the feature builds, tests, and
+ *      ships with NO credentials, lighting up the moment the owner adds them. Email is
+ *      one recovery channel among three (console, email, passkey), never a hard dep.
  *
- * Env override (ALL of host/port/user/pass required to enable it):
- *   AIM_SMTP_HOST, AIM_SMTP_PORT, AIM_SMTP_USER, AIM_SMTP_PASS
- * Optional: AIM_SMTP_FROM (defaults to AIM_SMTP_USER), AIM_SMTP_SECURE ('true' for
- *   implicit TLS; defaults to true on port 465, else STARTTLS).
+ * Every AIM_SMTP_* variable is INDEPENDENT: setting one overrides exactly its own field
+ * and leaves the rest to the dashboard-configured relay. `AIM_SMTP_HOST=relay.internal`
+ * alone now means "same account, different host". It previously meant NOTHING — the env
+ * path required all four together, so a lone override was silently discarded while the
+ * operator believed it had taken effect.
+ *
+ * Completeness is still enforced on the MERGED config, which preserves the property the
+ * all-or-nothing shape was protecting: a partial override with no stored relay behind it
+ * is incomplete, so it stays dormant rather than half-enabling a channel that would fail
+ * at send time.
+ *
+ * Env vars (each optional and independent):
+ *   AIM_SMTP_HOST, AIM_SMTP_PORT, AIM_SMTP_USER, AIM_SMTP_PASS, AIM_SMTP_FROM
+ *   (defaults to the effective user), AIM_SMTP_SECURE ('true'/'false'; defaults to the
+ *   stored value, or true on port 465 / STARTTLS elsewhere when the port is overridden).
  */
 import nodemailer from 'nodemailer'
 import { detectProvider } from './email-providers'
@@ -42,27 +54,49 @@ export interface MailerConfig {
   secure: boolean
 }
 
+/** The one port that means implicit TLS on connect; every other port means STARTTLS. */
+const IMPLICIT_TLS_PORT = 465
+
 /**
- * Explicit SMTP override from the environment, or null when it is not fully set. ALL of
- * host/port/user/pass must be present — a partial config is "not configured" rather
- * than half-enabling a channel that would fail at send time.
+ * The per-field SMTP override read from the environment. Each AIM_SMTP_* var contributes
+ * ONLY its own field; an unset var contributes nothing and leaves that field to the
+ * dashboard config.
+ *
+ * THROWS on a malformed value rather than dropping it. A typo'd AIM_SMTP_PORT must not
+ * quietly disable the recovery channel while the operator believes it is live — absence
+ * is a legitimate "not configured", but a wrong value is a bug they need to see. This is
+ * the fail-fast rule: the override either works as written or the process says why.
  */
-function envConfig(): MailerConfig | null {
-  const host = process.env.AIM_SMTP_HOST
-  const portRaw = process.env.AIM_SMTP_PORT
-  const user = process.env.AIM_SMTP_USER
+function envOverride(): Partial<MailerConfig> {
+  const ov: Partial<MailerConfig> = {}
+
+  const host = process.env.AIM_SMTP_HOST?.trim()
+  if (host) ov.host = host
+  const user = process.env.AIM_SMTP_USER?.trim()
+  if (user) ov.user = user
   const pass = process.env.AIM_SMTP_PASS
-  if (!host || !portRaw || !user || !pass) return null
-  const port = Number(portRaw)
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) return null
-  return {
-    host,
-    port,
-    user,
-    pass,
-    from: process.env.AIM_SMTP_FROM || user,
-    secure: process.env.AIM_SMTP_SECURE ? process.env.AIM_SMTP_SECURE === 'true' : port === 465,
+  if (pass) ov.pass = pass
+  const from = process.env.AIM_SMTP_FROM?.trim()
+  if (from) ov.from = from
+
+  const portRaw = process.env.AIM_SMTP_PORT?.trim()
+  if (portRaw) {
+    const port = Number(portRaw)
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+      throw new Error(`AIM_SMTP_PORT="${portRaw}" is not a valid TCP port (1-65535)`)
+    }
+    ov.port = port
   }
+
+  const secureRaw = process.env.AIM_SMTP_SECURE?.trim()
+  if (secureRaw) {
+    if (secureRaw !== 'true' && secureRaw !== 'false') {
+      throw new Error(`AIM_SMTP_SECURE="${secureRaw}" must be exactly "true" or "false"`)
+    }
+    ov.secure = secureRaw === 'true'
+  }
+
+  return ov
 }
 
 /**
@@ -96,15 +130,33 @@ function autoConfig(accountEmail: string): MailerConfig | null {
 }
 
 /**
- * Resolve the SMTP config: the env override first, else auto-config for `accountEmail`
- * (the owner's registered address), else null. Pass the registered email whenever you
- * want the auto-config path — without it only the env override can resolve.
+ * Resolve the effective SMTP config: the stored/auto-config for `accountEmail` (the owner's
+ * registered address) with each env var layered over its own field, or null when the merged
+ * result is incomplete. Pass the registered email whenever you want the stored relay as the
+ * base — without it, only the env vars can supply a field, so they must supply all four.
+ *
+ * Throws if an env var is present but malformed (see envOverride).
  */
 export function getMailerConfig(accountEmail?: string): MailerConfig | null {
-  const env = envConfig()
-  if (env) return env
-  if (accountEmail) return autoConfig(accountEmail)
-  return null
+  const base = accountEmail ? autoConfig(accountEmail) : null
+  const ov = envOverride()
+
+  const host = ov.host ?? base?.host
+  const port = ov.port ?? base?.port
+  const user = ov.user ?? base?.user
+  const pass = ov.pass ?? base?.pass
+  // Completeness is checked on the MERGE, not on either source: a lone override with no
+  // stored relay behind it is still "not configured" and stays dormant.
+  if (!host || !port || !user || !pass) return null
+
+  // `secure` tracks the EFFECTIVE port unless stated outright. Keeping the stored value
+  // when the port was NOT overridden preserves a provider's known-correct setting; deriving
+  // it when the port WAS overridden is what stops AIM_SMTP_PORT=465 from inheriting a
+  // stored STARTTLS and failing the handshake — the one field that cannot be varied
+  // independently of the port without producing a config that never connects.
+  const secure = ov.secure ?? (base && ov.port === undefined ? base.secure : port === IMPLICIT_TLS_PORT)
+
+  return { host, port, user, pass, from: ov.from ?? base?.from ?? user, secure }
 }
 
 export function isMailerConfigured(accountEmail?: string): boolean {

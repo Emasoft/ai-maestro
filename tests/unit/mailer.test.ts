@@ -5,8 +5,8 @@ import { join } from 'path'
 
 /**
  * Mailer config RESOLUTION (TRDD-P7XKV3N9) — the deterministic half of the mailer, tested
- * without any network. Proves the resolution order: env override wins, else the STORED
- * autodetected config (from governance) for the registered account, else the curated table,
+ * without any network. Proves resolution is PER FIELD: each AIM_SMTP_* var overrides only
+ * its own field of the STORED autodetected config (from governance), else the curated table,
  * else dormant (null → caller falls back to console). Dynamic imports after a stubbed $HOME +
  * resetModules, because the mailer transitively loads governance, which binds ~/.aimaestro at
  * module load — a static top-level import would bind the developer's REAL governance.json.
@@ -78,5 +78,69 @@ describe('getMailerConfig — resolution order', () => {
     vi.stubEnv('AIM_SMTP_PASS', 'relay-pass')
     // …but the explicit env override is used instead.
     expect(mailer.getMailerConfig('me@gmail.com')).toMatchObject({ host: 'relay.example.com', port: 2525, user: 'relay-user', secure: false })
+  })
+})
+
+describe('getMailerConfig — each env var overrides ONE field, independently', () => {
+  it('a LONE host override keeps every other field from the stored config', async () => {
+    const { mailer, cred } = await load()
+    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
+    vi.stubEnv('AIM_SMTP_HOST', 'relay.internal') // the ONLY var set
+    // Same account, same credentials, different host. Under the old all-or-nothing shape
+    // this lone override was silently discarded and Gmail's host was used.
+    expect(mailer.getMailerConfig('me@gmail.com')).toEqual({
+      host: 'relay.internal', port: 465, secure: true, user: 'me@gmail.com', from: 'me@gmail.com', pass: 'app-pw',
+    })
+  })
+
+  it('a lone user/from override leaves host, port and password alone', async () => {
+    const { mailer, cred } = await load()
+    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
+    vi.stubEnv('AIM_SMTP_USER', 'login-id')
+    vi.stubEnv('AIM_SMTP_FROM', 'noreply@example.com')
+    expect(mailer.getMailerConfig('me@gmail.com')).toEqual({
+      host: 'smtp.gmail.com', port: 465, secure: true, user: 'login-id', from: 'noreply@example.com', pass: 'app-pw',
+    })
+  })
+
+  it('a partial override with NO stored relay behind it stays dormant', async () => {
+    const { mailer } = await load()
+    vi.stubEnv('AIM_SMTP_HOST', 'relay.internal') // no stored password → merge is incomplete
+    // The fail-safe the all-or-nothing shape protected is preserved: never half-enable a
+    // channel that would fail at send time.
+    expect(mailer.getMailerConfig('me@gmail.com')).toBeNull()
+    expect(mailer.isMailerConfigured('me@gmail.com')).toBe(false)
+  })
+
+  it('overriding the port re-derives secure, so 587 does not inherit the stored implicit TLS', async () => {
+    const { mailer, cred } = await load()
+    cred.storeSmtpPassword('me@gmail.com', 'app-pw') // base is 465 / secure:true
+    vi.stubEnv('AIM_SMTP_PORT', '587')
+    // Inheriting secure:true onto 587 would wedge the TLS handshake — the one field that
+    // cannot be varied independently of the port.
+    expect(mailer.getMailerConfig('me@gmail.com')).toMatchObject({ port: 587, secure: false })
+  })
+
+  it('an explicit AIM_SMTP_SECURE beats the port derivation', async () => {
+    const { mailer, cred } = await load()
+    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
+    vi.stubEnv('AIM_SMTP_PORT', '587')
+    vi.stubEnv('AIM_SMTP_SECURE', 'true')
+    expect(mailer.getMailerConfig('me@gmail.com')).toMatchObject({ port: 587, secure: true })
+  })
+
+  it('a malformed port THROWS instead of silently disabling the channel', async () => {
+    const { mailer, cred } = await load()
+    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
+    vi.stubEnv('AIM_SMTP_PORT', '58x')
+    // Fail-fast: a typo must not leave the owner believing email recovery is live.
+    expect(() => mailer.getMailerConfig('me@gmail.com')).toThrow(/AIM_SMTP_PORT/)
+  })
+
+  it('a malformed secure THROWS rather than being coerced to false', async () => {
+    const { mailer, cred } = await load()
+    cred.storeSmtpPassword('me@gmail.com', 'app-pw')
+    vi.stubEnv('AIM_SMTP_SECURE', 'yes')
+    expect(() => mailer.getMailerConfig('me@gmail.com')).toThrow(/AIM_SMTP_SECURE/)
   })
 })

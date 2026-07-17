@@ -30,6 +30,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { globalStateDir, legacyReadPath } from './global-state'
+import { testOnlyEnv } from '../test-only-env'
 
 // How long to wait on a secret-store CLI before giving up (a hung keyring prompt must never
 // wedge the unattended daemon tick).
@@ -277,10 +278,13 @@ function whichSync(tool: string): boolean {
   return false
 }
 
-/** Active backend id: `macos` | `secret_tool` | `dpapi` | `none`. Honours the
- * CLAUDE_SAFE_STORAGE_BACKEND override first, else picks by platform + tool availability. */
+/** Active backend id: `macos` | `secret_tool` | `dpapi` | `none`. Picks by platform + tool
+ * availability. A TEST-ONLY CLAUDE_SAFE_STORAGE_BACKEND override wins first — honored inside the
+ * test runner (so a test can force `none` and never touch the real keychain), IGNORED in dev and
+ * production (TRDD-CC9PY337). Honored outside a test, `none` would silently store OAuth tokens in
+ * plaintext instead of the OS keychain — which is why it is gated, not merely trusted. */
 export function detectBackend(): string {
-  const forced = (process.env.CLAUDE_SAFE_STORAGE_BACKEND ?? '').trim()
+  const forced = (testOnlyEnv('CLAUDE_SAFE_STORAGE_BACKEND') ?? '').trim()
   if (forced) return forced
   const system = process.platform
   if (system === 'darwin' && whichSync('security')) return 'macos'
@@ -292,11 +296,13 @@ export function detectBackend(): string {
 }
 
 // --------------------------------------------------------------------------
-// Keychain-scope lever — confine every rotator `security` op to a named keychain when
-// JANITOR_ROTATOR_KEYCHAIN is set (tests point this at an isolated temp keychain), else [].
+// Keychain-scope lever — confine every rotator `security` op to a named keychain. TEST-ONLY
+// (TRDD-CC9PY337): honored inside the test runner (tests point it at an isolated temp keychain),
+// IGNORED in dev/production, where it would otherwise confine the rotator's REAL keychain ops to
+// an attacker-chosen keychain. Ignored ⇒ [] ⇒ the default (login) keychain, which is correct.
 // --------------------------------------------------------------------------
 export function keychainScopeArgs(): string[] {
-  const kc = (process.env.JANITOR_ROTATOR_KEYCHAIN ?? '').trim()
+  const kc = (testOnlyEnv('JANITOR_ROTATOR_KEYCHAIN') ?? '').trim()
   return kc ? [kc] : []
 }
 

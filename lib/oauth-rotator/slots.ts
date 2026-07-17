@@ -22,6 +22,7 @@ import { backupAndWrite, readOrRestore } from './integrity'
 import { securityWrite, securityReadRaw, securityDelete, KeychainWriteResult } from './keychain'
 import { detectBackend } from './safe-storage'
 import { tryAcquireTickLockWait } from './tick-lock'
+import { testOnlyEnv } from '../test-only-env'
 
 /** True iff the Linux Secret Service (`secret-tool`) is the active backend. The slot tiers gate
  * their `secret-tool` spawns on this so they are reached ONLY when it is genuinely the store —
@@ -33,13 +34,17 @@ function secretToolActive(): boolean {
 }
 
 // --------------------------------------------------------------------------
-// Keychain services (env-overridable ONLY so tests can target a throwaway service; production
-// always uses the defaults). Read once at import, matching rotator.py's module-level constants.
+// Keychain services. The env overrides are a TEST-ONLY seam so a test can target a throwaway
+// service — now MECHANICALLY enforced via testOnlyEnv (TRDD-CC9PY337), not merely intended:
+// honored inside the test runner, IGNORED in dev/production, where an inherited value would
+// redirect OAuth slot tokens into an attacker-named keychain service. Ignored ⇒ the defaults
+// below. Read once at import, matching rotator.py's module-level constants (vitest sets
+// NODE_ENV=test before any import, so the test value is captured; pm2's production run is not).
 // --------------------------------------------------------------------------
 export const SLOT_KEYCHAIN_SERVICE =
-  process.env.CLAUDE_ROTATOR_SLOT_KEYCHAIN_SERVICE?.trim() || 'Claude Code-rotator-slot'
+  testOnlyEnv('CLAUDE_ROTATOR_SLOT_KEYCHAIN_SERVICE')?.trim() || 'Claude Code-rotator-slot'
 export const SLOT_BACKUP_KEYCHAIN_SERVICE =
-  process.env.CLAUDE_ROTATOR_SLOT_BACKUP_KEYCHAIN_SERVICE?.trim() || 'Claude Code-rotator-slot-backup'
+  testOnlyEnv('CLAUDE_ROTATOR_SLOT_BACKUP_KEYCHAIN_SERVICE')?.trim() || 'Claude Code-rotator-slot-backup'
 
 // The janitor plugin's OWN data dir, resolved by its FIXED install name (the stable per-plugin
 // DATA path — survives version updates, purged only on uninstall).

@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T18:03:22+0200
+updated: 2026-07-17T18:08:10+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -24,32 +24,34 @@ release-via: none
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-16
 
-**▶ CO-RATIFICATION AT REV 2 — NEAR FINAL (2026-07-17).** The janitor shipped the redesign
-(**v0.50.0**, one-plugin-two-backends: `harness_backend.is_harness_session()` discriminator; `#J`
-thin-mode inside a harness agent, `#N` standalone outside; Family-B unchanged) and drove
-`design/ARCHITECTURE.md` through co-ratification on janitor#100. My round-1 refinement filled **§6**
-(server-side contracts) + a **§2 conflict-review** (#100 comment `5004829403`). **The required
-janitor-side change LANDED** (`616ab18`, janitor TRDD-N9YAH5E7): `server_owns_singleton_chores()` no
-longer delegates to `server_owns_family_a()` — per-class gating via `SERVER_ABSORBED_TASK_CLASS`
-(OAuth pair → `family-a`, marketplace/version trio → `singleton-chores` which the server never emits →
-janitor keeps them); `server_capabilities()` reads my probe at the reserved rung 2; and the janitor
-also **removed the legacy `list --json` rung** (liveness ≠ capability — a good catch that closes the
-same conflict one rung lower). Janitor posted **`RATIFIED rev 2`** + ARCHITECTURE.md rev 2 (`7ef80d2`).
+**▶ CO-RATIFICATION COMPLETE — `design/ARCHITECTURE.md` rev 3 is FINAL (2026-07-17).** Both sides
+posted **`RATIFIED rev 3`** (my comment `5005141732`; janitor's alongside `ca22004`). The janitor
+drove the two-harness redesign (**v0.50.0**, one-plugin-two-backends:
+`harness_backend.is_harness_session()` discriminator; `#J` thin-mode inside a harness agent, `#N`
+standalone outside; Family-B unchanged) through 3 rounds on janitor#100; my round-1 §6 fill + §2
+conflict-review are folded. **The required janitor-side change LANDED** (`616ab18`, janitor
+TRDD-N9YAH5E7): per-class capability gating replaced the `server_owns_singleton_chores()` →
+`server_owns_family_a()` delegation (OAuth pair → `family-a`; marketplace/version trio →
+`singleton-chores`, which the server NEVER emits → janitor keeps them); `server_capabilities()` reads
+my probe at rung 2; the legacy `list --json` rung was removed (liveness ≠ capability). rev 3 corrected
+§6.4 (`ca22004`) to record the deployed `session command` verb (my retracted round-1 claim, fixed).
+**The ratified baseline governs:** the two-backend split, the per-class chore matrix, the per-project
+isolation invariant (X92VBFNF), the findings-ledger feed contract (FENWWB4E), and the §6 server-side
+contracts. Verified §6.4 against the committed doc before ratifying.
 
-**My rev-2 review (#100 comment `5005104320`): contracts all correct; ONE residual doc fix before I
-match `RATIFIED`.** rev 2's §6.4 still carries my *retracted* round-1 claim ("the `session command`
-verb does not yet exist — ai-maestro adds it") — FALSE (it exists + is deployed; see the CORRECTION
-below). I gave the janitor the exact one-line §6.4 replacement; **once folded (rev 3), I post
-`RATIFIED rev 3` and the doc is FINAL.**
+**All 5 `--command-key` entries landed** (`ee9624f7` + `d9439b94`, `lib/agent-commands.ts`):
+`compact → /compact`, `reload-plugins-force → /reload-plugins --force`, `reload-skills → /reload-skills`
+(built-in), `janitor-resume → /janitor-resume`, `janitor-write-handoff → /janitor-write-handoff` —
+strings CONFIRMED by the janitor against its shipped senders (never guessed). The server maps each key
+to its fixed literal, so the janitor's #J soft-send never supplies command text.
 
-**Residual items after rev 3:**
-1. **ME (joint):** deploy `aimaestro-continuity.sh` to `~/.local/bin` (installer `scripts/*.sh` glob) —
-   repo-only on this machine (`ls` fails), so the janitor's Phase-D `ensure-resume` delegation is a
-   feature-detected **no-op** until installed. Machine-provisioning step, not a code task.
-2. **Command-key follow-up (janitor's §6.4 ask):** 2/5 landed (`ee9624f7`: `janitor-resume`,
-   `janitor-write-handoff`). 3 await the janitor's exact command STRINGS — `compact`/`reload-plugins`
-   already exist; `reload-plugins --force` variant + `reload-skills` (built-in vs `/janitor-reload-skills`)
-   need confirming. Non-blocking (janitor's migration is its own follow-up TRDD).
+**2 joint verify-together items remain (operational — no doc/code change):**
+1. **`aimaestro-continuity.sh` redeploy** to `~/.local/bin` (installer `scripts/*.sh` glob) — repo-only
+   on this machine (`ls` fails), so the janitor's Phase-D `ensure-resume` delegation is a
+   feature-detected **no-op** until installed. Machine-provisioning step.
+2. **First-run probe verification** — `~/.aimaestro/server-liveness.json` appears only once a server
+   carrying the probe build is restarted live; confirm the file + the janitor's rung-2 read end-to-end
+   then. Until then consumers correctly see "no file → safe default (janitor keeps every chore)".
 
 **CORRECTION (2026-07-17, #100 comment 5004880793) — kept as the audit record:** my round-1 §6.4
 claimed `aimaestro-agent.sh session command` was missing — **WRONG.** It EXISTS + is DEPLOYED
@@ -61,8 +63,11 @@ standalone CLI, before claiming a `session` sub-verb absent.**
 
 Nothing is urgent: the probe ships advertising `capabilities: []`, so the safe default (janitor keeps
 every chore) holds until each class is proven live. Everything landed is SAFE (OAuth port INERT via
-the R16 flag; probe inert-on-disk until a server restart). **NEXT = await the janitor's §6.4 one-liner
-→ post `RATIFIED rev 3`. Then the umbrella can advance the Family-A flock (#49) / restart-self (#59).**
+the R16 flag; probe inert-on-disk until a server restart). **NEXT (architecture now RATIFIED, so
+these are unblocked): the Family-A flock (#49) may advance to the ratified baseline, and restart-self
+(#59) — which I sequenced behind ratification on #75 — is now free to build. The 2 joint verify-together
+items (continuity redeploy, first-run probe check) run when a server carrying the probe build is live.
+R16 flag flip stays the USER's alone.**
 
 **🔒 PER-PROJECT CHANNELING — binding invariant (USER via janitor#100 / janitor TRDD-X92VBFNF,
 2026-07-17).** Every AUTOMATIC surface (heartbeat/drift line, detector finding, injected nudge,

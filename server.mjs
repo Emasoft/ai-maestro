@@ -1909,6 +1909,29 @@ async function startServer(handleRequest) {
       console.warn('[Startup] Agent-invariant sweep failed (non-fatal):', err?.message || err)
     }
 
+    // ── Claude Code runtime-env enforcer (TRDD-QZL828OD) ───────────────────────
+    // USER-ratified carve-out (2026-07-17): the harness cannot function without a
+    // fixed set of Claude Code runtime env keys (+ one timeout) in the user-scope
+    // ~/.claude/settings.json. Enforce them at boot and re-apply on drift. This is
+    // NOT the forbidden user-scope PLUGIN write (`feedback_ai_maestro_never_installs_user_scope`):
+    // it touches only the `env` runtime-behaviour object, never enabledPlugins or a
+    // marketplace, so no AI-Maestro plugin leaks into the user's other projects.
+    // It does NOT restart running agents — that needs the R42 restart extension (D1),
+    // still unratified; new sessions pick the keys up at launch until then.
+    try {
+      const { enforceClaudeSettings, startClaudeSettingsEnforcerWatchdog } =
+        await import('./lib/claude-settings-enforcer.ts')
+      const r = enforceClaudeSettings()
+      if (r.error) console.warn(`[Startup] Claude settings enforcer: ${r.error}`)
+      else if (r.changed) console.log(`[Startup] Claude settings enforcer: applied ${r.applied.join(', ')}`)
+      else console.log('[Startup] Claude settings enforcer: already conformant')
+      if (startClaudeSettingsEnforcerWatchdog()) {
+        console.log('[Startup] Claude settings-enforcer watchdog started (restore-on-drift)')
+      }
+    } catch (err) {
+      console.warn('[Startup] Claude settings enforcer failed (non-fatal):', err?.message || err)
+    }
+
     // R17 core-plugin compliance is enforced exclusively by the AIO Change*
     // pipelines and the wake gate:
     //   - InstallElement() PG01/PG02/PG05 post-gates

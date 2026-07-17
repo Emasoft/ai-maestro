@@ -2,7 +2,7 @@
 name: agent-control-monitor-api
 description: "how does the janitor / a governance agent CONTROL or MONITOR another agent's Claude Code terminal — inject a command like /compact or /reload-plugins, read+answer an AskQuestion or permission menu, watch agent state (idle/busy/permission/hibernated), QUEUE a command until the agent is next idle/online, read an agent's full config (launch args / teams / github repo / docker clone / pending tasks), drive the terminal HTML side panel, or search/read/edit/approve/promote/archive a TRDD or kanban task — the API endpoints + the permanent aimaestro-*/amp-* script layer"
 ocd: 2026-07-09
-lmd: 2026-07-09
+lmd: 2026-07-17
 metadata:
   node_type: memory
   type: project
@@ -194,3 +194,16 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   so an accurate comment beside an absent guard bought nothing. Comments describe; tests enforce. The
   `EXFIL_FUNCTIONS` net now asserts `exportAgentZip` really does archive the keys dir, so the
   justification cannot rot into a lie the way that comment did.
+
+[^7]: [ocd:2026-07-17 lmd:2026-07-17 keywords:"session_command_verb aimaestro-agent_vs_aimaestro-session
+  grep_wrong_script verb_does_not_exist agent-session_module"] DO NOT claim an `aimaestro-agent.sh
+  <verb> <subverb>` command is absent by grepping `aimaestro-session.sh` (or the `aimaestro-agent.sh`
+  dispatcher file alone), BECAUSE `aimaestro-agent.sh` is a thin dispatcher that SOURCES `agent-*.sh`
+  modules — `agent-session.sh` owns the `session` sub-verbs (`command`→`cmd_session_command`,
+  `activity-update`, `user-input`), and `aimaestro-session.sh` is a SEPARATE standalone CLI
+  (`inject/queue/state/read-prompt/answer/slash`). DO grep the `agent-*.sh` MODULE that owns the verb
+  (here `cmd_session_command` at `agent-session.sh:210`, landed `77883371`, → `POST
+  /api/sessions/<name>/command`, LIVE in `~/.local/bin`). Cost a wrong "the `session command` verb
+  doesn't exist, I'll build it" claim to the janitor on #100 (2026-07-17), retracted same day (comment
+  5004880793) + a throwaway TRDD-FUYUP38L cancelled. Same shape as [^4]: a capability is what the code
+  does, not what one convenient grep target shows — and the standalone CLI is not the module surface.

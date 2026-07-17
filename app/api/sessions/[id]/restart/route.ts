@@ -30,34 +30,15 @@ import { getAgentBySession } from '@/lib/agent-registry'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 import { requireSudoToken } from '@/lib/sudo-guard'
+import {
+  isValidProgramArgs,
+  resolveRestartBin,
+  sanitizePersonaName,
+  buildRelaunchCommand,
+  runRestartSequence,
+} from '@/lib/session-restart'
 
 export const dynamic = 'force-dynamic'
-
-/**
- * Execute a command with args array (no shell) to prevent injection.
- * CC-GOV-001: Never pass user-derived values through shell interpolation.
- */
-function execCommandArgs(bin: string, args: string[]): string {
-  const { execFileSync } = require('child_process')
-  return (execFileSync(bin, args, { timeout: 5000, encoding: 'utf8' }) as string).trim()
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-/** Query tmux for the process currently running in the session's pane. */
-function getPaneCommand(sessionName: string): string | null {
-  try {
-    return execCommandArgs('tmux', ['display-message', '-p', '-t', sessionName, '#{pane_current_command}']) || null
-  } catch {
-    return null
-  }
-}
-
-/** Shell process names that indicate the AI program has exited and the pane
- *  is back at a shell prompt (ready to accept a new launch command). */
-const SHELL_COMMANDS = new Set(['zsh', 'bash', 'sh', 'fish', '-zsh', '-bash'])
 
 export async function POST(
   request: NextRequest,
@@ -122,7 +103,7 @@ export async function POST(
   // subagents make an idle prompt unsafe; a PROVEN positive counter refuses with
   // 409 (null/0 never blocks — stale-low per plugin#17); ?force=true overrides.
   const force = request.nextUrl.searchParams.get('force') === 'true'
-  const { readSubagentCount, evaluateExitGate, looksLikeAbandonPrompt } = await import('@/lib/session-safe-state')
+  const { readSubagentCount, evaluateExitGate } = await import('@/lib/session-safe-state')
   const agentWorkingDir = agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory
   const gate = evaluateExitGate(readSubagentCount(agentWorkingDir), force)
   if (gate.blocked) {
@@ -139,135 +120,37 @@ export async function POST(
   const program = body.program || agent?.program || 'claude'
   const programArgs = body.programArgs || agent?.programArgs || ''
 
-  // CC-GOV-002: Reject programArgs containing shell metacharacters that could escape
-  // the single-quoted tmux send-keys argument. Only allow safe CLI flags/values.
-  // Allowed: alphanumeric, spaces, hyphens, underscores, dots, slashes, equals,
-  //          colons, commas, at-signs, double-quotes, tildes
-  if (programArgs && !/^[a-zA-Z0-9 \-_./=:,@"~]+$/.test(programArgs)) {
+  // CC-GOV-002: reject programArgs with shell metacharacters that could escape
+  // the `--name "…"` quoting the receiving shell parses. The allowlist is the
+  // single definition in lib/session-restart.ts, shared with me/restart, so the
+  // two surfaces cannot validate differently.
+  if (!isValidProgramArgs(programArgs)) {
     return NextResponse.json({ error: 'Invalid programArgs: contains disallowed characters' }, { status: 400 })
   }
 
-  // Resolve display program name (e.g. "Claude Code") to the actual CLI binary name
-  const resolveBin = (p: string): string => {
-    const lower = p.toLowerCase()
-    if (lower.includes('claude')) return 'claude'
-    if (lower.includes('codex')) return 'codex'
-    if (lower.includes('aider')) return 'aider'
-    if (lower.includes('gemini')) return 'gemini'
-    // CC-GOV-002: Warn when falling back to default — may indicate unexpected input
-    console.warn(`[Sessions Restart] resolveBin: unrecognized program "${p}", falling back to "claude"`)
-    return 'claude'
+  // Build the relaunch command through the shared, security-validated construction
+  // (bin resolution + persona-name allowlist + --name injection), then run the
+  // mechanical stop→poll→relaunch sequence. Both live in lib/session-restart.ts.
+  const bin = resolveRestartBin(program)
+  const personaName = sanitizePersonaName(agent?.label || agent?.name || sessionName, sessionName)
+  const command = buildRelaunchCommand(bin, programArgs, personaName)
+
+  const outcome = await runRestartSequence(sessionName, command)
+
+  if (outcome.status === 'timeout') {
+    return NextResponse.json(
+      {
+        error: 'Timeout: program did not exit within 15s',
+        hint: 'The session may be sitting on a confirmation dialog (e.g. background subagents still running). Check the terminal, or retry.',
+      },
+      { status: 504 }
+    )
   }
-
-  try {
-    // Step 1: Ctrl+C clears partial input, /exit as literal text exits Claude Code
-    // Note: Ctrl+D does NOT exit Claude Code. Only /exit works.
-    // CC-GOV-001: Use execCommandArgs (no shell) for all tmux interactions
-    execCommandArgs('tmux', ['send-keys', '-t', sessionName, 'C-c'])
-    execCommandArgs('tmux', ['send-keys', '-t', sessionName, '-l', '/exit'])
-    execCommandArgs('tmux', ['send-keys', '-t', sessionName, 'Enter'])
-
-    // Step 2: Poll tmux pane command every 500ms until it becomes a shell
-    // (meaning the AI program exited and the shell prompt is back)
-    const maxWait = 15000  // 15 second timeout
-    const pollInterval = 500
-    let elapsed = 0
-    let exited = false
-    let abandonPromptHandled = false
-
-    while (elapsed < maxWait) {
-      await sleep(pollInterval)
-      elapsed += pollInterval
-      const paneCmd = getPaneCommand(sessionName)
-      // If pane command is null (session gone) or a shell, the program exited
-      if (!paneCmd || SHELL_COMMANDS.has(paneCmd)) {
-        exited = true
-        break
-      }
-      // TRDD-O8NCNRWO: with CC ≥2.1.198 background subagents, /exit can land on
-      // Claude's abandon-confirmation dialog instead of exiting (the pre-gate
-      // can't catch it when the hook's counter is stale-low — plugin#17). At
-      // half-timeout, probe the pane ONCE: if the dialog is visible, press
-      // Enter (the dialog's default = confirm exit) and keep polling. Only the
-      // detected dialog gets a keystroke — never blind keys into an unknown UI.
-      if (!abandonPromptHandled && elapsed >= 5000) {
-        abandonPromptHandled = true
-        try {
-          const paneTail = execCommandArgs('tmux', ['capture-pane', '-t', sessionName, '-p'])
-            .split('\n').slice(-12).join('\n')
-          if (looksLikeAbandonPrompt(paneTail)) {
-            console.warn('[Sessions Restart] abandon-confirmation dialog detected after /exit — confirming')
-            execCommandArgs('tmux', ['send-keys', '-t', sessionName, 'Enter'])
-          }
-        } catch {
-          // capture failure is non-fatal — the poll loop keeps its own timeout
-        }
-      }
-    }
-
-    if (!exited) {
-      return NextResponse.json(
-        {
-          error: 'Timeout: program did not exit within 15s',
-          hint: 'The session may be sitting on a confirmation dialog (e.g. background subagents still running). Check the terminal, or retry.',
-        },
-        { status: 504 }
-      )
-    }
-
-    // Step 3: Brief pause for shell readiness (rc files, prompt rendering)
-    await sleep(1000)
-
-    // Step 4: Build and send the relaunch command into the tmux pane
-    const bin = resolveBin(program)
-    // Ensure --name <persona> is always present in the args
-    const personaNameRaw = agent?.label || agent?.name || sessionName
-    // ── API-MAJ-03 fix (2026-05-04) — strict allowlist for personaName ──
-    // The previous version interpolated the registry-stored label/name
-    // directly into a double-quoted shell argument:
-    //   ` --name "${personaName}"`
-    // tmux's `send-keys -l` is literal-mode (no shell), but the receiving
-    // shell process inside the tmux pane parses the argument string when
-    // the user (or the trailing Enter we send below) submits it. A label
-    // containing an embedded `"`, `\`, `$`, or backtick would break out
-    // of the quoted region and the shell would interpret the rest as
-    // additional CLI flags — including, in the worst case,
-    // `--dangerously-skip-permissions`.
-    //
-    // ChangeName already validates `name` against `[a-zA-Z0-9][a-zA-Z0-9_-]*`,
-    // but `label` (the persona display name) is more permissive. Apply
-    // an explicit defensive allowlist HERE so even a permissive label
-    // cannot break the quoting. Characters allowed:
-    //   - alphanumerics
-    //   - space, underscore, hyphen, dot
-    // Anything else gets stripped. Empty result falls back to sessionName,
-    // which is itself constrained by tmux's session-name regex.
-    const personaName =
-      personaNameRaw.replace(/[^a-zA-Z0-9 _.\-]/g, '').trim() || sessionName
-    let finalArgs = programArgs
-    if (!finalArgs.includes('--name ')) {
-      // Insert --name before any -- divider (raw prompt passthrough), or at the end
-      const dividerIdx = finalArgs.indexOf(' -- ')
-      if (dividerIdx !== -1) {
-        finalArgs = finalArgs.slice(0, dividerIdx) + ` --name "${personaName}"` + finalArgs.slice(dividerIdx)
-      } else {
-        finalArgs = `${finalArgs} --name "${personaName}"`.trim()
-      }
-    }
-    const cmd = `${bin} ${finalArgs}`.trim()
-    // CC-GOV-001: Use execCommandArgs (no shell) — tmux send-keys with -l sends
-    // the command as literal text, then a separate Enter key press launches it.
-    execCommandArgs('tmux', ['send-keys', '-t', sessionName, '-l', cmd])
-    execCommandArgs('tmux', ['send-keys', '-t', sessionName, 'Enter'])
-
-    return NextResponse.json({ success: true, sessionName, command: cmd })
-  } catch (error: unknown) {
-    // API-MIN-03 fix: do not return raw error.message to client. tmux/exec
-    // errors leak internal paths (socket path, full command), OS-specific
-    // text, and absolute filesystem layout. Log full detail server-side and
-    // return a generic message to the client.
-    const detail = error instanceof Error ? error.message : 'Unknown error'
-    console.error('[Sessions restart] tmux command failed:', { detail, error })
+  if (outcome.status === 'error') {
+    // API-MIN-03: log the detail server-side; return a generic message (exec
+    // errors leak socket paths / absolute layout).
+    console.error('[Sessions restart] tmux command failed:', { detail: outcome.detail })
     return NextResponse.json({ error: 'Session restart failed' }, { status: 500 })
   }
+  return NextResponse.json({ success: true, sessionName, command: outcome.command })
 }

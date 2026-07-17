@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeNextAction } from '@/lib/continuity-status'
+import { computeNextAction, getContinuityStatus } from '@/lib/continuity-status'
 import type { AgentlensStatusMetadata } from '@/lib/agentlens-status'
 
 function meta(over: Partial<AgentlensStatusMetadata>): AgentlensStatusMetadata {
@@ -48,5 +48,40 @@ describe('computeNextAction', () => {
     expect(
       computeNextAction(meta({ accountHealthy: true, windowSource: 'calibrated', window5hPct: 150, window7dPct: 166 })),
     ).toBe('monitor')
+  })
+})
+
+describe('getContinuityStatus — OAuth cascade supersedes the interim heuristic (TRDD-1GGQ4HWY)', () => {
+  // Injected deps keep this 0-IMPACT: no AgentlensPro CLI, no network, no credential, no stamp file.
+  const healthy = () => Promise.resolve(meta({})) // observable heuristic would compute 'ok'
+
+  it('surfaces the persisted cascade next_action when a fresh one exists (supersede)', async () => {
+    const s = await getContinuityStatus({ readMetadata: healthy, readTickAction: () => 'rotating' })
+    expect(s.nextAction).toBe('rotating')
+  })
+
+  it('surfaces reauth-needed from the cascade even when the observables look healthy', async () => {
+    const s = await getContinuityStatus({ readMetadata: healthy, readTickAction: () => 'reauth-needed' })
+    expect(s.nextAction).toBe('reauth-needed')
+  })
+
+  it('falls back to the interim heuristic when no cascade state is stamped (absent/stale → null)', async () => {
+    const pressured = () => Promise.resolve(meta({ window5hPct: 95 })) // heuristic → 'monitor'
+    const s = await getContinuityStatus({ readMetadata: pressured, readTickAction: () => null })
+    expect(s.nextAction).toBe('monitor')
+  })
+
+  it('never errors and passes the four observable fields through unchanged', async () => {
+    const s = await getContinuityStatus({
+      readMetadata: () => Promise.resolve(meta({ window5hPct: 12, window7dPct: 34, cacheTtlMinutes: 60 })),
+      readTickAction: () => null,
+    })
+    expect(s).toMatchObject({
+      accountHealthy: true,
+      window5hPct: 12,
+      window7dPct: 34,
+      cacheTtlMinutes: 60,
+      nextAction: 'ok',
+    })
   })
 })

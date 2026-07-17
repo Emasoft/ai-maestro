@@ -27,6 +27,7 @@ import { execFile } from 'child_process'
 import { statePath } from '../ecosystem-constants'
 import { withTickLock } from './tick-lock'
 import { runTick } from './tick'
+import { writeTickStatus } from './tick-status'
 
 /** The opt-in flag FILE (not an env var, per TRDD-CC9PY337). Its ABSENCE is the R16 default. */
 export const OAUTH_TICK_FLAG = statePath('oauth-rotator-tick.enabled')
@@ -82,7 +83,11 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
   try {
     if (!enabledCheck()) return // R16 default: flag absent → do nothing, write nothing.
     if (!(await claudeRunningCheck())) return // no live client → nobody to keep signed in.
-    await withTickLock(() => runTickImpl()) // serialise; a concurrent tick makes this a no-op.
+    const result = await withTickLock(() => runTickImpl()) // serialise; concurrent tick → null.
+    // PERSIST-THEN-READ (TRDD-1GGQ4HWY → DXJZM3BW): stamp the cascade next_action so the continuity
+    // `status` verb can READ it without ever running the tick (R16). A null (lock held) / undefined
+    // (stub) / shapeless result is a silent no-op inside writeTickStatus — the last good value stays.
+    writeTickStatus(result)
   } catch (err) {
     console.warn(`[oauth-rotator] server tick failed (non-fatal): ${(err as Error)?.message ?? err}`)
   }

@@ -1,0 +1,74 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+import { statePath } from '@/lib/ecosystem-constants'
+import { writeTickStatus, readTickStatus } from '@/lib/oauth-rotator/tick-status'
+
+// 0-IMPACT: HOME → temp so statePath() writes the stamp inside the temp dir; no credential, no
+// network, no real state dir touched. Mirrors oauth-rotator-server-tick.test.ts's HOME guard, and
+// hard-asserts the resolved stamp path lands inside temp before any write.
+let saved: string | undefined
+let tmpDir: string
+
+beforeEach(() => {
+  saved = process.env.HOME
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-tickstatus-'))
+  process.env.HOME = tmpDir
+  const f = statePath('oauth-rotator-tick-status.json')
+  if (!f.startsWith(tmpDir)) throw new Error(`refusing to run: stamp path ${f} escaped tmp ${tmpDir}`)
+})
+
+afterEach(() => {
+  if (saved === undefined) delete process.env.HOME
+  else process.env.HOME = saved
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* best-effort */ }
+})
+
+describe('tick-status — writeTickStatus / readTickStatus (PERSIST-THEN-READ, TRDD-1GGQ4HWY)', () => {
+  it('persists a valid cascade result and reads it back', () => {
+    writeTickStatus({ nextAction: 'rotating', switched: true })
+    expect(readTickStatus()).toBe('rotating')
+  })
+
+  it('round-trips each valid cascade state', () => {
+    for (const s of ['ok', 'rotating', 'reauth-needed'] as const) {
+      writeTickStatus({ nextAction: s })
+      expect(readTickStatus()).toBe(s)
+    }
+  })
+
+  it('is a no-op on a lock-held null result — the last good value is not clobbered', () => {
+    writeTickStatus({ nextAction: 'reauth-needed' })
+    writeTickStatus(null) // withTickLock returned null: a concurrent beat held the lock
+    expect(readTickStatus()).toBe('reauth-needed')
+  })
+
+  it('is a no-op on an undefined / shapeless / invalid result', () => {
+    writeTickStatus(undefined) // stubbed beat (server-tick tests use `async () => {}`)
+    expect(readTickStatus()).toBeNull()
+    writeTickStatus({ nextAction: 'bogus' })
+    expect(readTickStatus()).toBeNull()
+    writeTickStatus({ notNextAction: 'ok' })
+    expect(readTickStatus()).toBeNull()
+  })
+
+  it('returns null (safe default) when the stamp file is absent', () => {
+    expect(readTickStatus()).toBeNull()
+  })
+
+  it('returns null when the stamp is unparseable garbage', () => {
+    const f = statePath('oauth-rotator-tick-status.json')
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    fs.writeFileSync(f, 'not json{')
+    expect(readTickStatus()).toBeNull()
+  })
+
+  it('ignores a STALE stamp (older than the freshness window) but honours a fresh one', () => {
+    writeTickStatus({ nextAction: 'rotating' })
+    // now() is seconds-since-epoch (matching tick.ts); 10 min in the future is beyond MAX_AGE_S.
+    const tenMinAhead = () => Date.now() / 1000 + 600
+    expect(readTickStatus({ now: tenMinAhead })).toBeNull()
+    expect(readTickStatus()).toBe('rotating') // still fresh when read at ~now
+  })
+})

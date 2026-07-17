@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { enforceSystemOwner } from '@/lib/route-auth'
-import { autodetectSMTP, verifyCredentials } from '@/lib/smtp-autodetect'
+import { autodetectSMTP, verifyCredentials, type SmtpConfig } from '@/lib/smtp-autodetect'
 import { storeSmtpPassword } from '@/lib/smtp-credential'
 import { setRecoveryEmail } from '@/lib/governance'
 import { startSetupFlow } from '@/lib/setup-bootstrap'
@@ -26,6 +26,14 @@ const BodySchema = z.object({
   // derives the login from usernameFormat (the prior behavior). Present ⇒ used verbatim,
   // for providers whose login is neither the full email nor its local-part.
   userid: z.string().trim().max(256).optional(),
+  // Manual SMTP server override (TRDD-P7XKV3N9). When `host` is supplied, it is used
+  // VERBATIM and autodetection is SKIPPED — the escape hatch for a provider whose server
+  // autodetection gets wrong or cannot reach (custom-domain relays, self-hosted, corporate),
+  // and the answer to "it said the address was wrong but never asked me for it". Same risk
+  // class as autodetect (the route already opens SMTP to a discovered host) and owner-gated.
+  host: z.string().trim().min(1).max(255).optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  secure: z.boolean().optional(),
 }).strict()
 
 export async function POST(request: NextRequest) {
@@ -40,17 +48,23 @@ export async function POST(request: NextRequest) {
   }
   const parsed = BodySchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'invalid_body', detail: parsed.error.issues }, { status: 400 })
-  const { email, appPassword, userid } = parsed.data
+  const { email, appPassword, userid, host, port, secure } = parsed.data
 
-  const detected = await autodetectSMTP(email)
-  if (!detected) return NextResponse.json({ status: 'FAILED', error: 'no_smtp_detected' }, { status: 200 })
+  // A manual host override wins over autodetection — it is the owner's explicit server, used
+  // when detection is wrong or unreachable. `secure` defaults from the port (465 ⇒ implicit
+  // TLS) when unspecified; usernameFormat is 'full' (the userid field overrides the login when
+  // the provider needs something else). Otherwise autodetect from the email domain as before.
+  let cfg: SmtpConfig
+  if (host) {
+    const p = port ?? 587
+    cfg = { host, port: p, secure: secure ?? p === 465, usernameFormat: 'full' }
+  } else {
+    const detected = await autodetectSMTP(email)
+    if (!detected) return NextResponse.json({ status: 'FAILED', error: 'no_smtp_detected' }, { status: 200 })
+    cfg = { host: detected.host, port: detected.port, secure: detected.secure, usernameFormat: detected.usernameFormat }
+  }
 
-  const { status, config, instructions } = await verifyCredentials(
-    { host: detected.host, port: detected.port, secure: detected.secure, usernameFormat: detected.usernameFormat },
-    email,
-    appPassword,
-    userid,
-  )
+  const { status, config, instructions } = await verifyCredentials(cfg, email, appPassword, userid)
 
   if (status !== 'SUCCESS') {
     // Store nothing: AUTH_REQUIRED means enable SMTP / use an app-password; FAILED means

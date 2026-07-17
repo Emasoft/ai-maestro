@@ -55,6 +55,11 @@ export default function RecoveryEmailSection({ onRecoveryComplete }: { onRecover
   const [email, setEmail] = useState('')
   const [userid, setUserid] = useState('') // explicit SMTP login id; blank ⇒ server derives from the email
   const [appPassword, setAppPassword] = useState('')
+  // Manual SMTP server override (TRDD-P7XKV3N9). Auto-filled by Detect; editable so a wrong or
+  // unreachable auto-detected server can be corrected. Blank host ⇒ the server autodetects.
+  const [host, setHost] = useState('')
+  const [port, setPort] = useState('')
+  const [secure, setSecure] = useState(true)
   const [preview, setPreview] = useState<DetectPreview | null>(null)
   const [detecting, setDetecting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -103,7 +108,12 @@ export default function RecoveryEmailSection({ onRecoveryComplete }: { onRecover
         body: JSON.stringify({ email: email.trim() }),
       })
       if (res.ok) {
-        setPreview((await res.json()) as DetectPreview)
+        const p = (await res.json()) as DetectPreview
+        setPreview(p)
+        // Auto-fill the editable SMTP fields so the owner can confirm — or correct — them.
+        setHost(p.host)
+        setPort(String(p.port))
+        setSecure(p.secure)
       } else if (res.status === 404) {
         setError('No SMTP settings could be detected for that email domain — you can still try saving.')
       } else {
@@ -128,7 +138,14 @@ export default function RecoveryEmailSection({ onRecoveryComplete }: { onRecover
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim(), appPassword, userid: userid.trim() }),
+          body: JSON.stringify({
+            email: email.trim(),
+            appPassword,
+            userid: userid.trim(),
+            // Send the manual server override only when the owner filled the host — otherwise
+            // the server autodetects from the email domain (the default path).
+            ...(host.trim() ? { host: host.trim(), port: Number(port) || undefined, secure } : {}),
+          }),
         },
         (reason) => requestSudoToken(reason),
       )
@@ -154,8 +171,8 @@ export default function RecoveryEmailSection({ onRecoveryComplete }: { onRecover
         setInstructions(data.instructions || 'The mail server rejected the password. Enable SMTP access / use an app-specific password.')
       } else {
         setError(data?.error === 'no_smtp_detected'
-          ? 'No SMTP server was detected for that email domain.'
-          : 'The mail server was unreachable. Check the address and try again.')
+          ? 'No SMTP server was detected for that email domain — enter the SMTP server and port below, then try again.'
+          : 'Could not reach that SMTP server. Check the SMTP server and port below — edit them if the auto-detected values are wrong — then try again.')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
@@ -221,6 +238,9 @@ export default function RecoveryEmailSection({ onRecoveryComplete }: { onRecover
       setEmail('')
       setUserid('')
       setAppPassword('')
+      setHost('')
+      setPort('')
+      setSecure(true)
       setPreview(null)
       setInstructions(null)
     } catch (err) {
@@ -380,6 +400,44 @@ export default function RecoveryEmailSection({ onRecoveryComplete }: { onRecover
                 autoComplete="off"
                 className="w-full px-2 py-1 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 focus:outline-none focus:border-emerald-500"
               />
+
+              <div className="space-y-1">
+                <p className="text-xs text-gray-600">
+                  SMTP server — auto-filled by Detect. Leave blank to auto-detect, or edit if your
+                  provider needs a different host or port.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={host}
+                    onChange={(e) => setHost(e.target.value)}
+                    placeholder="smtp.example.com (auto-detected)"
+                    autoComplete="off"
+                    className="flex-1 min-w-0 px-2 py-1 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={port}
+                    onChange={(e) => setPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                    placeholder="587"
+                    className="w-16 flex-shrink-0 px-2 py-1 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                  <label
+                    className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0 cursor-pointer"
+                    title="Implicit TLS (typically port 465). Uncheck for STARTTLS (587 or 25)."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={secure}
+                      onChange={(e) => setSecure(e.target.checked)}
+                      className="accent-emerald-600"
+                    />
+                    TLS
+                  </label>
+                </div>
+              </div>
+
               <button
                 onClick={saveEmail}
                 disabled={saving || !email.trim() || !appPassword}

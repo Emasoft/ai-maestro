@@ -26,20 +26,20 @@ function makeReq(body: unknown): NextRequest {
 }
 
 function mockDeps(opts: { status: 'SUCCESS' | 'AUTH_REQUIRED' | 'FAILED'; gateDenied?: boolean }) {
+  const autodetectSMTP = vi.fn(async () => ({ ...CONFIG, source: 'mx', label: 'corp.example', known: false }))
+  const verifyCredentials = vi.fn(async () => ({
+    status: opts.status,
+    config: CONFIG,
+    instructions: opts.status === 'AUTH_REQUIRED' ? 'enable SMTP and use an app password' : undefined,
+  }))
   vi.doMock('@/lib/route-auth', () => ({
     enforceSystemOwner: vi.fn(() => (opts.gateDenied ? NextResponse.json({ error: 'Forbidden' }, { status: 403 }) : null)),
   }))
-  vi.doMock('@/lib/smtp-autodetect', () => ({
-    autodetectSMTP: vi.fn(async () => ({ ...CONFIG, source: 'mx', label: 'corp.example', known: false })),
-    verifyCredentials: vi.fn(async () => ({
-      status: opts.status,
-      config: CONFIG,
-      instructions: opts.status === 'AUTH_REQUIRED' ? 'enable SMTP and use an app password' : undefined,
-    })),
-  }))
+  vi.doMock('@/lib/smtp-autodetect', () => ({ autodetectSMTP, verifyCredentials }))
   vi.doMock('@/lib/setup-bootstrap', () => ({
     startSetupFlow: vi.fn(async () => ({ channel: 'email', hint: 'sent to your inbox', expiresAt: 9_999_999_999_999 })),
   }))
+  return { autodetectSMTP, verifyCredentials }
 }
 
 let dir: string
@@ -102,5 +102,31 @@ describe('POST /api/governance/email/configure', () => {
     const POST = await loadRoute()
     const res = await POST(makeReq({ email: 'not-an-email', appPassword: APPPW }))
     expect(res.status).toBe(400)
+  })
+
+  it('a manual SMTP host override is used verbatim and SKIPS autodetection (TRDD-P7XKV3N9)', async () => {
+    // The escape hatch for a provider whose server autodetection gets wrong/unreachable —
+    // and the answer to "it said the address was wrong but never asked me for it".
+    const { autodetectSMTP, verifyCredentials } = mockDeps({ status: 'SUCCESS' })
+    const POST = await loadRoute()
+    const res = await POST(makeReq({ email: EMAIL, appPassword: APPPW, host: 'mail.override.example', port: 465, secure: true }))
+    expect(res.status).toBe(200)
+    expect((await res.json()).status).toBe('SUCCESS')
+    // Detection was bypassed; the owner's explicit server was verified instead.
+    expect(autodetectSMTP).not.toHaveBeenCalled()
+    expect(verifyCredentials).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'mail.override.example', port: 465, secure: true }),
+      EMAIL,
+      APPPW,
+      undefined,
+    )
+  })
+
+  it('with NO host override, autodetection runs (the default path is unchanged)', async () => {
+    const { autodetectSMTP } = mockDeps({ status: 'SUCCESS' })
+    const POST = await loadRoute()
+    const res = await POST(makeReq({ email: EMAIL, appPassword: APPPW }))
+    expect(res.status).toBe(200)
+    expect(autodetectSMTP).toHaveBeenCalledOnce()
   })
 })

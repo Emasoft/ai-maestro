@@ -361,8 +361,16 @@ export function rolePluginRepoUrl(pluginName: string): string {
 
 /**
  * AgentlensPro — official ai-maestro observability CLI dependency (TRDD-WF0UE9BC).
- * npm CLI (NOT a Claude Code plugin), installed by scripts/install-agentlens.sh.
- * VERSION_FLOOR is the release carrying the locked janitor-consumed CLI contract.
+ * npm CLI (NOT a Claude Code plugin), installed by scripts/install-agentlens.sh, which
+ * installs the NEWEST published version (npm resolves `@>=FLOOR` to the highest release),
+ * so new AgentlensPro features arrive automatically with NO code change here.
+ *
+ * VERSION_FLOOR is the STABLE janitor-consumed CLI-contract baseline — a minimum, not a
+ * pin, and deliberately NOT bumped when AgentlensPro ships a feature. Feature availability
+ * is detected at RUNTIME, never gated on a version number: e.g. the Analytics
+ * panel-restriction (TRDD-YY6M8Z16) checks whether ~/.agentlens/embed-key exists
+ * (lib/analytics-viewer-token.mjs) and fails closed if not — so it self-adapts to whatever
+ * version is installed, including releases published after this file was written.
  */
 export const AGENTLENS_NPM_PKG = 'agentlenspro'
 export const AGENTLENS_VERSION_FLOOR = '2.8.0'

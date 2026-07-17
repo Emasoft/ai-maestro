@@ -59,7 +59,9 @@ MARKETPLACE_REPO_URL="https://github.com/${MARKETPLACE_REPO}"
 
 # AgentlensPro — official observability CLI dependency (TRDD-WF0UE9BC).
 # Mirrors lib/ecosystem-constants.ts AGENTLENS_* (source of truth). npm CLI,
-# installed by scripts/install-agentlens.sh; floor = the locked-contract release.
+# installed by scripts/install-agentlens.sh, which tracks the NEWEST published release
+# (npm resolves @>=FLOOR to the highest version). FLOOR is the STABLE janitor-contract
+# baseline — NOT bumped per feature; feature availability is detected at runtime.
 AGENTLENS_NPM_PKG="agentlenspro"
 AGENTLENS_VERSION_FLOOR="2.8.0"
 AGENTLENS_REPO="https://github.com/Emasoft/AgentlensPro"

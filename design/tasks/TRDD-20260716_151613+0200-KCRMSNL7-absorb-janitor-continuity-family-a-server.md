@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T15:55:21+0200
+updated: 2026-07-17T17:29:52+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -24,15 +24,30 @@ release-via: none
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-16
 
-**⛔ HOLD — architecture under janitor-side revision (USER, 2026-07-17).** The USER is redesigning
-the janitor packaging live with the janitor Claude — likely collapsing the `#J` (thin local) + `#N`
-(scope-flip) two-plugin split into **ONE janitor plugin that adapts to the ai-maestro harness when
-inside an ai-maestro agent**, plus more. **Do NOT build further absorption (singleton-chores, etc.)
-until the janitor Claude brings this side up to speed.** What is already landed is SAFE regardless of
-the outcome: the OAuth port is INERT (R16 flag off), and the probe file [[P7RPOR5O]] advertises
-`capabilities: []` today and is inert-on-disk until a server restart — nothing forces a design. The
-server-side liveness/capability file is agnostic to one-plugin-vs-two (both consume the same file),
-so it likely survives; confirm against the janitor's revised design before assuming so.
+**▶ HOLD LIFTED — co-ratification in progress (2026-07-17).** The janitor shipped the redesign
+(**v0.50.0**, one-plugin-two-backends: `harness_backend.is_harness_session()` discriminator; `#J`
+thin-mode inside a harness agent, `#N` standalone outside; Family-B unchanged) and posted
+**`design/ARCHITECTURE.md` rev 1 for co-ratification** (janitor#100, commit `4c3347b`). The
+liveness/capability probe SURVIVED the redesign exactly as predicted — both backends read the same
+file. I refined rev 1: filled **§6** (server-side contracts) + a **§2 conflict-review**
+(#100 comment `5004829403`). **NOT `RATIFIED` yet** — rev 2 needs three convergences:
+1. **JANITOR (§2/§6):** `server_owns_singleton_chores()` MUST stop delegating to
+   `server_owns_family_a()`. My probe emits **per-class** tokens; `family-a` ≠ "server owns
+   marketplace/version chores". If it keeps delegating, flipping the OAuth flag ON would silence the
+   janitor's marketplace-refresh/user-plugins-update/version-update — the exact "token without its
+   live chore" failure #100's load-bearing rule forbids. Fix: gate the 2 OAuth tasks on `family-a`,
+   the 3 marketplace/version tasks on `singleton-chores` (server emits it NEVER today → janitor keeps them).
+2. **ME (task #59-adjacent):** add `aimaestro-agent.sh session command <tmux> --newline -- <cmd>` —
+   your `fleet_inject.py:143` targets it; the ROUTE `POST /api/sessions/[id]/command` EXISTS, only the
+   CLI verb is missing → thin wrapper, your shipped code runs unchanged.
+3. **ME:** deploy `aimaestro-continuity.sh` to `~/.local/bin` (installer `scripts/*.sh` glob) — it is
+   repo-only on this machine, so your Phase-D `on-stop-failure → ensure-resume` is a feature-detected
+   **no-op** until installed.
+
+Nothing is urgent: the probe ships advertising `capabilities: []`, so the safe default (janitor keeps
+every chore) holds until each class is proven live. Everything landed is SAFE regardless of rev 2
+(OAuth port INERT via the R16 flag; probe inert-on-disk until a server restart). **NEXT = land my two
+items (2, 3) + await the janitor's rev 2 (§2 de-delegation), then post `RATIFIED rev 2`.**
 
 **🔒 PER-PROJECT CHANNELING — binding invariant (USER via janitor#100 / janitor TRDD-X92VBFNF,
 2026-07-17).** Every AUTOMATIC surface (heartbeat/drift line, detector finding, injected nudge,

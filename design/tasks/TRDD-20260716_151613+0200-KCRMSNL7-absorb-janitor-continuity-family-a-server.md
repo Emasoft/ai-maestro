@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T17:36:30+0200
+updated: 2026-07-17T18:03:22+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -24,38 +24,45 @@ release-via: none
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-16
 
-**▶ HOLD LIFTED — co-ratification in progress (2026-07-17).** The janitor shipped the redesign
+**▶ CO-RATIFICATION AT REV 2 — NEAR FINAL (2026-07-17).** The janitor shipped the redesign
 (**v0.50.0**, one-plugin-two-backends: `harness_backend.is_harness_session()` discriminator; `#J`
-thin-mode inside a harness agent, `#N` standalone outside; Family-B unchanged) and posted
-**`design/ARCHITECTURE.md` rev 1 for co-ratification** (janitor#100, commit `4c3347b`). The
-liveness/capability probe SURVIVED the redesign exactly as predicted — both backends read the same
-file. I refined rev 1: filled **§6** (server-side contracts) + a **§2 conflict-review**
-(#100 comment `5004829403`). **NOT `RATIFIED` yet** — rev 2 needs three convergences:
-1. **JANITOR (§2/§6):** `server_owns_singleton_chores()` MUST stop delegating to
-   `server_owns_family_a()`. My probe emits **per-class** tokens; `family-a` ≠ "server owns
-   marketplace/version chores". If it keeps delegating, flipping the OAuth flag ON would silence the
-   janitor's marketplace-refresh/user-plugins-update/version-update — the exact "token without its
-   live chore" failure #100's load-bearing rule forbids. Fix: gate the 2 OAuth tasks on `family-a`,
-   the 3 marketplace/version tasks on `singleton-chores` (server emits it NEVER today → janitor keeps them).
-2. **ME:** deploy `aimaestro-continuity.sh` to `~/.local/bin` (installer `scripts/*.sh` glob) — it is
-   repo-only on this machine (`ls ~/.local/bin/aimaestro-continuity.sh` fails), so the janitor's
-   Phase-D `on-stop-failure → ensure-resume` is a feature-detected **no-op** until installed. Joint
-   first-run verify step, not a code task.
+thin-mode inside a harness agent, `#N` standalone outside; Family-B unchanged) and drove
+`design/ARCHITECTURE.md` through co-ratification on janitor#100. My round-1 refinement filled **§6**
+(server-side contracts) + a **§2 conflict-review** (#100 comment `5004829403`). **The required
+janitor-side change LANDED** (`616ab18`, janitor TRDD-N9YAH5E7): `server_owns_singleton_chores()` no
+longer delegates to `server_owns_family_a()` — per-class gating via `SERVER_ABSORBED_TASK_CLASS`
+(OAuth pair → `family-a`, marketplace/version trio → `singleton-chores` which the server never emits →
+janitor keeps them); `server_capabilities()` reads my probe at the reserved rung 2; and the janitor
+also **removed the legacy `list --json` rung** (liveness ≠ capability — a good catch that closes the
+same conflict one rung lower). Janitor posted **`RATIFIED rev 2`** + ARCHITECTURE.md rev 2 (`7ef80d2`).
 
-**CORRECTION (2026-07-17, #100 comment 5004880793):** my §6.4 originally claimed the CLI verb
-`aimaestro-agent.sh session command` was missing and owed by me — **WRONG.** It EXISTS and is DEPLOYED
+**My rev-2 review (#100 comment `5005104320`): contracts all correct; ONE residual doc fix before I
+match `RATIFIED`.** rev 2's §6.4 still carries my *retracted* round-1 claim ("the `session command`
+verb does not yet exist — ai-maestro adds it") — FALSE (it exists + is deployed; see the CORRECTION
+below). I gave the janitor the exact one-line §6.4 replacement; **once folded (rev 3), I post
+`RATIFIED rev 3` and the doc is FINAL.**
+
+**Residual items after rev 3:**
+1. **ME (joint):** deploy `aimaestro-continuity.sh` to `~/.local/bin` (installer `scripts/*.sh` glob) —
+   repo-only on this machine (`ls` fails), so the janitor's Phase-D `ensure-resume` delegation is a
+   feature-detected **no-op** until installed. Machine-provisioning step, not a code task.
+2. **Command-key follow-up (janitor's §6.4 ask):** 2/5 landed (`ee9624f7`: `janitor-resume`,
+   `janitor-write-handoff`). 3 await the janitor's exact command STRINGS — `compact`/`reload-plugins`
+   already exist; `reload-plugins --force` variant + `reload-skills` (built-in vs `/janitor-reload-skills`)
+   need confirming. Non-blocking (janitor's migration is its own follow-up TRDD).
+
+**CORRECTION (2026-07-17, #100 comment 5004880793) — kept as the audit record:** my round-1 §6.4
+claimed `aimaestro-agent.sh session command` was missing — **WRONG.** It EXISTS + is DEPLOYED
 (`~/.local/bin/agent-session.sh:210` `cmd_session_command`, commit `77883371`, → `POST
-/api/sessions/<name>/command`), matching the janitor's `fleet_inject` argv. I had grepped
-`aimaestro-session.sh` (a separate standalone CLI) instead of the `agent-session.sh` module
-`aimaestro-agent.sh` sources. That convergence item is WITHDRAWN; the throwaway TRDD-FUYUP38L I opened
-for it is CANCELLED + archived. **The lesson: `aimaestro-agent.sh` sources `agent-*.sh` modules — grep
-the MODULE, not the standalone `aimaestro-session.sh`, before claiming a `session` sub-verb is absent.**
+/api/sessions/<name>/command`). I had grepped `aimaestro-session.sh` (a separate standalone CLI)
+instead of the `agent-session.sh` module `aimaestro-agent.sh` sources. Throwaway TRDD-FUYUP38L
+CANCELLED + archived; lesson `[^7]` in memory `agent-control-monitor-api`. **Grep the MODULE, not the
+standalone CLI, before claiming a `session` sub-verb absent.**
 
 Nothing is urgent: the probe ships advertising `capabilities: []`, so the safe default (janitor keeps
-every chore) holds until each class is proven live. Everything landed is SAFE regardless of rev 2
-(OAuth port INERT via the R16 flag; probe inert-on-disk until a server restart). **NEXT = await the
-janitor's rev 2 (§2 de-delegation); the continuity-CLI deploy is a joint install step. Then post
-`RATIFIED rev 2`.**
+every chore) holds until each class is proven live. Everything landed is SAFE (OAuth port INERT via
+the R16 flag; probe inert-on-disk until a server restart). **NEXT = await the janitor's §6.4 one-liner
+→ post `RATIFIED rev 3`. Then the umbrella can advance the Family-A flock (#49) / restart-self (#59).**
 
 **🔒 PER-PROJECT CHANNELING — binding invariant (USER via janitor#100 / janitor TRDD-X92VBFNF,
 2026-07-17).** Every AUTOMATIC surface (heartbeat/drift line, detector finding, injected nudge,

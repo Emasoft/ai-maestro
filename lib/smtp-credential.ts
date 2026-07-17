@@ -27,6 +27,7 @@ import { execFileSync } from 'child_process'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, chmodSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { testOnlyEnv } from './test-only-env'
 
 const KEYCHAIN_SERVICE = 'ai-maestro-smtp'
 const SECURITY_BIN = '/usr/bin/security'
@@ -41,15 +42,25 @@ function credFile(): string {
 
 /**
  * True when the macOS Keychain backend should be used — on darwin with `security`
- * present — unless a test / CI forces the file backend via AIM_SMTP_CRED_BACKEND=file
+ * present — unless a TEST forces the file backend via AIM_SMTP_CRED_BACKEND=file
  * (so unit tests never pollute or prompt the developer's real login keychain).
+ *
+ * AIM_SMTP_CRED_BACKEND is honored ONLY inside the test runner (TRDD-CC9PY337). Outside
+ * it, `=file` would move the SMTP password out of the OS keychain into a file — a silent
+ * downgrade one stray `export` in a shell profile away, on a host where agents run under
+ * the same UID as the server. It is not a setting anyone should reach from the environment;
+ * it is a test seam, so it is gated to the only process that legitimately needs it.
+ *
+ * This does NOT affect non-macOS hosts: the darwin check below already selects the file
+ * backend for them automatically. The env var only ever FORCED file on macOS, which is
+ * exactly the case a test needs and a release must not have.
  *
  * NAMING: must NOT start with `use` + Capital — ESLint's react-hooks/rules-of-hooks
  * treats any `useX()` as a React Hook and errors when it is called outside a component
  * (which fails `next build`, not just lint). It was `useKeychain` and broke the build.
  */
 function keychainAvailable(): boolean {
-  if (process.env.AIM_SMTP_CRED_BACKEND === 'file') return false
+  if (testOnlyEnv('AIM_SMTP_CRED_BACKEND') === 'file') return false
   return process.platform === 'darwin' && existsSync(SECURITY_BIN)
 }
 

@@ -79,6 +79,45 @@ describe('GATE 1 — governed transitions + release-evidence need MANAGER-by-AID
   })
 })
 
+describe('GATE 1 — governed BACKWARD transitions into dev (ai-maestro#74 BYPASS 2)', () => {
+  it('refuses a non-manager un-escalating human_review → dev', () => {
+    const r = authorizeKanbanFieldWrite(base({ currentStatus: 'human_review', requested: { status: 'dev' } }))
+    expect(r?.status).toBe(403)
+    expect(r?.field).toBe('status')
+  })
+  it('refuses a non-manager pulling live_auditing → dev', () => {
+    const r = authorizeKanbanFieldWrite(base({ currentStatus: 'live_auditing', requested: { status: 'dev' } }))
+    expect(r?.status).toBe(403)
+    expect(r?.field).toBe('status')
+  })
+  it('allows a MANAGER to move human_review → dev', () => {
+    const r = authorizeKanbanFieldWrite(
+      base({ requesterIsManagerOrOwner: true, assigneeAgentId: OTHER, currentStatus: 'human_review', requested: { status: 'dev' } }),
+    )
+    expect(r).toBeNull()
+  })
+  it('allows a MANAGER to move live_auditing → dev', () => {
+    const r = authorizeKanbanFieldWrite(
+      base({ requesterIsManagerOrOwner: true, assigneeAgentId: OTHER, currentStatus: 'live_auditing', requested: { status: 'dev' } }),
+    )
+    expect(r).toBeNull()
+  })
+  it('allows the human owner to move human_review → dev (no agent id)', () => {
+    const r = authorizeKanbanFieldWrite(base({ requesterAgentId: undefined, currentStatus: 'human_review', requested: { status: 'dev' } }))
+    expect(r).toBeNull()
+  })
+  // NO REGRESSION: only human_review / live_auditing are governed sources into dev. A rejected
+  // review (ai_review → dev) and ordinary back-to-work (testing → dev) stay EXEMPT (§A).
+  it('still allows a non-manager rejecting a review: ai_review → dev', () => {
+    const r = authorizeKanbanFieldWrite(base({ currentStatus: 'ai_review', requested: { status: 'dev' } }))
+    expect(r).toBeNull()
+  })
+  it('still allows a non-manager moving testing → dev (ordinary back-to-work)', () => {
+    const r = authorizeKanbanFieldWrite(base({ currentStatus: 'testing', requested: { status: 'dev' } }))
+    expect(r).toBeNull()
+  })
+})
+
 describe('GATE 2 — self-review ban', () => {
   it('allows a non-manager agent to review SOMEONE ELSE’s card (legit reviewer)', () => {
     const r = authorizeKanbanFieldWrite(

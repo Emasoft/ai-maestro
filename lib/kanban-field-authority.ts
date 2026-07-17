@@ -40,6 +40,18 @@ export const GOVERNED_TARGET_COLUMNS: ReadonlySet<string> = new Set([
   'superseded',   // force-supersede (Y)
 ])
 
+/**
+ * Governed BACKWARD transitions INTO `dev` (ai-maestro#74 BYPASS 2). `dev` is a mechanical
+ * (EXEMPT) target for FORWARD work, so it is deliberately ABSENT from GOVERNED_TARGET_COLUMNS —
+ * but two BACKWARD moves into `dev` are NON-EXEMPT and were leaking past both gates:
+ *   - human_review → dev — the `|dev` half of the Z escalation set (un-escalating a USER review)
+ *   - live_auditing → dev — the Y set (pulling a live-soaking service back to dev)
+ * Both require MANAGER-by-AID or the human owner. Because the danger is the SOURCE column, the
+ * gate keys these off `currentStatus`, not the target — a target-only check (GOVERNED_TARGET_COLUMNS)
+ * structurally cannot see them, which is exactly why the hole existed.
+ */
+const GOVERNED_BACKWARD_TO_DEV: ReadonlySet<string> = new Set(['human_review', 'live_auditing'])
+
 /** The review columns a card exits when a verdict is rendered on it. */
 export const REVIEW_COLUMNS: ReadonlySet<string> = new Set(['ai_review', 'human_review'])
 
@@ -93,7 +105,15 @@ export function authorizeKanbanFieldWrite(input: KanbanFieldAuthzInput): KanbanF
 
   const req = input.requested
   const targetStatus = typeof req.status === 'string' ? req.status : undefined
-  const movesToGoverned = targetStatus !== undefined && GOVERNED_TARGET_COLUMNS.has(targetStatus)
+  // A governed FORWARD entry — release / escalation / terminal (GOVERNED_TARGET_COLUMNS)…
+  const movesToGovernedColumn = targetStatus !== undefined && GOVERNED_TARGET_COLUMNS.has(targetStatus)
+  // …OR a governed BACKWARD un-escalation into `dev` (ai-maestro#74 BYPASS 2). `dev` is not a
+  // governed TARGET, so this is keyed off the SOURCE column — the only place the danger is visible.
+  const movesBackwardToDev =
+    targetStatus === 'dev' &&
+    input.currentStatus !== undefined &&
+    GOVERNED_BACKWARD_TO_DEV.has(input.currentStatus)
+  const movesToGoverned = movesToGovernedColumn || movesBackwardToDev
   const releaseEvidenceField = RELEASE_EVIDENCE_FIELDS.find((f) => f in req)
 
   // GATE 1 — a governed transition or a release-confirmation write needs
@@ -101,7 +121,11 @@ export function authorizeKanbanFieldWrite(input: KanbanFieldAuthzInput): KanbanF
   if (movesToGoverned || releaseEvidenceField) {
     if (!input.requesterIsManagerOrOwner) {
       const field = movesToGoverned ? 'status' : (releaseEvidenceField as string)
-      const what = movesToGoverned ? `move a card to "${targetStatus}"` : `set ${field}`
+      const what = movesBackwardToDev
+        ? `move a card from "${input.currentStatus}" back to dev`
+        : movesToGovernedColumn
+          ? `move a card to "${targetStatus}"`
+          : `set ${field}`
       return {
         error: `Only a MANAGER (by AID) or the human owner may ${what} — it is a governed transition (NON-EXEMPT).`,
         status: 403,

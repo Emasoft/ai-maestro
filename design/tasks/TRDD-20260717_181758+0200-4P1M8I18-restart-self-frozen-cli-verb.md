@@ -3,7 +3,7 @@ trdd-id: 4P1M8I18
 title: restart-self — self-only-by-construction agent self-restart (me/restart route + frozen CLI verb)
 column: planned
 created: 2026-07-17T18:17:58+0200
-updated: 2026-07-17T18:30:35+0200
+updated: 2026-07-17T18:44:47+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -21,14 +21,14 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [2af0aabf]
+implementation-commits: [2af0aabf, 1981abf8]
 ---
 
 # restart-self — self-only-by-construction agent self-restart (me/restart route + frozen CLI verb)
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
 
-**IN PROGRESS — Phase 1 DONE (`2af0aabf`), Phase 2 NEXT.** A self-mandate (Tier 0: the frozen-layer
+**IN PROGRESS — Phases 1 + 2 DONE (`2af0aabf`, `1981abf8`); Phase 2b + Phase 3 NEXT.** A self-mandate (Tier 0: the frozen-layer
 script surface + a self-derived route are the ai-maestro server's own scope, reversible, self-only).
 Unblocked by the now-FINAL janitor#100 co-ratification (I committed on janitor#75 that restart-self
 lands after ratification).
@@ -50,30 +50,34 @@ janitor `#J` continuity path (recover a stuck SELF by relaunching) has no server
 keystroke-injection at ANOTHER agent (restart does `C-c` + `/exit` + `Enter`), but self-restart
 is self-harm-only — an agent can already `/exit` its own REPL; this is the programmatic twin.
 
-**NEXT ACTION — Phase 2: build `POST /api/sessions/me/restart` + security-invariant tests.**
-Grounding captured for a clean build (no re-grounding needed):
-- **Self-resolution:** `authenticateFromRequest(request)` → `auth.agentId` (the caller's own agent)
-  for an AID/Bearer caller; `{ agentId: undefined }` / `{ userId }` for the system-owner. The route
-  derives the session SOLELY from `auth.agentId` — NO `[id]` param — so no other agent is nameable.
-- **Route flow:** authenticate (401 on `auth.error`) → require `auth.agentId` (AGENT-only; a
-  system-owner with no agentId is 400 "use /api/sessions/[id]/restart", since "me" has no agent
-  session for the human) → resolve the caller's own agent + its session name from the registry
-  (`getAgent(auth.agentId)` → session name; 404/409 if it has no live session) → manager-gate parity
-  (a team agent still needs a MANAGER on the host — reuse the same `getManagerId()`+`isAgentInAnyTeam`
-  check) → subagent gate (reuse `readSubagentCount`+`evaluateExitGate`, `?force=true`) → optional body
-  `{program, programArgs}` (default to registry) → `isValidProgramArgs` (400) → `resolveRestartBin` +
-  `sanitizePersonaName` + `buildRelaunchCommand` + `runRestartSequence` (all from `lib/session-restart.ts`)
-  → map `RestartOutcome` to HTTP exactly as `[id]/restart` does.
-- **NOT sudo-strict:** R32 agents never sudo (`sudo-guard.ts:19-25`); self-only-by-construction has no
-  cross-target for sudo to protect. So `me/restart` is a normal authenticated route (the structural
-  middleware still blocks anonymous). Do NOT add it to `security-registry.json` strict / STRICT_AGENT_RULES.
-- **Security-invariant tests (the gate — Never relax security strictness):** (a) an agent restarts its
-  OWN session via `me/restart`; (b) there is NO request shape by which agent A reaches agent B's session
-  (the route reads only `auth.agentId`); (c) `[id]/restart`'s existing self-deny for agents is UNCHANGED
-  (this route ADDS a capability, it does not loosen `restart-session`); (d) a system-owner without an
-  agent session is refused. All four green or it does not ship.
-Then Phase 3: the no-arg `aimaestro-continuity.sh restart-self` verb + `docs/SCRIPT-LAYER.md` /
-`SCRIPT-MANIFEST.md` registration + a CLI/route smoke test.
+**✅ Phase 2 (`1981abf8`):** `POST /api/sessions/me/restart` in BOTH modes — the Next.js app route
+(`app/api/sessions/me/restart/route.ts`) AND the headless router entry (registered BEFORE the generic
+`[id]/restart` so `me` is never caught as a session name). Self-only BY CONSTRUCTION: target derived
+from `auth.agentId`, NO `[id]`/body/query target field. NOT sudo-strict (R32 agents never sudo;
+self-only has no cross-target). Reuses `lib/session-restart.ts` (P1) so it cannot construct a laxer
+command; manager-gate + subagent-gate parity. 12 security tests pin the four invariants (a self-works,
+b hostile body ignored, c `[id]/restart` self-deny unchanged, d owner refused). tsc 0, `yarn build` 0.
+
+**NEXT ACTION — Phase 2b (hardening) then Phase 3 (CLI + docs):**
+
+**Phase 2b — SECURITY: unify the headless `[id]/restart` copy to `lib/session-restart.ts`.**
+Discovered building P2: `services/headless-router.ts` `POST /api/sessions/[id]/restart` (the entry
+right AFTER the new me/restart one) is a THIRD, DIVERGENT copy of the restart machinery and is
+**less safe than the app route** — a pre-existing shell-injection surface:
+- uses `execSync` with **shell interpolation** (`tmux send-keys -t "${sessionName}" …`) — app route
+  uses `execFileSync` (no shell);
+- **no session-name validation** (`decodeURIComponent(params.id)` with no `^[a-zA-Z0-9_@.-]+$` gate);
+- **no programArgs allowlist** (CC-GOV-002) and **no persona-name sanitization** (API-MAJ-03) — a
+  permissive `agent.label` flows RAW into the `--name "…"` and then into the `execSync` shell string;
+- no subagent gate, no abandon-confirmation handling, leaks the raw exec error (API-MIN-03).
+Fix: refactor that handler to the shared lib (add the validation + `isValidProgramArgs` +
+`sanitizePersonaName` + `buildRelaunchCommand` + `runRestartSequence`, subagent gate via `query.force`),
+mirroring the app route — completing P1's One-Source-of-Truth and fixing the injection divergence in one
+move. This is a pre-existing bug adjacent to P1's goal; do it before P3. tsc + build + mirror test green.
+
+**Phase 3 — the no-arg `aimaestro-continuity.sh restart-self` verb** (`POST /api/sessions/me/restart`
+with `AID_AUTH`, no target arg — sits beside `status`/`ensure-resume` on the frozen script) +
+`docs/SCRIPT-LAYER.md` / `SCRIPT-MANIFEST.md` registration + a CLI/route smoke test.
 
 ## Problem / Goal
 

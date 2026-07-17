@@ -3,20 +3,36 @@ trdd-id: YY6M8Z16
 title: Analytics panel-restriction — proxy-side X-Agentlens-Viewer signing (deferred, waits on AgentlensPro npm verifier)
 column: testing
 created: 2026-07-17T09:00:31+0200
-updated: 2026-07-17T09:29:00+0200
+updated: 2026-07-17T10:02:38+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
 parent-trdd:
 labels: [analytics, agentlenspro, embed, security]
 relevant-rules: [16]
-implementation-commits: [5d972107, f7104bc9]
+implementation-commits: [5d972107, f7104bc9, afbb13b9]
 external-refs:
   - https://github.com/Emasoft/AgentlensPro/issues/4
   - AgentlensPro TRDD-KDGJ0R38 (basePath — retires our CSP rewrite)
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
+
+**FOLLOW-UP FIX (2026-07-17, commit `afbb13b9`) — the panel falsely said "AgentlensPro isn't
+running" in the browser even though the upstream was up.** Root cause: `AnalyticsSection.tsx`
+health-probes the reverse proxy (main port + 1) with `fetch(..., {credentials:'include'})`
+BEFORE framing. That fetch is cross-ORIGIN (the port differs); the proxy sent no
+`Access-Control-Allow-Origin`, so the browser DISCARDED even the healthy 200 and the probe's
+promise REJECTED → `.catch()` → `probe='down'` → the "isn't running" card. The iframe itself was
+never the problem (iframes are CSP/frame-ancestors gated, not CORS gated). Fix: the proxy now
+echoes ACAO for the ai-maestro origin ONLY (same derivation as `frameAncestorsFor` — same Host,
+pinned main port) with `Allow-Credentials`, on every response INCLUDING the 401/403/503 error
+paths (so the probe reads those statuses too). Never `*`; a mismatched origin/host gets nothing —
+this widens no trust (the caller is already past the IP filter + session gate). `corsHeadersFor`
+is a pure fn (8 unit tests, all green); `deny()` gained an `extraHeaders` arg. VERIFIED live:
+matching Origin → ACAO echoed on the 401; wrong port / no Origin → no ACAO. tsc 0, 18/18 analytics
+tests, `yarn build` exit 0, pm2 restarted. The panel now mounts the iframe on Reload — NO client
+rebuild needed (server-side only). This was the last blocker for the browser round-trip below.
 
 **IMPLEMENTED + VERIFIED (2026-07-17, commit `f7104bc9`), `column: testing`.** The USER first
 chose "B" (defer until the verifier shipped to npm); AgentlensPro published **2.10.0 with the

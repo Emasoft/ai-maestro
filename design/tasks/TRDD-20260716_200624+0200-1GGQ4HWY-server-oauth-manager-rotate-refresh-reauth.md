@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T02:05:00+0200
+updated: 2026-07-17T12:36:00+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -23,7 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e963487f]
+implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e963487f, 45725da7]
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
@@ -102,17 +102,25 @@ write, the lock, and the state.json schema.
 - **G** — the 60s `cmd_tick` as a server-internal task, **config-gated OFF by default**; feeds
   [[DXJZM3BW]]'s `next_action` (cascade states: ok | rotating | reauth-needed).
 
-**NEXT ACTION:** Phase F/G — the cascade-driven ORCHESTRATION + tick that COMPOSES the E-actuators
-(no NEW irreversible primitive; the switch/refresh are already ported). Read `rotator.py`'s
-`_refresh_and_heal_slot` (1528), `_keepalive_refresh` (1770, the RENEW loop over accounts), and
-`cmd_auto` (1574 — the ROTATE decision: it consumes [[cascade.ts]]'s classifier + `usageRequest`
-to pick a safe alternate, then calls `switchLiveTo`). Port them as a server-internal task
-**config-gated OFF by default** (Phase G) that emits [[DXJZM3BW]]'s `next_action`
-(ok | rotating | reauth-needed). Reuse [[live.ts]]/[[rotate.ts]]/[[network.ts]]/[[slots.ts]]/
-[[tick-lock.ts]]/[[cascade.ts]]. **The tick MUST stay OFF until the R16 USER go-ahead** — wiring it
-to fire is what makes `switchLiveTo`/`writeLiveBlob` run live. Phase F (REAUTH browser tier via Node
-CDP/tmux) is the lower-priority "only human step" and can follow. `reauth.py`/`slot_capture_browser.py`/
-`cookie_vault.py` are the sources.
+- **ORCHESTRATION TICK ✅ CODE DONE — NOT WIRED LIVE (`45725da7`)** — `lib/oauth-rotator/tick.ts`:
+  the faithful port of `cmd_auto` (ROTATE), `_keepalive_refresh` (RENEW), `_refresh_and_heal_slot`,
+  `_reconcile_live_email`, `_resolve_untrusted_live` (F1 mirror stay-put), and the `cmd_tick`
+  compose. Preserves 1:1: the 429 debounce, anti-thrash dwell, DRAIN-FIRST selection, degraded
+  fallback, RENEW-before-rotate + refresh-on-err nets, ground-truth reconcile. `runTick()` returns
+  [[DXJZM3BW]]'s `next_action` (ok | rotating | reauth-needed). Thresholds are FIXED constants
+  (rotator.py env defaults) — no env knob (TRDD-CC9PY337). 12 new 0-IMPACT tests (stub fetch +
+  forced-off backend + temp HOME + hard escape guard); full oauth-rotator suite 106/106; tsc 0;
+  `yarn build` 0. **NO code path CALLS runTick yet — nothing runs against the real credential.**
+
+**NEXT ACTION:** Phase G — WIRE `runTick` into the server as a ~60 s interval task **config-gated
+OFF by default**, under `withTickLock` (serialise the server's own ticks) and only when the real
+`claude` binary is running (port `claude_running()`). The config flag defaults OFF, so the safe
+default is "the server never calls runTick"; flipping it ON is the single R16 activation and is
+the USER's to make (it makes `switchLiveTo`/`writeLiveBlob` run live against `Claude
+Code-credentials`). Seams: `server.mjs` startup (beside the agent-invariants sweep), a config
+read, `lib/oauth-rotator/tick-lock.ts::withTickLock`. Then feed `next_action` to [[DXJZM3BW]]'s
+`status` verb. Phase F (REAUTH browser tier via Node CDP/tmux — `reauth.py`/
+`slot_capture_browser.py`/`cookie_vault.py`) is the lower-priority "only human step" and follows.
 
 ## Problem / Goal
 

@@ -1980,6 +1980,21 @@ async function startServer(handleRequest) {
       console.warn('[Startup] OAuth-rotator tick init failed (non-fatal):', err?.message || err)
     }
 
+    // ── Server liveness+capability probe file (TRDD-P7RPOR5O; janitor#100 seam) ──
+    // Maintain ~/.aimaestro/server-liveness.json so the janitor's two backends (#J
+    // inside the harness, #N outside) coordinate WITHOUT auth (the outside daemon has
+    // no $AID_AUTH and the health route 401s). Safe to start UNCONDITIONALLY: the
+    // honesty is inside currentCapabilities() — a server with nothing absorbed simply
+    // advertises capabilities:[] and the janitor keeps every chore. Today: [] (OAuth
+    // INERT via the R16 flag; nothing else built).
+    try {
+      const { startServerLiveness } = await import('./lib/server-liveness.ts')
+      startServerLiveness()
+      console.log('[Startup] Server liveness heartbeat started (~/.aimaestro/server-liveness.json; capabilities advertised only when live)')
+    } catch (err) {
+      console.warn('[Startup] Server liveness init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Claude Code runtime-env enforcer (TRDD-QZL828OD) ───────────────────────
     // USER-ratified carve-out (2026-07-17): the harness cannot function without a
     // fixed set of Claude Code runtime env keys (+ one timeout) in the user-scope

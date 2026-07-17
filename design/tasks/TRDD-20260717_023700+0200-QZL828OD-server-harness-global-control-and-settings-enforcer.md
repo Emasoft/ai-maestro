@@ -1,13 +1,14 @@
 ---
 trdd-id: QZL828OD
 title: Server-owned harness global-control + settings.json env-key enforcer + auto-restart on plugin update
-column: backburner
+column: dev
 created: 2026-07-17T02:37:00+0200
-updated: 2026-07-17T02:37:00+0200
+updated: 2026-07-17T02:58:00+0200
 current-owner: ai-maestro
 task-type: feature
 parent-trdd: KCRMSNL7
 relevant-rules: [42, 17, 20]
+implementation-commits: [4c8b7cb8]
 scope: project
 ---
 
@@ -18,23 +19,29 @@ server IS the janitor daemon for **harness agents**; a set of daemon responsibil
 in the continuity NPT chain (OAuth `1GGQ4HWY` / resurrection `JAU1ES1C` / continuity-CLI `DXJZM3BW`)
 must be added to the server directly.
 
-**NEEDS USER RATIFICATION BEFORE BUILD (two governance items — both IRON, USER-only):**
-1. **R42 wording extension.** R42's exception today = the janitor's *machine-wide switches*
-   (disarm/re-arm, pause/unpause, global reload), explicitly *"NOT commands aimed at an agent."* A
-   per-agent **restart** is agent-aimed. Extend the exception so the daemon-as-server may **restart
-   same-host HARNESS agents** (draft below).
-2. **User-scope settings.json exception.** The memory `feedback_ai_maestro_never_installs_user_scope`
-   (IRON) forbids the service layer from ANY write to `~/.claude/settings.json`. This TRDD needs a
-   NARROW carve-out: the daemon/server MAY write a fixed allowlist of Claude Code **runtime env keys**
-   (NOT plugins/elements — no leakage of AI-Maestro plugins, which is the rule's actual WHY). The
-   memory note must be amended to record the exception, or a future janitor audit will "fix" (delete)
-   the enforcer as a rule violation.
+**PROGRESS (2026-07-17):**
+- **D2 (user-scope settings.json carve-out) — ✅ RATIFIED by USER 2026-07-17** (*"it is a narrow
+  exception, but it is important. ai-maestro cannot function without those settings."*).
+- **Capability #3 (Claude settings enforcer) — ✅ DONE + LIVE (`4c8b7cb8`).**
+  `lib/claude-settings-enforcer.ts` (fixed allowlist, merge-never-replace, fail-closed on corrupt,
+  atomic tmp+rename + `.aim-bak`, idempotent, restore-on-drift watchdog) + boot-enforce + watchdog
+  wired in `server.mjs` beside the agent-invariants sweep. 9 0-IMPACT tests; tsc + `yarn build`
+  clean. The carve-out is recorded in the IRON-guard memory note (`feedback_ai_maestro_never_installs_user_scope`
+  + its wikimem twin) with a `[^1]` guardrail lesson so a future audit will not delete it.
+- **Multi-client (codex/gemini/opencode/kiro/kimi) enforcement — SPLIT OUT to [[TRDD-D0SI66XM]]**
+  (USER-mandated, DELAYED: *"this other TRDD can be delayed. only the one with claude must be done now."*).
 
-**NEXT ACTION:** get USER sign-off on the two items above + a build go-ahead. THEN: (Phase 1) build
-the settings-enforcer + auto-restart-on-plugin-update; (Phase 2) the harness global-control ops.
-First build step = investigate the existing seams (`services/auto-update-service.ts`,
-`hooks/useRestartQueue.ts`, `POST /api/sessions/[id]/restart`, the `/api/settings/*` writers) to wire
-into, not rebuild.
+**STILL BLOCKED ON USER — D1 (R42 wording extension, IRON, USER-only):** R42's exception today =
+the janitor's *machine-wide switches* (disarm/re-arm, pause/unpause, global reload), explicitly
+*"NOT commands aimed at an agent."* A per-agent **restart** is agent-aimed. Until D1 is ratified,
+capability #3 writes+restores settings but does NOT restart running agents (new sessions pick the
+keys up at launch); capabilities **#1** (auto-restart-all-harness-agents on `ai-maestro-plugins`
+update) and **#2** (in-process global control ops) CANNOT proceed — both depend on the daemon-as-
+server restarting agents. Draft wording is in "Governance drafts" below.
+
+**NEXT ACTION:** get USER sign-off on **D1** (the R42 restart extension). THEN build capability #1
+(auto-restart-on-plugin-update) + capability #2 (in-process global control ops), reusing the seams
+`services/auto-update-service.ts`, `hooks/useRestartQueue.ts`, `POST /api/sessions/[id]/restart`.
 
 ## Problem / Goal
 
@@ -104,3 +111,8 @@ settings (not plugin enablement) and the daemon owns harness-agent runtime behav
 ## Approval log
 - 2026-07-17 — Authored from the USER's clarifying directive. Awaiting USER ratification of the R42
   extension + the user-scope settings exception, then a build go-ahead.
+- 2026-07-17 — **D2 (user-scope settings.json runtime-env carve-out) APPROVED by USER.** Capability #3
+  (Claude settings enforcer) built + wired live (`4c8b7cb8`); carve-out recorded in the IRON-guard
+  memory note. Multi-client enforcement split to [[TRDD-D0SI66XM]] (USER-mandated, delayed).
+  **D1 (R42 restart extension) NOT YET ratified** — capabilities #1 (auto-restart-on-plugin-update)
+  and #2 (in-process global control) remain blocked on it.

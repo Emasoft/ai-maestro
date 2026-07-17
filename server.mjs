@@ -1966,6 +1966,20 @@ async function startServer(handleRequest) {
       console.warn('[Startup] Agent-invariant sweep failed (non-fatal):', err?.message || err)
     }
 
+    // ── OAuth-rotator server tick: config-gated, default OFF (TRDD-1GGQ4HWY Ph.G) ─
+    // Drive tick.ts::runTick from a server timer. Safe to start UNCONDITIONALLY: the
+    // opt-in gate is a FLAG FILE (~/.aimaestro/oauth-rotator-tick.enabled, per
+    // TRDD-CC9PY337 — never an env var) checked INSIDE each beat, so with the flag
+    // ABSENT (the R16-safe default) every beat no-ops — nothing is written, no network
+    // is hit. Only the human creates the flag; the server only reads it.
+    try {
+      const { startOauthRotatorTick } = await import('./lib/oauth-rotator/server-tick.ts')
+      startOauthRotatorTick()
+      console.log('[Startup] OAuth-rotator tick timer started (gated OFF by default; enable by creating ~/.aimaestro/oauth-rotator-tick.enabled)')
+    } catch (err) {
+      console.warn('[Startup] OAuth-rotator tick init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Claude Code runtime-env enforcer (TRDD-QZL828OD) ───────────────────────
     // USER-ratified carve-out (2026-07-17): the harness cannot function without a
     // fixed set of Claude Code runtime env keys (+ one timeout) in the user-scope

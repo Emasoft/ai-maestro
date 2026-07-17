@@ -97,10 +97,13 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
     description: 'Run the janitor drift/security detectors once now.',
   },
   // Registered for the janitor #J soft-send migration to `queue --command-key`
-  // (janitor#100 rev 2). Both are self-scoped janitor self-maintenance commands,
-  // safe at idle, non-destructive. The other requested keys (reload-skills, and a
-  // --force variant of reload-plugins) are pending the janitor's exact command
-  // strings — do NOT guess a command string (verified allowlist is the boundary).
+  // (janitor#100 rev 3). All self-scoped janitor self-maintenance commands, safe at
+  // idle, non-destructive. Command strings were CONFIRMED by the janitor against its
+  // shipped senders (reload_trigger.py:138 → `/reload-plugins --force`;
+  // reload_skills_trigger.py:136 → `/reload-skills`, the Claude Code built-in) — never
+  // guessed (the verified allowlist is the injection boundary). `reload-plugins-force`
+  // is a SEPARATE key from the plain UI `reload-plugins` so the dashboard button
+  // semantics don't shift.
   {
     key: 'janitor-resume',
     label: 'Janitor: resume',
@@ -114,6 +117,20 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
     command: '/janitor-write-handoff',
     requiresIdle: true,
     description: 'Author a rich agent handoff to .janitor/state before a delicate compaction.',
+  },
+  {
+    key: 'reload-plugins-force',
+    label: 'Reload plugins (force)',
+    command: '/reload-plugins --force',
+    requiresIdle: true,
+    description: 'Reload plugin hooks/skills, forcing past a mid-use plugin that would refuse a plain reload.',
+  },
+  {
+    key: 'reload-skills',
+    label: 'Reload skills',
+    command: '/reload-skills',
+    requiresIdle: true,
+    description: 'Reload standalone (non-plugin) skills — the Claude Code built-in, distinct from reload-plugins.',
   },
 ] as const
 

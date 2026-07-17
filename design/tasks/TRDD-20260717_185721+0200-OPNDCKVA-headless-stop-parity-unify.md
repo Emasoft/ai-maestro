@@ -1,9 +1,9 @@
 ---
 trdd-id: OPNDCKVA
 title: headless /stop parity — execFileSync + subagent gate + codex-aware exit (extract lib/session-stop)
-column: planned
+column: complete
 created: 2026-07-17T18:57:21+0200
-updated: 2026-07-17T18:57:21+0200
+updated: 2026-07-17T21:29:39+0200
 current-owner: ai-maestro
 task-type: refactor
 scope: project
@@ -21,15 +21,36 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: []
+implementation-commits: [5179972d, 4d4b677e]
 ---
 
 # headless /stop parity — execFileSync + subagent gate + codex-aware exit (extract lib/session-stop)
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
 
-**PLANNED — a self-mandate (Tier 0: headless-parity hardening of the server's own /stop route,
-reversible, no cross-project reach).** Surfaced building [[TRDD-4P1M8I18]] Phase 2b: the headless
+**COMPLETE (2026-07-17T21:29+0200).** Both phases landed and verified — tsc 0, 72 unit tests green
+(session-stop 5, session-restart 17, headless mirror 50), `yarn build` clean (ESLint no-unused-vars
+passes after dropping the now-unused `execSync` import). Commits: `5179972d` (Phase 1 — extract
+`lib/session-stop.ts` + wire the app `/stop` route + `session-stop.test.ts`), `4d4b677e` (Phase 2 —
+wire the headless `/stop` handler to the lib, add the TRDD-O8NCNRWO subagent gate + `?force`, codex
+double-C-c awareness, generic error, `execSync` import removed, stop well-formed→401 mirror parity).
+NOT pushed (app, not a plugin).
+
+**What shipped:** the client-aware graceful-exit sequence now lives once in `lib/session-stop.ts`
+(the exit-only twin of `lib/session-restart.ts`) — execFileSync (no shell), injectable exec/sleep
+seams. BOTH serving modes consume it, so they can no longer diverge. The headless `/stop` gained the
+three capabilities it lacked: codex-aware exit, the subagent gate (409 `subagents_running`, null/0
+never blocks, `?force=true` overrides), and generic error mapping (was leaking raw exec text). The
+app route's blocking `execFileSync('sleep','0.4')` subprocess became an injectable async sleep seam.
+
+**SUPERSEDED — do NOT carry forward:** the original NEXT ACTION ("extract lib/session-stop.ts …") —
+done. The "shell vs no-shell / no subagent gate / not codex-aware / raw error leak" divergence list —
+all four closed.
+
+---
+
+**(historical) PLANNED — a self-mandate (Tier 0: headless-parity hardening of the server's own /stop
+route, reversible, no cross-project reach).** Surfaced building [[TRDD-4P1M8I18]] Phase 2b: the headless
 `POST /api/sessions/[id]/stop` in `services/headless-router.ts` is a divergent, less-safe copy of the
 Next.js app route `app/api/sessions/[id]/stop/route.ts`. **The shell-INJECTION half is already closed**
 (`1fdc3603` added the CC-GOV-001 `^[a-zA-Z0-9_@.-]+$` session-name gate before auth, so the existing

@@ -3,7 +3,7 @@ trdd-id: YY6M8Z16
 title: Analytics panel-restriction — proxy-side X-Agentlens-Viewer signing (deferred, waits on AgentlensPro npm verifier)
 column: complete
 created: 2026-07-17T09:00:31+0200
-updated: 2026-07-17T11:02:15+0200
+updated: 2026-07-17T14:26:35+0200
 current-owner: ai-maestro
 task-type: security
 scope: project

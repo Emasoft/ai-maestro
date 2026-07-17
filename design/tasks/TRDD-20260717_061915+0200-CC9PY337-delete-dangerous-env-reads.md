@@ -59,9 +59,39 @@ rule, not a one-off cleanup.
   so a test pins the property — if vitest ever drops it, every hatch silently dies and the suite
   starts writing to the developer's REAL keychain). 17/17; tsc clean.
 
-**NEXT ACTION:** Phase 2 — `lib/smtp-credential.ts:52`, swap `process.env.AIM_SMTP_CRED_BACKEND`
-for `testOnlyEnv('AIM_SMTP_CRED_BACKEND')`, then run the mailer + smtp-credential + email-route
-suites. It is the smallest wiring and proves the pattern before phase 3 touches token custody.
+- `752f798f` — **phase 2 DONE.** `lib/smtp-credential.ts` `keychainAvailable()` now reads via
+  `testOnlyEnv('AIM_SMTP_CRED_BACKEND')`. Verified: non-macOS unaffected (the `darwin` check
+  already picks the file backend there), and no dependent test stubs `NODE_ENV`.
+- `4a4c28c0` — **suite fully green: 205/205 files, 3028 tests, 0 failures.** Closed 3 red tests
+  that were MY OWN and had been mis-filed as "pre-existing, someone else's": R49.1-R49.6 given
+  BEHAVIOURAL enforcement-map rows (the refusal protocol binds what an approver WRITES; no guard
+  can judge whether prose named a concrete defect — reasoning recorded in the map's notes), and
+  3 TRDDs moved `planned|testing → blocked` + `pre-block-column:` after VERIFYING every blocker
+  is genuinely still open.
+
+**NEXT ACTION:** Phase 3 — the rotator seams. `lib/oauth-rotator/`: `safe-storage.ts:283`
+(`CLAUDE_SAFE_STORAGE_BACKEND`, returned UNVALIDATED — `none` = plaintext tokens), `:299`
+(`JANITOR_ROTATOR_KEYCHAIN`), `slots.ts:40,42` + `live.ts:36` (the 3
+`CLAUDE_ROTATOR_*_KEYCHAIN_SERVICE`), `global-state.ts:68,91` (`JANITOR_GLOBAL_STATE_DIR`).
+Swap each `process.env.X` for `testOnlyEnv('X')` and run the 6 `oauth-rotator-*` suites.
+
+**PHASE 3 LANDMINE — verify BEFORE editing `global-state.ts`.** Its doc-comment says
+`globalStateDir()` *"Matches global_state.py::global_state_dir exactly"* — a PYTHON
+implementation (the janitor daemon, a SEPARATE repo we must not edit) must agree on the same
+STRING. Nothing in ai-maestro sets `JANITOR_GLOBAL_STATE_DIR` when spawning anything (grepped:
+zero hits outside the module itself), so in production both sides take the default and agree.
+But CONFIRM that before gating, and confirm the TS/Python pair cannot disagree in a scenario
+run. If they could, gating the TS side alone would split the daemon's state dir from the
+server's — a worse bug than the vector.
+
+**THE 0-IMPACT TRAP (cost me nothing only because I checked — repeat it every phase).** Passing
+tests do NOT prove isolation held. If `testOnlyEnv()` returned undefined inside the runner, the
+rotator suites would transact against the REAL login keychain and still pass, silently polluting
+it. After each phase, prove it directly:
+`security dump-keychain 2>/dev/null | grep -c 'Claude Code-rotator-slot'` → expect 0, and
+`security find-generic-password -s ai-maestro-smtp -a me@gmail.com` → "could not be found".
+On macOS the keychain is used UNLESS the hatch forces otherwise, so absence proves BOTH that
+isolation held and that the hatch works.
 
 **SUPERSEDED — do NOT carry forward:**
 - *"A release-mode gate is the answer."* Twice wrong. (a) It still READS the var in development,
@@ -129,12 +159,25 @@ security-weakening, and gating them would break deployments while buying nothing
    its tests + `mailer-user-relay`/`email-configure-route` fallout. Drops 1.
 3. **Rotator seams** — `safe-storage.ts`, `slots.ts`, `live.ts`, `global-state.ts` (5 vars) + the
    6 rotator test files. The largest phase; may split.
-4. **Remaining reads + the regression fence** — `jsonl-reader.ts`, `plugin-builder-service.ts`,
-   `sessions-service.ts` (3 vars). Convert `lib/release-env-guard.ts` from a runtime gate into a
-   test asserting NO deleted name reappears in a `process.env` read anywhere in the source. That
-   test is the durable value: it stops the next contributor re-introducing a hatch.
-5. **Docs** — purge every deleted name from `.example.env` and `CLAUDE.md`; state the standing
-   rule.
+4. **Remaining reads + the regression fence** — `jsonl-reader.ts:58`,
+   `plugin-builder-service.ts:56`, `sessions-service.ts:519` (3 vars). Then add a test asserting
+   no name in `TEST_ONLY_ENV` is read via a bare `process.env.X` anywhere in `lib/`+`services/`
+   (grep the source; the only legal reader is `test-only-env.ts` itself). That fence is the
+   durable value — it stops the next contributor re-introducing a hatch, and it is what makes
+   the rule survive this session. Wire `reportIgnoredTestEnv()` into `server.mjs` boot for the
+   tamper-evidence summary.
+5. **Docs** — purge every deleted/gated name from `.example.env` and `CLAUDE.md`; state the
+   standing rule + the decision procedure.
+
+## AFTER THIS TRDD (USER, 2026-07-17): AgentLensPro settings section
+
+Once env/config is done: make AgentLensPro a **section of the Settings page, rendered in an
+iframe** (its server runs INDEPENDENTLY, hence the iframe rather than an in-app route), and
+**coordinate with the AgentLensPro Claude via GitHub repo issues**. Do not design its API
+unilaterally — open an issue and agree the contract. Related existing work: **TRDD-Y916N7WL**
+(`agentlenspro-status-metadata-consum…`, column: testing) already touches AgentLensPro status
+metadata and is the blocker on DXJZM3BW — READ IT FIRST; it likely already establishes the
+integration contract, and `tests/unit/agentlens-status.test.ts` exists.
 
 ## Verification
 

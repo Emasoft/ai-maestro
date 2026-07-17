@@ -28,6 +28,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 import { requireSudoToken } from '@/lib/sudo-guard'
+import { runStopSequence } from '@/lib/session-stop'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,34 +97,15 @@ export async function POST(
     )
   }
 
-  try {
-    const { execFileSync } = require('child_process')
-    // CC-GOV-001: Use execFileSync (no shell) to prevent injection even with validated names.
-    if (program === 'codex') {
-      // Codex exits on two consecutive Ctrl+C — first one clears partial input,
-      // second one terminates the CLI. A small sleep between gives the TUI time
-      // to redraw and accept the second signal.
-      execFileSync('tmux', ['send-keys', '-t', sessionName, 'C-c'], { timeout: 5000, stdio: 'ignore' })
-      // Wait briefly so Codex sees two distinct C-c events, not a held signal.
-      execFileSync('sleep', ['0.4'], { timeout: 5000, stdio: 'ignore' })
-      execFileSync('tmux', ['send-keys', '-t', sessionName, 'C-c'], { timeout: 5000, stdio: 'ignore' })
-    } else {
-      // Claude Code (and current fallback for gemini/opencode/kiro):
-      // Ctrl+C clears any partial input, then /exit as literal text exits the CLI.
-      // Note: Ctrl+D does NOT exit Claude Code. Only /exit works.
-      // The -l flag sends literal text (not key names); Enter is a key name so sent separately.
-      execFileSync('tmux', ['send-keys', '-t', sessionName, 'C-c'], { timeout: 5000, stdio: 'ignore' })
-      execFileSync('tmux', ['send-keys', '-t', sessionName, '-l', '/exit'], { timeout: 5000, stdio: 'ignore' })
-      execFileSync('tmux', ['send-keys', '-t', sessionName, 'Enter'], { timeout: 5000, stdio: 'ignore' })
-    }
-    return NextResponse.json({ success: true, sessionName, program })
-  } catch (error: unknown) {
-    // API-MIN-03 fix: do not return raw error.message to client. tmux/exec
-    // errors leak internal paths (socket path, full command), OS-specific
-    // text, and absolute filesystem layout. Log full detail server-side and
-    // return a generic message to the client.
-    const detail = error instanceof Error ? error.message : 'Unknown error'
-    console.error('[Sessions stop] tmux command failed:', { detail, error })
+  // Delegate the client-aware exit (codex double-C-c vs claude /exit) to the
+  // shared lib so the FULL and HEADLESS serving modes cannot drift again
+  // (TRDD-OPNDCKVA). runStopSequence uses execFileSync (no shell) and never throws.
+  const outcome = await runStopSequence(sessionName, program)
+  if (outcome.status === 'error') {
+    // API-MIN-03: raw exec text leaks socket paths / absolute layout. Log the
+    // detail server-side and return a generic message to the client.
+    console.error('[Sessions stop] tmux command failed:', { detail: outcome.detail })
     return NextResponse.json({ error: 'Session stop failed' }, { status: 500 })
   }
+  return NextResponse.json({ success: true, sessionName, program })
 }

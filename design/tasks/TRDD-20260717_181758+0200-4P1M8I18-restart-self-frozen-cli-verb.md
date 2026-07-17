@@ -1,9 +1,9 @@
 ---
 trdd-id: 4P1M8I18
 title: restart-self — self-only-by-construction agent self-restart (me/restart route + frozen CLI verb)
-column: planned
+column: complete
 created: 2026-07-17T18:17:58+0200
-updated: 2026-07-17T18:57:21+0200
+updated: 2026-07-17T19:06:11+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -21,17 +21,21 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [2af0aabf, 1981abf8, 1fdc3603]
+implementation-commits: [2af0aabf, 1981abf8, 1fdc3603, 6714a2ea]
 ---
 
 # restart-self — self-only-by-construction agent self-restart (me/restart route + frozen CLI verb)
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
 
-**IN PROGRESS — Phases 1 + 2 + 2b DONE (`2af0aabf`, `1981abf8`, `1fdc3603`); Phase 3 NEXT.** A self-mandate
+**✅ COMPLETE — all phases DONE (`2af0aabf`, `1981abf8`, `1fdc3603`, `6714a2ea`).** A self-mandate
 (Tier 0: the frozen-layer script surface + a self-derived route are the ai-maestro server's own scope,
 reversible, self-only). Unblocked by the now-FINAL janitor#100 co-ratification (I committed on janitor#75
-that restart-self lands after ratification).
+that restart-self lands after ratification). `derived: false`, empty `npt`/`eht` (depth-0) → the
+completion gate is satisfied. Only OPERATIONAL follow-through remains (NOT a code/doc task, tracked under
+[[TRDD-KCRMSNL7]]'s "2 joint verify-together items"): the `aimaestro-continuity.sh` redeploy to
+`~/.local/bin` (installer glob) makes the new verb callable on this machine; until then `#J` feature-detects
+its absence and no-ops. `release-via: none`, so `complete` is terminal for this TRDD.
 
 **✅ Phase 1 (`2af0aabf`):** `lib/session-restart.ts` extracted from `[id]/restart` — the ONE
 definition of the CC-GOV-002 `programArgs` allowlist (`isValidProgramArgs`), the API-MAJ-03 persona
@@ -74,10 +78,21 @@ codex double-`C-c` client-aware exit — none of which is a live injection once 
 task, authored as **[[TRDD-OPNDCKVA]]** (headless /stop parity — extract `lib/session-stop.ts`, wire both
 modes, add the subagent gate).
 
-**NEXT ACTION — Phase 3: the no-arg `aimaestro-continuity.sh restart-self` verb** (`POST
-/api/sessions/me/restart` with `AID_AUTH`, no target arg — sits beside `status`/`ensure-resume` on the
-frozen continuity script) + `docs/SCRIPT-LAYER.md` / `SCRIPT-MANIFEST.md` registration + a CLI/route smoke
-test. Then this TRDD reaches `complete` (no NPT/EHT — depth-0). Do NOT push (app, not a plugin).
+**✅ Phase 3 (`6714a2ea`):** the no-arg `aimaestro-continuity.sh restart-self` verb — `POST
+/api/sessions/me/restart` with `AID_AUTH`, NO target arg (deliberately not `_resolve_agent_id`'d, which
+would re-introduce a targetable parameter); `--force` → `?force=true`; a positional arg rejected. Sits
+beside `status`/`ensure-resume` on the frozen continuity script (installed by the `install-messaging.sh`
+glob — no installer edit). Registered in `docs/SCRIPT-LAYER.md` (continuity table) + `docs/SCRIPT-MANIFEST.md`
+— the manifest had NO `aimaestro-continuity.sh` entry at all (pre-existing gap from [[TRDD-DXJZM3BW]]),
+and `install-agentlens.sh` was also unlisted, so registering the verb entailed reconciling both (Tier A
+43→44, Tier C 20→21, total 75→77 to match reality). CLI smoke test `continuity-cli-restart-self.test.ts`
+(4 tests, 0-IMPACT stub-`_api` in a temp dir) pins the self-by-construction invariant: exactly ONE request
+to `/me/restart`, NEVER a `GET /api/agents?q=` target lookup. shellcheck clean; 82 tests green across the
+4 restart suites; tsc 0, `yarn build` 0.
+
+**NO NEXT ACTION for this TRDD — it is `complete`.** The only remaining item is OPERATIONAL and belongs to
+[[TRDD-KCRMSNL7]]: redeploy `aimaestro-continuity.sh` to `~/.local/bin` so `restart-self` is callable on
+this host (a machine-provisioning step, feature-detected until then). Do NOT push (app, not a plugin).
 
 ## Problem / Goal
 

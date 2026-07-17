@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: dev
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T18:17:58+0200
+updated: 2026-07-17T19:06:11+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -127,14 +127,15 @@ WORKING but INERT server mechanism; the FIRST LIVE ACTIVATION (the human creatin
 `~/.aimaestro/oauth-rotator-tick.enabled`) is the single R16 go-ahead, the USER's alone.
 **Flock re-assessed 2026-07-17 — the four testing NPTs are code-complete:** [[Y916N7WL]]
 (`fbf28fb0`), [[DXJZM3BW]] (`03c40474`+`2b325a11`), [[JAU1ES1C]] (`166bd8a4`), [[P7RPOR5O]]
-(`f47d2ff4`). Remaining Family-A work, in priority order:
+(`f47d2ff4`). **restart-self ([[TRDD-4P1M8I18]], #59) is now ✅ COMPLETE** (`2af0aabf`, `1981abf8`,
+`1fdc3603`, `6714a2ea`) — `POST /api/sessions/me/restart` (self-only by construction) in both serving
+modes + the `aimaestro-continuity.sh restart-self` frozen verb; the janitor `#J` continuity path can now
+recover a stuck self (agents still can't via the shared `restart-session`, which is intended). Remaining
+Family-A work, in priority order:
 1. **[[9ZIF82HI]] account switcher** (passive rotation on 429 / dead-refresh / net-drop) — the big
    unbuilt infra piece; builds on this NPT's rotator machinery ([[TRDD-H24DF6ZC]] signed, so
    buildable as gated INFRA like Phases E/G, live-activation still R16).
-2. **restart-self ([[TRDD-4P1M8I18]], #59)** — a self-only-by-construction restart the janitor `#J`
-   needs; agents CANNOT self-restart today (`restart-session` ∉ SELF_DRIVE_ACTIONS). Design grounded
-   + TRDD authored 2026-07-17; sequenced behind the now-FINAL janitor#100 ratification.
-3. **Phase F** — the REAUTH browser tier (`reauth.py`/`slot_capture_browser.py`/`cookie_vault.py`
+2. **Phase F** — the REAUTH browser tier (`reauth.py`/`slot_capture_browser.py`/`cookie_vault.py`
    via Node CDP/tmux), the lower-priority "only human step".
 Do NOT flip the flag on (R16 — USER's call). Do NOT push (this is the app, not a plugin).
 

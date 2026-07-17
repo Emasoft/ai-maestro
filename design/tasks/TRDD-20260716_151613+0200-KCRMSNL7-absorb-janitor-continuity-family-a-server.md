@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T18:08:10+0200
+updated: 2026-07-17T19:06:11+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -64,10 +64,14 @@ standalone CLI, before claiming a `session` sub-verb absent.**
 Nothing is urgent: the probe ships advertising `capabilities: []`, so the safe default (janitor keeps
 every chore) holds until each class is proven live. Everything landed is SAFE (OAuth port INERT via
 the R16 flag; probe inert-on-disk until a server restart). **NEXT (architecture now RATIFIED, so
-these are unblocked): the Family-A flock (#49) may advance to the ratified baseline, and restart-self
-(#59) — which I sequenced behind ratification on #75 — is now free to build. The 2 joint verify-together
-items (continuity redeploy, first-run probe check) run when a server carrying the probe build is live.
-R16 flag flip stays the USER's alone.**
+these are unblocked): the Family-A flock (#49) advances to the ratified baseline. restart-self
+([[TRDD-4P1M8I18]], #59) is now ✅ COMPLETE (`2af0aabf`, `1981abf8`, `1fdc3603`, `6714a2ea`) — the
+self-only-by-construction `POST /api/sessions/me/restart` (both serving modes) + the frozen
+`aimaestro-continuity.sh restart-self` verb; a same-pass CC-GOV-001 gate also closed the adjacent
+headless `/stop` shell-injection, with the deeper `/stop` parity split out as [[TRDD-OPNDCKVA]]. The
+remaining flock infra is [[9ZIF82HI]] (account switcher) and Phase F (REAUTH browser tier). The 2 joint
+verify-together items (continuity redeploy, first-run probe check) run when a server carrying the probe
+build is live. R16 flag flip stays the USER's alone.**
 
 **🔒 PER-PROJECT CHANNELING — binding invariant (USER via janitor#100 / janitor TRDD-X92VBFNF,
 2026-07-17).** Every AUTOMATIC surface (heartbeat/drift line, detector finding, injected nudge,

@@ -1,9 +1,9 @@
 ---
 trdd-id: YY6M8Z16
 title: Analytics panel-restriction — proxy-side X-Agentlens-Viewer signing (deferred, waits on AgentlensPro npm verifier)
-column: testing
+column: complete
 created: 2026-07-17T09:00:31+0200
-updated: 2026-07-17T10:32:58+0200
+updated: 2026-07-17T11:02:15+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -17,6 +17,15 @@ external-refs:
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
+
+**✅ COMPLETE (USER-CONFIRMED 2026-07-17 ~11:00): "it work! now it is perfect."** The USER
+hard-reloaded and confirmed Settings → Analytics renders the AgentlensPro dashboard through the
+proxy. The "isn't running" false-negative is fixed (same-origin probe, `02a8192c`), and the
+panel-restriction signing is implemented + interop-verified (`f7104bc9`). `column: complete`.
+Only truly future-conditional follow-up remains: the panel-HIDE-for-`role:user` visual can be
+confirmed only once `governance.userAuthorityModelEnabled` is ON (OFF today ⇒ every session is
+maestro ⇒ that path is inert). Retire the CSP `frame-ancestors` rewrite when AgentlensPro's
+`basePath` ships (their TRDD-KDGJ0R38 / issue #4). Neither blocks completion.
 
 **"ISN'T RUNNING" BUG — ROOT-CAUSED + FIXED (2026-07-17, commit `02a8192c`; SUPERSEDES the
 `afbb13b9` CORS attempt, which `02a8192c` reverts).** The panel showed "AgentlensPro isn't

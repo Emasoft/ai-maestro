@@ -1,16 +1,16 @@
 ---
 trdd-id: YY6M8Z16
 title: Analytics panel-restriction — proxy-side X-Agentlens-Viewer signing (deferred, waits on AgentlensPro npm verifier)
-column: backburner
+column: testing
 created: 2026-07-17T09:00:31+0200
-updated: 2026-07-17T09:00:31+0200
+updated: 2026-07-17T09:29:00+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
 parent-trdd:
 labels: [analytics, agentlenspro, embed, security]
 relevant-rules: [16]
-implementation-commits: [5d972107]
+implementation-commits: [5d972107, f7104bc9]
 external-refs:
   - https://github.com/Emasoft/AgentlensPro/issues/4
   - AgentlensPro TRDD-KDGJ0R38 (basePath — retires our CSP rewrite)
@@ -18,10 +18,27 @@ external-refs:
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
 
-**USER DECISION (2026-07-17): "B" — DO NOT implement the proxy-side signing now; WAIT for
-AgentlensPro to ship the embed-key verifier to npm.** This TRDD is the durable card for that
-deferred work. It is on `backburner` because it is gated on an EXTERNAL release, not on any
-internal TRDD (so `blocked` — which requires a non-empty `blocked-by:` — does not apply).
+**IMPLEMENTED + VERIFIED (2026-07-17, commit `f7104bc9`), `column: testing`.** The USER first
+chose "B" (defer until the verifier shipped to npm); AgentlensPro published **2.10.0 with the
+verifier ~40 min later**, so the trigger fired and the signing was built against the live release.
+
+**VERIFIED (everything a machine can prove):** signer reproduces AgentlensPro's §B4 vector
+byte-for-byte; 10/10 unit tests (vector + fail-closed key custody); tsc 0; full suite 206/3042;
+`yarn build` exit 0; **E2E interop 7/7 against the LIVE 2.10.0 verifier** (my signer + the real
+`~/.agentlens/embed-key`, hitting :3000 directly — reproduces AgentlensPro's #4 proof table:
+no-header→standalone, role:user→embedded/user, role:maestro→embedded/maestro, garbage→403,
+POST /action + GET /api/hook-config as role:user →403, hook-config no-header→200); installer live
+run idempotent (already-installed + "server already running").
+
+**REMAINING (human confirmation only):** the full browser round-trip — a logged-in ai-maestro
+session on :23000 → the proxy → the panel VISIBLY hidden for a `role:user` — needs the governance
+password, which must never pass through the model. The refuse/serve behavior is otherwise proven.
+
+**NO VERSION HARDCODE (USER correction, 2026-07-17):** the install floor stays the stable 2.8.0
+janitor baseline; `npm install @>=floor` already tracks the newest release; and the feature is
+CAPABILITY-detected at runtime (`readEmbedKey()` present → enforce, absent → fail-closed) — so no
+floor bump is ever needed when AgentlensPro releases. An earlier draft bumped the floor to 2.10.0
+and was reverted.
 
 **WHAT SHIPPED (commit `5d972107`, task #58):** Settings → Analytics embeds the AgentlensPro
 dashboard through ai-maestro's OWN reverse proxy `lib/analytics-proxy.mjs` on `PORT+1` (23001).
@@ -36,9 +53,9 @@ CSP + `?embed=1&tab=<id>`).
 **THE GAP THIS TRDD CLOSES (the panel-*hide* half):** the USER required that a normal user
 "cannot even open" the AgentlensPro settings panel, only MAESTRO. The method allowlist enforces
 the WRITE side. The panel-HIDE side needs ai-maestro to send a signed `X-Agentlens-Viewer` header
-that AgentlensPro's verifier reads to render (or not) the settings panel. **The proxy does not
-stamp that header yet** (verified: 0 signing lines in `analytics-proxy.mjs`). Until it does, a
-`role:user` session is write-restricted but the panel is not hidden.
+that AgentlensPro's verifier reads to render (or not) the settings panel. **The proxy now stamps
+that header** (`f7104bc9`; `lib/analytics-viewer-token.mjs` signs it, `analytics-proxy.mjs` sets it
+per request): a `role:user` session is now BOTH write-restricted AND has the panel hidden.
 
 **WHY DEFERRED (not merely postponed by preference):** AgentlensPro's verifier is on their `main`
 @ `553e258` but is **post-2.9.0 — NOT yet in npm**. So even if we stamped the header now, the
@@ -66,11 +83,10 @@ contract.** Do NOT re-derive it. Implement exactly:
 - **Falsifiable wiring check:** hit their `GET /api/embed-status` (`{mode,role,keyLoaded}`)
   through the proxy to PROVE the gate is live, not assumed.
 
-**NEXT ACTION (do NOT run until unblocked):** when `npm view agentlenspro version` shows a
-release > 2.9.0 whose changelog/#4 confirms the verifier ships, implement the checklist above in
-`lib/analytics-proxy.mjs`, add the pinned-vector test, verify (`tsc` + `yarn test` + `yarn build`),
-and — if AgentlensPro's `basePath` (their TRDD-KDGJ0R38) also lands — retire our CSP `frame-ancestors`
-rewrite and serve same-origin instead.
+**NEXT ACTION:** none blocking — the signing is implemented + interop-verified. Two follow-ups,
+both external: (1) the USER's browser confirmation of the rendered panel-hide (above); (2) when
+AgentlensPro's `basePath` ships (their TRDD-KDGJ0R38), retire the proxy's CSP `frame-ancestors`
+rewrite and serve same-origin — watch AgentlensPro#4.
 
 **UNBLOCK TRIGGER:** AgentlensPro publishes post-2.9.0 to npm with the embed-key verifier. They
 said they will post the confirmation on issue #4 / #3. Watch those threads.

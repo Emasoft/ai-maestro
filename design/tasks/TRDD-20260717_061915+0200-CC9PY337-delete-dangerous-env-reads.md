@@ -1,9 +1,9 @@
 ---
 trdd-id: CC9PY337
 title: Delete every security-risk env read — dashboard-only settings, non-env test seams
-column: dev
+column: testing
 created: 2026-07-17T06:19:15+0200
-updated: 2026-07-17T07:52:00+0200
+updated: 2026-07-17T07:44:00+0200
 current-owner: ai-maestro
 task-type: security
 parent-trdd: QZL828OD
@@ -86,22 +86,44 @@ rule, not a one-off cleanup.
     found" (phase-2 property holds).
   - Verified: tsc 0; full suite 205/205, 3028 passed; `yarn build` exit 0.
 
-**NEXT ACTION:** Phase 4 — the last 3 reads + the regression fence + boot wiring.
-1. Gate `AIM_JSONL_READER_PATH` (`lib/jsonl-reader.ts:58` — RCE), `CLAUDE_MARKETPLACE_PLUGINS_DIR`
-   (`services/plugin-builder-service.ts:56`), `OPENCLAW_TMUX_SOCKET_DIR`
-   (`services/sessions-service.ts:519`) via `testOnlyEnv('X')`. All 3 are already in `TEST_ONLY_ENV`.
-2. **The regression fence (the durable value):** a test asserting NO name in `TEST_ONLY_ENV` is
-   read via a bare `process.env.X` anywhere in `lib/`+`services/` — the ONLY legal reader is
-   `test-only-env.ts` itself. Grep the source; fail red on any re-introduced hatch. This is what
-   makes the rule survive the next contributor.
-3. Wire `reportIgnoredTestEnv()` into `server.mjs` boot (the tamper-evidence summary line).
-4. Re-run the 0-IMPACT delta for the 3 new seams (jsonl-reader spawns a binary — count nothing new
-   is spawned/written; the reader test must force the stub path).
+- `b4ce9d3e` — **phase 4 DONE, and it REVISED phase 3.** Verification (grep tests/ for every
+  registered name) showed SIX names are set by NO functional test → decision-procedure step 4:
+  DELETE, not gate.
+  - **DELETED** (env read removed from source): `AIM_JSONL_READER_PATH` (build drops the binary at
+    the default path — override was dead RCE surface), `CLAUDE_MARKETPLACE_PLUGINS_DIR` (const was
+    ALSO already dead — nothing read it), `OPENCLAW_TMUX_SOCKET_DIR` (CHANGELOG documents the FIXED
+    default; override never in the contract), and the **3 `CLAUDE_ROTATOR_*_KEYCHAIN_SERVICE`**
+    (phase 3 gated them on a stale "tests target a throwaway service" comment — NO test does; now
+    plain literal consts, which also makes the janitor `#N` byte-compat unconditional).
+  - **STILL GATED** (a test genuinely sets each — verified): `CLAUDE_SAFE_STORAGE_BACKEND` (5),
+    `AIM_SMTP_CRED_BACKEND` (4), `JANITOR_ROTATOR_KEYCHAIN` (1), `JANITOR_GLOBAL_STATE_DIR` (3).
+  - **`test-only-env.ts` split** → `TEST_ONLY_ENV` (4 live seams) + `FORBIDDEN_ENV` (6 deleted; a
+    test asserts the sets are DISJOINT).
+  - **THE REGRESSION FENCE** (the durable value): `tests/unit/test-only-env.test.ts` walks
+    `lib/+services/+app/` with Node fs (NOT grep — no dialect / git-tracking dependence) and fails
+    with file:line if any gated OR forbidden name reappears as a bare `process.env.<NAME>`. Ran
+    58ms (real scan), green.
+  - `reportIgnoredTestEnv()` wired into `server.mjs` boot; **live-verified**: server restarts
+    clean, both listeners up, sweep SILENT on this clean host (correct — a poisoned host prints
+    the list). 0-IMPACT delta re-checked post-revert: 0/0.
+- **Phase 5 (docs) — NO WORK.** Grepped `.example.env` + `CLAUDE.md`: the deleted vars were never
+  user-facing config (internal test seams / dead overrides), so nothing to purge. The only hit is
+  the intended phase-1 SMTP "here's why this was removed" note.
 
-**THE 0-IMPACT TRAP (still binding for phase 4).** Passing tests do NOT prove isolation. The
-proof is the DELTA: snapshot the affected real resource, run the affected suite, re-snapshot,
-require 0. For phase 3 that was keychain items; for `AIM_JSONL_READER_PATH` it is "no unexpected
-binary spawned as the server UID."
+**STATUS: all automated gates GREEN** — tsc 0; full suite 205/205, 3032 passed; `yarn build` exit
+0; regression fence green; 0-IMPACT delta 0/0 (phase 3 AND phase 4); server boots clean with the
+sweep live. `column: testing`. The implementation is complete; what remains is the USER's review
+of a security change (this TRDD was a Tier-0 self-mandate, so no approval gate blocked it, but a
+human eye on credential-custody code is worth having before `complete`).
+
+**Commits (this TRDD, all local on `governance-rules`):** `8e124445` `dac3ca8f` `752f798f`
+`4a4c28c0` (phase 1-2 + red-test fix) · `a50984b4` (phase 3, since partly revised) · `cb593862`
+(STATE) · `b4ce9d3e` (phase 4 + fence).
+
+**NEXT (separate task, USER-directed):** the AgentLensPro Analytics section is BUILT + committed
+(`5d972107`) — Settings→Analytics via a reverse proxy on PORT+1, MAESTRO-gated writes, coordinated
+on AgentlensPro#4 (signed viewer-role assertion + base-path ask). Needs the USER at a browser to
+confirm the authenticated iframe RENDER (the proxy's refuse-path is proven; the serve-path is not).
 
 **SUPERSEDED — do NOT carry forward:**
 - *"A release-mode gate is the answer."* Twice wrong. (a) It still READS the var in development,

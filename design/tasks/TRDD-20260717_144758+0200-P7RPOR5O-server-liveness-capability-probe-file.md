@@ -1,9 +1,9 @@
 ---
 trdd-id: P7RPOR5O
 title: Server liveness+capability probe file — the auth-free coordination seam both janitor backends read
-column: dev
+column: testing
 created: 2026-07-17T14:47:58+0200
-updated: 2026-07-17T14:47:58+0200
+updated: 2026-07-17T14:55:07+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,11 +23,21 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
+implementation-commits: [f47d2ff4]
 ---
 
 # Server liveness+capability probe file — the auth-free coordination seam both janitor backends read
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
+
+**✅ IMPLEMENTED 2026-07-17 (`f47d2ff4`) — `column: testing`.** `lib/server-liveness.ts` +
+`server.mjs` boot wiring (beside the OAuth tick) + 8 unit tests (0-IMPACT temp HOME). tsc 0,
+`yarn build` 0. The file writes `{ts,pid,capabilities}` atomically every 30 s; today
+`capabilities: []` (OAuth INERT via the R16 flag; nothing else built) → the janitor keeps 100%.
+**NOT YET LIVE ON DISK:** the file appears only once the running server is restarted onto this
+build (governance-rules), and reaches the deployed server on `governance-rules → main`. Until then
+a consumer sees "no file → server down → I own everything" (the safe default). Spec relayed to the
+janitor: janitor#100 comment 5003418487.
 
 7th NPT of [[KCRMSNL7]], surfaced by the daemon-coordination refinement (janitor#100). The whole
 Family-A/B daemon split needs ONE fact from two ends: `#J` (inside the harness) must know "the

@@ -50,15 +50,54 @@ truth:
   dashboard is applied by writing it into the TRDD (`column:` edit +
   folder `git mv`); it is never left living in the mirror alone.
 
+## The three kanbans — one QUERY per scope (USER, 2026-07-18)
+
+There is not one board but **three**, one per TRDD **scope**, and each is a
+**QUERY over the TRDD corpus**, never a store. The TRDDs are the blood cells of
+the circulatory system; a kanban is just the set of them matching
+`(scope, discriminator)`:
+
+| kanban | filter | cardinality | where its TRDDs live | pushed? |
+|---|---|---|---|---|
+| **local / agent** | `scope: local` ∧ `created-by == <agent>` (author **==** assignee — self-assigned) | **1 per AGENT** | `~/.claude/projects/<agent-slug>/design/` | **NO** (machine-private) |
+| **project / team** | `scope: project` ∧ `project-id == <project>` | **1 per Project = Team** | each project repo's `<repo>/design/` | yes (git-tracked) |
+| **user / host** | `scope: user` ∧ `host-id == <host>` | **1 per HOST** | the host-level user store (mirrors USER memory) | host-only |
+
+- **local / agent** — the agent's OWN self-assigned chores and local-repo matters.
+  Not pushed, not orchestrated by the central board — the agent runs it itself.
+- **project / team** — the shared team board. A project may span **N GitHub repos**
+  but is **ONE kanban**; each card carries a **`repo:`** annotation naming which
+  repo it touches. `project-id` is the discriminator; `repo` is per-card metadata.
+- **user / host** — the global board: cross-project / cross-team mandates, issues,
+  and proposals. No `project-id`.
+
+**The discriminator is a frontmatter field, and mostly already exists:** local keys
+off the existing `created-by` (== `assignee`); project keys off **`project-id:`**;
+user keys off **`host-id:`** (or is implicit from the host store). A project-scoped
+TRDD MUST carry `project-id`; a user/local TRDD MUST NOT. (`scope: user` and the
+`project-id`/`host-id`/`repo` fields are a proposed addition to the IND base
+`trdd-design-tasks.md` — coordinated with the ai-maestro-janitor; this overlay
+documents the fleet model that rests on them.)
+
+**The buffers are caches, never ground truth.** The GitHub Project board, the
+ai-maestro dashboard kanban, and any `trddgrep`/index document are **mirrors** of
+these three queries — they go stale on every TRDD edit and are constantly
+re-derived. The query over the TRDDs is the only ground truth (this is the
+"index is a buffer" discipline above, applied to all three scopes). And the
+**derived TRDDs (NPT/EHT) are the platelets** — they cover and fix the holes a
+parent TRDD's change opens, so a board is never just its cards but its cards plus
+the platelets closing their wounds.
+
 ## What changes when the project is an ai-maestro agent workdir
 
 The board's substrate is unchanged — the cards are still the TRDDs and
 the internal universal kanban (the `column:` field over `design/`)
 remains the **single source of truth**. The overlay adds:
 
-1. **Shared per-project board.** The board is one-per-PROJECT, not
-   one-per-agent. Every agent working the project reads and mutates
-   the same board (through the same git-tracked `design/` tree — pull
+1. **Shared per-project board.** The PROJECT-scope board is one-per-PROJECT
+   (the per-agent `local` board and the per-host `user` board are the other
+   two scopes above). Every agent working the project reads and mutates
+   the same project board (through the same git-tracked `design/` tree — pull
    before acting, push after each change).
 2. **Multiple assignees.** `assignee:` names any registered agent, not
    just "this Claude". Assignment happens at `dispatch → dev` per the

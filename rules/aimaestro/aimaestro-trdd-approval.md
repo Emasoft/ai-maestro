@@ -89,6 +89,24 @@ GitHub repo, so a repo URL is NOT a reliable project key. The
 PRRD frontmatter (`project-id:`); it is what scopes a cross-project TRDD
 search to exactly one project.
 
+**Scope discriminators — the per-TRDD frontmatter field that binds a TRDD to
+exactly ONE of the three kanbans.** A kanban is a QUERY over the corpus
+(`aimaestro-kanban-multiagent.md`), and a TRDD's `scope:` plus one discriminator
+field decide which board it lands on:
+
+| scope | discriminator field | rule |
+|---|---|---|
+| `project` | **`project-id:`** (required) + optional **`repo:`** (which of the project's N repos this card touches) | binds to the project/team board; MUST carry `project-id` |
+| `user` | **`host-id:`** (or implicit from the host store) | binds to the host-wide global board; MUST NOT carry `project-id` |
+| `local` | the existing **`created-by`** (== `assignee`) | binds to the authoring agent's own board; MUST NOT carry `project-id` |
+
+`scope: user` (the third scope, alongside the IND base's `project | local`) and the
+`project-id:` / `host-id:` / `repo:` field definitions are a proposed addition to the
+IND base `trdd-design-tasks.md`, **coordinated with the ai-maestro-janitor** (never
+edited into the shipped `~/.claude/rules/` copy here). Until they ship, project-scoped
+TRDDs already carry `project-id` per this overlay; user/local scope keep to their
+existing discriminators.
+
 **Canonical TRDD citation** (what `findtrdd` resolves):
 
 | Form | Meaning |

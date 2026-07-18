@@ -3,7 +3,7 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-07-18T10:24:00+0200
+updated: 2026-07-18T10:29:00+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -83,18 +83,19 @@ diff lines) — so do NOT edit it or the shipped copies; the IND delta goes to t
 types `/reload-plugins --force` into the USER's pane and was corrupting their live typing. On a
 `[janitor-reload]` marker: NOTIFY the pending version and let the USER run it; do NOT inject.**
 
-**PROGRESS:**
-- ✅ Phase 1a (`06d9f439`) — `aimaestro-kanban-multiagent.md`: added the explicit 3-kanban section
+**PROGRESS — Phase 1 (both DEP overlays) COMPLETE:**
+- ✅ Phase 1a (`06d9f439`) — `aimaestro-kanban-multiagent.md`: the explicit 3-kanban section
   (three queries: local/agent, project/team multi-repo, user/host; discriminators; buffers=mirrors;
   platelets=derived TRDDs) + scoped the "one-per-project" line to the project board.
+- ✅ Phase 1b (`ab749309`) — `aimaestro-trdd-approval.md`: the per-TRDD scope-discriminator table
+  (project→project-id+repo, user→host-id, local→created-by==assignee) + `user` scope; project MUST
+  carry project-id, user/local MUST NOT.
 
 **NEXT ACTION:**
-- Phase 1b — `rules/aimaestro/aimaestro-trdd-approval.md`: extend its "Project identity + canonical
-  TRDD citation" section with the per-TRDD `project-id:` + `repo:` + (`host-id:`) fields and the
-  `user` scope in the multi-agent context (project-scoped MUST carry project-id; user/local MUST NOT).
 - Phase 2 — DRAFT (hold, do not post) a janitor coordination issue: IND-base `trdd-design-tasks.md`
   gains `scope: user` + the `project-id`/`host-id`/`repo` field defs + the host-wide user root.
-- Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; lint) — own TRDDs.
+  (The local IND handoff source is STALE — do not edit it; the canonical is the janitor repo.)
+- Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; lint) — own TRDDs, on the USER's word.
 - Also: write a LOCAL feedback memory note capturing the reload-injection-stop directive.
 
 ## Reconciliation — most of this already has a home (verified on disk)

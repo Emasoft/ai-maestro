@@ -3,7 +3,7 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-07-18T10:08:19+0200
+updated: 2026-07-18T10:14:00+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -35,7 +35,7 @@ spanning an IRON/IND-base rule).
 | scope | kanban | cardinality | design root (where its TRDDs live) | pushed? |
 |---|---|---|---|---|
 | **user** | global / host-wide | **1 per HOST** | janitor host-level store (mirrors USER memory) | host-only, not per-project |
-| **project** | project / team | **1 per Project = Team** | canonical = team server store `~/.aimaestro/teams/tasks-<teamId>.json`, FED BY each project repo's `<repo>/design/` | git-tracked + pushed per repo |
+| **project** | project / team | **1 per Project = Team** | TRDDs live in each project repo's `<repo>/design/`; the team server store `~/.aimaestro/teams/tasks-<teamId>.json` + GitHub Project are MIRRORS of the query, not the source | git-tracked + pushed per repo |
 | **local** | local | **1 per AGENT** | `~/.claude/projects/<agent-slug>/design/` (already machine-private in the IND base) | NOT pushed |
 
 - **user-scoped** = cross-project / cross-team: global issues, proposals, mandates. No `project-id`.
@@ -44,24 +44,39 @@ spanning an IRON/IND-base rule).
 - **local-scoped** = single-agent: local-repo matters, self-assigned chores. No `project-id`, NOT
   pushed, orchestrated by the agent's OWN local kanban, never the central one.
 
-**GENUINELY NEW (everything else already exists — see Reconciliation):**
-1. **`project-id:` per-TRDD frontmatter field** — project scope only; ABSENT for user/local.
-2. **`repo:` per-TRDD annotation** — which of the project's N repos this task touches.
-3. **`user` as the 3rd TRDD scope** (today the IND base has only `project | local`) + a host-wide
-   design root (mirrors the USER-memory store).
-4. **Formalize the scope→kanban binding**: user→host kanban, project→team kanban (multi-repo,
-   canonical = team store), local→agent kanban.
+**THE KEYSTONE (USER, 2026-07-18): a kanban is a QUERY, not a store.** Everything lives inside the
+TRDDs; a kanban is simply the set of TRDDs matching `(scope, discriminator)` — the IND
+`universal-kanban` principle ("the cards ARE the TRDDs; a corpus-backed board cannot drift") made
+concrete as three filters:
 
-**A1 — THE ONE OPEN ASSUMPTION (confirm before implementing):** the canonical PROJECT kanban for a
-multi-repo project is the **TEAM SERVER STORE** (`tasks-<teamId>.json`, already 1-per-team), with each
-repo's `design/` FEEDING it and a task's `repo:` tag naming which repo — i.e. the project kanban is
-NOT physically inside a single repo, it is the team board, mirrored out to each repo's `design/` + the
-GitHub Project. **Proposed default; USER to confirm or override.** Chosen because it is the EXISTING
-reality (the team store is already 1-per-team = 1-per-project), not a speculative new store.
+```
+kanban(local,  agent) = { TRDD | scope=local   ∧ author=agent   (author == assignee) }
+kanban(project, proj) = { TRDD | scope=project ∧ project-id=proj }
+kanban(user,   host)  = { TRDD | scope=user    ∧ host-id=host }          (1 per host)
+```
 
-**NEXT ACTION:** get the USER's (a) go to implement + (b) A1 confirmation. THEN execute the phases
-below — DEP overlay edits land in this repo; the IND-base delta is a cross-repo janitor proposal
-(never a unilateral edit of `~/.claude/rules/trdd-design-tasks.md`).
+The team server store (`tasks-<teamId>.json`), the GitHub Project, and the dashboard board are all
+**MIRRORS** of these queries — never the canonical source (`aimaestro-kanban-multiagent` already:
+"proxies… allowed to be stale… regenerable… mirror writes flow backwards"). **A1 (an earlier
+"which store is canonical?" question) is therefore DISSOLVED — the QUERY is canonical, every store is
+a cache of it.**
+
+**GENUINELY NEW — the whole delta is 3 small frontmatter additions; the discriminators mostly EXIST:**
+
+| scope | discriminator | new? |
+|---|---|---|
+| local | `created-by` (== `assignee`) | **already exists** — no new field |
+| project | `project-id` | **NEW** — the only genuinely-new discriminator |
+| user | `host-id` | NEW-ish — implicit from the host store, or a field for greppability |
+
+So the frontmatter change is: **`scope:` gains `user`** (today `project | local`) · **`project-id:`**
+(project discriminator) · optionally **`host-id:`** (user discriminator; else implicit) · **`repo:`**
+(per-card metadata for a multi-repo project — NOT a discriminator, the `project-id` is). Everything
+else (author, assignee, the mirror stores) is unchanged.
+
+**NEXT ACTION:** get the USER's go to implement. THEN execute the phases — DEP overlay edits land in
+this repo; the IND-base delta (`scope: +user`, `project-id`/`host-id`/`repo` fields) is a cross-repo
+janitor proposal (never a unilateral edit of `~/.claude/rules/trdd-design-tasks.md`).
 
 ## Reconciliation — most of this already has a home (verified on disk)
 
@@ -86,14 +101,15 @@ below — DEP overlay edits land in this repo; the IND-base delta is a cross-rep
 | Change | Layer | Where it lands | How |
 |---|---|---|---|
 | add `user` to the `scope:` enum; the `project-id:`/`repo:` field definitions; the host-wide (user) design root | **IND base** `trdd-design-tasks.md` | JANITOR-owned (`~/.claude/rules/`, shipped by the plugin) | **cross-repo proposal to the janitor** (co-ratify like BSW) — NEVER edit their file here |
-| team 1:1 project 1:1 kanban; multi-repo → one team-store kanban + per-task `repo`; user→host / project→team / local→agent kanban binding | **DEP overlays** `aimaestro-trdd-approval.md` + `aimaestro-kanban-multiagent.md` | THIS repo (git-tracked, self-governed via symlinks) | I draft + edit here |
+| kanban = a QUERY `(scope, discriminator)` over the corpus; team 1:1 project 1:1 kanban; multi-repo → ONE project query + per-task `repo` (stores are mirrors); user→host / project→team / local→agent binding | **DEP overlays** `aimaestro-trdd-approval.md` + `aimaestro-kanban-multiagent.md` | THIS repo (git-tracked, self-governed via symlinks) | I draft + edit here |
 | `--project` / `--repo` flags on the task-creation CLI + the TRDD frontmatter schema | server + `amp-kanban-*` | THIS repo (ai-maestro owns the scripts) | derived EHT (see below) |
 
 ## Phases (≤5 files each; all gated on the USER go + A1)
 
 - **Phase 1 (this repo, DEP overlays)** — extend `aimaestro-trdd-approval.md` (per-TRDD `project-id`
-  + `repo`; the 3-tier scope→kanban binding; multi-repo canonical-store rule) and
-  `aimaestro-kanban-multiagent.md` (user/host + local/agent boards alongside the project board).
+  + `repo`; the 3-tier scope→kanban binding; kanban-is-a-query + stores-are-mirrors for the multi-repo
+  case) and `aimaestro-kanban-multiagent.md` (the three filters — user/host, project/team,
+  local/agent — as queries over the corpus, alongside the existing project board).
 - **Phase 2 (cross-repo, janitor)** — a coordination issue/PR proposing the IND-base delta: `user`
   scope, the `project-id`/`repo` fields, the host-wide root. Held as a DRAFT until the USER approves
   posting (outward-facing).

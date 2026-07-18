@@ -3,7 +3,7 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-07-18T10:14:00+0200
+updated: 2026-07-18T10:24:00+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -74,9 +74,28 @@ So the frontmatter change is: **`scope:` gains `user`** (today `project | local`
 (per-card metadata for a multi-repo project — NOT a discriminator, the `project-id` is). Everything
 else (author, assignee, the mirror stores) is unchanged.
 
-**NEXT ACTION:** get the USER's go to implement. THEN execute the phases — DEP overlay edits land in
-this repo; the IND-base delta (`scope: +user`, `project-id`/`host-id`/`repo` fields) is a cross-repo
-janitor proposal (never a unilateral edit of `~/.claude/rules/trdd-design-tasks.md`).
+**USER GAVE THE GO (2026-07-18): implement — update the governance rules + 3-pillars specs to make the
+3 kanbans clearer.** Topology check found the IND-base HANDOFF SOURCE in this repo
+(`design/rules-refactor/independent/`) is STALE vs the janitor's shipped `~/.claude/rules/` (trdd 951
+diff lines) — so do NOT edit it or the shipped copies; the IND delta goes to the janitor as a proposal.
+
+**⚠ USER DIRECTIVE (2026-07-18): STOP auto-firing the janitor reload trigger — `reload_trigger.py`
+types `/reload-plugins --force` into the USER's pane and was corrupting their live typing. On a
+`[janitor-reload]` marker: NOTIFY the pending version and let the USER run it; do NOT inject.**
+
+**PROGRESS:**
+- ✅ Phase 1a (`06d9f439`) — `aimaestro-kanban-multiagent.md`: added the explicit 3-kanban section
+  (three queries: local/agent, project/team multi-repo, user/host; discriminators; buffers=mirrors;
+  platelets=derived TRDDs) + scoped the "one-per-project" line to the project board.
+
+**NEXT ACTION:**
+- Phase 1b — `rules/aimaestro/aimaestro-trdd-approval.md`: extend its "Project identity + canonical
+  TRDD citation" section with the per-TRDD `project-id:` + `repo:` + (`host-id:`) fields and the
+  `user` scope in the multi-agent context (project-scoped MUST carry project-id; user/local MUST NOT).
+- Phase 2 — DRAFT (hold, do not post) a janitor coordination issue: IND-base `trdd-design-tasks.md`
+  gains `scope: user` + the `project-id`/`host-id`/`repo` field defs + the host-wide user root.
+- Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; lint) — own TRDDs.
+- Also: write a LOCAL feedback memory note capturing the reload-injection-stop directive.
 
 ## Reconciliation — most of this already has a home (verified on disk)
 

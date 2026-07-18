@@ -408,6 +408,47 @@ describe('updateTask', () => {
 })
 
 // ============================================================================
+// BYPASS-1 tripwire — no server-side previousStatus -> status promotion (ai-maestro#74)
+// ============================================================================
+//
+// `previousStatus` is CLIENT bookkeeping (the column to restore to after `blocked`);
+// the R41 field-authority gate (lib/kanban-field-authority.ts) does NOT gate a
+// `previousStatus`-only write, on the verified premise that NO server code ever
+// promotes `previousStatus` into `status`. If a future refactor wired
+// `status = previousStatus` at the registry (the one place the promotion would
+// live), a governed column smuggled in via `previousStatus` would become the live
+// column WITHOUT passing GATE 1 — the exact bypass #74 flagged as latent. These
+// tests are the CI tripwire the MANAGER required: they fail the instant such a
+// promotion is introduced, so "latent" can never silently become "live".
+describe('BYPASS-1 tripwire: previousStatus never promotes to status', () => {
+  it('a previousStatus-only write leaves status unchanged', async () => {
+    // Card sits in an EXEMPT column; write ONLY previousStatus = a GOVERNED column.
+    const created = await createTask({ teamId: TEAM_1, subject: 'Restore bookkeeping', status: 'dev' })
+    const { task } = await updateTask(TEAM_1, created.id, { previousStatus: 'complete' })
+    // The tripwire: if anyone wires `status = previousStatus`, status becomes 'complete' and this fails.
+    expect(task!.status).toBe('dev')
+    expect(task!.previousStatus).toBe('complete')
+    // Persisted the same way — no async promotion on reload either.
+    expect(getTask(TEAM_1, created.id)!.status).toBe('dev')
+  })
+
+  it('a governed column parked in previousStatus never leaks into the live status', async () => {
+    const created = await createTask({ teamId: TEAM_1, subject: 'Governed parked', status: 'testing' })
+    const { task } = await updateTask(TEAM_1, created.id, { previousStatus: 'published' })
+    expect(task!.status).toBe('testing')
+    expect(task!.previousStatus).toBe('published')
+  })
+
+  it('an explicit status write is authoritative — previousStatus never overrides it', async () => {
+    // Both fields in one write: the explicit `status` must win; `previousStatus` is inert bookkeeping.
+    const created = await createTask({ teamId: TEAM_1, subject: 'Both fields', status: 'dev' })
+    const { task } = await updateTask(TEAM_1, created.id, { status: 'testing', previousStatus: 'complete' })
+    expect(task!.status).toBe('testing')
+    expect(task!.previousStatus).toBe('complete')
+  })
+})
+
+// ============================================================================
 // deleteTask
 // ============================================================================
 

@@ -3,7 +3,7 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-07-18T10:29:00+0200
+updated: 2026-07-21T10:12:00+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -83,20 +83,28 @@ diff lines) — so do NOT edit it or the shipped copies; the IND delta goes to t
 types `/reload-plugins --force` into the USER's pane and was corrupting their live typing. On a
 `[janitor-reload]` marker: NOTIFY the pending version and let the USER run it; do NOT inject.**
 
-**PROGRESS — Phase 1 (both DEP overlays) COMPLETE:**
+**PROGRESS — Phase 1 (both DEP overlays) + Phase 2 DRAFT COMPLETE:**
 - ✅ Phase 1a (`06d9f439`) — `aimaestro-kanban-multiagent.md`: the explicit 3-kanban section
   (three queries: local/agent, project/team multi-repo, user/host; discriminators; buffers=mirrors;
   platelets=derived TRDDs) + scoped the "one-per-project" line to the project board.
 - ✅ Phase 1b (`ab749309`) — `aimaestro-trdd-approval.md`: the per-TRDD scope-discriminator table
   (project→project-id+repo, user→host-id, local→created-by==assignee) + `user` scope; project MUST
   carry project-id, user/local MUST NOT.
+- ✅ LOCAL feedback memory note written (reload-injection-stop directive) —
+  `feedback-janitor-reload-no-inject-while-typing.md`.
+- ✅ Phase 2 DRAFT authored + HELD (2026-07-21) — the cross-repo janitor coordination issue body is
+  ready at `docs_dev/20260721_101004+0200-janitor-proposal-ind-base-user-scope-project-id.md`
+  (gitignored dev scratch). Targets `Emasoft/ai-maestro-janitor`; asks to co-ratify into IND-base
+  `trdd-design-tasks.md`: `scope:user` + `project-id`/`host-id`/`repo` field defs + the host-wide
+  user design root. Additive/backward-compat (38/38 live TRDDs are `scope: project`, none carry the
+  new fields). **NOT posted** — posting is an outward-facing shared-identity publish, USER go required.
 
 **NEXT ACTION:**
-- Phase 2 — DRAFT (hold, do not post) a janitor coordination issue: IND-base `trdd-design-tasks.md`
-  gains `scope: user` + the `project-id`/`host-id`/`repo` field defs + the host-wide user root.
-  (The local IND handoff source is STALE — do not edit it; the canonical is the janitor repo.)
-- Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; lint) — own TRDDs, on the USER's word.
-- Also: write a LOCAL feedback memory note capturing the reload-injection-stop directive.
+- On USER go — POST the Phase-2 draft as a `gh issue create --repo Emasoft/ai-maestro-janitor`
+  (body = the draft's "Proposed issue body" section). Do NOT post unprompted.
+- Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; frontmatter schema in `lib/trdd-store.ts`;
+  routing-lint) — own TRDDs, gated on the IND-base change SHIPPING (janitor co-ratifies + releases
+  first, else the schema has nothing to parse). On the USER's word.
 
 ## Reconciliation — most of this already has a home (verified on disk)
 

@@ -1,9 +1,9 @@
 ---
 trdd-id: FZRTRCGL
 title: a package-manager safety knob is disabled in package-manager config — 1 gap(s)
-column: proposal
+column: planned
 created: 2026-07-16T03:17:19+0200
-updated: 2026-07-16T03:17:19+0200
+updated: 2026-07-21T21:20:57+0200
 current-owner: janitor
 task-type: bugfix
 severity: medium
@@ -18,7 +18,7 @@ ticket-origin: package-manager-policy
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-16
 
-**PROPOSED BY THE JANITOR — awaiting approval. NOT authorized to execute.**
+**APPROVED — support ticket `T-A1EHL7K6` is queued for dispatch.**
 
 The janitor detected this in code the **USER owns**, so it may only propose. It has NOT touched
 anything and will not, until a human or the main Claude approves by running:

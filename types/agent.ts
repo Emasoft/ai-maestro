@@ -488,6 +488,21 @@ export type AgentRole = 'manager' | 'chief-of-staff' | 'architect' | 'orchestrat
 export const VALID_GOVERNANCE_TITLES: readonly AgentRole[] = ['manager', 'chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member', 'autonomous', 'maintainer', 'assistant'] as const
 
 /**
+ * ACTIVE_GOVERNANCE_TITLES — the governance titles EXPOSED for NEW selection in
+ * this build (3-role finalization, TRDD-H18PO5YJ): manager (governance authority),
+ * maintainer (imported-plugin agents), autonomous (existing agents). The full
+ * VALID_GOVERNANCE_TITLES set stays intact so dormant-title agents remain valid and
+ * resolvable — ONLY user-facing title ENUMERATIONS filter through this. Revert by
+ * restoring this to the full VALID_GOVERNANCE_TITLES set.
+ */
+export const ACTIVE_GOVERNANCE_TITLES: readonly AgentRole[] = ['manager', 'maintainer', 'autonomous'] as const
+
+/** True when `title` (any casing) is one of ACTIVE_GOVERNANCE_TITLES. */
+export function isActiveGovernanceTitle(title: string): boolean {
+  return (ACTIVE_GOVERNANCE_TITLES as readonly string[]).includes(title.toLowerCase())
+}
+
+/**
  * Simplified agent for listings
  */
 export interface AgentSummary {

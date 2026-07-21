@@ -1,9 +1,9 @@
 ---
 trdd-id: H18PO5YJ
 title: Finalize ai-maestro to a 3-role-plugin governance model (MANAGER/MAINTAINER/AUTONOMOUS) for the PR
-column: design
+column: dev
 created: 2026-07-21T21:45:10+0200
-updated: 2026-07-21T21:52:00+0200
+updated: 2026-07-21T22:26:29+0200
 current-owner: ai-maestro
 task-type: refactor
 scope: project
@@ -18,11 +18,26 @@ relevant-rules: []
 labels: [finalization, governance, role-plugins, final-form, pr-prep]
 external-refs: [Emasoft/ai-maestro#66, Emasoft/ai-maestro#65, Emasoft/ai-maestro-assistant-manager-agent#28]
 release-via: none
+implementation-commits: [963d3cda]
 ---
 
 # Finalize ai-maestro to a 3-role-plugin governance model for the PR
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-21
+
+**✅ P0 LANDED — commit `963d3cda` (2026-07-21T22:26). The "run with only 3 role plugins" version WORKS.**
+SSOT `ACTIVE_GOVERNANCE_TITLES` (`types/agent.ts`) gates the 2 title-offer sites (wizard picker + title-
+assignment dialog; dialog keeps the agent's CURRENT title visible). Full 9-title set + `TITLE_PLUGIN_MAP` +
+comm graph + role-plugin repos DORMANT/intact. `tsc --noEmit` + `yarn build` green; +1 unit test. **NOT yet
+deployed** — working-tree-is-production ⇒ live on the next `pm2 restart` (batch with the T2DVNWVI oracle).
+
+**P1–P3 PAUSED — need USER/AMAMA input (each mutates live fleet, another repo, or requires a push):**
+- **P1** reconcile the 1 `architect` live agent → `autonomous` (do it via the now-restricted title dialog —
+  it shows the agent's current `architect` + the 3 active — or authorize a server-side `ChangeTitle` run);
+  and ensure a MANAGER exists (adapt-AMAMA is CROSS-REPO; awaiting AMAMA's #66 follow-up on server-side needs).
+- **P2** MANAGER-handles-all-governance comm-graph collapse — cross-repo persona + server routing.
+- **P3** branch-litter delete + the `governance-rules → main` PR — needs USER go (push is USER-gated: ai-maestro
+  is NOT a plugin project).
 
 **USER directive (verbatim intent):** *"merge, we cannot have multiple branches now. we need to
 finalize so we get toward the ai-maestro final form that we will use to make the PR in the end.
@@ -40,11 +55,16 @@ the plugins that we will import as agents), AUTONOMOUS (all existing agents)."*
   `worktree-wf_*`): every one is fully-merged (0 ahead) or an ancient snapshot (1600-2000 behind).
   **Nothing to merge; no valuable work exists outside governance-rules.** BUT several `backup/*`
   are 79-171 commits AHEAD of gov (commits not in gov) → a blind delete is real loss (reflog-only).
-- **Role-plugins (8):** `lib/ecosystem-constants.ts` (`ROLE_PLUGIN_{MANAGER=ai-maestro-assistant-
-  manager-agent, COS, ARCHITECT, INTEGRATOR, ORCHESTRATOR, PROGRAMMER, MAINTAINER, AUTONOMOUS}`),
-  surfaced via `GovernanceTitle` (8-value union, `types/governance.ts`), `TITLE_PLUGIN_MAP`,
-  `PLUGIN_COMPATIBLE_TITLES`, `PREDEFINED_ROLE_PLUGIN_NAMES`, the 8×8 comm graph
-  (`lib/communication-graph.ts`), the DEP overlays (`rules/aimaestro/*`), and 8 external repos.
+- **Role-plugins — 9 TITLES / 8 predefined (compaction summary said 8; VERIFIED wrong 2026-07-21):**
+  `lib/ecosystem-constants.ts` has `ROLE_PLUGIN_{MANAGER=ai-maestro-assistant-manager-agent, COS,
+  ARCHITECT, INTEGRATOR, ORCHESTRATOR, PROGRAMMER, MAINTAINER, AUTONOMOUS}` (8, in
+  `PREDEFINED_ROLE_PLUGIN_NAMES`) PLUS a 9th `ROLE_PLUGIN_ASSISTANT=ai-maestro-assistant-role-agent`
+  (R39.2 — LOCAL source, deliberately NOT in `PREDEFINED_*`, but IS in `TITLE_PLUGIN_MAP` +
+  `PLUGIN_COMPATIBLE_TITLES` with title `ASSISTANT`). Surfaced via `GovernanceTitle` union
+  (`types/governance.ts`), `TITLE_PLUGIN_MAP`, `PLUGIN_COMPATIBLE_TITLES`, the comm graph
+  (`lib/communication-graph.ts`), the DEP overlays (`rules/aimaestro/*`).
+  → **Exposed target = {MANAGER, MAINTAINER, AUTONOMOUS} (3); DORMANT = 6** (COS, ARCHITECT,
+  INTEGRATOR, ORCHESTRATOR, MEMBER, ASSISTANT).
 - **Fleet is ALREADY ~3-role-shaped:** 23 live agents — 13 `none` + 7 `autonomous` (→ AUTONOMOUS),
   2 `maintainer` (already there), **1 `architect`** (the only off-target title), **0 MANAGER** and
   **0** of COS/ORCHESTRATOR/INTEGRATOR/MEMBER. So fleet reassignment is tiny: 1 agent + create a MANAGER.
@@ -56,18 +76,34 @@ union + comm graph + 5 role-plugin repos as code; expose ONLY MANAGER/MAINTAINER
 wizard, marketplace listing, `PREDEFINED_ROLE_PLUGIN_NAMES`, and `TITLE_PLUGIN_MAP`. A later pass
 can collapse the type union if the "final form" wants it — restrict is a stepping stone, not a wall.
 
-### OPEN FORKS — awaiting USER (asked 2026-07-21, no response in 300s; using safe defaults meanwhile)
-1. **Reduction shape:** restrict-to-3-keep-dormant (default, safe) **vs** collapse the type union to 3
-   (clean but a large breaking refactor across hundreds of sites).
-2. **MANAGER "created anew":** adapt the existing `ai-maestro-assistant-manager-agent` (AMAMA — reuse,
-   already MANAGER-titled with approval skills) **vs** author a brand-new role-plugin repo. NB: both
-   live in a SEPARATE GitHub repo — per the cross-project rule this repo can only do the SERVER-side
-   wiring; the plugin itself is authored/adapted in its own repo. **COORDINATED with AMAMA's Claude on
-   Emasoft/ai-maestro#66 (2026-07-21):** gave it the 3-role direction, answered its Q1-Q7 in the new
-   frame, recommended *adapt AMAMA*, and asked what it needs from the server side. Awaiting its reply +
-   the USER's fork confirm.
-3. **Branch litter:** delete the 224 backup/worktree branches now **vs** leave them (inert). Deferred
-   by default — destructive, and some are ahead-of-gov (RULE 0: no delete without explicit go).
+### DECISION (2026-07-21T22:08 — PROCEEDING under `/go-on-yourself`, session unattended)
+The forks were asked; no USER response across 300s + a compaction (session idle). `/go-on-yourself`
+= act without waiting approval; the finalization is USER-MANDATED (`approved: true, mandate: true`).
+All three forks have SAFE, REVERSIBLE, mandate-aligned defaults — AMAMA endorsed the same frame on
+#66 — so I proceed on the defaults and record them here:
+1. **Reduction shape → 1a RESTRICT-to-3-keep-6-dormant.** Non-destructive, reversible, a stepping
+   stone that does NOT foreclose a later union-collapse. Keeps the `GovernanceTitle` union + comm
+   graph + all role-plugin code intact; existing agents on dormant titles keep working.
+2. **MANAGER → adapt AMAMA (`ai-maestro-assistant-manager-agent`).** Cross-repo: the persona/skills
+   are authored in AMAMA's own repo (I cannot touch it — cross-project rule). **My SERVER-side P0 is
+   IDENTICAL either way** — the 3 exposed roles are fixed regardless of adapt-vs-new. AMAMA's pending
+   #66 follow-up (what server capabilities it needs) is ADDITIVE/later — P0 does not depend on it.
+3. **Branch litter → DEFER.** Destructive; several `backup/*` are 79-171 ahead-of-gov (RULE 0). No
+   action without explicit USER go.
+
+### P0 DESIGN (SSOT restrict — the actual code change, reversible)
+Add ONE SSOT constant in `lib/ecosystem-constants.ts`:
+  `export const ACTIVE_GOVERNANCE_TITLES = ['MANAGER','MAINTAINER','AUTONOMOUS'] as const`
+  (+ `ACTIVE_ROLE_PLUGIN_NAMES` derived via `TITLE_PLUGIN_MAP`, + an `isActiveGovernanceTitle()` helper).
+Then FILTER every USER-FACING ENUMERATION through it (wizard offered titles, title-assignment dialog,
+marketplace/role-plugin listing). Do NOT touch: the `GovernanceTitle` union, `TITLE_PLUGIN_MAP`,
+`PLUGIN_COMPATIBLE_TITLES`, `PREDEFINED_ROLE_PLUGIN_NAMES`, the comm graph — those stay full so pure
+LOOKUPS for dormant titles keep resolving and existing dormant-title agents don't break. Reversal =
+flip the one constant back to the full set.
+→ **Exact enumeration sites being mapped by a read-only scout (Explore agent, dispatched 22:08);
+edit plan finalized + executed on its return.** Then: tests + `tsc` + build (quality gates), docs
+(CLAUDE.md "Agent Terminology" note, GOVERNANCE-RULES), commit (NOT push). Column flips design→dev at
+first code edit.
 
 ## Phased plan (execute after the forks are confirmed)
 - **P0 (safe, in-repo, reversible) — server-side restrict to 3:** narrow `PREDEFINED_ROLE_PLUGIN_NAMES`,
@@ -99,3 +135,8 @@ can collapse the type union if the "final form" wants it — restrict is a stepp
 - 2026-07-21T21:45:10+0200 — MANDATE (goal user-directed). The 3 SHAPE forks await USER confirm before
   execution proceeds past `design`; asked via the dashboard, no response in 300s — proceeding on safe
   defaults (restrict / adapt / defer-branch-delete) and documenting here.
+- 2026-07-21T22:26:29+0200 — P0 (restrict-to-3, restrict-keep-dormant) IMPLEMENTED + committed `963d3cda`
+  under `/go-on-yourself` on the safe defaults (1a restrict / 2 adapt-AMAMA / 3 defer-branch-delete). `tsc`
+  + `yarn build` green; the only red test is a PRE-EXISTING, unrelated ZONE-MISMATCH corpus lint
+  (`4P1M8I18`/`OPNDCKVA` sit in `design/tasks/` while `column: complete`) — fixed in a separate hygiene
+  commit, NOT part of P0. Column design→dev. P1–P3 paused for USER/AMAMA input (see STATE block).

@@ -3,7 +3,7 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-07-21T10:12:00+0200
+updated: 2026-07-21T20:05:00+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -99,12 +99,21 @@ types `/reload-plugins --force` into the USER's pane and was corrupting their li
   user design root. Additive/backward-compat (38/38 live TRDDs are `scope: project`, none carry the
   new fields). **NOT posted** — posting is an outward-facing shared-identity publish, USER go required.
 
+**PROGRESS — Phase 2 POSTED (2026-07-21, USER go):**
+- ✅ The IND-base kanban proposal is POSTED → **`Emasoft/ai-maestro-janitor#103`**. Awaiting the
+  janitor's co-ratification + plugin release of the `scope:user`/`project-id`/`host-id`/`repo` delta.
+
 **NEXT ACTION:**
-- On USER go — POST the Phase-2 draft as a `gh issue create --repo Emasoft/ai-maestro-janitor`
-  (body = the draft's "Proposed issue body" section). Do NOT post unprompted.
+- WAIT for janitor#103 to be co-ratified + shipped in a plugin release (`~/.claude/rules/trdd-design-tasks.md`
+  picks up the delta) — THEN Phase 3/4 EHTs unblock.
 - Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; frontmatter schema in `lib/trdd-store.ts`;
-  routing-lint) — own TRDDs, gated on the IND-base change SHIPPING (janitor co-ratifies + releases
-  first, else the schema has nothing to parse). On the USER's word.
+  routing-lint) — own TRDDs, gated on #103 SHIPPING. On the USER's word.
+
+**SEPARATE THREAD (not this TRDD — belongs to Family-A / TRDD-KCRMSNL7):** posted a daemon-update
+request on `janitor#100` (comment 5037238511) asking the janitor Claude for a consolidated CURRENT
+daemon snapshot (v0.57.0, thread at rev-5) before advancing the server-side Family-A mirror. Per the
+USER: HOLD all daemon-mirror work until the janitor's consolidated reply. Background watcher
+`bzp9y16au` will notify on their reply.
 
 ## Reconciliation — most of this already has a home (verified on disk)
 

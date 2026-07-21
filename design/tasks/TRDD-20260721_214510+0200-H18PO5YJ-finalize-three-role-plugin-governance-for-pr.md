@@ -3,7 +3,7 @@ trdd-id: H18PO5YJ
 title: Finalize ai-maestro to a 3-role-plugin governance model (MANAGER/MAINTAINER/AUTONOMOUS) for the PR
 column: design
 created: 2026-07-21T21:45:10+0200
-updated: 2026-07-21T21:45:10+0200
+updated: 2026-07-21T21:52:00+0200
 current-owner: ai-maestro
 task-type: refactor
 scope: project
@@ -16,6 +16,7 @@ approval-judge: user
 approval-datetime: 2026-07-21T21:45:10+0200
 relevant-rules: []
 labels: [finalization, governance, role-plugins, final-form, pr-prep]
+external-refs: [Emasoft/ai-maestro#66, Emasoft/ai-maestro#65, Emasoft/ai-maestro-assistant-manager-agent#28]
 release-via: none
 ---
 
@@ -61,7 +62,10 @@ can collapse the type union if the "final form" wants it — restrict is a stepp
 2. **MANAGER "created anew":** adapt the existing `ai-maestro-assistant-manager-agent` (AMAMA — reuse,
    already MANAGER-titled with approval skills) **vs** author a brand-new role-plugin repo. NB: both
    live in a SEPARATE GitHub repo — per the cross-project rule this repo can only do the SERVER-side
-   wiring; the plugin itself is authored/adapted in its own repo.
+   wiring; the plugin itself is authored/adapted in its own repo. **COORDINATED with AMAMA's Claude on
+   Emasoft/ai-maestro#66 (2026-07-21):** gave it the 3-role direction, answered its Q1-Q7 in the new
+   frame, recommended *adapt AMAMA*, and asked what it needs from the server side. Awaiting its reply +
+   the USER's fork confirm.
 3. **Branch litter:** delete the 224 backup/worktree branches now **vs** leave them (inert). Deferred
    by default — destructive, and some are ahead-of-gov (RULE 0: no delete without explicit go).
 

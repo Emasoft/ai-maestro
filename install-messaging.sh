@@ -128,11 +128,23 @@ if [ -n "$SRC_REPO" ] || [ -n "$SRC_BRANCH" ]; then
         print_error "--branch requires --repo (no source repo to clone)"
         exit 1
     fi
-    # Accept "owner/repo" shorthand or a full git URL.
+    # Accept "owner/repo" shorthand, a full git URL, OR a local repo path (the dev default:
+    # install the frozen scripts from the local governance-rules checkout). Local paths MUST be
+    # matched before owner/repo, or an absolute path is wrongly rewritten into a github.com URL.
+    SRC_REPO="${SRC_REPO/#\~\//$HOME/}"   # expand a quoted leading ~/ to $HOME/ (a bare ~/* case
+                                          # pattern would tilde-expand and never match the literal).
     case "$SRC_REPO" in
-        http://*|https://*|git@*|ssh://*) _src_url="$SRC_REPO" ;;
+        http://*|https://*|git@*|ssh://*|file://*) _src_url="$SRC_REPO" ;;
+        /*|./*|../*) _src_url="$SRC_REPO" ;;
         */*) _src_url="https://github.com/${SRC_REPO%.git}.git" ;;
-        *) print_error "--repo must be OWNER/REPO or a full git URL (got: $SRC_REPO)"; exit 1 ;;
+        *)
+            if [ -d "$SRC_REPO" ]; then
+                _src_url="$SRC_REPO"
+            else
+                print_error "--repo must be OWNER/REPO, a git URL, or a local repo path (got: $SRC_REPO)"
+                exit 1
+            fi
+            ;;
     esac
     _clone_dir="$(mktemp -d "${TMPDIR:-/tmp}/aimaestro-src.XXXXXX")"
     # The clone is scratch: scripts are copied to ~/.local/bin during this run, so remove the

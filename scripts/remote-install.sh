@@ -1,13 +1,14 @@
 #!/bin/bash
 # AI Maestro - Remote Installer (Maestro-Guided)
-# Usage: curl -fsSL https://raw.githubusercontent.com/Emasoft/ai-maestro/main/scripts/remote-install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/23blocks-OS/ai-maestro/main/scripts/remote-install.sh | bash
 #    or: curl -fsSL https://get.aimaestro.dev | bash
 #
 # Options:
 #   -d, --dir PATH      Install directory (default: ~/ai-maestro)
 #   -y, --yes           Non-interactive mode (auto-accept all prompts)
-#   --repo OWNER/REPO   Install/update from a custom git repo (or full URL) instead of the
-#                       official one; also env AIMAESTRO_REPO. Default: Emasoft/ai-maestro
+#   --repo SRC          Install/update from a custom source instead of the default: an
+#                       owner/repo, a full git URL, OR a local repo path (e.g. ~/ai-maestro).
+#                       Also env AIMAESTRO_REPO. Default: 23blocks-OS/ai-maestro
 #   --branch NAME       Branch to install/update from; also env AIMAESTRO_BRANCH
 #   --allow-downgrade   Permit updating to an OLDER version than the one installed
 #   --skip-prereqs      Skip prerequisite installation
@@ -37,12 +38,15 @@ NC='\033[0m'
 
 # Version & config
 VERSION="0.28.0"
-# Source repo is overridable via --repo/--branch or the AIMAESTRO_REPO/AIMAESTRO_BRANCH env
-# vars. Default is the CANONICAL Emasoft/ai-maestro repo — the app moved orgs from the legacy
-# 23blocks-OS upstream (see CLAUDE.md "GitHub Repos Architecture"). Never default to upstream:
-# a fresh install pulling upstream over a fork/branch install is the destructive footgun the
-# --branch/downgrade-guard machinery exists to prevent.
-REPO_URL="${AIMAESTRO_REPO:-https://github.com/Emasoft/ai-maestro.git}"
+# Source is overridable via --repo/--branch or the AIMAESTRO_REPO/AIMAESTRO_BRANCH env vars, and
+# --repo accepts owner/repo, a full git URL, OR a local repo path. The DEFAULT stays the official
+# 23blocks-OS/ai-maestro upstream for now; the flip to the Emasoft/ai-maestro fork happens only
+# AFTER governance-rules is merged to main and pushed (the fork's main is stale until then, so
+# defaulting to it would install an OLDER version — exactly the downgrade the guard catches).
+# For DEV, install/update from the LOCAL governance-rules checkout: `--repo ~/ai-maestro --branch
+# governance-rules` (or use install-messaging.sh, which installs the frozen scripts from its own
+# local tree by default).
+REPO_URL="${AIMAESTRO_REPO:-https://github.com/23blocks-OS/ai-maestro.git}"
 BRANCH="${AIMAESTRO_BRANCH:-}"      # empty = the repo's default branch
 REPO_EXPLICIT=false                  # set true when --repo/AIMAESTRO_REPO overrides the default
 BRANCH_EXPLICIT=false                # set true when --branch/AIMAESTRO_BRANCH is given
@@ -230,14 +234,27 @@ if [ ! -t 0 ]; then
     exec < /dev/tty 2>/dev/null || { NON_INTERACTIVE=true; TYPE_SPEED=0; }
 fi
 
-# Accept either an "owner/repo" shorthand or a full git URL; emit a clonable URL.
-# Scheme-prefixed inputs pass through untouched; a bare owner/repo becomes a github.com URL.
+# Accept an "owner/repo" shorthand, a full git URL, OR a local repo path; emit a clonable source.
+# URLs and local paths pass through untouched; a bare owner/repo becomes a github.com URL. Local
+# paths MUST be detected before the owner/repo case, or "/Users/me/ai-maestro" is wrongly turned
+# into "https://github.com//Users/me/ai-maestro.git".
 _normalize_repo_url() {
     local r="$1"
+    r="${r/#\~\//$HOME/}"   # expand a literal leading ~/ (a quoted --repo "~/repo") to $HOME/ —
+                            # a bare ~/* case pattern would instead tilde-EXPAND and never match.
     case "$r" in
-        http://*|https://*|git@*|ssh://*) printf '%s' "$r" ;;   # already a URL
-        */*) printf 'https://github.com/%s.git' "${r%.git}" ;;  # owner/repo shorthand (idempotent .git)
-        *) printf '%s' "$r" ;;                                   # leave anything unexpected as-is
+        http://*|https://*|git@*|ssh://*|file://*) printf '%s' "$r" ;;  # already a URL
+        /*|./*|../*) printf '%s' "$r" ;;                                # explicit local repo path
+        *)
+            if [ -d "$r" ]; then
+                printf '%s' "$r"                                        # existing dir = local repo
+            else
+                case "$r" in
+                    */*) printf 'https://github.com/%s.git' "${r%.git}" ;;  # owner/repo shorthand
+                    *) printf '%s' "$r" ;;                                   # leave unexpected as-is
+                esac
+            fi
+            ;;
     esac
 }
 
@@ -352,8 +369,8 @@ show_help() {
     echo "Options:"
     echo "  -d, --dir PATH      Install directory (default: ~/ai-maestro)"
     echo "  -y, --yes           Non-interactive mode (auto-accept all prompts)"
-    echo "  --repo OWNER/REPO   Install/update from a custom git repo or full URL"
-    echo "                      (env: AIMAESTRO_REPO; default: Emasoft/ai-maestro)"
+    echo "  --repo SRC          Custom source: owner/repo, a full git URL, or a local repo"
+    echo "                      path (env: AIMAESTRO_REPO; default: 23blocks-OS/ai-maestro)"
     echo "  --branch NAME       Branch to install/update from (env: AIMAESTRO_BRANCH)"
     echo "  --allow-downgrade   Permit updating to an OLDER version than installed"
     echo "  --fast              Disable typing animation (auto-enabled over SSH)"

@@ -3,7 +3,7 @@ trdd-id: 95IKXQI6
 title: Parameterize install/update scripts with a custom git repo+branch and a version-downgrade guard
 column: testing
 created: 2026-07-21T20:51:42+0200
-updated: 2026-07-21T21:00:00+0200
+updated: 2026-07-21T21:12:00+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -35,11 +35,16 @@ creating a new agent or by the janitor when armed."*
 - `install-messaging.sh` — the local installer of the `~/.local/bin` frozen scripts.
 
 **Deliverables (this TRDD):**
-1. `--repo <owner/repo|url>` + `--branch <b>` on BOTH (env `AIMAESTRO_REPO`/`AIMAESTRO_BRANCH`
-   on the remote one). Shorthand `owner/repo` → `https://github.com/owner/repo.git`.
-2. **remote-install.sh default `REPO_URL` fixed** `23blocks-OS/ai-maestro` → `Emasoft/ai-maestro`
-   (canonical per CLAUDE.md "GitHub Repos Architecture"; kills the destructive-upstream default
-   the USER warned about twice).
+1. `--repo <SRC>` + `--branch <b>` on BOTH (env `AIMAESTRO_REPO`/`AIMAESTRO_BRANCH` on the
+   remote one). `<SRC>` = `owner/repo` shorthand → `https://github.com/owner/repo.git`, a full
+   URL (passed through), OR a **local repo path** (absolute, `.`/`..`, `file://`, quoted `~/…`
+   → all passed through un-mangled; a bare `~/*` case pattern tilde-EXPANDS and must not be used).
+2. **remote-install.sh default `REPO_URL` STAYS `23blocks-OS/ai-maestro`** (the current official
+   upstream). See the SUPERSEDED note — the flip to the Emasoft fork waits for merge→main→push;
+   until then the fork's main is stale and defaulting to it would install an OLDER version. For
+   DEV, install/update from the LOCAL governance-rules checkout via `--repo ~/ai-maestro --branch
+   governance-rules` (or just run install-messaging.sh, which installs from its local tree by
+   default).
 3. **Version-downgrade guard** on remote-install.sh UPDATE path: fetch the target branch, read
    its `package.json` version, REFUSE if the installed version is strictly newer, unless
    `--allow-downgrade`. `_version_gt` via `sort -V`.
@@ -81,5 +86,15 @@ governance-rules`). This is why column=testing, not complete.
   install-messaging `-h`. ✓
 - Live install/update against a clean target → DEFERRED to the human (see above).
 
+## SUPERSEDED — do NOT carry forward
+- The first pass (commit a5485043) flipped the remote-install.sh default `REPO_URL` from
+  `23blocks-OS/ai-maestro` → `Emasoft/ai-maestro`, reasoning from CLAUDE.md that Emasoft is
+  canonical. **USER corrected this (2026-07-21): the default IS and STAYS 23blocks-OS/ai-maestro.**
+  The Emasoft-fork flip is future work gated on merge→main→push (the fork's main is stale, so the
+  premature default would install an OLDER version — the very downgrade the guard exists to catch).
+  Reverted in the follow-up commit; `--repo` (now incl. local paths) is the override for dev.
+
 ## Approval log
 - 2026-07-21T20:51:42+0200 — MANDATE (Tier-0, self, in-scope infra). No approval request sent.
+- 2026-07-21T21:12:00+0200 — USER correction folded in: default reverted to 23blocks-OS;
+  `--repo` extended to accept local repo paths (the dev-workflow source).

@@ -1,11 +1,15 @@
 #!/bin/bash
 # AI Maestro - Remote Installer (Maestro-Guided)
-# Usage: curl -fsSL https://raw.githubusercontent.com/23blocks-OS/ai-maestro/main/scripts/remote-install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/Emasoft/ai-maestro/main/scripts/remote-install.sh | bash
 #    or: curl -fsSL https://get.aimaestro.dev | bash
 #
 # Options:
 #   -d, --dir PATH      Install directory (default: ~/ai-maestro)
 #   -y, --yes           Non-interactive mode (auto-accept all prompts)
+#   --repo OWNER/REPO   Install/update from a custom git repo (or full URL) instead of the
+#                       official one; also env AIMAESTRO_REPO. Default: Emasoft/ai-maestro
+#   --branch NAME       Branch to install/update from; also env AIMAESTRO_BRANCH
+#   --allow-downgrade   Permit updating to an OLDER version than the one installed
 #   --skip-prereqs      Skip prerequisite installation
 #   --skip-tools        Skip agent tools installation
 #   --uninstall         Remove AI Maestro installation
@@ -33,7 +37,18 @@ NC='\033[0m'
 
 # Version & config
 VERSION="0.28.0"
-REPO_URL="https://github.com/23blocks-OS/ai-maestro.git"
+# Source repo is overridable via --repo/--branch or the AIMAESTRO_REPO/AIMAESTRO_BRANCH env
+# vars. Default is the CANONICAL Emasoft/ai-maestro repo — the app moved orgs from the legacy
+# 23blocks-OS upstream (see CLAUDE.md "GitHub Repos Architecture"). Never default to upstream:
+# a fresh install pulling upstream over a fork/branch install is the destructive footgun the
+# --branch/downgrade-guard machinery exists to prevent.
+REPO_URL="${AIMAESTRO_REPO:-https://github.com/Emasoft/ai-maestro.git}"
+BRANCH="${AIMAESTRO_BRANCH:-}"      # empty = the repo's default branch
+REPO_EXPLICIT=false                  # set true when --repo/AIMAESTRO_REPO overrides the default
+BRANCH_EXPLICIT=false                # set true when --branch/AIMAESTRO_BRANCH is given
+ALLOW_DOWNGRADE=false                # --allow-downgrade to override the version guard on update
+[ -n "${AIMAESTRO_REPO:-}" ] && REPO_EXPLICIT=true
+[ -n "${AIMAESTRO_BRANCH:-}" ] && BRANCH_EXPLICIT=true
 DEFAULT_INSTALL_DIR="$HOME/ai-maestro"
 PORT="${AIMAESTRO_PORT:-23000}"  # configurable via --port or AIMAESTRO_PORT env var
 TYPE_SPEED=0.03  # seconds per character (0 in non-interactive)
@@ -215,6 +230,23 @@ if [ ! -t 0 ]; then
     exec < /dev/tty 2>/dev/null || { NON_INTERACTIVE=true; TYPE_SPEED=0; }
 fi
 
+# Accept either an "owner/repo" shorthand or a full git URL; emit a clonable URL.
+# Scheme-prefixed inputs pass through untouched; a bare owner/repo becomes a github.com URL.
+_normalize_repo_url() {
+    local r="$1"
+    case "$r" in
+        http://*|https://*|git@*|ssh://*) printf '%s' "$r" ;;   # already a URL
+        */*) printf 'https://github.com/%s.git' "${r%.git}" ;;  # owner/repo shorthand (idempotent .git)
+        *) printf '%s' "$r" ;;                                   # leave anything unexpected as-is
+    esac
+}
+
+# True when version $1 is STRICTLY greater than $2 (semver-ish, via sort -V). Used by the
+# downgrade guard so an accidental "update" to an older branch is refused, not silently applied.
+_version_gt() {
+    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
+}
+
 parse_args() {
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -269,6 +301,30 @@ parse_args() {
                 fi
                 shift 2
                 ;;
+            --repo)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    maestro_fail "$1 requires an argument (e.g., $1 Emasoft/ai-maestro, or a full git URL)"
+                    show_help
+                    exit 1
+                fi
+                REPO_URL="$2"
+                REPO_EXPLICIT=true
+                shift 2
+                ;;
+            --branch)
+                if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                    maestro_fail "$1 requires a branch name (e.g., $1 governance-rules)"
+                    show_help
+                    exit 1
+                fi
+                BRANCH="$2"
+                BRANCH_EXPLICIT=true
+                shift 2
+                ;;
+            --allow-downgrade)
+                ALLOW_DOWNGRADE=true
+                shift
+                ;;
             --uninstall)
                 UNINSTALL=true
                 shift
@@ -284,6 +340,8 @@ parse_args() {
                 ;;
         esac
     done
+    # Normalize AFTER parsing so an env-var or --repo "owner/repo" shorthand both resolve.
+    REPO_URL="$(_normalize_repo_url "$REPO_URL")"
 }
 
 show_help() {
@@ -294,6 +352,10 @@ show_help() {
     echo "Options:"
     echo "  -d, --dir PATH      Install directory (default: ~/ai-maestro)"
     echo "  -y, --yes           Non-interactive mode (auto-accept all prompts)"
+    echo "  --repo OWNER/REPO   Install/update from a custom git repo or full URL"
+    echo "                      (env: AIMAESTRO_REPO; default: Emasoft/ai-maestro)"
+    echo "  --branch NAME       Branch to install/update from (env: AIMAESTRO_BRANCH)"
+    echo "  --allow-downgrade   Permit updating to an OLDER version than installed"
     echo "  --fast              Disable typing animation (auto-enabled over SSH)"
     echo "  --skip-prereqs      Skip prerequisite installation"
     echo "  --skip-tools, --skip-messaging
@@ -1063,6 +1125,33 @@ act3_clone_and_build() {
             if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
                 maestro_step 1 4 "Pulling latest changes..." ""
                 cd "$INSTALL_DIR"
+                # Re-point origin only when a custom --repo was explicitly requested, so a plain
+                # update keeps pulling from wherever it was installed (never silently upstream).
+                if [ "$REPO_EXPLICIT" = true ]; then
+                    git remote set-url origin "$REPO_URL" 2>/dev/null || true
+                fi
+                # Pull the explicitly-requested branch, else the currently-checked-out one —
+                # never a hardcoded "main", which cross-branches a fork/branch install.
+                local pull_branch="main"
+                if [ "$BRANCH_EXPLICIT" = true ]; then
+                    pull_branch="$BRANCH"
+                else
+                    pull_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+                fi
+                # Downgrade guard: fetch the target and compare its version BEFORE mutating the
+                # working tree, so an accidental update to an older branch is refused, not applied.
+                git fetch --quiet origin "$pull_branch" 2>/dev/null || true
+                local new_version=""
+                if command -v jq &>/dev/null; then
+                    new_version=$(git show "origin/${pull_branch}:package.json" 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)
+                else
+                    new_version=$(git show "origin/${pull_branch}:package.json" 2>/dev/null | sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1 || true)
+                fi
+                if [ "$ALLOW_DOWNGRADE" != true ] && [ -n "$old_version" ] && [ -n "$new_version" ] && _version_gt "$old_version" "$new_version"; then
+                    maestro_fail "Refusing downgrade: installed v${old_version} is newer than target v${new_version} (${REPO_URL} @ ${pull_branch})."
+                    maestro_info "Pass --allow-downgrade to override, or --repo/--branch to target the intended source."
+                    exit 1
+                fi
                 # Determine whether git stash actually created a new stash entry by
                 # checking its exit code: 0 means a stash was created, non-zero means
                 # there was nothing to stash (or stash failed for another reason).
@@ -1072,7 +1161,7 @@ act3_clone_and_build() {
                 if git stash --quiet 2>/dev/null; then
                     had_stash=true
                 fi
-                git pull origin main 2>/dev/null || git pull origin main
+                git pull origin "$pull_branch" 2>/dev/null || git pull origin "$pull_branch"
                 if [ "$had_stash" = true ]; then
                     if ! git stash pop --quiet; then
                         maestro_warn "Could not cleanly restore your local changes after update."
@@ -1148,7 +1237,10 @@ act3_clone_and_build() {
     [ -n "$SELECTED_GATEWAYS" ] && total_steps=5
 
     maestro_step 1 "$total_steps" "Downloading..." ""
-    if ! git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"; then
+    # Honor --branch on the shallow clone; empty BRANCH = the repo's default branch.
+    local -a clone_args=(--depth 1)
+    [ -n "$BRANCH" ] && clone_args+=(--branch "$BRANCH")
+    if ! git clone "${clone_args[@]}" "$REPO_URL" "$INSTALL_DIR"; then
         maestro_fail "Failed to clone repository. Check your network connection."
         exit 1
     fi

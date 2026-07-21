@@ -20,6 +20,8 @@ fi
 # Parse command line arguments
 NON_INTERACTIVE=false
 MIGRATE_ONLY=false
+SRC_REPO=""       # --repo owner/repo|url : clone+install the frozen scripts from a custom source
+SRC_BRANCH=""     # --branch NAME         : branch to clone when a custom source is requested
 while [[ $# -gt 0 ]]; do
     case $1 in
         -y|--yes|--non-interactive)
@@ -30,6 +32,20 @@ while [[ $# -gt 0 ]]; do
             MIGRATE_ONLY=true
             shift
             ;;
+        --repo)
+            if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" == -* ]]; then
+                echo "Error: --repo requires an argument (e.g., --repo Emasoft/ai-maestro, or a full git URL)"
+                exit 1
+            fi
+            SRC_REPO="$2"; shift 2
+            ;;
+        --branch)
+            if [ $# -lt 2 ] || [ -z "$2" ] || [[ "$2" == -* ]]; then
+                echo "Error: --branch requires a branch name (e.g., --branch governance-rules)"
+                exit 1
+            fi
+            SRC_BRANCH="$2"; shift 2
+            ;;
         -h|--help)
             echo "AI Maestro - Agent Messaging Protocol (AMP) Installer"
             echo ""
@@ -38,6 +54,9 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  -y, --yes          Non-interactive mode (install all, assume yes)"
             echo "  --migrate          Migrate from old messaging system only"
+            echo "  --repo OWNER/REPO  Install the frozen scripts from a custom git repo or URL"
+            echo "                     (opt-in; default installs from this local checkout)"
+            echo "  --branch NAME      Branch to clone when --repo is given"
             echo "  -h, --help         Show this help message"
             echo ""
             echo "This installer sets up the Agent Messaging Protocol (AMP) which provides:"
@@ -99,6 +118,38 @@ print_info() {
 # Derive absolute path from script location so it works when called from any CWD
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$SCRIPT_DIR/scripts"
+
+# --repo/--branch: install the frozen scripts from a custom git source instead of this local
+# tree. OPT-IN ONLY — with neither flag this installer does ZERO network I/O and installs from
+# its own checked-out tree (which is already "the current branch"), preserving the
+# destructive-safety property (it never silently fetches from a default/upstream repo).
+if [ -n "$SRC_REPO" ] || [ -n "$SRC_BRANCH" ]; then
+    if [ -z "$SRC_REPO" ]; then
+        print_error "--branch requires --repo (no source repo to clone)"
+        exit 1
+    fi
+    # Accept "owner/repo" shorthand or a full git URL.
+    case "$SRC_REPO" in
+        http://*|https://*|git@*|ssh://*) _src_url="$SRC_REPO" ;;
+        */*) _src_url="https://github.com/${SRC_REPO%.git}.git" ;;
+        *) print_error "--repo must be OWNER/REPO or a full git URL (got: $SRC_REPO)"; exit 1 ;;
+    esac
+    _clone_dir="$(mktemp -d "${TMPDIR:-/tmp}/aimaestro-src.XXXXXX")"
+    # The clone is scratch: scripts are copied to ~/.local/bin during this run, so remove the
+    # temp checkout on exit (success or failure) — nothing after this script needs it.
+    trap 'rm -rf "$_clone_dir"' EXIT
+    print_info "Cloning scripts source: $_src_url${SRC_BRANCH:+ @ $SRC_BRANCH}"
+    _clone_args=(--depth 1)
+    [ -n "$SRC_BRANCH" ] && _clone_args+=(--branch "$SRC_BRANCH")
+    if ! git clone "${_clone_args[@]}" "$_src_url" "$_clone_dir"; then
+        print_error "Failed to clone $_src_url"
+        exit 1
+    fi
+    SCRIPT_DIR="$_clone_dir"
+    SCRIPTS_DIR="$_clone_dir/scripts"
+    print_success "Installing frozen scripts from $_clone_dir"
+fi
+
 if [ ! -d "$SCRIPTS_DIR" ]; then
     print_error "Scripts not found at $SCRIPTS_DIR"
     exit 1

@@ -1,9 +1,9 @@
 ---
 trdd-id: H18PO5YJ
 title: Finalize ai-maestro to a 3-role-plugin governance model (MANAGER/MAINTAINER/AUTONOMOUS) for the PR
-column: dev
+column: todo
 created: 2026-07-21T21:45:10+0200
-updated: 2026-07-21T22:26:29+0200
+updated: 2026-07-22T00:32:28+0200
 current-owner: ai-maestro
 task-type: refactor
 scope: project
@@ -18,14 +18,24 @@ relevant-rules: []
 labels: [finalization, governance, role-plugins, final-form, pr-prep]
 external-refs: [Emasoft/ai-maestro#66, Emasoft/ai-maestro#65, Emasoft/ai-maestro-assistant-manager-agent#28]
 release-via: none
-implementation-commits: [963d3cda]
 ---
 
 # Finalize ai-maestro to a 3-role-plugin governance model for the PR
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-21
 
-**✅ P0 LANDED — commit `963d3cda` (2026-07-21T22:26). The "run with only 3 role plugins" version WORKS.**
+**⛔ REVERTED / MISREAD — 2026-07-22. DO NOT ACT ON ANYTHING BELOW THIS BANNER.**
+The "restrict the OFFERED titles to 3 (`ACTIVE_GOVERNANCE_TITLES`)" approach in this TRDD was a MISREAD of the
+mandate. The USER clarified: *"i didn't say to remove all titles except those 3 — for the initial test we only
+need to get ready those 3 role plugins."* The other titles are NOT removed/hidden. The restrict code was
+reverted (`04108dbc`), the wrong memory note removed (`7935c68a`), and the live server rebuilt + restarted
+(HEAD `7935c68a`) to UN-deploy it. Everything below (P0 restrict / keep-dormant / P1–P3) is retained ONLY as a
+record of the wrong approach.
+**CORRECT goal:** get the 3 role-plugins (MANAGER / MAINTAINER / AUTONOMOUS) READY for the initial test —
+titles stay unrestricted. Awaiting USER clarification on what "ready" concretely requires (likely role-plugin
+readiness, mostly CROSS-REPO — NOT a server-side title-restriction change).
+
+**[superseded — the line below is the reverted claim, kept for the record]** ✅ P0 LANDED — commit `963d3cda` (2026-07-21T22:26). The "run with only 3 role plugins" version WORKS.
 SSOT `ACTIVE_GOVERNANCE_TITLES` (`types/agent.ts`) gates the 2 title-offer sites (wizard picker + title-
 assignment dialog; dialog keeps the agent's CURRENT title visible). Full 9-title set + `TITLE_PLUGIN_MAP` +
 comm graph + role-plugin repos DORMANT/intact. `tsc --noEmit` + `yarn build` green; +1 unit test. **NOT yet
@@ -140,3 +150,8 @@ first code edit.
   + `yarn build` green; the only red test is a PRE-EXISTING, unrelated ZONE-MISMATCH corpus lint
   (`4P1M8I18`/`OPNDCKVA` sit in `design/tasks/` while `column: complete`) — fixed in a separate hygiene
   commit, NOT part of P0. Column design→dev. P1–P3 paused for USER/AMAMA input (see STATE block).
+- 2026-07-22T00:32:28+0200 — **REVERTED.** The restrict-to-3 approach was a MISREAD (USER: "i only said for
+  the initial test we need to get ready those 3 role plugins"). Reverted code `04108dbc`; removed the wrong
+  memory note `7935c68a`; rebuilt + restarted to un-deploy. KEPT the unrelated correct commits (`b4887d20`
+  corpus hygiene, `fe3061d0` T2DVNWVI oracle). Column dev→todo; awaiting USER clarification on the real
+  "ready the 3 role-plugins for the initial test" scope (titles stay unrestricted).

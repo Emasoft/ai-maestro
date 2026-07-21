@@ -15,6 +15,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
+import { execSync } from 'child_process'
 import { statePath } from './ecosystem-constants'
 import { oauthTickEnabled } from './oauth-rotator/server-tick'
 
@@ -29,6 +30,15 @@ export interface ServerLiveness {
   ts: number
   /** The server process id (for an optional liveness cross-check). */
   pid: number
+  /** Short (12-char) git sha of the RUNNING build — the working-tree-is-production deploy oracle a
+   *  consumer reads to answer "is server code X live?" (TRDD-T2DVNWVI). `'unknown'` when neither
+   *  git nor `AIM_BUILD_SHA` is available (a packaged install). */
+  sha: string
+  /** Full git sha (or `'unknown'`). */
+  sha_full: string
+  /** True when the running working tree had uncommitted TRACKED changes at resolve time — under
+   *  working-tree-is-production the sha alone does not fully identify a dirty build. */
+  dirty: boolean
   /** The chore classes the server owns+runs RIGHT NOW (honest, live-only — see the file header). */
   capabilities: string[]
 }
@@ -55,11 +65,58 @@ export function currentCapabilities(deps: { oauthEnabled?: () => boolean } = {})
   return caps
 }
 
+/** The running build's git identity — the server-side deploy oracle (TRDD-T2DVNWVI). */
+export interface BuildSha {
+  sha: string
+  sha_full: string
+  dirty: boolean
+}
+
+/**
+ * PURE resolver (no cache, no process globals) — env stamp WINS over git so a packaged build can
+ * assert its sha without a `.git`. Exported so a unit test drives it deterministically via injected
+ * `env`/`runGit`; `runGit` THROWS when git is unavailable, which is the `'unknown'` fallback path.
+ */
+export function computeBuildSha(
+  env: (name: string) => string | undefined,
+  runGit: (args: string) => string,
+): BuildSha {
+  const envSha = env('AIM_BUILD_SHA')?.trim()
+  if (envSha) return { sha: envSha.slice(0, 12), sha_full: envSha, dirty: false }
+  try {
+    const full = runGit('rev-parse HEAD')
+    // A dirty tracked tree means the sha under-describes what is actually running.
+    const dirty = runGit('status --porcelain --untracked-files=no').length > 0
+    return { sha: full.slice(0, 12), sha_full: full, dirty }
+  } catch {
+    return { sha: 'unknown', sha_full: 'unknown', dirty: false }
+  }
+}
+
+let cachedBuildSha: BuildSha | undefined
+
+/**
+ * Resolve the running build's git sha ONCE (cached — it cannot change without a restart, so
+ * re-resolving on every 30 s heartbeat would be wasted git spawns). Reads `process.env` and runs
+ * git in the server's cwd (the install dir under pm2). NEVER throws.
+ */
+export function resolveBuildSha(): BuildSha {
+  if (!cachedBuildSha) {
+    cachedBuildSha = computeBuildSha(
+      (name) => process.env[name],
+      (args) =>
+        execSync(`git ${args}`, { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(),
+    )
+  }
+  return cachedBuildSha
+}
+
 /** Injected seams so a unit test drives a write deterministically without the clock or real pid. */
 export interface WriteServerLivenessDeps {
   now?: () => number
   pid?: number
   capabilities?: () => string[]
+  buildSha?: () => BuildSha
 }
 
 /**
@@ -73,7 +130,15 @@ export function writeServerLiveness(deps: WriteServerLivenessDeps = {}): void {
   const now = deps.now ?? (() => Math.floor(Date.now() / 1000))
   const pid = deps.pid ?? process.pid
   const capabilities = (deps.capabilities ?? currentCapabilities)()
-  const payload: ServerLiveness = { ts: now(), pid, capabilities }
+  const build = (deps.buildSha ?? resolveBuildSha)()
+  const payload: ServerLiveness = {
+    ts: now(),
+    pid,
+    sha: build.sha,
+    sha_full: build.sha_full,
+    dirty: build.dirty,
+    capabilities,
+  }
   const dest = statePath(path.basename(SERVER_LIVENESS_FILE))
   const tmp = `${dest}.tmp.${pid}`
   try {

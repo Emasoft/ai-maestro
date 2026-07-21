@@ -1,9 +1,9 @@
 ---
 trdd-id: T2DVNWVI
 title: Stamp the running git sha into server-liveness.json as the server deploy oracle
-column: planned
+column: testing
 created: 2026-07-21T21:15:52+0200
-updated: 2026-07-21T21:15:52+0200
+updated: 2026-07-21T21:34:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -49,12 +49,22 @@ New shape: `{"ts":…, "pid":…, "sha":"139ae56f", "sha_full":"…", "capabilit
 - Restart → `cat ~/.aimaestro/server-liveness.json` shows `sha` == `git rev-parse --short HEAD`.
 - The core can then answer "is server code X live?" = read `server-liveness.json.sha`.
 
+## IMPLEMENTED + VERIFIED (2026-07-21)
+- `lib/server-liveness.ts`: `ServerLiveness` gained `sha`/`sha_full`/`dirty`; a PURE
+  `computeBuildSha(env, runGit)` (env `AIM_BUILD_SHA` wins → git → `'unknown'`, `dirty` from
+  `git status --porcelain`) behind the cached `resolveBuildSha()`; a `buildSha?()` seam on
+  `WriteServerLivenessDeps` mirrors the existing `now`/`pid`/`capabilities` seams.
+- `tests/unit/server-liveness.test.ts`: +5 (sha-write via seam; computeBuildSha env-wins /
+  git-clean / git-dirty / unknown). **13/13 pass; `tsc --noEmit` exit 0.**
+- Added `dirty` beyond the original plan: under working-tree-is-production a sha alone under-
+  describes a dirty build, so the oracle must report it.
+
 ## Notes
-- Implementation is DEFERRED to batch with the next natural server restart (avoid a redundant
-  dashboard blip + agent boot-restore right after the 21:12 restart). The code change + commit
-  can land now; it goes live on the next restart.
-- Coordinate the new field with the janitor (it reads this file) — additive, so no break, but
-  note it on janitor#100 when implemented so the two backends can optionally consume `sha`.
+- **DEPLOY DEFERRED to the next natural restart** (avoid a redundant blip right after 21:12).
+  Code committed; `server-liveness.json` gains `sha` on the next `pm2 restart`. Superseded by the
+  finalization pivot (2026-07-21) — the build+restart batches into that work.
+- Coordinate the additive field with the janitor (it reads this file) on janitor#100 when it
+  deploys — additive, no break.
 
 ## Approval log
 - 2026-07-21T21:15:52+0200 — MANDATE (Tier-0, self, in-scope infra). Promised to core on #80 S5.

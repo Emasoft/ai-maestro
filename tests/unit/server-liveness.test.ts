@@ -6,6 +6,7 @@ import {
   currentCapabilities,
   writeServerLiveness,
   startServerLiveness,
+  computeBuildSha,
   SERVER_LIVENESS_FILE,
   type ServerLiveness,
 } from '@/lib/server-liveness'
@@ -72,6 +73,45 @@ describe('writeServerLiveness — atomic write of the 3-field shape', () => {
     // Make ~/.aimaestro a FILE so mkdirSync of the dir throws — the write must swallow it.
     fs.writeFileSync(path.join(tmpHome, '.aimaestro'), 'not a dir')
     expect(() => writeServerLiveness({ now: () => 1, pid: 1, capabilities: () => [] })).not.toThrow()
+  })
+  it('writes the build sha/sha_full/dirty from the resolver seam (TRDD-T2DVNWVI)', () => {
+    writeServerLiveness({
+      now: () => 1,
+      pid: 1,
+      capabilities: () => [],
+      buildSha: () => ({ sha: 'abcdef012345', sha_full: 'abcdef0123456789', dirty: true }),
+    })
+    const l = readLiveness()
+    expect(l.sha).toBe('abcdef012345')
+    expect(l.sha_full).toBe('abcdef0123456789')
+    expect(l.dirty).toBe(true)
+  })
+})
+
+describe('computeBuildSha — env stamp wins, else git, else unknown (TRDD-T2DVNWVI)', () => {
+  const noGit = () => {
+    throw new Error('git unavailable')
+  }
+  it('prefers AIM_BUILD_SHA (a packaged build), truncating sha to 12 with dirty=false', () => {
+    const b = computeBuildSha((n) => (n === 'AIM_BUILD_SHA' ? '0123456789abcdef' : undefined), noGit)
+    expect(b).toEqual({ sha: '0123456789ab', sha_full: '0123456789abcdef', dirty: false })
+  })
+  it('falls back to git HEAD with dirty=false on a clean tree', () => {
+    const b = computeBuildSha(
+      () => undefined,
+      (a) => (a.startsWith('rev-parse') ? 'feedface0000' : ''),
+    )
+    expect(b).toEqual({ sha: 'feedface0000', sha_full: 'feedface0000', dirty: false })
+  })
+  it('reports dirty=true when git status --porcelain is non-empty', () => {
+    const b = computeBuildSha(
+      () => undefined,
+      (a) => (a.startsWith('rev-parse') ? 'feedface0000' : ' M lib/x.ts'),
+    )
+    expect(b.dirty).toBe(true)
+  })
+  it("returns 'unknown' when neither env nor git is available", () => {
+    expect(computeBuildSha(() => undefined, noGit)).toEqual({ sha: 'unknown', sha_full: 'unknown', dirty: false })
   })
 })
 

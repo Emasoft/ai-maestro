@@ -3,7 +3,7 @@ trdd-id: T2DVNWVI
 title: Stamp the running git sha into server-liveness.json as the server deploy oracle
 column: testing
 created: 2026-07-21T21:15:52+0200
-updated: 2026-07-21T21:34:00+0200
+updated: 2026-07-21T22:36:08+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -18,6 +18,7 @@ relevant-rules: []
 labels: [deploy-oracle, server-liveness, coordination, core-plugin, P7RPOR5O]
 external-refs: [Emasoft/ai-maestro#80, Emasoft/ai-maestro-plugin#31]
 release-via: none
+implementation-commits: [5a91b7fb]
 ---
 
 # Stamp the running git sha into server-liveness.json as the server deploy oracle
@@ -60,9 +61,13 @@ New shape: `{"ts":…, "pid":…, "sha":"139ae56f", "sha_full":"…", "capabilit
   describes a dirty build, so the oracle must report it.
 
 ## Notes
-- **DEPLOY DEFERRED to the next natural restart** (avoid a redundant blip right after 21:12).
-  Code committed; `server-liveness.json` gains `sha` on the next `pm2 restart`. Superseded by the
-  finalization pivot (2026-07-21) — the build+restart batches into that work.
+- **DEPLOYED + VERIFIED LIVE 2026-07-21T22:36** — batched with the H18PO5YJ P0 restart (`pm2 restart`
+  at HEAD `b4887d20`). `~/.aimaestro/server-liveness.json` now carries
+  `sha:"b4887d202aa0"` (== HEAD), `sha_full:"b4887d202aa0460b740a1611f176496dbf5f99b5"`, `dirty:false`.
+  The oracle CONFIRMED its own deploy AND P0's (the running server is provably on the committed HEAD,
+  clean). Impl commit `5a91b7fb`. NB verify-lag: the very first post-restart liveness write can briefly
+  show the old `{ts,pid,capabilities}` shape before the new process's writer runs — re-read after ~15s.
+- Additive-field coordination with the janitor (reads this file) tracked on janitor#100 — additive, no break.
 - Coordinate the additive field with the janitor (it reads this file) on janitor#100 when it
   deploys — additive, no break.
 

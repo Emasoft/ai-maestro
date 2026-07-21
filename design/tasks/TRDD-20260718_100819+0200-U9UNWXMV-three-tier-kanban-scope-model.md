@@ -3,7 +3,7 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-07-21T20:05:00+0200
+updated: 2026-07-21T20:20:00+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -109,11 +109,20 @@ types `/reload-plugins --force` into the USER's pane and was corrupting their li
 - Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; frontmatter schema in `lib/trdd-store.ts`;
   routing-lint) — own TRDDs, gated on #103 SHIPPING. On the USER's word.
 
+**CORE-PLUGIN SYNC LOOP (USER directive 2026-07-21):** the core plugin `ai-maestro-plugin` owns the
+SKILLS agents use to drive the frozen CLI (`team-kanban`, `ama-kanban-render`, …); ai-maestro owns
+the CLI script layer. So EVERY agent-facing script/command change MUST be communicated to the core
+Claude (skill sync) AND documented. Opened **`ai-maestro-plugin#31`** — heads-up that `amp-kanban-create-task`
+will gain `--project`/`--repo` (Phase 3, pending #103 ratification) so `team-kanban`/`ama-kanban-render`
+can plan; also flagged the continuity verbs; established the standing loop + asked for the core's
+prioritized needs list. Background watcher `bxpwdyaur` notifies on the core's reply. **STANDING RULE:
+when I land the Phase-3 CLI flags, ping #31 with the exact help-block text before/as they deploy.**
+
 **SEPARATE THREAD (not this TRDD — belongs to Family-A / TRDD-KCRMSNL7):** posted a daemon-update
 request on `janitor#100` (comment 5037238511) asking the janitor Claude for a consolidated CURRENT
 daemon snapshot (v0.57.0, thread at rev-5) before advancing the server-side Family-A mirror. Per the
 USER: HOLD all daemon-mirror work until the janitor's consolidated reply. Background watcher
-`bzp9y16au` will notify on their reply.
+`bzp9y16au` will notify on their reply. (Continuity verbs also flagged to core on #31.)
 
 ## Reconciliation — most of this already has a home (verified on disk)
 

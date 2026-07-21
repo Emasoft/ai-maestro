@@ -36,7 +36,6 @@ import PasswordDialog from './PasswordDialog'
 import type { GovernanceState, GovernanceTitle } from '@/hooks/useGovernance'
 import { mintSudoToken, sudoFetch, sudoFetchWithToken } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
-import { isActiveGovernanceTitle } from '@/types/agent'
 
 interface TitleAssignmentDialogProps {
   isOpen: boolean
@@ -328,15 +327,10 @@ export default function TitleAssignmentDialog({
     }
   }
 
-  // TRDD-H18PO5YJ: restrict the OFFERED titles to ACTIVE_GOVERNANCE_TITLES
-  // (manager/maintainer/autonomous) for new selection, but always keep the
-  // agent's CURRENT title visible so an existing dormant-title agent can
-  // still see its own selection and change away from it. TITLE_OPTIONS
-  // itself stays full — other code (titleDisabledReason, transition logic)
-  // depends on the complete set. Revert by restoring `TITLE_OPTIONS` here.
-  const visibleTitleOptions = TITLE_OPTIONS.filter(
-    (o) => isActiveGovernanceTitle(o.title) || o.title === currentTitle
-  )
+  // All titles are visible now — team-only vs standalone-only titles are
+  // shown as disabled with a reason (see titleDisabledReason above). Kept
+  // as a stable alias so downstream render code doesn't need to change.
+  const visibleTitleOptions = TITLE_OPTIONS
 
   // R19.2: Validate githubRepo format client-side. Must match the same regex
   // used by services/element-management-service.ts Gate 9a: ^[\w.-]+\/[\w.-]+$.

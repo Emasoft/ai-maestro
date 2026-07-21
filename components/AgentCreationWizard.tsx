@@ -7,7 +7,6 @@ import Image from 'next/image'
 import CreateAgentAnimation, { getPreviewAvatarUrl } from './CreateAgentAnimation'
 import type { Team } from '@/types/team'
 import type { AgentRole } from '@/types/agent'
-import { isActiveGovernanceTitle } from '@/types/agent'
 import type { RolePlugin } from '@/services/role-plugin-service'
 // Plugin compatibility is resolved dynamically via /api/agents/role-plugins
 
@@ -27,25 +26,20 @@ interface ChatMessage {
 // --- Constants ---
 
 // Titles available when an agent is assigned to a team
-// TRDD-H18PO5YJ: filtered to ACTIVE_GOVERNANCE_TITLES (manager/maintainer/autonomous)
-// for NEW-agent selection — none of the team-only titles are active, so this list is
-// empty in this build. Revert by dropping the .filter() call.
-const TEAM_TITLES_ALL: Array<{ value: AgentRole; label: string; description: string }> = [
+const TEAM_TITLES: Array<{ value: AgentRole; label: string; description: string }> = [
   { value: 'member', label: 'MEMBER', description: 'Default team member' },
   { value: 'chief-of-staff', label: 'CHIEF-OF-STAFF', description: 'Coordinates the team on behalf of the MANAGER' },
   { value: 'architect', label: 'ARCHITECT', description: 'Designs technical solutions' },
   { value: 'orchestrator', label: 'ORCHESTRATOR', description: 'Manages tasks and kanban' },
   { value: 'integrator', label: 'INTEGRATOR', description: 'Handles integrations and APIs' },
 ]
-const TEAM_TITLES = TEAM_TITLES_ALL.filter((t) => isActiveGovernanceTitle(t.value))
 
 // Titles available when an agent has no team (standalone)
-const STANDALONE_TITLES_ALL: Array<{ value: AgentRole; label: string; description: string }> = [
+const STANDALONE_TITLES: Array<{ value: AgentRole; label: string; description: string }> = [
   { value: 'autonomous', label: 'AUTONOMOUS', description: 'Independent agent, no team assigned' },
   { value: 'manager', label: 'MANAGER', description: 'Oversees the entire multi-agent system (singleton)' },
   { value: 'maintainer', label: 'MAINTAINER', description: 'Polls a single GitHub repo, triages issues, fixes autonomously' },
 ]
-const STANDALONE_TITLES = STANDALONE_TITLES_ALL.filter((t) => isActiveGovernanceTitle(t.value))
 
 // Title colors matching TitleBadge conventions
 const TITLE_COLORS: Record<AgentRole, string> = {
@@ -1359,14 +1353,6 @@ function TitlePickerWidget({
       })
       .catch(() => {})
   }, [])
-
-  if (titles.length === 0) {
-    return (
-      <div className="px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800/40 text-sm text-gray-500">
-        No team roles are available in this build — create a standalone MANAGER, MAINTAINER, or AUTONOMOUS agent.
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-1.5">

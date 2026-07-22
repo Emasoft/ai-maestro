@@ -65,3 +65,19 @@ The taxonomy is a UNIVERSAL 3-pillars concept, so the authoritative, cross-proje
 as a first-class doc type alongside the janitor's `trdd-design-tasks.md` / `prrd-design-rules.md`)
 is an IND-base delta being coordinated with the ai-maestro-janitor. Until that lands, this README is
 the working reference and `3-pillars-spec.md` is the reference SPEC that establishes the shape.
+
+## Current specs in this folder
+
+Each is a DETAILED capture of a rule file — read the whole rule file, one rule at a time; a spec is
+*more* detailed than its source, never a summary (the per-clause style is dry/greppable, not lossy).
+
+- **`3-pillars-spec.md`** — the reference SPEC. The 17-column kanban vocabulary, the TRDD/PRRD
+  contracts, the IND/DEP boundary test. Conformance-tested against `types/task.ts`.
+- **`governance-spec.md`** — captures `docs/GOVERNANCE-RULES.md` (R1-R49 + 22 invariants + comm graph
+  + the 8 titles + permission matrix), clause-for-clause. Tracks the catalog `version:`.
+- **`scenario-tests-spec.md`** — captures `tests/scenarios/SCENARIOS_TESTS_RULES.md` (Rule 0-14) + the
+  runner-agent contract + the test procedures, so the **ai-maestro-web-scenario-tester** plugin can
+  validate its own agents/skills/scripts against it (the `STS-VAL` checklist).
+
+The rule files these describe STAY in their own locations (the RULE FILE ≠ the SPEC, per the
+distinction above); only the describing spec lives here.

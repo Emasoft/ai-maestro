@@ -57,4 +57,14 @@ janitor USER-scope hub [[ai-maestro-fleet-hub-governance-and-security]].
   protocols); the operational rule files themselves stay in their INSTALL folders (IND →
   `~/.claude/rules/` via janitor; DEP overlays `aimaestro-*.md` → `rules/aimaestro/`, seeded to
   workdirs) and do NOT move to `design/specs/`. Only the describing spec lives there.
+[^3]: [id:ATOM-3PSP-0003, status:valid, keywords:"how_to_write_a_spec spec_from_summaries distiller_digest read_whole_rule_file one_rule_at_a_time spec_more_detailed_than_rule concise_is_style_not_omission", ocd:2026-07-22, lmd:2026-07-22]
+  DO NOT author a SPEC from summaries or a distiller agent's digest, BECAUSE a spec is MORE
+  detailed than the rule file it captures, not a digest — a summary silently drops the atomic
+  requirements the spec must pin. DO read the WHOLE source rule file yourself, ONE RULE AT A TIME,
+  and capture EVERY rule + sub-rule as its own dry, greppable clause (USER, 2026-07-22). "Concise/
+  dry/greppable" is the per-clause STYLE, never permission to omit content. Applied authoring
+  [[three-pillars-conformance-spec]]'s siblings `design/specs/{governance-spec,scenario-tests-spec}.md`:
+  killed a Sonnet summariser mid-flight, then read GOVERNANCE-RULES.md R1-R49 + SCENARIOS_TESTS_RULES.md
+  in full, rule by rule (TRDD-R8LJJDBQ). This note exists because the first cut delegated the
+  distillation to summaries — the exact miss it now prevents.
 

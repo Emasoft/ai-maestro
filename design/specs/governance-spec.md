@@ -617,9 +617,11 @@ teams (following the COS).
 ### GOV-R39 — Users Have No Terminal → the ASSISTANT Agent [CRITICAL · IRON · USER-set]
 `R39.1` **user-has-no-terminal** — human users have no terminal/chat page on their profile; each is auto-assigned an
 ASSISTANT-title agent on create/register (the MAESTRO is exempt — it has the MANAGER). `R39.2` **assistant-role-plugin**
-— the ASSISTANT runs `ai-maestro-assistant-role-agent` (still TO BE CREATED) — a combination of the MANAGER +
-MAINTAINER role-plugins, WITHOUT agent/team-creation and WITHOUT governing powers (revised 2026-07-16 from "MANAGER
-planning + AUTONOMOUS programming"). `R39.3` **user-uses-own-assistant-terminal** — the user works via their own
+— the ASSISTANT runs `ai-maestro-assistant-role-agent` (a LOCAL/D4 source — already BUILT at
+`~/agents/role-plugins/roles-marketplace/`, not a published repo) — a mix of the MANAGER (planning — it listens to
+its bound user) + AUTONOMOUS (programming — codes autonomously, no team, not directed by the MANAGER) role-plugins,
+WITHOUT agent/team-creation and WITHOUT governing powers (USER-ruled MANAGER+AUTONOMOUS on 2026-07-22, reverting the
+erroneous 2026-07-16 MAINTAINER revision — GOVERNANCE-RULES v4.5.1). `R39.3` **user-uses-own-assistant-terminal** — the user works via their own
 profile's ASSISTANT terminal; selecting any other agent shows the profile with NO terminal and no panel edit.
 `R39.4` **four-locked-fields** — the ASSISTANT has no team; profile shows `Assistant of <user>`; the user may edit
 its panel EXCEPT NAME/TITLE/ROLE-PLUGIN/TEAM (changed only by the MAESTRO with sudo, per R26). `R39.5`

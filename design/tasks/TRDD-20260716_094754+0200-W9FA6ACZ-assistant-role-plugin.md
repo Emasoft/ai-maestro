@@ -1,9 +1,9 @@
 ---
 trdd-id: W9FA6ACZ
-title: ASSISTANT role-plugin — ai-maestro-assistant-role-agent (MANAGER+MAINTAINER, ungoverned, user-bound) (R39)
+title: ASSISTANT role-plugin — ai-maestro-assistant-role-agent (MANAGER+AUTONOMOUS, ungoverned, user-bound) (R39)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-16T10:39:44+0200
+updated: 2026-07-22T11:48:01+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [39, 46, 41, 26, 6, 11]
@@ -50,20 +50,31 @@ block — and `services/element-management-service.ts`). Only **R39.1-R39.4 are 
 | **R39.2** (v4.4.0, today) | MANAGER + **MAINTAINER** |
 | `lib/ecosystem-constants.ts:283` | MANAGER (planning) + **AUTONOMOUS** (programming) |
 | **the built plugin** (2026-06-19) | persona references **autonomous** → built to the OLD spec |
-R39.2 is USER-set IRON; no agent may resolve this. **Do NOT re-compose or rebuild the plugin until
-the USER rules.** Reported to the MANAGER in `ai-maestro-assistant-manager-agent` issue #28 §3.
+**✅ RESOLVED 2026-07-22 — the USER RE-RULED: composition = MANAGER + AUTONOMOUS** (MANAGER because it
+listens to its bound user; AUTONOMOUS because it codes independently — no team, not directed by the
+MANAGER; consistent with R39.5). So **R39.2's "MAINTAINER" text (the 2026-07-16 v4.4.0 revision) was the
+error**; the built persona + `ecosystem-constants.ts:283` were RIGHT all along. Reconciled this session
+(TRDD-R8LJJDBQ commits): **R39.2 CORRECTED → MANAGER+AUTONOMOUS + version bump to GOVERNANCE-RULES v4.5.1**,
+`design/specs/governance-spec.md` R39.2 synced, r39 project-memory note's stale "+ MAESTRO" fixed. The built
+plugin needs **NO** change (already MANAGER+AUTONOMOUS). Originally reported to the MANAGER in
+`ai-maestro-assistant-manager-agent` issue #28 §3.
+**STILL OPEN:** only the R39.4 KEEP/STRIP decision below (recommendation: KEEP). The R39.1-R39.4 SURFACE
+build stays HELD (transition phase) — this resolution is doc-reconciliation only, not surface-build.
 
-**NEXT ACTION when unheld:** do NOT scaffold. (1) Get the USER's ruling on the composition drift
-above; (2) get the USER's R39.4 ruling below; (3) THEN reconcile the existing plugin's persona to the
-ruled composition and build only the genuinely-missing R39.1-R39.4 surfaces.
+**NEXT ACTION when unheld:** do NOT scaffold. Composition is RESOLVED (MANAGER+AUTONOMOUS) and the docs
+are reconciled — the ONLY remaining gate is (1) the USER's R39.4 KEEP/STRIP ruling below; then (2) build
+only the genuinely-missing R39.1-R39.4 surfaces (the existing persona already matches — no re-compose).
 
 ## Problem
 
 R39.1 auto-assigns every non-MAESTRO user an ASSISTANT agent (users are human — no terminal/client
-of their own, R39). The role-plugin **exists** (above) but was built to the **superseded**
-MANAGER+AUTONOMOUS composition, while R39.2 now mandates MANAGER+**MAINTAINER** — without
-agent/team-creation privileges and without governing powers (R46.3). So the gap is NOT "create the
-plugin"; it is **reconcile the drift** and build the still-unenforced R39.1-R39.4.
+of their own, R39). The role-plugin **exists** (above), built to **MANAGER+AUTONOMOUS** — which the
+USER RE-RULED (2026-07-22) is the CORRECT composition: MANAGER because it listens to its bound user,
+AUTONOMOUS because it codes independently (no team, not directed by the MANAGER), without
+agent/team-creation privileges and without governing powers (R46.3). R39.2's momentary "MAINTAINER"
+text (v4.4.0, 2026-07-16) was the drift, now CORRECTED to MANAGER+AUTONOMOUS (GOVERNANCE-RULES v4.5.1).
+So the gap is NOT "create the plugin" and NOT "re-compose it"; it is only build the still-unenforced
+R39.1-R39.4 surfaces (HELD under transition-phase).
 
 ## Approach (design sketch — pending the USER rulings)
 
@@ -121,3 +132,8 @@ R47) · TRDD-40CUZA1Z (sidebar R46) · TRDD-PLOVIPZE (console gates R48) · TRDD
   MANAGER+MAINTAINER; `ecosystem-constants.ts:283` says MANAGER+AUTONOMOUS; the built persona says
   autonomous). When they do, the drift itself is the finding — escalate it rather than picking the
   source that happens to be newest.
+- 2026-07-22 — RESOLUTION of the above (and proof of the lesson): the USER ruled MANAGER+AUTONOMOUS.
+  The **newest** source (R39.2 v4.4.0, "MAINTAINER") was the WRONG one; the older code comment + the
+  built persona were right. Had we auto-picked "newest wins" we'd have re-composed a correct plugin
+  into a wrong one. DO NOT resolve a governance-vs-code drift by recency; escalate to the USER, whose
+  intent is the tie-breaker. R39.2 CORRECTED → GOVERNANCE-RULES v4.5.1; spec + r39 memory note synced.

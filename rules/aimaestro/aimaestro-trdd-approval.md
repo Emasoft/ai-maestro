@@ -799,7 +799,7 @@ server registry):
     paths:    ["**/libfoo/**"]
     keywords: ["libfoo", "CVE-2026-XXXX"]
     deps:     ["libfoo"]
-  min-tier: 2                  # raise matches to >= Tier 2
+  min-requirement: manager     # raise each match's min-approval-requirement to >= manager
   no-self-approve: true
   mode: realtime              # proactive for THIS category only
   expires: 2026-06-12T19:00:00+0200   # TTL — see below
@@ -818,7 +818,7 @@ shrinks:
    certainty, but they shrink the investigation area massively — that is
    their job.
 2. **LLM confirm only on the suspects:** the (few) matched TRDDs get the
-   expensive check — raise their `approval-tier:` to `min-tier`, enforce
+   expensive check — raise their `min-approval-requirement:` to the rule's `min-requirement`, enforce
    `no-self-approve` (if a match was self-approved into `design/tasks/`,
    move it back to `design/proposals/` and halt dependent execution),
    and LLM-confirm ambiguous matches. The non-matches never cost a

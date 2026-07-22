@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-17T19:06:11+0200
+updated: 2026-07-22T15:04:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -22,7 +22,18 @@ release-via: none
 
 # Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-16
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-22
+
+**▶ 2026-07-22 — NPT flock progress (8 NPTs; parent stays `design` until an NPT reaches `complete`):**
+`testing` ×3 — Y916N7WL, JAU1ES1C, P7RPOR5O. `design` ×1 — H24DF6ZC (R16 oauth-design, owner-gated).
+`dev` ×2 — **CHN16JXZ**: gentle fleet-recovery loop **A(detect)+B(actuate)+D(wire) COMPLETE + dark-shipped**
+behind default-OFF `AIM_FLEET_RECOVERY_FIRE` (detection live at boot; gentle ladder
+esc_nudge→rearm→reload→update via the authenticated server-queue #60 path); Phase C (hard rungs) SPECIFIED
++ deferred (needs a `dead`-class = `persisted && !exists`, debounced past boot — must NOT fire on live
+frozen agents). 1GGQ4HWY oauth-manager ~95%, gated OFF (R16). `blocked` ×2 — DXJZM3BW (continuity-CLI),
+9ZIF82HI (account-switcher, user-approval). **Flock is ACTIVE, not stale.** Launch-readiness verdict holds:
+SAFE to launch — the janitor keeps its Family-A stopgaps (#79) until each server half lands; CHN16JXZ's
+gentle recovery is the first server half built + tested (arm the flag to validate live).
 
 **▶ CO-RATIFICATION COMPLETE — `design/ARCHITECTURE.md` rev 3 is FINAL (2026-07-17).** Both sides
 posted **`RATIFIED rev 3`** (my comment `5005141732`; janitor's alongside `ca22004`). The janitor

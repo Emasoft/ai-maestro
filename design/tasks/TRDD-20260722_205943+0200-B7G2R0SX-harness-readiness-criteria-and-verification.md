@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T23:40:00+0200
+updated: 2026-07-23T00:05:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -66,6 +66,17 @@ STARTED with a backtick (`` `gh` ``, `` `tests/...` ``) — YAML rejects a plain
 starts with a backtick; swapped both `: ` to ` — `. yq now parses all 18 keys + resolves rewipe-list/dir-fixtures/
 git-fixtures. NOTE: 4 of 31 scen files carry the same backtick-in-frontmatter pattern — the other 3 are a latent
 setup-failure risk (follow-up, not this run).
+
+**▶ 2026-07-22 (BOTH BLOCKERS RESOLVED by USER → SCEN-031 LAUNCHED).** USER resolved both prereqs: (A) template =
+`fannijako/repo_template` (verified public + `isTemplate:true`) — wired into S002/S006/prereq, committed `04a3c8e1`;
+(B) `AIM_GOVERNANCE_PASSWORD` confirmed present in `.env.local` (the forked runner sources it; I stay walled off per
+Rule 12). **SCEN-031 is now RUNNING** — launched via the `scenario-runner` agent (background, isolated context) with
+the full constraint set: Rule 0.b (brief MANAGER once, observe, never drive the workers), NEVER-STOP (fleet
+self-sustains via janitor cron + server continuity daemon; runner forbidden any keep-alive), Rule 12 (password never
+through a model), shared design/ board + column ownership, real GitHub side effects + full cleanup. **This run IS the
+readiness proof** (USER's definition: ready = SCEN-031 runs and passes). NEXT = await the runner's verdict
+(PASS/FAIL/PARTIAL/STUCK) + report path; on FAIL/PARTIAL, act on the finding at its CAUSE and rerun. The run is long
+(multi-hour fleet build) and unsupervised by design — a completion notification will arrive.
 
 **Origin.** After the governance-spec full-fidelity rewrite (TRDD-CJWC3JLU, complete), a standing
 Stop-hook condition "make the ai-maestro harness ready" kept firing. "Ready" was undefined. The USER

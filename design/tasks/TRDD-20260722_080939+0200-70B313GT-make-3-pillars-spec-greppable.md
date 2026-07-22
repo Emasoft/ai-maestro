@@ -1,9 +1,9 @@
 ---
 trdd-id: 70B313GT
 title: Redesign the 3-pillars SPEC as a greppable reference — stable 3P clause-ID anchors + a 3P-GREP cheat-sheet
-column: testing
+column: complete
 created: 2026-07-22T08:09:39+0200
-updated: 2026-07-22T08:09:39+0200
+updated: 2026-07-22T08:10:16+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -18,7 +18,7 @@ relevant-rules: []
 labels: [governance-rules, three-pillars-spec, greppable, am85]
 external-refs: [Emasoft/ai-maestro#85, TRDD-CR8JRH74]
 release-via: none
-implementation-commits: []
+implementation-commits: [9278bbc6]
 ---
 
 # Redesign the 3-pillars SPEC as a greppable reference — stable 3P clause-ID anchors + a 3P-GREP cheat-sheet

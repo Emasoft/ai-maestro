@@ -16,7 +16,12 @@ description: >
   v1.0.0 release; install and smoke-test the release, then tell the user it is done. The user then
   installs it themselves and verifies it works on a sample zip. If every one of those happens
   WITHOUT the runner ever driving a non-MANAGER agent, the harness is READY. This exercises the three
-  NO-TEAM host-level titles (MANAGER / AUTONOMOUS / MAINTAINER) end to end.
+  NO-TEAM host-level titles (MANAGER / AUTONOMOUS / MAINTAINER) end to end. CRUCIALLY, the entire build must
+  proceed UNSUPERVISED and UNINTERRUPTED: the janitor heartbeat cron plus the ai-maestro server's continuity
+  daemon (auto-resume, rate-limit recovery, session resurrection) must keep every agent working with ZERO
+  human nudge. The runner must not cheat or interfere to keep them alive — no manual resume, no re-prompt,
+  no keep-alive poke. If any agent stops and stays stopped (not auto-recovered by the continuity substrate),
+  the test FAILED.
 client: claude
 interhosts: false
 device: desktop
@@ -27,6 +32,7 @@ subsystems:
   - agent-messaging
   - role-plugins
   - sessions-service
+  - fleet-continuity (janitor heartbeat cron + ai-maestro server continuity daemon — auto-resume / rate-limit recovery / session resurrection; the fleet must run unsupervised, never stopping)
 ui_sections:
   - Sidebar -> Agents tab
   - Agent view -> Chat section (the ONLY place the user types to an agent — and only to the MANAGER)
@@ -65,6 +71,10 @@ prerequisites:
     (`ai-maestro-autonomous-agent`), and the MAINTAINER role-plugin (`ai-maestro-maintainer-agent`) available
   - `tests/scenarios/fixtures/scen031-sample-zips/` exists with at least one sample `.zip` containing a known
     file (e.g. `needle.txt`) for the S0-final user verification
+  - CONTINUITY SUBSTRATE ACTIVE: `ai-maestro-janitor` installed so the heartbeat is armable in each agent
+    session, AND the ai-maestro server's continuity/daemon functionality (KCRMSNL7 Family-A: auto-resume,
+    rate-limit recovery via account rotation, session resurrection after a crash/reboot) is live — this is
+    what must carry the fleet through the long unsupervised build with zero human intervention
 governance_password: "$AIM_GOVERNANCE_PASSWORD"
 commit: TBD
 author: Emasoft
@@ -95,6 +105,16 @@ author: Emasoft
 > PR, or told the MAINTAINER to approve, the verdict is FAIL and the finding is "the fleet did not do X on its
 > own." The value of this test is the answer to one question: *given a real, non-trivial software goal, does an
 > AI Maestro fleet organize itself and ship it?*
+>
+> **UNSUPERVISED + NEVER-STOP — a second thing this test proves, equally load-bearing (USER, 2026-07-22).**
+> The build is long and WILL hit interruptions — rate limits, idle gaps, the odd crash. The fleet must survive
+> them ON ITS OWN, through the janitor heartbeat cron + the ai-maestro server continuity daemon (auto-resume,
+> account rotation on 429, session resurrection) — NOT through the runner. The runner is FORBIDDEN from any
+> keep-alive: no manual resume, no re-prompt, no "are you still there" poke, no compacting on an agent's
+> behalf. When an agent goes quiet the ONLY question is whether the CONTINUITY SUBSTRATE brings it back. An
+> agent that stops and STAYS stopped — or that only kept going because the runner nudged it — is a **FAIL**.
+> This is why the janitor cron must be armed in every agent and the server daemon active before the brief:
+> the harness is "ready" only if it keeps the fleet working while nobody is watching.
 
 ---
 
@@ -128,12 +148,12 @@ author: Emasoft
 - **Modifies:** `registry.json`, `governance.json` (owner/manager wiring)
 - **Verify:** `GET /api/agents/{id}` → `.agent.governanceTitle === 'manager'`; sidebar badge reads MANAGER.
 
-#### S005: Wake the MANAGER and confirm it is idle
-- **Action:** Wake `scen031-manager`; wait for the idle prompt.
-- **Goal:** A live MANAGER session, not driven by the runner.
-- **Creates:** 1 tmux session
+#### S005: Wake the MANAGER, arm its continuity substrate, confirm idle
+- **Action:** Wake `scen031-manager`; wait for the idle prompt. Confirm the janitor heartbeat is armed in its session (it self-arms on wake via the core plugin; if it is not, that is a continuity-substrate bug — Rule 4, fix it). Confirm the ai-maestro server's continuity/daemon functionality is live (auto-resume / rate-limit recovery / resurrection).
+- **Goal:** A live MANAGER session whose continuity substrate (janitor cron + server daemon) is ACTIVE — so it will self-sustain unsupervised, never kept alive by the runner.
+- **Creates:** 1 tmux session; the `[janitor-heartbeat]` cron for this agent
 - **Modifies:** nothing
-- **Verify:** the badge shows waiting/idle (5-state model), not `exited`.
+- **Verify:** badge shows waiting/idle (5-state model), not `exited`; a `[janitor-heartbeat]` cron exists for the session; the server continuity daemon reports active. If the janitor is NOT armed or the daemon is down, the fleet cannot run unsupervised → fix the cause before proceeding (Rule 4). Do NOT proceed by planning to nudge the agent yourself — that would invalidate the never-stop proof.
 
 ---
 
@@ -176,7 +196,7 @@ author: Emasoft
 - **Goal:** An AUTONOMOUS agent and a MAINTAINER agent now exist, created BY THE MANAGER.
 - **Creates:** (by the MANAGER) 1 AUTONOMOUS + 1 MAINTAINER agent under `~/agents/<name>/` each
 - **Modifies:** `registry.json`
-- **Verify:** `GET /api/agents` shows two NEW agents whose `governanceTitle` is `autonomous` and `maintainer`, each with its role-plugin installed (R9.13). Record their names (do NOT hardcode — the MANAGER chose them). If the MANAGER creates the wrong titles, a team (this is team-less), or only one agent → behavioural FAIL, fix the cause.
+- **Verify:** `GET /api/agents` shows two NEW agents whose `governanceTitle` is `autonomous` and `maintainer`, each with its role-plugin installed (R9.13). **Each new agent's continuity substrate must also come up** — on its first wake its janitor heartbeat arms and the server daemon covers it, so the AUTONOMOUS and MAINTAINER ALSO self-sustain unsupervised (they will be running long unattended stretches). Record their names (do NOT hardcode — the MANAGER chose them). If the MANAGER creates the wrong titles, a team (this is team-less), only one agent, OR an agent whose janitor heartbeat never arms → behavioural FAIL, fix the cause.
 
 ---
 
@@ -194,18 +214,18 @@ author: Emasoft
 - **Goal:** The approval loop actually runs: proposals flow up, decisions flow down as messages, and a refusal (if any) is a guide, not a gate.
 - **Creates:** nothing (runner)
 - **Modifies:** nothing (runner)
-- **Verify:** TRDD frontmatter shows `approved: true` (or a documented refusal with a named defect) via the MANAGER; the `## Approval log` records who decided and when. A silent approval with no message chain, or a bare refusal, is a behavioural finding.
+- **Verify:** TRDD frontmatter shows `approved: true` (or a documented refusal with a named defect) via the MANAGER; the `## Approval log` records who decided and when. **DERIVED TRDDs are correct:** the AUTONOMOUS authors NPT/EHT children properly — each derived TRDD is DEPTH-1 (empty `npt:`/`eht:`, it spawns no derived TRDDs of its own), siblings are ordered via `blocked-by:` (NEVER by putting a sibling in `npt:`), and the parent stays out of `complete` until every EHT is terminal (the completion gate). A silent approval with no message chain, a bare refusal, or malformed/missing derived TRDDs is a behavioural finding.
 
 ---
 
 ## Phase 5: The repo — MAINTAINER creates zipsearcher from a template (user spec step 6)
 
-#### S011: Observe — the MANAGER instructs the MAINTAINER to create + protect + clone the repo
-- **Action:** Watch (read-only) the MAINTAINER. On the MANAGER's message, the MAINTAINER must: create `Emasoft/zipsearcher` FROM the template (`gh repo create --template`), apply the baseline branch rulesets (no-force/no-delete/linear + PR+checks — the ratified baseline), and clone it into its own workdir.
-- **Goal:** A real, branch-protected `Emasoft/zipsearcher` repo exists, cloned locally by the MAINTAINER.
-- **Creates:** (by the MAINTAINER) the GitHub repo + a local clone under `~/agents/<maintainer>/`
-- **Modifies:** GitHub (repo + rulesets)
-- **Verify:** `gh repo view Emasoft/zipsearcher` succeeds and was generated from the template; `gh api repos/Emasoft/zipsearcher/rulesets` shows the baseline branch rules; the local clone exists. If the MAINTAINER skips branch protection → finding (the baseline is the floor).
+#### S011: Observe — the MANAGER instructs the MAINTAINER to create, protect, add CI, and clone the repo
+- **Action:** Watch (read-only) the MAINTAINER. On the MANAGER's message, the MAINTAINER must: create `Emasoft/zipsearcher` FROM the template (`gh repo create --template`), apply the baseline branch rulesets (no-force/no-delete/linear + PR + required-checks — the ratified baseline), **set up a CI workflow** (`.github/workflows/` GitHub Actions that runs zipsearcher's test suite on every PR), and clone it into its own workdir.
+- **Goal:** A real, branch-protected `Emasoft/zipsearcher` repo WITH working CI exists, cloned locally by the MAINTAINER.
+- **Creates:** (by the MAINTAINER) the GitHub repo + a CI workflow + a local clone under `~/agents/<maintainer>/`
+- **Modifies:** GitHub (repo + rulesets + workflow)
+- **Verify:** `gh repo view Emasoft/zipsearcher` succeeds and was generated from the template; `gh api repos/Emasoft/zipsearcher/rulesets` shows the baseline branch rules; a CI workflow exists under `.github/workflows/` and runs on PRs, and the ruleset's required status check references it; the local clone exists. If the MAINTAINER skips branch protection OR ships no CI → finding (both are the floor — PRs must be gated on green CI).
 
 ---
 
@@ -237,10 +257,10 @@ author: Emasoft
 - **Goal:** A genuine review loop: at least one PR is sent back for a fix and improved before merge. No self-merge by the AUTONOMOUS; no empty approval by the MAINTAINER.
 - **Verify:** review comments name concrete issues; a PR shows a request-changes → fix → re-review → merge cycle; merges are by the MAINTAINER, not the author. A PR merged with a known failing test, or approved with no substantive review, is a hard FAIL (the plugin-tests-are-the-plugin's-job discipline + R49).
 
-#### S015: Observe — the AUTONOMOUS iterates TRDD after TRDD to completion, then notifies the MANAGER
-- **Action:** Watch (read-only) across the full cycle: approvals (MANAGER), tests (green), PRs (opened), reviews (MAINTAINER), merges — repeated until the tool is complete. Then the AUTONOMOUS messages the MANAGER that zipsearcher is done.
-- **Goal:** The software reaches feature-complete via the governed loop, and completion is REPORTED up as a message.
-- **Verify:** the merged `main` of `Emasoft/zipsearcher` is a working zipsearcher (searches names inside a zip via the central directory, no decompression); its own test suite passes in CI; an AMP message `from: <autonomous> to: <manager>` reports completion.
+#### S015: Observe — the AUTONOMOUS iterates to completion; the MANAGER monitors via scripts; nobody nudges
+- **Action:** Watch (read-only) across the full cycle: approvals (MANAGER), tests green in CI, PRs opened, reviews (MAINTAINER), merges — repeated until the tool is complete. Throughout, the MANAGER MONITORS the two agents' status via the ai-maestro-plugin skills / `aimaestro-agent.sh` status verbs (read-only status polling — this is MONITORING, not driving; R42 forbids injection, not observation). The runner does NOTHING — no nudge, no resume, no keep-alive. Then the AUTONOMOUS messages the MANAGER that zipsearcher is done.
+- **Goal:** The software reaches feature-complete via the governed loop; the MANAGER stays aware of both agents through the status scripts; and the whole long run self-sustains through interruptions via the continuity substrate, with ZERO runner intervention.
+- **Verify:** the merged `main` of `Emasoft/zipsearcher` is a working zipsearcher (searches names inside a zip via the central directory, no decompression); its test suite passes in CI; the MANAGER's transcript shows it polling the two agents' status via the scripts/skills; an AMP message `from: <autonomous> to: <manager>` reports completion. **Never-stop check:** across the whole run, every agent that went quiet was brought back by the janitor cron / server continuity daemon, NOT by the runner — verify via cron-fire evidence + server continuity logs and the ABSENCE of any runner keep-alive action. An agent that stopped and stayed stopped, or that only continued because the runner poked it, is a hard FAIL.
 
 ---
 
@@ -265,7 +285,7 @@ author: Emasoft
 - **Goal:** The finished software works for the user, on a real zip, finding a file inside without decompressing.
 - **Creates:** a throwaway install in `/tmp`
 - **Modifies:** nothing in the project
-- **Verify:** zipsearcher reports `needle.txt` found inside the sample zip (and a non-existent name is reported not-found). If it works → **step 14 satisfied: the harness is READY**. If it fails → the fleet shipped a broken 1.0.0 that its own MANIFEST smoke-test missed: a hard FAIL with the deepest finding of all.
+- **Verify:** zipsearcher reports `needle.txt` found inside the sample zip (and a non-existent name is reported not-found). If it works → **step 14 satisfied: the harness is READY — PROVIDED the never-stop condition ALSO held:** the fleet ran the ENTIRE build unsupervised, self-recovering from every interruption via the janitor cron + server continuity daemon, with ZERO runner keep-alive. If the tool works but any agent had to be nudged/resumed by the runner to get here, the harness is NOT ready — that is a FAIL. If the tool fails → the fleet shipped a broken 1.0.0 that its own smoke-test missed: a hard FAIL with the deepest finding of all.
 
 ---
 

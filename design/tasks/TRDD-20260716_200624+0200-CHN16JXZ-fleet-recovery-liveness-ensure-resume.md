@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-22T14:17:51+0200
+updated: 2026-07-22T14:24:17+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,7 +23,7 @@ derived-kind: npt
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: [c930a1cc, a7c04017]
+implementation-commits: [c930a1cc, a7c04017, 70688c00]
 release-via: none
 ---
 
@@ -63,8 +63,14 @@ gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
   the HID-presence gate before any injection.
 - **C 🔲 HARD rungs** `relaunch → force_restart → resurrect` behind a **default-OFF** flag +
   per-instance cooldown + crash-loop-page-once (mirrors janitor `FLEET_HARD_RESTART_ENABLED`).
-- **D 🔲 WATCHDOG wiring:** boot-start a periodic scan (mirror `startAgentInvariantsWatchdog`),
-  server-owned agents only (never `unarmed`/non-`server_owned` — those stay the janitor's).
+- **D-lite ✅ DONE (`70688c00`)** — READ-ONLY WATCHDOG wiring: `lib/fleet-liveness-watchdog.ts`
+  (`defaultFleetScanDeps` wires registry + `getAgentSessionStatus` + `readHookNotification`;
+  `runFleetLivenessTick` scans + LOGS stalled/token-blocked, never throws; `startFleetLivenessWatchdog`
+  setInterval/unref/env-interval/0-disables). Started at boot in `server.mjs` after server-liveness.
+  Detection RUNS now (the guardian's eyes) — no actuation. 6 tests.
+- **D-full 🔲** — the watchdog fires the Phase-B/C actuator on `recoveryTargets` (currently detect+log
+  only). Restrict to `server_owned` agents (today `listAgents()` == the server's own registry; when
+  cross-host/#N sessions enter scope, add the `server_owned` filter so we never touch the janitor's).
 - **Deferred:** token-blocked healing hand-off to [[1GGQ4HWY]]'s cascade, live only after R16.
 
 **Recovery-ladder parity spec** (mirror the janitor's `RECOVERY_LADDER`, from the audit report

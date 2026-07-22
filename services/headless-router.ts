@@ -232,6 +232,7 @@ import {
   buildRelaunchCommand,
   runRestartSequence,
 } from '@/lib/session-restart'
+import { resolveLaunchArgs } from '@/services/agent-launch-args'
 import { runStopSequence } from '@/lib/session-stop'
 // SF2 drift-fix: the role-plugins install/delete headless handlers must mirror the
 // Next.js routes' agent-path RBAC. Those routes gate agents via requireSudoToken →
@@ -969,9 +970,13 @@ const routes: Route[] = [
     const program = body.program || agent.program || 'claude'
     const programArgs = body.programArgs || agent.programArgs || ''
     if (!isValidProgramArgs(programArgs)) { sendJson(res, 400, { error: 'Invalid programArgs: contains disallowed characters' }); return }
+    // TRDD-GZ1KOHNR: enforce `--agent <persona>` on relaunch (headless me/restart);
+    // refuse before any stop if this Claude agent has no resolvable role persona.
+    const enforced = await resolveLaunchArgs(agent.id, program, programArgs)
+    if (enforced.kind === 'refuse') { sendJson(res, 409, { error: 'agent_persona_unresolved', message: `Refusing to restart "${sessionName}": ${enforced.reason}` }); return }
     const bin = resolveRestartBin(program)
     const personaName = sanitizePersonaName(agent.label || agent.name || sessionName, sessionName)
-    const command = buildRelaunchCommand(bin, programArgs, personaName)
+    const command = buildRelaunchCommand(bin, enforced.args, personaName)
     const outcome = await runRestartSequence(sessionName, command)
     if (outcome.status === 'timeout') {
       sendJson(res, 504, { error: 'Timeout: program did not exit within 15s', hint: 'The session may be sitting on a confirmation dialog (e.g. background subagents still running). Check the terminal, or retry.' })
@@ -1050,9 +1055,13 @@ const routes: Route[] = [
     // persona-name allowlist + --name injection) and run the mechanical
     // stop→poll→relaunch sequence — identical to the app route, so the two cannot
     // construct different commands.
+    // TRDD-GZ1KOHNR: enforce `--agent <persona>` on relaunch (headless [id]/restart);
+    // refuse before any stop if this Claude agent has no resolvable role persona.
+    const enforced = await resolveLaunchArgs(agent?.id, program, programArgs)
+    if (enforced.kind === 'refuse') { sendJson(res, 409, { error: 'agent_persona_unresolved', message: `Refusing to restart "${sessionName}": ${enforced.reason}` }); return }
     const bin = resolveRestartBin(program)
     const personaName = sanitizePersonaName(agent?.label || agent?.name || sessionName, sessionName)
-    const command = buildRelaunchCommand(bin, programArgs, personaName)
+    const command = buildRelaunchCommand(bin, enforced.args, personaName)
     const outcome = await runRestartSequence(sessionName, command)
     if (outcome.status === 'timeout') {
       sendJson(res, 504, { error: 'Timeout: program did not exit within 15s', hint: 'The session may be sitting on a confirmation dialog (e.g. background subagents still running). Check the terminal, or retry.' })

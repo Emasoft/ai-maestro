@@ -37,6 +37,7 @@ import {
   buildRelaunchCommand,
   runRestartSequence,
 } from '@/lib/session-restart'
+import { resolveLaunchArgs } from '@/services/agent-launch-args'
 
 export const dynamic = 'force-dynamic'
 
@@ -128,12 +129,24 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid programArgs: contains disallowed characters' }, { status: 400 })
   }
 
+  // TRDD-GZ1KOHNR: enforce `--agent <persona>` on relaunch too — a restart must
+  // not resurrect a titled Claude agent as generic claude. resolveLaunchArgs
+  // derives it from the installed role-plugin; refuse (before any stop, so a
+  // running agent is never disrupted) if a Claude agent has no resolvable persona.
+  const enforced = await resolveLaunchArgs(agent?.id, program, programArgs)
+  if (enforced.kind === 'refuse') {
+    return NextResponse.json(
+      { error: 'agent_persona_unresolved', message: `Refusing to restart "${sessionName}": ${enforced.reason}` },
+      { status: 409 },
+    )
+  }
+
   // Build the relaunch command through the shared, security-validated construction
   // (bin resolution + persona-name allowlist + --name injection), then run the
   // mechanical stop→poll→relaunch sequence. Both live in lib/session-restart.ts.
   const bin = resolveRestartBin(program)
   const personaName = sanitizePersonaName(agent?.label || agent?.name || sessionName, sessionName)
-  const command = buildRelaunchCommand(bin, programArgs, personaName)
+  const command = buildRelaunchCommand(bin, enforced.args, personaName)
 
   const outcome = await runRestartSequence(sessionName, command)
 

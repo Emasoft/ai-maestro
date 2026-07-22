@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockAuth, mockRegistry, mockRuntime, mockRestart, mockGov, mockTeam, mockSafe } = vi.hoisted(() => ({
+const { mockAuth, mockRegistry, mockRuntime, mockRestart, mockGov, mockTeam, mockSafe, mockLaunchArgs } = vi.hoisted(() => ({
   mockAuth: { authenticateFromRequest: vi.fn() },
   mockRegistry: { getAgent: vi.fn() },
   mockRuntime: { sessionExistsSync: vi.fn() },
@@ -25,6 +25,13 @@ const { mockAuth, mockRegistry, mockRuntime, mockRestart, mockGov, mockTeam, moc
   mockGov: { getManagerId: vi.fn() },
   mockTeam: { isAgentInAnyTeam: vi.fn() },
   mockSafe: { readSubagentCount: vi.fn(), evaluateExitGate: vi.fn() },
+  // TRDD-GZ1KOHNR: default passthrough so these restart-flow tests reach the
+  // relaunch path; the --agent enforcement itself is unit-tested separately.
+  mockLaunchArgs: {
+    resolveLaunchArgs: vi.fn(
+      async (_a: string | undefined, _p: string, args: string): Promise<{ kind: 'ok'; args: string } | { kind: 'refuse'; reason: string }> => ({ kind: 'ok', args }),
+    ),
+  },
 }))
 
 vi.mock('@/lib/agent-auth', () => mockAuth)
@@ -33,6 +40,7 @@ vi.mock('@/lib/agent-runtime', () => mockRuntime)
 vi.mock('@/lib/governance', () => mockGov)
 vi.mock('@/lib/team-registry', () => mockTeam)
 vi.mock('@/lib/session-safe-state', () => mockSafe)
+vi.mock('@/services/agent-launch-args', () => mockLaunchArgs)
 // Keep the REAL pure helpers (isValidProgramArgs, resolveRestartBin,
 // sanitizePersonaName, buildRelaunchCommand); mock only the tmux sequence.
 vi.mock('@/lib/session-restart', async (importOriginal) => {

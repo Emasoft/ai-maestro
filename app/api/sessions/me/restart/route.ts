@@ -40,6 +40,7 @@ import {
   buildRelaunchCommand,
   runRestartSequence,
 } from '@/lib/session-restart'
+import { resolveLaunchArgs } from '@/services/agent-launch-args'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,11 +131,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid programArgs: contains disallowed characters' }, { status: 400 })
   }
 
+  // TRDD-GZ1KOHNR: enforce `--agent <persona>` on self-relaunch too — refuse
+  // (before any stop) if this Claude agent has no resolvable role persona.
+  const enforced = await resolveLaunchArgs(agent.id, program, programArgs)
+  if (enforced.kind === 'refuse') {
+    return NextResponse.json(
+      { error: 'agent_persona_unresolved', message: `Refusing to restart "${sessionName}": ${enforced.reason}` },
+      { status: 409 },
+    )
+  }
+
   // Build via the shared, security-validated construction and run the mechanical
   // sequence — the same lib [id]/restart uses, so the two cannot diverge.
   const bin = resolveRestartBin(program)
   const personaName = sanitizePersonaName(agent.label || agent.name || sessionName, sessionName)
-  const command = buildRelaunchCommand(bin, programArgs, personaName)
+  const command = buildRelaunchCommand(bin, enforced.args, personaName)
 
   const outcome = await runRestartSequence(sessionName, command)
 

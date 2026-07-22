@@ -78,6 +78,12 @@ Each is a DETAILED capture of a rule file — read the whole rule file, one rule
 - **`scenario-tests-spec.md`** — captures `tests/scenarios/SCENARIOS_TESTS_RULES.md` (Rule 0-14) + the
   runner-agent contract + the test procedures, so the **ai-maestro-web-scenario-tester** plugin can
   validate its own agents/skills/scripts against it (the `STS-VAL` checklist).
+- **`role-plugins-spec.md`** — the on-disk STRUCTURE of every role-plugin: the quad-identity
+  (fourfold) rule + verification, the `.agent.toml` schema (the mandatory `[agent].name` +
+  `compatible-titles` + `compatible-clients`, and the fact that the full toml *body* shape is NOT
+  uniform across the 8 predefined plugins), the `<pfx>-` element prefix mechanism, naming/marketplace,
+  the build blueprint, and the `RP-VAL` validation checklist. Verified against the 8 cached predefined
+  role-plugins + `ecosystem-constants.ts`; confirms the ASSISTANT plugin's conformance (`RP-ASSISTANT`).
 
 The rule files these describe STAY in their own locations (the RULE FILE ≠ the SPEC, per the
 distinction above); only the describing spec lives here.

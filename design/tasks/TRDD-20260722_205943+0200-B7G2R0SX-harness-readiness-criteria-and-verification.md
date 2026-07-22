@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T21:40:00+0200
+updated: 2026-07-22T21:50:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -69,8 +69,12 @@ TRDDs and wait for the USER.
   auth-setup=OS-notify+crypto, `password/invalidate`=notify+console-peer, sessions=tmux, docker=docker → per
   the no-mocking rule these need the USER to activate services; the thin-wrapper routes (normalize-hosts →
   `agents-directory-service`, create-from-toml, email/autodetect) wrap services doing file I/O → need real
-  registry/config FIXTURES. Closing F1 = a scoped test-task program, NOT blind mock-writing. AWAITS USER
-  greenlight + (for the live-dep routes) service activation.
+  registry/config FIXTURES. Closing F1 = a scoped test-task program, NOT blind mock-writing.
+  **PARTIAL CLOSURE (2026-07-22, `be21fbc1`): 2 of 17 done** — real non-mocked tests for `normalize-hosts`
+  (3 tests, `tests/unit/agents-directory-host-normalization.test.ts`) + `email/autodetect` (3 tests,
+  `tests/unit/smtp-autodetect-route.test.ts`), 6/6 pass; `create-from-toml` skipped (live claude-CLI
+  plugin-gen toolchain). The remaining ~14 (webauthn, auth-setup, password/invalidate, sessions, docker, …)
+  need LIVE services (crypto/tmux/docker/notify) for a real test → **USER to activate the services**.
 
 **RECOMMENDED TIGHT BAR (un-gated, high-value):** A2 (propagation issues) + A3 (verify/wire CI + coverage) +
 B1 (enforcement-verification) + C1/C2 (confirm watchdog + DEP self-heal live). D/E excluded.

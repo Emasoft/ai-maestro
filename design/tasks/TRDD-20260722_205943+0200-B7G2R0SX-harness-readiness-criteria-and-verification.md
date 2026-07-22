@@ -87,26 +87,42 @@ confirmed):** a role plugin properly installed `--scope local` by the server —
 `installPluginLocally` DOES via `claude plugin install <plugin> ai-maestro-plugins --scope local` — makes
 `claude --agent <main-agent>` RESOLVE the persona **by name** (bare AND namespaced). So the `--agent` substrate WORKS;
 do NOT pursue any `lib/program-args.ts` fix or persona-copy. **RUN 2** (re-run, corrected to actually create+test a
-fresh MANAGER via the Wizard) PROVED it: the fresh `scen031-manager` came up a **live Opus-4.8(1M) Claude REPL WITH
-its persona, logged in** — NOT a bare shell. ISSUE-001 (`/login`) also NOT blocking.
+fresh MANAGER via the Wizard) PROVED the substrate BOOTS: the fresh `scen031-manager` came up a **live Opus-4.8(1M)
+Claude REPL, logged in** — NOT a bare shell. ISSUE-001 (`/login`) also NOT blocking. **BUT its PERSONA did NOT load
+(the refined root cause):** `ps` showed the live process was `claude --dangerously-skip-permissions` with the
+**`--agent` flag DROPPED**, even though the registry `programArgs` carry
+`--agent ai-maestro-assistant-manager-agent-main-agent`. So the REPL ran the **GENERIC** claude agent — the plugin's
+governance rules + skills loaded, but the MANAGER main-agent **behavioural prompt did NOT**. **Corroborated
+fleet-wide (this session, read-only `ps` snapshot):** **0 of 13** running titled agents carry `--agent`; every one is
+bare `claude … --dangerously-skip-permissions`. Convergent with OQIA2DCR point 2 ("CREATE apparently does not pass
+programArgs, so a freshly-created agent comes up on plain claude, running no role persona at all"). Three independent
+observations agree: **a freshly-created titled agent launches as generic claude, so its role persona never loads.**
 
-**THE REAL BLOCKER (USER-confirmed) — harness NOT ready because the MANAGER VIOLATES ITS GOVERNANCE ROLE.** Given the
-one-sentence build brief, the MANAGER built zipsearcher **SOLO** — created `Emasoft/zipsearcher` itself, cloned it
-into its own workdir, developed it with its own **Claude Code subagents** — and created **ZERO ai-maestro fleet
-personas** (no AUTONOMOUS, no MAINTAINER; registry snapshot-diff confirms). It never delegated via AMP. A clear
-**R6/R9 governance violation**: a MANAGER must ORCHESTRATE (create fleet personas + delegate), not EXECUTE. The fleet
-never self-organized → SCEN-031's core question fails.
+**THE BLOCKER — SYMPTOM vs ROOT CAUSE.** *Symptom (USER-confirmed governance violation):* given the one-sentence
+brief, the MANAGER built zipsearcher **SOLO** — created `Emasoft/zipsearcher` itself, cloned it into its own workdir,
+developed it with its own **vanilla Claude Code subagents** — and created **ZERO** ai-maestro fleet personas (no
+AUTONOMOUS, no MAINTAINER; registry snapshot-diff confirms), never delegating via AMP. That IS an R6/R9 violation. But
+*ROOT CAUSE:* it built solo because it was **running generic claude, not the MANAGER persona** — the CREATE launch
+dropped `--agent`, so the persona that would have told it to create+delegate was never active. **This is an IN-REPO
+launch-pipeline bug (CREATE omits `--agent`), upstream of the persona.** The persona-mandate fix cannot even be
+*evaluated* until the persona loads.
 
-**ACTIONS TAKEN:** (1) **Issue filed** on the MANAGER role-plugin (separate Emasoft repo) —
-`https://github.com/Emasoft/ai-maestro-assistant-manager-agent/issues/31` — asking to fix the main-agent persona to
-create+delegate to fleet personas and never solo-build (cross-repo → issue, not in-place fix). (2) Runner directed to
-conclude FAIL + clean up: **`scen031-manager` agent + folder DELETED** ✓; **`Emasoft/zipsearcher` repo + PRs #1–4
-deletion PENDING** (runner stalled again at S008 ~17m; the repo still exists — outward/irreversible delete awaits
-USER go, OR finish via `gh repo delete Emasoft/zipsearcher --yes`).
+**ACTIONS TAKEN:** (1) **Issue #31** filed on the MANAGER role-plugin (separate Emasoft repo,
+`github.com/Emasoft/ai-maestro-assistant-manager-agent/issues/31`) — persona must mandate create+delegate. **NOTE it
+is now SECONDARY** — downstream of the in-repo `--agent` drop; needs a comment saying so. (2) Runner (a53dcb03)
+**COMPLETED** → FAIL; report `reports/scenarios-runner/SCEN-031_20260722T203644Z.report.md`; authored proposal
+**`TRDD-F898NXLU`** which correctly captures BOTH fixes (in-repo `--agent` drop AND the persona mandate). (3) Cleanup:
+`scen031-manager` agent+folder DELETED ✓; STATE-WIPE 3/4 (teams.json only `updatedAt` drift on pre-existing litter
+teams, benign); **`Emasoft/zipsearcher` repo + PRs STILL EXISTS** — the `gh` token lacks `delete_repo` scope
+(`gh auth refresh -h github.com -s delete_repo && gh repo delete Emasoft/zipsearcher --yes`) — outward/irreversible,
+**awaiting USER go**.
 
-**NEXT:** (a) finish cleanup — delete `Emasoft/zipsearcher` (+ any fork) so 0-IMPACT holds; (b) once plugin issue #31
-lands a persona fix, **RERUN SCEN-031** to verify the MANAGER now creates+delegates to AUTONOMOUS+MAINTAINER personas.
-Harness readiness is gated on the MANAGER role-plugin behaviour, NOT on any ai-maestro in-repo code.
+**NEXT:** (a) delete `Emasoft/zipsearcher` (needs `delete_repo` token scope + USER go) so 0-IMPACT holds; (b) the FIRST
+fix is IN-REPO — make the CREATE launch pass `--agent` (same as WAKE) so a fresh titled agent runs its persona
+(track as its own TRDD / promote F898NXLU's in-repo half); (c) comment on issue #31 that it is downstream of (b);
+(d) once (b) lands, **RERUN SCEN-031** to see whether the now-persona'd MANAGER actually creates+delegates — only
+then can the persona-mandate (issue #31) be judged. **Harness readiness is gated FIRST on the in-repo `--agent`-drop
+fix, THEN on the MANAGER role-plugin behaviour.**
 
 **SUPERSEDED — do NOT carry forward:** the OQIA2DCR "`--agent` unresolvable / dead-on-arrival / scope-is-the-
 discriminator" root cause and its fixes (program-args edit, persona-copy to `.claude/agents/`) — ALL WRONG: a fresh

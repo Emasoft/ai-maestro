@@ -112,7 +112,17 @@ export async function ensureAgentRules(
 
   let entries: string[]
   try {
-    entries = (await readdir(sourceDir)).filter((f) => f.endsWith('.md')).sort()
+    // Seed ONLY the `aimaestro-*` overlays — the NAME this file's ownership contract
+    // (top of file) owns — NOT every .md in the dir. A colocated maintainer doc such
+    // as `3-pillars-spec.md` (the 3-pillars conformance SPEC, TRDD-CR8JRH74, kept here
+    // by USER directive so specs sit WITH the governance rules) must NOT be injected
+    // into every agent's per-turn context — that is exactly the cost the 2200-byte
+    // aimaestro-agent-rules.md budget exists to prevent. `.md` and `aimaestro-*.md`
+    // were equivalent until that spec landed; scoping to the prefix keeps the seeded
+    // set == the overlays and lets a non-overlay doc share the dir harmlessly.
+    entries = (await readdir(sourceDir))
+      .filter((f) => f.startsWith('aimaestro-') && f.endsWith('.md'))
+      .sort()
   } catch {
     return result
   }

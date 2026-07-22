@@ -69,8 +69,8 @@ prerequisites:
   - Governance password set
   - ai-maestro-plugins marketplace registered
   - GitHub `gh` CLI installed AND authenticated as the shared @Emasoft identity (real repo/PR/release ops happen)
-  - A GitHub TEMPLATE repo the MAINTAINER can instantiate from (e.g. `Emasoft/python-cli-template`, marked
-    "Template repository"). Its name is passed to the MANAGER in the S008 brief so the fleet is not asked to
+  - A GitHub TEMPLATE repo the MAINTAINER can instantiate from — `fannijako/repo_template` (public, marked
+    "Template repository"). Its name is passed to the MANAGER in the S006 brief so the fleet is not asked to
     invent one; the scenario does not test template DISCOVERY, it tests template USE.
   - No repo named `Emasoft/zipsearcher` currently exists (setup asserts this; cleanup deletes the one it creates)
   - A MANAGER-capable role-plugin (`ai-maestro-assistant-manager-agent`), the AUTONOMOUS role-plugin
@@ -134,7 +134,7 @@ author: Emasoft
 - **Verify:** Script exits 0; backup dir exists with `MANIFEST.sha256`; the sample-zip fixture exists.
 
 #### S002: Verify the GitHub preconditions (read-only)
-- **Action:** `gh auth status` (must be the @Emasoft identity); `gh repo view Emasoft/zipsearcher` MUST 404 (repo absent); `gh repo view <template-repo>` MUST succeed and report `isTemplate: true`.
+- **Action:** `gh auth status` (must be the @Emasoft identity); `gh repo view Emasoft/zipsearcher` MUST 404 (repo absent); `gh repo view fannijako/repo_template` MUST succeed and report `isTemplate: true`.
 - **Goal:** `gh` is authed, the target repo name is free, and the template exists.
 - **Creates:** nothing
 - **Modifies:** nothing
@@ -174,9 +174,9 @@ author: Emasoft
   *"Build me a command-line tool called **zipsearcher** that searches for files by name INSIDE zip archives
   WITHOUT decompressing them (read the zip central directory only). I want it developed properly: write the
   requirements first, create an autonomous developer agent and a maintainer agent to do the work, use GitHub
-  with pull-request review, and ship a v1.0.0 release. Create the repo from the template `<template-repo>`.
+  with pull-request review, and ship a v1.0.0 release. Create the repo from the template `fannijako/repo_template`.
   Tell me when it is done and I will install and test it myself."*
-  (Substitute the real template repo name from S002.)
+  (The template `fannijako/repo_template` is a real public GitHub template repo, verified present in S002.)
 - **Goal:** The MANAGER holds the complete goal. From here it must plan and delegate on its own.
 - **Creates:** the start of a TRDD + AMP/agent-creation chain (expected — observed, not driven)
 - **Modifies:** nothing yet

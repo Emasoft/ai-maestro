@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.0.0
+spec-version: 1.1.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-22T07:54:21+0200
+updated: 2026-07-22T08:07:00+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -15,56 +15,71 @@ implementations:
 
 # The 3-pillars conformance SPEC
 
-**This file is the SPEC, not a rule.** It is the single, versioned, normative source
-that the 3-pillars implementations conform to. The implementations (the janitor's IND
-base rules, ai-maestro's DEP overlays, and ai-maestro's enforcement code) carry the
-teaching prose and the executable logic; **this file carries the testable contract.**
-On any disagreement between an implementation and this spec, **the spec is the arbiter.**
+**This file is the SPEC, not a rule.** It is the single, versioned, normative source the
+3-pillars implementations conform to. Implementations carry the teaching prose and the
+executable logic; this carries the testable contract. On any disagreement, the spec is
+the arbiter.
 
-## Why this exists (the anti-drift discipline)
+## 3P-GREP — how to grep this spec
 
-The pillars' invariants — the 17-column vocabulary above all — live duplicated across
-at least five artefacts (`universal-kanban.md` prose, `types/task.ts::DEFAULT_STATUSES`,
-`types/team.ts::DEFAULT_KANBAN_COLUMNS`, `docs/GOVERNANCE-RULES.md` R25, the DEP
-overlays) with **no arbiter**. Two independently-authored halves of one system with no
-shared normative source is how the IND/DEP split silently drifts (ai-maestro#83/#85,
-janitor#73, DE9757LJ).
+This is a REFERENCE doc: every normative clause starts with a stable `` `3P-<FAMILY>-NN` ``
+anchor and a bold key-phrase, so you grep to the clause instead of reading through.
 
-**This spec MUST NOT be a re-narration of the rule prose.** A spec that copies the rule
-text is the exact `design/rules-refactor/independent/` mirror that ai-maestro RETIRED in
-TRDD-TAFH4U0G — drift reborn under a new filename. This spec states **contract**:
-authoritative values, MUST-assertions, and the boundary test. The prose stays in the
-rules; this stays the thing they are checked against.
+```text
+3P-GREP  all clauses of a family:   grep '3P-KAN'      (or META TRDD PRRD BND VER CHK MNT)
+3P-GREP  one clause by id:          grep '3P-KAN-01'
+3P-GREP  the authoritative columns: grep -A20 '@spec:kanban-columns'
+3P-GREP  the version stamp:         grep '^spec-version:'
+3P-GREP  families: META=arbiter KAN=kanban TRDD=trdd PRRD=prrd BND=ind/dep-boundary
+3P-GREP            VER=versioning CHK=conformance-checks MNT=maintenance
+```
 
-## Conformance & versioning
+## 3P-META — the arbiter, and the anti-drift discipline
 
-- `spec-version` is semver. Bump **MAJOR** when a `MUST` invariant changes (a column
-  renamed/added/removed, the id grammar changed, a tier-authority rule changed);
-  **MINOR** when an optional field or a non-breaking clarification is added; **PATCH**
-  for wording only.
-- An implementation MAY declare `conforms-to-spec: 3-pillars@<version>`. A declared
-  version that does not match this file's `spec-version` is a **detectable** conformance
-  failure — the whole point of the stamp is that a mismatch fails a test rather than
-  surfacing months later as two agents disagreeing on a column name.
-- **The bidirectional check loop:** ai-maestro CI asserts its own code + overlays
-  conform (see "Conformance checks" below); the janitor asserts its shipped IND bases
-  conform at the version they claim. #83 froze the overlay *filenames* the IND bases
-  cite; this spec + the janitor check freeze the *content contract*. Together they close
-  the loop in both directions.
+`3P-META-01` **arbiter** — this file is the single versioned normative source; where an
+implementation and this spec disagree, THE SPEC WINS. Implementations cite it and conform.
 
-## Pillar 1 — the kanban column vocabulary (17 columns)
+`3P-META-02` **not-a-mirror** — the spec MUST NOT re-narrate rule prose. A prose copy is
+the `design/rules-refactor/independent/` mirror ai-maestro RETIRED in TRDD-TAFH4U0G (drift
+reborn as a third disagreeing copy). It states VALUES + `MUST`-assertions + the boundary
+test; the teaching prose stays in the rules, the executable logic in the code.
 
-The authoritative vocabulary, USER-ratified (TRDD-YUGDER9D / GOVERNANCE-RULES R25) —
-**immutable to MANAGER; only the USER may change it, and doing so is a MAJOR bump.**
+`3P-META-03` **why-it-exists** — the 17-column vocabulary alone lives duplicated across
+five artefacts (`universal-kanban.md`, `types/task.ts`, `types/team.ts`, GOVERNANCE-RULES
+R25, the DEP overlays) with no arbiter; two independently-authored halves with no shared
+source is how the IND/DEP split silently drifts (ai-maestro#83/#85, janitor#73, DE9757LJ).
 
-`MUST`: a kanban `column:` value is EXACTLY one of the 17 below — these spellings, no
-others. `MUST`: every consumer (UI boards, GitHub-Project mirrors, `amp-kanban-*.sh`,
-role-plugins, `types/task.ts`, `types/team.ts`) aligns TO this list; a coarser view may
-GROUP columns for display but MUST round-trip mutations back to these 17. **Never the
-reverse** — no consumer invents, renames, or collapses a column.
+## 3P-VER — versioning & conformance
 
-The 14 lifecycle columns are in canonical progression order; the 3 exception columns are
-orthogonal (a card enters them from any working column and returns).
+`3P-VER-01` **semver-bump** — `spec-version` is semver. MAJOR = a `MUST` changes (a column
+renamed/added/removed, the id grammar, a tier-authority rule). MINOR = an optional field or
+a non-breaking clarification (incl. adding a clause). PATCH = wording only.
+
+`3P-VER-02` **conforms-to** — an implementation MAY declare `conforms-to-spec:
+3-pillars@<version>`. A declared version ≠ this file's `spec-version` is a DETECTABLE
+conformance failure — the whole point of the stamp.
+
+`3P-VER-03` **clause-ids-stable** — every `3P-<FAMILY>-NN` id is STABLE, never reused, and
+append-only. A conformance check may cite a clause by id, so a citation resolves to the
+same clause across versions; deleting a clause tombstones its id (never re-assign it).
+
+`3P-VER-04` **bidirectional-loop** — #83 froze the overlay FILENAMES the IND bases cite;
+this spec + the janitor check freeze the content CONTRACT. Together they close the loop in
+both directions.
+
+## 3P-KAN — Pillar 1: the kanban column vocabulary (17 columns)
+
+`3P-KAN-01` **enum** — `MUST`: a `column:` value is EXACTLY one of the 17 in the block
+below, these spellings, no others.
+
+`3P-KAN-02` **user-ratified** — the vocabulary is USER-ratified (TRDD-YUGDER9D /
+GOVERNANCE-RULES R25): immutable to MANAGER; only the USER may change it, and a change is a
+MAJOR bump.
+
+`3P-KAN-03` **align-to** — `MUST`: every consumer (UI boards, GitHub-Project mirrors,
+`amp-kanban-*.sh`, role-plugins, `types/task.ts`, `types/team.ts`) aligns TO this list,
+never the reverse. A coarser view MAY group columns for display but `MUST` round-trip
+mutations back to these 17.
 
 <!-- @spec:kanban-columns v1 — authoritative; the conformance test extracts the block below verbatim -->
 ```text
@@ -87,60 +102,81 @@ failed
 superseded
 ```
 
-**Lifecycle contract** (the legal shape; per-transition *authority* — which TITLE may
-trigger each move — is a DEP concern, see `aimaestro-trdd-approval.md` Part B2):
+`3P-KAN-04` **lifecycle** — happy-path order: `backburner → todo → design → dispatch → dev
+→ testing → ai_review → (human_review) → complete`, then `publish → published`
+(`release-via: publish`) OR `deploy → live → (live_auditing)` (`release-via: deploy`).
 
-- Happy path: `backburner → todo → design → dispatch → dev → testing → ai_review →
-  (human_review) → complete`, then `publish → published` (tools, `release-via: publish`)
-  OR `deploy → live → (live_auditing)` (services, `release-via: deploy`).
-- `testing` may return to `dev` on failure; `ai_review` may return to `dev` on rejection.
-- `blocked` is entered from any working column whenever `blocked-by:` is non-empty, and
-  returns to `pre-block-column:` when it clears.
-- `failed` is retryable and stays on the board — it is NEVER auto-archived.
-- `superseded` is terminal and leaves the board on the next archival pass.
+`3P-KAN-05` **return-edges** — `testing` may return to `dev` on failure; `ai_review` may
+return to `dev` on rejection.
 
-## Pillar 2 — the TRDD contract
+`3P-KAN-06` **blocked** — entered from any working column whenever `blocked-by:` is
+non-empty; record `pre-block-column:` and restore to it when it clears.
 
-- **Id grammar**: `MUST` match `^[A-Z0-9]{8}$` — 8-char UPPERCASE base36. This IS the
-  canonical id (no UUID). `MUST` be unique across BOTH scope roots (project + local).
-- **Filename**: `TRDD-<YYYYMMDD_HHMMSS±HHMM>-<id8>-<slug>.md`.
-- **Frontmatter is grep-first**: `MUST` be one field per line; lists flow-style
-  `[a, b, c]`; enums bare kebab-case; dates ISO-8601 with local offset
-  (`%Y-%m-%dT%H:%M:%S%z`); titles contain no colons; no trailing whitespace on data lines.
-- **Minimal required fields**: `trdd-id, title, column, created, updated, current-owner,
-  task-type`. The schema is OPEN — any field the implementations define may be added.
-- **`column:`** is the state machine and `MUST` draw from Pillar 1.
-- **Scope = path**: a TRDD is `project` (in `<repo>/design/`, git-tracked) or `local`
-  (in `~/.claude/projects/<slug>/design/`, machine-private). The **path is
-  authoritative**; a `scope:` field is a lint target on disagreement.
-- **`MUST` bump `updated:` on EVERY edit** — the board sorts on it.
-- A TRDD spanning more than one session `MUST` carry the STATE head block.
+`3P-KAN-07` **failed** — retryable; stays on the board; NEVER auto-archived.
 
-## Pillar 3 — the PRRD contract
+`3P-KAN-08` **superseded** — terminal; leaves the board on the next archival pass.
 
-- **Two tiers**: 🥇 GOLDEN (USER-set, immutable to every agent incl. MANAGER) and
-  🥈 SILVER (MANAGER-mutable). Both are one flat bullet list per section in `PRRD.md`.
-- **Rule identity**: `<letter><number>.<version>` — `G`/`S` = current tier (flips on
-  promote/demote), `number` = globally unique across BOTH tiers and **never reused**,
-  `version` = forward-only edit counter. `MUST`: a citation by number resolves to the
-  same rule regardless of the G/S letter; tools accept the number alone.
-- **Citation grammar**: `PRRD G64.134` — the space is mandatory (it is what makes it
-  greppable).
-- **Mutation authority** (base): USER may edit any rule; the project's own Claude may
-  edit SILVER. The multi-agent per-TITLE authority matrix + COS-routed proposal queue is
-  a DEP concern (see `aimaestro-prrd-governance.md`).
+`3P-KAN-09` **transition-authority-is-DEP** — WHICH title may trigger a given move is a DEP
+concern, not IND; see `aimaestro-trdd-approval.md` Part B2. (This clause is itself a 3P-BND
+worked example.)
 
-## Pillar 4 — the IND/DEP boundary (the classification test)
+## 3P-TRDD — Pillar 2: the TRDD contract
 
-*(This is the boundary the janitor applies on every base edit and previously applied
-from memory — ai-maestro#85 item 4.)*
+`3P-TRDD-01` **id-grammar** — `MUST` match `^[A-Z0-9]{8}$` (8-char UPPERCASE base36). This
+IS the canonical id (no UUID). `MUST` be unique across BOTH scope roots (project + local).
 
-A normative statement belongs to the **IND universal base** iff it is **TRUE and USEFUL
-for a project with NO ai-maestro harness** — a solo git repo with one Claude and the
-human USER as sole approver. It belongs to a **DEP overlay** iff it **presupposes the
-ai-maestro harness**. A DEP overlay EXPANDS an IND base and `MUST NOT` restate it.
+`3P-TRDD-02` **filename** — `TRDD-<YYYYMMDD_HHMMSS±HHMM>-<id8>-<slug>.md`.
 
-| A statement that mentions… | Layer |
+`3P-TRDD-03` **frontmatter-grep-first** — `MUST` be one field per line; lists flow-style
+`[a, b, c]`; enums bare kebab-case; dates ISO-8601 with local offset
+(`%Y-%m-%dT%H:%M:%S%z`); titles contain no colons; no trailing whitespace on data lines.
+
+`3P-TRDD-04` **required-fields** — minimal set: `trdd-id, title, column, created, updated,
+current-owner, task-type`. The schema is OPEN — implementations may add fields.
+
+`3P-TRDD-05` **column-is-state** — `column:` is the state machine and `MUST` draw from
+3P-KAN.
+
+`3P-TRDD-06` **scope-is-path** — a TRDD is `project` (in `<repo>/design/`, git-tracked) or
+`local` (in `~/.claude/projects/<slug>/design/`, machine-private). The PATH is
+authoritative; a `scope:` field is a lint target on disagreement.
+
+`3P-TRDD-07` **bump-updated** — `MUST` bump `updated:` on EVERY edit (the board sorts on
+it).
+
+`3P-TRDD-08` **state-block** — a TRDD spanning more than one session `MUST` carry the STATE
+head block.
+
+## 3P-PRRD — Pillar 3: the PRRD contract
+
+`3P-PRRD-01` **two-tiers** — 🥇 GOLDEN (USER-set, immutable to every agent incl. MANAGER)
+and 🥈 SILVER (MANAGER-mutable). Both are one flat bullet list per section in `PRRD.md`.
+
+`3P-PRRD-02` **rule-identity** — `<letter><number>.<version>`: `G`/`S` = current tier
+(flips on promote/demote); `number` = globally unique across BOTH tiers, NEVER reused;
+`version` = forward-only edit counter.
+
+`3P-PRRD-03` **cite-by-number** — a citation by number resolves to the same rule regardless
+of the G/S letter; tools accept the number alone.
+
+`3P-PRRD-04` **citation-grammar** — `PRRD G64.134` — the space is mandatory (it is what
+makes it greppable).
+
+`3P-PRRD-05` **mutation-authority** — base: USER may edit any rule; the project's own Claude
+may edit SILVER. The multi-agent per-TITLE authority matrix + COS-routed proposal queue is
+a DEP concern (see `aimaestro-prrd-governance.md`).
+
+## 3P-BND — Pillar 4: the IND/DEP boundary (the classification test)
+
+`3P-BND-01` **the-test** — a normative statement belongs to the **IND universal base** iff
+it is TRUE and USEFUL for a project with NO ai-maestro harness (a solo git repo, one Claude,
+the USER as sole approver). It belongs to a **DEP overlay** iff it PRESUPPOSES the harness.
+A DEP overlay EXPANDS an IND base and `MUST NOT` restate it. *(This is the item the janitor
+applied from memory until now — ai-maestro#85 item 4.)*
+
+`3P-BND-02` **discriminator-table** —
+
+| a statement that mentions… | layer |
 |---|---|
 | one Claude; the USER approves; a plain git repo; markdown + grep | **IND** |
 | the 17-column vocabulary, TRDD/PRRD file formats, folder lifecycle | **IND** (the contract; this spec) |
@@ -150,24 +186,30 @@ ai-maestro harness**. A DEP overlay EXPANDS an IND base and `MUST NOT` restate i
 | cross-agent transition authority (who may trigger a column move) | **DEP** |
 | multi-agent shared board, dashboard/GitHub-Project mirrors, assignees | **DEP** |
 
-Rule of thumb: **IND says WHAT the artefact is; DEP says WHO, in a multi-agent fleet,
-may act on it.** When a statement is true even with the harness removed, it is IND.
+`3P-BND-03` **rule-of-thumb** — IND says WHAT the artefact is; DEP says WHO, in a fleet, may
+act on it. If a statement is true with the harness removed, it is IND.
 
-## Conformance checks (who verifies what)
+## 3P-CHK — conformance checks (who verifies what)
 
-- **ai-maestro, code side** — `tests/unit/three-pillars-spec-conformance.test.ts`
-  asserts `types/task.ts::DEFAULT_STATUSES` deep-equals this spec's Pillar-1 block
-  (TRDD-QP07O1BK). This is the platelet that keeps the spec from being drift-prone prose.
-- **ai-maestro, overlay side** — `tests/unit/aimaestro-overlay-filename-contract.test.ts`
-  freezes the DEP overlay filenames the IND bases cite (#83) and pins this spec's
-  colocation in `rules/aimaestro/`.
-- **janitor side** — a check (janitor's to build, #85) that its shipped IND bases satisfy
-  this spec at the `spec-version` they declare.
+`3P-CHK-01` **ai-maestro-code** — `tests/unit/three-pillars-spec-conformance.test.ts`
+asserts `types/task.ts::DEFAULT_STATUSES` deep-equals 3P-KAN-01's block (TRDD-QP07O1BK) —
+the platelet that keeps this spec from being drift-prone prose.
 
-## Maintenance
+`3P-CHK-02` **ai-maestro-overlay** — `tests/unit/aimaestro-overlay-filename-contract.test.ts`
+freezes the DEP overlay filenames the IND bases cite (#83) and pins this spec's colocation.
 
-This file is **maintained and non-archived** (an archived TRDD cannot serve as a living
-spec — the wrong shape the janitor correctly rejected in #85). USER-ratified invariants
-(the 17-column vocabulary, the golden/silver top-level model) are immutable to MANAGER;
-other clarifications are MANAGER-revisable. Any change to a `MUST` bumps `spec-version`
-per the rules above.
+`3P-CHK-03` **janitor** — a check (janitor's to build, #85) that its shipped IND bases
+satisfy this spec at the `spec-version` they declare.
+
+## 3P-MNT — maintenance
+
+`3P-MNT-01` **living** — this file is MAINTAINED and NON-archived (an archived TRDD cannot
+serve as a living spec — the wrong shape the janitor correctly rejected in #85).
+
+`3P-MNT-02` **change-authority** — USER-ratified invariants (3P-KAN-02, the golden/silver
+top-level model) are immutable to MANAGER; other clarifications are MANAGER-revisable; any
+change to a `MUST` bumps `spec-version` per 3P-VER-01.
+
+`3P-MNT-03` **keep-it-greppable** — every clause `MUST` keep its `` `3P-<FAMILY>-NN` ``
+anchor + a bold key-phrase at the line start, and 3P-GREP `MUST` list every family. A new
+clause takes the next free NN in its family (never a reused id, per 3P-VER-03).

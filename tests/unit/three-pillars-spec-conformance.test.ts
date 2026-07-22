@@ -28,8 +28,11 @@ const SPEC_PATH = join(process.cwd(), 'rules', 'aimaestro', '3-pillars-spec.md')
  */
 function specKanbanColumns(): string[] {
   const md = readFileSync(SPEC_PATH, 'utf-8')
-  const marker = md.indexOf('@spec:kanban-columns')
-  if (marker === -1) throw new Error('spec is missing the @spec:kanban-columns marker')
+  // Anchor on the actual HTML-comment marker, NOT the bare token — the token also
+  // appears as a grep example in the 3P-GREP cheat-sheet, and keying on it there would
+  // extract the wrong fence. The `<!-- ` prefix makes the real marker occur exactly once.
+  const marker = md.indexOf('<!-- @spec:kanban-columns')
+  if (marker === -1) throw new Error('spec is missing the <!-- @spec:kanban-columns --> marker')
   const fenceOpen = md.indexOf('```', marker)
   if (fenceOpen === -1) throw new Error('spec column marker is not followed by a code fence')
   const bodyStart = md.indexOf('\n', fenceOpen) + 1
@@ -58,5 +61,16 @@ describe('3-pillars SPEC conformance — kanban vocabulary (ai-maestro#85)', () 
   it('the spec carries a semver spec-version stamp (mismatch is detectable)', () => {
     const md = readFileSync(SPEC_PATH, 'utf-8')
     expect(md).toMatch(/^spec-version:\s*\d+\.\d+\.\d+\s*$/m)
+  })
+
+  it('is greppable — carries the 3P-GREP cheat-sheet and a clause anchor per pillar family', () => {
+    // USER directive 2026-07-22: a spec is a lookup surface, so every clause starts with a
+    // stable `3P-<FAMILY>-NN` anchor + key-phrase (clause 3P-MNT-03). This pins that scheme
+    // so a future edit cannot silently un-grep the reference doc.
+    const md = readFileSync(SPEC_PATH, 'utf-8')
+    expect(md).toContain('3P-GREP')
+    for (const family of ['META', 'VER', 'KAN', 'TRDD', 'PRRD', 'BND', 'CHK', 'MNT']) {
+      expect(md).toMatch(new RegExp(`3P-${family}-01\\b`))
+    }
   })
 })

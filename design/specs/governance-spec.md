@@ -625,20 +625,19 @@ erroneous 2026-07-16 MAINTAINER revision — GOVERNANCE-RULES v4.5.1). `R39.3` *
 profile's ASSISTANT terminal; selecting any other agent shows the profile with NO terminal and no panel edit.
 `R39.4` **four-locked-fields** — the ASSISTANT has no team; profile shows `Assistant of <user>`; the user may edit
 its panel EXCEPT NAME/TITLE/ROLE-PLUGIN/TEAM (changed only by the MAESTRO with sudo, per R26). `R39.5`
-**assistant-obeys-user-and-if-permitted-maestro-agent** — the ASSISTANT obeys its bound user UNCONDITIONALLY and,
-only with the user's explicit permission, the MAESTRO agent (the MANAGER — the MAESTRO's own agent, R39.1), whose
+**assistant-obeys-user-and-if-permitted-manager** — the ASSISTANT obeys its bound user UNCONDITIONALLY and,
+only with the user's explicit permission, the MANAGER, whose
 tasks stay refusable (R41); it does NOT obey the MAESTRO USER, nor any other agent; works in isolation; is outside the
 governance chain (never a forced mandate target, needs no MANAGER/COS/MAESTRO approval); messages only its own user AND
-the MAESTRO agent (the MANAGER) (the sole agent channel — R39.9; refined 2026-07-22, was "only its own user" /
+the MANAGER (the sole agent channel — R39.9; refined 2026-07-22, was "only its own user" /
 2026-07-16 from "its user and the MAESTRO"). `R39.6` **assistant-lifecycle-bound**
 — an ASSISTANT cannot be deleted independently; every user always has exactly one; only deleting the USER cascades a
-soft delete. `R39.7` **assistant-invisible-inherits** — the ASSISTANT is invisible to other agents EXCEPT the MAESTRO
-agent (the MANAGER) (R39.9) — plus any collaborator agent the MANAGER assigns on a shared repo, scoped + revocable
+soft delete. `R39.7` **assistant-invisible-inherits** — the ASSISTANT is invisible to other agents EXCEPT the MANAGER
+(R39.9) — plus any collaborator agent the MANAGER assigns on a shared repo, scoped + revocable
 (R39.10) — but inherits all tasks + permissions sent to the user. `R39.8` **assistant-approves-only-own** — carries
 NONE of the MANAGER's approve-other-agents machinery; approves ONLY its OWN TRDDs (self-mandates, Tier 0 — never asks
 the MANAGER to approve them); never approves/commands/directs another agent (like any AUTONOMOUS agent, minus the
-governing powers it never had). `R39.9` **assistant-manager-channel-and-peer** — the MAESTRO agent (the MANAGER — the
-MAESTRO's own agent, R39.1) is the ONLY agent that
+governing powers it never had). `R39.9` **assistant-manager-channel-and-peer** — the MANAGER is the ONLY agent that
 may reach the ASSISTANT, and only to ASSIGN a TRDD (never to configure it — config is USER-only via the UI, R39.4);
 the ASSISTANT accepts only if its bound USER approved that collaboration and may REFUSE any assigned task (never a
 forced mandate, R41); on a SHARED GitHub project it acts as a PEER with EQUAL authority, subordinate only to its USER
@@ -646,7 +645,7 @@ forced mandate, R41); on a SHARED GitHub project it acts as a PEER with EQUAL au
 collaboration (R39.9), the MANAGER may assign ANOTHER agent to collaborate with the ASSISTANT on a specific shared
 GitHub project; scoped to that, the ASSISTANT is mutually VISIBLE with that collaborator, may exchange AMP messages
 with it, and may be assigned tasks via the kanban linked to that project (each refusable, R41). This is the ONLY
-opening of R39.7 invisibility beyond the MAESTRO agent — scoped to the assigned collaborator(s)/project, never
+opening of R39.7 invisibility beyond the MANAGER — scoped to the assigned collaborator(s)/project, never
 general. The USER may STOP/PAUSE the collaboration or REFUSE specific MANAGER orders at ANY time (absolute user
 authority over its own ASSISTANT).
 

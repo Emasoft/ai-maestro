@@ -71,13 +71,13 @@ for the rewrite. So the plugin-content rewrite is **GO** (in that folder), confo
 **✅ PLUGIN REWRITE DONE 2026-07-22 (commit `e2fa6d4` in `~/Code/ai-maestro-assistant-role-agent`, v0.2.0).**
 Persona rewritten to R39.8/R39.9; `team-governance` skill dropped from `.agent.toml` (the approve-others
 machinery); `plugin.json` description synced; quad-identity preserved; MANAGER(planning)+AUTONOMOUS(programming)
-fusion kept. **Terminology (USER-confirmed 2026-07-22): "the MAESTRO agent" = the MANAGER** (the host MAESTRO's
-own agent, R39.1) — the persona leads with "the MAESTRO agent (the MANAGER)". **Obedience model (USER-corrected):**
-obeys its USER unconditionally + (only with the user's explicit permission) the MAESTRO agent, whose tasks stay
-refusable; does NOT obey the MAESTRO *user*. Rules synced to GOVERNANCE-RULES **v4.6.1** + spec.
+fusion kept. **Terminology: "the MANAGER"** — the USER RETRACTED the earlier "MAESTRO agent" expression as wrong
+(2026-07-22); use "the MANAGER" everywhere (persona + rules reverted, GOVERNANCE-RULES v4.7.1). **Obedience model:**
+obeys its USER unconditionally + (only with the user's explicit permission) the MANAGER, whose tasks stay
+refusable; does NOT obey the MAESTRO *user*. Rules synced to GOVERNANCE-RULES **v4.7.1** + spec.
 
 **STILL OPEN (USER-only / separate items):** (1) the R39.4 KEEP/STRIP ruling below; (2) comm-graph ENFORCEMENT of
-the MAESTRO-agent↔ASSISTANT edge (`lib/communication-graph.ts` stays safely stricter — pending); (3) the R39.1-R39.4
+the MANAGER↔ASSISTANT edge (`lib/communication-graph.ts` stays safely stricter — pending); (3) the R39.1-R39.4
 UI SURFACE build (auto-create, no-other-terminal, locked-field UI) — still HELD (transition phase); (4) FUTURE:
 give the ASSISTANT MAINTAINER-style GitHub-repo skills, and improve the AUTONOMOUS role-plugin's GitHub skills.
 
@@ -114,7 +114,7 @@ must be rewritten to:
   collaboration, the MANAGER may assign ANOTHER agent to collaborate with the ASSISTANT on a specific shared
   GitHub project. Scoped to that, the ASSISTANT becomes MUTUALLY VISIBLE with that collaborator, may exchange
   AMP with it, and may receive kanban tasks on that project (each refusable). This is the ONLY opening of the
-  R39.7 invisibility beyond the MAESTRO agent — never general. The USER may STOP/PAUSE/REFUSE at any time.
+  R39.7 invisibility beyond the MANAGER — never general. The USER may STOP/PAUSE/REFUSE at any time.
   (Enforcement of the ASSISTANT↔collaborator AMP + kanban edges is a pending comm-graph build item.)
 - **Everything else = a normal AUTONOMOUS agent** (MANAGER planning + AUTONOMOUS programming fusion; no
   governing powers; no agent/team creation).

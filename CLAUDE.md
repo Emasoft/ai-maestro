@@ -104,9 +104,12 @@ The 3-pillars governance rules (TRDD, PRRD, universal kanban) are split in two
 layers:
 
 - **IND (universal base)** — ai-maestro-independent; shipped globally to
-  `~/.claude/rules/` by the **ai-maestro-janitor** plugin (handoff source:
-  `design/rules-refactor/independent/`; canonical home = the janitor repo,
-  issue ai-maestro-janitor#73).
+  `~/.claude/rules/` by the **ai-maestro-janitor** plugin. Canonical home = the
+  janitor repo (issue ai-maestro-janitor#73). The DE9757LJ handoff is complete —
+  the former in-repo source `design/rules-refactor/independent/` was retired once
+  the janitor became canonical (TRDD-TAFH4U0G); see `design/rules-refactor/README.md`.
+  IND-base deltas now flow as janitor proposal issues (e.g. janitor#103), never as
+  in-repo edits here.
 - **DEP (ai-maestro overlay)** — `rules/aimaestro/aimaestro-*.md` in THIS repo
   (git-tracked, bundled with the app). `lib/agent-rules-seed.ts`
   (`ensureAgentRules`) copies them into each registered agent workdir's

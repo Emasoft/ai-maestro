@@ -3,7 +3,7 @@ trdd-id: W9FA6ACZ
 title: ASSISTANT role-plugin — ai-maestro-assistant-role-agent (MANAGER+AUTONOMOUS, ungoverned, user-bound) (R39)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-22T11:58:04+0200
+updated: 2026-07-22T12:17:12+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [39, 46, 41, 26, 6, 11]
@@ -68,11 +68,18 @@ folder — **`/Users/emanuelesabetta/Code/ai-maestro-assistant-role-agent`** (co
 LOCAL/D4 source) — and said *"just use this folder for the plugin"*, lifting the out-of-project blocker
 for the rewrite. So the plugin-content rewrite is **GO** (in that folder), conforming to the spec below.
 
-**NEXT ACTION:** rewrite the plugin at `~/Code/ai-maestro-assistant-role-agent` per "## ASSISTANT plugin
-content spec" below — STRIP the inherited MANAGER/AMAMA approve-other-agents machinery, encode R39.8/R39.9.
-Keep quad-identity + MANAGER(planning)+AUTONOMOUS(programming) fusion. Do NOT touch comm-graph ENFORCEMENT
-(lib/communication-graph.ts — the MANAGER↔ASSISTANT edge is a separate pending build item, code stays
-safely stricter). STILL OPEN (USER-only): the R39.4 KEEP/STRIP ruling below.
+**✅ PLUGIN REWRITE DONE 2026-07-22 (commit `e2fa6d4` in `~/Code/ai-maestro-assistant-role-agent`, v0.2.0).**
+Persona rewritten to R39.8/R39.9; `team-governance` skill dropped from `.agent.toml` (the approve-others
+machinery); `plugin.json` description synced; quad-identity preserved; MANAGER(planning)+AUTONOMOUS(programming)
+fusion kept. **Terminology (USER-confirmed 2026-07-22): "the MAESTRO agent" = the MANAGER** (the host MAESTRO's
+own agent, R39.1) — the persona leads with "the MAESTRO agent (the MANAGER)". **Obedience model (USER-corrected):**
+obeys its USER unconditionally + (only with the user's explicit permission) the MAESTRO agent, whose tasks stay
+refusable; does NOT obey the MAESTRO *user*. Rules synced to GOVERNANCE-RULES **v4.6.1** + spec.
+
+**STILL OPEN (USER-only / separate items):** (1) the R39.4 KEEP/STRIP ruling below; (2) comm-graph ENFORCEMENT of
+the MAESTRO-agent↔ASSISTANT edge (`lib/communication-graph.ts` stays safely stricter — pending); (3) the R39.1-R39.4
+UI SURFACE build (auto-create, no-other-terminal, locked-field UI) — still HELD (transition phase); (4) FUTURE:
+give the ASSISTANT MAINTAINER-style GitHub-repo skills, and improve the AUTONOMOUS role-plugin's GitHub skills.
 
 ## Problem
 

@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-23T00:05:00+0200
+updated: 2026-07-22T23:20:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -77,6 +77,41 @@ through a model), shared design/ board + column ownership, real GitHub side effe
 readiness proof** (USER's definition: ready = SCEN-031 runs and passes). NEXT = await the runner's verdict
 (PASS/FAIL/PARTIAL/STUCK) + report path; on FAIL/PARTIAL, act on the finding at its CAUSE and rerun. The run is long
 (multi-hour fleet build) and unsupervised by design — a completion notification will arrive.
+
+**▶ 2026-07-22 (FINAL — READ THIS; the earlier FAIL root cause was WRONG).** Two runs, and the TRUTH is the
+SECOND one. **RUN 1** (`SCEN-031_20260722T201234Z`) FAILed at S005 blaming `TRDD-OQIA2DCR` ("role agents dead on
+arrival — `claude --agent <plugin>-main-agent` unresolvable → bare shell"). **That root cause is a FALSE NEGATIVE.**
+The runner inferred it from 4 STALE/pre-existing agents and NEVER created a fresh MANAGER (skipped S004) — the
+recall-lesson error of concluding fresh-path behaviour from stale state. **Ground truth (empirically verified + USER-
+confirmed):** a role plugin properly installed `--scope local` by the server — which `CreateAgent`'s
+`installPluginLocally` DOES via `claude plugin install <plugin> ai-maestro-plugins --scope local` — makes
+`claude --agent <main-agent>` RESOLVE the persona **by name** (bare AND namespaced). So the `--agent` substrate WORKS;
+do NOT pursue any `lib/program-args.ts` fix or persona-copy. **RUN 2** (re-run, corrected to actually create+test a
+fresh MANAGER via the Wizard) PROVED it: the fresh `scen031-manager` came up a **live Opus-4.8(1M) Claude REPL WITH
+its persona, logged in** — NOT a bare shell. ISSUE-001 (`/login`) also NOT blocking.
+
+**THE REAL BLOCKER (USER-confirmed) — harness NOT ready because the MANAGER VIOLATES ITS GOVERNANCE ROLE.** Given the
+one-sentence build brief, the MANAGER built zipsearcher **SOLO** — created `Emasoft/zipsearcher` itself, cloned it
+into its own workdir, developed it with its own **Claude Code subagents** — and created **ZERO ai-maestro fleet
+personas** (no AUTONOMOUS, no MAINTAINER; registry snapshot-diff confirms). It never delegated via AMP. A clear
+**R6/R9 governance violation**: a MANAGER must ORCHESTRATE (create fleet personas + delegate), not EXECUTE. The fleet
+never self-organized → SCEN-031's core question fails.
+
+**ACTIONS TAKEN:** (1) **Issue filed** on the MANAGER role-plugin (separate Emasoft repo) —
+`https://github.com/Emasoft/ai-maestro-assistant-manager-agent/issues/31` — asking to fix the main-agent persona to
+create+delegate to fleet personas and never solo-build (cross-repo → issue, not in-place fix). (2) Runner directed to
+conclude FAIL + clean up: **`scen031-manager` agent + folder DELETED** ✓; **`Emasoft/zipsearcher` repo + PRs #1–4
+deletion PENDING** (runner stalled again at S008 ~17m; the repo still exists — outward/irreversible delete awaits
+USER go, OR finish via `gh repo delete Emasoft/zipsearcher --yes`).
+
+**NEXT:** (a) finish cleanup — delete `Emasoft/zipsearcher` (+ any fork) so 0-IMPACT holds; (b) once plugin issue #31
+lands a persona fix, **RERUN SCEN-031** to verify the MANAGER now creates+delegates to AUTONOMOUS+MAINTAINER personas.
+Harness readiness is gated on the MANAGER role-plugin behaviour, NOT on any ai-maestro in-repo code.
+
+**SUPERSEDED — do NOT carry forward:** the OQIA2DCR "`--agent` unresolvable / dead-on-arrival / scope-is-the-
+discriminator" root cause and its fixes (program-args edit, persona-copy to `.claude/agents/`) — ALL WRONG: a fresh
+Wizard MANAGER loads its persona fine. Also drop the ISSUE-001 `/login` blocker (not live — the fresh MANAGER was
+logged in). The one true finding is the MANAGER **role-behaviour** violation (issue #31).
 
 **Origin.** After the governance-spec full-fidelity rewrite (TRDD-CJWC3JLU, complete), a standing
 Stop-hook condition "make the ai-maestro harness ready" kept firing. "Ready" was undefined. The USER

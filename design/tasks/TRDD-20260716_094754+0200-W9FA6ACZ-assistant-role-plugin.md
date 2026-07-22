@@ -3,7 +3,7 @@ trdd-id: W9FA6ACZ
 title: ASSISTANT role-plugin — ai-maestro-assistant-role-agent (MANAGER+AUTONOMOUS, ungoverned, user-bound) (R39)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-22T12:17:12+0200
+updated: 2026-07-22T12:23:03+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [39, 46, 41, 26, 6, 11]
@@ -110,6 +110,12 @@ must be rewritten to:
 - **Peer on shared projects:** on the SAME GitHub project as another agent it acts as a **peer with equal
   authority**, subordinate **only** to its USER (R39.9). Its latitude is deliberate — the USER is free, and
   the ASSISTANT must be free to follow.
+- **Scoped, revocable collaboration expansion (R39.10, added 2026-07-22):** once the user permitted MANAGER
+  collaboration, the MANAGER may assign ANOTHER agent to collaborate with the ASSISTANT on a specific shared
+  GitHub project. Scoped to that, the ASSISTANT becomes MUTUALLY VISIBLE with that collaborator, may exchange
+  AMP with it, and may receive kanban tasks on that project (each refusable). This is the ONLY opening of the
+  R39.7 invisibility beyond the MAESTRO agent — never general. The USER may STOP/PAUSE/REFUSE at any time.
+  (Enforcement of the ASSISTANT↔collaborator AMP + kanban edges is a pending comm-graph build item.)
 - **Everything else = a normal AUTONOMOUS agent** (MANAGER planning + AUTONOMOUS programming fusion; no
   governing powers; no agent/team creation).
 

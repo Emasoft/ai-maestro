@@ -633,7 +633,8 @@ the MAESTRO agent (the MANAGER) (the sole agent channel — R39.9; refined 2026-
 2026-07-16 from "its user and the MAESTRO"). `R39.6` **assistant-lifecycle-bound**
 — an ASSISTANT cannot be deleted independently; every user always has exactly one; only deleting the USER cascades a
 soft delete. `R39.7` **assistant-invisible-inherits** — the ASSISTANT is invisible to other agents EXCEPT the MAESTRO
-agent (the MANAGER) (R39.9) but inherits all tasks + permissions sent to the user. `R39.8` **assistant-approves-only-own** — carries
+agent (the MANAGER) (R39.9) — plus any collaborator agent the MANAGER assigns on a shared repo, scoped + revocable
+(R39.10) — but inherits all tasks + permissions sent to the user. `R39.8` **assistant-approves-only-own** — carries
 NONE of the MANAGER's approve-other-agents machinery; approves ONLY its OWN TRDDs (self-mandates, Tier 0 — never asks
 the MANAGER to approve them); never approves/commands/directs another agent (like any AUTONOMOUS agent, minus the
 governing powers it never had). `R39.9` **assistant-manager-channel-and-peer** — the MAESTRO agent (the MANAGER — the
@@ -641,7 +642,13 @@ MAESTRO's own agent, R39.1) is the ONLY agent that
 may reach the ASSISTANT, and only to ASSIGN a TRDD (never to configure it — config is USER-only via the UI, R39.4);
 the ASSISTANT accepts only if its bound USER approved that collaboration and may REFUSE any assigned task (never a
 forced mandate, R41); on a SHARED GitHub project it acts as a PEER with EQUAL authority, subordinate only to its USER
-(USER-ruled 2026-07-22).
+(USER-ruled 2026-07-22). `R39.10` **assistant-collaboration-expansion** — once the user permitted MANAGER
+collaboration (R39.9), the MANAGER may assign ANOTHER agent to collaborate with the ASSISTANT on a specific shared
+GitHub project; scoped to that, the ASSISTANT is mutually VISIBLE with that collaborator, may exchange AMP messages
+with it, and may be assigned tasks via the kanban linked to that project (each refusable, R41). This is the ONLY
+opening of R39.7 invisibility beyond the MAESTRO agent — scoped to the assigned collaborator(s)/project, never
+general. The USER may STOP/PAUSE the collaboration or REFUSE specific MANAGER orders at ANY time (absolute user
+authority over its own ASSISTANT).
 
 ### GOV-R40 — Foreign-User Creation Approval [IRON · USER-set]
 `R40.1` **foreign-user-per-op-approval** — foreign users are under all R38 restrictions AND need MAESTRO approval for

@@ -1,9 +1,9 @@
 ---
 trdd-id: TAFH4U0G
 title: Freeze the aimaestro-* overlay filenames with a pin test and retire the stale pre-split IND mirror
-column: dev
+column: testing
 created: 2026-07-22T05:54:44+0200
-updated: 2026-07-22T05:54:44+0200
+updated: 2026-07-22T05:59:15+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -18,7 +18,7 @@ relevant-rules: []
 labels: [governance-rules, ind-dep-split, cross-repo-contract, plugin35, am83]
 external-refs: [Emasoft/ai-maestro#83, Emasoft/ai-maestro-plugin#35, Emasoft/ai-maestro-janitor#73, Emasoft/ai-maestro-janitor-DE9757LJ]
 release-via: none
-implementation-commits: []
+implementation-commits: [ec3c6a7a]
 ---
 
 # Freeze the aimaestro-* overlay filenames with a pin test and retire the stale pre-split IND mirror

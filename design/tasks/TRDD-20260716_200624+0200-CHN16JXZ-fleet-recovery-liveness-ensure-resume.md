@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-22T15:02:14+0200
+updated: 2026-07-22T15:26:50+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,7 +23,7 @@ derived-kind: npt
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049, 0a90648b, a717fc3b]
+implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049, 0a90648b, a717fc3b, 813e0347]
 release-via: none
 ---
 
@@ -121,15 +121,25 @@ work** — strictly worse than leaving it frozen. So:
      `relaunch` (`claude --continue`, transcript-preserving) is safe on a dead session (no live work to
      lose). `force_restart`/`resurrect` (external kill) escalate only if `relaunch` fails.
 
-**NEXT ACTION:** Phase C, in this order — (a) add + test the `dead` class in `lib/fleet-liveness.ts` using
-the VERIFIED signal above (`isPersisted(id) && !exists`, DEBOUNCED past boot) — NOT `hasSession`, (b) a SEPARATE hard-actuator (`lib/fleet-hard-recovery.ts`)
-behind its OWN default-off flag `AIM_FLEET_HARD_RECOVERY` (mirror janitor `FLEET_HARD_RESTART_ENABLED`),
-reusing the stop/restart substrate (`app/api/sessions/[id]/restart`, `kill`), with per-instance cooldown +
-crash-loop-page-once + HID + `fleetActuationBlocked()`, (c) the runner calls it for `dead` targets when the
-hard flag is on. `actuateRecovery` already REFUSES hard rungs (`hard_not_wired`/`hard_gated`), so the
-gentle path is untouched. Read `lib/fleet-recovery.ts` (`HARD_RUNGS`) + `lib/fleet-liveness.ts` +
-`lib/fleet-recovery-runner.ts` first. **Phase C is OPTIONAL for the core coverage gap** — gentle recovery
-(A/B/D) already closes it for the common frozen-agent case.
+**PHASE C STEP (a) ✅ DONE (`813e0347`)** — the `dead` class, DETECTION-ONLY: `classifyLiveness` splits
+`!exists` into `dead` (PERSISTED ⇒ crashed) vs `offline` (not persisted ⇒ hibernated) via the VERIFIED
+`isPersisted` signal (absent dep ⇒ offline, so existing callers unchanged); the watchdog LOGS dead agents;
+`recoveryRecommended:false` so NOTHING is actuated. `FleetScanDeps.isPersisted` is wired from
+`loadPersistedSessions()` once per tick. 6 tests. ⚠ `dead` is classified IMMEDIATELY — the
+boot-overcomplete DEBOUNCE belongs to step (c)'s ACTUATION, not detection (a report is harmless; a
+resurrection at boot is not).
+
+**NEXT ACTION:** Phase C step (b) — a SEPARATE hard-actuator (`lib/fleet-hard-recovery.ts`) behind its OWN
+default-off flag `AIM_FLEET_HARD_RECOVERY` (mirror janitor `FLEET_HARD_RESTART_ENABLED`), reusing the
+stop/restart substrate (`app/api/sessions/[id]/restart`, `kill`) — relaunch first (`claude --continue`,
+transcript-preserving), escalate to external kill only if it fails; per-instance cooldown +
+crash-loop-page-once + HID + `fleetActuationBlocked()`. THEN step (c): flip `dead` to
+`recoveryRecommended:true`, map `diagnosisForClass('dead')→'dead'`, have the runner call the hard-actuator
+for `dead` targets when the hard flag is on — **WITH the boot-overcomplete DEBOUNCE** (fire only after N
+consecutive dead scans / a grace past boot, else a restart mass-resurrects every persisted agent).
+`actuateRecovery` already REFUSES hard rungs, so the gentle path stays untouched. Read
+`lib/fleet-recovery.ts` (`HARD_RUNGS`) + `lib/fleet-recovery-runner.ts` first. **Phase C stays OPTIONAL** —
+gentle recovery (A/B/D) already closes the core gap; steps (b)/(c) add crashed-process recovery on top.
 
 ## Problem / Goal
 

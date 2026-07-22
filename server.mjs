@@ -1995,6 +1995,23 @@ async function startServer(handleRequest) {
       console.warn('[Startup] Server liveness init failed (non-fatal):', err?.message || err)
     }
 
+    // ── Fleet-liveness watchdog (CHN16JXZ Phase A — READ-ONLY detection) ───────
+    // The janitor's session-liveness beat declines to recover the harness agents a
+    // live server owns, and the janitor daemon EXITS while the server runs (§7.2,
+    // ai-maestro#79) — so nothing watches server-owned agents unless the server does.
+    // This watchdog SCANS + LOGS stalled/token-blocked agents (the guardian's eyes);
+    // it does NOT actuate yet (recovery is Phase B/C). Read-only ⇒ safe to start
+    // unconditionally. AIM_FLEET_LIVENESS_WATCHDOG_INTERVAL_MS overrides the 5-min
+    // cadence; 0 disables. The timer is unref'd, so it dies with the process.
+    try {
+      const { startFleetLivenessWatchdog } = await import('./lib/fleet-liveness-watchdog.ts')
+      if (startFleetLivenessWatchdog()) {
+        console.log('[Startup] Fleet-liveness watchdog started (read-only detection; CHN16JXZ Phase A)')
+      }
+    } catch (err) {
+      console.warn('[Startup] Fleet-liveness watchdog init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Claude Code runtime-env enforcer (TRDD-QZL828OD) ───────────────────────
     // USER-ratified carve-out (2026-07-17): the harness cannot function without a
     // fixed set of Claude Code runtime env keys (+ one timeout) in the user-scope

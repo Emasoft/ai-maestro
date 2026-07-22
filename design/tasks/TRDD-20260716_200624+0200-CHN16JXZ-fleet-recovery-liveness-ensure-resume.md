@@ -1,10 +1,10 @@
 ---
 trdd-id: CHN16JXZ
 title: Fleet recovery — server-internal liveness detection + ensure-resume actuation across the fleet
-column: blocked
-pre-block-column: planned
+column: dev
+pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T06:34:21+0200
+updated: 2026-07-22T14:17:51+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -22,20 +22,61 @@ derived: true
 derived-kind: npt
 npt: []
 eht: []
-blocked-by: [DXJZM3BW, 1GGQ4HWY]
+blocked-by: []
+implementation-commits: [c930a1cc, a7c04017]
 release-via: none
 ---
 
 # Fleet recovery — server-internal liveness detection + ensure-resume actuation across the fleet
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-16
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-22
 
-Server-internal liveness + actuation: the server watches the whole fleet and RESUMES stalled
-agents. Cross-agent reach is the SERVER's job, never a `#J` call (R42) — the `#J` side only asks
-`ensure-resume <self>`. Blocked on [[DXJZM3BW]] (the `ensure-resume` verb + route) and
-[[1GGQ4HWY]] (an agent stalled on token expiry is un-resumable until the cascade heals it).
-**NEXT ACTION:** implement the server-internal liveness scan + actuation that reuses the existing
-queue/slash substrate; no new cross-agent script surface.
+**▶ 2026-07-22 — `blocked` → `dev`. Phase A (DETECTION) landed; unblocked, correctly.**
+
+Verified against the janitor's own v0.60.1 daemon + ai-maestro#79: this is the ONE Family-A
+chore that *structurally* transfers to the server (a frozen session's own cron is what has
+stopped, so only an external watcher can recover it), and it is the janitor's #1 open ask —
+*"the only real coverage gap, silent, from the first second the server runs."* The
+capabilities-vs-binary handshake break (janitor ignores our `capabilities:[]` and yields on mere
+liveness, TRDD-LU0C5KAR) makes this urgent. Coordination posted:
+ai-maestro#79#issuecomment-5045588088 (per-chore YES/NO — janitor keeps its stopgap until each
+server half lands).
+
+**Unblocked:** [[DXJZM3BW]]'s `ensure-resume`/`status` verbs are DONE (in testing), so that
+dep is satisfied. [[1GGQ4HWY]] is NOT a hard blocker for the core: a token-blocked agent is
+*classified* `token_blocked` with `recoveryRecommended:false` and simply flagged — never
+actuated — until the OAuth cascade is R16-live. So the token-cascade hand-off is a deferred,
+gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
+
+**Phase plan (safest-first, like 1GGQ4HWY):**
+- **A ✅ DONE (`c930a1cc`, `a7c04017`)** — DETECTION, read-only, zero actuation:
+  - `lib/janitor-control.ts` — read-only reader of the janitor fleet-control plane
+    (`~/.claude/janitor-control/`, shared `$JANITOR_CONTROL_DIR`); `fleetActuationBlocked()`
+    gate (kill-switch/pause/maintenance). NEVER writes. 9 tests.
+  - `lib/fleet-liveness.ts` — pure `classifyLiveness` (active/idle_waiting/permission_waiting/
+    stalled/token_blocked/offline) + `scanFleetLiveness` (injectable deps). Conservative:
+    `stalled` = idle-at-prompt with no activity ≥30 min (never ordinary idle); STOP-gate empties
+    `recoveryTargets`. 15 tests. + `readHookNotification` companion on `lib/session-safe-state.ts`.
+- **B 🔲 NEXT — SOFT actuation:** the gentle rungs `esc_nudge → rearm → reload → update` via the
+  AUTHENTICATED path (ai-maestro#60) — reuse `aimaestro-session.sh queue|slash <self>` /
+  `wakeAgent`, self-scoped; NO new cross-agent script (R42). Consult `fleetActuationBlocked()` +
+  the HID-presence gate before any injection.
+- **C 🔲 HARD rungs** `relaunch → force_restart → resurrect` behind a **default-OFF** flag +
+  per-instance cooldown + crash-loop-page-once (mirrors janitor `FLEET_HARD_RESTART_ENABLED`).
+- **D 🔲 WATCHDOG wiring:** boot-start a periodic scan (mirror `startAgentInvariantsWatchdog`),
+  server-owned agents only (never `unarmed`/non-`server_owned` — those stay the janitor's).
+- **Deferred:** token-blocked healing hand-off to [[1GGQ4HWY]]'s cascade, live only after R16.
+
+**Recovery-ladder parity spec** (mirror the janitor's `RECOVERY_LADDER`, from the audit report
+`reports/janitor-daemon-audit/20260722_140531+0200-family-a-coverage.md` §2.4):
+`esc_nudge → rearm → reload → update → relaunch → force_restart → resurrect`; entry map
+`cron_dead→rearm / version_mismatch→reload / dead→relaunch / frozen→full-ladder`; HARD rungs
+gated + cooldown + crash-loop-page-once + HID-presence defer; never touch `server_owned`(theirs
+is us now)/`unarmed`.
+
+**NEXT ACTION:** Phase B — wire `recoveryTargets` to the authenticated soft-rung actuation
+(esc_nudge/rearm via `session.sh queue <self>`), gated by `fleetActuationBlocked()` + HID
+presence; add unit tests with an injected actuator. Then the boot watchdog (Phase D).
 
 ## Problem / Goal
 

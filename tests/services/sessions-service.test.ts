@@ -20,6 +20,7 @@ const {
   mockAmpInboxWriter,
   mockSharedState,
   mockFs,
+  mockLaunchArgs,
 } = vi.hoisted(() => {
   const mockRuntime = {
     listSessions: vi.fn().mockResolvedValue([]),
@@ -78,6 +79,18 @@ const {
       }
       return { default: fns, ...fns }
     })(),
+    // TRDD-GZ1KOHNR: default passthrough so the launch/keychain tests reach the
+    // launch path unchanged. Individual tests flip it to `refuse` to exercise
+    // createSession's --agent-enforcement wiring.
+    mockLaunchArgs: {
+      resolveLaunchArgs: vi.fn(
+        async (
+          _agentId: string | undefined,
+          _program: string,
+          args: string,
+        ): Promise<{ kind: 'ok'; args: string } | { kind: 'refuse'; reason: string }> => ({ kind: 'ok', args }),
+      ),
+    },
   }
 })
 
@@ -102,6 +115,7 @@ vi.mock('@/lib/hosts-config', () => mockHostsConfig)
 vi.mock('@/lib/session-persistence', () => mockSessionPersistence)
 vi.mock('@/lib/amp-inbox-writer', () => mockAmpInboxWriter)
 vi.mock('@/services/shared-state', () => mockSharedState)
+vi.mock('@/services/agent-launch-args', () => mockLaunchArgs)
 vi.mock('fs', () => mockFs)
 vi.mock('child_process', () => ({
   // exec/execFile must be callback-style for promisify to work
@@ -290,6 +304,28 @@ describe('createSession', () => {
     // The client command was never typed into the pane...
     expect(mockRuntime.sendKeys).not.toHaveBeenCalledWith('my-agent', expect.stringContaining('claude'), expect.anything())
     // ...the doomed pane is gone, and the agent is not left green-but-dead.
+    expect(mockRuntime.killSession).toHaveBeenCalledWith('my-agent')
+    expect(mockSessionPersistence.unpersistSession).toHaveBeenCalledWith('my-agent')
+    expect(mockAgentRegistry.unlinkSession).toHaveBeenCalledWith('agent-1')
+  })
+
+  // TRDD-GZ1KOHNR: a titled Claude agent whose role-plugin main-agent cannot be
+  // resolved must NOT launch generic claude (its persona would never load — the
+  // SCEN-031 MANAGER-builds-solo failure). resolveLaunchArgs refuses; createSession
+  // then kills the pane and undoes link+persist, exactly like the keychain refuse.
+  it('refuses the launch when --agent enforcement refuses — no client injection, pane killed, link undone', async () => {
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.getAgentByName.mockReturnValue({ id: 'agent-1', name: 'my-agent', launchCount: 1 })
+    mockLaunchArgs.resolveLaunchArgs.mockResolvedValueOnce({
+      kind: 'refuse',
+      reason: 'Claude agent has no resolvable role-plugin main-agent',
+    })
+
+    const result = await createSession({ name: 'my-agent', agentId: 'agent-1' })
+
+    expect(result.status).toBe(409)
+    expect(result.error).toContain('role-plugin')
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalledWith('my-agent', expect.stringContaining('claude'), expect.anything())
     expect(mockRuntime.killSession).toHaveBeenCalledWith('my-agent')
     expect(mockSessionPersistence.unpersistSession).toHaveBeenCalledWith('my-agent')
     expect(mockAgentRegistry.unlinkSession).toHaveBeenCalledWith('agent-1')

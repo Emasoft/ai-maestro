@@ -41,6 +41,7 @@ import { statePath } from '@/lib/ecosystem-constants'
 // agents-core-service.ts for the full rationale — one implementation used
 // by wakeAgent, this defense-in-depth path, and POST /api/agents/[id]/ensure-core).
 import { ensureCorePluginInstalled, drainCommandQueueForSession } from '@/services/agents-core-service'
+import { resolveLaunchArgs } from '@/services/agent-launch-args'
 
 const execFileAsync = promisify(execFile)
 
@@ -1087,16 +1088,39 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     else if (selectedProgram.includes('openclaw')) startCommand = 'openclaw'
     else startCommand = 'claude'
 
-    if (programArgs && typeof programArgs === 'string') {
-      // SVC2-MAJ-03 fix (2026-05-06): the previous allowlist included `\s`,
-      // which matches `\n`, `\r`, `\t` and `\v` — a newline embedded in
-      // programArgs (e.g. via a registry row written through a less-protected
-      // path) would translate into a newline in the literal command sent to
-      // tmux send-keys, injecting a second shell command after the legitimate
-      // claude/codex/aider invocation. Replacing `\s` with a literal space and
-      // dropping the comma narrows the surface to characters that are never
-      // shell-meaningful in this context.
-      const sanitized = programArgs.replace(/[^a-zA-Z0-9 \-_.=/:~@]/g, '').trim()
+    // TRDD-GZ1KOHNR: enforce `--agent <persona>` for a titled Claude agent.
+    // This IS the fresh-create bug site: at G11 CreateAgent passes a programArgs
+    // captured before G06 ChangeTitle injected `--agent` into the registry, so
+    // the command would launch GENERIC claude and the role persona would never
+    // load (the SCEN-031 MANAGER-builds-solo failure). resolveLaunchArgs derives
+    // `--agent` from the role-plugin installed by G11 (guaranteed by G07c),
+    // passes non-Claude programs and agentless sessions through unchanged, and
+    // REFUSES a Claude agent with no resolvable persona (fail-fast) — surfaced
+    // exactly like the keychain refuse below.
+    const enforced = await resolveLaunchArgs(
+      agentId,
+      selectedProgram,
+      typeof programArgs === 'string' ? programArgs : '',
+    )
+    if (enforced.kind === 'refuse') {
+      console.error(`[Sessions] ${actualSessionName}: REFUSING launch — ${enforced.reason}`)
+      await runtime.killSession(actualSessionName).catch(() => {})
+      await unpersistSession(actualSessionName)
+      if (registeredAgent) {
+        await unlinkSession(registeredAgent.id)
+      }
+      return {
+        error: `Refused to launch "${agentName}": ${enforced.reason}`,
+        status: 409,
+        data: undefined,
+      }
+    }
+    if (enforced.args) {
+      // SVC2-MAJ-03 security allowlist: strip any char that is shell-meaningful
+      // in the literal command sent to tmux send-keys (a newline embedded via a
+      // less-protected registry row would inject a second command). `--agent
+      // <plugin>-main-agent` is letters+hyphens+spaces only, so it passes intact.
+      const sanitized = enforced.args.replace(/[^a-zA-Z0-9 \-_.=/:~@]/g, '').trim()
       if (sanitized) startCommand = `${startCommand} ${sanitized}`
     }
 

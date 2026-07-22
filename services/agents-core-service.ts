@@ -57,6 +57,7 @@ import {
 import { resolveAgentIdentifier } from '@/lib/messageQueue'
 import { getHosts, getSelfHost, getSelfHostId, isSelf } from '@/lib/hosts-config'
 import { persistSession, unpersistSession } from '@/lib/session-persistence'
+import { resolveLaunchArgs } from '@/services/agent-launch-args'
 import { initAgentAMPHome, getAgentAMPDir } from '@/lib/amp-inbox-writer'
 import { buildAgentSessionEnv } from '@/lib/session-env'
 import { initializeAllAgents, getStartupStatus } from '@/lib/agent-startup'
@@ -2204,10 +2205,25 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       } else {
         let startCommand = resolveStartCommand(program)
 
-        // Build full command with programArgs
+        // Build full command with programArgs.
+        // TRDD-GZ1KOHNR: enforce `--agent <persona>` so a woken titled Claude
+        // agent runs its role-plugin persona, never generic claude. Derives
+        // `--agent` from the installed role-plugin; passes non-Claude programs
+        // through unchanged; REFUSES a Claude agent with no resolvable persona
+        // (fail-fast, R9.13) — mirrored on the keychain refuse below.
         let fullCommand = startCommand
-        if (agent.programArgs) {
-          const args = sanitizeArgs(agent.programArgs)
+        const enforced = await resolveLaunchArgs(agentId, program, agent.programArgs || '')
+        if (enforced.kind === 'refuse') {
+          console.error(`[Wake] ${sessionName}: REFUSING launch — ${enforced.reason}`)
+          await runtime.killSession(sessionName).catch(() => {})
+          await unpersistSession(sessionName)
+          return {
+            error: `Refused to launch "${agentName}": ${enforced.reason}`,
+            status: 409,
+          }
+        }
+        if (enforced.args) {
+          const args = sanitizeArgs(enforced.args)
           if (args) {
             fullCommand = `${startCommand} ${args}`
           }

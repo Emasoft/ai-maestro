@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T21:10:00+0200
+updated: 2026-07-22T21:20:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -30,10 +30,13 @@ TRDDs and wait for the USER.
 
 - **A · Governance-doc authority (spec-first inversion)**
   - `✓ A1` spec = complete authoritative source of truth (rewrite 0-miss ×6, conformance 14/14).
-  - `~ A2` inversion propagated: catalog §0 ✓ + MANAGER #30 ✓; **in-repo DEP overlays `rules/aimaestro/*.md`
-    = CLEAN** (verified 2026-07-22: zero stale "catalog is canonical / authoritative / source" claims).
-    Remaining: the 8 cross-repo role-plugin personas — UNVERIFIED (need fetch; may be a non-gap if they only
-    CITE rules rather than name the catalog THE source) + any correction is ISSUE/PR only + OUTWARD → USER go-ahead.
+  - `~ A2` inversion propagated: catalog §0 ✓ + MANAGER #30 ✓; in-repo DEP overlays CLEAN. **8 cross-repo
+    personas VERIFIED read-only (2026-07-22): 3 carry a STALE "GOVERNANCE-RULES.md … canonical / authoritative
+    on conflict" claim** — `assistant-manager` (L116, v4.0.1), `architect` (L102, "authoritative on any
+    conflict", v4.0.2), `integrator` (L449, v4.0.1); the other 5 (COS, orchestrator, programmer, maintainer,
+    autonomous) CLEAN. Post-inversion the SPEC is the arbiter on conflict → those 3 name the WRONG one. (Also:
+    all 3 cite catalog v4.0.1/4.0.2 vs current v4.7.1 → separately ~7 minors stale.) Correction = ISSUE/PR on
+    3 repos = OUTWARD → **awaits USER go-ahead** (how-to-fix-issues-of-other-projects: state finding, wait for direction).
   - `✓ A3` conformance harness runs IN CI — `.github/workflows/ci.yml` runs `yarn test` (full vitest suite,
     incl. `governance-spec-conformance` + the 378 enforcement tests) on push **and** PR to main.
 - **B · Rule enforcement ("all governance rules enforced")**

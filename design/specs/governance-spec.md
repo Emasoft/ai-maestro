@@ -764,7 +764,7 @@ autonomous       no team; independent; unaffected by team blocking (R9.5)
 maintainer       no team; bound to one githubRepo (R19)
 ```
 
-<!-- @spec:title-plugin-map — the default role-plugin per title (lib/ecosystem-constants.ts TITLE_PLUGIN_MAP) -->
+<!-- @spec:title-plugin-map — the default role-plugin per title (lib/ecosystem-constants.ts TITLE_PLUGIN_MAP; 9 entries — the 8 governance titles + the R39 ASSISTANT) -->
 ```text
 MANAGER          ai-maestro-assistant-manager-agent
 CHIEF-OF-STAFF   ai-maestro-chief-of-staff
@@ -774,11 +774,23 @@ INTEGRATOR       ai-maestro-integrator-agent
 MEMBER           ai-maestro-programmer-agent
 MAINTAINER       ai-maestro-maintainer-agent
 AUTONOMOUS       ai-maestro-autonomous-agent
+ASSISTANT        ai-maestro-assistant-role-agent
 ```
 
-`TITLES-01` **enum-closed** — these 8 are the only valid `agent.governanceTitle` values (R3.1); a 9th is a MAJOR bump.
-`TITLES-02` **default-mandatory** — each title's default role-plugin auto-installs on grant unless a compatible
-alternative is picked (R11, R20.4/R20.5); every persisted agent carries exactly one (R9.13).
+`TITLES-01` **enum-closed** — the 8 in `@spec:titles` are the only valid `agent.governanceTitle` values on the
+COMM-GRAPH / governance axis (R3.1); a 9th governance title is a MAJOR bump. `TITLES-02` **default-mandatory** —
+each title's default role-plugin auto-installs on grant unless a compatible alternative is picked (R11, R20.4/R20.5);
+every persisted agent carries exactly one (R9.13). `TITLES-03` **assistant-is-code-ahead-of-rule** — the CODE already carries `assistant` as a **9th** governance role:
+`types/agent.ts` `AgentRole` / `VALID_GOVERNANCE_TITLES` list it, `TITLE_PLUGIN_MAP` maps it
+(→ `ai-maestro-assistant-role-agent`), and `lib/communication-graph.ts` has an `assistant` NODE — it is IN the R6
+graph, with edges only to its bound user (R39.5 restricts its authority, not its existence as a node). But the RULE
+has NOT caught up: R3.1 still enumerates **eight** governance titles and the R6 matrix has **nine** nodes (HUMAN + 8,
+no ASSISTANT), because the R39 assistant role-plugin is "still TO BE CREATED" (R39.2) and the user-model
+implementation is tracked as follow-on TRDDs (v4.4.0 changelog). This SPEC faithfully mirrors the RULE:
+`@spec:titles` = R3.1's 8, `@spec:comm-graph` = R6's 9-node matrix; `@spec:title-plugin-map` = the code's 9 (it is
+the code contract). The conformance test PINS the delta — the 8 spec titles ⊆ the code roles, and the code's extra
+role is exactly `{assistant}` — so a NEW undocumented role goes red. When R39 lands, R3.1 + R6 gain ASSISTANT and
+this SPEC + block follow (GOV-META-02). [Surfaced to the USER as a code-ahead-of-rule gap, TRDD-R8LJJDBQ.]
 
 ## GOV-INV — the 22 hard invariants (MUST never be violated)
 
@@ -840,7 +852,8 @@ vocabulary (R25) is defined by the IND 3-pillars spec (`3P-KAN`); this spec cite
 
 `GOV-VAL-01` **comm-graph** — `lib/communication-graph.ts` edges deep-equal the `@spec:comm-graph` block.
 `GOV-VAL-02` **title-enum** — the code's `governanceTitle` enum equals the `@spec:titles` set (8, exact spellings).
-`GOV-VAL-03` **title-plugin-map** — `lib/ecosystem-constants.ts::TITLE_PLUGIN_MAP` equals the `@spec:title-plugin-map`.
+`GOV-VAL-03` **title-plugin-map** — `lib/ecosystem-constants.ts::TITLE_PLUGIN_MAP` (9 entries, incl. the R39
+`ASSISTANT`) equals the `@spec:title-plugin-map` block key-for-key and value-for-value.
 `GOV-VAL-04` **invariants** — each `GOV-INV-NN` has an enforcement site (a gate in `element-management-service.ts` or a
 test); an invariant with no enforcement site is a gap. `GOV-VAL-05` **strict-routes** — every route in
 `security-registry.json` marked `strict` is USER/UI-sudo-gated and agent callers use the R28 three-check (R32).

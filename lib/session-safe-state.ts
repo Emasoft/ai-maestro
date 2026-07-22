@@ -51,6 +51,31 @@ export function readSubagentCount(workingDir: string | undefined | null): number
 }
 
 /**
+ * Read the hook's activity notification for a workdir — the 5-state signal
+ * (`status`, `notificationType` ∈ idle_prompt | permission_prompt | idle | …) —
+ * from the SAME chat-state file as readSubagentCount. Used by the fleet-liveness
+ * scanner (TRDD-CHN16JXZ) to tell a permission-waiting agent (needs the user, do
+ * not touch) from a genuinely stalled one. Null when unknown/unreadable (fail-safe:
+ * an absent notification is never read as "stalled").
+ */
+export function readHookNotification(
+  workingDir: string | undefined | null,
+): { status: string | null; notificationType: string | null } | null {
+  if (!workingDir) return null
+  try {
+    const stateFile = path.join(statePath('chat-state'), `${hashCwd(workingDir)}.json`)
+    if (!fs.existsSync(stateFile)) return null
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'))
+    return {
+      status: typeof state?.status === 'string' ? state.status : null,
+      notificationType: typeof state?.notificationType === 'string' ? state.notificationType : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Pure gate decision for the stop/restart routes: block only on a PROVEN
  * positive subagent count and no force override. `count === null` (unknown)
  * never blocks — the counter is not trustworthy enough to refuse service on

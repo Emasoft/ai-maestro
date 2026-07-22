@@ -1,9 +1,9 @@
 ---
 trdd-id: CJWC3JLU
 title: Invert governance authority — the SPEC is the source of truth and GOVERNANCE-RULES.md emanates from it (spec-first)
-column: dev
+column: human_review
 created: 2026-07-22T17:02:20+0200
-updated: 2026-07-22T18:15:00+0200
+updated: 2026-07-22T18:20:00+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -88,17 +88,17 @@ NEW-SPEC (1998 lines, 49 GOV-R, 14 sections, 894→1998 / 78KB→170KB) placed a
 titles blocks extract + match live code; the duplicate @spec:titles in GOV-TERM was de-collided to
 @spec:three-layer-model so the marker stays unique). Verifier reports: `scratchpad/spec-fragments/verify-{A,B1,B2,C,D,E}.md`.
 
-**NEXT ACTION (the last EHT — do NOT skip; it leaves a stale authority claim in the fleet):** push
-`fork governance-rules` (spec `032b274f` + this TRDD update), then post the correction comment on
-ai-maestro-assistant-manager-agent#30 (cross-repo GitHub issue channel per how-to-fix-issues-of-other-projects
-— NOT a code edit into that repo): the spec is the SOURCE, the catalog EMANATES; the MANAGER must re-point
-its read to the spec as canonical (inverts my prior #30 claim "GOVERNANCE-RULES.md is authoritative for
-meaning; spec = shape"). Then this TRDD is complete.
+**✅ ALL WORK DONE — pushed `fork governance-rules` (`5b0b12a0..a7df9006`): spec `032b274f` + TRDD record
+`a7df9006`. The last EHT (correct MANAGER #30) was already satisfied during the inversion (`5b0b12a0`) —
+VERIFIED 2026-07-22 by reading the live #30 comment: it inverts the authority (spec = SOURCE, catalog =
+primary emanation, re-point your read to `governance-spec.md`). The MANAGER re-reading the spec now picks up
+the fuller 2.1.0 rewrite automatically; no redundant follow-up needed. Column → `human_review` for USER
+inspection of the new source-of-truth spec.**
 
-**EHT (do NOT skip — leaves a stale authority claim in the fleet):** I posted
-ai-maestro-assistant-manager-agent#30 telling the MANAGER "GOVERNANCE-RULES.md is authoritative for
-meaning; spec = shape." That is now INVERTED. Post a correction comment on #30: the spec is the
-source; the catalog emanates; re-point your read to the spec as canonical.
+**EHT — ✅ DONE (verified 2026-07-22):** the #30 correction is live on
+ai-maestro-assistant-manager-agent#30 (posted with the inversion, `5b0b12a0`) — it tells the MANAGER the
+authority is INVERTED: the spec is the source, the catalog emanates, re-point your read to the spec as
+canonical. No stale authority claim remains in the fleet.
 
 **SUPERSEDED — do NOT carry forward:** the "Mirror-sync: governance-spec.md" discipline (prose→spec)
 and any statement that GOVERNANCE-RULES.md is the canonical source. Both are reversed by this TRDD.

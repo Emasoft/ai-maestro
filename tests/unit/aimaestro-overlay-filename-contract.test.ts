@@ -4,8 +4,8 @@
  * ~/.claude/rules/ — cite these DEP overlay files BY NAME in their layering notes
  * (e.g. prrd-design-rules.md says "the overlay `aimaestro-prrd-governance.md`
  * EXPANDS this base"). ai-maestro seeds the overlays into agent workdirs by GLOB
- * (`lib/agent-rules-seed.ts` — readdir + `aimaestro-*.md` filter + sort), so a rename
- * does NOT break seeding: it silently seeds the new name while the janitor's prose
+ * (`lib/agent-rules-seed.ts:115` — readdir + .md filter + sort), so a rename does
+ * NOT break seeding: it silently seeds the new name while the janitor's prose
  * pointer dangles. Nothing else in ai-maestro CI would catch that.
  *
  * This test is that guard. A rename/removal here fails CI instead of silently
@@ -20,14 +20,11 @@ import { join } from 'path'
 // Same source dir the seeder uses (DEFAULT_RULES_SOURCE_DIR in agent-rules-seed.ts).
 const RULES_SOURCE_DIR = join(process.cwd(), 'rules', 'aimaestro')
 
-// Discover EXACTLY as `ensureAgentRules` does (agent-rules-seed.ts) so this test
-// guards the real shipped set, not a parallel hand-maintained one. The seeder scopes
-// to the `aimaestro-*` prefix (not bare `.md`) so a colocated non-overlay doc — the
-// 3-pillars conformance SPEC that now shares this dir — is neither seeded nor counted
-// as an overlay here.
+// Discover EXACTLY as `ensureAgentRules` does (agent-rules-seed.ts:115) so this
+// test guards the real shipped set, not a parallel hand-maintained one.
 const shippedOverlayFiles = (): string[] =>
   readdirSync(RULES_SOURCE_DIR)
-    .filter((f) => f.startsWith('aimaestro-') && f.endsWith('.md'))
+    .filter((f) => f.endsWith('.md'))
     .sort()
 
 // The 4 governance overlays that ARE the janitor cross-repo contract, each paired
@@ -74,20 +71,5 @@ describe('aimaestro-* overlay filename contract (cross-repo, ai-maestro#83)', ()
     for (const { overlay } of CROSS_REPO_CONTRACT) {
       expect(EXPECTED_OVERLAY_SET).toContain(overlay)
     }
-  })
-})
-
-describe('3-pillars conformance SPEC colocation (ai-maestro#85, USER-directed same-dir)', () => {
-  // USER directive 2026-07-22: "the specs must be stored along with the governance
-  // rules, same dir." The spec is a maintainer conformance CONTRACT, not an overlay —
-  // it deliberately carries NO `aimaestro-` prefix so the seeder (scoped to that
-  // prefix) does NOT inject it into every agent's per-turn context. This pins both
-  // its presence in the dir AND its exclusion from the seeded overlay set.
-  it('the 3-pillars SPEC lives in rules/aimaestro/ beside the governance overlays', () => {
-    expect(readdirSync(RULES_SOURCE_DIR)).toContain('3-pillars-spec.md')
-  })
-
-  it('the SPEC is NOT a seeded overlay (no aimaestro- prefix → excluded from the seeded set)', () => {
-    expect(shippedOverlayFiles()).not.toContain('3-pillars-spec.md')
   })
 })

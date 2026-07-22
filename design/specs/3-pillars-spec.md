@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.1.0
+spec-version: 1.1.1
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-22T08:07:00+0200
+updated: 2026-07-22T09:28:36+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -196,7 +196,8 @@ asserts `types/task.ts::DEFAULT_STATUSES` deep-equals 3P-KAN-01's block (TRDD-QP
 the platelet that keeps this spec from being drift-prone prose.
 
 `3P-CHK-02` **ai-maestro-overlay** — `tests/unit/aimaestro-overlay-filename-contract.test.ts`
-freezes the DEP overlay filenames the IND bases cite (#83) and pins this spec's colocation.
+freezes the DEP overlay filenames the IND bases cite (#83). (This SPEC lives in
+`design/specs/`, not with the overlays — the standard SPEC home per the doc-type taxonomy.)
 
 `3P-CHK-03` **janitor** — a check (janitor's to build, #85) that its shipped IND bases
 satisfy this spec at the `spec-version` they declare.

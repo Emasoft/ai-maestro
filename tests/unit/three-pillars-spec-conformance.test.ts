@@ -19,7 +19,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { DEFAULT_STATUSES } from '@/types/task'
 
-const SPEC_PATH = join(process.cwd(), 'rules', 'aimaestro', '3-pillars-spec.md')
+const SPEC_PATH = join(process.cwd(), 'design', 'specs', '3-pillars-spec.md')
 
 /**
  * Extract the authoritative column list the spec marks with

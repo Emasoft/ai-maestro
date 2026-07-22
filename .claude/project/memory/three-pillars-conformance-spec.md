@@ -9,7 +9,7 @@ metadata:
   tier: component
 ---
 ai-maestro hosts the normative **3-pillars conformance SPEC** at
-`rules/aimaestro/3-pillars-spec.md` (ai-maestro#85, USER-directed, `spec-version` semver). It is
+`design/specs/3-pillars-spec.md` (ai-maestro#85, USER-directed, `spec-version` semver). It is
 the **ARBITER**: the janitor IND rules (`~/.claude/rules/{trdd-design-tasks,prrd-design-rules,universal-kanban}.md`),
 the ai-maestro DEP overlays (`rules/aimaestro/aimaestro-*.md`), and the enforcement code
 (`types/task.ts::DEFAULT_STATUSES`, `types/team.ts`) are all IMPLEMENTATIONS that conform to it.
@@ -32,9 +32,10 @@ append-only so a conformance check may CITE a clause id.
 
 Enforced by `tests/unit/three-pillars-spec-conformance.test.ts` (asserts `types/task.ts`
 DEFAULT_STATUSES == the spec's 17-column block, read FROM the spec) + the #83 overlay-filename
-loop in `aimaestro-overlay-filename-contract.test.ts`. The spec is **not seeded** to agent workdirs
-(no `aimaestro-` prefix → excluded by the seeder's `aimaestro-*.md` filter) so it never taxes an
-agent's per-turn context.
+loop in `aimaestro-overlay-filename-contract.test.ts`. The spec lives in **`design/specs/`** — the
+standard SPEC home in the doc-type taxonomy (PRRD `design/requirements/` → SPEC `design/specs/` →
+TRDD `design/tasks/`, authority in that order) — not with the governance rules or the code; the
+janitor + ai-maestro conformance checks read it from the repo path.
 
 The design decisions this spec codifies (the pillar bodies + their `[^N]` lessons) live in the
 janitor USER-scope hub [[ai-maestro-fleet-hub-governance-and-security]].
@@ -42,7 +43,15 @@ janitor USER-scope hub [[ai-maestro-fleet-hub-governance-and-security]].
 ## Notes and lessons learned
 [^1]: [id:ATOM-3PSP-0001, status:valid, keywords:"three_pillars_spec arbiter recall_before_authoring did_not_recall", ocd:2026-07-22, lmd:2026-07-22]
   DO NOT author or re-derive the 3-pillars contract (the columns, the TRDD/PRRD schema) from
-  scattered sources, BECAUSE a normative arbiter already exists at `rules/aimaestro/3-pillars-spec.md`
+  scattered sources, BECAUSE a normative arbiter already exists at `design/specs/3-pillars-spec.md`
   and re-deriving risks minting a sixth drifting copy. DO recall this note and read the spec first
   (grep the `3P-<FAMILY>` you need). This note exists because the spec itself was authored WITHOUT
   first recalling the hub page's stored design decisions — the exact miss it now prevents.
+[^2]: [id:ATOM-3PSP-0002, status:valid, keywords:"spec placement rules/aimaestro seeder workaround design/specs doc-type taxonomy", ocd:2026-07-22, lmd:2026-07-22]
+  DO NOT place a SPEC in `rules/aimaestro/` (nor tighten the rule-seeder to exclude it from
+  seeding), BECAUSE that was a first-cut placement superseded 2026-07-22: the USER established the
+  doc-type taxonomy where SPECs live in `design/specs/` (PRRD `design/requirements/` → SPEC
+  `design/specs/` → TRDD `design/tasks/`, authority in that order, each with proposals/ + archived/).
+  DO put a spec in `design/specs/`, where it has zero seeder coupling. The earlier
+  "specs sit WITH the governance rules" directive was itself superseded by this taxonomy.
+

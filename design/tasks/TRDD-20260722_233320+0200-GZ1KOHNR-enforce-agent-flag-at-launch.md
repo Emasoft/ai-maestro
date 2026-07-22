@@ -1,9 +1,9 @@
 ---
 trdd-id: GZ1KOHNR
 title: Enforce --agent at every launch chokepoint — a titled Claude agent must run its role persona, never generic claude
-column: dev
+column: testing
 created: 2026-07-22T23:33:20+0200
-updated: 2026-07-22T23:33:20+0200
+updated: 2026-07-22T23:50:00+0200
 current-owner: session
 task-type: bugfix
 scope: project
@@ -14,7 +14,7 @@ mandated-by: user
 relevant-rules: [9]
 eht: []
 npt: []
-implementation-commits: []
+implementation-commits: [eff07647, 2bd8969c]
 external-refs:
   - design/tasks/TRDD-20260722_205943+0200-B7G2R0SX-harness-readiness-criteria-and-verification.md
   - design/proposals/TRDD-20260722_231837+0200-F898NXLU-manager-must-create-fleet-and-delegate.md
@@ -58,10 +58,19 @@ paths** (buildRelaunchCommand — 2 restart routes + headless-router) relaunch a
 programArgs already carries `--agent` (ChangeTitle maintained it), so they are NOT the observed bug — cover as a
 fast-follow in this same TRDD once Phase 1 is green.
 
-**NEXT ACTION:** create `services/agent-launch-args.ts` + unit test; wire createSession + wakeAgent; `tsc --noEmit`,
-`yarn test`, `yarn build` (all via `bash scripts/with-node.sh`); commit by name citing TRDD-GZ1KOHNR. Do NOT push.
-Then (fast-follow) wire the 3 restart chokepoints. Then a re-run of SCEN-031 verifies the MANAGER now loads its
-persona (issue #31's persona-mandate can only be judged AFTER this lands).
+**DONE (all committed, NOT pushed):** `services/agent-launch-args.ts` (pure `enforceLaunchAgentFlag` +
+wired `resolveLaunchArgs`) + `tests/unit/agent-launch-args.test.ts` (9 cases). Wired ALL launch chokepoints:
+createSession + wakeAgent (commit `eff07647`), and all 4 restart sites — `[id]/restart` + `me/restart` routes + 2
+headless-router handlers (commit `2bd8969c`). Gates: tsc 0 errors · full vitest 226 files green · yarn build clean.
+Refuse is fail-fast + safe (fires only for an R9.13-violating agent; before any stop, so a running agent is never
+disrupted).
+
+**NEXT ACTION (the live acceptance test):** `pm2 restart ai-maestro`, then RE-RUN SCEN-031 (create a fresh MANAGER via
+the Wizard) and confirm its live `ps` now shows `claude … --agent ai-maestro-assistant-manager-agent-main-agent` and
+that the MANAGER creates+delegates to AUTONOMOUS+MAINTAINER personas. Only AFTER the persona demonstrably loads can
+issue #31's persona-mandate be judged (if the MANAGER STILL builds solo WITH its persona active, #31 is the real fix;
+if it now delegates, #31 may be moot). Also still open: delete `Emasoft/zipsearcher` (needs `delete_repo` token scope +
+USER go) so SCEN-031's 0-IMPACT holds.
 
 **VERIFY:** after wiring, a freshly-created titled Claude agent's live `ps` shows `claude … --agent <plugin>-main-agent`;
 `resolveLaunchArgs` unit test covers inject / passthrough(non-Claude) / passthrough(no agentId) / refuse(no role-plugin).

@@ -8,12 +8,13 @@ severity: critical
 effort: medium
 task-type: bugfix
 created: 2026-07-15T01:05:00+0200
-updated: 2026-07-15T01:05:00+0200
+updated: 2026-07-22T20:13:00+0200
 scope: project
-labels: [scenario-improvement, scen-029]
+labels: [scenario-improvement, scen-029, scen-031]
 current-owner: scenario-runner
 external-refs:
   - reports/scenarios-runner/SCEN-029_20260714T212851Z.report.md
+  - reports/scenarios-runner/SCEN-031_20260722T201234Z.report.md
 ---
 
 # Role-plugin main-agents do not resolve, so `claude --agent` exits and the agent lands at a shell
@@ -51,6 +52,35 @@ Claude sees **73 agents from that workdir and not one role-plugin agent** — th
 only `ai-maestro-*` entries are the janitor's, and they are namespaced
 (`ai-maestro-janitor:janitor-security-agent`). The plugin-namespaced form does not
 resolve either.
+
+## SCEN-031 reconfirmation (2026-07-22) — STILL LIVE, and it is a total blocker for the fleet-ship proof
+
+SCEN-031 (the end-to-end "does the fleet ship real software from one sentence?"
+proof) cannot begin because of this bug. Reproduced the SAME DAY across **four
+independent live agent panes** (`ecos-chief-of-staff-one`, `scen017-ui-test`,
+`e2e-ctl-1783769585`, `e2e-br-1783777802`), each woken with
+`claude --agent ai-maestro-autonomous-agent-main-agent …` and each printing
+`--agent 'ai-maestro-autonomous-agent-main-agent' not found. Available agents: …`
+then falling to a bare `emanuelesabetta@Mac-mini-di-Emanuele <session> %` shell.
+The `e2e-*` agents were created earlier the same day (16:31), so this is the
+CURRENT wake pipeline, not stale state.
+
+The printed "Available agents" list contains **zero** `ai-maestro-*-main-agent`
+entries — including the MANAGER persona `ai-maestro-assistant-manager-agent-main-agent`
+that SCEN-031's S004 MANAGER would use. Consequence chain for SCEN-031:
+the runner's S006 brief has **no REPL to land in** (the MANAGER is a bare shell),
+so the MANAGER never creates the AUTONOMOUS/MAINTAINER, never writes a TRDD, never
+delegates — every one of the fleet-autonomy behaviours the scenario exists to
+measure is unobservable. **SCEN-031 verdict: FAIL (harness NOT ready), root-caused
+to THIS TRDD.** The runner deliberately did not create the S004 MANAGER, because
+the outcome is already determined (a dead-on-arrival bare shell) and creating one
+adds cleanup/residue risk for zero verdict value — 0-IMPACT was preserved (zero
+state mutations).
+
+Note the launch token has drifted slightly since SCEN-029: some panes now show
+`unset CLAUDECODE; claude --agent … --dangerously-skip-permissions` and others
+`claude --dangerously-skip-permissions --chrome --add-dir /tmp --agent …`, but the
+unresolvable bare `--agent <plugin>-main-agent` name is identical in every case.
 
 ## Root cause
 

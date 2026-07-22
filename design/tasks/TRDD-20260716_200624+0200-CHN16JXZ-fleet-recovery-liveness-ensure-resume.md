@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-22T14:44:14+0200
+updated: 2026-07-22T14:56:09+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,7 +23,7 @@ derived-kind: npt
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049]
+implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049, 0a90648b, a717fc3b]
 release-via: none
 ---
 
@@ -75,9 +75,14 @@ gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
   `runFleetLivenessTick` scans + LOGS stalled/token-blocked, never throws; `startFleetLivenessWatchdog`
   setInterval/unref/env-interval/0-disables). Started at boot in `server.mjs` after server-liveness.
   Detection RUNS now (the guardian's eyes) — no actuation. 6 tests.
-- **D-full 🔲** — the watchdog fires the Phase-B/C actuator on `recoveryTargets` (currently detect+log
-  only). Restrict to `server_owned` agents (today `listAgents()` == the server's own registry; when
-  cross-host/#N sessions enter scope, add the `server_owned` filter so we never touch the janitor's).
+- **D-full ✅ DONE (`0a90648b` keys, `a717fc3b` wiring)** — the watchdog now FIRES the gentle actuator on
+  `recoveryTargets`, behind the default-OFF `AIM_FLEET_RECOVERY_FIRE`. `lib/fleet-recovery-runner.ts`:
+  threads per-agent state across ticks (prune-on-recover, advance-on-fire), wires the REAL deps —
+  `inject`=`enqueueCommand` on the server-owned queue (the authenticated #60 path: persists, drains at
+  the next safe idle prompt, never a raw keystroke; 409-dedup is a 2nd flood-guard), `hidPresent`=user-
+  presence (defer while the user types), `hardEnabled`=false. 9 runner + 4 watchdog tests. Full suite
+  3224/0, tsc + next lint clean. Still `listAgents()`==server registry today; add the `server_owned`
+  filter when cross-host/#N sessions enter scope so we never touch the janitor's.
 - **Deferred:** token-blocked healing hand-off to [[1GGQ4HWY]]'s cascade, live only after R16.
 
 **Recovery-ladder parity spec** (mirror the janitor's `RECOVERY_LADDER`, from the audit report
@@ -87,15 +92,19 @@ gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
 gated + cooldown + crash-loop-page-once + HID-presence defer; never touch `server_owned`(theirs
 is us now)/`unarmed`.
 
-**NEXT ACTION:** Phase D-full — wire `actuateRecovery` into `runFleetLivenessTick` behind the SAME
-default-OFF fire flag (env, e.g. `AIM_FLEET_RECOVERY_FIRE=1`; absent ⇒ detect-only, today's behaviour).
-Build the real injected deps: (a) the **authenticated #60 injection primitive** — the server-side write
-that `aimaestro-session.sh queue <self>` maps to; FIND the existing server route/fn for it, do NOT add a
-cross-agent script (R42); (b) `hidPresent` from the user-presence source (`lib/user-presence.ts` /
-`~/.aimaestro/user-presence.json`); (c) a per-agent attempt+lastActuatedAt store OWNED by the watchdog
-(the actuator is stateless). Restrict to `server_owned` agents (today `listAgents()` == the server's own
-registry). tsc + FULL suite after wiring (it touches the boot path). Read `lib/fleet-recovery-actuator.ts`
-+ `lib/fleet-liveness-watchdog.ts` first. Phase C (hard rungs) stays after D-full, behind its own flag.
+**GENTLE RECOVERY (A + B + D) IS COMPLETE and dark-shipped** (default-OFF `AIM_FLEET_RECOVERY_FIRE`):
+detection runs live at boot; the gentle ladder (`esc_nudge → rearm → reload → update`) actuates via the
+authenticated queue when armed. Phase C is the only remaining rung set and is OPTIONAL for the core
+coverage gap — gentle recovery handles a frozen agent; hard is only for a truly-dead process.
+
+**NEXT ACTION:** Phase C — the HARD rungs (`relaunch → force_restart → resurrect`), behind their OWN
+default-off flag (mirror the janitor's `FLEET_HARD_RESTART_ENABLED`). These are NOT slash-injections: they
+kill + relaunch the stuck pid. `actuateRecovery` already REFUSES them (returns `hard_not_wired` when
+`hardEnabled`, `hard_gated` when not), so Phase C adds a SEPARATE hard-actuator the runner calls when the
+gentle ladder is exhausted AND the hard flag is on — with per-instance cooldown + crash-loop-page-once +
+the same HID-presence + `fleetActuationBlocked()` gates. Reuse the stop/restart substrate
+(`app/api/sessions/[id]/restart`, `kill`). Read `lib/fleet-recovery.ts` (`HARD_RUNGS`) +
+`lib/fleet-recovery-runner.ts` first.
 
 ## Problem / Goal
 

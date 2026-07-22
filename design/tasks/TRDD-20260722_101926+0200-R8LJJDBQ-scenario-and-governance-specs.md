@@ -3,7 +3,7 @@ trdd-id: R8LJJDBQ
 title: Author the governance and scenario-tests SPEC files by capturing their rule files rule-by-rule
 column: complete
 created: 2026-07-22T10:19:26+0200
-updated: 2026-07-22T10:34:00+0200
+updated: 2026-07-22T10:36:00+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -19,7 +19,7 @@ labels: [governance-rules, design-doc-taxonomy, specs-folder, governance-spec, s
 external-refs: [Emasoft/ai-maestro#85, TRDD-P58RCR2C]
 parent-trdd: P58RCR2C
 release-via: none
-implementation-commits: []
+implementation-commits: [2096ad35]
 ---
 
 # Author the governance and scenario-tests SPEC files by capturing their rule files rule-by-rule

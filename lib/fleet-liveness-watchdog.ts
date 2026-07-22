@@ -13,6 +13,12 @@ import { getAgent, listAgents } from '@/lib/agent-registry'
 import { getAgentSessionStatus } from '@/services/agents-core-service'
 import { readHookNotification } from '@/lib/session-safe-state'
 import { scanFleetLiveness, type FleetScanDeps, type FleetLivenessSnapshot } from '@/lib/fleet-liveness'
+import {
+  runRecoveryPass,
+  defaultActuatorDeps,
+  type RecoveryState,
+  type RecoveryPassResult,
+} from '@/lib/fleet-recovery-runner'
 
 /** Wire the read-only scanner to the real registry + session substrate. Token-block
  *  detection (`getAccountHealthy`) is intentionally omitted here — it lands with the
@@ -46,10 +52,28 @@ export interface FleetLivenessWatchdogOptions {
   scan?: (scannedAt: number) => Promise<FleetLivenessSnapshot>
   now?: () => number
   log?: (msg: string) => void
+  /** D-full: enable the recovery ACTUATOR. Defaults to AIM_FLEET_RECOVERY_FIRE; OFF otherwise —
+   *  detection always runs, firing is opt-in. */
+  fireEnabled?: boolean
+  /** Injectable recovery pass for tests; defaults to the real runner over the module store. */
+  runPass?: (snap: FleetLivenessSnapshot) => Promise<RecoveryPassResult>
 }
 
 /** Default 5 min, env-overridable, 0 disables (same knob shape as the invariants watchdog). */
 const DEFAULT_INTERVAL_MS = Number(process.env.AIM_FLEET_LIVENESS_WATCHDOG_INTERVAL_MS) || 300_000
+
+/** Recovery actuation is OFF by default — only `AIM_FLEET_RECOVERY_FIRE=1` arms it. Detection
+ *  runs regardless; this gates only the firing. */
+const DEFAULT_RECOVERY_FIRE = process.env.AIM_FLEET_RECOVERY_FIRE === '1'
+
+/** The per-agent recovery state, threaded across ticks (the actuator is stateless). Module-level
+ *  because the watchdog is a process singleton; reset between tests via resetRecoveryStore(). */
+const recoveryStore = new Map<string, RecoveryState>()
+
+/** Clear the recovery state — for tests only (the running server keeps one store for its life). */
+export function resetRecoveryStore(): void {
+  recoveryStore.clear()
+}
 
 /**
  * One scan + report. READ-ONLY: it never actuates. Returns the snapshot (or null if the
@@ -67,6 +91,7 @@ export async function runFleetLivenessTick(
     const snap = await scan(now())
     const stalled = snap.agents.filter((a) => a.class === 'stalled')
     const tokenBlocked = snap.agents.filter((a) => a.class === 'token_blocked')
+    const fireEnabled = opts.fireEnabled ?? DEFAULT_RECOVERY_FIRE
     if (stalled.length || tokenBlocked.length) {
       const parts: string[] = []
       if (stalled.length) parts.push(`${stalled.length} stalled: ${stalled.map((a) => a.name || a.agentId).join(', ')}`)
@@ -74,8 +99,27 @@ export async function runFleetLivenessTick(
         parts.push(`${tokenBlocked.length} token-blocked: ${tokenBlocked.map((a) => a.name || a.agentId).join(', ')}`)
       const gate = snap.actuationBlocked
         ? ` (actuation BLOCKED: ${snap.actuationBlockReason})`
-        : ` — recovery targets: ${snap.recoveryTargets.length} [Phase A: detect-only, no actuation yet]`
+        : ` — recovery targets: ${snap.recoveryTargets.length}${fireEnabled ? '' : ' [detect-only: AIM_FLEET_RECOVERY_FIRE not set]'}`
       log(`[FleetLiveness] ${parts.join('; ')}${gate}`)
+    }
+
+    // Phase D-full: actuation, behind the default-OFF fire flag. Detection (above) always runs;
+    // firing is opt-in. The scan already emptied recoveryTargets under a machine-wide STOP, so a
+    // halted fleet loops over nothing here. Wrapped in its OWN try so a pass failure logs but never
+    // discards the snapshot the caller returns (the read-only detection result stays intact).
+    if (fireEnabled && snap.recoveryTargets.length > 0) {
+      try {
+        const pass =
+          opts.runPass ??
+          ((s: FleetLivenessSnapshot) => runRecoveryPass(s, defaultActuatorDeps(true, now), recoveryStore, now))
+        const pr = await pass(snap)
+        for (const f of pr.fired)
+          log(`[FleetLiveness] recovery FIRED ${f.name || f.agentId}: ${f.rung}${f.ok ? '' : ` (enqueue issue: ${f.detail})`}`)
+        for (const e of pr.escalationNeeded)
+          log(`[FleetLiveness] recovery ESCALATION NEEDED ${e.name || e.agentId}: ${e.reason} — gentle ladder exhausted; human / Phase C`)
+      } catch (err) {
+        log(`[FleetLiveness] recovery pass failed (non-fatal): ${(err as Error)?.message || err}`)
+      }
     }
     return snap
   } catch (err) {

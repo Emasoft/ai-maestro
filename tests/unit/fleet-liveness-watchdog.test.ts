@@ -76,6 +76,94 @@ describe('runFleetLivenessTick (read-only)', () => {
   })
 })
 
+describe('runFleetLivenessTick — recovery actuation (D-full, behind the default-OFF fire flag)', () => {
+  const stalledSnap = () =>
+    snap({
+      agents: [{ agentId: 'a1', name: 'alpha', class: 'stalled', recoveryRecommended: true, reason: 'x' }],
+      recoveryTargets: ['a1'],
+    })
+
+  it('runs the pass and logs FIRED lines when fireEnabled + targets present', async () => {
+    const logs: string[] = []
+    const calls: FleetLivenessSnapshot[] = []
+    const r = await runFleetLivenessTick({
+      now: () => 1,
+      log: (m) => logs.push(m),
+      fireEnabled: true,
+      scan: async () => stalledSnap(),
+      runPass: async (s) => {
+        calls.push(s)
+        return { fired: [{ agentId: 'a1', name: 'alpha', rung: 'esc_nudge', ok: true }], escalationNeeded: [] }
+      },
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].recoveryTargets).toEqual(['a1'])
+    expect(logs.some((l) => l.includes('recovery FIRED alpha: esc_nudge'))).toBe(true)
+    expect(r).not.toBeNull()
+  })
+
+  it('logs ESCALATION NEEDED lines from the pass', async () => {
+    const logs: string[] = []
+    await runFleetLivenessTick({
+      now: () => 1,
+      log: (m) => logs.push(m),
+      fireEnabled: true,
+      scan: async () => stalledSnap(),
+      runPass: async () => ({ fired: [], escalationNeeded: [{ agentId: 'a1', name: 'alpha', reason: 'hard_gated' }] }),
+    })
+    expect(logs.some((l) => l.includes('recovery ESCALATION NEEDED alpha: hard_gated'))).toBe(true)
+  })
+
+  it('does NOT run the pass when fireEnabled is false, even with targets', async () => {
+    let called = false
+    await runFleetLivenessTick({
+      now: () => 1,
+      log: () => {},
+      fireEnabled: false,
+      scan: async () => stalledSnap(),
+      runPass: async () => {
+        called = true
+        return { fired: [], escalationNeeded: [] }
+      },
+    })
+    expect(called).toBe(false)
+  })
+
+  it('does NOT run the pass when there are no recovery targets', async () => {
+    let called = false
+    await runFleetLivenessTick({
+      now: () => 1,
+      log: () => {},
+      fireEnabled: true,
+      scan: async () =>
+        snap({
+          agents: [{ agentId: 'a1', name: 'alpha', class: 'idle_waiting', recoveryRecommended: false, reason: 'ok' }],
+          recoveryTargets: [],
+        }),
+      runPass: async () => {
+        called = true
+        return { fired: [], escalationNeeded: [] }
+      },
+    })
+    expect(called).toBe(false)
+  })
+
+  it('a throwing pass is non-fatal — logs and still returns the snapshot', async () => {
+    const logs: string[] = []
+    const r = await runFleetLivenessTick({
+      now: () => 1,
+      log: (m) => logs.push(m),
+      fireEnabled: true,
+      scan: async () => stalledSnap(),
+      runPass: async () => {
+        throw new Error('queue offline')
+      },
+    })
+    expect(r).not.toBeNull()
+    expect(logs.some((l) => l.includes('recovery pass failed (non-fatal): queue offline'))).toBe(true)
+  })
+})
+
 describe('startFleetLivenessWatchdog', () => {
   it('returns a stop function for a positive interval and null when disabled', () => {
     const stop = startFleetLivenessWatchdog({ intervalMs: 60_000, scan: async () => snap() })

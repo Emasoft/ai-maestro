@@ -3,7 +3,7 @@ trdd-id: CJWC3JLU
 title: Invert governance authority — the SPEC is the source of truth and GOVERNANCE-RULES.md emanates from it (spec-first)
 column: dev
 created: 2026-07-22T17:02:20+0200
-updated: 2026-07-22T17:20:00+0200
+updated: 2026-07-22T18:15:00+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -17,7 +17,7 @@ approval-datetime: 2026-07-22T17:02:20+0200
 relevant-rules: [22]
 eht: []
 npt: []
-implementation-commits: [60c38453]
+implementation-commits: [60c38453, 032b274f]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-22
@@ -63,8 +63,37 @@ lacks) but takes its rule CONTENT from the spec.
    canonical/edit-first; this catalog is the primary emanation); `version: 4.7.1 → 4.8.0` + a changelog
    entry recording the inversion (MINOR — structural, no rule-behavior change).
 
-**NEXT ACTION:** apply the 2-file edit, then the EHT below, then commit (subject cites TRDD-CJWC3JLU)
-+ push to `fork` (Emasoft/ai-maestro governance-rules) so consumers see it.
+**REWRITE PHASE (USER, 2026-07-22 — supersedes the inversion NEXT ACTION):** USER caught that the
+inversion's feature-parity check was COUNT-based (335/335 ids), NOT content-based — dangerous because
+the spec is now authoritative and agents may DELETE any feature absent from it. Directive: rewrite the
+WHOLE spec from `docs/GOVERNANCE-RULES.md`, omitting NOTHING (every parameter/detail/schema).
+DONE so far: 6 capture agents produced full-fidelity fragments A/B1/B2/C/D/E; an assembler produced
+`NEW-SPEC.md` (1998 lines / 170KB — vs old 78KB, faithful not summarized) at
+`/private/tmp/claude-501/-Users-emanuelesabetta-ai-maestro/43e66c93-aa93-421a-87d9-64ae53310766/scratchpad/spec-fragments/NEW-SPEC.md`.
+Structure verified: 49 GOV-R + 14 sections in order + GOV-OVERVIEW; 5 authority fixes applied
+(GOV-META-01/02, GOV-VER-01, GOV-MNT-01/02 — the inversion missed these); dedicated tables took the
+fuller source (inv=22, perm=E full 12-row); GOV-GREP `@spec:` anchors resolve; R39.2=v4.4.0; GOV-INV
+held at 22 (R41.5/R42.1 NOT promoted).
+
+**✅ REWRITE + CONTENT-VERIFY GATE DONE (2026-07-22, commit `032b274f`).** All 6 chunks content-verified
+by ITEMIZED `source⊆assembled` miss-lists (counts forbidden as the deliverable): A/B1/B2/C/D by sub-agent,
+E (R41-R49 + the 12×6 permission matrix — highest-risk table) verified FIRST-PARTY in-context after the
+AgentLens burn-gate blocked its agent. **Result: 0 material misses across all 6.** 2 non-material B2
+phrase trims restored for max fidelity (Codex `marketplace add` sentence in R20.per-client-manifest-schema;
+"AID identity rules" cross-ref in R20.15). 5 authority-direction fixes verified INVERTED (GOV-META-01/02
+spec-authoritative + update-spec-first; GOV-VER-01 spec-version-leads; GOV-MNT-01/02 this-file-leads).
+NEW-SPEC (1998 lines, 49 GOV-R, 14 sections, 894→1998 / 78KB→170KB) placed at
+`design/specs/governance-spec.md` + committed `032b274f`. Conformance test
+`tests/unit/governance-spec-conformance.test.ts` = **14/14 PASS** (the @spec:comm-graph / title-plugin-map /
+titles blocks extract + match live code; the duplicate @spec:titles in GOV-TERM was de-collided to
+@spec:three-layer-model so the marker stays unique). Verifier reports: `scratchpad/spec-fragments/verify-{A,B1,B2,C,D,E}.md`.
+
+**NEXT ACTION (the last EHT — do NOT skip; it leaves a stale authority claim in the fleet):** push
+`fork governance-rules` (spec `032b274f` + this TRDD update), then post the correction comment on
+ai-maestro-assistant-manager-agent#30 (cross-repo GitHub issue channel per how-to-fix-issues-of-other-projects
+— NOT a code edit into that repo): the spec is the SOURCE, the catalog EMANATES; the MANAGER must re-point
+its read to the spec as canonical (inverts my prior #30 claim "GOVERNANCE-RULES.md is authoritative for
+meaning; spec = shape"). Then this TRDD is complete.
 
 **EHT (do NOT skip — leaves a stale authority claim in the fleet):** I posted
 ai-maestro-assistant-manager-agent#30 telling the MANAGER "GOVERNANCE-RULES.md is authoritative for

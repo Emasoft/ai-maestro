@@ -196,8 +196,9 @@ asserts `types/task.ts::DEFAULT_STATUSES` deep-equals 3P-KAN-01's block (TRDD-QP
 the platelet that keeps this spec from being drift-prone prose.
 
 `3P-CHK-02` **ai-maestro-overlay** — `tests/unit/aimaestro-overlay-filename-contract.test.ts`
-freezes the DEP overlay filenames the IND bases cite (#83). (This SPEC lives in
-`design/specs/`, not with the overlays — the standard SPEC home per the doc-type taxonomy.)
+freezes the DEP overlay filenames the IND bases cite (#83). (This SPEC lives in `design/specs/`,
+the standard SPEC home. The DEP overlays are ALSO specs but stay in `rules/aimaestro/` because they
+are SEEDED to agent workdirs by that path — a mechanical constraint, not a taxonomy exception.)
 
 `3P-CHK-03` **janitor** — a check (janitor's to build, #85) that its shipped IND bases
 satisfy this spec at the `spec-version` they declare.

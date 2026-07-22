@@ -43,8 +43,9 @@ the TRDD one: draft in `design/specs/proposals/` → approved (PRRD-compliance-g
 - Created `design/specs/`, `design/specs/proposals/`, `design/specs/archived/` + a README codifying
   the doc-type definition, the PRRD→SPEC→TRDD authority order, and the approval-gated lifecycle.
 - `git mv rules/aimaestro/3-pillars-spec.md → design/specs/3-pillars-spec.md` (the reference SPEC
-  that establishes the shape). Superseded the earlier "specs sit with the governance rules"
-  placement (`rules/aimaestro/`), which the taxonomy replaces.
+  that establishes the shape). This RECONCILES the earlier "specs sit with the governance rules"
+  directive rather than contradicting it — the governance rules are THEMSELVES specs, so both belong
+  in `design/specs/`; the DEP overlays remain in `rules/aimaestro/` only for the seeding mechanism.
 - **Reverted the now-obsolete seeder workaround.** CR8JRH74 had tightened
   `lib/agent-rules-seed.ts` (`.md` → `aimaestro-*.md`) + added pin-test colocation assertions
   purely so the spec-in-rules/aimaestro/ would not be seeded into every agent's context. With the

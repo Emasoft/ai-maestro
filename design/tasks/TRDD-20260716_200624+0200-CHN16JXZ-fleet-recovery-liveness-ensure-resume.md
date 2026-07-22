@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-22T14:29:37+0200
+updated: 2026-07-22T14:44:14+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,7 +23,7 @@ derived-kind: npt
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c]
+implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049]
 release-via: none
 ---
 
@@ -61,10 +61,13 @@ gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
   `lib/fleet-recovery.ts` — `RECOVERY_LADDER` (janitor-parity 7 rungs) + `recoveryRungFor(diagnosis,
   attempt, hardEnabled)` (entry-rung by diagnosis, 1-rung/attempt escalation clamped to last, HARD
   rungs gated → null when disabled). 8 tests. No actuation yet.
-- **B (2/2) 🔲 NEXT — ACTUATION wiring:** execute the chosen rung via the AUTHENTICATED path
-  (ai-maestro#60) — `aimaestro-session.sh queue|slash <self>` / `wakeAgent`, self-scoped; NO new
-  cross-agent script (R42). Injected actuator + **default-OFF fire flag**. Gate every injection on
-  BOTH `fleetActuationBlocked()` AND a HID-presence check. Per-instance cooldown + crash-loop-page-once.
+- **B (2/2) ✅ DONE (`17206049`)** — the gated ACTUATION DECISION layer: `lib/fleet-recovery-actuator.ts`.
+  Stateless 7-gate fail-safe dispatch for ONE stalled agent — `not_a_target → fire_flag_off →
+  actuation_blocked → hard_gated|hard_not_wired → hid_present → cooldown → FIRE`. `inject` (the #60
+  side-effect), `hidPresent`, `actuationBlocked`, clock ALL INJECTED (real wiring = D-full); per-agent
+  attempt/cooldown PASSED IN (stateless). Hard rungs REFUSED (Phase C owns process-kill). Only
+  `stalled`→`frozen`; reload rungs are a genuine plain→forced escalation. **default-OFF fire flag** is
+  the master gate (checked before any I/O). 12 tests; tsc clean.
 - **C 🔲 HARD rungs** `relaunch → force_restart → resurrect` behind a **default-OFF** flag +
   per-instance cooldown + crash-loop-page-once (mirrors janitor `FLEET_HARD_RESTART_ENABLED`).
 - **D-lite ✅ DONE (`70688c00`)** — READ-ONLY WATCHDOG wiring: `lib/fleet-liveness-watchdog.ts`
@@ -84,11 +87,15 @@ gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
 gated + cooldown + crash-loop-page-once + HID-presence defer; never touch `server_owned`(theirs
 is us now)/`unarmed`.
 
-**NEXT ACTION:** Phase B (2/2) — build the ACTUATOR that executes `recoveryRungFor(...)`'s chosen
-rung via the authenticated #60 path (`session.sh queue <self>` for esc_nudge/rearm/reload), with an
-INJECTED actuator + a default-OFF fire flag, gated on `fleetActuationBlocked()` + HID presence + a
-per-instance cooldown; unit-test with a fake actuator. Then wire it into the watchdog (D-full,
-behind the same flag). Read `lib/fleet-recovery.ts` + `lib/fleet-liveness.ts` first.
+**NEXT ACTION:** Phase D-full — wire `actuateRecovery` into `runFleetLivenessTick` behind the SAME
+default-OFF fire flag (env, e.g. `AIM_FLEET_RECOVERY_FIRE=1`; absent ⇒ detect-only, today's behaviour).
+Build the real injected deps: (a) the **authenticated #60 injection primitive** — the server-side write
+that `aimaestro-session.sh queue <self>` maps to; FIND the existing server route/fn for it, do NOT add a
+cross-agent script (R42); (b) `hidPresent` from the user-presence source (`lib/user-presence.ts` /
+`~/.aimaestro/user-presence.json`); (c) a per-agent attempt+lastActuatedAt store OWNED by the watchdog
+(the actuator is stateless). Restrict to `server_owned` agents (today `listAgents()` == the server's own
+registry). tsc + FULL suite after wiring (it touches the boot path). Read `lib/fleet-recovery-actuator.ts`
++ `lib/fleet-liveness-watchdog.ts` first. Phase C (hard rungs) stays after D-full, behind its own flag.
 
 ## Problem / Goal
 

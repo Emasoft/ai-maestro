@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-22T14:24:17+0200
+updated: 2026-07-22T14:29:37+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,7 +23,7 @@ derived-kind: npt
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: [c930a1cc, a7c04017, 70688c00]
+implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c]
 release-via: none
 ---
 
@@ -57,10 +57,14 @@ gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
     stalled/token_blocked/offline) + `scanFleetLiveness` (injectable deps). Conservative:
     `stalled` = idle-at-prompt with no activity ≥30 min (never ordinary idle); STOP-gate empties
     `recoveryTargets`. 15 tests. + `readHookNotification` companion on `lib/session-safe-state.ts`.
-- **B 🔲 NEXT — SOFT actuation:** the gentle rungs `esc_nudge → rearm → reload → update` via the
-  AUTHENTICATED path (ai-maestro#60) — reuse `aimaestro-session.sh queue|slash <self>` /
-  `wakeAgent`, self-scoped; NO new cross-agent script (R42). Consult `fleetActuationBlocked()` +
-  the HID-presence gate before any injection.
+- **B (1/2) ✅ DONE (`3b68005c`)** — the PURE recovery-ladder decision logic:
+  `lib/fleet-recovery.ts` — `RECOVERY_LADDER` (janitor-parity 7 rungs) + `recoveryRungFor(diagnosis,
+  attempt, hardEnabled)` (entry-rung by diagnosis, 1-rung/attempt escalation clamped to last, HARD
+  rungs gated → null when disabled). 8 tests. No actuation yet.
+- **B (2/2) 🔲 NEXT — ACTUATION wiring:** execute the chosen rung via the AUTHENTICATED path
+  (ai-maestro#60) — `aimaestro-session.sh queue|slash <self>` / `wakeAgent`, self-scoped; NO new
+  cross-agent script (R42). Injected actuator + **default-OFF fire flag**. Gate every injection on
+  BOTH `fleetActuationBlocked()` AND a HID-presence check. Per-instance cooldown + crash-loop-page-once.
 - **C 🔲 HARD rungs** `relaunch → force_restart → resurrect` behind a **default-OFF** flag +
   per-instance cooldown + crash-loop-page-once (mirrors janitor `FLEET_HARD_RESTART_ENABLED`).
 - **D-lite ✅ DONE (`70688c00`)** — READ-ONLY WATCHDOG wiring: `lib/fleet-liveness-watchdog.ts`
@@ -80,9 +84,11 @@ gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
 gated + cooldown + crash-loop-page-once + HID-presence defer; never touch `server_owned`(theirs
 is us now)/`unarmed`.
 
-**NEXT ACTION:** Phase B — wire `recoveryTargets` to the authenticated soft-rung actuation
-(esc_nudge/rearm via `session.sh queue <self>`), gated by `fleetActuationBlocked()` + HID
-presence; add unit tests with an injected actuator. Then the boot watchdog (Phase D).
+**NEXT ACTION:** Phase B (2/2) — build the ACTUATOR that executes `recoveryRungFor(...)`'s chosen
+rung via the authenticated #60 path (`session.sh queue <self>` for esc_nudge/rearm/reload), with an
+INJECTED actuator + a default-OFF fire flag, gated on `fleetActuationBlocked()` + HID presence + a
+per-instance cooldown; unit-test with a fake actuator. Then wire it into the watchdog (D-full,
+behind the same flag). Read `lib/fleet-recovery.ts` + `lib/fleet-liveness.ts` first.
 
 ## Problem / Goal
 

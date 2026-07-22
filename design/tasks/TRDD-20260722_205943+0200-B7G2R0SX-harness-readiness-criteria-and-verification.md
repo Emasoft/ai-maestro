@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T21:20:00+0200
+updated: 2026-07-22T21:30:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -56,7 +56,15 @@ TRDDs and wait for the USER.
     `lib/agent-invariants.ts` (dep-rules row: create·wake·periodic).
 - **D/E · Fleet continuity + remote access** (separately-tracked program, NOT this TRDD): KCRMSNL7,
   CHN16JXZ, OC9ELGSO/#40, P7XKV3N9 (🔒), OAuth (🔒 R16), MAESTRO console-presence (🔒 R48).
-- **F · No capability gaps** — coverage scan: every shipped route/skill/command/hook has a test.
+- **F · No capability gaps** — `~ F1` coverage scan DONE (2026-07-22): 237 route files / 223 test files;
+  **33 high-risk MUTATING routes (agents/teams/governance/sessions/auth) have NO test referencing their path**
+  (CANDIDATE gaps — a coarse path-match; some may be covered by import-based tests → needs per-route confirm).
+  Security-sensitive subset worth REAL tests: `auth/webauthn/{register,authenticate,credentials}`,
+  `auth/{setup-init,setup-verify,logout}`, `governance/{password/invalidate,email/verify,email/autodetect,
+  recovery-optout,user,trust}`, `sessions/{create,restore}`, `agents/{register,create-from-toml,docker/create,
+  startup}`. NB: the strict-route GUARD layer IS covered (B1); this is about per-HANDLER behavior tests.
+  Closing these = a REAL-test-writing program (un-gated, in-repo, additive) — but substantial + some need live
+  deps (crypto/tmux), so it warrants a scoped plan (NPTs), NOT an unattended blind loop.
 
 **RECOMMENDED TIGHT BAR (un-gated, high-value):** A2 (propagation issues) + A3 (verify/wire CI + coverage) +
 B1 (enforcement-verification) + C1/C2 (confirm watchdog + DEP self-heal live). D/E excluded.

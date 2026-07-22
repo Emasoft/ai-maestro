@@ -305,6 +305,9 @@ Row format is fixed so a regex parses each line:
 | R39.5 | ENFORCED | lib/communication-graph.ts:363-371 | — |
 | R39.6 | ENFORCED | services/element-management-service.ts:6381-6385 | — |
 | R39.7 | ENFORCED | lib/communication-graph.ts:113-118 | — |
+| R39.8 | UNENFORCED | — | — |
+| R39.9 | UNENFORCED | — | — |
+| R39.10 | UNENFORCED | — | — |
 | R40.1 | ENFORCED | services/element-management-service.ts:244-271 | — |
 | R40.2 | INVENTED | — | — |
 | R41.1 | ENFORCED | lib/trdd-authz.ts:105-131 | tests/unit/manage-trdd-authorization.test.ts |

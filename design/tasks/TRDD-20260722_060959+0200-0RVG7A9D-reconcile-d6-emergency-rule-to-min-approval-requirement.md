@@ -18,7 +18,7 @@ relevant-rules: []
 labels: [governance-rules, dep-overlay, approval-tiers, am80-amendment-b]
 external-refs: [Emasoft/ai-maestro#80, Emasoft/ai-maestro-plugin#35]
 release-via: none
-implementation-commits: []
+implementation-commits: [9a564e1c]
 ---
 
 # Reconcile the D6 emergency-rule vocabulary in aimaestro-trdd-approval.md to the live min-approval-requirement field

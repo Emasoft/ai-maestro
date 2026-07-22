@@ -68,17 +68,17 @@ prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
   - ai-maestro-plugins marketplace registered
-  - `gh` CLI installed AND authenticated as the shared @Emasoft identity (real repo/PR/release ops happen)
+  - GitHub `gh` CLI installed AND authenticated as the shared @Emasoft identity (real repo/PR/release ops happen)
   - A GitHub TEMPLATE repo the MAINTAINER can instantiate from (e.g. `Emasoft/python-cli-template`, marked
     "Template repository"). Its name is passed to the MANAGER in the S008 brief so the fleet is not asked to
     invent one; the scenario does not test template DISCOVERY, it tests template USE.
   - No repo named `Emasoft/zipsearcher` currently exists (setup asserts this; cleanup deletes the one it creates)
   - A MANAGER-capable role-plugin (`ai-maestro-assistant-manager-agent`), the AUTONOMOUS role-plugin
     (`ai-maestro-autonomous-agent`), and the MAINTAINER role-plugin (`ai-maestro-maintainer-agent`) available
-  - `tests/scenarios/fixtures/scen031-sample-zips/` exists with at least one sample `.zip` containing a known
+  - Fixture dir `tests/scenarios/fixtures/scen031-sample-zips/` exists with at least one sample `.zip` containing a known
     file (e.g. `needle.txt`) for the S0-final user verification
-  - CONTINUITY SUBSTRATE ACTIVE: `ai-maestro-janitor` installed so the heartbeat is armable in each agent
-    session, AND the ai-maestro server's continuity/daemon functionality (KCRMSNL7 Family-A: auto-resume,
+  - CONTINUITY SUBSTRATE ACTIVE — `ai-maestro-janitor` installed so the heartbeat is armable in each agent
+    session, AND the ai-maestro server's continuity/daemon functionality (KCRMSNL7 Family-A — auto-resume,
     rate-limit recovery via account rotation, session resurrection after a crash/reboot) is live — this is
     what must carry the fleet through the long unsupervised build with zero human intervention
 governance_password: "$AIM_GOVERNANCE_PASSWORD"

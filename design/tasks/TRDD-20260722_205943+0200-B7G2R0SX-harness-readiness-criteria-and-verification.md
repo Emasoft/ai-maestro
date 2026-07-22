@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T23:15:00+0200
+updated: 2026-07-22T23:40:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -55,6 +55,17 @@ so it stays a spontaneous-behaviour test per Rule 0.b; if the surface offers no 
 that becomes an 11th-HOUR capability-gap proposal); S010 verify (AUTONOMOUS cards move only through its owned
 columns on the shared board); S014 verify (MAINTAINER advances review→publish). NEXT unchanged = resolve the 2
 prereq blockers (template repo + password confirm) with the USER, then RUN.
+
+**▶ 2026-07-22 (recheck found + FIXED a latent 3rd blocker).** A recheck pass (recheck-rule) on the v1.1 file
+caught that SCEN-031's frontmatter did NOT parse under mikefarah `yq` v4.45.4 — the EXACT parser
+`scenario-setup.sh` uses — so `setup-SCEN-031.sh` would have aborted `SETUP_FAIL` at S001 BEFORE the run, a
+silent 3rd blocker (pre-existing from v1.0). Two causes, both fixed: (1) two prerequisite list items whose value
+STARTED with a backtick (`` `gh` ``, `` `tests/...` ``) — YAML rejects a plain scalar starting with the reserved
+`` ` ``; rephrased to start with a word. (2) a prerequisite item containing `: ` (colon-space) —
+`CONTINUITY SUBSTRATE ACTIVE: …` + `(KCRMSNL7 Family-A: …` — which yq parses as a nested map whose value then
+starts with a backtick; swapped both `: ` to ` — `. yq now parses all 18 keys + resolves rewipe-list/dir-fixtures/
+git-fixtures. NOTE: 4 of 31 scen files carry the same backtick-in-frontmatter pattern — the other 3 are a latent
+setup-failure risk (follow-up, not this run).
 
 **Origin.** After the governance-spec full-fidelity rewrite (TRDD-CJWC3JLU, complete), a standing
 Stop-hook condition "make the ai-maestro harness ready" kept firing. "Ready" was undefined. The USER

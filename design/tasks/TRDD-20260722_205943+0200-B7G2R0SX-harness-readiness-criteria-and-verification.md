@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T22:05:00+0200
+updated: 2026-07-22T23:15:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -44,6 +44,17 @@ role-plugins cached; ✗ **NO Emasoft template repo exists** (step-6 blocker —
 public/3rd-party template, OR from-scratch), ✗ **AIM_GOVERNANCE_PASSWORD unset in shell** (likely in
 gitignored `.env.local` which the runner sources — confirm). **NEXT = resolve the 2 blockers with the USER,
 then RUN SCEN-031 via the `run-scenario-test` skill.** SCEN-031 file: `tests/scenarios/SCEN-031_zipsearcher-end-to-end-fleet-ship.scen.md`.
+
+**▶ 2026-07-22 (SCEN-031 v1.1 — shared board + column ownership).** USER added: the two worker agents build the
+SAME project → they SHARE one project `design/` kanban board (git-tracked zipsearcher TRDD corpus, NOT siloed
+per-agent design trees); and the MANAGER assigns each agent its own kanban columns — AUTONOMOUS owns the build
+side (`todo`/`dev`/`testing`), MAINTAINER owns the ship side (`ai_review`/`human_review`/`publish`). Folded in +
+committed `a19eb0e4`: description + subsystems(kanban) + ui_sections(design board); new **S008b** (MANAGER sets up
+the shared board + column split — the split is the PASS CRITERION, deliberately NOT dictated to the MANAGER in chat
+so it stays a spontaneous-behaviour test per Rule 0.b; if the surface offers no way to assign an agent to columns
+that becomes an 11th-HOUR capability-gap proposal); S010 verify (AUTONOMOUS cards move only through its owned
+columns on the shared board); S014 verify (MAINTAINER advances review→publish). NEXT unchanged = resolve the 2
+prereq blockers (template repo + password confirm) with the USER, then RUN.
 
 **Origin.** After the governance-spec full-fidelity rewrite (TRDD-CJWC3JLU, complete), a standing
 Stop-hook condition "make the ai-maestro harness ready" kept firing. "Ready" was undefined. The USER

@@ -28,8 +28,9 @@ export type LivenessClass =
   | 'active' // processing a turn — healthy
   | 'idle_waiting' // idle at prompt, within the stall window (waiting for the user) — healthy
   | 'permission_waiting' // blocked on a tool-permission prompt — needs the USER, never a resume target
-  | 'stalled' // idle at prompt with no activity past the stall window — a recovery target
+  | 'stalled' // idle at prompt with no activity past the stall window — a recovery target (gentle ladder)
   | 'token_blocked' // account unhealthy — must be healed by the OAuth cascade before any resume
+  | 'dead' // registry expects a running session but tmux is gone — a CRASHED process (Phase C hard-recovery)
   | 'offline' // no live session (hibernated/never-woken) — not a recovery target
 
 /** The observed inputs the classifier decides from (all from read-only sources). */
@@ -46,6 +47,14 @@ export interface LivenessInput {
   timeSinceActivityMs?: number | null
   /** From the continuity `status` rollup: false ⇒ token-blocked. null/absent ⇒ unknown (assume ok). */
   accountHealthy?: boolean | null
+  /**
+   * Whether the server's session-persistence record (added on wake, removed on hibernate) still
+   * lists this agent. It is the ONLY reliable crashed-vs-hibernated discriminator when `exists` is
+   * false: persisted-but-absent ⇒ CRASHED (`dead`); not-persisted-but-absent ⇒ clean hibernate
+   * (`offline`). `hasSession` cannot tell them apart — it is ~always true for a named agent
+   * (CHN16JXZ Phase C, verified 2026-07-22). Absent/undefined ⇒ treat as not-persisted (offline).
+   */
+  isPersisted?: boolean
 }
 
 export interface LivenessVerdict {
@@ -68,8 +77,19 @@ export function classifyLiveness(
   input: LivenessInput,
   stallThresholdMs: number = DEFAULT_STALL_THRESHOLD_MS,
 ): LivenessVerdict {
-  if (!input.hasSession || !input.exists) {
-    return { class: 'offline', recoveryRecommended: false, reason: 'no live session (hibernated/offline)' }
+  if (!input.hasSession) {
+    return { class: 'offline', recoveryRecommended: false, reason: 'no session record (hibernated/never-woken)' }
+  }
+  if (!input.exists) {
+    // The registry has a session but the tmux session is GONE. PERSISTED (the registry still expects
+    // it running) ⇒ it CRASHED → `dead`. NOT persisted ⇒ a clean hibernate → `offline`. This
+    // `isPersisted` split is the ONLY reliable crashed-vs-hibernated discriminator (`hasSession` is
+    // ~always true for a named agent). `dead` is DETECTION-ONLY for now (recoveryRecommended:false):
+    // hard recovery (relaunch) is the gated Phase C hard-actuator, which also debounces the
+    // post-restart sessions.json overcompleteness before it ever kills/relaunches anything.
+    return input.isPersisted
+      ? { class: 'dead', recoveryRecommended: false, reason: 'persisted session but tmux gone — process crashed (Phase C hard-recovery, gated)' }
+      : { class: 'offline', recoveryRecommended: false, reason: 'no live session (hibernated/offline)' }
   }
   // Token-blocked BEFORE anything else: resuming an agent whose credential is dead
   // just burns another turn. It must be healed by the OAuth cascade (1GGQ4HWY) first;
@@ -129,6 +149,10 @@ export interface FleetScanDeps {
   ) => { status: string | null; notificationType: string | null } | null
   /** Optional: the continuity account-health rollup (false ⇒ token-blocked). */
   getAccountHealthy?: (agentId: string) => Promise<boolean | null>
+  /** Optional: whether the agent is in the server's session-persistence record — the
+   *  crashed-vs-hibernated signal for the `dead` class. Absent ⇒ `dead` is never classified
+   *  (a persisted-but-absent agent falls through to `offline`). */
+  isPersisted?: (agentId: string) => boolean
   /** Defaults to the janitor control-plane gate. Injectable for tests. */
   actuationBlocked?: () => { blocked: boolean; reason: string | null }
   /** Override the stall window. */
@@ -189,6 +213,7 @@ export async function scanFleetLiveness(deps: FleetScanDeps, scannedAt: number):
         activityStatus: hook?.status ?? null,
         timeSinceActivityMs: status.timeSinceActivityMs,
         accountHealthy,
+        isPersisted: deps.isPersisted?.(ref.id),
       },
       stall,
     )

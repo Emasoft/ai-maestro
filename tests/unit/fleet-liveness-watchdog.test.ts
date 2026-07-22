@@ -52,6 +52,21 @@ describe('runFleetLivenessTick (read-only)', () => {
     expect(logs[0]).toContain('actuation BLOCKED: kill-switch.flag')
   })
 
+  it('logs dead (crashed) agents with the Phase C gated note', async () => {
+    const logs: string[] = []
+    await runFleetLivenessTick({
+      now: () => 1,
+      log: (m) => logs.push(m),
+      scan: async () =>
+        snap({
+          agents: [{ agentId: 'a1', name: 'zombie', class: 'dead', recoveryRecommended: false, reason: 'crashed' }],
+          recoveryTargets: [],
+        }),
+    })
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toContain('1 dead (crashed, Phase C gated): zombie')
+  })
+
   it('stays silent when the fleet is healthy', async () => {
     const logs: string[] = []
     await runFleetLivenessTick({

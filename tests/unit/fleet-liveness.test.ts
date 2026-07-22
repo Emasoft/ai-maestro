@@ -11,7 +11,24 @@ const online = { hasSession: true, exists: true }
 describe('classifyLiveness (pure)', () => {
   it('no session ⇒ offline, no recovery', () => {
     expect(classifyLiveness({ hasSession: false, exists: false })).toMatchObject({ class: 'offline', recoveryRecommended: false })
+    // absent isPersisted defaults to not-persisted ⇒ offline (never dead)
     expect(classifyLiveness({ hasSession: true, exists: false })).toMatchObject({ class: 'offline', recoveryRecommended: false })
+  })
+
+  it('persisted session but tmux gone ⇒ dead (crashed), detection-only (no recovery yet)', () => {
+    expect(classifyLiveness({ hasSession: true, exists: false, isPersisted: true }))
+      .toMatchObject({ class: 'dead', recoveryRecommended: false })
+  })
+
+  it('NOT persisted + tmux gone ⇒ offline (clean hibernate), never dead', () => {
+    expect(classifyLiveness({ hasSession: true, exists: false, isPersisted: false }))
+      .toMatchObject({ class: 'offline', recoveryRecommended: false })
+  })
+
+  it('dead is decided on absence: a persisted+absent agent is dead regardless of a stale idle reading', () => {
+    expect(
+      classifyLiveness({ hasSession: true, exists: false, isPersisted: true, notificationType: 'idle_prompt', timeSinceActivityMs: DEFAULT_STALL_THRESHOLD_MS + 1 }),
+    ).toMatchObject({ class: 'dead' })
   })
 
   it('unhealthy account ⇒ token_blocked, no recovery (defer to the cascade)', () => {
@@ -112,5 +129,30 @@ describe('scanFleetLiveness', () => {
     )
     expect(snap.agents.find((a) => a.agentId === 'a1')?.class).toBe('token_blocked')
     expect(snap.recoveryTargets).toEqual([]) // a1 no longer a target; a2/a3 aren't stalled
+  })
+
+  it('a persisted-but-absent agent classifies as dead (crashed), never a recovery target', async () => {
+    const snap = await scanFleetLiveness(
+      fakeDeps({
+        getStatus: async (id) =>
+          id === 'a3'
+            ? { hasSession: true, exists: false, timeSinceActivityMs: null } // crashed: record present, tmux gone
+            : id === 'a1'
+              ? { hasSession: true, exists: true, timeSinceActivityMs: DEFAULT_STALL_THRESHOLD_MS + 60_000 }
+              : { hasSession: true, exists: true, timeSinceActivityMs: 5_000 },
+        isPersisted: (id) => id === 'a3', // a3 is still persisted ⇒ dead, not hibernated
+      }),
+      5_000,
+    )
+    expect(snap.agents.find((a) => a.agentId === 'a3')?.class).toBe('dead')
+    expect(snap.recoveryTargets).toEqual(['a1']) // dead is NOT a recovery target (Phase C gated)
+  })
+
+  it('without an isPersisted dep, a persisted-looking absent agent falls through to offline (never dead)', async () => {
+    const snap = await scanFleetLiveness(
+      fakeDeps({ getStatus: async () => ({ hasSession: true, exists: false, timeSinceActivityMs: null }) }),
+      6_000,
+    )
+    expect(snap.agents.every((a) => a.class === 'offline')).toBe(true)
   })
 })

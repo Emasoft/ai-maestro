@@ -12,6 +12,7 @@
 import { getAgent, listAgents } from '@/lib/agent-registry'
 import { getAgentSessionStatus } from '@/services/agents-core-service'
 import { readHookNotification } from '@/lib/session-safe-state'
+import { loadPersistedSessions } from '@/lib/session-persistence'
 import { scanFleetLiveness, type FleetScanDeps, type FleetLivenessSnapshot } from '@/lib/fleet-liveness'
 import {
   runRecoveryPass,
@@ -25,6 +26,13 @@ import {
  *  OAuth cascade (1GGQ4HWY); until then a token-blocked agent simply classifies via
  *  its idle/active state and is never actuated. */
 export function defaultFleetScanDeps(): FleetScanDeps {
+  // Snapshot the persisted-session set ONCE per deps build (once per tick), closed over — the
+  // crashed-vs-hibernated discriminator for the `dead` class. One file read per tick, not per agent.
+  const persisted = new Set(
+    loadPersistedSessions()
+      .map((s) => s.agentId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0),
+  )
   return {
     listAgents: () =>
       listAgents(false).map((s) => {
@@ -43,6 +51,7 @@ export function defaultFleetScanDeps(): FleetScanDeps {
       }
     },
     getHookNotification: (wd) => readHookNotification(wd),
+    isPersisted: (id) => persisted.has(id),
   }
 }
 
@@ -91,12 +100,15 @@ export async function runFleetLivenessTick(
     const snap = await scan(now())
     const stalled = snap.agents.filter((a) => a.class === 'stalled')
     const tokenBlocked = snap.agents.filter((a) => a.class === 'token_blocked')
+    const dead = snap.agents.filter((a) => a.class === 'dead')
     const fireEnabled = opts.fireEnabled ?? DEFAULT_RECOVERY_FIRE
-    if (stalled.length || tokenBlocked.length) {
+    if (stalled.length || tokenBlocked.length || dead.length) {
       const parts: string[] = []
       if (stalled.length) parts.push(`${stalled.length} stalled: ${stalled.map((a) => a.name || a.agentId).join(', ')}`)
       if (tokenBlocked.length)
         parts.push(`${tokenBlocked.length} token-blocked: ${tokenBlocked.map((a) => a.name || a.agentId).join(', ')}`)
+      if (dead.length)
+        parts.push(`${dead.length} dead (crashed, Phase C gated): ${dead.map((a) => a.name || a.agentId).join(', ')}`)
       const gate = snap.actuationBlocked
         ? ` (actuation BLOCKED: ${snap.actuationBlockReason})`
         : ` — recovery targets: ${snap.recoveryTargets.length}${fireEnabled ? '' : ' [detect-only: AIM_FLEET_RECOVERY_FIRE not set]'}`

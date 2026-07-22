@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T21:50:00+0200
+updated: 2026-07-22T21:55:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -16,6 +16,21 @@ implementation-commits: []
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-22
+
+**▶ USER DEFINED "READY" (2026-07-22) — AUTHORITATIVE; supersedes the proposed A-F bar below as the
+DEFINITION.** "Harness ready" = **scenario `SCEN-031` (zipsearcher end-to-end) RUNS and PASSES.** The user
+gives the MANAGER ONE directive ("build zipsearcher — search files inside zips without decompressing") and
+the fleet self-organizes to ship it: MANAGER writes the requirements TRDD → creates an AUTONOMOUS developer
++ a MAINTAINER → delegates → approves/refuses the AUTONOMOUS's TRDDs → drives a real GitHub PR-review
+workflow (repo-from-template + branch rules, fork/clone, PRs, MAINTAINER reviews + bug-back-and-forth,
+iterate) → v1.0.0 release → install+smoke-test → notify user → user installs + verifies on a sample zip.
+Exercises the 3 no-team host titles. **AUTHORED + committed `4623dc83`** (`tests/scenarios/SCEN-031_*.scen.md`
++ setup wrapper + sample-zip fixture + NEXT_SCEN_NUMBER→32). The A-F bar below is now SUPPORTING EVIDENCE
+(it proves the governance/enforcement substrate SCEN-031 depends on is sound — enforcement 378 green,
+invariants boot-active, spec authoritative), NOT the definition. **NEXT = RUN SCEN-031** (via the
+`run-scenario-test` skill) — but it has REAL GitHub side effects (creates `Emasoft/zipsearcher` + PRs +
+release), runs long (agents build real software), and needs prereqs (gh auth, a template repo, MANAGER-
+capable) → needs the USER's explicit go-ahead + a prereq check before the run.
 
 **Origin.** After the governance-spec full-fidelity rewrite (TRDD-CJWC3JLU, complete), a standing
 Stop-hook condition "make the ai-maestro harness ready" kept firing. "Ready" was undefined. The USER

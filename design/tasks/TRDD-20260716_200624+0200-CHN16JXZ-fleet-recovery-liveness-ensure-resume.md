@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-22T14:56:09+0200
+updated: 2026-07-22T15:00:18+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -97,14 +97,32 @@ detection runs live at boot; the gentle ladder (`esc_nudge → rearm → reload 
 authenticated queue when armed. Phase C is the only remaining rung set and is OPTIONAL for the core
 coverage gap — gentle recovery handles a frozen agent; hard is only for a truly-dead process.
 
-**NEXT ACTION:** Phase C — the HARD rungs (`relaunch → force_restart → resurrect`), behind their OWN
-default-off flag (mirror the janitor's `FLEET_HARD_RESTART_ENABLED`). These are NOT slash-injections: they
-kill + relaunch the stuck pid. `actuateRecovery` already REFUSES them (returns `hard_not_wired` when
-`hardEnabled`, `hard_gated` when not), so Phase C adds a SEPARATE hard-actuator the runner calls when the
-gentle ladder is exhausted AND the hard flag is on — with per-instance cooldown + crash-loop-page-once +
-the same HID-presence + `fleetActuationBlocked()` gates. Reuse the stop/restart substrate
-(`app/api/sessions/[id]/restart`, `kill`). Read `lib/fleet-recovery.ts` (`HARD_RUNGS`) +
-`lib/fleet-recovery-runner.ts` first.
+**⚠ PHASE C SAFETY PREREQUISITE (found 2026-07-22 — do NOT skip; it changes the design):** the hard rungs
+KILL + relaunch a process. The classifier TODAY only produces `stalled`→`frozen`, and a `frozen` agent is
+ALIVE (idle at its own prompt). **Firing a hard rung on a frozen agent DESTROYS a live session's in-flight
+work** — strictly worse than leaving it frozen. So:
+  1. Hard rungs are correct ONLY for a genuinely **`dead`** process (registry expects a session but tmux
+     says it is gone) — NOT for `frozen`. The current `frozen`→(gentle ×4)→`hard_gated`→"human needed"
+     terminal is the CORRECT, safe behaviour and must stay: never escalate a live frozen agent to a kill.
+  2. Phase C therefore needs a **`dead` liveness class FIRST**: split `classifyLiveness`'s current
+     `!hasSession || !exists → offline` into `!hasSession → offline` (hibernated/never-woken) vs
+     `hasSession && !exists → dead` (had a session, it vanished → recover). ⚠ FOOTGUN: verify the exact
+     semantics of `getAgentSessionStatus`'s `hasSession`/`exists` so a HIBERNATED agent is never
+     misread as `dead` and force-woken. If they can't reliably distinguish crashed-vs-hibernated,
+     `dead` detection is not yet safe and Phase C stays deferred.
+  3. Only a `dead` target maps to the hard entry rung (`recoveryRungFor('dead',0,…)==='relaunch'`);
+     `relaunch` (`claude --continue`, transcript-preserving) is safe on a dead session (no live work to
+     lose). `force_restart`/`resurrect` (external kill) escalate only if `relaunch` fails.
+
+**NEXT ACTION:** Phase C, in this order — (a) add + test the `dead` class in `lib/fleet-liveness.ts`
+(with the hibernated-vs-dead footgun proven safe), (b) a SEPARATE hard-actuator (`lib/fleet-hard-recovery.ts`)
+behind its OWN default-off flag `AIM_FLEET_HARD_RECOVERY` (mirror janitor `FLEET_HARD_RESTART_ENABLED`),
+reusing the stop/restart substrate (`app/api/sessions/[id]/restart`, `kill`), with per-instance cooldown +
+crash-loop-page-once + HID + `fleetActuationBlocked()`, (c) the runner calls it for `dead` targets when the
+hard flag is on. `actuateRecovery` already REFUSES hard rungs (`hard_not_wired`/`hard_gated`), so the
+gentle path is untouched. Read `lib/fleet-recovery.ts` (`HARD_RUNGS`) + `lib/fleet-liveness.ts` +
+`lib/fleet-recovery-runner.ts` first. **Phase C is OPTIONAL for the core coverage gap** — gentle recovery
+(A/B/D) already closes it for the common frozen-agent case.
 
 ## Problem / Goal
 

@@ -28,8 +28,15 @@ greppable**. A **TRDD** is an actionable task that implements against the SPECs 
   validator, a linter). A spec with no way to validate conformance is a draft, not a spec.
 - **PRRD-compliant** — it may not contradict any PRRD requirement.
 
-Documents that are (or should become) SPECs: the 3-pillars conformance spec (`3-pillars-spec.md`,
-here), the governance-rules catalog, and the scenario-test rules.
+**A SPEC is NOT a Claude Code rule file — do not conflate them.** A SPEC *describes* things,
+including rule files (their content, exact paths, and install protocols). The operational rule
+files the harness loads/installs are separate artifacts that live in their INSTALL folders and do
+NOT belong here: the IND rules (`~/.claude/rules/`, shipped by the janitor) and the DEP overlays
+(`rules/aimaestro/aimaestro-*.md`, seeded to agent workdirs). The reference SPEC in this folder is
+`3-pillars-spec.md` — one file describing both the IND and DEP rule files. Whether the
+governance-rules catalog / scenario-test rules are SPECs (that live here) or rule files (that stay
+in their install folders) is decided per document by the same test: **is it loaded/installed by the
+harness as a rule?** If yes, it is a rule file; if it only describes, it is a spec.
 
 ## Lifecycle (mirrors the TRDD lifecycle — approval-gated)
 

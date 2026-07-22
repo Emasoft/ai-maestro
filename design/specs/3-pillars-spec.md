@@ -197,8 +197,8 @@ the platelet that keeps this spec from being drift-prone prose.
 
 `3P-CHK-02` **ai-maestro-overlay** — `tests/unit/aimaestro-overlay-filename-contract.test.ts`
 freezes the DEP overlay filenames the IND bases cite (#83). (This SPEC lives in `design/specs/`,
-the standard SPEC home. The DEP overlays are ALSO specs but stay in `rules/aimaestro/` because they
-are SEEDED to agent workdirs by that path — a mechanical constraint, not a taxonomy exception.)
+the standard SPEC home. The DEP overlays it references are RULE FILES, not specs — they live in
+`rules/aimaestro/` (their seed/install folder); this spec DESCRIBES them, it is not one of them.)
 
 `3P-CHK-03` **janitor** — a check (janitor's to build, #85) that its shipped IND bases
 satisfy this spec at the `spec-version` they declare.

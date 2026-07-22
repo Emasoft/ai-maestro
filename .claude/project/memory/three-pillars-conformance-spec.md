@@ -52,8 +52,9 @@ janitor USER-scope hub [[ai-maestro-fleet-hub-governance-and-security]].
   seeding), BECAUSE that was a first-cut placement superseded 2026-07-22: the USER established the
   doc-type taxonomy where SPECs live in `design/specs/` (PRRD `design/requirements/` → SPEC
   `design/specs/` → TRDD `design/tasks/`, authority in that order, each with proposals/ + archived/).
-  DO put a spec in `design/specs/`, where it has zero seeder coupling. This does NOT contradict the
-  earlier "specs sit WITH the governance rules" directive — the governance rules are THEMSELVES
-  specs, so both point at the same home (`design/specs/`). The DEP overlays stay in `rules/aimaestro/`
-  only because they are SEEDED to workdirs by that path (a mechanical constraint, not an exception).
+  DO put a spec in `design/specs/`. SPECS and Claude Code RULE FILES are DIFFERENT things (USER,
+  2026-07-22) — do not conflate. A SPEC DESCRIBES rule files (their content, paths, install
+  protocols); the operational rule files themselves stay in their INSTALL folders (IND →
+  `~/.claude/rules/` via janitor; DEP overlays `aimaestro-*.md` → `rules/aimaestro/`, seeded to
+  workdirs) and do NOT move to `design/specs/`. Only the describing spec lives there.
 

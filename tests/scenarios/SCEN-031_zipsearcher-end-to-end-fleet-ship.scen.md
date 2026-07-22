@@ -1,7 +1,7 @@
 ---
 number: 31
 name: End-to-end — the MANAGER builds and ships "zipsearcher" via an AUTONOMOUS + a MAINTAINER
-version: "1.0"
+version: "1.1"
 description: >
   The definitive fleet-autonomy proof. The user (impersonated by the runner) gives the MANAGER
   ONE directive through the chat box — "build me a tool called zipsearcher that searches for files
@@ -16,7 +16,11 @@ description: >
   v1.0.0 release; install and smoke-test the release, then tell the user it is done. The user then
   installs it themselves and verifies it works on a sample zip. If every one of those happens
   WITHOUT the runner ever driving a non-MANAGER agent, the harness is READY. This exercises the three
-  NO-TEAM host-level titles (MANAGER / AUTONOMOUS / MAINTAINER) end to end. CRUCIALLY, the entire build must
+  NO-TEAM host-level titles (MANAGER / AUTONOMOUS / MAINTAINER) end to end. Because both worker agents build the
+  SAME project, they SHARE one project `design/` kanban board (the git-tracked zipsearcher TRDD corpus — not
+  siloed per-agent private design trees), and the MANAGER divides labour by assigning each agent its own kanban
+  columns: the AUTONOMOUS owns the build side (todo / dev / testing), the MAINTAINER owns the ship side
+  (ai_review / human_review / publish). CRUCIALLY, the entire build must
   proceed UNSUPERVISED and UNINTERRUPTED: the janitor heartbeat cron plus the ai-maestro server's continuity
   daemon (auto-resume, rate-limit recovery, session resurrection) must keep every agent working with ZERO
   human nudge. The runner must not cheat or interfere to keep them alive — no manual resume, no re-prompt,
@@ -32,6 +36,7 @@ subsystems:
   - agent-messaging
   - role-plugins
   - sessions-service
+  - kanban (one shared project design/ board across both worker agents; MANAGER assigns per-agent column ownership)
   - fleet-continuity (janitor heartbeat cron + ai-maestro server continuity daemon — auto-resume / rate-limit recovery / session resurrection; the fleet must run unsupervised, never stopping)
 ui_sections:
   - Sidebar -> Agents tab
@@ -40,6 +45,7 @@ ui_sections:
   - Agent view -> Messages tab (AMP inbox/sent between MANAGER, AUTONOMOUS, MAINTAINER)
   - Agent Creation Wizard (used by the runner ONLY to create the MANAGER in setup)
   - Agent view -> TRDD / task surface (observe the requirements + approvals)
+  - Kanban / design board (the ONE shared zipsearcher project board; observe cards move through columns owned by the assigned agent)
 data_produced:
   - 1 MANAGER agent (temporary, created by the runner in setup, deleted in cleanup)
   - 1 AUTONOMOUS agent (temporary, created BY THE MANAGER during the run, deleted in cleanup)
@@ -198,6 +204,13 @@ author: Emasoft
 - **Modifies:** `registry.json`
 - **Verify:** `GET /api/agents` shows two NEW agents whose `governanceTitle` is `autonomous` and `maintainer`, each with its role-plugin installed (R9.13). **Each new agent's continuity substrate must also come up** — on its first wake its janitor heartbeat arms and the server daemon covers it, so the AUTONOMOUS and MAINTAINER ALSO self-sustain unsupervised (they will be running long unattended stretches). Record their names (do NOT hardcode — the MANAGER chose them). If the MANAGER creates the wrong titles, a team (this is team-less), only one agent, OR an agent whose janitor heartbeat never arms → behavioural FAIL, fix the cause.
 
+#### S008b: Observe — the MANAGER sets up ONE shared board and assigns each agent its columns
+- **Action:** Watch (read-only) as the MANAGER establishes the working structure for the two agents on the SAME project. Both agents build zipsearcher, so they must operate on ONE shared project `design/` kanban board (the git-tracked zipsearcher TRDD corpus), NOT two siloed per-agent private design trees. The MANAGER divides labour by assigning each agent its own kanban columns: the AUTONOMOUS owns the build side (`todo`, `dev`, `testing`), the MAINTAINER owns the ship side (`ai_review`, `human_review`, `publish`). This assignment is expected to be established here (or recorded in the requirements TRDD) — do NOT dictate the columns to the MANAGER in chat; the sensible split is what a correct fleet arrives at on its own, and the split is the pass criterion, not a coaching input.
+- **Goal:** A single shared kanban board exists for the project, and a clear per-agent column ownership is set (AUTONOMOUS: build columns; MAINTAINER: ship columns).
+- **Creates:** nothing (runner)
+- **Modifies:** nothing (runner)
+- **Verify:** the MANAGER's transcript/TRDD shows (a) ONE shared project `design/` board the two agents both reference (not two private boards), and (b) a column-ownership split where the AUTONOMOUS is assigned `todo`/`dev`/`testing` and the MAINTAINER `ai_review`/`human_review`/`publish`. If the MANAGER siloes each agent's TRDDs into its own private design tree, or never establishes any column ownership, that is a behavioural finding (capability gap). If the ai-maestro surface offers NO way for a MANAGER to assign an agent to specific kanban columns, record it as an 11th-HOUR capability-gap proposal (Rule 11) — the column split may then be expressed as a documented convention in the requirements TRDD rather than a formal assignment, but the expected ownership above is still what the run must verify.
+
 ---
 
 ## Phase 4: Development handoff + TRDD approvals (user spec steps 4–5)
@@ -214,7 +227,7 @@ author: Emasoft
 - **Goal:** The approval loop actually runs: proposals flow up, decisions flow down as messages, and a refusal (if any) is a guide, not a gate.
 - **Creates:** nothing (runner)
 - **Modifies:** nothing (runner)
-- **Verify:** TRDD frontmatter shows `approved: true` (or a documented refusal with a named defect) via the MANAGER; the `## Approval log` records who decided and when. **DERIVED TRDDs are correct:** the AUTONOMOUS authors NPT/EHT children properly — each derived TRDD is DEPTH-1 (empty `npt:`/`eht:`, it spawns no derived TRDDs of its own), siblings are ordered via `blocked-by:` (NEVER by putting a sibling in `npt:`), and the parent stays out of `complete` until every EHT is terminal (the completion gate). A silent approval with no message chain, a bare refusal, or malformed/missing derived TRDDs is a behavioural finding.
+- **Verify:** TRDD frontmatter shows `approved: true` (or a documented refusal with a named defect) via the MANAGER; the `## Approval log` records who decided and when. **DERIVED TRDDs are correct:** the AUTONOMOUS authors NPT/EHT children properly — each derived TRDD is DEPTH-1 (empty `npt:`/`eht:`, it spawns no derived TRDDs of its own), siblings are ordered via `blocked-by:` (NEVER by putting a sibling in `npt:`), and the parent stays out of `complete` until every EHT is terminal (the completion gate). **Shared board + columns:** these TRDDs live on the ONE shared project `design/` board from S008b (both agents reference it), and the AUTONOMOUS's cards move through ITS owned columns — `todo` → `dev` → `testing` — as it works; it does NOT move a card into a MAINTAINER-owned column (`ai_review`/`human_review`/`publish`). A silent approval with no message chain, a bare refusal, malformed/missing derived TRDDs, a card the AUTONOMOUS pushes into a ship-side column it does not own, or TRDDs siloed off the shared board is a behavioural finding.
 
 ---
 
@@ -255,7 +268,7 @@ author: Emasoft
 #### S014: Observe — the MAINTAINER reviews every PR and sends bugs back
 - **Action:** Watch (read-only) + poll `gh pr view <n> --repo Emasoft/zipsearcher --comments`. The MAINTAINER reviews each PR; when it finds a defect it requests changes with a concrete finding (not "looks good"); it merges only when ready.
 - **Goal:** A genuine review loop: at least one PR is sent back for a fix and improved before merge. No self-merge by the AUTONOMOUS; no empty approval by the MAINTAINER.
-- **Verify:** review comments name concrete issues; a PR shows a request-changes → fix → re-review → merge cycle; merges are by the MAINTAINER, not the author. A PR merged with a known failing test, or approved with no substantive review, is a hard FAIL (the plugin-tests-are-the-plugin's-job discipline + R49).
+- **Verify:** review comments name concrete issues; a PR shows a request-changes → fix → re-review → merge cycle; merges are by the MAINTAINER, not the author. A PR merged with a known failing test, or approved with no substantive review, is a hard FAIL (the plugin-tests-are-the-plugin's-job discipline + R49). **Column ownership:** on the shared board (S008b) the MAINTAINER moves the corresponding cards through ITS owned columns — `ai_review`/`human_review` → `publish` — and it, not the AUTONOMOUS, is the one advancing a card into a ship-side column. A MAINTAINER that never touches the review/publish columns, or an AUTONOMOUS that self-advances a card into them, is a behavioural finding.
 
 #### S015: Observe — the AUTONOMOUS iterates to completion; the MANAGER monitors via scripts; nobody nudges
 - **Action:** Watch (read-only) across the full cycle: approvals (MANAGER), tests green in CI, PRs opened, reviews (MAINTAINER), merges — repeated until the tool is complete. Throughout, the MANAGER MONITORS the two agents' status via the ai-maestro-plugin skills / `aimaestro-agent.sh` status verbs (read-only status polling — this is MONITORING, not driving; R42 forbids injection, not observation). The runner does NOTHING — no nudge, no resume, no keep-alive. Then the AUTONOMOUS messages the MANAGER that zipsearcher is done.

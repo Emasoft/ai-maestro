@@ -1,9 +1,9 @@
 ---
 trdd-id: 0RVG7A9D
 title: Reconcile the D6 emergency-rule vocabulary in aimaestro-trdd-approval.md to the live min-approval-requirement field
-column: testing
+column: complete
 created: 2026-07-22T06:09:59+0200
-updated: 2026-07-22T06:09:59+0200
+updated: 2026-07-22T07:48:52+0200
 current-owner: ai-maestro
 task-type: bugfix
 scope: project

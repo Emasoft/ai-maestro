@@ -1,9 +1,9 @@
 ---
 trdd-id: TAFH4U0G
 title: Freeze the aimaestro-* overlay filenames with a pin test and retire the stale pre-split IND mirror
-column: testing
+column: complete
 created: 2026-07-22T05:54:44+0200
-updated: 2026-07-22T05:59:15+0200
+updated: 2026-07-22T07:48:52+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project

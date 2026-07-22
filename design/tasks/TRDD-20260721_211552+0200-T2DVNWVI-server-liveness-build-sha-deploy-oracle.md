@@ -1,9 +1,9 @@
 ---
 trdd-id: T2DVNWVI
 title: Stamp the running git sha into server-liveness.json as the server deploy oracle
-column: testing
+column: complete
 created: 2026-07-21T21:15:52+0200
-updated: 2026-07-21T22:36:08+0200
+updated: 2026-07-22T13:23:40+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -73,3 +73,8 @@ New shape: `{"ts":…, "pid":…, "sha":"139ae56f", "sha_full":"…", "capabilit
 
 ## Approval log
 - 2026-07-21T21:15:52+0200 — MANDATE (Tier-0, self, in-scope infra). Promised to core on #80 S5.
+- 2026-07-22T13:23:40+0200 — `testing → complete` (mechanical, EXEMPT §A: all Verification criteria PASSED
+  — 13/13 tests, `tsc --noEmit` exit 0, deployed + verified live at HEAD `b4887d20`, oracle confirmed its
+  own deploy). `release-via: none` ⇒ `complete` is terminal. Column was lagging reality since 22:36 the prior
+  night; reconciled so the board stops presenting a done card as in-flight (it had misfired as a post-compact
+  resume target). No code change — bookkeeping only.

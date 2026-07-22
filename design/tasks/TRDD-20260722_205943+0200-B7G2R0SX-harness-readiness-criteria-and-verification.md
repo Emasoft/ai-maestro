@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T21:55:00+0200
+updated: 2026-07-22T22:05:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -31,6 +31,19 @@ invariants boot-active, spec authoritative), NOT the definition. **NEXT = RUN SC
 `run-scenario-test` skill) — but it has REAL GitHub side effects (creates `Emasoft/zipsearcher` + PRs +
 release), runs long (agents build real software), and needs prereqs (gh auth, a template repo, MANAGER-
 capable) → needs the USER's explicit go-ahead + a prereq check before the run.
+
+**▶ 2026-07-22 (SCEN-031 EXPANDED + prereq-gated).** USER added requirement sets, ALL folded in + committed
+`a129a0b1`: (1) **NEVER-STOP** — the whole run must self-sustain via the janitor heartbeat cron + the
+ai-maestro server continuity daemon (auto-resume / rate-limit recovery / resurrection), ZERO runner
+keep-alive; any agent that stops-and-stays-stopped, or only continued because the runner nudged it, = FAIL;
+(2) correct **DERIVED TRDDs** (depth-1, siblings via `blocked-by:`, parent gated on all-EHT-terminal);
+(3) **MAINTAINER creates the CI workflow** (PRs gated on green CI); (4) **MANAGER monitors** the 2 agents via
+ai-maestro-plugin status scripts / `aimaestro-agent.sh` (read-only status = monitoring, NOT driving/R42).
+**PREREQ GATE ran (read-only):** ✓ server up (401), ✓ gh authed @Emasoft, ✓ `zipsearcher` absent, ✓ 3
+role-plugins cached; ✗ **NO Emasoft template repo exists** (step-6 blocker — USER must create one, OR allow a
+public/3rd-party template, OR from-scratch), ✗ **AIM_GOVERNANCE_PASSWORD unset in shell** (likely in
+gitignored `.env.local` which the runner sources — confirm). **NEXT = resolve the 2 blockers with the USER,
+then RUN SCEN-031 via the `run-scenario-test` skill.** SCEN-031 file: `tests/scenarios/SCEN-031_zipsearcher-end-to-end-fleet-ship.scen.md`.
 
 **Origin.** After the governance-spec full-fidelity rewrite (TRDD-CJWC3JLU, complete), a standing
 Stop-hook condition "make the ai-maestro harness ready" kept firing. "Ready" was undefined. The USER

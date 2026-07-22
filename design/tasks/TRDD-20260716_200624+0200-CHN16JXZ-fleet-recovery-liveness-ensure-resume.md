@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-22T15:00:18+0200
+updated: 2026-07-22T15:02:14+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -104,18 +104,25 @@ work** — strictly worse than leaving it frozen. So:
   1. Hard rungs are correct ONLY for a genuinely **`dead`** process (registry expects a session but tmux
      says it is gone) — NOT for `frozen`. The current `frozen`→(gentle ×4)→`hard_gated`→"human needed"
      terminal is the CORRECT, safe behaviour and must stay: never escalate a live frozen agent to a kill.
-  2. Phase C therefore needs a **`dead` liveness class FIRST**: split `classifyLiveness`'s current
-     `!hasSession || !exists → offline` into `!hasSession → offline` (hibernated/never-woken) vs
-     `hasSession && !exists → dead` (had a session, it vanished → recover). ⚠ FOOTGUN: verify the exact
-     semantics of `getAgentSessionStatus`'s `hasSession`/`exists` so a HIBERNATED agent is never
-     misread as `dead` and force-woken. If they can't reliably distinguish crashed-vs-hibernated,
-     `dead` detection is not yet safe and Phase C stays deferred.
+  2. Phase C therefore needs a **`dead` liveness class FIRST**. ⚠ VERIFIED 2026-07-22: `hasSession` is
+     NOT the discriminator — `getAgentSessionStatus` sets it UNCONDITIONALLY `true` for any NAMED agent
+     (`services/agents-core-service.ts:1426`), so `hasSession && !exists` fires for EVERY hibernated agent
+     (they are named + have no tmux session). The reliable crashed-vs-hibernated signal is the
+     PERSISTED-SESSION record (`lib/session-persistence.ts`): `persistSession` on wake, `unpersistSession`
+     on hibernate. So **`dead` = `loadPersistedSessions().some(s => s.agentId === id)` AND `!exists`**
+     (registry still expects it running, tmux says it's gone); a hibernated agent is UNpersisted, so it
+     never trips this. Add an `isPersisted(agentId)` dep to the scanner and a new `dead` class to
+     `classifyLiveness` gated on it.
+     ⚠ SECOND NUANCE (found same session): `sessions.json` is OVERCOMPLETE right after a server restart
+     (persisted agents are absent until boot-restore re-creates them). So `dead` MUST be DEBOUNCED — flag
+     only after N consecutive scans / a grace period past boot — else a restart mass-flags every persisted
+     agent as dead and resurrects them all at once.
   3. Only a `dead` target maps to the hard entry rung (`recoveryRungFor('dead',0,…)==='relaunch'`);
      `relaunch` (`claude --continue`, transcript-preserving) is safe on a dead session (no live work to
      lose). `force_restart`/`resurrect` (external kill) escalate only if `relaunch` fails.
 
-**NEXT ACTION:** Phase C, in this order — (a) add + test the `dead` class in `lib/fleet-liveness.ts`
-(with the hibernated-vs-dead footgun proven safe), (b) a SEPARATE hard-actuator (`lib/fleet-hard-recovery.ts`)
+**NEXT ACTION:** Phase C, in this order — (a) add + test the `dead` class in `lib/fleet-liveness.ts` using
+the VERIFIED signal above (`isPersisted(id) && !exists`, DEBOUNCED past boot) — NOT `hasSession`, (b) a SEPARATE hard-actuator (`lib/fleet-hard-recovery.ts`)
 behind its OWN default-off flag `AIM_FLEET_HARD_RECOVERY` (mirror janitor `FLEET_HARD_RESTART_ENABLED`),
 reusing the stop/restart substrate (`app/api/sessions/[id]/restart`, `kill`), with per-instance cooldown +
 crash-loop-page-once + HID + `fleetActuationBlocked()`, (c) the runner calls it for `dead` targets when the

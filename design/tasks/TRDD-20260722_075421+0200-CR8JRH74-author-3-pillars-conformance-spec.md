@@ -1,9 +1,9 @@
 ---
 trdd-id: CR8JRH74
 title: Author the maintained 3-pillars conformance SPEC as the normative arbiter both IND bases and DEP overlays conform to
-column: testing
+column: complete
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-22T07:54:21+0200
+updated: 2026-07-22T08:02:41+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -19,7 +19,7 @@ eht: [QP07O1BK]
 labels: [governance-rules, ind-dep-split, three-pillars-spec, cross-repo-contract, am85]
 external-refs: [Emasoft/ai-maestro#85, Emasoft/ai-maestro#83, Emasoft/ai-maestro-janitor#73]
 release-via: none
-implementation-commits: []
+implementation-commits: [ef7117f9]
 ---
 
 # Author the maintained 3-pillars conformance SPEC as the normative arbiter both IND bases and DEP overlays conform to

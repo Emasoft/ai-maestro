@@ -1,9 +1,9 @@
 ---
 trdd-id: QP07O1BK
 title: ai-maestro code-side conformance test asserting types-task.ts DEFAULT_STATUSES matches the 3-pillars SPEC column vocabulary
-column: testing
+column: complete
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-22T07:54:21+0200
+updated: 2026-07-22T08:02:41+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -23,7 +23,7 @@ eht: []
 labels: [governance-rules, three-pillars-spec, conformance-test, am85, derived]
 external-refs: [Emasoft/ai-maestro#85]
 release-via: none
-implementation-commits: []
+implementation-commits: [ef7117f9]
 ---
 
 # ai-maestro code-side conformance test asserting types-task.ts DEFAULT_STATUSES matches the 3-pillars SPEC column vocabulary

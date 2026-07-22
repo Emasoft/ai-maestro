@@ -3,7 +3,7 @@ trdd-id: CJWC3JLU
 title: Invert governance authority — the SPEC is the source of truth and GOVERNANCE-RULES.md emanates from it (spec-first)
 column: dev
 created: 2026-07-22T17:02:20+0200
-updated: 2026-07-22T17:02:20+0200
+updated: 2026-07-22T17:20:00+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -17,7 +17,7 @@ approval-datetime: 2026-07-22T17:02:20+0200
 relevant-rules: [22]
 eht: []
 npt: []
-implementation-commits: []
+implementation-commits: [60c38453]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-22

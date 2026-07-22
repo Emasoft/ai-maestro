@@ -1,15 +1,16 @@
 ---
 spec: governance
-spec-version: 1.0.0
+spec-version: 2.0.0
 status: normative
 created: 2026-07-22T10:19:26+0200
-updated: 2026-07-22T10:19:26+0200
+updated: 2026-07-22T17:02:20+0200
 maintainer: ai-maestro
 project-id: ai-maestro
-derived-from:
-  - "docs/GOVERNANCE-RULES.md v4.5.0 (2026-07-16) — the R1..R49 team-governance RULE catalog; STAYS there (canonical, §0-mirrored). This SPEC captures its every rule as a dry, greppable, versioned contract."
+authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a governance rule changes; docs/GOVERNANCE-RULES.md and the code/personas/DEP-overlays are its IMPLEMENTATIONS, authored AFTER it (see `implementations`). Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). This spec was previously derived FROM the catalog; that direction is reversed for good."
+reconciled-with:
+  - "docs/GOVERNANCE-RULES.md v4.7.1 (2026-07-22) — catalog and spec are in sync as of the inversion; henceforth the spec LEADS and the catalog follows it (was: spec derived from catalog v4.5.0)."
 implementations:
-  - "docs/GOVERNANCE-RULES.md — the discursive catalog + rationale (the source; §0 lists all its mirrors)"
+  - "docs/GOVERNANCE-RULES.md — the PRIMARY emanation: this spec's rule content + the teaching/rationale the spec omits (its §0 lists the downstream mirrors that follow it)"
   - "lib/communication-graph.ts — R6 adjacency matrix + validateMessageRoute()"
   - "services/element-management-service.ts — ChangeTitle/ChangeTeam/ChangeClient/ChangePlugin/CreateAgent gates (R3/R9/R11/R12/R17/R18/R21)"
   - "services/governance-service.ts, lib/team-registry.ts, lib/agent-auth.ts, lib/aid-ledger-authority.ts, server.mjs — runtime enforcement"
@@ -22,14 +23,18 @@ validated-by:
 
 # The governance conformance SPEC
 
-**This file is the SPEC, not a rule.** It is the single, versioned, normative capture of the
-AI Maestro team-governance rules. The RULE catalog `docs/GOVERNANCE-RULES.md` (discursive
-prose + rationale, `version: 4.5.0`) is the IMPLEMENTATION that carries the teaching; the
-runtime code (`lib/communication-graph.ts`, `services/element-management-service.ts`, …) is
-the IMPLEMENTATION that carries the enforcement. This file carries the testable clauses. On
-any disagreement, **GOVERNANCE-RULES.md is authoritative for rule MEANING** (it is the
-`§0`-mirrored canonical source and is USER-owned); this spec tracks it clause-for-clause and
-is the arbiter of the machine-checkable SHAPE (the comm graph, the title enum, the invariants).
+**This file is the SPEC, and it is the SOURCE OF TRUTH** for the AI Maestro team-governance
+rules — the single, versioned, normative definition, **edited FIRST when a rule changes**
+(USER, 2026-07-22: *specs come before the implementation*). The RULE catalog
+`docs/GOVERNANCE-RULES.md` (discursive prose + rationale, `version: 4.7.1`) is the IMPLEMENTATION
+that carries the teaching; the runtime code (`lib/communication-graph.ts`,
+`services/element-management-service.ts`, …), the DEP overlays (`rules/aimaestro/*`), and the 8
+role-plugin personas are the IMPLEMENTATIONS that carry the enforcement. All of them are authored
+AFTER this spec and take their rule CONTENT from it. On any disagreement, **THIS SPEC is
+authoritative** — the catalog and code must be brought into agreement with it; the catalog keeps
+the rationale + changelog the spec omits, but never the last word on what a rule mandates. This
+spec remains the arbiter of the machine-checkable SHAPE (the comm graph, the title enum, the 22
+invariants), which its `validated-by` harness asserts the code conforms to.
 
 Every rule R1..R49 and sub-rule is captured. Each clause leads with its canonical id
 (`` `R<n>.<sub>` ``) so a citation resolves to the same clause in the catalog and here.

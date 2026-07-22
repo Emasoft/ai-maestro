@@ -1,8 +1,9 @@
 ---
-version: "4.7.1"
+version: "4.8.0"
 date: 2026-07-22
 branch: governance-rules
 changelog:
+  - "4.8.0: AUTHORITY INVERSION (USER, 2026-07-22, TRDD-CJWC3JLU) — design/specs/governance-spec.md is now the SOURCE OF TRUTH; this catalog is its PRIMARY EMANATION. Specs come before the implementation: a rule is authored in the SPEC first, then this prose + the code + the DEP overlays + the personas follow it. Reverses the prior direction (this file canonical, the spec a mirror synced from it — the 'Mirror-sync: design/specs/governance-spec.md' note in every v4.5-v4.7.1 entry now flows the other way). Structural — no rule-behavior change; §0 + §0.1 flipped; the spec's authority block + frontmatter inverted (spec-version 2.0.0)."
   - "4.7.1: TERMINOLOGY REVERSION (USER, 2026-07-22) — 'the MAESTRO agent' was a wrong expression (the USER's own, now retracted); the correct term is 'the MANAGER'. All R39 rule bodies (R39.5/R39.7/R39.9/R39.10) + the governance-spec clauses + TRDD-W9FA6ACZ + the plugin persona reverted 'the MAESTRO agent (the MANAGER)' -> 'the MANAGER'. SAME entity, SAME substance — only the wording changes; the obedience model (obeys its user unconditionally + the MANAGER only with the user's explicit permission, refusable; not the MAESTRO USER) is unchanged. The 4.6.1 changelog entry (which INTRODUCED 'the MAESTRO agent') and the 4.7.0 entry are left intact as history. PATCH — wording only, no behavior change."
   - "4.7.0: ADDED R39.10 (USER, 2026-07-22) — the ASSISTANT's SCOPED, REVOCABLE collaboration expansion. MINOR (new sub-rule, new behavior). Once the user has permitted MANAGER collaboration (R39.9), the MANAGER may assign ANOTHER agent to collaborate with the ASSISTANT on a specific shared GitHub project; scoped to that collaboration the ASSISTANT becomes MUTUALLY VISIBLE with that collaborator (the R39.7 invisibility opens ONLY to the assigned collaborator(s), never generally), the two may exchange AMP messages, and the ASSISTANT may be assigned tasks via the kanban linked to that GitHub project — each still REFUSABLE (R41). The USER may at ANY time order the ASSISTANT to STOP/PAUSE the collaboration or REFUSE specific MANAGER orders (absolute user authority over its own ASSISTANT). R39.7 updated with the collaborator carve-out. ENFORCEMENT of the ASSISTANT<->collaborator AMP + kanban edges is a pending comm-graph build item (code stays stricter than the rule). Mirror-sync: design/specs/governance-spec.md + the ASSISTANT plugin persona at ~/Code/ai-maestro-assistant-role-agent + TRDD-W9FA6ACZ."
   - "4.6.1: TERMINOLOGY + obedience precision on R39 (USER clarification, 2026-07-22). 'The MAESTRO agent' == the MANAGER (the host MAESTRO's own agent, R39.1) — same entity, named for its ownership; R39.5/R39.7/R39.9 now say 'the MAESTRO agent (the MANAGER)'. R39.5 tightened: the ASSISTANT obeys its user UNCONDITIONALLY and — ONLY with the user's explicit permission — the MAESTRO agent (the MANAGER), whose tasks stay refusable (R41); it does NOT obey the MAESTRO USER (who only administers the 4 locked identity fields via the UI, R39.4). This makes explicit the obedience set that 4.6.0's user-gated MANAGER task-acceptance (R39.9) already implied — no new behavior. Mirror-sync: design/specs/governance-spec.md + the ASSISTANT plugin persona REWRITE at ~/Code/ai-maestro-assistant-role-agent (commit e2fa6d4 — persona to R39.8/R39.9, team-governance skill dropped, v0.2.0) + TRDD-W9FA6ACZ. PATCH."
@@ -45,15 +46,16 @@ changelog:
 
 ## §0. Canonical source + copies (READ THIS BEFORE EDITING)
 
-**`docs/GOVERNANCE-RULES.md` is the canonical source of truth for every governance rule in the AI Maestro ecosystem.** Every time a rule is added, renamed, renumbered, rewritten, or deleted, **every file listed below** must be updated in the same commit. Leaving any entry stale produces drift — agents that still obey an old rule because their plugin persona was never refreshed, validation scripts that block legitimate operations because they still check an old gate, etc.
+**`design/specs/governance-spec.md` is the canonical SOURCE OF TRUTH for every governance rule in the AI Maestro ecosystem — a rule is authored in the SPEC FIRST; this file (`docs/GOVERNANCE-RULES.md`) is its PRIMARY EMANATION: the human-facing catalog carrying the spec's rule content PLUS the teaching/rationale the spec omits.** Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU) — the earlier direction, in which this file was canonical and the spec was a mirror synced from it, is reversed for good. The two are kept at strict **feature parity**: every rule R1-R49, every sub-clause, every invariant (the 22), every title, and the comm graph exists in BOTH; only the *rationale* is catalog-only. Every time a rule is added, renamed, renumbered, rewritten, or deleted, **edit the SPEC first, then this catalog, then every file listed below** in the same commit. Leaving any entry stale produces drift — agents that still obey an old rule because their plugin persona was never refreshed, validation scripts that block legitimate operations because they still check an old gate, etc.
 
 The list is maintained here (not in a separate `GOVERNANCE-COPIES.md`) so it is impossible to read the rules without seeing the index. Update this list whenever a new copy is added.
 
-### 0.1 — Canonical source
+### 0.1 — Canonical source + primary emanation
 
 | Path | Role | Update strategy |
 |---|---|---|
-| `docs/GOVERNANCE-RULES.md` | **CANONICAL** — single source of truth | Edit first. Bump the `version:` field in YAML frontmatter. Append a changelog entry. |
+| `design/specs/governance-spec.md` | **CANONICAL** — the single SOURCE OF TRUTH (the SPEC) | **Edit FIRST.** Bump its `spec-version:`. It defines every rule/invariant/title/comm-graph clause-for-clause. |
+| `docs/GOVERNANCE-RULES.md` | **PRIMARY EMANATION** — the human catalog (spec's rule content + rationale) | Edit right AFTER the spec. Bump the `version:` field + append a changelog entry. Must stay at feature parity with the spec and never contradict it. |
 
 ### 0.2 — Documentation mirrors (in this repo)
 

@@ -3,7 +3,7 @@ trdd-id: R8LJJDBQ
 title: Author the governance and scenario-tests SPEC files by capturing their rule files rule-by-rule
 column: complete
 created: 2026-07-22T10:19:26+0200
-updated: 2026-07-22T10:36:00+0200
+updated: 2026-07-22T11:12:00+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -19,7 +19,7 @@ labels: [governance-rules, design-doc-taxonomy, specs-folder, governance-spec, s
 external-refs: [Emasoft/ai-maestro#85, TRDD-P58RCR2C]
 parent-trdd: P58RCR2C
 release-via: none
-implementation-commits: [2096ad35]
+implementation-commits: [2096ad35, e220b1e2]
 ---
 
 # Author the governance and scenario-tests SPEC files by capturing their rule files rule-by-rule
@@ -43,7 +43,20 @@ implementation-commits: [2096ad35]
   in full. (Lesson [[three-pillars-conformance-spec]] `[^3]`.)
 - **PLACEMENT:** authored DIRECTLY in `design/specs/` (not `proposals/`) — USER-directed = born-
   approved mandate (authority(user) >= manager floor), matching the 3-pillars spec placement.
-- **NEXT ACTION:** none — record the impl commit in `implementation-commits:` after the main commit.
+- **CONFORMANCE TEST added (commit e220b1e2):** `tests/unit/governance-spec-conformance.test.ts`
+  makes governance-spec.md validatable (the `design/specs/` acceptance bar) — extracts the
+  `@spec:*` blocks and asserts the live code conforms: comm-graph (81 pairs) ==
+  `lib/communication-graph.ts`, title-plugin-map == `TITLE_PLUGIN_MAP` (9), titles = R3.1 eight +
+  the code's extra pinned to `{assistant}`. 18 conformance tests green, tsc clean.
+- **⚠ FINDING for the USER (code-ahead-of-rule gap):** the CODE already treats `assistant` as a
+  **9th** governance role (`types/agent.ts` `VALID_GOVERNANCE_TITLES`/`AgentRole`, `TITLE_PLUGIN_MAP`,
+  a `communication-graph.ts` node), implementing R39 — but GOVERNANCE-RULES.md R3.1 ("eight
+  titles") + the R6 matrix (9 nodes, no ASSISTANT) have NOT been updated (R39.2: assistant
+  role-plugin "still TO BE CREATED"). Updating R3.1/R6 to enumerate ASSISTANT is a
+  USER/governance decision (R41.6-class), NOT done unilaterally here — surfaced for the USER to
+  decide (a governance TRDD to update R3.1/R6, or leave it pending R39's landing).
+- **NEXT ACTION:** none blocking. Candidate next step: a symmetric `scenario-tests-spec` conformance
+  test (assert every `SCEN-*.scen.md` conforms to STS-FILE + no governance-password literal).
 - **SUPERSEDED — do NOT carry forward:** the reports/spec-distiller/*.md distillation report is
   scratch evidence only (a summary); it is NOT spec content and was not used verbatim.
 

@@ -1,9 +1,9 @@
 ---
 trdd-id: P58RCR2C
 title: Adopt the design-document taxonomy — relocate the 3-pillars SPEC to design/specs/ and establish the SPEC lifecycle folders
-column: testing
+column: complete
 created: 2026-07-22T09:30:53+0200
-updated: 2026-07-22T09:30:53+0200
+updated: 2026-07-22T09:32:51+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -18,7 +18,7 @@ relevant-rules: []
 labels: [governance-rules, design-doc-taxonomy, three-pillars-spec, specs-folder, am85]
 external-refs: [Emasoft/ai-maestro#85, TRDD-CR8JRH74, TRDD-70B313GT, TRDD-QP07O1BK]
 release-via: none
-implementation-commits: []
+implementation-commits: [8fd7ed19]
 ---
 
 # Adopt the design-document taxonomy — relocate the 3-pillars SPEC to design/specs/ and establish the SPEC lifecycle folders

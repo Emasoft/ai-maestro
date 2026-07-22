@@ -8,6 +8,7 @@ import {
   type RecoveryTarget,
 } from '@/lib/fleet-recovery-actuator'
 import type { LivenessClass } from '@/lib/fleet-liveness'
+import { getAgentCommand } from '@/lib/agent-commands'
 
 // A recording fake injector + a deps builder with every gate open by default. Each test
 // closes exactly the gate it exercises, so a failure names the gate.
@@ -47,8 +48,9 @@ describe('actuateRecovery — the gentle ladder fires by attempt', () => {
     expect(d.fired).toBe(true)
     if (d.fired) {
       expect(d.action.rung).toBe('esc_nudge')
-      expect(d.action.slash).toBe('/janitor-resume')
-      expect(d.action.needsEsc).toBe(true)
+      expect(d.action.commandKey).toBe('janitor-resume')
+      // the key resolves to the real slash in the allowlist (single source of truth)
+      expect(getAgentCommand(d.action.commandKey)?.command).toBe('/janitor-resume')
       expect(d.result.ok).toBe(true)
     }
     expect(injected).toHaveLength(1)
@@ -56,18 +58,34 @@ describe('actuateRecovery — the gentle ladder fires by attempt', () => {
   })
 
   it('escalates one rung per attempt: rearm → reload → update', async () => {
-    for (const [attempt, rung, slash] of [
-      [1, 'rearm', '/janitor-arm'],
-      [2, 'reload', '/reload-plugins'],
-      [3, 'update', '/reload-plugins --force'],
+    for (const [attempt, rung, key, literal] of [
+      [1, 'rearm', 'janitor-arm', '/janitor-arm'],
+      [2, 'reload', 'reload-plugins', '/reload-plugins'],
+      [3, 'update', 'reload-plugins-force', '/reload-plugins --force'],
     ] as const) {
       const { deps } = makeDeps()
       const d = await actuateRecovery(target({ attempt }), deps)
       expect(d.fired).toBe(true)
       if (d.fired) {
         expect(d.action.rung).toBe(rung)
-        expect(d.action.slash).toBe(slash)
-        expect(d.action.needsEsc).toBe(false)
+        expect(d.action.commandKey).toBe(key)
+        expect(getAgentCommand(d.action.commandKey)?.command).toBe(literal)
+      }
+    }
+  })
+})
+
+describe('every gentle rung maps to a valid, idle-safe allowlist key (injection-proof boundary)', () => {
+  it('all four gentle keys resolve in the allowlist, require idle, and are non-destructive', async () => {
+    for (const attempt of [0, 1, 2, 3]) {
+      const { deps } = makeDeps()
+      const d = await actuateRecovery(target({ attempt }), deps)
+      expect(d.fired).toBe(true)
+      if (d.fired) {
+        const cmd = getAgentCommand(d.action.commandKey)
+        expect(cmd, `key "${d.action.commandKey}" must exist in the allowlist`).toBeDefined()
+        expect(cmd?.requiresIdle).toBe(true) // recovery drains only at a safe idle prompt
+        expect(cmd?.destructive ?? false).toBe(false) // never a destructive command on a stalled agent
       }
     }
   })

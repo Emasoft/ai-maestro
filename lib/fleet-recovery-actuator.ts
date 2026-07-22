@@ -48,18 +48,23 @@ export function diagnosisForClass(cls: LivenessClass): RecoveryDiagnosis | null 
 /** The slash command + ESC posture each GENTLE rung injects (server-side names, from the
  *  recovery-ladder-parity spec). The three HARD rungs carry no slash: this actuator refuses
  *  them (they need the process-kill wiring of Phase C, not a keystroke). */
-// The two reload rungs are a genuine plain→forced ESCALATION, not a duplicate: a plain
-// `/reload-plugins` can be REFUSED by a plugin that is mid-use, so `update` escalates to
-// `--force` to override that refusal and guarantee the newest cached plugin code loads
-// (the janitor ships `--force` for exactly this reason). Mapping `update` to the
-// `/janitor-reload-plugins` skill instead would inject the SAME `--force` keystrokes as this
-// rung and collapse the escalation. NOTE for D-full: the true version-BUMP (fetching a newer
-// release) is daemon/server-owned, not a session slash — this is the gentle self-service form.
-const GENTLE_RUNG_ACTION: Partial<Record<RecoveryRung, { slash: string; needsEsc: boolean }>> = {
-  esc_nudge: { slash: '/janitor-resume', needsEsc: true }, // dismiss a stuck modal, then kick a fresh turn
-  rearm: { slash: '/janitor-arm', needsEsc: false }, // restore the heartbeat cron
-  reload: { slash: '/reload-plugins', needsEsc: false }, // in-place plugin-code swap (may be refused mid-use)
-  update: { slash: '/reload-plugins --force', needsEsc: false }, // force past a mid-use refusal → newest code loads
+// Each gentle rung maps to a CURATED COMMAND KEY from lib/agent-commands.ts — never a raw
+// command literal. The allowlist is the single source of truth for the exact slash text AND
+// the injection-proof boundary (the caller supplies only a key; an unknown key is rejected).
+// Duplicating the literal here would drift from the allowlist and defeat that boundary. A
+// stalled agent is idle at its prompt (that IS the stall classification), so there is no modal
+// to dismiss — the gentle rungs are pure idle-drain slashes, no ESC.
+//   reload → update is a genuine plain→forced ESCALATION: a plain /reload-plugins can be
+//   REFUSED by a plugin mid-use; `reload-plugins-force` overrides that so the newest cached
+//   code loads. (The true version-BUMP — fetching a newer release — is daemon/server-owned,
+//   not a session slash; this is the gentle self-service form. D-full note.)
+// A test pins every key here to a real allowlist entry, so a typo or a removed entry fails
+// loudly rather than at inject time.
+const GENTLE_RUNG_COMMAND_KEY: Partial<Record<RecoveryRung, string>> = {
+  esc_nudge: 'janitor-resume', // kick a fresh turn (continue the pending task)
+  rearm: 'janitor-arm', // restore the heartbeat cron
+  reload: 'reload-plugins', // in-place plugin-code swap (may be refused mid-use)
+  update: 'reload-plugins-force', // force past a mid-use refusal → newest cached code loads
 }
 
 /** 10 min between nudges: shorter than the 30 min stall window, so a still-stalled agent is
@@ -78,15 +83,15 @@ export interface RecoveryTarget {
   lastActuatedAtMs: number | null
 }
 
-/** What the injector is asked to perform — the authenticated #60 injection payload. */
+/** What the injector is asked to perform — the authenticated #60 injection payload. Carries
+ *  the curated allowlist KEY, not a raw command string, so the injector resolves the literal
+ *  via `getAgentCommand(key)` and the surface stays injection-proof by construction. */
 export interface RecoveryAction {
   agentId: string
   name?: string
   rung: RecoveryRung
-  /** The slash command to inject (server-side name for the rung). */
-  slash: string
-  /** esc_nudge dismisses a stuck modal (raw ESC) before the slash; other rungs do not. */
-  needsEsc: boolean
+  /** The curated command KEY from lib/agent-commands.ts (e.g. 'janitor-resume'). */
+  commandKey: string
 }
 
 /** The injector's honest report. `ok:false` still counts as a fire (we attempted it) — the
@@ -167,14 +172,12 @@ export async function actuateRecovery(target: RecoveryTarget, deps: ActuatorDeps
     }
   }
 
-  // 7. FIRE. rung is gentle (steps 4 excluded hard), so GENTLE_RUNG_ACTION always has it.
-  const spec = GENTLE_RUNG_ACTION[rung]!
+  // 7. FIRE. rung is gentle (step 4 excluded hard), so GENTLE_RUNG_COMMAND_KEY always has it.
   const action: RecoveryAction = {
     agentId: target.agentId,
     name: target.name,
     rung,
-    slash: spec.slash,
-    needsEsc: spec.needsEsc,
+    commandKey: GENTLE_RUNG_COMMAND_KEY[rung]!,
   }
   const result = await deps.inject(action)
   return { fired: true, action, result }

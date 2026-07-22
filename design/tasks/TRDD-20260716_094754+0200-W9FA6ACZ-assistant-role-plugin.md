@@ -3,7 +3,7 @@ trdd-id: W9FA6ACZ
 title: ASSISTANT role-plugin — ai-maestro-assistant-role-agent (MANAGER+AUTONOMOUS, ungoverned, user-bound) (R39)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-22T11:48:01+0200
+updated: 2026-07-22T11:58:04+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [39, 46, 41, 26, 6, 11]
@@ -61,9 +61,18 @@ plugin needs **NO** change (already MANAGER+AUTONOMOUS). Originally reported to 
 **STILL OPEN:** only the R39.4 KEEP/STRIP decision below (recommendation: KEEP). The R39.1-R39.4 SURFACE
 build stays HELD (transition phase) — this resolution is doc-reconciliation only, not surface-build.
 
-**NEXT ACTION when unheld:** do NOT scaffold. Composition is RESOLVED (MANAGER+AUTONOMOUS) and the docs
-are reconciled — the ONLY remaining gate is (1) the USER's R39.4 KEEP/STRIP ruling below; then (2) build
-only the genuinely-missing R39.1-R39.4 surfaces (the existing persona already matches — no re-compose).
+**⚡ UPDATE 2026-07-22 — the USER unblocked the PLUGIN REWRITE and detailed its spec.** (1) Composition
+RESOLVED (MANAGER+AUTONOMOUS) + R39 rules REFINED — R39.5/R39.7 revised, R39.8/R39.9 ADDED
+(GOVERNANCE-RULES v4.6.0) encoding the ASSISTANT authority model below. (2) The USER supplied a working
+folder — **`/Users/emanuelesabetta/Code/ai-maestro-assistant-role-agent`** (copied from the `~/agents/`
+LOCAL/D4 source) — and said *"just use this folder for the plugin"*, lifting the out-of-project blocker
+for the rewrite. So the plugin-content rewrite is **GO** (in that folder), conforming to the spec below.
+
+**NEXT ACTION:** rewrite the plugin at `~/Code/ai-maestro-assistant-role-agent` per "## ASSISTANT plugin
+content spec" below — STRIP the inherited MANAGER/AMAMA approve-other-agents machinery, encode R39.8/R39.9.
+Keep quad-identity + MANAGER(planning)+AUTONOMOUS(programming) fusion. Do NOT touch comm-graph ENFORCEMENT
+(lib/communication-graph.ts — the MANAGER↔ASSISTANT edge is a separate pending build item, code stays
+safely stricter). STILL OPEN (USER-only): the R39.4 KEEP/STRIP ruling below.
 
 ## Problem
 
@@ -75,6 +84,35 @@ agent/team-creation privileges and without governing powers (R46.3). R39.2's mom
 text (v4.4.0, 2026-07-16) was the drift, now CORRECTED to MANAGER+AUTONOMOUS (GOVERNANCE-RULES v4.5.1).
 So the gap is NOT "create the plugin" and NOT "re-compose it"; it is only build the still-unenforced
 R39.1-R39.4 surfaces (HELD under transition-phase).
+
+## ASSISTANT plugin content spec (USER ruling 2026-07-22) — what the rewrite MUST do
+
+Encoded as GOVERNANCE-RULES R39.8/R39.9 (v4.6.0). The plugin at `~/Code/ai-maestro-assistant-role-agent`
+must be rewritten to:
+
+- **STRIP all approve-other-agents machinery** inherited from the MANAGER/AMAMA half: every instruction
+  and every script that approves, commands, or sends directives to ANOTHER agent's TRDD. The ASSISTANT
+  approves **only its OWN** TRDDs — which are its user's work → **self-mandates (Tier 0)**, needing no
+  MANAGER/COS/MAESTRO approval. It **never** asks the MANAGER to approve its own work (R39.8).
+- **No AMP to any other agent.** The ASSISTANT cannot message any agent, and no agent may message it —
+  **except the MANAGER** (R39.7/R39.9). Its own USER channel is always open.
+- **The MANAGER channel is narrow:** the MANAGER may **assign** it a TRDD, but (a) only if the bound USER
+  has **approved MANAGER-collaboration**, and (b) the ASSISTANT may **REFUSE any assigned task** — it is
+  never a forced mandate target (R41). The MANAGER has **no** power over its CONFIG (config = USER-only via
+  UI, R39.4).
+- **Peer on shared projects:** on the SAME GitHub project as another agent it acts as a **peer with equal
+  authority**, subordinate **only** to its USER (R39.9). Its latitude is deliberate — the USER is free, and
+  the ASSISTANT must be free to follow.
+- **Everything else = a normal AUTONOMOUS agent** (MANAGER planning + AUTONOMOUS programming fusion; no
+  governing powers; no agent/team creation).
+
+**FUTURE (noted, not this rewrite):** give the ASSISTANT MAINTAINER-style GitHub-repo skills — and the
+**AUTONOMOUS role-plugin itself has long lacked GitHub-repo skills** and should be improved (a separate
+follow-up TRDD when scheduled).
+
+**NOT in this plugin rewrite (separate pending items):** the comm-graph ENFORCEMENT of the MANAGER↔ASSISTANT
+edge (`lib/communication-graph.ts` — code stays safely stricter than the rule until then), and the
+R39.1-R39.4 UI surface build (auto-create-on-user, no-other-terminal UI, the 4 locked fields).
 
 ## Approach (design sketch — pending the USER rulings)
 

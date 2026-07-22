@@ -627,10 +627,18 @@ profile's ASSISTANT terminal; selecting any other agent shows the profile with N
 its panel EXCEPT NAME/TITLE/ROLE-PLUGIN/TEAM (changed only by the MAESTRO with sudo, per R26). `R39.5`
 **assistant-obeys-only-its-user** — the ASSISTANT obeys ONLY its bound user, NOT the MAESTRO, NOT the MANAGER;
 works in isolation; is outside the governance chain (never a mandate target, needs no MANAGER/COS/MAESTRO approval);
-messages only its own user (revised 2026-07-16 from "its user and the MAESTRO"). `R39.6` **assistant-lifecycle-bound**
+messages only its own user AND the MANAGER (the sole agent channel — R39.9; refined 2026-07-22, was "only its own
+user" / 2026-07-16 from "its user and the MAESTRO"). `R39.6` **assistant-lifecycle-bound**
 — an ASSISTANT cannot be deleted independently; every user always has exactly one; only deleting the USER cascades a
-soft delete. `R39.7` **assistant-invisible-inherits** — the ASSISTANT is invisible to other agents but inherits all
-tasks + permissions sent to the user.
+soft delete. `R39.7` **assistant-invisible-inherits** — the ASSISTANT is invisible to other agents EXCEPT the MANAGER
+(R39.9) but inherits all tasks + permissions sent to the user. `R39.8` **assistant-approves-only-own** — carries
+NONE of the MANAGER's approve-other-agents machinery; approves ONLY its OWN TRDDs (self-mandates, Tier 0 — never asks
+the MANAGER to approve them); never approves/commands/directs another agent (like any AUTONOMOUS agent, minus the
+governing powers it never had). `R39.9` **assistant-manager-channel-and-peer** — the MANAGER is the ONLY agent that
+may reach the ASSISTANT, and only to ASSIGN a TRDD (never to configure it — config is USER-only via the UI, R39.4);
+the ASSISTANT accepts only if its bound USER approved MANAGER-collaboration and may REFUSE any assigned task (never a
+forced mandate, R41); on a SHARED GitHub project it acts as a PEER with EQUAL authority, subordinate only to its USER
+(USER-ruled 2026-07-22).
 
 ### GOV-R40 — Foreign-User Creation Approval [IRON · USER-set]
 `R40.1` **foreign-user-per-op-approval** — foreign users are under all R38 restrictions AND need MAESTRO approval for
@@ -785,10 +793,11 @@ each title's default role-plugin auto-installs on grant unless a compatible alte
 every persisted agent carries exactly one (R9.13). `TITLES-03` **assistant-is-code-ahead-of-rule** — the CODE already carries `assistant` as a **9th** governance role:
 `types/agent.ts` `AgentRole` / `VALID_GOVERNANCE_TITLES` list it, `TITLE_PLUGIN_MAP` maps it
 (→ `ai-maestro-assistant-role-agent`), and `lib/communication-graph.ts` has an `assistant` NODE — it is IN the R6
-graph, with edges only to its bound user (R39.5 restricts its authority, not its existence as a node). But the RULE
+graph, with the ENFORCED edge only to its bound user (R39.9 now ALSO permits a MANAGER edge — pending enforcement; the
+code is safely stricter than the rule). But the RULE
 has NOT caught up: R3.1 still enumerates **eight** governance titles and the R6 matrix has **nine** nodes (HUMAN + 8,
-no ASSISTANT), because the R39 assistant role-plugin is "still TO BE CREATED" (R39.2) and the user-model
-implementation is tracked as follow-on TRDDs (v4.4.0 changelog). This SPEC faithfully mirrors the RULE:
+no ASSISTANT), because the R39.1-R39.4 user-model SURFACE is HELD (transition phase) — the assistant role-plugin
+itself already EXISTS (LOCAL/D4, R39.2); the implementation is tracked as follow-on TRDDs (TRDD-W9FA6ACZ). This SPEC faithfully mirrors the RULE:
 `@spec:titles` = R3.1's 8, `@spec:comm-graph` = R6's 9-node matrix; `@spec:title-plugin-map` = the code's 9 (it is
 the code contract). The conformance test PINS the delta — the 8 spec titles ⊆ the code roles, and the code's extra
 role is exactly `{assistant}` — so a NEW undocumented role goes red. When R39 lands, R3.1 + R6 gain ASSISTANT and

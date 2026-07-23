@@ -20,6 +20,12 @@ import {
   type RecoveryState,
   type RecoveryPassResult,
 } from '@/lib/fleet-recovery-runner'
+import {
+  runInboxNudgeTick,
+  defaultInboxNudgeDeps,
+  type InboxNudgeState,
+  type InboxNudgeResult,
+} from '@/lib/fleet-inbox-nudge'
 
 /** Wire the read-only scanner to the real registry + session substrate. Token-block
  *  detection (`getAccountHealthy`) is intentionally omitted here — it lands with the
@@ -66,6 +72,10 @@ export interface FleetLivenessWatchdogOptions {
   fireEnabled?: boolean
   /** Injectable recovery pass for tests; defaults to the real runner over the module store. */
   runPass?: (snap: FleetLivenessSnapshot) => Promise<RecoveryPassResult>
+  /** Inbox-nudge leg (TRDD-7HRDAD0U): default-ON; AIM_FLEET_INBOX_NUDGE=0 disables. */
+  nudgeEnabled?: boolean
+  /** Injectable inbox-nudge pass for tests; defaults to the real tick over the module store. */
+  runNudge?: () => Promise<InboxNudgeResult>
 }
 
 /** Default 5 min, env-overridable, 0 disables (same knob shape as the invariants watchdog). */
@@ -75,13 +85,25 @@ const DEFAULT_INTERVAL_MS = Number(process.env.AIM_FLEET_LIVENESS_WATCHDOG_INTER
  *  runs regardless; this gates only the firing. */
 const DEFAULT_RECOVERY_FIRE = process.env.AIM_FLEET_RECOVERY_FIRE === '1'
 
+/** The inbox-nudge is ON by default (it is the core AMP-delivery function; low-risk — gated inject,
+ *  benign prompt, cooldown, STOP-gated). `AIM_FLEET_INBOX_NUDGE=0` disables it. */
+const DEFAULT_INBOX_NUDGE = process.env.AIM_FLEET_INBOX_NUDGE !== '0'
+
 /** The per-agent recovery state, threaded across ticks (the actuator is stateless). Module-level
  *  because the watchdog is a process singleton; reset between tests via resetRecoveryStore(). */
 const recoveryStore = new Map<string, RecoveryState>()
 
+/** The per-agent inbox-nudge cooldown state, threaded across ticks. Reset via resetInboxNudgeStore(). */
+const inboxNudgeStore = new Map<string, InboxNudgeState>()
+
 /** Clear the recovery state — for tests only (the running server keeps one store for its life). */
 export function resetRecoveryStore(): void {
   recoveryStore.clear()
+}
+
+/** Clear the inbox-nudge state — for tests only. */
+export function resetInboxNudgeStore(): void {
+  inboxNudgeStore.clear()
 }
 
 /**
@@ -133,6 +155,24 @@ export async function runFleetLivenessTick(
         log(`[FleetLiveness] recovery pass failed (non-fatal): ${(err as Error)?.message || err}`)
       }
     }
+
+    // Inbox-nudge leg (TRDD-7HRDAD0U): deliver AMP mail to idle agents that never fire idle_prompt,
+    // so a filesystem-delivered mandate reaches a never-prompted worker. Independent of the liveness
+    // classes above — runs every tick regardless of stalled/dead counts. Default-ON; its OWN try so a
+    // nudge failure never discards the liveness snapshot the caller returns.
+    const nudgeEnabled = opts.nudgeEnabled ?? DEFAULT_INBOX_NUDGE
+    if (nudgeEnabled) {
+      try {
+        const nudge =
+          opts.runNudge ?? (() => runInboxNudgeTick(defaultInboxNudgeDeps(), inboxNudgeStore, now))
+        const nr = await nudge()
+        for (const n of nr.nudged)
+          log(`[FleetInboxNudge] nudged ${n.name || n.agentId}: ${n.unread} unread → injected inbox-check`)
+      } catch (err) {
+        log(`[FleetInboxNudge] nudge pass failed (non-fatal): ${(err as Error)?.message || err}`)
+      }
+    }
+
     return snap
   } catch (err) {
     log(`[FleetLiveness] scan failed (non-fatal): ${(err as Error)?.message || err}`)

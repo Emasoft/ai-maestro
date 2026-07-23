@@ -48,5 +48,16 @@ LOW-MED. New detector; the false-positive risk (flagging a legitimately-thinking
 requiring BOTH an acknowledgement AND a sufficiently long zero-action window, and by making it a
 non-actuating FINDING (never a kill).
 
+## Implementation status — still `planned`; one attempt DEFERRED on infra (2026-07-23)
+A forked `parallel-worker-agent` (isolation: worktree) DEFERRED without touching any file: its worktree
+was provisioned from `origin/main` (the `worktree.baseRef` `fresh` default — UNSET in
+`.claude/settings.json`), which is ~1799 commits behind the working `governance-rules` branch, so
+`design/` and `lib/fleet-*.ts` did not exist in it. **BLOCKER for any future worktree-isolated attempt on
+this branch** (also affects `scenario-improvement-implementer`, `parallel-worker-agent`). Two paths to
+unblock: (a) set `worktree.baseRef: head` — but weigh the scenario-runner's reliance on a clean
+origin/main base first (a deliberate, USER-facing config call, not an autonomous flip); or (b) implement
+without worktree isolation, under an explicit repo-root write-scope guard. Not re-attempted: off the
+SCEN-031 critical path, and burn was flagged at the time.
+
 ## Approval log
 - 2026-07-23 — MANDATE by USER (improvement series, "you have my trust").

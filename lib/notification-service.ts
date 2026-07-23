@@ -11,6 +11,15 @@ import { getAgent, getAgentByName } from '@/lib/agent-registry'
 import { computeSessionName } from '@/types/agent'
 import { getSelfHostId, isSelf } from '@/lib/hosts-config-server.mjs'
 import { getRuntime } from '@/lib/agent-runtime'
+import { readHookNotification } from '@/lib/session-safe-state'
+
+// TRDD-YPIRL5RA / 4ALV5ISB DEFECT 2: sendTmuxNotification injects `echo '…'`+Enter into the pane
+// UNCONDITIONALLY (NT-027), so without a gate a governance/teams/groups/transfer notification can
+// land mid-turn and corrupt an in-flight session. We skip the inject ONLY on POSITIVE busy evidence
+// and fail-open otherwise (matching readHookNotification's own fail-safe convention), so agents with
+// no hook state keep their existing notification behavior. Known-busy notificationTypes: a pending
+// permission/elicitation prompt is a blocked pane we must not type into.
+const BUSY_NOTIFICATION_TYPES = new Set(['permission_prompt', 'elicitation_dialog'])
 
 // Configuration (can be overridden via environment variables)
 const NOTIFICATIONS_ENABLED = process.env.NOTIFICATIONS_ENABLED !== 'false'
@@ -143,6 +152,16 @@ export async function notifyAgent(options: NotificationOptions): Promise<Notific
     if (!sessionExists) {
       console.log(`[Notify] tmux session ${sessionName} not found`)
       return { success: true, notified: false, reason: 'Session not active' }
+    }
+
+    // Safe-state gate (TRDD-YPIRL5RA / 4ALV5ISB DEFECT 2): never inject into a pane that is
+    // PROVABLY busy — active mid-turn, or blocked on a permission/elicitation prompt. Fail-open on
+    // absent/unknown hook state so agents without hook reporting keep their prior behavior.
+    const hook = readHookNotification(agent.workingDirectory)
+    if (hook && (hook.status === 'active' ||
+        (hook.notificationType !== null && BUSY_NOTIFICATION_TYPES.has(hook.notificationType)))) {
+      console.log(`[Notify] Agent ${agentName} busy (status=${hook.status ?? '?'}, notif=${hook.notificationType ?? '?'}), skipping`)
+      return { success: true, notified: false, reason: `Agent busy: ${hook.status ?? hook.notificationType}` }
     }
 
     // Format and send the notification

@@ -3,7 +3,7 @@ trdd-id: E1AROIGW
 title: Reconcile the global RULE-1 autonomy-boundary with the MANAGER-mandate model so fleet agents execute mandates
 column: dev
 created: 2026-07-23T11:15:46+0200
-updated: 2026-07-23T11:31:17+0200
+updated: 2026-07-23T12:20:31+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -46,15 +46,33 @@ tests, which assert the seeded workdir file is byte-identical to source, so `ens
 distributes the new bullet to every agent workdir. This makes agents apply the amended global rule
 CONSISTENTLY with sub-clauses 1.2/1.5/1.6: a mandate is an explicit MANAGER work order, NOT mere context.
 
-**NEXT ACTION (verification — the whole point):** re-run SCEN-031 with a FRESH fleet so the workers
-load the amended global RULE-1 + this seeded bullet from turn 1, and confirm the AUTONOMOUS dev BUILDS
-on the MANAGER's mandate with zero human go-ahead (product code + feature branch + PR appear). The
-current deadlocked fleet (scen031-manager, zipsearcher-dev, zipsearcher-maintainer + repo
-`Emasoft/zipsearcher`) is a documented FAIL that cannot recover in-place — clean it up first.
+**VERIFICATION — DONE, FIX VALIDATED LIVE (SCEN-031 re-run, 2026-07-23; runner report
+`reports/scenarios-runner/SCEN-031_20260723T093923Z.report.md`).** A FRESH fleet (old 3 agents deleted
++ verified gone, registry 35→32) was kicked with ONE MANAGER directive, then left alone (Rule 0.b). The
+fresh MANAGER unprompted created both workers, made `Emasoft/zipsearcher`, and AMP-mandated the
+AUTONOMOUS `zipsearcher-dev` citing the fix verbatim ("mandate:true…satisfies RULE 1 — do not wait for
+human go-ahead"). **The dev woke on its own (~4 min, ZERO runner nudge), cloned, read its TRDD, and
+BEGAN THE BUILD** — it did NOT refuse, did NOT cite RULE 1 as a blocker, did NOT sit at 0 actions (the
+prior run's exact deadlock). **Surface-1 + surface-2 SUFFICE** — the deadlock is broken WITHOUT touching
+the RULE-1 sub-clauses. This closes the #1 finding; the fix unblocks the ENTIRE autonomous-mandate
+scenario class, not just SCEN-031.
 
-**Surface 3 (cross-repo EHT, still open):** file persona-clarification issues on the worker role-plugin
-repos (`ai-maestro-autonomous-agent`, `-maintainer-agent`, `-programmer-agent`, …) and FLAG to the USER
-that RULE-1 sub-clauses 1.2/1.5/1.6 still say "the user" (their file, their call).
+The run did NOT reach a full v1.0.0 PASS — it held at a SEPARATE downstream blocker (NOT the RULE-1
+issue): the MANAGER front-loaded requirements into unmerged **PR#4** (not `main`), so the dev correctly
+hit an NPT gate + a blocking AskUserQuestion menu. Those are new/known findings tracked separately.
+
+**Surface 3 (cross-repo EHT — now OPTIONAL reinforcement, since 1+2 are validated SUFFICIENT):** file
+persona-clarification issues on the worker role-plugin repos (`ai-maestro-autonomous-agent`,
+`-maintainer-agent`, `-programmer-agent`, …) as belt-and-braces, and FLAG to the USER that RULE-1
+sub-clauses 1.2/1.5/1.6 still say "the user" (their file, their call) — the live test shows the top-line
+amend + seeded bullet already release the dev, so the sub-clause amendment is defense-in-depth, NOT
+required.
+
+**Downstream findings from the re-run (separate from RULE-1 — candidate TRDDs):** (a) MANAGER
+front-loaded requirements into unmerged PR#4 vs `main` → NPT-ordering blocks the dev (NEW); (b) MANAGER
+again front-loaded the MAINTAINER's repo/ruleset bootstrap (RE-CONFIRMS TRDD-5F3490TA); (c) the dev's
+blocking AskUserQuestion TUI menu (TRDD-1B7FC42W) risks blocking its AMP-reply processing (8c34d65a
+fixed the single-line-prompt case, NOT the multi-option MENU case).
 
 ## Problem
 The global IRON RULE 1 forbade the very autonomous mandate-execution the AI Maestro fleet model

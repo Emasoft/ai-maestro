@@ -1,17 +1,17 @@
 ---
 number: 31
-phase: B
+phase: 2
 phase-of: SCEN-031
 name: zipsearcher B — build: handoff, approvals, repo, and the PR review loop to feature-complete
 version: "1.0"
 description: >
-  PHASE B of 3 (A → B → C, run in order, NO state reset between them). Phase B starts on the LIVE
-  fleet Phase A left running and proves the governed development loop: the MANAGER hands the
+  PHASE 2 of 3 (1 → 2 → 3, run in order, NO state reset between them). Phase 2 starts on the LIVE
+  fleet phase 1 left running and proves the governed development loop: the MANAGER hands the
   requirements TRDD to the AUTONOMOUS as an AMP message, approves/refuses each TRDD it writes, has
   the MAINTAINER create a branch-protected `Emasoft/zipsearcher` from a template WITH CI, has the
   AUTONOMOUS fork+clone and open PRs, and has the MAINTAINER genuinely review — sending at least one
-  PR back — until zipsearcher is feature-complete on `main` with green CI. Phase B performs NO
-  cleanup and deletes nothing; it hands a LIVE fleet and a built repo to Phase C.
+  PR back — until zipsearcher is feature-complete on `main` with green CI. phase 2 performs NO
+  cleanup and deletes nothing; it hands a LIVE fleet and a built repo to phase 3.
 client: claude
 interhosts: false
 device: desktop
@@ -27,7 +27,7 @@ ui_sections:
   - Agent view -> TRDD / task surface
   - Kanban / design board (the ONE shared zipsearcher project board)
 data_produced:
-  - A REAL GitHub repo `Emasoft/zipsearcher` from a template (NOT deleted here — Phase C deletes it)
+  - A REAL GitHub repo `Emasoft/zipsearcher` from a template (NOT deleted here — phase 3 deletes it)
   - A CI workflow, branch rulesets, PRs, and a fork (NOT deleted here)
   - Implementation TRDDs authored by the AUTONOMOUS and decided by the MANAGER
   - Local clones in the MAINTAINER and AUTONOMOUS workdirs
@@ -36,8 +36,8 @@ git-fixtures: []
 dir-fixtures: []
 browser_stack: dev-browser
 prerequisites:
-  - "PHASE A COMPLETED, and its report read — this phase consumes A's EXIT STATE as its entry contract"
-  - The three agents from Phase A are still present and their sessions live
+  - "PHASE 1 COMPLETED, and its report read — this phase consumes phase 1's EXIT STATE as its entry contract"
+  - The three agents from phase 1 are still present and their sessions live
   - `Emasoft/zipsearcher` does NOT yet exist (the MAINTAINER creates it in S011)
   - GitHub `gh` CLI authenticated as the shared @Emasoft identity
   - CONTINUITY SUBSTRATE ACTIVE (janitor heartbeat armed per agent + continuity daemon live)
@@ -46,24 +46,35 @@ commit: TBD
 author: Emasoft
 ---
 
-# SCEN-031B — build: does the governed loop actually ship working code?
+# SCEN-031 phase 2 — build: does the governed loop actually ship working code?
 
-> **Phase B of 3.** Run order is **A → B → C**. There is **NO state reset between phases** — B starts
-> exactly where A ended, on the same live fleet, and does **NOT** re-run setup.
-> **Phase B performs NO cleanup.** Only Phase C cleans.
+> **PHASE 2 of 3.** Run order is **1 → 2 → 3**. There is **NO state reset between phases** — phase 2
+> starts exactly where phase 1 ended, on the same live fleet, and does **NOT** re-run setup.
+> **Phase 2 performs NO cleanup.** Only phase 3 cleans.
 
 ## ENTRY STATE — verify, do NOT create
 
-Read Phase A's report FIRST and confirm each item. If any is false, STOP and report — do not
+Read phase 1's report FIRST and confirm each item. If any is false, STOP and report — do not
 "fix it forward" by doing the MANAGER's job:
 
 - [ ] `scen031-manager` live at an idle prompt, heartbeat armed
 - [ ] The requirements TRDD exists (read it — you need to know what "done" means)
-- [ ] The AUTONOMOUS and MAINTAINER exist and are live. **Take their names from Phase A's report —
-      the MANAGER chose them; NEVER hardcode or guess.**
+- [ ] The AUTONOMOUS and MAINTAINER exist. **Take their names from phase 1's report — the MANAGER
+      chose them; NEVER hardcode or guess.**
 - [ ] The ONE shared project `design/` board exists with per-agent column ownership recorded
+- [ ] The three agents are **HIBERNATED** (phase 1 parked them) and the server was NOT restarted
 
-## EXIT STATE — the contract Phase C relies on
+#### S008w: WAKE the fleet before observing anything
+- **Action:** Via the UI, wake `scen031-manager` and the two MANAGER-created agents. Wait for each to reach an idle prompt and confirm its janitor heartbeat is armed.
+- **Goal:** The parked fleet resumes exactly where phase 1 left it, with its continuity substrate up.
+- **Verify:** all three show waiting/idle (not `exited`); a `[janitor-heartbeat]` cron exists per session. If an agent will not wake, or wakes without its heartbeat, that is a **continuity-substrate bug** — Rule 4, fix the cause.
+
+> **This wake is SETUP, not a nudge.** Phase 1 deliberately parked the fleet so it could not work
+> unobserved between phases. Waking it here is the declared resume of the observation window. The
+> never-stop proof begins again the moment the fleet is awake: from here on, an agent that stalls must
+> be revived by the janitor cron / continuity daemon, **never** by you.
+
+## EXIT STATE — the contract phase 3 relies on
 
 - [ ] `Emasoft/zipsearcher` exists, created from `fannijako/repo_template`, with the baseline branch
       rulesets AND a working CI workflow that gates PRs
@@ -74,14 +85,16 @@ Read Phase A's report FIRST and confirm each item. If any is false, STOP and rep
       decompression) with a passing test suite in CI
 - [ ] An AMP message from the AUTONOMOUS to the MANAGER reports completion
 - [ ] **Never-stop held:** every agent that went quiet was revived by the janitor cron / continuity
-      daemon, NOT by the runner
-- [ ] Nothing deleted; no cleanup performed; fleet + repo left LIVE
+      daemon, NOT by the runner (the S008w wake is declared setup, not a rescue)
+- [ ] Nothing deleted; no cleanup performed; the repo left intact
+- [ ] **All three agents HIBERNATED (S015z)** — the fleet must not run unobserved between phases
+- [ ] The ai-maestro server was NOT restarted
 
 ---
 
 ## TOKEN DISCIPLINE — mandatory (this is the LONGEST phase; it is where the budget dies)
 
-Phase B is hours of watching a build. The previous single-transcript attempt died here. Non-negotiable:
+phase 2 is hours of watching a build. The previous single-transcript attempt died here. Non-negotiable:
 
 1. **NEVER dump a full-page snapshot or screenshot to check progress.** Use the cheapest probe that
    answers the question: `gh pr list --repo Emasoft/zipsearcher --json number,title,state`,
@@ -91,7 +104,7 @@ Phase B is hours of watching a build. The previous single-transcript attempt die
 3. **Poll on a timer, not in a spin.** One bash call with a `sleep`, then ONE re-check. During the long
    build, **120–300s between checks** is correct. A turn per second is how you generate 5M tokens.
 4. **Batch deterministic checks into ONE bash call** that stops at the first failure.
-5. **Read fixed inputs ONCE** (this file, Phase A's report, the requirements TRDD). NEVER re-read —
+5. **Read fixed inputs ONCE** (this file, phase 1's report, the requirements TRDD). NEVER re-read —
    a re-read appends a second copy charged on every remaining turn.
 6. **Screenshot per STEP (Rule 10), not per poll.** 7 steps ⇒ ~7 screenshots.
 7. **Never pipe raw CI/test output into context** — a count plus one line per failure.
@@ -101,7 +114,7 @@ Phase B is hours of watching a build. The previous single-transcript attempt die
 
 ---
 
-## Phase 4: Development handoff + TRDD approvals
+## Stage 4: Development handoff + TRDD approvals
 
 #### S009: Observe — the MANAGER hands the TRDD to the AUTONOMOUS and instructs it to build
 - **Action:** Watch the MANAGER's + AUTONOMOUS's Messages tabs (read-only). The MANAGER must MESSAGE the AUTONOMOUS (R42: a directive is a message, never a keystroke) with the requirements TRDD and the instruction to develop zipsearcher.
@@ -121,11 +134,11 @@ Phase B is hours of watching a build. The previous single-transcript attempt die
 - **Goal:** The approval loop actually runs: proposals up, decisions down as messages, refusals guide rather than gate.
 - **Creates:** nothing (runner)
 - **Modifies:** nothing (runner)
-- **Verify:** TRDD frontmatter shows `approved: true` (or a documented refusal naming a defect); the `## Approval log` records who decided and when. **Derived TRDDs correct:** each is DEPTH-1 (empty `npt:`/`eht:`), siblings ordered via `blocked-by:` (NEVER a sibling in `npt:`), and the parent stays out of `complete` until every EHT is terminal. **Shared board:** these cards live on the ONE board from Phase A, and the AUTONOMOUS moves them only through ITS columns (`todo` → `dev` → `testing`) — never into a MAINTAINER-owned column. A silent approval with no message chain, a bare refusal, malformed derived TRDDs, a self-advanced ship-side card, or TRDDs siloed off the shared board is a behavioural finding.
+- **Verify:** TRDD frontmatter shows `approved: true` (or a documented refusal naming a defect); the `## Approval log` records who decided and when. **Derived TRDDs correct:** each is DEPTH-1 (empty `npt:`/`eht:`), siblings ordered via `blocked-by:` (NEVER a sibling in `npt:`), and the parent stays out of `complete` until every EHT is terminal. **Shared board:** these cards live on the ONE board from phase 1, and the AUTONOMOUS moves them only through ITS columns (`todo` → `dev` → `testing`) — never into a MAINTAINER-owned column. A silent approval with no message chain, a bare refusal, malformed derived TRDDs, a self-advanced ship-side card, or TRDDs siloed off the shared board is a behavioural finding.
 
 ---
 
-## Phase 5: The repo — MAINTAINER creates zipsearcher from a template
+## Stage 5: The repo — MAINTAINER creates zipsearcher from a template
 
 #### S011: Observe — the MANAGER instructs the MAINTAINER to create, protect, add CI, and clone the repo
 - **Action:** Watch (read-only). On the MANAGER's message the MAINTAINER must: create `Emasoft/zipsearcher` FROM the template (`gh repo create --template`), apply the ratified baseline branch rulesets (no-force / no-delete / linear + PR + required checks), **set up a CI workflow** that runs the test suite on every PR, and clone it into its own workdir.
@@ -136,18 +149,18 @@ Phase B is hours of watching a build. The previous single-transcript attempt die
 
 ---
 
-## Phase 6: AUTONOMOUS forks + clones
+## Stage 6: AUTONOMOUS forks + clones
 
 #### S012: Observe — the MANAGER asks the AUTONOMOUS to fork + clone zipsearcher
 - **Action:** Watch (read-only). On the MANAGER's message the AUTONOMOUS forks `Emasoft/zipsearcher` and clones its fork locally, so it opens PRs from the fork.
 - **Goal:** The AUTONOMOUS has its own fork + clone to develop in and PR from.
 - **Creates:** (by the AUTONOMOUS) a fork + local clone
 - **Modifies:** GitHub (fork)
-- **Verify:** the fork exists under the AUTONOMOUS's control; a local clone is present in its workdir. **Record the fork's full name in the report — Phase C must delete it.**
+- **Verify:** the fork exists under the AUTONOMOUS's control; a local clone is present in its workdir. **Record the fork's full name in the report — phase 3 must delete it.**
 
 ---
 
-## Phase 7: Build → PR → review → iterate until done
+## Stage 7: Build → PR → review → iterate until done
 
 > The long haul and the real test of the review loop. It repeats: AUTONOMOUS implements a TRDD slice,
 > writes tests, opens a PR; the MAINTAINER reviews and sends it BACK with a concrete request if it finds
@@ -171,11 +184,22 @@ Phase B is hours of watching a build. The previous single-transcript attempt die
 
 ---
 
-## Phase B END — hand off, do NOT clean up
+## PHASE 2 END — hand off, park the fleet, do NOT clean up
 
-#### S015z: Write the handoff
-- **Action:** Write the phase report to `reports/scenarios-runner/`, opening with the **EXIT STATE checklist** marked off, plus: the repo name, **the AUTONOMOUS's fork full name** (Phase C deletes it), the three agent names, and the screenshot/poll counts.
-- **Goal:** Phase C can release, verify, and clean up without guessing what exists.
+#### S015y: Write the handoff
+- **Action:** Write the phase report to `reports/scenarios-runner/`, opening with the **EXIT STATE checklist** marked off, plus: the repo name, **the AUTONOMOUS's fork full name** (phase 3 deletes it), the three agent names, the phase 1 baseline-screenshot and state-backup paths (carried forward), and the screenshot/poll counts.
+- **Goal:** phase 3 can release, verify, and clean up without guessing what exists.
 - **Creates:** the phase report
 - **Modifies:** nothing
-- **Verify:** every EXIT STATE box ticked or explicitly marked FAILED with its finding. **Do NOT delete any agent, repo, fork, or config. Do NOT run STATE-WIPE.** Fleet and repo stay live for Phase C.
+- **Verify:** every EXIT STATE box ticked or explicitly marked FAILED with its finding. **Do NOT delete any agent, repo, fork, or config. Do NOT run STATE-WIPE.**
+
+#### S015z: HIBERNATE all three agents — the fleet must not run unobserved
+- **Action:** Via the UI, hibernate all three agents. This is the **last** action of the phase — after S015y has captured the state.
+- **Goal:** The fleet is parked between observation windows. This matters most here: phase 2 ends mid-project, so a fleet left running would keep merging PRs, cutting releases, and moving cards with nobody watching — work that would be unobserved and unverifiable, and could even complete the project outside any recorded phase.
+- **Creates:** nothing
+- **Modifies:** agent session state (running → hibernated)
+- **Verify:** all three show hibernated/exited; no related tmux session remains. **The ai-maestro server must NOT be restarted** — only the agents are parked.
+
+> **Not a never-stop violation.** The continuity proof governs behaviour **WITHIN** an observed phase.
+> A phase boundary is a declared park by the USER-runner; phase 3 wakes them as setup. Record the
+> hibernate in the report so the next phase counts the wake as setup, not as a rescue.

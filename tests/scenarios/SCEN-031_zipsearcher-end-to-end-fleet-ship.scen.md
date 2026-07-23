@@ -92,12 +92,12 @@ author: Emasoft
 >
 > | phase | file | steps | ends at |
 > |---|---|---|---|
-> | **A** | `SCEN-031A_zipsearcher-bootstrap.scen.md` | S001–S008b | fleet created, requirements TRDD written, shared board + columns set |
-> | **B** | `SCEN-031B_zipsearcher-build.scen.md` | S009–S015 | repo built, PR review loop run, `main` feature-complete with green CI |
-> | **C** | `SCEN-031C_zipsearcher-release-verify-cleanup.scen.md` | S016–S024 | released, USER-verified, **everything cleaned up** |
+> | **1** | `SCEN-031-phase-1.scen.md` — bootstrap | S001–S008b | fleet created, requirements TRDD written, shared board + columns set |
+> | **2** | `SCEN-031-phase-2.scen.md` — build | S009–S015 | repo built, PR review loop run, `main` feature-complete with green CI |
+> | **3** | `SCEN-031-phase-3.scen.md` — release + cleanup | S016–S024 | released, USER-verified, **everything cleaned up** |
 >
-> **Run order is A → B → C, each in a FRESH agent, with NO state reset between them** — every phase
-> starts on the live fleet the previous one left running. Only **Phase C** cleans up; A and B delete
+> **Run order is 1 → 2 → 3, each in a FRESH agent, with NO state reset between them** — every phase
+> starts on the live fleet the previous one left running. Only **phase 3** cleans up; 1 and 2 delete
 > nothing. Each phase declares an ENTRY STATE (verify, don't create) and an EXIT STATE (the handoff
 > contract the next phase reads).
 >
@@ -107,6 +107,22 @@ author: Emasoft
 > Three bounded transcripts let the orchestrator READ each one, fix what it found, and only then start
 > the next phase. Each phase file carries a mandatory TOKEN DISCIPLINE block — that block is the fix,
 > not the split alone.
+>
+> ### Park / resume at every phase boundary
+>
+> Each phase **HIBERNATES all agents as its final action**, and the next phase **WAKES them as its
+> first action**. The ai-maestro **server is never restarted** — only the agents are parked.
+>
+> **Why:** between phases nobody is observing, so nobody may be working. A fleet left running would
+> keep building, messaging, merging PRs, and moving cards while the orchestrator reads the report —
+> work that is unobserved, unverifiable, and unrecorded, and which could even finish the project
+> outside any recorded phase. That would hollow out the one thing this scenario measures.
+>
+> **The park is NOT a never-stop violation and the wake is NOT a runner nudge.** The continuity proof
+> governs behaviour **WITHIN** an observed phase: an agent that stalls mid-phase must be revived by the
+> janitor cron + continuity daemon, never by the runner. A phase boundary is a deliberate, declared
+> park by the USER-runner between observation windows, and each phase records it so the next counts
+> the wake as setup rather than as a rescue.
 >
 > This file remains the **archival full spec** (frontmatter, prerequisites, and the rationale below are
 > canonical). The step text lives in the three phase files; keep them in sync when editing.

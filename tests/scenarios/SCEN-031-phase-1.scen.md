@@ -1,16 +1,16 @@
 ---
 number: 31
-phase: A
+phase: 1
 phase-of: SCEN-031
 name: zipsearcher A — bootstrap: one directive, requirements TRDD, and the fleet the MANAGER builds
 version: "1.0"
 description: >
-  PHASE A of 3 (A → B → C, run in order, NO state reset between them). The runner creates ONE agent
-  (the MANAGER), types ONE directive into its chat, and then STOPS DRIVING. Phase A proves the first
+  PHASE 1 of 3 (1 → 2 → 3, run in order, NO state reset between them). The runner creates ONE agent
+  (the MANAGER), types ONE directive into its chat, and then STOPS DRIVING. phase 1 proves the first
   half of self-organization: from that single sentence the MANAGER must author a requirements TRDD,
   create an AUTONOMOUS developer and a MAINTAINER on its own, and establish ONE shared project
-  design/ board with per-agent column ownership. Phase A performs NO cleanup and deletes nothing —
-  it hands a LIVE fleet to Phase B.
+  design/ board with per-agent column ownership. phase 1 performs NO cleanup and deletes nothing —
+  it hands a LIVE fleet to phase 2.
 client: claude
 interhosts: false
 device: desktop
@@ -29,7 +29,7 @@ ui_sections:
   - Agent view -> Terminal section (READ-ONLY observation)
   - Agent Creation Wizard (runner uses it ONLY to create the MANAGER)
 data_produced:
-  - 1 MANAGER agent (created by the runner; NOT deleted here — Phase C deletes it)
+  - 1 MANAGER agent (created by the runner; NOT deleted here — phase 3 deletes it)
   - 1 AUTONOMOUS + 1 MAINTAINER agent (created BY THE MANAGER; NOT deleted here)
   - A requirements TRDD authored by the MANAGER
 rewipe-list:
@@ -55,10 +55,11 @@ commit: TBD
 author: Emasoft
 ---
 
-# SCEN-031A — bootstrap: does one sentence produce requirements and a fleet?
+# SCEN-031 phase 1 — bootstrap: does one sentence produce requirements and a fleet?
 
-> **Phase A of 3.** Run order is **A → B → C**. There is **NO state reset between phases** — B starts
-> exactly where A ended, on the same live fleet. **Phase A performs NO cleanup.** Only Phase C cleans.
+> **PHASE 1 of 3.** Run order is **1 → 2 → 3**. There is **NO state reset between phases** — phase 2
+> starts exactly where phase 1 ended, on the same live fleet. **Phase 1 performs NO cleanup.** Only
+> phase 3 cleans.
 
 ## Why the split exists (read this before running)
 
@@ -104,12 +105,12 @@ If the answer is "hundreds of polls", the next phase's budget needs tightening a
 
 ## ENTRY STATE (assert, do not create)
 
-Phase A is the first phase, so it OWNS setup. Assert before S006: server up, `gh` authed,
+phase 1 is the first phase, so it OWNS setup. Assert before S006: server up, `gh` authed,
 `Emasoft/zipsearcher` ABSENT, template present.
 
-## EXIT STATE — the contract Phase B relies on
+## EXIT STATE — the contract phase 2 relies on
 
-Phase A is DONE when all of these are true and verified:
+phase 1 is DONE when all of these are true and verified:
 
 - [ ] `scen031-manager` exists, title MANAGER, session live at an idle prompt, janitor heartbeat armed
 - [ ] A requirements TRDD for zipsearcher exists, authored BY THE MANAGER
@@ -117,14 +118,16 @@ Phase A is DONE when all of these are true and verified:
       each with its role-plugin installed and its continuity substrate up
 - [ ] ONE shared project `design/` board is established (not two siloed private trees), with per-agent
       column ownership (AUTONOMOUS: `todo`/`dev`/`testing`; MAINTAINER: `ai_review`/`human_review`/`publish`)
-- [ ] **The agent names the MANAGER chose are RECORDED in the phase report** — Phase B must not guess them
-- [ ] Nothing deleted; no cleanup performed; fleet left LIVE
+- [ ] **The agent names the MANAGER chose are RECORDED in the phase report** — phase 2 must not guess them
+- [ ] Nothing deleted; no cleanup performed
+- [ ] **All three agents HIBERNATED (S008z)** — the fleet must not run unobserved between phases
+- [ ] The ai-maestro server was NOT restarted
 
-Write the exit state explicitly at the top of your report. Phase B reads it as its entry contract.
+Write the exit state explicitly at the top of your report. phase 2 reads it as its entry contract.
 
 ---
 
-## Phase 0: SAFE-SETUP
+## Stage 0: SAFE-SETUP
 
 #### S001: Run the shared setup
 - **Action:** Run `tests/scenarios/scripts/setup-SCEN-031.sh` (delegates to `scenario-setup.sh 31`).
@@ -142,10 +145,10 @@ Write the exit state explicitly at the top of your report. Phase B reads it as i
 
 #### S003: Log in and baseline the dashboard
 - **Action:** `aim_login`, then screenshot the agent list.
-- **Goal:** Logged-in dashboard; baseline captured for the Phase C post-cleanup comparison.
+- **Goal:** Logged-in dashboard; baseline captured for the phase 3 post-cleanup comparison.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot saved. **Record its path in the report — Phase C compares against THIS baseline.**
+- **Verify:** Screenshot saved. **Record its path in the report — phase 3 compares against THIS baseline.**
 
 #### S004: Create the MANAGER (the fleet's only entry point)
 - **Action:** Agent Creation Wizard → name `scen031-manager` → title MANAGER → finish. Handle the sudo modal with `aim_sudo_modal` (it resolves the password itself — you never see or type it).
@@ -163,10 +166,10 @@ Write the exit state explicitly at the top of your report. Phase B reads it as i
 
 ---
 
-## Phase 1: ONE directive. Then stop driving.
+## Stage 1: ONE directive. Then stop driving.
 
 > The load-bearing step. Everything after it is observation + the four permitted user actions
-> (sudo approval, answering a direct MANAGER question, read-only checks, and — in Phase C — the final
+> (sudo approval, answering a direct MANAGER question, read-only checks, and — in phase 3 — the final
 > install). If the runner types into the AUTONOMOUS or MAINTAINER, the run is INVALID (Rule 6).
 
 #### S006: Brief the MANAGER — the whole project, in one message
@@ -183,7 +186,7 @@ Write the exit state explicitly at the top of your report. Phase B reads it as i
 
 ---
 
-## Phase 2: Requirements — does the MANAGER write a TRDD?
+## Stage 2: Requirements — does the MANAGER write a TRDD?
 
 #### S007: STOP and observe — the MANAGER defines the requirements
 - **Action:** Watch read-only for up to 15 min, polling per the TOKEN DISCIPLINE rules (a tail of the pane + an `ls` of the design tree — NOT full snapshots). Do NOT prod, hint, or name a skill/tool.
@@ -194,14 +197,14 @@ Write the exit state explicitly at the top of your report. Phase B reads it as i
 
 ---
 
-## Phase 3: The fleet — does the MANAGER create the two agents?
+## Stage 3: The fleet — does the MANAGER create the two agents?
 
 #### S008: Observe — the MANAGER creates an AUTONOMOUS developer and a MAINTAINER
 - **Action:** Watch read-only + poll the registry (`GET /api/agents`, a `jq` of names+titles — not a page dump). The MANAGER must create two agents itself, naming them and installing any local-scope skills they need. Approve any sudo modal (`aim_sudo_modal`).
 - **Goal:** An AUTONOMOUS and a MAINTAINER now exist, created BY THE MANAGER.
 - **Creates:** (by the MANAGER) 1 AUTONOMOUS + 1 MAINTAINER under `~/agents/<name>/`
 - **Modifies:** `registry.json`
-- **Verify:** two NEW agents with `governanceTitle` `autonomous` and `maintainer`, each with its role-plugin installed (R9.13). **Each new agent's continuity substrate must come up** on first wake. **RECORD THEIR NAMES in the report — do NOT hardcode; the MANAGER chose them, and Phase B needs them.** Wrong titles, a team (this is team-less), only one agent, or an agent whose heartbeat never arms → behavioural FAIL, fix the cause.
+- **Verify:** two NEW agents with `governanceTitle` `autonomous` and `maintainer`, each with its role-plugin installed (R9.13). **Each new agent's continuity substrate must come up** on first wake. **RECORD THEIR NAMES in the report — do NOT hardcode; the MANAGER chose them, and phase 2 needs them.** Wrong titles, a team (this is team-less), only one agent, or an agent whose heartbeat never arms → behavioural FAIL, fix the cause.
 
 #### S008b: Observe — the MANAGER sets up ONE shared board and assigns each agent its columns
 - **Action:** Watch read-only as the MANAGER establishes the working structure. Both agents build the same project, so they must share ONE project `design/` kanban board (the git-tracked zipsearcher TRDD corpus), NOT two siloed private trees. Expected split: AUTONOMOUS owns `todo`/`dev`/`testing`; MAINTAINER owns `ai_review`/`human_review`/`publish`. **Do NOT dictate the columns in chat** — the sensible split is what a correct fleet arrives at on its own, and it is the pass criterion, not a coaching input.
@@ -212,11 +215,24 @@ Write the exit state explicitly at the top of your report. Phase B reads it as i
 
 ---
 
-## Phase A END — hand off, do NOT clean up
+## PHASE 1 END — hand off, park the fleet, do NOT clean up
 
-#### S008z: Write the handoff
-- **Action:** Write the phase report to `reports/scenarios-runner/`, opening with the **EXIT STATE checklist** (above) marked off, the **recorded agent names**, the **S003 baseline screenshot path**, and the screenshot/poll counts.
-- **Goal:** Phase B can start with zero guessing and zero re-derivation.
+#### S008y: Write the handoff
+- **Action:** Write the phase report to `reports/scenarios-runner/`, opening with the **EXIT STATE checklist** (above) marked off, the **recorded agent names**, the **S003 baseline screenshot path**, the **state-backup dir path**, and the screenshot/poll counts.
+- **Goal:** phase 2 can start with zero guessing and zero re-derivation.
 - **Creates:** the phase report
 - **Modifies:** nothing
-- **Verify:** every EXIT STATE box is ticked or explicitly marked FAILED with its finding. **Do NOT delete any agent, repo, or config. Do NOT run STATE-WIPE.** The fleet stays live for Phase B.
+- **Verify:** every EXIT STATE box is ticked or explicitly marked FAILED with its finding. **Do NOT delete any agent, repo, or config. Do NOT run STATE-WIPE.**
+
+#### S008z: HIBERNATE all three agents — the fleet must not run unobserved
+- **Action:** Via the UI, hibernate `scen031-manager` and the two agents the MANAGER created. This is the **last** action of the phase — do it only after S008y has captured the state, since a hibernated agent's live terminal is no longer readable.
+- **Goal:** The fleet is parked. Between phases nobody is observing, so nobody may be working: an agent left running would build, message, and merge with no runner watching, and its behaviour would be unobserved, unverifiable, and unrecorded — the exact thing this scenario exists to measure.
+- **Creates:** nothing
+- **Modifies:** agent session state (running → hibernated)
+- **Verify:** all three show hibernated/exited in the sidebar; no `scen031-*` or MANAGER-chosen tmux session remains. **The ai-maestro server itself must NOT be restarted** — only the agents are parked.
+
+> **Hibernating here is NOT a never-stop violation, and waking in phase 2 is NOT a runner nudge.**
+> The never-stop / continuity proof governs behaviour **WITHIN** an observed phase: an agent that
+> stalls mid-phase must be revived by the janitor cron + continuity daemon, never by the runner. A
+> phase boundary is a deliberate, declared park by the USER-runner between observation windows. Record
+> the hibernate explicitly in the report so the next phase counts the wake as setup, not as a rescue.

@@ -3,19 +3,38 @@ trdd-id: 1B7FC42W
 title: A MANAGER's AskUserQuestion TUI menu is unanswerable from the dashboard Chat — the user↔agent question channel is broken for menu prompts
 column: proposal
 created: 2026-07-23T06:34:43+0200
-updated: 2026-07-23T06:34:43+0200
+updated: 2026-07-23T06:55:00+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
 approval-tier: 2
-priority: 1
+priority: 0
 severity: high
 effort: M
 labels: [scenario-improvement, scen-031, agent-messaging, ui]
 relevant-rules: []
+implementation-commits: [8c34d65a]
 external-refs:
   - reports/scenarios-runner/SCEN-031_20260723T033213Z.report.md
+  - reports/scenarios-runner/SCEN-031_20260723T054536Z.report.md
 ---
+
+> **ROOT CAUSE FOUND + FIX LANDED (SCEN-031 run 20260723T054536Z, commit `8c34d65a`).**
+> The cause is `components/TerminalView.tsx` `handlePromptSubmit`: every dashboard
+> prompt was wrapped in a **bracketed paste** (`ESC[200~ … ESC[201~`) + a delayed
+> `\r`. A raw-mode TUI widget — Claude Code's AskUserQuestion menu — **discards
+> bracketed-paste input**, so the user's Chat answer never reached the menu's
+> free-text field and the MANAGER hard-blocked (>10 min, no self-recovery this run).
+> Fix: deliver **single-line** content as PLAIN keystrokes (land in the field like
+> typing; the existing delayed Enter submits); keep bracketed paste for multi-line
+> only. Verified live in this run: after the fix + rebuild + restart, the plain-text
+> answer reached the stuck menu, advanced it to the submit-confirmation, and the
+> MANAGER unblocked and proceeded to create the two workers and delegate. Priority
+> raised P1→P0 (it is a hard fleet-stopper before any delegation). This TRDD should
+> move to screening/`complete` — the fix is committed; a screener confirms and
+> archives. A deeper follow-up (route a Chat answer through the `answer` verb when a
+> pending prompt is detected, so multi-question submit flows need no numeric nudge)
+> may be filed separately if desired.
 
 # AskUserQuestion TUI menu is unanswerable from the dashboard Chat
 

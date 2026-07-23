@@ -73,7 +73,9 @@ turns it from a silent fleet outage into an explicit, diagnosable refusal.
 Related: the general platform knowledge lives in the user-scope notes
 `claude-code-client-authentication` and `macos-keychain-access-inheritance`.
 
-^agent-launch-agent-flag-dropped [desc: role_plugin_installed_but_--agent_dropped_at_launch_so_agent_runs_a_live_generic_claude, keywords: titled agent runs generic claude persona never loads, MANAGER builds the project solo instead of creating a fleet, agent is logged in and alive but not running its role persona, --agent missing from ps argv though registry programArgs has it, fresh Wizard-created titled agent has no --agent in its process, ocd:2026-07-22, lmd:2026-07-22]
+^agent-launch-agent-flag-dropped [status: superseded, superseded-by: agent-launch-agent-flag-dropped-v2, desc: role_plugin_installed_but_--agent_dropped_at_launch_so_agent_runs_a_live_generic_claude, keywords: titled agent runs generic claude persona never loads, MANAGER builds the project solo instead of creating a fleet, agent is logged in and alive but not running its role persona, --agent missing from ps argv though registry programArgs has it, fresh Wizard-created titled agent has no --agent in its process, ocd:2026-07-22, lmd:2026-07-22]
+⚠ **SUPERSEDED by `^agent-launch-agent-flag-dropped-v2` — do NOT apply; preserved as history.** This block over-generalized ("the launch chokepoints" plural) — only the fresh-CREATE path drops `--agent`; `wakeAgent`/restart read the registry which already carries it. Why it was wrong: `[^6]`.
+
 **Third silent failure — the MOST insidious, because the agent is genuinely ALIVE and
 LOGGED IN** (not "Not logged in" #1, not a shell prompt #2). The role-plugin is installed AND
 enabled — `--agent` WOULD resolve — but the launch command **drops `--agent` entirely**, so
@@ -98,6 +100,32 @@ Non-Claude programs + agentless sessions pass through; a Claude agent with no re
 persona is REFUSED (fail-fast, R9.13), mirroring the keychain refuse. Derive at launch from
 the role-plugin (the source of truth), NOT from stored programArgs — the stored copy can be
 stale. See also `scen031-manager-role-violation-not-substrate`.
+
+^agent-launch-agent-flag-dropped-v2 [desc: only_the_FRESH-CREATE_path_dropped_--agent_because_createSession_uses_desired.programArgs_not_the_registry, keywords: titled agent runs generic claude persona never loads, MANAGER builds the project solo, fresh Wizard-created titled agent has no --agent in its ps argv, createSession uses desired.programArgs not the registry value ChangeTitle updated, wakeAgent and restart read the registry which already has --agent, why only freshly-created agents dropped the persona, --continue relaunch omits --agent by design, ocd:2026-07-22, lmd:2026-07-22]
+**Third silent failure — a live, logged-in but GENERIC claude** (not "Not logged in" #1, not a
+shell prompt #2): the role-plugin IS installed and `--agent` WOULD resolve, but the launch command
+lacks `--agent`, so the pane runs vanilla Claude and the role persona never loads — e.g. a MANAGER
+told "build X and create a fleet" builds X SOLO and creates ZERO ai-maestro personas (SCEN-031,
+2026-07-22).
+
+**Precise mechanism (VERIFIED by reading source) — it is ONLY the fresh-CREATE path.** CreateAgent
+creates the agent with the default `programArgs` (`--dangerously-skip-permissions`, no `--agent`);
+G06 ChangeTitle then injects `--agent` into the REGISTRY (`setClaudeAgentFlag`); but G09
+`createSession` is passed **`desired.programArgs`** — the ORIGINAL creation request, which never had
+`--agent` — NOT the registry value ChangeTitle just updated (`element-management-service.ts` G09:
+`createSession({… programArgs: desired.programArgs || '--dangerously-skip-permissions' …})`). So the
+FRESHLY-CREATED agent launches generic claude. By contrast `wakeAgent` and the restart routes read
+the REGISTRY (`agent.programArgs`, which HAS `--agent`) so they were already correct; the
+`claude --continue` fleet-recovery relaunch legitimately omits `--agent` (the persona resumes from
+the transcript). `sanitizeArgs` is NOT the stripper — the fresh-create path simply never received
+`--agent`. Diagnose by the LIVE process argv (`ps -eo pid,command`), never by liveness.
+
+**Fix (TRDD-GZ1KOHNR, commits eff07647 + 2bd8969c):** one shared helper
+`services/agent-launch-args.ts::resolveLaunchArgs` derives `--agent` from the INSTALLED role-plugin
+(`RolePlugin.mainAgentName`) at EVERY launch/restart chokepoint — createSession is THE fix; wakeAgent
++ the 4 restart sites are a belt-and-braces enforcement net honoring the USER mandate "no agent may
+be executed without `--agent`". Non-Claude + agentless pass through; no resolvable persona ⇒ REFUSE
+(fail-fast, R9.13). See also `scen031-manager-role-violation-not-substrate`.
 
 ## Governed by
 
@@ -154,3 +182,14 @@ not as a `[[wikilink]]`, per the link-hygiene rule).
   inspect the actual launched process argv (`ps -eo pid,command`) for `--agent`, and derive the
   flag from the INSTALLED role-plugin AT launch (not from possibly-stale stored programArgs) —
   enforced now by TRDD-GZ1KOHNR (`services/agent-launch-args.ts`, commits eff07647+2bd8969c).
+
+[^6]: [id:ATOM-ALP6-CREATEONLY, status:valid, keywords:"only_fresh_create_dropped_--agent createSession_uses_desired.programArgs wakeAgent_reads_registry_which_has_--agent conflated_launch_paths overgeneralized_atom_superseded per_path_claim_needs_per_path_source", ocd:2026-07-22, lmd:2026-07-22]
+  DO NOT characterize the `--agent`-drop as "all launch chokepoints build from stale args" (the
+  now-superseded atom `^agent-launch-agent-flag-dropped`, replaced by `^…-v2`), BECAUSE only the
+  FRESH-CREATE path drops it: CreateAgent G09 passes `createSession` the `desired.programArgs` (the
+  original request, no `--agent`), bypassing the registry value ChangeTitle updated — whereas
+  `wakeAgent` and the restart routes read `agent.programArgs` from the REGISTRY (which HAS `--agent`)
+  and were already correct, and `claude --continue` omits `--agent` by design. DO read the exact call
+  site before generalizing a bug across code paths — a per-path claim needs the per-path source;
+  I over-generalized from one observation (the fresh MANAGER's `ps`) to "all chokepoints" without
+  reading `wakeAgent`'s registry read vs `createSession`'s `desired.programArgs` pass.

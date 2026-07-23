@@ -65,9 +65,19 @@ Read phase 1's report FIRST and confirm each item. If any is false, STOP and rep
 - [ ] The three agents are **HIBERNATED** (phase 1 parked them) and the server was NOT restarted
 
 #### S008w: WAKE the fleet before observing anything
-- **Action:** Via the UI, wake `scen031-manager` and the two MANAGER-created agents. Wait for each to reach an idle prompt and confirm its janitor heartbeat is armed.
-- **Goal:** The parked fleet resumes exactly where phase 1 left it, with its continuity substrate up.
-- **Verify:** all three show waiting/idle (not `exited`); a `[janitor-heartbeat]` cron exists per session. If an agent will not wake, or wakes without its heartbeat, that is a **continuity-substrate bug** — Rule 4, fix the cause.
+- **Action:** Via the UI, wake `scen031-manager` and the two MANAGER-created agents. Wait for each to reach an idle prompt.
+- **Goal:** The parked fleet resumes exactly where phase 1 left it.
+- **Verify:** all three show waiting/idle (not `exited`). If an agent will not wake, that IS a continuity-substrate bug — Rule 4, fix the cause.
+
+> **A per-agent `[janitor-heartbeat]` cron is NOT expected, and its absence is NOT a failure.**
+> Corrected after phase 1 (ISSUE-001): this file previously claimed the heartbeat "self-arms on wake
+> via the core plugin". It does not — the core plugin contains no reference to `janitor-arm` at all;
+> the name appears only as a curated `commandKey` the SERVER may send and as the fleet-recovery
+> `rearm` rung. Phase 1 observed **no `scheduled_tasks.json` in any of the three agents**, and all
+> three nonetheless worked unattended and woke on their own. So the per-agent cron is demonstrably
+> not the mechanism keeping them alive — server-managed continuity / a push-notification wake is.
+> **Do not stop to "fix" a missing cron.** The never-stop proof is about whether an idle agent
+> RESUMES on its own, by whatever mechanism — not about which mechanism does it.
 
 > **This wake is SETUP, not a nudge.** Phase 1 deliberately parked the fleet so it could not work
 > unobserved between phases. Waking it here is the declared resume of the observation window. The

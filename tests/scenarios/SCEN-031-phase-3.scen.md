@@ -67,9 +67,13 @@ Read phase 2's report FIRST. Take from it, never guess:
 - [ ] `Emasoft/zipsearcher` exists with feature-complete `main` and green CI
 
 #### S015w: WAKE the fleet before observing anything
-- **Action:** Via the UI, wake all three agents (names from phase 2's report). Wait for each to reach an idle prompt and confirm its janitor heartbeat is armed.
+- **Action:** Via the UI, wake all three agents (names from phase 2's report). Wait for each to reach an idle prompt.
 - **Goal:** The parked fleet resumes exactly where phase 2 left it, so the release can proceed.
-- **Verify:** all three show waiting/idle (not `exited`); a `[janitor-heartbeat]` cron exists per session. An agent that will not wake, or wakes without its heartbeat, is a **continuity-substrate bug** — Rule 4, fix the cause.
+- **Verify:** all three show waiting/idle (not `exited`). An agent that will not wake IS a continuity-substrate bug — Rule 4, fix the cause.
+
+> **A per-agent `[janitor-heartbeat]` cron is NOT expected, and its absence is NOT a failure**
+> (phase 1 ISSUE-001). The core plugin does not self-arm it; phase 1 saw no `scheduled_tasks.json` in
+> any agent while all three worked unattended and woke unaided. Do not stop to "fix" a missing cron.
 
 > **This wake is SETUP, not a nudge.** Phase 2 deliberately parked the fleet so it could not work
 > unobserved. The never-stop proof resumes the moment the fleet is awake: from here on, an agent that

@@ -158,11 +158,19 @@ Write the exit state explicitly at the top of your report. phase 2 reads it as i
 - **Verify:** `GET /api/agents/{id}` → `.agent.governanceTitle === 'manager'`; sidebar badge reads MANAGER.
 
 #### S005: Wake the MANAGER, arm its continuity substrate, confirm idle
-- **Action:** Wake `scen031-manager`; wait for the idle prompt. Confirm the janitor heartbeat is armed in its session (it self-arms on wake via the core plugin; if not, that is a continuity-substrate bug — Rule 4, fix it). Confirm the ai-maestro continuity daemon is live.
+- **Action:** Wake `scen031-manager`; wait for the idle prompt. Confirm the ai-maestro continuity daemon is live. **Do NOT require a per-agent `[janitor-heartbeat]` cron** — see the note below.
 - **Goal:** A live MANAGER whose continuity substrate is ACTIVE, so it self-sustains unsupervised.
 - **Creates:** 1 tmux session; the `[janitor-heartbeat]` cron for this agent
 - **Modifies:** nothing
-- **Verify:** badge shows waiting/idle, not `exited`; a `[janitor-heartbeat]` cron exists; the daemon reports active. If the janitor is NOT armed or the daemon is down, fix the CAUSE before proceeding (Rule 4). Do NOT plan to nudge the agent yourself — that would invalidate the never-stop proof.
+- **Verify:** badge shows waiting/idle, not `exited`; the daemon reports active. If the agent will not wake or the daemon is down, fix the CAUSE before proceeding (Rule 4). Do NOT plan to nudge the agent yourself — that would invalidate the never-stop proof.
+
+> **A per-agent `[janitor-heartbeat]` cron is NOT expected, and its absence is NOT a failure.**
+> Corrected after the first phase-1 run (ISSUE-001): this step used to claim the heartbeat "self-arms
+> on wake via the core plugin". It does not — the core plugin contains no reference to `janitor-arm`;
+> the name appears only as a curated `commandKey` the SERVER may send and as the fleet-recovery
+> `rearm` rung. That run found **no `scheduled_tasks.json` in any of the three agents**, and all three
+> worked unattended and woke on their own anyway. The never-stop proof is about whether an idle agent
+> RESUMES — not about which mechanism resumes it.
 
 ---
 

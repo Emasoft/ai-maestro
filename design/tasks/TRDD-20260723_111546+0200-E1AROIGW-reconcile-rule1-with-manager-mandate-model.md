@@ -3,7 +3,7 @@ trdd-id: E1AROIGW
 title: Reconcile the global RULE-1 autonomy-boundary with the MANAGER-mandate model so fleet agents execute mandates
 column: dev
 created: 2026-07-23T11:15:46+0200
-updated: 2026-07-23T11:15:46+0200
+updated: 2026-07-23T11:31:17+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -17,7 +17,7 @@ approval-datetime: 2026-07-23T11:15:46+0200
 relevant-rules: []
 eht: []
 npt: []
-implementation-commits: []
+implementation-commits: [1ce1ecae]
 external-refs:
   - reports/fleet-evaluation/20260723_110953+0200-scen031-fleet-behaviour-eval.md
   - tests/scenarios/SCEN-031_end-to-end-fleet-ship.scen.md
@@ -38,14 +38,23 @@ MANAGER even conceded it could not override RULE 1.
 CANNOT BE BYPASSED`. This is the authoritative anchor: a MANAGER's permission (a mandate) now
 explicitly satisfies RULE 1. (Accepted cost: a one-time cache-prefix invalidation across all agents.)
 
-**NEXT ACTION (surface 2, in-repo, this repo):** add ONE line to `rules/aimaestro/aimaestro-agent-rules.md`
-— within its hard **2,200-byte budget** (`tests/unit/agent-operating-rules.test.ts`) — stating:
-*a MANAGER mandate (`mandate:true`, git-tracked in the PRRD/TRDD) IS the explicit MANAGER permission
-RULE 1 now names; executing it SATISFIES RULE 1 — do not wait for a separate human go-ahead.* Then
-verify `lib/agent-rules-seed.ts` (`ensureAgentRules`) distributes it into every agent workdir and the
-byte-budget test still passes. This makes agents apply the amended rule CONSISTENTLY with sub-clauses
-1.2 ("wait for the user"), 1.5 ("status reports are not work orders"), 1.6 ("context ≠ permission") —
-a mandate is an explicit MANAGER work order, NOT mere context.
+**Surface 2 — DONE (2026-07-23, commit `1ce1ecae`).** Added one Work bullet to
+`rules/aimaestro/aimaestro-agent-rules.md` (2190/2200 bytes): *a git-tracked `mandate: true` IS the
+explicit MANAGER permission RULE 1 names — executing it satisfies RULE 1; do not wait for a human
+go-ahead.* `tests/unit/agent-operating-rules.test.ts` green — the byte-budget cap AND the seed-sweep
+tests, which assert the seeded workdir file is byte-identical to source, so `ensureAgentRulesForWorkdirs`
+distributes the new bullet to every agent workdir. This makes agents apply the amended global rule
+CONSISTENTLY with sub-clauses 1.2/1.5/1.6: a mandate is an explicit MANAGER work order, NOT mere context.
+
+**NEXT ACTION (verification — the whole point):** re-run SCEN-031 with a FRESH fleet so the workers
+load the amended global RULE-1 + this seeded bullet from turn 1, and confirm the AUTONOMOUS dev BUILDS
+on the MANAGER's mandate with zero human go-ahead (product code + feature branch + PR appear). The
+current deadlocked fleet (scen031-manager, zipsearcher-dev, zipsearcher-maintainer + repo
+`Emasoft/zipsearcher`) is a documented FAIL that cannot recover in-place — clean it up first.
+
+**Surface 3 (cross-repo EHT, still open):** file persona-clarification issues on the worker role-plugin
+repos (`ai-maestro-autonomous-agent`, `-maintainer-agent`, `-programmer-agent`, …) and FLAG to the USER
+that RULE-1 sub-clauses 1.2/1.5/1.6 still say "the user" (their file, their call).
 
 ## Problem
 The global IRON RULE 1 forbade the very autonomous mandate-execution the AI Maestro fleet model

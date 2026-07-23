@@ -168,7 +168,7 @@ Strict routes (answer, queue) require AIMAESTRO_SUDO_TOKEN for USER callers.
 Agent callers authorize by AID_AUTH + governance title and need no sudo token.
 
 Environment:
-  AID_AUTH               Bearer token for agent callers (optional on localhost)
+  AID_AUTH               Bearer token for agent callers (REQUIRED — no localhost exemption)
   AIMAESTRO_SUDO_TOKEN   X-Sudo-Token passthrough for strict routes
   AIMAESTRO_API_BASE     Override the API base URL (default: this host)
 EOF

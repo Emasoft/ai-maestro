@@ -99,7 +99,7 @@ Commands:
   help
 
 Environment:
-  AID_AUTH               Bearer token for the agent caller (optional on localhost)
+  AID_AUTH               Bearer token for the agent caller (REQUIRED — no localhost exemption)
   AIMAESTRO_SUDO_TOKEN   X-Sudo-Token passthrough (optional)
   AIMAESTRO_API_BASE     Override the API base URL (default: this host)
 EOF

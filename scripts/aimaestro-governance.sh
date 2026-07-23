@@ -134,7 +134,7 @@ Commands:
   help                         Show this help
 
 Environment:
-  AID_AUTH               Bearer token for agent callers (optional on localhost)
+  AID_AUTH               Bearer token for agent callers (REQUIRED — no localhost exemption)
   AIMAESTRO_SUDO_TOKEN   X-Sudo-Token passthrough for strict routes (optional)
   AIMAESTRO_API_BASE     Override the API base URL (default: this host)
 EOF

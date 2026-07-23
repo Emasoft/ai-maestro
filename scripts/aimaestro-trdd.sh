@@ -148,7 +148,7 @@ Mutating verbs are strict routes: AIMAESTRO_SUDO_TOKEN for USER callers; agent
 callers authorize by AID_AUTH + governance title. Nothing is committed for you.
 
 Environment:
-  AID_AUTH               Bearer token for agent callers (optional on localhost)
+  AID_AUTH               Bearer token for agent callers (REQUIRED — no localhost exemption)
   AIMAESTRO_SUDO_TOKEN   X-Sudo-Token passthrough for strict routes
   AIMAESTRO_API_BASE     Override the API base URL (default: this host)
 EOF

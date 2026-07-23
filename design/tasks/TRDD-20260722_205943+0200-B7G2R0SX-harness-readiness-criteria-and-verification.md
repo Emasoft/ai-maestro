@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-22T23:20:00+0200
+updated: 2026-07-23T06:42:00+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -15,7 +15,19 @@ npt: []
 implementation-commits: []
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-22
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-23
+
+**▶ 2026-07-23 LATEST — one blocker down, one to go.** The `--agent`-drop blocker is FIXED + VERIFIED LIVE
+(`TRDD-GZ1KOHNR`, commits eff07647+2bd8969c; SCEN-031 re-run report `SCEN-031_20260723T033213Z`): the fresh MANAGER
+now loads its persona AND self-organizes a fleet (created AUTONOMOUS `zipsearcher-dev` + MAINTAINER `zipsearcher-maint`,
+authored requirements TRDD-04HFVTND, made the repo from template, opened PR #4, DELEGATED via real AMP mandates). Both
+targeted acceptance criteria PASSED; issue #31 (MANAGER-builds-solo) is now MOOT. **SCEN-031 STILL FAILs on a NEW,
+separately-diagnosed P0: `TRDD-4ALV5ISB` — idle worker agents never WAKE to process their inbound AMP mandates** (no
+push-notification into the idle pane + no janitor-heartbeat cron armed for the workers), so the fleet organizes then
+stalls at the first handoff. That is THE next harness-readiness blocker (relates to `TRDD-KCRMSNL7`
+continuity/Family-A). Runner also filed P1 `TRDD-1B7FC42W` (AskUserQuestion unanswerable from dashboard chat).
+**NEXT: decide whether to tackle 4ALV5ISB (worker-wake continuity) — it is tier-2 (manager) + architectural; await
+USER direction.** Everything below this line is the earlier (now largely-superseded) narrative.
 
 **▶ USER DEFINED "READY" (2026-07-22) — AUTHORITATIVE; supersedes the proposed A-F bar below as the
 DEFINITION.** "Harness ready" = **scenario `SCEN-031` (zipsearcher end-to-end) RUNS and PASSES.** The user

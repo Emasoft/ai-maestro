@@ -1,9 +1,9 @@
 ---
 trdd-id: GZ1KOHNR
 title: Enforce --agent at every launch chokepoint — a titled Claude agent must run its role persona, never generic claude
-column: testing
+column: complete
 created: 2026-07-22T23:33:20+0200
-updated: 2026-07-22T23:50:00+0200
+updated: 2026-07-23T06:42:00+0200
 current-owner: session
 task-type: bugfix
 scope: project
@@ -65,12 +65,21 @@ headless-router handlers (commit `2bd8969c`). Gates: tsc 0 errors · full vitest
 Refuse is fail-fast + safe (fires only for an R9.13-violating agent; before any stop, so a running agent is never
 disrupted).
 
-**NEXT ACTION (the live acceptance test):** `pm2 restart ai-maestro`, then RE-RUN SCEN-031 (create a fresh MANAGER via
-the Wizard) and confirm its live `ps` now shows `claude … --agent ai-maestro-assistant-manager-agent-main-agent` and
-that the MANAGER creates+delegates to AUTONOMOUS+MAINTAINER personas. Only AFTER the persona demonstrably loads can
-issue #31's persona-mandate be judged (if the MANAGER STILL builds solo WITH its persona active, #31 is the real fix;
-if it now delegates, #31 may be moot). Also still open: delete `Emasoft/zipsearcher` (needs `delete_repo` token scope +
-USER go) so SCEN-031's 0-IMPACT holds.
+**✅ VERIFIED LIVE — COMPLETE.** SCEN-031 re-run (`reports/scenarios-runner/SCEN-031_20260723T033213Z.report.md`,
+2026-07-23) proved BOTH targeted acceptance criteria PASS: (1) the fresh Wizard MANAGER's LIVE process is
+`claude --agent ai-maestro-assistant-manager-agent-main-agent --dangerously-skip-permissions` (PID 33230; banner +
+statusline confirm the persona loaded) — and so did the two MANAGER-created workers (dev/maint personas); (2) on ONE
+directive the MANAGER SELF-ORGANIZED a fleet — created an AUTONOMOUS (`zipsearcher-dev`) + a MAINTAINER
+(`zipsearcher-maint`), authored requirements TRDD-04HFVTND, made the repo from the template, opened PR #4, and
+DELEGATED via real AMP mandates. The prior "MANAGER builds solo / persona never loads" failure is RESOLVED, so
+issue #31's persona-mandate concern is MOOT (the MANAGER already creates+delegates). Fix landed at all 6 chokepoints;
+createSession was THE load-bearing fix (see `[[agent-launch-preconditions]]` v2 atom for the per-path precision).
+
+**This TRDD is DONE.** The SCEN-031 ship still FAILs, but on a SEPARATE, newly-diagnosed P0 that is NOT this TRDD:
+**TRDD-4ALV5ISB** — idle worker agents never wake to process their inbound AMP mandates (no push-notification into the
+idle pane + no janitor heartbeat cron armed for the workers), so the fleet organizes then stalls at the first handoff.
+That is the next harness-readiness blocker (relates to TRDD-KCRMSNL7 continuity/Family-A). zipsearcher repo residue: the
+USER deleted the prior run's repo; the re-run's fresh `Emasoft/zipsearcher` is new residue the USER will handle.
 
 **VERIFY:** after wiring, a freshly-created titled Claude agent's live `ps` shows `claude … --agent <plugin>-main-agent`;
 `resolveLaunchArgs` unit test covers inject / passthrough(non-Claude) / passthrough(no agentId) / refuse(no role-plugin).

@@ -94,21 +94,50 @@ export function resolveRestartBin(program: string): string {
 }
 
 /**
+ * Insert an already-built argument before a ` -- ` raw-prompt divider when one is
+ * present, else append it. Anything after ` -- ` is the raw prompt, so an argument
+ * placed there would be swallowed as prompt text instead of parsed as a flag.
+ */
+function insertArg(args: string, arg: string): string {
+  const dividerIdx = args.indexOf(' -- ')
+  if (dividerIdx !== -1) {
+    return args.slice(0, dividerIdx) + ` ${arg}` + args.slice(dividerIdx)
+  }
+  return `${args} ${arg}`.trim()
+}
+
+/** True when the args already carry a continue flag, in either spelling. */
+function hasContinueFlag(args: string): boolean {
+  return /(^|\s)(-c|--continue)(\s|$)/.test(args)
+}
+
+/**
  * Build the relaunch command string, guaranteeing `--name "<persona>"` is present.
  * `programArgs` MUST already be allowlist-validated (isValidProgramArgs) and
  * `personaName` MUST already be sanitized (sanitizePersonaName) — the caller does
- * both before building, exactly as the original inline code did. Inserts `--name`
- * before a ` -- ` raw-prompt divider when present, else appends it.
+ * both before building, exactly as the original inline code did.
+ *
+ * TRDD-6AMXSG3S — `opts.continueConversation` adds `--continue` so the relaunched
+ * agent resumes its own transcript. Without it a restart is a COLD START: the
+ * agent returns on a fresh session and the mandate it was executing is gone. That
+ * is not a corner case — useRestartQueue restarts an agent after every element
+ * change, so a plugin install would silently discard its in-flight work.
+ *
+ * The caller decides the flag (it owns the workdir lookup and the bin), because
+ * `--continue` is Claude-only and fails when there is no prior conversation.
  */
-export function buildRelaunchCommand(bin: string, programArgs: string, personaName: string): string {
+export function buildRelaunchCommand(
+  bin: string,
+  programArgs: string,
+  personaName: string,
+  opts: { continueConversation?: boolean } = {},
+): string {
   let finalArgs = programArgs
   if (!finalArgs.includes('--name ')) {
-    const dividerIdx = finalArgs.indexOf(' -- ')
-    if (dividerIdx !== -1) {
-      finalArgs = finalArgs.slice(0, dividerIdx) + ` --name "${personaName}"` + finalArgs.slice(dividerIdx)
-    } else {
-      finalArgs = `${finalArgs} --name "${personaName}"`.trim()
-    }
+    finalArgs = insertArg(finalArgs, `--name "${personaName}"`)
+  }
+  if (opts.continueConversation && !hasContinueFlag(finalArgs)) {
+    finalArgs = insertArg(finalArgs, '--continue')
   }
   return `${bin} ${finalArgs}`.trim()
 }

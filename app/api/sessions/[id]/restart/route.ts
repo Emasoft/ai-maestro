@@ -38,6 +38,7 @@ import {
   runRestartSequence,
 } from '@/lib/session-restart'
 import { resolveLaunchArgs } from '@/services/agent-launch-args'
+import { hasPriorConversation } from '@/lib/claude-conversation'
 
 export const dynamic = 'force-dynamic'
 
@@ -146,7 +147,17 @@ export async function POST(
   // mechanical stop→poll→relaunch sequence. Both live in lib/session-restart.ts.
   const bin = resolveRestartBin(program)
   const personaName = sanitizePersonaName(agent?.label || agent?.name || sessionName, sessionName)
-  const command = buildRelaunchCommand(bin, enforced.args, personaName)
+
+  // TRDD-6AMXSG3S: resume the agent's own transcript instead of cold-starting it.
+  // A restart exists to pick up new config, NOT to discard the task in flight —
+  // and useRestartQueue fires one after every element change, so without this a
+  // plugin install silently destroys whatever the agent was doing. `--continue`
+  // is Claude-only and fails with no prior transcript, hence both guards.
+  const restartWorkdir = agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory
+  const continueConversation =
+    bin === 'claude' && !!restartWorkdir && (await hasPriorConversation(restartWorkdir))
+
+  const command = buildRelaunchCommand(bin, enforced.args, personaName, { continueConversation })
 
   const outcome = await runRestartSequence(sessionName, command)
 

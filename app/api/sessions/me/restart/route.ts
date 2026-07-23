@@ -41,6 +41,7 @@ import {
   runRestartSequence,
 } from '@/lib/session-restart'
 import { resolveLaunchArgs } from '@/services/agent-launch-args'
+import { hasPriorConversation } from '@/lib/claude-conversation'
 
 export const dynamic = 'force-dynamic'
 
@@ -145,7 +146,15 @@ export async function POST(request: NextRequest) {
   // sequence — the same lib [id]/restart uses, so the two cannot diverge.
   const bin = resolveRestartBin(program)
   const personaName = sanitizePersonaName(agent.label || agent.name || sessionName, sessionName)
-  const command = buildRelaunchCommand(bin, enforced.args, personaName)
+
+  // TRDD-6AMXSG3S: same continuity guarantee as [id]/restart — an agent that
+  // restarts ITSELF to pick up new config must come back on its own transcript,
+  // not on a blank session that has forgotten why it restarted.
+  const restartWorkdir = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory
+  const continueConversation =
+    bin === 'claude' && !!restartWorkdir && (await hasPriorConversation(restartWorkdir))
+
+  const command = buildRelaunchCommand(bin, enforced.args, personaName, { continueConversation })
 
   const outcome = await runRestartSequence(sessionName, command)
 

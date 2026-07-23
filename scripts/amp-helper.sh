@@ -765,6 +765,13 @@ load_config() {
     AMP_TENANT=$(jq -r '.agent.tenant // "default"' "${AMP_CONFIG}" 2>/dev/null)
     AMP_ADDRESS=$(jq -r '.agent.address // empty' "${AMP_CONFIG}" 2>/dev/null)
     AMP_FINGERPRINT=$(jq -r '.agent.fingerprint // empty' "${AMP_CONFIG}" 2>/dev/null)
+    # Read the two fields the self-heal below MUST carry forward. `save_config`
+    # rebuilds the whole agent object, so anything not passed back in is LOST:
+    # omitting the id silently un-registers the agent (its uuid is its identity
+    # in .index.json and every message envelope), and omitting createdAt resets
+    # its age to now.
+    AMP_AGENT_ID_EXISTING=$(jq -r '.agent.id // empty' "${AMP_CONFIG}" 2>/dev/null)
+    AMP_CREATED_EXISTING=$(jq -r '.agent.createdAt // empty' "${AMP_CONFIG}" 2>/dev/null)
 
     if [ -z "${AMP_AGENT_NAME}" ]; then
         return 1
@@ -779,6 +786,7 @@ load_config() {
     #   1. CLAUDE_AGENT_NAME env var (set by AI Maestro)
     #   2. Directory basename (only if it's NOT a UUID — UUID dirs are stable,
     #      the name lives in config.json)
+    #   3. The config's OWN .agent.name — see below.
     local _expected_name _addr_local_part _needs_fix=false
     _expected_name=""
 
@@ -792,6 +800,21 @@ load_config() {
         if [[ ! "$_dir_basename" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
             _expected_name="$_dir_basename"
         fi
+    fi
+
+    # Fall back to the config's own name, so the check below still runs for a
+    # UUID-named dir (the NORMAL modern layout) with no CLAUDE_AGENT_NAME set.
+    # WHY this must exist: `save_config` DERIVES address as "${name}@${tenant}...",
+    # so name and address-local-part can only disagree if the address is stale.
+    # Without this fallback `_expected_name` was empty for every UUID dir, the
+    # whole mismatch block was skipped, and a stale address could never self-heal
+    # — precisely for the agents that had the bug. 32 registered agents were found
+    # carrying address local-part "ai-maestro" (the REGISTRAR's cwd) instead of
+    # their own name, which made every one of them collide on a single address
+    # while `.agent.name`/`.index.json` stayed correct and distinct.
+    # The name is the identity; the address is derived from it, so the name wins.
+    if [ -z "$_expected_name" ]; then
+        _expected_name="${AMP_AGENT_NAME}"
     fi
 
     _addr_local_part="${AMP_ADDRESS%%@*}"
@@ -808,7 +831,8 @@ load_config() {
         if [ "$_needs_fix" = true ]; then
             echo "  Auto-fixing config to match agent identity..." >&2
             local _new_address
-            _new_address=$(save_config "$_expected_name" "$AMP_TENANT" "$AMP_FINGERPRINT")
+            _new_address=$(save_config "$_expected_name" "$AMP_TENANT" "$AMP_FINGERPRINT" \
+                "$AMP_AGENT_ID_EXISTING" "$AMP_CREATED_EXISTING")
             AMP_AGENT_NAME="$_expected_name"
             AMP_ADDRESS="$_new_address"
             echo "  ✅ Fixed: name='${AMP_AGENT_NAME}' address='${AMP_ADDRESS}'" >&2
@@ -824,6 +848,11 @@ save_config() {
     local tenant="${2:-default}"
     local fingerprint="$3"
     local agent_id="${4:-}"
+    # Optional: preserve an EXISTING createdAt. A repair-in-place must not reset
+    # the agent's age, so the self-heal passes the original through; a genuine
+    # first registration omits it and gets "now".
+    local created="${5:-}"
+    [ -n "$created" ] || created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
     # Build address: name@tenant.aimaestro.local
     local address="${name}@${tenant}.${AMP_PROVIDER_DOMAIN}"
@@ -836,7 +865,7 @@ save_config() {
         --arg agent_id "$agent_id" \
         --arg provider_domain "$AMP_PROVIDER_DOMAIN" \
         --arg maestro_url "$AMP_MAESTRO_URL" \
-        --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg created "$created" \
         '{
             version: "1.1",
             agent: (

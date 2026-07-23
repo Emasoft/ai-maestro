@@ -217,6 +217,60 @@ t8_p1_amp_dir_wins() {
         "explicit AMP_DIR set -> used verbatim (P1, no re-resolution)"
 }
 
+# ============================================================================
+# TEST 9 — REGRESSION: a UUID-named agent dir with a STALE address self-heals,
+#          WITHOUT destroying the agent's identity.
+#
+# Two bugs, one test. (1) `_expected_name` was only ever sourced from
+# CLAUDE_AGENT_NAME or a non-UUID dir basename, so for the normal modern layout
+# (UUID dir, no env) the whole mismatch block was skipped and a stale address
+# could never heal — 32 live agents were found stamped with the REGISTRAR's cwd
+# ("ai-maestro@...") instead of their own name, all colliding on one address.
+# (2) The heal called save_config with 3 args, and save_config REBUILDS the
+# agent object, so `id` (the uuid that IS the agent's identity in .index.json
+# and every envelope) and `createdAt` were silently dropped. Fixing (1) without
+# (2) would have activated the data loss across all 32.
+# ============================================================================
+t9_stale_address_heals_without_identity_loss() {
+    local h; h="$(new_home)"
+    local uuid="99999999-9999-9999-9999-999999999999"
+    local dir="$h/.agent-messaging/agents/$uuid"
+    mkdir -p "$dir"
+    # A config in the exact shape of the 32 found in the wild: correct name,
+    # correct id, but an address local-part belonging to someone else.
+    jq -n --arg id "$uuid" '{
+        version: "1.1",
+        agent: {
+            name: "cos-alpha", tenant: "emasoft",
+            address: "ai-maestro@emasoft.aimaestro.local",
+            fingerprint: "SHA256:test", createdAt: "2026-02-07T19:44:53Z", id: $id
+        }
+    }' > "$dir/config.json"
+
+    (
+        set +e
+        export HOME="$h"
+        export AMP_AGENTS_BASE="$h/.agent-messaging/agents"
+        export AMP_DIR="$dir" AMP_CONFIG="$dir/config.json"
+        unset CLAUDE_AGENT_NAME
+        # shellcheck disable=SC1090
+        source "$HELPER" >/dev/null 2>&1
+        load_config >/dev/null 2>&1
+    )
+
+    local addr name id created
+    addr=$(jq -r '.agent.address'          "$dir/config.json")
+    name=$(jq -r '.agent.name'             "$dir/config.json")
+    id=$(jq   -r '.agent.id // "LOST"'     "$dir/config.json")
+    created=$(jq -r '.agent.createdAt'     "$dir/config.json")
+
+    [ "${addr%%@*}" = "$name" ] \
+        && [ "$id" = "$uuid" ] \
+        && [ "$created" = "2026-02-07T19:44:53Z" ]
+    record "stale_addr_heals_keeps_identity" "$?" \
+        "UUID dir + stale address self-heals; id and createdAt survive the repair"
+}
+
 # --- run all ---------------------------------------------------------------
 command -v jq >/dev/null 2>&1 || { echo "${RED}jq is required${RESET}" >&2; exit 2; }
 
@@ -228,6 +282,7 @@ t5_p35_cross_check_refuses
 t6_p35_no_match_falls_through
 t7_explicit_id_wins
 t8_p1_amp_dir_wins
+t9_stale_address_heals_without_identity_loss
 
 # --- results table (unicode-bordered, colorized) ---------------------------
 NAME_W=34; STAT_W=6; DESC_W=62

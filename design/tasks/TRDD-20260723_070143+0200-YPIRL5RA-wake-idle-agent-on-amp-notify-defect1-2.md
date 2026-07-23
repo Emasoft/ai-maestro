@@ -3,7 +3,7 @@ trdd-id: YPIRL5RA
 title: Wake an idle agent on an AMP notification — press Enter on the inbox alert, gate the sibling notify path
 column: testing
 created: 2026-07-23T07:01:43+0200
-updated: 2026-07-23T07:07:00+0200
+updated: 2026-07-23T07:12:00+0200
 current-owner: session
 task-type: bugfix
 scope: project
@@ -22,6 +22,27 @@ external-refs:
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-23
+
+**▶ DECISIVE EMPIRICAL FINDING (from `~/.aimaestro/chat-state/hook-debug.log`, the ACTUAL SCEN-031 run) —
+DEFECT 1 ALONE IS PROVEN INSUFFICIENT; DEFECT 3 (recurring wake) IS LOAD-BEARING.** Both zipsearcher workers
+received ONLY `SessionStart` (03:53) + `SessionEnd` (04:18) over 25 min — ZERO `idle_prompt`, ZERO `Stop`,
+nothing between. A freshly-launched, never-PROMPTED Claude agent sits at its first prompt and never fires
+`idle_prompt`, so the AMP-notify chain (idle_prompt|agent_needs_input|SessionStart-only) never ran after the
+SessionStart 3s check (which raced AHEAD of the MANAGER's later delegation). The 19 notifications that DID fire in
+the log (for other agents) are spaced at EXACTLY 15-min intervals = the `*/15` janitor-heartbeat cadence → the
+heartbeat's periodic turns are what make `idle_prompt` fire → which is what drains the inbox. Workers had NO
+armed heartbeat (no scheduled_tasks.json) → no periodic turns → deaf. **So a SCEN-031 re-run would FAIL
+identically; do NOT run it to "test DEFECT 1 sufficiency" — the log already answered it.**
+
+**THE DEADLOCK (why DEFECT 3 is architectural, not a one-liner):** arming the heartbeat = running `/janitor-arm`
+INSIDE the agent's Claude session (it calls CronCreate — a Claude tool the ai-maestro SERVER cannot invoke
+externally). But running any turn requires a wake, and the wake is the heartbeat. Chicken-and-egg. Break it with
+EITHER (a) IN-REPO: the launch pipeline injects an initial startup turn (`/janitor-arm` + inbox-check) once the
+worker session is ready — bootstraps the recurring heartbeat, depends on the janitor plugin being available in the
+worker session (verify); OR (b) CROSS-REPO: the janitor's own SessionStart hook auto-arms for ai-maestro workdirs
+(the report's Option B; janitor repo → issue/PR). This is the 4ALV5ISB tier-2 fork, now EVIDENCE-BACKED. **NEXT =
+USER decision on (a) vs (b); DEFECT 1+2 stay landed/verified/live as the necessary companion (heartbeat makes
+idle_prompt fire; DEFECT 1 makes the resulting notification actually submit).**
 
 **▶ CODE LANDED (`d7d3e712` DEFECT 1, `9d44c29c` DEFECT 2). Gates GREEN:** tsc 0 · vitest 226 files /
 3246 passed · build clean. (Also archived the stale-in-tasks `complete` TRDD-GZ1KOHNR that the corpus linter

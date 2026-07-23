@@ -1,9 +1,9 @@
 ---
 trdd-id: DY0E76EQ
 title: Orchestrator playbook for long unattended fleet watches — event-driven monitors, burn-guard-first, terse status
-column: planned
+column: complete
 created: 2026-07-23T11:15:46+0200
-updated: 2026-07-23T11:15:46+0200
+updated: 2026-07-23T13:13:24+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -54,3 +54,6 @@ LOW. Documentation of learned discipline.
 
 ## Approval log
 - 2026-07-23 — MANDATE by USER (improvement series, "you have my trust").
+- 2026-07-23T13:13:24+0200 — COMPLETE. Implemented as `docs/ORCHESTRATOR-LONG-WATCH-PLAYBOOK.md`
+  (the 6-section playbook: event-driven monitors, burn-guard-first, cost-gating, lean session,
+  fast reversible decisions, governance-boundary handoff). Tier-0 (min-approval: none) self-mandate.

@@ -2,15 +2,17 @@
 number: 31
 phase: 1
 phase-of: SCEN-031
-name: zipsearcher A — bootstrap: one directive, requirements TRDD, and the fleet the MANAGER builds
-version: "1.0"
+name: portfolio A — bootstrap; one directive, THREE requirements, and the seven-agent fleet the MANAGER builds
+version: "2.0"
 description: >
   PHASE 1 of 3 (1 → 2 → 3, run in order, NO state reset between them). The runner creates ONE agent
-  (the MANAGER), types ONE directive into its chat, and then STOPS DRIVING. phase 1 proves the first
-  half of self-organization: from that single sentence the MANAGER must author a requirements TRDD,
-  create an AUTONOMOUS developer and a MAINTAINER on its own, and establish ONE shared project
-  design/ board with per-agent column ownership. phase 1 performs NO cleanup and deletes nothing —
-  it hands a LIVE fleet to phase 2.
+  (the MANAGER), types ONE directive naming THREE separate projects into its chat, and then STOPS
+  DRIVING. phase 1 proves the first half of PORTFOLIO self-organization: from that single message the
+  MANAGER must author THREE requirements TRDDs, create THREE (autonomous developer + maintainer) pairs
+  — six agents — on its own, and establish THREE shared project boards, one per project, run
+  concurrently. The whole point of v2.0 is that the MANAGER handles three projects AT ONCE, never one
+  after another. phase 1 performs NO cleanup and deletes nothing — it hands a LIVE seven-agent fleet
+  to phase 2.
 client: claude
 interhosts: false
 device: desktop
@@ -30,8 +32,8 @@ ui_sections:
   - Agent Creation Wizard (runner uses it ONLY to create the MANAGER)
 data_produced:
   - 1 MANAGER agent (created by the runner; NOT deleted here — phase 3 deletes it)
-  - 1 AUTONOMOUS + 1 MAINTAINER agent (created BY THE MANAGER; NOT deleted here)
-  - A requirements TRDD authored by the MANAGER
+  - 3 AUTONOMOUS + 3 MAINTAINER agents (created BY THE MANAGER, one pair per project; NOT deleted here)
+  - THREE requirements TRDDs authored by the MANAGER (one per project)
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -47,7 +49,7 @@ prerequisites:
   - ai-maestro-plugins marketplace registered
   - GitHub `gh` CLI authenticated as the shared @Emasoft identity
   - Template repo `fannijako/repo_template` exists and is a template
-  - No repo named `Emasoft/zipsearcher` exists
+  - None of `Emasoft/zipsearcher`, `Emasoft/tarot-reader`, `Emasoft/weather-reporter` exists
   - MANAGER / AUTONOMOUS / MAINTAINER role-plugins available
   - CONTINUITY SUBSTRATE ACTIVE (janitor heartbeat armable per session + ai-maestro continuity daemon live)
 governance_password: "$AIM_GOVERNANCE_PASSWORD"
@@ -55,72 +57,82 @@ commit: TBD
 author: Emasoft
 ---
 
-# SCEN-031 phase 1 — bootstrap: does one sentence produce requirements and a fleet?
+# SCEN-031 phase 1 — bootstrap: does one sentence produce THREE requirements and a seven-agent fleet?
 
 > **PHASE 1 of 3.** Run order is **1 → 2 → 3**. There is **NO state reset between phases** — phase 2
 > starts exactly where phase 1 ended, on the same live fleet. **Phase 1 performs NO cleanup.** Only
 > phase 3 cleans.
 
+## THE THREE PROJECTS (the portfolio under test)
+
+Every later phase references this table. The MANAGER is NOT told these repo names or this table — it
+derives sensible ones itself; the runner maps whatever the MANAGER chose back to these three projects
+in its report.
+
+| # | Project | What it does | Repo (expected) | Pair |
+|---|---|---|---|---|
+| P1 | **zipsearcher** | search files by name INSIDE a zip via the central directory, no decompression | `Emasoft/zipsearcher` | dev₁ + maint₁ |
+| P2 | **tarot-reader** | draw tarot cards; render each as ASCII / Unicode art | `Emasoft/tarot-reader` | dev₂ + maint₂ |
+| P3 | **weather-reporter** | report the local weather when called (a free, no-key source) | `Emasoft/weather-reporter` | dev₃ + maint₃ |
+
+**The v2.0 test is PARALLELISM.** A MANAGER that ships the three one-after-another has NOT proven
+portfolio handling. Phase 2 explicitly checks that all three projects advance concurrently — that no
+project is starved while another is built. Record, per project, when each milestone is reached, so the
+report can show the three timelines overlap.
+
 ## Why the split exists (read this before running)
 
 A single-transcript run of the whole scenario grew an unreadable, unaffordable transcript: this is a
-**long-observation** test, and the runner was re-dumping full-page snapshots on every poll for hours.
-Every one of those blobs then rode forward in the transcript and was re-charged on **every later turn**
-(cost ≈ turns × per-turn-context). Splitting into three phases bounds each transcript so the
-orchestrator can actually READ it between phases, fix what it found, and only then start the next one.
-
-**The split is not a licence to be less rigorous.** Rule 0.b still governs: brief the MANAGER once,
-then observe. A pass bought by nudging is a FAIL.
+**long-observation** test. Splitting into phases bounds each transcript so the orchestrator can READ
+it between phases, fix what it found, and only then start the next. **The split is not a licence to be
+less rigorous.** Rule 0.b still governs: brief the MANAGER once, then observe. A pass bought by nudging
+is a FAIL. Rule 15 also governs: this phase's runner does bounded UI work and never waits for the fleet
+in a spin — it briefs, verifies what has happened, screenshots, hibernates, and exits.
 
 ---
 
-## TOKEN DISCIPLINE — mandatory, and the reason this scenario was unrunnable
+## TOKEN DISCIPLINE — mandatory
 
-You will spend most of this phase WAITING and WATCHING. How you watch decides whether the transcript
-is 50k or 5M. These are not suggestions.
+1. **NEVER dump a full-page snapshot or screenshot to observe progress.** Read the smallest thing that
+   answers "did anything change" — a `tmux capture-pane -p | tail -30`, a `gh` one-liner, an `ls`, a
+   `jq` field. A full `snapshotForAI()` is only for locating an element you are about to CLICK.
+2. **Extract the fact, then DROP the blob.** State the one line learned; never carry raw output forward.
+3. **Poll on a timer inside ONE bash call** (`sleep` then re-check once) — never a turn per second. But
+   per Rule 15, do NOT structure the phase around long waits: verify what has already happened.
+4. **Batch deterministic checks into ONE bash call**, stopping at the first failed assertion.
+5. **Read fixed inputs ONCE** (this file, the rules). NEVER re-read mid-phase.
+6. **Screenshot per STEP (Rule 10), not per poll.**
+7. **Never pipe raw test/lint/CI output into context** — a count plus one line per failure.
+8. **Read the SYMBOL, not the file**, when diagnosing.
 
-1. **NEVER dump a full-page snapshot or screenshot to observe progress.** To check "did anything
-   change", read the smallest thing that answers it — a `tmux capture-pane -p | tail -30`, a
-   `gh` one-liner, an `ls`, a `jq` field. A full `snapshotForAI()` is for locating an element you are
-   about to CLICK, not for watching.
-2. **Extract the fact, then DROP the blob.** After any snapshot/capture, state the one line you
-   learned ("MANAGER created agent `zs-dev`") and never carry the raw output forward. Do not paste a
-   terminal dump into your reasoning "for reference".
-3. **Poll on a timer, not in a spin.** When waiting on the fleet, `sleep` in a single bash call and
-   re-check ONCE — do not burn a turn per second. One check every 60–120s is plenty for a fleet that
-   works in minutes.
-4. **Batch deterministic steps into ONE bash call**, stopping at the first failed assertion. Turns are
-   a linear cost multiplier. Split a turn only when the next action depends on fresh state.
-5. **Read fixed inputs ONCE, at the start** (this file, the rules). NEVER re-read them mid-phase — a
-   re-read appends a SECOND copy that is then re-charged every remaining turn. Recall instead.
-6. **Screenshot per STEP (Rule 10), not per poll.** 9 steps ⇒ ~9 screenshots, not 400.
-7. **Never pipe raw test/lint/CI output into context.** Reduce to a count plus one line per failure.
-8. **If you must read source to diagnose, read the SYMBOL, not the file** — locate with `tldr search`
-   / `grep -n`, then `Read` with `offset`/`limit`.
-
-**Report at the end of the phase how many screenshots you took and roughly how many polls you ran.**
-If the answer is "hundreds of polls", the next phase's budget needs tightening and I want to know.
+**Report your screenshot and poll counts at the end.**
 
 ---
 
 ## ENTRY STATE (assert, do not create)
 
-phase 1 is the first phase, so it OWNS setup. Assert before S006: server up, `gh` authed,
-`Emasoft/zipsearcher` ABSENT, template present.
+phase 1 OWNS setup. Assert before S006: server up, `gh` authed, **all three of `Emasoft/zipsearcher`,
+`Emasoft/tarot-reader`, `Emasoft/weather-reporter` ABSENT**, template present.
 
 ## EXIT STATE — the contract phase 2 relies on
 
 phase 1 is DONE when all of these are true and verified:
 
-- [ ] `scen031-manager` exists, title MANAGER, session live at an idle prompt, janitor heartbeat armed
-- [ ] A requirements TRDD for zipsearcher exists, authored BY THE MANAGER
-- [ ] Exactly TWO further agents exist, created BY THE MANAGER: one `autonomous`, one `maintainer`,
-      each with its role-plugin installed and its continuity substrate up
-- [ ] ONE shared project `design/` board is established (not two siloed private trees), with per-agent
-      column ownership (AUTONOMOUS: `todo`/`dev`/`testing`; MAINTAINER: `ai_review`/`human_review`/`publish`)
-- [ ] **The agent names the MANAGER chose are RECORDED in the phase report** — phase 2 must not guess them
+- [ ] `scen031-manager` exists, title MANAGER, session live at an idle prompt, continuity substrate up
+- [ ] **THREE** requirements TRDDs exist — one per project (zipsearcher, tarot-reader, weather-reporter)
+      — authored BY THE MANAGER
+- [ ] Exactly **SIX** further agents exist, created BY THE MANAGER: **three `autonomous` + three
+      `maintainer`**, paired one dev+maint per project, each with its role-plugin installed and its
+      continuity substrate up
+- [ ] **THREE** shared project boards exist (one per project), NOT siloed private trees, each with
+      per-agent column ownership (that project's AUTONOMOUS owns `todo`/`dev`/`testing`; its MAINTAINER
+      owns `ai_review`/`human_review`/`publish`)
+- [ ] **The MANAGER-chosen names are RECORDED in the phase report, mapped to P1/P2/P3** — phase 2 must
+      not guess them, and must know which pair owns which project
+- [ ] **Evidence the three were set up CONCURRENTLY**, not serially (e.g. all three requirements + all
+      six agents exist by end of phase, with no project left un-started)
 - [ ] Nothing deleted; no cleanup performed
-- [ ] **All three agents HIBERNATED (S008z)** — the fleet must not run unobserved between phases
+- [ ] **All SEVEN agents HIBERNATED (S008z)** — the fleet must not run unobserved between phases
 - [ ] The ai-maestro server was NOT restarted
 
 Write the exit state explicitly at the top of your report. phase 2 reads it as its entry contract.
@@ -131,116 +143,101 @@ Write the exit state explicitly at the top of your report. phase 2 reads it as i
 
 #### S001: Run the shared setup
 - **Action:** Run `tests/scenarios/scripts/setup-SCEN-031.sh` (delegates to `scenario-setup.sh 31`).
-- **Goal:** Config backed up with a SHA256 manifest; the `scen031-sample-zips` dir-fixture verified present; no orphan `scen031-*`/`zip*` tmux sessions.
+- **Goal:** Config backed up with a SHA256 manifest; the `scen031-sample-zips` dir-fixture present; no orphan `scen031-*`/`zip*`/`tarot*`/`weather*` tmux sessions.
 - **Creates:** `state-backups/SCEN-031_<ts>/`
-- **Modifies:** nothing
 - **Verify:** Script exits 0; backup dir exists with `MANIFEST.sha256`; the sample-zip fixture exists.
 
 #### S002: Verify the GitHub preconditions (read-only)
-- **Action:** `gh auth status` (must be the @Emasoft identity); `gh repo view Emasoft/zipsearcher` MUST 404 (repo absent); `gh repo view fannijako/repo_template` MUST succeed and report `isTemplate: true`.
-- **Goal:** `gh` is authed, the target repo name is free, and the template exists.
-- **Creates:** nothing
-- **Modifies:** nothing
-- **Verify:** auth ok; `zipsearcher` absent; template present + is a template. If `zipsearcher` exists, ABORT (do not overwrite real work) and surface it.
+- **Action:** `gh auth status` (must be @Emasoft); each of `Emasoft/zipsearcher`, `Emasoft/tarot-reader`, `Emasoft/weather-reporter` MUST 404; `gh repo view fannijako/repo_template` MUST succeed with `isTemplate: true`.
+- **Goal:** `gh` authed, all three target names free, template present.
+- **Verify:** auth ok; all three repos absent; template present + is a template. If ANY of the three exists, ABORT (do not overwrite real work) and surface it.
 
 #### S003: Log in and baseline the dashboard
 - **Action:** `aim_login`, then screenshot the agent list.
 - **Goal:** Logged-in dashboard; baseline captured for the phase 3 post-cleanup comparison.
-- **Creates:** nothing
-- **Modifies:** nothing
 - **Verify:** Screenshot saved. **Record its path in the report — phase 3 compares against THIS baseline.**
 
 #### S004: Create the MANAGER (the fleet's only entry point)
 - **Action:** Agent Creation Wizard → name `scen031-manager` → title MANAGER → finish. Handle the sudo modal with `aim_sudo_modal` (it resolves the password itself — you never see or type it).
 - **Goal:** A MANAGER exists and its session starts. This is the ONE agent the runner creates.
 - **Creates:** agent `scen031-manager` at `~/agents/scen031-manager/`
-- **Modifies:** `registry.json`, `governance.json`
 - **Verify:** `GET /api/agents/{id}` → `.agent.governanceTitle === 'manager'`; sidebar badge reads MANAGER.
 
-#### S005: Wake the MANAGER, arm its continuity substrate, confirm idle
+#### S005: Wake the MANAGER, confirm continuity substrate, confirm idle
 - **Action:** Wake `scen031-manager`; wait for the idle prompt. Confirm the ai-maestro continuity daemon is live. **Do NOT require a per-agent `[janitor-heartbeat]` cron** — see the note below.
 - **Goal:** A live MANAGER whose continuity substrate is ACTIVE, so it self-sustains unsupervised.
-- **Creates:** 1 tmux session; the `[janitor-heartbeat]` cron for this agent
-- **Modifies:** nothing
-- **Verify:** badge shows waiting/idle, not `exited`; the daemon reports active. If the agent will not wake or the daemon is down, fix the CAUSE before proceeding (Rule 4). Do NOT plan to nudge the agent yourself — that would invalidate the never-stop proof.
+- **Verify:** badge shows waiting/idle, not `exited`; the daemon reports active. If the agent will not wake or the daemon is down, fix the CAUSE (Rule 4). Do NOT plan to nudge the agent yourself.
 
-> **A per-agent `[janitor-heartbeat]` cron is NOT expected, and its absence is NOT a failure.**
-> Corrected after the first phase-1 run (ISSUE-001): this step used to claim the heartbeat "self-arms
-> on wake via the core plugin". It does not — the core plugin contains no reference to `janitor-arm`;
-> the name appears only as a curated `commandKey` the SERVER may send and as the fleet-recovery
-> `rearm` rung. That run found **no `scheduled_tasks.json` in any of the three agents**, and all three
-> worked unattended and woke on their own anyway. The never-stop proof is about whether an idle agent
-> RESUMES — not about which mechanism resumes it.
+> **A per-agent `[janitor-heartbeat]` cron is NOT expected, and its absence is NOT a failure**
+> (phase-1 ISSUE-001). The never-stop proof is about whether an idle agent RESUMES — not about which
+> mechanism resumes it.
 
 ---
 
-## Stage 1: ONE directive. Then stop driving.
+## Stage 1: ONE directive naming THREE projects. Then stop driving.
 
-> The load-bearing step. Everything after it is observation + the four permitted user actions
-> (sudo approval, answering a direct MANAGER question, read-only checks, and — in phase 3 — the final
-> install). If the runner types into the AUTONOMOUS or MAINTAINER, the run is INVALID (Rule 6).
+> The load-bearing step. Everything after it is observation + the four permitted user actions. If the
+> runner types into ANY of the six worker agents, the run is INVALID (Rule 6).
 
-#### S006: Brief the MANAGER — the whole project, in one message
+#### S006: Brief the MANAGER — the whole PORTFOLIO, in one message
 - **Action:** Select `scen031-manager` → **Chat** section (never the terminal) → type ONE directive and send, verbatim:
-  *"Build me a command-line tool called **zipsearcher** that searches for files by name INSIDE zip archives
-  WITHOUT decompressing them (read the zip central directory only). I want it developed properly: write the
-  requirements first, create an autonomous developer agent and a maintainer agent to do the work, use GitHub
-  with pull-request review, and ship a v1.0.0 release. Create the repo from the template `fannijako/repo_template`.
-  Tell me when it is done and I will install and test it myself."*
-- **Goal:** The MANAGER holds the complete goal. From here it plans and delegates on its own.
-- **Creates:** the start of a TRDD + agent-creation chain (observed, not driven)
-- **Modifies:** nothing yet
+  *"Build me THREE separate command-line tools, each in its own GitHub repo, developed IN PARALLEL by a
+  dedicated pair of agents (one autonomous developer + one maintainer) per project — so you are running
+  three projects at the same time, not one after another:
+  (1) **zipsearcher** — searches for files by name INSIDE zip archives WITHOUT decompressing them (read
+  the zip central directory only);
+  (2) **tarot-reader** — draws tarot cards and shows each card as ASCII/Unicode art;
+  (3) **weather-reporter** — reports the local weather when it is called.
+  For EACH project: write the requirements first, create its own autonomous developer + maintainer pair,
+  create the repo from the template `fannijako/repo_template`, develop on GitHub with pull-request review,
+  and ship a v1.0.0 release. Run all three concurrently and keep me posted on all three. Tell me when each
+  one is done and I will install and test it myself."*
+- **Goal:** The MANAGER holds the complete three-project goal. From here it plans and delegates on its own.
 - **Verify:** the directive appears in the MANAGER's chat. Screenshot.
 
 ---
 
-## Stage 2: Requirements — does the MANAGER write a TRDD?
+## Stage 2: Requirements — does the MANAGER write THREE TRDDs?
 
-#### S007: STOP and observe — the MANAGER defines the requirements
-- **Action:** Watch read-only for up to 15 min, polling per the TOKEN DISCIPLINE rules (a tail of the pane + an `ls` of the design tree — NOT full snapshots). Do NOT prod, hint, or name a skill/tool.
-- **Goal:** The MANAGER authors a requirements TRDD for zipsearcher on its own.
-- **Creates:** nothing (runner)
-- **Modifies:** nothing (runner)
-- **Verify:** a TRDD appears under the MANAGER's design tree describing zipsearcher's requirements (zip central-directory read, filename search, CLI). Read it. Classify: **written on its own → continue**; **stalled → FAIL** (fix the MANAGER role-plugin, Rule 4, rerun); **asks a genuine scoping question → answer once, plainly, then resume observing.**
+#### S007: Verify — the MANAGER defined the requirements for all three projects
+- **Action:** Read-only. Check the MANAGER's design tree for requirements TRDDs. Do NOT prod, hint, or name a skill/tool. If not all three are present yet, that is a datapoint (which projects it started with) — record it and continue; do NOT sit in a wait loop (Rule 15).
+- **Goal:** The MANAGER authors THREE requirements TRDDs on its own — one per project.
+- **Verify:** three TRDDs describing, respectively, zipsearcher (zip central-directory read + filename search + CLI), tarot-reader (draw cards + ASCII/Unicode art), weather-reporter (local weather on call). Read each. **Classify:** all three written on its own → continue; **started only one/two and stalled on the rest → PORTFOLIO FAIL** (the MANAGER serialized or dropped projects — fix the MANAGER role-plugin, Rule 4, rerun); a genuine scoping question → answer once, plainly, then resume observing. **Record which projects had requirements and when** — the concurrency evidence starts here.
 
 ---
 
-## Stage 3: The fleet — does the MANAGER create the two agents?
+## Stage 3: The fleet — does the MANAGER create THREE pairs?
 
-#### S008: Observe — the MANAGER creates an AUTONOMOUS developer and a MAINTAINER
-- **Action:** Watch read-only + poll the registry (`GET /api/agents`, a `jq` of names+titles — not a page dump). The MANAGER must create two agents itself, naming them and installing any local-scope skills they need. Approve any sudo modal (`aim_sudo_modal`).
-- **Goal:** An AUTONOMOUS and a MAINTAINER now exist, created BY THE MANAGER.
-- **Creates:** (by the MANAGER) 1 AUTONOMOUS + 1 MAINTAINER under `~/agents/<name>/`
-- **Modifies:** `registry.json`
-- **Verify:** two NEW agents with `governanceTitle` `autonomous` and `maintainer`, each with its role-plugin installed (R9.13). **Each new agent's continuity substrate must come up** on first wake. **RECORD THEIR NAMES in the report — do NOT hardcode; the MANAGER chose them, and phase 2 needs them.** Wrong titles, a team (this is team-less), only one agent, or an agent whose heartbeat never arms → behavioural FAIL, fix the cause.
+#### S008: Verify — the MANAGER created three AUTONOMOUS developers and three MAINTAINERs
+- **Action:** Read-only + poll the registry (`GET /api/agents`, a `jq` of names+titles — not a page dump). The MANAGER must create six agents itself — three dev/maint pairs — and install any local-scope skills they need. Approve any sudo modal (`aim_sudo_modal`).
+- **Goal:** Three AUTONOMOUS + three MAINTAINER agents now exist, created BY THE MANAGER, paired per project.
+- **Creates:** (by the MANAGER) 3 AUTONOMOUS + 3 MAINTAINER under `~/agents/<name>/`
+- **Verify:** six NEW agents — three `autonomous`, three `maintainer` — each with its role-plugin installed (R9.13), each continuity substrate coming up on first wake. **RECORD ALL SIX NAMES mapped to P1/P2/P3** (which dev + which maint own which project) — the MANAGER chose them; phase 2 needs the mapping. **PORTFOLIO checks:** fewer than six agents, or a project with no pair, or all six assigned to one project = the MANAGER failed to staff the portfolio → behavioural FAIL. This is team-less (no COS/team); a team is a finding.
 
-#### S008b: Observe — the MANAGER sets up ONE shared board and assigns each agent its columns
-- **Action:** Watch read-only as the MANAGER establishes the working structure. Both agents build the same project, so they must share ONE project `design/` kanban board (the git-tracked zipsearcher TRDD corpus), NOT two siloed private trees. Expected split: AUTONOMOUS owns `todo`/`dev`/`testing`; MAINTAINER owns `ai_review`/`human_review`/`publish`. **Do NOT dictate the columns in chat** — the sensible split is what a correct fleet arrives at on its own, and it is the pass criterion, not a coaching input.
-- **Goal:** One shared board exists with clear per-agent column ownership.
-- **Creates:** nothing (runner)
-- **Modifies:** nothing (runner)
-- **Verify:** the MANAGER's transcript/TRDD shows (a) ONE shared project `design/` board both agents reference, and (b) the column-ownership split above. Siloed per-agent design trees, or no column ownership at all, is a behavioural finding. If the ai-maestro surface offers NO way to assign an agent to kanban columns, record an 11th-HOUR capability-gap proposal (Rule 11) — the split may then be a documented convention in the requirements TRDD, but the expected ownership is still what the run verifies.
+#### S008b: Verify — the MANAGER set up THREE shared boards, one per project, each with column ownership
+- **Action:** Read-only. Each project has its own repo → its own git-tracked `design/` board. Verify three boards exist, each shared by that project's pair (NOT six siloed private trees), each with the per-agent split (that project's AUTONOMOUS owns `todo`/`dev`/`testing`; its MAINTAINER owns `ai_review`/`human_review`/`publish`). **Do NOT dictate columns in chat** — the split is the pass criterion, not a coaching input.
+- **Goal:** Three shared boards with clear per-agent column ownership.
+- **Verify:** for each project, ONE shared `design/` board its pair references, with the ownership split. Per phase-1 ISSUE-002, `assignee` + `blocked-by` gating between two TRDDs is an ACCEPTED equivalent to column-ownership fields (see proposal TRDD-1K2TZVIP) — judge the OUTCOME (maintainer gates release, no single agent owns the whole lifecycle), not the mechanism. Siloed trees, or no gating at all, is a finding. If the surface offers NO way to assign kanban columns, record an 11th-HOUR capability-gap proposal (Rule 11).
 
 ---
 
 ## PHASE 1 END — hand off, park the fleet, do NOT clean up
 
 #### S008y: Write the handoff
-- **Action:** Write the phase report to `reports/scenarios-runner/`, opening with the **EXIT STATE checklist** (above) marked off, the **recorded agent names**, the **S003 baseline screenshot path**, the **state-backup dir path**, and the screenshot/poll counts.
+- **Action:** Write the phase report to `reports/scenarios-runner/`, opening with the **EXIT STATE checklist** marked off, the **six recorded worker names mapped to P1/P2/P3**, the **S003 baseline screenshot path**, the **state-backup dir path**, the per-project requirement/agent timestamps (the concurrency evidence), and the screenshot/poll counts.
 - **Goal:** phase 2 can start with zero guessing and zero re-derivation.
-- **Creates:** the phase report
-- **Modifies:** nothing
-- **Verify:** every EXIT STATE box is ticked or explicitly marked FAILED with its finding. **Do NOT delete any agent, repo, or config. Do NOT run STATE-WIPE.**
+- **Verify:** every EXIT STATE box ticked or explicitly marked FAILED with its finding. **Do NOT delete any agent, repo, or config. Do NOT run STATE-WIPE.**
 
-#### S008z: HIBERNATE all three agents — the fleet must not run unobserved
-- **Action:** Via the UI, hibernate `scen031-manager` and the two agents the MANAGER created. This is the **last** action of the phase — do it only after S008y has captured the state, since a hibernated agent's live terminal is no longer readable.
-- **Goal:** The fleet is parked. Between phases nobody is observing, so nobody may be working: an agent left running would build, message, and merge with no runner watching, and its behaviour would be unobserved, unverifiable, and unrecorded — the exact thing this scenario exists to measure.
-- **Creates:** nothing
-- **Modifies:** agent session state (running → hibernated)
-- **Verify:** all three show hibernated/exited in the sidebar; no `scen031-*` or MANAGER-chosen tmux session remains. **The ai-maestro server itself must NOT be restarted** — only the agents are parked.
+#### S008y2: 11th-HOUR — author each finding as its own proposal TRDD (Rule 11)
+- **Action:** For every behavioural finding, capability gap, or improvement this phase surfaced, author an INDIVIDUAL proposal TRDD in `design/proposals/` (`column: proposal`, `labels: [scenario-improvement, scen-031, phase-1]`, `min-approval-requirement:` per its objective floor). ONE finding = ONE file. **NEVER a monolithic report of proposals** — the report records step outcomes; the proposals are separate TRDD files. Commit them by name.
+- **Goal:** The phase's real product — its improvement proposals — exists as individual, screenable TRDDs.
+- **Verify:** each finding in the report has a matching `design/proposals/TRDD-*.md`; `grep -l 'phase-1' design/proposals/*.md` lists them. If the phase found nothing, say so explicitly — zero proposals is a valid outcome only if the report records zero findings.
 
-> **Hibernating here is NOT a never-stop violation, and waking in phase 2 is NOT a runner nudge.**
-> The never-stop / continuity proof governs behaviour **WITHIN** an observed phase: an agent that
-> stalls mid-phase must be revived by the janitor cron + continuity daemon, never by the runner. A
-> phase boundary is a deliberate, declared park by the USER-runner between observation windows. Record
-> the hibernate explicitly in the report so the next phase counts the wake as setup, not as a rescue.
+#### S008z: HIBERNATE all seven agents — the fleet must not run unobserved
+- **Action:** Via the UI, hibernate `scen031-manager` and the six agents the MANAGER created. **Last** action of the phase — after S008y/S008y2.
+- **Goal:** The fleet is parked between observation windows.
+- **Verify:** all seven show hibernated/exited; no related tmux session remains. **The server must NOT be restarted** — only the agents are parked.
+
+> **Hibernating here is NOT a never-stop violation, and waking in phase 2 is NOT a runner nudge.** The
+> continuity proof governs behaviour WITHIN an observed phase; a phase boundary is a declared park by
+> the USER-runner. Record the hibernate so phase 2 counts the wake as setup, not as a rescue.

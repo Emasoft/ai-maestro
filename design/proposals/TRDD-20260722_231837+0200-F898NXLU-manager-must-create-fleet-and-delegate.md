@@ -3,7 +3,7 @@ trdd-id: F898NXLU
 title: MANAGER role-plugin must mandate create-the-fleet-and-delegate, never build solo with vanilla subagents
 column: proposal
 created: 2026-07-22T23:18:37+0200
-updated: 2026-07-22T23:18:37+0200
+updated: 2026-07-23T06:35:00+0200
 current-owner: scenario-runner
 task-type: bugfix
 approval-tier: 2
@@ -15,6 +15,20 @@ external-refs:
   - reports/scenarios-runner/SCEN-031_20260722T203644Z.report.md
   - https://github.com/Emasoft/ai-maestro-assistant-manager-agent
 ---
+
+## UPDATE 2026-07-23 (SCEN-031 re-run) — largely RESOLVED by TRDD-GZ1KOHNR
+
+The prior FAIL was caused by the launch chokepoint dropping `--agent`, so the MANAGER ran as
+GENERIC `claude` with no persona and built solo. With TRDD-GZ1KOHNR live (commits eff07647 +
+2bd8969c), the SCEN-031 re-run showed the OPPOSITE behavior: the MANAGER persona loaded (live
+process `claude --agent ai-maestro-assistant-manager-agent-main-agent`, banner confirms), and
+it CREATED an AUTONOMOUS + a MAINTAINER agent and DELEGATED via real AMP mandates — exactly what
+this proposal asked for. The solo-build regression is not reproduced. The residual concern is
+narrower and now split off: the MANAGER front-loaded the MAINTAINER's repo-creation job itself
+(created the repo before the agents existed) rather than delegating it — a role-plugin
+labour-division nuance, not a solo build. The NEW blocker is downstream (workers never wake on
+the AMP mandate — see TRDD-4ALV5ISB). Recommend screening this toward the narrower nuance or
+closing it as superseded by GZ1KOHNR + 4ALV5ISB.
 
 ## Problem
 

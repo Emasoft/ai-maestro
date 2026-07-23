@@ -64,13 +64,48 @@ get_self_host_url() {
     echo "$_SELF_HOST_URL"
 }
 
-# API_BASE - dynamically determined, never localhost
+# API_BASE — how THIS process reaches the server on THIS host.
+#
+# Always loopback (ai-maestro#81). This used to return get_self_host_url(), i.e.
+# the LAN hostname — and on a host whose firewall drops inbound on the LAN
+# interface, that hostname RESOLVES but REFUSES the connection, so every
+# server-backed verb across all ~14 installed CLIs failed with a bare
+# "(network)" error while the very same port answered fine on 127.0.0.1. The
+# failure is invisible: "(network)" gives no hint that the BASE is the problem.
+#
+# A same-host caller has no reason to traverse the LAN interface. Loopback is
+# also unconditionally reachable whenever the server is up: it binds `::`
+# (dual-stack, which includes loopback) when Tailscale is present and
+# 127.0.0.1-only otherwise.
+#
+# Deliberately NOT fixed by probing-then-falling-back: that spends a connect
+# round-trip on every CLI invocation to discover something already known.
+#
+# get_self_host_url() is left ALONE on purpose — it is the URL this host
+# ADVERTISES to peers, and a peer told "127.0.0.1" would call itself. Only the
+# self-directed call is rewritten here; cross-host addressing goes through
+# get_host_url().
 get_api_base() {
     if [ -n "$AIMAESTRO_API_BASE" ]; then
         echo "$AIMAESTRO_API_BASE"
-    else
-        get_self_host_url
+        return 0
     fi
+
+    # Preserve the configured scheme and port; swap only the host for loopback.
+    local url scheme rest port
+    url="$(get_self_host_url)"
+    case "$url" in
+        https://*) scheme=https; rest="${url#https://}" ;;
+        http://*)  scheme=http;  rest="${url#http://}"  ;;
+        *)         scheme=http;  rest="$url"            ;;
+    esac
+    rest="${rest%%/*}"          # strip any path
+    port="${rest##*:}"          # trailing :PORT, if present
+    case "$port" in
+        ''|*[!0-9]*) port=23000 ;;   # no port in the URL -> the project default
+    esac
+
+    echo "${scheme}://127.0.0.1:${port}"
 }
 
 # For backwards compatibility - use function instead

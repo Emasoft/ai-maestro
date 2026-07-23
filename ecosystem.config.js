@@ -11,6 +11,13 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 23000,
+        // TRDD-MQ82BYSX: arm the gentle fleet-recovery actuator (esc_nudge → rearm → reload →
+        // update, via the authenticated queue; hard/process-kill rungs stay gated off in
+        // fleet-recovery-runner.ts). Without it the watchdog only DETECTS stalled agents and a
+        // fleet agent that finishes a turn with no unread mail sits idle forever — SCEN-031's
+        // "unsupervised, never-stopping" continuity requirement cannot hold. In the pm2 env (not a
+        // shell export) so it survives SCEN-031's mid-run `pm2 restart ai-maestro`.
+        AIM_FLEET_RECOVERY_FIRE: '1',
       },
       env_development: {
         NODE_ENV: 'development',

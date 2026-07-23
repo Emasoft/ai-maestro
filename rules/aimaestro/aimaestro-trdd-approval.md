@@ -645,6 +645,37 @@ multi-agent system, WHO may trigger each transition:
 
 Which of these transitions are EXEMPT from MANAGER approval vs
 NON-EXEMPT is defined in `aimaestro-manager-approval-defaults.md`.
+
+### The dispatch precondition — never dispatch against an unsatisfiable NPT (TRDD-BYCN5PB7)
+
+**Before moving a TRDD to `dev` (i.e. handing a worker its build order), the
+dispatcher MUST ensure the BASE that worker branches from already satisfies
+every NPT that worker's TRDD declares.**
+
+Binds **every** dispatching agent — MANAGER, CHIEF-OF-STAFF, ORCHESTRATOR —
+not one persona. Concretely:
+
+- Land the requirements/spec on `main` (or on a base branch that is merged
+  **before** dispatch), **then** hand the worker its TRDD.
+- If the requirements are staged in a PR, **merge that PR — or otherwise make
+  the base satisfy the NPT — BEFORE** telling the worker to build.
+- **Never** dispatch a worker whose declared NPT is satisfied only by an
+  unmerged PR, an unpushed branch, or any base it does not branch from.
+
+**Why this is a rule and not advice.** Violating it produces a deadlock in
+which *nobody is wrong and nothing moves*: the worker reads its STATE-block NPT
+gate, correctly refuses to build because the prerequisite is genuinely absent
+from its base, and flags the dispatcher — while the dispatcher believes the
+work was delivered. Observed live in the SCEN-031 re-run: requirements sat in
+an unmerged PR#4 while `main` held only "Initial commit", the AUTONOMOUS dev
+correctly held at the NPT gate, and the run stalled short of a release. A
+worker refusing here is behaving **correctly**; the defect is upstream, in the
+dispatch.
+
+The general form, worth stating because it outlives this instance: **do not
+declare a prerequisite you then leave unmet on the base you dispatch against.**
+An NPT is a promise to the worker, and the dispatcher owns keeping it.
+
 ---
 
 ## Part D — Asynchronous enforcement: self-classify fast, audit lazily

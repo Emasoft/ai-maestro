@@ -32,8 +32,12 @@ carry it. Corroborated fleet-wide (`ps` snapshot: 0 of 13 running titled agents 
 `--agent`) and by OQIA2DCR point 2 ("CREATE does not pass programArgs → plain claude, no role
 persona"). So the MANAGER built solo because it WAS generic claude, not because its persona
 told it to. USER directive: **the `--agent` spec MUST be ENFORCED — no agent may be executed
-without it** (an in-repo launch-pipeline fix, `lib/program-args.ts` + the CREATE/WAKE launch
-sites). Issue #31 (persona mandate) is SECONDARY — it can't be judged until the persona loads.
+without it.** FIX LANDED: TRDD-GZ1KOHNR (commits eff07647 + 2bd8969c) — `services/agent-launch-args.ts`
+derives `--agent` from the installed role-plugin at every launch/restart chokepoint (createSession,
+wakeAgent, the 4 restart sites); refuses fail-fast if a Claude agent has no resolvable persona.
+Issue #31 (persona mandate) is SECONDARY — it can only be judged after a re-run confirms the
+persona now loads. The launch-pipeline mechanics + the "diagnose by process argv" rule live on the
+component page `[[agent-launch-preconditions]]` (its third silent-failure block + `[^5]`).
 
 ## Notes and lessons learned
 [^1]: [id:ATOM-SC31-FNEG, status:valid, keywords:"role_plugin_agents_dead_on_arrival --agent_unresolvable claude_--agent_not_found bare_shell TRDD-OQIA2DCR false_negative stale_agents", ocd:2026-07-22, lmd:2026-07-22]

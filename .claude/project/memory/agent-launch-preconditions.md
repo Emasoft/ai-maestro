@@ -1,8 +1,8 @@
 ---
 name: agent-launch-preconditions
-description: "an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in' / 'API Usage Billing' and can do nothing — or its pane falls back to a shell prompt because --agent did not resolve"
+description: "an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in' / 'API Usage Billing' and can do nothing — or its pane falls back to a shell prompt because --agent did not resolve — or it runs a live but GENERIC claude (role persona never loads, e.g. a MANAGER builds solo) because --agent was DROPPED at the launch chokepoint"
 ocd: 2026-07-12
-lmd: 2026-07-13
+lmd: 2026-07-22
 metadata:
   node_type: memory
   type: project
@@ -73,6 +73,32 @@ turns it from a silent fleet outage into an explicit, diagnosable refusal.
 Related: the general platform knowledge lives in the user-scope notes
 `claude-code-client-authentication` and `macos-keychain-access-inheritance`.
 
+^agent-launch-agent-flag-dropped [desc: role_plugin_installed_but_--agent_dropped_at_launch_so_agent_runs_a_live_generic_claude, keywords: titled agent runs generic claude persona never loads, MANAGER builds the project solo instead of creating a fleet, agent is logged in and alive but not running its role persona, --agent missing from ps argv though registry programArgs has it, fresh Wizard-created titled agent has no --agent in its process, ocd:2026-07-22, lmd:2026-07-22]
+**Third silent failure — the MOST insidious, because the agent is genuinely ALIVE and
+LOGGED IN** (not "Not logged in" #1, not a shell prompt #2). The role-plugin is installed AND
+enabled — `--agent` WOULD resolve — but the launch command **drops `--agent` entirely**, so
+the pane runs a live, working GENERIC `claude`. The plugin's rules+skills load, but the
+role-plugin main-agent BEHAVIOURAL prompt does not, so the agent acts like vanilla Claude:
+e.g. a MANAGER told "build X and create a fleet" builds X SOLO with its own Claude Code
+subagents and creates ZERO ai-maestro personas (SCEN-031, 2026-07-22).
+
+Root cause (ai-maestro CreateAgent, verified): G04 stores the default `programArgs`
+(`--dangerously-skip-permissions`, NO `--agent`); G06 ChangeTitle injects `--agent` into the
+REGISTRY; but the launch chokepoints build the tmux command from a stale/param `programArgs`
+captured BEFORE G06 — so `--agent` is absent from the actual argv even though the registry
+now carries it. `sanitizeArgs` is NOT the stripper (its allowlist keeps `--agent`). **Diagnose
+by the LIVE process argv, never by liveness:** `ps -eo pid,command` then grep for `--agent` — a
+booting REPL is not proof the persona loaded.
+
+Fix (TRDD-GZ1KOHNR, commits eff07647 + 2bd8969c): derive `--agent` from the INSTALLED
+role-plugin (`RolePlugin.mainAgentName` via `scanAgentLocalConfig`) AT every launch/restart
+chokepoint — one shared helper `services/agent-launch-args.ts::resolveLaunchArgs`, wired into
+createSession, wakeAgent, and the 4 restart sites (`[id]`/`me` routes + 2 headless handlers).
+Non-Claude programs + agentless sessions pass through; a Claude agent with no resolvable
+persona is REFUSED (fail-fast, R9.13), mirroring the keychain refuse. Derive at launch from
+the role-plugin (the source of truth), NOT from stored programArgs — the stored copy can be
+stale. See also `scen031-manager-role-violation-not-substrate`.
+
 ## Governed by
 
 General debugging discipline this page's own `[^1]` lesson applies now lives on the
@@ -117,3 +143,14 @@ not as a `[[wikilink]]`, per the link-hygiene rule).
   which is the opposite of what the scope rule protects. Lesson: a scope-leak finding is a
   *candidate*, not a verdict; read the page before you move it, and record the verdict here
   so the next sweep does not re-litigate it.
+
+[^5]: [id:ATOM-ALP5-AGDROP, status:valid, keywords:"live_REPL_not_proof_persona_loaded verify_process_argv_via_ps --agent_dropped_at_launch generic_claude MANAGER_builds_solo derive_--agent_from_installed_role_plugin_at_launch stale_programArgs", ocd:2026-07-22, lmd:2026-07-22]
+  DO NOT conclude a titled agent's role persona is active just because it came up a live,
+  logged-in REPL, BECAUSE `--agent` can be DROPPED at the launch chokepoint — the fresh MANAGER
+  ran `claude --dangerously-skip-permissions` with no `--agent` though the registry programArgs
+  carried it (CREATE stores the default no-`--agent` args at G04; ChangeTitle injects `--agent`
+  into the registry at G06; the launch built the command from a stale/param copy captured before
+  G06). A fully-alive agent was silently running GENERIC claude and built its project solo. DO
+  inspect the actual launched process argv (`ps -eo pid,command`) for `--agent`, and derive the
+  flag from the INSTALLED role-plugin AT launch (not from possibly-stale stored programArgs) —
+  enforced now by TRDD-GZ1KOHNR (`services/agent-launch-args.ts`, commits eff07647+2bd8969c).

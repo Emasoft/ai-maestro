@@ -572,7 +572,7 @@ When a MANAGER is assigned (via title change), the reverse cascade runs:
 | ID | Rule | Source |
 |----|------|--------|
 | R13.1 | Each title agent **MUST operate strictly within its role-plugin's scope**. No agent may perform tasks assigned to another title's role-plugin | Explicit |
-| R13.2 | **MANAGER** manages governance, approves operations, routes work. Does NOT write code, design architecture, or coordinate tasks | Explicit |
+| R13.2 | **MANAGER** manages governance, approves operations, routes work, and performs **host-wide coordination** across projects, teams and agents (via AMP messaging, the PRRD, and the TRDD kanban). Does **NOT** write code, does **NOT** design architecture, and does **NOT** perform a team's **internal task orchestration** (kanban + work distribution inside a team — that is the ORCHESTRATOR's role, R13.5; the MANAGER reaches a team through its COS, R6.2) | Explicit |
 | R13.3 | **CHIEF-OF-STAFF** manages team staffing, agent lifecycle, external comms. Does NOT design, implement, or integrate | Explicit |
 | R13.4 | **ARCHITECT** designs system architecture, data models, APIs. Does NOT implement code, manage agents, or run CI/CD | Explicit |
 | R13.5 | **ORCHESTRATOR** coordinates tasks, manages kanban, distributes work. Does NOT design architecture or write code | Explicit |

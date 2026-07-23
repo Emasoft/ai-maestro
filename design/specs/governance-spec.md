@@ -518,7 +518,7 @@ Note (rationale, retained): the MEMBER title is the ONLY one that supports multi
 | ID | Rule |
 |----|------|
 | `R13.1` **strict-scope** | Each title agent **MUST operate strictly within its role-plugin's scope**. No agent may perform tasks assigned to another title's role-plugin |
-| `R13.2` **manager-governs-not-codes** | **MANAGER** manages governance, approves operations, routes work. Does NOT write code, design architecture, or coordinate tasks |
+| `R13.2` **manager-governs-not-codes** | **MANAGER** manages governance, approves operations, routes work, and performs **host-wide coordination** across projects, teams and agents (via AMP messaging, the PRRD, and the TRDD kanban). Does **NOT** write code, does **NOT** design architecture, and does **NOT** perform a team's **internal task orchestration** (kanban management and work distribution inside a team — that is the ORCHESTRATOR's role, `R13.5`; the MANAGER reaches a team through its COS, `R6.2`) |
 | `R13.3` **cos-staffs-not-builds** | **CHIEF-OF-STAFF** manages team staffing, agent lifecycle, external comms. Does NOT design, implement, or integrate |
 | `R13.4` **architect-designs-not-implements** | **ARCHITECT** designs system architecture, data models, APIs. Does NOT implement code, manage agents, or run CI/CD |
 | `R13.5` **orchestrator-coordinates-not-designs** | **ORCHESTRATOR** coordinates tasks, manages kanban, distributes work. Does NOT design architecture or write code |
@@ -1569,8 +1569,10 @@ Invariant: human users have no terminal and no AI client; each works through an 
 `R39.1` **user-has-no-terminal** — users (being human) have **no terminal and no chat page** on their own profile; each
 user is auto-assigned an **ASSISTANT**-title agent when created/registered (the MAESTRO user is exempt — it already has
 the MANAGER agent). `R39.2` **assistant-role-plugin** — the ASSISTANT runs the **`ai-maestro-assistant-role-agent`**
-role-plugin (a **LOCAL/D4 source** — already built at `~/agents/role-plugins/roles-marketplace/`, intentionally NOT a
-published GitHub repo and absent from `PREDEFINED_ROLE_PLUGIN_NAMES`) — a **mix of the MANAGER** (planning — it listens
+role-plugin (**PUBLISHED** — `Emasoft/ai-maestro-assistant-role-agent`, public since 2026-07-22, and listed in the
+`ai-maestro-plugins` marketplace manifest; also built locally at `~/agents/role-plugins/roles-marketplace/`. It remains
+absent from `PREDEFINED_ROLE_PLUGIN_NAMES`, which is now an OPEN QUESTION rather than a settled consequence of being
+local — see ai-maestro#86 F2) — a **mix of the MANAGER** (planning — it listens
 to its bound user) **and AUTONOMOUS** (programming — it codes autonomously, with no team and no direction from the
 MANAGER) role-plugins, **without** agent/team-creation privileges and **without governing powers** (R46.3). *(USER
 2026-07-22 RE-RULED the composition back to MANAGER+AUTONOMOUS; the 2026-07-16 **v4.4.0** "MANAGER+MAINTAINER" revision

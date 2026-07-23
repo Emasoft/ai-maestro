@@ -277,13 +277,23 @@ export const ROLE_PLUGIN_PROGRAMMER = 'ai-maestro-programmer-agent'
 export const ROLE_PLUGIN_MAINTAINER = 'ai-maestro-maintainer-agent'
 export const ROLE_PLUGIN_AUTONOMOUS = 'ai-maestro-autonomous-agent'
 /**
- * R39.2 ASSISTANT role-plugin. A LOCAL source (decision D4) — authored into
- * ~/agents/role-plugins/, NOT one of the 8 predefined/published GitHub
- * role-plugins, so it is intentionally absent from PREDEFINED_ROLE_PLUGIN_NAMES.
- * It runs a mix of the MANAGER (planning) + AUTONOMOUS (programming) role-plugins
- * WITHOUT agent/team-creation privileges. Listed in the title→plugin and
- * compatible-titles maps so title→plugin resolution and tsc exhaustiveness stay
- * total now that 'assistant' is a first-class AgentRole.
+ * R39.2 ASSISTANT role-plugin. It runs a mix of the MANAGER (planning) +
+ * AUTONOMOUS (programming) role-plugins WITHOUT agent/team-creation privileges.
+ * Listed in the title→plugin and compatible-titles maps so title→plugin
+ * resolution and tsc exhaustiveness stay total now that 'assistant' is a
+ * first-class AgentRole.
+ *
+ * STALE RATIONALE CORRECTED (ai-maestro#86 F2, 2026-07-23): this comment used to
+ * justify the omission below by calling it "a LOCAL source (decision D4) …
+ * intentionally NOT a published GitHub repo". That is no longer true —
+ * `Emasoft/ai-maestro-assistant-role-agent` was published 2026-07-22 (public) and
+ * IS listed in the ai-maestro-plugins marketplace manifest. Both verified.
+ *
+ * It is STILL absent from PREDEFINED_ROLE_PLUGIN_NAMES below, but that is now an
+ * OPEN QUESTION rather than a settled decision: adding it changes behaviour for
+ * every consumer that iterates the tuple (install flows, validation, UI
+ * listings), and several of those assume a set of exactly 8. Deliberately NOT
+ * changed here — the fact was wrong, the code may or may not be. Tracked on #86.
  */
 export const ROLE_PLUGIN_ASSISTANT = 'ai-maestro-assistant-role-agent'
 

@@ -83,6 +83,20 @@ export async function PATCH(
       }
       command = allowed.command
       requireIdle = allowed.requiresIdle
+      // #54 follow-up: the allowlist is the security boundary ONLY because every
+      // key on it is bounded and reversible — that, not "is it a slash command",
+      // is the membership test. `clear` is not: it WIPES the agent's context
+      // irreversibly, which is a strictly worse outcome than DELETE …/session
+      // (already strict) since a killed session can be woken and a wiped context
+      // cannot be recovered. `AgentCommand.destructive` already declared this and
+      // had ZERO consumers — dead metadata that read as a safeguard. Enforce it:
+      // a destructive key is held to the same bar as the arbitrary-`command`
+      // path. Non-destructive keys stay exempt, so chat keystrokes and the
+      // curated controls (compact / reload / janitor-*) are unaffected.
+      if (allowed.destructive) {
+        const guard = requireSudoToken(request, 'PATCH', '/api/agents/[id]/session')
+        if (guard) return guard
+      }
     } else {
       // #54 (TRDD-ED9A4VVY): the arbitrary-`command` path types unconstrained
       // text straight into a live agent's pane — strictly more dangerous than

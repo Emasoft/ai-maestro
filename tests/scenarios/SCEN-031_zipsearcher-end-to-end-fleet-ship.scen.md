@@ -88,6 +88,29 @@ author: Emasoft
 
 # SCEN-031 — zipsearcher, end to end: does the fleet ship real software from one sentence?
 
+> ## ⚠ DO NOT RUN THIS FILE DIRECTLY — it is executed as THREE PHASES
+>
+> | phase | file | steps | ends at |
+> |---|---|---|---|
+> | **A** | `SCEN-031A_zipsearcher-bootstrap.scen.md` | S001–S008b | fleet created, requirements TRDD written, shared board + columns set |
+> | **B** | `SCEN-031B_zipsearcher-build.scen.md` | S009–S015 | repo built, PR review loop run, `main` feature-complete with green CI |
+> | **C** | `SCEN-031C_zipsearcher-release-verify-cleanup.scen.md` | S016–S024 | released, USER-verified, **everything cleaned up** |
+>
+> **Run order is A → B → C, each in a FRESH agent, with NO state reset between them** — every phase
+> starts on the live fleet the previous one left running. Only **Phase C** cleans up; A and B delete
+> nothing. Each phase declares an ENTRY STATE (verify, don't create) and an EXIT STATE (the handoff
+> contract the next phase reads).
+>
+> **Why:** run as one transcript this scenario became unaffordable and unreadable. It is a
+> *long-observation* test, and the runner re-dumped full-page snapshots on every poll for hours; each
+> blob then rode forward and was re-charged on every later turn (cost ≈ turns × per-turn-context).
+> Three bounded transcripts let the orchestrator READ each one, fix what it found, and only then start
+> the next phase. Each phase file carries a mandatory TOKEN DISCIPLINE block — that block is the fix,
+> not the split alone.
+>
+> This file remains the **archival full spec** (frontmatter, prerequisites, and the rationale below are
+> canonical). The step text lives in the three phase files; keep them in sync when editing.
+
 > **What this scenario proves — read before writing or running a step (Rule 0.b is the whole point).**
 >
 > This is NOT a checklist the runner executes. It is a single directive followed by a long observation.

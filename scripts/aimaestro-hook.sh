@@ -160,7 +160,16 @@ cmd_notify() {
     [ -z "$tmux" ] && { echo "Error: resolved agent has no tmux session" >&2; return 1; }
     # Defence-in-depth: the session name is interpolated into the URL path.
     [[ "$tmux" =~ ^[a-zA-Z0-9_@.-]+$ ]] || { echo "Error: invalid session name: $tmux" >&2; return 1; }
-    local body; body="$(jq -nc --arg cmd "$message" '{command: $cmd, requireIdle: false, addNewline: false}')"
+    # addNewline:true is LOAD-BEARING (TRDD-YPIRL5RA / 4ALV5ISB DEFECT 1): the plugin fires this
+    # `notify` ONLY off Claude Code's idle_prompt/agent_needs_input signal, so pressing Enter here
+    # SUBMITS the inbox alert as a turn — which is what makes an idle recipient actually READ its
+    # inbox and act on a delegated mandate. With addNewline:false the text was typed but never
+    # submitted, so idle worker agents were deaf to AMP delegation (SCEN-031: fleet organizes, then
+    # stalls at the first handoff). requireIdle:false is CORRECT and deliberate: the idle_prompt hook
+    # that triggered this call is a STRONGER, hook-driven idleness proof than the isSessionIdle
+    # activity-timestamp heuristic — the exact rationale drainCommandQueueForSession documents
+    # (services/agents-core-service.ts:1658-1662).
+    local body; body="$(jq -nc --arg cmd "$message" '{command: $cmd, requireIdle: false, addNewline: true}')"
     _post "/api/sessions/${tmux}/command" "$body" >/dev/null
     echo "notified: $tmux"
 }

@@ -59,6 +59,21 @@ author: Emasoft
 
 # SCEN-031 phase 1 — bootstrap: does one sentence produce THREE requirements and a seven-agent fleet?
 
+> # ⚠ SUPERSEDED — DO NOT RUN THIS FILE
+>
+> **Split into two bursts by Rule 15.** Run these instead:
+>
+> | Burst | Does | When |
+> |---|---|---|
+> | `SCEN-031-phase-1a` | SAFE-SETUP + create MANAGER + brief on 3 projects, then EXIT | clean slate |
+> | `SCEN-031-phase-1b` | verify 3 requirements + 6 agents + 3 boards, park the fleet | after the MANAGER has organized the portfolio |
+>
+> **Why:** briefing the MANAGER is instant; the MANAGER then needs wall-clock time to author three
+> requirements and create six agents. A single burst that briefs *and* verifies would either WAIT for
+> that (forbidden — Rule 15) or hibernate a just-briefed MANAGER and wrongly fail it. 1a briefs and
+> exits; the orchestrator holds the clock; 1b verifies once the work exists. This file is kept as the
+> readable narrative of what phase 1 tests. **Do not run it directly.**
+
 > **PHASE 1 of 3.** Run order is **1 → 2 → 3**. There is **NO state reset between phases** — phase 2
 > starts exactly where phase 1 ended, on the same live fleet. **Phase 1 performs NO cleanup.** Only
 > phase 3 cleans.

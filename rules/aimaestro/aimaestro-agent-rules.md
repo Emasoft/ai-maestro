@@ -28,6 +28,7 @@ satisfy a rule is yours to decide.
 
 ## Work
 
+- A MANAGER mandate (git-tracked `mandate: true`) IS the explicit MANAGER permission RULE 1 names — executing it satisfies RULE 1; do not wait for a human go-ahead.
 - Non-trivial change ⇒ a TRDD under `design/`; cite its `TRDD-<id>` in the commit subject.
 - Commit often, and put the WHY in both the commit message and a comment at the change site.
 - Stage files by name — never `git add -A`. Never delete an uncommitted file. Never push unless told to.

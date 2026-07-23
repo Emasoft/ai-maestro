@@ -1525,12 +1525,34 @@ export async function installPluginLocally(
     // Retry with exponential backoff on transient-looking failures only. A wrong
     // plugin name or an unregistered marketplace is NOT transient — retrying those
     // just burns two minutes before failing with the same message, so they fail fast.
+    //
+    // SERIALIZED across concurrent installs for DIFFERENT agents (SCEN-031 phase-2
+    // finding, 2026-07-23): `claude plugin install` mutates the single shared
+    // ~/.claude/plugins/installed_plugins.json as an internal side effect of the CLI
+    // process itself — a side effect our own withSettingsLock() cannot see or guard
+    // when it wraps only OUR writes. When ai-maestro creates/wakes several agents in
+    // quick succession (e.g. a MANAGER dispatching a fresh AUTONOMOUS + MAINTAINER
+    // pair), each spawns its own `claude plugin install` child process, and two
+    // concurrent CLI processes doing read-modify-write on that one JSON file is a
+    // classic lost-update race: the loser's plugin entry never lands in
+    // installed_plugins.json even though settings.local.json (which OUR code writes
+    // directly, under our own lock) still shows it enabled. The agent then launches
+    // with `--agent <persona>` but the persona is invisible to Claude Code's plugin
+    // resolver ("not found. Available agents: ..." — no crash, no error surfaced to
+    // ai-maestro, just a silently role-less agent). Observed live: scen031-manager's
+    // MANAGER persona vanished this way while two sibling agents created moments
+    // earlier survived. Wrapping the CLI call in the SAME lock used for our own
+    // installed_plugins.json writes serializes every install attempt (ours and the
+    // CLI's) against that file, so no two `claude plugin install` invocations for
+    // different agents can interleave their read-modify-write on it.
     let lastErr = ''
     for (let attempt = 1; attempt <= INSTALL_MAX_ATTEMPTS; attempt++) {
       try {
-        await execFileAsync('claude', [
-          'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
-        ], { timeout: 120000, cwd: resolvedDir })
+        await withSettingsLock(INSTALLED_FILE, async () => {
+          await execFileAsync('claude', [
+            'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
+          ], { timeout: 120000, cwd: resolvedDir })
+        })
         if (attempt > 1) {
           console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} on attempt ${attempt}/${INSTALL_MAX_ATTEMPTS} (earlier attempts failed transiently)`)
         } else {

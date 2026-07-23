@@ -6,7 +6,7 @@ The ultimate aim of UI scenario tests is NOT just to verify that features work. 
 
 Every scenario run should author its improvement suggestions as INDIVIDUAL git-tracked TRDD-proposal files under `design/proposals/` — one suggestion = one `TRDD-<TS>-<id8>-<slug>.md` with `column: proposal` (see Rule 11). Proposals are then screened through the standard TRDD approval flow (`~/.claude/rules/trdd-approval-tiers.md`), prioritized, and implemented before the next scenario batch. Over time, this creates a virtuous cycle: tests find issues, issues get fixed, fixes get verified by re-running the same scenarios.
 
-All UI scenario tests in AI Maestro MUST follow these 14 rules. No exceptions.
+All UI scenario tests in AI Maestro MUST follow these 15 rules. No exceptions.
 
 ---
 
@@ -184,6 +184,8 @@ The default rewipe-list does NOT contain `~/.claude/*` files. Those belong to th
 11. [Rule 11: 11th-HOUR](#rule-11-11th-hour) — Post-scenario deep analysis and improvement proposals
 12. [Rule 12: SUDO-MODE](#rule-12-sudo-mode) — Password re-entry for destructive operations
 13. [Rule 13: AUTONOMOUS-PROTOCOL](#rule-13-autonomous-protocol) — How a long unattended overnight batch is structured
+14. [Rule 14: REPORTS-TO-PROJECT-ROOT](#rule-14-reports-to-project-root-added-2026-04-20-tightened-2026-04-21) — Every report under `<main-repo>/reports/`
+15. [Rule 15: THE-RUNNER-NEVER-WAITS](#rule-15-the-runner-never-waits) — The orchestrator owns the clock; a runner is a bounded burst
 14. [How-To: Running a Scenario](#how-to-running-a-scenario) — Practical guidance for the test executor
 
 ---
@@ -1426,6 +1428,66 @@ What remains forbidden:
 - Killing sessions with `tmux kill-session` (use the UI hibernate/delete)
 
 The distinction is: **read = monitoring (allowed), write/action = must go through the browser UI**.
+
+---
+
+## Rule 15: THE-RUNNER-NEVER-WAITS
+
+**A scenario runner MUST NOT wait for anything. Ever.** Not for a build, not for a
+fleet, not for CI, not for an agent to finish thinking. If a step's precondition is not
+already true when the runner is spawned, the runner returns `BLOCKED: <precondition>`
+**immediately** and exits. Waiting is the orchestrator's job, never the runner's.
+
+### Why (TRDD-CQD0EP6R — learned the expensive way)
+
+**A subagent that ends its turn is indistinguishable from a subagent that finished.**
+"Wait" and "done" are the same event to the harness. So there is no way for a runner to
+wait quietly:
+
+| How it tries to wait | What actually happens |
+|---|---|
+| Ends its turn to wait | Reported as **completed**; the run is abandoned mid-scenario |
+| Foreground `sleep` | Blocked by the harness |
+| Background job, then ends the turn | Same as the first row |
+
+SCEN-031 phase 2 killed **three consecutive runners** this way in one afternoon, with
+the fleet healthy throughout. None was confused — the third one's final recorded thought
+was a correct reading of the run. They did not fail at observing; they failed at
+**existing long enough to observe**. One of them burned ~355k tokens per resume cycle to
+buy two tool calls, because every resume re-reads the whole transcript.
+
+### The split
+
+| Role | Owns | Shape |
+|---|---|---|
+| **Orchestrator** (the main session) | the **CLOCK** — polling, waiting, deciding when a milestone has landed | long-lived; ~1k tokens per probe; woken by the janitor heartbeat |
+| **Runner** (a spawned subagent) | the **UI BURST** — drive the dashboard, screenshot, assert, write, exit | short-lived; bounded turns; never waits |
+
+The orchestrator waits *cheaply* (a `gh api` call, a `tmux capture-pane`, a transcript
+mtime) and adds nothing durable to its context per probe. That is exactly what a runner
+cannot do, because its cost is its whole transcript re-read on every resume.
+
+### What this means when authoring a scenario
+
+1. **Split phase files by ACTIVITY, not by scenario stage.** Each runner invocation is a
+   burst of UI steps whose precondition is **already true at spawn time**.
+2. **Every burst file states its PRECONDITION at the top**, in a form the runner can
+   check in one cheap call, plus the exact `BLOCKED:` string to return if it is unmet.
+3. **No step may contain "wait for", "poll until", "watch until", or a `sleep`.** A step
+   that says *"Observe — the MANAGER hands the TRDD to the dev"* is really *"verify the
+   handoff ALREADY happened"*. Write it that way.
+4. **The orchestrator gates the spawns.** It polls for the milestone, then spawns the
+   burst that verifies it.
+5. **A stale runner heartbeat is a RUNNER failure, never a fleet failure.** These were
+   repeatedly conflated: the fleet kept working while the runner died. Check the fleet's
+   own liveness (transcript mtimes, repo side effects) before concluding anything about
+   the agents.
+
+### The one thing this does NOT change
+
+Rule 0.b still governs: the orchestrator may **wait and watch**, but it may not **drive**.
+Holding the clock is not permission to nudge an agent. If the milestone never arrives,
+that is the finding — the orchestrator records it and spawns nothing.
 
 ---
 

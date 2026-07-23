@@ -111,15 +111,27 @@ Leaving a parked fleet and a real GitHub repo behind is never acceptable.
 
 ## Stage 8: Release + the MANAGER's own smoke test
 
-#### S016: Observe — the MANAGER asks the MAINTAINER to cut a v1.0.0 release
-- **Action:** Watch (read-only). On the MANAGER's message the MAINTAINER creates a GitHub release tagged `1.0.0` on `Emasoft/zipsearcher`.
-- **Goal:** A published `v1.0.0` release exists.
-- **Verify:** `gh release view 1.0.0 --repo Emasoft/zipsearcher` succeeds and is published (not draft).
+> **RULE 15 — YOU NEVER WAIT.** Both steps below verify something that has **already
+> happened**. Check the precondition in one cheap call before either:
+>
+> ```bash
+> gh release view 1.0.0 --repo Emasoft/zipsearcher --json isDraft,publishedAt 2>/dev/null
+> ```
+>
+> No release yet → record `BLOCKED: no v1.0.0 release` for S016+S017, **skip straight to the
+> CLEANUP stage**, and let the orchestrator decide whether to re-spawn later. Cleanup must run
+> regardless of verdict — never leave a live fleet and a real GitHub repo behind because a
+> release did not appear.
 
-#### S017: Observe — the MANAGER installs the release, smoke-tests it, and notifies the USER
-- **Action:** Watch (read-only) as the MANAGER installs the released zipsearcher locally and runs it against a zip; on success it MESSAGES the user (the runner) that the project is complete.
-- **Goal:** The MANAGER independently confirms the shipped artifact works before declaring done.
-- **Verify:** the MANAGER's transcript shows a real install + a successful search run; a completion message reaches the user surface. **A "done" claim with no install/run evidence is a truth failure = hard FAIL** — and it is the single most important thing this step catches.
+#### S016: Verify the v1.0.0 release exists and is published
+- **Action:** Confirm the MAINTAINER cut a release tagged `1.0.0` on `Emasoft/zipsearcher` on the MANAGER's message.
+- **Goal:** A published `v1.0.0` release exists.
+- **Verify:** `gh release view 1.0.0 --repo Emasoft/zipsearcher` succeeds and is published (**not** a draft).
+
+#### S017: Verify the MANAGER installed and smoke-tested the release before declaring done
+- **Action:** Read the MANAGER's transcript and the user-facing message surface for the completion claim and the evidence behind it.
+- **Goal:** The MANAGER independently confirmed the shipped artifact works before saying it was done.
+- **Verify:** the transcript shows a **real install and a successful search run**; a completion message reached the user surface. **A "done" claim with no install/run evidence is a truth failure = hard FAIL** — the single most important thing this step catches, because it is the difference between shipping software and reporting that you did.
 
 ---
 

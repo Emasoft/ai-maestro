@@ -48,6 +48,26 @@ author: Emasoft
 
 # SCEN-031 phase 2 — build: does the governed loop actually ship working code?
 
+> # ⚠ SUPERSEDED — DO NOT RUN THIS FILE
+>
+> **Split into four bursts by TRDD-CQD0EP6R.** Run these instead, each spawned by the
+> ORCHESTRATOR only once its precondition is already true:
+>
+> | Burst | Verifies | Precondition |
+> |---|---|---|
+> | `SCEN-031-phase-2a` | dispatch + TRDD approval loop | requirements on `main`, fleet awake |
+> | `SCEN-031-phase-2b` | repo, rulesets, CI, fork, clones | `Emasoft/zipsearcher` exists |
+> | `SCEN-031-phase-2c` | PR review loop (re-spawnable) | ≥1 fleet-authored PR exists |
+> | `SCEN-031-phase-2d` | closer: honest verdict, handoff, park | none — always runs |
+>
+> **Why:** every `Observe —` step below is a disguised **wait**, and a runner cannot wait
+> (Rule 15). Three consecutive runners died here in one afternoon with the fleet healthy —
+> ending a turn to wait is indistinguishable from finishing, so the run was abandoned each
+> time. The bursts contain the same checks, re-expressed as *verify what already happened*.
+>
+> This file is kept as the readable narrative of what phase 2 tests, and as the record of
+> the design that failed. **Its steps live on in the bursts; do not run it directly.**
+
 > **PHASE 2 of 3.** Run order is **1 → 2 → 3**. There is **NO state reset between phases** — phase 2
 > starts exactly where phase 1 ended, on the same live fleet, and does **NOT** re-run setup.
 > **Phase 2 performs NO cleanup.** Only phase 3 cleans.

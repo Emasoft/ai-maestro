@@ -285,25 +285,30 @@ if [ -z "${AMP_DIR:-}" ]; then
                     _amp_resolved=true
                 fi
             elif [ "$_amp_count" != "0" ]; then
-                echo "Error: Multiple AMP agents found. Use --id <uuid>" >&2
+                # ai-maestro#46: this branch used to print "Use --id <uuid>", list every
+                # agent's address+uuid, and close with "Example: … --id <uuid-from-above>".
+                # That INVITED the one act the issue correctly calls state-corrupting: a
+                # session that cannot prove who it is copying a live peer's uuid and
+                # mutating kanban/AMP state under THAT agent's identity. An error message
+                # must not hand the caller the exploit. We now name only the paths that
+                # PROVE identity, and deliberately do NOT print a pickable uuid list.
+                echo "Error: AMP identity could not be resolved for this session (${_amp_count} agents registered)." >&2
                 echo "" >&2
-                echo "Available agents:" >&2
-                while IFS= read -r _entry; do
-                    _e_name=$(echo "$_entry" | jq -r '.key')
-                    _e_uuid=$(echo "$_entry" | jq -r '.value')
-                    _e_addr=""
-                    _e_cfg="${AMP_AGENTS_BASE}/${_e_uuid}/config.json"
-                    if [ -f "$_e_cfg" ]; then
-                        _e_addr=$(jq -r '.agent.address // empty' "$_e_cfg" 2>/dev/null)
-                    fi
-                    if [ -n "$_e_addr" ]; then
-                        printf "  %-45s %s\n" "$_e_addr" "$_e_uuid" >&2
-                    else
-                        printf "  %-45s %s\n" "$_e_name" "$_e_uuid" >&2
-                    fi
-                done < <(jq -c 'to_entries[]' "$_amp_index_file" 2>/dev/null)
+                echo "This session is not bound to any agent, so an amp-* command here would have to" >&2
+                echo "ASSERT an identity rather than prove one. Resolve it legitimately instead:" >&2
                 echo "" >&2
-                echo "Example: amp-inbox.sh --id <uuid-from-above>" >&2
+                echo "  1. Run from the agent's own working directory:  cd ~/agents/<your-agent-name>" >&2
+                echo "     (identity is derived from the workdir, and cross-checked against the server env)" >&2
+                echo "  2. Let AI Maestro spawn the session — the server injects AIM_AGENT_ID/AIM_AGENT_NAME" >&2
+                echo "     into the agent's pane. This is the deterministic, unspoofable path." >&2
+                echo "  3. For genuine HOST operations (the server itself, acting as no agent):  AMP_HOST=1" >&2
+                echo "" >&2
+                echo "Do NOT pass an arbitrary --id to get past this. Every registered uuid belongs to a" >&2
+                echo "real, possibly LIVE agent; running as one sends mail, moves kanban cards, and mutates" >&2
+                echo "state under that agent's identity. If you are DEVELOPING a role-plugin, you are not" >&2
+                echo "that agent and must not borrow its identity." >&2
+                echo "" >&2
+                echo "(Deliberate admin lookup, if you genuinely need it: ~/.agent-messaging/agents/.index.json)" >&2
                 exit 1
             fi
         fi

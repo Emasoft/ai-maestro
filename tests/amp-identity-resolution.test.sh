@@ -174,9 +174,18 @@ t6_p35_no_match_falls_through() {
     add_agent "$h" "beta"  "bbbbbbbb-0000-0000-0000-000000000002"
     add_workdir "$h" "alpha"   # ~/agents EXISTS, but CWD is elsewhere
     run_probe "$h" "/tmp"
-    [ "$P_RC" != "0" ] && printf '%s' "$P_ERR" | grep -q "Multiple AMP agents"
+    [ "$P_RC" != "0" ] && printf '%s' "$P_ERR" | grep -q "AMP identity could not be resolved"
     record "p35_no_match_falls_through_to_p4" "$?" \
-        "CWD not under ~/agents, many agents -> unchanged P4 multi-agent error"
+        "CWD not under ~/agents, many agents -> unchanged P4 multi-agent refusal"
+
+    # ai-maestro#46 — the P4 refusal must NEVER print a pickable uuid. It used to list
+    # every agent's address+uuid and close with "Example: … --id <uuid-from-above>",
+    # which handed a session that CANNOT prove its identity the means to run as a live
+    # peer (sending mail / moving kanban cards under that agent's name). The fixture
+    # agents above carry uuid-shaped ids, so a regression that re-lists them trips this.
+    ! printf '%s' "$P_ERR" | grep -qE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-'
+    record "p4_refusal_leaks_no_uuid" "$?" \
+        "P4 refusal names no agent uuid (anti-impersonation, ai-maestro#46)"
 }
 
 # ============================================================================

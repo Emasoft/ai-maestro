@@ -4,8 +4,10 @@ import {
   touchesGateField,
   GOVERNED_TARGET_COLUMNS,
   REVIEW_COLUMNS,
+  GATE_CRITICAL_COLUMN_IDS,
   type KanbanFieldAuthzInput,
 } from '@/lib/kanban-field-authority'
+import { DEFAULT_STATUSES } from '@/types/task'
 
 // ai-maestro#47 verb 3 — the kanban field-write judgment gate (pure, no mocks).
 // Verifies: GATE 1 (governed transitions + release-evidence need MANAGER-by-AID or
@@ -183,5 +185,29 @@ describe('sanity — the ratified column sets', () => {
   })
   it('review columns are ai_review and human_review', () => {
     expect([...REVIEW_COLUMNS].sort()).toEqual(['ai_review', 'human_review'])
+  })
+})
+
+// ai-maestro#74 — the enum hard-lock residual (resolved as Option C). GATE_CRITICAL_COLUMN_IDS is
+// what `setKanbanConfig` forces every custom board to preserve. If an id the gates key off could be
+// renamed away, the predicate guarding that transition would simply never match for that team.
+describe('GATE_CRITICAL_COLUMN_IDS — what a custom board may never rename away (#74 Option C)', () => {
+  it('covers every id either gate keys off — governed targets, review columns, and both backward-to-dev sources plus dev itself', () => {
+    for (const c of GOVERNED_TARGET_COLUMNS) expect(GATE_CRITICAL_COLUMN_IDS.has(c)).toBe(true)
+    for (const c of REVIEW_COLUMNS) expect(GATE_CRITICAL_COLUMN_IDS.has(c)).toBe(true)
+    // The BYPASS-2 backward moves: the SOURCE columns and the `dev` target are all load-bearing.
+    for (const c of ['human_review', 'live_auditing', 'dev']) {
+      expect(GATE_CRITICAL_COLUMN_IDS.has(c)).toBe(true)
+    }
+  })
+
+  it('leaves the purely mechanical columns free — teams may still rename or omit those', () => {
+    for (const c of ['backburner', 'todo', 'design', 'dispatch', 'testing', 'blocked']) {
+      expect(GATE_CRITICAL_COLUMN_IDS.has(c)).toBe(false)
+    }
+  })
+
+  it('every gate-critical id is a real column in the ratified 17-col vocabulary (catches a typo that would silently never match)', () => {
+    for (const c of GATE_CRITICAL_COLUMN_IDS) expect(DEFAULT_STATUSES).toContain(c)
   })
 })

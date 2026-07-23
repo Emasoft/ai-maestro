@@ -130,6 +130,9 @@ import {
   setKanbanConfig,
 } from '@/services/teams-service'
 import { getManagerId, isManager, isOrchestrator, isChiefOfStaff } from '@/lib/governance'
+// Real (unmocked) — the gate is a pure module with no deps; it defines which column ids a custom
+// board must preserve (ai-maestro#74 Option C), so tests derive their fixtures from it, never a copy.
+import { GATE_CRITICAL_COLUMN_IDS } from '@/lib/kanban-field-authority'
 
 // ============================================================================
 // Setup
@@ -1116,7 +1119,13 @@ describe('notifyTeamAgents', () => {
 // ============================================================================
 
 describe('setKanbanConfig — kanban-config write RBAC (GOV-AUDIT 2026-06-21)', () => {
-  const COLS = [{ id: 'todo', label: 'To Do', color: '#ffffff' }]
+  // Must be a GATE-VALID set: since ai-maestro#74 (Option C) setKanbanConfig also rejects a config
+  // that drops a governance column id. These tests are about RBAC, so the fixture carries every
+  // gate-critical id (derived from the gate itself, so it cannot drift) plus one ordinary column.
+  const COLS = [
+    { id: 'todo', label: 'To Do', color: '#ffffff' },
+    ...Array.from(GATE_CRITICAL_COLUMN_IDS).map((id) => ({ id, label: id, color: '#ffffff' })),
+  ]
 
   // The shared beforeEach uses vi.clearAllMocks() which clears CALLS but NOT the
   // mockReturnValue implementations — so reset all three authz fns to false here,
@@ -1170,5 +1179,92 @@ describe('setKanbanConfig — kanban-config write RBAC (GOV-AUDIT 2026-06-21)', 
     // The RBAC gate is skipped entirely when there is no agent identity.
     expect(vi.mocked(isManager)).not.toHaveBeenCalled()
     expect(vi.mocked(isOrchestrator)).not.toHaveBeenCalled()
+  })
+})
+
+// ============================================================================
+// setKanbanConfig — governance-column preservation (ai-maestro#74, enum hard-lock = Option C)
+// A custom board may ADD columns and rename/omit the NON-governed ones, but it must PRESERVE every
+// column id the R41 field-authority gates key off. Dropping one leaves those gates' predicates
+// unmatchable, silently disabling that governed transition FOR THAT TEAM — the gate still runs, it
+// just can never fire. Closing it here (service) covers the Next.js route and headless router alike.
+// ============================================================================
+
+describe('setKanbanConfig — custom boards must preserve the governance column ids (#74 Option C)', () => {
+  const gateCols = () =>
+    Array.from(GATE_CRITICAL_COLUMN_IDS).map((id) => ({ id, label: id, color: '#ffffff' }))
+
+  beforeEach(() => {
+    // Authority is NOT what these tests exercise — grant it so the RBAC gate passes through.
+    vi.mocked(isManager).mockReturnValue(true)
+    vi.mocked(isOrchestrator).mockReturnValue(false)
+    vi.mocked(isChiefOfStaff).mockReturnValue(false)
+  })
+
+  it('rejects the self-review-ban bypass: human_review renamed to boss-check and complete to done', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    // The exact attack #74 describes: rename the two ids GATE 2 keys off, and a self-assigned agent
+    // could then move its OWN card boss-check -> done, tripping neither GATE 1 nor GATE 2.
+    const renamed = gateCols()
+      .filter((c) => c.id !== 'human_review' && c.id !== 'complete')
+      .concat([
+        { id: 'boss-check', label: 'Boss check', color: '#ffffff' },
+        { id: 'done', label: 'Done', color: '#ffffff' },
+      ])
+    const result = await setKanbanConfig('team-1', renamed, 'mgr-1', undefined)
+    expect(result.status).toBe(400)
+    expect(result.error).toMatch(/must preserve the governance column ids/i)
+    expect(result.error).toMatch(/complete/)
+    expect(result.error).toMatch(/human_review/)
+    expect(mockTeams.updateTeam).not.toHaveBeenCalled()
+  })
+
+  it('names EVERY missing governance id, so a caller fixes the config in one pass', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    const dropped = ['ai_review', 'live_auditing', 'superseded']
+    const result = await setKanbanConfig(
+      'team-1',
+      gateCols().filter((c) => !dropped.includes(c.id)),
+      'mgr-1',
+      undefined,
+    )
+    expect(result.status).toBe(400)
+    for (const id of dropped) expect(result.error).toContain(id)
+  })
+
+  it('accepts a custom board that keeps every governance id while adding a bespoke column', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    mockTeams.updateTeam.mockResolvedValue(makeTeam({ id: 'team-1' }))
+    // Note this set OMITS the mechanical columns (todo/design/dispatch/testing/blocked/backburner)
+    // and adds a bespoke one — all legitimate, because none of those is gate-critical.
+    const custom = gateCols().concat([{ id: 'triage-inbox', label: 'Triage', color: '#abcdef' }])
+    const result = await setKanbanConfig('team-1', custom, 'mgr-1', undefined)
+    expect(result.status).toBe(200)
+    expect(mockTeams.updateTeam).toHaveBeenCalledWith('team-1', { kanbanConfig: custom })
+  })
+
+  it('applies to the web UI / system-owner path too — a gate-breaking board is a structural defect, not an authority question', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    const result = await setKanbanConfig(
+      'team-1',
+      gateCols().filter((c) => c.id !== 'human_review'),
+      undefined,
+      undefined,
+    )
+    expect(result.status).toBe(400)
+    expect(mockTeams.updateTeam).not.toHaveBeenCalled()
+  })
+
+  it('RBAC still runs FIRST — an unprivileged MEMBER gets 403, not the 400 config error', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    vi.mocked(isManager).mockReturnValue(false)
+    const result = await setKanbanConfig(
+      'team-1',
+      gateCols().filter((c) => c.id !== 'complete'),
+      'member-1',
+      undefined,
+    )
+    expect(result.status).toBe(403)
+    expect(mockTeams.updateTeam).not.toHaveBeenCalled()
   })
 })

@@ -55,6 +55,29 @@ const GOVERNED_BACKWARD_TO_DEV: ReadonlySet<string> = new Set(['human_review', '
 /** The review columns a card exits when a verdict is rendered on it. */
 export const REVIEW_COLUMNS: ReadonlySet<string> = new Set(['ai_review', 'human_review'])
 
+/**
+ * The column ids BOTH gates structurally depend on (ai-maestro#74 — the enum hard-lock residual,
+ * resolved as Option C).
+ *
+ * A team may define a custom `kanbanConfig`, and `validStatusesForTeam` then accepts ONLY that
+ * team's ids. So if a custom board RENAMED or OMITTED one of these, the predicate that guards the
+ * corresponding governed transition could never match, and that transition would silently become
+ * UNGATED for that team — e.g. renaming `human_review`→`boss-check` and `complete`→`done` disables
+ * the GATE 2 self-review ban outright, because neither id is in REVIEW_COLUMNS /
+ * GOVERNED_TARGET_COLUMNS any more. The gate would still "run"; it just could never fire.
+ *
+ * `setKanbanConfig` therefore REQUIRES a custom set to still contain every id here. Teams keep full
+ * freedom to ADD columns and to rename/omit the NON-governed ones (backburner, todo, design,
+ * dispatch, testing, blocked). This is derived from the gate's OWN sets rather than re-listed, so a
+ * future change to what is governed updates the config check automatically — the two cannot drift.
+ */
+export const GATE_CRITICAL_COLUMN_IDS: ReadonlySet<string> = new Set<string>([
+  ...Array.from(GOVERNED_TARGET_COLUMNS),
+  ...Array.from(GOVERNED_BACKWARD_TO_DEV),
+  ...Array.from(REVIEW_COLUMNS),
+  'dev', // the TARGET half of the governed backward moves (human_review|live_auditing → dev)
+])
+
 /** Release-confirmation fields — writing one asserts a release authority's action. */
 const RELEASE_EVIDENCE_FIELDS = ['publishedVersion', 'liveSince'] as const
 

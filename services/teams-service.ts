@@ -30,6 +30,7 @@ import { loadTeams, createTeam, getTeam, updateTeam, deleteTeam, TeamValidationE
 // Local task-registry removed (governance simplification 2026-03-27) — kanban uses GitHub Projects exclusively
 import { loadDocuments, createDocument, getDocument, updateDocument, deleteDocument } from '@/lib/document-registry'
 import * as ghProject from '@/lib/github-project'
+import { GATE_CRITICAL_COLUMN_IDS } from '@/lib/kanban-field-authority'
 import type { Task, TaskWithDeps } from '@/types/task'
 import type { Team, KanbanColumnConfig } from '@/types/team'
 import { DEFAULT_KANBAN_COLUMNS } from '@/types/team'
@@ -1546,6 +1547,25 @@ export async function setKanbanConfig(teamId: string, columns: KanbanColumnConfi
   for (const col of columns) {
     if (!col.id || !col.label || !col.color) {
       return { error: 'Each column must have id, label, and color', status: 400 }
+    }
+  }
+  // ai-maestro#74 (enum hard-lock, Option C): a custom board MUST PRESERVE the column ids the R41
+  // field-authority gates key off. `validStatusesForTeam` accepts only this team's ids, so a config
+  // that renamed/omitted e.g. `human_review`/`complete` leaves GATE 2's predicates unmatchable and
+  // silently disables the self-review ban FOR THAT TEAM — the gate still runs, it just can never
+  // fire. Validating HERE (service, not route) closes it for the Next.js route AND the headless
+  // router alike, exactly like the RBAC gate above — no FULL-vs-headless drift.
+  const providedColumnIds = new Set(columns.map((c) => c.id))
+  const missingGateColumnIds = Array.from(GATE_CRITICAL_COLUMN_IDS)
+    .filter((id) => !providedColumnIds.has(id))
+    .sort()
+  if (missingGateColumnIds.length > 0) {
+    return {
+      error:
+        `Custom kanban config must preserve the governance column ids the approval-ladder gates depend on. ` +
+        `Missing: ${missingGateColumnIds.join(', ')}. ` +
+        `You may add columns and rename/omit non-governed ones (backburner, todo, design, dispatch, testing, blocked).`,
+      status: 400,
     }
   }
   try {

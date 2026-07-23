@@ -1,9 +1,9 @@
 ---
 trdd-id: LY442MKH
 title: close ai-maestro#74 residuals — BYPASS-1 previousStatus tripwire test + surface the enum hard-lock decision
-column: dev
+column: complete
 created: 2026-07-18T09:44:16+0200
-updated: 2026-07-18T09:47:00+0200
+updated: 2026-07-23T14:37:20+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -57,12 +57,30 @@ MANAGER-accepted). Two residuals remain, per the MANAGER ruling in the issue thr
 leaks into status; an explicit status write always wins over previousStatus). Verified: file 61/61
 green, tsc 0, `yarn build` exit 0. NOT pushed (app, not a plugin).
 
-**NEXT ACTION:** item 2 (enum hard-lock) awaits the USER's mechanism pick (A/B/C below; my rec = C).
-Do NOT unilaterally change governance authority or restrict the custom-columns feature — that is the
-USER-reserved decision the MANAGER deferred in ai-maestro#74. On the pick: implement as its own
-commit + tests + verify; then this TRDD can reach `complete`.
+**ITEM 2 DONE — OPTION C IMPLEMENTED (2026-07-23).** The USER delegated the reserved mechanism pick
+("decide yourself", 2026-07-23) and **C** was chosen: `setKanbanConfig` (`services/teams-service.ts`)
+now REJECTS (400) any custom column set that drops a governance column id, naming every missing id.
+The set is `GATE_CRITICAL_COLUMN_IDS`, newly exported from `lib/kanban-field-authority.ts` and
+DERIVED from the gate's own sets (`GOVERNED_TARGET_COLUMNS ∪ GOVERNED_BACKWARD_TO_DEV ∪
+REVIEW_COLUMNS ∪ {dev}`) so the config check can never drift from the predicates it protects.
+Validation sits in the SERVICE (not the route), so the Next.js route and the headless router are
+covered alike — same reason the GOV-AUDIT RBAC gate lives there. It applies to the system-owner path
+too: a gate-breaking board is a STRUCTURAL defect, not an authority question. C was chosen over A
+(breaks every legit custom board) and B (reverses the deliberate 2026-06-21 GOV-AUDIT authority
+decision); C changes no authority and keeps the feature.
 
-**SUPERSEDED — do NOT carry forward:** item 1's original "NEXT ACTION: add the tripwire tests" — done.
+Tests: 5 service tests (incl. the exact `boss-check`/`done` rename attack from the issue, the
+all-missing-ids-named case, RBAC-runs-first ordering, and the system-owner path) + 3 pure gate-set
+tests. The pre-existing RBAC fixture `COLS` was widened to a gate-valid set — it tests RBAC, not the
+vocabulary, and would otherwise have 400'd. Gates: tsc 0 · `yarn test` 227/227 files · `yarn build`
+exit 0. NOT pushed (app, not a plugin).
+
+**ai-maestro#74 is now fully closed:** BYPASS 2 (`c61ccbcb`) · BYPASS 1 latent-safe + tripwires
+(`69b03617`) · enum hard-lock (this commit).
+
+**SUPERSEDED — do NOT carry forward:** item 1's original "NEXT ACTION: add the tripwire tests" —
+done. And item 2's "awaits the USER's mechanism pick / do NOT unilaterally restrict the
+custom-columns feature" — the USER delegated the pick on 2026-07-23 and C is implemented.
 
 ## The enum hard-lock — mechanism options for the USER (the reserved decision)
 
@@ -98,6 +116,8 @@ USER's pick; then implement as a follow-up (its own commit, tests, verify).
 
 ## Approval log
 
+- 2026-07-23T14:37:20+0200 — COMPLETED. Item 2 (enum hard-lock) implemented as Option C after the
+  USER delegated the reserved mechanism pick ("decide yourself"). ai-maestro#74 fully closed.
 - 2026-07-18T09:44:16+0200 — MANDATE issued by ai-maestro (min-approval-requirement: none).
   Self-mandate: Tier-0 regression test on the server's own security gate, MANAGER-REQUIRED in
   ai-maestro#74, no product/governance change. The enum hard-lock's mechanism is USER-reserved and is

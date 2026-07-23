@@ -1322,7 +1322,21 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
       const normalized = promptDraft.replace(/\r\n?/g, '\n')
       const withoutEscape = normalized.replace(/\u001b/g, '')
       const carriageAdjusted = withoutEscape.replace(/\n/g, '\r')
-      const bracketedPayload = `${BRACKETED_PASTE_START}${carriageAdjusted}${BRACKETED_PASTE_END}`
+      // SINGLE-LINE prompts (including a user's answer to an interactive raw-mode
+      // TUI menu such as Claude Code's AskUserQuestion) are delivered as PLAIN
+      // keystrokes, NOT a bracketed paste. A raw-mode TUI widget DISCARDS
+      // bracketed-paste input, so a bracketed answer never reaches the menu's
+      // free-text ("Chat about this") field — the agent then hard-blocks with no
+      // way for the dashboard user to answer through the sanctioned Chat path
+      // (TRDD-1B7FC42W, reproduced in SCEN-031: the MANAGER stalled on a scoping
+      // menu and could not be answered). Plain keystrokes land in the field
+      // exactly like typing, and the delayed Enter below submits them. Multi-line
+      // content still uses bracketed paste to preserve newline integrity (so a
+      // normal multi-line prompt is not auto-submitted on its first newline).
+      const isMultiline = withoutEscape.includes('\n')
+      const bracketedPayload = isMultiline
+        ? `${BRACKETED_PASTE_START}${carriageAdjusted}${BRACKETED_PASTE_END}`
+        : carriageAdjusted
 
       const staged = sendMessage(bracketedPayload)
       if (!staged) {

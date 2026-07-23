@@ -3,7 +3,7 @@ trdd-id: 7HRDAD0U
 title: Fleet inbox-nudge — wake an idle agent that never fires idle_prompt so it drains its AMP inbox
 column: testing
 created: 2026-07-23T07:31:44+0200
-updated: 2026-07-23T07:37:00+0200
+updated: 2026-07-23T08:33:00+0200
 current-owner: session
 task-type: feature
 scope: project

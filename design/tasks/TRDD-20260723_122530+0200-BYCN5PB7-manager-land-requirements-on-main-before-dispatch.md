@@ -3,7 +3,7 @@ trdd-id: BYCN5PB7
 title: MANAGER must land the requirements on main (or an already-merged base) before dispatching the dev — never leave them in an unmerged PR that gates the NPT
 column: planned
 created: 2026-07-23T12:25:30+0200
-updated: 2026-07-23T12:25:30+0200
+updated: 2026-07-23T15:17:26+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -17,12 +17,47 @@ approval-datetime: 2026-07-23T12:25:30+0200
 relevant-rules: []
 eht: []
 npt: []
-implementation-commits: []
+implementation-commits: [276cef26]
 external-refs:
   - reports/scenarios-runner/SCEN-031_20260723T093923Z.report.md
   - design/tasks/TRDD-20260723_111546+0200-5F3490TA-manager-delegate-repo-bootstrap-to-maintainer.md
   - design/tasks/TRDD-20260723_111546+0200-E1AROIGW-reconcile-rule1-with-manager-mandate-model.md
 ---
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-23
+
+**IN-REPO HALF DONE — commit `276cef26`.** The fix below was authored as *cross-repo only*
+("file an issue/PR on the MANAGER role-plugin, do NOT edit in place"). That scoping was too
+narrow and left the TRDD blocked on someone else's merge queue. **Corrected approach:** the
+invariant is not a MANAGER quirk — ANY dispatching agent (MANAGER / COS / ORCHESTRATOR) can
+strand a worker the same way — so it now lives in the **governance overlay** as a normative
+subsection of `rules/aimaestro/aimaestro-trdd-approval.md` Part B2 ("The dispatch
+precondition — never dispatch against an unsatisfiable NPT").
+
+**Why this deploys without any cross-repo action:** `lib/agent-rules-seed.ts` reads
+**every** `.md` in `rules/aimaestro/` **live** from `process.cwd()` and seeds it read-only
+into each agent workdir (create trigger + wake + the 5-min invariants watchdog). No rebuild,
+no plugin republish, no PR merge. This is the same lever that carried the RULE-1 carve-out
+(TRDD-E1AROIGW surface 2, `1ce1ecae`) and was **validated live** in the SCEN-031 re-run.
+
+**The rule, as landed:** before moving a TRDD to `dev`, the dispatcher MUST ensure the BASE
+the worker branches from already satisfies every NPT that worker's TRDD declares.
+Requirements staged in a PR must be merged — or the base otherwise made to satisfy the NPT —
+BEFORE dispatch. General form: *do not declare a prerequisite you then leave unmet on the
+base you dispatch against; an NPT is a promise to the worker, and the dispatcher owns
+keeping it.*
+
+**NOT superseded — still open, and still someone else's:** `Emasoft/ai-maestro-assistant-manager-agent`
+**PR #33** ("sequence project-bootstrap NPT + delegate repo creation to MAINTAINER") is the
+**persona half** and remains OPEN. It is a DIFFERENT repo — **never merge, tag, or publish
+it from here** (cross-repo rule). The two halves are complementary: PR #33 fixes how the
+MANAGER *sequences* bootstrap; `276cef26` makes the contract binding on *every* dispatcher
+regardless of persona, so the fleet is protected even while PR #33 waits.
+
+**NEXT ACTION:** verification is a SCEN-031 re-run — launched 2026-07-23 after this commit.
+Pass criterion: at the moment the MANAGER dispatches the dev, the dev's NPT gate is
+satisfiable from `main` (requirements present on the base), with no requirements-only PR
+left unmerged while the dev waits.
 
 ## Problem (SCEN-031 re-run, 2026-07-23 — the downstream blocker AFTER the RULE-1 fix)
 

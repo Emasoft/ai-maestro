@@ -23,6 +23,18 @@ external-refs:
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-23
 
+**✅ CONFIRMED LIVE (SCEN-031 re-run, 08:30:54) — THE WORKER-WAKE BLOCKER IS FIXED.** With the fixes live, the
+MANAGER self-organized the fleet (created `zipsearcher-dev` AUTONOMOUS + `zipsearcher-maintainer` MAINTAINER, made
+`Emasoft/zipsearcher`, delegated via AMP) AND both workers WOKE and worked — vs the prior run where both sat at 0
+tokens, deaf. Evidence: `zipsearcher-maintainer` reached 📊 270k tokens (actively building); the server logged
+`[FleetInboxNudge] nudged zipsearcher-{dev,maintainer}: 1 unread → injected inbox-check` at 08:30:54. BOTH fixes
+proved to cover complementary timing cases: **DEFECT 1** (YPIRL5RA addNewline→Enter) makes the `.cjs` SessionStart
+3s inbox-check actually SUBMIT (woke the maintainer to 270k before any nudge — the at-creation case); **this
+inbox-nudge** catches the LATER case (a follow-up message to an already-idle worker → nudged awake at 08:30:54).
+The prior "workers deaf at 0 tokens" failure is RESOLVED. (Separate: `zipsearcher-dev` woke then hit an
+AskUserQuestion selector — the known P1 TRDD-1B7FC42W, unrelated to worker-wake; the runner's to handle.) Full
+SCEN-031 PASS/FAIL verdict still pending the runner's completion.
+
 **WHY (proven, not speculative):** the ACTUAL SCEN-031 run's hook-debug.log shows both zipsearcher workers received
 ONLY `SessionStart`+`SessionEnd` over 25 min — ZERO `idle_prompt`. A freshly-launched, never-PROMPTED Claude agent
 sits at its first prompt and never fires `idle_prompt`, so the plugin's inbox-notify chain (idle_prompt|

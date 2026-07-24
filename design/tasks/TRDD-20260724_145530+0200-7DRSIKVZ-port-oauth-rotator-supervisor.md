@@ -21,10 +21,19 @@ derived-kind: npt
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
 
-Goal: port `oauth_rotator/{supervisor,rotator,cookie_vault}.py` from the janitor's daemon
-(`…/ai-maestro-janitor/0.60.1/scripts/`) into `lib/oauth-rotator/{supervisor,rotator,
-cookie-vault}.ts` — server-native, line-by-line port. NEXT ACTION: read the reference python
-modules, then write the TS ports preserving the write-mutex + starvation guard. Not started.
+Goal: port the daemon's oauth-rotator governance layer into the server, server-native.
+**SCOPE REFRAMED 2026-07-24 (grounded):** rotator.py's ORCHESTRATION is ALREADY ported — `tick.ts`
+declares itself "a FAITHFUL port of rotator.py's cmd_auto / _keepalive_refresh / _refresh_and_heal_slot
+/ _reconcile_live_email / _resolve_untrusted_live", and the actuator core (cascade/rotate/network/
+slots/live/keychain/integrity/safe-storage) is ported too (tasks #50-55). The tick is server-WIRED:
+`server.mjs:1969` starts `startOauthRotatorTick()` at boot, flag-gated OFF via
+`~/.aimaestro/oauth-rotator-tick.enabled` (R16-safe). So there is NO separate `rotator.ts` to write.
+REMAINING D1 = (1) `supervisor.ts` — port supervisor.py (422 lines, the 10-min governance/auto-heal
+loop that oversees the rotator); (2) `cookie-vault.ts` — port cookie_vault.py (331 lines, custody);
+(3) wire the supervisor beat into the server tick, mirroring `server-tick.ts`. NEXT ACTION: port
+cookie_vault.py → cookie-vault.ts FIRST (custody, lower risk), reading keychain.ts / safe-storage.ts
+for API parity; then supervisor.ts. Preserve the write-mutex + starvation guard; do NOT port the
+human-interactive capture (reauth / slot_capture); stays R16 flag-gated.
 
 ## Spec
 

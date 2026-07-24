@@ -36,8 +36,15 @@ export interface AutoUpdateCategories {
   /** Update plugins discovered in the two AI Maestro local marketplaces:
    *  ai-maestro-local-roles-marketplace and ai-maestro-local-custom-marketplace. */
   localMarketplaces: boolean
-  /** Update plugins from the remote ai-maestro-plugins marketplace
-   *  (the 8 predefined role-plugins + the bundled core mirror). */
+  /** Update plugins from the remote ai-maestro-plugins marketplace —
+   *  enumerated DYNAMICALLY from the plugins actually installed in that
+   *  marketplace (auto-update-service::listInstalledPluginsInMarketplace),
+   *  NOT a fixed role-plugin list. So it covers whatever is installed there:
+   *  the 8 predefined role-plugins, the bundled core mirror, AND the
+   *  ai-maestro-janitor plugin. That last one matters (TRDD-YLCTM8EU): a
+   *  running server thus keeps the janitor current — closing the window where
+   *  the janitor daemon exits (server up) but its self-updates never land —
+   *  once auto-update's master toggle is on. */
   aiMaestroMarketplace: boolean
   /** Update the curated list of AI Maestro dependency plugins
    *  (PSS, CPV, llm-externalizer, code-auditor, serena, grepika). See

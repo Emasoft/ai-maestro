@@ -1,10 +1,10 @@
 ---
 trdd-id: H4L3HHKX
 title: Route MANAGER and worker behaviour fixes to the plugin repos
-column: dev
+column: complete
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T15:07:44+0200
+updated: 2026-07-24T16:00:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: docs
@@ -19,9 +19,15 @@ approval-datetime: 2026-07-24T14:55:30+0200
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
 
 Goal: route the 6 MANAGER/worker behaviour proposals surfaced by SCEN-031 to the correct plugin
-repos as cross-repo GitHub issues/comments (PRRD-G1 self-identified). NEXT ACTION: execute NPT C1
-(tie evidence to existing issues), then C2 (MANAGER delegation-mandate issue), then C3
-(AUTONOMOUS/MAINTAINER wake-drain issue). Not started.
+repos as cross-repo GitHub issues/comments (PRRD-G1 self-identified). **DONE 2026-07-24** — column
+`complete`. C1 = 3 evidence/cross-link comments (ai-maestro#51, #89, #90); #86/#87 skipped (no
+fresh SCEN-031 evidence this run — the re-run showed the MANAGER coordinating correctly, so a
+"burst-1b" comment there would be noise). C2 = no new issue; ai-maestro-assistant-manager-agent#32
+already carries the full evidence (dispatch-precondition BYCN5PB7 + delegate-repo-bootstrap
+5F3490TA) and #34 digests the NORMATIVE overlay enforcement — dedup, not a dropped task. C3 = 2
+worker-side issues filed: ai-maestro-autonomous-agent#17 + ai-maestro-maintainer-agent#33 (drain
+AMP inbox on wake + clone/bootstrap repo step 0). All routing delivered; the plugin-side FIXES now
+live on the plugin repos, out of this TRDD's scope.
 
 ## Spec
 
@@ -42,11 +48,17 @@ repos as cross-repo GitHub issues/comments (PRRD-G1 self-identified). NEXT ACTIO
 
 ## Acceptance
 
-- [ ] C1: 4 comments posted (ai-maestro#51, #90, #89, #86/#87)
-- [ ] C2: issue filed on `ai-maestro-assistant-manager-agent` with the 4 proposal bodies as evidence
-- [ ] C3: issue(s) filed on `ai-maestro-autonomous-agent` and `ai-maestro-maintainer-agent`
-- [ ] Parent C0 closed once C1, C2, C3 are terminal
+- [x] C1: 3 evidence/cross-link comments posted — ai-maestro#51 (idle-wake AMP-inbox), #89 (R42
+  403 fan-out), #90 (retry-wedge server-impl cross-link). #86/#87 deliberately SKIPPED — no fresh
+  SCEN-031 evidence this run; a comment there would be noise, not a finding.
+- [x] C2: no new issue needed — ai-maestro-assistant-manager-agent#32 already carries the full
+  SCEN-031 evidence (BYCN5PB7 sequencing + 5F3490TA delegation) and #34 digests the NORMATIVE
+  overlay enforcement. Duplicate avoided per the dedup discipline.
+- [x] C3: 2 worker-side issues filed — ai-maestro-autonomous-agent#17 + ai-maestro-maintainer-agent#33
+  (drain AMP inbox on wake + clone/bootstrap the assigned repo as step 0).
+- [x] Parent C0 terminal — all routing delivered; plugin-side fixes tracked on the plugin repos.
 
 ## Approval log
 
 - 2026-07-24T14:55:30+0200 — MANDATE issued by USER (min-approval-requirement: manager). Pre-approved; born approved to author+execute.
+- 2026-07-24T16:00:53+0200 — COMPLETED by ai-maestro. All 3 sub-tasks terminal (3 comments + 2 new worker-side issues; C2 satisfied by existing #32/#34). Routing delivered; column → complete.

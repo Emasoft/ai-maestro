@@ -1,10 +1,10 @@
 ---
 trdd-id: UCC2QJH9
 title: Enforce the TRDD field and checklist completion gate
-column: dev
+column: complete
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T15:07:44+0200
+updated: 2026-07-24T16:00:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: docs
@@ -39,11 +39,11 @@ comment). Not started.
 
 ## Acceptance
 
-- [ ] B1: `grep "column ∈ {complete" rules/aimaestro/aimaestro-trdd-approval.md` matches; the DEP
-      size budget/tests still pass
-- [ ] B2: comment posted on janitor#109; links resolve
-- [ ] Parent B0 closed once B1 and B2 are terminal
+- [x] B1: overlay §D4 5b landed — `grep "column ∈ {complete" rules/aimaestro/aimaestro-trdd-approval.md` = 1 hit. Committed cc4e25da; DEP tests pass.
+- [x] B2: comment posted on janitor#109 (issuecomment-5070110091); the watchdog now enforces the 5b checks.
+- [x] Parent B0 terminal — both B1 and B2 landed.
 
 ## Approval log
 
 - 2026-07-24T14:55:30+0200 — MANDATE issued by USER (min-approval-requirement: manager). Pre-approved; born approved to author+execute.
+- 2026-07-24T16:00:53+0200 — COMPLETED by ai-maestro. B1 (overlay §D4 5b) + B2 (janitor#109 comment) verified; column → complete.

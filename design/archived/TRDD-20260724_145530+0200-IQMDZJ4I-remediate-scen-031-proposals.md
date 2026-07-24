@@ -1,10 +1,10 @@
 ---
 trdd-id: IQMDZJ4I
 title: Remediate the 9 SCEN-031 proposals per the USER rulings
-column: dev
+column: complete
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T15:07:44+0200
+updated: 2026-07-24T16:00:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: docs
@@ -40,10 +40,11 @@ proposals), then close this parent. Not started.
 
 ## Acceptance
 
-- [ ] A1: the proposal states the enforce ruling; `grep -i "loosen\|accept EITHER" <file>` is empty
-- [ ] A2: each of the 3 proposals (4ALV5ISB, 1B7FC42W, F1S7QQX6) cites its canonical issue/TRDD
-- [ ] Parent A0 closed once A1 and A2 are terminal
+- [x] A1: 1K2TZVIP states the enforce ruling (14 signal lines); `grep -i "loosen\|accept EITHER"` = 0 hits. Committed 1f3f45be.
+- [x] A2: each of the 3 automaton proposals (4ALV5ISB, 1B7FC42W, F1S7QQX6) carries a "Canonical mechanism" block. Committed 1f3f45be.
+- [x] Parent A0 terminal — both A1 and A2 landed.
 
 ## Approval log
 
 - 2026-07-24T14:55:30+0200 — MANDATE issued by USER (min-approval-requirement: none). Pre-approved; born approved to author+execute.
+- 2026-07-24T16:00:53+0200 — COMPLETED by ai-maestro. A1+A2 verified (grep-checks pass); column → complete.

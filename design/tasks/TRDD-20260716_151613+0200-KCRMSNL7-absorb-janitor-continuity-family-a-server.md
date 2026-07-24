@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-24T15:07:44+0200
+updated: 2026-07-24T17:05:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -22,7 +22,32 @@ release-via: none
 
 # Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-22
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
+
+**▶ 2026-07-24 — Flock D absorption landed the two biggest token-death levers (D1 + D2 COMPLETE):**
+- **D1 (7DRSIKVZ) COMPLETE** — oauth `supervisor.ts` + `cookie-vault.ts` + the supervisor beat wired
+  into the server tick (eb1439d5, b3846e9b, f0c66776); 48 parity tests; live-validated at boot. The
+  rotator ORCHESTRATION was already `tick.ts`; this finished the governance + custody halves.
+- **D2 (SX593MDG) COMPLETE** — the missing **dead-class boot-debounce** (`fleet-dead-debounce.ts`,
+  c247b071) — the fail-safe guard the dark Phase-C hard rung must consult so it never kills a booting
+  agent. Actuator decision path (gentle ladder + STOP/HID/cooldown) already tested. Live-validated
+  fire-OFF; the new debounce wording EMITTED live; a `ps` snapshot confirms the janitor daemon stays
+  exited (server-owns-host).
+- **D5 (A77JBHC9) COMPLETE** — capability honesty + `$JANITOR_CONTROL_DIR` isolation already correct +
+  tested; grounded the daemon's FRESHNESS-only exit (capabilities are advisory); the flock half was
+  mis-scoped (janitor-control.ts is read-only) → relocated to D4.
+- **D7 (2X4AYX9T)** — posted the D1+D2+D5 "now server-native" coordination on **janitor#100**
+  (comment-5071270871; the plan's #79 was a stale closed issue). Stays open for D4/D6.
+- **D6 (CPETQBAW) BLOCKED-BY D4** — design decision: the faithful server port of the daemon's single
+  scheduling loop is PER-CHORE unref'd timers (a single-loop port would re-introduce the starvation the
+  daemon's bulk-lane guards against). 5/7 chores scheduled; the last 2 are D4.
+- **D4 (S5RUHJRP)** — the marketplace/user-plugins chores + the relocated flock; WAITING on the janitor
+  to confirm the `marketplace-op.lock` path (D7 ASK). Ships mechanism-only, auto-update toggle OFF.
+- **D3 (YLCTM8EU)** — found already-satisfied (dynamic candidate set) in a prior session.
+
+**Net:** rotation/supervisor + freeze-recovery (the two levers that actually cause token-death) are
+server-native + live. D4/D6 are gated on the janitor's lock-path reply — a clean, non-blocked stopping
+point. Parent stays `design` (several NPTs still open/blocked).
 
 **▶ 2026-07-22 — NPT flock progress (8 NPTs; parent stays `design` until an NPT reaches `complete`):**
 `testing` ×3 — Y916N7WL, JAU1ES1C, P7RPOR5O. `design` ×1 — H24DF6ZC (R16 oauth-design, owner-gated).

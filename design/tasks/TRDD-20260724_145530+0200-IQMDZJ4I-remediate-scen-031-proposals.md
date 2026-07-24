@@ -4,7 +4,7 @@ title: Remediate the 9 SCEN-031 proposals per the USER rulings
 column: dev
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T14:55:30+0200
+updated: 2026-07-24T15:07:44+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: docs
@@ -14,12 +14,13 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-07-24T14:55:30+0200
-npt: [A1, A2]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
 
-Goal: remediate the 9 SCEN-031 proposals per the USER's rulings, via the two NPT children A1/A2.
+Goal: remediate the 9 SCEN-031 proposals per the USER's rulings, via two remediation tasks
+(A1 = rewrite 1K2TZVIP; A2 = re-anchor the 3 automaton proposals) — tracked as checklist items
+below, NOT child TRDDs (both already landed this session; see the checklist).
 NEXT ACTION: author/execute NPT A1 (rewrite 1K2TZVIP) and A2 (re-anchor the 3 automaton
 proposals), then close this parent. Not started.
 

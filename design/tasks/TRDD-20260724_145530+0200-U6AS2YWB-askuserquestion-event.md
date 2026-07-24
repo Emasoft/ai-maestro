@@ -1,10 +1,11 @@
 ---
 trdd-id: U6AS2YWB
 title: AskUserQuestion event ESC-flood then cursor-ready then directive
-column: dev
+column: blocked
+pre-block-column: dev
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T14:55:30+0200
+updated: 2026-07-24T15:07:44+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: feature

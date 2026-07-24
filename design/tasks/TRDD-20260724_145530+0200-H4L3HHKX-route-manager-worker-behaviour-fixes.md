@@ -4,7 +4,7 @@ title: Route MANAGER and worker behaviour fixes to the plugin repos
 column: dev
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T14:55:30+0200
+updated: 2026-07-24T15:07:44+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: docs
@@ -14,7 +14,6 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-07-24T14:55:30+0200
-npt: [C1, C2, C3]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24

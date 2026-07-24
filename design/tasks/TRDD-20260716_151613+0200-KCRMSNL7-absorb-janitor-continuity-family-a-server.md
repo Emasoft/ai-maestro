@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-22T15:04:00+0200
+updated: 2026-07-24T15:07:44+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -16,7 +16,7 @@ approval-datetime: 2026-07-16T15:16:13+0200
 relevant-rules: [16, 23, 42]
 labels: [janitor-absorption, continuity, oauth, resurrection, family-a, server, guardian]
 external-refs: [Emasoft/ai-maestro-janitor#100, Emasoft/ai-maestro#68, Emasoft/ai-maestro#70, Emasoft/AgentlensPro#3]
-npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RPOR5O]
+npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RPOR5O, 7DRSIKVZ, SX593MDG, YLCTM8EU, S5RUHJRP, A77JBHC9, CPETQBAW, 2X4AYX9T]
 release-via: none
 ---
 

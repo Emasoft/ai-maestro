@@ -1,10 +1,11 @@
 ---
 trdd-id: Y8VPE3NS
 title: Retry-wedge event the ai-maestro 90 contract
-column: dev
+column: blocked
+pre-block-column: dev
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T14:55:30+0200
+updated: 2026-07-24T15:07:44+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: feature

@@ -63,6 +63,7 @@ import {
   CUSTOM_MARKETPLACE_NAME,
 } from '@/lib/ecosystem-constants'
 import { isDependencyPlugin } from '@/lib/dependency-plugins'
+import { withMarketplaceLock } from '@/lib/marketplace-lock'
 
 /** AuthContext used for every pipeline call this scheduler makes. The
  *  scheduler runs in-process inside the server and has no per-agent
@@ -158,7 +159,16 @@ async function runTickSafely(): Promise<{ ran: boolean; entries: AutoUpdateRunEn
   try {
     const s = await loadSettings()
     if (!s.enabled) return { ran: false, entries: [] }
-    const entries = await runTick(s)
+    // Serialise the whole tick behind the marketplace-op lock (TRDD-S5RUHJRP). `tickInFlight`
+    // above only guards THIS process; the lock additionally guards a second server-family process
+    // (a "Run now" from another worker, a stray second server) from running `claude plugin
+    // marketplace update` against the same cache concurrently — which corrupts it into a valid
+    // but WRONG catalogue. Held ⇒ SKIP, never block: the next scheduled tick picks the work up.
+    const entries = await withMarketplaceLock(() => runTick(s))
+    if (entries === null) {
+      console.warn('[auto-update] marketplace-op lock held by another process — skipping this tick')
+      return { ran: false, entries: [] }
+    }
     // Persist the run summary in one final write — keeping per-entry I/O
     // out of the hot path and atomic from the UI's perspective.
     let next = s

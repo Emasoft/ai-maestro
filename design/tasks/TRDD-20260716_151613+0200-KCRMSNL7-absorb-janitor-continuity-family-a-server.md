@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-24T17:05:00+0200
+updated: 2026-07-24T21:32:56+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -38,16 +38,32 @@ release-via: none
   mis-scoped (janitor-control.ts is read-only) → relocated to D4.
 - **D7 (2X4AYX9T)** — posted the D1+D2+D5 "now server-native" coordination on **janitor#100**
   (comment-5071270871; the plan's #79 was a stale closed issue). Stays open for D4/D6.
-- **D6 (CPETQBAW) BLOCKED-BY D4** — design decision: the faithful server port of the daemon's single
-  scheduling loop is PER-CHORE unref'd timers (a single-loop port would re-introduce the starvation the
-  daemon's bulk-lane guards against). 5/7 chores scheduled; the last 2 are D4.
-- **D4 (S5RUHJRP)** — the marketplace/user-plugins chores + the relocated flock; WAITING on the janitor
-  to confirm the `marketplace-op.lock` path (D7 ASK). Ships mechanism-only, auto-update toggle OFF.
-- **D3 (YLCTM8EU)** — found already-satisfied (dynamic candidate set) in a prior session.
+- **D6 (CPETQBAW) COMPLETE** — design decision stands (PER-CHORE unref'd timers, not a single ported
+  loop, which would re-introduce the starvation the daemon's bulk-lane guards against). Box 1 is now
+  **7/7** once D4 registered the last two chores; box 2 re-validated live on the D4 build.
+- **D4 (S5RUHJRP) COMPLETE** (`6aac9397`) — **unblocked by reading the janitor SOURCE instead of
+  waiting on #100** (the "port line-by-line" directive is the instruction to do exactly that). It
+  corrected TWO errors in this flock's own plan:
+  1. **wrong directory** — the lock is `global_state_dir()/marketplace-op.lock`
+     (`global_state.py:433`), NOT the control dir. Building as planned = two files, ZERO mutual
+     exclusion, silent. This was the precise rework the "wait for the reply" hold existed to avoid.
+  2. **wrong premise** — Node cannot join the janitor's kernel `fcntl.flock(2)` at all (O_EXCL
+     cannot interoperate). The USER already ruled this identical trade-off on 2026-07-17 for the
+     rotation tick: SERVER-INTERNAL lock, DISTINCT filename. Hence `marketplace-op-server.lock`.
+  The mechanism was EXTRACTED to `lib/server-lockfile.ts` and shared with the rotation tick, whose
+  29 tests pass untouched.
+- **D3 (YLCTM8EU)** — behaviour VERIFIED (dynamic candidate set; the janitor is in it, nothing
+  filters it out). Its box 2 (a unit test pinning that inclusion) stays OPEN: the helpers are
+  module-private with no dep seam, so the test needs a small refactor first. Honest gap, not a
+  claim.
 
-**Net:** rotation/supervisor + freeze-recovery (the two levers that actually cause token-death) are
-server-native + live. D4/D6 are gated on the janitor's lock-path reply — a clean, non-blocked stopping
-point. Parent stays `design` (several NPTs still open/blocked).
+**Net — the 7-chore absorption is FUNCTIONALLY COMPLETE and live.** All 7 daemon chores now run on
+server timers (oauth-tick, oauth-supervisor, session-liveness+fleet-stop, version-update,
+server-liveness, marketplace-refresh, user-plugins-update); a `ps` snapshot shows zero `daemon.py`,
+so the dark window that caused the token death is closed. What is NOT claimed: cross-process
+exclusion against a live `#N` Python daemon (impossible in pure Node — see D4), and D3's test.
+Parent stays `design` — several NPTs (H24DF6ZC, 9ZIF82HI, DXJZM3BW, …) are still open, and the
+completion gate correctly holds it open until every one is terminal.
 
 **▶ 2026-07-22 — NPT flock progress (8 NPTs; parent stays `design` until an NPT reaches `complete`):**
 `testing` ×3 — Y916N7WL, JAU1ES1C, P7RPOR5O. `design` ×1 — H24DF6ZC (R16 oauth-design, owner-gated).

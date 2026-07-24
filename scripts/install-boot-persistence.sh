@@ -48,8 +48,13 @@ if printf '%s' "$STARTUP_OUT" | grep -q "sudo env"; then
 fi
 
 echo "==> 3/3  Saving the process list to resurrect at boot"
+# RE-RUN THIS AFTER EVERY RESTART-POLICY CHANGE, not just at install time. `pm2 resurrect` replays
+# THE DUMP, never ecosystem.config.js — so raising max_restarts or adding exponential backoff in the
+# config does nothing to the boot path until this line rewrites the dump. The config file, the
+# running process, and the saved entry can all disagree while each looks correct on its own; the
+# server's startup self-check reports the mismatch ("stale-policy") so it is not silent.
 pm2 save
-echo "    ok — ~/.pm2/dump.pm2 written"
+echo "    ok — ~/.pm2/dump.pm2 written (now carries the CURRENT restart policy)"
 
 echo
 echo "DONE. Verify by restarting the machine, or check the server's startup log — it reports"

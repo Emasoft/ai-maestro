@@ -37,6 +37,9 @@ export interface BootPersistenceFacts {
   /** Is the unit actually BOOTSTRAPPED in the running init domain? null when undeterminable.
    *  Distinct from presence on disk — see the `unit-not-loaded` branch for why they differ. */
   unitLoaded?: boolean | null
+  /** Does the SAVED entry carry the never-give-up restart policy? null when undeterminable.
+   *  `pm2 resurrect` replays the dump, NOT ecosystem.config.js — see `dumpPolicyCarriesBackoff`. */
+  dumpHasBackoff?: boolean | null
 }
 
 export type BootPersistenceStatus =
@@ -45,6 +48,7 @@ export type BootPersistenceStatus =
   | 'unit-not-loaded'
   | 'missing-dump'
   | 'stale-dump'
+  | 'stale-policy'
   | 'unknown-platform'
 
 export interface BootPersistenceVerdict {
@@ -127,6 +131,11 @@ export function evaluateBootPersistence(facts: BootPersistenceFacts): BootPersis
     }
   }
 
+  // The two checks below are WARNINGS, not reboot failures, so they are collected rather than
+  // returned one-at-a-time: a host can be both not-loaded and stale-policy at once (this one was),
+  // and reporting only the first would hide the second behind a fix for the first.
+  const warnings: string[] = []
+
   // PRESENT-ON-DISK ≠ SUPERVISED-RIGHT-NOW, and conflating them was this module's own first bug.
   // The unit file can sit in LaunchAgents while no job is bootstrapped in the running domain (a
   // `launchctl bootout`, or an install that never bootstrapped). A REBOOT still recovers — login
@@ -136,13 +145,35 @@ export function evaluateBootPersistence(facts: BootPersistenceFacts): BootPersis
   // is a different interruption than the one the reboot flag answers, so it gets its own status
   // rather than being folded into either OK or a false alarm.
   if (facts.unitLoaded === false) {
+    warnings.push(
+      `pm2's ${mechanism} is not currently loaded — until the next login nothing supervises pm2, so a ` +
+        `pm2-daemon crash today would NOT be recovered. Load it: ` +
+        `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/pm2.$USER.plist`,
+    )
+  }
+
+  // THE TRAP THIS CATCHES, which cost a falsely-ticked acceptance box before it was noticed:
+  // `pm2 resurrect` replays THE DUMP, not ecosystem.config.js. So raising max_restarts / adding
+  // exponential backoff in the config changes nothing about the boot path until `pm2 save` rewrites
+  // the dump — and the config file, the running process, and the saved entry can all disagree while
+  // every one of them looks right in isolation. Editing the config and believing the boot path
+  // changed is the natural mistake, and nothing anywhere reported it.
+  if (facts.dumpHasBackoff === false) {
+    warnings.push(
+      `the SAVED boot entry predates the never-give-up restart policy (no exponential backoff), so a ` +
+        `crash-loop after a reboot would still stop for good. pm2 resurrect replays the dump, not ` +
+        `ecosystem.config.js — refresh it: pm2 save`,
+    )
+  }
+
+  if (warnings.length > 0) {
     return {
-      status: 'unit-not-loaded',
+      status: facts.unitLoaded === false ? 'unit-not-loaded' : 'stale-policy',
+      // Both warnings describe a DEGRADED recovery, not a failed one: the server does come back
+      // from an ordinary reboot in either case. Claiming otherwise would be the false alarm that
+      // teaches operators to skip this line.
       willSurviveReboot: true,
-      message:
-        `Boot persistence OK for a REBOOT, but pm2's ${mechanism} is not currently loaded — until the ` +
-        `next login nothing supervises pm2, so a pm2-daemon crash today would NOT be recovered. ` +
-        `Load it now with: launchctl bootstrap gui/$UID ~/Library/LaunchAgents/pm2.$USER.plist`,
+      message: `Boot persistence works for an ordinary reboot, but: ${warnings.join(' ALSO: ')}`,
     }
   }
 
@@ -175,10 +206,33 @@ export function unitSearchDirs(platform: NodeJS.Platform, homedir: string): stri
 /** Does the pm2 dump carry an entry whose `name` is this app? null when the dump cannot be parsed
  *  as the expected array-of-processes, so the caller can fall back rather than conclude "no". */
 export function namedInDump(raw: string, appName: string): boolean | null {
+  const entries = parseDumpEntries(raw)
+  if (entries === null) return null
+  return entries.some((p) => (p as { name?: unknown }).name === appName)
+}
+
+/**
+ * Does the SAVED entry for this app carry exponential backoff — i.e. the never-give-up restart
+ * policy the boot path will actually use? null when the dump cannot be parsed or the app is absent
+ * (both already reported by the branches above; this must not add a second, confusing complaint).
+ */
+export function dumpPolicyCarriesBackoff(raw: string, appName: string): boolean | null {
+  const entries = parseDumpEntries(raw)
+  if (entries === null) return null
+  const entry = entries.find((p) => (p as { name?: unknown }).name === appName)
+  // Absent app is NOT "no backoff" — that case is already reported as stale-dump, and answering
+  // false here would stack a second, misleading complaint on top of the real one.
+  if (!entry) return null
+  const delay = (entry as { exp_backoff_restart_delay?: unknown }).exp_backoff_restart_delay
+  return typeof delay === 'number' && delay > 0
+}
+
+/** The dump's process array, or null when it is unreadable or not the shape we expect. */
+function parseDumpEntries(raw: string): object[] | null {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return null
-    return parsed.some((p) => typeof p === 'object' && p !== null && (p as { name?: unknown }).name === appName)
+    return parsed.filter((p): p is object => typeof p === 'object' && p !== null)
   } catch {
     return null
   }
@@ -221,6 +275,7 @@ export function detectBootPersistence(
     const dumpPath = path.join(homedir, '.pm2', 'dump.pm2')
     let dumpExists = false
     let dumpContainsApp: boolean | null = null
+    let dumpHasBackoff: boolean | null = null
     try {
       dumpExists = fs.statSync(dumpPath).isFile()
     } catch {
@@ -235,6 +290,7 @@ export function detectBootPersistence(
         // stays as the fallback because pm2's dump shape has changed across versions and a parse
         // failure must degrade to loose-but-answerable, not to a wrong "no".
         dumpContainsApp = namedInDump(raw, appName) ?? raw.includes(appName)
+        dumpHasBackoff = dumpPolicyCarriesBackoff(raw, appName)
       } catch {
         dumpContainsApp = null
       }
@@ -245,6 +301,7 @@ export function detectBootPersistence(
       unitFileNames,
       dumpExists,
       dumpContainsApp,
+      dumpHasBackoff,
       unitLoaded: detectUnitLoaded(platform),
     })
   } catch (err) {

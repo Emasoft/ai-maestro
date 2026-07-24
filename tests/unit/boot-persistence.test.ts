@@ -12,6 +12,7 @@ import {
   evaluateBootPersistence,
   looksLikePm2Unit,
   namedInDump,
+  dumpPolicyCarriesBackoff,
   unitSearchDirs,
   detectBootPersistence,
   type BootPersistenceFacts,
@@ -23,6 +24,7 @@ const healthy: BootPersistenceFacts = {
   dumpExists: true,
   dumpContainsApp: true,
   unitLoaded: true,
+  dumpHasBackoff: true,
 }
 
 describe('boot-persistence — the healthy case', () => {
@@ -94,6 +96,54 @@ describe('boot-persistence — present on disk but NOT loaded', () => {
     const v = evaluateBootPersistence({ ...healthy, unitFileNames: [], unitLoaded: false })
     expect(v.status).toBe('missing-unit')
     expect(v.willSurviveReboot).toBe(false)
+  })
+})
+
+describe('boot-persistence — the SAVED restart policy can be stale', () => {
+  // The trap: `pm2 resurrect` replays the dump, NOT ecosystem.config.js. Editing the config and
+  // believing the boot path changed is the natural mistake — it cost a falsely-ticked acceptance
+  // box on this very TRDD before anything reported it.
+  it('warns when the saved entry predates the never-give-up policy', () => {
+    const v = evaluateBootPersistence({ ...healthy, dumpHasBackoff: false })
+    expect(v.status).toBe('stale-policy')
+    expect(v.message).toContain('pm2 save')
+    expect(v.message).toMatch(/replays the dump/)
+  })
+
+  it('is a DEGRADED recovery, not a failed one — an ordinary reboot still comes back', () => {
+    expect(evaluateBootPersistence({ ...healthy, dumpHasBackoff: false }).willSurviveReboot).toBe(true)
+  })
+
+  it('an unknown policy is not treated as stale', () => {
+    expect(evaluateBootPersistence({ ...healthy, dumpHasBackoff: null }).status).toBe('ok')
+    expect(evaluateBootPersistence({ ...healthy, dumpHasBackoff: undefined }).status).toBe('ok')
+  })
+
+  it('BOTH warnings surface together — fixing one must not hide the other', () => {
+    // The real host was in exactly this state: unit present but not loaded, AND a dump saved
+    // before the backoff policy existed.
+    const v = evaluateBootPersistence({ ...healthy, unitLoaded: false, dumpHasBackoff: false })
+    expect(v.message).toContain('launchctl bootstrap')
+    expect(v.message).toContain('pm2 save')
+  })
+
+  it('reads the backoff off the app\'s own entry, not any entry', () => {
+    const dump = JSON.stringify([
+      { name: 'other-app', exp_backoff_restart_delay: 1000 },
+      { name: 'ai-maestro', max_restarts: 10 },
+    ])
+    expect(dumpPolicyCarriesBackoff(dump, 'ai-maestro')).toBe(false)
+    expect(dumpPolicyCarriesBackoff(dump, 'other-app')).toBe(true)
+  })
+
+  it('returns null for an absent app — stale-dump already reports that, once', () => {
+    const dump = JSON.stringify([{ name: 'other-app', exp_backoff_restart_delay: 1000 }])
+    expect(dumpPolicyCarriesBackoff(dump, 'ai-maestro')).toBeNull()
+    expect(dumpPolicyCarriesBackoff('not json', 'ai-maestro')).toBeNull()
+  })
+
+  it('a zero delay is not backoff', () => {
+    expect(dumpPolicyCarriesBackoff(JSON.stringify([{ name: 'a', exp_backoff_restart_delay: 0 }]), 'a')).toBe(false)
   })
 })
 

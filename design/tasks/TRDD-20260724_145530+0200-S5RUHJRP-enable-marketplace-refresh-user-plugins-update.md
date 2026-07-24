@@ -25,6 +25,14 @@ Goal: enable `marketplace-refresh` + `user-plugins-update` under the shared lock
 auto-update-service exists but is `enabled:false` by default. NEXT ACTION: wire the server to run
 both on schedule, contending on the shared marketplace-op.lock. Not started.
 
+**GROUNDING 2026-07-24 (from D5/A77JBHC9):** the `flock(2)` contention on `marketplace-op.lock` is
+THIS TRDD's responsibility (D5 confirmed `janitor-control.ts` is read-only by construction and cannot
+host a lock contender). It is currently **BLOCKED on the janitor**: the control dir
+`~/.claude/janitor-control/` today holds ONLY `oauth-rotator-tick.lock` — the janitor has NOT yet
+moved `marketplace-op.lock` there. Coordinate via D7 (2X4AYX9T) before building the contention; until
+the lock exists, contend on it defensively (create-if-absent under the same path the janitor will use)
+OR gate the chore on the lock's presence. Do NOT invent a divergent lock path.
+
 ## Spec
 
 - The `auto-update-service` exists but `enabled:false` by default; wire the server to run both

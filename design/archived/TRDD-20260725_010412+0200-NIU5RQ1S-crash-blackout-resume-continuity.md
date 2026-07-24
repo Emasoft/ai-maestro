@@ -69,8 +69,20 @@ not resumed. Now `decideResume()` (lib/claude-conversation.ts) appends the clien
 transcript exists, refusing subcommand-form verbs because appending those builds an *invalid*
 command, which is worse than a cold start.
 
-**[2] was a real hole.** `max_restarts: 10` with `min_uptime: '10s'`: a genuine crash-loop exhausts
-the budget and pm2 stops trying FOREVER. Now `max_restarts: 10000` + `exp_backoff_restart_delay`.
+**[2] was a real hole, and editing the config did NOT close it.** `max_restarts: 10` with
+`min_uptime: '10s'`: a genuine crash-loop exhausts the budget and pm2 stops trying FOREVER. The
+config now says `max_restarts: 10000` + `exp_backoff_restart_delay: 1000` — but that value has to
+reach **three** places, and a config edit reaches only one:
+
+| where | how it gets there | state |
+|---|---|---|
+| `ecosystem.config.js` | the edit | ✓ 18aaf300 |
+| the RUNNING pm2 process | `pm2 restart ecosystem.config.js --update-env` (a plain `pm2 restart <name>` does NOT re-read the config) | ✓ done + verified live |
+| `~/.pm2/dump.pm2` — **what `pm2 resurrect` replays at boot** | `pm2 save` | ✗ **human step** |
+
+This box was ticked once on the config edit alone while `pm2 jlist` still reported
+`max_restarts=10, backoff=None` — i.e. the blackout path, the only one this TRDD is about, was
+unchanged. The self-check now reports the third row (`stale-policy`) so it cannot be silent again.
 
 **Also verified while tracing the boot path** (a wrong Node there would crash-loop the resurrected
 server forever, now *politely* forever thanks to the backoff): `/opt/homebrew/bin/node` is v26.5.0,
@@ -80,8 +92,17 @@ source of truth build/test use, which version-CHECKS candidates and fails fast.
 
 ### NEXT ACTION
 
-None — all five acceptance boxes are met (commits 18aaf300, 7cbc2ecc, 9d71c3ef). The one remaining
-step is the human's `launchctl bootstrap` line above.
+None for this agent — all five acceptance boxes are met (18aaf300, 7cbc2ecc, 9d71c3ef, 7952f3c6),
+and the live chain was validated end-to-end on a real restart: boot-restore woke 3 agents, the one
+WITH a transcript resumed (`--continue`) and the two without cold-started with the reason logged,
+and the startup self-check printed its verdict.
+
+**Two residuals, both outside this agent's write boundary, both one command:**
+
+```bash
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/pm2.$USER.plist   # supervise pm2 now
+pm2 save                                                             # push the restart policy into the boot dump
+```
 
 **BOUNDARY (why [1] ships as a check + an installer, not an installation):** installing or loading
 a LaunchAgent writes OUTSIDE the project, which the standing rule forbids this agent from doing,
@@ -107,7 +128,10 @@ than buried in a script. Turning an invisible hole into a visible one is the par
 - [x] The resume flag is per-client (never a hardcoded `--continue` for a client that lacks it) —
       read from `getClientCapabilities(program).cli.resume`, and subcommand-form verbs are REFUSED
 - [x] pm2 retries a crash-looping server indefinitely with backoff rather than stopping at a count —
-      `max_restarts: 10000` + `exp_backoff_restart_delay: 1000` in ecosystem.config.js
+      `max_restarts: 10000` + `exp_backoff_restart_delay: 1000` in ecosystem.config.js, APPLIED to
+      the running process (verified live) and, for the boot path, reported by the self-check until
+      the human runs `pm2 save` — see the three-row table above; ticking this on the config edit
+      alone was the error that produced that table
 - [x] The server reports, at startup, whether machine-level boot persistence is installed —
       `lib/boot-persistence.ts` wired into server.mjs beside the boot-restore call; on this host it
       correctly reports `unit-not-loaded`, matching an independent `launchctl` inspection
@@ -121,3 +145,10 @@ than buried in a script. Turning an invisible hole into a visible one is the par
 - 2026-07-25T01:22:35+0200 — COMPLETED. All five acceptance boxes met (18aaf300, 7cbc2ecc, 9d71c3ef).
   Residual, explicitly outside this agent's write boundary: the human loads the already-present pm2
   LaunchAgent (`launchctl bootstrap gui/$UID ~/Library/LaunchAgents/pm2.$USER.plist`).
+- 2026-07-25T01:34:00+0200 — RECORD CORRECTION (not new work; the agent-side scope was and remains
+  complete). Box 3 had been ticked on the ecosystem.config.js edit alone, while `pm2 jlist` still
+  reported `max_restarts=10, backoff=None` — the boot path, the only one this TRDD is about, was
+  unchanged. Cause: a policy value must reach the config, the running process, AND the saved dump,
+  and each reaches only itself. The running process is now corrected and verified; the dump is the
+  human's `pm2 save`, and 7952f3c6 makes its staleness visible (`stale-policy`) instead of silent.
+  A SECOND residual is therefore recorded alongside the launchctl one — see NEXT ACTION.

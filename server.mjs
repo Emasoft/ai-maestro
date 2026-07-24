@@ -1980,6 +1980,21 @@ async function startServer(handleRequest) {
       console.warn('[Startup] OAuth-rotator tick init failed (non-fatal):', err?.message || err)
     }
 
+    // ── OAuth-rotator SUPERVISOR beat: the 10-min alert-only governance loop (TRDD-7DRSIKVZ) ─
+    // Ported from the janitor daemon's supervisor.py. HEALS NOTHING — it surfaces the conditions a
+    // HUMAN must act on (a pinning env var defeating rotation, an opted-in non-macOS host, a stalled
+    // tick, a no-refresh setup token nearing expiry, an account stuck in a human-only renew leg).
+    // Safe to start UNCONDITIONALLY: its natural gate is the rotator OPT-IN (rotatorRoot()/opt-in.flag)
+    // checked INSIDE each beat, so with the rotator not opted in every beat no-ops and never touches
+    // the OS keychain. `daemonAlive` maps to whether the server's rotation tick is armed.
+    try {
+      const { startOauthRotatorSupervisor } = await import('./lib/oauth-rotator/server-supervisor.ts')
+      startOauthRotatorSupervisor()
+      console.log('[Startup] OAuth-rotator supervisor beat started (alert-only; no-op unless the rotator opt-in flag is present)')
+    } catch (err) {
+      console.warn('[Startup] OAuth-rotator supervisor init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Server liveness+capability probe file (TRDD-P7RPOR5O; janitor#100 seam) ──
     // Maintain ~/.aimaestro/server-liveness.json so the janitor's two backends (#J
     // inside the harness, #N outside) coordinate WITHOUT auth (the outside daemon has

@@ -2,7 +2,7 @@
 name: restart-conversation-continuity
 description: "restarted agent came back blank / forgot what it was doing / splash screen after restart / plugin install made the agent lose its task / fleet went idle after a fix"
 ocd: 2026-07-23
-lmd: 2026-07-23
+lmd: 2026-07-25
 metadata:
   node_type: memory
   type: project
@@ -32,8 +32,19 @@ give it a turn. A resumed session sits idle at the prompt with its history loade
 Whether an agent resumes WORKING without a human is a separate mechanism (the
 janitor heartbeat / continuity daemon) — do not read this fix as solving that.
 
+**The BOOT-RESTORE path was a second, separate cold start**, closed later by
+TRDD-NIU5RQ1S: `wakeAgent` built its command from `startCommand + resolveLaunchArgs()`
+and never added a resume verb, so an agent restored after a server restart came back
+alive, in the right repo, and having forgotten everything. It now takes
+`continueConversation`, and the decision lives in `decideResume()` alongside
+`hasPriorConversation` — per-client (read from `getClientCapabilities().cli.resume`),
+and FLAG-FORM only: codex `resume --last` / kiro `chat --resume` are subcommands that
+must precede other args, so appending them would build an *invalid* command, which is
+worse than the cold start it replaces.
+
 See also [[session-control-subagent-gate]] (the other half of the restart path: the
-safe-state gate that decides WHEN a restart may proceed).
+safe-state gate that decides WHEN a restart may proceed) and [[pm2-boot-persistence]]
+(the layer BELOW this one: whether the server comes back at all after a reboot).
 
 ## Notes and lessons learned
 
@@ -57,3 +68,10 @@ safe-state gate that decides WHEN a restart may proceed).
   only because a restart wiped the MANAGER's mandate — the defect was in this repo, not
   in the agents. DO capture each pane and ask "what did we do to it?" before concluding
   the agents failed.
+
+[^4]: [id:ATOM-6P4J-V9SD, status:valid, keywords:"fixed_the_restart_path_but_boot_restore_was_still_cold second_relaunch_path relaunch_command_built_in_two_places", ocd:2026-07-25, lmd:2026-07-25]
+  DO NOT treat "relaunch preserves the conversation" as settled once the restart routes
+  are fixed, BECAUSE a SECOND relaunch path existed — boot-restore's `wakeAgent` builds
+  its own command and kept cold-starting every agent after a server restart for months
+  after TRDD-6AMXSG3S closed the first one. DO grep for every site that assembles a
+  launch command, not just the one the bug was reported against.

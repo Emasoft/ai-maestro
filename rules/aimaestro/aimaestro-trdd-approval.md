@@ -774,6 +774,23 @@ heartbeat cadence / MANAGER idle sweep) — **never** on every creation:
    `npt:`/`eht:` names a non-terminal child is a **false completion** —
    move it to `blocked` with `blocked-by:` naming the open children, and
    flag it. See the completion rule below.
+5b. **Check the field + checklist discipline (USER ruling 2026-07-24, pure
+   grep, no LLM).** The three fields are MANDATORY and NOT substitutable —
+   `blocked-by` records what gates a TRDD, `column` its pipeline position,
+   `assignee` its owner; none stands in for another, and all are kept
+   current at every edit:
+   - **Fields present + consistent:** `assignee` is set; `blocked-by` is
+     non-empty ⟺ `column: blocked`; `column` ∈ the ratified 17-column enum.
+     A `column: blocked` with empty `blocked-by`, or a non-empty `blocked-by`
+     with `column ≠ blocked`, is drift → flag.
+   - **Checklist-gated completion (the hard gate):** a TRDD may sit in a
+     terminal column `column ∈ {complete, published, live}` ONLY when every
+     `- [ ]` box in its bottom checklist is `- [x]`. A terminal column with
+     ANY unchecked box is a **false completion** → move it back to its
+     `pre-block-column:` (or `dev`) and flag. A fully-checked checklist in a
+     non-terminal column is simply not-yet-advanced (not a violation).
+     This gate is INDEPENDENT of, and additional to, the NPT/EHT gate in
+     step 5: BOTH must pass for a TRDD to be `complete`/`published`/`live`.
 6. **Check the approval record:** `approved:` agrees with `column:` per the
    invariant above; `approval-judge`/`approval-datetime` are present exactly
    when `approved ∈ {true, rejected}`; and the judge's authority is at or

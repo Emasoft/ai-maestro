@@ -26,6 +26,7 @@ import {
   type InboxNudgeState,
   type InboxNudgeResult,
 } from '@/lib/fleet-inbox-nudge'
+import { trackDeadDebounce, type DeadPartition } from '@/lib/fleet-dead-debounce'
 
 /** Wire the read-only scanner to the real registry + session substrate. Token-block
  *  detection (`getAccountHealthy`) is intentionally omitted here — it lands with the
@@ -76,6 +77,9 @@ export interface FleetLivenessWatchdogOptions {
   nudgeEnabled?: boolean
   /** Injectable inbox-nudge pass for tests; defaults to the real tick over the module store. */
   runNudge?: () => Promise<InboxNudgeResult>
+  /** Boot-debounce for the `dead` class (TRDD-SX593MDG D2); defaults to the real sidecar-backed
+   *  tracker. Injected in tests so the partition is deterministic and no sidecar is written. */
+  trackDead?: (deadIds: string[], now: number) => DeadPartition
 }
 
 /** Default 5 min, env-overridable, 0 disables (same knob shape as the invariants watchdog). */
@@ -124,13 +128,28 @@ export async function runFleetLivenessTick(
     const tokenBlocked = snap.agents.filter((a) => a.class === 'token_blocked')
     const dead = snap.agents.filter((a) => a.class === 'dead')
     const fireEnabled = opts.fireEnabled ?? DEFAULT_RECOVERY_FIRE
+    // Boot-debounce the dead set (D2): a dead agent is only a hard-recovery candidate once it has
+    // been observed dead PAST the boot window — a freshly-relaunched agent (session registered,
+    // tmux not yet back) is still booting and must NOT be hard-recovered. Detection-only here; the
+    // partition just labels the log so the observability is honest until Phase C consumes it.
+    const trackDead = opts.trackDead ?? ((ids: string[], t: number) => trackDeadDebounce(ids, t))
+    const deadPart: DeadPartition | null = dead.length ? trackDead(dead.map((a) => a.agentId), now()) : null
     if (stalled.length || tokenBlocked.length || dead.length) {
       const parts: string[] = []
       if (stalled.length) parts.push(`${stalled.length} stalled: ${stalled.map((a) => a.name || a.agentId).join(', ')}`)
       if (tokenBlocked.length)
         parts.push(`${tokenBlocked.length} token-blocked: ${tokenBlocked.map((a) => a.name || a.agentId).join(', ')}`)
-      if (dead.length)
-        parts.push(`${dead.length} dead (crashed, Phase C gated): ${dead.map((a) => a.name || a.agentId).join(', ')}`)
+      if (dead.length && deadPart) {
+        const nameOf = (id: string) => dead.find((a) => a.agentId === id)?.name || id
+        if (deadPart.hardRecoverable.length)
+          parts.push(
+            `${deadPart.hardRecoverable.length} dead (crashed past boot window, Phase C hard-recovery gated): ${deadPart.hardRecoverable.map(nameOf).join(', ')}`,
+          )
+        if (deadPart.debouncing.length)
+          parts.push(
+            `${deadPart.debouncing.length} dead (within boot window — debouncing, NOT a recovery target): ${deadPart.debouncing.map(nameOf).join(', ')}`,
+          )
+      }
       const gate = snap.actuationBlocked
         ? ` (actuation BLOCKED: ${snap.actuationBlockReason})`
         : ` — recovery targets: ${snap.recoveryTargets.length}${fireEnabled ? '' : ' [detect-only: AIM_FLEET_RECOVERY_FIRE not set]'}`

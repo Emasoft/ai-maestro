@@ -52,19 +52,31 @@ describe('runFleetLivenessTick (read-only)', () => {
     expect(logs[0]).toContain('actuation BLOCKED: kill-switch.flag')
   })
 
-  it('logs dead (crashed) agents with the Phase C gated note', async () => {
+  it('boot-debounces dead agents: past-window → crashed, within-window → debouncing (D2)', async () => {
     const logs: string[] = []
     await runFleetLivenessTick({
       now: () => 1,
       log: (m) => logs.push(m),
+      // Inject the partition (0-IMPACT: no real sidecar) — zombie past the boot window, newborn within.
+      trackDead: (ids) => ({
+        hardRecoverable: ids.filter((id) => id === 'a1'),
+        debouncing: ids.filter((id) => id === 'a2'),
+        nextFirstSeen: {},
+      }),
       scan: async () =>
         snap({
-          agents: [{ agentId: 'a1', name: 'zombie', class: 'dead', recoveryRecommended: false, reason: 'crashed' }],
+          agents: [
+            { agentId: 'a1', name: 'zombie', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
+            { agentId: 'a2', name: 'newborn', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
+          ],
           recoveryTargets: [],
         }),
     })
     expect(logs).toHaveLength(1)
-    expect(logs[0]).toContain('1 dead (crashed, Phase C gated): zombie')
+    // the genuinely-crashed one is a hard-recovery candidate (still Phase C gated) …
+    expect(logs[0]).toContain('1 dead (crashed past boot window, Phase C hard-recovery gated): zombie')
+    // … the just-relaunched one is suppressed — NOT a recovery target while it may still be booting.
+    expect(logs[0]).toContain('1 dead (within boot window — debouncing, NOT a recovery target): newborn')
   })
 
   it('stays silent when the fleet is healthy', async () => {

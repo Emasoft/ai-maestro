@@ -150,9 +150,19 @@ describe('continuity-registry — the shipped table', () => {
     }
   })
 
-  it('claude is registered (its events land with E3/E4/E5) and classifies to null until then', () => {
-    expect(findClientEntry('claude')).not.toBeNull()
-    expect(classifyContinuity(obs({ frame: 'attempt 12/300' }), CONTINUITY_REGISTRY)).toBeNull()
+  it('claude is registered and carries the E3 retry-wedge event', () => {
+    const claude = findClientEntry('claude')
+    expect(claude).not.toBeNull()
+    expect(claude!.events.map((e) => e.id)).toContain('retry-wedge')
+  })
+
+  it('the STATELESS entry point never fires a temporal event, even on a wedge frame', () => {
+    // Safe by default: with no episode memory nothing can be observed to ADVANCE, so a caller
+    // that forgets the store under-detects rather than injecting into a healthy agent.
+    // (E3's own suite covers the stateful path.)
+    expect(
+      classifyContinuity(obs({ frame: 'Retrying in 8s (attempt 12/300)' }), CONTINUITY_REGISTRY),
+    ).toBeNull()
   })
 
   it('ESC_KEYSTROKE is the single fixed control byte', () => {

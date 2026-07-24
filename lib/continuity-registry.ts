@@ -20,6 +20,8 @@
 // resolve to "no event" — never to a spurious injection. A false detection drives a keystroke
 // into a healthy agent, so silence is the safe failure.
 
+import { CLAUDE_CONTINUITY_EVENTS } from '@/lib/continuity-events-claude'
+
 /** The fixed ESC control byte. Exported so an injector never has to spell it — the `esc`
  *  response carries no payload precisely so no caller can substitute other keystrokes. */
 export const ESC_KEYSTROKE = '\x1b'
@@ -56,6 +58,18 @@ export interface ContinuityEvent {
   /** Stable id, reported in the decision and used for logging/tests (e.g. 'retry-wedge'). */
   id: string
   match: (obs: ContinuityObservation) => boolean
+  /**
+   * OPTIONAL false-positive gate for states that are only real when they are MOVING
+   * (TRDD-Y8VPE3NS). Extract a monotonic progress number from the observation — a retry attempt
+   * counter, a step index — and the event fires ONLY when that number ADVANCED since the previous
+   * poll. A first sighting and a tie never fire.
+   *
+   * WHY: `match` sees ONE poll, so it cannot tell a live wedge from a STATIC string that merely
+   * contains the same words — a document, an issue body, a log tail on screen. Without this gate
+   * a agent reading its own spec would be injected into. Keep it pure; a throwing marker is
+   * treated as absent, and an absent marker CLEARS the episode (the state went away).
+   */
+  progressMarker?: (obs: ContinuityObservation) => number | null
   response: ContinuityResponse
 }
 
@@ -70,13 +84,14 @@ export interface ContinuityClientEntry {
 }
 
 /**
- * THE registry. Entries are populated by the per-event TRDDs — E3 (retry-wedge), E4
- * (AskUserQuestion), E5 (idle-with-inbox), E6 (non-Claude clients). A client listed with no
- * events is KNOWN but currently has nothing to detect: it classifies to null exactly like an
- * unknown one, and adding its first event is a one-entry push rather than an engine change.
+ * THE registry. Per-client event tables live in their own modules (`continuity-events-<client>.ts`)
+ * and are assembled here, so adding a client is one import plus one row — never engine code.
+ * Remaining events are added by their own TRDDs: E4 (AskUserQuestion), E5 (idle-with-inbox),
+ * E6 (non-Claude clients). A client listed with no events is KNOWN but has nothing to detect yet:
+ * it classifies to null exactly like an unknown one.
  */
 export const CONTINUITY_REGISTRY: readonly ContinuityClientEntry[] = [
-  { program: 'claude', aliases: ['claude-code'], events: [] },
+  { program: 'claude', aliases: ['claude-code'], events: CLAUDE_CONTINUITY_EVENTS },
 ]
 
 /** Normalise a program to its registry key: basename, trimmed, lowercased. An agent's stored
@@ -112,29 +127,89 @@ export interface ContinuityClassification {
 }
 
 /**
- * Classify ONE observation against the registry. Returns the first matching event's
- * classification, or null when the program is unknown, has no events, or nothing matched.
- *
- * FAIL-OPEN: a matcher that throws is treated as "did not match" and the scan continues — one
- * bad regex in one client's entry must never break detection for every other client, and it must
- * never be read as a positive.
+ * Per-agent episode memory: the last progress marker seen for each temporal event, keyed by
+ * event id. The CALLER owns the store (the actuator's `episodes` dep) — this module stays pure.
+ * An event whose state vanished is simply absent from the next map, which is how "cleared" is
+ * represented; there is no tombstone to leak.
  */
-export function classifyContinuity(
+export type ContinuityEpisodes = Record<string, number>
+
+/**
+ * Classify ONE observation, carrying the per-agent episode memory that temporal events need.
+ *
+ * Returns the first matching event plus the episodes to remember for the NEXT poll. The episode
+ * map is rebuilt on every call and covers EVERY temporal event of the client, whether or not it
+ * fired — an event that only recorded its marker when it fired could never establish a previous
+ * value, so it could never observe an advance, so it would never fire at all.
+ *
+ * THE FALSE-POSITIVE GATE: an event declaring `progressMarker` fires only when the marker is
+ * present AND strictly greater than the remembered one. A first sighting cannot fire (nothing to
+ * advance from) and a tie cannot fire (the screen is not moving). That is precisely what makes a
+ * STATIC on-screen string incapable of triggering an injection, no matter how many polls it
+ * survives.
+ *
+ * FAIL-OPEN throughout: a matcher or marker that throws is treated as absent, never as a
+ * detection — one bad pattern in one client's table must not break the others, and must never
+ * drive a keystroke into a healthy agent.
+ */
+export function classifyContinuityWithEpisodes(
   obs: ContinuityObservation,
+  previous: Readonly<ContinuityEpisodes> = {},
   registry: readonly ContinuityClientEntry[] = CONTINUITY_REGISTRY,
-): ContinuityClassification | null {
+): { hit: ContinuityClassification | null; episodes: ContinuityEpisodes } {
+  const episodes: ContinuityEpisodes = {}
   const entry = findClientEntry(obs.program, registry)
-  if (!entry) return null
+  if (!entry) return { hit: null, episodes }
+
+  let hit: ContinuityClassification | null = null
   for (const event of entry.events) {
+    // Record the marker FIRST, for every temporal event, even once something has already matched:
+    // the store must stay current or a later poll's "advance" is measured against a stale value.
+    let marker: number | null = null
+    if (event.progressMarker) {
+      try {
+        marker = event.progressMarker(obs)
+      } catch {
+        marker = null
+      }
+      if (typeof marker !== 'number' || !Number.isFinite(marker)) marker = null
+      if (marker !== null) episodes[event.id] = marker
+      // marker === null ⇒ the state vanished ⇒ the key stays absent ⇒ the episode is cleared.
+    }
+
+    if (hit !== null) continue // first match wins; keep looping only to keep episodes current
+
     let matched = false
     try {
       matched = event.match(obs) === true
     } catch {
       matched = false // fail-open — a broken matcher is never a detection
     }
-    if (matched) return { program: entry.program, eventId: event.id, response: event.response }
+    if (!matched) continue
+
+    if (event.progressMarker) {
+      const prev = previous[event.id]
+      if (marker === null || typeof prev !== 'number' || marker <= prev) continue // no advance ⇒ no fire
+    }
+
+    hit = { program: entry.program, eventId: event.id, response: event.response }
   }
-  return null
+  return { hit, episodes }
+}
+
+/**
+ * Stateless classification — the convenience entry point for callers with no episode store.
+ *
+ * SAFE BY DEFAULT: with no remembered episodes, a temporal event can never observe an advance,
+ * so it never fires here. A caller that needs the retry-wedge class of event must carry the
+ * store and use `classifyContinuityWithEpisodes`; forgetting to do so under-detects, which is
+ * the failure direction we want.
+ */
+export function classifyContinuity(
+  obs: ContinuityObservation,
+  registry: readonly ContinuityClientEntry[] = CONTINUITY_REGISTRY,
+): ContinuityClassification | null {
+  return classifyContinuityWithEpisodes(obs, {}, registry).hit
 }
 
 /** Every curated command key any registered response names. A test pins these to real

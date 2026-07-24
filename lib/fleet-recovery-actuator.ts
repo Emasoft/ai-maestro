@@ -35,8 +35,9 @@ import type { LivenessClass } from '@/lib/fleet-liveness'
 import { fleetActuationBlocked } from '@/lib/janitor-control'
 import { getAgentCommand } from '@/lib/agent-commands'
 import {
-  classifyContinuity,
+  classifyContinuityWithEpisodes,
   type ContinuityClientEntry,
+  type ContinuityEpisodes,
   type ContinuityObservation,
   type ContinuityResponse,
 } from '@/lib/continuity-registry'
@@ -255,6 +256,19 @@ export interface ContinuityActuatorDeps extends GateDeps {
   registry?: readonly ContinuityClientEntry[]
   /** Curated-key existence check. Defaults to the real allowlist — the injection boundary. */
   commandExists?: (key: string) => boolean
+  /**
+   * Per-agent episode memory for TEMPORAL events (the retry-wedge's attempt-ADVANCE gate,
+   * TRDD-Y8VPE3NS). Injected so this actuator stays stateless — the watchdog owns the store,
+   * exactly as it owns the recovery attempt counts.
+   *
+   * OMITTING IT IS SAFE, and under-detects on purpose: with no memory a temporal event can never
+   * observe an advance, so it never fires. A caller that wants retry-wedge detection must supply
+   * the store.
+   */
+  episodes?: {
+    get: (agentId: string) => ContinuityEpisodes | undefined
+    set: (agentId: string, episodes: ContinuityEpisodes) => void
+  }
 }
 
 export type ContinuityDecision =
@@ -280,7 +294,12 @@ export async function actuateContinuity(
   deps: ContinuityActuatorDeps,
 ): Promise<ContinuityDecision> {
   // 1. no_event — pure classification against the registry; fail-open by construction.
-  const hit = classifyContinuity(target.observation, deps.registry)
+  //    The episode store is read and WRITTEN BACK here, before any gate: a temporal event
+  //    measures its advance against the PREVIOUS poll, so a poll that skipped the write (because
+  //    a gate refused, or because nothing matched) would leave the next advance unmeasurable.
+  const previous = deps.episodes?.get(target.agentId) ?? {}
+  const { hit, episodes } = classifyContinuityWithEpisodes(target.observation, previous, deps.registry)
+  deps.episodes?.set(target.agentId, episodes)
   if (hit === null) return { fired: false, reason: 'no_event' }
 
   // 2. unknown_command_key — the curated boundary, enforced before anything can be sent.

@@ -33,6 +33,13 @@
 import { recoveryRungFor, isHardRung, type RecoveryRung, type RecoveryDiagnosis } from '@/lib/fleet-recovery'
 import type { LivenessClass } from '@/lib/fleet-liveness'
 import { fleetActuationBlocked } from '@/lib/janitor-control'
+import { getAgentCommand } from '@/lib/agent-commands'
+import {
+  classifyContinuity,
+  type ContinuityClientEntry,
+  type ContinuityObservation,
+  type ContinuityResponse,
+} from '@/lib/continuity-registry'
 
 /**
  * Map a liveness class to the recovery-ladder diagnosis, or null when the class is not a
@@ -101,22 +108,63 @@ export interface InjectResult {
   detail?: string
 }
 
-export interface ActuatorDeps {
+/**
+ * The gates EVERY actuation shares — the master flag, the machine-wide STOP, HID presence, and
+ * the per-agent cooldown. Split out of ActuatorDeps (TRDD-X8801GT4) so a second diagnosis
+ * enforces the IDENTICAL gates instead of a copy that can drift: one duplicated gate is one
+ * place the fleet can be actuated while the owner believes it is halted.
+ */
+export interface GateDeps {
   /** MASTER SWITCH — OFF by default. Only true when the operator opts in (D-full flag). */
   fireEnabled: boolean
-  /** Enable the HARD rungs (Phase C). Default false — this gentle-only actuator never runs them. */
-  hardEnabled?: boolean
   /** The janitor machine-wide STOP gate. Defaults to the real janitor-control reader. */
   actuationBlocked?: () => { blocked: boolean; reason: string | null }
   /** True when the user is actively at the keyboard — defer injection to avoid racing them. */
   hidPresent: () => boolean
-  /** THE side effect: perform the authenticated injection (#60). Injected so the real
-   *  queue/tmux wiring lands in D-full; tests pass a fake. */
-  inject: (action: RecoveryAction) => Promise<InjectResult>
   /** Cooldown window in ms (default DEFAULT_COOLDOWN_MS). */
   cooldownMs?: number
   /** Clock, injectable for tests. */
   now?: () => number
+}
+
+export interface ActuatorDeps extends GateDeps {
+  /** Enable the HARD rungs (Phase C). Default false — this gentle-only actuator never runs them. */
+  hardEnabled?: boolean
+  /** THE side effect: perform the authenticated injection (#60). Injected so the real
+   *  queue/tmux wiring lands in D-full; tests pass a fake. */
+  inject: (action: RecoveryAction) => Promise<InjectResult>
+}
+
+/** Why a shared gate refused. Every value is also a member of each diagnosis's decision union,
+ *  so a gate reason is reported verbatim rather than remapped (a remap is where truth is lost). */
+export type GateBlockReason = 'fire_flag_off' | 'actuation_blocked' | 'hid_present' | 'cooldown'
+
+/** A gate verdict: pass, or the truthful dominant reason it did not. */
+export type GateResult = { ok: true } | { ok: false; reason: GateBlockReason; detail?: string }
+
+/** Gates 2-3 — the ENTRY gates, checked before any per-target work. The flag is first so an OFF
+ *  actuator performs no I/O at all; a deliberate machine-wide halt is then reported as itself. */
+export function checkEntryGates(deps: GateDeps): GateResult {
+  if (!deps.fireEnabled) return { ok: false, reason: 'fire_flag_off' }
+  const gate = (deps.actuationBlocked ?? fleetActuationBlocked)()
+  if (gate.blocked) return { ok: false, reason: 'actuation_blocked', detail: gate.reason ?? undefined }
+  return { ok: true }
+}
+
+/** Gates 5-6 — the INJECTION gates, checked immediately before the keystroke. Kept separate from
+ *  the entry gates so a caller can interleave its OWN decision (the ladder's rung choice, the
+ *  registry's key check) between the two halves and still report the dominant reason. */
+export function checkInjectionGates(lastActuatedAtMs: number | null, deps: GateDeps): GateResult {
+  if (deps.hidPresent()) return { ok: false, reason: 'hid_present' }
+  const cooldownMs = deps.cooldownMs ?? DEFAULT_COOLDOWN_MS
+  const now = (deps.now ?? Date.now)()
+  if (lastActuatedAtMs !== null) {
+    const since = now - lastActuatedAtMs
+    if (since < cooldownMs) {
+      return { ok: false, reason: 'cooldown', detail: `${Math.round((cooldownMs - since) / 1000)}s left` }
+    }
+  }
+  return { ok: true }
 }
 
 export type RecoveryDecision =
@@ -145,12 +193,9 @@ export async function actuateRecovery(target: RecoveryTarget, deps: ActuatorDeps
   const diagnosis = diagnosisForClass(target.class)
   if (diagnosis === null) return { fired: false, reason: 'not_a_target', detail: target.class }
 
-  // 2. fire_flag_off — the master switch. Checked before any I/O so an OFF actuator reads nothing.
-  if (!deps.fireEnabled) return { fired: false, reason: 'fire_flag_off' }
-
-  // 3. actuation_blocked — the janitor machine-wide STOP.
-  const gate = (deps.actuationBlocked ?? fleetActuationBlocked)()
-  if (gate.blocked) return { fired: false, reason: 'actuation_blocked', detail: gate.reason ?? undefined }
+  // 2-3. fire_flag_off / actuation_blocked — the shared ENTRY gates.
+  const entry = checkEntryGates(deps)
+  if (!entry.ok) return { fired: false, reason: entry.reason, detail: entry.detail }
 
   // 4. rung — escalate one rung per attempt from the diagnosis's entry. A HARD result is
   //    NOT this actuator's to run: gated off ⇒ hard_gated (human needed); enabled ⇒
@@ -159,18 +204,9 @@ export async function actuateRecovery(target: RecoveryTarget, deps: ActuatorDeps
   if (rung === null) return { fired: false, reason: 'hard_gated', detail: `attempt ${target.attempt}` }
   if (isHardRung(rung)) return { fired: false, reason: 'hard_not_wired', detail: rung }
 
-  // 5. hid_present — the user is typing; defer.
-  if (deps.hidPresent()) return { fired: false, reason: 'hid_present' }
-
-  // 6. cooldown — one nudge per window.
-  const cooldownMs = deps.cooldownMs ?? DEFAULT_COOLDOWN_MS
-  const now = (deps.now ?? Date.now)()
-  if (target.lastActuatedAtMs !== null) {
-    const since = now - target.lastActuatedAtMs
-    if (since < cooldownMs) {
-      return { fired: false, reason: 'cooldown', detail: `${Math.round((cooldownMs - since) / 1000)}s left` }
-    }
-  }
+  // 5-6. hid_present / cooldown — the shared INJECTION gates.
+  const ready = checkInjectionGates(target.lastActuatedAtMs, deps)
+  if (!ready.ok) return { fired: false, reason: ready.reason, detail: ready.detail }
 
   // 7. FIRE. rung is gentle (step 4 excluded hard), so GENTLE_RUNG_COMMAND_KEY always has it.
   const action: RecoveryAction = {
@@ -178,6 +214,98 @@ export async function actuateRecovery(target: RecoveryTarget, deps: ActuatorDeps
     name: target.name,
     rung,
     commandKey: GENTLE_RUNG_COMMAND_KEY[rung]!,
+  }
+  const result = await deps.inject(action)
+  return { fired: true, action, result }
+}
+
+// ─── conversation-continuity (TRDD-X8801GT4 — Flock-E E2) ────────────────────────────────────
+//
+// The SECOND diagnosis this one injector serves. Where `actuateRecovery` answers "this agent has
+// gone QUIET" with a ladder of idle-drain slashes, the continuity path answers "this agent is
+// SHOWING a blocking screen" with the one response its client's registry entry declares for that
+// screen. Same gates, same cooldown, same injection-proof boundary — only the classifier and the
+// payload differ. Adding a client is a `lib/continuity-registry.ts` entry, never a branch here.
+
+export interface ContinuityTarget {
+  agentId: string
+  name?: string
+  /** What the frame reader + hook state saw for this agent at this poll. */
+  observation: ContinuityObservation
+  /** Epoch ms of the last actuation of THIS agent, or null. SHARED with the recovery ladder on
+   *  purpose: the cooldown is per AGENT, not per diagnosis — two subsystems each nudging "only
+   *  once per window" would still double-nudge the same agent within that window. */
+  lastActuatedAtMs: number | null
+}
+
+/** What the continuity injector is asked to perform. Carries the classified event and the
+ *  registry's CLOSED-UNION response — never command text. */
+export interface ContinuityAction {
+  agentId: string
+  name?: string
+  program: string
+  eventId: string
+  response: ContinuityResponse
+}
+
+export interface ContinuityActuatorDeps extends GateDeps {
+  /** THE side effect: perform the response (the raw ESC, or the curated command). Injected. */
+  inject: (action: ContinuityAction) => Promise<InjectResult>
+  /** Registry override — tests pass fakes; production uses the real table. */
+  registry?: readonly ContinuityClientEntry[]
+  /** Curated-key existence check. Defaults to the real allowlist — the injection boundary. */
+  commandExists?: (key: string) => boolean
+}
+
+export type ContinuityDecision =
+  | { fired: true; action: ContinuityAction; result: InjectResult }
+  | { fired: false; reason: 'no_event' | 'unknown_command_key' | GateBlockReason; detail?: string }
+
+/**
+ * Decide and (if every gate passes) actuate the continuity response for ONE agent.
+ *
+ * Order — cheapest and most decisive first, so the reported reason is the truthful dominant one:
+ *   1. no_event            — unknown client, or nothing on screen matched. The overwhelming
+ *                            majority of polls end here, before any I/O.
+ *   2. unknown_command_key — the classified response names a key the allowlist does not carry.
+ *                            A CONFIGURATION defect, reported even while the fire flag is OFF:
+ *                            the subsystem ships dark, so a typo caught only after arming would
+ *                            first surface as an agent silently receiving nothing, in production.
+ *   3-4. the shared ENTRY gates      (fire flag, machine-wide STOP)
+ *   5-6. the shared INJECTION gates  (HID presence, per-agent cooldown)
+ *   7. FIRE.
+ */
+export async function actuateContinuity(
+  target: ContinuityTarget,
+  deps: ContinuityActuatorDeps,
+): Promise<ContinuityDecision> {
+  // 1. no_event — pure classification against the registry; fail-open by construction.
+  const hit = classifyContinuity(target.observation, deps.registry)
+  if (hit === null) return { fired: false, reason: 'no_event' }
+
+  // 2. unknown_command_key — the curated boundary, enforced before anything can be sent.
+  if (hit.response.kind === 'command') {
+    const exists = deps.commandExists ?? ((key: string) => getAgentCommand(key) !== undefined)
+    if (!exists(hit.response.commandKey)) {
+      return { fired: false, reason: 'unknown_command_key', detail: hit.response.commandKey }
+    }
+  }
+
+  // 3-4. the shared ENTRY gates.
+  const entry = checkEntryGates(deps)
+  if (!entry.ok) return { fired: false, reason: entry.reason, detail: entry.detail }
+
+  // 5-6. the shared INJECTION gates.
+  const ready = checkInjectionGates(target.lastActuatedAtMs, deps)
+  if (!ready.ok) return { fired: false, reason: ready.reason, detail: ready.detail }
+
+  // 7. FIRE.
+  const action: ContinuityAction = {
+    agentId: target.agentId,
+    name: target.name,
+    program: hit.program,
+    eventId: hit.eventId,
+    response: hit.response,
   }
   const result = await deps.inject(action)
   return { fired: true, action, result }

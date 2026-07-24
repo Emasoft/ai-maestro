@@ -4,7 +4,7 @@ title: Port oauth-rotator-supervisor and rotator core into the server
 column: dev
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T14:55:30+0200
+updated: 2026-07-24T16:29:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: refactor
@@ -17,6 +17,7 @@ approval-datetime: 2026-07-24T14:55:30+0200
 parent-trdd: KCRMSNL7
 derived: true
 derived-kind: npt
+implementation-commits: [eb1439d5]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
@@ -30,10 +31,17 @@ slots/live/keychain/integrity/safe-storage) is ported too (tasks #50-55). The ti
 `~/.aimaestro/oauth-rotator-tick.enabled` (R16-safe). So there is NO separate `rotator.ts` to write.
 REMAINING D1 = (1) `supervisor.ts` — port supervisor.py (422 lines, the 10-min governance/auto-heal
 loop that oversees the rotator); (2) `cookie-vault.ts` — port cookie_vault.py (331 lines, custody);
-(3) wire the supervisor beat into the server tick, mirroring `server-tick.ts`. NEXT ACTION: port
-cookie_vault.py → cookie-vault.ts FIRST (custody, lower risk), reading keychain.ts / safe-storage.ts
-for API parity; then supervisor.ts. Preserve the write-mutex + starvation guard; do NOT port the
-human-interactive capture (reauth / slot_capture); stays R16 flag-gated.
+(3) wire the supervisor beat into the server tick, mirroring `server-tick.ts`.
+
+**PROGRESS 2026-07-24:** part (2) DONE — `cookie-vault.ts` ported + verified (commit `eb1439d5`):
+tsc 0 errors, next lint clean, 17/17 parity tests (0-IMPACT temp sqlite + vi.mock'd safe-storage).
+Load-bearing fix: Chrome's *_utc columns exceed 2^53, so the port reads INTEGER columns via
+better-sqlite3 `safeIntegers(true)` → BigInt (carried as decimal strings in JSON) — a lossy Number
+would corrupt the timestamp and break the unique index. NEXT ACTION: port supervisor.py (422 lines,
+the 10-min governance/auto-heal loop) → `supervisor.ts`; read rotator.py's `_log`/`_decide` +
+`supervisor.py`'s governance loop, and `tick.ts`/`server-tick.ts` for the beat pattern. Then part
+(3): wire the supervisor beat into the server tick. Preserve the write-mutex + starvation guard; do
+NOT port the human-interactive capture (reauth / slot_capture); stays R16 flag-gated.
 
 ## Spec
 

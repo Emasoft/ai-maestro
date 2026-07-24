@@ -2218,6 +2218,19 @@ async function startServer(handleRequest) {
         await reconcileOrphanPanesOnBoot()
         const { restoreActiveAgentsOnBoot } = await import('./services/boot-restore-service.ts')
         await restoreActiveAgentsOnBoot()
+
+        // TRDD-NIU5RQ1S — report whether this HOST will actually bring us back after a power loss.
+        // Everything above is unreachable if pm2 itself never starts at boot, and that gap is
+        // otherwise completely invisible: `pm2 save` makes it LOOK configured while nothing runs
+        // `pm2 resurrect`. Logged right after the restore so the two read together.
+        try {
+          const { detectBootPersistence } = await import('./lib/boot-persistence.ts')
+          const boot = detectBootPersistence()
+          if (boot.willSurviveReboot) console.log(`[BootPersistence] ${boot.message}`)
+          else console.warn(`[BootPersistence] ${boot.message}`)
+        } catch (err) {
+          console.warn('[BootPersistence] check unavailable:', err?.message || err)
+        }
       } catch (error) {
         console.error('[BootRestore] Failed to run startup session bootstrap / agent restore:', error.message)
       }

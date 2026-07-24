@@ -1,64 +1,78 @@
 ---
 trdd-id: 1K2TZVIP
-title: SCEN-031 should accept blocked-by/assignee gating as an equal alternative to column-ownership fields
+title: Enforce assignee + blocked-by + column + checklist on every TRDD with a checklist-gated completion
 column: proposal
 created: 2026-07-23T18:12:45+0200
-updated: 2026-07-23T18:12:45+0200
-current-owner: scenario-runner
+updated: 2026-07-24T14:55:58+0200
+current-owner: ai-maestro
 task-type: docs
 scope: project
 min-approval-requirement: manager
-approval-tier: 2
-priority: 3
-severity: trivial
+priority: 1
+severity: medium
 effort: small
-labels: [scenario-improvement, scen-031, batch-manual-harvest]
+labels: [scenario-improvement, scen-031, batch-manual-harvest, governance]
 external-refs: [reports/scenarios-runner/SCEN-031-phase-1_20260723T133825Z.report.md]
 ---
 
-# Recognize blocked-by gating as a valid column-ownership design
+# Enforce the full field + checklist discipline on every TRDD, with a checklist-gated completion
+
+> **USER RULING (2026-07-24) — this proposal's ORIGINAL stance was WRONG and is REVERSED.** The
+> original text argued SCEN-031 should accept an `assignee`+`blocked-by` split as an *equal
+> alternative to* the `column` field. The USER rejected that: *"every TRDD must have assignee,
+> blocked-by (if blocked) AND column fields filled with the value. And those must be constantly
+> updated at every change, along with the checklist at the bottom of every TRDD. completion only is
+> possible when all checklist boxes are checked and the column is complete or deployed. not in any
+> other case."* The three fields are NOT alternatives — they are all mandatory and all kept current.
 
 ## Problem
 
-SCEN-031 phase 1 (`S008b`) expects the MANAGER to split work into TRDDs with **column-level
-ownership fields** ("AUTONOMOUS: todo/dev/testing; MAINTAINER: ai_review/human_review/publish").
-The fleet instead produced two TRDDs with an **`assignee` split + `blocked-by` gate**: the dev
-owns the implementation TRDD (`release-via: publish`), the maintainer owns a separate audit/review
-TRDD, and the maintainer's TRDD gates the dev's via `blocked-by`.
+Two defects, one root:
 
-This achieves the identical functional goal — clear, non-siloed ownership with the maintainer
-gating the release — through a different, equally-valid mechanism. The phase file's own text
-anticipates this ("the sensible split is what a correct fleet arrives at on its own"), yet its
-literal verification criteria describe only the column-field mechanism, so a strict reading would
-flag a correct fleet as non-conforming.
+1. **The fields are treated as substitutable.** SCEN-031's ownership check accepted a fleet that
+   used `assignee`+`blocked-by` gating *in place of* per-column ownership. That is wrong: a TRDD's
+   `assignee`, its `blocked-by` (whenever it is blocked), AND its `column` are all REQUIRED and must
+   be kept current at every change — none stands in for another. `blocked-by` records *what gates
+   this TRDD*; `column` records *where it is in the pipeline*; `assignee` records *who owns it*.
+   Dropping `column` because a `blocked-by` edge exists loses the pipeline position the board reads.
 
-## Root cause
+2. **Completion is unenforced.** The approval ladder is advisory (ai-maestro#59): any agent can set
+   `column: complete` on a TRDD whose work is not done and whose bottom checklist is unchecked.
+   There is no gate asserting the terminal-column invariant.
 
-The verification criteria encode ONE implementation of "ownership + release gate" (column fields
-on a single TRDD) as if it were the requirement, when the actual requirement is the outcome
-(non-siloed ownership, maintainer gates release). TRDD-level `blocked-by` between two assigned
-TRDDs is a legitimate second implementation and is arguably cleaner (one concern per TRDD).
+## The ruling (what MUST hold)
+
+- Every TRDD carries `assignee`, `column`, and — whenever it is blocked — a non-empty `blocked-by`,
+  all filled and **kept current at every change**, together with the bottom `- [ ]` checklist.
+- **Completion is allowed ONLY when every checklist box is `[x]` AND `column ∈ {complete, published,
+  live}`.** In no other state may a TRDD be treated as done — not `dev`, not `testing`, not with an
+  unchecked box.
 
 ## Proposed fix
 
-Amend the SCEN-031 phase-file verification (and the reference split it cites) to accept EITHER
-mechanism as conforming:
+This is an ENFORCEMENT change, implemented by **[[TRDD-UCC2QJH9]]** (Flock B):
 
-1. column-ownership fields on a shared TRDD, OR
-2. an `assignee` split with a maintainer-owned TRDD gating the dev's TRDD via `blocked-by`.
+1. **DEP overlay** — `rules/aimaestro/aimaestro-trdd-approval.md` §D4 states the invariant + makes it
+   a watchdog check: (i) `assignee` present; `blocked-by` non-empty ⟺ `column: blocked`; `column` ∈
+   the 17-column enum; (ii) parse the bottom checklist; (iii) terminal-column invariant above, else
+   move the TRDD back and flag.
+2. **The §D4 watchdog** (mechanism B is ratified — ai-maestro#59; the completion gate already landed
+   in the IND base — janitor#81; the watchdog that ENFORCES it is being built — janitor#109) asserts
+   the checks asynchronously, so agents are never blocked but violations are caught.
 
-State the requirement as the outcome — "the maintainer gates the release and no single agent owns
-the whole lifecycle" — and list both mechanisms as acceptable evidence.
+The SCEN-031 phase-file ownership check is corrected to require all three fields present+current
+(NOT "either mechanism"), matching this ruling.
 
 ## Verification
 
-Re-run SCEN-031 phase 1 (or its 2a burst equivalent): a fleet that produces the `blocked-by`
-variant passes the ownership check without a fix-as-you-go override.
+- The DEP overlay §D4 lists the three checks; a `grep` confirms the terminal-column invariant wording.
+- Re-run SCEN-031: a fleet is conforming only when every TRDD carries `assignee`+`column`
+  (+`blocked-by` when blocked) all current, and no TRDD reaches `complete` with an unchecked box.
 
 ## Estimated risk
 
-LOW. Documentation/criteria change only; broadens what counts as conforming, so it cannot make a
-previously-passing run fail. No code touched.
+MEDIUM. Governance/rules + a watchdog behaviour change; it can flag previously-"passing" TRDDs that
+were completed without a checked checklist — which is the intended tightening, not a regression.
 
 ## Approval log
 

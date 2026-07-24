@@ -21,6 +21,12 @@ external-refs:
 
 # Idle agent never wakes to process an inbound AMP mandate
 
+> **Canonical mechanism (2026-07-24):** tracked at **ai-maestro#51** (active idle-agent wake) and
+> implemented server-side by the terminal-continuity automaton's *idle-with-inbox wake* event —
+> [[TRDD-9DYUI97S]] under parent [[TRDD-5CIL7A07]]: the server detects an online-but-idle pane with a
+> pending AMP inbox and injects a turn-trigger so the agent drains it. The worker-side half (drain
+> the inbox and act on the mandate when woken) routes as a plugin issue (Flock C, [[TRDD-H4L3HHKX]]).
+
 ## Problem
 SCEN-031 re-run (2026-07-23): with the launch-args fix (TRDD-GZ1KOHNR) live, the MANAGER
 persona loaded correctly and the MANAGER autonomously (a) created a `zipsearcher-dev`

@@ -38,6 +38,13 @@ external-refs:
 
 # AskUserQuestion TUI menu is unanswerable from the dashboard Chat
 
+> **Canonical mechanism (2026-07-24):** implemented by the terminal-continuity automaton's
+> *AskUserQuestion* event — [[TRDD-U6AS2YWB]] under parent [[TRDD-5CIL7A07]]. Once activated the
+> server detects the blocking menu (per-client signature), injects ESC repeatedly until the cursor
+> is back at a typeable prompt, then injects a fixed continuation directive (a curated command key,
+> not raw text) so an unattended agent proceeds instead of timing out after 300 s. Distinct from the
+> retry-wedge event [[TRDD-Y8VPE3NS]] (that one is ESC-ONLY, never a command).
+
 ## Problem
 In SCEN-031, after receiving the build directive the MANAGER (persona loaded) asked the user
 genuine scoping questions via Claude Code's blocking **AskUserQuestion** TUI menu — e.g.

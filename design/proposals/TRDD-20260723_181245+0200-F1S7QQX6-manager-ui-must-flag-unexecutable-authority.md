@@ -18,6 +18,13 @@ external-refs: [reports/scenarios-runner/SCEN-031-phase-1_20260723T133825Z.repor
 
 # The MANAGER must not offer an authorization the server cannot execute
 
+> **Canonical mechanism (2026-07-24):** two halves. The *server* half — the R42 fan-out authority
+> that has no working caller — is tracked at **ai-maestro#89**; until it exists, an authorization of
+> that class is genuinely unroutable. The *UI* half — surfacing the limitation up front (disable or
+> omit an ungrantable option) rather than via a live 403 — routes with the MANAGER role-plugin issue
+> (Flock C, [[TRDD-H4L3HHKX]]) and, where the dashboard must reflect it, the terminal automaton work
+> [[TRDD-5CIL7A07]]. This proposal makes the gap HONEST; it does not require #89 to be closed first.
+
 ## Problem
 
 Observed in SCEN-031 phase 1 (`S008`, "the 403 after granted authorization"). The MANAGER's own

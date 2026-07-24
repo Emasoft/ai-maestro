@@ -2266,20 +2266,20 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         if (continueConversation) {
           try {
             const { getClientCapabilities } = await import('@/lib/client-capabilities')
-            const { hasPriorConversation } = await import('@/lib/claude-conversation')
-            const resumeVerb = (getClientCapabilities(program)?.cli?.resume || '').trim()
-            if (!resumeVerb) {
-              console.log(`[Wake] ${sessionName}: client "${program}" has no resume verb — cold start`)
-            } else if (!resumeVerb.startsWith('-')) {
+            const { hasPriorConversation, decideResume } = await import('@/lib/claude-conversation')
+            const decision = await decideResume(getClientCapabilities(program)?.cli?.resume, () =>
+              hasPriorConversation(workingDirectory),
+            )
+            if (decision.resume) {
+              fullCommand = `${fullCommand} ${decision.verb}`
+              console.log(`[Wake] ${sessionName}: resuming prior conversation (${decision.verb})`)
+            } else if (decision.reason === 'subcommand') {
               console.warn(
-                `[Wake] ${sessionName}: resume verb "${resumeVerb}" for "${program}" is a SUBCOMMAND, ` +
-                  `not a flag — cold start (appending it would build an invalid command)`,
+                `[Wake] ${sessionName}: client "${program}" resumes via a SUBCOMMAND, not a flag — ` +
+                  `cold start (appending it would build an invalid command)`,
               )
-            } else if (!(await hasPriorConversation(workingDirectory))) {
-              console.log(`[Wake] ${sessionName}: no prior transcript for ${workingDirectory} — cold start`)
             } else {
-              fullCommand = `${fullCommand} ${resumeVerb}`
-              console.log(`[Wake] ${sessionName}: resuming prior conversation (${resumeVerb})`)
+              console.log(`[Wake] ${sessionName}: cold start (${decision.reason}) for ${workingDirectory}`)
             }
           } catch (err) {
             // Never let the resume attempt break the launch — a cold start beats no start.

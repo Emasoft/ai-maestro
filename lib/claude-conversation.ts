@@ -18,6 +18,39 @@ import { promises as fsp } from 'fs'
 import os from 'os'
 import path from 'path'
 
+/** Why a wake/boot-restore launch did NOT resume a prior conversation, or the verb to append. */
+export type ResumeDecision =
+  | { resume: true; verb: string }
+  | { resume: false; reason: 'no-verb' | 'subcommand' | 'no-transcript' }
+
+/**
+ * Decide whether a relaunch should carry its client's resume verb (TRDD-NIU5RQ1S).
+ *
+ * Extracted from the wake path so the load-bearing half of the USER's mandate — "all agents must
+ * resume their work exactly from where they left it" — is a testable decision rather than a branch
+ * buried in a 400-line launcher that no test can reach.
+ *
+ * `hasPrior` is a THUNK, not a boolean, deliberately: it walks the filesystem, and the verb checks
+ * below reject most clients outright, so evaluating it eagerly would pay that walk for launches
+ * that were never going to resume. It also keeps the whole decision injectable in tests.
+ *
+ * FLAG-FORM ONLY. Per-client resume verbs are not interchangeable: claude `--continue` and gemini
+ * `-r latest` are flags that append safely, but codex `resume --last` and kiro `chat --resume` are
+ * SUBCOMMANDS that must precede other args — appending those builds a command that is WRONG rather
+ * than merely absent, which is the worse failure (a cold start still starts). Those clients are
+ * refused here, loudly, until they go through buildLaunchCommand, which owns subcommand ordering.
+ */
+export async function decideResume(
+  resumeVerb: string | undefined | null,
+  hasPrior: () => Promise<boolean>,
+): Promise<ResumeDecision> {
+  const verb = (resumeVerb || '').trim()
+  if (!verb) return { resume: false, reason: 'no-verb' }
+  if (!verb.startsWith('-')) return { resume: false, reason: 'subcommand' }
+  if (!(await hasPrior())) return { resume: false, reason: 'no-transcript' }
+  return { resume: true, verb }
+}
+
 /**
  * The `~/.claude/projects/` directory name for an absolute working directory.
  * `path.resolve` first, so `/a//b` and `/a/b` — which Claude resolves to the

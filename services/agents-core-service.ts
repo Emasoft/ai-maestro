@@ -140,6 +140,17 @@ export interface WakeAgentParams {
   program?: string
   /** Auth context from the route — when provided, Gate 0 checks authorization */
   authContext?: import('@/lib/agent-auth').AuthContext
+  /**
+   * Relaunch the client so it CONTINUES its previous conversation instead of starting a fresh
+   * one (TRDD-NIU5RQ1S). Set by boot-restore after a crash or blackout: an agent that comes back
+   * alive in the right repo but with an empty context has been RESTARTED, not resumed, and the
+   * work it was mid-way through is gone.
+   *
+   * Opt-in rather than the default: it changes what the agent believes about the world, so the
+   * caller must mean it. Best-effort by construction — it is skipped when no prior transcript
+   * exists, and when the client's resume verb is not a plain flag (see the launch site).
+   */
+  continueConversation?: boolean
 }
 
 export interface HibernateAgentParams {
@@ -1999,7 +2010,13 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
   message: string
 }>> {
   try {
-    const { startProgram = true, sessionIndex = 0, program: programOverride, authContext } = params
+    const {
+      startProgram = true,
+      sessionIndex = 0,
+      program: programOverride,
+      authContext,
+      continueConversation = false,
+    } = params
 
     // ── Gate 0: Authorization ───────────────────────────────────
     // When authContext is provided (route call), check caller permissions.
@@ -2226,6 +2243,47 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
           const args = sanitizeArgs(enforced.args)
           if (args) {
             fullCommand = `${startCommand} ${args}`
+          }
+        }
+
+        // TRDD-NIU5RQ1S — RESUME THE CONVERSATION, don't just restart the process.
+        //
+        // Boot-restore (after a crash or a blackout) asks for this. Without it a restored agent
+        // comes back alive, in the right repo, and having forgotten everything it was doing —
+        // which is a restart wearing a resume's clothes, and the failure is silent: the agent
+        // looks healthy and simply does the wrong thing next.
+        //
+        // Two guards, both fail-toward-a-normal-launch, because a launch that DIES is far worse
+        // than one that merely starts cold:
+        //   1. `hasPriorConversation` — `--continue` with nothing to continue makes the client
+        //      exit, which would turn boot-restore into boot-destroy on a first-ever launch.
+        //   2. FLAG-FORM ONLY. Per-client resume verbs are not interchangeable: claude
+        //      `--continue` and gemini `-r latest` are flags that append safely, but codex
+        //      `resume --last` and kiro `chat --resume` are SUBCOMMANDS that must precede other
+        //      args — appending those builds a command that is wrong rather than absent. Those
+        //      clients are skipped loudly here instead of being silently mis-launched; wiring
+        //      them means going through buildLaunchCommand, which owns subcommand ordering.
+        if (continueConversation) {
+          try {
+            const { getClientCapabilities } = await import('@/lib/client-capabilities')
+            const { hasPriorConversation } = await import('@/lib/claude-conversation')
+            const resumeVerb = (getClientCapabilities(program)?.cli?.resume || '').trim()
+            if (!resumeVerb) {
+              console.log(`[Wake] ${sessionName}: client "${program}" has no resume verb — cold start`)
+            } else if (!resumeVerb.startsWith('-')) {
+              console.warn(
+                `[Wake] ${sessionName}: resume verb "${resumeVerb}" for "${program}" is a SUBCOMMAND, ` +
+                  `not a flag — cold start (appending it would build an invalid command)`,
+              )
+            } else if (!(await hasPriorConversation(workingDirectory))) {
+              console.log(`[Wake] ${sessionName}: no prior transcript for ${workingDirectory} — cold start`)
+            } else {
+              fullCommand = `${fullCommand} ${resumeVerb}`
+              console.log(`[Wake] ${sessionName}: resuming prior conversation (${resumeVerb})`)
+            }
+          } catch (err) {
+            // Never let the resume attempt break the launch — a cold start beats no start.
+            console.warn(`[Wake] ${sessionName}: resume check failed, cold start: ${err}`)
           }
         }
 

@@ -148,6 +148,14 @@ export async function restoreActiveAgentsOnBoot(): Promise<BootRestoreResult> {
               sessionIndex,
               startProgram: true,
               authContext: { isSystemOwner: true },
+              // TRDD-NIU5RQ1S: RESUME the conversation, don't merely restart the process. Waking
+              // an agent with a fresh context after a crash or blackout brings it back alive, in
+              // the right repo, having forgotten what it was doing — and it then confidently does
+              // the wrong next thing. This is the one caller that unambiguously means "continue
+              // exactly where you left off", which is why the flag is opt-in rather than default.
+              // Best-effort: wakeAgent falls back to a cold start when there is no prior
+              // transcript or the client's resume verb is not a plain flag.
+              continueConversation: true,
             }),
           {
             attempts: WAKE_ATTEMPTS,

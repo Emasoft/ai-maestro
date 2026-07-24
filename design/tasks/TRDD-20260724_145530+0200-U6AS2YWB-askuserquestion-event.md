@@ -1,13 +1,13 @@
 ---
 trdd-id: U6AS2YWB
 title: AskUserQuestion event ESC-flood then cursor-ready then directive
-column: blocked
-pre-block-column: dev
+column: dev
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T15:07:44+0200
+updated: 2026-07-24T21:10:33+0200
 current-owner: ai-maestro
 created-by: ai-maestro
+assignee: ai-maestro
 task-type: feature
 min-approval-requirement: none
 mandate: true
@@ -18,15 +18,24 @@ approval-datetime: 2026-07-24T14:55:30+0200
 parent-trdd: 5CIL7A07
 derived: true
 derived-kind: eht
-blocked-by: [TRDD-6HEF0XLS, TRDD-X8801GT4]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
 
 Goal: implement the AskUserQuestion event — flood ESC to dismiss the menu, poll until the cursor
 is back at a typeable prompt, then inject the continuation directive as a curated command key.
-Blocked on TRDD-6HEF0XLS and TRDD-X8801GT4 landing first. NEXT ACTION: wait for the reader +
-registry, then implement the per-client menu signature + curated directive key. Not started.
+
+**UNBLOCKED 2026-07-24** — both blockers are `complete`: the frame reader (TRDD-6HEF0XLS) and the
+registry + continuity actuator (TRDD-X8801GT4, `a3a22376`).
+
+NEXT ACTION: this event needs a response kind that does not exist yet. E2 deliberately shipped
+only `esc` and `command` — a kind the injector cannot PERFORM would be a lie in the type — so
+this TRDD adds `{kind:'esc-then-command', commandKey, maxEsc}` to the `ContinuityResponse` union
+in `lib/continuity-registry.ts` AND teaches `actuateContinuity` to perform it: ESC repeatedly,
+polling `getForegroundCommand`/`waitForShellReady` until the cursor is typeable, bounded by
+`maxEsc`, THEN the curated key. Register the directive text as a NEW curated key in
+`lib/agent-commands.ts` (never raw free-text — that boundary is what makes the surface
+injection-proof); the verbatim directive is in the Spec below.
 
 ## Spec
 

@@ -1,13 +1,13 @@
 ---
 trdd-id: Y8VPE3NS
 title: Retry-wedge event the ai-maestro 90 contract
-column: blocked
-pre-block-column: dev
+column: dev
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T15:07:44+0200
+updated: 2026-07-24T21:10:33+0200
 current-owner: ai-maestro
 created-by: ai-maestro
+assignee: ai-maestro
 task-type: feature
 min-approval-requirement: none
 mandate: true
@@ -18,16 +18,24 @@ approval-datetime: 2026-07-24T14:55:30+0200
 parent-trdd: 5CIL7A07
 derived: true
 derived-kind: eht
-blocked-by: [TRDD-6HEF0XLS, TRDD-X8801GT4]
 relevant-rules: [ai-maestro-90]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
 
 Goal: implement the retry-wedge event — the canonical ai-maestro#90 contract — detecting
-`attempt N/300` spinning turns and injecting a single raw ESC. Blocked on TRDD-6HEF0XLS and
-TRDD-X8801GT4 landing first. NEXT ACTION: wait for the reader + registry, then implement the
-byte-identical regex + FP gate. Not started.
+`attempt N/300` spinning turns and injecting a single raw ESC.
+
+**UNBLOCKED 2026-07-24** — both blockers are `complete`: the frame reader (TRDD-6HEF0XLS,
+`lib/agent-frame-reader.ts`) and the registry + continuity actuator (TRDD-X8801GT4, `a3a22376`).
+
+NEXT ACTION: push one `ContinuityEvent` onto the `claude` entry in `lib/continuity-registry.ts`
+with the byte-identical `is_retry_wedge` regex and `response: { kind: 'esc' }` — then build the
+attempt-ADVANCE false-positive gate, which the registry alone CANNOT express: `match(obs)` is
+pure and sees one poll, while "the attempt number advanced since last poll" needs a per-agent
+episode store. Decide where that store lives (the watchdog's recovery store is the precedent)
+before writing the matcher. The gate is the whole safety of this event: a STATIC string naming
+`attempt N/300` — this very TRDD on screen, the #90 issue text, a log tail — must NOT fire.
 
 ## Spec
 

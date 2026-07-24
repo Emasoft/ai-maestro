@@ -33,6 +33,14 @@ moved `marketplace-op.lock` there. Coordinate via D7 (2X4AYX9T) before building 
 the lock exists, contend on it defensively (create-if-absent under the same path the janitor will use)
 OR gate the chore on the lock's presence. Do NOT invent a divergent lock path.
 
+**STATUS 2026-07-24:** the D7 ASK is POSTED on janitor#100 (comment-5071270871) — requested the exact
+`marketplace-op.lock` filename/path. WAITING on the janitor's reply before building, per "verify
+before acting" (building against an unconfirmed lock path risks rework). This TRDD also gates **D6
+(CPETQBAW)** — its 2 chores (`marketplace-refresh` + `user-plugins-update`) are the last 2 of D6's
+"every absorbed chore". NOTE: the auto-update master toggle is default-OFF (a human opt-in, per
+D3/YLCTM8EU); this TRDD ships the MECHANISM, arming stays the human's — do NOT auto-enable plugin
+updates by default.
+
 ## Spec
 
 - The `auto-update-service` exists but `enabled:false` by default; wire the server to run both

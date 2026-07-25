@@ -1,14 +1,20 @@
 ---
 trdd-id: D5XDT49I
 title: An agent's launch string must carry its client's resume flag so a restart resumes the conversation
-column: proposal
+column: complete
 created: 2026-07-14T15:11:49+0200
-updated: 2026-07-14T15:11:49+0200
-current-owner: claude-opus-session
+updated: 2026-07-25T02:05:00+0200
+current-owner: ai-maestro
 created-by: claude-opus-session
+assignee: ai-maestro
 task-type: bugfix
-min-approval-requirement: manager
-approved: false
+min-approval-requirement: user
+mandate: true
+mandated-by: user
+approved: true
+approval-judge: user
+approval-datetime: 2026-07-25T02:05:00+0200
+implementation-commits: [18aaf300, 9d71c3ef, c9bc48db]
 priority: 1
 severity: high
 effort: small
@@ -20,17 +26,45 @@ blocks: [SB5I53K1]
 
 # An agent's launch string must carry its client's resume flag so a restart resumes the conversation
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-25
 
-**The capability EXISTS and is UNREACHABLE.** Nothing here needs to be invented; something
-here needs to be *wired*, and one composition question needs to be *answered empirically*
-before it is.
+**DONE.** USER-mandated 2026-07-25 and implemented; the three blocking questions below are all
+ANSWERED, two of them by measurement rather than reasoning. **NEXT ACTION: none.**
 
-- **NEXT ACTION:** answer the open question below (does `claude --continue` compose with
-  `--agent <persona>-main-agent`?) by launching ONE agent by hand with both flags. Everything
-  else follows from that answer.
-- **Do NOT** blanket-append `--continue` to every agent's `programArgs` until that is known —
-  see "Why this is not a one-line fix".
+**Q1 — does `--continue` compose with `--agent`? YES, observed live.** The 01:24 boot-restore
+launched `claude --dangerously-skip-permissions --chrome --add-dir /tmp --agent
+ai-maestro-autonomous-agent-main-agent --continue` (pid 39895) and the client came up resumed. No
+`--resume <session-id>` pinning is needed.
+
+**Q2 — the `else if` bug was real and is fixed.** Asking to resume dropped
+`--dangerously-skip-permissions`, silently changing the permission posture of every resumed agent
+on the one path nobody watches. Both flags are now emitted; kiro's shared `chat` prefix is resolved
+by dropping the duplicate TOKEN, never the flag.
+
+**Q3 — the flag lives in the LAUNCH BUILDER, not `programArgs`.** No migration, and the
+"first launch has nothing to resume" case is answered structurally: `CreateAgent` launches via
+`createSession`, which has no resume concept at all, so a brand-new agent is cold BY CONSTRUCTION.
+Every other launch resumes by default.
+
+**What the proposal did NOT anticipate, found by reading each CLI's own `--help`:**
+
+| client | resume-LAST (used) | PICKER — must never be used |
+|---|---|---|
+| claude | `-c, --continue` | `-r, --resume` (no value) |
+| codex | `resume --last` | `resume` (bare — "picker by default") |
+| gemini | `-r latest` | `-r <index>`, `--list-sessions` |
+| kiro-cli | `chat --resume` | `chat --resume-picker`, `--resume-id` |
+| opencode | `-c, --continue` | `-s/--session <id>` |
+
+Kiro's `--resume` means resume-LAST while Claude's means PICKER — so the verb's name cannot be
+reasoned from. A picker in an unattended pane wedges the agent at a menu forever while it looks
+healthy, which is worse than not resuming; `isPickerVerb()` plus a guard test now fail the build if
+one is ever configured. **opencode's verb was `''`** ("no resume flag documented") — never checked,
+which had quietly made it the only client that always cold-started.
+
+Placement also mattered: appending the verb yields `codex --profile x resume --last`, which does
+not run. `composeLaunchWithResume()` puts it immediately after the binary — the one position
+correct for both flag and subcommand forms.
 
 ## Problem
 
@@ -150,3 +184,11 @@ forgetful. The `else if` bug (question 2) would silently strip a permission flag
 Both are cheap to check and expensive to miss.
 
 ## Approval log
+
+- 2026-07-25T02:05:00+0200 — MANDATE issued by USER (min-approval-requirement: user). The USER
+  directed the cross-client resume work verbatim ("the launch string should always include the
+  command to resume/continue the last conversation, except ... creating a new agent from scratch"),
+  which is the approval this proposal was waiting for. Born approved; implemented the same session.
+- 2026-07-25T02:05:00+0200 — COMPLETED. Q1/Q2/Q3 answered (Q1 by live observation), all five
+  clients' verbs verified against their own `--help`, picker guard added.
+  Commits: 18aaf300, 9d71c3ef, c9bc48db.

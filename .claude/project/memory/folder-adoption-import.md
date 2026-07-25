@@ -59,3 +59,7 @@ See also [[session-control-subagent-gate]] (same campaign, same fleet-readiness 
   repos missed it (they never tracked `.gitignore`); a live rehearsal against a REAL
   cloned repo caught it in the first run — always do the dummy live protocol before
   trusting an import-path change.
+
+## See also
+
+- [[agent-deletion-all-in-one-pipeline]] — deleting an adopted agent: G03-SAFETY refuses folder removal outside `~/agents/`, so an adopted workdir always survives the pipeline (by design).

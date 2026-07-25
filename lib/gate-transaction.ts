@@ -85,11 +85,28 @@ export function findUncompensatedGates<Ctx>(gates: Gate<Ctx>[]): string[] {
   return gates.filter((g) => !g.readOnly && typeof g.undo !== 'function').map((g) => g.id)
 }
 
+export interface GateSequenceOptions<Ctx> {
+  /**
+   * R51.7 — the SUCCESS-path check. Returns the list of violated invariants; empty means valid.
+   *
+   * "Every gate ran" and "the system is valid" are different claims. A run where each gate
+   * succeeded can still leave an agent holding a title with no compatible role-plugin, a workdir
+   * missing its seeded rules, or a team slot pointing at a deleted agent. A violation here is
+   * treated as a GATE FAILURE — same reverse compensation, same message — because returning success
+   * on a contradicted system is exactly what the aim forbids.
+   */
+  invariants?: (ctx: Ctx) => Promise<string[]>
+}
+
 /**
  * Run gates in order. On the first failure, undo everything already executed in REVERSE order and
  * return a failure describing the abort. Never throws.
  */
-export async function runGateSequence<Ctx>(gates: Gate<Ctx>[], ctx: Ctx): Promise<GateResult> {
+export async function runGateSequence<Ctx>(
+  gates: Gate<Ctx>[],
+  ctx: Ctx,
+  opts: GateSequenceOptions<Ctx> = {},
+): Promise<GateResult> {
   const ops: string[] = []
 
   // Refuse to start rather than discover mid-flight that a gate cannot be undone — by then the
@@ -110,6 +127,41 @@ export async function runGateSequence<Ctx>(gates: Gate<Ctx>[], ctx: Ctx): Promis
   }
 
   const executed: Gate<Ctx>[] = []
+
+  /** Undo everything already executed, then build the failure result. Shared by BOTH abort paths —
+   *  a failing gate and a violated success-path invariant are the same event: the aim was not met. */
+  const abort = async (gateNumber: number, gateId: string, cause: string): Promise<GateFailure> => {
+    // Reverse order: the most recent change is the one whose undo is still valid; undoing an
+    // earlier gate first could invalidate the state a later gate's undo depends on.
+    const unrevertable: { id: string; error: string }[] = []
+    for (let j = executed.length - 1; j >= 0; j--) {
+      const done = executed[j]
+      if (done.readOnly || !done.undo) continue
+      try {
+        await done.undo(ctx)
+        ops.push(`${done.id}: reverted`)
+      } catch (undoErr) {
+        const ue = undoErr instanceof Error ? undoErr.message : String(undoErr)
+        unrevertable.push({ id: done.id, error: ue })
+        ops.push(`${done.id}: ROLLBACK FAILED — ${ue}`)
+        // Keep going: a later-listed gate may still be revertible, and reverting more is strictly
+        // better than stopping at the first compensation failure.
+      }
+    }
+    return {
+      ok: false,
+      failedGateNumber: gateNumber,
+      failedGateId: gateId,
+      error: cause,
+      rolledBack: unrevertable.length === 0,
+      unrevertable,
+      message: unrevertable.length
+        ? invalidStateMessage(gateNumber, gateId, cause, unrevertable)
+        : noChangesMessage(gateNumber, gateId, cause),
+      ops,
+    }
+  }
+
   for (let i = 0; i < gates.length; i++) {
     const gate = gates[i]
     try {
@@ -119,39 +171,28 @@ export async function runGateSequence<Ctx>(gates: Gate<Ctx>[], ctx: Ctx): Promis
     } catch (err) {
       const cause = err instanceof Error ? err.message : String(err)
       ops.push(`${gate.id}: FAILED — ${cause}`)
-
-      // Reverse order: the most recent change is the one whose undo is still valid; undoing an
-      // earlier gate first could invalidate the state a later gate's undo depends on.
-      const unrevertable: { id: string; error: string }[] = []
-      for (let j = executed.length - 1; j >= 0; j--) {
-        const done = executed[j]
-        if (done.readOnly || !done.undo) continue
-        try {
-          await done.undo(ctx)
-          ops.push(`${done.id}: reverted`)
-        } catch (undoErr) {
-          const ue = undoErr instanceof Error ? undoErr.message : String(undoErr)
-          unrevertable.push({ id: done.id, error: ue })
-          ops.push(`${done.id}: ROLLBACK FAILED — ${ue}`)
-          // Keep going: a later-listed gate may still be revertible, and reverting more is strictly
-          // better than stopping at the first compensation failure.
-        }
-      }
-
-      const n = i + 1
-      return {
-        ok: false,
-        failedGateNumber: n,
-        failedGateId: gate.id,
-        error: cause,
-        rolledBack: unrevertable.length === 0,
-        unrevertable,
-        message: unrevertable.length
-          ? invalidStateMessage(n, gate.id, cause, unrevertable)
-          : noChangesMessage(n, gate.id, cause),
-        ops,
-      }
+      return abort(i + 1, gate.id, cause)
     }
+  }
+
+  // R51.7 — every gate ran; that is NOT yet "the system is valid". Check the invariants before
+  // claiming success, and treat a violation exactly like a gate failure.
+  if (opts.invariants) {
+    let violations: string[]
+    try {
+      violations = await opts.invariants(ctx)
+    } catch (err) {
+      // An invariant check that cannot run leaves validity UNKNOWN, and unknown is not valid.
+      const cause = `invariant check failed to run: ${err instanceof Error ? err.message : String(err)}`
+      ops.push(`INVARIANTS: FAILED — ${cause}`)
+      return abort(gates.length + 1, 'INVARIANTS', cause)
+    }
+    if (violations.length) {
+      const cause = `system invariants violated: ${violations.join('; ')}`
+      ops.push(`INVARIANTS: FAILED — ${cause}`)
+      return abort(gates.length + 1, 'INVARIANTS', cause)
+    }
+    ops.push(`INVARIANTS: verified (${gates.length} gate(s) ran, system valid)`)
   }
 
   return { ok: true, ops }

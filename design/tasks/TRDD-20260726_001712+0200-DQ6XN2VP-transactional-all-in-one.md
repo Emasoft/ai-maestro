@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-26T00:17:12+0200
+updated: 2026-07-26T00:24:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -116,13 +116,17 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
 ## Acceptance
 
 - [x] `lib/gate-transaction.ts` — reverse compensation, R51.3 message, R51.5 invalid-state report,
-      pre-flight refusal of uncompensated mutating gates (10 tests)
+      pre-flight refusal of uncompensated mutating gates, and the R51.7 success-path invariant check
+      that aborts+reverts on a violated invariant (13 tests)
 - [ ] `DeleteAgent` transactional
 - [ ] `CreateAgent` transactional
 - [ ] `ChangeTitle` / `ChangeClient` / `ChangePlugin` transactional
 - [ ] `ChangeTeam` / `DeleteTeam` transactional
 - [ ] The remaining 18 `Change*` / marketplace / element pipelines transactional
 - [ ] Parity test: zero uncompensated mutating gates across all 26 pipelines
+- [ ] Each pipeline declares its R51.7 INVARIANTS (not only its gates) — leftovers and
+      contradictions are two different ways to be invalid, and the KERM18NX residue check only
+      catches the first
 - [ ] The tmux-kill compensation question decided and recorded here
 - [ ] tsc clean, full suite green
 

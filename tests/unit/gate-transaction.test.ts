@@ -170,3 +170,41 @@ describe('R51.4 — a mutating gate with no compensation cannot run at all', () 
     expect(findUncompensatedGates(gates)).toEqual(['G03'])
   })
 })
+
+describe('R51.7 — success is not "every gate ran", it is "the system is valid"', () => {
+  it('rolls back when the gates all succeeded but an invariant is violated', async () => {
+    // The failure mode this closes: a run where nothing threw, yet the result contradicts itself —
+    // a title with no compatible role-plugin, a workdir missing its rules, a team slot pointing at
+    // a deleted agent. Returning success there is exactly what the aim forbids.
+    const ctx = w()
+    const r = await runGateSequence([mutating('G01', 'a'), mutating('G02', 'b')], ctx, {
+      invariants: async () => ['agent holds title MANAGER with no compatible role-plugin'],
+    })
+    if (r.ok) throw new Error('expected failure')
+    expect(ctx.effects).toEqual([]) // fully reverted, exactly like a gate failure
+    expect(r.failedGateId).toBe('INVARIANTS')
+    expect(r.failedGateNumber).toBe(3) // reported after the 2 real gates
+    expect(r.message).toContain('NO CHANGES WERE MADE TO THE SYSTEM')
+    expect(r.error).toContain('no compatible role-plugin')
+  })
+
+  it('an invariant check that THROWS is a failure — unknown validity is not validity', async () => {
+    const ctx = w()
+    const r = await runGateSequence([mutating('G01', 'a')], ctx, {
+      invariants: async () => {
+        throw new Error('registry unreadable')
+      },
+    })
+    if (r.ok) throw new Error('expected failure')
+    expect(ctx.effects).toEqual([])
+    expect(r.error).toContain('registry unreadable')
+  })
+
+  it('passes when the invariants hold, and says so', async () => {
+    const ctx = w()
+    const r = await runGateSequence([mutating('G01', 'a')], ctx, { invariants: async () => [] })
+    expect(r.ok).toBe(true)
+    expect(ctx.effects).toEqual(['a'])
+    expect(r.ops.some((o) => o.includes('INVARIANTS: verified'))).toBe(true)
+  })
+})

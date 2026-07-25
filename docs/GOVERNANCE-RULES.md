@@ -1727,10 +1727,24 @@ tracked in TRDD-YB4T4RTL.
 
 ## R51. All-Or-Nothing — An All-In-One Function Is a TRANSACTION (CRITICAL — IRON, USER-set)
 
-**An all-in-one function NEVER leaves the system in an invalid state. There is no reporting
-option.** (USER, 2026-07-26 — this supersedes the "detect and report the residue" contract of
+**R51.0 — THE AIM: an all-in-one function ALWAYS leaves the system in a valid state.** (USER,
+2026-07-26.) Every other clause of R50 and R51 is a *derivation* of this one sentence, not an
+independent rule — when a new situation is not covered below, derive the answer from the aim rather
+than looking for a clause:
+
+| Derived clause | Because |
+|---|---|
+| A failed gate rolls everything back (R51.1-R51.3) | a half-applied operation is an invalid state |
+| A mutating gate must ship its undo, checked before the run starts (R51.4) | you cannot restore validity with a compensation you never wrote |
+| A failed compensation is reported as CRITICAL, never as "no changes" (R51.5) | the aim was NOT met; concealing that leaves an invalid state that nobody is looking for |
+| Irreversible effects go LAST (R51.6) | an irreversible effect early makes every later failure unrecoverable *by construction* |
+| The success path is validated too (R51.7) | "all gates ran" is not the same claim as "the system is valid" |
+| One function per operation (R50.1) | two implementations are two definitions of valid, and they drift |
+| Never bypass the endpoint (R50.4) | a bypass cannot maintain invariants it does not know about |
+
+**There is no reporting option.** This supersedes the "detect and report the residue" contract of
 TRDD-KERM18NX, which allowed an operation to return `incomplete` and leave a partial state behind.
-Reporting an invalid state is not an alternative to preventing one.)
+Reporting an invalid state is not an alternative to preventing one.
 
 **R51.1 — Any gate failure aborts the whole operation.** If even ONE gate fails to execute
 successfully, the function immediately stops and REVERTS. It does not continue to the next gate, and
@@ -1762,6 +1776,18 @@ effects (deleting a remote repo, sending a message, killing a process) come LAST
 revertible has already succeeded. An irreversible effect placed early makes every later gate's
 failure unrecoverable by construction.
 
+**R51.7 — The SUCCESS path is validated too, against the system's INVARIANTS.** The aim is not
+"every gate ran"; it is "the system is valid". A run in which every gate succeeded can still produce
+an invalid system — an agent holding a title with no compatible role-plugin, a workdir missing its
+seeded rules, a team slot pointing at a deleted agent, a launch string that will not start, a
+GitHub-project reference that no longer resolves. So a pipeline verifies the invariants it is
+responsible for BEFORE returning success, and **a failed invariant is a gate failure**: it triggers
+the same reverse compensation and the same R51.3 message. It does not return success with a warning.
+
+This is the clause the residue check of TRDD-KERM18NX only half-covers: that post-condition asks
+"does any store still CLAIM this entity?", which catches leftovers but not contradictions. Both are
+required — leftovers and contradictions are two different ways to be invalid.
+
 **Enforcement.** `lib/gate-transaction.ts` provides the runner; `tests/unit/gate-transaction.test.ts`
 proves reverse-order compensation, the exact R51.3 message, and the R51.5 refusal. Retrofitting the
-existing pipelines is tracked in TRDD-DQ6XN2VP.
+existing pipelines, including their R51.7 invariant checks, is tracked in TRDD-DQ6XN2VP.

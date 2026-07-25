@@ -197,3 +197,67 @@ export async function runGateSequence<Ctx>(
 
   return { ok: true, ops }
 }
+
+// ── The AIO three-phase pipeline (R51.8) ───────────────────────────────────────────────────────
+//
+// A flat gate list was the wrong shape. Per the canonical spec
+// (`~/.claude/skills/make-all-in-one/SKILL.md`), an all-in-one is THREE phases, and the phasing is
+// itself the primary mechanism that keeps the system valid — rollback is only the fallback for a
+// failure at or after the mutation:
+//
+//   PRE  (G00..G11+)  verify every REQUIREMENT the change depends on
+//   EXE               the change itself — the smallest possible mutation, never a `G##`
+//   POST (PG01..PG08) apply every CONSEQUENCE the change implies
+//
+// NO CHANGE EXISTS IN ISOLATION. A value is linked to dozens of others, so a change is legal only
+// when its requirements hold (PRE) and leaves the system valid only after its derived changes are
+// applied (POST). Concretely: creating an agent with the AUTONOMOUS title MUST install the
+// AUTONOMOUS role-plugin, because no agent may exist without a role-plugin compatible with its
+// title; uninstalling the core plugin MUST hibernate the agent, because nothing can run without it.
+// Those are POST-gates, not caller responsibilities.
+
+export interface ExeStep<Ctx> {
+  what: string
+  run: (ctx: Ctx) => Promise<void>
+  undo?: (ctx: Ctx) => Promise<void>
+  /**
+   * Idempotency (spec G09): when the system is ALREADY in the desired state, the mutation is
+   * skipped — but the POST-gates still run. A no-op EXE does not imply valid consequences: the
+   * previous attempt may have died before its post-gates, which is exactly the state that needs
+   * repairing.
+   */
+  skipIf?: (ctx: Ctx) => Promise<boolean>
+}
+
+export interface AioPipeline<Ctx> {
+  pre: Gate<Ctx>[]
+  exe: ExeStep<Ctx>
+  post: Gate<Ctx>[]
+}
+
+/**
+ * Run PRE -> EXE -> POST with R51 semantics throughout: any failure reverts everything already
+ * executed, in reverse order, across all three phases.
+ *
+ * A PRE-gate failure is the cheap case — nothing has mutated yet, so the revert is usually a no-op
+ * and the operation costs nothing. That is WHY the requirements are checked before the change
+ * rather than compensated after it.
+ */
+export async function runAioPipeline<Ctx>(
+  pipeline: AioPipeline<Ctx>,
+  ctx: Ctx,
+  opts: GateSequenceOptions<Ctx> = {},
+): Promise<GateResult> {
+  const exeGate: Gate<Ctx> = {
+    id: 'EXE',
+    what: pipeline.exe.what,
+    // Not read-only unless it declares no undo AND is a pure skip — treat as mutating so R51.4's
+    // pre-flight check applies to the mutation itself, which is the last place to be lax.
+    undo: pipeline.exe.undo,
+    run: async (c) => {
+      if (pipeline.exe.skipIf && (await pipeline.exe.skipIf(c))) return
+      await pipeline.exe.run(c)
+    },
+  }
+  return runGateSequence([...pipeline.pre, exeGate, ...pipeline.post], ctx, opts)
+}

@@ -1788,6 +1788,42 @@ This is the clause the residue check of TRDD-KERM18NX only half-covers: that pos
 "does any store still CLAIM this entity?", which catches leftovers but not contradictions. Both are
 required — leftovers and contradictions are two different ways to be invalid.
 
+**R51.8 — THE SHAPE: pre-gates, the change, post-gates. NO CHANGE EXISTS IN ISOLATION.** A normal
+function makes CHANGE X. An all-in-one is a long sequence of PRE-gates, then CHANGE X, then a long
+sequence of POST-gates — because every change has both REQUIREMENTS and CONSEQUENCES, and the
+phasing is the PRIMARY mechanism that keeps the system valid (rollback is only the fallback for a
+failure at or after the change).
+
+```
+PRE-EXECUTION   G00..G11+   verify each element is in the required state
+EXECUTION       EXE:        the change itself — smallest possible mutation, never a `G##`
+POST-EXECUTION  PG01..PG08  apply every derived change the CHANGE implies
+```
+
+- **PRE-gates verify requirements.** They span low-level (`the name must have more than 0 chars`) to
+  complex governance (`only agents assigned to teams can install role-plugins compatible with the
+  MEMBER title`). One value is linked to dozens of others; the change is legal only when all of them
+  hold. Checking first is also why a rejected operation costs nothing to undo.
+- **POST-gates apply consequences.** They are NOT the caller's job and NOT optional:
+  - create an agent with the AUTONOMOUS title ⇒ install the AUTONOMOUS role-plugin (no agent may
+    exist without a role-plugin compatible with its title);
+  - uninstall the role-plugin of a MEMBER agent (MEMBER has several compatible) ⇒ install the
+    default one;
+  - remove an agent from a team ⇒ reset it to the AUTONOMOUS title AND an autonomous role-plugin;
+  - uninstall the core `ai-maestro-plugin` ⇒ HIBERNATE the agent immediately, because nothing can
+    run in ai-maestro without it.
+- **Post-gates call other all-in-one functions** — never inline the cascaded mutation, or it bypasses
+  that operation's own gates (R50.1).
+- **Post-gates run even when EXE is skipped as idempotent.** A no-op change does not imply valid
+  consequences: a previous attempt may have died before its post-gates, and that is precisely the
+  state needing repair.
+- **A failed post-gate reverts the CHANGE too.** A change whose consequences could not be applied
+  leaves the system invalid, so the change itself must go.
+
+**R51.9 — COMPLETENESS: one gate per rule.** For each governance rule there is a gate. For each
+security-spec rule there is a gate. For each spec rule there is a gate. A rule with no gate is a rule
+the system does not actually enforce — it is documentation, and the state it forbids will occur.
+
 **Enforcement.** `lib/gate-transaction.ts` provides the runner; `tests/unit/gate-transaction.test.ts`
 proves reverse-order compensation, the exact R51.3 message, and the R51.5 refusal. Retrofitting the
 existing pipelines, including their R51.7 invariant checks, is tracked in TRDD-DQ6XN2VP.

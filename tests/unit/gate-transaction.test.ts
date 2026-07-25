@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   runGateSequence,
+  runAioPipeline,
   findUncompensatedGates,
   type Gate,
 } from '@/lib/gate-transaction'
@@ -206,5 +207,73 @@ describe('R51.7 — success is not "every gate ran", it is "the system is valid"
     expect(r.ok).toBe(true)
     expect(ctx.effects).toEqual(['a'])
     expect(r.ops.some((o) => o.includes('INVARIANTS: verified'))).toBe(true)
+  })
+})
+
+describe('R51.8 — the AIO three-phase pipeline (PRE -> EXE -> POST)', () => {
+  const exe = (effect: string, o: { fail?: boolean; skip?: boolean } = {}) => ({
+    what: `mutate ${effect}`,
+    skipIf: async () => !!o.skip,
+    run: async (ctx: World) => {
+      if (o.fail) throw new Error('EXE exploded')
+      ctx.effects.push(effect)
+      ctx.log.push('run:EXE')
+    },
+    undo: async (ctx: World) => {
+      const i = ctx.effects.lastIndexOf(effect)
+      if (i >= 0) ctx.effects.splice(i, 1)
+      ctx.log.push('undo:EXE')
+    },
+  })
+
+  it('runs requirements, then the change, then the consequences', async () => {
+    const ctx = w()
+    const r = await runAioPipeline(
+      { pre: [readOnly('G01')], exe: exe('x'), post: [mutating('PG01', 'consequence')] },
+      ctx,
+    )
+    expect(r.ok).toBe(true)
+    expect(ctx.log).toEqual(['run:G01', 'run:EXE', 'run:PG01'])
+    expect(ctx.effects).toEqual(['x', 'consequence'])
+  })
+
+  it('a PRE-gate failure costs nothing — the change never happened', async () => {
+    // This is WHY requirements are checked before the change rather than compensated after it.
+    const ctx = w()
+    const r = await runAioPipeline(
+      { pre: [readOnly('G01', { fail: true })], exe: exe('x'), post: [mutating('PG01', 'c')] },
+      ctx,
+    )
+    if (r.ok) throw new Error('expected failure')
+    expect(ctx.effects).toEqual([])
+    expect(ctx.log).toEqual([]) // EXE and the post-gates never ran
+    expect(r.message).toContain('NO CHANGES WERE MADE TO THE SYSTEM')
+  })
+
+  it('a POST-gate failure reverts the CHANGE as well — consequences are not optional', async () => {
+    // A change whose consequences could not be applied leaves the system invalid, so the change
+    // itself must go: an agent created without its mandatory role-plugin must not survive.
+    const ctx = w()
+    const r = await runAioPipeline(
+      { pre: [], exe: exe('agent'), post: [mutating('PG01', 'role-plugin', { failRun: true })] },
+      ctx,
+    )
+    if (r.ok) throw new Error('expected failure')
+    expect(ctx.effects).toEqual([])
+    expect(ctx.log).toContain('undo:EXE')
+    expect(r.failedGateId).toBe('PG01')
+  })
+
+  it('POST-gates STILL run when EXE was skipped as idempotent', async () => {
+    // A no-op change does not imply valid consequences: a previous attempt may have died before its
+    // post-gates, and that is exactly the state needing repair.
+    const ctx = w()
+    const r = await runAioPipeline(
+      { pre: [], exe: exe('x', { skip: true }), post: [mutating('PG01', 'repair')] },
+      ctx,
+    )
+    expect(r.ok).toBe(true)
+    expect(ctx.effects).toEqual(['repair']) // EXE skipped, consequence still applied
+    expect(ctx.log).toEqual(['run:PG01'])
   })
 })

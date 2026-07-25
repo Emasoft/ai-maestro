@@ -300,6 +300,51 @@ This delegates to `scenario-restore.sh` which verifies and replays the `rewipe-l
 
 Finally, take a post-test screenshot and compare with the baseline. Note any drift in the report.
 
+### Cleanup is owed on EVERY exit path — not only the happy one
+
+**Whatever ends your run, you clean up before you return.** PASS, FAIL, PARTIAL, BLOCKED, STUCK,
+DEFERRED, "the user told me to stop", "I hit a wall I can't fix" — every one of them reaches Phase F
+first. Phase F is not the last phase of a *successful* scenario; it is the last thing *you* do,
+always. If you are about to return without having run it, you are about to leave litter.
+
+You are creating real, persistent, sometimes PUBLIC things — agents with tmux sessions and
+registry records, teams, GitHub repos. They do not expire. Three agents and a public repo from one
+stopped SCEN-031 run survived 53 hours until the user found them (2026-07-25); that is the failure
+this section exists to prevent.
+
+**Keep the artifact ledger from step 1.** Append to the report AS YOU CREATE each artifact, never
+at the end — a run that dies never reaches the end, and the next runner can only clean up what it
+can read. Track: agents (name + id + workdir, **including the auto-COS that CreateTeam spawns
+without being asked**), teams, groups, tmux sessions, GitHub repos/forks/issues/PRs/branches the
+fleet creates, and anything written outside `reports/` that is worth keeping (copy it out BEFORE
+deleting the workdir, and say where you put it).
+
+**Delete agents ONLY through the UI's Delete Agent pipeline** (Profile → Advanced → Danger Zone →
+Delete Agent, "Also delete agent folder" checked, then purge the Cemetery entry). An agent is not a
+folder: it also has a registry record, a persisted-session row, a tmux session, team slots, AMP
+keys, AID tokens, and a Claude transcript dir. The pipeline is the ONE operation that handles all
+of them.
+
+**NEVER `rm -rf ~/agents/<name>/`.** It deletes the one visible piece and leaves every invisible
+one — and the server, finding a record whose folder disappeared, can legitimately re-create it. On
+2026-07-25 three manually-`rm -rf`'d agents kept regrowing `~/agents/<name>/.claude/rules/` on a
+loop, because a stale `PersistedSession` row outlived them. If the pipeline leaves something
+behind, that is a **pipeline bug** — fix it there (Rule 4), never with a shell command.
+
+**Verify by absence before you return** — cleanup is proven by looking, not by having clicked:
+
+```bash
+ls ~/agents/ && tmux list-sessions 2>/dev/null
+jq -r '.[].name' ~/.aimaestro/agents/registry.json
+jq -r '.[].id'   ~/.aimaestro/sessions.json
+ls ~/.aimaestro/cemetery/
+```
+
+Put the output in the report's Cleanup Verification table. **If you genuinely cannot remove
+something, name it explicitly** — in the report AND in your Phase H return lines — with what it is,
+where it is, and why it survived. An unmentioned leftover is indistinguishable from a clean run,
+which is exactly how litter accumulates unnoticed across dozens of runs.
+
 ## Phase G — Reports (Rules 9, 11)
 
 **Report-writing discipline (concise + DRY, technique 8).** Be exhaustive AND concise at once — cover every bug/issue/proposal with no filler. Define each non-obvious concept/element ONCE (don't assume the reader shares your run context), then refer back, never restate (DRY). One row per step in the step table; no prose that re-narrates the table; no pasted code longer than the few lines that carry the point. A report that repeats itself costs a re-read on every future open.
@@ -317,6 +362,11 @@ Write two files:
    - Stage each created file BY NAME for the per-scenario `docs(scen-NNN): add improvement-proposal TRDDs` commit (the batch conductor owns the commit per Rule 13; on a standalone run, commit it yourself).
 
 ## Phase H — Return
+
+**Gate: you may not return until Phase F has run.** This holds for every terminus — including
+`BLOCKED`, `STUCK`, and a mid-run stop by the user. If some artifact could not be removed, the
+return lines must name it (see Phase F), because the parent decides what to do next based only on
+these lines. Never return "I stopped early, someone else will clean up": there is no someone else.
 
 Your LAST text output must be exactly these 2 or 3 lines:
 

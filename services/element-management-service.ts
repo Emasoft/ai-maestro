@@ -6518,6 +6518,28 @@ export async function DeleteAgent(
       ops.push(`G05: WARN — session kill failed: ${err instanceof Error ? err.message : err}`)
     }
 
+    // ── G05b: Drop the PersistedSession record ─────────────────
+    // Killing the tmux session (G05) is NOT enough: ~/.aimaestro/sessions.json keeps its own
+    // PersistedSession row, and nothing else in this pipeline removed it. A deleted agent then
+    // stayed "a session that ought to exist" forever — the liveness/recovery paths treat a
+    // persisted-but-absent session as a DEAD agent, and reviving it runs the wake invariants,
+    // which re-create <workdir>/.claude/ and re-seed the aimaestro-*.md DEP rules. Observed
+    // 2026-07-25: three hard-deleted SCEN-031 agents kept regrowing their workdirs after every
+    // `rm -rf`, because the row outlived them. Unpersist on BOTH soft and hard delete — a
+    // soft-deleted agent is a tombstone, not a session to restore.
+    try {
+      const { unpersistSession } = await import('@/lib/session-persistence')
+      const sessionName = agent.name
+      if (sessionName) {
+        const outcome = await unpersistSession(sessionName as string)
+        ops.push(`G05b: PersistedSession "${sessionName}" — ${outcome}`)
+      } else {
+        ops.push('G05b: No session name — skipped')
+      }
+    } catch (err) {
+      ops.push(`G05b: WARN — unpersist failed: ${err instanceof Error ? err.message : err}`)
+    }
+
     // ── G06: Revoke credentials ────────────────────────────────
     // Revoke AMP API keys so stolen keys can't be reused
     try {

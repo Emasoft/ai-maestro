@@ -312,6 +312,14 @@ registry records, teams, GitHub repos. They do not expire. Three agents and a pu
 stopped SCEN-031 run survived 53 hours until the user found them (2026-07-25); that is the failure
 this section exists to prevent.
 
+**A stop is not a pause.** A scenario is only "paused" while its next phase is about to run. If you
+are not continuing right now — out of context, blocked on a fix that is not minutes away, the batch
+was interrupted, the session is ending — the run is **stopped for good**: clean up before you do
+the next thing, even though the last phase never executed. Never tell yourself *"it's only paused,
+I'll clean up when I resume"* — nobody resumes it, and meanwhile the abandoned fleet keeps running
+and silently corrupts the next run's results. In doubt, clean up: re-running from S001 is cheap
+(Rule 6 invalidates a partial run anyway), a stale live fleet is not.
+
 **Keep the artifact ledger from step 1.** Append to the report AS YOU CREATE each artifact, never
 at the end — a run that dies never reaches the end, and the next runner can only clean up what it
 can read. Track: agents (name + id + workdir, **including the auto-COS that CreateTeam spawns

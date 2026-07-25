@@ -225,6 +225,30 @@ naming every artifact left behind and why. Silence is the failure mode: an unmen
 looks identical to a clean run, and that is how three SCEN-031 agents and a public GitHub repo
 survived 53 hours after the run stopped (2026-07-25).
 
+### A stop is not a pause — an un-resumed scenario is STOPPED FOR GOOD
+
+**A scenario stopped mid-way is only "paused" while its next phase is about to run.** If the next
+phase does not follow promptly, the run is over — treat it as STOPPED FOR GOOD and delete
+everything it created, **even though its last phase never executed**. There is no such thing as a
+scenario left half-run indefinitely "in case we continue it later".
+
+Practically:
+
+- **Intending to continue?** Continue *now* — the next phase runs immediately, or as close to
+  immediately as the blocker allows.
+- **Not continuing right now, for any reason** — you are out of context, the user's attention moved
+  on, a blocker needs a fix that is not minutes away, the batch was interrupted, the session is
+  ending? Then the run is finished. **Clean up before you do the next thing**, not after it.
+- **In doubt, clean up.** Re-running a scenario from S001 is cheap and is required anyway
+  (Rule 6 invalidates a partially-bypassed run). Leaving a live fleet behind is not cheap: those
+  agents keep running, keep holding sessions, and keep being acted on by the server — and a stale
+  fleet silently corrupts the *next* run's results.
+
+The failure this forbids is the plausible-sounding one: *"the scenario is only paused, I'll clean up
+when I resume it."* Nobody resumes it. That sentence is how the 53-hour incident happened, and it
+is why the deletion is owed at the moment the run stops rather than at some later phase that will
+never arrive.
+
 ### Keep a live artifact ledger — you cannot delete what you never wrote down
 
 From step 1, maintain a running list of everything the run creates, and write it into the report

@@ -22,6 +22,7 @@
  */
 
 import type { AgentRole } from '@/types/agent'
+import type { Residue, TeardownVerification } from '@/lib/agent-teardown'
 import { join } from 'path'
 import { homedir } from 'os'
 import { statePath } from '@/lib/ecosystem-constants'
@@ -6322,6 +6323,14 @@ export interface DeleteAgentResult {
   hard: boolean
   operations: string[]
   error?: string
+  /**
+   * TRDD-KERM18NX. `success` means "the pipeline ran"; `incomplete` means "and a store STILL claims
+   * this agent". They are different questions, and conflating them is what let a stale
+   * PersistedSession row survive every delete until 2026-07-25 while every caller saw success.
+   * A caller that cares about a valid end state must check this, not just `success`.
+   */
+  incomplete?: boolean
+  residue?: Residue[]
 }
 
 /**
@@ -6741,6 +6750,35 @@ export async function DeleteAgent(
       ops.push('G09: Soft-delete — folder preserved')
     }
 
+    // ── G10: POST-CONDITION — does any store still claim this agent? ──
+    // Every gate above is try/catch → WARN → continue, so a partial teardown and a complete one
+    // returned the SAME success. That shape is why the missing PersistedSession cleanup (G05b) went
+    // unnoticed: no gate existed, and nothing asked whether one should have. This gate inverts the
+    // question — instead of trusting that each step ran, it asks each STORE whether it still holds
+    // the agent (lib/agent-teardown.ts, TRDD-KERM18NX). A probe that throws counts as residue, so an
+    // unreadable store can never be reported clean.
+    //
+    // It does NOT roll back: a half-deleted agent cannot be un-deleted by re-creating one, and a
+    // fake rollback is worse than an honest report. What it guarantees is that an invalid state is
+    // always VISIBLE — `incomplete: true` plus the exact stores — instead of silently successful.
+    let teardown: TeardownVerification | null = null
+    try {
+      const { verifyAgentRemoved, formatVerification } = await import('@/lib/agent-teardown')
+      teardown = await verifyAgentRemoved({
+        agentId,
+        agentName: agent.name,
+        sessionName: agent.name,
+        workingDirectory: agent.workingDirectory ?? null,
+        expectFolderGone: !!(hard && options?.deleteFolder),
+        hard,
+      })
+      ops.push(`G10: ${formatVerification(teardown)}`)
+    } catch (err) {
+      // The verifier itself failing is the one case we cannot fail closed on without breaking a
+      // delete that may well have succeeded — but it must never read as verified.
+      ops.push(`G10: WARN — post-condition verification unavailable: ${err instanceof Error ? err.message : err}`)
+    }
+
     // TRDD-eac02238 step 6 (fan-out, 2026-04-20): emit per-op ledger
     // entry for DeleteAgent. Diff encodes hard vs soft (remove vs
     // replace with deletedAt). Single op name 'delete_agent' per the
@@ -6788,7 +6826,19 @@ export async function DeleteAgent(
     }
 
     result.success = true
-    console.log(`[DeleteAgent] "${agent.name}" deleted (hard=${hard}, ${ops.length} gates)`)
+    // Surface the G10 post-condition on the RESULT, not only in the ops log — a caller that wants a
+    // valid end state must be able to branch on it without string-matching a log line.
+    if (teardown && !teardown.clean) {
+      result.incomplete = true
+      result.residue = teardown.residue
+      console.warn(
+        `[DeleteAgent] "${agent.name}" INCOMPLETE — ${teardown.residue.length} store(s) still claim it: ` +
+          teardown.residue.map((r) => r.store).join(', '),
+      )
+    }
+    console.log(
+      `[DeleteAgent] "${agent.name}" deleted (hard=${hard}, ${ops.length} gates${result.incomplete ? ', INCOMPLETE' : ''})`,
+    )
     return result
   } catch (err) {
     result.error = err instanceof Error ? err.message : String(err)

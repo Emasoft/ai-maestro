@@ -531,6 +531,18 @@ export async function revokeTokensForAgent(agentId: string): Promise<number> {
 }
 
 /**
+ * How many governance tokens this store still holds for an agent.
+ *
+ * Exists so a teardown POST-CONDITION can ask "does this store still claim the agent?" without
+ * reaching around the module to its JSON file. `revokeTokensForAgent` returns what it removed,
+ * which answers a different question — a revoke that silently did nothing returns 0 exactly like a
+ * store that was already clean (TRDD-KERM18NX).
+ */
+export function countTokensForAgent(agentId: string): number {
+  return loadTokens().filter(t => t.agent_id === agentId).length
+}
+
+/**
  * Clean up expired tokens from storage.
  */
 export async function cleanupExpiredTokens(): Promise<number> {

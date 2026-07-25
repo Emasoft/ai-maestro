@@ -1,5 +1,5 @@
 ---
-version: "4.8.0"
+version: "4.9.0"
 date: 2026-07-22
 branch: governance-rules
 changelog:
@@ -1659,3 +1659,43 @@ else. There is **no title-based exemption** — not MANAGER, not CHIEF-OF-STAFF.
 | Wake agent | No | Own team only | No | No | Any agent | No |
 | Hibernate agent | No | Own team only | No | No | Any agent | No |
 | Message (see R6 graph) | COS + ORCH | All titles | COS+ARCH+INTEG+MEM | COS + ORCH | All titles | MGR+COS+AUTO |
+
+## R50. One Operation, One All-In-One Function — And The Button Calls It (CRITICAL — IRON, USER-set)
+
+**The first principle of all-in-one functions: THERE MUST BE ONLY ONE FUNCTION FOR EACH OPERATION,
+AND THAT FUNCTION MUST BE AN ALL-IN-ONE.** (USER, 2026-07-25.)
+
+**R50.1 — One implementation per operation.** For any operation on a governed entity (create,
+delete, rename, change title, change client, wake, hibernate, team membership, …) exactly ONE
+function performs it. Every other caller delegates to it. A second code path that reaches the same
+end state by touching stores directly is a violation regardless of how small it is, because the
+gates it skips are exactly the ones nobody remembers.
+
+**R50.2 — An all-in-one leaves a VALID state, or says it did not.** It owns every store the entity
+touches, and it never reports success on a partial state. Where a gate cannot be made
+transactional, the operation MUST verify its own post-condition and surface the residue
+(`incomplete` + the stores still claiming the entity — TRDD-KERM18NX). "The pipeline ran" and "the
+system is valid" are different claims; only the second one may be reported as success.
+
+**R50.3 — Every UI button maps to exactly one API command, and that command IS the all-in-one.**
+The button does not implement the operation; it calls the endpoint. There is no UI-only path and no
+API-only path.
+
+**R50.4 — Manual invocation uses the SAME command with the SAME authentication.** When the UI is
+unavailable (a stopped scenario, a headless host), the operation may be invoked directly — but only
+through that same endpoint, at the same authorization level, with a valid signed token passed to
+it. Reaching around the endpoint to call the service function in-process is a DEVIATION: it
+performs the same steps while skipping the authentication the endpoint exists to enforce. It is
+permitted only when no authenticated path exists yet, and every such invocation is recorded with
+what authorized it.
+
+**R50.5 — Store primitives are private to the pipeline.** Low-level mutators
+(`lib/agent-registry.ts::createAgent/deleteAgent/renameAgent/deleteAgentBySession`, direct
+`saveAgents()` writes, …) are implementation details of the all-in-one that owns them. A service
+calling them directly re-creates the class of defect R50 exists to prevent — the
+`PersistedSession` row that outlived every deleted agent (2026-07-25) survived precisely because
+one store had no owner in the pipeline.
+
+**Enforcement.** `tests/unit/all-in-one-single-path.test.ts` pins the known bypass set; a NEW
+bypass fails the build, and the list may only shrink. Convergence of the existing bypasses is
+tracked in TRDD-YB4T4RTL.

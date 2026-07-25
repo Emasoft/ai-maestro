@@ -106,15 +106,25 @@ describe('aid-nonce store — fail-closed capacity', () => {
   it('refuses new issuance (returns null) once the hard cap is reached, without evicting live nonces', () => {
     // Cap is 10_000. Fill it; the next issue must fail closed (null), never
     // evict a legitimate just-issued nonce.
+    // The per-iteration assertion was `expect(last).not.toBeNull()` INSIDE the loop — 10_000
+    // expect() calls, each building a matcher context, which pushed the test past the 5s default
+    // and made it fail under any concurrent load while passing on an idle machine. Same guarantee,
+    // counted instead: a flaky gate is worse than no gate, because it trains people to re-run.
     let last: { nonce: string; expires_in: number } | null = null
+    let refusedDuringFill = 0
     for (let i = 0; i < 10_000; i++) {
       last = issueNonce(FP)
-      expect(last).not.toBeNull()
+      if (last === null) refusedDuringFill++
     }
+    expect(refusedDuringFill).toBe(0)
     expect(nonceStoreSize()).toBe(10_000)
     const overflow = issueNonce(FP)
     expect(overflow).toBeNull()
     // The last legitimately-issued nonce is still consumable — not evicted.
     expect(consumeNonce(last!.nonce, FP).ok).toBe(true)
-  })
+    // 30s, not the 5s default: filling the real 10_000 cap IS the test, so the cost is inherent.
+    // It runs in ~2s alone and still lost the 5s budget when the full suite runs it in parallel —
+    // an outcome that depends on machine load is not a gate. Do NOT "fix" this by shrinking the
+    // cap: a fail-closed capacity test that never reaches capacity tests nothing.
+  }, 30_000)
 })

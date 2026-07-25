@@ -27,6 +27,12 @@ import {
   type InboxNudgeResult,
 } from '@/lib/fleet-inbox-nudge'
 import { trackDeadDebounce, type DeadPartition } from '@/lib/fleet-dead-debounce'
+import {
+  runContinuityTick,
+  defaultContinuityDeps,
+  type ContinuityState,
+  type ContinuityTickResult,
+} from '@/lib/fleet-continuity'
 
 /** Wire the read-only scanner to the real registry + session substrate. Token-block
  *  detection (`getAccountHealthy`) is intentionally omitted here — it lands with the
@@ -77,6 +83,8 @@ export interface FleetLivenessWatchdogOptions {
   nudgeEnabled?: boolean
   /** Injectable inbox-nudge pass for tests; defaults to the real tick over the module store. */
   runNudge?: () => Promise<InboxNudgeResult>
+  /** Injectable continuity pass for tests; defaults to the real tick over the module store. */
+  runContinuity?: () => Promise<ContinuityTickResult>
   /** Boot-debounce for the `dead` class (TRDD-SX593MDG D2); defaults to the real sidecar-backed
    *  tracker. Injected in tests so the partition is deterministic and no sidecar is written. */
   trackDead?: (deadIds: string[], now: number) => DeadPartition
@@ -108,6 +116,16 @@ export function resetRecoveryStore(): void {
 /** Clear the inbox-nudge state — for tests only. */
 export function resetInboxNudgeStore(): void {
   inboxNudgeStore.clear()
+}
+
+/** Per-agent continuity state: the temporal-event episode memory plus the shared cooldown clock.
+ *  Threaded across ticks because the retry-wedge fires on an ADVANCE between polls — with no memory
+ *  it can never fire at all, which is the safe direction but detects nothing. */
+const continuityStore = new Map<string, ContinuityState>()
+
+/** Clear the continuity state — for tests only. */
+export function resetContinuityStore(): void {
+  continuityStore.clear()
 }
 
 /**
@@ -190,6 +208,26 @@ export async function runFleetLivenessTick(
       } catch (err) {
         log(`[FleetInboxNudge] nudge pass failed (non-fatal): ${(err as Error)?.message || err}`)
       }
+    }
+
+    // Terminal-continuity leg (TRDD-Y8VPE3NS E3 box 5) — THE poll site that drives the automaton.
+    // Until this existed the detection, classification and actuation were all built and tested and
+    // never called once: an event nobody asked about. Runs every tick and independently of the
+    // liveness classes above, because a wedged agent is `active` by every liveness measure — it is
+    // genuinely doing something, just doing it forever. Detection always runs; FIRING is gated
+    // inside the actuator by AIM_FLEET_RECOVERY_FIRE, so a tick on a default host classifies and
+    // reports without touching anything. Own try, like its siblings.
+    try {
+      const cont =
+        opts.runContinuity ??
+        (() => runContinuityTick(defaultContinuityDeps(continuityStore, now()), continuityStore, now()))
+      const cr = await cont()
+      for (const f of cr.fired) log(`[FleetContinuity] ${f.name || f.agentId}: ${f.eventId} → ${f.response}`)
+      // Only non-'no_event' skips reach here, so this stays quiet on a healthy fleet instead of
+      // printing a line per agent per tick forever.
+      for (const s of cr.skipped) log(`[FleetContinuity] ${s.name || s.agentId}: not actuated (${s.reason})`)
+    } catch (err) {
+      log(`[FleetContinuity] continuity pass failed (non-fatal): ${(err as Error)?.message || err}`)
     }
 
     return snap

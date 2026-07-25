@@ -18,10 +18,40 @@ import { promises as fsp } from 'fs'
 import os from 'os'
 import path from 'path'
 
-/** Why a wake/boot-restore launch did NOT resume a prior conversation, or the verb to append. */
+/**
+ * Where each client keeps its transcripts — the "is there anything to resume?" probe, per client.
+ *
+ * This module started Claude-only and now hosts the cross-client registry, because the probe is
+ * fs-bound and `client-capabilities.ts` is imported by browser bundles that must not pull in `fs`.
+ *
+ * A client is listed ONLY when its transcript location has been VERIFIED on a real install.
+ * Everything else answers `null` = UNKNOWN, and unknown means cold start — never a speculative
+ * resume. The asymmetry is the same one that governs the rest of this path: a missed resume costs
+ * a cold start, while a resume verb the client cannot honour can make it exit at launch, which
+ * turns boot-restore into boot-destroy. Add a client here after checking it, not before.
+ */
+const CONVERSATION_PROBES: Record<string, (workdir: string) => Promise<boolean>> = {
+  // Verified: `claude --continue` resolves ~/.claude/projects/<slug>/*.jsonl by the same slug.
+  claude: hasPriorConversation,
+}
+
+/**
+ * The transcript probe for a client, or null when we have not verified where that client stores
+ * its conversations. `program` is matched loosely because the registry stores free-form values
+ * ("claude", "claude code", "claude-code").
+ */
+export function resolveConversationProbe(program: string): ((workdir: string) => Promise<boolean>) | null {
+  const p = (program || '').toLowerCase()
+  for (const [key, probe] of Object.entries(CONVERSATION_PROBES)) {
+    if (p.includes(key)) return probe
+  }
+  return null
+}
+
+/** Why a wake/boot-restore launch did NOT resume a prior conversation, or the verb to use. */
 export type ResumeDecision =
   | { resume: true; verb: string }
-  | { resume: false; reason: 'no-verb' | 'subcommand' | 'no-transcript' }
+  | { resume: false; reason: 'no-verb' | 'no-transcript' }
 
 /**
  * Decide whether a relaunch should carry its client's resume verb (TRDD-NIU5RQ1S).
@@ -30,24 +60,29 @@ export type ResumeDecision =
  * resume their work exactly from where they left it" — is a testable decision rather than a branch
  * buried in a 400-line launcher that no test can reach.
  *
- * `hasPrior` is a THUNK, not a boolean, deliberately: it walks the filesystem, and the verb checks
- * below reject most clients outright, so evaluating it eagerly would pay that walk for launches
- * that were never going to resume. It also keeps the whole decision injectable in tests.
+ * `hasPrior` is a THUNK, not a boolean, deliberately: it walks the filesystem, and a client with no
+ * resume verb is rejected before it is ever called, so evaluating it eagerly would pay that walk for
+ * launches that were never going to resume. It also keeps the whole decision injectable in tests.
  *
- * FLAG-FORM ONLY. Per-client resume verbs are not interchangeable: claude `--continue` and gemini
- * `-r latest` are flags that append safely, but codex `resume --last` and kiro `chat --resume` are
- * SUBCOMMANDS that must precede other args — appending those builds a command that is WRONG rather
- * than merely absent, which is the worse failure (a cold start still starts). Those clients are
- * refused here, loudly, until they go through buildLaunchCommand, which owns subcommand ordering.
+ * This answers WHETHER to resume. WHERE the verb goes in the command line is a per-client syntax
+ * question answered by `composeLaunchWithResume` — deliberately separate, because the two vary
+ * independently: every client answers "do I have a transcript?" the same way and "where does my
+ * resume verb go?" differently.
  */
 export async function decideResume(
   resumeVerb: string | undefined | null,
-  hasPrior: () => Promise<boolean>,
+  hasPrior: (() => Promise<boolean>) | null,
 ): Promise<ResumeDecision> {
   const verb = (resumeVerb || '').trim()
   if (!verb) return { resume: false, reason: 'no-verb' }
-  if (!verb.startsWith('-')) return { resume: false, reason: 'subcommand' }
-  if (!(await hasPrior())) return { resume: false, reason: 'no-transcript' }
+  // A null probe means we have not verified where THIS client stores transcripts. We resume anyway
+  // (USER 2026-07-25: "the launch string should always include the command to resume the last
+  // conversation, except ... the first launch"), because the caller — not a filesystem guess — is
+  // what knows whether this is a brand-new agent: the wizard passes continueConversation:false for
+  // a first launch, and every other path leaves it true. The probe stays for Claude as
+  // belt-and-braces, so a caller that forgets still cannot make `claude --continue` exit on a
+  // virgin workdir.
+  if (hasPrior && !(await hasPrior())) return { resume: false, reason: 'no-transcript' }
   return { resume: true, verb }
 }
 

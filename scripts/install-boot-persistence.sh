@@ -33,6 +33,28 @@ fi
 echo "    ok — $APP_NAME is known to pm2"
 
 echo "==> 2/3  Generating the boot service unit"
+# WSL FIRST, because it is the case that looks handled and is not. `pm2 startup` happily installs a
+# systemd unit inside the distro, and that unit is correct — but Windows does not boot the distro,
+# it starts it when something asks. So after a Windows restart nothing has asked, no unit runs, and
+# the install looks successful while delivering nothing. The trigger has to live on the Windows side.
+if grep -qiE "microsoft|wsl" /proc/version 2>/dev/null; then
+  echo
+  echo "    ⚠ WSL DETECTED — a Linux unit alone will NOT bring the server back after a Windows reboot."
+  echo "      Windows starts the distro on demand; it does not boot it. Pick ONE Windows-side trigger:"
+  echo
+  echo "      (a) Task Scheduler — 'At log on', run:"
+  echo "          wsl.exe -d ${WSL_DISTRO_NAME:-<distro>} -u \"$USER\" -- pm2 resurrect"
+  echo
+  echo "      (b) /etc/wsl.conf inside the distro (needs 'wsl --shutdown' to take effect):"
+  echo "          [boot]"
+  echo "          systemd=true"
+  echo "          command=\"su - $USER -c 'pm2 resurrect'\""
+  echo
+  echo "      Then re-run this script to write the process list (step 3)."
+  echo "      Continuing with the in-distro half anyway — it is necessary, just not sufficient."
+  echo
+fi
+
 # `pm2 startup` DETECTS the init system and, on most hosts, prints a privileged command for you to
 # run rather than executing it itself. We surface that instead of silently swallowing it: a command
 # that needs sudo must be seen and consented to by the person typing it, never buried in a script.

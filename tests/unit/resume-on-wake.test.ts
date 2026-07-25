@@ -43,21 +43,41 @@ describe('resume-on-wake — every non-resuming case falls to a COLD START', () 
     expect(await decideResume('--continue', noTranscript)).toEqual({ resume: false, reason: 'no-transcript' })
   })
 
-  it('a SUBCOMMAND verb is REFUSED — appending it would build an invalid command', async () => {
-    // codex `resume --last` and kiro `chat --resume` must PRECEDE other args. Appending them is
-    // worse than skipping: a cold start still starts, a malformed command starts nothing.
-    expect(await decideResume('resume --last', hasTranscript)).toEqual({ resume: false, reason: 'subcommand' })
-    expect(await decideResume('chat --resume', hasTranscript)).toEqual({ resume: false, reason: 'subcommand' })
+})
+
+describe('resume-on-wake — a client with no transcript probe still resumes (contract changed)', () => {
+  // SUPERSEDED: a null probe used to mean reason:'unverified-client' — a cold start. USER
+  // 2026-07-25 ruled the opposite: ALWAYS include the resume verb, because the one case with
+  // nothing to resume is a brand-new agent's first launch, and that is known by the CALLER
+  // (createSession, which has no resume concept at all) rather than by guessing at five different
+  // clients' transcript stores. Claude keeps its probe as belt-and-braces only.
+  it('resumes when the client has a verb and no probe', async () => {
+    expect(await decideResume('resume --last', null)).toEqual({ resume: true, verb: 'resume --last' })
+  })
+})
+
+describe('resume-on-wake — subcommand verbs are ACCEPTED (contract changed)', () => {
+  // SUPERSEDED: this used to return reason:'subcommand', refusing codex/kiro outright, because
+  // appending their verb after the args builds a command that does not run. That was a WORKAROUND
+  // for a composition bug, not a property of those clients — `composeLaunchWithResume` now places
+  // the verb after the binary where a subcommand belongs, so the refusal is gone and the clients
+  // resume like any other. Placement is pinned in tests/unit/cross-client-resume.test.ts.
+  it('codex', async () => {
+    expect(await decideResume('resume --last', hasTranscript)).toEqual({ resume: true, verb: 'resume --last' })
+  })
+
+  it('kiro', async () => {
+    expect(await decideResume('chat --resume', hasTranscript)).toEqual({ resume: true, verb: 'chat --resume' })
   })
 })
 
 describe('resume-on-wake — the transcript probe is only paid when it can matter', () => {
-  it('is never called for a client that cannot resume anyway', async () => {
-    // The probe walks ~/.claude/projects; running it for a client we are about to refuse is pure
+  it('is never called for a client that has no resume verb at all', async () => {
+    // The probe walks the transcript store; running it for a client we are about to refuse is pure
     // waste on every boot-restore of a non-resuming fleet.
     const probe = vi.fn(hasTranscript)
     await decideResume(undefined, probe)
-    await decideResume('resume --last', probe)
+    await decideResume('', probe)
     expect(probe).not.toHaveBeenCalled()
   })
 

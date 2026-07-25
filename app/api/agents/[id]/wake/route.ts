@@ -76,6 +76,7 @@ export async function POST(
     let startProgram = true
     let sessionIndex = 0
     let program: string | undefined
+    let continueConversation = true
     try {
       const body = await request.json()
       if (body.startProgram === false) {
@@ -87,6 +88,14 @@ export async function POST(
           return NextResponse.json({ error: 'Invalid sessionIndex' }, { status: 400 })
         }
         sessionIndex = body.sessionIndex
+      }
+      // FIRST-LAUNCH OPT-OUT (TRDD-D5XDT49I). Every wake resumes the last conversation by
+      // default; a brand-new agent has none, and only the caller that just created it knows that.
+      // Opt-out only — `true` is never read from the body, so a client cannot turn resuming ON for
+      // a workdir where it would be wrong, and forgetting the flag costs a cold start, not a
+      // failed launch.
+      if (body.continueConversation === false) {
+        continueConversation = false
       }
       if (typeof body.program === 'string') {
         // SF-010: Do not lowercase program name -- case-sensitive filesystems need exact case
@@ -102,6 +111,7 @@ export async function POST(
       startProgram,
       sessionIndex,
       program,
+      continueConversation,
       authContext: buildAuthContext(auth),
     })
 

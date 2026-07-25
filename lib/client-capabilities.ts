@@ -93,7 +93,29 @@ export interface ClientCapabilities {
   /** CLI launch/session commands — used by tmux session management */
   cli: {
     binary: string                    // e.g. 'claude', 'kiro-cli', 'codex'
-    resume: string                    // flag/subcommand to resume last conversation
+    /**
+     * The verb that resumes THE MOST RECENT conversation, non-interactively.
+     *
+     * ⚠ NEVER put a conversation-PICKER verb here. Every client ships both, and the naming is
+     * INVERTED between them — `--resume` is the picker on Claude and the resume-LAST on Kiro — so
+     * "it's called resume, it must resume" is exactly the reasoning that breaks this. A picker
+     * launched into an unattended tmux pane sits at a menu nobody will ever answer: the agent looks
+     * alive, is wedged forever, and the failure is invisible. That is strictly worse than not
+     * resuming at all, which is why the guard test in tests/unit/cross-client-resume.test.ts fails
+     * the build if a picker form ever appears in this column.
+     *
+     * VERIFIED 2026-07-25 against each installed CLI's own --help (all five are on this host):
+     *
+     *   client    resume-LAST (use this)   PICKER / by-id (never use)
+     *   claude    -c, --continue           -r, --resume  (no value ⇒ picker)
+     *   codex     resume --last            resume        (bare ⇒ "picker by default")
+     *   gemini    -r latest                -r <index>, --list-sessions
+     *   kiro-cli  chat --resume            chat --resume-picker, --resume-id <id>
+     *   opencode  -c, --continue           -s/--session <id>, `opencode session`
+     *
+     * Re-verify with `<binary> --help` before editing; do not infer from another client.
+     */
+    resume: string
     skipPermissions: string           // flag to bypass tool confirmations
     useAgent: string                  // flag to load an agent persona (use %s for agent name)
     exit: string                      // command typed inside client to exit
@@ -179,7 +201,10 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
     // Verified from: opencode --help (not installed on this host)
     cli: {
       binary: 'opencode',
-      resume: '',                     // no resume flag documented
+      // VERIFIED 2026-07-25 from `opencode --help`: "-c, --continue  continue the last session".
+      // Previously '' ("no resume flag documented") — it was never checked, and the empty string
+      // silently made opencode the one client that always cold-started.
+      resume: '--continue',
       skipPermissions: '',            // no auto-approve flag documented
       useAgent: '',                   // no agent flag documented
       exit: '/exit',
@@ -321,6 +346,74 @@ export function isTabSupported(tabId: string, capabilities: ClientCapabilities):
 }
 
 /**
+ * Verbs that open an INTERACTIVE CONVERSATION PICKER instead of resuming the last conversation.
+ *
+ * A picker in an unattended pane is the worst outcome on this path: the client starts, draws a
+ * menu, and waits for a human who is not there — so the agent reads as alive while being wedged
+ * forever, and no amount of downstream recovery helps because the process is perfectly healthy.
+ * Not resuming at all is strictly better, so these are refused outright.
+ *
+ * Matched as WHOLE TOKENS against the configured verb; `--resume-picker` is listed explicitly
+ * because Kiro's plain `--resume` is legitimately resume-last (the inverse of Claude's meaning).
+ */
+const PICKER_VERBS = ['--resume-picker', '--resume-id', '--list-sessions', '--session', '-s'] as const
+
+/** Does this verb open an interactive picker (or select a specific session) rather than resume the
+ *  most recent conversation? Used as a build-time guard on the capability table. */
+export function isPickerVerb(verb: string): boolean {
+  const tokens = verb.trim().split(/\s+/)
+  if (PICKER_VERBS.some((p) => tokens.includes(p))) return true
+  // `codex resume` with no `--last` is "picker by default" per its own help; the bare subcommand
+  // is therefore a picker, while `resume --last` is not.
+  if (tokens[0] === 'resume' && !tokens.includes('--last')) return true
+  // `-r`/`--resume` with no value is Claude's picker. With a value ("latest") it is resume-last.
+  if ((tokens[0] === '-r' || tokens[0] === '--resume') && tokens.length === 1) return true
+  return false
+}
+
+/** A resume verb is FLAG-form (`--continue`, `-r latest`) or SUBCOMMAND-form (`resume --last`,
+ *  `chat --resume`). The distinction decides WHERE it may sit on the command line, and it is the
+ *  only thing about resuming that differs between clients. */
+export function isSubcommandVerb(verb: string): boolean {
+  const first = verb.trim().split(/\s+/)[0] || ''
+  return first.length > 0 && !first.startsWith('-')
+}
+
+/** Drop `other`'s leading token when it repeats the subcommand `verb` already opens with —
+ *  `chat --resume` + `chat --trust-all-tools` must not emit `chat` twice. */
+function dropSharedLeadingSubcommand(other: string, verb: string): string {
+  if (!isSubcommandVerb(verb)) return other
+  const sub = verb.trim().split(/\s+/)[0]
+  const rest = other.trim().split(/\s+/)
+  return rest[0] === sub ? rest.slice(1).join(' ') : other
+}
+
+/**
+ * Put a client's resume verb into an already-assembled launch command (TRDD-D5XDT49I).
+ *
+ * The wake path does not build its command with `buildLaunchCommand` — it concatenates a binary
+ * with args that `resolveLaunchArgs` has already enforced (`--agent <persona>`, R9.13). So this
+ * splices the verb into THAT shape instead, which is why it takes a binary and an arg string
+ * rather than the option bag above.
+ *
+ * The verb always goes IMMEDIATELY AFTER THE BINARY, which is correct for both forms and is the
+ * only position that is: a subcommand (`codex resume --last`) is invalid anywhere else, while a
+ * flag is position-independent. Appending instead — the obvious-looking choice — silently produces
+ * `codex --profile x resume --last`, a command that does not run.
+ *
+ * When the verb opens with a subcommand the args already repeat (kiro `chat …`), the duplicate
+ * leading token is dropped rather than the args: losing `--trust-all-tools` would change the
+ * agent's permission posture, and doing that during an unattended recovery is the worst possible
+ * moment for it.
+ */
+export function composeLaunchWithResume(binary: string, args: string, resumeVerb: string): string {
+  const verb = resumeVerb.trim()
+  if (!verb) return args ? `${binary} ${args}` : binary
+  const rest = dropSharedLeadingSubcommand(args.trim(), verb)
+  return [binary, verb, rest].filter(Boolean).join(' ')
+}
+
+/**
  * Build the full tmux launch command for a client session.
  * Combines binary, skip-permissions, agent persona, and any extra args.
  *
@@ -336,10 +429,17 @@ export function buildLaunchCommand(
   const cli = caps.cli
   const parts: string[] = [cli.binary || program]
 
-  // For kiro, subcommand comes before flags (e.g. 'kiro-cli chat --trust-all-tools')
-  // The skipPermissions/resume/useAgent fields already include 'chat' prefix for kiro
+  // For kiro, subcommand comes before flags (e.g. 'kiro-cli chat --trust-all-tools').
+  // The skipPermissions/resume/useAgent fields already include the 'chat' prefix for kiro.
+  //
+  // resume and skipPermissions are BOTH emitted when both apply. This used to be an `else if`,
+  // which silently dropped `--dangerously-skip-permissions` from any resumed launch — changing the
+  // permission posture of every agent that carries it, on the one path (recovery) where nobody is
+  // watching. They are only mutually exclusive for a client whose verbs share a leading subcommand
+  // (kiro's `chat …`), and that case is handled by dropping the duplicate token, not the flag.
   if (options?.resume && cli.resume) {
     parts.push(cli.resume)
+    if (cli.skipPermissions) parts.push(dropSharedLeadingSubcommand(cli.skipPermissions, cli.resume))
   } else if (cli.skipPermissions) {
     parts.push(cli.skipPermissions)
   }

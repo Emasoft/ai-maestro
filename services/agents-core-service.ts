@@ -150,6 +150,8 @@ export interface WakeAgentParams {
    * caller must mean it. Best-effort by construction — it is skipped when no prior transcript
    * exists, and when the client's resume verb is not a plain flag (see the launch site).
    */
+  /** Resume the client's last conversation on launch. Defaults TRUE — pass false ONLY for a
+   *  brand-new agent's first launch, which has no conversation to resume. */
   continueConversation?: boolean
 }
 
@@ -2015,7 +2017,13 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       sessionIndex = 0,
       program: programOverride,
       authContext,
-      continueConversation = false,
+      // DEFAULT TRUE (USER 2026-07-25): every launch resumes the last conversation, because a wake
+      // that silently starts a fresh one destroys in-flight work and looks identical to success.
+      // The ONE exception is a brand-new agent's very first launch, which has nothing to resume —
+      // and only the CREATE path knows that, so it is the create path that passes false. Defaulting
+      // to false instead would put the burden on every other caller to remember, and the cost of
+      // forgetting would be silent amnesia rather than a visible error.
+      continueConversation = true,
     } = params
 
     // ── Gate 0: Authorization ───────────────────────────────────
@@ -2265,19 +2273,23 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         //      them means going through buildLaunchCommand, which owns subcommand ordering.
         if (continueConversation) {
           try {
-            const { getClientCapabilities } = await import('@/lib/client-capabilities')
-            const { hasPriorConversation, decideResume } = await import('@/lib/claude-conversation')
-            const decision = await decideResume(getClientCapabilities(program)?.cli?.resume, () =>
-              hasPriorConversation(workingDirectory),
+            const { getClientCapabilities, composeLaunchWithResume } = await import('@/lib/client-capabilities')
+            const { resolveConversationProbe, decideResume } = await import('@/lib/claude-conversation')
+            const probe = resolveConversationProbe(program)
+            const decision = await decideResume(
+              getClientCapabilities(program)?.cli?.resume,
+              probe ? () => probe(workingDirectory) : null,
             )
             if (decision.resume) {
-              fullCommand = `${fullCommand} ${decision.verb}`
-              console.log(`[Wake] ${sessionName}: resuming prior conversation (${decision.verb})`)
-            } else if (decision.reason === 'subcommand') {
-              console.warn(
-                `[Wake] ${sessionName}: client "${program}" resumes via a SUBCOMMAND, not a flag — ` +
-                  `cold start (appending it would build an invalid command)`,
+              // Re-compose rather than append: the verb has to sit right after the binary for the
+              // clients whose resume is a subcommand, and `fullCommand` already carries the
+              // enforced args, so splicing is the only way to keep both correct.
+              fullCommand = composeLaunchWithResume(
+                startCommand,
+                fullCommand.slice(startCommand.length).trim(),
+                decision.verb,
               )
+              console.log(`[Wake] ${sessionName}: resuming prior conversation (${decision.verb})`)
             } else {
               console.log(`[Wake] ${sessionName}: cold start (${decision.reason}) for ${workingDirectory}`)
             }

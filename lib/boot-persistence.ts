@@ -40,6 +40,8 @@ export interface BootPersistenceFacts {
   /** Does the SAVED entry carry the never-give-up restart policy? null when undeterminable.
    *  `pm2 resurrect` replays the dump, NOT ecosystem.config.js — see `dumpPolicyCarriesBackoff`. */
   dumpHasBackoff?: boolean | null
+  /** Is this a WSL distro? Node reports platform 'linux', but the BOOT story is Windows's. */
+  isWsl?: boolean
 }
 
 export type BootPersistenceStatus =
@@ -49,6 +51,7 @@ export type BootPersistenceStatus =
   | 'missing-dump'
   | 'stale-dump'
   | 'stale-policy'
+  | 'wsl-needs-windows-trigger'
   | 'unknown-platform'
 
 export interface BootPersistenceVerdict {
@@ -76,6 +79,24 @@ export function looksLikePm2Unit(fileName: string): boolean {
  * outage has already lost the fleet's work.
  */
 export function evaluateBootPersistence(facts: BootPersistenceFacts): BootPersistenceVerdict {
+  // WSL is Linux to Node and NOT Linux to the boot process, which is the whole problem. The distro
+  // does not boot on its own: Windows starts it when something asks for it, and systemd runs only
+  // if /etc/wsl.conf opts in ([boot] systemd=true). So a systemd unit installed here can be
+  // perfectly valid and still never run after a Windows restart, and reporting "OK" on the strength
+  // of the unit file would be exactly the false comfort this module exists to prevent. The fix
+  // lives on the WINDOWS side (Task Scheduler running `wsl.exe … pm2 resurrect`, or a
+  // [boot] command= line), so it is named rather than guessed at.
+  if (facts.isWsl) {
+    return {
+      status: 'wsl-needs-windows-trigger',
+      willSurviveReboot: false,
+      message:
+        `⚠ Running under WSL — a Linux service unit alone does NOT survive a Windows reboot, because ` +
+        `Windows only starts the distro on demand. Add a Windows-side trigger: a Task Scheduler task ` +
+        `at logon running "wsl.exe -d <distro> -u <user> -- pm2 resurrect", or a "[boot] command=" ` +
+        `line in /etc/wsl.conf. See scripts/install-boot-persistence.sh.`,
+    }
+  }
   if (facts.platform !== 'darwin' && facts.platform !== 'linux') {
     return {
       status: 'unknown-platform',
@@ -203,6 +224,19 @@ export function unitSearchDirs(platform: NodeJS.Platform, homedir: string): stri
   return []
 }
 
+/** Is this a WSL distro? `/proc/version` carries the Microsoft kernel signature on WSL1 and WSL2
+ *  alike; the env var only exists on WSL2, so both are checked. Any read failure ⇒ not WSL, which
+ *  is the answer that keeps a plain Linux host from being nagged about Task Scheduler. */
+export function detectWsl(platform: NodeJS.Platform = process.platform): boolean {
+  if (platform !== 'linux') return false
+  if (process.env.WSL_DISTRO_NAME) return true
+  try {
+    return /microsoft|wsl/i.test(fs.readFileSync('/proc/version', 'utf8'))
+  } catch {
+    return false
+  }
+}
+
 /** Does the pm2 dump carry an entry whose `name` is this app? null when the dump cannot be parsed
  *  as the expected array-of-processes, so the caller can fall back rather than conclude "no". */
 export function namedInDump(raw: string, appName: string): boolean | null {
@@ -303,6 +337,7 @@ export function detectBootPersistence(
       dumpContainsApp,
       dumpHasBackoff,
       unitLoaded: detectUnitLoaded(platform),
+      isWsl: detectWsl(platform),
     })
   } catch (err) {
     return {

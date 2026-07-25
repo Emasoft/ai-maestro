@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest'
 import {
   evaluateBootPersistence,
   looksLikePm2Unit,
+  detectWsl,
   namedInDump,
   dumpPolicyCarriesBackoff,
   unitSearchDirs,
@@ -165,6 +166,43 @@ describe('boot-persistence — dump content is matched on the entry NAME', () =>
   it('returns null (not false) on an unparseable dump so the caller can fall back', () => {
     expect(namedInDump('not json at all', 'ai-maestro')).toBeNull()
     expect(namedInDump('{"processes":[]}', 'ai-maestro')).toBeNull() // shape changed across versions
+  })
+})
+
+describe('boot-persistence — WSL is Linux to Node and NOT Linux to the boot process', () => {
+  it('a WSL host is reported as NOT surviving, however healthy its systemd unit looks', () => {
+    // The trap: `pm2 startup` installs a valid systemd unit inside the distro, so every in-distro
+    // check passes — while Windows never boots the distro, so the unit never runs.
+    const v = evaluateBootPersistence({ ...healthy, platform: 'linux', isWsl: true })
+    expect(v.status).toBe('wsl-needs-windows-trigger')
+    expect(v.willSurviveReboot).toBe(false)
+  })
+
+  it('names the WINDOWS-side fix, because that is where the trigger has to live', () => {
+    const v = evaluateBootPersistence({ ...healthy, platform: 'linux', isWsl: true })
+    expect(v.message).toContain('wsl.exe')
+    expect(v.message).toMatch(/Task Scheduler|wsl\.conf/)
+  })
+
+  it('WSL outranks every other finding — an unloaded unit is moot if nothing starts the distro', () => {
+    const v = evaluateBootPersistence({
+      ...healthy,
+      platform: 'linux',
+      isWsl: true,
+      unitFileNames: [],
+      dumpExists: false,
+    })
+    expect(v.status).toBe('wsl-needs-windows-trigger')
+  })
+
+  it('a plain Linux host is NOT nagged about Windows', () => {
+    const v = evaluateBootPersistence({ ...healthy, platform: 'linux', isWsl: false })
+    expect(v.status).toBe('ok')
+    expect(v.message).toContain('systemd unit')
+  })
+
+  it('detectWsl never claims WSL on macOS', () => {
+    expect(detectWsl('darwin')).toBe(false)
   })
 })
 

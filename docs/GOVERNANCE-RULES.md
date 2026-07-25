@@ -1681,13 +1681,38 @@ system is valid" are different claims; only the second one may be reported as su
 The button does not implement the operation; it calls the endpoint. There is no UI-only path and no
 API-only path.
 
-**R50.4 — Manual invocation uses the SAME command with the SAME authentication.** When the UI is
-unavailable (a stopped scenario, a headless host), the operation may be invoked directly — but only
-through that same endpoint, at the same authorization level, with a valid signed token passed to
-it. Reaching around the endpoint to call the service function in-process is a DEVIATION: it
-performs the same steps while skipping the authentication the endpoint exists to enforce. It is
-permitted only when no authenticated path exists yet, and every such invocation is recorded with
-what authorized it.
+**R50.4 — Manual invocation uses the SAME endpoint with the SAME authentication. Bypassing it is
+FORBIDDEN.** (USER, 2026-07-26 — this clause previously called an in-process bypass a "recorded
+deviation, permitted when no authenticated path exists yet". That was wrong and is superseded: it
+licensed exactly the practice that corrupts the system.)
+
+When the UI is unavailable (a stopped scenario, a headless host), the operation is invoked through
+**that same API endpoint, at the same authorization level, with a valid signed token passed to it**.
+Nothing else is an invocation of the operation.
+
+**Creating, renaming, changing, assigning, deleting, configuring, or migrating an agent by any other
+means — a CLI script, an in-process call to the service function, a direct store write — is
+ABSOLUTELY FORBIDDEN.** Not discouraged, not a deviation to log. Forbidden, because it does not
+merely skip a permission check:
+
+- **It punches holes in the ledger.** The operation sequence is the audit trail AND the restore
+  substrate. An unrecorded mutation makes the ledger a description of a system that no longer
+  exists, and state-restore silently reconstructs the wrong thing. (Worse in a short-lived process:
+  `emitAgentOp` does not await its append, so a CLI that exits can drop even the entries it tried
+  to write.)
+- **It makes recovery impossible.** No ledger entry means no cemetery archive, no rollback point,
+  nothing to reconstruct from.
+- **It compromises security.** The signed token is the authorization; skipping the endpoint is
+  performing a privileged operation with no proof of authority, and the audit record that would
+  show who did it is the same record that was skipped.
+- **It leaves the system invalid in ways nobody sees until later** — agents with conflicting titles
+  and role-plugins, missing rules in their workdirs, stale configuration, wrong names, references to
+  teams or GitHub projects that no longer exist, lost AMP messages, invalid launch-string args.
+
+**If no authenticated non-UI path exists, that is a BLOCKING GAP to fix, not a licence to bypass.**
+The correct response is to build the authenticated path (ai-maestro#55), or to wait for the UI —
+never to reach around the endpoint. An operation you cannot perform through its endpoint is an
+operation you do not perform.
 
 **R50.5 — Store primitives are private to the pipeline.** Low-level mutators
 (`lib/agent-registry.ts::createAgent/deleteAgent/renameAgent/deleteAgentBySession`, direct

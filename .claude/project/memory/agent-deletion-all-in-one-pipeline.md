@@ -1,8 +1,8 @@
 ---
 name: agent-deletion-all-in-one-pipeline
-description: "I deleted an agent but its folder keeps coming back / rm -rf the workdir and it reappears with a bare .claude/rules / leftover agent after cleanup / how do I fully delete an agent"
+description: "I deleted an agent but its folder keeps coming back / rm -rf the workdir and it reappears with a bare .claude/rules / leftover agent after cleanup / how do I fully delete an agent / can I just call the service function from a script instead of the UI"
 ocd: 2026-07-25
-lmd: 2026-07-25
+lmd: 2026-07-26
 metadata:
   node_type: memory
   type: project
@@ -22,8 +22,13 @@ to loops that will act on the agent afterwards. The folder is the one visible pi
 one people reach for — and it is the least load-bearing.
 
 **How to apply:**
-- Always delete through the pipeline. Check "Also delete agent folder"; then purge the Cemetery
-  entry (Settings → Cemetery), or the artifact has merely moved.
+- **Through the UI button, or through the same API endpoint with a valid signed token — nothing
+  else.** Calling `DeleteAgent` (or any pipeline) in-process from a script is FORBIDDEN under
+  **R50.4**, not a shortcut: it performs the operation with no authorization proof and outside the
+  audit path. If no authenticated non-UI path exists, that is a blocking gap to fix (ai-maestro#55),
+  never a licence to bypass. [^4]
+- Check "Also delete agent folder"; then purge the Cemetery entry (Settings → Cemetery), or the
+  artifact has merely moved.
 - **HARD vs SOFT matters:** `deleteFolder` is honored only on a hard delete. On a soft delete the
   flag is silently inert and the pipeline still reports success — a soft delete leaves a tombstone
   (`deletedAt`) in the registry and the folder on disk, by design.
@@ -59,3 +64,20 @@ Related: [[ui-test-cleanup-rule]] (the scenario-side obligation),
   checked. DO verify by ABSENCE across all five: `ls ~/agents/`, `tmux list-sessions`,
   `jq -r '.[].name' ~/.aimaestro/agents/registry.json`, `jq -r '.[].id' ~/.aimaestro/sessions.json`,
   `ls ~/.aimaestro/cemetery/`.
+
+[^4]: [id:ATOM-3PX9-H7VK, status:valid, keywords:"call_the_service_function_from_a_script sudo_gated_route_no_cli_path in_process_pipeline_invocation ledger_hole forbidden_bypass R50.4", ocd:2026-07-26, lmd:2026-07-26]
+  DO NOT invoke a pipeline in-process from a script because the HTTP route is sudo-gated and the
+  script layer has no human auth path, BECAUSE that is not "the same operation minus a permission
+  check" — it performs a privileged mutation with no proof of authority and outside the audit path,
+  and the record that would show who did it is the same one skipped. I did this for 29 agent
+  deletions and 69 direct `unpersistSession` calls; the agent ops happened to reach the ledger, the
+  session-store mutations left no trace at all. DO use the UI button, or the same endpoint with a
+  valid signed token; if no authenticated path exists, treat it as a BLOCKING gap (ai-maestro#55).
+
+[^5]: [id:ATOM-5QW2-M8BT, status:valid, keywords:"emitAgentOp_not_awaited ledger_append_fire_and_forget process_exit_drops_audit_entry short_lived_cli", ocd:2026-07-26, lmd:2026-07-26]
+  DO NOT assume an operation that "emits to the ledger" is durably recorded when you run it from a
+  short-lived process, BECAUSE `emitAgentOp` calls `registryLedger.append(...)` WITHOUT awaiting it
+  (only a `.catch()` is attached), so a script that reaches `process.exit(0)` can drop an in-flight
+  append and the audit entry is simply never written. DO run the operation inside the long-lived
+  server via its endpoint — which is the same conclusion R50.4 reaches from the security side, and
+  the two together are why the CLI path is unsafe in principle, not only by policy.

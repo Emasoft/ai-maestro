@@ -17,7 +17,7 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-07-25T23:45:05+0200
 relevant-rules: []
-implementation-commits: [PENDING]
+implementation-commits: [bb746e64]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-25

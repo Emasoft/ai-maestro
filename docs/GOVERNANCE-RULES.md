@@ -1,5 +1,5 @@
 ---
-version: "4.9.0"
+version: "5.0.0"
 date: 2026-07-22
 branch: governance-rules
 changelog:
@@ -1724,3 +1724,44 @@ one store had no owner in the pipeline.
 **Enforcement.** `tests/unit/all-in-one-single-path.test.ts` pins the known bypass set; a NEW
 bypass fails the build, and the list may only shrink. Convergence of the existing bypasses is
 tracked in TRDD-YB4T4RTL.
+
+## R51. All-Or-Nothing — An All-In-One Function Is a TRANSACTION (CRITICAL — IRON, USER-set)
+
+**An all-in-one function NEVER leaves the system in an invalid state. There is no reporting
+option.** (USER, 2026-07-26 — this supersedes the "detect and report the residue" contract of
+TRDD-KERM18NX, which allowed an operation to return `incomplete` and leave a partial state behind.
+Reporting an invalid state is not an alternative to preventing one.)
+
+**R51.1 — Any gate failure aborts the whole operation.** If even ONE gate fails to execute
+successfully, the function immediately stops and REVERTS. It does not continue to the next gate, and
+it does not "WARN and carry on".
+
+**R51.2 — Revert backwards, one gate at a time, completely.** The already-executed gates are undone
+in REVERSE order — last executed, first reverted — until the system is returned to the EXACT state
+it was in when the function was called. No trace of any change is left behind.
+
+**R51.3 — The return value states the failure and the no-op.** On abort the function returns:
+`THE COMMAND FAILED TO ACCOMPLISH THE REQUESTED OPERATION BECAUSE GATE NUMBER <N> FAILED, SO NO
+CHANGES WERE MADE TO THE SYSTEM.`
+
+**R51.4 — Every mutating gate declares its compensation.** A gate that changes state MUST ship the
+undo that reverses it, written at the same time as the gate. A gate with no compensation may only be
+one that changes nothing (validation, authorization, a read). "Unrevertable" is not a property of an
+operation — it is a missing archive: `DeleteAgent` can be undone precisely because it writes the
+cemetery archive BEFORE it touches anything. Where an undo needs a snapshot, the gate takes the
+snapshot as part of its own execution.
+
+**R51.5 — A failed compensation is a CRITICAL incident, never a silent "no changes".** If a rollback
+step itself fails, the system IS in an invalid state, and the function MUST say exactly that —
+naming every gate that could not be reverted. It must NOT emit the R51.3 no-op message, because that
+message is a factual claim about the system and it would be false. This is not an escape hatch from
+R51.1: it is the refusal to lie about the one case where the guarantee could not be met.
+
+**R51.6 — Ordering follows from this.** Gates are ordered so that irreversible or outward-facing
+effects (deleting a remote repo, sending a message, killing a process) come LAST, after everything
+revertible has already succeeded. An irreversible effect placed early makes every later gate's
+failure unrecoverable by construction.
+
+**Enforcement.** `lib/gate-transaction.ts` provides the runner; `tests/unit/gate-transaction.test.ts`
+proves reverse-order compensation, the exact R51.3 message, and the R51.5 refusal. Retrofitting the
+existing pipelines is tracked in TRDD-DQ6XN2VP.

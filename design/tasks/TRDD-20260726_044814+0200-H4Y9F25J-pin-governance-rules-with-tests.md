@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW]
 npt: []
-implementation-commits: [7bec032e, 2298646a]
+implementation-commits: [7bec032e, 2298646a, 59893d08]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
@@ -79,6 +79,19 @@ pinning test for it **passed with the fix neutered**, i.e. pinned nothing; caugh
 neuter check. Worth carrying forward: the neuter check is not a formality for the sub-agents, it is
 the whole method, and it catches the orchestrator too.
 
+**BATCH 3 LANDED (`59893d08`) — debt 101 → 88.** All 13 of R6 pinned, 96 tests. Two caveats
+recorded rather than glossed, and both became TRDDs: **R6.8 is pinned at LAYER 1 only** (its other
+two layers are prompt-level, in the role-plugin repos, with no server surface), and **R6.10 is
+pinned at the WEAK contract the code actually has** — any truthy `inReplyToMessageId` unlocks a
+reply-only edge, repeatedly, unverified. Writing the stronger test and then editing production to
+pass it would have been a governance change smuggled in by a test batch, so it is
+**TRDD-VLBVO0ZP** instead. **TRDD-2XV78BND** carries two text-vs-code disagreements where the CODE
+is right and the TEXT is stale — the dangerous direction.
+
+**RUNNING TALLY OF MAP DEFECTS (3 batches): 8 citations naming the WRONG guard, 8 imprecise ranges,
+6 enforcement sites never recorded at all.** That is the map's steady state, not a run of bad luck —
+so a citation is evidence only once someone has executed it.
+
 NEXT ACTION: continue the batches (below). One sub-agent at a time (USER spawn rule), tests only.
 
 ## The batch plan
@@ -89,7 +102,7 @@ Each batch is one sub-agent, one new file under `tests/governance/`, disjoint ru
 |---|---|---|---|
 | 1 | R17 core-plugin + R11 title-plugin binding | 22 | **landed — 17 pinned, 2 no-seam, `7bec032e`** |
 | 2 | R9 manager requirement + R3 role hierarchy | 17 | **landed — 16 pinned, 1 no-seam, `2298646a`** |
-| 3 | R6 communication graph | 13 | pending |
+| 3 | R6 communication graph | 13 | **landed — 13/13 pinned, `59893d08`** |
 | 4 | R20 marketplace governance | 23 | pending |
 | 5 | R18 client-change continuity + R5 transfers | 15 | pending |
 | 6 | the remainder (R1, R4, R7, R8, R10, R39, …) | ~44 | pending |
@@ -140,7 +153,7 @@ Each is worth more than a test, and none is fixed by the batch that finds it:
 
 - [x] Batch 1 — R17 + R11 (22 → 17 pinned; R17.17/R17.20 blocked on a `server.mjs` seam)
 - [x] Batch 2 — R9 + R3 (17 → 16 pinned; R9.9 blocked on the same `server.mjs` seam)
-- [ ] Batch 3 — R6 (13)
+- [x] Batch 3 — R6 (13/13 pinned; 2 caveats filed as TRDD-VLBVO0ZP + TRDD-2XV78BND)
 - [ ] Batch 4 — R20 (23)
 - [ ] Batch 5 — R18 + R5 (15)
 - [ ] Batch 6 — the remainder (~44)

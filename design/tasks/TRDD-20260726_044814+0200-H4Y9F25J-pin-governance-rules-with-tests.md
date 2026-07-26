@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-26T08:41:00+0200
+updated: 2026-07-26T09:45:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW]
 npt: []
-implementation-commits: [7bec032e]
+implementation-commits: [7bec032e, 2298646a]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
@@ -61,6 +61,24 @@ by R51.9, documentation.
 fix is a PARTIAL mock of `@/lib/ecosystem-constants` overriding the path FUNCTIONS
 (`importOriginal`, spread `...actual`) — never the `os` module.
 
+**BATCH 2 LANDED (`2298646a`) — debt 117 → 101.** 16 of 17 pinned. Three things it settled:
+
+- **Wrong map citations are a PROPERTY of the map, not an accident.** Batch 1 found 2; batch 2 found
+  **6 pointing at an entirely different guard** plus 4 off-by-a-few, and recorded 4 second
+  enforcement sites the map never listed. Two batches, same finding ⇒ assume every unverified
+  citation is suspect until executed.
+- **R9.9 is the THIRD rule blocked on one missing `server.mjs` seam** (with R17.17/R17.20). That
+  makes TRDD-L42SKUBW structural rather than a tidy-up.
+- **An absence-invariant is still pinnable** — run the proof backwards. R9.12 forbids a filter, so
+  there is nothing to delete; it is pinned by ADDING the forbidden filter and watching it fail.
+
+**Verification found a real production bug (TRDD-F4UUM8RZ, `62b5e58d`).** The full suite failed
+once on an unrelated file; `stopAgentInvariantsWatchdog()` stopped the schedule but not the sweep,
+so a stop could be followed by a writer re-creating files — the re-appearing-workdir class. My first
+pinning test for it **passed with the fix neutered**, i.e. pinned nothing; caught only by the
+neuter check. Worth carrying forward: the neuter check is not a formality for the sub-agents, it is
+the whole method, and it catches the orchestrator too.
+
 NEXT ACTION: continue the batches (below). One sub-agent at a time (USER spawn rule), tests only.
 
 ## The batch plan
@@ -70,7 +88,7 @@ Each batch is one sub-agent, one new file under `tests/governance/`, disjoint ru
 | Batch | Rules | Untested sub-rules | Status |
 |---|---|---|---|
 | 1 | R17 core-plugin + R11 title-plugin binding | 22 | **landed — 17 pinned, 2 no-seam, `7bec032e`** |
-| 2 | R9 manager requirement + R3 role hierarchy | 17 | dispatched |
+| 2 | R9 manager requirement + R3 role hierarchy | 17 | **landed — 16 pinned, 1 no-seam, `2298646a`** |
 | 3 | R6 communication graph | 13 | pending |
 | 4 | R20 marketplace governance | 23 | pending |
 | 5 | R18 client-change continuity + R5 transfers | 15 | pending |
@@ -121,7 +139,7 @@ Each is worth more than a test, and none is fixed by the batch that finds it:
 ## Acceptance
 
 - [x] Batch 1 — R17 + R11 (22 → 17 pinned; R17.17/R17.20 blocked on a `server.mjs` seam)
-- [ ] Batch 2 — R9 + R3 (17)
+- [x] Batch 2 — R9 + R3 (17 → 16 pinned; R9.9 blocked on the same `server.mjs` seam)
 - [ ] Batch 3 — R6 (13)
 - [ ] Batch 4 — R20 (23)
 - [ ] Batch 5 — R18 + R5 (15)

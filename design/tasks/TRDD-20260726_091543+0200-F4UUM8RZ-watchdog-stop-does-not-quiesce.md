@@ -3,9 +3,9 @@ trdd-id: F4UUM8RZ
 title: stopAgentInvariantsWatchdog stops the schedule but not the sweep
 scope: project
 project-id: ai-maestro
-column: dev
+column: complete
 created: 2026-07-26T09:15:43+0200
-updated: 2026-07-26T09:15:43+0200
+updated: 2026-07-26T09:41:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [62b5e58d]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
@@ -32,8 +32,16 @@ fails under full-suite load, which is the signature of a race rather than a logi
 
 The race is real and it is in PRODUCTION code, not in the test.
 
-NEXT ACTION: make `stopAgentInvariantsWatchdog()` return a promise that resolves when the
-in-flight sweep has finished, and have the sweep check a stop flag between agents.
+**LANDED `62b5e58d`.** `stop()` now returns `Promise<void>` resolving once the in-flight sweep has
+settled, and the sweep checks a `stopping` flag between agents.
+
+**The lesson worth more than the fix.** My FIRST version of the pinning test was worthless: a
+one-agent fleet made the post-stop window a single file-write wide, so it passed identically with
+and without the fix. I caught it only by running it against a neutered guard — the same check this
+whole TRDD-H4Y9F25J program is built on, reproduced against my own work while doing that program.
+A test that cannot fail is worse than no test, because it reports coverage. The replacement sweeps
+a 40-agent fleet and carries a non-vacuity assertion; proven RED against HEAD's original code
+(`expected 7 to be 1` — one workdir seeded at stop, seven 300 ms later).
 
 ## Problem
 
@@ -106,12 +114,13 @@ caller. The behaviour change is strictly "stop now also means the work has stopp
 
 ## Acceptance
 
-- [ ] `stopAgentInvariantsWatchdog()` returns a promise that resolves only after the in-flight
+- [x] `stopAgentInvariantsWatchdog()` returns a promise that resolves only after the in-flight
       sweep has settled
-- [ ] The sweep checks a stop flag between agents
-- [ ] The test's `afterEach` awaits it
-- [ ] A test pins the quiesce contract itself, not just the absence of the flake
-- [ ] tsc clean; full suite green on repeated runs
+- [x] The sweep checks a stop flag between agents
+- [x] The test's `afterEach` awaits it
+- [x] A test pins the quiesce contract itself, not just the absence of the flake — and is proven
+      RED against HEAD's original code
+- [x] tsc clean; full suite 246 files / 3562 tests green on two consecutive runs
 
 ## Approval log
 

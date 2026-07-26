@@ -40,17 +40,17 @@ Row format is fixed so a regex parses each line:
 | R2.2 | ENFORCED | lib/team-registry.ts:107 | — |
 | R2.3 | ENFORCED | lib/team-registry.ts:107 | — |
 | R3.1 | CONTRADICTED | — | — |
-| R3.2 | ENFORCED | services/element-management-service.ts:2249-2256 | — |
-| R3.3 | ENFORCED | services/element-management-service.ts:2304-2309 | — |
-| R3.4 | ENFORCED | lib/team-registry.ts:133-138 | — |
-| R3.5 | ENFORCED | services/governance-service.ts:66-83 | — |
+| R3.2 | ENFORCED | services/element-management-service.ts:2291-2303 | tests/governance/r3-r9-team-governance.test.ts |
+| R3.3 | ENFORCED | services/element-management-service.ts:2338-2354 | tests/governance/r3-r9-team-governance.test.ts |
+| R3.4 | ENFORCED | lib/team-registry.ts:131-138 | tests/governance/r3-r9-team-governance.test.ts |
+| R3.5 | ENFORCED | services/governance-service.ts:66-83 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.6 | ENFORCED | lib/authorization.ts:321-326 | tests/unit/headless-router-auth-mirror.test.ts |
-| R3.7 | ENFORCED | lib/communication-graph.ts:98 | — |
+| R3.7 | ENFORCED | lib/communication-graph.ts:98, lib/communication-graph.ts:97 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.8 | CONTRADICTED | — | — |
-| R3.9 | ENFORCED | lib/authorization.ts:285 | — |
+| R3.9 | ENFORCED | lib/authorization.ts:285, lib/authorization.ts:527 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.10 | UNENFORCED | — | — |
 | R3.11 | CONTRADICTED | — | — |
-| R3.12 | ENFORCED | app/api/teams/[id]/route.ts:115 | — |
+| R3.12 | ENFORCED | app/api/teams/[id]/route.ts:115, services/teams-service.ts:577 | tests/governance/r3-r9-team-governance.test.ts |
 | R4.1 | ENFORCED | lib/team-registry.ts:158-176 | — |
 | R4.2 | ENFORCED | lib/group-registry.ts | — |
 | R4.3 | CONTRADICTED | — | — |
@@ -97,18 +97,18 @@ Row format is fixed so a regex parses each line:
 | R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |
 | R8.3 | ENFORCED | services/element-management-service.ts:6183-6205 | — |
 | R8.4 | ENFORCED | lib/authorization.ts:580-592 | — |
-| R9.1 | ENFORCED | services/teams-service.ts:279-282 | — |
-| R9.2 | ENFORCED | services/element-management-service.ts:2419-2431 | — |
+| R9.1 | ENFORCED | services/teams-service.ts:279-282 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.2 | ENFORCED | services/element-management-service.ts:2461-2474 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.3 | CONTRADICTED | — | — |
-| R9.4 | ENFORCED | lib/team-registry.ts:451-501 | — |
-| R9.5 | ENFORCED | services/agents-core-service.ts:2019-2028 | — |
-| R9.6 | ENFORCED | services/element-management-service.ts:2497-2515 | — |
-| R9.7 | ENFORCED | lib/team-registry.ts:518-534 | — |
-| R9.8 | ENFORCED | services/element-management-service.ts:6392-6415 | — |
-| R9.9 | ENFORCED | server.mjs:1693-1699 | — |
+| R9.4 | ENFORCED | lib/team-registry.ts:472-501 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.5 | ENFORCED | services/agents-core-service.ts:2045-2054 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.6 | ENFORCED | services/element-management-service.ts:2539-2554 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.7 | ENFORCED | lib/team-registry.ts:518-534 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.8 | ENFORCED | services/element-management-service.ts:6442-6465 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.9 | ENFORCED | server.mjs:1750-1764 | — |
 | R9.10 | UNENFORCED | — | — |
-| R9.11 | ENFORCED | services/teams-service.ts:284-290 | — |
-| R9.12 | ENFORCED | app/api/agents/route.ts | — |
+| R9.11 | ENFORCED | services/teams-service.ts:285-291 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.12 | ENFORCED | services/agents-core-service.ts:417, app/api/agents/route.ts | tests/governance/r3-r9-team-governance.test.ts |
 | R9.13 | CONTRADICTED | — | — |
 | R10.1 | ENFORCED | services/agents-core-service.ts:2003-2017 | — |
 | R10.2 | CONTRADICTED | — | — |

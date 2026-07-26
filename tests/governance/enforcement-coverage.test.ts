@@ -74,8 +74,22 @@ const UNAUDITED_RULES = new Set<number>([
 // 21/22/23) in tests/governance/r17-r11-core-plugin-binding.test.ts — 134 → 117. R17.17 and R17.20
 // were NOT pinned and are deliberately still counted: both guards are real, but they sit inline in
 // server.mjs's `startServer`, which binds sockets on import, so there is no seam to call. Counting
-// them as debt is the honest record — extracting the seam is the work that clears them.
-const MAX_ENFORCED_WITHOUT_TEST = 117
+// them as debt is the honest record — extracting the seam is the work that clears them
+// (TRDD-L42SKUBW).
+//
+// 2026-07-26: batch 2 pinned 16 more (R3.2/3/4/5/7/9/12 + R9.1/2/4/5/6/7/8/11/12) in
+// tests/governance/r3-r9-team-governance.test.ts — 117 → 101. R9.9 is the batch's one non-pin, and
+// it is the SAME defect as R17.17/R17.20: the guard is real (server.mjs:1750-1764) but lives inside
+// the `server.listen` callback of the un-exported startServer() IIFE. Three rules now blocked on one
+// missing seam is no longer a coincidence — it is a structural property of server.mjs, and
+// TRDD-L42SKUBW is where it gets fixed.
+//
+// One nuance worth keeping, because it will recur: R9.12's "guard" is an ABSENCE (`listAgents`
+// filters on `!a.deletedAt` and nothing else), so "delete the guard → the test fails" has nothing to
+// delete. It is pinned in the inverse direction — ADD the forbidden governance filter and the test
+// fails — and was proven that way. An absence-invariant is still pinnable; it just needs the proof
+// run backwards, and saying so beats quietly counting it as though it were an ordinary guard.
+const MAX_ENFORCED_WITHOUT_TEST = 101
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

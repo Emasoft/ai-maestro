@@ -1,0 +1,1118 @@
+/**
+ * Governance drift tests — R3 (Manager / Chief-of-Staff structure) + R9
+ * (Manager-gated team governance) sub-rules that already have a REAL code guard
+ * but were never pinned by any test (docs/GOVERNANCE-ENFORCEMENT-MAP.md rows
+ * R3.2, R3.3, R3.4, R3.5, R3.7, R3.9, R3.12, R9.1, R9.2, R9.4, R9.5, R9.6,
+ * R9.7, R9.8, R9.11, R9.12).
+ *
+ * Every test below calls the REAL exported function that implements the rule
+ * (never a re-implementation, never the guard's own module mocked away) and
+ * asserts the REFUSAL / real behavior the guard produces. If the guard is
+ * deleted, weakened, or its wiring is changed, the corresponding test fails.
+ *
+ * Mocking policy in this file:
+ *   - ENVIRONMENT is mocked: $HOME-derived state paths, agent registry,
+ *     governance store, tmux/child_process, network broadcast.
+ *   - GUARDS are never mocked. `@/lib/team-registry` and `@/services/teams-service`
+ *     are PARTIAL mocks built with importOriginal(): every implementation stays
+ *     real; three functions are additionally wrapped in vi.fn() so a CALL SITE in
+ *     another module can be observed while the real body still runs.
+ *
+ * Out of scope for this file (see the accompanying report for why):
+ *   - R9.9 — the startup manager-gate lives inside server.mjs's
+ *     `server.listen(...)` callback in the monolithic, un-exported startServer()
+ *     async IIFE. Importing server.mjs binds a real socket and starts tmux
+ *     discovery; there is no independently-callable seam and extracting one
+ *     would be a production change (out of scope for a tests-only batch).
+ */
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
+import { rmSync, mkdirSync, writeFileSync, readFileSync } from 'fs'
+import path from 'path'
+
+// Vitest's 5s default is a COLD-START trap for this file, not a generous budget.
+// services/element-management-service.ts is ~6,500 lines and pulls in a large
+// transitive graph; the FIRST test that awaits `import(...)` of it pays the whole
+// transform+load cost, which exceeds 5s on a cold vite cache or a loaded machine.
+// That surfaced as a ~1-in-25 "Test timed out in 5000ms" on whichever test
+// happened to be first — a pure infrastructure flake with nothing to do with the
+// guard under test. The warm steady state is ~1.5s for all 36 tests. Raising the
+// budget removes the false failure without weakening a single assertion; the
+// beforeAll below additionally pays the import cost ONCE, in a hook, so no
+// individual test carries it.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 })
+
+// ============================================================================
+// Hoisted fake state dir.
+//
+// lib/team-registry.ts evaluates `const AIMAESTRO_DIR = getStateDir()` at
+// MODULE level (line ~204), so the ecosystem-constants override must be in
+// place before that module is first imported anywhere. vi.hoisted() runs before
+// vi.mock() factories AND before this file's own static imports.
+// ============================================================================
+const FAKE_STATE = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fsSync = require('fs')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const osSync = require('os')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pathSync = require('path')
+  const root = fsSync.mkdtempSync(pathSync.join(osSync.tmpdir(), 'r3-r9-state-'))
+  fsSync.mkdirSync(pathSync.join(root, 'teams'), { recursive: true })
+  fsSync.mkdirSync(pathSync.join(root, 'agents'), { recursive: true })
+  return root
+})
+
+const FAKE_HOME = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fsSync = require('fs')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const osSync = require('os')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pathSync = require('path')
+  return fsSync.mkdtempSync(pathSync.join(osSync.tmpdir(), 'r3-r9-home-'))
+})
+
+// 0-IMPACT (hard constraint). lib/ecosystem-constants.ts derives BOTH the
+// ~/.aimaestro state dir and the ~/agents/{role,custom,core}-plugins containers
+// from homedir(). A `vi.mock('os', ...)` does NOT reliably redirect those —
+// several of these helpers resolve homedir() through a runtime require('os')
+// inside the function body, which the module mock does not intercept (proved
+// the hard way in the R17/R11 batch, which wrote real folders under the
+// developer's actual ~/agents/ before this override was added). Overriding the
+// PATH FUNCTIONS themselves closes the gap regardless of how homedir() is
+// resolved internally. Every other export (MARKETPLACE_NAME, TITLE_PLUGIN_MAP,
+// ROLE_PLUGIN_*, ...) stays real via the `...actual` spread, so nothing the
+// guards under test read is altered.
+vi.mock('@/lib/ecosystem-constants', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/ecosystem-constants')>()
+  const p = await import('path')
+  const agentsBase = p.join(FAKE_HOME, 'agents')
+  return {
+    ...actual,
+    getStateDir: () => FAKE_STATE,
+    statePath: (...segments: string[]) => p.join(FAKE_STATE, ...segments),
+    getCustomPluginsContainerPath: () => p.join(agentsBase, 'custom-plugins'),
+    getRolePluginsContainerPath: () => p.join(agentsBase, 'role-plugins'),
+    getCorePluginsContainerPath: () => p.join(agentsBase, 'core-plugins'),
+    getCustomAbstractDir: () => p.join(agentsBase, 'custom-plugins', '.abstract'),
+    getRoleAbstractDir: () => p.join(agentsBase, 'role-plugins', '.abstract'),
+    getCoreAbstractDir: () => p.join(agentsBase, 'core-plugins', '.abstract'),
+    getCustomMarketplacePathForClient: (client: string) =>
+      p.join(agentsBase, 'custom-plugins', client === 'claude' ? 'custom-marketplace' : `${client}-custom-marketplace`),
+    getRoleMarketplacePathForClient: (client: string) =>
+      p.join(agentsBase, 'role-plugins', client === 'claude' ? 'roles-marketplace' : `${client}-roles-marketplace`),
+    getCoreMarketplacePathForClient: (client: string) =>
+      p.join(agentsBase, 'core-plugins', `${client}-core-marketplace`),
+    getLocalMarketplacePath: () => p.join(agentsBase, 'role-plugins'),
+    getCustomMarketplacePath: () => p.join(agentsBase, 'custom-plugins'),
+  }
+})
+
+// ============================================================================
+// Environment mocks (none of these modules CONTAINS a guard pinned here).
+// ============================================================================
+const {
+  mockAgentRegistry,
+  mockGovernance,
+  mockExecFileCalls,
+  mockExecFileImpl,
+  mockRuntime,
+  mockAgentInvariants,
+  mockHostsConfig,
+  mockSessionPersistence,
+  mockAmpInboxWriter,
+  mockSharedState,
+  mockRolePluginService,
+  mockAgentLocalConfig,
+  mockUuid,
+} = vi.hoisted((): any => {
+  let uuidCounter = 0
+  const execFileCalls: Array<{ cmd: unknown; args: unknown }> = []
+  return {
+    mockAgentRegistry: {
+      getAgent: vi.fn(() => null),
+      loadAgents: vi.fn(() => []),
+      saveAgents: vi.fn(),
+      createAgent: vi.fn(),
+      getAgentByName: vi.fn(() => null),
+      getAgentBySession: vi.fn(() => null),
+      updateAgent: vi.fn(async () => undefined),
+      deleteAgent: vi.fn(() => true),
+      searchAgents: vi.fn(() => []),
+      linkSession: vi.fn(),
+      unlinkSession: vi.fn(),
+    },
+    mockGovernance: {
+      loadGovernance: vi.fn(() => ({ managerId: null, passwordHash: 'stored-hash' })),
+      saveGovernance: vi.fn(),
+      verifyPassword: vi.fn(async () => false),
+      setPassword: vi.fn(async () => undefined),
+      setUserName: vi.fn(async () => undefined),
+      setManager: vi.fn(async () => undefined),
+      removeManager: vi.fn(async () => undefined),
+      isManager: vi.fn(() => false),
+      getManagerId: vi.fn(() => null),
+      isChiefOfStaffAnywhere: vi.fn(() => false),
+      isUserAuthorityModelEnabled: vi.fn(() => false),
+    },
+    mockExecFileCalls: execFileCalls,
+    mockExecFileImpl: vi.fn(async (cmd: unknown, args: unknown) => {
+      execFileCalls.push({ cmd, args })
+      return { stdout: '', stderr: '' }
+    }),
+    mockRuntime: {
+      listSessions: vi.fn(async () => []),
+      sessionExists: vi.fn(async () => false),
+      createSession: vi.fn(async () => undefined),
+      killSession: vi.fn(async () => undefined),
+      renameSession: vi.fn(async () => undefined),
+      sendKeys: vi.fn(async () => undefined),
+      cancelCopyMode: vi.fn(async () => undefined),
+      setEnvironment: vi.fn(async () => undefined),
+      unsetEnvironment: vi.fn(async () => undefined),
+    },
+    mockAgentInvariants: {
+      enforceAgentInvariants: vi.fn(async () => ({
+        outcomes: [{ id: 'core-plugin', status: 'ok' }],
+        repaired: [],
+        failed: [],
+      })),
+      formatEnforceResult: vi.fn(() => null),
+    },
+    mockHostsConfig: {
+      getHosts: vi.fn(() => [{ id: 'test-host', name: 'Test Host', url: 'http://localhost:23000' }]),
+      getSelfHost: vi.fn(() => ({ id: 'test-host', name: 'Test Host', url: 'http://localhost:23000' })),
+      getSelfHostId: vi.fn(() => 'test-host'),
+      isSelf: vi.fn(() => true),
+    },
+    mockSessionPersistence: { persistSession: vi.fn(), unpersistSession: vi.fn() },
+    mockAmpInboxWriter: {
+      initAgentAMPHome: vi.fn(async () => undefined),
+      getAgentAMPDir: vi.fn(() => '/tmp/amp/r3-r9'),
+    },
+    mockSharedState: { sessionActivity: new Map<string, number>(), broadcastAgentUpdate: vi.fn() },
+    mockRolePluginService: {
+      installPluginLocally: vi.fn(async () => undefined),
+      uninstallPluginLocally: vi.fn(async () => undefined),
+      getPluginsForTitle: vi.fn(() => []),
+      ensureMarketplace: vi.fn(async () => undefined),
+      updateMarketplaceManifest: vi.fn(async () => undefined),
+      listRolePlugins: vi.fn(async () => []),
+    },
+    mockAgentLocalConfig: {
+      scanAgentLocalConfig: vi.fn(() => ({
+        data: {
+          plugins: [], skills: [], agents: [], commands: [], rules: [],
+          hooks: [], mcp: [], lsp: [], outputStyles: [], rolePlugin: null,
+        },
+        error: null,
+      })),
+    },
+    mockUuid: { v4: vi.fn(() => `uuid-${++uuidCounter}`) },
+  }
+})
+
+vi.mock('@/lib/agent-registry', () => mockAgentRegistry)
+vi.mock('@/lib/governance', () => mockGovernance)
+vi.mock('@/lib/agent-runtime', () => ({ getRuntime: vi.fn(() => mockRuntime) }))
+vi.mock('@/lib/agent-invariants', () => mockAgentInvariants)
+vi.mock('@/lib/hosts-config', () => mockHostsConfig)
+vi.mock('@/lib/session-persistence', () => mockSessionPersistence)
+vi.mock('@/lib/amp-inbox-writer', () => mockAmpInboxWriter)
+vi.mock('@/services/shared-state', () => mockSharedState)
+vi.mock('@/services/role-plugin-service', () => mockRolePluginService)
+vi.mock('@/services/agent-local-config-service', () => mockAgentLocalConfig)
+vi.mock('uuid', () => mockUuid)
+// Network fan-out to peer hosts — genuine external I/O, never a guard here.
+vi.mock('@/lib/governance-sync', () => ({
+  broadcastGovernanceSync: vi.fn(async () => undefined),
+}))
+vi.mock('@/lib/notification-service', () => ({
+  notifyAgent: vi.fn(async () => undefined),
+}))
+
+// NOTE — deliberately NOT mocking @/lib/agent-auth or @/lib/sudo-guard here.
+// Both were tried as file-wide partial mocks and both are traps: `lib/sudo-guard`
+// imports `./authorization`, which imports `./team-registry`, so its
+// importOriginal() factory races the team-registry partial mock below and can
+// leave the REAL, unwrapped team-registry bound for some importers — which
+// silently un-spies blockAllTeams/unblockAllTeams/updateTeam and made five
+// unrelated tests fail with "expected vi.fn() to be called at least once".
+// The R3.12 route test needs neither: an unauthenticated Request resolves to the
+// system-owner web path, and the strict-route gate is skipped for a body whose
+// only privileged field (chiefOfStaffId) the guard under test has already
+// stripped. Letting both run for real is simpler AND a stronger test.
+
+// child_process: preserve every real export, intercept only the three call
+// shapes the code under test uses (all of them genuine external-process I/O:
+// `tmux kill-session`, `claude plugin ...`).
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>()
+  return {
+    ...actual,
+    execFile: (...args: unknown[]) => {
+      const cb = args[args.length - 1] as (err: Error | null, r: { stdout: string; stderr: string }) => void
+      mockExecFileImpl(args[0], args[1])
+        .then((r: { stdout: string; stderr: string }) => cb(null, r))
+        .catch((err: Error) => cb(err, { stdout: '', stderr: '' }))
+    },
+    exec: (_cmd: string, cb: (err: Error | null, r: { stdout: string; stderr: string }) => void) =>
+      cb(null, { stdout: '', stderr: '' }),
+    execSync: () => { throw new Error('ENOENT (test double)') },
+  }
+})
+
+// ============================================================================
+// PARTIAL mocks — the implementation stays REAL (importOriginal + spread); only
+// a spy wrapper is added so a CALL SITE inside another module can be observed.
+// The guard bodies (blockAllTeams's hibernation loop, unblockAllTeams's
+// no-wake contract, updateTeam's write path) all still execute for real.
+// ============================================================================
+const { spyBlockAllTeams, spyUnblockAllTeams, spyUpdateTeam, spyUpdateTeamById } =
+  vi.hoisted((): any => ({
+    spyBlockAllTeams: vi.fn(),
+    spyUnblockAllTeams: vi.fn(),
+    spyUpdateTeam: vi.fn(),
+    spyUpdateTeamById: vi.fn(),
+  }))
+
+vi.mock('@/lib/team-registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/team-registry')>()
+  return {
+    ...actual,
+    blockAllTeams: (...a: []) => { spyBlockAllTeams(...a); return actual.blockAllTeams(...a) },
+    unblockAllTeams: (...a: []) => { spyUnblockAllTeams(...a); return actual.unblockAllTeams(...a) },
+    updateTeam: (...a: Parameters<typeof actual.updateTeam>) => {
+      spyUpdateTeam(...a)
+      return actual.updateTeam(...a)
+    },
+  }
+})
+
+vi.mock('@/services/teams-service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/teams-service')>()
+  return {
+    ...actual,
+    updateTeamById: (...a: Parameters<typeof actual.updateTeamById>) => {
+      spyUpdateTeamById(...a)
+      return actual.updateTeamById(...a)
+    },
+  }
+})
+
+// ============================================================================
+// Shared helpers
+// ============================================================================
+const OWNER_CTX = { isSystemOwner: true as const }
+const TEAMS_FILE = path.join(FAKE_STATE, 'teams', 'teams.json')
+
+/** One recorded external-process invocation (see the child_process mock above). */
+type ExecCall = { cmd: unknown; args: unknown }
+
+type SeedTeam = {
+  id: string
+  name: string
+  agentIds: string[]
+  chiefOfStaffId?: string | null
+  orchestratorId?: string | null
+  blocked?: boolean
+}
+
+/** Write teams.json directly — the REAL team-registry reads from this path. */
+function seedTeams(teams: SeedTeam[]): void {
+  mkdirSync(path.dirname(TEAMS_FILE), { recursive: true })
+  writeFileSync(
+    TEAMS_FILE,
+    JSON.stringify({
+      version: '1.0',
+      teams: teams.map(t => ({
+        type: 'closed',
+        description: '',
+        chiefOfStaffId: null,
+        orchestratorId: null,
+        blocked: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        ...t,
+      })),
+    }, null, 2),
+  )
+}
+
+function readTeamsFile(): SeedTeam[] {
+  return JSON.parse(readFileSync(TEAMS_FILE, 'utf-8')).teams
+}
+
+function makeAgentRecord(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'agent-a',
+    name: 'agent-a',
+    workingDirectory: path.join(FAKE_HOME, 'agents', 'agent-a'),
+    sessions: [],
+    hostId: 'test-host',
+    program: 'claude',
+    governanceTitle: null,
+    config: {},
+    status: 'active',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    lastActive: '2026-01-01T00:00:00.000Z',
+    ...over,
+  }
+}
+
+/** Register a fixed set of agent records with the mocked registry. */
+function seedAgents(agents: Array<Record<string, unknown>>): void {
+  mockAgentRegistry.loadAgents.mockReturnValue(agents)
+  mockAgentRegistry.getAgent.mockImplementation(
+    (id: string) => agents.find(a => a.id === id) ?? null,
+  )
+  mockAgentRegistry.getAgentByName.mockImplementation(
+    (n: string) => agents.find(a => a.name === n) ?? null,
+  )
+}
+
+// Pay the cold-start module-graph cost ONCE, in a hook, instead of billing it to
+// whichever test happens to import first (see the vi.setConfig note at the top).
+// SEQUENTIALLY, and with team-registry FIRST. Both details are load-bearing:
+// a Promise.all here races the partial-mock factories (several of these modules
+// transitively import team-registry), which non-deterministically binds the REAL
+// unwrapped module for some importers and silently un-spies
+// blockAllTeams/unblockAllTeams/updateTeam.
+beforeAll(async () => {
+  await import('@/lib/team-registry')
+  await import('@/lib/authorization')
+  await import('@/lib/communication-graph')
+  await import('@/services/element-management-service')
+  await import('@/services/agents-core-service')
+  await import('@/services/teams-service')
+  await import('@/services/governance-service')
+})
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockExecFileCalls.length = 0
+  mockExecFileImpl.mockImplementation(async (cmd: unknown, args: unknown) => {
+    mockExecFileCalls.push({ cmd, args })
+    return { stdout: '', stderr: '' }
+  })
+  mockGovernance.getManagerId.mockReturnValue(null)
+  mockGovernance.isManager.mockReturnValue(false)
+  mockGovernance.isChiefOfStaffAnywhere.mockReturnValue(false)
+  mockGovernance.isUserAuthorityModelEnabled.mockReturnValue(false)
+  mockGovernance.loadGovernance.mockReturnValue({ managerId: null, passwordHash: 'stored-hash' })
+  mockGovernance.verifyPassword.mockResolvedValue(false)
+  mockAgentInvariants.enforceAgentInvariants.mockResolvedValue({
+    outcomes: [{ id: 'core-plugin', status: 'ok' }],
+    repaired: [],
+    failed: [],
+  })
+  mockRuntime.sessionExists.mockResolvedValue(false)
+  seedAgents([])
+  seedTeams([])
+})
+
+afterAll(() => {
+  rmSync(FAKE_STATE, { recursive: true, force: true })
+  rmSync(FAKE_HOME, { recursive: true, force: true })
+})
+
+// ============================================================================
+// R3.2 — MANAGER singleton (services/element-management-service.ts, ChangeTitle
+//        GATE 7, lines 2291-2303 — the enforcement map's 2249-2256 is stale;
+//        that range is GATE 3's R9.13 role-plugin check)
+// ============================================================================
+describe('R3.2 — only ONE agent may hold MANAGER (ChangeTitle GATE 7)', () => {
+  it('refuses to make a second agent MANAGER while another already holds the title — deleting GATE 7 lets two MANAGERs coexist and the whole manager-gated cascade (R9) loses its single owner', async () => {
+    seedAgents([
+      makeAgentRecord({ id: 'agent-a', name: 'agent-a' }),
+      makeAgentRecord({ id: 'agent-mgr', name: 'agent-mgr', governanceTitle: 'manager' }),
+    ])
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-a', 'manager', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/Only one MANAGER allowed/i)
+    expect(result.error).toContain('agent-mgr')
+    // The refusal happened AT gate 7, not incidentally later.
+    expect(result.operations.some(op => /G07: MANAGER singleton check passed/.test(op))).toBe(false)
+    expect(result.operations.some(op => /^G06:/.test(op))).toBe(true)
+  })
+
+  it('positive control — re-asserting MANAGER on the agent that ALREADY holds it passes GATE 7 (the singleton is "one", not "none")', async () => {
+    seedAgents([makeAgentRecord({ id: 'agent-mgr', name: 'agent-mgr', governanceTitle: null })])
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-mgr', 'manager', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    expect(result.error).not.toMatch(/Only one MANAGER allowed/i)
+    expect(result.operations.some(op => /G07: MANAGER singleton check passed/.test(op))).toBe(true)
+  })
+})
+
+// ============================================================================
+// R3.3 — COS is per-team and each team has exactly ONE
+//        (services/element-management-service.ts, ChangeTitle GATE 8)
+// ============================================================================
+describe('R3.3 — one CHIEF-OF-STAFF per team (ChangeTitle GATE 8)', () => {
+  it('refuses CHIEF-OF-STAFF for a second agent in a team that already has one — deleting GATE 8 lets the UI check be bypassed by any direct API PATCH, giving a team two gateways', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-a', 'agent-cos'], chiefOfStaffId: 'agent-cos' }])
+    seedAgents([
+      makeAgentRecord({ id: 'agent-a', name: 'agent-a', governanceTitle: 'member' }),
+      makeAgentRecord({ id: 'agent-cos', name: 'agent-cos', governanceTitle: 'chief-of-staff' }),
+    ])
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-a', 'chief-of-staff', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/Only one Chief-of-Staff is allowed per team/i)
+    expect(
+      result.operations.some(op => /G08: DENIED — CHIEF-OF-STAFF singleton already held by agent-cos/.test(op)),
+    ).toBe(true)
+  })
+
+  it('the same GATE 8 also refuses a second ORCHESTRATOR — the per-team singleton set is not COS-only', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-a', 'agent-orch'], chiefOfStaffId: 'agent-cos', orchestratorId: 'agent-orch' }])
+    seedAgents([
+      makeAgentRecord({ id: 'agent-a', name: 'agent-a', governanceTitle: 'member' }),
+      makeAgentRecord({ id: 'agent-orch', name: 'agent-orch', governanceTitle: 'orchestrator' }),
+    ])
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-a', 'orchestrator', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/Only one Orchestrator is allowed per team/i)
+    expect(
+      result.operations.some(op => /G08: DENIED — ORCHESTRATOR singleton already held by agent-orch/.test(op)),
+    ).toBe(true)
+  })
+
+  it('positive control — a team with a VACANT COS slot accepts the assignment (GATE 8 blocks a second COS, not the first)', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-a'], chiefOfStaffId: null }])
+    seedAgents([makeAgentRecord({ id: 'agent-a', name: 'agent-a', governanceTitle: 'member' })])
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-a', 'chief-of-staff', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    expect(result.error).not.toMatch(/Only one Chief-of-Staff/i)
+    expect(result.operations.some(op => /G08: CHIEF-OF-STAFF per-team singleton check passed/.test(op))).toBe(true)
+  })
+})
+
+// ============================================================================
+// R3.4 — an agent may be COS of ONE team only
+//        (lib/team-registry.ts validateTeamMutation, lines 132-138)
+// ============================================================================
+describe('R3.4 — an agent can be CHIEF-OF-STAFF of only ONE team (validateTeamMutation)', () => {
+  /** validateTeamMutation returns a discriminated union; widen it for assertions. */
+  type MutationVerdict = { valid: boolean; error?: string; code?: number }
+
+  it('refuses (409) assigning an agent as COS of team B while it is already COS of team A — deleting this check lets one agent become the gateway of every team at once', async () => {
+    const { validateTeamMutation } = await import('@/lib/team-registry')
+    const teams = [
+      { id: 'team-a', name: 'Team Alpha', type: 'closed', agentIds: ['cos-1'], chiefOfStaffId: 'cos-1', orchestratorId: null, description: '', createdAt: '', updatedAt: '' },
+      { id: 'team-b', name: 'Team Beta', type: 'closed', agentIds: ['other'], chiefOfStaffId: null, orchestratorId: null, description: '', createdAt: '', updatedAt: '' },
+    ] as unknown as import('@/types/team').Team[]
+
+    const res = validateTeamMutation(teams, 'team-b', { chiefOfStaffId: 'cos-1' }, null) as MutationVerdict
+
+    expect(res.valid).toBe(false)
+    expect(res.error).toMatch(/already Chief-of-Staff of team "Team Alpha"/)
+    expect(res.code).toBe(409)
+  })
+
+  it('the same check fires on CREATE (teamId = null), not only on update — a fresh team cannot steal another team\'s COS', async () => {
+    const { validateTeamMutation } = await import('@/lib/team-registry')
+    const teams = [
+      { id: 'team-a', name: 'Team Alpha', type: 'closed', agentIds: ['cos-1'], chiefOfStaffId: 'cos-1', orchestratorId: null, description: '', createdAt: '', updatedAt: '' },
+    ] as unknown as import('@/types/team').Team[]
+
+    const res = validateTeamMutation(teams, null, { name: 'Team Gamma', chiefOfStaffId: 'cos-1' }, null) as MutationVerdict
+
+    expect(res.valid).toBe(false)
+    expect(res.error).toMatch(/already Chief-of-Staff of team "Team Alpha"/)
+    expect(res.code).toBe(409)
+  })
+
+  it('positive control — re-asserting the SAME agent as COS of the SAME team is not a second-team conflict', async () => {
+    const { validateTeamMutation } = await import('@/lib/team-registry')
+    const teams = [
+      { id: 'team-a', name: 'Team Alpha', type: 'closed', agentIds: ['cos-1'], chiefOfStaffId: 'cos-1', orchestratorId: null, description: '', createdAt: '', updatedAt: '' },
+    ] as unknown as import('@/types/team').Team[]
+
+    const res = validateTeamMutation(teams, 'team-a', { chiefOfStaffId: 'cos-1' }, null) as MutationVerdict
+
+    expect(res.valid).toBe(true)
+    expect(res.error ?? '').not.toMatch(/already Chief-of-Staff/)
+  })
+})
+
+// ============================================================================
+// R3.5 — role changes require the governance password
+//        (services/governance-service.ts setManagerRole, lines 66-68 + 82-84)
+// ============================================================================
+describe('R3.5 — MANAGER role changes require the governance password (setManagerRole)', () => {
+  it('refuses with 400 when NO password is supplied — deleting this gate makes POST /api/governance/manager an unauthenticated title-grant endpoint', async () => {
+    const { setManagerRole } = await import('@/services/governance-service')
+    const res = await setManagerRole({ agentId: 'agent-a' })
+
+    expect(res.status).toBe(400)
+    expect(res.error).toBe('Governance password is required')
+    expect(mockGovernance.verifyPassword).not.toHaveBeenCalled()
+    expect(mockGovernance.setManager).not.toHaveBeenCalled()
+  })
+
+  it('refuses with 401 when the password is WRONG, and performs no title mutation — deleting the verifyPassword gate would let any string through', async () => {
+    mockGovernance.verifyPassword.mockResolvedValue(false)
+
+    const { setManagerRole } = await import('@/services/governance-service')
+    const res = await setManagerRole({ agentId: 'agent-a', password: 'not-the-password' })
+
+    expect(res.status).toBe(401)
+    expect(res.error).toBe('Invalid governance password')
+    expect(mockGovernance.verifyPassword).toHaveBeenCalledWith('not-the-password')
+    // The refusal must land BEFORE any governance mutation.
+    expect(mockGovernance.setManager).not.toHaveBeenCalled()
+    expect(mockGovernance.removeManager).not.toHaveBeenCalled()
+  })
+
+  it('also refuses (400) when no governance password has been configured at all — the gate is not skipped on an unconfigured host', async () => {
+    mockGovernance.loadGovernance.mockReturnValue({ managerId: null })
+
+    const { setManagerRole } = await import('@/services/governance-service')
+    const res = await setManagerRole({ agentId: 'agent-a', password: 'anything' })
+
+    expect(res.status).toBe(400)
+    expect(res.error).toMatch(/Governance password not set/i)
+    expect(mockGovernance.setManager).not.toHaveBeenCalled()
+  })
+})
+
+// ============================================================================
+// R3.7 — COS is the team's external contact point
+//        (lib/communication-graph.ts ALLOW_EDGES, lines 97-102)
+// ============================================================================
+describe('R3.7 — COS is the sole external contact point of its team (communication graph)', () => {
+  it('COS reaches OUT to MANAGER and MANAGER reaches IN to COS — the two halves of the gateway edge', async () => {
+    const { getEdgeType } = await import('@/lib/communication-graph')
+    expect(getEdgeType('chief-of-staff', 'manager')).toBe('allow')
+    expect(getEdgeType('manager', 'chief-of-staff')).toBe('allow')
+  })
+
+  it('every in-team title reaches its COS — the gateway is reachable from inside the team', async () => {
+    const { getEdgeType } = await import('@/lib/communication-graph')
+    for (const inTeam of ['orchestrator', 'architect', 'integrator', 'member'] as const) {
+      expect(getEdgeType(inTeam, 'chief-of-staff')).toBe('allow')
+    }
+  })
+
+  it('an OUTSIDE agent cannot reach an in-team agent directly, MANAGER included — deleting the COS-gateway shape lets outsiders bypass the team gateway entirely', async () => {
+    const { getEdgeType } = await import('@/lib/communication-graph')
+    for (const inTeam of ['orchestrator', 'architect', 'integrator', 'member'] as const) {
+      expect(getEdgeType('manager', inTeam)).toBe('deny')
+      expect(getEdgeType('maintainer', inTeam)).toBe('deny')
+      expect(getEdgeType('autonomous', inTeam)).toBe('deny')
+    }
+  })
+
+  it('an in-team agent cannot reach OUTSIDE the team except through its COS — the gateway is the only outbound door', async () => {
+    const { getEdgeType, getAllowedRecipients } = await import('@/lib/communication-graph')
+    for (const inTeam of ['architect', 'integrator', 'member'] as const) {
+      expect(getEdgeType(inTeam, 'manager')).toBe('deny')
+      expect(getEdgeType(inTeam, 'maintainer')).toBe('deny')
+      expect(getEdgeType(inTeam, 'autonomous')).toBe('deny')
+      // The only titles they may freely initiate to are inside their own team.
+      expect(getAllowedRecipients(inTeam).sort()).toEqual(['chief-of-staff', 'orchestrator'])
+    }
+  })
+})
+
+// ============================================================================
+// R3.9 — MANAGER can do everything COS can (lib/authorization.ts, line 285 for
+//        change-title + the general MANAGER grant at ~527)
+// ============================================================================
+describe('R3.9 — MANAGER is a superset of COS (authorize)', () => {
+  const COS = { agentId: 'cos-1', governanceTitle: 'chief-of-staff', teamId: 'team-1' }
+  const MGR = { agentId: 'mgr-1', governanceTitle: 'manager', teamId: undefined }
+  const TARGET = 'agent-a'
+
+  beforeEach(() => {
+    // authorize() resolves team membership through the REAL team-registry, so
+    // seed a team that contains both the COS and the target.
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['cos-1', 'agent-a'], chiefOfStaffId: 'cos-1' }])
+  })
+
+  it('for EVERY action a same-team COS is allowed, a MANAGER is allowed too — deleting the MANAGER grant inverts the hierarchy (a COS could act where its MANAGER could not)', async () => {
+    const { authorize } = await import('@/lib/authorization')
+    const actions = [
+      'modify-agent', 'change-title', 'delete-agent', 'hibernate-agent', 'wake-agent',
+      'link-session', 'delete-session', 'create-session', 'manage-team', 'manage-skills',
+      'manage-group', 'view-agent', 'send-command', 'restart-session', 'register-agent',
+      'export-agent',
+    ] as const
+
+    const inversions: string[] = []
+    let cosAllowedCount = 0
+    for (const action of actions) {
+      const cos = authorize(COS as never, action, TARGET)
+      const mgr = authorize(MGR as never, action, TARGET)
+      if (cos.allowed) cosAllowedCount++
+      if (cos.allowed && !mgr.allowed) inversions.push(`${action}: COS allowed but MANAGER denied`)
+    }
+
+    expect(inversions).toEqual([])
+    // Guard against a vacuous pass: the COS must actually be allowed something.
+    expect(cosAllowedCount).toBeGreaterThan(3)
+  })
+
+  it('change-title specifically: MANAGER is granted with no team relationship at all, while COS needs same-team — this is the line-285 grant', async () => {
+    const { authorize } = await import('@/lib/authorization')
+
+    // MANAGER: not in any team, still allowed.
+    expect(authorize(MGR as never, 'change-title', TARGET)).toEqual({ allowed: true })
+
+    // COS: allowed inside its own team...
+    expect(authorize(COS as never, 'change-title', TARGET).allowed).toBe(true)
+    // ...and denied outside it.
+    const outsider = authorize(COS as never, 'change-title', 'stranger-agent')
+    expect(outsider.allowed).toBe(false)
+    expect(outsider.reason).toMatch(/own team/i)
+  })
+
+  it('the superset does NOT extend to self-action: neither MANAGER nor COS may change its OWN title (the one rule that binds a MANAGER)', async () => {
+    const { authorize } = await import('@/lib/authorization')
+    expect(authorize(MGR as never, 'change-title', 'mgr-1')).toEqual({
+      allowed: false,
+      reason: 'No agent can change its own governance title',
+    })
+    expect(authorize(COS as never, 'change-title', 'cos-1').allowed).toBe(false)
+  })
+})
+
+// ============================================================================
+// R3.12 — BYPASS PREVENTION: COS cannot be changed through the generic
+//         PUT /api/teams/[id]. Two independent strip layers (SF-015), both
+//         pinned: app/api/teams/[id]/route.ts:115 and
+//         services/teams-service.ts::updateTeamById.
+// ============================================================================
+describe('R3.12 — chiefOfStaffId cannot be set via the generic PUT /api/teams/[id]', () => {
+  beforeEach(() => {
+    seedTeams([{ id: '11111111-1111-4111-8111-111111111111', name: 'Team One', agentIds: ['agent-a'], chiefOfStaffId: 'cos-1' }])
+    seedAgents([makeAgentRecord({ id: 'agent-a', name: 'agent-a' })])
+  })
+
+  it('LAYER 1 (route): a PUT body carrying chiefOfStaffId reaches updateTeamById with that field STRIPPED — deleting the route strip re-opens a password-free COS reassignment path', async () => {
+    // Only `authenticateFromRequest` is stubbed, and only for THIS test. It is not
+    // an R3/R9 guard — it decides WHO the caller is, and it correctly rejects a
+    // header-less Request (401) before control ever reaches the COS-strip that IS
+    // the guard. Scoped rather than file-wide because agent-auth's transitive graph
+    // overlaps team-registry's, and a file-wide importOriginal() factory there races
+    // the team-registry partial mock (that race un-spied blockAllTeams and broke
+    // four unrelated tests). try/finally so a throw cannot leak the mock forward.
+    // requireSudoToken is deliberately left REAL: with chiefOfStaffId stripped, no
+    // privileged field remains, so the strict-route gate is legitimately skipped.
+    vi.doMock('@/lib/agent-auth', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/agent-auth')>()
+      return { ...actual, authenticateFromRequest: () => ({}) }
+    })
+    vi.resetModules()
+    try {
+      const { PUT } = await import('@/app/api/teams/[id]/route')
+      const teamId = '11111111-1111-4111-8111-111111111111'
+      const req = new Request(`http://localhost:23000/api/teams/${teamId}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed Team', chiefOfStaffId: '22222222-2222-4222-8222-222222222222' }),
+      })
+
+      const res = await PUT(req as never, { params: Promise.resolve({ id: teamId }) })
+
+      // Fail loudly if the request never reached the service at all, rather than
+      // letting a 401/400 masquerade as "the field was stripped".
+      expect(res.status, `route returned ${res.status}: ${await res.clone().text()}`).toBe(200)
+      expect(spyUpdateTeamById).toHaveBeenCalled()
+      const forwarded = spyUpdateTeamById.mock.calls.at(-1)![1] as Record<string, unknown>
+      expect(forwarded).not.toHaveProperty('chiefOfStaffId')
+      expect(forwarded).not.toHaveProperty('orchestratorId')
+      expect(forwarded).not.toHaveProperty('type')
+      // Proof the request was otherwise well-formed and DID reach the service:
+      expect(forwarded.name).toBe('Renamed Team')
+    } finally {
+      vi.doUnmock('@/lib/agent-auth')
+      vi.resetModules()
+      // Re-warm sequentially so every later test sees a consistently mocked graph
+      // (see the beforeAll note — concurrent re-imports can un-spy team-registry).
+      await import('@/lib/team-registry')
+      await import('@/services/element-management-service')
+      await import('@/services/teams-service')
+    }
+  })
+
+  it('LAYER 2 (service): updateTeamById strips chiefOfStaffId before it reaches team-registry.updateTeam — deleting this second strip means a direct service caller could reassign the COS', async () => {
+    const teamId = '11111111-1111-4111-8111-111111111111'
+    const { updateTeamById } = await import('@/services/teams-service')
+
+    await updateTeamById(teamId, {
+      name: 'Renamed Again',
+      chiefOfStaffId: '22222222-2222-4222-8222-222222222222',
+      orchestratorId: '33333333-3333-4333-8333-333333333333',
+      authContext: OWNER_CTX,
+    } as never)
+
+    expect(spyUpdateTeam).toHaveBeenCalled()
+    const fields = spyUpdateTeam.mock.calls.at(-1)![1] as Record<string, unknown>
+    expect(fields).not.toHaveProperty('chiefOfStaffId')
+    expect(fields).not.toHaveProperty('orchestratorId')
+    expect(fields.name).toBe('Renamed Again')
+
+    // And the persisted team still names the ORIGINAL COS.
+    expect(readTeamsFile().find(t => t.id === teamId)!.chiefOfStaffId).toBe('cos-1')
+  })
+})
+
+// ============================================================================
+// R9.1 / R9.11 — team creation is manager-gated (services/teams-service.ts
+//                createNewTeam, lines 279-282 and 285-291)
+// ============================================================================
+describe('R9.1 / R9.11 — team creation requires a MANAGER on the host (createNewTeam)', () => {
+  it('R9.1: refuses (400) to create ANY team while no MANAGER exists — deleting this gate lets a host accumulate teams with no governance owner, which is exactly the state R9.2 blocks', async () => {
+    mockGovernance.getManagerId.mockReturnValue(null)
+
+    const { createNewTeam } = await import('@/services/teams-service')
+    const res = await createNewTeam({ name: 'Orphan Team', authContext: OWNER_CTX } as never)
+
+    expect(res.status).toBe(400)
+    expect(res.error).toMatch(/Teams require an existing MANAGER first/i)
+    // Nothing was written.
+    expect(readTeamsFile()).toEqual([])
+  })
+
+  it('R9.11: a NON-manager agent caller is refused (403) — the MANAGER slot, not merely "some agent", is the create authority', async () => {
+    mockGovernance.getManagerId.mockReturnValue('mgr-1')
+
+    const { createNewTeam } = await import('@/services/teams-service')
+    const res = await createNewTeam({
+      name: 'Hijacked Team',
+      requestingAgentId: 'not-the-manager',
+      authContext: OWNER_CTX,
+    } as never)
+
+    expect(res.status).toBe(403)
+    expect(res.error).toMatch(/Only the MANAGER agent can create teams/i)
+    expect(readTeamsFile()).toEqual([])
+  })
+
+  it('R9.11: the MANAGER itself passes both gates supplying NO governance password — an agent never faces a password prompt (R29/R32)', async () => {
+    mockGovernance.getManagerId.mockReturnValue('mgr-1')
+
+    const { createNewTeam } = await import('@/services/teams-service')
+    const res = await createNewTeam({
+      name: 'Manager Team',
+      requestingAgentId: 'mgr-1',
+      authContext: OWNER_CTX,
+    } as never)
+
+    // Whatever happens downstream, it must NOT be one of the two manager gates.
+    expect(res.error ?? '').not.toMatch(/Teams require an existing MANAGER first/i)
+    expect(res.error ?? '').not.toMatch(/Only the MANAGER agent can create teams/i)
+    expect(res.error ?? '').not.toMatch(/password/i)
+  })
+})
+
+// ============================================================================
+// R9.2 / R9.6 — the manager-gated blocking cascade
+//               (element-management-service.ts ChangeTitle GATE 10 @2461-2474
+//                and GATE 13 @2539-2554 — the map's 2419-2431 / 2497-2515 are
+//                stale; those ranges are GATE 9b and GATE 11 respectively)
+// ============================================================================
+describe('R9.2 / R9.6 — losing/gaining the MANAGER blocks/unblocks every team (ChangeTitle G10 / G13)', () => {
+  it('R9.2: demoting the MANAGER runs the blocking cascade — deleting the G10 call leaves teams live with no governance owner', async () => {
+    seedTeams([
+      { id: 'team-1', name: 'Team One', agentIds: ['agent-x'], chiefOfStaffId: 'agent-x' },
+      { id: 'team-2', name: 'Team Two', agentIds: ['agent-y'], chiefOfStaffId: 'agent-y' },
+    ])
+    seedAgents([
+      makeAgentRecord({ id: 'agent-mgr', name: 'agent-mgr', governanceTitle: 'manager' }),
+      makeAgentRecord({ id: 'agent-x', name: 'agent-x' }),
+      makeAgentRecord({ id: 'agent-y', name: 'agent-y' }),
+    ])
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+    mockGovernance.isManager.mockImplementation((id: string) => id === 'agent-mgr')
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-mgr', 'autonomous', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    expect(spyBlockAllTeams).toHaveBeenCalled()
+    expect(result.operations.some(op => /G10: Blocked all teams/.test(op))).toBe(true)
+    // ...and the REAL blockAllTeams actually persisted the block.
+    expect(readTeamsFile().every(t => t.blocked === true)).toBe(true)
+  })
+
+  it('R9.2 negative control — a title change that does NOT vacate the MANAGER slot must not block anything', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-a'], chiefOfStaffId: 'agent-cos' }])
+    seedAgents([makeAgentRecord({ id: 'agent-a', name: 'agent-a', governanceTitle: 'member' })])
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-a', 'architect', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    expect(spyBlockAllTeams).not.toHaveBeenCalled()
+    expect(result.operations.some(op => /G10: Old title not MANAGER/.test(op))).toBe(true)
+    expect(readTeamsFile().every(t => !t.blocked)).toBe(true)
+  })
+
+  it('R9.6: assigning a MANAGER unblocks every team — deleting the G13 call leaves the host permanently frozen after a MANAGER is restored', async () => {
+    seedTeams([
+      { id: 'team-1', name: 'Team One', agentIds: ['agent-x'], chiefOfStaffId: 'agent-x', blocked: true },
+      { id: 'team-2', name: 'Team Two', agentIds: ['agent-y'], chiefOfStaffId: 'agent-y', blocked: true },
+    ])
+    seedAgents([makeAgentRecord({ id: 'agent-new-mgr', name: 'agent-new-mgr', governanceTitle: null })])
+    mockGovernance.getManagerId.mockReturnValue(null)
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-new-mgr', 'manager', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    expect(spyUnblockAllTeams).toHaveBeenCalled()
+    expect(result.operations.some(op => /G13: Unblocked all teams/.test(op))).toBe(true)
+    expect(readTeamsFile().every(t => t.blocked === false)).toBe(true)
+  })
+})
+
+// ============================================================================
+// R9.4 / R9.7 — blockAllTeams hibernates; unblockAllTeams does NOT wake
+//               (lib/team-registry.ts, blockAllTeams @427-505,
+//                unblockAllTeams @518-534)
+// ============================================================================
+describe('R9.4 / R9.7 — blockAllTeams hibernates every team agent; unblockAllTeams wakes none', () => {
+  it('R9.4: kills the tmux session of EVERY agent in EVERY team (members + COS + orchestrator) — deleting the hibernation loop leaves team agents running with no MANAGER governing them', async () => {
+    seedTeams([
+      { id: 'team-1', name: 'Team One', agentIds: ['a1', 'a2'], chiefOfStaffId: 'cos1', orchestratorId: 'orch1' },
+      { id: 'team-2', name: 'Team Two', agentIds: ['b1'], chiefOfStaffId: 'cosb' },
+    ])
+    seedAgents([
+      makeAgentRecord({ id: 'a1', name: 'sess-a1' }),
+      makeAgentRecord({ id: 'a2', name: 'sess-a2' }),
+      makeAgentRecord({ id: 'cos1', name: 'sess-cos1' }),
+      makeAgentRecord({ id: 'orch1', name: 'sess-orch1' }),
+      makeAgentRecord({ id: 'b1', name: 'sess-b1' }),
+      makeAgentRecord({ id: 'cosb', name: 'sess-cosb' }),
+    ])
+
+    const { blockAllTeams } = await import('@/lib/team-registry')
+    const hibernated = await blockAllTeams()
+
+    const killed = (mockExecFileCalls as ExecCall[])
+      .filter(c => c.cmd === 'tmux' && Array.isArray(c.args) && (c.args as string[])[0] === 'kill-session')
+      .map(c => (c.args as string[])[2])
+      .sort()
+
+    expect(killed).toEqual(['sess-a1', 'sess-a2', 'sess-b1', 'sess-cos1', 'sess-cosb', 'sess-orch1'])
+    expect(hibernated.sort()).toEqual(['a1', 'a2', 'b1', 'cos1', 'cosb', 'orch1'])
+    expect(readTeamsFile().every(t => t.blocked === true)).toBe(true)
+  })
+
+  it('R9.4: refuses to kill a session whose name contains shell metacharacters — the argv guard is part of the hibernation path, not decoration', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['evil'], chiefOfStaffId: null }])
+    seedAgents([makeAgentRecord({ id: 'evil', name: 'a; rm -rf /' })])
+
+    const { blockAllTeams } = await import('@/lib/team-registry')
+    const hibernated = await blockAllTeams()
+
+    expect(hibernated).toEqual([])
+    expect((mockExecFileCalls as ExecCall[]).filter(c => c.cmd === 'tmux')).toEqual([])
+    // The team is still blocked — the unsafe name is skipped, not fatal.
+    expect(readTeamsFile()[0].blocked).toBe(true)
+  })
+
+  it('R9.7: unblockAllTeams clears the flag and wakes NOBODY — deleting the "no auto-wake" contract would silently relaunch every agent the moment a MANAGER appears', async () => {
+    seedTeams([
+      { id: 'team-1', name: 'Team One', agentIds: ['a1'], chiefOfStaffId: 'cos1', blocked: true },
+      { id: 'team-2', name: 'Team Two', agentIds: ['b1'], chiefOfStaffId: 'cosb', blocked: true },
+    ])
+    seedAgents([
+      makeAgentRecord({ id: 'a1', name: 'sess-a1' }),
+      makeAgentRecord({ id: 'cos1', name: 'sess-cos1' }),
+      makeAgentRecord({ id: 'b1', name: 'sess-b1' }),
+      makeAgentRecord({ id: 'cosb', name: 'sess-cosb' }),
+    ])
+
+    const { unblockAllTeams } = await import('@/lib/team-registry')
+    await unblockAllTeams()
+
+    expect(readTeamsFile().every(t => t.blocked === false)).toBe(true)
+    // No session was created and no tmux process was spawned. Asserted on the
+    // tmux SUBSET rather than on the whole recorded-call array: some pipelines
+    // fire genuinely detached background work, and a late-landing unrelated call
+    // must not be able to turn this rule's assertion red.
+    expect(mockRuntime.createSession).not.toHaveBeenCalled()
+    expect((mockExecFileCalls as ExecCall[]).filter(c => c.cmd === 'tmux')).toEqual([])
+  })
+})
+
+// ============================================================================
+// R9.5 — AUTONOMOUS agents are unaffected by the MANAGER gate
+//        (services/agents-core-service.ts wakeAgent Gate 1 @2045-2054 — the
+//         map's 2019-2028 is the function signature, not the guard)
+// ============================================================================
+describe('R9.5 — the MANAGER wake-gate binds TEAM agents only (wakeAgent Gate 1)', () => {
+  it('refuses (403) to wake a TEAM agent while no MANAGER exists — deleting Gate 1 lets a team run ungoverned', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['team-agent'], chiefOfStaffId: 'cos1' }])
+    seedAgents([makeAgentRecord({ id: 'team-agent', name: 'team-agent', governanceTitle: 'member' })])
+    mockGovernance.getManagerId.mockReturnValue(null)
+
+    const { wakeAgent } = await import('@/services/agents-core-service')
+    const res = await wakeAgent('team-agent', { startProgram: false })
+
+    expect(res.status).toBe(403)
+    expect(res.error).toMatch(/Cannot wake team agent: no MANAGER exists/i)
+    expect(mockRuntime.createSession).not.toHaveBeenCalled()
+  })
+
+  it('wakes an AUTONOMOUS (team-less) agent with no MANAGER present — deleting the isAgentInAnyTeam conjunct would freeze the whole host, which R9.5 explicitly forbids', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['someone-else'], chiefOfStaffId: 'cos1' }])
+    seedAgents([makeAgentRecord({ id: 'auto-1', name: 'auto-1', governanceTitle: 'autonomous' })])
+    mockGovernance.getManagerId.mockReturnValue(null)
+
+    const { wakeAgent } = await import('@/services/agents-core-service')
+    const res = await wakeAgent('auto-1', { startProgram: false })
+
+    expect(res.status).toBe(200)
+    expect(res.error).toBeUndefined()
+    expect(mockRuntime.createSession).toHaveBeenCalled()
+  })
+
+  it('the gate also releases for a TEAM agent once a MANAGER exists — it is a manager gate, not a permanent team ban', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['team-agent'], chiefOfStaffId: 'cos1' }])
+    seedAgents([makeAgentRecord({ id: 'team-agent', name: 'team-agent', governanceTitle: 'member' })])
+    mockGovernance.getManagerId.mockReturnValue('mgr-1')
+
+    const { wakeAgent } = await import('@/services/agents-core-service')
+    const res = await wakeAgent('team-agent', { startProgram: false })
+
+    expect(res.status).toBe(200)
+    expect(mockRuntime.createSession).toHaveBeenCalled()
+  })
+})
+
+// ============================================================================
+// R9.8 — deleting the MANAGER triggers the cascade immediately
+//        (services/element-management-service.ts DeleteAgent G02 @6442-6465 —
+//         the map's 6392-6415 is the G00/G01 auth+exists block)
+// ============================================================================
+describe('R9.8 — deleting the MANAGER runs the blocking cascade before the delete (DeleteAgent G02)', () => {
+  it('auto-demotes the MANAGER (which fires the R9.2 cascade) before removing it — deleting G02 would delete the MANAGER and leave every team live and ownerless', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-x'], chiefOfStaffId: 'agent-x' }])
+    seedAgents([
+      makeAgentRecord({ id: 'agent-mgr', name: 'agent-mgr', governanceTitle: 'manager' }),
+      makeAgentRecord({ id: 'agent-x', name: 'agent-x' }),
+    ])
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+    mockGovernance.isManager.mockImplementation((id: string) => id === 'agent-mgr')
+
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const result = await DeleteAgent('agent-mgr', { authContext: OWNER_CTX, hard: true })
+
+    expect(
+      result.operations.some(op => /G02: Agent is MANAGER — auto-demoting to AUTONOMOUS/.test(op)),
+    ).toBe(true)
+    expect(spyBlockAllTeams).toHaveBeenCalled()
+    expect(readTeamsFile().every(t => t.blocked === true)).toBe(true)
+  })
+
+  it('negative control — deleting a NON-manager agent runs no cascade', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-x'], chiefOfStaffId: 'agent-x' }])
+    seedAgents([
+      makeAgentRecord({ id: 'agent-mgr', name: 'agent-mgr', governanceTitle: 'manager' }),
+      makeAgentRecord({ id: 'agent-plain', name: 'agent-plain', governanceTitle: 'autonomous' }),
+    ])
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+    mockGovernance.isManager.mockImplementation((id: string) => id === 'agent-mgr')
+
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const result = await DeleteAgent('agent-plain', { authContext: OWNER_CTX, hard: true })
+
+    expect(result.operations.some(op => /G02: Agent is not MANAGER/.test(op))).toBe(true)
+    expect(spyBlockAllTeams).not.toHaveBeenCalled()
+    expect(readTeamsFile().every(t => !t.blocked)).toBe(true)
+  })
+})
+
+// ============================================================================
+// R9.12 — the agent registry is NEVER filtered by governance state
+//         (services/agents-core-service.ts listAgents @404-418 — the only
+//          filter is `!a.deletedAt`)
+//
+// NOTE: this rule's "guard" is an ABSENCE, so it cannot be pinned by deleting
+// a guard. It is pinned in the opposite direction: the test sets up the most
+// hostile governance precondition (no MANAGER, every team blocked, every agent
+// a member of a blocked team) and asserts the listing is still complete. Adding
+// any governance filter to listAgents — the drift this rule exists to prevent —
+// makes it fail.
+// ============================================================================
+describe('R9.12 — every agent stays visible regardless of MANAGER state (listAgents)', () => {
+  it('returns every non-deleted agent with no MANAGER and all teams blocked — the MANAGER gate controls WAKE, never VISIBILITY', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['a1', 'a2'], chiefOfStaffId: 'a2', blocked: true }])
+    seedAgents([
+      makeAgentRecord({ id: 'a1', name: 'a1', governanceTitle: 'member' }),
+      makeAgentRecord({ id: 'a2', name: 'a2', governanceTitle: 'chief-of-staff' }),
+      makeAgentRecord({ id: 'a3', name: 'a3', governanceTitle: 'autonomous' }),
+    ])
+    mockGovernance.getManagerId.mockReturnValue(null)
+
+    const { listAgents } = await import('@/services/agents-core-service')
+    const res = await listAgents()
+
+    expect(res.status).toBe(200)
+    expect((res.data!.agents as Array<{ id: string }>).map(a => a.id).sort()).toEqual(['a1', 'a2', 'a3'])
+  })
+
+  it('the ONLY exclusion is a soft-deleted tombstone — proof the listing does filter something, so the assertion above is not vacuous', async () => {
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['a1'], chiefOfStaffId: 'a1', blocked: true }])
+    seedAgents([
+      makeAgentRecord({ id: 'a1', name: 'a1', governanceTitle: 'chief-of-staff' }),
+      makeAgentRecord({ id: 'gone', name: 'gone', deletedAt: '2026-01-02T00:00:00.000Z' }),
+    ])
+    mockGovernance.getManagerId.mockReturnValue(null)
+
+    const { listAgents } = await import('@/services/agents-core-service')
+    const res = await listAgents()
+
+    expect((res.data!.agents as Array<{ id: string }>).map(a => a.id)).toEqual(['a1'])
+  })
+})

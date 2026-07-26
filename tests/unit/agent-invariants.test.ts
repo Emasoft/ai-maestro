@@ -16,7 +16,7 @@
  * installer; this test is the wall in front of that.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, rmSync, existsSync, writeFileSync, statSync } from 'fs'
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync, statSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -73,8 +73,13 @@ beforeEach(() => {
   workdir = mkdtempSync(join(tmpdir(), 'invariants-'))
 })
 
-afterEach(() => {
-  stopAgentInvariantsWatchdog()
+afterEach(async () => {
+  // AWAIT the stop. The sweep is a WRITER (it re-creates .claude/ and rewrites the
+  // shipped rules), so removing the workdir while one is in flight raced it and
+  // failed intermittently with ENOTEMPTY under full-suite load — only ever in the
+  // whole suite, never in isolation, which is what made it look like noise.
+  // TRDD-F4UUM8RZ made stop() resolve once the sweep has settled.
+  await stopAgentInvariantsWatchdog()
   rmSync(workdir, { recursive: true, force: true })
 })
 
@@ -229,5 +234,51 @@ describe('the single invariants watchdog', () => {
 
   it('does not start when the interval is 0 (the loop is disableable)', () => {
     expect(startAgentInvariantsWatchdog(() => [], 0)).toBe(false)
+  })
+
+  it('stop() resolves only once the in-flight sweep has finished writing — "stopped" must mean the work stopped, not just the timer', async () => {
+    // The bug this pins (TRDD-F4UUM8RZ): the sweep was fire-and-forget, so stop()
+    // cleared the interval and returned WHILE a sweep was still re-creating files.
+    // A caller that stopped the watchdog and then removed the workdir raced a
+    // writer putting files back — the re-appearing-workdir class (TRDD-KERM18NX).
+    // It surfaced only as an intermittent ENOTEMPTY in this file's own afterEach
+    // under full-suite load, which is exactly why it needs a test that states the
+    // CONTRACT rather than one that merely stops flaking.
+    //
+    // The fleet is large on purpose. With a single agent the post-stop window is
+    // one file-write wide, so a test would pass with or without the fix and pin
+    // nothing (the first version of this test did exactly that). With 40 agents,
+    // "the rest of the sweep" is hundreds of writes — the difference between
+    // awaiting it and not is unmissable.
+    const FLEET = 40
+    const root = mkdtempSync(join(tmpdir(), 'invariants-fleet-'))
+    const dirs = Array.from({ length: FLEET }, (_, i) => {
+      const d = join(root, `a${i}`)
+      mkdirSync(d, { recursive: true })
+      return d
+    })
+    const seeded = () => dirs.filter(d => existsSync(join(d, '.claude', 'rules', AGENT_RULES_FILE))).length
+    const fleet = () =>
+      dirs.map((d, i) => ({ agentId: `a${i}`, agentName: `a${i}`, workdir: d, clientType: 'claude' as const }))
+
+    try {
+      expect(startAgentInvariantsWatchdog(fleet, 10)).toBe(true)
+      // Stop the moment the sweep is demonstrably mid-flight.
+      await vi.waitFor(() => expect(seeded()).toBeGreaterThan(0), { timeout: 3000, interval: 5 })
+
+      await stopAgentInvariantsWatchdog()
+      const atStop = seeded()
+      await new Promise(r => setTimeout(r, 300))
+
+      // The contract: once the promise resolves, no further write happens.
+      expect(seeded()).toBe(atStop)
+      // Non-vacuity: prove we really caught it mid-sweep. Had the whole fleet been
+      // swept before we sampled, "nothing changed afterwards" would be trivially
+      // true and would test nothing.
+      expect(atStop).toBeLessThan(FLEET)
+    } finally {
+      await stopAgentInvariantsWatchdog()
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

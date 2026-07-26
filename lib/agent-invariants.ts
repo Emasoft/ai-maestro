@@ -293,6 +293,10 @@ const WATCHDOG_INTERVAL_MS = Math.max(
 )
 
 let watchdogTimer: NodeJS.Timeout | null = null
+/** The sweep currently running, so a stop can await it rather than race it. */
+let inFlightSweep: Promise<void> | null = null
+/** Set by stop(); checked between agents so a stop takes effect promptly. */
+let stopping = false
 
 export interface WatchdogAgent {
   agentId: string
@@ -319,8 +323,17 @@ export function startAgentInvariantsWatchdog(
 ): boolean {
   if (watchdogTimer !== null || intervalMs <= 0) return false
 
+  stopping = false
+
   watchdogTimer = setInterval(() => {
-    void (async () => {
+    // Hold the sweep so stopAgentInvariantsWatchdog() can AWAIT it. Without this
+    // the sweep is fire-and-forget and `stop()` stops only the SCHEDULE: an
+    // in-flight sweep keeps running, and it is a WRITER (it re-creates .claude/,
+    // rewrites the shipped aimaestro-*.md rules, seeds the git-exclude block). A
+    // caller that stops the watchdog and then removes a workdir would therefore
+    // race a process that puts files back — the re-appearing-workdir class of bug
+    // (TRDD-KERM18NX). TRDD-F4UUM8RZ.
+    inFlightSweep = (async () => {
       // Fleet-level check, ONCE per sweep, BEFORE the per-agent loop — never
       // per-agent. The keychain-blindness this detects is a property of the
       // tmux SERVER every pane is forked from, not of any one agent's workdir,
@@ -337,6 +350,11 @@ export function startAgentInvariantsWatchdog(
 
       try {
         for (const a of listAgents()) {
+          // Stop BETWEEN agents, never inside one. An invariant repair is itself a
+          // short write sequence, so aborting halfway would leave exactly the
+          // partial state R51 forbids; finishing the current agent and then
+          // stopping is the correct granularity.
+          if (stopping) break
           const r = await enforceAgentInvariants({ ...a, trigger: 'periodic' })
           const line = formatEnforceResult(a.agentName || a.agentId, r)
           if (line) console.warn(`[InvariantsWatchdog] ${line}`)
@@ -345,16 +363,27 @@ export function startAgentInvariantsWatchdog(
         console.warn('[InvariantsWatchdog] sweep failed:', err instanceof Error ? err.message : err)
       }
     })()
+    void inFlightSweep.finally(() => { inFlightSweep = null })
   }, intervalMs)
 
   watchdogTimer.unref?.()
   return true
 }
 
-/** Stop the watchdog (tests, graceful shutdown). */
-export function stopAgentInvariantsWatchdog(): void {
+/**
+ * Stop the watchdog (tests, graceful shutdown) AND wait for the in-flight sweep.
+ *
+ * Returns a promise that resolves only once no sweep is still writing. That is the
+ * whole point: the previous `void` version cleared the interval and returned while
+ * a sweep kept re-creating files, so "stopped" was not a state any caller could
+ * rely on before deleting a workdir. Existing fire-and-forget call sites still
+ * compile; a caller that needs the guarantee awaits it (TRDD-F4UUM8RZ).
+ */
+export function stopAgentInvariantsWatchdog(): Promise<void> {
+  stopping = true
   if (watchdogTimer !== null) {
     clearInterval(watchdogTimer)
     watchdogTimer = null
   }
+  return inFlightSweep ?? Promise.resolve()
 }

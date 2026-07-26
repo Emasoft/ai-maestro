@@ -80,29 +80,16 @@ vi.mock('os', async (importOriginal) => {
 // of how homedir() is resolved internally. Every other export — the naming
 // builders and constant maps the R20.1 / R20.4 guards under test actually read —
 // stays REAL via the `...actual` spread.
+// The override list lives in tests/helpers/fake-ecosystem-home.ts — it was hand-copied into
+// 8 files, and each copy was a chance to omit one override and write to the real home. The
+// helper also REFUSES a fake root that is not under the temp dir, so a mis-wired test fails
+// loudly at setup instead of quietly escaping the sandbox.
 vi.mock('@/lib/ecosystem-constants', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/ecosystem-constants')>()
-  const p = await import('path')
-  const agentsBase = p.join(FAKE_HOME, 'agents')
-  return {
-    ...actual,
-    getStateDir: () => FAKE_STATE,
-    statePath: (...segments: string[]) => p.join(FAKE_STATE, ...segments),
-    getCustomPluginsContainerPath: () => p.join(agentsBase, 'custom-plugins'),
-    getRolePluginsContainerPath: () => p.join(agentsBase, 'role-plugins'),
-    getCorePluginsContainerPath: () => p.join(agentsBase, 'core-plugins'),
-    getCustomAbstractDir: () => p.join(agentsBase, 'custom-plugins', '.abstract'),
-    getRoleAbstractDir: () => p.join(agentsBase, 'role-plugins', '.abstract'),
-    getCoreAbstractDir: () => p.join(agentsBase, 'core-plugins', '.abstract'),
-    getCustomMarketplacePathForClient: (client: string) =>
-      p.join(agentsBase, 'custom-plugins', actual.customMarketplaceDirName(client)),
-    getRoleMarketplacePathForClient: (client: string) =>
-      p.join(agentsBase, 'role-plugins', actual.rolesMarketplaceDirName(client)),
-    getCoreMarketplacePathForClient: (client: string) =>
-      p.join(agentsBase, 'core-plugins', actual.coreMarketplaceDirName(client)),
-    getLocalMarketplacePath: () => p.join(agentsBase, 'role-plugins'),
-    getCustomMarketplacePath: () => p.join(agentsBase, 'custom-plugins'),
-  }
+  // Imported INSIDE the factory: vi.mock is hoisted above every top-level import, so a
+  // static import of the helper would not be initialised yet.
+  const { fakeEcosystemPaths } = await import('@/tests/helpers/fake-ecosystem-home')
+  return fakeEcosystemPaths(actual, FAKE_HOME, FAKE_STATE)
 })
 
 // ============================================================================

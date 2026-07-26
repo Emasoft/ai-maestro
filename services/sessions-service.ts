@@ -1097,8 +1097,13 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     // passes non-Claude programs and agentless sessions through unchanged, and
     // REFUSES a Claude agent with no resolvable persona (fail-fast) — surfaced
     // exactly like the keychain refuse below.
+    // Use registeredAgent.id — the CANONICAL agent id for this session (resolved by name above,
+    // and the one persistSession/linkSession use). The `agentId` PARAM is optional: POST
+    // /api/sessions/create and the headless route both accept a bare `name`, and with only the
+    // param the enforcement would silently pass through for a fully-registered titled agent —
+    // reopening exactly the launch-as-generic-claude hole this gate exists to close.
     const enforced = await resolveLaunchArgs(
-      agentId,
+      registeredAgent?.id ?? agentId,
       selectedProgram,
       typeof programArgs === 'string' ? programArgs : '',
     )

@@ -409,7 +409,18 @@ const STALE_LOCK_MS = 30_000
 const LOCK_POLL_MS = 50
 const LOCK_MAX_WAIT_MS = 10_000
 
-async function _acquireFileLock(filePath: string): Promise<() => Promise<void>> {
+async function _acquireFileLock(
+  filePath: string,
+  // Both windows are overridable because they are sized for a SHORT read-modify-write of a JSON
+  // file. A caller that holds the lock across a long child process (`claude plugin install` clones
+  // a repo and is allowed 120s) breaks both defaults at once: a waiter declares the lock stale at
+  // 30s and rm -rf's it while the holder is still running — which permits the very concurrency the
+  // lock exists to prevent, and leaves the ORIGINAL holder's release() deleting the new holder's
+  // lockdir. The window must always exceed the guarded operation's own timeout.
+  opts: { staleMs?: number; maxWaitMs?: number } = {},
+): Promise<() => Promise<void>> {
+  const staleMs = opts.staleMs ?? STALE_LOCK_MS
+  const maxWaitMs = opts.maxWaitMs ?? LOCK_MAX_WAIT_MS
   const lockDir = `${filePath}.lock`
   // Ensure the parent dir exists before mkdir-ing the lockdir. A fresh
   // machine/CI runner may not have e.g. ~/.claude/ yet (nothing has
@@ -433,7 +444,7 @@ async function _acquireFileLock(filePath: string): Promise<() => Promise<void>> 
       // Already held — check if it's stale.
       try {
         const st = await stat(lockDir)
-        if (Date.now() - st.mtimeMs > STALE_LOCK_MS) {
+        if (Date.now() - st.mtimeMs > staleMs) {
           // Break the stale lock; another caller may have done the
           // same in parallel — that's fine, mkdir below will sort it.
           try { await rm(lockDir, { recursive: true, force: true }) } catch {}
@@ -443,7 +454,7 @@ async function _acquireFileLock(filePath: string): Promise<() => Promise<void>> 
         // stat failed (lock disappeared) — retry mkdir
         continue
       }
-      if (Date.now() - start > LOCK_MAX_WAIT_MS) {
+      if (Date.now() - start > maxWaitMs) {
         throw new Error(`withSettingsLock: timeout waiting for ${lockDir}`)
       }
       await new Promise(r => setTimeout(r, LOCK_POLL_MS))
@@ -451,7 +462,11 @@ async function _acquireFileLock(filePath: string): Promise<() => Promise<void>> 
   }
 }
 
-async function withSettingsLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+async function withSettingsLock<T>(
+  filePath: string,
+  fn: () => Promise<T>,
+  opts: { staleMs?: number; maxWaitMs?: number } = {},
+): Promise<T> {
   // In-process queue keeps the existing within-process serialisation
   // semantics (so concurrent withSettingsLock calls from the same Node
   // process don't compete for the cross-process lock).
@@ -465,7 +480,7 @@ async function withSettingsLock<T>(filePath: string, fn: () => Promise<T>): Prom
     // Also acquire the cross-process file lock so other Node
     // processes (PM2 cluster, headless + full mode, tests) cannot
     // interleave with us.
-    const release = await _acquireFileLock(filePath)
+    const release = await _acquireFileLock(filePath, opts)
     try {
       return await fn()
     } finally {
@@ -1549,11 +1564,15 @@ export async function installPluginLocally(
     let lastErr = ''
     for (let attempt = 1; attempt <= INSTALL_MAX_ATTEMPTS; attempt++) {
       try {
+        // The windows must OUTLIVE the guarded child process. With the 30s default a waiter
+        // declares this lock stale mid-install and starts a SECOND concurrent `claude plugin
+        // install` — the exact lost-update race described above — and with the 10s wait a
+        // legitimately-queued second install fails instead of waiting its turn.
         await withSettingsLock(INSTALLED_FILE, async () => {
           await execFileAsync('claude', [
             'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
           ], { timeout: 120000, cwd: resolvedDir })
-        })
+        }, { staleMs: 180_000, maxWaitMs: 180_000 })
         if (attempt > 1) {
           console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} on attempt ${attempt}/${INSTALL_MAX_ATTEMPTS} (earlier attempts failed transiently)`)
         } else {

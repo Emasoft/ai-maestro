@@ -138,12 +138,18 @@ export async function runInboxNudgeTick(
  *  is never an agent-to-agent drive (R42-safe), mirroring the fleet-recovery actuator. */
 export function defaultInboxNudgeDeps(): InboxNudgeDeps {
   return {
+    // ONLINE sessions only, matching this dep's documented contract (and the sibling
+    // fleet-continuity wiring). A hibernated agent has no pane to type into, so every tick would
+    // spend a registry read plus a failed sendAgentSessionCommand (a tmux sessionExists exec) on it
+    // — and because the cooldown is only set on a SUCCESSFUL inject, it would retry forever.
     listAgents: () =>
-      listAgents(false).map((s) => {
-        const full = getAgent(s.id)
-        const wd = full?.workingDirectory ?? s.sessions?.find((x) => x.index === 0)?.workingDirectory ?? null
-        return { id: s.id, name: s.name, workingDirectory: wd }
-      }),
+      listAgents(false)
+        .filter((s) => s.sessions?.some((x) => x.status === 'online'))
+        .map((s) => {
+          const full = getAgent(s.id)
+          const wd = full?.workingDirectory ?? s.sessions?.find((x) => x.index === 0)?.workingDirectory ?? null
+          return { id: s.id, name: s.name, workingDirectory: wd }
+        }),
     countUnread: async (agentId) => (await listInboxMessages(agentId, { status: 'unread' })).length,
     inject: async (agentId, prompt) => {
       const auth = buildSystemAuthContext('fleet-inbox-nudge')

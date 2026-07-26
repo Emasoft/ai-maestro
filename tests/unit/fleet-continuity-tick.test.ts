@@ -121,6 +121,46 @@ describe('continuity tick — episode memory survives a non-firing poll', () => 
   })
 })
 
+describe('continuity tick — an episode the actuator writes DURING the poll survives', () => {
+  // The two tests above SEED the store and use a fake `actuate` that never writes, so they only
+  // prove "a pre-existing value survives". The real bug was the opposite direction and they passed
+  // straight through it: production hands the SAME Map to `defaultContinuityDeps(store)` and to
+  // `runContinuityTick(deps, store)` (fleet-liveness-watchdog.ts:223), so the actuator's
+  // `episodes.set` writes into the store MID-POLL — and the tick then wrote back the `prior` it had
+  // captured BEFORE that call, erasing it every single pass.
+  //
+  // Consequence, which is why this is worth two tests: retry-wedge fires only on an attempt-number
+  // ADVANCE between polls. With the marker erased every pass, `previous[eventId]` was permanently
+  // empty, no advance was ever measurable, and the only shipped continuity event could never fire —
+  // while the sweep logged exactly like a healthy one. These tests fail on that code.
+  const writesEpisode = (store: Map<string, ContinuityState>, d: ContinuityDecision) => {
+    const actuate: ContinuityTickDeps['actuate'] = async (t) => {
+      // Mirrors the production `episodes.set` dep: same map, same shape, written during actuate.
+      const cur = store.get(t.agentId)
+      store.set(t.agentId, {
+        episodes: { ...(cur?.episodes ?? {}), 'retry-wedge': 12 },
+        lastActuatedAtMs: cur?.lastActuatedAtMs ?? null,
+      })
+      return d
+    }
+    return actuate
+  }
+
+  it('does not clobber it on a NON-firing poll (first sighting of a wedge)', async () => {
+    // The first sighting is the one that matters most: it is what a later poll compares against.
+    const store = new Map<string, ContinuityState>()
+    await runContinuityTick(deps({ actuate: writesEpisode(store, NO_EVENT) }), store, 1_000)
+    expect(store.get('a1')?.episodes).toEqual({ 'retry-wedge': 12 })
+  })
+
+  it('does not clobber it on a FIRING poll, and still stamps the cooldown', async () => {
+    const store = new Map<string, ContinuityState>([['a1', { episodes: { 'retry-wedge': 11 }, lastActuatedAtMs: null }]])
+    await runContinuityTick(deps({ actuate: writesEpisode(store, FIRED) }), store, 5_000)
+    expect(store.get('a1')?.episodes).toEqual({ 'retry-wedge': 12 })
+    expect(store.get('a1')?.lastActuatedAtMs).toBe(5_000)
+  })
+})
+
 describe('continuity tick — one bad agent never stops the sweep', () => {
   it('a capture that throws is a skip, and the next agent is still polled', async () => {
     const { actuate, targets } = recorder()

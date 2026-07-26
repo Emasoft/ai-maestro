@@ -281,19 +281,34 @@ function parseDumpEntries(raw: string): object[] | null {
  * `pm2.<user>.plist` but labels the job `com.PM2`, so a filename-derived label lookup misses it.
  */
 function detectUnitLoaded(platform: NodeJS.Platform): boolean | null {
-  const probe: [string, string[]] | null =
+  // On Linux, BOTH scopes must be probed: `unitSearchDirs` searches
+  // ~/.config/systemd/user, and a unit installed there is invisible to a plain (system-scope)
+  // `systemctl list-units`. Probing only the system scope reported unitLoaded=false for every
+  // user-scope pm2 install — a permanent, unfixable `unit-not-loaded` warning on exactly the
+  // hosts that are configured correctly, which is how an operator learns to ignore this line.
+  const probes: [string, string[]][] =
     platform === 'darwin'
-      ? ['launchctl', ['list']]
+      ? [['launchctl', ['list']]]
       : platform === 'linux'
-        ? ['systemctl', ['list-units', '--type=service', '--all', '--no-legend', '--no-pager']]
-        : null
-  if (!probe) return null
-  try {
-    const out = execFileSync(probe[0], probe[1], { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] })
-    return out.split('\n').some(looksLikePm2Unit)
-  } catch {
-    return null
+        ? [
+            ['systemctl', ['list-units', '--type=service', '--all', '--no-legend', '--no-pager']],
+            ['systemctl', ['--user', 'list-units', '--type=service', '--all', '--no-legend', '--no-pager']],
+          ]
+        : []
+  if (probes.length === 0) return null
+  let answered = false
+  for (const [bin, args] of probes) {
+    try {
+      const out = execFileSync(bin, args, { encoding: 'utf8', timeout: 5_000, stdio: ['ignore', 'pipe', 'ignore'] })
+      answered = true
+      if (out.split('\n').some(looksLikePm2Unit)) return true
+    } catch {
+      // this scope could not be queried — keep trying the others
+    }
   }
+  // Only claim "not loaded" when at least one probe actually answered; if none did, the state is
+  // UNKNOWN and must stay null (an unknown reported as `false` is a false alarm).
+  return answered ? false : null
 }
 
 /** Gather the facts from this host, then decide. Never throws — a self-check that crashes the boot

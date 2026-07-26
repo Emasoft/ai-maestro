@@ -20,6 +20,7 @@ import { readHookNotification } from '@/lib/session-safe-state'
 import { fleetActuationBlocked } from '@/lib/janitor-control'
 import { sendAgentSessionCommand } from '@/services/agents-core-service'
 import { buildSystemAuthContext } from '@/lib/agent-auth'
+import { getAgentCommand } from '@/lib/agent-commands'
 import { ESC_KEYSTROKE, type ContinuityEpisodes } from '@/lib/continuity-registry'
 import {
   actuateContinuity,
@@ -94,8 +95,15 @@ export async function runContinuityTick(
         lastActuatedAtMs: prior.lastActuatedAtMs,
       })
 
+      // RE-READ the store: `actuate` writes the episode memory for this agent (the actuator's
+      // `episodes.set` dep points at THIS map), and `prior` was captured BEFORE that write. Writing
+      // `prior.episodes` back here would clobber the marker the actuator just recorded, so a
+      // temporal event could never observe an advance between polls and could never fire at all —
+      // silently turning the whole poll leg into a no-op that still logs like a healthy scan.
+      const episodes = store.get(a.id)?.episodes ?? prior.episodes
+
       if (decision.fired) {
-        store.set(a.id, { episodes: prior.episodes, lastActuatedAtMs: now })
+        store.set(a.id, { episodes, lastActuatedAtMs: now })
         result.fired.push({
           agentId: a.id,
           name: a.name,
@@ -104,7 +112,7 @@ export async function runContinuityTick(
         })
       } else {
         // Keep the episode memory the actuator just wrote; only the cooldown clock is untouched.
-        store.set(a.id, { episodes: prior.episodes, lastActuatedAtMs: prior.lastActuatedAtMs })
+        store.set(a.id, { episodes, lastActuatedAtMs: prior.lastActuatedAtMs })
         if (decision.reason !== 'no_event') {
           result.skipped.push({ agentId: a.id, name: a.name, reason: decision.reason ?? 'unknown' })
         }
@@ -188,10 +196,25 @@ function continuityActuatorDeps(now: number): Omit<ContinuityActuatorDeps, 'epis
         }, auth)
         return { ok: !r.error, status: r.status ?? 0, detail: r.error }
       }
+      // RESOLVE the curated key to its literal command. `sendAgentSessionCommand` types whatever
+      // string it is given straight into the pane, so passing the KEY would type `compact` instead
+      // of `/compact` — a word into the prompt, not a command. The actuator already proved the key
+      // exists (its `unknown_command_key` gate), so a miss here is a contract break, not user input:
+      // refuse rather than type the raw key.
+      const curated = getAgentCommand(action.response.commandKey)
+      if (!curated) {
+        return { ok: false, status: 0, detail: `unknown command key: ${action.response.commandKey}` }
+      }
       const r = await sendAgentSessionCommand(action.agentId, {
-        command: action.response.commandKey,
-        addNewline: true,
+        // HARDCODED true, deliberately — do NOT relax this to `curated.requiresIdle`. That field
+        // says what a HUMAN-initiated send of this command needs; this injector is unattended and
+        // runs with `hidPresent: () => false`, so it has no way to know a person is not mid-turn.
+        // Every curated command happens to be `requiresIdle: true` today, which is exactly what
+        // makes the swap look free: it would change nothing until someone adds a command with the
+        // flag off, and then this gate would disappear silently, in a file nobody was editing.
         requireIdle: true,
+        command: curated.command,
+        addNewline: true,
       }, auth)
       return { ok: !r.error, status: r.status ?? 0, detail: r.error }
     },

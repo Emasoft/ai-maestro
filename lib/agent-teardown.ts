@@ -176,8 +176,12 @@ export const AGENT_STORES: AgentStore[] = [
       if (!ctx.expectFolderGone || !ctx.workingDirectory) return null
       const managedRoot = join(homedir(), 'agents') + '/'
       if (!ctx.workingDirectory.startsWith(managedRoot)) return null
-      const slug = ctx.workingDirectory.replace(/[^a-zA-Z0-9]/g, '-')
-      const dir = join(homedir(), '.claude', 'projects', slug)
+      // Use the ONE slug derivation (lib/claude-conversation.ts) that the resume decision and the
+      // DeleteAgent history-purge already use — slashes to '-', nothing else. Rolling a fourth
+      // variant here (`[^a-zA-Z0-9] -> '-'`) probed a DIFFERENT directory for any workdir holding a
+      // '.' or '_', so the probe read clean while the real transcript dir survived.
+      const { conversationSlug } = await import('@/lib/claude-conversation')
+      const dir = join(homedir(), '.claude', 'projects', conversationSlug(ctx.workingDirectory))
       return existsSync(dir) ? `transcript dir still on disk: ${dir}` : null
     },
   },

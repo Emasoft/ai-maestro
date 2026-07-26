@@ -406,3 +406,127 @@ Row format is fixed so a regex parses each line:
   in-repo guard can be cited. Fleet-wide the rule is unenforced.
 - **R42.1–R42.6, R22.4–R22.5, R23.3–R23.4** were not covered by any audit report;
   they are recorded `UNENFORCED | — | —` (no evidence of enforcement), never assumed.
+
+---
+
+# Part II — R51.9 gate-shape coverage
+
+**A different question from the one above.** Part I asks *is this rule enforced?* R51.9 asks
+*is it enforced **as a gate**, inside the all-in-one pipeline?* Those come apart, and the gap
+between them is a real class of bug rather than a bookkeeping detail:
+
+> A rule enforced at a **route** holds for callers of that route. A rule enforced at a **gate**
+> holds for every path to that mutation — which, under R50, is the only path there is.
+
+So a rule can be `ENFORCED` in Part I and still fail R51.9. That is not double-counting: it says
+the check sits outside the pipeline, where a second caller of the same service function — a
+post-gate cascade, an internal call, a future endpoint — does not pass through it.
+
+R51.9: *"For each governance rule there is a gate. A rule with no gate is a rule the system does
+not actually enforce — it is documentation, and the state it forbids will occur."*
+
+## How this table is produced
+
+`scripts/aio-gate-coverage.py` (re-run it; do not hand-edit the verdicts). For each rule it
+greps enforcement code (`services/`, `lib/`, `app/api/`, `server.mjs`) versus docs/tests/design,
+and asks whether any enforcement-code citation sits within 40 lines of a gate label
+(`ops.push('G##' | 'EXE' | 'PG##')`).
+
+| Verdict | Meaning |
+|---|---|
+| `GATED` | cited inside a pipeline, in a gate's neighbourhood — the strongest evidence a script can give that a gate enforces it |
+| `ENFORCED` | cited in enforcement code but not at a gate — a route guard, a middleware, a lib invariant. Real enforcement, wrong shape for R51.9 |
+| `DOC-ONLY` | cited only in docs/rules/tests/design. Nothing enforces it at runtime |
+| `UNMAPPED` | not cited outside `GOVERNANCE-RULES.md` itself |
+
+**This is a worklist, not a certificate.** A script cannot judge whether a gate checks *what the
+rule says* — only that one plausibly exists. Every non-`GATED` row is a candidate hole; every
+`GATED` row still needs a human to confirm the gate is the right check.
+
+## Coverage as of 2026-07-26
+
+**GATED 21 · ENFORCED 16 · DOC-ONLY 14 · UNMAPPED 0 · total 51.**
+
+| Rule | Verdict | Where |
+|---|---|---|
+| R1 Teams and Groups | ENFORCED | `lib/ledger-startup.ts`, teams routes |
+| R2 Team Name Rules | ENFORCED | `lib/team-registry.ts`, `lib/aid-ledger-authority.ts` |
+| R3 Role Hierarchy | **GATED** | `element-management-service.ts` |
+| R4 Agent Membership | **GATED** | `element-management-service.ts` |
+| R5 Transfer Rules | ENFORCED | governance transfer routes |
+| R6 Communication Graph | **GATED** | `send-message-service.ts` |
+| R7 UI Robustness | **GATED** | `element-management-service.ts` |
+| R8 Data Integrity | **GATED** | `element-management-service.ts` |
+| R9 Manager Requirement | **GATED** | `element-management-service.ts` |
+| R10 Agent Lifecycle | **GATED** | `element-management-service.ts` |
+| R11 Title-Plugin Binding | **GATED** | `element-management-service.ts` |
+| R12 Minimum Team Composition | **GATED** | `element-management-service.ts` |
+| R13 Role Boundaries | DOC-ONLY | — (behavioural; binds agent conduct) |
+| R14 Team Resilience | ENFORCED | `app/api/agents/[id]/route.ts` |
+| R15 Written Orders | DOC-ONLY | — (behavioural) |
+| R16 Password Never Shared | ENFORCED | continuity routes, `lib/agent-frame-reader.ts` |
+| R17 Mandatory Core Plugin | **GATED** | `element-management-service.ts` |
+| R18 Plugin Continuity on Client Change | **GATED** | `element-management-service.ts` |
+| R19 MAINTAINER Title | **GATED** | `element-management-service.ts` |
+| R20 Marketplace Governance | ENFORCED | groups/marketplace routes |
+| R21 All-In-One Pipeline Architecture | **GATED** | `element-management-service.ts` |
+| R22 GitHub Authorship | DOC-ONLY | — (behavioural) |
+| R23 Plugin↔Server Decoupling | DOC-ONLY | — (guard lives in an external plugin repo; see Part I) |
+| R24 Proactive Global Memory | DOC-ONLY | — (behavioural) |
+| R25 Three-Pillars Task System | DOC-ONLY | — (partly pinned by `trdd-doctor`/`kanban-index` tests) |
+| R26 Identity Immutability | **GATED** | `element-management-service.ts` |
+| R27 Self-Install via Core-Plugin Skills | DOC-ONLY | — |
+| R28 Three-Check API Authorization | **GATED** | `element-management-service.ts` |
+| R29 MANAGER Lifecycle Authority | ENFORCED | teams routes |
+| R30 COS Creation Requires a Mandate | ENFORCED | `lib/authorization.ts`, `lib/portfolio-issue-guard.ts` |
+| R31 Incomplete-Team Freeze | ENFORCED | `lib/portfolio-check.ts` |
+| R32 No Sudo Gates for Agents | ENFORCED | message + agent routes |
+| R33 Signed-Ledger Recovery | ENFORCED | `aid-recover`, `v1/auth/token` |
+| R34 Ledger Is Source of Truth | **GATED** | `element-management-service.ts` |
+| R35 Foreign Agent/User Host Approval | ENFORCED | foreign-approval routes |
+| R36 Users Have AIDs; One MAESTRO | **GATED** | `send-message-service.ts` |
+| R37 MAESTRO + MAESTRO-DELEGATE | **GATED** | `send-message-service.ts` |
+| R38 Non-MAESTRO User Restrictions | **GATED** | `send-message-service.ts` |
+| R39 ASSISTANT Agent | **GATED** | `element-management-service.ts` |
+| R40 Foreign-User Creation Approval | **GATED** | `element-management-service.ts` |
+| R41 APPROVAL vs MANDATE | ENFORCED | `lib/trdd-approval-token.ts`, portfolio verify |
+| R42 No Agent May Drive Another | ENFORCED | chat + continuity routes |
+| R43 Multi-Host Governance Scope | DOC-ONLY | — |
+| R44 Cross-Host Agent Migration | DOC-ONLY | — |
+| R45 Teams Same-Host; Groups Span | DOC-ONLY | — |
+| R46 Unified Cross-Host Sidebar | DOC-ONLY | — |
+| R47 VPN-Unique User Names | DOC-ONLY | — |
+| R48 MAESTRO Console-Presence | ENFORCED | `lib/peer-address.mjs` (`isConsolePeer`) |
+| R49 The Refusal Protocol | DOC-ONLY | — (behavioural) |
+| R50 One Operation, One AIO Function | DOC-ONLY | — but ratcheted by `tests/unit/all-in-one-single-path.test.ts` |
+| R51 All-Or-Nothing Transaction | ENFORCED | `lib/gate-transaction.ts` |
+
+## Reading the holes
+
+Three distinct kinds, and they need different work — collapsing them into one "15 unenforced"
+number is how a real hole hides behind a behavioural one:
+
+1. **BEHAVIOURAL (R13, R15, R22, R24, R49, and most of R25).** These bind an *agent's conduct*,
+   not server code. No gate can enforce "self-identify when posting to GitHub". They are
+   enforced by the DEP rules seeded into every agent workdir and by review. Correctly DOC-ONLY;
+   **not** a backlog item.
+2. **ENFORCED-BUT-NOT-GATED (15 rules).** Real guards in the wrong shape. Each is a candidate to
+   move into the pipeline as a gate during the TRDD-DQ6XN2VP retrofit — starting with the ones
+   whose mutation has more than one caller. R32/R42 are the sharpest cases: both are cited
+   heavily across routes (66 and 33 citations), which is a lot of surface to keep consistent by
+   hand.
+3. **GENUINELY MISSING (R27, R43–R47).** The multi-host rules R43–R47 are the largest cluster:
+   the cross-host governance surface exists as design, and its enforcement is not yet written.
+
+   R48 *was* in this list on the first run, wrongly. The console-presence gate has been
+   implemented since TRDD-P7XKV3N9 (`lib/peer-address.mjs::isConsolePeer`) — it simply never
+   named its rule, so the scan could not see it. **That was a citation defect, not an enforcement
+   one**, and the fix was one comment line. Worth stating because it generalizes: this scan reads
+   rule ids out of enforcement code, so **a guard that does not cite its rule is indistinguishable
+   from a guard that does not exist**. When a row here looks wrong, check for a missing citation
+   before writing a guard that is already there.
+
+R50's own row is the instructive one: `DOC-ONLY` by citation, yet it has the strongest enforcement
+in the repo — `tests/unit/all-in-one-single-path.test.ts` is a ratchet whose bypass list may only
+shrink. A rule can be enforced by a *test* rather than a *guard*, and this script does not look
+for that. Read the verdicts as evidence, never as a verdict on the system.

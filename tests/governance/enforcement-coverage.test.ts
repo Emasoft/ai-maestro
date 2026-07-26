@@ -200,24 +200,39 @@ describe('governance enforcement coverage — the ratchet', () => {
     const broken: string[] = []
     for (const r of rows.filter(r => r.verdict === 'ENFORCED')) {
       // A guard may be a bare `file`, a `file:line`, or a `file:start-end` range (the common
-      // citation form). Take the first token before any comma (some rows cite two guards) and
-      // split off an optional `:line` / `:start-end` suffix; validate the START line exists.
-      const first = r.guard.split(',')[0].trim()
-      const m = /^([^\s:]+?)(?::(\d+)(?:-\d+)?)?$/.exec(first)
-      if (!m || !m[1] || !/[./]/.test(m[1])) {
-        broken.push(`${r.subRule}: guard is not a file path ("${r.guard}")`)
-        continue
-      }
-      const [, file, startStr] = m
-      const abs = resolve(ROOT, file)
-      if (!existsSync(abs)) {
-        broken.push(`${r.subRule}: guard file is GONE — ${file}`)
-        continue
-      }
-      if (startStr) {
+      // citation form). A row may cite SEVERAL guards, comma-separated.
+      //
+      // Two bugs lived here until 2026-07-26, and both let real rot through silently:
+      //   1. `r.guard.split(',')[0]` validated ONLY the first citation, so the second guard of
+      //      every multi-guard row (e.g. R6.9's `services/amp-service.ts:797-802`) was never
+      //      checked at all — it could point at a deleted file forever.
+      //   2. the range end was matched by a NON-capturing `(?:-\d+)?`, i.e. discarded outright,
+      //      so `foo.ts:10-99999` passed as long as line 10 existed.
+      // Validate EVERY citation, and validate the END of a range as well as its start.
+      for (const cite of r.guard.split(',').map(s => s.trim()).filter(Boolean)) {
+        const m = /^([^\s:]+?)(?::(\d+)(?:-(\d+))?)?$/.exec(cite)
+        if (!m || !m[1] || !/[./]/.test(m[1])) {
+          broken.push(`${r.subRule}: guard is not a file path ("${cite}")`)
+          continue
+        }
+        const [, file, startStr, endStr] = m
+        const abs = resolve(ROOT, file)
+        if (!existsSync(abs)) {
+          broken.push(`${r.subRule}: guard file is GONE — ${file}`)
+          continue
+        }
+        if (!startStr) continue
         const lines = readFileSync(abs, 'utf8').split('\n').length
         if (Number(startStr) > lines) {
           broken.push(`${r.subRule}: ${file} has ${lines} lines, guard cited at :${startStr} (moved?)`)
+          continue
+        }
+        if (endStr) {
+          if (Number(endStr) > lines) {
+            broken.push(`${r.subRule}: ${file} has ${lines} lines, guard range ends at :${endStr} (moved?)`)
+          } else if (Number(endStr) < Number(startStr)) {
+            broken.push(`${r.subRule}: ${file} cites an inverted range :${startStr}-${endStr}`)
+          }
         }
       }
     }

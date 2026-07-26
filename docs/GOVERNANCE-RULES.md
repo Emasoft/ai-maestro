@@ -1824,6 +1824,43 @@ POST-EXECUTION  PG01..PG08  apply every derived change the CHANGE implies
 security-spec rule there is a gate. For each spec rule there is a gate. A rule with no gate is a rule
 the system does not actually enforce — it is documentation, and the state it forbids will occur.
 
+**R51.10 — What "the EXACT state" means, and why restoring it is always possible.** (USER,
+2026-07-26.) R51.2 says a compensation returns the system to the exact state it was in. That is a
+weaker requirement than it looks, because **restorability is already a fundamental requirement of
+ai-maestro** — not something R51 has to invent. Whatever kills a process, kills a tmux, or deletes an
+agent directory, the continuity daemon restores the agent exactly where it stopped. That is what
+"the janitor daemon makes agents immortal" means.
+
+The state that must be restored:
+
+> **the configuration of the agent, its sessions and conversation transcripts, the AMP inbox and
+> outbox, and any state or resource it owns that will allow it to resume its job without
+> interruption — NOT process ids, and not values unnecessary to that.**
+
+What makes this reachable:
+
+- **Deleting an agent is a SOFT delete.** It moves the agent to the cemetery, preserving the git.
+- **Soft-delete and pack-for-relocation are THE SAME function.** A MANAGER may approve migrating an
+  agent to another host, under a different MANAGER; that migration must restore the agent and its
+  tmux on the new host perfectly and restart its work exactly where it stopped. A function that can
+  move an agent across machines can certainly move it back across a failed gate.
+- **The archive carries everything the definition names**: the whole workdir, every JSON config file
+  (local- and project-scoped), the git workdirs, the plugin data folders — plus the conversation
+  `.jsonl` copied out of the Claude projects folder together with the Claude metadata needed to
+  restore or relocate it.
+- **The LEDGER is the last-resort rebuild.** If configuration files are lost, the ledger recreates
+  them exactly: it records every addition, change and removal of every agent's configuration
+  elements, including uid rotation.
+
+Two consequences that decide real compensations:
+
+1. **A rebuilt-but-equivalent resource satisfies the guarantee.** Killing a tmux session is
+   compensated by relaunching it; the new session has a new pid, and that is NOT a violation,
+   because a pid was never part of the state. Same for a re-attached PTY or a re-opened handle.
+2. **Anything IN the definition must be snapshotted before the gate that destroys it** (R51.4). A
+   lost transcript, a dropped AMP message, or a config the ledger cannot replay IS an unrestored
+   state — no "it was equivalent" argument applies to those.
+
 **Enforcement.** `lib/gate-transaction.ts` provides the runner; `tests/unit/gate-transaction.test.ts`
 proves reverse-order compensation, the exact R51.3 message, and the R51.5 refusal. Retrofitting the
 existing pipelines, including their R51.7 invariant checks, is tracked in TRDD-DQ6XN2VP.

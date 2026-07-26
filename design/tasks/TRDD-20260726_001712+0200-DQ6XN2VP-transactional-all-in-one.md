@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-26T00:24:00+0200
+updated: 2026-07-26T03:44:55+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -38,6 +38,26 @@ belt to R51's braces, catching residue left by a *buggy* compensation.
 **LANDED:** `lib/gate-transaction.ts` + 10 tests — reverse-order compensation, the exact R51.3
 message, the R51.5 refusal to claim "no changes" when a rollback failed, and a pre-flight refusal to
 start when any mutating gate lacks an `undo`.
+
+**DECIDED 2026-07-26 (USER) — what "the exact state" means, and that restoring it is ALREADY a
+fundamental ai-maestro requirement, not something R51 has to invent.** Codified as **R51.10**.
+Verbatim: *"the exact state must be restored, where by exact state we are talking about the
+configuration of the agent, its sessions and conversations transcripts, the AMP inbox and outbox,
+any state or resource it owns and that will allow it to resume its job without interruption, so not
+processes ids or values not necessary to this."* The mechanisms that make it reachable: an agent
+delete is a **soft** delete into the cemetery (git preserved); **the soft-delete function and the
+pack-for-relocation function are the SAME function** (a MANAGER may approve migrating an agent to
+another host under a different MANAGER, restoring it and its tmux there and resuming its work
+exactly where it stopped); the archive carries the whole workdir + every local/project-scoped JSON
+config + the git workdirs + the plugin data folders + the conversation `.jsonl` with the Claude
+metadata needed to restore or relocate it; and if configuration is lost the **ledger rebuilds it
+exactly**, because it records every addition/change/removal of every agent's configuration
+elements, including uid rotation. This is what "the janitor daemon makes agents immortal" means.
+
+⇒ **Unblocks the tmux question**: re-launch is a valid compensation (a new pid is not a state
+change, because a pid was never in the definition). ⇒ **And tightens the rest**: anything IN the
+definition — transcript, AMP inbox/outbox, config the ledger cannot replay — MUST be snapshotted
+before the gate that destroys it; "it was equivalent" is not available for those.
 
 NEXT ACTION: retrofit `DeleteAgent` first — it is the pipeline with a proven partial-state defect and
 it already has its snapshot (the cemetery zip), so its compensations are the cheapest to write.
@@ -94,8 +114,10 @@ Per pipeline:
 - **`claude plugin install/uninstall`** shells out to another tool; the undo is the inverse command,
   which can itself fail → precisely the R51.5 case, and it must report rather than pretend.
 - **tmux session kill** is irreversible in-place; the compensation is re-launch, which produces a
-  session with the same name but a NEW process. Whether that counts as "the exact state" needs a
-  decision recorded in the TRDD before the retrofit lands.
+  session with the same name but a NEW process. **DECIDED 2026-07-26 (USER) — re-launch IS a valid
+  compensation.** See the STATE block: a pid was never part of "the exact state", so an equivalent
+  rebuilt resource satisfies R51.2. What must survive the kill is the session's *conversation* —
+  the transcript and the metadata needed to resume it — which the same archive already carries.
 
 ## Verification
 
@@ -127,7 +149,8 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
 - [ ] Each pipeline declares its R51.7 INVARIANTS (not only its gates) — leftovers and
       contradictions are two different ways to be invalid, and the KERM18NX residue check only
       catches the first
-- [ ] The tmux-kill compensation question decided and recorded here
+- [x] The tmux-kill compensation question decided and recorded here (R51.10 — re-launch is valid;
+      a pid is not part of "the exact state")
 - [ ] tsc clean, full suite green
 
 ## Approval log

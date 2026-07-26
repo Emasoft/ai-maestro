@@ -1751,6 +1751,24 @@ debug the wrong layer.
 Set via `.env.local` (gitignored). Never commit `.env.local`. `.example.env`
 IS committed — never put a real secret in it (see `TRDD-44RGLOO8`).
 
+### The governance password — where it lives (never ask, never print)
+
+`AIM_GOVERNANCE_PASSWORD`, in the gitignored **`.env.local`**. That is the one
+place. Every caller that needs it resolves it ITSELF from there —
+`tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh` sources the file
+and pipes the value straight into the browser script's stdin, so the helpers
+(`aim_login`, `aim_sudo_modal`, `aim_delete_agent`) deliberately take **no
+password argument**. Unset ⇒ fail fast; there is no default, because a default
+would be a secret in a committed file.
+
+**The value NEVER passes through a model** — not in a prompt, a report, a shell
+command, a scenario step, or a commit. Write the variable NAME, never the
+literal. The old contract passed it as `$1`, which required every scenario to
+spell it out; 197 copies accumulated across 34 committed files and one reached a
+PUBLIC repo (`TRDD-44RGLOO8`, `TRDD-E9BZ5P7S`). A secret any file is *permitted*
+to name eventually appears in every file that *can* name it — so the fix is to
+make naming it unnecessary, not to be careful.
+
 ## Server Modes
 
 AI Maestro supports two server modes controlled by the `MAESTRO_MODE` environment variable:

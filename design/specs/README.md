@@ -85,5 +85,12 @@ Each is a DETAILED capture of a rule file — read the whole rule file, one rule
   the build blueprint, and the `RP-VAL` validation checklist. Verified against the 8 cached predefined
   role-plugins + `ecosystem-constants.ts`; confirms the ASSISTANT plugin's conformance (`RP-ASSISTANT`).
 
+- **`all-in-one-spec.md`** — the AIO function contract: the PRE/EXE/POST phase shape, gate naming +
+  per-pipeline numbering, the pre/post role catalogues, variant gates, the transaction semantics
+  (formalising R50/R51 as `MUST`-assertions, never re-narrating them — `AIO-META-02`), the result and
+  caller contracts, rule-coverage (`AIO-CVG`), and the `AIO-CHK` C1-C11 conformance table. Names the
+  three places it supersedes the upstream `make-all-in-one` authoring skill (`AIO-SKILL`).
+  Conformance-tested against `lib/gate-transaction.ts` + `tests/unit/all-in-one-single-path.test.ts`.
+
 The rule files these describe STAY in their own locations (the RULE FILE ≠ the SPEC, per the
 distinction above); only the describing spec lives here.

@@ -140,7 +140,7 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
 - [x] `lib/gate-transaction.ts` — reverse compensation, R51.3 message, R51.5 invalid-state report,
       pre-flight refusal of uncompensated mutating gates, and the R51.7 success-path invariant check
       that aborts+reverts on a violated invariant (13 tests)
-- [x] `docs/ALL-IN-ONE-SPEC.md` — the normative engineering contract (v1.0.0), derived from the
+- [x] `design/specs/all-in-one-spec.md` — the normative engineering contract (v1.0.0), derived from the
       `make-all-in-one` skill and reconciled with R50/R51; Appendix A names the 3 places it
       supersedes the skill (chief among them: the skill returns on a gate failure, this spec
       compensates)

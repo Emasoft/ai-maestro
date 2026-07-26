@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-26T16:23:45+0200
+updated: 2026-07-26T19:48:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -92,7 +92,45 @@ is right and the TEXT is stale — the dangerous direction.
 6 enforcement sites never recorded at all.** That is the map's steady state, not a run of bad luck —
 so a citation is evidence only once someone has executed it.
 
-NEXT ACTION: continue the batches (below). One sub-agent at a time (USER spawn rule), tests only.
+**PHASES 1 + 2b LANDED 2026-07-26 (debt unchanged at 66 — these were instrument work, not pins).**
+Commits `b07cfd78`, `c5173e59`, `17471dd3`, `08bd2800`, `f379b2b7`.
+
+- **The ratchet's own guard check had two silent holes** (`b07cfd78`): it validated only the FIRST
+  citation of a multi-guard row (so R6.9's second guard was never checked) and captured a range's
+  END without using it (so `foo.ts:10-999999` passed). Both fixed, both mutation-proved.
+- **Guards may now cite a gate NAME** — `…:6442-6465 (DeleteAgent::G02)` (`c5173e59`). A label
+  travels with the code; a line number does not. 17 rows qualified — only those whose cited range
+  contains EXACTLY ONE gate. Gate ids are per-pipeline local and reused (G01 means four different
+  things), so the citation MUST be `<Pipeline>::<Gnn>`; a bare `Gnn` is ambiguous four ways.
+- **The new gate test had a false-green and shipped one commit later** (`17471dd3`): commenting out
+  DeleteAgent's five G02 pushes left it GREEN, because a regex over raw text cannot tell code from a
+  comment. Fixed; now proved four ways (bad gate, bad pipeline, gate commented, gate deleted).
+  **Deletion alone would have passed — try the mutation a developer actually makes.**
+- **Part II is now checked against the code on every test run** (`b07cfd78`):
+  `python3 scripts/aio-gate-coverage.py --check`. Until then the script never opened the file it
+  feeds, so the table was a hand-copied snapshot of an analysis that could not see it.
+- **A rotted prose count was removed, not re-checked**: the header claimed "only 5 rules have both a
+  guard and a test" while the true figure was 75. The machine-checked constant beside it
+  (`MAX_ENFORCED_WITHOUT_TEST`) never drifted. The doc now states no standalone number.
+- **TRDD-W8NA7ROZ** (EHT) records the 15 rows that could NOT be gate-qualified — 5 with no label in
+  range, 10 whose citation names no single guard (R18.8/R18.9 cite a 391-line range spanning
+  ChangeCLIArgs into ChangeClient with 8 gates in it). Not converted: laundering a too-coarse
+  citation into an authoritative-looking one is worse than leaving it visibly coarse.
+- **Phase 2b — `tests/helpers/fake-ecosystem-home.ts`** (`f379b2b7`): the 0-IMPACT containment idiom
+  was hand-rolled in 8 files; now one definition, adopted by r20 (23 lines → 4). It adds a guarantee
+  no copy had — it REFUSES a root that is not under a temp dir — and its own test watches it refuse.
+  Remaining 7 sites can adopt it incrementally; it is additive.
+
+NEXT ACTION: **batch 5 — R5 (7 transfer rules), all citing
+`app/api/governance/transfers/route.ts` + `[id]/resolve/route.ts`.** Grouped by GUARD FILE, not by
+rule id, so one context holds one file's mocking setup. Use the new containment helper from the
+start. Then R18 (8), noting 5 of its rows are in W8NA7ROZ's defective-citation list — verify those
+citations BEFORE writing against them.
+
+Deferred from Phase 2 as tooling, not pins: `scripts/verify-zero-impact.sh` (2a) and the
+`setupFiles` timeout unification (2b tail).
+
+One sub-agent at a time (USER spawn rule), tests only.
 
 ## The batch plan
 

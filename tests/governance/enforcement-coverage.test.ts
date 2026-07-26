@@ -89,7 +89,14 @@ const UNAUDITED_RULES = new Set<number>([
 // delete. It is pinned in the inverse direction — ADD the forbidden governance filter and the test
 // fails — and was proven that way. An absence-invariant is still pinnable; it just needs the proof
 // run backwards, and saying so beats quietly counting it as though it were an ordinary guard.
-const MAX_ENFORCED_WITHOUT_TEST = 101
+// 2026-07-26: batch 3 pinned all 13 of R6 (the communication graph) in
+// tests/governance/r6-communication-graph.test.ts — 101 → 88. Two caveats recorded rather than
+// glossed: R6.8 is pinned at LAYER 1 only (its layers 2/3 are prompt-level, in the role-plugin
+// repos, with no server surface), and R6.10 is pinned at the contract the code ACTUALLY has —
+// any truthy `inReplyToMessageId` unlocks a reply-only edge — not the stronger one its rule text
+// aspires to. Writing the stronger test and then "fixing" production to match would have been a
+// governance change smuggled in by a test batch; it is filed as TRDD-VLBVO0ZP instead.
+const MAX_ENFORCED_WITHOUT_TEST = 88
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

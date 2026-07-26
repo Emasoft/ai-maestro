@@ -68,21 +68,21 @@ Row format is fixed so a regex parses each line:
 | R5.6 | ENFORCED | app/api/governance/transfers/route.ts:124-126 | — |
 | R5.7 | ENFORCED | app/api/governance/transfers/[id]/resolve/route.ts:103-127 | — |
 | R5.8 | ENFORCED | app/api/governance/transfers/route.ts:160-164 | — |
-| R6.1 | ENFORCED | lib/communication-graph.ts:94-144 | — |
-| R6.2 | ENFORCED | lib/communication-graph.ts:97 | — |
-| R6.3 | ENFORCED | lib/communication-graph.ts:98 | — |
-| R6.4 | ENFORCED | lib/communication-graph.ts:99 | — |
-| R6.5 | ENFORCED | lib/communication-graph.ts:100-102 | — |
-| R6.5a | ENFORCED | lib/communication-graph.ts:103 | — |
-| R6.5b | ENFORCED | lib/communication-graph.ts:104 | — |
-| R6.6 | ENFORCED | lib/communication-graph.ts:112 | — |
-| R6.7 | ENFORCED | services/amp-service.ts:1294-1300 | — |
-| R6.8 | ENFORCED | services/amp-service.ts:1286 | — |
-| R6.9 | ENFORCED | services/amp-service.ts:797-802 | — |
-| R6.10 | ENFORCED | lib/communication-graph.ts:442-491 | — |
+| R6.1 | ENFORCED | lib/communication-graph.ts:94-144 | tests/governance/r6-communication-graph.test.ts |
+| R6.2 | ENFORCED | lib/communication-graph.ts:97 | tests/governance/r6-communication-graph.test.ts |
+| R6.3 | ENFORCED | lib/communication-graph.ts:98 | tests/governance/r6-communication-graph.test.ts |
+| R6.4 | ENFORCED | lib/communication-graph.ts:99 | tests/governance/r6-communication-graph.test.ts |
+| R6.5 | ENFORCED | lib/communication-graph.ts:100-102 | tests/governance/r6-communication-graph.test.ts |
+| R6.5a | ENFORCED | lib/communication-graph.ts:103 | tests/governance/r6-communication-graph.test.ts |
+| R6.5b | ENFORCED | lib/communication-graph.ts:104 | tests/governance/r6-communication-graph.test.ts |
+| R6.6 | ENFORCED | lib/communication-graph.ts:112, lib/communication-graph.ts:396-408 | tests/governance/r6-communication-graph.test.ts |
+| R6.7 | ENFORCED | services/amp-service.ts:1294-1300 | tests/governance/r6-communication-graph.test.ts |
+| R6.8 | ENFORCED | services/amp-service.ts:1286, services/amp-service.ts:1112-1124 | tests/governance/r6-communication-graph.test.ts |
+| R6.9 | ENFORCED | lib/communication-graph.ts:322-327, services/amp-service.ts:797-802 | tests/governance/r6-communication-graph.test.ts |
+| R6.10 | ENFORCED | lib/communication-graph.ts:442-491 | tests/governance/r6-communication-graph.test.ts |
 | R6.11 | UNENFORCED | — | — |
 | R6.12 | UNENFORCED | — | — |
-| R6.13 | ENFORCED | lib/agent-registry.ts:316-325 | — |
+| R6.13 | ENFORCED | lib/agent-registry.ts:312-332 | tests/governance/r6-communication-graph.test.ts |
 | R6.14 | UNENFORCED | — | — |
 | R7.1 | ENFORCED | components/sidebar/TeamListView.tsx:94 | — |
 | R7.2 | ENFORCED | hooks/useGovernance.ts:48 | — |

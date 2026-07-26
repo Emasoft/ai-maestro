@@ -19,11 +19,16 @@ ratchet.
 | `RULING-NEEDED` | The rule and the shipped architecture cannot both stand; a USER must decide which wins. |
 | `BEHAVIOURAL` | The rule binds an agent's conduct, not server code, so no code guard can enforce it (authorship, proactive memory, written-order intent, self-refusal). |
 
-**Enforced-but-untested.** Most `ENFORCED` rows have a real guard but no test
-(Test = `—`): the guard is single-path code that nothing pins against regression.
-A separate ratchet counter tracks these; they are the priority backlog for
-governance test coverage. Only 5 rules have BOTH a guard and a drift-failing test
-(R25.2, R28.1, R41.1, R41.4, R41.5).
+**Enforced-but-untested.** An `ENFORCED` row with Test = `—` has a real guard that
+nothing pins against regression. These are the priority backlog for governance test
+coverage, and their count is the ratchet `MAX_ENFORCED_WITHOUT_TEST` in
+`tests/governance/enforcement-coverage.test.ts` — a number that may only fall.
+
+**Read the count there, not here.** This paragraph used to carry its own tally
+("only 5 rules have both a guard and a test"); four pinning batches later the real
+figure was 75 and nobody noticed, because prose is not checked and the constant is.
+Any standalone number written here would rot the same way, so this document
+deliberately states none.
 
 Row format is fixed so a regex parses each line:
 `| Sub-rule | Verdict | Guard (file:line or —) | Test (path or —) |`
@@ -431,6 +436,21 @@ not actually enforce — it is documentation, and the state it forbids will occu
 greps enforcement code (`services/`, `lib/`, `app/api/`, `server.mjs`) versus docs/tests/design,
 and asks whether any enforcement-code citation sits within 40 lines of a gate label
 (`ops.push('G##' | 'EXE' | 'PG##')`).
+
+**The table below is checked against the code on every test run.**
+`python3 scripts/aio-gate-coverage.py --check` re-derives the verdicts and fails on any
+disagreement with this table — including the tally line — and
+`tests/governance/enforcement-coverage.test.ts` runs it. Until 2026-07-26 it did not: the
+script never opened this file, so the table was a hand-copied snapshot of an analysis that
+could not see it, and a change in gate coverage would have left this page reading as accurate
+indefinitely. Editing a verdict here without a matching change in code now turns the suite red.
+
+**What that check does and does not buy.** It proves the table is FRESH, not that a verdict is
+RIGHT: `GATED` still rests on the ±40-line proximity heuristic above, which is evidence a gate
+is nearby, never that it is the correct check. And it says nothing about Part I — those
+`file:line` guard citations are checked only for existence and in-range bounds by the same test
+(a moved guard inside a file that is still long enough passes). Neither the script nor any test
+verifies that a cited line still CONTAINS the guard it names; only a human read does.
 
 | Verdict | Meaning |
 |---|---|

@@ -21,6 +21,11 @@ Classification (deliberately conservative — it under-claims rather than over-c
 A script cannot judge whether a gate is CORRECT — only whether one plausibly exists. So this
 output is a worklist, not a certificate: every non-GATED row is a candidate hole, and the
 GATED rows still need a human to confirm the gate checks what the rule says.
+
+`--check` compares the verdicts computed here against the table published in Part II of
+docs/GOVERNANCE-ENFORCEMENT-MAP.md and exits non-zero on any drift. Without it the published
+table is a hand-copied snapshot of a script that never opens the file it feeds, so code could
+change gate coverage and the doc would keep reading as accurate.
 """
 from __future__ import annotations
 
@@ -32,6 +37,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RULES_MD = ROOT / "docs" / "GOVERNANCE-RULES.md"
+MAP_MD = ROOT / "docs" / "GOVERNANCE-ENFORCEMENT-MAP.md"
+
+VERDICTS = ("GATED", "ENFORCED", "DOC-ONLY", "UNMAPPED")
+# Part II only. Part I's table is a different question with overlapping verdict words, so the
+# parse is anchored on the Part II heading rather than on row shape alone.
+PART_II = re.compile(r"^# Part II\b")
+# `| R7 UI Robustness | **GATED** | ... |` — the trailing "Where" cell is human-curated prose,
+# deliberately NOT compared: the verdict is the machine's claim, the evidence is a reader's note.
+TABLE_ROW = re.compile(rf"^\|\s*(R\d+)\s+[^|]*\|\s*\*{{0,2}}({'|'.join(VERDICTS)})\*{{0,2}}\s*\|")
+TALLY = re.compile(
+    r"\*\*GATED (\d+) · ENFORCED (\d+) · DOC-ONLY (\d+) · UNMAPPED (\d+) · total (\d+)\.\*\*"
+)
 
 # Code that actually runs on the server. A citation here is evidence of enforcement.
 ENFORCEMENT_DIRS = ["services", "lib", "app/api", "server.mjs"]
@@ -76,11 +93,10 @@ def gate_lines(path: Path) -> list[int]:
         return []
 
 
-def main() -> int:
+def compute() -> tuple[list[tuple[str, str, str, int, str]], dict[str, int]]:
     rules = rule_headings()
     if not rules:
-        print("FATAL: no rule headings parsed", file=sys.stderr)
-        return 1
+        raise SystemExit("FATAL: no rule headings parsed")
 
     gate_cache: dict[str, list[int]] = {}
     rows = []
@@ -116,6 +132,65 @@ def main() -> int:
 
         tally[verdict] += 1
         rows.append((rid, title, verdict, len(code_hits), ev))
+
+    return rows, tally
+
+
+def published() -> tuple[dict[str, str], tuple[int, ...] | None]:
+    """Parse Part II's table out of the enforcement map: {rule: verdict}, plus its tally line."""
+    verdicts: dict[str, str] = {}
+    tally: tuple[int, ...] | None = None
+    in_part_ii = False
+    for line in MAP_MD.read_text().splitlines():
+        if PART_II.match(line):
+            in_part_ii = True
+            continue
+        if not in_part_ii:
+            continue
+        if (m := TALLY.search(line)) is not None:
+            tally = tuple(int(g) for g in m.groups())
+        if (m := TABLE_ROW.match(line)) is not None:
+            verdicts[m.group(1)] = m.group(2)
+    return verdicts, tally
+
+
+def check(rows: list[tuple[str, str, str, int, str]], tally: dict[str, int]) -> int:
+    """Fail when the published Part II table disagrees with what the code says today."""
+    doc_verdicts, doc_tally = published()
+    computed = {rid: verdict for rid, _, verdict, _, _ in rows}
+    drift: list[str] = []
+
+    if not doc_verdicts:
+        drift.append(f"no Part II table parsed from {MAP_MD.relative_to(ROOT)} — did its shape change?")
+    for rid in sorted(computed.keys() - doc_verdicts.keys()):
+        drift.append(f"{rid}: computed {computed[rid]}, but the map's Part II has no row for it")
+    for rid in sorted(doc_verdicts.keys() - computed.keys()):
+        drift.append(f"{rid}: the map's Part II lists it {doc_verdicts[rid]}, but no such rule heading exists")
+    for rid in sorted(computed.keys() & doc_verdicts.keys()):
+        if computed[rid] != doc_verdicts[rid]:
+            drift.append(f"{rid}: map says {doc_verdicts[rid]}, code says {computed[rid]}")
+
+    want = tuple(tally[k] for k in VERDICTS) + (len(rows),)
+    if doc_tally is None:
+        drift.append("the map's Part II carries no `**GATED n · ENFORCED n · …**` tally line")
+    elif doc_tally != want:
+        drift.append(f"tally line says {doc_tally}, code says {want}")
+
+    if drift:
+        print(f"DRIFT — {MAP_MD.relative_to(ROOT)} Part II no longer matches the code:", file=sys.stderr)
+        for d in drift:
+            print(f"  - {d}", file=sys.stderr)
+        print("\nRe-run `python3 scripts/aio-gate-coverage.py` and update Part II.", file=sys.stderr)
+        return 1
+
+    print(f"OK — Part II matches the code ({len(rows)} rules).")
+    return 0
+
+
+def main() -> int:
+    rows, tally = compute()
+    if "--check" in sys.argv[1:]:
+        return check(rows, tally)
 
     w = max(len(t) for _, t, _, _, _ in rows)
     print(f"{'RULE':<5} {'TITLE':<{w}} {'VERDICT':<9} {'CITES':>5}  EVIDENCE")

@@ -34,6 +34,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const ROOT = resolve(__dirname, '../..')
 const RULES_DOC = resolve(ROOT, 'docs/GOVERNANCE-RULES.md')
@@ -273,4 +274,24 @@ describe('governance enforcement coverage — the ratchet', () => {
         `Untested-but-enforced rules:\n  ${unproven.join(', ')}`,
     ).toBeLessThanOrEqual(MAX_ENFORCED_WITHOUT_TEST)
   })
+
+  it("Part II's published gate coverage still matches what the code says", () => {
+    // Part II is DERIVED from code — `scripts/aio-gate-coverage.py` greps the enforcement dirs and
+    // asks whether each rule's citation sits at a gate label. But the table in the doc is a
+    // hand-COPIED snapshot, and until now the script never opened the file it feeds: the two were
+    // decoupled sources of truth, so a change in gate coverage could leave the doc reading as
+    // accurate forever. `--check` re-derives and compares; this makes it run.
+    //
+    // A missing interpreter FAILS rather than skips. A check that silently does nothing is the
+    // exact defect this whole map exists to end — it reads as green while measuring nothing.
+    const res = spawnSync('python3', [resolve(ROOT, 'scripts/aio-gate-coverage.py'), '--check'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    })
+    expect(
+      res.error ?? null,
+      'python3 is required to verify the enforcement map (preinstalled on macOS and ubuntu-latest)',
+    ).toBeNull()
+    expect(res.status, `${res.stderr}${res.stdout}`).toBe(0)
+  }, 60_000)
 })

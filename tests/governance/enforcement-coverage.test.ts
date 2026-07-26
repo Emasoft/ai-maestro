@@ -343,6 +343,12 @@ describe('governance enforcement coverage — the ratchet', () => {
           if (fn) current = fn[1]
           if (current !== pipeline) continue
           sawPipeline = true
+          // A COMMENTED-OUT gate is a dead gate. Caught by mutation: commenting out DeleteAgent's
+          // five G02 pushes left this test green, because a regex over raw text cannot tell code
+          // from a comment — the precise false-green this map exists to end. Skip comment lines so
+          // disabling a guard fails here instead of passing quietly.
+          const code = line.trim()
+          if (code.startsWith('//') || code.startsWith('*') || code.startsWith('/*')) continue
           if (new RegExp(`ops\\.push\\(\\s*[\`'"]${label}\\b`).test(line)) {
             found = true
             break

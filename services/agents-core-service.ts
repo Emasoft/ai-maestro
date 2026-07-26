@@ -2265,12 +2265,17 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         // than one that merely starts cold:
         //   1. `hasPriorConversation` — `--continue` with nothing to continue makes the client
         //      exit, which would turn boot-restore into boot-destroy on a first-ever launch.
-        //   2. FLAG-FORM ONLY. Per-client resume verbs are not interchangeable: claude
-        //      `--continue` and gemini `-r latest` are flags that append safely, but codex
-        //      `resume --last` and kiro `chat --resume` are SUBCOMMANDS that must precede other
-        //      args — appending those builds a command that is wrong rather than absent. Those
-        //      clients are skipped loudly here instead of being silently mis-launched; wiring
-        //      them means going through buildLaunchCommand, which owns subcommand ordering.
+        //   2. SUBCOMMAND ORDERING, handled by COMPOSITION rather than by skipping. Per-client
+        //      resume verbs are not interchangeable: claude `--continue` and gemini `-r latest`
+        //      are flags that append safely, but codex `resume --last` and kiro `chat --resume`
+        //      are SUBCOMMANDS that must precede the other args — appending those would build a
+        //      command that is wrong rather than absent. `composeLaunchWithResume` splices the
+        //      verb straight after the binary (`[binary, verb, rest]`) and drops a shared leading
+        //      subcommand (kiro's `chat`), so those clients launch CORRECTLY instead of being
+        //      excluded. Do not re-add a flag-form-only skip: an earlier version of this comment
+        //      still described one, and a review pass read it, found no such guard in the code,
+        //      and reported a launch-killing bug that does not exist. The guard was replaced by a
+        //      better mechanism, not dropped.
         if (continueConversation) {
           try {
             const { getClientCapabilities, composeLaunchWithResume } = await import('@/lib/client-capabilities')

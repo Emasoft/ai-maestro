@@ -25,10 +25,23 @@ import path from 'path'
  * fs-bound and `client-capabilities.ts` is imported by browser bundles that must not pull in `fs`.
  *
  * A client is listed ONLY when its transcript location has been VERIFIED on a real install.
- * Everything else answers `null` = UNKNOWN, and unknown means cold start — never a speculative
- * resume. The asymmetry is the same one that governs the rest of this path: a missed resume costs
- * a cold start, while a resume verb the client cannot honour can make it exit at launch, which
- * turns boot-restore into boot-destroy. Add a client here after checking it, not before.
+ * Everything else answers `null` = UNKNOWN. Add a client here after checking it, not before.
+ *
+ * UNKNOWN DOES NOT MEAN COLD START — read `decideResume` before changing anything here. This
+ * header used to say the opposite ("unknown means cold start — never a speculative resume"), which
+ * has contradicted the code since the USER ruling of 2026-07-25: the CALLER knows whether this is a
+ * first launch (the wizard passes `continueConversation: false`; every other path leaves it true),
+ * and a filesystem guess is not a better authority than the caller. A probe present and negative
+ * still refuses.
+ *
+ * The stale wording is called out rather than deleted because it nearly cost a reversal: a review
+ * pass read the header, found the body disagreeing, and proposed "fixing" the body — which would
+ * have undone a USER decision to satisfy a comment. When code and comment disagree about a recorded
+ * ruling, the comment is the defect.
+ *
+ * The residual risk this leaves is real but narrow, and belongs to the CALLER, not here: a client
+ * with no probe whose caller wrongly passes `continueConversation: true` on a virgin workdir emits
+ * its resume verb with nothing to resume. Closing it means adding that client's probe above.
  */
 const CONVERSATION_PROBES: Record<string, (workdir: string) => Promise<boolean>> = {
   // Verified: `claude --continue` resolves ~/.claude/projects/<slug>/*.jsonl by the same slug.

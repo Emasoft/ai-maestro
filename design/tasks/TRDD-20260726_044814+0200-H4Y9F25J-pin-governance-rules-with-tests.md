@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-26T09:45:00+0200
+updated: 2026-07-26T16:23:45+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T04:48:14+0200
 relevant-rules: [R51]
 blocked-by: []
-eht: [L42SKUBW]
+eht: [L42SKUBW, W8NA7ROZ]
 npt: []
 implementation-commits: [7bec032e, 2298646a, 59893d08]
 ---

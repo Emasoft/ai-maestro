@@ -96,7 +96,12 @@ const UNAUDITED_RULES = new Set<number>([
 // any truthy `inReplyToMessageId` unlocks a reply-only edge — not the stronger one its rule text
 // aspires to. Writing the stronger test and then "fixing" production to match would have been a
 // governance change smuggled in by a test batch; it is filed as TRDD-VLBVO0ZP instead.
-const MAX_ENFORCED_WITHOUT_TEST = 88
+// 2026-07-26: batch 4 pinned 22 of R20's 23 in tests/governance/r20-marketplace-governance.test.ts
+// — 88 → 66. R20.28 is the one non-pin and the reason is honest: its guard is in a SHELL script
+// (install-messaging.sh), where a vitest assertion could only grep the file's text. Pinning text is
+// not pinning behaviour, so it stays counted rather than being cleared by a test that reads a
+// string.
+const MAX_ENFORCED_WITHOUT_TEST = 66
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

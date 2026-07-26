@@ -45,8 +45,8 @@ Row format is fixed so a regex parses each line:
 | R2.2 | ENFORCED | lib/team-registry.ts:107 | — |
 | R2.3 | ENFORCED | lib/team-registry.ts:107 | — |
 | R3.1 | CONTRADICTED | — | — |
-| R3.2 | ENFORCED | services/element-management-service.ts:2291-2303 | tests/governance/r3-r9-team-governance.test.ts |
-| R3.3 | ENFORCED | services/element-management-service.ts:2338-2354 | tests/governance/r3-r9-team-governance.test.ts |
+| R3.2 | ENFORCED | services/element-management-service.ts:2291-2303 (ChangeTitle::G07) | tests/governance/r3-r9-team-governance.test.ts |
+| R3.3 | ENFORCED | services/element-management-service.ts:2338-2354 (ChangeTitle::G08) | tests/governance/r3-r9-team-governance.test.ts |
 | R3.4 | ENFORCED | lib/team-registry.ts:131-138 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.5 | ENFORCED | services/governance-service.ts:66-83 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.6 | ENFORCED | lib/authorization.ts:321-326 | tests/unit/headless-router-auth-mirror.test.ts |
@@ -100,16 +100,16 @@ Row format is fixed so a regex parses each line:
 | R7.9 | ENFORCED | hooks/useGovernance.ts:48 | — |
 | R8.1 | ENFORCED | lib/team-registry.ts:306 | — |
 | R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |
-| R8.3 | ENFORCED | services/element-management-service.ts:6183-6205 | — |
+| R8.3 | ENFORCED | services/element-management-service.ts:6183-6205 (DeleteTeam::G03) | — |
 | R8.4 | ENFORCED | lib/authorization.ts:580-592 | — |
 | R9.1 | ENFORCED | services/teams-service.ts:279-282 | tests/governance/r3-r9-team-governance.test.ts |
-| R9.2 | ENFORCED | services/element-management-service.ts:2461-2474 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.2 | ENFORCED | services/element-management-service.ts:2461-2474 (ChangeTitle::G10) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.3 | CONTRADICTED | — | — |
 | R9.4 | ENFORCED | lib/team-registry.ts:472-501 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.5 | ENFORCED | services/agents-core-service.ts:2045-2054 | tests/governance/r3-r9-team-governance.test.ts |
-| R9.6 | ENFORCED | services/element-management-service.ts:2539-2554 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.6 | ENFORCED | services/element-management-service.ts:2539-2554 (ChangeTitle::G13) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.7 | ENFORCED | lib/team-registry.ts:518-534 | tests/governance/r3-r9-team-governance.test.ts |
-| R9.8 | ENFORCED | services/element-management-service.ts:6442-6465 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.8 | ENFORCED | services/element-management-service.ts:6442-6465 (DeleteAgent::G02) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.9 | ENFORCED | server.mjs:1750-1764 | — |
 | R9.10 | UNENFORCED | — | — |
 | R9.11 | ENFORCED | services/teams-service.ts:285-291 | tests/governance/r3-r9-team-governance.test.ts |
@@ -125,8 +125,8 @@ Row format is fixed so a regex parses each line:
 | R11.1 | CONTRADICTED | — | — |
 | R11.2 | ENFORCED | lib/ecosystem-constants.ts:330 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R11.3 | ENFORCED | lib/ecosystem-constants.ts:332 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R11.4 | ENFORCED | services/element-management-service.ts:4952-4956 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R11.5 | ENFORCED | services/element-management-service.ts:4897-4902 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R11.4 | ENFORCED | services/element-management-service.ts:4952-4956 (ChangeTeam::PG01) | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R11.5 | ENFORCED | services/element-management-service.ts:4897-4902 (ChangeTeam::G02) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R11.6 | ENFORCED | components/agent-profile/RoleTab.tsx:63-74 | — |
 | R11.7 | CONTRADICTED | — | — |
 | R11.8 | CONTRADICTED | — | — |
@@ -136,7 +136,7 @@ Row format is fixed so a regex parses each line:
 | R11.12 | CONTRADICTED | — | — |
 | R12.1 | UNENFORCED | — | — |
 | R12.2 | CONTRADICTED | — | — |
-| R12.3 | ENFORCED | services/element-management-service.ts:2296-2314 | — |
+| R12.3 | ENFORCED | services/element-management-service.ts:2296-2314 (ChangeTitle::G07) | — |
 | R12.4 | INVENTED | — | — |
 | R12.5 | CONTRADICTED | — | — |
 | R12.6 | UNENFORCED | — | — |
@@ -169,21 +169,21 @@ Row format is fixed so a regex parses each line:
 | R16.5 | CONTRADICTED | — | — |
 | R16.6 | BEHAVIOURAL | — | — |
 | R16.7 | CONTRADICTED | — | — |
-| R17.1 | ENFORCED | services/element-management-service.ts:7530-7551 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.1 | ENFORCED | services/element-management-service.ts:7530-7551 (CreateAgent::G08) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.2 | ENFORCED | services/element-management-service.ts:1531-1533 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.3 | UNENFORCED | — | — |
 | R17.4 | UNENFORCED | — | — |
 | R17.5 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.6 | ENFORCED | services/element-management-service.ts:7522-7551 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.6 | ENFORCED | services/element-management-service.ts:7522-7551 (CreateAgent::G08) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.7 | UNENFORCED | — | — |
 | R17.8 | ENFORCED | services/element-management-service.ts:724-729 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.9 | ENFORCED | services/element-management-service.ts:1193-1194 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.9 | ENFORCED | services/element-management-service.ts:1193-1194 (InstallElement::PG01) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.10 | UNENFORCED | — | — |
 | R17.11 | CONTRADICTED | — | — |
 | R17.12 | UNENFORCED | — | — |
 | R17.13 | ENFORCED | services/plugin-storage-service.ts:182-266 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.14 | UNENFORCED | — | — |
-| R17.15 | ENFORCED | services/element-management-service.ts:714-722 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.15 | ENFORCED | services/element-management-service.ts:714-722 (InstallElement::G07) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.16 | ENFORCED | components/agent-profile/PluginsTab.tsx:244-245 | — |
 | R17.17 | ENFORCED | server.mjs:1766-1799 | — |
 | R17.18 | RULING-NEEDED | — | — |
@@ -200,15 +200,15 @@ Row format is fixed so a regex parses each line:
 | R18.3c | UNENFORCED | — | — |
 | R18.3d | UNENFORCED | — | — |
 | R18.4 | UNENFORCED | — | — |
-| R18.5 | ENFORCED | services/element-management-service.ts:5556-5563 | — |
+| R18.5 | ENFORCED | services/element-management-service.ts:5556-5563 (ChangeClient::G03) | — |
 | R18.6 | CONTRADICTED | — | — |
 | R18.7 | ENFORCED | services/element-management-service.ts:5847-5849 | — |
 | R18.8 | ENFORCED | services/element-management-service.ts:5475-5866 | — |
 | R18.9 | ENFORCED | services/element-management-service.ts:5475-5866 | — |
 | R18.10 | ENFORCED | services/element-management-service.ts:5840 | — |
-| R19.1 | ENFORCED | services/element-management-service.ts:2385 | — |
+| R19.1 | ENFORCED | services/element-management-service.ts:2385 (ChangeTitle::G08b) | — |
 | R19.2 | UNENFORCED | — | — |
-| R19.3 | ENFORCED | services/element-management-service.ts:2400-2411 | — |
+| R19.3 | ENFORCED | services/element-management-service.ts:2400-2411 (ChangeTitle::EXE) | — |
 | R19.4 | UNENFORCED | — | — |
 | R19.5 | UNENFORCED | — | — |
 | R19.6 | UNENFORCED | — | — |
@@ -229,7 +229,7 @@ Row format is fixed so a regex parses each line:
 | R20.10 | UNENFORCED | — | — |
 | R20.11 | UNENFORCED | — | — |
 | R20.12 | UNENFORCED | — | — |
-| R20.13 | ENFORCED | services/element-management-service.ts:6953-6966 | tests/governance/r20-marketplace-governance.test.ts |
+| R20.13 | ENFORCED | services/element-management-service.ts:6953-6966 (CreateAgent::G01b) | tests/governance/r20-marketplace-governance.test.ts |
 | R20.14 | ENFORCED | lib/agent-directory.ts:338-341, lib/agent-directory.ts:206-211 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.15 | ENFORCED | lib/agent-auth.ts:110-116 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.16 | ENFORCED | lib/agent-auth.ts:125 | tests/governance/r20-marketplace-governance.test.ts |

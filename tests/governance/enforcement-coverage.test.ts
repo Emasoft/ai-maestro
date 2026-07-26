@@ -36,6 +36,21 @@ import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
+/**
+ * A guard may carry a GATE QUALIFIER: `services/x.ts:120-140 (DeleteAgent::G03)`.
+ *
+ * WHY a name and not just the line range. A line number is a coordinate into a file that keeps
+ * changing, so a citation decays every time code above it moves — which is how R17.17 came to be
+ * cited at `server.mjs:1709-1742` while its guard sat at `1766-1799`, reading as coverage and
+ * sending the reader to code that does something else. A gate LABEL moves with the code it labels.
+ *
+ * The pipeline prefix is not decoration: gate numbers are per-pipeline local and heavily reused —
+ * `G01` is "Marketplace missing" in InstallElement, "Title valid" in ChangeTitle, "Plugin name
+ * valid" in ChangePlugin and "Agent found" in DeleteAgent. A bare `G01` citation is ambiguous four
+ * ways; `DeleteAgent::G01` is unique.
+ */
+const GATE_QUALIFIER = /\(([A-Za-z_][\w]*)::(G\d+[a-z]?|EXE|PG\d+)\)/g
+
 const ROOT = resolve(__dirname, '../..')
 const RULES_DOC = resolve(ROOT, 'docs/GOVERNANCE-RULES.md')
 const MAP_DOC = resolve(ROOT, 'docs/GOVERNANCE-ENFORCEMENT-MAP.md')
@@ -210,7 +225,10 @@ describe('governance enforcement coverage — the ratchet', () => {
       //   2. the range end was matched by a NON-capturing `(?:-\d+)?`, i.e. discarded outright,
       //      so `foo.ts:10-99999` passed as long as line 10 existed.
       // Validate EVERY citation, and validate the END of a range as well as its start.
-      for (const cite of r.guard.split(',').map(s => s.trim()).filter(Boolean)) {
+      // A `(Pipeline::Gnn)` gate qualifier is checked by its own test below, not here — strip it
+      // so it is not mistaken for a file path.
+      const cites = r.guard.replace(GATE_QUALIFIER, '').split(',')
+      for (const cite of cites.map(s => s.trim()).filter(Boolean)) {
         const m = /^([^\s:]+?)(?::(\d+)(?:-(\d+))?)?$/.exec(cite)
         if (!m || !m[1] || !/[./]/.test(m[1])) {
           broken.push(`${r.subRule}: guard is not a file path ("${cite}")`)
@@ -273,6 +291,72 @@ describe('governance enforcement coverage — the ratchet', () => {
         `lower MAX_ENFORCED_WITHOUT_TEST to ${unproven.length} to lock the gain in.\n` +
         `Untested-but-enforced rules:\n  ${unproven.join(', ')}`,
     ).toBeLessThanOrEqual(MAX_ENFORCED_WITHOUT_TEST)
+  })
+
+  it('every gate qualifier names a real gate inside that pipeline', () => {
+    // The rot-proof half of a guard citation. `file:line` decays whenever code above it moves;
+    // `(DeleteAgent::G02)` is a name the gate carries, so it travels with the code and this test
+    // fails only when the gate genuinely stops existing — which is exactly when the rule stops
+    // being enforced there.
+    //
+    // Deliberately NOT asserted: that the gate is the RIGHT check for the rule. No parser can
+    // read intent. This proves the cited gate EXISTS in the cited pipeline; a human read is still
+    // what establishes it enforces what the rule says.
+    const broken: string[] = []
+    const srcCache = new Map<string, string[]>()
+
+    for (const r of rows.filter(r => r.verdict === 'ENFORCED')) {
+      const quals = [...r.guard.matchAll(GATE_QUALIFIER)]
+      if (quals.length === 0) continue
+
+      // A qualifier belongs to the file cited beside it. Every qualified row today cites exactly
+      // one file; if that ever stops being true this refuses rather than guessing which file.
+      const files = r.guard
+        .replace(GATE_QUALIFIER, '')
+        .split(',')
+        .map(s => s.trim().split(':')[0])
+        .filter(Boolean)
+      if (new Set(files).size !== 1) {
+        broken.push(`${r.subRule}: a gate qualifier needs exactly one guard file, saw ${files.length}`)
+        continue
+      }
+      const file = files[0]
+      if (!srcCache.has(file)) {
+        const abs = resolve(ROOT, file)
+        srcCache.set(file, existsSync(abs) ? readFileSync(abs, 'utf8').split('\n') : [])
+      }
+      const src = srcCache.get(file)!
+      if (src.length === 0) {
+        broken.push(`${r.subRule}: gate qualifier cites ${file}, which does not exist`)
+        continue
+      }
+
+      for (const [, pipeline, label] of quals) {
+        // Walk the file tracking the enclosing exported function, then ask whether THIS pipeline
+        // pushes THIS label. Scoping to the function is the whole point — labels repeat across
+        // pipelines, so a file-wide grep would pass on another pipeline's gate of the same number.
+        let current = ''
+        let sawPipeline = false
+        let found = false
+        for (const line of src) {
+          const fn = /^export (?:async )?function ([A-Za-z_][\w]*)/.exec(line)
+          if (fn) current = fn[1]
+          if (current !== pipeline) continue
+          sawPipeline = true
+          if (new RegExp(`ops\\.push\\(\\s*[\`'"]${label}\\b`).test(line)) {
+            found = true
+            break
+          }
+        }
+        if (!sawPipeline) {
+          broken.push(`${r.subRule}: ${file} has no exported function ${pipeline}() (renamed or moved?)`)
+        } else if (!found) {
+          broken.push(`${r.subRule}: ${pipeline}() no longer pushes a ${label} gate — the guard this row cites is gone`)
+        }
+      }
+    }
+
+    expect(broken, `Gate qualifiers that no longer resolve:\n  ${broken.join('\n  ')}`).toEqual([])
   })
 
   it("Part II's published gate coverage still matches what the code says", () => {

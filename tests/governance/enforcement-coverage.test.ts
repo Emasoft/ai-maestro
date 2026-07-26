@@ -70,7 +70,12 @@ const UNAUDITED_RULES = new Set<number>([
  * write a refusal test for an enforced rule, drop this number; the test prints the live count so
  * you always know the new floor.
  */
-const MAX_ENFORCED_WITHOUT_TEST = 134
+// 2026-07-26: batch 1 of TRDD-H4Y9F25J pinned 17 more (R11.2/3/4/5/11 + R17.1/2/5/6/8/9/13/15/19/
+// 21/22/23) in tests/governance/r17-r11-core-plugin-binding.test.ts — 134 → 117. R17.17 and R17.20
+// were NOT pinned and are deliberately still counted: both guards are real, but they sit inline in
+// server.mjs's `startServer`, which binds sockets on import, so there is no seam to call. Counting
+// them as debt is the honest record — extracting the seam is the work that clears them.
+const MAX_ENFORCED_WITHOUT_TEST = 117
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

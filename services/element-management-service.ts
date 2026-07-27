@@ -2631,8 +2631,14 @@ export async function ChangeTitle(
     // a concurrent writer clobbered it.
     try {
       const { readFileSync } = await import('fs')
-      const { join: pathJoin } = await import('path')
-      const REGISTRY_PATH = pathJoin(HOME, '.aimaestro', 'agents', 'registry.json')
+      // statePath() instead of join(HOME, '.aimaestro', ...): identical in production (getStateDir()
+      // IS ~/.aimaestro) but resolved through the ONE seam every fixture already redirects. Built
+      // from the module-scope `const HOME = homedir()`, this read reached the developer's REAL
+      // registry, so no test could ever make a title change verify for a synthetic agent — every
+      // ChangeTitle failed here, which silently made anything downstream of a SUCCESSFUL title
+      // change untestable too (it is why DeleteTeam::G03's title-restore branch was unreachable,
+      // and why its first test passed with the compensation neutered). TRDD-N7X4KDQ2.
+      const REGISTRY_PATH = statePath('agents', 'registry.json')
       const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
       const diskAgent = diskAgents.find((a) => a.id === agentId)
       if (!diskAgent) {
@@ -3230,8 +3236,8 @@ export async function ChangeTitle(
     }
     try {
       const { readFileSync } = await import('fs')
-      const { join: pathJoin } = await import('path')
-      const REGISTRY_PATH = pathJoin(HOME, '.aimaestro', 'agents', 'registry.json')
+      // Same seam as ChangeTitle's G14 — see the note there (TRDD-N7X4KDQ2).
+      const REGISTRY_PATH = statePath('agents', 'registry.json')
       const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
       const diskAgent = diskAgents.find((a) => a.id === agentId)
       const diskFinalTitle = (diskAgent?.governanceTitle as string | null | undefined) ?? null
@@ -6960,8 +6966,8 @@ export async function DeleteAgent(
     // For hard-delete: verify the agent entry is GONE from disk.
     try {
       const { readFileSync } = await import('fs')
-      const { join: pathJoinG08 } = await import('path')
-      const REGISTRY_PATH_G08 = pathJoinG08(HOME, '.aimaestro', 'agents', 'registry.json')
+      // Same seam as ChangeTitle's G14 — see the note there (TRDD-N7X4KDQ2).
+      const REGISTRY_PATH_G08 = statePath('agents', 'registry.json')
       const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH_G08, 'utf-8')) as Array<Record<string, unknown>>
       const diskAgent = diskAgents.find((a) => a.id === agentId)
       if (hard) {

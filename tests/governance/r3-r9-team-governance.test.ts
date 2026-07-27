@@ -1094,7 +1094,7 @@ describe('R9.8 — deleting the MANAGER runs the blocking cascade before the del
 // tests pin the two ways that guarantee was silently broken.
 // ============================================================================
 describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team back', () => {
-  it('re-enrols every agent it had already pulled out of the team', async () => {
+  it('restores the membership, team field and title of every agent it had already dismantled', async () => {
     /**
      * G03 dismantles the team agent-by-agent BEFORE G04 deletes it: each agent is pulled out of
      * team.agentIds, reverted to AUTONOMOUS (role-plugin stripped) and has its legacy `team` field
@@ -1103,15 +1103,13 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
      * already been stripped and un-enrolled. The operator's natural next move, a retry, then ran
      * against state that no longer matched the first attempt.
      *
-     * SCOPE, stated honestly: this pins the agentIds re-enrolment and the legacy-team-field
-     * restore. It does NOT reach the third restore step (putting the title back), because no test
-     * in this repo can: ChangeTitle's G14 re-reads `~/.aimaestro/agents/registry.json` through
-     * `const HOME = homedir()` captured at module scope (element-management-service.ts:81), so the
-     * ONLY way to make a revert succeed for a synthetic agent is to write into the developer's
-     * LIVE registry — which 0-IMPACT forbids outright. Every revert here therefore fails at G14,
-     * `previousTitle` is never recorded, and the title branch is unreachable. That is a structural
-     * testability gap in ChangeTitle, not a gap in the compensation: same shape as TRDD-L42SKUBW
-     * (guards wired to un-injectable process state). Tracked as TRDD-N7X4KDQ2.
+     * All THREE restore steps are pinned. Reaching the title one required TRDD-N7X4KDQ2 first:
+     * ChangeTitle's G14 used to re-read `~/.aimaestro/agents/registry.json` built from a
+     * module-scope `const HOME = homedir()`, so every revert failed there, `previousTitle` was
+     * never recorded, and the title branch was unreachable — which is exactly why the first
+     * version of this test passed with the compensation NEUTERED. G14 now resolves through
+     * `statePath()`, the seam this fixture already redirects, so a synthetic agent verifies
+     * against the fake state dir instead of the developer's live registry.
      */
     seedTeams([{ id: 'team-abort', name: 'Abort Team', agentIds: ['agent-a', 'agent-b'] }])
     const agents = [
@@ -1119,6 +1117,15 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
       makeAgentRecord({ id: 'agent-b', name: 'agent-b', governanceTitle: 'member', team: 'Abort Team' }),
     ]
     seedAgents(agents)
+    // ChangeTitle's G14 proves the write landed by re-reading registry.json from disk (via
+    // statePath, redirected to FAKE_STATE here). Keep that file in step with the in-memory array
+    // on every write, or every revert fails at G14 and nothing is ever recorded as reverted.
+    const REGISTRY_FILE = path.join(FAKE_STATE, 'agents', 'registry.json')
+    const syncRegistryFile = () => {
+      mkdirSync(path.dirname(REGISTRY_FILE), { recursive: true })
+      writeFileSync(REGISTRY_FILE, JSON.stringify(agents))
+    }
+    syncRegistryFile()
 
     // Make the registry actually persist, so ChangeTitle's read-back verification can pass for
     // agent-a — and then refuse exactly ONE write: agent-b's revert. A blanket rejection would
@@ -1129,6 +1136,8 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
       }
       const rec = agents.find(a => a.id === id)
       if (rec) Object.assign(rec, patch)
+      syncRegistryFile()
+      // MUST return the record: G14 treats a null return as "registry not written".
       return rec
     })
 
@@ -1154,6 +1163,9 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
     expect(team!.agentIds).toContain('agent-b')
     // And the legacy `team` field, cleared on the way down, is put back on the way up.
     expect(agents.find(x => x.id === 'agent-a')!.team).toBe('Abort Team')
+    // The third restore step: agent-a's revert SUCCEEDED before agent-b failed, so its title was
+    // stripped to autonomous. It must be back. This is the assertion TRDD-N7X4KDQ2 unblocked.
+    expect(agents.find(x => x.id === 'agent-a')!.governanceTitle).toBe('member')
   })
 })
 

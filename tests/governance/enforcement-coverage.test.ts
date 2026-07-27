@@ -117,7 +117,15 @@ const UNAUDITED_RULES = new Set<number>([
 // (install-messaging.sh), where a vitest assertion could only grep the file's text. Pinning text is
 // not pinning behaviour, so it stays counted rather than being cleared by a test that reads a
 // string.
-const MAX_ENFORCED_WITHOUT_TEST = 66
+// 2026-07-27: batch 5 pinned all 7 of R5 (transfers) in
+// tests/governance/r5-transfer-governance.test.ts — 66 → 59. First batch whose guards are ROUTE
+// HANDLERS rather than a gate-labelled pipeline: there is no `ops` trace to assert, so the tests
+// drive the real exported POST with a real NextRequest and fake only the stores beneath the guard.
+// Two things that batch made explicit and are worth carrying forward: the create route returns 400
+// from five different guards, so a status-only assertion would pass on the WRONG refusal — every
+// case pins a fragment of its guard's own message; and R5.5 turned out to have TWO enforcement
+// sites (create-time and a re-check on the approval path), which the map now cites separately.
+const MAX_ENFORCED_WITHOUT_TEST = 59
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

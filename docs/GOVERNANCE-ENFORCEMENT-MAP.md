@@ -66,13 +66,13 @@ Row format is fixed so a regex parses each line:
 | R4.8 | ENFORCED | components/teams/TeamOverviewSection.tsx:33-34 | — |
 | R4.9 | UNENFORCED | — | — |
 | R5.1 | UNENFORCED | — | — |
-| R5.2 | ENFORCED | app/api/governance/transfers/route.ts:97-99 | — |
-| R5.3 | ENFORCED | app/api/governance/transfers/[id]/resolve/route.ts:85-90 | — |
-| R5.4 | ENFORCED | app/api/governance/transfers/route.ts:149-151 | — |
-| R5.5 | ENFORCED | app/api/governance/transfers/route.ts:143-146 | — |
-| R5.6 | ENFORCED | app/api/governance/transfers/route.ts:124-126 | — |
-| R5.7 | ENFORCED | app/api/governance/transfers/[id]/resolve/route.ts:103-127 | — |
-| R5.8 | ENFORCED | app/api/governance/transfers/route.ts:160-164 | — |
+| R5.2 | ENFORCED | app/api/governance/transfers/route.ts:97-99 | tests/governance/r5-transfer-governance.test.ts |
+| R5.3 | ENFORCED | app/api/governance/transfers/[id]/resolve/route.ts:85-90 | tests/governance/r5-transfer-governance.test.ts |
+| R5.4 | ENFORCED | app/api/governance/transfers/route.ts:149-151 | tests/governance/r5-transfer-governance.test.ts |
+| R5.5 | ENFORCED | app/api/governance/transfers/route.ts:143-146, app/api/governance/transfers/[id]/resolve/route.ts:99-101 | tests/governance/r5-transfer-governance.test.ts |
+| R5.6 | ENFORCED | app/api/governance/transfers/route.ts:124-126 | tests/governance/r5-transfer-governance.test.ts |
+| R5.7 | ENFORCED | app/api/governance/transfers/[id]/resolve/route.ts:103-127 | tests/governance/r5-transfer-governance.test.ts |
+| R5.8 | ENFORCED | app/api/governance/transfers/route.ts:160-164 | tests/governance/r5-transfer-governance.test.ts |
 | R6.1 | ENFORCED | lib/communication-graph.ts:94-144 | tests/governance/r6-communication-graph.test.ts |
 | R6.2 | ENFORCED | lib/communication-graph.ts:97 | tests/governance/r6-communication-graph.test.ts |
 | R6.3 | ENFORCED | lib/communication-graph.ts:98 | tests/governance/r6-communication-graph.test.ts |

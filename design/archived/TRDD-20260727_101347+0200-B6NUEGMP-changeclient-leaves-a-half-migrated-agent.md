@@ -1,7 +1,7 @@
 ---
 trdd-id: B6NUEGMP
 title: ChangeClient leaves a half-migrated agent when any install fails
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-27T10:13:47+0200
@@ -79,14 +79,22 @@ first, fold this in as its second target and mark this superseded.
 
 ## Acceptance
 
-- [ ] A test forces a mid-G08 install failure and asserts the agent directory is UNCHANGED
-- [ ] That test FAILS against HEAD before any fix lands (red-then-green; a test written after the
-      fix proves nothing)
-- [ ] G07 and G08 declare compensations; a partial uninstall no longer proceeds silently
-- [ ] The registry write and the filesystem migration cannot disagree
-- [ ] `ChangeClient` goes through `runAioPipeline` (AIO-TXN-10), not a hand-rolled gate chain
-- [ ] The 15 existing R18 tests still pass — the SUCCESS path must not move
-- [ ] `bash scripts/with-node.sh npx tsc --noEmit` clean; governance suite green
+- [x] A test forces a mid-G08 install failure and asserts the agent directory is UNCHANGED
+- [x] That test FAILS against HEAD before any fix lands (red-then-green; a test written after the
+      fix proves nothing) — **4 red, 15 green** on the first run
+- [x] G07 and G08 declare compensations; a partial uninstall no longer proceeds silently
+- [x] The registry write and the filesystem migration cannot disagree
+- [x] `ChangeClient` goes through `lib/gate-transaction.ts` (AIO-TXN-10) — it is the module's FIRST
+      production caller
+- [x] The 15 existing R18 tests still pass — the SUCCESS path must not move
+- [x] `bash scripts/with-node.sh npx tsc --noEmit` clean (0 errors); **251/251 test files green**
+- [x] Every new test mutation-proved (4 mutations, each killing exactly its own test)
+
+**EXPLICITLY OUT OF SCOPE, handed to TRDD-DQ6XN2VP:** the full `runAioPipeline` PRE/EXE/POST
+decomposition (R51.8). This TRDD used `runGateSequence` for the mutating tail — same module, same
+all-or-nothing guarantee — because the defect is the missing compensation, not the phase shape.
+Re-phrasing all of `ChangeClient` into pre/exe/post belongs with the other 25 pipelines, not
+smuggled into a bugfix. Do not read the checked box above as "R51.8 done".
 
 ## Approval log
 

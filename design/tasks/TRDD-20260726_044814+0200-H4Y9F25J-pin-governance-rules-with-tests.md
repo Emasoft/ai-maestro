@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-27T09:46:34+0200
+updated: 2026-07-27T09:54:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-27
@@ -171,15 +171,57 @@ no-op check) when its guard is the G05b core-plugin safety net. R18.9/R18.10 are
 (neither `syncRolePlugin` nor `governanceTitle` appears anywhere in ChangeClient), so R18.9 cites
 the whole function body — for an absence invariant that is the PRECISE citation, not a coarse one.
 
-NEXT ACTION: **write batch 6's tests — and decide the harness question first, because it is now
-blocking.** `ChangeClient` lives in `services/element-management-service.ts`, whose test harness is
-24 `vi.mock` calls and ~200 lines of preamble, hand-rolled in
-`tests/governance/r17-r11-core-plugin-binding.test.ts`. Writing an R18 file means duplicating that a
-FIFTH time. Phase 2's own diagnosis (finding K) already named this: no shared test infrastructure,
-76 `vi.mock` calls across 4 governance files. So do Phase 2's deferred work first — extract the
-element-management harness beside `tests/helpers/fake-ecosystem-home.ts` — then write R18 against
-it. Extracting mid-session at the tail of a long context is how the extraction breaks the four files
-that currently pass; give it its own session.
+**BATCH 6 COMPLETE (`b74b01bf`) — debt 59 → 52.** 7 of R18's 8 pinned, 15 tests, 7 mutation runs.
+
+**The harness question answered by MEASURING instead of assuming.** I first deferred this batch on
+the grounds that it meant duplicating a 24-mock, 200-line harness a fifth time. That premise was
+false and I had not checked it: the r17-r11 harness is 24 mocks because it drives CreateAgent +
+InstallElement + ChangeTeam. **`ChangeClient` needs SEVEN** — `gate0Auth` short-circuits on
+`isSystemOwner`, so the entire authorization module drops out, leaving the registry, the config
+scanner, the plugin store and two adapter lookups. Before deferring work on a cost, measure the cost.
+(The shared-harness extraction is still worth doing for the OTHER four files; it is no longer a
+blocker for anything.)
+
+**R18.8 is the one non-pin and stays counted.** Its "emits a loss report" half lives in the
+converter's warning collector; its "operation MUST still proceed" half is the ABSENCE of an abort.
+A test for it would assert that nothing happened — which also passes on a pipeline that does
+nothing at all. A test that cannot fail is worse than an honest count.
+
+**R18.9 is pinned at its CONSEQUENCE, and the test says so.** `syncRolePlugin` is module-internal so
+no spy can watch it; what is pinnable is that the role-plugin travels the ordinary plan path and is
+installed for the new client via the adapter. Proved by mutation: drop the role-plugin from the
+snapshot and the test fails.
+
+**THE MUTATION FINDING, worth more than the tests: a single-line mutation that leaves the test GREEN
+does not always mean the test is bad — it can mean the property has DEPTH.** R18.1 survived two
+separate single-abort mutations because ChangeClient defends "never uninstall before a replacement
+is ready" with **two independent aborts** (the catch-branch at :5717 and the fall-through at :5723).
+My fixture takes the catch path, so removing the fall-through changed nothing, and vice versa. Only
+removing BOTH killed the test. **For a redundantly-guarded property the honest mutation removes the
+whole defence, not one line** — and telling that case apart from a genuinely-vacuous test requires
+reading which path the fixture actually takes, not staring at the green tick.
+
+**A vitest filter footgun that cost a wrong first reading:** `-t "R18.1"` also matches **R18.10**.
+The first neuter run reported "15 tests | 11 skipped" — 4 ran, from two different describes — and I
+briefly read it as R18.1 alone surviving. Read the test NAMES, not just the count.
+
+| mutation | named test | controls |
+|---|---|---|
+| R18.1 — BOTH aborts removed | FAILED | positive control passed |
+| R18.2 — scan-failure abort removed | FAILED | ordering + disabled-plugin tests passed |
+| R18.3 — native-first preference removed | FAILED | both fallback tests passed |
+| R18.5 — core-plugin safety net removed | FAILED | no-duplicate test passed |
+| R18.7 — `restartNeeded` removed | FAILED | abort-case test passed |
+| R18.9 — role-plugin dropped from the plan | FAILED | — |
+| R18.10 — title folded into the registry write | FAILED | abort-case test passed |
+
+NEXT ACTION: **batch 7 — R7 (6 rules).** Its guards are React components + a hook
+(`components/sidebar/TeamListView.tsx`, `components/sidebar/TeamCard.tsx`,
+`components/teams/TeamOverviewSection.tsx`, `hooks/useGovernance.ts`), which is a THIRD guard shape
+after pipelines and routes — no `ops` trace and no HTTP surface, so decide the observation method
+before writing (render-level assertions, or demote rows whose "guard" is only a conditional render).
+**Verify the citations first**, as always. Then R4 (6), R1 (5), R17 (4), R10 (4), then the ~1-3 tail
+grouped BY GUARD FILE.
 
 After R18: R7 (6), R4 (6), R1 (5), R17 (4), R10 (4), then the ~1-3 tail grouped BY GUARD FILE.
 
@@ -199,8 +241,9 @@ Each batch is one sub-agent, one new file under `tests/governance/`, disjoint ru
 | 3 | R6 communication graph | 13 | **landed — 13/13 pinned, `59893d08`** |
 | 4 | R20 marketplace governance | 23 | **landed — 22 pinned, 1 shell-only, `8e77d834`** |
 | 5 | R5 transfers | 7 | **landed — 7/7 pinned, `73856fe0`** |
-| 6 | R18 client-change continuity | 8 | pending — **verify its 5 W8NA7ROZ citations FIRST** |
-| 7 | the remainder (R1, R4, R7, R8, R10, R39, …) | ~44 | pending — group BY GUARD FILE |
+| 6 | R18 client-change continuity | 8 | **landed — 7/8 pinned, 1 honest non-pin, `b74b01bf`** |
+| 7 | R7 team UI surface | 6 | pending — a THIRD guard shape (components/hook) |
+| 8 | the remainder (R1, R4, R8, R10, R39, …) | ~38 | pending — group BY GUARD FILE |
 
 ## The constraints every batch carries, and why each exists
 

@@ -14,6 +14,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Asserting only `success === false` passes on ANY earlier refusal (a missing password, a failed auth gate) — pin the REASON, e.g. the specific gate in the ops trace.
 - A fixture that models the filesystem as ONE constant boolean cannot test a post-condition: an install needs `existsSync` false BEFORE and true AFTER. Model the writes, or the post-condition stays a WARN forever.
 - When a guard is unreachable in a fixture, say so in the test's docstring and file it — never seed the developer's REAL `$HOME` to reach it.
+- `expect(err).not.toMatch(/one specific message/)` is satisfied by EVERY OTHER error — a positive control must assert `success === true`.
+- A verification gate that reads a REAL path passes vacuously in every test: it inspects state the fixture never touched. Point it at the fixture's seam, then model the write.
+- A test can be propped up by the very bug you are fixing: 4 here asserted a cascade that only ran because the buggy ORDER put it before the gate that was failing.
 
 ## Verifying a fix
 

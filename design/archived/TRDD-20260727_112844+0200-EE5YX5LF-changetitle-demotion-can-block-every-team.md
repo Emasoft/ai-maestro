@@ -1,12 +1,12 @@
 ---
 trdd-id: EE5YX5LF
 title: A failed ChangeTitle demotion can leave the host with no MANAGER and every team blocked
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-07-27T11:28:44+0200
-updated: 2026-07-27T11:52:00+0200
+updated: 2026-07-27T12:05:00+0200
 created-by: claude-ai-maestro
 current-owner: claude-ai-maestro
 assignee: claude-ai-maestro
@@ -31,7 +31,13 @@ labels: [aio, governance, blast-radius]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-27
 
-**REORDER IS DONE. The dedicated test is NOT — that is the only remaining acceptance item.**
+**DONE — reorder + dedicated test, both neuter-verified.**
+
+The test (`TRDD-EE5YX5LF: a demotion whose title write FAILS must not have touched governance`) makes
+G14 fail the way it most often fails in production — the registry write does not land — and asserts
+`removeManager` was never called, `blockAllTeams` was never called, and no team is blocked. Neutering
+the ordering guarantee (letting G14 fall through instead of refusing) fails it with
+`expected "vi.fn()" to not be called at all, but actually been called 1 times`.
 
 Done: G14 now runs immediately before G10 (`~:2472`). Pre-flight confirmed as the TRDD required —
 G10-G13b branch only on the in-scope `oldTitle`/`newTitle` locals and read governance.json via
@@ -139,6 +145,6 @@ move with no behavioural edits alongside, and run the whole governance suite.
 - [x] G10-G13 confirmed not to read the new title from the registry
 - [x] title write reordered ahead of the governance mutations (or compensated, if a reorder is
       shown unsafe)
-- [ ] test: a failed G14 on a MANAGER demotion leaves `getManagerId()` unchanged and no team blocked
-- [ ] that test neuter-verified
+- [x] test: a failed G14 on a MANAGER demotion leaves `getManagerId()` unchanged and no team blocked
+- [x] that test neuter-verified (removeManager called 1x when the ordering guarantee is removed)
 - [x] tsc clean, full suite green (251/251)

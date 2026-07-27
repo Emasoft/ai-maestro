@@ -926,6 +926,51 @@ describe('R9.2 / R9.6 — losing/gaining the MANAGER blocks/unblocks every team 
     expect(readTeamsFile().every(t => t.blocked === true)).toBe(true)
   })
 
+  it('TRDD-EE5YX5LF: a demotion whose title write FAILS must not have touched governance — G14 runs before G10', async () => {
+    /**
+     * G10-G13b mutate HOST-WIDE governance: removeManager(), block every team, hibernate their
+     * agents, null out team COS/ORCH pointers. G14 — the verified title write — used to run AFTER
+     * all of that, and every one of its failure paths is a `return result`. So a demotion whose
+     * write failed left the host with NO MANAGER, every team blocked, team agents hibernated and
+     * un-wakeable ("assign MANAGER first"), while the agent still read `manager` in the registry:
+     * a single failed registry write turning into a host-wide outage fixable only by hand-editing
+     * governance.json.
+     *
+     * G14 is also the gate that fails MOST readily, by design — it verifies the write actually
+     * landed. Running it FIRST makes such a failure a clean no-op, which is what this pins.
+     */
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-x'], chiefOfStaffId: 'agent-x' }])
+    seedAgents([
+      makeAgentRecord({ id: 'agent-mgr', name: 'agent-mgr', governanceTitle: 'manager' }),
+      makeAgentRecord({ id: 'agent-x', name: 'agent-x' }),
+    ])
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+    mockGovernance.isManager.mockImplementation((id: string) => id === 'agent-mgr')
+
+    // Make G14 fail the way it most often does in production: the registry write does not land.
+    const writeThrough = mockAgentRegistry.updateAgent.getMockImplementation()!
+    mockAgentRegistry.updateAgent.mockImplementation(async (id: string, patch: Record<string, unknown>) => {
+      if (patch.governanceTitle !== undefined) return null // "registry not written"
+      return writeThrough(id, patch)
+    })
+
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-mgr', 'autonomous', {
+      authContext: OWNER_CTX,
+      skipPluginSync: true,
+      skipRestart: true,
+    })
+
+    // Pin the REASON, not just the outcome — an earlier refusal would also give success===false.
+    expect(result.success).toBe(false)
+    expect(result.operations.some(op => op.startsWith('G14: DENIED'))).toBe(true)
+
+    // THE POINT: none of the host-wide governance mutations may have run.
+    expect(mockGovernance.removeManager).not.toHaveBeenCalled()
+    expect(spyBlockAllTeams).not.toHaveBeenCalled()
+    expect(readTeamsFile().some(t => t.blocked === true)).toBe(false)
+  })
+
   it('R9.2 negative control — a title change that does NOT vacate the MANAGER slot must not block anything', async () => {
     seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-a'], chiefOfStaffId: 'agent-cos' }])
     seedAgents([makeAgentRecord({ id: 'agent-a', name: 'agent-a', governanceTitle: 'member' })])

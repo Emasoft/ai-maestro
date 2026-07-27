@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-27T09:37:30+0200
+updated: 2026-07-27T09:46:34+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-27
@@ -157,11 +157,31 @@ deleted between request and approval); both are now cited.
 The two R5.5 rows are the interesting pair: each mutation failed exactly ONE of the two tests, which
 is the proof that the sites are independent rather than one test riding on the other's guard.
 
-NEXT ACTION: **batch 6 — R18 (8 rules)**, and it starts with verification, not with tests: **5 of
-R18's rows are in TRDD-W8NA7ROZ's defective-citation list** (R18.1/R18.7/R18.10 have no gate label
-in range; R18.8/R18.9 cite a 391-line range spanning ChangeCLIArgs into ChangeClient with 8 gates in
-it). Execute those citations BEFORE writing anything against them. After R18: R7 (6), R4 (6), R1
-(5), R17 (4), R10 (4), then the ~1-3 tail grouped BY GUARD FILE.
+**BATCH 6 — HALF DONE (`32d890f2`). Citations verified and corrected; TESTS NOT YET WRITTEN, so the
+debt is still 59.** Verifying R18 first (as this TRDD requires) turned into an audit of all 22
+gate-qualified rows and found that **the Phase-1a qualifier pass was unsound**: it derived gate
+names FROM line ranges that were already ~⅓ wrong, producing precise-looking wrong claims. 3 rows
+corrected, 7 stripped, 6 kept. The full record and the rule adopted ("a qualifier may only be added
+by READING the gate and the rule together — never derived from a range, never in bulk") are in
+**TRDD-W8NA7ROZ**, which also now carries the 7 stripped rows as proven-wrong ranges.
+
+All 8 R18 rows are re-cited from a complete read of `ChangeClient` (5517-5908) and every original
+was wrong or too coarse — including R18.5, which Phase 1a had qualified `ChangeClient::G03` (the
+no-op check) when its guard is the G05b core-plugin safety net. R18.9/R18.10 are absence-invariants
+(neither `syncRolePlugin` nor `governanceTitle` appears anywhere in ChangeClient), so R18.9 cites
+the whole function body — for an absence invariant that is the PRECISE citation, not a coarse one.
+
+NEXT ACTION: **write batch 6's tests — and decide the harness question first, because it is now
+blocking.** `ChangeClient` lives in `services/element-management-service.ts`, whose test harness is
+24 `vi.mock` calls and ~200 lines of preamble, hand-rolled in
+`tests/governance/r17-r11-core-plugin-binding.test.ts`. Writing an R18 file means duplicating that a
+FIFTH time. Phase 2's own diagnosis (finding K) already named this: no shared test infrastructure,
+76 `vi.mock` calls across 4 governance files. So do Phase 2's deferred work first — extract the
+element-management harness beside `tests/helpers/fake-ecosystem-home.ts` — then write R18 against
+it. Extracting mid-session at the tail of a long context is how the extraction breaks the four files
+that currently pass; give it its own session.
+
+After R18: R7 (6), R4 (6), R1 (5), R17 (4), R10 (4), then the ~1-3 tail grouped BY GUARD FILE.
 
 Deferred from Phase 2 as tooling, not pins: `scripts/verify-zero-impact.sh` (2a) and the
 `setupFiles` timeout unification (2b tail).

@@ -1243,6 +1243,57 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
   })
 })
 
+describe('ChangeTitle::G17 — a title whose role-plugin cannot be installed is QUARANTINED, not rejected', () => {
+  it('TRDD-C9LXXT76: 0 role-plugins after G16 ⇒ roleMissing=true + hibernate — deleting the G17 recovery leaves a titled, role-less, RUNNABLE agent', async () => {
+    /**
+     * CHARACTERIZATION TEST — it pins what the code DOES, which is NOT what R9.13 SAYS.
+     *
+     * R9.13 (docs/GOVERNANCE-RULES.md:483) says ChangeTitle "MUST reject any desired state that
+     * would leave an agent with zero role-plugins … the agent is never persisted in that state".
+     * G17 does not reject: the title is already written (G14), so it retries the install once and,
+     * if the agent is still role-less, persists `roleMissing: true` and hibernates it — the same
+     * forward-repair ChangePlugin::PG04 uses. The pipeline returns SUCCESS.
+     *
+     * That contradiction is filed as TRDD-C9LXXT76 and is a GOVERNANCE decision (amend the rule to
+     * permit the quarantine, or rewrite the pipeline to reject + roll back). This test takes no
+     * side: it pins the CURRENT behaviour so it cannot drift silently while that decision is
+     * pending, and it is the acceptance criterion either way — unchanged if the rule moves,
+     * rewritten to assert rejection if the code moves.
+     *
+     * Why it matters that the quarantine is real: R9.13 exists because a persona-less agent could
+     * destroy other agents' workdirs or force-merge PRs (all agents share one gh identity). A
+     * hibernated agent does none of that, and wakeAgent refuses to wake a roleMissing agent — so
+     * losing THIS gate is not cosmetic. Without it the agent stays titled, role-less AND runnable.
+     */
+    // Hold the array: seedAgents keeps this exact reference and write-through updateAgent
+    // mutates it, so it is how we read the persisted record back.
+    const agents = [makeAgentRecord({ id: 'agent-a', name: 'agent-a', governanceTitle: null })]
+    seedAgents(agents)
+
+    // No settings.local.json exists under the fake agent dir, so the post-G16 re-scan finds 0
+    // active role-plugins — the production shape of "the install did not land". The mocked
+    // installPluginLocally resolves without writing one, so the single retry cannot recover.
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('agent-a', 'autonomous', {
+      authContext: OWNER_CTX,
+      skipRestart: true,
+      // NOTE: skipPluginSync deliberately NOT set — it is what gates G15-G17 off, and every
+      // other ChangeTitle test in this file sets it, which is exactly why G17 was never covered.
+    })
+
+    // The pipeline SUCCEEDS — it does not reject, which is the contradiction being pinned.
+    expect(result.success).toBe(true)
+
+    // Pin the REASON, not just the outcome: the recovery must have run and named R9.13.
+    expect(result.operations.some(op => /G17: R9\.13 VIOLATION/.test(op))).toBe(true)
+
+    // And it must have QUARANTINED the agent — the half that makes the state safe.
+    const quarantined = agents.find(x => x.id === 'agent-a')!
+    expect(quarantined.roleMissing).toBe(true)
+    expect(quarantined.governanceTitle).toBe('autonomous') // the title WAS persisted
+  })
+})
+
 describe('DeleteAgent::G01c — the cemetery archive is what makes a soft delete recoverable', () => {
   beforeEach(() => {
     mockExportAgentZip.mockImplementation(async (id: string) => ({

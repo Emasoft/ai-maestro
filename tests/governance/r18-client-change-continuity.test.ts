@@ -71,8 +71,15 @@ vi.mock('@/services/plugin-storage-service', () => ({
 
 const mockUninstall = vi.fn()
 const mockInstall = vi.fn()
+const mockGetAdapter = vi.fn()
+// NOTE the `(...a) => mockX(...a)` indirection, which every other mock in this file uses and this
+// one originally did not. It is what lets beforeEach RESTORE the implementation: vi.clearAllMocks()
+// clears calls but NOT implementations, so a test that overrode an inline `vi.fn(async () => …)`
+// leaked its override into every test after it. That is not hypothetical — the first run of the
+// R18.4 block below passed a test for exactly that reason (test 2 left "codex has no adapter" in
+// place, so test 3 aborted early and its assertions held vacuously).
 vi.mock('@/lib/client-plugin-adapters', () => ({
-  getAdapter: vi.fn(async () => ({ uninstall: mockUninstall, install: mockInstall })),
+  getAdapter: (...a: unknown[]) => mockGetAdapter(...a),
 }))
 
 vi.mock('@/lib/client-capabilities', () => ({
@@ -138,6 +145,8 @@ beforeEach(() => {
   mockConvertAndStore.mockResolvedValue(undefined)
   mockUninstall.mockResolvedValue(undefined)
   mockInstall.mockResolvedValue(undefined)
+  // Restored per test — see the note on the mock factory above.
+  mockGetAdapter.mockImplementation(async () => ({ uninstall: mockUninstall, install: mockInstall }))
 })
 
 afterAll(() => {
@@ -384,5 +393,123 @@ describe('R18.9 — the role-plugin is converted explicitly, not via syncRolePlu
     const roleCall = mockInstall.mock.calls.find(c => (c[0] as { name: string }).name === ROLE)
     expect((roleCall?.[0] as { clientType: string }).clientType).toBe('codex')
     expect((roleCall?.[0] as { storageDir: string }).storageDir).toBeTruthy()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// R18.4 — "no partial state is allowed" (the clause with no guard)
+// Guard: services/element-management-service.ts:5729-5891 (ChangeClient::G07-G09)
+//
+// R18.4 has TWO halves and the code implements only the first:
+//
+//   (a) "Only AFTER all compatible versions are confirmed to exist may ChangeClient
+//        uninstall …"                                   → G06 pre-flight. Real, pinned as R18.1.
+//   (b) "… no partial state is allowed"                 → NOTHING. This block.
+//
+// Half (b) is why the map records R18.4 as UNENFORCED even though the code writes "(R18.4)" in
+// two gate comments. A comment claiming a rule is not a guard enforcing it, and the map was
+// right where the comments were not.
+//
+// WHY THESE TESTS ARE ADAPTER-CALL SHAPED. The adapters are mocked, so no real file moves; the
+// observable form of "the directory was restored" is therefore the COMPENSATING CALL — the old
+// plugins re-installed for the old client, the new ones removed for the new client. That is the
+// correct altitude: actually moving bytes is the adapter's job and its own tests cover it. What
+// ChangeClient owes is the DECISION to compensate, and that is exactly what is asserted here.
+// ---------------------------------------------------------------------------
+
+/** Plugin names the pipeline asked an adapter to act on FOR A GIVEN CLIENT. */
+const namesFor = (m: typeof mockInstall, clientType: string) =>
+  m.mock.calls
+    .filter(c => (c[0] as { clientType: string }).clientType === clientType)
+    .map(c => (c[0] as { name: string }).name)
+
+describe('R18.4 — no partial state is allowed', () => {
+  it('RESTORES the old-client plugins when an install fails part-way through G08', async () => {
+    /**
+     * THE LIKELY FAILURE, not a corner case: `newAdapter.install` shells out to a client CLI, so a
+     * transient PATH / permission / network problem is enough. Today the pipeline returns at the
+     * first throw with the old plugin set already uninstalled and only some of the new set
+     * installed — the agent has NEITHER client's plugins. That is precisely the state R18 exists
+     * to make impossible, reached through a different door than R18.1's.
+     *
+     * Note the old client's adapter keeps working in this fixture: the NEW client's CLI is what is
+     * broken. A rollback that could not itself run would be a different (and much worse) bug.
+     */
+    const codexInstalled: string[] = []
+    mockInstall.mockImplementation(async (spec: { name: string; clientType: string }) => {
+      if (spec.clientType !== 'codex') return undefined // the rollback path — must still work
+      codexInstalled.push(spec.name)
+      if (codexInstalled.length === 2) throw new Error('codex: command not found')
+      return undefined
+    })
+
+    const res = await ChangeClient(AGENT_ID, 'codex', SYSTEM_OWNER)
+
+    expect(res.success).toBe(false)
+
+    // Every plugin that was uninstalled from the old client must be put back.
+    expect(namesFor(mockInstall, 'claude').sort()).toEqual([CORE, ROLE, EXTRA].sort())
+
+    // The one new-client plugin that DID land must be removed again — leaving it behind is the
+    // both-clients-installed state R18.4 also forbids.
+    expect(namesFor(mockUninstall, 'codex')).toEqual([codexInstalled[0]])
+
+    // And the registry must still describe the client the agent actually has.
+    expect(mockUpdateAgent).not.toHaveBeenCalled()
+  })
+
+  it('checks the NEW client has an adapter BEFORE uninstalling anything', async () => {
+    /**
+     * An ORDERING bug, not a rollback one, and it needs no failure injection to reach: G07
+     * uninstalls the whole old set, and only then does G08 ask whether the new client even HAS an
+     * adapter. When it does not, the pipeline returns having removed every plugin and installed
+     * none. The pre-flight belongs with G06's other feasibility checks, where R18.4(a) already
+     * puts it for conversion.
+     */
+    mockGetAdapter.mockImplementation(async (client: string) =>
+      client === 'codex' ? null : { uninstall: mockUninstall, install: mockInstall }
+    )
+
+    const res = await ChangeClient(AGENT_ID, 'codex', SYSTEM_OWNER)
+
+    expect(res.success).toBe(false)
+    expect(mockUninstall).not.toHaveBeenCalled()
+    expect(mockUpdateAgent).not.toHaveBeenCalled()
+  })
+
+  it('does NOT proceed when an old-client uninstall fails', async () => {
+    /**
+     * Today the G07 loop swallows a per-plugin uninstall failure into console.warn and carries on.
+     * The result is the agent holding the OLD plugin *and* its new-client replacement at once —
+     * a state R18.4 forbids just as squarely as holding neither, and one no caller can detect
+     * because the pipeline reports success.
+     */
+    mockUninstall.mockImplementation(async (spec: { name: string; clientType: string }) => {
+      if (spec.clientType === 'claude' && spec.name === EXTRA) throw new Error('EBUSY')
+      return undefined
+    })
+
+    const res = await ChangeClient(AGENT_ID, 'codex', SYSTEM_OWNER)
+
+    expect(res.success).toBe(false)
+    // EXTRA is still installed for claude, so its codex twin must never have been created.
+    expect(namesFor(mockInstall, 'codex')).not.toContain(EXTRA)
+  })
+
+  it('does NOT leave the directory migrated when the registry write fails at G09', async () => {
+    /**
+     * The last mutation is the registry, and it is the only one outside the filesystem. When it
+     * fails the directory is fully migrated while the registry still names the old client, and
+     * the two disagree permanently — every later read of `agent.program` is wrong about what is
+     * actually installed. Ordering alone cannot fix this one (something has to be written last),
+     * which is exactly why it needs a compensation rather than a re-ordering.
+     */
+    mockUpdateAgent.mockResolvedValue(false)
+
+    const res = await ChangeClient(AGENT_ID, 'codex', SYSTEM_OWNER)
+
+    expect(res.success).toBe(false)
+    expect(namesFor(mockInstall, 'claude').sort()).toEqual([CORE, ROLE, EXTRA].sort())
+    expect(namesFor(mockUninstall, 'codex').sort()).toEqual([CORE, ROLE, EXTRA].sort())
   })
 })

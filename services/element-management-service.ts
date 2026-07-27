@@ -5726,165 +5726,232 @@ export async function ChangeClient(
     }
     ops.push(`G06: ${plans.length} plugin conversion plan(s) ready (strategies: ${plans.map(p => p.strategy).join(', ')})`)
 
-    // ── G07: Uninstall old-client plugins from agent dir (R18.4) ─
-    // Now that we know every plugin has a converted version waiting, it is
-    // safe to remove the old-client versions.
+    // ── G06b: resolve BOTH adapters BEFORE anything is uninstalled ─
+    // ORDERING IS THE GUARD HERE, not rollback. The new client's adapter used to be resolved at
+    // G08 — i.e. AFTER G07 had already emptied the agent directory — so a target client with no
+    // adapter left the agent holding NEITHER plugin set. That reached R18.4's forbidden "partial
+    // state" with no failure injected at all; it was simply the order the checks ran in.
     const { getAdapter } = await import('@/lib/client-plugin-adapters')
     const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
     const oldAdapter = await getAdapter(oldProgram)
     const oldProviderId = clientTypeToProviderId(oldProgram)
-    if (oldAdapter && oldProviderId) {
-      for (const plan of plans) {
-        try {
-          await oldAdapter.uninstall(
-            {
-              name: plan.pluginName,
-              clientType: oldProgram,
-              storageDir: plan.sourceDir || '',
-              providerId: oldProviderId,
-              // Claude adapter builds the plugin key from name + sourcePlugin (hack:
-              // sourcePlugin is used as marketplace name in buildPluginKey).
-              sourcePlugin: plan.marketplace,
-            },
-            agentDir,
-            { scope: 'local' }
-          )
-        } catch (err) {
-          console.warn(`[ChangeClient] Best-effort uninstall failed for "${plan.pluginName}":`, err)
-        }
-      }
-
-      // Belt-and-braces: strip the old-client plugin entries from .claude/settings.local.json
-      // even if the CLI uninstall silently skipped them (which can happen for local-scope
-      // plugins on offline clients). Without this, the agent ends up with both the old
-      // Claude plugin key and the new Codex plugin elements, violating R18.4.
-      if (oldProgram === 'claude') {
-        try {
-          const settingsPath = join(agentDir, '.claude', 'settings.local.json')
-          if (existsSync(settingsPath)) {
-            const { readFileSync, writeFileSync } = await import('fs')
-            const raw = readFileSync(settingsPath, 'utf-8')
-            const settings = JSON.parse(raw) as Record<string, unknown>
-            const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-            let changed = false
-            for (const plan of plans) {
-              const key = plan.marketplace ? `${plan.pluginName}@${plan.marketplace}` : plan.pluginName
-              if (key in ep) {
-                delete ep[key]
-                changed = true
-              }
-              if (plan.pluginName in ep) {
-                delete ep[plan.pluginName]
-                changed = true
-              }
-            }
-            if (changed) {
-              settings.enabledPlugins = ep
-              writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
-            }
-          }
-        } catch (err) {
-          console.warn('[ChangeClient] Settings strip fallback failed:', err)
-        }
-      }
-
-      ops.push(`G07: Uninstalled ${plans.length} old-client plugin(s) from agent dir`)
-    } else {
-      ops.push(`G07: No adapter/provider for old client "${oldProgram}" — skipped uninstall (best-effort)`)
-    }
-
-    // ── G08: Install new-client plugins into agent dir (R18.4) ──
-    // Converted / emitted plugins live in the local custom marketplace
-    // (~/agents/custom-plugins/ with a marketplace.json manifest). For Claude
-    // targets the adapter needs to know this marketplace name to build the
-    // correct plugin key. Role-plugins use the local roles marketplace instead.
-    // MIN-03 fix (2026-05-04): drop the redundant `await import()` —
-    // CUSTOM_MARKETPLACE_NAME is already imported statically at the top
-    // of the file. Same rationale as MAJ-03.
     const newAdapter = await getAdapter(normalized)
     const newProviderId = clientTypeToProviderId(normalized)
     if (!newAdapter || !newProviderId) {
       result.error = `No adapter/provider for new client "${normalized}" — cannot install converted plugins`
+      console.error(`[ChangeClient] ${result.error}`)
       return result
     }
-    for (const plan of plans) {
-      // Which marketplace does the converted plugin belong to?
-      //   - Role-plugin → LOCAL_MARKETPLACE_NAME ("ai-maestro-local-roles-marketplace")
-      //   - Normal plugin converted from source → CUSTOM_MARKETPLACE_NAME ("ai-maestro-local-custom-marketplace")
-      //   - Native (pre-existing) plugin → keep the original marketplace if we know it
-      let installMarketplace: string | undefined
-      if (plan.isRolePlugin) {
-        installMarketplace = LOCAL_MARKETPLACE_NAME
-      } else if (plan.strategy === 'native-exists') {
-        installMarketplace = plan.marketplace
-      } else {
-        installMarketplace = CUSTOM_MARKETPLACE_NAME
-      }
+    ops.push(`G06b: Adapters resolved (${oldProgram} → ${normalized}) before any mutation`)
 
+    // Which marketplace a converted plugin belongs to:
+    //   - Role-plugin → LOCAL_MARKETPLACE_NAME ("ai-maestro-local-roles-marketplace")
+    //   - Native (pre-existing) → keep the original marketplace if we know it
+    //   - Converted from source → CUSTOM_MARKETPLACE_NAME ("ai-maestro-local-custom-marketplace")
+    const installMarketplaceFor = (plan: PluginConversionPlan): string | undefined =>
+      plan.isRolePlugin
+        ? LOCAL_MARKETPLACE_NAME
+        : plan.strategy === 'native-exists'
+          ? plan.marketplace
+          : CUSTOM_MARKETPLACE_NAME
+
+    // ── G07-G09: the MUTATING tail, under the AIO transaction runner (AIO-TXN-10) ─
+    //
+    // R18.4 ends with "no partial state is allowed", and until now NOTHING enforced that clause —
+    // the two "(R18.4)" comments that used to sit on these gates asserted it without implementing
+    // it, which is why the enforcement map correctly recorded R18.4 as UNENFORCED while the code
+    // read as though it were covered. Three concrete holes, all closed here:
+    //
+    //   G07  swallowed a per-plugin uninstall failure into console.warn and CONTINUED, so the
+    //        agent could end up holding the old plugin AND its new-client replacement at once.
+    //   G08  returned at the first install throw with the old set already gone and only some of
+    //        the new set present — the likely failure, since install shells out to a client CLI.
+    //   G09  wrote the registry last with no compensation, so a failure there left the directory
+    //        migrated while `agent.program` still named the old client, disagreeing permanently.
+    //
+    // Each gate now declares the compensation R51.4 requires. runGateSequence reverts executed
+    // gates in REVERSE order on any failure, and refuses to start at all if a mutating gate has
+    // no `undo` — so this cannot silently regress into a half-migration again.
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const { readFileSync, writeFileSync, mkdirSync } = await import('fs')
+    const settingsPath = join(agentDir, '.claude', 'settings.local.json')
+
+    // The settings file is edited by two gates, so each snapshots it and restores its OWN
+    // snapshot. Reverse-order undo then rewinds it exactly: G08's undo returns it to the
+    // post-G07 state, G07's undo to the pre-G07 state.
+    const snapshotSettings = (): string | null => {
+      try { return existsSync(settingsPath) ? readFileSync(settingsPath, 'utf-8') : null } catch { return null }
+    }
+    const restoreSettings = async (snapshot: string | null): Promise<void> => {
       try {
-        await newAdapter.install(
-          {
-            name: plan.pluginName,
-            clientType: normalized,
-            storageDir: plan.targetDir,
-            providerId: newProviderId,
-            // Claude adapter builds the plugin key via sourcePlugin as marketplace (see buildPluginKey).
-            sourcePlugin: installMarketplace,
-          },
-          agentDir,
-          { scope: 'local', marketplace: installMarketplace }
-        )
+        if (snapshot !== null) { writeFileSync(settingsPath, snapshot, 'utf-8'); return }
+        if (!existsSync(settingsPath)) return
+        // `unlinkSync` is imported HERE, not with the others above, and only on the branch that
+        // needs it. Destructuring it up front made the entire pipeline depend on it even though
+        // it is reachable only during a rollback — and under a module mock that lacks the export,
+        // the destructure itself throws, so the SUCCESS path died on a function it never calls.
+        const { unlinkSync } = await import('fs')
+        unlinkSync(settingsPath)
       } catch (err) {
-        result.error = `Failed to install converted plugin "${plan.pluginName}" for ${normalized}: ${err instanceof Error ? err.message : String(err)}`
-        console.error(`[ChangeClient] ${result.error}`)
-        return result
+        // A failed settings restore must not abort the rest of the rollback: reverting the other
+        // plugins is strictly better than stopping here, and the runner reports what it could not
+        // revert either way.
+        console.warn('[ChangeClient] settings restore failed:', err)
       }
     }
 
-    // Belt-and-braces: for Claude targets, verify the plugin key is actually
-    // present in .claude/settings.local.json and write it back if not. The
-    // claude plugin CLI can fail silently when invoked from a server child
-    // process due to PATH / env differences, leaving the install as a no-op.
-    if (normalized === 'claude') {
-      try {
-        const settingsPath = join(agentDir, '.claude', 'settings.local.json')
-        const { readFileSync, writeFileSync, mkdirSync } = await import('fs')
-        mkdirSync(join(agentDir, '.claude'), { recursive: true })
-        let settings: Record<string, unknown> = {}
-        if (existsSync(settingsPath)) {
-          try { settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) } catch { /* keep empty */ }
-        }
-        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-        let changed = false
-        for (const plan of plans) {
-          const mkt = plan.isRolePlugin
-            ? LOCAL_MARKETPLACE_NAME
-            : (plan.strategy === 'native-exists' ? (plan.marketplace || 'ai-maestro-plugins') : CUSTOM_MARKETPLACE_NAME)
-          const key = `${plan.pluginName}@${mkt}`
-          if (ep[key] !== true) {
-            ep[key] = true
-            changed = true
+    interface MigrationCtx {
+      uninstalledOld: PluginConversionPlan[]
+      installedNew: PluginConversionPlan[]
+      settingsBeforeG07: string | null
+      settingsBeforeG08: string | null
+    }
+    const mig: MigrationCtx = {
+      uninstalledOld: [],
+      installedNew: [],
+      settingsBeforeG07: null,
+      settingsBeforeG08: null,
+    }
+
+    const oldPluginSpec = (plan: PluginConversionPlan) => ({
+      name: plan.pluginName,
+      clientType: oldProgram,
+      storageDir: plan.sourceDir || '',
+      providerId: oldProviderId as NonNullable<typeof oldProviderId>,
+      // Claude adapter builds the plugin key from name + sourcePlugin (hack:
+      // sourcePlugin is used as marketplace name in buildPluginKey).
+      sourcePlugin: plan.marketplace,
+    })
+    const newPluginSpec = (plan: PluginConversionPlan) => ({
+      name: plan.pluginName,
+      clientType: normalized,
+      storageDir: plan.targetDir,
+      providerId: newProviderId,
+      sourcePlugin: installMarketplaceFor(plan),
+    })
+
+    const gates = [
+      {
+        id: 'G07',
+        what: `Uninstalled ${plans.length} old-client plugin(s) from agent dir`,
+        run: async (c: MigrationCtx) => {
+          // No adapter for the OLD client is not a failure: there is nothing of its to remove.
+          // (The NEW client's adapter is the one that must exist, and G06b already proved it.)
+          if (!oldAdapter || !oldProviderId) return
+          c.settingsBeforeG07 = snapshotSettings()
+          for (const plan of plans) {
+            // NOT best-effort any more. A failed uninstall means the old plugin is still there,
+            // and installing its replacement on top would leave BOTH — the same forbidden partial
+            // state, just from the other direction.
+            await oldAdapter.uninstall(oldPluginSpec(plan), agentDir, { scope: 'local' })
+            c.uninstalledOld.push(plan)
           }
-        }
-        if (changed) {
-          settings.enabledPlugins = ep
-          writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
-          ops.push(`G08b: Settings write-back — ensured ${plans.length} plugin key(s) in .claude/settings.local.json`)
-        }
-      } catch (err) {
-        console.warn('[ChangeClient] Claude settings write-back fallback failed:', err)
-      }
-    }
 
-    ops.push(`G08: Installed ${plans.length} new-client plugin(s) into agent dir`)
+          // Belt-and-braces: strip the old-client plugin entries from settings.local.json even if
+          // the CLI uninstall silently skipped them (which happens for local-scope plugins on
+          // offline clients).
+          if (oldProgram === 'claude' && existsSync(settingsPath)) {
+            try {
+              const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>
+              const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+              let changed = false
+              for (const plan of plans) {
+                const key = plan.marketplace ? `${plan.pluginName}@${plan.marketplace}` : plan.pluginName
+                if (key in ep) { delete ep[key]; changed = true }
+                if (plan.pluginName in ep) { delete ep[plan.pluginName]; changed = true }
+              }
+              if (changed) {
+                settings.enabledPlugins = ep
+                writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+              }
+            } catch (err) {
+              console.warn('[ChangeClient] Settings strip fallback failed:', err)
+            }
+          }
+        },
+        undo: async (c: MigrationCtx) => {
+          // Reverse order, so the last plugin removed is the first put back.
+          while (c.uninstalledOld.length) {
+            const plan = c.uninstalledOld.pop() as PluginConversionPlan
+            await oldAdapter?.install(oldPluginSpec(plan), agentDir, {
+              scope: 'local',
+              marketplace: plan.marketplace,
+            })
+          }
+          restoreSettings(c.settingsBeforeG07)
+        },
+      },
+      {
+        id: 'G08',
+        what: `Installed ${plans.length} new-client plugin(s) into agent dir`,
+        run: async (c: MigrationCtx) => {
+          c.settingsBeforeG08 = snapshotSettings()
+          for (const plan of plans) {
+            await newAdapter.install(newPluginSpec(plan), agentDir, {
+              scope: 'local',
+              marketplace: installMarketplaceFor(plan),
+            })
+            c.installedNew.push(plan)
+          }
 
-    // ── G09: Write new program to registry ─────────────────────
-    const updated = await updateAgent(agentId, { program: normalized })
-    if (!updated) {
-      result.error = `Failed to update program in registry`
+          // Belt-and-braces: for Claude targets, verify the plugin key really landed in
+          // settings.local.json. The claude plugin CLI can fail silently when invoked from a
+          // server child process due to PATH / env differences, making the install a no-op.
+          if (normalized === 'claude') {
+            try {
+              mkdirSync(join(agentDir, '.claude'), { recursive: true })
+              let settings: Record<string, unknown> = {}
+              if (existsSync(settingsPath)) {
+                try { settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) } catch { /* keep empty */ }
+              }
+              const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+              let changed = false
+              for (const plan of plans) {
+                const mkt = plan.isRolePlugin
+                  ? LOCAL_MARKETPLACE_NAME
+                  : (plan.strategy === 'native-exists' ? (plan.marketplace || 'ai-maestro-plugins') : CUSTOM_MARKETPLACE_NAME)
+                const key = `${plan.pluginName}@${mkt}`
+                if (ep[key] !== true) { ep[key] = true; changed = true }
+              }
+              if (changed) {
+                settings.enabledPlugins = ep
+                writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+              }
+            } catch (err) {
+              console.warn('[ChangeClient] Claude settings write-back fallback failed:', err)
+            }
+          }
+        },
+        undo: async (c: MigrationCtx) => {
+          while (c.installedNew.length) {
+            const plan = c.installedNew.pop() as PluginConversionPlan
+            await newAdapter.uninstall(newPluginSpec(plan), agentDir, { scope: 'local' })
+          }
+          restoreSettings(c.settingsBeforeG08)
+        },
+      },
+      {
+        id: 'G09',
+        what: 'Updated program in registry',
+        run: async () => {
+          const updated = await updateAgent(agentId, { program: normalized })
+          // THROW, not `return result`: the runner turns a throw into a full reverse-order
+          // rollback, whereas an early return would leave the migrated directory behind.
+          if (!updated) throw new Error('Failed to update program in registry')
+        },
+        undo: async () => {
+          await updateAgent(agentId, { program: oldProgram })
+        },
+      },
+    ]
+
+    const txn = await runGateSequence(gates, mig)
+    ops.push(...txn.ops)
+    if (!txn.ok) {
+      result.error = txn.message
+      console.error(`[ChangeClient] ${result.error}`)
       return result
     }
-    ops.push(`G09: Updated program in registry`)
 
     // ── G10: Restart needed (R18.7) ────────────────────────────
     result.restartNeeded = true

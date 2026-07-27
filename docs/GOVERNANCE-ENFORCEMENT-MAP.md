@@ -199,7 +199,7 @@ Row format is fixed so a regex parses each line:
 | R18.3b | CONTRADICTED | — | — |
 | R18.3c | UNENFORCED | — | — |
 | R18.3d | UNENFORCED | — | — |
-| R18.4 | UNENFORCED | — | — |
+| R18.4 | ENFORCED | services/element-management-service.ts:5834-5883 (ChangeClient::G07), services/element-management-service.ts:5884-5932 (ChangeClient::G08), services/element-management-service.ts:5933-5945 (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.5 | ENFORCED | services/element-management-service.ts:5594-5605 (ChangeClient::G05b) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.6 | CONTRADICTED | — | — |
 | R18.7 | ENFORCED | services/element-management-service.ts:5889-5891 (ChangeClient::G10) | tests/governance/r18-client-change-continuity.test.ts |
@@ -465,7 +465,7 @@ rule says* — only that one plausibly exists. Every non-`GATED` row is a candid
 
 ## Coverage as of 2026-07-26
 
-**GATED 21 · ENFORCED 16 · DOC-ONLY 14 · UNMAPPED 0 · total 51.**
+**GATED 22 · ENFORCED 15 · DOC-ONLY 14 · UNMAPPED 0 · total 51.**
 
 | Rule | Verdict | Where |
 |---|---|---|
@@ -519,7 +519,7 @@ rule says* — only that one plausibly exists. Every non-`GATED` row is a candid
 | R48 MAESTRO Console-Presence | ENFORCED | `lib/peer-address.mjs` (`isConsolePeer`) |
 | R49 The Refusal Protocol | DOC-ONLY | — (behavioural) |
 | R50 One Operation, One AIO Function | DOC-ONLY | — but ratcheted by `tests/unit/all-in-one-single-path.test.ts` |
-| R51 All-Or-Nothing Transaction | ENFORCED | `lib/gate-transaction.ts` |
+| R51 All-Or-Nothing Transaction | GATED | `lib/gate-transaction.ts`, `services/element-management-service.ts` (ChangeClient::G07-G09, the runner's first production caller) |
 
 ## Reading the holes
 

@@ -76,12 +76,62 @@ describe('R51.1/R51.2 — one failed gate reverts everything, backwards', () => 
   it('undoes in REVERSE order — last executed, first reverted', async () => {
     // Order matters: an earlier gate's undo can depend on state a later gate changed, so unwinding
     // forwards can corrupt what it is trying to restore.
+    //
+    // The FAILING gate (G04) is unwound first, because its compensation is registered before its
+    // run is attempted — see 'compensates the FAILING gate' below for why that has to be so. Here
+    // G04 threw before doing any work, so its undo finds nothing to reverse and is a no-op that
+    // still logs; the reverse ordering it demonstrates is G04 → G03 → G02 → G01.
     const ctx = w()
     await runGateSequence(
       [mutating('G01', 'a'), mutating('G02', 'b'), mutating('G03', 'c'), mutating('G04', 'd', { failRun: true })],
       ctx,
     )
-    expect(ctx.log).toEqual(['run:G01', 'run:G02', 'run:G03', 'undo:G03', 'undo:G02', 'undo:G01'])
+    expect(ctx.log).toEqual([
+      'run:G01', 'run:G02', 'run:G03',
+      'undo:G04', 'undo:G03', 'undo:G02', 'undo:G01',
+    ])
+  })
+
+  it('compensates the FAILING gate itself, not just the ones before it', async () => {
+    /**
+     * THE PARTIAL-GATE CASE, and the reason compensations are registered before the action rather
+     * than after a successful one. A gate is only atomic if its `run` is a single step; the moment
+     * it is a LOOP — install N plugins, write N files, revoke N keys — a throw on item k leaves
+     * k-1 items done. Registering on success would have skipped exactly that gate's undo, so the
+     * partial work inside the failing gate was the one thing nothing reverted.
+     *
+     * This is not hypothetical: it is how ChangeClient's G08 left an agent holding one migrated
+     * plugin and neither client's full set (TRDD-B6NUEGMP).
+     */
+    const ctx = w()
+    const partial: Gate<World> = {
+      id: 'G02',
+      what: 'apply three effects, exploding on the third',
+      run: async (c) => {
+        for (const e of ['x', 'y', 'z']) {
+          if (e === 'z') throw new Error('G02 exploded part-way')
+          c.effects.push(e)
+          c.log.push(`run:G02:${e}`)
+        }
+      },
+      // Reverses only what `run` actually recorded — the contract every undo owes.
+      undo: async (c) => {
+        for (const e of ['y', 'x']) {
+          const i = c.effects.lastIndexOf(e)
+          if (i >= 0) { c.effects.splice(i, 1); c.log.push(`undo:G02:${e}`) }
+        }
+      },
+    }
+
+    const r = await runGateSequence([mutating('G01', 'a'), partial], ctx)
+
+    expect(r.ok).toBe(false)
+    // Byte-for-byte what it was: the failing gate's TWO completed units are gone, and so is G01's.
+    expect(ctx.effects).toEqual([])
+    expect(ctx.log).toEqual([
+      'run:G01', 'run:G02:x', 'run:G02:y',
+      'undo:G02:y', 'undo:G02:x', 'undo:G01',
+    ])
   })
 
   it('does not run any gate after the failure', async () => {

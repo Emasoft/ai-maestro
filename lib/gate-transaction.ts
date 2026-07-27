@@ -28,7 +28,19 @@ export interface Gate<Ctx> {
    */
   readOnly?: boolean
   run: (ctx: Ctx) => Promise<void>
-  /** Reverses `run` exactly. Required unless readOnly. */
+  /**
+   * Reverses `run`. Required unless readOnly.
+   *
+   * MUST TOLERATE PARTIAL WORK. `undo` is called even when `run` THREW part-way through, because
+   * the work a failing gate already did is exactly what would otherwise go uncompensated. So it
+   * must handle "run did none of it", "run did some of it", and "run did all of it" alike.
+   *
+   * The reliable way to write one is to have `run` record each completed unit in `ctx` and have
+   * `undo` reverse only what is recorded there — never assume a fixed amount of work happened:
+   *
+   *   run:  for (const x of items) { await apply(x); ctx.applied.push(x) }
+   *   undo: while (ctx.applied.length) await revert(ctx.applied.pop())
+   */
   undo?: (ctx: Ctx) => Promise<void>
 }
 
@@ -164,9 +176,21 @@ export async function runGateSequence<Ctx>(
 
   for (let i = 0; i < gates.length; i++) {
     const gate = gates[i]
+    // REGISTER THE COMPENSATION BEFORE PERFORMING THE ACTION (write-ahead).
+    //
+    // This used to push AFTER a successful run, which silently assumed every gate is atomic —
+    // that its `run` either completes or changes nothing. That assumption is FALSE for any gate
+    // whose run is a loop, which is most real ones: ChangeClient's G08 installs N plugins, so a
+    // throw on plugin k left k-1 installed and, because the gate never reached `executed`, its
+    // own `undo` was never called. The partial work inside the failing gate was the one thing
+    // nothing compensated — precisely the state this module exists to prevent.
+    //
+    // Registering first makes the failing gate the LAST entry, so reverse-order unwinding undoes
+    // it FIRST, then the gates before it. The cost is a contract on `undo` (see the Gate docs):
+    // it must tolerate being called when `run` did some, none, or all of its work.
+    executed.push(gate)
     try {
       await gate.run(ctx)
-      executed.push(gate)
       ops.push(`${gate.id}: ${gate.what}`)
     } catch (err) {
       const cause = err instanceof Error ? err.message : String(err)

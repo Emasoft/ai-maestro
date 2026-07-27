@@ -366,7 +366,21 @@ describe('governance enforcement coverage — the ratchet', () => {
           // disabling a guard fails here instead of passing quietly.
           const code = line.trim()
           if (code.startsWith('//') || code.startsWith('*') || code.startsWith('/*')) continue
-          if (new RegExp(`ops\\.push\\(\\s*[\`'"]${label}\\b`).test(line)) {
+          // TWO gate FORMS, because a pipeline may be hand-rolled or run under the AIO transaction
+          // runner, and a citation must survive the retrofit between them:
+          //
+          //   hand-rolled   ops.push(`G09: Updated program in registry`)
+          //   AIO runner    { id: 'G09', what: '…', run: …, undo: … }   (lib/gate-transaction.ts)
+          //
+          // The runner emits the SAME `G09: …` ops string at runtime, so the citation stays true —
+          // but a scraper that only knows the literal push cannot see it, and would report every
+          // retrofitted gate as "gone". ChangeClient hit this the moment it became the runner's
+          // first production caller (TRDD-B6NUEGMP); TRDD-DQ6XN2VP retrofits 25 more pipelines, so
+          // recognising only one form would have broken every citation in the map as it lands.
+          if (
+            new RegExp(`ops\\.push\\(\\s*[\`'"]${label}\\b`).test(line) ||
+            new RegExp(`\\bid:\\s*[\`'"]${label}[\`'"]`).test(line)
+          ) {
             found = true
             break
           }

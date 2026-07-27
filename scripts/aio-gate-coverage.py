@@ -59,7 +59,19 @@ DOC_DIRS = ["docs", "rules", "tests", "design", "scripts"]
 # 10-30 lines; 40 is generous without being meaningless.
 WINDOW = 40
 
-GATE_LABEL = re.compile(r"""ops\.push\(\s*[`'"](G\d+[a-z]?|EXE|PG\d+)""")
+# A gate is written one of TWO ways, and both must count as a gate label:
+#
+#   hand-rolled   ops.push(`G09: Updated program in registry`)
+#   AIO runner    { id: 'G09', what: '…', run: …, undo: … }   (lib/gate-transaction.ts)
+#
+# The runner emits the same `G09: …` ops string at runtime, so a rule cited next to a runner gate
+# is just as gated as one cited next to a literal push — but a pattern that knows only the push
+# form silently DOWNGRADES every retrofitted pipeline from GATED to ENFORCED, which reads as
+# "coverage got worse" when nothing did. ChangeClient became the runner's first production caller
+# in TRDD-B6NUEGMP; TRDD-DQ6XN2VP retrofits the remaining pipelines.
+GATE_LABEL = re.compile(
+    r"""(?:ops\.push\(\s*[`'"]|\bid:\s*[`'"])(G\d+[a-z]?|EXE|PG\d+)"""
+)
 
 
 def rule_headings() -> list[tuple[str, str]]:

@@ -1,12 +1,12 @@
 ---
 trdd-id: EE5YX5LF
 title: A failed ChangeTitle demotion can leave the host with no MANAGER and every team blocked
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-07-27T11:28:44+0200
-updated: 2026-07-27T11:28:44+0200
+updated: 2026-07-27T11:52:00+0200
 created-by: claude-ai-maestro
 current-owner: claude-ai-maestro
 assignee: claude-ai-maestro
@@ -31,7 +31,36 @@ labels: [aio, governance, blast-radius]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-27
 
-**NEXT ACTION:** decide between REORDER and COMPENSATE for `ChangeTitle` gates G10-G14
+**REORDER IS DONE. The dedicated test is NOT — that is the only remaining acceptance item.**
+
+Done: G14 now runs immediately before G10 (`~:2472`). Pre-flight confirmed as the TRDD required —
+G10-G13b branch only on the in-scope `oldTitle`/`newTitle` locals and read governance.json via
+`getManagerId()`; none reads the agent's title back from the registry, and `effectiveTitle` is
+computed at Gate 1. tsc 0, 251/251.
+
+**What the reorder EXPOSED (this is the bigger finding).** Making G14 run first broke 7 tests in
+`r3-r9-team-governance.test.ts`, and every one of them was green for the wrong reason:
+- 4 R9 tests asserted the G10/G13 blocking cascade **while the pipeline they drove was returning an
+  ERROR** — G14 was failing at its disk read-back (the fixture never seeded `registry.json`), and
+  they only saw the cascade because G10/G13 ran BEFORE G14. The bug under repair was propping up
+  its own tests.
+- 2 "positive control" tests asserted `expect(result.error).not.toMatch(/specific message/)`, which
+  is satisfied by **every other error** — including the G14 failure. Now assert `success === true`.
+- 1 DeleteAgent hard-delete test passed its `G08b` registry verification **by reading the
+  developer's REAL registry.json**, which naturally never contains a synthetic test agent. The
+  `statePath` seam (TRDD-N7X4KDQ2) made that gate read the fixture's file, where it correctly
+  reported the agent was still present until `deleteAgent` was modelled.
+`seedAgents()` now seeds `registry.json` on disk plus write-through `updateAgent`/`deleteAgent`, so
+this class is fixed for every future test in the file.
+
+**REMAINING (the acceptance gap, stated plainly):** the reorder itself has **no dedicated test**.
+The 7 repaired tests pass in BOTH orderings, so they do not pin it. Write the test named in the
+checklist — force G14 to fail on a MANAGER demotion, assert `getManagerId()` unchanged and no team
+blocked — and neuter-verify it by reverting the gate order.
+
+---
+
+**ORIGINAL NEXT ACTION (superseded):** decide between REORDER and COMPENSATE for `ChangeTitle` gates G10-G14
 (`services/element-management-service.ts` ~`:2472-2625`), then implement with a test. Read the
 "Two candidate fixes" section — the recommendation is REORDER, and the reason is that it PREVENTS
 the bad state rather than repairing it.
@@ -107,9 +136,9 @@ move with no behavioural edits alongside, and run the whole governance suite.
 
 ## Acceptance checklist
 
-- [ ] G10-G13 confirmed not to read the new title from the registry
-- [ ] title write reordered ahead of the governance mutations (or compensated, if a reorder is
+- [x] G10-G13 confirmed not to read the new title from the registry
+- [x] title write reordered ahead of the governance mutations (or compensated, if a reorder is
       shown unsafe)
 - [ ] test: a failed G14 on a MANAGER demotion leaves `getManagerId()` unchanged and no team blocked
 - [ ] that test neuter-verified
-- [ ] tsc clean, full suite green
+- [x] tsc clean, full suite green (251/251)

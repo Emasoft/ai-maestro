@@ -2469,6 +2469,87 @@ export async function ChangeTitle(
       ops.push(`G9a: Not MAINTAINER — maintainer validation skipped`)
     }
 
+    // ── GATE 14: Write governanceTitle to agent registry ─────
+    //
+    // ORDER IS THE SAFETY PROPERTY HERE (TRDD-EE5YX5LF). This gate used to run AFTER G10-G13b,
+    // which mutate HOST-WIDE governance: G10 calls removeManager() and then blocks EVERY team and
+    // hibernates their agents, G11/G12 null out team COS/ORCH pointers, G13 sets the new manager.
+    // Because every failure path below is a `return result`, a demotion whose title write failed
+    // left the host with NO MANAGER, every team blocked, team agents hibernated and un-wakeable
+    // ("assign MANAGER first"), and the agent still reading `manager` in the registry — a
+    // self-inflicted host-wide outage recoverable only by hand-editing governance.json.
+    //
+    // And this is the gate that fails MOST readily by design: it verifies the write actually
+    // landed (null return, in-memory mismatch, then a disk read-back), so a read-only registry, a
+    // concurrent writer or a full disk trips it — exactly when you least want governance
+    // half-dismantled. Running it FIRST makes such a failure a clean no-op instead.
+    //
+    // Safe to run here: G10-G13b branch only on the in-scope `oldTitle`/`newTitle` locals and read
+    // governance.json via getManagerId(); none of them reads the agent's title back from the
+    // registry, and `effectiveTitle` is computed at Gate 1. The residual failure mode inverts to
+    // the strictly milder one — if the title lands and a later governance write throws, the result
+    // is a STALE manager pointer (visible, non-blocking, one call to repair) rather than NO
+    // manager (invisible until the next team operation, and blocking everything).
+    //
+    // BUG-SCEN-002-P0-1 fix: verify the write actually persisted. Previous
+    // behavior silently accepted whatever updateAgent returned — if the
+    // write failed (cache glitch, lock contention, updateAgent returning
+    // null) the pipeline continued and the old title stayed on disk,
+    // creating UI/persistence drift. We now:
+    //   1. Capture updateAgent's return value (null = agent not found)
+    //   2. Re-read from disk (bypassing the agent cache) to confirm the
+    //      in-memory change was flushed to registry.json
+    //   3. FAIL the entire ChangeTitle pipeline if persistence verification
+    //      does not match — callers (DeleteTeam, TitleAssignmentDialog)
+    //      then know the registry is in an inconsistent state and can
+    //      surface the error rather than silently succeed.
+    const g14Updated = await updateAgent(agentId, { governanceTitle: effectiveTitle as any })
+    if (!g14Updated) {
+      result.error = `G14: updateAgent returned null for ${agentId} — registry not written`
+      ops.push(`G14: DENIED — updateAgent returned null`)
+      return result
+    }
+    if ((g14Updated.governanceTitle || null) !== (effectiveTitle || null)) {
+      result.error = `G14: in-memory post-write mismatch — expected "${effectiveTitle || 'null'}", got "${g14Updated.governanceTitle || 'null'}"`
+      ops.push(`G14: DENIED — in-memory post-write mismatch`)
+      return result
+    }
+    // Re-verify by re-reading from disk. The file must reflect the new
+    // title; any drift means saveAgents() silently dropped the field or
+    // a concurrent writer clobbered it.
+    try {
+      const { readFileSync } = await import('fs')
+      // statePath() instead of join(HOME, '.aimaestro', ...): identical in production (getStateDir()
+      // IS ~/.aimaestro) but resolved through the ONE seam every fixture already redirects. Built
+      // from the module-scope `const HOME = homedir()`, this read reached the developer's REAL
+      // registry, so no test could ever make a title change verify for a synthetic agent — every
+      // ChangeTitle failed here, which silently made anything downstream of a SUCCESSFUL title
+      // change untestable too (it is why DeleteTeam::G03's title-restore branch was unreachable,
+      // and why its first test passed with the compensation neutered). TRDD-N7X4KDQ2.
+      const REGISTRY_PATH = statePath('agents', 'registry.json')
+      const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
+      const diskAgent = diskAgents.find((a) => a.id === agentId)
+      if (!diskAgent) {
+        result.error = `G14: registry.json does not contain agent ${agentId} after write`
+        ops.push(`G14: DENIED — agent missing from registry.json after write`)
+        return result
+      }
+      const diskTitle = (diskAgent.governanceTitle as string | null | undefined) ?? null
+      const expectedTitle = effectiveTitle ?? null
+      if (diskTitle !== expectedTitle) {
+        result.error = `G14: registry.json title drift — disk="${diskTitle ?? 'null'}", expected="${expectedTitle ?? 'null'}"`
+        ops.push(`G14: DENIED — registry.json shows "${diskTitle ?? 'null'}" after write, expected "${expectedTitle ?? 'null'}"`)
+        return result
+      }
+      ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in registry (verified on disk)`)
+    } catch (verifyErr) {
+      // If we cannot even read the registry file, the write is unverifiable
+      // and the pipeline must NOT continue as if it succeeded.
+      result.error = `G14: registry verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
+      ops.push(`G14: DENIED — registry verification failed`)
+      return result
+    }
+
     // ── GATE 10: Clear old MANAGER from governance.json ──────
     if (oldTitle === 'manager') {
       const { removeManager } = await import('@/lib/governance')
@@ -2601,66 +2682,10 @@ export async function ChangeTitle(
       ops.push(`G13b: New title not ORCHESTRATOR/CHIEF-OF-STAFF — team ids unchanged`)
     }
 
-    // ── GATE 14: Write governanceTitle to agent registry ─────
-    //
-    // BUG-SCEN-002-P0-1 fix: verify the write actually persisted. Previous
-    // behavior silently accepted whatever updateAgent returned — if the
-    // write failed (cache glitch, lock contention, updateAgent returning
-    // null) the pipeline continued and the old title stayed on disk,
-    // creating UI/persistence drift. We now:
-    //   1. Capture updateAgent's return value (null = agent not found)
-    //   2. Re-read from disk (bypassing the agent cache) to confirm the
-    //      in-memory change was flushed to registry.json
-    //   3. FAIL the entire ChangeTitle pipeline if persistence verification
-    //      does not match — callers (DeleteTeam, TitleAssignmentDialog)
-    //      then know the registry is in an inconsistent state and can
-    //      surface the error rather than silently succeed.
-    const g14Updated = await updateAgent(agentId, { governanceTitle: effectiveTitle as any })
-    if (!g14Updated) {
-      result.error = `G14: updateAgent returned null for ${agentId} — registry not written`
-      ops.push(`G14: DENIED — updateAgent returned null`)
-      return result
-    }
-    if ((g14Updated.governanceTitle || null) !== (effectiveTitle || null)) {
-      result.error = `G14: in-memory post-write mismatch — expected "${effectiveTitle || 'null'}", got "${g14Updated.governanceTitle || 'null'}"`
-      ops.push(`G14: DENIED — in-memory post-write mismatch`)
-      return result
-    }
-    // Re-verify by re-reading from disk. The file must reflect the new
-    // title; any drift means saveAgents() silently dropped the field or
-    // a concurrent writer clobbered it.
-    try {
-      const { readFileSync } = await import('fs')
-      // statePath() instead of join(HOME, '.aimaestro', ...): identical in production (getStateDir()
-      // IS ~/.aimaestro) but resolved through the ONE seam every fixture already redirects. Built
-      // from the module-scope `const HOME = homedir()`, this read reached the developer's REAL
-      // registry, so no test could ever make a title change verify for a synthetic agent — every
-      // ChangeTitle failed here, which silently made anything downstream of a SUCCESSFUL title
-      // change untestable too (it is why DeleteTeam::G03's title-restore branch was unreachable,
-      // and why its first test passed with the compensation neutered). TRDD-N7X4KDQ2.
-      const REGISTRY_PATH = statePath('agents', 'registry.json')
-      const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
-      const diskAgent = diskAgents.find((a) => a.id === agentId)
-      if (!diskAgent) {
-        result.error = `G14: registry.json does not contain agent ${agentId} after write`
-        ops.push(`G14: DENIED — agent missing from registry.json after write`)
-        return result
-      }
-      const diskTitle = (diskAgent.governanceTitle as string | null | undefined) ?? null
-      const expectedTitle = effectiveTitle ?? null
-      if (diskTitle !== expectedTitle) {
-        result.error = `G14: registry.json title drift — disk="${diskTitle ?? 'null'}", expected="${expectedTitle ?? 'null'}"`
-        ops.push(`G14: DENIED — registry.json shows "${diskTitle ?? 'null'}" after write, expected "${expectedTitle ?? 'null'}"`)
-        return result
-      }
-      ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in registry (verified on disk)`)
-    } catch (verifyErr) {
-      // If we cannot even read the registry file, the write is unverifiable
-      // and the pipeline must NOT continue as if it succeeded.
-      result.error = `G14: registry verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
-      ops.push(`G14: DENIED — registry verification failed`)
-      return result
-    }
+    // ── GATE 14 ran EARLIER (just before G10) — see TRDD-EE5YX5LF ────
+    // Its position here, AFTER the governance mutations, was the bug: a failed title write left
+    // the host with no MANAGER and every team blocked. Nothing between here and there depends on
+    // it having run last.
 
     // ── G14c: Per-op ledger entry for title change (TRDD-eac02238) ─
     // Emit a discrete 'change_title' entry AFTER the registry write is

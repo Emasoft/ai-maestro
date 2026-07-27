@@ -372,6 +372,8 @@ function makeAgentRecord(over: Record<string, unknown> = {}): Record<string, unk
 }
 
 /** Register a fixed set of agent records with the mocked registry. */
+const REGISTRY_FILE = path.join(FAKE_STATE, 'agents', 'registry.json')
+
 function seedAgents(agents: Array<Record<string, unknown>>): void {
   mockAgentRegistry.loadAgents.mockReturnValue(agents)
   mockAgentRegistry.getAgent.mockImplementation(
@@ -380,6 +382,35 @@ function seedAgents(agents: Array<Record<string, unknown>>): void {
   mockAgentRegistry.getAgentByName.mockImplementation(
     (n: string) => agents.find(a => a.name === n) ?? null,
   )
+  // ChangeTitle's G14 proves the write LANDED by re-reading registry.json from disk (via
+  // statePath, redirected to FAKE_STATE here) — it deliberately bypasses this module mock, so
+  // mocking `@/lib/agent-registry` alone is not enough. Without the file on disk EVERY ChangeTitle
+  // fails at G14, and that is not hypothetical: it is how four R9 tests came to assert the
+  // G10/G13 blocking cascade while the pipeline they drove was returning an ERROR. They only
+  // passed because G10/G13 used to run BEFORE G14 — the very ordering TRDD-EE5YX5LF fixed.
+  const syncRegistryFile = () => {
+    mkdirSync(path.dirname(REGISTRY_FILE), { recursive: true })
+    writeFileSync(REGISTRY_FILE, JSON.stringify(agents))
+  }
+  syncRegistryFile()
+  // Default write-through. A test that needs a specific failure overrides this AFTER seedAgents;
+  // re-establishing it on every seed also heals any implementation leaked by a previous test.
+  mockAgentRegistry.updateAgent.mockImplementation(async (id: string, patch: Record<string, unknown>) => {
+    const rec = agents.find(a => a.id === id)
+    if (rec) Object.assign(rec, patch)
+    syncRegistryFile()
+    return rec ?? null // MUST return the record: G14 reads a null return as "registry not written"
+  })
+  // DeleteAgent's G08b verifies a hard delete by re-reading registry.json, so the delete has to be
+  // modelled or that gate correctly reports the agent is still there. It used to "pass" only
+  // because it was reading the DEVELOPER'S live registry, which of course never contains a
+  // synthetic test agent — a verification gate satisfied by the wrong file.
+  mockAgentRegistry.deleteAgent.mockImplementation((id: string) => {
+    const i = agents.findIndex(a => a.id === id)
+    if (i >= 0) agents.splice(i, 1)
+    syncRegistryFile()
+    return i >= 0
+  })
 }
 
 // Pay the cold-start module-graph cost ONCE, in a hook, instead of billing it to
@@ -466,7 +497,12 @@ describe('R3.2 — only ONE agent may hold MANAGER (ChangeTitle GATE 7)', () => 
       skipRestart: true,
     })
 
-    expect(result.error).not.toMatch(/Only one MANAGER allowed/i)
+    // `expect(result.error).not.toMatch(/Only one MANAGER allowed/)` used to stand here, and it
+    // passed for EVERY other error too — including the G14 persistence failure this fixture was
+    // silently producing before it seeded registry.json. A positive control has to assert the
+    // operation SUCCEEDED, not merely that it failed for a different reason.
+    expect(result.success).toBe(true)
+    expect(result.error).toBeUndefined()
     expect(result.operations.some(op => /G07: MANAGER singleton check passed/.test(op))).toBe(true)
   })
 })
@@ -529,7 +565,10 @@ describe('R3.3 — one CHIEF-OF-STAFF per team (ChangeTitle GATE 8)', () => {
       skipRestart: true,
     })
 
-    expect(result.error).not.toMatch(/Only one Chief-of-Staff/i)
+    // Same correction as the GATE 7 positive control above: "the error is not THIS error" is
+    // satisfied by every OTHER error, so it stayed green while the pipeline was failing at G14.
+    expect(result.success).toBe(true)
+    expect(result.error).toBeUndefined()
     expect(result.operations.some(op => /G08: CHIEF-OF-STAFF per-team singleton check passed/.test(op))).toBe(true)
   })
 })
@@ -1116,29 +1155,19 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
       makeAgentRecord({ id: 'agent-a', name: 'agent-a', governanceTitle: 'member', team: 'Abort Team' }),
       makeAgentRecord({ id: 'agent-b', name: 'agent-b', governanceTitle: 'member', team: 'Abort Team' }),
     ]
-    seedAgents(agents)
-    // ChangeTitle's G14 proves the write landed by re-reading registry.json from disk (via
-    // statePath, redirected to FAKE_STATE here). Keep that file in step with the in-memory array
-    // on every write, or every revert fails at G14 and nothing is ever recorded as reverted.
-    const REGISTRY_FILE = path.join(FAKE_STATE, 'agents', 'registry.json')
-    const syncRegistryFile = () => {
-      mkdirSync(path.dirname(REGISTRY_FILE), { recursive: true })
-      writeFileSync(REGISTRY_FILE, JSON.stringify(agents))
-    }
-    syncRegistryFile()
+    seedAgents(agents) // also seeds registry.json on disk + a write-through updateAgent
 
     // Make the registry actually persist, so ChangeTitle's read-back verification can pass for
     // agent-a — and then refuse exactly ONE write: agent-b's revert. A blanket rejection would
     // also break the restore path, and the test would pass without proving anything.
+    // Override seedAgents' write-through to refuse exactly ONE write: agent-b's revert. A blanket
+    // rejection would also break the restore path, and the test would pass without proving anything.
+    const writeThrough = mockAgentRegistry.updateAgent.getMockImplementation()!
     mockAgentRegistry.updateAgent.mockImplementation(async (id: string, patch: Record<string, unknown>) => {
       if (id === 'agent-b' && patch.governanceTitle === 'autonomous') {
         throw new Error('simulated persistence failure on agent-b')
       }
-      const rec = agents.find(a => a.id === id)
-      if (rec) Object.assign(rec, patch)
-      syncRegistryFile()
-      // MUST return the record: G14 treats a null return as "registry not written".
-      return rec
+      return writeThrough(id, patch)
     })
 
     // G00b gates on the governance password. `verifyPassword` is a mock here, so this string is an

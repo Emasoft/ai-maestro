@@ -164,10 +164,16 @@ vi.mock('@/lib/group-registry', () => ({
   loadGroups: vi.fn(() => []),
   saveGroups: vi.fn(),
 }))
-// DeleteAgent G03 cemetery archive — return no data so it logs a WARN and skips
-// the disk write (the archive is non-fatal; the soft-delete still proceeds).
+// DeleteAgent G01c cemetery archive.
+// The archive must SUCCEED here. This stub used to return `{ data: null }`, which was harmless
+// while DeleteAgent merely WARNed on a failed archive — but a failed archive now REFUSES the soft
+// delete, because "soft" means recoverable and the cemetery zip is the recovery. These tests are
+// about R39.6 ASSISTANT-delete authorization, not archiving, so a failing archive here would fail
+// them for a reason they are not testing.
 vi.mock('@/services/agents-transfer-service', () => ({
-  exportAgentZip: vi.fn(async () => ({ data: null, error: 'stubbed-in-test' })),
+  exportAgentZip: vi.fn(async () => ({
+    data: { filename: 'stub-agent-export.zip', buffer: Buffer.from('stub-zip-payload') },
+  })),
 }))
 
 vi.mock('@/lib/agent-runtime', () => ({

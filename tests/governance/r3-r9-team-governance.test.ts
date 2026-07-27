@@ -227,6 +227,17 @@ vi.mock('uuid', () => mockUuid)
 vi.mock('@/lib/governance-sync', () => ({
   broadcastGovernanceSync: vi.fn(async () => undefined),
 }))
+// The cemetery archive. Default: succeeds — a failing archive now REFUSES a soft delete, so a
+// stub that fails would break every soft-delete test for a reason it is not testing.
+const mockExportAgentZip = vi.fn(async (id: string) => {
+  return { data: { filename: `${id}-export.zip`, buffer: Buffer.from('zip') } } as {
+    data: { filename: string; buffer: Buffer } | null
+    error?: string
+  }
+})
+vi.mock('@/services/agents-transfer-service', () => ({
+  exportAgentZip: (...a: [string]) => mockExportAgentZip(...a),
+}))
 vi.mock('@/lib/notification-service', () => ({
   notifyAgent: vi.fn(async () => undefined),
 }))
@@ -1070,6 +1081,102 @@ describe('R9.8 — deleting the MANAGER runs the blocking cascade before the del
     expect(result.operations.some(op => /G02: Agent is not MANAGER/.test(op))).toBe(true)
     expect(spyBlockAllTeams).not.toHaveBeenCalled()
     expect(readTeamsFile().every(t => !t.blocked)).toBe(true)
+  })
+})
+
+// ============================================================================
+// A SOFT DELETE MUST STAY RECOVERABLE
+// (services/element-management-service.ts DeleteAgent::G01c — the cemetery archive)
+//
+// DeleteAgent cannot be made all-or-nothing by rollback: it revokes AMP keys, kills the tmux
+// session and `rm -rf`s the working directory and the Claude transcripts. None of that can be
+// undone. So its guarantee rests on ORDERING plus ONE artifact — the cemetery zip. These two
+// tests pin the two ways that guarantee was silently broken.
+// ============================================================================
+describe('DeleteAgent::G01c — the cemetery archive is what makes a soft delete recoverable', () => {
+  beforeEach(() => {
+    mockExportAgentZip.mockImplementation(async (id: string) => ({
+      data: { filename: `${id}-export.zip`, buffer: Buffer.from('zip') },
+    }))
+  })
+
+  it('archives the MANAGER *before* auto-demoting it, so the zip records `manager`', async () => {
+    /**
+     * The archive gate used to run AFTER the G02 auto-demotion, while its own comment claimed it
+     * "must happen before … cleanup so the archive captures the agent's full state (… title …)".
+     * For the one agent whose title matters most, the cemetery zip therefore recorded
+     * `autonomous`, and restoring it handed back an agent with the WRONG TITLE — a corruption
+     * invisible until someone actually restored, which is the worst time to discover it.
+     */
+    seedTeams([{ id: 'team-1', name: 'Team One', agentIds: ['agent-x'], chiefOfStaffId: 'agent-x' }])
+    seedAgents([
+      makeAgentRecord({ id: 'agent-mgr', name: 'agent-mgr', governanceTitle: 'manager' }),
+      makeAgentRecord({ id: 'agent-x', name: 'agent-x' }),
+    ])
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+    mockGovernance.isManager.mockImplementation((id: string) => id === 'agent-mgr')
+
+    // Observe the ORDER directly, the way the R18.2 snapshot test does. Reading the title back
+    // from the registry would NOT work here and would be VACUOUS: this fixture's ChangeTitle does
+    // not write the demotion through, so the archived title reads 'manager' whichever gate ran
+    // first — the assertion would pass on the very pipeline it is supposed to reject. G02's
+    // isManager() call is the demotion's own first observable act, so the two are directly
+    // comparable.
+    const order: string[] = []
+    mockExportAgentZip.mockImplementation(async (id: string) => {
+      order.push('G01c:archive')
+      return { data: { filename: `${id}-export.zip`, buffer: Buffer.from('zip') } }
+    })
+    mockGovernance.isManager.mockImplementation((id: string) => {
+      order.push('G02:demote-check')
+      return id === 'agent-mgr'
+    })
+
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    await DeleteAgent('agent-mgr', { authContext: OWNER_CTX, hard: false })
+
+    expect(mockExportAgentZip).toHaveBeenCalledWith('agent-mgr')
+    expect(order[0]).toBe('G01c:archive')
+    expect(order).toContain('G02:demote-check')
+  })
+
+  it('REFUSES the soft delete when the archive fails, and mutates nothing', async () => {
+    /**
+     * This used to WARN and proceed. "Soft" delete means exactly one thing — it is recoverable —
+     * and the zip IS the recovery. Continuing without it does not degrade the operation, it
+     * CHANGES it into the irreversible delete the caller did not ask for, and then reports
+     * success. Nothing downstream can detect that, because the missing archive was the only
+     * evidence. Refusing costs a retry; proceeding costs the agent.
+     */
+    seedTeams([])
+    seedAgents([makeAgentRecord({ id: 'agent-doomed', name: 'agent-doomed', governanceTitle: 'autonomous' })])
+    mockGovernance.isManager.mockReturnValue(false)
+    mockExportAgentZip.mockResolvedValue({ data: null, error: 'disk full' })
+
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const result = await DeleteAgent('agent-doomed', { authContext: OWNER_CTX, hard: false })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/not be recoverable/i)
+    // The agent is still there — the refusal happened before the first mutation.
+    expect(mockAgentRegistry.getAgent('agent-doomed')).toBeTruthy()
+    expect(mockAgentRegistry.deleteAgent).not.toHaveBeenCalled()
+  })
+
+  it('a HARD delete still proceeds with no archive — that asymmetry is deliberate', async () => {
+    /** Positive control: `hard: true` is the user explicitly asking for permanence, so demanding
+     *  an archive there would contradict the request rather than protect it. Without this, the
+     *  refusal test above would also pass on a pipeline that had simply broken all deletes. */
+    seedTeams([])
+    seedAgents([makeAgentRecord({ id: 'agent-gone', name: 'agent-gone', governanceTitle: 'autonomous' })])
+    mockGovernance.isManager.mockReturnValue(false)
+    mockExportAgentZip.mockResolvedValue({ data: null, error: 'disk full' })
+
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const result = await DeleteAgent('agent-gone', { authContext: OWNER_CTX, hard: true })
+
+    expect(result.success).toBe(true)
+    expect(mockExportAgentZip).not.toHaveBeenCalled()
   })
 })
 

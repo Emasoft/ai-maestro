@@ -6506,10 +6506,66 @@ export async function DeleteAgent(
       ops.push('G01b: Not an ASSISTANT — OK to delete')
     }
 
+    // ── G01c: Archive agent to cemetery BEFORE ANY mutation ───
+    //
+    // ORDERING IS THE GUARANTEE HERE, because almost nothing below can be undone: revoked AMP
+    // keys, a killed tmux session, `rm -rf` of the working directory and the Claude transcripts.
+    // A destructive pipeline cannot be made all-or-nothing by rollback, so it is made safe by
+    // taking a COMPLETE, RESTORABLE SNAPSHOT FIRST and only then mutating.
+    //
+    // THIS GATE USED TO RUN AFTER G02, AND G02 MUTATES. Its own comment said the archive "must
+    // happen before … cleanup so the archive captures the agent's full state (team membership,
+    // COS slot, title, etc.)" — while the gate immediately above it demoted a MANAGER to
+    // AUTONOMOUS. So for the one agent whose title matters most, the cemetery zip recorded
+    // `autonomous`, and restoring it silently returned an agent with the WRONG TITLE. The comment
+    // stated the exact invariant the ordering broke.
+    if (!hard) {
+      try {
+        const { exportAgentZip } = await import('@/services/agents-transfer-service')
+        const zipResult = await exportAgentZip(agentId)
+        if (zipResult.data) {
+          const cemeteryDir = statePath('cemetery')
+          const { mkdirSync, writeFileSync } = await import('fs')
+          mkdirSync(cemeteryDir, { recursive: true, mode: 0o700 })
+          const archFile = join(cemeteryDir, zipResult.data.filename)
+          writeFileSync(archFile, zipResult.data.buffer)
+          ops.push(`G01c: Archived to cemetery: ${zipResult.data.filename} (${Math.round(zipResult.data.buffer.length / 1024)}KB)`)
+        } else {
+          // A FAILED ARCHIVE IS A FAILED SOFT DELETE — it used to WARN and proceed.
+          // "Soft" delete means exactly one thing: it is recoverable, and the cemetery zip IS the
+          // recovery. Continuing without it does not degrade the operation, it CHANGES it into an
+          // irreversible delete the caller never asked for — and then reports success. Nothing
+          // downstream can detect that, because the only evidence would have been the archive.
+          // Refusing costs the user a retry; proceeding costs them the agent.
+          result.error = `Cannot soft-delete "${agent.name}": the cemetery archive failed (${zipResult.error || 'unknown'}), so the deletion would NOT be recoverable. No changes were made. Retry, or use hard delete if you intend a permanent, non-recoverable deletion.`
+          ops.push('G01c: DENIED — archive failed; refusing to turn a recoverable delete into a permanent one')
+          return result
+        }
+      } catch (err) {
+        result.error = `Cannot soft-delete "${agent.name}": the cemetery archive failed (${err instanceof Error ? err.message : String(err)}), so the deletion would NOT be recoverable. No changes were made. Retry, or use hard delete if you intend a permanent, non-recoverable deletion.`
+        ops.push('G01c: DENIED — archive failed; refusing to turn a recoverable delete into a permanent one')
+        return result
+      }
+    } else {
+      // TRDD-0301PUYW (SCEN-024 P2-PROP-002): a HARD delete intentionally
+      // skips the cemetery archive. hard=true is the UI's explicit "Delete
+      // Forever" path (DeleteAgentDialog "Delete Forever" button) — the user
+      // asked for a permanent, non-recoverable deletion, so producing a
+      // cemetery zip would contradict that intent and leave recoverable data
+      // behind. The recoverable path is hard=false ("Move to Cemetery"), which
+      // takes the archive branch above. This asymmetry is by design, not an
+      // oversight.
+      ops.push('G01c: Hard-delete — skipping cemetery archive')
+    }
+
     // ── G02: Auto-demote MANAGER before deletion ───────────────
-    // If the agent is MANAGER, auto-demote to AUTONOMOUS first. This removes
-    // the MANAGER designation (triggering R10 blocking cascade on all teams)
-    // but avoids forcing the user through 2 manual steps.
+    // If the agent is MANAGER, auto-demote to AUTONOMOUS first. This removes the MANAGER
+    // designation (triggering the R10 blocking cascade on all teams) but avoids forcing the user
+    // through 2 manual steps.
+    //
+    // RUNS AFTER THE ARCHIVE (G01c), NOT BEFORE IT. This is the FIRST mutation in the
+    // pipeline, and the archive above is what makes it recoverable — demoting before snapshotting
+    // wrote the demoted title into the snapshot.
     try {
       const { isManager: checkManager } = await import('@/lib/governance')
       if (checkManager(agentId)) {
@@ -6529,38 +6585,6 @@ export async function DeleteAgent(
       }
     } catch {
       ops.push('G02: WARN — governance check failed, proceeding')
-    }
-
-    // ── G03: Archive agent to cemetery BEFORE any cleanup ─────
-    // Must happen before team/session/credential cleanup so the archive
-    // captures the agent's full state (team membership, COS slot, title, etc.).
-    if (!hard) {
-      try {
-        const { exportAgentZip } = await import('@/services/agents-transfer-service')
-        const zipResult = await exportAgentZip(agentId)
-        if (zipResult.data) {
-          const cemeteryDir = statePath('cemetery')
-          const { mkdirSync, writeFileSync } = await import('fs')
-          mkdirSync(cemeteryDir, { recursive: true, mode: 0o700 })
-          const archFile = join(cemeteryDir, zipResult.data.filename)
-          writeFileSync(archFile, zipResult.data.buffer)
-          ops.push(`G03: Archived to cemetery: ${zipResult.data.filename} (${Math.round(zipResult.data.buffer.length / 1024)}KB)`)
-        } else {
-          ops.push(`G03: WARN — zip export failed: ${zipResult.error || 'unknown'}. Proceeding without archive.`)
-        }
-      } catch (err) {
-        ops.push(`G03: WARN — cemetery archive failed: ${err instanceof Error ? err.message : err}. Proceeding without archive.`)
-      }
-    } else {
-      // TRDD-0301PUYW (SCEN-024 P2-PROP-002): a HARD delete intentionally
-      // skips the cemetery archive. hard=true is the UI's explicit "Delete
-      // Forever" path (DeleteAgentDialog "Delete Forever" button) — the user
-      // asked for a permanent, non-recoverable deletion, so producing a
-      // cemetery zip would contradict that intent and leave recoverable data
-      // behind. The recoverable path is hard=false ("Move to Cemetery"), which
-      // takes the archive branch above. This asymmetry is by design, not an
-      // oversight.
-      ops.push('G03: Hard-delete — skipping cemetery archive')
     }
 
     // ── G04: Strip COS/Orchestrator from teams + remove from all teams ──

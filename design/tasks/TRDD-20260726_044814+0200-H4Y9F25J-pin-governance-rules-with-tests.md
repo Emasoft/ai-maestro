@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-26T19:48:00+0200
+updated: 2026-07-27T09:37:30+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,10 +20,10 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 59893d08]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0]
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-27
 
 USER mandate (2026-07-26): *"the api implement the full all-in-one design and the governance rules
 enforced and tested"*, scoped to **Claude only** — codex/gemini/opencode/kiro stay parked.
@@ -121,11 +121,47 @@ Commits `b07cfd78`, `c5173e59`, `17471dd3`, `08bd2800`, `f379b2b7`.
   no copy had — it REFUSES a root that is not under a temp dir — and its own test watches it refuse.
   Remaining 7 sites can adopt it incrementally; it is additive.
 
-NEXT ACTION: **batch 5 — R5 (7 transfer rules), all citing
-`app/api/governance/transfers/route.ts` + `[id]/resolve/route.ts`.** Grouped by GUARD FILE, not by
-rule id, so one context holds one file's mocking setup. Use the new containment helper from the
-start. Then R18 (8), noting 5 of its rows are in W8NA7ROZ's defective-citation list — verify those
-citations BEFORE writing against them.
+**BATCH 5 LANDED 2026-07-27 (`73856fe0`) — debt 66 → 59.** All 7 of R5 (transfers) pinned in
+`tests/governance/r5-transfer-governance.test.ts`, 19 tests. First batch whose guards are ROUTE
+HANDLERS, and that changes the method in three ways worth carrying to every route-shaped batch:
+
+- **No `ops` trace exists**, so the honest substitute is to drive the real exported `POST` with a
+  real `NextRequest` and fake only the stores/authority beneath the guard. The guard logic is never
+  mocked, which is what keeps the mutation-kill property.
+- **Status-only assertions are false-greens here.** The create route returns 400 from FIVE
+  different guards and 404 from two, so `expect(status).toBe(400)` passes while a completely
+  different guard refuses. Every case pins a fragment of its own guard's message.
+- **Fixture ordering is load-bearing.** The route checks authority → self-transfer → source exists →
+  agent-in-source → destination exists → COS-immobility → source-is-closed → duplicate. A fixture
+  tripping an EARLIER guard gives a passing test for the wrong reason.
+
+**All 7 citations were CORRECT** — the first batch where the map's guard column survived
+verification intact, against a running tally of 8 wrong ones. Worth noting so the tally stays a
+measurement and not a slogan. Reading the code did add one site the map lacked: **R5.5 has TWO
+enforcement points** (create-time, and a re-check on the approval path, because a team can be
+deleted between request and approval); both are now cited.
+
+**8 mutation runs, one per guard, each committed-before-mutated and restored by `git checkout`:**
+
+| mutation | named test | positive controls |
+|---|---|---|
+| R5.2 authority removed | FAILED (403) | 3 still passed |
+| R5.3 resolver-authority removed | FAILED (both 403 cases) | 2 still passed |
+| R5.4 COS-immobility removed | FAILED (400) | passed |
+| R5.5 create-time check removed | FAILED (404) | approval-time test **still passed** |
+| R5.5 approval-time check removed | FAILED (404) | create-time test **still passed** |
+| R5.6 self-transfer removed | FAILED (400) | — |
+| R5.7 single-closed-team removed | FAILED (409) | 3 still passed |
+| R5.8 duplicate removed | FAILED (409) | different-destination control passed |
+
+The two R5.5 rows are the interesting pair: each mutation failed exactly ONE of the two tests, which
+is the proof that the sites are independent rather than one test riding on the other's guard.
+
+NEXT ACTION: **batch 6 — R18 (8 rules)**, and it starts with verification, not with tests: **5 of
+R18's rows are in TRDD-W8NA7ROZ's defective-citation list** (R18.1/R18.7/R18.10 have no gate label
+in range; R18.8/R18.9 cite a 391-line range spanning ChangeCLIArgs into ChangeClient with 8 gates in
+it). Execute those citations BEFORE writing anything against them. After R18: R7 (6), R4 (6), R1
+(5), R17 (4), R10 (4), then the ~1-3 tail grouped BY GUARD FILE.
 
 Deferred from Phase 2 as tooling, not pins: `scripts/verify-zero-impact.sh` (2a) and the
 `setupFiles` timeout unification (2b tail).
@@ -141,9 +177,10 @@ Each batch is one sub-agent, one new file under `tests/governance/`, disjoint ru
 | 1 | R17 core-plugin + R11 title-plugin binding | 22 | **landed — 17 pinned, 2 no-seam, `7bec032e`** |
 | 2 | R9 manager requirement + R3 role hierarchy | 17 | **landed — 16 pinned, 1 no-seam, `2298646a`** |
 | 3 | R6 communication graph | 13 | **landed — 13/13 pinned, `59893d08`** |
-| 4 | R20 marketplace governance | 23 | pending |
-| 5 | R18 client-change continuity + R5 transfers | 15 | pending |
-| 6 | the remainder (R1, R4, R7, R8, R10, R39, …) | ~44 | pending |
+| 4 | R20 marketplace governance | 23 | **landed — 22 pinned, 1 shell-only, `8e77d834`** |
+| 5 | R5 transfers | 7 | **landed — 7/7 pinned, `73856fe0`** |
+| 6 | R18 client-change continuity | 8 | pending — **verify its 5 W8NA7ROZ citations FIRST** |
+| 7 | the remainder (R1, R4, R7, R8, R10, R39, …) | ~44 | pending — group BY GUARD FILE |
 
 ## The constraints every batch carries, and why each exists
 

@@ -11,6 +11,13 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Route every mock through `(...a) => mockX(...a)` and restore it in `beforeEach`; an inline `vi.fn(async () => …)` in the factory cannot be restored.
 - Pinning only the SUCCESS path reads as coverage — assert what happens when the operation fails, or the suite is decorative.
 - `-t "R18.1"` also matches `R18.10`; read the test NAMES and COUNT, never the exit code (vitest exits 0 when a filter matches nothing).
+- Asserting only `success === false` passes on ANY earlier refusal (a missing password, a failed auth gate) — pin the REASON, e.g. the specific gate in the ops trace.
+- A fixture that models the filesystem as ONE constant boolean cannot test a post-condition: an install needs `existsSync` false BEFORE and true AFTER. Model the writes, or the post-condition stays a WARN forever.
+- When a guard is unreachable in a fixture, say so in the test's docstring and file it — never seed the developer's REAL `$HOME` to reach it.
+
+## Verifying a fix
+
+- Diagnose by dumping the actual ops/trace, not by reasoning about what the code should have done — the trace named the real cause in one run, twice, after reasoning had blamed the wrong thing.
 
 ## Mocked modules
 
@@ -23,6 +30,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Check every precondition (adapters, permissions, reachability) BEFORE the first mutation; ordering prevents states that rollback can only repair.
 - The last write in a pipeline still needs a compensation — a registry write after the filesystem work leaves the two disagreeing forever.
 - Swallowing a per-item failure into `console.warn` and continuing converts one bad item into an invalid system.
+- Order a compensation by the CONSTRAINT graph, not by blind reversal: if the do-path removed X first to satisfy a gate, the undo must restore X first to satisfy that gate's mirror.
+- A snapshot nothing reads is not a safeguard — if a gate announces an archive, point at the artifact or stop announcing it.
+- "Nothing was deleted" is false the moment ANY earlier sub-step landed; a preserved parent row with its children stripped is a husk, not consistency.
 
 ## Claims about the codebase
 

@@ -394,6 +394,44 @@ describe('R17.1 / R17.2 / R17.6 / R17.9 — InstallElement CLI-install + PG01 ve
     expect(written.enabledPlugins?.['ai-maestro-plugin@ai-maestro-plugins']).toBe(true)
   })
 
+  it('PG01: an uninstall that left the plugin installed is a FAILED uninstall, not a warning', async () => {
+    /**
+     * PG01 was asymmetric: install/enable set `result.success = false` when verification failed,
+     * while uninstall/disable only pushed a WARN. So the two directions of the same lifecycle
+     * reported failure by different rules, and the removal direction ALWAYS reported success —
+     * the UI cleared, the caller moved on, and the plugin kept loading. Removal is the whole
+     * operation; if the settings still list it, the operation did not happen.
+     *
+     * Sabotage mirrors the R17.9 install test: seed the key, then make the .claude dir
+     * unwritable so the removal's write (tmp-file + rename) cannot land. The key survives, and
+     * PG01 must call that a failure.
+     */
+    const claudeDir = path.join(agentDir, '.claude')
+    mkdirSync(claudeDir, { recursive: true })
+    writeFileSync(
+      path.join(claudeDir, 'settings.local.json'),
+      JSON.stringify({ enabledPlugins: { 'some-plugin@some-market': true } }),
+    )
+    chmodSync(claudeDir, 0o555) // no new tmp file ⇒ the settings rewrite cannot land
+
+    const { InstallElement } = await import('@/services/element-management-service')
+    let result
+    try {
+      result = await InstallElement(
+        { name: 'some-plugin', marketplace: 'some-market', action: 'uninstall', scope: 'local', agentDir, clientType: 'claude' },
+        OWNER_CTX,
+      )
+    } finally {
+      // The shared afterEach chmods the temp-dir ROOT, not this SUBdirectory — and unlinking the
+      // seeded settings.local.json needs write permission on .claude itself. Restore it here or
+      // teardown dies with EACCES and reports a green test as a suite failure.
+      chmodSync(claudeDir, 0o755)
+    }
+
+    expect(result.success).toBe(false)
+    expect(result.operations.some(o => o.startsWith('PG01: DENIED'))).toBe(true)
+  })
+
   it('R17.9: flags corePluginMissing=true on the agent registry when post-install verification cannot confirm the plugin — never a silent "looks fine"', async () => {
     // The CLI reports success, but we sabotage the local write-back (chmod the
     // .claude dir read-only) so the belt-and-braces write ALSO cannot land.

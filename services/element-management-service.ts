@@ -1143,15 +1143,21 @@ export async function InstallElement(
                 : `PG01: WARN — ${clientType}-adapter reports ${stateSummary} after ${action}`)
               if (!ok) result.success = false
             } else if (action === 'uninstall') {
+              // Was WARN-only while install/enable above set success=false. That asymmetry meant an
+              // uninstall which left the plugin installed reported SUCCESS: the UI cleared, the
+              // caller moved on, and the plugin kept loading. Removal is the whole operation — if
+              // the adapter still sees it, the operation did not happen.
               const ok = !state.installed
               ops.push(ok
                 ? `PG01: Verified via ${clientType}-adapter — ${name} removed`
-                : `PG01: WARN — ${clientType}-adapter reports ${stateSummary} after uninstall`)
+                : `PG01: DENIED — ${clientType}-adapter reports ${stateSummary} after uninstall`)
+              if (!ok) result.success = false
             } else if (action === 'disable') {
               const ok = !state.enabled || !state.installed
               ops.push(ok
                 ? `PG01: Verified via ${clientType}-adapter — ${stateSummary}`
-                : `PG01: WARN — ${clientType}-adapter reports ${stateSummary} after disable`)
+                : `PG01: DENIED — ${clientType}-adapter reports ${stateSummary} after disable`)
+              if (!ok) result.success = false
             } else {
               ops.push(`PG01: Verification for "${action}" — skipped`)
             }
@@ -1181,15 +1187,20 @@ export async function InstallElement(
               : `PG01: WARN — ${name} not found or disabled after ${action}`)
             if (!found) result.success = false
           } else if (action === 'uninstall') {
+            // Same asymmetry as the adapter branch above: install/enable gated on their result
+            // while uninstall/disable only warned, so the two directions of the same lifecycle
+            // reported failure by different rules and the removal direction always "succeeded".
             const stillPresent = ep && Object.keys(ep).some(k => matchesName(k))
             ops.push(stillPresent
-              ? `PG01: WARN — ${name} still present after uninstall`
+              ? `PG01: DENIED — ${name} still present after uninstall`
               : `PG01: Verified — ${name} removed`)
+            if (stillPresent) result.success = false
           } else if (action === 'disable') {
             const isDisabled = ep && Object.keys(ep).some(k => matchesName(k) && ep[k] === false)
             ops.push(isDisabled
               ? `PG01: Verified — ${name} is disabled`
-              : `PG01: WARN — ${name} not in expected disabled state`)
+              : `PG01: DENIED — ${name} not in expected disabled state`)
+            if (!isDisabled) result.success = false
           } else {
             ops.push(`PG01: Verification for "${action}" — skipped (update verified by CLI exit code)`)
           }

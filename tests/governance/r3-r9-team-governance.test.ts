@@ -1093,6 +1093,70 @@ describe('R9.8 — deleting the MANAGER runs the blocking cascade before the del
 // undone. So its guarantee rests on ORDERING plus ONE artifact — the cemetery zip. These two
 // tests pin the two ways that guarantee was silently broken.
 // ============================================================================
+describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team back', () => {
+  it('re-enrols every agent it had already pulled out of the team', async () => {
+    /**
+     * G03 dismantles the team agent-by-agent BEFORE G04 deletes it: each agent is pulled out of
+     * team.agentIds, reverted to AUTONOMOUS (role-plugin stripped) and has its legacy `team` field
+     * cleared. When a later agent's revert failed, the pipeline aborted and told the operator
+     * "Team NOT deleted to preserve consistency" — while holding a team whose earlier agents had
+     * already been stripped and un-enrolled. The operator's natural next move, a retry, then ran
+     * against state that no longer matched the first attempt.
+     *
+     * SCOPE, stated honestly: this pins the agentIds re-enrolment and the legacy-team-field
+     * restore. It does NOT reach the third restore step (putting the title back), because no test
+     * in this repo can: ChangeTitle's G14 re-reads `~/.aimaestro/agents/registry.json` through
+     * `const HOME = homedir()` captured at module scope (element-management-service.ts:81), so the
+     * ONLY way to make a revert succeed for a synthetic agent is to write into the developer's
+     * LIVE registry — which 0-IMPACT forbids outright. Every revert here therefore fails at G14,
+     * `previousTitle` is never recorded, and the title branch is unreachable. That is a structural
+     * testability gap in ChangeTitle, not a gap in the compensation: same shape as TRDD-L42SKUBW
+     * (guards wired to un-injectable process state). Tracked as TRDD-N7X4KDQ2.
+     */
+    seedTeams([{ id: 'team-abort', name: 'Abort Team', agentIds: ['agent-a', 'agent-b'] }])
+    const agents = [
+      makeAgentRecord({ id: 'agent-a', name: 'agent-a', governanceTitle: 'member', team: 'Abort Team' }),
+      makeAgentRecord({ id: 'agent-b', name: 'agent-b', governanceTitle: 'member', team: 'Abort Team' }),
+    ]
+    seedAgents(agents)
+
+    // Make the registry actually persist, so ChangeTitle's read-back verification can pass for
+    // agent-a — and then refuse exactly ONE write: agent-b's revert. A blanket rejection would
+    // also break the restore path, and the test would pass without proving anything.
+    mockAgentRegistry.updateAgent.mockImplementation(async (id: string, patch: Record<string, unknown>) => {
+      if (id === 'agent-b' && patch.governanceTitle === 'autonomous') {
+        throw new Error('simulated persistence failure on agent-b')
+      }
+      const rec = agents.find(a => a.id === id)
+      if (rec) Object.assign(rec, patch)
+      return rec
+    })
+
+    // G00b gates on the governance password. `verifyPassword` is a mock here, so this string is an
+    // arbitrary token the mock accepts — never the real governance secret, which no test may name.
+    mockGovernance.verifyPassword.mockResolvedValue(true)
+
+    const { DeleteTeam } = await import('@/services/element-management-service')
+    const result = await DeleteTeam('team-abort', { authContext: OWNER_CTX, password: 'mocked-ok' })
+
+    // Pin the REASON, not just the outcome: without this, an early refusal (a missing password, a
+    // failed auth gate) also yields success===false and the test passes having never reached G03.
+    expect(result.success).toBe(false)
+    expect(result.operations.some(o => o.startsWith('G03: ABORTED'))).toBe(true)
+
+    // THE POINT: both agents were pulled out of team.agentIds before the abort. A team that still
+    // exists but has been emptied of its members is not "unchanged" — it is a husk, and the old
+    // message called that consistency.
+    const { loadTeams } = await import('@/lib/team-registry')
+    const team = loadTeams().find(t => t.id === 'team-abort')
+    expect(team).toBeDefined()
+    expect(team!.agentIds).toContain('agent-a')
+    expect(team!.agentIds).toContain('agent-b')
+    // And the legacy `team` field, cleared on the way down, is put back on the way up.
+    expect(agents.find(x => x.id === 'agent-a')!.team).toBe('Abort Team')
+  })
+})
+
 describe('DeleteAgent::G01c — the cemetery archive is what makes a soft delete recoverable', () => {
   beforeEach(() => {
     mockExportAgentZip.mockImplementation(async (id: string) => ({

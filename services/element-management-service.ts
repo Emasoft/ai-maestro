@@ -6187,10 +6187,23 @@ export async function DeleteTeam(
     result.teamName = team.name
     ops.push(`G01: Team "${team.name}" found (${team.agentIds.length} agents)`)
 
-    // ── G02: Archive team state before mutations ───────────────
-    // Capture full team structure for potential future recovery.
-    const _teamSnapshot = JSON.parse(JSON.stringify(team)) // archived for future recovery
-    ops.push(`G02: Team state archived (COS=${team.chiefOfStaffId || 'none'}, ORCH=${team.orchestratorId || 'none'})`)
+    // ── G02: Record what G03 must be able to put back ──────────
+    // This gate used to deep-clone `team` into a local `_teamSnapshot` "archived for future
+    // recovery". Nothing ever read it: it was a local that died with the call, so the ops line
+    // promised the operator a recovery artifact that did not exist. The durable record is
+    // elsewhere and is real — `saveTeams()` writes a signed-ledger JSON-patch on every mutation,
+    // so a COMPLETED delete is reconstructible from the ledger, and an ABORTED one leaves the
+    // team in teams.json. What was genuinely missing is the per-agent restore data below, because
+    // G03 dismantles the team agent by agent BEFORE G04 deletes it.
+    const restoreRecords: Array<{
+      agentId: string
+      previousTitle: string | null   // non-null ⇒ the title was reverted and must be put back
+      previousTeamField: string | null // non-null ⇒ the legacy `team` field was cleared
+      removedFromAgentIds: boolean
+      wasChiefOfStaff: boolean
+      wasOrchestrator: boolean
+    }> = []
+    ops.push(`G02: Pre-mutation state recorded (COS=${team.chiefOfStaffId || 'none'}, ORCH=${team.orchestratorId || 'none'}, ${team.agentIds.length} agent(s))`)
 
     // ── G03: Revert all team agents to AUTONOMOUS + hibernate ──
     // Collect all unique agents: agentIds + COS + Orchestrator.
@@ -6231,14 +6244,29 @@ export async function DeleteTeam(
       ])
       for (const agentId of agentsToRevert) {
         let currentTitle: string | null = null
+        let currentTeamField: string | null = null
         let agentExists = false
         try {
           const a = getAgentFromRegistry(agentId)
           if (a) {
             agentExists = true
             currentTitle = a.governanceTitle || null
+            currentTeamField = a.team || null
           }
         } catch { /* best effort */ }
+
+        // One record per agent, filled in as each sub-step lands. It is the ONLY thing that makes
+        // the abort path below able to put the team back together — the sub-steps are individually
+        // reversible, but only if we remember which of them actually ran for this agent.
+        const record = {
+          agentId,
+          previousTitle: null as string | null,
+          previousTeamField: null as string | null,
+          removedFromAgentIds: false,
+          wasChiefOfStaff: false,
+          wasOrchestrator: false,
+        }
+        restoreRecords.push(record)
 
         // SCEN-008 BUG-001 fix (2026-04-30): If an agent ID is in team.agentIds
         // but the agent no longer exists in the registry (orphan reference from
@@ -6288,6 +6316,9 @@ export async function DeleteTeam(
                 updates.orchestratorId = null
               }
               await updateTeamG03(teamId, updates)
+              record.removedFromAgentIds = true
+              record.wasChiefOfStaff = teamG03.chiefOfStaffId === agentId
+              record.wasOrchestrator = teamG03.orchestratorId === agentId
               ops.push(`G03: Removed ${agentId.substring(0, 8)} from team.agentIds (pre-revert, R3 Gate 9b prep)`)
             }
           } catch (err) {
@@ -6304,6 +6335,7 @@ export async function DeleteTeam(
               authContext: options.authContext,
             })
             if (titleResult.success) {
+              record.previousTitle = currentTitle
               ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS (verified in registry)`)
             } else {
               // SCEN-002 P0-001: ChangeTitle now includes strong persistence
@@ -6327,6 +6359,7 @@ export async function DeleteTeam(
         // reference (seen in SCEN-007 ISSUE-001).
         try {
           await updateAgent(agentId, { team: '' })
+          record.previousTeamField = currentTeamField
           ops.push(`G03: Cleared legacy team field for ${agentId.substring(0, 8)}`)
         } catch (err) {
           ops.push(`G03: WARN — team field clear failed for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
@@ -6366,10 +6399,79 @@ export async function DeleteTeam(
     // old title in agents/registry.json (ghost titles). The caller can
     // inspect `operations` for per-agent reasons and retry if desired.
     if (revertFailures.length > 0) {
-      result.error = `DeleteTeam aborted: ${revertFailures.length} agent(s) failed to revert to AUTONOMOUS. ` +
-        `Team NOT deleted to preserve consistency. Retry or inspect operations log. First failure: ` +
+      // Leaving the team row in teams.json was NEVER enough to "preserve consistency", and saying
+      // so was the most dangerous line in this pipeline: by the time we get here G03 has already
+      // dismantled the team agent by agent — every agent processed before the failure was removed
+      // from team.agentIds (possibly clearing chiefOfStaffId/orchestratorId), reverted to
+      // AUTONOMOUS with its role-plugin stripped, and had its legacy `team` field cleared. So the
+      // operator was told "nothing was deleted" while holding a half-dismantled team, and the
+      // obvious response — retry — ran against state that no longer matched the first attempt.
+      //
+      // Every one of those sub-steps is individually invertible, and `restoreRecords` says exactly
+      // which ones ran, so we put them back in REVERSE order. Hibernation is deliberately NOT
+      // undone: waking an agent is a heavier, side-effectful act than the data changes above, and
+      // an offline agent is a recoverable state, not a corrupted one. It is reported, not hidden.
+      const { noChangesMessage, invalidStateMessage } = await import('@/lib/gate-transaction')
+      const { updateAgent: updateAgentUndo } = await import('@/lib/agent-registry')
+      const stranded: { id: string; error: string }[] = []
+      for (const rec of [...restoreRecords].reverse()) {
+        const short = rec.agentId.substring(0, 8)
+        // ORDER: re-add to the team BEFORE restoring the title. This is deliberately NOT the exact
+        // reverse of the do-path, and the asymmetry is forced by the same rule that shaped the
+        // do-path: R3 Gate 9b refuses a revert-to-AUTONOMOUS while the agent is still listed in a
+        // team, which is why G03 removes membership FIRST. Its mirror image holds on the way back —
+        // a team-scoped title cannot be restored to an agent that is not in the team — so
+        // membership must be restored FIRST. Reversing blindly here strands every title.
+        if (rec.removedFromAgentIds) {
+          try {
+            const { loadTeams: loadT, updateTeam: updT } = await import('@/lib/team-registry')
+            const t = loadT().find(x => x.id === teamId)
+            if (t && !t.agentIds.includes(rec.agentId)) {
+              const updates: { agentIds: string[]; chiefOfStaffId?: string | null; orchestratorId?: string | null } = {
+                agentIds: [...t.agentIds, rec.agentId],
+              }
+              if (rec.wasChiefOfStaff) updates.chiefOfStaffId = rec.agentId
+              if (rec.wasOrchestrator) updates.orchestratorId = rec.agentId
+              await updT(teamId, updates)
+              ops.push(`G03-undo: ${short} re-added to team.agentIds`)
+            }
+          } catch (err) {
+            stranded.push({ id: short, error: `not restored to team.agentIds: ${err instanceof Error ? err.message : err}` })
+          }
+        }
+        if (rec.previousTitle) {
+          try {
+            const back = await ChangeTitle(rec.agentId, rec.previousTitle, {
+              authContext: options.authContext,
+            })
+            if (back.success) ops.push(`G03-undo: ${short} → ${rec.previousTitle} restored`)
+            else stranded.push({ id: short, error: `title stuck at autonomous: ${back.error || 'unknown'}` })
+          } catch (err) {
+            stranded.push({ id: short, error: `title restore threw: ${err instanceof Error ? err.message : err}` })
+          }
+        }
+        if (rec.previousTeamField !== null) {
+          try {
+            await updateAgentUndo(rec.agentId, { team: rec.previousTeamField })
+            ops.push(`G03-undo: ${short} team field restored`)
+          } catch (err) {
+            stranded.push({ id: short, error: `legacy team field still cleared: ${err instanceof Error ? err.message : err}` })
+          }
+        }
+      }
+
+      const hibernated = restoreRecords.filter(r => r.previousTitle || r.removedFromAgentIds).length
+      const cause = `${revertFailures.length} agent(s) failed to revert to AUTONOMOUS; first: ` +
         `${revertFailures[0].agentId.substring(0, 8)}=${revertFailures[0].error}`
-      ops.push(`G03: ABORTED — ${revertFailures.length} title revert failure(s); team preserved`)
+      result.error = stranded.length
+        ? invalidStateMessage(3, 'G03', cause, stranded)
+        : `${noChangesMessage(3, 'G03', cause)} The team and every agent's title/membership were restored` +
+          `${hibernated ? `, but ${hibernated} agent(s) remain hibernated and must be woken manually` : ''}.`
+      ops.push(
+        stranded.length
+          ? `G03: ABORTED — restore INCOMPLETE, ${stranded.length} residue item(s): ${stranded.join('; ')}`
+          : `G03: ABORTED — ${revertFailures.length} revert failure(s); team membership and titles restored`,
+      )
       return result
     }
 

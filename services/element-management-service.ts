@@ -7692,16 +7692,33 @@ export async function CreateAgent(
         githubRepo: desired.githubRepo,
       })
       if (!titleResult.success) {
-        // Roll back: delete the half-created agent so the caller can retry cleanly
+        // Roll back: delete the half-created agent so the caller can retry cleanly.
+        // R51.5 — a FAILED rollback may never be reported as "nothing was created".
+        // `result.agentId = null` used to run in BOTH branches, so a failed delete left
+        // an orphan agent in the registry while the caller was told no agent existed:
+        // the one record nobody would ever go clean up, because nothing named it. On a
+        // failed revert we KEEP agentId set (the orphan stays addressable) and say the
+        // state is invalid.
+        let rolledBack = true
+        let rollbackError = ''
         try {
           const { deleteAgent } = await import('@/lib/agent-registry')
           await deleteAgent(agent.id)
           ops.push(`G06: FAIL — ChangeTitle failed: ${titleResult.error}. Rolled back agent.`)
         } catch (rollbackErr) {
-          ops.push(`G06: FAIL — ChangeTitle failed: ${titleResult.error}. ROLLBACK ALSO FAILED: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`)
+          rolledBack = false
+          rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+          ops.push(`G06: FAIL — ChangeTitle failed: ${titleResult.error}. ROLLBACK ALSO FAILED: ${rollbackError}`)
         }
-        result.error = `Title assignment failed: ${titleResult.error}`
-        result.agentId = null
+        if (rolledBack) {
+          result.error = `Title assignment failed: ${titleResult.error}`
+          result.agentId = null
+        } else {
+          const { invalidStateMessage } = await import('@/lib/gate-transaction')
+          result.error = invalidStateMessage(6, 'G06', `Title assignment failed: ${titleResult.error}`, [
+            { id: `agent ${agent.id} (${agent.name})`, error: rollbackError },
+          ])
+        }
         return result
       }
       titleOps = titleResult.operations
@@ -7719,15 +7736,28 @@ export async function CreateAgent(
         authContext: desired.authContext,
       })
       if (!titleResult.success) {
+        // R51.5 — see the G06 explicit-title branch above: a failed rollback must keep
+        // the orphan addressable instead of reporting "no agent was created".
+        let rolledBack = true
+        let rollbackError = ''
         try {
           const { deleteAgent } = await import('@/lib/agent-registry')
           await deleteAgent(agent.id)
           ops.push(`G06: FAIL — default AUTONOMOUS assignment failed: ${titleResult.error}. Rolled back agent.`)
         } catch (rollbackErr) {
-          ops.push(`G06: FAIL — default AUTONOMOUS assignment failed: ${titleResult.error}. ROLLBACK ALSO FAILED: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`)
+          rolledBack = false
+          rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+          ops.push(`G06: FAIL — default AUTONOMOUS assignment failed: ${titleResult.error}. ROLLBACK ALSO FAILED: ${rollbackError}`)
         }
-        result.error = `Default AUTONOMOUS assignment failed: ${titleResult.error}`
-        result.agentId = null
+        if (rolledBack) {
+          result.error = `Default AUTONOMOUS assignment failed: ${titleResult.error}`
+          result.agentId = null
+        } else {
+          const { invalidStateMessage } = await import('@/lib/gate-transaction')
+          result.error = invalidStateMessage(6, 'G06', `Default AUTONOMOUS assignment failed: ${titleResult.error}`, [
+            { id: `agent ${agent.id} (${agent.name})`, error: rollbackError },
+          ])
+        }
         return result
       }
       titleOps = titleResult.operations
@@ -7804,15 +7834,32 @@ export async function CreateAgent(
       // hunting, when the actual message ("Could not resolve host: github.com") names
       // the problem outright.
       const why = titleOps.filter(o => /G1[67]:.*(WARN|VIOLATION)/.test(o)).join(' | ') || 'role-plugin install failed'
+      // R51.5 — the old message asserted "so no agent was created" unconditionally, which
+      // is FALSE on a failed rollback: the agent survives, role-less, while the caller is
+      // told it does not exist. Only claim it when the delete actually landed.
+      let rolledBack = true
+      let rollbackError = ''
       try {
         const { deleteAgent } = await import('@/lib/agent-registry')
         await deleteAgent(agent.id)
         ops.push(`G07c: DENIED — R9.13: agent has 0 role-plugins after title assignment. Rolled back.`)
       } catch (rollbackErr) {
-        ops.push(`G07c: DENIED — R9.13: agent has 0 role-plugins. ROLLBACK FAILED: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`)
+        rolledBack = false
+        rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+        ops.push(`G07c: DENIED — R9.13: agent has 0 role-plugins. ROLLBACK FAILED: ${rollbackError}`)
       }
-      result.error = `role-plugin is mandatory (R9.13) — the agent's role-plugin could not be installed, so no agent was created. Cause: ${why}`
-      result.agentId = null
+      if (rolledBack) {
+        result.error = `role-plugin is mandatory (R9.13) — the agent's role-plugin could not be installed, so no agent was created. Cause: ${why}`
+        result.agentId = null
+      } else {
+        const { invalidStateMessage } = await import('@/lib/gate-transaction')
+        result.error = invalidStateMessage(
+          7,
+          'G07c',
+          `role-plugin is mandatory (R9.13) and could not be installed. Cause: ${why}`,
+          [{ id: `agent ${agent.id} (${agent.name}) — role-less, R9.13-violating`, error: rollbackError }],
+        )
+      }
       return result
     }
 

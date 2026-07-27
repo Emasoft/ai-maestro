@@ -357,4 +357,43 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
     expect(result.error).toMatch(/already exists/i)
     expect(mockCreateAgent).not.toHaveBeenCalled()
   })
+
+  /**
+   * R51.5 — a FAILED rollback may never be reported as "nothing was created".
+   *
+   * G06 rolls back a half-created agent by deleting it, and honestly records
+   * `ROLLBACK ALSO FAILED` in the ops trace when that delete throws. But `result.agentId
+   * = null` used to run in BOTH branches, so on a failed rollback the caller was handed
+   * `agentId: null` — "no agent exists" — while the orphan sat in the registry. Callers
+   * read the return value, not the ops prose, so that orphan was the one record nobody
+   * would ever clean up: invisible by construction. (G07c was worse still: its error
+   * string asserted "so no agent was created" unconditionally.)
+   *
+   * The fix keeps agentId SET when the revert fails and swaps the message for
+   * invalidStateMessage, which names the orphan and says manual repair is required.
+   */
+  it('R51.5: a G06 rollback that FAILS keeps the orphan addressable — it must not report "no agent created"', async () => {
+    // Make ChangeTitle fail (its verified registry write cannot land), then make the
+    // compensating delete fail too — the two-failure case the old code mis-reported.
+    mockUpdateAgent.mockRejectedValue(new Error('registry write refused'))
+    mockDeleteAgent.mockRejectedValue(new Error('registry locked'))
+
+    const { CreateAgent } = await import('@/services/element-management-service')
+    const result = await CreateAgent({
+      name: 'orphan-alpha',
+      client: 'claude',
+      governanceTitle: 'manager', // standalone title → G06 applies it directly
+      authContext: { isSystemOwner: true as const },
+    })
+
+    expect(result.success).toBe(false)
+    // The rollback was attempted and failed — pin the REASON, not just the outcome.
+    expect(result.operations.some(o => /ROLLBACK ALSO FAILED/.test(o))).toBe(true)
+    // THE POINT: the orphan stays addressable.
+    expect(result.agentId).not.toBeNull()
+    expect(result.error).toMatch(/INVALID STATE/i)
+    expect(result.error).toMatch(/orphan-alpha/)
+    // And it must NOT claim nothing happened.
+    expect(result.error).not.toMatch(/no agent was created/i)
+  })
 })

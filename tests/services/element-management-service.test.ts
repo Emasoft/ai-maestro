@@ -18,6 +18,10 @@ const {
   mockFsWriteFile,
   mockFsMkdir,
   mockFsExistsSync,
+  mockFsCreated,
+  mockFsDeleted,
+  mockFsReaddir,
+  mockFsBehavior,
   mockAgentRegistry,
   mockClientCapabilities,
 } = vi.hoisted(() => ({
@@ -26,6 +30,18 @@ const {
   mockFsWriteFile: vi.fn().mockResolvedValue(undefined),
   mockFsMkdir: vi.fn().mockResolvedValue(undefined),
   mockFsExistsSync: vi.fn().mockReturnValue(false),
+  // The BASELINE above answers "what was on disk before this test ran". These two sets record what
+  // the test itself creates and deletes, so `existsSync` can answer post-condition questions the
+  // baseline structurally cannot: an install needs `false` BEFORE (the "already exists" check) and
+  // `true` AFTER (the G05 post-condition), and one fixed boolean can never be both. Modelling the
+  // writes is what lets a real post-condition be tested at all.
+  mockFsCreated: new Set<string>(),
+  mockFsDeleted: new Set<string>(),
+  mockFsReaddir: vi.fn().mockResolvedValue([]),
+  // `silentWrites` models the failure G05 exists to catch: the write RESOLVES but produces nothing
+  // (a dropped write on a network mount, a path race). Without a lever for it, G05 is unfalsifiable
+  // in this fixture — which is how it stayed a WARN.
+  mockFsBehavior: { silentWrites: false },
   mockAgentRegistry: {
     getAgent: vi.fn(),
     // 2026-05-06: ChangePlugin's G11b (rolePluginSwap programArgs rewrite)
@@ -52,23 +68,55 @@ vi.mock('child_process', () => ({
   },
 }))
 
+// ── The in-memory filesystem overlay ────────────────────────────────────────
+// A mutating fs call records its effect; `existsSync` consults those records BEFORE falling back to
+// the per-test baseline. Without this, a mocked write is a no-op, so no post-install/post-remove
+// assertion in this file could ever discriminate — which is precisely why the pipelines' G05
+// post-conditions were only WARNings for so long: they were unfalsifiable here.
+// Scope of the model: exact paths, plus subtree removal (deleting a directory removes what is under
+// it). It does NOT synthesise ancestors for `mkdir -p`; no pipeline gate checks a parent's existence.
+const fsTrack = {
+  create: (p: unknown) => {
+    if (mockFsBehavior.silentWrites) return
+    const s = String(p); mockFsDeleted.delete(s); mockFsCreated.add(s)
+  },
+  destroy: (p: unknown) => {
+    const s = String(p)
+    for (const c of [...mockFsCreated]) if (c === s || c.startsWith(`${s}/`)) mockFsCreated.delete(c)
+    mockFsDeleted.add(s)
+  },
+}
+
 vi.mock('fs/promises', () => ({
   readFile: mockFsReadFile,
-  writeFile: mockFsWriteFile,
-  mkdir: mockFsMkdir,
-  readdir: vi.fn().mockResolvedValue([]),
-  rm: vi.fn().mockResolvedValue(undefined),
+  // Call THROUGH to the exported spy first (so `expect(mockFsWriteFile).toHaveBeenCalledWith(...)`
+  // and any per-test `mockRejectedValue` still behave), and record the path only once it resolved —
+  // a write that threw must NOT mark its target as existing.
+  writeFile: vi.fn(async (p: unknown, ...rest: unknown[]) => {
+    const r = await mockFsWriteFile(p, ...rest); fsTrack.create(p); return r
+  }),
+  mkdir: vi.fn(async (p: unknown, ...rest: unknown[]) => {
+    const r = await mockFsMkdir(p, ...rest); fsTrack.create(p); return r
+  }),
+  readdir: mockFsReaddir,
+  rm: vi.fn(async (p: unknown) => { fsTrack.destroy(p) }),
   stat: vi.fn().mockRejectedValue(new Error('ENOENT')),
   // 2026-05-04: saveJsonSafe and the cross-process settings lock
   // (MAJ-01 + MAJ-02 fixes) now use rename + copyFile from fs/promises.
   // The mock must resolve them so the test path doesn't throw
   // "rename is not a function" before the assertion runs.
-  rename: vi.fn().mockResolvedValue(undefined),
-  copyFile: vi.fn().mockResolvedValue(undefined),
+  rename: vi.fn(async (from: unknown, to: unknown) => { fsTrack.create(to); fsTrack.destroy(from) }),
+  copyFile: vi.fn(async (_from: unknown, to: unknown) => { fsTrack.create(to) }),
 }))
 
 vi.mock('fs', () => ({
-  existsSync: mockFsExistsSync,
+  existsSync: (p: unknown) => {
+    const s = String(p)
+    // Most recent effect wins; `destroy` clears the created entry, so the two sets cannot disagree.
+    if (mockFsCreated.has(s)) return true
+    if (mockFsDeleted.has(s)) return false
+    return mockFsExistsSync(p) as boolean
+  },
 }))
 
 vi.mock('@/lib/agent-registry', () => mockAgentRegistry)
@@ -91,6 +139,11 @@ describe('element-management-service', () => {
     resetFixtureCounter()
     mockFsExistsSync.mockReturnValue(false)
     mockFsReadFile.mockResolvedValue('{}')
+    // The overlay is per-test state, and vi.clearAllMocks() cannot know about it.
+    mockFsCreated.clear()
+    mockFsDeleted.clear()
+    mockFsBehavior.silentWrites = false
+    mockFsReaddir.mockResolvedValue([])
   })
 
   describe('installPluginLocally', () => {
@@ -1196,6 +1249,52 @@ describe('element-management-service', () => {
       const result = await ChangeSkill(agent.id, { name: 'my-skill', action: 'remove', scope: 'local' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockAgentRegistry.getAgent).toHaveBeenCalledWith(agent.id)
+    })
+  })
+
+  // ══════════════════════════════════════════════════════════════
+  // R50/R51 — element installs are all-or-nothing (TRDD-DQ6XN2VP)
+  // ══════════════════════════════════════════════════════════════
+  describe('R51.4 — a failed element install leaves NO residue', () => {
+    it('ChangeSkill::G04 compensates a half-done copy, so the retry is not blocked', async () => {
+      /** Validates that a copy failing mid-way is rolled back rather than leaving a partial skill dir */
+      mockFsExistsSync.mockReturnValue(false)
+      mockFsCreated.add('/tmp/src-skill') // the source exists; the target must not
+      const desired = { name: 'half-copied', action: 'install' as const, scope: 'user' as const, sourcePath: '/tmp/src-skill' }
+      const { ChangeSkill } = await import('@/services/element-management-service')
+
+      // copyDirRecursive mkdir's the target, THEN readdir's the source — so a readdir failure is
+      // exactly the "target created, contents not copied" shape that used to strand a directory.
+      mockFsReaddir.mockRejectedValueOnce(new Error('EIO: simulated mid-copy failure'))
+      const failed = await ChangeSkill(null, desired, _tAuth)
+      expect(failed.success).toBe(false)
+
+      // THE POINT: before the compensation existed, the orphaned target dir made this retry fail
+      // with "already exists" forever, with no UI path to clear it.
+      const retry = await ChangeSkill(null, desired, _tAuth)
+      expect(retry.success).toBe(true)
+      expect(retry.error).toBeUndefined()
+    })
+
+    it('ChangeSkill::G05 refuses to report success when the skill is not there afterwards', async () => {
+      /** Validates that a silently-dropped copy is reported as a failure, not logged as a warning */
+      mockFsExistsSync.mockReturnValue(false)
+      mockFsCreated.add('/tmp/src-skill')
+      mockFsBehavior.silentWrites = true
+      const { ChangeSkill } = await import('@/services/element-management-service')
+      const result = await ChangeSkill(null, { name: 'phantom', action: 'install', scope: 'user', sourcePath: '/tmp/src-skill' }, _tAuth)
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/does not exist|NOT installed/i)
+    })
+
+    it('changeSimpleElement::G05 refuses to report success when the file is not there afterwards', async () => {
+      /** Validates the same post-condition on the shared agent/command/rule/output-style handler */
+      mockFsExistsSync.mockReturnValue(false)
+      mockFsBehavior.silentWrites = true
+      const { ChangeAgentDef } = await import('@/services/element-management-service')
+      const result = await ChangeAgentDef(null, { name: 'phantom-agent', action: 'install', scope: 'user', content: '# x' }, _tAuth)
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/does not exist|NOT installed/i)
     })
   })
 

@@ -4330,9 +4330,37 @@ export async function ChangeSkill(agentId: string | null, desired: {
         result.error = `Skill "${desired.name}" already exists at ${targetDir}`
         return result
       }
-      await mkdir(baseDir, { recursive: true })
-      await copyDirRecursive(desired.sourcePath, targetDir)
-      ops.push(`G04: Installed skill from ${desired.sourcePath}`)
+      // A PARTIAL COPY IS WORSE THAN NO COPY, and it used to be the outcome: copyDirRecursive
+      // failing half-way left a partial skill directory behind. The pipeline returned an error,
+      // so the caller believed nothing happened — but the leftover directory then made EVERY
+      // retry fail on the `already exists` check above, with no UI path to clear it. A failed
+      // install that permanently blocks the next install is not a failed install, it is a
+      // corrupted target.
+      //
+      // The check above guarantees targetDir did NOT exist, so removing it is an exact
+      // compensation, not a guess.
+      const { runGateSequence } = await import('@/lib/gate-transaction')
+      const txn = await runGateSequence(
+        [{
+          id: 'G04',
+          what: `Installed skill from ${desired.sourcePath}`,
+          run: async () => {
+            await mkdir(baseDir, { recursive: true })
+            await copyDirRecursive(desired.sourcePath!, targetDir)
+          },
+          // Tolerates a partial copy AND no copy at all — `force: true` makes a missing target a
+          // no-op, which is exactly the "run did none of its work" case the runner now guarantees
+          // an undo must survive.
+          undo: async () => { await rm(targetDir, { recursive: true, force: true }) },
+        }],
+        {},
+      )
+      ops.push(...txn.ops)
+      if (!txn.ok) {
+        result.error = txn.message
+        console.error(`[ChangeSkill] ${result.error}`)
+        return result
+      }
     } else if (desired.action === 'remove') {
       if (!existsSync(targetDir)) {
         result.error = `Skill "${desired.name}" not found at ${targetDir}`
@@ -4360,14 +4388,23 @@ export async function ChangeSkill(agentId: string | null, desired: {
       ops.push(`G04: Converted skill to ${desired.targetClient}`)
     }
 
-    // ── Verify final state ────────────────────────────────────
+    // ── G05: Verify final state ───────────────────────────────
+    // These two were WARNings, and the pipeline reported SUCCESS through both of them. A
+    // post-condition that does not gate the result is not a verification — it is a log line that
+    // reads like one. "The skill is missing after installing it" is the operation failing to do
+    // the single thing it was asked to do, so it must be reported as a failure.
     if (desired.action === 'install' && !existsSync(targetDir)) {
-      ops.push(`G05: WARN — target dir missing after install`)
+      result.error = `Install reported no error but "${targetDir}" does not exist — the skill was NOT installed.`
+      ops.push(`G05: DENIED — target dir missing after install`)
+      return result
     } else if (desired.action === 'remove' && existsSync(targetDir)) {
-      ops.push(`G05: WARN — target dir still exists after remove`)
-    } else {
-      ops.push(`G05: Final state verified`)
+      // Nothing to compensate: a partial removal has already deleted files, and re-creating them
+      // is not possible. Report the invalid state (R51.5) rather than claim success.
+      result.error = `Remove reported no error but "${targetDir}" still exists — the skill may be PARTIALLY removed. Inspect it before retrying.`
+      ops.push(`G05: DENIED — target dir still exists after remove`)
+      return result
     }
+    ops.push(`G05: Final state verified`)
 
     {
       const scopePath = agentId ? `/agents/${agentId}/skills/${desired.name}` : `/user/skills/${desired.name}`
@@ -4473,13 +4510,30 @@ async function changeSimpleElement(
         result.error = `${elementType} "${desired.name}" already exists at ${targetPath}`
         return result
       }
-      await mkdir(baseDir, { recursive: true })
-      if (desired.sourcePath) {
-        await copyFile(desired.sourcePath, targetPath)
-        ops.push(`G04: Installed from ${desired.sourcePath}`)
-      } else {
-        await writeFile(targetPath, desired.content!, 'utf-8')
-        ops.push(`G04: Installed from content`)
+      // Same compensation as ChangeSkill's install: a copyFile/writeFile that dies part-way leaves
+      // a TRUNCATED element file behind, which then makes every retry fail on the `already exists`
+      // check above. A half-written agent/command/rule that the next retry refuses to replace is
+      // worse than a clean failure. The existence check above proves targetPath was absent, so
+      // removing it restores exactly the prior state.
+      const { runGateSequence } = await import('@/lib/gate-transaction')
+      const txn = await runGateSequence(
+        [{
+          id: 'G04',
+          what: desired.sourcePath ? `Installed from ${desired.sourcePath}` : 'Installed from content',
+          run: async () => {
+            await mkdir(baseDir, { recursive: true })
+            if (desired.sourcePath) await copyFile(desired.sourcePath, targetPath)
+            else await writeFile(targetPath, desired.content!, 'utf-8')
+          },
+          undo: async () => { await rm(targetPath, { recursive: true, force: true }) },
+        }],
+        {},
+      )
+      ops.push(...txn.ops)
+      if (!txn.ok) {
+        result.error = txn.message
+        console.error(`[ChangeElement] ${result.error}`)
+        return result
       }
     } else if (desired.action === 'remove') {
       if (!existsSync(targetPath)) {
@@ -4490,11 +4544,17 @@ async function changeSimpleElement(
       ops.push(`G04: Removed ${elementType}`)
     }
 
-    // ── Verify final state ────────────────────────────────────
+    // ── G05: Verify final state ───────────────────────────────
+    // Was a pair of WARNings the pipeline reported SUCCESS through. A post-condition that does not
+    // gate the result is a log line dressed as a verification.
     if (desired.action === 'install' && !existsSync(targetPath)) {
-      ops.push(`G05: WARN — target missing after install`)
+      result.error = `Install reported no error but "${targetPath}" does not exist — the ${elementType} was NOT installed.`
+      ops.push(`G05: DENIED — target missing after install`)
+      return result
     } else if (desired.action === 'remove' && existsSync(targetPath)) {
-      ops.push(`G05: WARN — target still exists after remove`)
+      result.error = `Remove reported no error but "${targetPath}" still exists — the ${elementType} may be PARTIALLY removed. Inspect it before retrying.`
+      ops.push(`G05: DENIED — target still exists after remove`)
+      return result
     } else {
       ops.push(`G05: Final state verified`)
     }

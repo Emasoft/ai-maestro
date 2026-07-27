@@ -3520,9 +3520,42 @@ export async function ChangePlugin(
       if (desired.scope === 'user') {
         await execFileAsync('claude', ['plugin', 'update', desired.name, desired.marketplace, '--scope', 'user'], { timeout: 120000 })
       } else {
-        // Local: uninstall then reinstall
-        await uninstallPluginLocally(desired.name, agentDir!, desired.marketplace)
-        await installPluginLocally(desired.name, agentDir!, desired.marketplace)
+        // Local update = uninstall THEN reinstall, which is the one branch of this pipeline that
+        // mutates twice — and it used to run both calls bare. A failure of the reinstall left the
+        // plugin GONE, from an operation whose entire purpose was to KEEP it and make it newer.
+        // Losing a plugin is not a degraded update, it is the opposite of the requested change.
+        //
+        // Under the runner the uninstall carries its compensation (put it back), so a failed
+        // reinstall is rolled back to the version the agent already had. And if that restore ALSO
+        // fails, the caller is told the system is in an invalid state and which plugin is missing
+        // (R51.5) — never a bare error that implies nothing happened.
+        const { runGateSequence } = await import('@/lib/gate-transaction')
+        const txn = await runGateSequence(
+          [
+            {
+              id: 'EXE-a',
+              what: `Uninstalled ${pluginKey} (pre-update)`,
+              run: async () => { await uninstallPluginLocally(desired.name, agentDir!, desired.marketplace) },
+              undo: async () => { await installPluginLocally(desired.name, agentDir!, desired.marketplace) },
+            },
+            {
+              id: 'EXE-b',
+              what: `Reinstalled ${pluginKey} (update)`,
+              run: async () => { await installPluginLocally(desired.name, agentDir!, desired.marketplace) },
+              // Nothing to undo: if EXE-b succeeded the update is complete, and any later failure
+              // is compensated by EXE-a's undo restoring the plugin.
+              undo: async () => { /* no-op — see above */ },
+            },
+          ],
+          {},
+        )
+        if (!txn.ok) {
+          ops.push(...txn.ops)
+          result.error = txn.message
+          console.error(`[ChangePlugin] ${result.error}`)
+          return result
+        }
+        ops.push(...txn.ops)
       }
       ops.push(`EXE: Updated ${pluginKey} (scope: ${desired.scope})`)
     }

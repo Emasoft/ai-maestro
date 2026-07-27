@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T16:23:45+0200
-updated: 2026-07-26T16:23:45+0200
+updated: 2026-07-27T09:44:50+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -32,8 +32,15 @@ Surfaced while adding gate qualifiers to `docs/GOVERNANCE-ENFORCEMENT-MAP.md` (c
 `services/element-management-service.ts` with a line range. 17 resolved to exactly one gate and
 were qualified. These 15 did not, and were deliberately left alone.**
 
-**NEXT ACTION: resolve each row below by HUMAN READ of the cited code, then either add a
-`(Pipeline::Gnn)` qualifier or correct the citation.** Do not batch-convert them — see WHY.
+**PARTIALLY RESOLVED 2026-07-27 — read the dated section at the bottom FIRST.** All 6 R18 rows
+listed below (R18.1, R18.2, R18.3, R18.7, R18.8, R18.9, R18.10) have been read and re-cited, and an
+audit of all 22 gate-qualified rows found **7 more whose qualifier was wrong — which PROVES their
+line range is wrong too.** The tables below are the original measurement and are kept as the record;
+the bottom section supersedes them for the rows it names.
+
+**NEXT ACTION: re-cite the 7 rows whose qualifier was stripped** (R3.3, R12.3, R17.1, R17.6,
+R17.15, R19.1, R19.3), then the remaining category-A/B rows, by HUMAN READ of the cited code. Do
+not batch-convert them — see WHY, and see what batch-converting cost at the bottom.
 
 **WHY they were not converted mechanically.** A citation that already fails to name one guard
 would be laundered into a more authoritative-looking form while staying just as wrong. This
@@ -98,6 +105,50 @@ confirm by experiment before acting.
 - [ ] `tests/governance/enforcement-coverage.test.ts` stays green, and each new qualifier is
       mutation-proved (break the gate in the source, watch the named test fail)
 - [ ] `bash scripts/with-node.sh npx tsc --noEmit` clean; governance suite green
+
+## 2026-07-27 — the qualifier pass was ALSO a detector, and it found 7 wrong ranges
+
+Batch 6 began by verifying R18's citations before writing tests against them, per this TRDD. That
+verification generalized into an audit of **all 22 gate-qualified rows**, and the result is worse —
+and more useful — than this TRDD originally assumed.
+
+**The unsound step, stated plainly.** Phase 1a (`c5173e59`) derived each gate name FROM the cited
+line range: "if the range contains exactly one gate, name it." But the ranges were already known to
+be wrong roughly a third of the time (this TRDD's own tally). So the pass propagated wrongness into
+a form that READS as verified — a named gate looks like someone checked, where a bare line number
+visibly does not. That is the laundering risk this TRDD warned about, committed one commit later by
+the same hand that wrote the warning.
+
+**The redeeming half.** A gate NAME is human-checkable against a rule; a line number is not. So
+comparing each qualifier's label text against its rule text is a cheap, high-yield rot detector —
+and it is sound in one direction: **if the rule is enforced by a gate, and the cited range contains
+a DIFFERENT gate, then the range does not contain the guard.** A wrong qualifier PROVES a wrong
+range. The pass therefore surfaced rot that was previously invisible; the failure was shipping the
+qualifiers without running this comparison first.
+
+**Audit result — 22 rows:**
+
+| verdict | rows |
+|---|---|
+| verified correct, kept | R3.2 (`ChangeTitle::G07` = MANAGER singleton), R9.2 (`G10` = block-on-manager-removal, per CLAUDE.md), R9.6 (`G13` = unblock-on-assignment, per CLAUDE.md), R9.8 (`DeleteAgent::G02` = MANAGER auto-demote), R17.9 (`InstallElement::PG01` = verify+flag chain, matches its test), R20.13 (`CreateAgent::G01b` = name uniqueness) |
+| corrected | **R8.3** `DeleteTeam::G03`→**G05** (the pipeline's own docblock says "G05: Cancel pending transfers … (R8.3)"; G03 reverts agents to AUTONOMOUS) · **R11.4** `ChangeTeam::PG01`→**G07** (PG01 at :4952 is the LEAVE branch; joining calls ChangeTitle('member') at :4996-5008) · **R11.5** `ChangeTeam::G02`→**G04d** (G02 merely finds the team; the leave-side ChangeTitle('autonomous') is :4938-4947) |
+| **qualifier STRIPPED — range proven wrong** | **R3.3** (cited G08 = the ORCHESTRATOR singleton; the rule is one-COS-per-team) · **R12.3** (cited G07 = MANAGER singleton; the rule is one-role-per-agent) · **R17.1**, **R17.6** (cited `CreateAgent::G08` = ROLE-plugin install; both rules are about the CORE plugin, and batch 1's tests pin them against **InstallElement** — wrong PIPELINE, not just wrong gate) · **R17.15** (cited G07 = a client/directory check; the rule is "cannot be disabled") · **R19.1** (cited G08b = "cannot demote current COS"; the rule is MAINTAINER-is-no-team) · **R19.3** (`ChangeTitle::EXE`, unverified) |
+
+Stripping restores those rows to honest coarseness. It is strictly better than leaving a precise,
+authoritative-looking, wrong claim — and the ratchet never asserted qualifier correctness anyway
+("no parser can read intent"), so nothing regressed.
+
+**The 7 stripped rows now carry a range PROVEN wrong** and need re-citation, which is added to this
+TRDD's scope below. Three of them (R17.1, R17.6, R17.15) are the sharpest instance of the general
+pattern: **the TEST column was right while the GUARD column was wrong** — batch 1 pinned the real
+behaviour and nobody noticed the citation pointed at another pipeline entirely.
+
+**Rule adopted:** a gate qualifier may only be added by READING the gate and the rule together.
+Never derive one from a line range, and never add one in bulk.
+
+- [ ] Re-cite the 7 stripped rows against their real guard, by reading
+- [ ] R18.8's two-site citation (converter warning collector + the ChangeClient path that proceeds
+      anyway) is confirmed to be the honest shape for a "proceed despite loss" rule
 
 ## Approval log
 

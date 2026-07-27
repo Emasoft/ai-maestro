@@ -125,7 +125,16 @@ const UNAUDITED_RULES = new Set<number>([
 // from five different guards, so a status-only assertion would pass on the WRONG refusal — every
 // case pins a fragment of its guard's own message; and R5.5 turned out to have TWO enforcement
 // sites (create-time and a re-check on the approval path), which the map now cites separately.
-const MAX_ENFORCED_WITHOUT_TEST = 59
+// 2026-07-27: batch 6 pinned 7 of R18's 8 in
+// tests/governance/r18-client-change-continuity.test.ts — 59 → 52. R18.8 is the one non-pin: its
+// "emits a loss report" half lives in the converter's warning collector and its "proceeds anyway"
+// half is the ABSENCE of an abort, so a test would assert that nothing happened — which passes on a
+// pipeline that does nothing at all. It stays counted.
+// The batch also corrected all 8 R18 citations (every one was wrong or too coarse) and audited the
+// 22 gate qualifiers added in c5173e59, of which 7 were wrong. Deriving a gate NAME from a line
+// RANGE is unsound when the ranges are themselves ~1/3 wrong — it turns a visibly vague citation
+// into an authoritative-looking false one. See TRDD-W8NA7ROZ.
+const MAX_ENFORCED_WITHOUT_TEST = 52
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

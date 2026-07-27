@@ -193,19 +193,19 @@ Row format is fixed so a regex parses each line:
 | R17.21 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.22 | ENFORCED | services/agents-core-service.ts:1833-1866 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.23 | ENFORCED | services/agents-core-service.ts:2300-2303 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R18.1 | ENFORCED | services/element-management-service.ts:5697-5727 (ChangeClient::G06) | — |
-| R18.2 | ENFORCED | services/element-management-service.ts:5568-5607 (ChangeClient::G05) | — |
-| R18.3 | ENFORCED | services/element-management-service.ts:5645-5727 (ChangeClient::G06) | — |
+| R18.1 | ENFORCED | services/element-management-service.ts:5697-5727 (ChangeClient::G06) | tests/governance/r18-client-change-continuity.test.ts |
+| R18.2 | ENFORCED | services/element-management-service.ts:5568-5607 (ChangeClient::G05) | tests/governance/r18-client-change-continuity.test.ts |
+| R18.3 | ENFORCED | services/element-management-service.ts:5645-5727 (ChangeClient::G06) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.3b | CONTRADICTED | — | — |
 | R18.3c | UNENFORCED | — | — |
 | R18.3d | UNENFORCED | — | — |
 | R18.4 | UNENFORCED | — | — |
-| R18.5 | ENFORCED | services/element-management-service.ts:5594-5605 (ChangeClient::G05b) | — |
+| R18.5 | ENFORCED | services/element-management-service.ts:5594-5605 (ChangeClient::G05b) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.6 | CONTRADICTED | — | — |
-| R18.7 | ENFORCED | services/element-management-service.ts:5889-5891 (ChangeClient::G10) | — |
+| R18.7 | ENFORCED | services/element-management-service.ts:5889-5891 (ChangeClient::G10) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.8 | ENFORCED | lib/converter/utils/warnings.ts:14-22, services/element-management-service.ts:5705-5715 | — |
-| R18.9 | ENFORCED | services/element-management-service.ts:5517-5908 | — |
-| R18.10 | ENFORCED | services/element-management-service.ts:5882 (ChangeClient::G09) | — |
+| R18.9 | ENFORCED | services/element-management-service.ts:5517-5908 | tests/governance/r18-client-change-continuity.test.ts |
+| R18.10 | ENFORCED | services/element-management-service.ts:5882 (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
 | R19.1 | ENFORCED | services/element-management-service.ts:2385 | — |
 | R19.2 | UNENFORCED | — | — |
 | R19.3 | ENFORCED | services/element-management-service.ts:2400-2411 | — |

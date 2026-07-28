@@ -12,8 +12,23 @@
 //   • usage_request: STATUS is load-bearing — 200 → [200, data], a non-2xx → [code, null]
 //     (HTTPError.code), a network/parse failure → [0, null].
 //
-// The `User-Agent: claude-account-rotator` header is REQUIRED: urllib's default UA is banned by
-// Cloudflare at the token endpoint (HTTP 403 / code 1010), so every call sends this UA.
+// ⚠️ TWO HOSTS NEED TWO **OPPOSITE** USER-AGENTS. THEY LOOK CONTRADICTORY. THEY ARE NOT.
+// (janitor#117, 2026-07-27 — the upstream answer to "what changed since v0.60.1"; their fix is
+// TRDD-WEBA1RMF / commit b9d9c75, and the deadlock it cured is TRDD-WBYFTU2L, 2026-07-18.)
+//
+//   • platform.claude.com/v1/oauth/token  → MUST send `claude-account-rotator`.
+//     urllib's/undici's default UA is banned by Cloudflare here (HTTP 403, code 1010).
+//   • api.anthropic.com/api/oauth/usage   → MUST send `claude-code/<version>`.
+//     This endpoint answers a NON-`claude-code` UA with persistent 429s.
+//
+// DO NOT "simplify" these into one constant. That unification is the whole bug, and it is a
+// DEADLOCK, not a slow path: `usageRequest` reads 429 as "this account is maxed", so a UA-banned
+// 429 makes the LIVE account look maxed AND every alternate look unsafe at the same instant —
+// rotation stalls exactly when it is needed. A UA the server chose caused it, entirely client-side.
+//
+// `accountEmail` (/roles) deliberately keeps `claude-account-rotator`: janitor#117 named ONLY the
+// usage endpoint, /roles works with this UA today, and changing it on a guess would be inventing a
+// fix for a defect nobody has observed. Open question raised upstream rather than assumed.
 
 import { oauthOf, type CredentialBlob } from './slots'
 
@@ -22,11 +37,48 @@ const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
 const OAUTH_BETA = 'oauth-2025-04-20'
 const CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
-const USER_AGENT = 'claude-account-rotator'
+
+/** The token endpoint's REQUIRED UA (Cloudflare 1010 without it). Never send this to /usage. */
+const ROTATOR_USER_AGENT = 'claude-account-rotator'
+
+/** Fallback when `claude --version` cannot be read — still a `claude-code/*` UA, which is what the
+ *  /usage endpoint gates on; the exact version is telemetry, the prefix is the access key. */
+const CLAUDE_CODE_UA_FALLBACK = 'claude-code/0.0.0'
+
+let cachedClaudeCodeUA: string | null = null
+
+/**
+ * `claude-code/<version>` for the /usage endpoint, derived once from `claude --version` and cached
+ * for the process. Resolution failure is NON-FATAL by design — this whole module is fail-soft, and
+ * a probe that threw because a CLI was missing would be a worse outcome than a probe that sends a
+ * slightly-wrong version. Exported for the test that pins the two-UA rule.
+ */
+export function claudeCodeUserAgent(deps?: NetworkDeps): string {
+  if (deps?.claudeVersion !== undefined) {
+    const pinned = deps.claudeVersion.trim()
+    return pinned ? `claude-code/${pinned}` : CLAUDE_CODE_UA_FALLBACK
+  }
+  if (cachedClaudeCodeUA !== null) return cachedClaudeCodeUA
+  let ua = CLAUDE_CODE_UA_FALLBACK
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { execFileSync } = require('child_process') as typeof import('child_process')
+    const out = execFileSync('claude', ['--version'], { encoding: 'utf8', timeout: 5_000 }).trim()
+    // `claude --version` prints e.g. "2.1.209 (Claude Code)" — take the leading semver token.
+    const m = /^(\d+\.\d+\.\d+[^\s]*)/.exec(out)
+    if (m) ua = `claude-code/${m[1]}`
+  } catch {
+    // Missing CLI, timeout, permission error — keep the fallback.
+  }
+  cachedClaudeCodeUA = ua
+  return ua
+}
 
 /** Dependency seam so tests stub the HTTP (default = the platform `fetch`). */
 export interface NetworkDeps {
   fetchImpl?: typeof fetch
+  /** Pin the `claude --version` string instead of shelling out (tests; 0-IMPACT). */
+  claudeVersion?: string
 }
 
 function resolveFetch(deps?: NetworkDeps): typeof fetch {
@@ -79,7 +131,8 @@ export async function accountEmail(blob: CredentialBlob, deps?: NetworkDeps): Pr
         Authorization: 'Bearer ' + tok,
         'Content-Type': 'application/json',
         'anthropic-beta': OAUTH_BETA,
-        'User-Agent': USER_AGENT,
+        // /roles keeps the rotator UA — see the two-UA note at the top of this file.
+        'User-Agent': ROTATOR_USER_AGENT,
       },
       timeoutMs: 20_000,
     },
@@ -112,7 +165,10 @@ export async function usageRequest(
         Authorization: 'Bearer ' + tok,
         'Content-Type': 'application/json',
         'anthropic-beta': OAUTH_BETA,
-        'User-Agent': USER_AGENT,
+        // ⚠️ MUST be `claude-code/<version>`, NOT the rotator UA. A non-`claude-code` UA earns
+        // persistent 429s here, and a 429 at this call site is read as "account maxed" — which
+        // is the rotation deadlock (janitor#117 / TRDD-WBYFTU2L).
+        'User-Agent': claudeCodeUserAgent(deps),
       },
       timeoutMs: 20_000,
     },
@@ -145,7 +201,8 @@ export async function refreshOauthToken(
     TOKEN_URL,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+      // The token endpoint REQUIRES the rotator UA — Cloudflare 1010 without it.
+      headers: { 'Content-Type': 'application/json', 'User-Agent': ROTATOR_USER_AGENT },
       body,
       timeoutMs: 30_000,
     },

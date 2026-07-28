@@ -31,6 +31,69 @@ const withTok = (accessToken = 'tok', extra: Record<string, unknown> = {}) => ({
   claudeAiOauth: { accessToken, ...extra },
 })
 
+/** Capture the headers each call actually sent, so the UA rule is asserted on the wire. */
+function captureFetch(status = 200, jsonData: unknown = {}) {
+  const calls: Array<{ url: string; headers: Record<string, string> }> = []
+  const impl = (async (url: unknown, init: unknown) => {
+    const h = ((init as { headers?: Record<string, string> })?.headers ?? {}) as Record<string, string>
+    calls.push({ url: String(url), headers: h })
+    return { ok: status >= 200 && status < 300, status, json: async () => jsonData }
+  }) as unknown as typeof fetch
+  return { impl, calls }
+}
+
+describe('TWO HOSTS, TWO OPPOSITE User-Agents (janitor#117 / TRDD-WBYFTU2L)', () => {
+  /**
+   * The upstream janitor "genuinely urged" this test, and the reason is that the two rules read
+   * as contradictory, so a reasonable refactor unifies them — which re-introduces a DEADLOCK:
+   *
+   *   api.anthropic.com/api/oauth/usage answers a non-`claude-code` UA with persistent 429s, and
+   *   `usageRequest` treats 429 as "this account is maxed". Send the rotator UA there and the LIVE
+   *   account looks maxed AND every alternate looks unsafe in the same instant — rotation stalls
+   *   exactly when it is needed. Entirely self-inflicted, from a header the server chose.
+   *
+   *   platform.claude.com/v1/oauth/token does the opposite: it REQUIRES `claude-account-rotator`
+   *   (the default UA earns a Cloudflare 1010), so "just set claude-code globally" breaks RENEW.
+   *
+   * Hence both directions are pinned. Deleting either half must fail.
+   */
+  it('/usage sends claude-code/<version> — NEVER the rotator UA', async () => {
+    const { impl, calls } = captureFetch(200, { a: 1 })
+    await usageRequest(withTok(), { fetchImpl: impl, claudeVersion: '2.1.209' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toContain('api.anthropic.com/api/oauth/usage')
+    expect(calls[0].headers['User-Agent']).toBe('claude-code/2.1.209')
+    // The half that actually prevents the deadlock:
+    expect(calls[0].headers['User-Agent']).not.toBe('claude-account-rotator')
+  })
+
+  it('the TOKEN endpoint sends claude-account-rotator — NEVER claude-code (Cloudflare 1010)', async () => {
+    const { impl, calls } = captureFetch(200, { access_token: 'new' })
+    // refreshOauthToken takes the credential BLOB and reads refreshToken out of it — it returns
+    // null before any HTTP call when that field is absent, which would make `calls` empty and the
+    // assertion below vacuously unreachable. Seed the refresh token.
+    await refreshOauthToken(
+      { claudeAiOauth: { accessToken: 'tok', refreshToken: 'refresh-tok' } },
+      { fetchImpl: impl, claudeVersion: '2.1.209' },
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toContain('platform.claude.com/v1/oauth/token')
+    expect(calls[0].headers['User-Agent']).toBe('claude-account-rotator')
+    expect(calls[0].headers['User-Agent']).not.toMatch(/^claude-code\//)
+  })
+
+  it('falls back to a claude-code/* UA when the version cannot be read — the PREFIX is the access key', async () => {
+    const { impl, calls } = captureFetch(200, {})
+    await usageRequest(withTok(), { fetchImpl: impl, claudeVersion: '' })
+
+    // The exact version is telemetry; what the endpoint gates on is the `claude-code/` prefix, so
+    // an unreadable CLI must still produce a usable UA rather than falling back to the rotator one.
+    expect(calls[0].headers['User-Agent']).toMatch(/^claude-code\//)
+  })
+})
+
 describe('accountEmail (/roles)', () => {
   it("strips the \"'s Organization\" suffix", async () => {
     const f = fakeFetch(200, { organization_name: "x@example.com's Organization" })

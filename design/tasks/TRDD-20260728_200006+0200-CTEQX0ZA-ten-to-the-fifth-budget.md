@@ -71,6 +71,41 @@ So the USER's premise is confirmed with a sharper edge than "search gets slow": 
 the CURRENT tooling does not degrade, it fails — and the linter fails first, before search is even
 reached.
 
+## THE REFERENCE JOIN — why the DB is not an optimization but the same index, persisted
+
+USER, 2026-07-28 (second scale correction):
+
+> *"The moment you introduce the linter, you need to introduce the link/reference/specs
+> verification. Every reference in the TRDD must be validated. Blockers, cited, derived-trdds,
+> but also specs entries referenced, etc. … extremely inefficient if made directly instead of
+> doing it via a ready to use index with all references already in it."*
+
+Correct, and verified in the code rather than assumed:
+
+| fact | evidence |
+|---|---|
+| the linter ALREADY builds an index — in RAM, from scratch, every run | `lib/trdd-doctor.ts:188` `byId = new Map`, `:193` `known = new Set`, `:196` `claimedBy = new Map` |
+| that in-memory index is WHY the whole corpus is resident | `loadCorpus` (`:131`) returns `Card[]` carrying `raw` per card — the Maps index it |
+| reference validation is already a JOIN over 5 fields | `blocked-by` `:389`, `npt`/`eht` `:198,:418`, `parent-trdd` `:449`, `superseded-by` `:518` |
+| cross-pillar validation does NOT exist yet | grep for `3P-[A-Z]+-[0-9]+` / `PRRD [GS]` / `prrd` in `trdd-doctor.ts` + `trdd-graph.ts` → **zero hits** |
+| the store's own lookup is O(N) PER CALL, uncached | `findTrdd` re-`listTrddFiles`-es all four zones on every single call (`lib/trdd-store.ts:200-210`) |
+
+**So the question was never "index or no index".** The linter has always had one — it rebuilds it
+in RAM on every run and throws it away. The 6.5 GB extrapolation above *is* that index. What
+Phase 4 adds is not a new cost centre but a WIDER join: spec clause ids (38 distinct in
+`3-pillars-spec.md` alone), PRRD rules, and prose `TRDD-[A-Z0-9]{8}` citations — three corpora
+resident instead of one, cross-referenced.
+
+And the quadratic trap is real and already loaded: a cross-pillar linter written on the store's
+public `findTrdd` would be O(N) readdir **per reference**, i.e. O(N² × refs). The doctor escapes
+it only by building its own Map first — which is exactly the memory cost measured above. The two
+problems are the same problem.
+
+**Design consequence:** the index must store the resolved reference EDGES, not just documents.
+That is what turns validation into O(edges) with an O(1) endpoint lookup, instead of
+O(N × refs × O(N) scan). An index of documents alone would leave the join cost untouched and
+would not have answered the USER's point.
+
 ## THE CONSEQUENCE THAT GATES THE SEAM (ordering correction)
 
 The approved plan blocked only the *index* phase on this budget. That was wrong, and the

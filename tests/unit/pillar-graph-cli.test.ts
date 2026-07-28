@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import Database from 'better-sqlite3'
 import { spawnSync } from 'child_process'
 
 /**
@@ -278,6 +279,69 @@ describe('the INDEX answers the graph exactly as the WALK does (TRDD-L55IYKL4)',
   it('`show` is byte-identical — its STATE block is still read from the FILE', () => {
     const r = runBoth(['show', 'ROOTAAAA'])
     expect(r.indexed).toBe(r.walk)
+  })
+
+  /**
+   * The gap every OTHER differential test here leaves open.
+   *
+   * They all build the index COLD, so insertion order and walk order coincide by
+   * construction and the comparison can never see a reindex. But `blockerRefs` order
+   * comes from `ORDER BY rowid`, and re-indexing a changed file evicts its edges and
+   * re-inserts them at FRESH rowids at the end of the table. `index-open.ts:78-82`
+   * argues that only the order BETWEEN files drifts and no query reads that — which
+   * was REASONED, never executed. This executes it.
+   */
+  it('an incremental REINDEX changes neither the answer nor its ORDER, despite fresh rowids', () => {
+    // A card with TWO prerequisites — the shared fixture has none, and a single edge
+    // cannot reveal an ordering bug no matter how the rows are sorted. `why` is the
+    // subcommand that PRINTS that chain, so it is what the comparison must read;
+    // `board` never shows blocker order and would pass while the order rotted.
+    card('MULTIBLK', {
+      column: 'dev',
+      title: 'two prerequisites, in a declared order',
+      priority: 1,
+      extra: 'npt: [TRDD-ROOTAAAA, TRDD-TASKEEEE]',
+    })
+
+    const before = runCli(['why', 'MULTIBLK', '--design-dir', corpus])
+    expect(before.status).toBe(0)
+    expect(before.stderr).not.toMatch(/falling back to the corpus walk/)
+    // Both prerequisites really are in the output, in declaration order — otherwise
+    // the byte-comparison below would be comparing two copies of a chain of one.
+    expect(before.stdout).toMatch(/ROOTAAAA/)
+    expect(before.stdout.indexOf('TASKEEEE')).toBeGreaterThan(before.stdout.indexOf('ROOTAAAA'))
+
+    const indexDir = path.join(home, '.aimaestro', 'pillar-index')
+    const dbFile = path.join(indexDir, fs.readdirSync(indexDir).find((f) => f.endsWith('.sqlite'))!)
+    const identityOf = (p: string): string => {
+      const db = new Database(dbFile, { readonly: true })
+      try {
+        return (db.prepare(`SELECT identity FROM files WHERE path = ?`).get(p) as { identity: string }).identity
+      } finally {
+        db.close()
+      }
+    }
+
+    // Re-index the MULTI-blocker card itself — the one whose two edges are what a
+    // rowid reshuffle would reorder.
+    const target = path.join(corpus, 'tasks', 'TRDD-20260101_000000+0000-MULTIBLK-fixture.md')
+    const identityBefore = identityOf(target)
+
+    // Change the BODY only: the file's identity moves (so it is genuinely re-read and
+    // its edges re-inserted at new rowids) while every field `why` prints is untouched.
+    fs.appendFileSync(target, '\na body line the graph never prints\n')
+
+    const after = runCli(['why', 'MULTIBLK', '--design-dir', corpus])
+    expect(after.status).toBe(0)
+    expect(after.stderr).not.toMatch(/falling back to the corpus walk/)
+
+    // NON-VACUITY. Without this, a change that failed to trigger a reindex would make
+    // the assertion below pass for the most trivial reason available — nothing moved,
+    // so of course the output matched. This is the same trap that made the FIRST
+    // version of the differential above compare a walk to a walk.
+    expect(identityOf(target), 'the file was NOT re-indexed, so this test proves nothing').not.toBe(identityBefore)
+
+    expect(after.stdout).toBe(before.stdout)
   })
 
   it('the CLI still WORKS when the index cannot be loaded at all', () => {

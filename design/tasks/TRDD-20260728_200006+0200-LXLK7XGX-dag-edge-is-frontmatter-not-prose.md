@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-28T20:00:06+0200
+updated: 2026-07-29T00:05:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -72,6 +72,33 @@ it would delete history rather than break a link.
 lint reads frontmatter edges, never bodies. This is the reading that makes the USER's table and the
 live corpus both correct at once, which is the reading to prefer.
 
+## VERIFIED 2026-07-29 — and the scope above is IMPRECISE in a way that still produces false positives
+
+The resolution says *"the lint reads frontmatter edges, never bodies."* Implemented literally as
+**frontmatter-not-body**, it is still wrong — just less wrong. Three TRDD ids live INSIDE spec
+frontmatter blocks:
+
+| file | field | the value |
+|---|---|---|
+| `all-in-one-spec.md` | `implementations:` | `- "the 26 pipelines — services/element-management-service.ts (retrofit tracked in TRDD-DQ6XN2VP)"` |
+| `governance-spec.md` | `authority:` | `"… Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). …"` |
+
+Both are **prose sentences that happen to be quoted frontmatter values**, not structured references.
+A frontmatter-scanning lint flags them, so the naive scope trades 18 false positives for 3.
+
+**The correct scope is structural, not positional:** the lint reads a fixed ALLOWLIST of
+DEPENDENCY FIELDS — `blocked-by`, `npt`, `eht`, `parent-trdd`, `superseded-by`, `relevant-rules` —
+and never a free-text field value, never a body. "Where the text sits" was never the discriminator;
+"which field declares it" always was.
+
+**Under that scope the result is stronger than this card claimed.** Every field a spec actually
+carries is descriptive — `spec`, `spec-version`, `status`, `created`, `updated`, `maintainer`,
+`project-id`, `requested-by`, `implementations`, `authority`, `reconciled-with`, `derived-from`,
+`validated-by`. **Not one is a dependency field.** So `SPECS → TRDD` is not merely absent from the
+live corpus, it is **unexpressible by construction**: the lint cannot flag a spec, today or after
+any amount of prose churn, because specs declare no dependency edges at all. The rule and the
+corpus agree for a structural reason, not a lucky one.
+
 ## Why it blocks the parent
 
 Phase 4's lint cannot be written until its input set is fixed. Written against bodies it produces 18
@@ -81,8 +108,9 @@ produces findings that name a real dangling dependency.
 
 ## Acceptance
 
-- [ ] The lint's input is frontmatter dependency fields only; the decision is recorded in the spec
-      clause it implements
+- [ ] The lint's input is the DEPENDENCY-FIELD ALLOWLIST only (`blocked-by`, `npt`, `eht`,
+      `parent-trdd`, `superseded-by`, `relevant-rules`) — not "frontmatter", which still admits
+      prose values; the decision is recorded in the spec clause it implements (`3P-DAG`, Phase 6)
 - [ ] `pillars:lint` yields **zero** findings on the live corpus (if it flags any of the 18
       provenance mentions, this decision was implemented wrong)
 - [ ] The lint still FAILS on a seeded frontmatter violation (a spec whose frontmatter declares a

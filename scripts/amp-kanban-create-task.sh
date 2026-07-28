@@ -76,7 +76,7 @@ show_help() {
     echo "  --npt \"id1,id2\"            Necessary Prerequisite Task UUIDs (comma-separated)"
     echo "  --eht \"id1,id2\"            Effects Handling Task UUIDs (comma-separated)"
     echo "  --supersedes \"id1,id2\"     Task UUIDs this task replaces (comma-separated)"
-    echo "  --relevant-rules \"3,27\"    PRRD rule numbers this task complies with (comma-separated)"
+    echo "  --relevant-rules \"R25,G7\"  Rule citations, comma-separated. R<n>=GOVERNANCE-RULES, G<n>/S<n>=PRRD"
     echo "  --severity LEVEL           CRITICAL|HIGH|MEDIUM|LOW|NIT"
     echo "  --effort SIZE              S|M|L|XL"
     echo "  --release-via MODE         publish|deploy|none"

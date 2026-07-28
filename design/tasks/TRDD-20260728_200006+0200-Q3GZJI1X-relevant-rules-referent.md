@@ -117,6 +117,20 @@ number stays stable. That remains exactly true *within* PRRD: `G`/`S` are interc
 non-load-bearing. The refinement is only that the letter **class** — `{G,S}` vs `R` — selects the
 CATALOGUE. No PRRD rule identity changes, and no citation-by-number becomes unstable.
 
+## The field has THREE consumers — so this is not a documentation-only decision
+
+Checked before writing any lint, because a lint scoped outside its consumers' scan set produces
+findings that name no broken reader:
+
+| consumer | what it does with the value | consequence of the decision |
+|---|---|---|
+| `lib/github-project.ts:80`, `:235` | emits each value as a GitHub label `rule:<v>`, and parses it back | **the ambiguity is EXPORTED**: a `rule:25` label on the Project board is exactly as unresolvable as the frontmatter. Migration rewrites those labels (`rule:25` → `rule:R25`); `:1168` already drops the `rule:` prefix set on update, so the sync handles it — but it IS an outward-facing mutation of the board, not a local edit. |
+| `app/api/teams/[id]/tasks/route.ts:42` | `z.array(z.string().max(32))` | strings, not numbers — **the prefixed form needs no schema change**. |
+| `scripts/amp-kanban-create-task.sh:79` | `--relevant-rules` help text | said *"PRRD rule numbers this task complies with"* with the example `"3,27"` — the IND semantics, contradicting 100% of actual usage AND this decision. **Fixed in this commit**; it was telling every agent to write the one form that is now deprecated. |
+
+The GitHub row is the one that matters for sequencing: it means the migration is not purely internal
+and should land as one deliberate pass, not card-by-card as files happen to be touched.
+
 ## Acceptance
 
 - [x] The two catalogues and the two syntaxes are stated in one place, with counts

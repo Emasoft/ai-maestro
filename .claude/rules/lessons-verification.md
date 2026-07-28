@@ -56,6 +56,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A gate enforced in the ROUTE is absent from every non-route caller: headless routers call services directly, so a quarantine flag set by a pipeline is bypassable until the refusal lives in the SERVICE.
 - Prove a guard dead by EXPERIMENT (break it, watch a named test fail), never by reading — a static read produced a confident false positive the tests already refuted.
 - Verify a cited line range before writing against it: this repo's citations have been wrong roughly a third of the time.
+- `grep -l '^field:'` matches the BODY too — a field inside a fenced example is not frontmatter; check where the `---` block ENDS before calling two values a conflict.
+- When a green instrument contradicts your confident reading, re-check the READING: the linter ignored a body-only field and was right, twice in one session (cf. the TITLE_PLUGIN_MAP inversion).
+- Scope a new lint to the SCAN SET of the consumer it mirrors — flagging cards no consumer evaluates produced 218 findings that named no broken reader, and a wall of warnings is how a linter gets routed around.
 
 ## Refactoring under static tooling
 

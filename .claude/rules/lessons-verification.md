@@ -79,6 +79,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Disprove a "storm" by the AGE spread, not the count: 29 `claude` processes all 1h+ old is standing infrastructure, and `turns × context × 0.1` already accounted for the whole spike.
 - An audit naming ids you cannot find may be auditing a DIFFERENT repo — positive-control your `find` before reporting the absence as a defect (this stopped a false filing against janitor #120).
 - Before exporting YOUR finding to another project, read THEIR architecture: my column-granular fix applies to an incremental-shape ladder, and memgrep runs full-current DDL on every open, so the "bug" does not exist there — checking is what stopped the second wrong filing.
+- An advisor's VERDICT and its AMENDMENT need separate checking: mine was right that FTS5 cannot serve a regex search, and wrong that indexing replaces "the doctor's O(N x refs) join" — the doctor resolves via an O(1) Set over a Map it builds anyway, so the amendment would have added a native dep to buy nothing.
+- A complexity claim in a comment may be hypothetical and still correct: store.ts's "O(N^2 x refs)" names a lint written on `findRecord` that NOBODY WROTE, and says so one line later — the summariser dropped the qualifier, not the comment.
 
 ## Claims about the codebase
 

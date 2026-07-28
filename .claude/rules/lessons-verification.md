@@ -35,6 +35,11 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 ## Measuring at scale
 
 - Measure peak RSS, not just wall time: the wall here was MEMORY and it landed at ~60-70k documents — BELOW the 100k target — so the failure is a heap crash, not a slow run.
+- A dependency's module-level cache defeats streaming outright — gray-matter keys a cache on each file's full text, so a reader retaining NOTHING still accumulated the whole corpus; grep the parser for `cache` before believing a streaming rewrite.
+- Peak RSS is not the live set: RSS counts uncollected garbage, so measure RETENTION with `--expose-gc` + `heapUsed`, or a heap-cap sweep — mine dropped 57% while the retained set barely moved.
+- A memory correlation has more than one plausible cause: identical frontmatter + 4.4x memory looked exactly like V8 sliced strings, and deep-flattening every string moved it −3%, refuting it — run the candidate fix as a PROBE before editing any source.
+- Extrapolation can be wrong in KIND, not degree — a projected "~6.5 GB, 80-90 s" was in fact an OOM CRASH at 4.45 GB; generate the real 10^5 fixture, because "slow" and "dead" are different verdicts.
+- When a refactor must preserve output ORDER, say which alternative you rejected for it: evaluating rules inside the stream would have moved every cross-card finding into a trailing block, and that is invisible on a corpus whose cross-card rules all pass.
 - Super-linear wall time near the limit is a SYMPTOM of the memory wall (GC pressure), not a second problem to optimize.
 - "Do we need an index?" is usually "is the index rebuilt in RAM every run, or persisted?" — grep for the Maps first; this linter already built one, and that in-memory index WAS the 6.5 GB.
 - Cost the JOIN, not just the scan: validating references is O(N × refs × lookup), and a lookup that re-readdirs the corpus makes a linear-looking tool quadratic.

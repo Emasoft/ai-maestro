@@ -9,18 +9,21 @@
  *    `refused/`); every other errno throws. An empty result must be PROVABLY empty,
  *    never merely unread. (ai-maestro#96 L2.)
  *
- * 2. THE PRIMARY READ IS AN ITERATOR, NOT AN ARRAY. Measured on generated corpora:
+ * 2. THE PRIMARY READ IS AN ITERATOR, NOT AN ARRAY — and that alone was not enough.
+ *    Measured end-to-end on a generated 100 000-card corpus (`yarn trdd:doctor`):
  *
- *      cards   corpus    wall     peak RSS
- *      1 000     10 MB   1.61 s     178 MB
- *     10 000    118 MB   5.47 s     820 MB
- *     50 000    586 MB  37.63 s   3 309 MB      ← 100k extrapolates to ~6.5 GB
+ *      before  exit 134 (OOM crash)   4.45 GB peak RSS   died at 23 s
+ *      after   exit 0                 2.43 GB peak RSS       22.6 s
  *
- *    RSS tracks corpus bytes because the linter holds every card, `raw` included,
- *    in one array. Past ~60-70k documents that is a heap crash, not a slow run —
- *    the wall arrives BELOW the 10^5 target. So an array-returning primary read
- *    IS the bug; `walkDocuments`/`walkRecords` let a consumer process and discard.
- *    Array helpers stay for the small-corpus callers that legitimately want one.
+ *    Note the failure was a CRASH, not a slow run: the wall is memory and it
+ *    arrives BELOW the 10^5 target. Two independent causes had to go (TRDD-BQC8NQSW):
+ *    the linter retained every card with `raw` AND `body`, and gray-matter's
+ *    module-level cache retained every file behind the caller's back — see NO_CACHE.
+ *    An array-returning primary read is the first bug, so `walkDocuments` /
+ *    `walkRecords` let a consumer process and discard; array helpers stay for the
+ *    small-corpus callers that legitimately want one. But note the ORDER of the two:
+ *    streaming without the cache fix is theatre, because the reader would still
+ *    accumulate the whole corpus no matter how little it kept.
  *
  * WHAT THIS MODULE IS NOT: an index. Resolving a reference still costs a scan here,
  * so a cross-pillar lint written directly on `findRecord` is O(N^2 x refs). The

@@ -1,11 +1,11 @@
 ---
 trdd-id: L55IYKL4
 title: Adopt the wikimem/memgrep solutions into the 3-pillars system and its grep tool
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-26T15:51:58+0200
+updated: 2026-07-28T20:00:06+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,25 +18,66 @@ approval-judge: user
 approval-datetime: 2026-07-26T15:51:58+0200
 relevant-rules: [R25]
 blocked-by: []
-npt: []
-eht: []
+npt: [Q3GZJI1X, LXLK7XGX, 7JK3NCV4, CTEQX0ZA]
+eht: [BQC8NQSW, C069SK9E, 8KDIB2LT, MUYRIKN3, YN8EQWYP]
+external-refs: [Emasoft/ai-maestro#96, Emasoft/ai-maestro#98, Emasoft/ai-maestro-janitor#118, Emasoft/ai-maestro-janitor#123, Emasoft/ai-maestro-janitor#126, Emasoft/ai-maestro-janitor#127]
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-28
 
-**USER observation (2026-07-26), relayed from a directive given to the ai-maestro-janitor Claude:**
-the 3-pillars task system (PRRD / SPECS / TRDD) is *structurally the same shape* as the wikimem
-memory system, and therefore inherits the same design hazards. The janitor Claude has been asked to
-(a) write detailed SPECS of the wikimem system, and (b) **open an issue on the ai-maestro repo**
-laying out every problem found in wikimem and the solutions adopted in `memgrep` + its indexer, so
-this project can reuse that experience.
+**UNBLOCKED.** The artefact this TRDD was waiting for landed: **`Emasoft/ai-maestro#96` — "Transfer:
+12 measured design laws from the wikimem retrieval engine"** (2026-07-26), with `#98` (3-pillars
+guidance) beside it. Read #96 before touching anything here; L2, L7, L8 and L10 are the load-bearing
+ones.
 
-**NEXT ACTION: wait for the janitor's issue to land on `Emasoft/ai-maestro`, then read it BEFORE
-designing anything.** Poll with `gh issue list --repo Emasoft/ai-maestro --state open --limit 20`.
-Designing the fix before the spec arrives is the exact failure this TRDD exists to avoid.
+**USER mandate 2026-07-28:** *"report every issue to the janitor github repo. make sure adopt
+stronger safety mechanisms for the trddgrep, prrdgrep and specsgrep indexer db. make the whole thing
+a lesson learned and improve the code accordingly. we need the 3-pillar system working and solid as
+a rock."* Full plan: `~/.claude/plans/iterative-foraging-wadler.md` (top section).
 
-**Do NOT start rewriting `greptrdd.mjs` yet.** The whole value of the incoming issue is that it is
-hard-won experience from a system that already hit these problems in production.
+### Decisions taken (USER-set; do not re-litigate)
+
+- **Scale target is 10⁵ documents.** I measured 298 TRDDs / 3.0 MB → `validate` in 0.57 s and
+  recommended staying stateless; the USER overruled it on the growth curve — *"when you will get
+  100000+ TRDDs, PRRDs, and specs … without a db the search will become slow."* Correct. **Build
+  the DB.**
+- **SQLite + FTS5**, memgrep-shaped safety (FTS5 confirmed available in the bundled
+  `better-sqlite3`, SQLite 3.51.3; `('integrity-check', 1)` parity form works).
+- **A shared `lib/pillar/` seam** serving all three pillars; `lib/trdd-store.ts` is re-expressed on
+  it with its **public API frozen**, so its 20 existing tests passing unchanged is the proof the
+  abstraction fits.
+- **Two of memgrep's postures are deliberately NOT copied** — full-walk fallback (at 10⁵ the
+  fallback IS the outage → incremental repair) and per-file `git hash-object` (→ one
+  `git ls-files -s`). Recorded in CTEQX0ZA.
+
+### The flock (authored 2026-07-28; the parent is not `complete` until every EHT is terminal)
+
+| kind | id | what |
+|---|---|---|
+| NPT | `Q3GZJI1X` | `relevant-rules:` cites two catalogues in two syntaxes across 234 cards — resolve BEFORE a `PRRD.md` makes `[25]` ambiguous |
+| NPT | `LXLK7XGX` | the DAG constrains **frontmatter** edges, not prose — 18 live provenance mentions in specs are not violations |
+| NPT | `7JK3NCV4` | choose the fail-loud posture once at the store API seam |
+| NPT | `CTEQX0ZA` | write the 10⁵ budget down before designing the index |
+| EHT | `BQC8NQSW` | the linter holds the whole corpus (`raw` per card) — ~1 GB at 10⁵ |
+| EHT | `C069SK9E` | graph + board at 10⁵ |
+| EHT | `8KDIB2LT` | propagate the new CLI contract (exit trichotomy, `--design-dir`, two new tools) |
+| EHT | `MUYRIKN3` | the spec bump 1.1.1 → 1.2.0 is consumed by the janitor (`3P-CHK-03`, `3P-VER-02`) |
+| EHT | `YN8EQWYP` | the index is new shared server state — register it, handle N writers, contain the tests |
+
+### NEXT ACTION
+
+Phase 1 of the plan: **make the corpus reader fail loud** — `lib/trdd-store.ts` `listTrddFiles`
+(`:112-114` `catch { return [] }`), both CLIs' `process.cwd()` assumption and missing non-vacuity
+guard, and the divergent read-error handling between `lib/trdd-doctor.ts:137-140` (reports it) and
+`greptrdd.mjs:63` / `lib/kanban-index.ts:143` (silently drops it). Gated by NPT `7JK3NCV4`.
+
+### SUPERSEDED — do NOT carry forward
+
+- *"wait for the janitor's issue to land"* — it landed (#96). The poll loop is over.
+- *"Do NOT start rewriting `greptrdd.mjs` yet"* — lifted by the same fact.
+- My own earlier reading that memgrep's v5→v6 ladder *"was never attempted"* — **wrong**;
+  janitor#123 is right (a version skew described as damage). Both indexes on this host verified at
+  `user_version = 6` with `atoms.status` present; correction posted to janitor#124.
 
 ## The isomorphism the USER identified
 

@@ -1,8 +1,8 @@
 ---
 name: pillar-tooling-scale-and-index
-description: "greptrdd / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules"
+description: "greptrdd / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules"
 ocd: 2026-07-28
-lmd: 2026-07-28
+lmd: 2026-07-29
 metadata:
   node_type: memory
   type: project
@@ -23,15 +23,30 @@ measurements contradict the two things people assume.
 | 10 000 | 118 MB | 5.47 s | 820 MB |
 | 50 000 | 586 MB | 37.6 s | **3.31 GB** |
 
-RSS tracks corpus bytes at ~5.6-7×, so 100 000 cards (~1.17 GB) extrapolates to **~6.5 GB — past
-Node's ~4 GB default old-space cap**. The failure at scale is a **heap crash at roughly
-60-70 000 documents**, not a slow run. Super-linear wall time near the limit is GC pressure, i.e.
-a symptom of the same thing rather than a second problem.
+**MEASURED at 10⁵ on 2026-07-29** (a real 100 000-card fixture, not extrapolated): the pre-fix lint
+**CRASHED — exit 134, 4.45 GB peak RSS, dead at 23 s**. After the fix: **exit 0, 2.43 GB, 22.6 s**.
+Note the shape: at scale this tool did not run slowly, it *died*. Super-linear wall time near the
+limit is GC pressure — a symptom of the same thing, not a second problem.[^8]
 
-**2. The question was never "index or no index".** `lib/trdd-doctor.ts` ALREADY builds an index —
-in RAM, from scratch, on every run (`byId`, `known`, `claimedBy` Maps). That in-memory index is
-*why* `loadCorpus` holds every card with `raw` attached, so the 6.5 GB above **is** the index. The
-real question is **rebuilt-every-run vs persisted-and-repaired-incrementally**.
+**2. TWO independent causes, and the non-obvious one dominated.**
+
+*(a)* `lib/trdd-doctor.ts` ALREADY built an index in RAM, from scratch, every run (`byId`, `known`,
+`claimedBy` Maps), which is *why* `loadCorpus` held every card with `raw` AND `body` attached. So
+the question was never "index or no index" — it is **rebuilt-every-run vs
+persisted-and-repaired-incrementally**.
+
+*(b)* **`gray-matter` keeps a MODULE-LEVEL cache keyed by each file's full text** and stores the
+parsed file including `orig`, with nothing ever evicting it (`matter.cache[file.content] = file`,
+4.0.3 `index.js:35-47`; it is skipped whenever ANY options object is passed). Memory therefore
+tracked TOTAL BYTES EVER PARSED no matter how little the caller kept — **so streaming alone could
+never have fixed this**, and (a) on its own would have been theatre. In a CLI the cost is bounded;
+in the long-lived server it is an **unbounded leak**, and the same one-argument call was found in
+three unrelated subsystems (marketplace scan, plugin builder, the ChangeClient converter chain).
+One owner now: `lib/gray-matter-nocache.ts`, with a source-level guard, `TRDD-X6MJIMYS`.[^9]
+
+Finding *(b)* took a refuted hypothesis first: identical frontmatter cost 456 MB with 10 KB bodies
+and 104 MB with 1 KB bodies, which is the exact signature of V8 sliced strings — and deep-flattening
+every frontmatter string moved it **−3%**.[^10]
 
 **3. Reference validation is a JOIN, and that is what the index is for.** Every card resolves
 `blocked-by` / `npt` / `eht` / `parent-trdd` / `superseded-by`; Phase 4 adds spec clauses and PRRD
@@ -110,3 +125,25 @@ abstraction fits is that its tests pass unchanged.
   column may be either. DO resolve the owning FILE before wiring a link, and cite an atom by its
   `^anchor` within that page — otherwise the LINK LAW cannot be satisfied, since there is no far
   end to add the back-link to.
+
+[^8]: [id:ATOM-PTSI-0008, status:valid, keywords:"extrapolated_memory_budget slow_versus_dead generate_the_real_fixture heap_crash_not_slow_run", ocd:2026-07-29, lmd:2026-07-29]
+  DO NOT close a scale question on an extrapolation — this page said "~6.5 GB, past the cap",
+  and the measured truth was an OOM CRASH at 4.45 GB. BECAUSE extrapolation can be wrong in KIND,
+  not just degree: "slow" and "dead" are different verdicts and only one of them is a bug report.
+  DO generate the real 10⁵ fixture and run it. (Supersedes this page's original extrapolated
+  table, which is kept above as the smaller-corpus curve because those points are still measured.)
+
+[^9]: [id:ATOM-PTSI-0009, status:valid, keywords:"streaming_reader_still_uses_memory gray_matter_module_cache library_cache_defeats_streaming memory_grows_per_file_parsed server_memory_never_returns", ocd:2026-07-29, lmd:2026-07-29]
+  DO NOT conclude a reader's memory is fixed because YOUR code retains nothing, BECAUSE a
+  dependency's module-level cache can retain every input behind you — gray-matter caches each
+  parsed file keyed by its full text and never evicts, so a perfectly streaming reader still
+  accumulated the whole corpus. DO grep the parser for `cache` before believing a streaming
+  rewrite, and measure RETENTION (`--expose-gc` + `heapUsed`, or a heap-cap sweep) rather than
+  peak RSS, which counts uncollected garbage and moved 57% while the live set barely did.
+
+[^10]: [id:ATOM-PTSI-0010, status:valid, keywords:"plausible_cause_refuted v8_sliced_strings probe_before_fixing memory_correlation", ocd:2026-07-29, lmd:2026-07-29]
+  DO NOT fix the cause you INFERRED from a correlation — identical frontmatter costing 456 MB with
+  10 KB bodies and 104 MB with 1 KB bodies is the exact signature of V8 sliced strings (a substring
+  ≥ 13 chars pins its parent), and deep-flattening every string moved it −3%. BECAUSE a memory
+  correlation usually has more than one plausible cause, and the plausible one was wrong here. DO
+  run the candidate fix as a throwaway PROBE before editing any source.

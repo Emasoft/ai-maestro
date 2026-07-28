@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-29T01:00:25+0200
+updated: 2026-07-29T01:06:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -183,6 +183,43 @@ is documented in `greptrdd --help`.
 than a re-argument: if a MEASURED walk at the target scale exceeds the 4 GB RSS budget or crosses
 into minutes, refusal becomes correct. That is a measurement, not a judgment call.
 
+## THE CORRECTNESS GUARANTEE, restated for a world where the walk is not the fallback
+
+memgrep's guarantee is *"the walk is always there, so a wrong index is survivable — fall back."*
+At 10⁵ that cannot be the CORRECTNESS mechanism. It survives as a **degradation convenience**
+(measured above, and chosen as the policy) — but "we can always recompute the answer the slow way"
+proves nothing about whether the fast way agrees.
+
+**The guarantee moves from RUNTIME to BUILD TIME.** Index-backed and walk-backed answers are proven
+**byte-identical, including result ORDER**, by a differential test over a fixture corpus
+(`tests/unit/pillar-graph-cli.test.ts`, `f19327f9`).
+
+**Why proving it on a SMALL corpus is legitimate and not a dodge.** The differential compares two
+IMPLEMENTATIONS over the same data, not two datasets. What can diverge between them is the QUERY
+SHAPE — zone rank vs path order, edge order within a card, empty-`column` handling, scalar-vs-array
+refs, priority stringification — and each is exercised by cards chosen to DISCRIMINATE it (the
+fixture carries a `cancelled` card in `archived/` sharing a blocker with a `proposals/` card
+precisely because that pair is the only shape that tells zone order apart from path order). Scale
+exercises no additional branch in the query; it exercises memory and time, which is what the budget
+table covers. **The differential proves CORRECTNESS; the budget proves FEASIBILITY. Neither
+substitutes for the other** — and saying which does which is the substance of this box.
+
+**The order is a TOTAL order on both sides, which is what makes it scale-independent.** The walk
+emits (zone-declaration index, sorted path) — `listDocuments` sorts since `2e7359bb`, because
+`readdirSync` order is POSIX-undefined and the byte-identity would otherwise have held on APFS by
+accident. The index emits `ORDER BY <zone rank derived FROM TRDD_ZONES>, r.path`. Path is unique per
+record, so there are no ties left for a larger corpus to break differently.
+
+**The one place order could still have drifted, now closed.** Within a card, `blockerRefs` order
+comes from `ORDER BY rowid`, and an incremental reindex re-inserts a changed file's edges at FRESH
+rowids. Because a file's edges are evicted and reinserted contiguously, within-card order survives
+and only the order BETWEEN files moves — which no query reads (`index-open.ts:78-82`). That was
+REASONED and never executed: every other differential builds the index cold, so none of them could
+observe a reindex. It is now **pinned by a test** (`7ce589cc`) that re-indexes a card carrying TWO
+prerequisites and compares `why` — the subcommand that actually prints the chain — with a
+non-vacuity guard on the file's identity row. Neuter recorded: dropping `delEdges` from `evict()`
+fails that test and the DB-level duplicate test, and leaves every cold-build test green.
+
 ## Why it blocks the parent
 
 Without a number, "the index is fast enough" is unfalsifiable, and the fallback policy (walk vs
@@ -197,9 +234,12 @@ against this table.
       (`scripts/gen-trdd-fixture.mjs`, deterministic ids, real edges, real frontmatter)
 - [ ] The remaining per-operation budgets are stated (they are stated against the index design,
       so they land with Phase 5)
-- [ ] The correctness guarantee is restated for a world where the full walk is NOT an available
+- [x] The correctness guarantee is restated for a world where the full walk is NOT an available
       fallback: index-backed and walk-backed answers proven byte-identical on a *small* corpus,
-      including result ORDER
+      including result ORDER — the guarantee moves from RUNTIME fallback to a BUILD-TIME
+      differential (`f19327f9`), and the one order that a small cold-built corpus could NOT reach
+      (a reindex's fresh rowids) is now pinned separately (`7ce589cc`). See the restatement above
+      for why a small corpus is the right place to prove it and what the budget proves instead
 - [x] A degradation policy is chosen for "index unavailable at 10⁵" — **CHOSEN: loud fallback +
       `--no-index`, NOT the refusal this box proposed.** The refusal premise (a 6.5 GB / minutes
       walk) was retired by `fc53ce99` + `65e1f514`; the walk now measures 8.07 s / 1.02 GB at 10⁵,

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-28T23:24:00+0200
+updated: 2026-07-29T00:12:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -108,17 +108,32 @@ edges point at.
   citation test fails; keep the PRRD tier letter → the named test AND the bare-number `findRecord`
   fail). Full suite 254 files / 3809 passed / 2 skipped.
 
+- **Phase 5 index BUILT AND PROVEN** — `fff68910` (`freshness.ts`, per-file identity: git consulted
+  twice for the whole corpus, zero per-file syscalls when clean) · `3a17a97b` (`index-db.ts`: the
+  10-point memgrep contract + the **edges** table F1 requires) · `e4b08f29` (**the janitor#123 guard
+  was DECORATIVE** — a neuter run caught it; `since` was per-table where the bug is per-column, and
+  `behind`/`damaged` were alternatives where they must be orthogonal) · `f66f4de0` (`index-build.ts`:
+  `syncIndex` incremental + `danglingRefs`, schema **v2** so a changed file's FTS rows can be
+  evicted) · `1d88fa12` (`corpusKeyFor`: one index per corpus, slug+hash because every corpus is
+  called `design`, realpath-resolved so one corpus never gets two indexes).
+  **Acceptance met: the differential test passes on the LIVE corpus** — index-backed id set ==
+  `loadTrddGraph`'s walked set (>100 ids). A no-change sync reads nothing (`records: 0, edges: 0`).
+  Full suite 257 files / 3862 passed / 2 skipped.
+  **7 neuter runs**, each failing only its named test, each restored byte-clean — one of which did
+  NOT fail on the first attempt, which is exactly how the decorative guard was found.
+
 ### NEXT ACTION
 
-**Phase 5 — the SQLite index, and it is the SAME work as EHT `BQC8NQSW`.** The linter's crash at 10⁵
-and the index are one problem: making the linter index-backed IS BQC8NQSW's fix. Build
-`lib/pillar/freshness.ts` + `lib/pillar/index-db.ts` to the 10-point memgrep contract, with the two
-deliberate deviations (incremental repair over full-walk fallback; one `git ls-files -s` over
-per-file `git hash-object`), and **store the resolved reference EDGES, not just documents** — an
-index of documents alone leaves the join cost untouched and would not answer F1.
+**Point `lib/trdd-doctor.ts::loadCorpus` (`:131`) at the index. That IS EHT `BQC8NQSW`'s fix — one
+task, not two.** Its `Card[]` carrying `raw` per card, plus the `byId`/`claimedBy`/`known` Maps it
+builds at `:188/193/196`, ARE the measured 6.5 GB; `syncIndex` + `danglingRefs` replace both.
+**Acceptance: every existing doctor test stays green**, the same proof the 28 store tests gave for
+Phase 2. Then EHT E5's `--no-index` escape hatch (`better-sqlite3` is native and caps at Node 25, so
+an index in `greptrdd`'s import graph makes the CLI die on a wrong Node where today it needs only
+`tsx` — degrade with a message, never a silent multi-minute walk).
 
-Scope note: the TRDD→TRDD edges (`blocked-by`/`npt`/`eht`/`parent-trdd`/`superseded-by`) are
-unambiguous and can be indexed now. Only the **rule** edges (`relevant-rules:`) must wait on NPT
+Scope note, still binding: TRDD→TRDD edges (`blocked-by`/`npt`/`eht`/`parent-trdd`/`superseded-by`)
+are unambiguous and are ALREADY indexed. Only the **rule** edges (`relevant-rules:`) wait on NPT
 `Q3GZJI1X`, since indexing an ambiguous referent would bake the ambiguity into the schema.
 
 ### SUPERSEDED — do NOT carry forward

@@ -43,6 +43,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Never propagate a citation you did not run: I copied SF4's "wakeAgent enforces the roleMissing 409 (~:1958-1973)" into a new TRDD under the word "verified" — the gate was in the ROUTE and that range holds zero `roleMissing`.
 - The reporter's confidence is not evidence; a verdict labelled REFUTED / CONFIRMED / VERIFIED still needs the grep, and this one was wrong in the REFUTED direction for five weeks.
 - A quoted line RANGE rots even when the claim was once true — re-resolve it against the current file before citing it forward.
+- An automated alert fuses a trustworthy MAGNITUDE to a GUESSED cause — two sessions got different confident labels (`FORK_STORM` / `PREMIUM_MODEL_FANOUT`) for the same main-loop burn; act on the number, verify the attribution.
+- Disprove a "storm" by the AGE spread, not the count: 29 `claude` processes all 1h+ old is standing infrastructure, and `turns × context × 0.1` already accounted for the whole spike.
+- An audit naming ids you cannot find may be auditing a DIFFERENT repo — positive-control your `find` before reporting the absence as a defect (this stopped a false filing against janitor #120).
 
 ## Claims about the codebase
 

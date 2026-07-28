@@ -23,10 +23,13 @@
 import fs from 'fs'
 import path from 'path'
 import { execFileSync } from 'child_process'
-import matter from 'gray-matter'
+import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
+import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 
-export type TrddZone = 'proposals' | 'tasks' | 'archived' | 'refused'
-export const TRDD_ZONES: readonly TrddZone[] = ['proposals', 'tasks', 'archived', 'refused']
+// Re-exported so this module's PUBLIC API is unchanged by the move to lib/pillar/:
+// every existing caller imports TrddZone / TRDD_ZONES from here, and the proof the
+// shared seam fits is that trdd-store's own tests pass unchanged.
+export { TRDD_ZONES, type TrddZone }
 
 export interface ParsedTrdd {
   id: string
@@ -78,45 +81,14 @@ export function defaultDesignDir(): string {
  * clean corpus and exited 0 — a write gate that passed because it read nothing.
  */
 export function assertDesignDir(designDir: string): void {
-  let st: fs.Stats
-  try {
-    st = fs.statSync(designDir)
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code
-    throw new Error(
-      code === 'ENOENT'
-        ? `no TRDD corpus at ${designDir} — wrong working directory, or pass --design-dir`
-        : `cannot stat TRDD corpus ${designDir}: ${(err as Error).message}`,
-    )
-  }
-  if (!st.isDirectory()) throw new Error(`TRDD corpus path is not a directory: ${designDir}`)
+  assertCorpusRoot(designDir, TRDD_KIND)
 }
 
-// v2 — TRDD-<YYYYMMDD_HHMMSS±HHMM>-<ID8>-<slug>.md. The timestamp itself may
-// contain a `-` (negative GMT offset), so extract the 8-char id positionally,
-// not by naive `-`-split.
-const TRDD_V2_FILENAME_RE = /^TRDD-\d{8}_\d{6}[+-]\d{4}-([A-Za-z0-9]{8})-.+\.md$/
-
-// v1 — TRDD-<uuid|8hex>-<slug>.md, no timestamp segment. Ten of these exist; three
-// carry live frontmatter (70a521d9, 7123d51a, ef0c6c0a) and CLAUDE.md cites
-// TRDD-70a521d9 by name. Matching only the v2 shape made every one of them
-// invisible to this store — `readTrdd('70a521d9')` returned 404 for a TRDD that is
-// on disk, and `searchTrdds` silently under-reported the corpus by ten files.
-// Both tails occur, so the uuid remainder is optional: `TRDD-80557822-slug.md` and
-// `TRDD-70a521d9-5641-4a11-975f-2ca6f5bd9b0c-slug.md`. Every cross-reference in the
-// corpus cites the first 8 chars, so that prefix IS the id.
-//
-// A v2 name cannot reach this pattern: its 8 leading digits are followed by `_`,
-// never `-`. v2 is tried first regardless.
-const TRDD_V1_FILENAME_RE =
-  /^TRDD-([0-9a-f]{8})(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?-.+\.md$/i
-
-function idFromFilename(name: string): string | null {
-  const v2 = name.match(TRDD_V2_FILENAME_RE)
-  if (v2) return v2[1].toUpperCase()
-  const v1 = name.match(TRDD_V1_FILENAME_RE)
-  return v1 ? v1[1].toUpperCase() : null
-}
+// The v1/v2 filename grammar moved to `lib/pillar/kinds.ts` (TRDD_KIND). It is the
+// TRDD's answer to the one question each pillar answers differently — where a
+// record's id lives — so it belongs with the other two answers, not here. Aliased
+// so the rest of this module reads unchanged.
+const idFromFilename = trddIdFromFilename
 
 // gray-matter (js-yaml) auto-parses an ISO-8601 frontmatter value into a JS Date.
 // Normalize such a value back to an ISO string for the summary; leave a plain
@@ -144,47 +116,17 @@ function toIsoOrNull(v: unknown): string | null {
  * An empty result must be PROVABLY empty, never merely unread.
  */
 export function listTrddFiles(designDir: string, zone: TrddZone): string[] {
-  const dir = path.join(designDir, zone)
-  let names: string[]
-  try {
-    names = fs.readdirSync(dir)
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return []
-    throw new Error(`cannot read TRDD zone ${dir}: ${(err as Error).message}`)
-  }
-  return names
-    .filter((n) => n.endsWith('.md') && idFromFilename(n) !== null)
-    .map((n) => path.join(dir, n))
+  return listDocuments(designDir, TRDD_KIND, zone)
 }
 
 export function parseTrddFile(filePath: string, zone: TrddZone): ParsedTrdd | null {
+  // A name that is not a TRDD is not an error — it is not a card. (Distinct from a
+  // READ failure, which `readDocument` throws on; two shapes, two behaviours.)
   const id = idFromFilename(path.basename(filePath))
   if (!id) return null
-  let raw: string
-  try {
-    raw = fs.readFileSync(filePath, 'utf-8')
-  } catch (err) {
-    // ENOENT is the one benign case: the file was listed and then moved out from
-    // under us by a concurrent `git mv` lifecycle transition (promote / refuse /
-    // archive), which is normal traffic on this corpus. Every other errno
-    // (EACCES, EIO, ELOOP) is a real fault on a file we already know IS a TRDD —
-    // its name passed `idFromFilename`. Returning null there would delete a real
-    // card from every count, board and lint without a word.
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return null
-    throw new Error(`cannot read TRDD ${filePath}: ${(err as Error).message}`)
-  }
-  let data: Record<string, unknown> = {}
-  let content = ''
-  try {
-    const parsed = matter(raw)
-    data = (parsed.data ?? {}) as Record<string, unknown>
-    content = parsed.content ?? ''
-  } catch {
-    // Unparseable frontmatter — still expose the id/zone with empty fields rather
-    // than dropping the file silently.
-    data = {}
-    content = raw
-  }
+  const doc = readDocument(filePath, TRDD_KIND, zone)
+  if (!doc) return null
+  const data = doc.frontmatter
   return {
     id,
     zone,
@@ -192,7 +134,7 @@ export function parseTrddFile(filePath: string, zone: TrddZone): ParsedTrdd | nu
     column: typeof data.column === 'string' ? data.column : '',
     title: typeof data.title === 'string' ? data.title : '',
     frontmatter: data,
-    body: content,
+    body: doc.body,
   }
 }
 
@@ -221,24 +163,32 @@ export function searchTrdds(designDir: string, opts: SearchOpts = {}): TrddSumma
   const kw = opts.keyword ? opts.keyword.toLowerCase() : null
   const out: TrddSummary[] = []
 
+  // Iterates rather than collecting: only the small SUMMARIES accumulate, never the
+  // bodies. The saving is modest at today's 298 cards — the corpus-sized win belongs
+  // to the linter (EHT BQC8NQSW) — but routing the search through the seam's primary
+  // read means `walkDocuments` is exercised by every one of this module's tests and
+  // by the live corpus, instead of being an API the next phase merely hopes works.
   for (const zone of zones) {
-    for (const file of listTrddFiles(designDir, zone)) {
-      const t = parseTrddFile(file, zone)
-      if (!t) continue
-      if (wantId && t.id !== wantId) continue
-      if (opts.column && t.column !== opts.column) continue
+    for (const doc of walkDocuments(designDir, TRDD_KIND, [zone])) {
+      const id = idFromFilename(path.basename(doc.filePath))
+      if (!id) continue
+      if (wantId && id !== wantId) continue
+      const fm = doc.frontmatter
+      const column = typeof fm.column === 'string' ? fm.column : ''
+      if (opts.column && column !== opts.column) continue
+      const title = typeof fm.title === 'string' ? fm.title : ''
       if (kw) {
-        const hay = `${t.title}\n${t.body}`.toLowerCase()
+        const hay = `${title}\n${doc.body}`.toLowerCase()
         if (!hay.includes(kw)) continue
       }
       out.push({
-        id: t.id,
-        zone: t.zone,
-        column: t.column,
-        title: t.title,
-        filePath: t.filePath,
-        updated: toIsoOrNull(t.frontmatter.updated),
-        priority: t.frontmatter.priority,
+        id,
+        zone,
+        column,
+        title,
+        filePath: doc.filePath,
+        updated: toIsoOrNull(fm.updated),
+        priority: fm.priority,
       })
     }
   }

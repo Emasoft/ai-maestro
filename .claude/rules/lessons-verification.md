@@ -17,6 +17,13 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - `expect(err).not.toMatch(/one specific message/)` is satisfied by EVERY OTHER error — a positive control must assert `success === true`.
 - A verification gate that reads a REAL path passes vacuously in every test: it inspects state the fixture never touched. Point it at the fixture's seam, then model the write.
 - A test can be propped up by the very bug you are fixing: 4 here asserted a cascade that only ran because the buggy ORDER put it before the gate that was failing.
+- Provoke an unreadable-input test with ENOTDIR/EISDIR, never chmod — a permissions fixture passes VACUOUSLY when the suite runs as root, and CI often does.
+
+## Tools that gate
+
+- A reader that returns `[]` on an I/O error turns its gate into one that passes because it read nothing — separate ENOENT (legal absence) from every other errno (a fault), or "clean" and "unread" are the same answer.
+- A gate needs THREE exit codes: 0 clean · 1 findings · 2 could-not-run. With two, every failure to read reports success.
+- The non-vacuity guard belongs in the TOOL, not only in the test that happens to exercise it — ours asserted `scanned > 100` in vitest for months while the shipped CLI certified an empty read.
 
 ## Verifying a fix
 
@@ -59,6 +66,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - `grep -l '^field:'` matches the BODY too — a field inside a fenced example is not frontmatter; check where the `---` block ENDS before calling two values a conflict.
 - When a green instrument contradicts your confident reading, re-check the READING: the linter ignored a body-only field and was right, twice in one session (cf. the TITLE_PLUGIN_MAP inversion).
 - Scope a new lint to the SCAN SET of the consumer it mirrors — flagging cards no consumer evaluates produced 218 findings that named no broken reader, and a wall of warnings is how a linter gets routed around.
+- Two `catch` arms in one function are two bugs with two fixes — I reported "the parser returns null on corrupt frontmatter" when that arm deliberately keeps the file and a DIFFERENT arm drops read errors; name the arm before writing the fix.
+- Before flagging a documented invariant as violated, check what the rule's own examples mechanically ARE: the reference DAG's legal edges are all frontmatter fields, so 18 prose mentions of a TRDD id in specs were never edges and a body-scanning lint would have flagged the arbiter itself.
 
 ## Refactoring under static tooling
 

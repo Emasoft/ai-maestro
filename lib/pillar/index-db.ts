@@ -21,6 +21,7 @@
  */
 import fs from 'fs'
 import path from 'path'
+import { createHash } from 'crypto'
 import Database from 'better-sqlite3'
 
 /**
@@ -217,6 +218,39 @@ const FTS_COLUMNS: readonly ColumnSpec[] = [
 
 export function indexPath(stateDir: string, corpusKey: string): string {
   return path.join(stateDir, `${corpusKey}.sqlite`)
+}
+
+/**
+ * Where THIS host keeps the index for a given corpus.
+ *
+ * Outside the corpus, always. The index is derived, gitignored server state; writing
+ * it under `design/` would put a binary that self-heals by deleting itself inside the
+ * git-tracked tree it indexes — and `greptrdd validate` would then lint its own cache.
+ * Precedent: `lib/kanban-index.ts` writes to `statePath('kanban-index', …)`.
+ *
+ * The key is a readable slug PLUS a hash of the resolved path, because slugs collide
+ * where it matters most: every agent workdir and every LOCAL corpus is called
+ * `design`, so a slug alone would silently make N corpora share one index. The path
+ * is realpath-resolved first so the symlinked and canonical forms of one corpus do
+ * not get two indexes (the same trap that killed the git fast path in freshness.ts).
+ */
+export function corpusKeyFor(corpusRoot: string): string {
+  const abs = path.resolve(corpusRoot)
+  let real = abs
+  try {
+    real = fs.realpathSync(abs)
+  } catch {
+    // Not yet on disk — the caller will fail on its own terms; keying off the
+    // unresolved path is still deterministic.
+  }
+  const slug =
+    path
+      .basename(path.dirname(real))
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'corpus'
+  const hash = createHash('sha256').update(real).digest('hex').slice(0, 12)
+  return `${slug}-${hash}`
 }
 
 function applyPragmas(db: Database.Database): void {

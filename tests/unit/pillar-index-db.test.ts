@@ -12,6 +12,8 @@ import {
   migrate,
   recordHeal,
   readHealLedger,
+  corpusKeyFor,
+  indexPath,
   IndexFaultError,
 } from '@/lib/pillar/index-db'
 
@@ -337,6 +339,44 @@ describe('the schema stores what a linter must be able to REPORT', () => {
       .all() as Array<{ dst_id: string }>
     db.close()
     expect(dangling.map((d) => d.dst_id)).toEqual(['MISSING'])
+  })
+})
+
+describe('corpusKeyFor — one index per corpus, and never inside it', () => {
+  it('is stable for the same corpus', () => {
+    expect(corpusKeyFor(tmp)).toBe(corpusKeyFor(tmp))
+  })
+
+  it('DIFFERS for two corpora that share the basename `design`', () => {
+    // The collision that matters: every agent workdir and every LOCAL corpus has a
+    // directory called `design`, so a slug-only key would silently make N corpora
+    // share one index — each sync wiping the last one's rows.
+    const a = path.join(tmp, 'projA', 'design')
+    const b = path.join(tmp, 'projB', 'design')
+    fs.mkdirSync(a, { recursive: true })
+    fs.mkdirSync(b, { recursive: true })
+    expect(corpusKeyFor(a)).not.toBe(corpusKeyFor(b))
+    // …and each still names its project, so the file is identifiable by eye.
+    expect(corpusKeyFor(a)).toMatch(/^proja-/)
+    expect(corpusKeyFor(b)).toMatch(/^projb-/)
+  })
+
+  it('gives the symlinked and canonical forms of ONE corpus the SAME key', () => {
+    // Same trap that killed the git fast path in freshness.ts: two spellings of one
+    // path would otherwise get two indexes, each permanently half-stale.
+    const real = path.join(tmp, 'realproj', 'design')
+    fs.mkdirSync(real, { recursive: true })
+    const link = path.join(tmp, 'linkproj')
+    fs.symlinkSync(path.join(tmp, 'realproj'), link)
+    expect(corpusKeyFor(path.join(link, 'design'))).toBe(corpusKeyFor(real))
+  })
+
+  it('resolves to a path OUTSIDE the corpus it indexes', () => {
+    const corpus = path.join(tmp, 'proj', 'design')
+    fs.mkdirSync(corpus, { recursive: true })
+    const file = indexPath(path.join(tmp, 'state'), corpusKeyFor(corpus))
+    expect(file.startsWith(corpus)).toBe(false)
+    expect(file.endsWith('.sqlite')).toBe(true)
   })
 })
 

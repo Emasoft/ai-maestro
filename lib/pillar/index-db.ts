@@ -29,7 +29,7 @@ import Database from 'better-sqlite3'
  * new ladder step — editing an existing step means two machines that both report
  * the same `user_version` disagree about their shape, which no validate can detect.
  */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export type IndexFaultCode =
   /** DB newer than this binary. The repair is the OPPOSITE one: upgrade the code. */
@@ -134,6 +134,31 @@ const MIGRATIONS: readonly Migration[] = [
       // installs permanent staleness, which is worse than the gap it closed.
     },
   },
+  {
+    to: 3,
+    name: 'records carries priority, so the board can sort without reading the corpus',
+    run: (db) => {
+      // ALTER, not DROP+CREATE: `records_by_id` and `records_by_path` hang off this
+      // table, and recreating it would silently take both indexes with it — turning
+      // the join this whole file exists for back into a scan, with nothing failing.
+      //
+      // Then clear ALL FOUR TABLES TOGETHER. Clearing `files` alone is the trap: the
+      // delta in `freshness.ts` computes `removed` from the INDEXED set, so an empty
+      // `files` means an empty `removed`, and every live file re-enters as `added`
+      // (evict+reinsert — correct). But rows in records/edges/records_fts belonging
+      // to files DELETED from the corpus while the index sat at v2 are never evicted
+      // and survive forever as phantom records answering queries for cards that no
+      // longer exist. v2's own comment warns about the mirror image of this; same
+      // class, one level down.
+      db.exec(`
+        ALTER TABLE records ADD COLUMN priority TEXT;
+        DELETE FROM records;
+        DELETE FROM edges;
+        DELETE FROM records_fts;
+        DELETE FROM files;
+      `)
+    },
+  },
 ]
 
 export interface ColumnSpec {
@@ -161,7 +186,11 @@ const at = (since: number, ...names: string[]): ColumnSpec[] => names.map((name)
  */
 export const REQUIRED_TABLES: readonly TableSpec[] = [
   { name: 'files', since: 1, cols: at(1, 'path', 'kind', 'zone', 'identity', 'indexed_at') },
-  { name: 'records', since: 1, cols: at(1, 'kind', 'id', 'path', 'line', 'col', 'title') },
+  {
+    name: 'records',
+    since: 1,
+    cols: [...at(1, 'kind', 'id', 'path', 'line', 'col', 'title'), { name: 'priority', since: 3 }],
+  },
   { name: 'edges', since: 1, cols: at(1, 'src_kind', 'src_id', 'field', 'dst_kind', 'dst_id', 'path') },
 ]
 
@@ -174,10 +203,13 @@ export const REQUIRED_TABLES: readonly TableSpec[] = [
  * a DB can be behind without damage (the common case), damaged without being behind,
  * or both.
  *
- * Exported with an injectable spec because the reachable-today ladder has one step,
- * so the column-granular skew this exists to handle cannot otherwise be exercised
- * until a v2 ships — and an untested guard for a bug we already shipped once is not
- * a guard.
+ * The spec stays injectable for the tests that need a shape this corpus does not
+ * have — but as of v3 the REAL spec exercises this too: `records.priority` is the
+ * first column with `since > 1`, so "a genuine v2 index is healthy, and the same
+ * index at v3 without that column is damaged" is now a statement about the shipped
+ * ladder rather than about a synthetic fixture. Until v3 there was no such column,
+ * and a guard exercised only by an injected spec is a guard for a bug we already
+ * shipped once, verified against something other than the thing that shipped.
  */
 export function checkShape(
   db: Database.Database,

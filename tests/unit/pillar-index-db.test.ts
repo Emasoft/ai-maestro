@@ -292,7 +292,11 @@ describe('FTS parity and orphans', () => {
 
   it('reports rows that reference a file no longer indexed', () => {
     const db = openIndex(db1)
-    db.prepare(`INSERT INTO records VALUES ('trdd','A','/gone.md',NULL,'dev','t')`).run()
+    // Columns NAMED, not positional. A bare `VALUES (...)` is coupled to the column
+    // COUNT, so v3's `priority` broke every one of these at once — loudly, which is
+    // the good case, but it will happen again on v4. Naming the columns makes these
+    // fixtures survive any future additive migration.
+    db.prepare(`INSERT INTO records (kind,id,path,line,col,title) VALUES ('trdd','A','/gone.md',NULL,'dev','t')`).run()
     const r = validate(db)
     db.close()
     expect(r.ok).toBe(false)
@@ -303,7 +307,7 @@ describe('FTS parity and orphans', () => {
   it('a record whose file IS indexed is not an orphan (positive control)', () => {
     const db = openIndex(db1)
     db.prepare(`INSERT INTO files VALUES ('/a.md','trdd','tasks','git:x',0)`).run()
-    db.prepare(`INSERT INTO records VALUES ('trdd','A','/a.md',NULL,'dev','t')`).run()
+    db.prepare(`INSERT INTO records (kind,id,path,line,col,title) VALUES ('trdd','A','/a.md',NULL,'dev','t')`).run()
     expect(validate(db)).toEqual({ ok: true })
     db.close()
   })
@@ -316,8 +320,8 @@ describe('the schema stores what a linter must be able to REPORT', () => {
     const db = openIndex(db1)
     db.prepare(`INSERT INTO files VALUES ('/a.md','trdd','tasks','i',0)`).run()
     db.prepare(`INSERT INTO files VALUES ('/b.md','trdd','archived','i',0)`).run()
-    db.prepare(`INSERT INTO records VALUES ('trdd','DUP','/a.md',NULL,'dev','one')`).run()
-    db.prepare(`INSERT INTO records VALUES ('trdd','DUP','/b.md',NULL,'completed','two')`).run()
+    db.prepare(`INSERT INTO records (kind,id,path,line,col,title) VALUES ('trdd','DUP','/a.md',NULL,'dev','one')`).run()
+    db.prepare(`INSERT INTO records (kind,id,path,line,col,title) VALUES ('trdd','DUP','/b.md',NULL,'completed','two')`).run()
     const n = db.prepare(`SELECT COUNT(*) n FROM records WHERE id='DUP'`).get() as { n: number }
     expect(n.n).toBe(2)
     expect(validate(db)).toEqual({ ok: true })
@@ -327,7 +331,7 @@ describe('the schema stores what a linter must be able to REPORT', () => {
   it('resolves a dangling reference with ONE join, which is the whole point of edges', () => {
     const db = openIndex(db1)
     db.prepare(`INSERT INTO files VALUES ('/a.md','trdd','tasks','i',0)`).run()
-    db.prepare(`INSERT INTO records VALUES ('trdd','AAA','/a.md',NULL,'dev','a')`).run()
+    db.prepare(`INSERT INTO records (kind,id,path,line,col,title) VALUES ('trdd','AAA','/a.md',NULL,'dev','a')`).run()
     db.prepare(`INSERT INTO edges VALUES ('trdd','AAA','blocked-by','trdd','MISSING','/a.md')`).run()
     db.prepare(`INSERT INTO edges VALUES ('trdd','AAA','npt','trdd','AAA','/a.md')`).run()
     const dangling = db
@@ -397,5 +401,66 @@ describe('migrate', () => {
     )
     expect(validate(raw)).toEqual({ ok: true })
     raw.close()
+  })
+})
+
+describe('v3 — the first migration the REAL shape spec can exercise (TRDD-L55IYKL4)', () => {
+  /**
+   * Every column in `REQUIRED_TABLES` was `since: 1` until v3, so the column-granular
+   * skew this whole guard exists for (janitor#123: `atoms` missing `status`, added at
+   * v6, on a DB legitimately still at v5) could only ever be shown with an INJECTED
+   * spec — the tests above pass `specWithV2Column`. `records.priority` is the first
+   * real `since > 1` column, so these two assertions are about the SHIPPED ladder.
+   */
+  it('a genuinely v2-shaped index is HEALTHY at v2 and DAMAGED at v3 — against the real spec', () => {
+    const db = openIndex(db1)
+    // Reproduce the v2 shape exactly: drop the column v3 added, restamp the version.
+    db.exec(`ALTER TABLE records DROP COLUMN priority`)
+    db.pragma('user_version = 2')
+
+    // No injected spec — this is REQUIRED_TABLES.
+    expect(checkShape(db, 2)).toEqual([])
+    const faults = checkShape(db, 3)
+    expect(faults.length).toBe(1)
+    expect(faults[0].detail).toMatch(/priority/)
+    db.close()
+  })
+
+  it('the v2 index is reported `behind`, NOT damaged — the distinction the ladder exists for', () => {
+    const db = openIndex(db1)
+    db.exec(`ALTER TABLE records DROP COLUMN priority`)
+    db.pragma('user_version = 2')
+    const r = validate(db)
+    db.close()
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    // Behind, and ONLY behind: a v2 index missing a v3 column is a migration away
+    // from correct. Calling it `shape` here is what nukes a healthy index.
+    expect(r.faults.map((f) => f.code)).toEqual(['behind'])
+  })
+
+  it('migrating v2 → v3 clears records, edges, FTS and files TOGETHER, leaving no phantoms', () => {
+    // THE TRAP: the delta in `freshness.ts` computes `removed` from the INDEXED set,
+    // so clearing `files` alone empties `removed` — and rows in records/edges/fts
+    // belonging to files DELETED from the corpus while the index sat at v2 would
+    // never be evicted, surviving forever as records for cards that no longer exist.
+    const db = openIndex(db1)
+    db.exec(`ALTER TABLE records DROP COLUMN priority`)
+    db.pragma('user_version = 2')
+    db.prepare(`INSERT INTO files VALUES ('/stale.md','trdd','tasks','i',0)`).run()
+    db.prepare(`INSERT INTO records (kind,id,path,line,col,title) VALUES ('trdd','GONE','/stale.md',NULL,'dev','t')`).run()
+    db.prepare(`INSERT INTO edges VALUES ('trdd','GONE','npt','trdd','X','/stale.md')`).run()
+    db.prepare(`INSERT INTO records_fts(id,title,body,path) VALUES ('GONE','t','b','/stale.md')`).run()
+    db.close()
+
+    const fresh = openIndex(db1)
+    const count = (t: string) =>
+      (fresh.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n
+    expect(count('files')).toBe(0)
+    expect(count('records')).toBe(0)
+    expect(count('edges')).toBe(0)
+    expect(count('records_fts')).toBe(0)
+    expect(validate(fresh)).toEqual({ ok: true })
+    fresh.close()
   })
 })

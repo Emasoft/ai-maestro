@@ -92,6 +92,33 @@ export function refList(v: unknown): string[] {
   return []
 }
 
+/**
+ * The frontmatter fields that impose ORDER — this card cannot proceed until those do.
+ *
+ * A CONSTANT rather than a literal at each site, for the same reason `refList` is
+ * exported: `scripts/greptrdd.mjs` reads them off the frontmatter and
+ * `lib/pillar/index-open.ts` reads them back out of the `edges` table, so a field
+ * added here that only one of them learns about would make the board and the index
+ * disagree about what "blocked" means. The ORDER of this tuple is load-bearing too —
+ * it is the order the refs appear in, and therefore the order every blocker chain
+ * prints in.
+ */
+export const BLOCKER_FIELDS = ['blocked-by', 'npt'] as const
+
+/**
+ * `priority` as a STRING or null — the one form the walk and the index both produce.
+ *
+ * The index stores it in a TEXT column, so a card rebuilt from a row can only ever
+ * hand back a string; a walk that handed back the raw YAML number would make the two
+ * paths differ in TYPE while agreeing on VALUE, and the differential test would then
+ * be comparing shapes rather than answers. Normalizing both to text is invisible at
+ * the surface — `P${0}` and `P${'0'}` print identically, and `String(x ?? 9)` sorts
+ * identically — which is precisely what makes it safe to do.
+ */
+export function normalizePriority(v: unknown): string | null {
+  return v === undefined || v === null ? null : String(v)
+}
+
 /** Exported for the pillar index, for the same reason as `refList`. */
 export function optionalRef(v: unknown): string | null {
   if (typeof v !== 'string') return null

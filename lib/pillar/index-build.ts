@@ -13,7 +13,7 @@
  * strictly worse than having no index at all.
  */
 import type Database from 'better-sqlite3'
-import { normalizeTrddRef, refList, optionalRef } from '../trdd-graph'
+import { normalizeTrddRef, refList, optionalRef, normalizePriority } from '../trdd-graph'
 import type { PillarKind } from './kinds'
 import { listDocuments, readDocument, recordsOf } from './store'
 import { identifyFiles, diffIdentities, type FileIdentity } from './freshness'
@@ -35,7 +35,14 @@ interface PendingRow {
   path: string
   zone: string
   identity: string
-  records: Array<{ id: string; line: number | null; col: string; title: string; body: string }>
+  records: Array<{
+    id: string
+    line: number | null
+    col: string
+    title: string
+    priority: string | null
+    body: string
+  }>
   edges: Array<{ srcId: string; field: string; dstId: string }>
 }
 
@@ -100,6 +107,10 @@ export function syncIndex(db: Database.Database, root: string, kind: PillarKind)
         line: rec.line,
         col: typeof doc.frontmatter.column === 'string' ? doc.frontmatter.column : '',
         title: typeof doc.frontmatter.title === 'string' ? doc.frontmatter.title : '',
+        // Through the graph's own normalizer, for the same reason the edges are:
+        // the board reads this back out and compares it to what the WALK produced,
+        // so a second stringification rule here would be a silent disagreement.
+        priority: normalizePriority(doc.frontmatter.priority),
         body: rec.text,
       })
       if (kind.name === 'trdd') row.edges.push(...edgesFor(id, doc.frontmatter))
@@ -121,7 +132,12 @@ export function syncIndex(db: Database.Database, root: string, kind: PillarKind)
   const delEdges = db.prepare(`DELETE FROM edges WHERE path = ?`)
   const delFts = db.prepare(`DELETE FROM records_fts WHERE path = ?`)
   const insFile = db.prepare(`INSERT INTO files VALUES (?, ?, ?, ?, ?)`)
-  const insRecord = db.prepare(`INSERT INTO records VALUES (?, ?, ?, ?, ?, ?)`)
+  // POSITIONAL, so the placeholder count is COUPLED to the column count: v3 added
+  // `priority` and a 6-placeholder INSERT would make SQLite reject every row with
+  // "table records has 7 columns but 6 values were supplied". That fails loudly,
+  // which is the good case — but it fails on every sync, so the INSERT and the
+  // migration have to land in the same change.
+  const insRecord = db.prepare(`INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?)`)
   const insEdge = db.prepare(`INSERT INTO edges VALUES (?, ?, ?, ?, ?, ?)`)
   const insFts = db.prepare(`INSERT INTO records_fts(id, title, body, path) VALUES (?, ?, ?, ?)`)
 
@@ -142,7 +158,7 @@ export function syncIndex(db: Database.Database, root: string, kind: PillarKind)
       evict(row.path)
       insFile.run(row.path, kind.name, row.zone, row.identity, now)
       for (const r of row.records) {
-        insRecord.run(kind.name, r.id, row.path, r.line, r.col, r.title)
+        insRecord.run(kind.name, r.id, row.path, r.line, r.col, r.title, r.priority)
         insFts.run(r.id, r.title, r.body, row.path)
         stats.records++
       }

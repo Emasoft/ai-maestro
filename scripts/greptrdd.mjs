@@ -39,7 +39,8 @@ import process from 'process'
 
 const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
   await import('../lib/trdd-store.ts')
-const { TERMINAL_DONE, normalizeTrddRef, refList } = await import('../lib/trdd-graph.ts')
+const { TERMINAL_DONE, normalizeTrddRef, refList, normalizePriority, BLOCKER_FIELDS } =
+  await import('../lib/trdd-graph.ts')
 const { readyQueue } = await import('../lib/trdd-doctor.ts')
 
 const C = {
@@ -64,11 +65,15 @@ process.on('uncaughtException', (err) => {
 // `--design-dir` is stripped before `cmd`/`arg` are read, so the flag may sit
 // anywhere in the line without shifting the positional arguments.
 const rawArgv = process.argv.slice(2)
-const ddIdx = rawArgv.indexOf('--design-dir')
+// `--no-index` is valueless, so it is filtered out FIRST — before `--design-dir` is
+// located — or its position would shift that flag's value by one.
+const noIndex = rawArgv.includes('--no-index')
+const flagless = rawArgv.filter((a) => a !== '--no-index')
+const ddIdx = flagless.indexOf('--design-dir')
 const designDir = path.resolve(
-  ddIdx >= 0 ? (rawArgv[ddIdx + 1] ?? '') : path.join(process.cwd(), 'design'),
+  ddIdx >= 0 ? (flagless[ddIdx + 1] ?? '') : path.join(process.cwd(), 'design'),
 )
-const argv = ddIdx >= 0 ? [...rawArgv.slice(0, ddIdx), ...rawArgv.slice(ddIdx + 2)] : rawArgv
+const argv = ddIdx >= 0 ? [...flagless.slice(0, ddIdx), ...flagless.slice(ddIdx + 2)] : flagless
 const cmd = argv[0] ?? 'board'
 const arg = argv[1]
 
@@ -101,18 +106,19 @@ const vanished = []
  * nothing about the index.
  */
 function cardFieldsFrom(fm) {
-  const p = fm.priority
   return {
-    // A STRING or null, never a number. `P${0}` and `P${'0'}` print identically and
-    // `String(x ?? 9)` sorts identically, so this is byte-identical to reading `fm`
-    // directly — and it is exactly what the index's TEXT column round-trips to.
-    priority: p === undefined || p === null ? null : String(p),
-    // The refs that impose ORDER, through the graph's OWN helper. greptrdd carried a
+    // A STRING or null, never a number — the one form the index's TEXT column can
+    // round-trip to. Invisible at the surface: `P${0}` and `P${'0'}` print the same.
+    priority: normalizePriority(fm.priority),
+    // The refs that impose ORDER, through the graph's OWN helpers. greptrdd carried a
     // private `list()` that accepted ONLY arrays, so a scalar `npt: TRDD-X` was a
     // reference to `lib/trdd-graph.ts` and to the pillar index but NOT to this file —
     // the same "two consumers of one store, divergent on identical input" bug Phase 1
-    // fixed one layer down. This tool owns nothing; `refList` is the one definition.
-    blockerRefs: [...refList(fm['blocked-by']), ...refList(fm['npt'])],
+    // fixed one layer down. This tool owns nothing: `BLOCKER_FIELDS` names the fields
+    // and `refList` reads them, and the INDEX filters its edge rows on the same tuple.
+    blockerRefs: BLOCKER_FIELDS.flatMap((f) => refList(fm[f])),
+    // Scored only by the default SEARCH, which is walk-only by design — so this is
+    // the one card field the index does not carry (see `lib/pillar/index-open.ts`).
     labels: String(fm.labels ?? ''),
   }
 }
@@ -157,14 +163,45 @@ const cards = []
 let byId = new Map()
 
 /**
+ * The index path — tried FIRST, and never silently.
+ *
+ * `better-sqlite3` is a NATIVE module that hard-caps at Node 25, while this CLI
+ * otherwise needs nothing but tsx. So the import is LAZY and guarded: on the wrong
+ * Node, on a missing build, or on an index fault the tool must still work, because a
+ * query tool that dies because its cache is broken is worse than one that has no
+ * cache. `--no-index` skips the attempt outright.
+ *
+ * The failure is LOUD. At 10^5 documents the walk is the outage the index exists to
+ * prevent, so falling back to it silently would turn a broken cache into a mysterious
+ * multi-minute hang — the operator has to be told which path answered them.
+ */
+async function tryIndex() {
+  if (noIndex) return null
+  try {
+    const { loadTrddGraphViaIndex } = await import('../lib/pillar/index-open.ts')
+    return loadTrddGraphViaIndex(designDir)
+  } catch (err) {
+    console.error(`greptrdd: the index could not answer — ${err?.message ?? err}`)
+    console.error('greptrdd: falling back to the corpus walk (--no-index skips this attempt)')
+    return null
+  }
+}
+
+/**
  * Fill the graph — every card, no prose.
  *
- * The loop is load-bearing and must NOT be written as `[...walkCards()]`: spreading
- * the generator materializes every [card, body] pair at once, which is exactly the
- * array this change exists to delete. Destructuring one pair per iteration is what
- * lets each body die with the iteration that produced it.
+ * The walk loop is load-bearing and must NOT be written as `[...walkCards()]`:
+ * spreading the generator materializes every [card, body] pair at once, which is
+ * exactly the array TRDD-O4JK6RV3 deleted. Destructuring one pair per iteration is
+ * what lets each body die with the iteration that produced it.
  */
-function loadGraph() {
+async function loadGraph() {
+  const indexed = await tryIndex()
+  if (indexed) {
+    cards.push(...indexed)
+    byId = new Map(cards.map((c) => [c.id, c]))
+    return
+  }
   for (const [c] of walkCards()) cards.push(c)
   byId = new Map(cards.map((c) => [c.id, c]))
   reportVanished()
@@ -240,7 +277,7 @@ function printChain(c, depth = 0, seen = new Set()) {
 // `lib/trdd-doctor.ts`; `help` reads nothing. The default branch (search) is
 // absent on purpose too: it streams its OWN walk, because it is the one command
 // that must see every body and must therefore keep none of them.
-if (['why', 'unblocks', 'roots', 'show', 'board'].includes(cmd)) loadGraph()
+if (['why', 'unblocks', 'roots', 'show', 'board'].includes(cmd)) await loadGraph()
 
 switch (cmd) {
   case 'why': {
@@ -434,6 +471,10 @@ ${C.b('greptrdd')} — query AND validate the TRDD corpus (offline; no server)
   ${C.c('greptrdd lint')}             every finding, grouped by rule (errors first)
   ${C.c('greptrdd validate')}         the WRITE GATE — TAB rows: SEV⇥CODE⇥id⇥path⇥msg
   ${C.d('  … add --strict to either to fail on warnings too (exit 1)')}
+
+  ${C.d('--no-index   answer the graph from the corpus WALK, not the SQLite index.')}
+  ${C.d('             The index serves why/unblocks/roots/board; search is walk-only')}
+  ${C.d('             by design, and `show` re-reads its one file for freshness.')}
 
 Repair of the mechanically-derivable findings: ${C.c('yarn trdd:fix')}
 `)

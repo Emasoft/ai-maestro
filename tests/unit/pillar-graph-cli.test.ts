@@ -26,19 +26,32 @@ const REPO = process.cwd()
  */
 const stripAnsi = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, '')
 
+let corpus: string
+/**
+ * A THROWAWAY $HOME for every spawn in this file — 0-IMPACT, and it was learned the
+ * hard way: the first version redirected HOME only for the differential runs, so the
+ * other describes indexed their fixtures into the DEVELOPER'S REAL `~/.aimaestro/`
+ * and left 20 orphan `.sqlite` files behind. `getStateDir()` resolves through
+ * `os.homedir()`, which honours $HOME on POSIX, so one env var keeps the whole file
+ * off the real home without the production code needing a test-only escape hatch.
+ */
+let home: string
+
 function runCli(args: string[]): { status: number; stdout: string; stderr: string } {
   const r = spawnSync(process.execPath, ['--import', 'tsx', path.join('scripts', 'greptrdd.mjs'), ...args], {
     cwd: REPO,
     encoding: 'utf-8',
-    env: { ...process.env, TRDD_DEBUG: '' },
+    env: { ...process.env, TRDD_DEBUG: '', HOME: home },
   })
   return { status: r.status ?? -1, stdout: stripAnsi(r.stdout ?? ''), stderr: stripAnsi(r.stderr ?? '') }
 }
 
-let corpus: string
-
 /** A minimal well-formed card. `extra` is spliced in as raw frontmatter lines. */
-function card(id: string, opts: { column: string; title: string; priority?: number; extra?: string }): void {
+function card(
+  id: string,
+  opts: { column: string; title: string; priority?: number; extra?: string; zone?: string },
+): void {
+  const zone = opts.zone ?? 'tasks'
   const fm = [
     `trdd-id: ${id}`,
     `title: ${opts.title}`,
@@ -46,18 +59,21 @@ function card(id: string, opts: { column: string; title: string; priority?: numb
     ...(opts.priority === undefined ? [] : [`priority: ${opts.priority}`]),
     ...(opts.extra ? [opts.extra] : []),
   ].join('\n')
+  fs.mkdirSync(path.join(corpus, zone), { recursive: true })
   fs.writeFileSync(
-    path.join(corpus, 'tasks', `TRDD-20260101_000000+0000-${id}-fixture.md`),
+    path.join(corpus, zone, `TRDD-20260101_000000+0000-${id}-fixture.md`),
     `---\n${fm}\n---\n\n# ${opts.title}\n`,
   )
 }
 
 beforeEach(() => {
   corpus = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-graph-'))
+  home = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-home-'))
   fs.mkdirSync(path.join(corpus, 'tasks'), { recursive: true })
 })
 afterEach(() => {
   fs.rmSync(corpus, { recursive: true, force: true })
+  fs.rmSync(home, { recursive: true, force: true })
 })
 
 describe('a dependency written as a bare SCALAR is a real edge (TRDD-L55IYKL4)', () => {
@@ -138,5 +154,142 @@ describe('priority is normalized to a STRING on the card, and prints unchanged',
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/P0\s+dev/)
     expect(r.stdout).toMatch(/P\?\s+dev/)
+  })
+})
+
+describe('the INDEX answers the graph exactly as the WALK does (TRDD-L55IYKL4)', () => {
+  /**
+   * THE ACCEPTANCE CRITERION for index-backing `why` / `unblocks` / `roots` / `board`.
+   *
+   * The scope is deliberate and is a contract, not a gap: the default regex SEARCH
+   * is NOT index-backed and never will be. fts5 is token matching with bm25 — it
+   * cannot evaluate a regex, and its unicode61 tokenizer splits `TRDD-BQC8NQSW` into
+   * whole tokens, so even a literal prefilter would miss substrings. "Serve the
+   * search from the index, byte-identically" contradicts itself.
+   *
+   * THE FIXTURE IS BUILT TO DISCRIMINATE ZONE ORDER, which is the subtle way this
+   * could be wrong while looking right. The walk visits `TRDD_ZONES` in DECLARATION
+   * order — proposals, tasks, archived, refused — which is NOT alphabetical, so an
+   * index query that ordered by path alone would emit archived before proposals and
+   * quietly reshuffle every downstream tie-break. `ARCHCCCC` sits in `archived/` with
+   * a NON-terminal column (`cancelled` is not in TERMINAL_DONE), so it survives the
+   * done-filter and shares a blocker with a card in `proposals/` — the one shape
+   * where the two orderings disagree.
+   */
+  /**
+   * Run the same subcommand twice — walk, then index — and REFUSE to return two
+   * walks.
+   *
+   * The guard lives HERE, not in a sibling test, because a neuter run proved the
+   * alternative worthless: breaking the index query made greptrdd fall back (loudly,
+   * as designed), both runs became walks, and five of six `expect(indexed).toBe(walk)`
+   * assertions went GREEN comparing a walk to itself. A separate positive-control
+   * test noticed; anyone running `-t "byte-identical"` would not have. A shared
+   * control does not protect the assertions that do not execute it, so every
+   * differential has to carry its own.
+   */
+  function runBoth(args: string[]): { walk: string; indexed: string; stderr: string } {
+    // HOME is redirected so the index lands in a temp state dir. `getStateDir()`
+    // resolves through `os.homedir()`, which honours $HOME on POSIX — so this keeps
+    // the developer's real ~/.aimaestro untouched by a test, without the production
+    // code needing a test-only escape hatch.
+    const env = { ...process.env, TRDD_DEBUG: '', HOME: home }
+    const run = (extra: string[]) =>
+      spawnSync(
+        process.execPath,
+        ['--import', 'tsx', path.join('scripts', 'greptrdd.mjs'), ...args, '--design-dir', corpus, ...extra],
+        { cwd: REPO, encoding: 'utf-8', env },
+      )
+    const w = run(['--no-index'])
+    const i = run([])
+    const stderr = stripAnsi(i.stderr ?? '')
+    expect(stderr, 'the indexed run fell back to the walk — this comparison would be vacuous').not.toMatch(
+      /falling back to the corpus walk/,
+    )
+    return {
+      walk: stripAnsi(w.stdout ?? ''),
+      indexed: stripAnsi(i.stdout ?? ''),
+      stderr,
+    }
+  }
+
+  beforeEach(() => {
+    card('ROOTAAAA', { column: 'todo', title: 'the shared prerequisite', priority: 0 })
+    card('TASKDDDD', { column: 'dev', title: 'an open task', priority: 1, extra: 'npt: TRDD-ROOTAAAA' })
+    card('TASKEEEE', { column: 'dev', title: 'an open task with no blockers', priority: 2 })
+    card('PROPBBBB', {
+      zone: 'proposals',
+      column: 'proposal',
+      title: 'a pending proposal',
+      priority: 1,
+      extra: 'blocked-by: [TRDD-ROOTAAAA]',
+    })
+    card('ARCHCCCC', {
+      zone: 'archived',
+      column: 'cancelled',
+      title: 'cancelled, therefore NOT terminal-done',
+      priority: 3,
+      extra: 'blocked-by: [TRDD-ROOTAAAA]',
+    })
+  })
+
+  it('POSITIVE CONTROL — the indexed run really used the index, so the diffs below are not two walks', () => {
+    const r = runBoth(['board'])
+    // If the native module failed to load, greptrdd falls back LOUDLY. Both runs
+    // would then be walks and every byte-identical assertion below would hold
+    // while proving nothing whatsoever about the index.
+    expect(r.stderr).not.toMatch(/falling back to the corpus walk/)
+    const dbs = fs
+      .readdirSync(path.join(home, '.aimaestro', 'pillar-index'))
+      .filter((f) => f.endsWith('.sqlite'))
+    expect(dbs.length).toBe(1)
+    // …and it wrote the corpus into it, rather than creating an empty file.
+    expect(fs.statSync(path.join(home, '.aimaestro', 'pillar-index', dbs[0])).size).toBeGreaterThan(0)
+  })
+
+  it('`board` is byte-identical', () => {
+    const r = runBoth(['board'])
+    expect(r.indexed).toBe(r.walk)
+    expect(r.walk).toMatch(/3 open cards/)
+  })
+
+  it('`roots` is byte-identical', () => {
+    const r = runBoth(['roots'])
+    expect(r.indexed).toBe(r.walk)
+    expect(r.walk).toMatch(/ROOTAAAA/)
+  })
+
+  it('`why` is byte-identical, through a SCALAR npt edge', () => {
+    const r = runBoth(['why', 'TASKDDDD'])
+    expect(r.indexed).toBe(r.walk)
+    expect(r.walk).toMatch(/ROOT CAUSE/)
+  })
+
+  it('`unblocks` is byte-identical AND keeps zone-declaration order, not path order', () => {
+    const r = runBoth(['unblocks', 'ROOTAAAA'])
+    expect(r.indexed).toBe(r.walk)
+    // The discriminating assertion: `proposals` is declared BEFORE `archived`, while
+    // path order would sort `archived/` first. Both must agree, and both must be
+    // wrong the same way or right the same way — here, right.
+    expect(r.walk.indexOf('PROPBBBB')).toBeGreaterThan(-1)
+    expect(r.walk.indexOf('ARCHCCCC')).toBeGreaterThan(r.walk.indexOf('PROPBBBB'))
+  })
+
+  it('`show` is byte-identical — its STATE block is still read from the FILE', () => {
+    const r = runBoth(['show', 'ROOTAAAA'])
+    expect(r.indexed).toBe(r.walk)
+  })
+
+  it('the CLI still WORKS when the index cannot be loaded at all', () => {
+    // The `--no-index` path IS the fallback path, exercised end-to-end: if the lazy
+    // import were not guarded, a wrong Node or a missing native build would make
+    // greptrdd die rather than degrade — a query tool killed by its own cache.
+    const r = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', path.join('scripts', 'greptrdd.mjs'), 'board', '--design-dir', corpus, '--no-index'],
+      { cwd: REPO, encoding: 'utf-8', env: { ...process.env, TRDD_DEBUG: '', HOME: home } },
+    )
+    expect(r.status).toBe(0)
+    expect(stripAnsi(r.stdout ?? '')).toMatch(/3 open cards/)
   })
 })

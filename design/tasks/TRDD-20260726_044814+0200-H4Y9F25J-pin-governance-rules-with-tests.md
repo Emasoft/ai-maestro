@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-27T09:54:11+0200
+updated: 2026-07-27T13:05:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-27
@@ -120,6 +120,37 @@ Commits `b07cfd78`, `c5173e59`, `17471dd3`, `08bd2800`, `f379b2b7`.
   was hand-rolled in 8 files; now one definition, adopted by r20 (23 lines → 4). It adds a guarantee
   no copy had — it REFUSES a root that is not under a temp dir — and its own test watches it refuse.
   Remaining 7 sites can adopt it incrementally; it is additive.
+
+**BATCH 6 LANDED 2026-07-27 (`bd701701`) — debt 52 → 48.** R4.1/R4.2/R4.6/R4.7 pinned in
+`tests/governance/r4-team-composition.test.ts` (9 tests, 3 mutation runs, all killed with
+positive controls surviving). The first batch needing NO fixture at all: the guards live in
+`validateTeamMutation`, a pure function, so nothing is mocked and nothing can be mocked wrong.
+
+- **Defect #9 — R4.4's citation named a DIFFERENT PIPELINE.** The map cited
+  `element-management-service.ts:4956`, which is inside `ChangeHook`; the real guard is
+  `ChangeTeam::G07` (:5128-5137). Corrected. R4.4 stays untested and counted — correcting a
+  citation is not pinning a rule, and conflating the two is how the map got its reputation.
+- **Two more unrecorded second sites** (tally now 8): R4.7 also at `ChangeTeam::G04a` (:5056),
+  R4.1 also at `ChangeTeam::G05` (:5110).
+- **I overclaimed once and caught it**: a `describe` titled "R4.5 — no duplicate membership".
+  R4.5 is genuinely UNENFORCED — `validateTeamMutation` has NO duplicate check (verified: no
+  `Set(`, no indexOf dedupe, no refusal), so `agentIds: ['a','a']` is accepted. Retitled to what
+  it pins; the map row stays UNENFORCED. **Manufacturing coverage for an unenforced rule is the
+  exact failure this campaign exists to remove — including when I am the one doing it.**
+- **A test expectation of mine was wrong, not the code**: `sanitized` carries a field ONLY when
+  validation CHANGED it (`createTeam` reads `sanitized.agentIds ?? data.agentIds`,
+  team-registry.ts:320). Pinned the real contract instead.
+- **Method note:** my first mutation run printed no counts at all — the grep missed vitest's
+  ANSI codes. A mutation run whose output you cannot read is not a mutation run.
+
+**NEXT BATCH — R7 (6 rules), and it is a NEW MODALITY.** All six guards are React components /
+hooks (`TeamListView.tsx`, `TeamCard.tsx`, `TeamOverviewSection.tsx`, `useGovernance.ts`), and
+their rules are genuine UX requirements (submitting guards, spinners, error messages, blocked
+badge, UUID resolution, loading state) — so client-side enforcement is CORRECT here, not the
+"a check in the client is no check" hole. Verified the repo can test `.tsx`:
+`tests/unit/password-dialog.test.tsx` opts in per-file with `// @vitest-environment jsdom`
+(the config default stays `node`). R4.8 belongs with that batch for the same reason.
+After R7, the remaining families are R1 (5), R10 (4), R17 (4), R2/R8/R19/R37/R39 (3 each).
 
 **BATCH 5 LANDED 2026-07-27 (`73856fe0`) — debt 66 → 59.** All 7 of R5 (transfers) pinned in
 `tests/governance/r5-transfer-governance.test.ts`, 19 tests. First batch whose guards are ROUTE

@@ -25,6 +25,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Provoke an unreadable-input test with ENOTDIR/EISDIR, never chmod — a permissions fixture passes VACUOUSLY when the suite runs as root, and CI often does.
 - When the OS will not vary the input you are testing, INJECT it: `expect(got).toEqual(got.sort())` on a real dir passes with the sort removed, so spy the readdir and name the element that must move.
 - A plan can name the wrong half of the tool: "wire the SEARCH at FTS5, acceptance byte-identical" was self-contradictory because the search takes a REGEX — and it was the ACCEPTANCE CRITERION, not the code, that exposed it.
+- A shared positive control does NOT protect the assertions that never execute it — my neuter made the index fall back, both sides became walks, and 5 of 6 `expect(indexed).toBe(walk)` passed comparing a walk to itself; put the non-vacuity guard INSIDE the helper both sides call.
+- An A-vs-B differential needs a fixture that DISCRIMINATES the axis you fear: zone order only shows up on a `cancelled` card in archived/ (non-terminal, so it survives the done-filter) sharing a blocker with a proposals/ card — every other shape agrees under both orderings.
+- A subprocess test cannot be contained by `vi.mock` — redirect `$HOME` in the spawn env (`os.homedir()` honours it on POSIX), and PROVE containment by counting the real dir before and after, not by reading the code that was supposed to do it.
 
 ## Tools that gate
 
@@ -81,6 +84,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Before exporting YOUR finding to another project, read THEIR architecture: my column-granular fix applies to an incremental-shape ladder, and memgrep runs full-current DDL on every open, so the "bug" does not exist there — checking is what stopped the second wrong filing.
 - An advisor's VERDICT and its AMENDMENT need separate checking: mine was right that FTS5 cannot serve a regex search, and wrong that indexing replaces "the doctor's O(N x refs) join" — the doctor resolves via an O(1) Set over a Map it builds anyway, so the amendment would have added a native dep to buy nothing.
 - A complexity claim in a comment may be hypothetical and still correct: store.ts's "O(N^2 x refs)" names a lint written on `findRecord` that NOBODY WROTE, and says so one line later — the summariser dropped the qualifier, not the comment.
+- A note you wrote in your OWN task description is a second-hand report by the time you read it back: mine said "ORDER BY path — the walk now agrees", and TRDD_ZONES is `proposals,tasks,archived,refused`, not alphabetical, so path order silently reshuffles every tie-break.
+- A task title can outlive what shipped: #78 said "point trdd-doctor at the pillar index" and the commit made the LINTER streaming instead — read the commit, not the card, before believing a subsystem has a consumer.
 
 ## Claims about the codebase
 

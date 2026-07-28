@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-28T22:41:00+0200
+updated: 2026-07-29T01:00:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -143,6 +143,46 @@ array-returning helpers layered on top for the small-corpus callers that legitim
 
    Copying the *safety* while discarding these two is the point of writing the budget down first.
 
+## THE DEGRADATION POLICY — CHOSEN 2026-07-29: loud fallback, NOT refusal
+
+Recorded as a **chosen** policy rather than silently ticked, because it DIFFERS from what the
+acceptance box proposed. The box said *"refuse with a clear message plus an explicit `--no-index`
+escape hatch"*. The shipped behaviour is **fall back to the walk, LOUDLY, plus `--no-index`**.
+
+**Why the box said "refuse", and why that premise no longer holds.** When it was written, the walk
+at 10⁵ was believed to be the ~6.5 GB heap crash this card's own table extrapolates — at that cost
+the fallback IS the outage, and refusing is right. Two commits changed the fact: `fc53ce99`
+(`BQC8NQSW`) made the linter streaming, and `65e1f514` (`O4JK6RV3`) made greptrdd's walk lazy and
+body-free. **Measured on the real 10⁵ fixture 2026-07-29** — not extrapolated, because the last
+extrapolation here was wrong in KIND (it predicted a slow run and the truth was an OOM crash):
+
+| path at 10⁵ | wall | peak RSS | exit |
+|---|---|---|---|
+| `board --no-index` (the fallback) | **8.07 s** | **1.02 GB** | 0 |
+| `validate` (the linter, walk-only) | 22.6 s | 2.43 GB | 0 |
+
+So the walk is no longer the outage — it is a slow-but-correct answer at a QUARTER of the 4 GB
+budget. A refusal would therefore fire in exactly the cases where the fallback would have worked,
+converting a working (if slower) tool into a broken one.
+
+**The stated requirement is met.** The words are *"never a **silent** multi-minute walk"*. The
+fallback is neither silent (two stderr lines naming the fault AND which path answered) nor
+multi-minute (8.07 s).
+
+**A second, independent reason to keep the walk.** The index can be unavailable at 10⁵ not only
+because it is broken but because it is EXPENSIVE TO BUILD — the cold build holds the whole corpus
+in RAM (measured 2.36 GB at 10⁵; see the cold-build finding). A policy that refuses whenever the
+index is missing would refuse hardest at precisely the scale where having one costs the most.
+
+**The principle this rests on**, already standing: an index is an ACCELERATOR, never an AUTHORITY;
+a query tool that dies because its cache is broken is worse than one that has no cache. EHT
+`8KDIB2LT` words the same requirement the same way. `--no-index` remains the explicit opt-out and
+is documented in `greptrdd --help`.
+
+**The trigger that would flip this decision**, stated so the revisit is evidence-driven rather
+than a re-argument: if a MEASURED walk at the target scale exceeds the 4 GB RSS budget or crosses
+into minutes, refusal becomes correct. That is a measurement, not a judgment call.
+
 ## Why it blocks the parent
 
 Without a number, "the index is fast enough" is unfalsifiable, and the fallback policy (walk vs
@@ -160,8 +200,11 @@ against this table.
 - [ ] The correctness guarantee is restated for a world where the full walk is NOT an available
       fallback: index-backed and walk-backed answers proven byte-identical on a *small* corpus,
       including result ORDER
-- [ ] A degradation policy is chosen for "index unavailable at 10⁵" — refuse with a clear message
-      plus an explicit `--no-index` escape hatch, never a silent multi-minute walk
+- [x] A degradation policy is chosen for "index unavailable at 10⁵" — **CHOSEN: loud fallback +
+      `--no-index`, NOT the refusal this box proposed.** The refusal premise (a 6.5 GB / minutes
+      walk) was retired by `fc53ce99` + `65e1f514`; the walk now measures 8.07 s / 1.02 GB at 10⁵,
+      so refusing would break the tool where falling back works. Rationale, the measured table, and
+      the trigger that would flip it: see the policy section above
 
 ## Approval log
 

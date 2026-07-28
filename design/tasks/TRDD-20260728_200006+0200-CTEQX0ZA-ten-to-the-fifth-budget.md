@@ -136,7 +136,7 @@ an unmeasured cell says so rather than carrying a projection.
 | graph query, WALK fallback | < 4 GB RSS; seconds, never minutes | 1.02 GB · 8.07 s · exit 0 | **MET** |
 | graph query, INDEX warm | **< 1 s** — this is the whole point of having one | 0.37 s at 10⁴ (vs 1.12 s walk) | pending the cold build |
 | incremental reindex, 1 file changed | ~O(1) work + an O(N) freshness probe | probe was 50 ms at 10⁴ | pending |
-| cold full index build | no interactive budget (rare) — but must fit **< 4 GB** | 2.36 GB · **> 20 min, still running when written** | RSS met, time unbudgeted → **`TRDD-7CHUK1AZ`** |
+| cold full index build | no interactive budget (rare) — but must fit **< 4 GB** | 2.37 GB · **> 56 min and still running** | RSS met; the TIME is a defect, not a budget → **`TRDD-7CHUK1AZ`** |
 | recall-by-symptom | — | does not exist | **Phase 5** designs it |
 
 Three of these are load-bearing and worth saying plainly:

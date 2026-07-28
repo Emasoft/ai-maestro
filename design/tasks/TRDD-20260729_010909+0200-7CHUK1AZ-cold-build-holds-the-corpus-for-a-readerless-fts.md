@@ -58,7 +58,7 @@ the rest of this flock uses.
 | | |
 |---|---|
 | peak RSS | **2.36 GB**, reached during accumulation and then FLAT for the whole write phase |
-| wall | **> 17 min** and still running when this card was written (10k took 117.6 s) |
+| wall | **> 56 min and still running** — 10× the data of the 10⁴ run (117.6 s) taking **>28× the time**, i.e. clearly SUPER-LINEAR |
 | WAL at 17 min | 420 MB, growing ~10 MB/min — one transaction, so nothing checkpoints until the end |
 
 The RSS plateau is the tell: it stops rising exactly when `pending` is full, which is the signature

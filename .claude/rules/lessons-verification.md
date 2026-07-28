@@ -42,6 +42,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 ## Measuring at scale
 
 - Measure peak RSS, not just wall time: the wall here was MEMORY and it landed at ~60-70k documents — BELOW the 100k target — so the failure is a heap crash, not a slow run.
+- Hoisting a parse OUT of a transaction (to avoid holding the write lock) still has to STREAM — retaining the rows makes peak memory the CORPUS SIZE, and that exact hoist-and-retain shape appeared twice: the linter (4.45 GB crash) then the index builder (2.36 GB at 10⁵).
+- A structure that is written, validated and tested but never QUERIED is invisible to the whole suite — my tests proved `records_fts` was POPULATED, never that anything reads it, so it dominated the cold build for a year unnoticed; grep for a consumer (`MATCH`/`bm25`), not for coverage.
+- An RSS PLATEAU is a diagnosis, not a plateau: it stops rising exactly when accumulation ends, so flat-during-the-write-phase told me the wall was the pending array and not the writes.
 - A dependency's module-level cache defeats streaming outright — gray-matter keys a cache on each file's full text, so a reader retaining NOTHING still accumulated the whole corpus; grep the parser for `cache` before believing a streaming rewrite.
 - Peak RSS is not the live set: RSS counts uncollected garbage, so measure RETENTION with `--expose-gc` + `heapUsed`, or a heap-cap sweep — mine dropped 57% while the retained set barely moved.
 - A memory correlation has more than one plausible cause: identical frontmatter + 4.4x memory looked exactly like V8 sliced strings, and deep-flattening every string moved it −3%, refuting it — run the candidate fix as a PROBE before editing any source.

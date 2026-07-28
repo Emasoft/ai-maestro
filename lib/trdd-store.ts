@@ -66,6 +66,32 @@ export function defaultDesignDir(): string {
   return path.join(process.cwd(), 'design')
 }
 
+/**
+ * Fail loudly when the corpus ROOT itself is absent or unreadable.
+ *
+ * `listTrddFiles` below deliberately tolerates a missing ZONE — a fresh project
+ * has no `refused/` yet, and that is not an error. The cost of that tolerance is
+ * that a completely wrong `designDir` yields four empty zones and a confident
+ * "0 findings". This guard is what separates "the corpus is clean" from "you are
+ * not where you think you are", and any caller that GATES on a scan must call it
+ * first. Without it, `greptrdd validate` run from the wrong directory reported a
+ * clean corpus and exited 0 — a write gate that passed because it read nothing.
+ */
+export function assertDesignDir(designDir: string): void {
+  let st: fs.Stats
+  try {
+    st = fs.statSync(designDir)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code
+    throw new Error(
+      code === 'ENOENT'
+        ? `no TRDD corpus at ${designDir} — wrong working directory, or pass --design-dir`
+        : `cannot stat TRDD corpus ${designDir}: ${(err as Error).message}`,
+    )
+  }
+  if (!st.isDirectory()) throw new Error(`TRDD corpus path is not a directory: ${designDir}`)
+}
+
 // v2 — TRDD-<YYYYMMDD_HHMMSS±HHMM>-<ID8>-<slug>.md. The timestamp itself may
 // contain a `-` (negative GMT offset), so extract the 8-char id positionally,
 // not by naive `-`-split.
@@ -101,17 +127,34 @@ function toIsoOrNull(v: unknown): string | null {
   return null
 }
 
-/** Every TRDD file in one zone, v1 and v2 filename shapes alike. */
+/**
+ * Every TRDD file in one zone, v1 and v2 filename shapes alike.
+ *
+ * A MISSING zone is legal and yields `[]` — a fresh project has no `refused/`.
+ * ANY OTHER read failure THROWS, and that distinction is the whole point.
+ *
+ * This used to be `catch { return [] }`, which made an unreadable directory and
+ * an empty one the same answer. A permissions fault, a broken mount, or simply
+ * the wrong working directory all read as "there is nothing here" — silently,
+ * because the failure mode of a missing input is not an error, it is a SILENCE,
+ * and silence reads as zero. That is ai-maestro#96 L2 (*a parser with a silent
+ * `continue` is a data-loss engine*) in the corpus reader that every pillar tool,
+ * the board, the graph and the write gate are built on.
+ *
+ * An empty result must be PROVABLY empty, never merely unread.
+ */
 export function listTrddFiles(designDir: string, zone: TrddZone): string[] {
   const dir = path.join(designDir, zone)
+  let names: string[]
   try {
-    return fs
-      .readdirSync(dir)
-      .filter((n) => n.endsWith('.md') && idFromFilename(n) !== null)
-      .map((n) => path.join(dir, n))
-  } catch {
-    return []
+    names = fs.readdirSync(dir)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return []
+    throw new Error(`cannot read TRDD zone ${dir}: ${(err as Error).message}`)
   }
+  return names
+    .filter((n) => n.endsWith('.md') && idFromFilename(n) !== null)
+    .map((n) => path.join(dir, n))
 }
 
 export function parseTrddFile(filePath: string, zone: TrddZone): ParsedTrdd | null {
@@ -120,8 +163,15 @@ export function parseTrddFile(filePath: string, zone: TrddZone): ParsedTrdd | nu
   let raw: string
   try {
     raw = fs.readFileSync(filePath, 'utf-8')
-  } catch {
-    return null
+  } catch (err) {
+    // ENOENT is the one benign case: the file was listed and then moved out from
+    // under us by a concurrent `git mv` lifecycle transition (promote / refuse /
+    // archive), which is normal traffic on this corpus. Every other errno
+    // (EACCES, EIO, ELOOP) is a real fault on a file we already know IS a TRDD —
+    // its name passed `idFromFilename`. Returning null there would delete a real
+    // card from every count, board and lint without a word.
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return null
+    throw new Error(`cannot read TRDD ${filePath}: ${(err as Error).message}`)
   }
   let data: Record<string, unknown> = {}
   let content = ''

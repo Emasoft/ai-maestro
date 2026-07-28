@@ -37,7 +37,8 @@
 import path from 'path'
 import process from 'process'
 
-const { TRDD_ZONES, listTrddFiles, parseTrddFile } = await import('../lib/trdd-store.ts')
+const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
+  await import('../lib/trdd-store.ts')
 const { TERMINAL_DONE, normalizeTrddRef } = await import('../lib/trdd-graph.ts')
 const { readyQueue } = await import('../lib/trdd-doctor.ts')
 
@@ -50,17 +51,44 @@ const C = {
   c: (s) => `\x1b[36m${s}\x1b[0m`,
 }
 
-const designDir = path.join(process.cwd(), 'design')
-const argv = process.argv.slice(2)
+// EXIT CODES — 0 clean · 1 findings · 2 THE CHECK COULD NOT RUN.
+// `validate` is the WRITE GATE, and until now a gate that could not read its
+// corpus exited 0 — "I found nothing wrong" and "I looked at nothing" were the
+// same answer. They are now different answers with different exit codes.
+process.on('uncaughtException', (err) => {
+  console.error(`greptrdd: could not run — ${err?.message ?? err}`)
+  if (process.env.TRDD_DEBUG) console.error(err?.stack ?? '')
+  process.exit(2)
+})
+
+// `--design-dir` is stripped before `cmd`/`arg` are read, so the flag may sit
+// anywhere in the line without shifting the positional arguments.
+const rawArgv = process.argv.slice(2)
+const ddIdx = rawArgv.indexOf('--design-dir')
+const designDir = path.resolve(
+  ddIdx >= 0 ? (rawArgv[ddIdx + 1] ?? '') : path.join(process.cwd(), 'design'),
+)
+const argv = ddIdx >= 0 ? [...rawArgv.slice(0, ddIdx), ...rawArgv.slice(ddIdx + 2)] : rawArgv
 const cmd = argv[0] ?? 'board'
 const arg = argv[1]
 
+assertDesignDir(designDir)
+
 // ---- load once, through the ONE owner ----
 const cards = []
+const vanished = []
 for (const zone of TRDD_ZONES) {
   for (const file of listTrddFiles(designDir, zone)) {
     const t = parseTrddFile(file, zone)
-    if (!t) continue
+    // Post-fail-loud, a null here means exactly one thing: the file was listed
+    // and then moved by a concurrent `git mv` lifecycle transition. Every other
+    // read fault throws. `lib/trdd-doctor.ts` has always reported these; this
+    // tool used to `continue` past them silently, so two consumers of one store
+    // gave different answers about identical input.
+    if (!t) {
+      vanished.push(file)
+      continue
+    }
     cards.push({
       id: normalizeTrddRef(t.id),
       zone,
@@ -72,6 +100,12 @@ for (const zone of TRDD_ZONES) {
     })
   }
 }
+if (vanished.length) {
+  console.error(`greptrdd: ${vanished.length} file(s) vanished mid-scan and were skipped:`)
+  for (const f of vanished.slice(0, 5)) console.error(`  · ${path.relative(process.cwd(), f)}`)
+  if (vanished.length > 5) console.error(`  … and ${vanished.length - 5} more`)
+}
+
 const byId = new Map(cards.map((c) => [c.id, c]))
 const done = (id) => {
   const c = byId.get(id)
@@ -254,6 +288,16 @@ switch (cmd) {
   case 'validate': {
     const { lintCorpus } = await import('../lib/trdd-doctor.ts')
     const report = lintCorpus(designDir)
+    // NON-VACUITY, in the GATE itself. The vitest suite has asserted
+    // `scanned > 100` before checking for errors since it was written; the tool
+    // that humans and agents actually run had no such guard, so an empty read
+    // certified a clean corpus. Zero scanned is "could not run", never "clean".
+    if (report.scanned === 0) {
+      console.error(
+        `greptrdd: scanned 0 TRDDs under ${designDir} — refusing to certify a corpus it never read`,
+      )
+      process.exit(2)
+    }
     const strict = argv.includes('--strict')
 
     if (cmd === 'validate') {

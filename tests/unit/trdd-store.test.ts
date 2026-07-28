@@ -5,6 +5,8 @@ import path from 'path'
 import { execFileSync } from 'child_process'
 import {
   parseTrddFile,
+  listTrddFiles,
+  assertDesignDir,
   findTrdd,
   searchTrdds,
   editTrdd,
@@ -372,5 +374,65 @@ describe('trdd-store lifecycle transitions stage the file they moved (real git r
     expect(git('ls-files', '--', 'design')).toBe('')
     expect(git('diff', '--cached', '--', 'design')).toBe('')
     expect(fs.existsSync(path.join(repoDesign, 'tasks', 'TRDD-20260709_102705+0200-DDDD4444-untracked.md'))).toBe(true)
+  })
+})
+
+/**
+ * TRDD-7JK3NCV4 — an empty result must be PROVABLY empty, never merely unread.
+ *
+ * `listTrddFiles` used to be `catch { return [] }`, which made an unreadable zone
+ * and an empty one the same answer — so a permissions fault, a broken mount, or
+ * simply the wrong working directory all read as "there is nothing here", and the
+ * write gate built on top exited 0 having scanned nothing.
+ *
+ * The unreadable cases below are provoked with ENOTDIR / EISDIR rather than
+ * chmod, deliberately: those reproduce identically for every user INCLUDING root,
+ * whereas a permissions fixture passes vacuously when the suite runs as root.
+ */
+describe('trdd-store fails loud instead of reporting an empty corpus', () => {
+  it('assertDesignDir throws when the corpus root does not exist, and says what to do', () => {
+    const missing = path.join(designDir, 'no-such-corpus')
+    expect(() => assertDesignDir(missing)).toThrow(/no TRDD corpus at .*no-such-corpus/)
+    expect(() => assertDesignDir(missing)).toThrow(/--design-dir/)
+  })
+
+  it('assertDesignDir throws when the corpus path is a file rather than a directory', () => {
+    const notADir = path.join(designDir, 'design-is-a-file')
+    fs.writeFileSync(notADir, 'not a directory')
+    expect(() => assertDesignDir(notADir)).toThrow(/not a directory/)
+  })
+
+  it('assertDesignDir accepts a real directory (positive control — the guard is not always-throw)', () => {
+    expect(() => assertDesignDir(designDir)).not.toThrow()
+  })
+
+  it('listTrddFiles returns [] for a MISSING zone — a fresh project has no refused/', () => {
+    expect(listTrddFiles(designDir, 'refused')).toEqual([])
+  })
+
+  it('listTrddFiles THROWS when the zone cannot be read, naming the zone and the errno', () => {
+    // A file where the zone directory belongs → ENOTDIR, not ENOENT.
+    fs.writeFileSync(path.join(designDir, 'tasks'), 'this is not a directory')
+    expect(() => listTrddFiles(designDir, 'tasks')).toThrow(/cannot read TRDD zone/)
+    expect(() => listTrddFiles(designDir, 'tasks')).toThrow(/ENOTDIR/)
+  })
+
+  it('listTrddFiles still lists a readable zone (positive control)', () => {
+    const file = writeProposal('EEEE5555', 'readable')
+    expect(listTrddFiles(designDir, 'proposals')).toEqual([file])
+  })
+
+  it('parseTrddFile returns null when the file vanished mid-scan — a git mv race is benign', () => {
+    const gone = path.join(designDir, 'tasks', 'TRDD-20260709_102705+0200-FFFF6666-gone.md')
+    expect(parseTrddFile(gone, 'tasks')).toBeNull()
+  })
+
+  it('parseTrddFile THROWS on a read fault that is not ENOENT', () => {
+    // The name passes idFromFilename, so this IS a TRDD by every check the store
+    // makes — dropping it silently would delete a real card from every count.
+    const dir = path.join(designDir, 'tasks', 'TRDD-20260709_102705+0200-AAAA7777-isdir.md')
+    fs.mkdirSync(dir, { recursive: true })
+    expect(() => parseTrddFile(dir, 'tasks')).toThrow(/cannot read TRDD/)
+    expect(() => parseTrddFile(dir, 'tasks')).toThrow(/EISDIR/)
   })
 })

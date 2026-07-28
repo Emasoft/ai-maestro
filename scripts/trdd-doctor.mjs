@@ -16,11 +16,31 @@ import path from 'path'
 import process from 'process'
 
 const { lintCorpus, fixCorpus, readyQueue } = await import('../lib/trdd-doctor.ts')
-const { TRDD_ZONES, listTrddFiles, parseTrddFile } = await import('../lib/trdd-store.ts')
+const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
+  await import('../lib/trdd-store.ts')
+
+// EXIT CODES — 0 clean · 1 findings · 2 THE CHECK COULD NOT RUN.
+// The third one is what was missing. A corpus this tool could not read used to
+// be indistinguishable from a corpus with nothing wrong in it, so every failure
+// to read reported success. "Could not run" is not "clean", and a gate that
+// cannot tell them apart is not a gate.
+process.on('uncaughtException', (err) => {
+  console.error(`trdd-doctor: could not run — ${err?.message ?? err}`)
+  if (process.env.TRDD_DEBUG) console.error(err?.stack ?? '')
+  process.exit(2)
+})
 
 const args = process.argv.slice(2)
 const has = (f) => args.includes(f)
-const designDir = path.join(process.cwd(), 'design')
+const flagValue = (f) => {
+  const i = args.indexOf(f)
+  return i >= 0 ? args[i + 1] : undefined
+}
+// `--design-dir` exists because the old `process.cwd()` assumption is silent when
+// wrong: run from anywhere but the repo root and you got a clean bill of health
+// for a corpus that was never there.
+const designDir = path.resolve(flagValue('--design-dir') ?? path.join(process.cwd(), 'design'))
+assertDesignDir(designDir)
 
 const C = {
   red: (s) => `\x1b[31m${s}\x1b[0m`,
@@ -97,6 +117,16 @@ if (has('--fix')) {
 }
 
 const report = lintCorpus(designDir)
+// NON-VACUITY, in the TOOL. `tests/unit/trdd-doctor.test.ts` has asserted
+// `scanned > 100` before checking for errors since the day it was written — the
+// guard was in the test that happens to run this logic, and missing from the
+// binary a human or an agent actually invokes. Zero scanned is never clean.
+if (report.scanned === 0) {
+  console.error(
+    `trdd-doctor: scanned 0 TRDDs under ${designDir} — refusing to call a corpus clean that it never read`,
+  )
+  process.exit(2)
+}
 if (report.findings.length === 0) {
   console.log(C.green(`✓ ${report.scanned} TRDDs — corpus is clean`))
   process.exit(0)

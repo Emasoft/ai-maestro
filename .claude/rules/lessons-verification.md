@@ -37,6 +37,13 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A snapshot nothing reads is not a safeguard — if a gate announces an archive, point at the artifact or stop announcing it.
 - "Nothing was deleted" is false the moment ANY earlier sub-step landed; a preserved parent row with its children stripped is a husk, not consistency.
 
+## Second-hand reports (sub-agents, prior sessions, TRDD verdicts, audit findings)
+
+- A report from a sub-agent, a prior session, or a recorded TRDD verdict is a HYPOTHESIS — demand the exact file:line, grep it YOURSELF, and only then call it a fact.
+- Never propagate a citation you did not run: I copied SF4's "wakeAgent enforces the roleMissing 409 (~:1958-1973)" into a new TRDD under the word "verified" — the gate was in the ROUTE and that range holds zero `roleMissing`.
+- The reporter's confidence is not evidence; a verdict labelled REFUTED / CONFIRMED / VERIFIED still needs the grep, and this one was wrong in the REFUTED direction for five weeks.
+- A quoted line RANGE rots even when the claim was once true — re-resolve it against the current file before citing it forward.
+
 ## Claims about the codebase
 
 - A comment citing a rule is NOT a guard enforcing it; the enforcement map is right more often than the comments.

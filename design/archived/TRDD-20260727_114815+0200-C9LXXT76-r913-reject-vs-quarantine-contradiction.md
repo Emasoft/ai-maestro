@@ -99,11 +99,27 @@ required role-plugin MUST persist `roleMissing: true` and hibernate the agent, w
 refuses to wake."* Then update the map row to `ENFORCED | ChangeTitle::G17 | <test>`.
 
 Why this is the better option on the merits:
-- **The security gap R9.13 exists to close is already closed by the quarantine.** The rule's own
-  rationale is that a persona-less agent "could destroy other agents' working directories,
-  force-merge PRs, or mutate shared registry state". A hibernated agent does none of those, and
-  `wakeAgent` (`services/agents-core-service.ts` ~:1958-1973) enforces a `roleMissing` 409 — so
-  the quarantine is effective, not cosmetic (verified in TRDD-47a35ba2's SF4 refutation).
+- **The security gap R9.13 exists to close is already closed by the quarantine** — TRUE, but
+  ONLY AFTER the fix this TRDD produced. The rule's own rationale is that a persona-less agent
+  "could destroy other agents' working directories, force-merge PRs, or mutate shared registry
+  state". A hibernated agent does none of those, and the wake path now refuses to wake a
+  `roleMissing` agent at `services/agents-core-service.ts:2066-2087` (`wakeAgent` Gate 1b,
+  added 2026-07-27, pinned by `tests/services/agents-core-service.test.ts`).
+
+  > **CORRECTION — the sentence this replaces was FALSE, and how it got written is the
+  > lesson.** It read: *"`wakeAgent` (`services/agents-core-service.ts` ~:1958-1973) enforces a
+  > `roleMissing` 409 — so the quarantine is effective, not cosmetic (verified in
+  > TRDD-47a35ba2's SF4 refutation)."* Every part of that is wrong. `wakeAgent` enforced no such
+  > thing; the only refusal lived in the Next.js ROUTE, so the headless path bypassed it. And
+  > lines 1958-1973 contain ZERO occurrences of `roleMissing` — they are a comment block plus
+  > the `enforceAgentInvariants` call.
+  >
+  > I did not verify any of it. I lifted the claim AND its line range verbatim from a previous
+  > session's SF4 verdict and wrote the word **"verified"** in front of it. A second-hand report
+  > is a HYPOTHESIS, whatever confidence the reporter expressed; it becomes a fact only when I
+  > run the grep myself. One `grep -n roleMissing` — the command that later found the real bug —
+  > would have caught it at authoring time. USER instruction, 2026-07-27: *"if a sub-agent
+  > reports something, ask him to tell you the exact line of code, grep it yourself and verify."*
 - **A true reject at G17 would be more dangerous than the quarantine.** By G17 the pipeline has
   already written the title (G14) *and* mutated host-wide governance (G10-G13: `removeManager`,
   block-all-teams, cleared team COS/ORCH). Rejecting there means rolling all of that back, and a

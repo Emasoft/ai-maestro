@@ -29,6 +29,16 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 
 - Diagnose by dumping the actual ops/trace, not by reasoning about what the code should have done — the trace named the real cause in one run, twice, after reasoning had blamed the wrong thing.
 
+## Measuring at scale
+
+- Measure peak RSS, not just wall time: the wall here was MEMORY and it landed at ~60-70k documents — BELOW the 100k target — so the failure is a heap crash, not a slow run.
+- Super-linear wall time near the limit is a SYMPTOM of the memory wall (GC pressure), not a second problem to optimize.
+- "Do we need an index?" is usually "is the index rebuilt in RAM every run, or persisted?" — grep for the Maps first; this linter already built one, and that in-memory index WAS the 6.5 GB.
+- Cost the JOIN, not just the scan: validating references is O(N × refs × lookup), and a lookup that re-readdirs the corpus makes a linear-looking tool quadratic.
+- A generated fixture of identical stubs measures filesystem throughput and nothing else — give it the real body size, the real field set, and real cross-references, or the number is theatre.
+- Before generalizing over N consumers, verify they share the shape you assume — I checked all three pillars on disk and found three different document models, one of which (PRRD) has no zones and no id in any filename.
+- When the repo lacks an instance of the thing you are encoding (no PRRD.md here), find a REAL one elsewhere rather than encoding the grammar from memory.
+
 ## Mocked modules
 
 - Destructuring an export a module-mock does not define THROWS, even if the function is never called — import lazily, on the branch that needs it.
@@ -77,3 +87,5 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 
 - `cmd | tee FILE | head` truncates FILE via SIGPIPE — capture to the file first, then inspect it.
 - Never `pgrep`/`ps | grep` for a cmdline: the scanning shell matches itself. Snapshot `ps` to a file, then search the file.
+- `ls dir/*.md | wc -l` on an unmatched glob is not 0, it is MEANINGLESS — count with `find`; mine reported 65 files in two empty dirs and the sample listing beside it was already blank.
+- When two outputs of the same command block disagree, recount before building on either — the contradiction IS the finding.

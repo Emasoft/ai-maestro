@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-28T22:58:00+0200
+updated: 2026-07-28T23:24:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -94,13 +94,32 @@ contortion — and it is the same shape F1 and the Phase-4 DAG lint need anyway,
 SPEC/PRRD *bodies* for citations. Records, not documents, are what the index stores and what the
 edges point at.
 
+### Progress
+
+- **Phase 1 DONE** (`8b892d5b`, NPT `7JK3NCV4`) — fail-loud corpus reader + the exit trichotomy
+  (`0` clean · `1` findings · `2` could-not-run), with the non-vacuity guard in the TOOL rather than
+  only in the test that happens to run it. CLI contract pinned by `tests/unit/pillar-cli-exit-codes.test.ts`.
+- **N4 `CTEQX0ZA` MEASURED** (`2ed6f97c`, `2ec2d26e`) — the curve, the memory wall below the target,
+  and the reference-join reframe. `scripts/gen-trdd-fixture.mjs` regenerates any corpus size.
+- **Phase 2 DONE** (`09db6b8c`) — `lib/pillar/{kinds,store}.ts`; `lib/trdd-store.ts` re-expressed
+  with its public API frozen. **Acceptance met: 73/73 across the store, CLI and doctor suites pass
+  UNCHANGED.** New `tests/unit/pillar-store.test.ts` (15) covers the per-line half TRDD never
+  exercises; both key guards proven by neuter run (unanchor the spec declaration → only the named
+  citation test fails; keep the PRRD tier letter → the named test AND the bare-number `findRecord`
+  fail). Full suite 254 files / 3809 passed / 2 skipped.
+
 ### NEXT ACTION
 
-**Phase 2 — the shared seam, in the shape F1+F2 dictate.** `lib/pillar/kinds.ts` (document→record
-descriptors, id-from-filename *or* id-from-body-line) + `lib/pillar/store.ts` (an **iterator** over
-records — never `Card[]`, which is the 6.5 GB — with array helpers layered on for small-corpus
-callers). Then re-express `lib/trdd-store.ts` on it with its **public API frozen**.
-**Acceptance: the 28 tests in `tests/unit/trdd-store.test.ts` pass unchanged.**
+**Phase 5 — the SQLite index, and it is the SAME work as EHT `BQC8NQSW`.** The linter's crash at 10⁵
+and the index are one problem: making the linter index-backed IS BQC8NQSW's fix. Build
+`lib/pillar/freshness.ts` + `lib/pillar/index-db.ts` to the 10-point memgrep contract, with the two
+deliberate deviations (incremental repair over full-walk fallback; one `git ls-files -s` over
+per-file `git hash-object`), and **store the resolved reference EDGES, not just documents** — an
+index of documents alone leaves the join cost untouched and would not answer F1.
+
+Scope note: the TRDD→TRDD edges (`blocked-by`/`npt`/`eht`/`parent-trdd`/`superseded-by`) are
+unambiguous and can be indexed now. Only the **rule** edges (`relevant-rules:`) must wait on NPT
+`Q3GZJI1X`, since indexing an ambiguous referent would bake the ambiguity into the schema.
 
 ### SUPERSEDED — do NOT carry forward
 

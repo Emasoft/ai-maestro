@@ -39,7 +39,7 @@ import process from 'process'
 
 const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
   await import('../lib/trdd-store.ts')
-const { TERMINAL_DONE, normalizeTrddRef } = await import('../lib/trdd-graph.ts')
+const { TERMINAL_DONE, normalizeTrddRef, refList } = await import('../lib/trdd-graph.ts')
 const { readyQueue } = await import('../lib/trdd-doctor.ts')
 
 const C = {
@@ -90,6 +90,33 @@ assertDesignDir(designDir)
 //    before letting it go.
 const vanished = []
 
+/**
+ * The three frontmatter facts these subcommands actually read, REDUCED at parse time.
+ *
+ * Retaining `fm` whole is the other half of the memory wall: at 10⁵ the object is
+ * ~15 KB of fields nothing here looks at, which is why `board` still held 1.52 GB
+ * after the bodies were freed. Reducing to three scalars also makes the card shape
+ * something the INDEX can reproduce EXACTLY — the precondition for a walk-vs-index
+ * differential, because a comparison against a shape only the walk can build proves
+ * nothing about the index.
+ */
+function cardFieldsFrom(fm) {
+  const p = fm.priority
+  return {
+    // A STRING or null, never a number. `P${0}` and `P${'0'}` print identically and
+    // `String(x ?? 9)` sorts identically, so this is byte-identical to reading `fm`
+    // directly — and it is exactly what the index's TEXT column round-trips to.
+    priority: p === undefined || p === null ? null : String(p),
+    // The refs that impose ORDER, through the graph's OWN helper. greptrdd carried a
+    // private `list()` that accepted ONLY arrays, so a scalar `npt: TRDD-X` was a
+    // reference to `lib/trdd-graph.ts` and to the pillar index but NOT to this file —
+    // the same "two consumers of one store, divergent on identical input" bug Phase 1
+    // fixed one layer down. This tool owns nothing; `refList` is the one definition.
+    blockerRefs: [...refList(fm['blocked-by']), ...refList(fm['npt'])],
+    labels: String(fm.labels ?? ''),
+  }
+}
+
 function* walkCards() {
   for (const zone of TRDD_ZONES) {
     for (const file of listTrddFiles(designDir, zone)) {
@@ -110,7 +137,7 @@ function* walkCards() {
           filePath: file,
           column: String(t.column ?? '').trim() || '(none)',
           title: String(t.title ?? '').trim(),
-          fm: t.frontmatter ?? {},
+          ...cardFieldsFrom(t.frontmatter ?? {}),
         },
         t.body ?? '',
       ]
@@ -146,13 +173,19 @@ const done = (id) => {
   const c = byId.get(id)
   return !c || TERMINAL_DONE.has?.(c.column) || [...TERMINAL_DONE].includes(c.column)
 }
-const list = (v) => (Array.isArray(v) ? v.map((x) => normalizeTrddRef(x)).filter(Boolean) : [])
-/** The edges that impose ORDER: this card cannot proceed until those do. */
-const blockers = (c) => [...list(c.fm['blocked-by']), ...list(c.fm['npt'])].filter((k) => byId.has(k))
+/**
+ * The edges that impose ORDER: this card cannot proceed until those do.
+ *
+ * A ref to a card that is not in the corpus is DROPPED, not treated as a blocker —
+ * a dangling reference is a lint finding (`DANGLING-REF`, the doctor's), never a
+ * reason to call work unstartable. The index-backed reader reproduces this by
+ * JOINing edges onto records, which drops the same rows for the same reason.
+ */
+const blockers = (c) => c.blockerRefs.filter((k) => byId.has(k))
 const openBlockers = (c) => blockers(c).filter((k) => !done(k))
 
 const fmt = (c) =>
-  `${C.b(c.id)} ${C.d(`P${c.fm.priority ?? '?'}`)} ${String(c.column).padEnd(13)} ${String(c.title).slice(0, 62)}`
+  `${C.b(c.id)} ${C.d(`P${c.priority ?? '?'}`)} ${String(c.column).padEnd(13)} ${String(c.title).slice(0, 62)}`
 
 const need = (id) => {
   const c = byId.get(normalizeTrddRef(id ?? ''))
@@ -320,7 +353,7 @@ switch (cmd) {
     for (const [col, cs] of [...grouped].sort((a, b) => b[1].length - a[1].length)) {
       const head = col === '(none)' ? C.r('(NO COLUMN — INVISIBLE TO THE BOARD)') : C.b(col.toUpperCase())
       console.log(`═══ ${head} (${cs.length})`)
-      for (const c of cs.sort((a, b) => String(a.fm.priority ?? 9).localeCompare(String(b.fm.priority ?? 9)))) {
+      for (const c of cs.sort((a, b) => String(a.priority ?? 9).localeCompare(String(b.priority ?? 9)))) {
         const blk = openBlockers(c).length
         console.log(`  ${fmt(c)}${blk ? '  ' + C.r(`⛔${blk}`) : ''}`)
       }
@@ -419,7 +452,7 @@ Repair of the mechanically-derivable findings: ${C.c('yarn trdd:fix')}
       let score = 0
       if (rx.test(c.id)) score += 10
       if (rx.test(c.title)) score += 5
-      if (rx.test(String(c.fm.labels ?? ''))) score += 3
+      if (rx.test(c.labels)) score += 3
       const bodyHits = (body.match(new RegExp(cmd, 'gi')) ?? []).length
       score += Math.min(bodyHits, 3)
       if (score > 0) hits.push({ c, score, bodyHits })

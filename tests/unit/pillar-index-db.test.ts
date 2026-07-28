@@ -8,6 +8,7 @@ import {
   openIndex,
   validate,
   validateAt,
+  checkShape,
   migrate,
   recordHeal,
   readHealLedger,
@@ -79,22 +80,65 @@ describe('a freshly opened index', () => {
 })
 
 describe('janitor#123 — a missing column means TWO different things', () => {
-  it('BEHIND the ladder is reported as `behind`, NOT as damage', () => {
-    // The exact shape of the bug: a v0 DB has no tables at all. Validating it
-    // AGAINST v1 must say "migrate", never "damaged" — because the caller's repair
-    // for damage is to delete the file.
+  // The bug is COLUMN-granular: memgrep's `atoms` was missing `status`, added in v6,
+  // on a DB still at v5 — healthy, merely behind, and reported as damaged. The
+  // reachable ladder here has one step, so the skew is exercised through an injected
+  // spec. An untested guard for a bug the ecosystem already shipped once is not a
+  // guard, and my first attempt at these tests passed with the guard DELETED —
+  // it asserted through the table-level skip and never reached the branch it named.
+
+  const specWithV2Column = [
+    {
+      name: 'files',
+      since: 1,
+      cols: [
+        { name: 'path', since: 1 },
+        { name: 'kind', since: 1 },
+        { name: 'zone', since: 1 },
+        { name: 'identity', since: 1 },
+        { name: 'indexed_at', since: 1 },
+        { name: 'added_in_v2', since: 2 },
+      ],
+    },
+  ]
+
+  it('a column introduced at v2 is legitimately ABSENT from a v1 index — no fault', () => {
+    const db = openIndex(db1) // real v1 schema: no `added_in_v2`
+    expect(checkShape(db, 1, specWithV2Column)).toEqual([])
+    db.close()
+  })
+
+  it('the SAME missing column IS damage once the index claims to be v2', () => {
+    // Identical database, identical spec — only the version stamp differs, which is
+    // exactly the discriminator the fix is built on.
+    const db = openIndex(db1)
+    const faults = checkShape(db, 2, specWithV2Column)
+    db.close()
+    expect(faults).toHaveLength(1)
+    expect(faults[0].code).toBe('shape')
+    expect(faults[0].detail).toMatch(/added_in_v2/)
+  })
+
+  it('a TABLE introduced later is skipped too, at the same granularity', () => {
+    const db = openIndex(db1)
+    expect(checkShape(db, 1, [{ name: 'future', since: 2, cols: [{ name: 'x', since: 2 }] }]))
+      .toEqual([])
+    expect(checkShape(db, 2, [{ name: 'future', since: 2, cols: [{ name: 'x', since: 2 }] }]))
+      .toHaveLength(1)
+    db.close()
+  })
+
+  it('a v0 index validated against v1 reports `behind`, never damage', () => {
     const raw = new Database(db1)
     raw.pragma('user_version = 0')
     const r = validateAt(raw, 1)
     raw.close()
     expect(r.ok).toBe(false)
     if (r.ok) return
-    expect(r.faults.every((f) => f.code === 'behind')).toBe(true)
-    expect(r.faults.some((f) => f.code === 'shape')).toBe(false)
+    expect(r.faults.map((f) => f.code)).toEqual(['behind'])
   })
 
-  it('AT the current version, a dropped column IS damage', () => {
-    // Same missing column, opposite verdict — and the stamp is the only difference.
+  it('a CURRENT index missing a table reports damage, never `behind`', () => {
     const db = openIndex(db1)
     db.exec('DROP TABLE edges')
     const r = validate(db)
@@ -103,6 +147,19 @@ describe('janitor#123 — a missing column means TWO different things', () => {
     if (r.ok) return
     expect(r.faults.some((f) => f.code === 'shape')).toBe(true)
     expect(r.faults.some((f) => f.code === 'behind')).toBe(false)
+  })
+
+  it('damage on a BEHIND index is still reported as damage — the two are orthogonal', () => {
+    // The case the earlier ternary could not express at all, because it made
+    // "behind" and "damaged" alternatives rather than independent facts.
+    const db = openIndex(db1)
+    db.exec('DROP TABLE files')
+    db.pragma('user_version = 1')
+    const r = validateAt(db, 2)
+    db.close()
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.faults.some((f) => f.code === 'shape')).toBe(true)
   })
 })
 

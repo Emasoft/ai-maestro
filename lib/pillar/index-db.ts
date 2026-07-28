@@ -116,12 +116,75 @@ const MIGRATIONS: readonly Migration[] = [
   },
 ]
 
-/** Tables every shipped version must have, with the version that introduced them. */
-const REQUIRED_TABLES: ReadonlyArray<{ name: string; since: number; cols: readonly string[] }> = [
-  { name: 'files', since: 1, cols: ['path', 'kind', 'zone', 'identity', 'indexed_at'] },
-  { name: 'records', since: 1, cols: ['kind', 'id', 'path', 'line', 'col', 'title'] },
-  { name: 'edges', since: 1, cols: ['src_kind', 'src_id', 'field', 'dst_kind', 'dst_id', 'path'] },
+export interface ColumnSpec {
+  name: string
+  /** Ladder version that introduced this COLUMN. */
+  since: number
+}
+export interface TableSpec {
+  name: string
+  /** Ladder version that introduced this TABLE. */
+  since: number
+  cols: readonly ColumnSpec[]
+}
+
+const at = (since: number, ...names: string[]): ColumnSpec[] => names.map((name) => ({ name, since }))
+
+/**
+ * The shape every version is required to have — versioned PER COLUMN, not per table.
+ *
+ * Per-column is not pedantry: janitor#123's actual bug was a column-granular skew
+ * (`atoms` missing `status`, added in v6, on a DB still at v5). A per-TABLE `since`
+ * cannot express that at all — the table exists, so the check would demand every
+ * column of the newest version from a DB that legitimately predates them, and report
+ * a healthy behind-DB as damaged. That is the exact bug, one level down.
+ */
+export const REQUIRED_TABLES: readonly TableSpec[] = [
+  { name: 'files', since: 1, cols: at(1, 'path', 'kind', 'zone', 'identity', 'indexed_at') },
+  { name: 'records', since: 1, cols: at(1, 'kind', 'id', 'path', 'line', 'col', 'title') },
+  { name: 'edges', since: 1, cols: at(1, 'src_kind', 'src_id', 'field', 'dst_kind', 'dst_id', 'path') },
 ]
+
+/**
+ * Shape faults ONLY — never a verdict about the version stamp.
+ *
+ * Anything introduced AFTER `ver` is legitimately absent and is skipped, so whatever
+ * this returns is real damage even on a behind DB. Keeping "damaged" and "behind"
+ * orthogonal is what the earlier ternary got wrong: it made them alternatives, when
+ * a DB can be behind without damage (the common case), damaged without being behind,
+ * or both.
+ *
+ * Exported with an injectable spec because the reachable-today ladder has one step,
+ * so the column-granular skew this exists to handle cannot otherwise be exercised
+ * until a v2 ships — and an untested guard for a bug we already shipped once is not
+ * a guard.
+ */
+export function checkShape(
+  db: Database.Database,
+  ver: number,
+  tables: readonly TableSpec[] = REQUIRED_TABLES,
+): IndexFault[] {
+  const faults: IndexFault[] = []
+  for (const t of tables) {
+    if (t.since > ver) continue
+    const cols = tableColumns(db, t.name)
+    if (!cols) {
+      faults.push({
+        code: 'shape',
+        detail: `table ${t.name} (introduced at v${t.since}) is missing from a v${ver} index`,
+      })
+      continue
+    }
+    const missing = t.cols.filter((c) => c.since <= ver && !cols.includes(c.name))
+    if (missing.length) {
+      faults.push({
+        code: 'shape',
+        detail: `table ${t.name} is missing column(s) ${missing.map((c) => c.name).join(', ')} introduced at or before v${ver}`,
+      })
+    }
+  }
+  return faults
+}
 
 const FTS_COLUMNS: readonly string[] = ['id', 'title', 'body']
 
@@ -231,33 +294,28 @@ export function validateAt(db: Database.Database, expectVersion: number): Valida
     }
   }
 
-  // 3. Shape — PAIRED with the version stamp. This is janitor#123's bug: a missing
-  //    column on a BEHIND DB is not damage, it is a pending migration, and calling
-  //    it damage is how a healthy index gets nuked.
-  for (const t of REQUIRED_TABLES) {
-    if (t.since > ver) continue
-    const cols = tableColumns(db, t.name)
-    if (!cols) {
-      faults.push({
-        code: ver < expectVersion ? 'behind' : 'shape',
-        detail: `table ${t.name} is missing (user_version ${ver}, expected ${expectVersion})`,
-      })
-      continue
-    }
-    const missing = t.cols.filter((c) => !cols.includes(c))
-    if (missing.length) {
-      faults.push({
-        code: ver < expectVersion ? 'behind' : 'shape',
-        detail: `table ${t.name} is missing column(s) ${missing.join(', ')} (user_version ${ver}, expected ${expectVersion})`,
-      })
-    }
-  }
-  if (ver < expectVersion && faults.length === 0) {
-    faults.push({ code: 'behind', detail: `user_version ${ver} < ${expectVersion} — migrate` })
-  }
-  if (faults.length) return { ok: false, faults }
+  // 3. Shape — DAMAGE ONLY. Everything introduced after `ver` is skipped, so a fault
+  //    here is real damage even on a behind DB, and behind-ness is judged separately
+  //    in step 4. Making the two ORTHOGONAL is the janitor#123 fix: as alternatives
+  //    they cannot express "behind AND damaged", and the cheap reading — treat a
+  //    missing column as damage — deletes a healthy index.
+  const shape = checkShape(db, ver)
+  if (shape.length) return { ok: false, faults: shape }
 
-  // 4. FTS column set, then 5. FTS content parity.
+  // 4. Behind the ladder. NOT damage: the repair is to migrate, never to rebuild.
+  if (ver < expectVersion) {
+    return {
+      ok: false,
+      faults: [
+        {
+          code: 'behind',
+          detail: `user_version ${ver} < ${expectVersion} — migrate; this is NOT damage`,
+        },
+      ],
+    }
+  }
+
+  // 5. FTS column set, then 6. FTS content parity.
   const ftsCols = tableColumns(db, 'records_fts')
   if (!ftsCols) {
     return { ok: false, faults: [{ code: 'shape', detail: 'records_fts is missing' }] }
@@ -278,7 +336,8 @@ export function validateAt(db: Database.Database, expectVersion: number): Valida
     return { ok: false, faults: [{ code: 'fts-parity', detail: (err as Error).message }] }
   }
 
-  // 6. Orphans — rows pointing at a file no longer indexed.
+  // 7. Orphans — rows pointing at a file no longer indexed. Last because it is the
+  //    only check that scans rows rather than metadata.
   for (const t of ['records', 'edges'] as const) {
     const row = db
       .prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE path NOT IN (SELECT path FROM files)`)
@@ -288,11 +347,8 @@ export function validateAt(db: Database.Database, expectVersion: number): Valida
     }
   }
 
-  // 7. The version stamp itself, last — by here everything else agrees with it.
-  if (ver !== expectVersion) {
-    faults.push({ code: 'behind', detail: `user_version ${ver} != ${expectVersion}` })
-  }
-
+  // The stamp needs no check of its own here: `ver > expectVersion` returned at
+  // step 1 and `ver < expectVersion` at step 4, so by this line they are equal.
   return faults.length ? { ok: false, faults } : { ok: true }
 }
 

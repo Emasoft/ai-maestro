@@ -6,6 +6,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 ## Tests
 
 - A test that passes with its guard removed pins NOTHING — never accept a new test without a recorded neuter run.
+- A neuter run that does NOT fail is a finding about the TEST: mine asserted through a table-level `since` skip and never reached the branch it named, so the guard was decorative.
+- Encode a guard at the granularity the BUG had — janitor#123 was COLUMN-granular and my per-table `since` could not express it, making the branch unreachable by construction, not merely untested.
+- When one ladder step is all that ships, a version-skew guard cannot be exercised end-to-end — export the pure check and inject a synthetic spec, or it stays unverified until the bug recurs.
 - A test that passes for an unknown reason is a failure: isolate it (`-t "<full name>"`) before believing it.
 - `vi.clearAllMocks()` clears CALLS, not IMPLEMENTATIONS — a mock overridden in one test leaks into every test after it.
 - Route every mock through `(...a) => mockX(...a)` and restore it in `beforeEach`; an inline `vi.fn(async () => …)` in the factory cannot be restored.

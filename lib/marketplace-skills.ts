@@ -22,6 +22,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import os from 'os'
 import matter from 'gray-matter'
+import { NO_MATTER_CACHE } from '@/lib/gray-matter-nocache'
 import type {
   Marketplace,
   MarketplacePlugin,
@@ -160,7 +161,9 @@ async function findSkillFiles(dir: string): Promise<string[]> {
  */
 function parseSkillFrontmatter(content: string): SkillFrontmatter {
   try {
-    const parsed = matter(content)
+    // NO_MATTER_CACHE, or every SKILL.md of every marketplace ever browsed stays
+    // resident for the life of the server process. See lib/gray-matter-nocache.ts.
+    const parsed = matter(content, NO_MATTER_CACHE)
     return parsed.data as SkillFrontmatter
   } catch {
     return {}

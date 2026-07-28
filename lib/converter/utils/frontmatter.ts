@@ -4,6 +4,7 @@
  */
 
 import matter from 'gray-matter'
+import { NO_MATTER_CACHE } from '@/lib/gray-matter-nocache'
 import type { ConversionProvenance } from '../types'
 
 export interface ParsedFrontmatter {
@@ -13,7 +14,9 @@ export interface ParsedFrontmatter {
 
 /** Parse YAML frontmatter + markdown body from a string */
 export function parseFrontmatter(content: string): ParsedFrontmatter {
-  const parsed = matter(content)
+  // NO_MATTER_CACHE, or every element of every plugin ever converted stays resident
+  // for the life of the server process. See lib/gray-matter-nocache.ts.
+  const parsed = matter(content, NO_MATTER_CACHE)
   return {
     data: parsed.data as Record<string, unknown>,
     body: parsed.content,

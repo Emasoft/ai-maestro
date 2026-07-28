@@ -18,6 +18,7 @@ import os from 'os'
 import { execFile } from 'child_process'
 import { randomUUID, createHash } from 'crypto'
 import matter from 'gray-matter'
+import { NO_MATTER_CACHE } from '@/lib/gray-matter-nocache'
 // ServiceResult imported directly from canonical source
 import type { ServiceResult } from '@/types/service'
 import type {
@@ -1047,7 +1048,9 @@ async function findSkillsInDir(dir: string): Promise<RepoSkillInfo[]> {
           // Accept only paths that are exactly realDir or strictly under it
           if (realFilePath !== realDir && !realFilePath.startsWith(realDirPrefix)) continue
           const content = await fs.readFile(fullPath, 'utf-8')
-          const parsed = matter(content)
+          // NO_MATTER_CACHE, or every scanned SKILL.md stays resident for the life of
+          // the server process. See lib/gray-matter-nocache.ts.
+          const parsed = matter(content, NO_MATTER_CACHE)
           const frontmatter = parsed.data as Record<string, unknown>
           // Use the relative path from the scan root so that a SKILL.md located
           // directly at the repo root does not inherit the temporary scan

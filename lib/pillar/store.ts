@@ -35,6 +35,7 @@
 import fs from 'fs'
 import path from 'path'
 import matter from 'gray-matter'
+import { NO_MATTER_CACHE } from '../gray-matter-nocache'
 import type { PillarKind, PillarName } from './kinds'
 
 export interface PillarDocument {
@@ -58,33 +59,6 @@ export interface PillarRecord {
   /** per-document: the whole body. per-line: the declaration line. */
   text: string
 }
-
-/**
- * Passed to EVERY `matter()` call, and the reason is memory, not parsing.
- *
- * gray-matter keeps a MODULE-LEVEL cache keyed by the full file text
- * (`matter.cache[file.content] = file`, gray-matter 4.0.3 `index.js:35-47`) and stores
- * the parsed file INCLUDING its `orig`. So every document ever parsed is retained for
- * the life of the process, and memory tracks TOTAL CORPUS BYTES no matter how little
- * the caller keeps. Invisible at 298 files; fatal at 10^5.
- *
- * MEASURED, because the correlation had an obvious wrong explanation. On a 20 000-card
- * fixture, retaining nothing but the frontmatter cost 456 MB with 10 KB bodies and
- * 104 MB with 1 KB bodies — IDENTICAL frontmatter, 4.4x the memory. The natural reading
- * was V8 sliced strings (a substring >= 13 chars keeps a pointer to its parent, so one
- * retained field would pin a whole document); deep-flattening every frontmatter string
- * moved the number by -3%, refuting it. The bodies were being held by this cache.
- *
- * gray-matter skips the cache whenever ANY options object is passed — its own comment
- * says caching with options would negate the benefit — and `defaults()` is
- * `Object.assign({}, options)`, so `{}` is behaviourally identical to passing nothing.
- * This constant changes no parsing; it only declines to leak.
- *
- * DO NOT "simplify" this back to `matter(raw)`. It is not decoration: without it a
- * perfectly streaming reader that retains NOTHING still accumulates the whole corpus,
- * so the streaming would be theatre.
- */
-const NO_CACHE: Record<string, never> = {}
 
 /**
  * Fail loudly when the corpus ROOT itself is absent or unreadable.
@@ -154,7 +128,9 @@ export function readDocument(
   let data: Record<string, unknown> = {}
   let content = ''
   try {
-    const parsed = matter(raw, NO_CACHE)
+    // NO_MATTER_CACHE, or the reader accumulates every document it ever parsed —
+    // which would make the streaming above theatre. See lib/gray-matter-nocache.ts.
+    const parsed = matter(raw, NO_MATTER_CACHE)
     data = (parsed.data ?? {}) as Record<string, unknown>
     content = parsed.content ?? ''
   } catch {

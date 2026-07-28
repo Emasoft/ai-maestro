@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-28T20:00:06+0200
+updated: 2026-07-28T22:58:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -44,8 +44,8 @@ a rock."* Full plan: `~/.claude/plans/iterative-foraging-wadler.md` (top section
 - **SQLite + FTS5**, memgrep-shaped safety (FTS5 confirmed available in the bundled
   `better-sqlite3`, SQLite 3.51.3; `('integrity-check', 1)` parity form works).
 - **A shared `lib/pillar/` seam** serving all three pillars; `lib/trdd-store.ts` is re-expressed on
-  it with its **public API frozen**, so its 20 existing tests passing unchanged is the proof the
-  abstraction fits.
+  it with its **public API frozen**, so its **28** existing tests passing unchanged is the proof the
+  abstraction fits. (Its shape is set by F2 below — document→records, not one-file-one-doc.)
 - **Two of memgrep's postures are deliberately NOT copied** — full-walk fallback (at 10⁵ the
   fallback IS the outage → incremental repair) and per-file `git hash-object` (→ one
   `git ls-files -s`). Recorded in CTEQX0ZA.
@@ -64,12 +64,43 @@ a rock."* Full plan: `~/.claude/plans/iterative-foraging-wadler.md` (top section
 | EHT | `MUYRIKN3` | the spec bump 1.1.1 → 1.2.0 is consumed by the janitor (`3P-CHK-03`, `3P-VER-02`) |
 | EHT | `YN8EQWYP` | the index is new shared server state — register it, handle N writers, contain the tests |
 
+### Two findings that CHANGE the seam design (2026-07-28, both verified first-hand)
+
+**F1 — the reference JOIN, not the walk, is the scale problem.** USER's second correction:
+*"every reference in the TRDD must be validated … extremely inefficient if made directly instead of
+doing it via a ready to use index with all references already in it."* Verified: the linter ALREADY
+builds an index in RAM every run (`trdd-doctor.ts:188/193/196`) — that is *why* the corpus is
+resident, so the 6.5 GB measured at 10⁵ **is** the index. Cross-pillar validation does not exist yet
+(grep: zero spec-clause/PRRD checks), so Phase 4 WIDENS the join to three corpora. And `findTrdd`
+re-readdirs all four zones **per call**, so a cross-pillar lint written on the public API is O(N²).
+⇒ **the index must store resolved reference EDGES, not just documents.** Full record: `CTEQX0ZA`.
+
+**F2 — the three pillars have THREE document models. `kinds.ts` as planned does not fit.**
+Measured on disk, not assumed:
+
+| pillar | corpus | queryable UNIT | where the id lives | zones |
+|---|---|---|---|---|
+| TRDD | many files, 4 zone dirs | one FILE = one card | the **filename** (`TRDD-…-<ID8>-slug.md`) | 4 |
+| SPEC | 6 files in `design/specs/` (its `proposals/`+`archived/` are **empty**) | one CLAUSE, many per file | the **body** (`3P-KAN-06`; 38 distinct in one file) | 1 live |
+| PRRD | **ONE** file, `design/requirements/PRRD.md` | one BULLET LINE = one rule | the **line** (`- **G1.2** — …`) | none |
+
+The plan's `kinds.ts` = *"zones, filename + id grammar"* is TRDD-shaped: it assumes the id comes
+from the filename, which is true for exactly one of the three. Contorting PRRD into a "corpus of
+one zone with one file" would be the *abstraction over 1.5 consumers* the advisor warned about.
+
+**The generalization that actually fits: a corpus is a set of DOCUMENTS; each document yields ≥1
+RECORDS.** TRDD is the 1:1 case; SPEC and PRRD are 1:N. One split covers all three with no
+contortion — and it is the same shape F1 and the Phase-4 DAG lint need anyway, since both must scan
+SPEC/PRRD *bodies* for citations. Records, not documents, are what the index stores and what the
+edges point at.
+
 ### NEXT ACTION
 
-Phase 1 of the plan: **make the corpus reader fail loud** — `lib/trdd-store.ts` `listTrddFiles`
-(`:112-114` `catch { return [] }`), both CLIs' `process.cwd()` assumption and missing non-vacuity
-guard, and the divergent read-error handling between `lib/trdd-doctor.ts:137-140` (reports it) and
-`greptrdd.mjs:63` / `lib/kanban-index.ts:143` (silently drops it). Gated by NPT `7JK3NCV4`.
+**Phase 2 — the shared seam, in the shape F1+F2 dictate.** `lib/pillar/kinds.ts` (document→record
+descriptors, id-from-filename *or* id-from-body-line) + `lib/pillar/store.ts` (an **iterator** over
+records — never `Card[]`, which is the 6.5 GB — with array helpers layered on for small-corpus
+callers). Then re-express `lib/trdd-store.ts` on it with its **public API frozen**.
+**Acceptance: the 28 tests in `tests/unit/trdd-store.test.ts` pass unchanged.**
 
 ### SUPERSEDED — do NOT carry forward
 

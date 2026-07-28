@@ -18,6 +18,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A fixture that models the filesystem as ONE constant boolean cannot test a post-condition: an install needs `existsSync` false BEFORE and true AFTER. Model the writes, or the post-condition stays a WARN forever.
 - When a guard is unreachable in a fixture, say so in the test's docstring and file it — never seed the developer's REAL `$HOME` to reach it.
 - `expect(err).not.toMatch(/one specific message/)` is satisfied by EVERY OTHER error — a positive control must assert `success === true`.
+- Choose a positive control to FALSIFY the failure you fear, not to prove a list is non-empty: mine asserted a nested path and stayed green while the pathspec `dir/**/*.ts` silently dropped every TOP-LEVEL file (71 matched, 0 top-level) — including the file the test existed to protect.
+- A source-scanning guard needs its scan set controlled too — assert a real count AND one file of each shape it must cover, or the guard reports "clean" on a set it never built.
 - A verification gate that reads a REAL path passes vacuously in every test: it inspects state the fixture never touched. Point it at the fixture's seam, then model the write.
 - A test can be propped up by the very bug you are fixing: 4 here asserted a cascade that only ran because the buggy ORDER put it before the gate that was failing.
 - Provoke an unreadable-input test with ENOTDIR/EISDIR, never chmod — a permissions fixture passes VACUOUSLY when the suite runs as root, and CI often does.

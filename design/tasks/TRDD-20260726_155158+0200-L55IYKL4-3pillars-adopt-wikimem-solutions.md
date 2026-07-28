@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-29T00:36:05+0200
+updated: 2026-07-29T00:55:31+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -145,14 +145,23 @@ edges point at.
 
 ### NEXT ACTION
 
-**Wire `greptrdd`'s SEARCH at the index — that is the USER's original scale concern** (*"when you
-will get 100000+ TRDDs … without a db the search will become slow"*), and the index has been built
-and proven for a full session without a single production consumer. Today a query walks the corpus:
-~22.6 s at 10⁵, versus an indexed lookup. Ship it WITH EHT `8KDIB2LT`'s `--no-index` degradation in
-the same change, not after — `better-sqlite3` is native and caps at Node 25, so putting it in
-`greptrdd`'s import graph makes the CLI die on a wrong Node where today it needs only `tsx`. It must
-degrade with a clear message, never a silent multi-minute walk, and the import must be LAZY so the
-non-index paths keep working.
+**DONE — and half its premise was WRONG, which is the finding.** Task #79 shipped (`f19327f9`):
+the GRAPH subcommands (`why`/`unblocks`/`roots`/`show`/`board`) are index-backed, carrying
+`8KDIB2LT`'s `--no-index` degradation in the same change with a LAZY native import, exactly as this
+directive required. But **"wire the SEARCH at the index" was never achievable**: greptrdd's default
+search is a REGEX search, and FTS5 is token matching + bm25 — it cannot evaluate a regex, and its
+unicode61 tokenizer splits `TRDD-BQC8NQSW` into whole tokens, so even a literal-only prefilter
+misses substrings. Search stays WALK-ONLY **by design**; that is now a documented CONTRACT in
+`lib/pillar/index-open.ts`, not an unfilled gap. The ACCEPTANCE CRITERION exposed it, not the code.
+
+**The `~22.6 s at 10⁵` above is the LINTER (`validate`), not a graph query — do not quote one for
+the other.** Measured separately on the 10⁵ fixture 2026-07-29: the graph walk (`board --no-index`)
+is **8.07 s / 1.02 GB**; the linter is **22.6 s / 2.43 GB**.
+
+**NEXT: the critical path is 3 roots** (`greptrdd why L55IYKL4`), all DECIDED-not-IMPLEMENTED —
+`CTEQX0ZA` (the 10⁵ budget; in progress), `Q3GZJI1X` (**HELD FOR THE USER** — its one open box asks
+the janitor to change an IND-base contract that every project on this machine loads), and
+`LXLK7XGX` (needs `pillars:lint`, i.e. Phase 4).
 
 Do NOT extend this to the doctor: it must read every document anyway for the ~25 frontmatter fields
 its per-card rules use, so the index would replace no walk there while importing the native

@@ -358,13 +358,39 @@ function tableColumns(db: Database.Database, table: string): string[] | null {
 }
 
 /**
+ * How much of the index to check. TRDD-4VCXRHAY.
+ *
+ * `structural` is METADATA-ONLY and stays flat as the corpus grows: the version
+ * stamp, `PRAGMA table_info`, and two indexed orphan counts — 3 ms at 10 000 cards.
+ * `full` adds the two checks that SCAN THE WHOLE INDEX: SQLite's `integrity_check`
+ * walks every b-tree page (367 ms at 10 000) and the FTS parity form walks the
+ * entire inverted index against its content (304 ms).
+ */
+export type ValidateDepth = 'structural' | 'full'
+
+/**
  * Validate the index AS IF it were at `expectVersion`, cheapest check first.
  *
  * NON-HEALING BY CONSTRUCTION. An observer must not repair what it measures: a
  * validate that silently fixed things would make a recurring corruption invisible
  * to the very tool asking whether corruption recurs.
+ *
+ * WHY DEPTH EXISTS AT ALL (TRDD-4VCXRHAY, measured). Running the full pass on every
+ * open made the SAFETY MECHANISM the scaling wall: answering a graph query over
+ * 10 000 cards costs 11 ms, and the open in front of it cost 666 ms, of which 671
+ * were these two scans. At 10⁵ that projects to ~7 s on every invocation, so the
+ * index was slower than the walk it replaced at every size measured.
+ *
+ * The split is a SCHEDULE change, not a weakening. A read cannot corrupt what it
+ * does not write, so paying for these scans per read is paying continuously to
+ * detect an event reads cannot cause — while every moment that CAN introduce it
+ * (create, each migration step, every heal) still runs the full pass.
  */
-export function validateAt(db: Database.Database, expectVersion: number): ValidateResult {
+export function validateAt(
+  db: Database.Database,
+  expectVersion: number,
+  depth: ValidateDepth = 'full',
+): ValidateResult {
   const faults: IndexFault[] = []
   const ver = currentVersion(db)
 
@@ -377,11 +403,24 @@ export function validateAt(db: Database.Database, expectVersion: number): Valida
   }
 
   // 2. Integrity — if SQLite says the file is corrupt, nothing below is meaningful.
-  const integrity = db.pragma('integrity_check') as Array<{ integrity_check: string }>
-  if (integrity[0]?.integrity_check !== 'ok') {
-    return {
-      ok: false,
-      faults: [{ code: 'corrupt', detail: integrity.map((r) => r.integrity_check).join('; ') }],
+  //    FULL ONLY: a whole-file b-tree walk. Skipping it does not leave the read path
+  //    blind — SQLite raises on genuinely damaged pages at query time, and `openIndex`
+  //    treats a throw as a heal trigger.
+  if (depth === 'full') {
+    try {
+      const integrity = db.pragma('integrity_check') as Array<{ integrity_check: string }>
+      if (integrity[0]?.integrity_check !== 'ok') {
+        return {
+          ok: false,
+          faults: [{ code: 'corrupt', detail: integrity.map((r) => r.integrity_check).join('; ') }],
+        }
+      }
+    } catch (err) {
+      // `integrity_check` does not always come back as a row saying "not ok" — on
+      // badly damaged pages SQLite THROWS `SQLITE_CORRUPT` out of the pragma itself.
+      // Letting that propagate turns a DETECTED, healable fault into an exception
+      // the caller has to guess the meaning of; it is the same fault either way.
+      return { ok: false, faults: [{ code: 'corrupt', detail: (err as Error).message }] }
     }
   }
 
@@ -423,13 +462,16 @@ export function validateAt(db: Database.Database, expectVersion: number): Valida
       ],
     }
   }
-  try {
-    // The PARITY form. The bare `('integrity-check')` passes on an emptied index —
-    // it verifies the b-tree, not that the index agrees with the content — so it
-    // would certify exactly the corruption worth catching.
-    db.prepare(`INSERT INTO records_fts(records_fts, rank) VALUES ('integrity-check', 1)`).run()
-  } catch (err) {
-    return { ok: false, faults: [{ code: 'fts-parity', detail: (err as Error).message }] }
+  // FULL ONLY, and it is the more expensive of the two scans in practice.
+  if (depth === 'full') {
+    try {
+      // The PARITY form. The bare `('integrity-check')` passes on an emptied index —
+      // it verifies the b-tree, not that the index agrees with the content — so it
+      // would certify exactly the corruption worth catching.
+      db.prepare(`INSERT INTO records_fts(records_fts, rank) VALUES ('integrity-check', 1)`).run()
+    } catch (err) {
+      return { ok: false, faults: [{ code: 'fts-parity', detail: (err as Error).message }] }
+    }
   }
 
   // 7. Orphans — rows pointing at a file no longer indexed. Last because it is the
@@ -448,8 +490,26 @@ export function validateAt(db: Database.Database, expectVersion: number): Valida
   return faults.length ? { ok: false, faults } : { ok: true }
 }
 
+/**
+ * The FULL pass. The strong name stays on the strong check, deliberately — a caller
+ * that types `validate` gets everything, and the cheap variant has to be asked for.
+ *
+ * This is what runs at every STATE TRANSITION: inside each migration step (see
+ * `migrate`), and after a heal. It is also the entry point for a scheduled or
+ * on-demand verifier — and the expensive half NEEDS such a caller, because a check
+ * nobody runs is a check that does not exist.
+ */
 export function validate(db: Database.Database): ValidateResult {
-  return validateAt(db, SCHEMA_VERSION)
+  return validateAt(db, SCHEMA_VERSION, 'full')
+}
+
+/**
+ * The CHEAP pass — what a READ path may afford. Metadata-only, so it stays flat as
+ * the corpus grows, and it still catches every STRUCTURAL fault: a DB from a newer
+ * binary, a missing table or column, a lying migration, rows orphaned from `files`.
+ */
+export function validateStructural(db: Database.Database): ValidateResult {
+  return validateAt(db, SCHEMA_VERSION, 'structural')
 }
 
 // ── heal ledger ──────────────────────────────────────────────────────────────
@@ -505,6 +565,14 @@ export interface OpenOptions {
   readonly ledgerFile?: string
   /** Injectable for tests. Defaults to `new Date().toISOString()`. */
   readonly now?: () => string
+  /**
+   * How hard to check an ALREADY-CURRENT index. Defaults to `structural` because
+   * this is the READ path (TRDD-4VCXRHAY). A scheduled verifier passes `full`.
+   * It does not weaken the transitions: `migrate` validates each step in full
+   * regardless, so a freshly created or freshly migrated index is always fully
+   * checked before this option is ever consulted.
+   */
+  readonly verify?: ValidateDepth
 }
 
 function nuke(file: string): void {
@@ -533,11 +601,17 @@ export function openIndex(file: string, opts: OpenOptions = {}): Database.Databa
   const now = opts.now ?? (() => new Date().toISOString())
   fs.mkdirSync(path.dirname(file), { recursive: true })
 
+  const depth = opts.verify ?? 'structural'
   const attempt = (): { db: Database.Database; result: ValidateResult } => {
     const db = new Database(file)
     applyPragmas(db)
+    // `migrate` runs the FULL pass inside each ladder step's transaction, so a
+    // brand-new or just-migrated index has already been checked end to end by the
+    // time control returns here. What is left to decide is how hard to re-check an
+    // index that was ALREADY current — and that is a read, so it gets the cheap pass
+    // unless a caller explicitly asks for more.
     migrate(db)
-    return { db, result: validate(db) }
+    return { db, result: validateAt(db, SCHEMA_VERSION, depth) }
   }
 
   let db: Database.Database

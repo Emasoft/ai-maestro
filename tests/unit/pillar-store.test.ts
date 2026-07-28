@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -225,5 +225,47 @@ describe('the reader must not accumulate the corpus (TRDD-BQC8NQSW)', () => {
     }
     expect([...walkRecords(tmp, TRDD_KIND, [''])].length).toBe(25)
     expect(cacheOf()).toHaveLength(0)
+  })
+})
+
+describe('listDocuments returns a STABLE order (TRDD-L55IYKL4)', () => {
+  /**
+   * The OS will not hand back an unsorted directory on demand — APFS happens to
+   * return sorted names, so a test that merely asserts `got === got.sort()` on a
+   * real temp dir PASSES WITH THE SORT REMOVED. That is the decorative guard this
+   * repo has been bitten by before, so the unsorted input is INJECTED instead: it
+   * is the one input the filesystem refuses to vary, and ext4's hash order is the
+   * real-world case being defended against.
+   */
+  const UNSORTED = [
+    'TRDD-20260101_000000+0000-ZZZZZZZZ-zulu.md',
+    'TRDD-20260101_000000+0000-AAAAAAAA-alpha.md',
+    'TRDD-20260101_000000+0000-MMMMMMMM-mike.md',
+  ]
+
+  it('sorts names the filesystem handed back out of order', () => {
+    const spy = vi.spyOn(fs, 'readdirSync').mockReturnValue(UNSORTED as never)
+    try {
+      const got = listDocuments('/corpus', TRDD_KIND, 'tasks').map((p) => path.basename(p))
+      expect(got).toEqual([...UNSORTED].sort())
+      // Spelled out, so the assertion cannot be satisfied by an already-sorted input:
+      // the FIRST name must be the alpha one, which the fixture handed back SECOND.
+      expect(got[0]).toMatch(/AAAAAAAA/)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('still filters non-documents while sorting — the sort must not widen the set', () => {
+    const spy = vi
+      .spyOn(fs, 'readdirSync')
+      .mockReturnValue([...UNSORTED, 'README.md', 'notes.txt'] as never)
+    try {
+      const got = listDocuments('/corpus', TRDD_KIND, 'tasks').map((p) => path.basename(p))
+      expect(got).toHaveLength(3)
+      expect(got.join()).not.toMatch(/README|notes/)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

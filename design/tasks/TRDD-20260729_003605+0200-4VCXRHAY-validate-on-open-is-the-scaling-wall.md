@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T00:36:05+0200
-updated: 2026-07-29T00:36:05+0200
+updated: 2026-07-29T00:43:32+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -109,16 +109,38 @@ exist.
 
 ## Acceptance
 
-- [ ] `validate` splits into a cheap structural pass and an expensive integrity pass, with the
-      split stated in the code and the reason for it
-- [ ] `openIndex` runs CHEAP on a healthy existing index, and FULL on create / migrate / heal
-- [ ] an explicit full-verify entry point exists for a scheduled or on-demand caller
-- [ ] MEASURED: warm `greptrdd board` at 10 000 cards drops from ~1.03 s to well under the walk's
-      ~1.05 s, and the query remains byte-identical (the differential in
-      `tests/unit/pillar-graph-cli.test.ts` still passes)
-- [ ] NEUTER: a structurally damaged index is STILL caught on open (the cheap pass), and a
-      genuinely corrupt file is STILL caught by the full pass — proven by seeding each
-- [ ] the cold-build cost is measured and either accepted or given its own card
+- [x] `validate` splits into a cheap structural pass and an expensive integrity pass, with the
+      split stated in the code and the reason for it (`ValidateDepth`, `d04ee6a6`)
+- [x] `openIndex` runs CHEAP on a healthy existing index, and FULL on create / migrate / heal
+- [x] an explicit full-verify entry point exists for a scheduled or on-demand caller
+      (`validate` keeps the strong name; `openIndex(file, { verify: 'full' })` opens-and-verifies)
+- [x] MEASURED: warm `greptrdd board` at 10 000 cards **1.03 s → 0.37 s**, against the walk's
+      1.12 s — a 3× win where there had been none. Live 298-card corpus: the 30 ms penalty is
+      gone. Byte-identity holds on the 10 000-card fixture (4291 lines, empty diff)
+- [x] NEUTER (make `depth` inert): fails exactly the two discriminating tests, while the two
+      "structural still catches X" tests correctly stay green — those faults are caught at both
+      depths, which is the point
+- [ ] the cold-build cost is measured and either accepted or given its own card — **MEASURED at
+      117.6 s for 10 000 cards, NOT yet resolved.** See the finding below; it needs its own card.
+
+## FOUND WHILE MEASURING — the FTS has no reader at all
+
+`syncIndex` writes every document's full body into `records_fts`, and that is what dominates the
+117.6 s cold build (~98 MB of prose through the tokenizer). **Nothing queries it.** The default
+regex search is walk-only by design and always will be, and the graph subcommands read
+`records`/`edges`. The one thing that touches `records_fts` is the parity check that exists to
+verify it.
+
+So the FTS is currently a write-only structure: it costs the whole cold build, it is the largest
+part of the file on disk, and it is verified by a check whose cost this card just rescheduled.
+That is the accretion line — *a column enters `records` only when an INDEX-SERVED subcommand
+reads it* — violated one table up, by a table that predates the line.
+
+Two defensible options, and picking between them is its own card: stop populating it until a
+consumer exists (fast builds, smaller file, parity trivially satisfied), or keep it as the
+deliberate substrate for a future recall-by-symptom capability the parent exists to add. Do NOT
+decide it here — the parent's Phase 5 is where recall is designed, and that is what makes the
+call informed.
 
 ## Approval log
 

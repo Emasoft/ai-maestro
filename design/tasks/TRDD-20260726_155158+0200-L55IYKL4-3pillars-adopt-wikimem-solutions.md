@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-29T00:12:00+0200
+updated: 2026-07-28T22:10:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -122,15 +122,42 @@ edges point at.
   **7 neuter runs**, each failing only its named test, each restored byte-clean — one of which did
   NOT fail on the first attempt, which is exactly how the decorative guard was found.
 
+- **EHT `BQC8NQSW` DONE + archived** (`fc53ce99`, `ce28bd3c`) — the lint at 10⁵ went from an **OOM
+  CRASH (exit 134, 4.45 GB)** to a clean run (**exit 0, 2.43 GB, 22.6 s**), measured on a real
+  100 000-card fixture rather than extrapolated. Findings over the live corpus are **byte-for-byte
+  identical** before and after (307 scanned · 0 errors · 294 warnings), which is what proves the
+  refactor changed cost and not verdicts. The doctor also stopped walking the corpus TWICE per
+  report — graph nodes now come from the same read via `toGraphNode`.
+- **The card's premise was incomplete, and the missed cause dominated: `gray-matter` caches every
+  parsed file FOREVER** (module-level, keyed by the file's full text, storing `orig`). So memory
+  tracked total corpus bytes no matter what the caller kept — **streaming alone could never have
+  fixed it.** Found by probe, and the obvious explanation was WRONG: identical frontmatter cost
+  456 MB with 10 KB bodies vs 104 MB with 1 KB bodies, which is the exact signature of V8 sliced
+  strings; deep-flattening every string moved it **−3%**, refuting that reading. Retained heap is
+  now 35 MB on both fixtures.
+- **EHT-adjacent defect found and fixed: `TRDD-X6MJIMYS`** (`d32fc46f`, archived) — the same
+  one-argument `matter()` call sat in THREE other subsystems reachable from the long-lived server
+  (marketplace scan, plugin builder, the ChangeClient converter chain), where the leak is
+  **unbounded**. One owner now (`lib/gray-matter-nocache.ts`) + a **source-level** guard, because a
+  behavioural test can only cover the call sites someone remembered. Its first version pinned
+  NOTHING — `dir/**/*.ts` matched 71 nested files and **zero top-level** ones, so it was blind to
+  one of the three files it protects; the neuter run caught it, the positive control did not.
+
 ### NEXT ACTION
 
-**Point `lib/trdd-doctor.ts::loadCorpus` (`:131`) at the index. That IS EHT `BQC8NQSW`'s fix — one
-task, not two.** Its `Card[]` carrying `raw` per card, plus the `byId`/`claimedBy`/`known` Maps it
-builds at `:188/193/196`, ARE the measured 6.5 GB; `syncIndex` + `danglingRefs` replace both.
-**Acceptance: every existing doctor test stays green**, the same proof the 28 store tests gave for
-Phase 2. Then EHT E5's `--no-index` escape hatch (`better-sqlite3` is native and caps at Node 25, so
-an index in `greptrdd`'s import graph makes the CLI die on a wrong Node where today it needs only
-`tsx` — degrade with a message, never a silent multi-minute walk).
+**Wire `greptrdd`'s SEARCH at the index — that is the USER's original scale concern** (*"when you
+will get 100000+ TRDDs … without a db the search will become slow"*), and the index has been built
+and proven for a full session without a single production consumer. Today a query walks the corpus:
+~22.6 s at 10⁵, versus an indexed lookup. Ship it WITH EHT `8KDIB2LT`'s `--no-index` degradation in
+the same change, not after — `better-sqlite3` is native and caps at Node 25, so putting it in
+`greptrdd`'s import graph makes the CLI die on a wrong Node where today it needs only `tsx`. It must
+degrade with a clear message, never a silent multi-minute walk, and the import must be LAZY so the
+non-index paths keep working.
+
+Do NOT extend this to the doctor: it must read every document anyway for the ~25 frontmatter fields
+its per-card rules use, so the index would replace no walk there while importing the native
+dependency. The walk it COULD replace is `loadTrddGraph`'s, and rebuilding a `TrddNode` needs
+`derived`/`hasDerivedField`/`derivedKind`, which the schema does not carry — that is `C069SK9E`.
 
 Scope note, still binding: TRDD→TRDD edges (`blocked-by`/`npt`/`eht`/`parent-trdd`/`superseded-by`)
 are unambiguous and are ALREADY indexed. Only the **rule** edges (`relevant-rules:`) wait on NPT

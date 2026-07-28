@@ -1,12 +1,11 @@
 ---
 trdd-id: 8KDIB2LT
 title: Propagate the new pillar CLI contract to every consumer and document
-column: blocked
-pre-block-column: todo
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-28T20:00:06+0200
+updated: 2026-07-28T23:12:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -27,7 +26,7 @@ release-via: none
 relevant-rules: []
 npt: []
 eht: []
-blocked-by: [7JK3NCV4]
+blocked-by: []
 external-refs: []
 ---
 

@@ -66,6 +66,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - An automated alert fuses a trustworthy MAGNITUDE to a GUESSED cause — two sessions got different confident labels (`FORK_STORM` / `PREMIUM_MODEL_FANOUT`) for the same main-loop burn; act on the number, verify the attribution.
 - Disprove a "storm" by the AGE spread, not the count: 29 `claude` processes all 1h+ old is standing infrastructure, and `turns × context × 0.1` already accounted for the whole spike.
 - An audit naming ids you cannot find may be auditing a DIFFERENT repo — positive-control your `find` before reporting the absence as a defect (this stopped a false filing against janitor #120).
+- Before exporting YOUR finding to another project, read THEIR architecture: my column-granular fix applies to an incremental-shape ladder, and memgrep runs full-current DDL on every open, so the "bug" does not exist there — checking is what stopped the second wrong filing.
 
 ## Claims about the codebase
 

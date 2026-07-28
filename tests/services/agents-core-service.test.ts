@@ -822,6 +822,34 @@ describe('wakeAgent', () => {
     expect(result.error).toBe('role_missing_core')
     expect(mockRuntime.createSession).not.toHaveBeenCalled()
   })
+
+  it('R9.13 / AIO-FAAF-04: refuses to wake a roleMissing agent IN THE SERVICE — the headless router calls wakeAgent directly and bypassed the route gate', async () => {
+    /**
+     * The FAAF quarantine (ChangeTitle::G17, ChangePlugin::PG04) sets roleMissing=true
+     * and hibernates an agent whose required role-plugin could not be installed. That
+     * fallback is only worth anything if something REFUSES to wake it (AIO-FAAF-04).
+     *
+     * The refusal used to exist ONLY in app/api/agents/[id]/wake/route.ts, while
+     * services/headless-router.ts:1268 calls wakeAgent() directly — so under
+     * MAESTRO_MODE=headless a quarantined agent woke normally, with no role-plugin and
+     * therefore no persona, while sharing the fleet's single gh identity. R17's sibling
+     * gate (corePluginMissing → role_missing_core, asserted directly above) was already
+     * in the service; only R9.13's had been left in the route.
+     *
+     * This drives the SERVICE function, which is exactly the surface the headless path
+     * uses — a route-level test would have passed throughout the bug's lifetime.
+     */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', roleMissing: true })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+
+    const result = await wakeAgent('agent-1', { startProgram: false })
+
+    expect(result.status).toBe(409)
+    expect(result.error).toBe('role_plugin_required')
+    // The point: no session is created for a quarantined agent.
+    expect(mockRuntime.createSession).not.toHaveBeenCalled()
+  })
 })
 
 // ============================================================================

@@ -2063,6 +2063,31 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       return { error: 'Agent has no name configured', status: 400 }
     }
 
+    // ── Gate 1b: R9.13 FAAF quarantine — refuse to wake a role-less agent ──
+    // AIO-FAAF-04: a quarantine flag is only real if some guard REFUSES to act on
+    // it. ChangeTitle::G17 and ChangePlugin::PG04 set roleMissing=true and hibernate
+    // when a required role-plugin cannot be installed — that fallback is the ONLY
+    // thing standing between a failed install and a running agent with no persona,
+    // and all agents share one gh identity, so a persona-less agent is exactly the
+    // hazard R9.13 exists to prevent.
+    //
+    // This gate USED TO LIVE ONLY IN THE ROUTE (app/api/agents/[id]/wake/route.ts),
+    // while services/headless-router.ts calls wakeAgent() DIRECTLY. So in headless
+    // mode the quarantine was bypassable: the flag was set, hibernation happened,
+    // and the next headless wake ignored both. R17's sibling gate (corePluginMissing
+    // → role_missing_core) was already enforced here in the service; only R9.13 was
+    // left behind in the route. Enforcing it here covers every caller — the Next.js
+    // route, the headless router, and any future one — which is the whole point of
+    // a service-level gate. The route keeps its own richer 409 (it adds
+    // compatibleOptions + a deep link for the UI picker) and simply never reaches
+    // this one; both refuse, so neither path can wake a quarantined agent.
+    if (agent.roleMissing) {
+      return {
+        error: 'role_plugin_required',
+        status: 409,
+      }
+    }
+
     const workingDirectory = agent.workingDirectory ||
                             agent.preferences?.defaultWorkingDirectory ||
                             process.cwd()

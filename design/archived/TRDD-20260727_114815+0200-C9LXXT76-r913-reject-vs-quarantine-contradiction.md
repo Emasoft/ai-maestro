@@ -1,19 +1,22 @@
 ---
 trdd-id: C9LXXT76
 title: R9.13 says HARD REJECT but ChangeTitle G17 persists a quarantined role-less agent
-column: proposal
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-07-27T11:48:15+0200
-updated: 2026-07-27T11:48:15+0200
+updated: 2026-07-27T12:40:00+0200
 created-by: ai-maestro-claude
 current-owner: ai-maestro-claude
 assignee: ai-maestro-claude
 task-type: docs
-min-approval-requirement: manager
-approved: false
-mandate: false
+min-approval-requirement: user
+approved: true
+approval-judge: user
+approval-datetime: 2026-07-27T12:20:00+0200
+mandate: true
+mandated-by: user
 derived: false
 priority: 2
 severity: medium
@@ -33,13 +36,25 @@ external-refs:
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-27
 
-- **Status:** filed, awaiting a governance decision. **No code change is proposed by me.**
-- **NEXT ACTION:** the approver picks option A or B in `## Proposed fix`. Until then, nothing
-  in `services/element-management-service.ts` or `docs/GOVERNANCE-RULES.md` changes.
-- **Already done, and NOT gated on this decision:** the current G17 behaviour is now pinned by a
-  characterization test (see `## Verification`), so whichever way the decision goes, the
-  behaviour cannot drift silently in the meantime.
-- **Do NOT** "fix" the enforcement-map row to ENFORCED. The row is CORRECT — see `## Root cause`.
+- **Status: RESOLVED — Option A, by USER ruling 2026-07-27.** The USER named the general
+  procedure **FAAF (Fail-And-Activate-a-Fallback)** and settled the contradiction in favour of
+  the code: a pipeline whose FAILURE would itself leave the system invalid does not restore the
+  prior state — it activates a fallback. Quarantined-and-inert is a valid state.
+- **What landed:**
+  1. `design/specs/all-in-one-spec.md` §AIO-FAAF (new, spec-version 1.1.0) — FAAF as the THIRD
+     outcome beside COMPLETE and REVERTED, with clauses 01-05 and the USER's ruling verbatim.
+  2. `docs/GOVERNANCE-RULES.md` R9.13 amended — "MUST NOT leave an agent RUNNABLE with zero
+     role-plugins"; revert when a clean restore exists (CreateAgent), FAAF when it does not
+     (ChangeTitle).
+  3. The enforcement-map row moved `CONTRADICTED` → `ENFORCED` with three real citations.
+- **The bug this uncovered (fixed, and the reason the work was worth doing):** AIO-FAAF-04 says a
+  quarantine flag is only real if some guard refuses to act on it. The `roleMissing` refusal
+  existed ONLY in `app/api/agents/[id]/wake/route.ts`, while `services/headless-router.ts` calls
+  `wakeAgent()` directly — so under `MAESTRO_MODE=headless` a quarantined agent woke normally,
+  persona-less, sharing the fleet's single `gh` identity. The gate now lives in `wakeAgent`
+  itself (Gate 1b). This also **overturns TRDD-47a35ba2's SF4 "REFUTED"** verdict, which had been
+  reached by matching a COMMENT that cited the rule rather than a guard that enforced it.
+- **NEXT ACTION:** none — closed. Both behaviours are pinned with recorded neuter runs.
 
 ## Problem
 
@@ -121,3 +136,13 @@ existing behaviour. The risk lives in the chosen option: Option A is a documenta
 (low); Option B is a pipeline rewrite touching the same gates as TRDD-EE5YX5LF (HIGH).
 
 ## Approval log
+
+- 2026-07-27T12:20:00+0200 — MANDATE / APPROVED by USER (min-approval-requirement: user).
+  Option A, generalized: the USER named the procedure **FAAF (Fail-And-Activate-a-Fallback)** —
+  *"a special PROCEDURE that arises when the failure to execute a all-in-one function will by
+  itself cause the system to be in an invalid state. When this happen, the all-in-one function
+  will not restore the system exactly as it found at the moment it was executed, but it will
+  activate the FAAF."* Recorded in `design/specs/all-in-one-spec.md` §AIO-FAAF; R9.13 amended
+  accordingly. Pre-approved: issuer authority (user) >= required approver (user).
+- 2026-07-27T12:40:00+0200 — COMPLETED. Spec + rule + map landed; the AIO-FAAF-04 enforcement
+  hole found while implementing it (headless wake bypass) fixed and pinned.

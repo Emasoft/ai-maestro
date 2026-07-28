@@ -1,9 +1,9 @@
 ---
 spec: all-in-one
-spec-version: 1.0.0
+spec-version: 1.1.0
 status: normative
 created: 2026-07-26T04:05:00+0200
-updated: 2026-07-26T05:02:00+0200
+updated: 2026-07-27T12:05:00+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: USER mandate 2026-07-26 ("the api implement the full all-in-one design")
@@ -217,6 +217,59 @@ use ONE gate.
 | `AIO-TXN-08` | **exact-state** — what must be restored is configuration, sessions, conversation transcripts, AMP inbox/outbox, and any owned state needed to resume — NOT process ids | R51.10 |
 | `AIO-TXN-09` | **equivalent-rebuild-suffices** — relaunching a killed tmux session with a new pid IS a valid compensation, because a pid was never part of the state | R51.10 |
 | `AIO-TXN-10` | **use-the-runner** — a pipeline MUST use `lib/gate-transaction.ts`; a hand-rolled compensation loop is a second implementation of the transaction semantics (`AIO-RULE-01` applied to the runner) | — |
+
+## AIO-FAAF — Fail-And-Activate-a-Fallback (the third outcome)
+
+> **USER ruling, 2026-07-27** (verbatim): *"if an agent has a default role plugin (usually each
+> title has one) it should install that. but if the plugin is unavailable (github
+> marketplace/repo missing, local folder missing, some other blockers), the all-in-one function
+> must report the failure. but since it cannot EVER leave a system in an invalid state, IT MUST
+> leave the agent in hibernated state. In this case the agent should not simply fail, but should
+> Fail-And-Activate-a-Fallback (FAAF). This is a special PROCEDURE that arises when the failure
+> to execute a all-in-one function will by itself cause the system to be in an invalid state.
+> When this happen, the all-in-one function will not restore the system exactly as it found at
+> the moment it was executed, but it will activate the FAAF."*
+
+Until now the spec admitted exactly two outcomes: COMPLETE (`AIO-TXN-07`) or REVERTED
+(`AIO-TXN-04`). FAAF is the **third**, and it exists because for some operations *the second one
+is not available*: rolling back would itself produce an invalid system, so "restore exactly what
+we found" is not the safe choice — it is the unsafe one.
+
+`AIO-FAAF-01` **when-it-applies** — FAAF applies when, and ONLY when, the failure **by itself**
+would leave the system invalid, so no clean restore exists. If the pre-command state is valid and
+reachable, the pipeline REVERTS (`AIO-TXN-04`) — FAAF is not a licence to leave debris behind a
+failure that could have been undone.
+
+`AIO-FAAF-02` **what-it-does** — the pipeline does NOT restore the exact prior state. It drives
+the system to the nearest **valid** state, which is a state that is *safe and inert* rather than
+correct: the affected entity is QUARANTINED — flagged with the reason and rendered unable to act
+— so it cannot operate in violation of the invariant it now breaches.
+
+`AIO-FAAF-03` **it-still-reports-failure** — FAAF is not a success. The result carries
+`success: false` and an error naming the blocker (the missing marketplace, repo, or folder), and
+the ops trace records both the failure and the fallback that was activated. A FAAF that reported
+success would be `AIO-TXN-06`'s lie in a new costume.
+
+`AIO-FAAF-04` **the-fallback-must-be-enforced-elsewhere** — a quarantine flag is only real if some
+other guard refuses to act on it. The flag and its enforcement are ONE feature: shipping the flag
+without the refusal is a no-op that reads as a safeguard.
+
+`AIO-FAAF-05` **role-plugin instance** (R9.13) — a title whose role-plugin cannot be installed:
+the agent is persisted with `roleMissing: true` and hibernated; `wakeAgent` refuses to wake it
+(the `AIO-FAAF-04` half) until the Config tab assigns a plugin. Implemented at
+`ChangeTitle::G17` (`enforceRoleOrHibernate`) and `ChangePlugin::PG04`.
+
+**Why a reverting ChangeTitle would be worse than FAAF here**, stated because it is the whole
+argument: by the time the plugin install fails, the title write (G14) and the host-wide governance
+mutations (G10-G13 — `removeManager`, block-all-teams, cleared team COS/ORCH) have already
+landed. Reverting means unwinding those, and a failed unwind of a MANAGER demotion is the
+host-wide outage TRDD-EE5YX5LF was filed to fix. FAAF trades an exact restore — which can fail —
+for a terminal state that cannot.
+
+**Contrast — CreateAgent does NOT use FAAF for this.** Deleting a just-created agent restores the
+exact pre-command state, and "no agent" is unambiguously valid, so `AIO-FAAF-01`'s precondition
+fails and `CreateAgent::G07c` correctly REVERTS instead of quarantining. Creating an agent that
+must then be remembered and woken is debris, not a fallback.
 
 ## AIO-RES — the result contract
 

@@ -114,7 +114,7 @@ Row format is fixed so a regex parses each line:
 | R9.10 | UNENFORCED | — | — |
 | R9.11 | ENFORCED | services/teams-service.ts:285-291 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.12 | ENFORCED | services/agents-core-service.ts:417, app/api/agents/route.ts | tests/governance/r3-r9-team-governance.test.ts |
-| R9.13 | CONTRADICTED | services/element-management-service.ts:3176-3181 (ChangeTitle::G17) — QUARANTINES (roleMissing+hibernate) where the rule says REJECT; see TRDD-C9LXXT76 | tests/governance/r3-r9-team-governance.test.ts |
+| R9.13 | ENFORCED | services/element-management-service.ts:3176-3181 (ChangeTitle::G17) | tests/governance/r3-r9-team-governance.test.ts |
 | R10.1 | ENFORCED | services/agents-core-service.ts:2003-2017 | — |
 | R10.2 | CONTRADICTED | — | — |
 | R10.3 | ENFORCED | lib/authorization.ts:456-466 | — |

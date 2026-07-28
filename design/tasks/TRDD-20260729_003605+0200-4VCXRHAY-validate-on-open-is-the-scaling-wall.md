@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T00:36:05+0200
-updated: 2026-07-29T00:43:32+0200
+updated: 2026-07-29T01:10:09+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -120,8 +120,13 @@ exist.
 - [x] NEUTER (make `depth` inert): fails exactly the two discriminating tests, while the two
       "structural still catches X" tests correctly stay green — those faults are caught at both
       depths, which is the point
-- [ ] the cold-build cost is measured and either accepted or given its own card — **MEASURED at
-      117.6 s for 10 000 cards, NOT yet resolved.** See the finding below; it needs its own card.
+- [x] the cold-build cost is measured and either accepted or given its own card — **GIVEN ITS OWN
+      CARD: `TRDD-7CHUK1AZ`.** Re-measuring at 10⁵ turned the cost into a defect with a named
+      mechanism: the build ACCUMULATES every parsed row before its transaction
+      (`index-build.ts:91`) and each row retains the document's full `body` (`:114`) whose only
+      consumer is the FTS insert (`:162`) — so peak RSS is the size of the corpus (**2.36 GB at
+      10⁵, flat once accumulation ends**), spent entirely on a table with no reader. That is the
+      same shape `BQC8NQSW` fixed one layer up, where it was a 4.45 GB crash
 
 ## FOUND WHILE MEASURING — the FTS has no reader at all
 

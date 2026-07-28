@@ -23,6 +23,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A verification gate that reads a REAL path passes vacuously in every test: it inspects state the fixture never touched. Point it at the fixture's seam, then model the write.
 - A test can be propped up by the very bug you are fixing: 4 here asserted a cascade that only ran because the buggy ORDER put it before the gate that was failing.
 - Provoke an unreadable-input test with ENOTDIR/EISDIR, never chmod — a permissions fixture passes VACUOUSLY when the suite runs as root, and CI often does.
+- When the OS will not vary the input you are testing, INJECT it: `expect(got).toEqual(got.sort())` on a real dir passes with the sort removed, so spy the readdir and name the element that must move.
+- A plan can name the wrong half of the tool: "wire the SEARCH at FTS5, acceptance byte-identical" was self-contradictory because the search takes a REGEX — and it was the ACCEPTANCE CRITERION, not the code, that exposed it.
 
 ## Tools that gate
 
@@ -48,6 +50,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A generated fixture of identical stubs measures filesystem throughput and nothing else — give it the real body size, the real field set, and real cross-references, or the number is theatre.
 - Before generalizing over N consumers, verify they share the shape you assume — I checked all three pillars on disk and found three different document models, one of which (PRRD) has no zones and no id in any filename.
 - When the repo lacks an instance of the thing you are encoding (no PRRD.md here), find a REAL one elsewhere rather than encoding the grammar from memory.
+- A wall-time delta whose SIGN flips between corpus sizes is noise, not a regression — mine read +12% at 50k and −6% at 10^5 for the same change, so the honest claim was "unchanged; the win is memory".
+- Isolate the variable before crediting your change: after a corpus-mutating session, re-run the SAME corpus with the change stashed — three "differences" I was about to attribute to a sort were a new card, an unblocked card, and a row pushed past a 25-row cutoff.
+- `readdirSync` order is POSIX-UNDEFINED — APFS returns it sorted, ext4 with dir_index returns hash order — so a byte-identical acceptance built on it passes at home and flakes in CI; sort at the ONE owner before building any differential on top.
 
 ## Mocked modules
 

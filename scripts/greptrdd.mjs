@@ -74,39 +74,74 @@ const arg = argv[1]
 
 assertDesignDir(designDir)
 
-// ---- load once, through the ONE owner ----
-const cards = []
+// ---- the corpus walk, through the ONE owner ----
+//
+// LAZY and BODY-FREE. Two separate wins, and the second is the one that scales:
+//
+//  · LAZY — this ran at top level, before the switch, so `greptrdd help` walked
+//    all four zones to print a usage string, and `greptrdd next` walked them to
+//    answer a question it then re-asks of `lib/trdd-doctor.ts` anyway.
+//  · BODY-FREE — an array of cards carrying `body` IS the memory wall. Measured
+//    on the linter, which had the identical defect: at 100 000 cards x ~10 KB it
+//    did not run slowly, it CRASHED — exit 134, 4.45 GB (TRDD-BQC8NQSW). This is
+//    that same bug in the second consumer, so it gets that same fix: the body is
+//    YIELDED as a transient, never retained. Only `show` and the default search
+//    read prose at all, and each reduces it — to a STATE block, to a hit count —
+//    before letting it go.
 const vanished = []
-for (const zone of TRDD_ZONES) {
-  for (const file of listTrddFiles(designDir, zone)) {
-    const t = parseTrddFile(file, zone)
-    // Post-fail-loud, a null here means exactly one thing: the file was listed
-    // and then moved by a concurrent `git mv` lifecycle transition. Every other
-    // read fault throws. `lib/trdd-doctor.ts` has always reported these; this
-    // tool used to `continue` past them silently, so two consumers of one store
-    // gave different answers about identical input.
-    if (!t) {
-      vanished.push(file)
-      continue
+
+function* walkCards() {
+  for (const zone of TRDD_ZONES) {
+    for (const file of listTrddFiles(designDir, zone)) {
+      const t = parseTrddFile(file, zone)
+      // Post-fail-loud, a null here means exactly one thing: the file was listed
+      // and then moved by a concurrent `git mv` lifecycle transition. Every other
+      // read fault throws. `lib/trdd-doctor.ts` has always reported these; this
+      // tool used to `continue` past them silently, so two consumers of one store
+      // gave different answers about identical input.
+      if (!t) {
+        vanished.push(file)
+        continue
+      }
+      yield [
+        {
+          id: normalizeTrddRef(t.id),
+          zone,
+          filePath: file,
+          column: String(t.column ?? '').trim() || '(none)',
+          title: String(t.title ?? '').trim(),
+          fm: t.frontmatter ?? {},
+        },
+        t.body ?? '',
+      ]
     }
-    cards.push({
-      id: normalizeTrddRef(t.id),
-      zone,
-      filePath: file,
-      column: String(t.column ?? '').trim() || '(none)',
-      title: String(t.title ?? '').trim(),
-      fm: t.frontmatter ?? {},
-      body: t.body ?? '',
-    })
   }
 }
-if (vanished.length) {
+
+/** The mid-scan casualties, reported once — after the walk that found them. */
+function reportVanished() {
+  if (!vanished.length) return
   console.error(`greptrdd: ${vanished.length} file(s) vanished mid-scan and were skipped:`)
   for (const f of vanished.slice(0, 5)) console.error(`  · ${path.relative(process.cwd(), f)}`)
   if (vanished.length > 5) console.error(`  … and ${vanished.length - 5} more`)
 }
 
-const byId = new Map(cards.map((c) => [c.id, c]))
+const cards = []
+let byId = new Map()
+
+/**
+ * Fill the graph — every card, no prose.
+ *
+ * The loop is load-bearing and must NOT be written as `[...walkCards()]`: spreading
+ * the generator materializes every [card, body] pair at once, which is exactly the
+ * array this change exists to delete. Destructuring one pair per iteration is what
+ * lets each body die with the iteration that produced it.
+ */
+function loadGraph() {
+  for (const [c] of walkCards()) cards.push(c)
+  byId = new Map(cards.map((c) => [c.id, c]))
+  reportVanished()
+}
 const done = (id) => {
   const c = byId.get(id)
   return !c || TERMINAL_DONE.has?.(c.column) || [...TERMINAL_DONE].includes(c.column)
@@ -166,6 +201,13 @@ function printChain(c, depth = 0, seen = new Set()) {
   console.log(`${pad}${C.d('└─ blocked by')}`)
   for (const k of open) printChain(byId.get(k), depth + 1, new Set(seen))
 }
+
+// Which subcommands need the graph — and, just as deliberately, which do not.
+// `next`, `lint` and `validate` each load their own corpus through
+// `lib/trdd-doctor.ts`; `help` reads nothing. The default branch (search) is
+// absent on purpose too: it streams its OWN walk, because it is the one command
+// that must see every body and must therefore keep none of them.
+if (['why', 'unblocks', 'roots', 'show', 'board'].includes(cmd)) loadGraph()
 
 switch (cmd) {
   case 'why': {
@@ -244,9 +286,18 @@ switch (cmd) {
     console.log(C.d(`  ${path.relative(process.cwd(), c.filePath)}`))
     const ob = openBlockers(c)
     if (ob.length) console.log(`  ${C.r('blocked by')} ${ob.join(', ')}   ${C.d('(greptrdd why ' + c.id + ')')}`)
+    // The body is read HERE, for this ONE card — the walk above kept none. Through
+    // the same store, so the semantics are the walk's: null means the file was
+    // `git mv`d between the walk and now (benign, and worth saying out loud), while
+    // every other read fault throws instead of reading as "no STATE block".
+    const fresh = parseTrddFile(c.filePath, c.zone)
+    if (!fresh) {
+      console.log(C.r('\n  the file moved mid-command (a concurrent git mv) — re-run\n'))
+      break
+    }
     // The STATE block is AUTHORITATIVE on resume — it supersedes the body, so it is the
     // only part worth printing by default.
-    const state = c.body.match(/##\s*⏵?\s*STATE[^\n]*\n([\s\S]*?)(?=\n## |\n$)/i)
+    const state = fresh.body.match(/##\s*⏵?\s*STATE[^\n]*\n([\s\S]*?)(?=\n## |\n$)/i)
     if (state) {
       console.log(C.b('\n  ⏵ STATE (authoritative — supersedes the body)\n'))
       for (const l of state[1].trim().split('\n').slice(0, 30)) console.log(`  ${l}`)
@@ -359,18 +410,24 @@ Repair of the mechanically-derivable findings: ${C.c('yarn trdd:fix')}
     // Ranked search. Title and labels outrank the body: a word in the title is what the
     // card IS; a word in the body may be an aside.
     const rx = new RegExp(cmd, 'i')
-    const hits = cards
-      .map((c) => {
-        let score = 0
-        if (rx.test(c.id)) score += 10
-        if (rx.test(c.title)) score += 5
-        if (rx.test(String(c.fm.labels ?? ''))) score += 3
-        const bodyHits = (c.body.match(new RegExp(cmd, 'gi')) ?? []).length
-        score += Math.min(bodyHits, 3)
-        return { c, score, bodyHits }
-      })
-      .filter((h) => h.score > 0)
-      .sort((a, b) => b.score - a.score || (a.c.zone === 'tasks' ? -1 : 1))
+    // The ONE command that must read every body — so it is the one that must keep
+    // none. Each body is scored and dropped in the same iteration; what survives is
+    // the count of matches, never the prose that produced it. Streaming here also
+    // means an unmatched corpus costs no more memory than a matched one.
+    const hits = []
+    for (const [c, body] of walkCards()) {
+      let score = 0
+      if (rx.test(c.id)) score += 10
+      if (rx.test(c.title)) score += 5
+      if (rx.test(String(c.fm.labels ?? ''))) score += 3
+      const bodyHits = (body.match(new RegExp(cmd, 'gi')) ?? []).length
+      score += Math.min(bodyHits, 3)
+      if (score > 0) hits.push({ c, score, bodyHits })
+    }
+    reportVanished()
+    // Sorted AFTER the walk, over the same sequence the walk produced, so ranking is
+    // unchanged by the streaming — the comparator sees an identically-ordered input.
+    hits.sort((a, b) => b.score - a.score || (a.c.zone === 'tasks' ? -1 : 1))
     if (hits.length === 0) {
       console.log(C.d(`\nno TRDD matches /${cmd}/i\n`))
       break

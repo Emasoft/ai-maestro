@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-29T01:06:25+0200
+updated: 2026-07-29T01:12:17+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -58,6 +58,12 @@ peak RSS via `/usr/bin/time -l`:
 | 50 000 | 586 MB | 37.6 s | **3 309 MB** | 5.6× |
 
 **Extrapolated to 100 000** (~1.17 GB corpus): **≈ 6.5 GB RSS, ≈ 80-90 s wall.**
+
+> **SUPERSEDED BY MEASUREMENT — and the way it was wrong is the lesson.** The real 10⁵ run of this
+> same pre-streaming linter was **exit 134 at 4.45 GB**: not a slow run at all, but an OOM crash at
+> a LOWER number than projected. An extrapolation can be wrong in KIND, not merely in degree, which
+> is why every cell in the budget table below is measured on a real fixture instead. (Post-streaming
+> the same lint is 2.43 GB / 22.6 s — `fc53ce99`.)
 
 Two things fall out, and the first one is the design input:
 
@@ -119,14 +125,34 @@ array-returning helpers layered on top for the small-corpus callers that legitim
 
 ## The remaining budget, to be stated against these numbers
 
-| operation | budget at 10⁵ | notes |
-|---|---|---|
-| full lint | **< 4 GB RSS, hard** | the binding constraint; time is secondary |
-| recall-by-symptom | ? | the capability the parent exists to add |
-| `board` render | ? | needs paging at 10⁵ regardless |
-| graph / cycle detection | ? | must stay near-linear |
-| incremental reindex, 1 file changed | ? | the common case; must be ~O(1) |
-| cold full index build | ? | the rare case |
+STATED 2026-07-29. A budget is a TARGET; the measured column says whether it is met today. Every
+number below is measured on the real 10⁵ fixture unless the cell says otherwise — this card's one
+previous extrapolation was wrong in KIND (it predicted a slow run where the truth was an OOM), so
+an unmeasured cell says so rather than carrying a projection.
+
+| operation | budget at 10⁵ | measured at 10⁵ | verdict |
+|---|---|---|---|
+| full lint (`validate`) | **< 4 GB RSS, hard**; time secondary | 2.43 GB · 22.6 s · exit 0 | **MET** (`fc53ce99`) |
+| graph query, WALK fallback | < 4 GB RSS; seconds, never minutes | 1.02 GB · 8.07 s · exit 0 | **MET** |
+| graph query, INDEX warm | **< 1 s** — this is the whole point of having one | 0.37 s at 10⁴ (vs 1.12 s walk) | pending the cold build |
+| incremental reindex, 1 file changed | ~O(1) work + an O(N) freshness probe | probe was 50 ms at 10⁴ | pending |
+| cold full index build | no interactive budget (rare) — but must fit **< 4 GB** | 2.36 GB · **> 20 min, still running when written** | RSS met, time unbudgeted → **`TRDD-7CHUK1AZ`** |
+| recall-by-symptom | — | does not exist | **Phase 5** designs it |
+
+Three of these are load-bearing and worth saying plainly:
+
+1. **The binding constraint held.** The linter was the thing that died at 10⁵ (4.45 GB, exit 134);
+   it now finishes in 2.43 GB. The 4 GB ceiling is a real ceiling — Node's default old-space — so
+   "< 4 GB, hard" is not a preference, it is the difference between an answer and a crash.
+2. **The walk is inside budget, which is what decided the degradation policy** (above). It is the
+   reason a refusal would be wrong.
+3. **The cold build is the only row with no defensible budget**, because its cost is currently
+   spent on a table with no reader. Setting a number for it before Phase 5 decides the FTS would be
+   budgeting for work that may not exist. `TRDD-7CHUK1AZ` carries the evidence.
+
+The `board` row folds in "graph / cycle detection": both are served by the same `loadGraph`, so
+they are one measurement, not two. **Paging is NOT needed at 10⁵** — the earlier note assuming it
+was is retired: `board` prints only the open cards and the walk renders them in 8 s.
 
 ## The two consequences that are already visible
 

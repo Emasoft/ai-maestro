@@ -79,14 +79,21 @@ export function normalizeTrddRef(ref: unknown): string {
   return String(ref).trim().replace(/^TRDD-/i, '').toUpperCase().slice(0, 8)
 }
 
-function refList(v: unknown): string[] {
+/**
+ * Exported so the pillar INDEX derives its edges from the same helpers the graph
+ * does. Two readers with their own notion of "what counts as a reference" would
+ * disagree silently — and the index exists precisely to answer the graph's question
+ * faster, so a divergence there is worse than no index.
+ */
+export function refList(v: unknown): string[] {
   if (Array.isArray(v)) return v.map(normalizeTrddRef).filter(Boolean)
   // A single bare scalar (`npt: TRDD-X`) is a lone reference, not a list.
   if (typeof v === 'string' && v.trim() && v.trim() !== 'null') return [normalizeTrddRef(v)]
   return []
 }
 
-function optionalRef(v: unknown): string | null {
+/** Exported for the pillar index, for the same reason as `refList`. */
+export function optionalRef(v: unknown): string | null {
   if (typeof v !== 'string') return null
   const s = v.trim()
   if (!s || s === 'null') return null

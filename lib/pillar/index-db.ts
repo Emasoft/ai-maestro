@@ -28,7 +28,7 @@ import Database from 'better-sqlite3'
  * new ladder step — editing an existing step means two machines that both report
  * the same `user_version` disagree about their shape, which no validate can detect.
  */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 export type IndexFaultCode =
   /** DB newer than this binary. The repair is the OPPOSITE one: upgrade the code. */
@@ -114,6 +114,25 @@ const MIGRATIONS: readonly Migration[] = [
       `)
     },
   },
+  {
+    to: 2,
+    name: 'records_fts carries path UNINDEXED so a changed file can be evicted',
+    run: (db) => {
+      // v1's FTS had no way to say "drop the rows belonging to this file", so an
+      // incremental sync could delete a record and leave its text searchable
+      // forever — a deleted card still answering queries. UNINDEXED keeps `path`
+      // out of the match vocabulary while making it a usable DELETE predicate.
+      db.exec(`
+        DROP TABLE IF EXISTS records_fts;
+        CREATE VIRTUAL TABLE records_fts USING fts5(id, title, body, path UNINDEXED);
+        DELETE FROM files;
+      `)
+      // Dropping the FTS discards derived content, so the FRESHNESS record must go
+      // with it. Leaving `files` populated would make the next sync see no delta and
+      // never repopulate the index it just emptied — a migration that silently
+      // installs permanent staleness, which is worse than the gap it closed.
+    },
+  },
 ]
 
 export interface ColumnSpec {
@@ -186,7 +205,13 @@ export function checkShape(
   return faults
 }
 
-const FTS_COLUMNS: readonly string[] = ['id', 'title', 'body']
+/** Column-granular for the same reason as REQUIRED_TABLES: `path` arrived at v2. */
+const FTS_COLUMNS: readonly ColumnSpec[] = [
+  { name: 'id', since: 1 },
+  { name: 'title', since: 1 },
+  { name: 'body', since: 1 },
+  { name: 'path', since: 2 },
+]
 
 // ── open ─────────────────────────────────────────────────────────────────────
 
@@ -320,11 +345,16 @@ export function validateAt(db: Database.Database, expectVersion: number): Valida
   if (!ftsCols) {
     return { ok: false, faults: [{ code: 'shape', detail: 'records_fts is missing' }] }
   }
-  const ftsMissing = FTS_COLUMNS.filter((c) => !ftsCols.includes(c))
+  const ftsMissing = FTS_COLUMNS.filter((c) => c.since <= ver && !ftsCols.includes(c.name))
   if (ftsMissing.length) {
     return {
       ok: false,
-      faults: [{ code: 'shape', detail: `records_fts missing column(s) ${ftsMissing.join(', ')}` }],
+      faults: [
+        {
+          code: 'shape',
+          detail: `records_fts missing column(s) ${ftsMissing.map((c) => c.name).join(', ')}`,
+        },
+      ],
     }
   }
   try {

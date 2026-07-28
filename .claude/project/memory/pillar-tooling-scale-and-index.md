@@ -1,6 +1,6 @@
 ---
 name: pillar-tooling-scale-and-index
-description: "greptrdd / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules"
+description: "greptrdd / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can greptrdd's search be served by FTS5 / the cold index build takes forever and eats gigabytes"
 ocd: 2026-07-28
 lmd: 2026-07-29
 metadata:
@@ -67,6 +67,40 @@ reference EDGES, not just documents**; an index of documents alone leaves the jo
 The generalization that fits all three: **a corpus is a set of DOCUMENTS, and each document yields
 one or more RECORDS** (TRDD is the 1:1 case). A descriptor keyed on "zones + filename grammar" fits
 exactly one of them.
+
+**5. The index's SAFETY CHECK was its own scaling wall — the index LOST to the walk until that was
+fixed.** `validate()` ran on EVERY `openIndex()`, and two of its seven checks are full scans of the
+whole index: SQLite's `integrity_check` and the FTS parity form. Measured at 10⁴: the open cost
+**666 ms** (integrity_check 367 ms + FTS parity 304 ms) in front of a query that costs **11 ms**.
+So the accelerator was slower than the walk at every size tested. The fix is a SCHEDULE change, not
+a weakening: the cheap structural checks (version stamp, `PRAGMA table_info` shape, orphan scans —
+~3 ms, metadata-only) run on every open; the two full scans run at every state TRANSITION (create,
+each migration step, any heal) and on demand. A read cannot corrupt what it does not write, so
+verifying on every read was paying continuously to detect an event reads cannot cause. After:
+warm `board` at 10⁴ went **1.03 s → 0.37 s**, against the walk's 1.12 s.[^11]
+
+**6. The walk is NOT the outage it was assumed to be, so the degradation policy is FALL BACK, not
+refuse.** Measured at 10⁵: `board --no-index` = **8.07 s / 1.02 GB / exit 0**; `validate` =
+22.6 s / 2.43 GB. Both sit well inside the 4 GB ceiling. A tool that REFUSES when its cache is
+broken fails exactly where falling back works, so greptrdd falls back LOUDLY (two stderr lines
+naming the fault and which path answered) and `--no-index` skips the attempt outright. The trigger
+that would flip this is measurable rather than arguable: a measured walk exceeding 4 GB or crossing
+into minutes.[^12]
+
+**7. SEARCH cannot be served by the index, BY DESIGN.** greptrdd's default search is a REGEX
+search. FTS5 is token matching + bm25 — it cannot evaluate a regex, and its unicode61 tokenizer
+splits `TRDD-BQC8NQSW` into whole tokens, so even a literal-only prefilter misses substrings. Search
+stays walk-only; that is a documented CONTRACT in `lib/pillar/index-open.ts`, not an unfilled gap.
+The ACCEPTANCE CRITERION exposed it, not the code.[^13]
+
+**8. The FTS has NO reader, and it is what makes the cold build expensive.** Every `records_fts`
+reference in production is a CREATE / INSERT / DELETE or the parity check that verifies it; the only
+`MATCH` queries in the repo are in tests. Meanwhile the build ACCUMULATES every parsed row before
+its transaction (`index-build.ts:91`) and each row retains the full `body` (`:114`) whose sole
+consumer is the FTS insert (`:162`) — so a cold build's peak RSS is the SIZE OF THE CORPUS
+(**2.36 GB at 10⁵**, flat once accumulation ends), spent entirely on a table nothing reads. That is
+the same hoist-and-retain shape as *(2a)*, one layer up, and it survived because the comment
+explains the hoist. Decision deferred to the phase that designs recall — `TRDD-7CHUK1AZ`.[^14]
 
 **Where things are.** `lib/pillar/kinds.ts` (the three descriptors) · `lib/pillar/store.ts`
 (fail-loud reader; the primary read is an ITERATOR because an array-returning read *is* the 6.5 GB)
@@ -147,3 +181,33 @@ abstraction fits is that its tests pass unchanged.
   ≥ 13 chars pins its parent), and deep-flattening every string moved it −3%. BECAUSE a memory
   correlation usually has more than one plausible cause, and the plausible one was wrong here. DO
   run the candidate fix as a throwaway PROBE before editing any source.
+
+[^11]: [id:ATOM-PTSI-0011, status:valid, keywords:"index_slower_than_the_walk validate_on_every_open integrity_check_cost open_costs_more_than_query safety_check_is_the_scaling_wall", ocd:2026-07-29, lmd:2026-07-29]
+  DO NOT run a whole-index verification on every OPEN, BECAUSE `integrity_check` and the FTS parity
+  form are O(corpus) and cost 666 ms in front of an 11 ms query — the safety mechanism WAS the
+  scaling wall, and the index lost to the walk at every size until it was split. DO schedule the
+  full scans at state TRANSITIONS (create / migrate / heal) and keep only metadata-only checks on a
+  read: a read cannot corrupt what it does not write.
+
+[^12]: [id:ATOM-PTSI-0012, status:valid, keywords:"index_missing_should_it_refuse degrade_or_refuse accelerator_never_authority cache_broken_tool_dies", ocd:2026-07-29, lmd:2026-07-29]
+  DO NOT make a tool REFUSE when its index is unavailable, BECAUSE the premise that the fallback is
+  an outage expires the moment the fallback is fixed — the walk measured 8.07 s / 1.02 GB at 10⁵,
+  so refusing would break the tool exactly where falling back works. DO fall back LOUDLY (name the
+  fault AND which path answered), keep an explicit skip flag, and write down the MEASURED trigger
+  that would flip the decision.
+
+[^13]: [id:ATOM-PTSI-0013, status:valid, keywords:"fts5_cannot_do_regex index_the_search substring_id_lookup tokenizer_splits_whole_tokens acceptance_criterion_exposed_it", ocd:2026-07-29, lmd:2026-07-29]
+  DO NOT plan to "serve the search from the index" without checking what the search IS — a REGEX
+  search cannot be served by FTS5 (token matching + bm25), and unicode61 splits an id into whole
+  tokens so even a literal prefilter misses substrings. BECAUSE the plan said "byte-identical
+  results via FTS5", which is self-contradictory. DO state search as a walk-only CONTRACT in code
+  rather than leaving it looking like an unfilled gap — and note it was the ACCEPTANCE CRITERION
+  that caught this, not the implementation.
+
+[^14]: [id:ATOM-PTSI-0014, status:valid, keywords:"write_only_table no_reader cold_build_holds_corpus parse_hoisted_out_of_transaction tests_prove_populated_not_read", ocd:2026-07-29, lmd:2026-07-29]
+  DO NOT assume a structure the tests exercise is a structure something READS — the FTS tests assert
+  it is POPULATED, and no production `MATCH`/`bm25` query exists, so it cost the entire cold build
+  unnoticed. BECAUSE coverage cannot detect a missing CONSUMER. DO grep for a reader before paying
+  to maintain a derived table — and note the related trap: hoisting a parse OUT of a transaction
+  (sound, to avoid holding the write lock) does NOT excuse RETAINING the rows, which makes peak
+  memory the corpus size; that identical shape had already been fixed one layer up.

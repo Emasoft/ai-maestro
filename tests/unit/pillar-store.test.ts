@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import matter from 'gray-matter'
 import { PRRD_KIND, SPEC_KIND, TRDD_KIND } from '@/lib/pillar/kinds'
 import {
   assertCorpusRoot,
@@ -181,5 +182,48 @@ describe('findRecord', () => {
   it('returns null for an id that is absent, rather than throwing', () => {
     fs.writeFileSync(path.join(tmp, 'PRRD.md'), '---\nx: 1\n---\n- **S2.1** — text.\n')
     expect(findRecord(tmp, PRRD_KIND, 'S9.9')).toBeNull()
+  })
+})
+
+describe('the reader must not accumulate the corpus (TRDD-BQC8NQSW)', () => {
+  // gray-matter keeps a MODULE-LEVEL cache keyed by the whole file text and stores the
+  // parsed file including `orig`, so every document ever parsed is retained for the life
+  // of the process — process memory then tracks TOTAL CORPUS BYTES no matter how little
+  // the caller keeps. It skips the cache whenever an options object is passed, which is
+  // why `readDocument` passes one.
+  //
+  // Asserting the cache is EMPTY (white-box) rather than measuring memory is deliberate:
+  // a heap assertion is flaky and would be tuned until it passed, whereas this fails the
+  // instant someone "simplifies" the options argument away — which is the only way this
+  // defect comes back.
+  const cacheOf = () =>
+    Object.keys((matter as unknown as { cache: Record<string, unknown> }).cache ?? {})
+
+  beforeEach(() => {
+    ;(matter as unknown as { clearCache(): void }).clearCache()
+  })
+
+  it('reading a document leaves gray-matter’s module cache EMPTY', () => {
+    const f = path.join(tmp, 'TRDD-20260101_000000+0100-AAAAAAAA-x.md')
+    fs.writeFileSync(f, `---\ntrdd-id: AAAAAAAA\ncolumn: dev\n---\n${'body '.repeat(4000)}`)
+    expect(readDocument(f, TRDD_KIND, 'tasks')?.frontmatter.column).toBe('dev')
+    expect(cacheOf()).toHaveLength(0)
+  })
+
+  it('positive control: gray-matter DOES cache when called the ordinary way', () => {
+    // Without this the test above passes on any gray-matter that simply has no cache,
+    // and would keep passing if the dependency changed under us — proving nothing.
+    matter('---\ntrdd-id: BBBBBBBB\n---\nbody')
+    expect(cacheOf()).toHaveLength(1)
+  })
+
+  it('parsing N documents keeps the cache at zero, not at N', () => {
+    // The failure mode is proportional to corpus SIZE, so one document cannot show it.
+    for (let i = 0; i < 25; i++) {
+      const f = path.join(tmp, `TRDD-20260101_000000+0100-AAAAAA${String(i).padStart(2, '0')}-x.md`)
+      fs.writeFileSync(f, `---\ntrdd-id: AAAAAA${String(i).padStart(2, '0')}\ncolumn: dev\n---\nbody\n`)
+    }
+    expect([...walkRecords(tmp, TRDD_KIND, [''])].length).toBe(25)
+    expect(cacheOf()).toHaveLength(0)
   })
 })

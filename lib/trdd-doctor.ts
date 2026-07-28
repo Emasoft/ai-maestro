@@ -35,7 +35,8 @@ import path from 'path'
 import { execFileSync } from 'child_process'
 import { TRDD_ZONES, type TrddZone, listTrddFiles, parseTrddFile } from './trdd-store'
 import {
-  loadTrddGraph,
+  toGraphNode,
+  type TrddNode,
   checkTrddInvariants,
   normalizeTrddRef,
   V1_STATUS_TO_COLUMN,
@@ -108,6 +109,9 @@ export interface DoctorReport {
   warnings: number
 }
 
+/**
+ * One card, REDUCED. `body` and `raw` are deliberately absent — see `loadCorpus`.
+ */
 export interface Card {
   id: string
   zone: TrddZone
@@ -115,22 +119,65 @@ export interface Card {
   column: string
   title: string
   fm: Record<string, unknown>
-  body: string
-  raw: string
+  /**
+   * The STALE-COLUMN verdict, decided IN THE STREAM so the body is released with the
+   * file. It is the only rule that reads prose, and holding ~10 KB of body per card to
+   * answer one boolean is most of what put the entire corpus in memory.
+   */
+  stateReadsDone: boolean
+  /**
+   * The body's H1 — the only body text the auto-fixer needs (it lifts a missing title
+   * from it). One line retained, not one document.
+   */
+  h1: string
 }
 
 const asList = (v: unknown): string[] =>
   Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []
 
+/**
+ * A STATE block that reads as finished. Hoisted to module scope so the reduction in
+ * `loadCorpus` and the rule that reports it cannot drift into two different tests.
+ * No `g` flag on purpose: a global regex carries `lastIndex` between `.test` calls and
+ * would then answer differently on identical input depending on call order.
+ */
+const STATE_READS_DONE =
+  /\b(RESOLVED|EXECUTION COMPLETE|✅\s*(DONE|COMPLETE|SHIPPED)|DEPLOYED \+ LIVE-VERIFIED)\b/i
 
 /**
- * Read every TRDD in every zone, through the store. A file the store cannot parse is
- * itself a finding — it must never be silently skipped, or the linter reproduces the
- * exact bug it exists to catch (an input that vanishes without an error).
+ * Read every TRDD in every zone, through the store, REDUCING each file as it is read.
+ *
+ * WHY THE REDUCTION IS THE POINT (TRDD-BQC8NQSW). This used to return a `Card[]` whose
+ * every card carried `body` AND `raw` — two full copies of the file — so peak RSS
+ * tracked corpus bytes: measured 1 429 MB over a 20 000-card fixture, extrapolating to
+ * ~7 GB at 10^5, past Node's heap cap. The wall was MEMORY, and it landed BELOW the
+ * target size, so the failure at scale was a crash rather than a slow run. Nothing about
+ * the verdicts needed those bytes: exactly two rules read prose (STALE-COLUMN's STATE
+ * block, the auto-fixer's H1 lift), and both reduce to a few bytes at parse time. So each
+ * file is read, reduced, and released.
+ *
+ * The frontmatter IS retained, and that is a deliberate trade. The alternative — evaluate
+ * every rule inside the stream and keep only findings — would move each cross-card
+ * finding (ID-DUPLICATE, ORDER-NPT-VIOLATED, DERIVED-FLAG-MISSING, DANGLING-REF) out of
+ * its card's position and into a trailing block, because those rules cannot be answered
+ * until the last card has been read. This refactor's acceptance criterion is that the
+ * findings are identical before and after, ORDER included; reducing ~70 KB/card to ~2 KB
+ * is what the budget needed, and reordering the report to save the last 2 KB would trade
+ * a provable property for an unmeasured one.
+ *
+ * The graph nodes are built HERE, from the same read, instead of by a second
+ * `loadTrddGraph(designDir)` walk — the doctor used to read the whole corpus twice for
+ * one report. `toGraphNode` remains the one owner of the node semantics; only the I/O is
+ * shared.
+ *
+ * A file the store cannot parse is itself a finding — it must never be silently skipped,
+ * or the linter reproduces the exact bug it exists to catch (an input that vanishes
+ * without an error).
  */
-function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[] } {
+function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[]; nodes: TrddNode[] } {
   const cards: Card[] = []
   const unparsed: string[] = []
+  const nodes: TrddNode[] = []
   for (const zone of TRDD_ZONES) {
     for (const file of listTrddFiles(designDir, zone)) {
       const parsed = parseTrddFile(file, zone)
@@ -138,6 +185,7 @@ function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[] } {
         unparsed.push(file)
         continue
       }
+      const body = parsed.body ?? ''
       cards.push({
         id: normalizeTrddRef(parsed.id),
         zone,
@@ -145,12 +193,17 @@ function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[] } {
         column: String(parsed.column ?? '').trim(),
         title: String(parsed.title ?? '').trim(),
         fm: parsed.frontmatter ?? {},
-        body: parsed.body ?? '',
-        raw: fs.readFileSync(file, 'utf8'),
+        stateReadsDone: STATE_READS_DONE.test(
+          body.match(/##\s*⏵?\s*STATE[\s\S]{0,1200}/i)?.[0] ?? '',
+        ),
+        h1: body.match(/^#\s+(.+)$/m)?.[1] ?? '',
       })
+      const node = toGraphNode(parsed)
+      if (node) nodes.push(node)
+      // `parsed` — and with it the body — goes out of scope here. That release is the fix.
     }
   }
-  return { cards, unparsed }
+  return { cards, unparsed, nodes }
 }
 
 /** Which zone a column belongs in. Returns null when the column implies no constraint. */
@@ -170,7 +223,7 @@ export function expectedZone(column: string, fm: Record<string, unknown>): TrddZ
 }
 
 export function lintCorpus(designDir: string): DoctorReport {
-  const { cards, unparsed } = loadCorpus(designDir)
+  const { cards, unparsed, nodes } = loadCorpus(designDir)
   const findings: Finding[] = []
   const add = (f: Finding) => findings.push(f)
 
@@ -539,8 +592,7 @@ export function lintCorpus(designDir: string): DoctorReport {
     // defect at any age. A stale column is only a bookkeeping lag, and it costs a
     // reviewer a minute; a violated order costs the work itself.
     if (WORKING_COLUMNS.includes(c.column)) {
-      const state = c.body.match(/##\s*⏵?\s*STATE[\s\S]{0,1200}/i)?.[0] ?? ''
-      if (/\b(RESOLVED|EXECUTION COMPLETE|✅\s*(DONE|COMPLETE|SHIPPED)|DEPLOYED \+ LIVE-VERIFIED)\b/i.test(state)) {
+      if (c.stateReadsDone) {
         add({
           rule: 'STALE-COLUMN',
           severity: 'warn',
@@ -568,7 +620,9 @@ export function lintCorpus(designDir: string): DoctorReport {
   // agree on the day they are written and disagree silently the day one is edited. That
   // is the exact class of defect this doctor exists to catch, and the doctor committed it.
   // Deleting my copies is the fix; this comment is the guardrail against a third.
-  for (const v of checkTrddInvariants(loadTrddGraph(designDir))) {
+  // The nodes come from `loadCorpus`'s single read, not from a second
+  // `loadTrddGraph(designDir)` walk of the same files (TRDD-BQC8NQSW).
+  for (const v of checkTrddInvariants(nodes)) {
     const id = normalizeTrddRef(v.id)
     add({
       rule: `GRAPH-${v.kind.replace(/([A-Z])/g, '-$1').toUpperCase()}`,
@@ -691,13 +745,25 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
 
   for (const c of cards) {
     const changes: string[] = []
-    let text = c.raw
+    // Re-read the ONE file about to be repaired, rather than carrying every file's bytes
+    // through the lint path to serve the rare fix path (TRDD-BQC8NQSW).
+    let text: string
+    try {
+      text = fs.readFileSync(c.filePath, 'utf8')
+    } catch (err) {
+      // ENOENT is the one benign case: a concurrent `git mv` lifecycle transition moved
+      // the card out from under us, which is normal traffic on a TRDD corpus. Repairing
+      // it would RE-CREATE the file at its old path, so skipping is the only correct
+      // action. Any other errno is a real fault on a file we just parsed successfully,
+      // and swallowing it would drop a repair without a word.
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') continue
+      throw err
+    }
     const hasFm = /^---\r?\n/.test(text)
 
     // A file with no frontmatter at all: build one from the H1 + git.
     if (!hasFm) {
-      const h1 = text.match(/^#\s+(.+)$/m)?.[1] ?? ''
-      const title = h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
+      const title = c.h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
       const created = gitFirstCommitDate(c.filePath) ?? stamp
       const id = normalizeTrddRef(path.basename(c.filePath).replace(/^TRDD-(?:\d{8}_\d{6}[+-]\d{4}-)?/, '').slice(0, 8))
       const fm = [
@@ -759,8 +825,7 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       }
       // title from H1
       if (!c.title) {
-        const h1 = c.body.match(/^#\s+(.+)$/m)?.[1] ?? ''
-        const title = h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
+        const title = c.h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
         if (title) {
           text = text.replace(/^(trdd-id:.*)$/m, `$1\ntitle: ${title.replace(/:/g, ' —')}`)
           changes.push('title lifted from the H1')

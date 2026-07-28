@@ -56,13 +56,13 @@ Row format is fixed so a regex parses each line:
 | R3.10 | UNENFORCED | — | — |
 | R3.11 | CONTRADICTED | — | — |
 | R3.12 | ENFORCED | app/api/teams/[id]/route.ts:115, services/teams-service.ts:577 | tests/governance/r3-r9-team-governance.test.ts |
-| R4.1 | ENFORCED | lib/team-registry.ts:158-176 | — |
-| R4.2 | ENFORCED | lib/group-registry.ts | — |
+| R4.1 | ENFORCED | lib/team-registry.ts:158-176, services/element-management-service.ts:5110 | tests/governance/r4-team-composition.test.ts |
+| R4.2 | ENFORCED | lib/group-registry.ts | tests/governance/r4-team-composition.test.ts |
 | R4.3 | CONTRADICTED | — | — |
-| R4.4 | ENFORCED | services/element-management-service.ts:4956 | — |
+| R4.4 | ENFORCED | services/element-management-service.ts:5128-5137 (ChangeTeam::G07) | — |
 | R4.5 | UNENFORCED | — | — |
-| R4.6 | ENFORCED | lib/team-registry.ts:142-145 | — |
-| R4.7 | ENFORCED | lib/team-registry.ts:148-154 | — |
+| R4.6 | ENFORCED | lib/team-registry.ts:142-145 | tests/governance/r4-team-composition.test.ts |
+| R4.7 | ENFORCED | lib/team-registry.ts:148-154, services/element-management-service.ts:5056 | tests/governance/r4-team-composition.test.ts |
 | R4.8 | ENFORCED | components/teams/TeamOverviewSection.tsx:33-34 | — |
 | R4.9 | UNENFORCED | — | — |
 | R5.1 | UNENFORCED | — | — |

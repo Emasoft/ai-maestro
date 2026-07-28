@@ -2,7 +2,7 @@
 name: three-pillars-conformance-spec
 description: "where is the 3-pillars (TRDD/PRRD/kanban) design actually decided / what is the arbiter when types/task.ts, the janitor rules, and GOVERNANCE-RULES disagree on a column name / does ai-maestro have a spec for the pillars / the IND vs DEP boundary test / what are the 17 columns authoritatively"
 ocd: 2026-07-22
-lmd: 2026-07-22
+lmd: 2026-07-28
 metadata:
   node_type: memory
   type: reference
@@ -39,6 +39,12 @@ janitor + ai-maestro conformance checks read it from the repo path.
 
 The design decisions this spec codifies (the pillar bodies + their `[^N]` lessons) live in the
 janitor USER-scope hub [[ai-maestro-fleet-hub-governance-and-security]].
+
+## See also
+
+- [[pillar-tooling-scale-and-index]] — the TOOLING that reads the corpus this spec defines:
+  the measured 10⁵ budget, why the linter's in-RAM index was the memory wall, the
+  documents→records model behind `lib/pillar/kinds.ts`, and the SQLite index's safety rules.
 
 ## Notes and lessons learned
 [^1]: [id:ATOM-3PSP-0001, status:valid, keywords:"three_pillars_spec arbiter recall_before_authoring did_not_recall", ocd:2026-07-22, lmd:2026-07-22]

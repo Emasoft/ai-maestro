@@ -73,6 +73,22 @@ export const AUTHORITY_RANK: Record<string, number> = {
   maestro: 4, // the human owner, as this project names them
 }
 
+/**
+ * The DEPRECATED `approval-tier:` decoded to the ladder rung it always meant. The overlay
+ * retired the number because reading `2` required a lookup to learn it said "MANAGER"; the
+ * field survives only as a read-alias on legacy cards, and is never written on a new one.
+ *
+ * This decodes against AUTHORITY_RANK above rather than carrying its own ordering — two
+ * hand-maintained ladders is the footgun one level up, and the whole point of the migration
+ * was to have ONE spelling per rung.
+ */
+export const TIER_TO_REQUIREMENT: Record<string, string> = {
+  '0': 'none',
+  '1': 'chief-of-staff',
+  '2': 'manager',
+  '3': 'user',
+}
+
 export type Severity = 'error' | 'warn'
 
 export interface Finding {
@@ -233,6 +249,70 @@ export function lintCorpus(designDir: string): DoctorReport {
         filePath: c.filePath,
         message: `carries the retired v1 \`status: ${c.fm['status']}\` — v2 replaced it with \`column:\`. Two state fields = two truths`,
         autofixable: true,
+      })
+    }
+
+    // ---- the approval requirement: one rung, one spelling ----
+    // `approval-tier:` is the retired NUMBER for the same fact `min-approval-requirement:`
+    // now names. Both fields on one card is not redundancy — the §D4 floor check reads one
+    // and another reader reads the other, so a disagreement hands them DIFFERENT required
+    // approvers for the same card. That is the only ERROR here; a lone legacy number is a
+    // migration chore, not a defect, and must not turn the suite red.
+    if (fmHas('approval-tier')) {
+      const decoded = TIER_TO_REQUIREMENT[String(c.fm['approval-tier']).trim()]
+      const declared = String(c.fm['min-approval-requirement'] ?? '').trim()
+      if (declared && decoded && declared !== decoded) {
+        add({
+          rule: 'APPROVAL-FIELD-CONFLICT',
+          severity: 'error',
+          id: c.id,
+          filePath: c.filePath,
+          message: `\`approval-tier: ${c.fm['approval-tier']}\` decodes to '${decoded}' but \`min-approval-requirement: ${declared}\` — the card names TWO different required approvers, and which one binds depends on which field the reader happens to prefer. Resolve by hand: deleting the wrong one is a governance decision, not a mechanical fix`,
+          autofixable: false,
+        })
+      } else {
+        add({
+          rule: 'APPROVAL-TIER-DEPRECATED',
+          severity: 'warn',
+          id: c.id,
+          filePath: c.filePath,
+          message: `carries the deprecated \`approval-tier: ${c.fm['approval-tier']}\`${decoded ? ` (= '${decoded}')` : ''} — the overlay retired the number for a named rung. Decode-only on legacy cards; never written on a new one`,
+          autofixable: Boolean(decoded),
+        })
+      }
+    }
+
+    // ---- overlay metadata the §D4 watchdog and the multi-agent board actually read ----
+    // Each entry names the CONSUMER that silently misreads the card when the field is absent
+    // — that is what keeps these false-positive-free. A field whose absence breaks nobody
+    // (`scope:` defaults to project; `project-id:` is a proposed IND-base addition that has
+    // not shipped) is deliberately NOT here: flagging it would be a style opinion, and a
+    // linter people route around costs every finding it would ever have made.
+    //
+    // SCOPE, and why it is exactly this: the §D4 watchdog scans `design/tasks/` +
+    // `design/proposals/` and nothing else. Archived and refused cards are outside its scan
+    // set, so a missing field there breaks no consumer — flagging them added 218 findings
+    // that named no broken reader, which is a wall, and a wall is how a linter gets routed
+    // around. Mirroring the consumer's OWN scan set is what makes the check FP-free.
+    const watchdogScans = c.zone === 'tasks' || c.zone === 'proposals'
+    const missingMeta: Array<[string, string]> = []
+    if (watchdogScans && c.zone === 'tasks' && !fmHas('assignee')) {
+      missingMeta.push(['assignee', 'this card is OPEN work with no owner — the D4 watchdog asserts `assignee` is set, and the board renders no one'])
+    }
+    if (watchdogScans && !fmHas('min-approval-requirement') && !fmHas('approval-tier')) {
+      missingMeta.push(['min-approval-requirement', 'the D4 floor comparison has nothing to compare the objective floor AGAINST, so the watchdog silently cannot evaluate this card at all'])
+    }
+    if (watchdogScans && !fmHas('created-by')) {
+      missingMeta.push(['created-by', 'mandate provenance and the derived-TRDD invariant both read authorship, and neither can resolve it from any other field'])
+    }
+    for (const [field, why] of missingMeta) {
+      add({
+        rule: 'META-MISSING',
+        severity: 'warn',
+        id: c.id,
+        filePath: c.filePath,
+        message: `no \`${field}:\` — ${why}`,
+        autofixable: false,
       })
     }
 

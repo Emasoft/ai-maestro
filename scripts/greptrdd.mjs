@@ -244,11 +244,56 @@ switch (cmd) {
     break
   }
 
+  // ---- the WRITE GATE half, so one tool both retrieves and validates (memgrep's shape) ----
+  // `lint` is for a human: findings grouped by rule, worst first.
+  // `validate` is for a machine: one TAB row per finding, so `cut -f2` and `awk -F'\t'` are
+  // exact. Greppability is a PROMISED property of that output, not an accident of it — a
+  // consumer that split on prose would break the next time a message is reworded, which is
+  // why the row is keyed on the stable CODE and never on the message text.
+  case 'lint':
+  case 'validate': {
+    const { lintCorpus } = await import('../lib/trdd-doctor.ts')
+    const report = lintCorpus(designDir)
+    const strict = argv.includes('--strict')
+
+    if (cmd === 'validate') {
+      // SEV ⇥ CODE ⇥ id ⇥ path ⇥ message. No colour: this is piped, not read.
+      for (const f of report.findings) {
+        console.log([f.severity.toUpperCase(), f.rule, f.id, path.relative(process.cwd(), f.filePath), f.message].join('\t'))
+      }
+      process.exit(report.errors > 0 || (strict && report.warnings > 0) ? 1 : 0)
+    }
+
+    if (report.findings.length === 0) {
+      console.log(C.g(`✓ ${report.scanned} TRDDs — corpus is clean`))
+      process.exit(0)
+    }
+    const byRule = new Map()
+    for (const f of report.findings) {
+      if (!byRule.has(f.rule)) byRule.set(f.rule, [])
+      byRule.get(f.rule).push(f)
+    }
+    console.log(C.b(`\n${report.scanned} scanned · ${C.r(`${report.errors} error`)} · ${C.y(`${report.warnings} warn`)}\n`))
+    // Errors first, then by volume: a single ERROR outranks ninety warnings, because the
+    // error is what a gate refuses on and the warnings are a migration chore.
+    const order = [...byRule].sort((a, b) =>
+      (a[1][0].severity === b[1][0].severity ? 0 : a[1][0].severity === 'error' ? -1 : 1) || b[1].length - a[1].length)
+    for (const [rule, fs_] of order) {
+      const sev = fs_[0].severity === 'error' ? C.r('ERROR') : C.y('WARN ')
+      console.log(`${sev} ${C.b(rule)} ×${fs_.length}${fs_[0].autofixable ? C.g(' [--fix]') : ''}`)
+      console.log(`      ${C.d(fs_[0].message.slice(0, 150))}`)
+      for (const f of fs_.slice(0, 6)) console.log(`      · ${f.id.padEnd(9)} ${C.d(path.relative(process.cwd(), f.filePath))}`)
+      if (fs_.length > 6) console.log(C.d(`      … and ${fs_.length - 6} more`))
+      console.log()
+    }
+    process.exit(report.errors > 0 || (strict && report.warnings > 0) ? 1 : 0)
+  }
+
   case 'help':
   case '--help':
   case '-h':
     console.log(`
-${C.b('greptrdd')} — query the TRDD corpus (offline; no server)
+${C.b('greptrdd')} — query AND validate the TRDD corpus (offline; no server)
 
   ${C.c('greptrdd')}                  the board
   ${C.c('greptrdd next')}             what is workable RIGHT NOW, ranked by what it frees
@@ -258,7 +303,11 @@ ${C.b('greptrdd')} — query the TRDD corpus (offline; no server)
   ${C.c('greptrdd show <id>')}        the card + its STATE block
   ${C.c('greptrdd <pattern>')}        ranked search over title, labels, id, body
 
-Health (lint / repair) lives in the sibling tool: ${C.c('yarn trdd:doctor')}
+  ${C.c('greptrdd lint')}             every finding, grouped by rule (errors first)
+  ${C.c('greptrdd validate')}         the WRITE GATE — TAB rows: SEV⇥CODE⇥id⇥path⇥msg
+  ${C.d('  … add --strict to either to fail on warnings too (exit 1)')}
+
+Repair of the mechanically-derivable findings: ${C.c('yarn trdd:fix')}
 `)
     break
 

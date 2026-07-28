@@ -39,6 +39,13 @@ function good(id: string, over: Record<string, string> = {}): string {
     'npt': '[]',
     'eht': '[]',
     'blocked-by': '[]',
+    // The overlay metadata the D4 watchdog reads. A "well-formed" card carries them, so a
+    // fixture that omits one does it DELIBERATELY — pass `{ assignee: '' }` to drop it, which
+    // is what `fmHas` already treats as absent. Without these here, every fixture in the file
+    // would emit META-MISSING and the clean-corpus non-vacuity test could never be clean.
+    assignee: 'someone',
+    'created-by': 'someone',
+    'min-approval-requirement': 'none',
     ...over,
   }
   const lines = Object.entries(fm).map(([k, v]) => `${k}: ${v}`)
@@ -337,6 +344,92 @@ describe('the vocabulary is the ratified one', () => {
     expect(expectedZone('dev', {})).toBe('tasks')
     expect(expectedZone('failed', {})).toBe('tasks')   // failed is OPEN — retryable, never archived
     expect(expectedZone('blocked', {})).toBe('tasks')
+  })
+})
+
+describe('the approval requirement — one rung, one spelling (TRDD-5THSI5ZB)', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-'))
+    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+      fs.mkdirSync(path.join(tmp, z), { recursive: true })
+    }
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  it('ERRORs when the two approval fields name DIFFERENT approvers', () => {
+    // tier 2 decodes to 'manager'; the card also declares 'orchestrator'. Whichever field a
+    // reader prefers decides who must sign off — so the card binds two different approvers.
+    write('tasks', 'TRDD-20260101_000000+0100-AAAAAAAA-conflict.md',
+      good('AAAAAAAA', { 'approval-tier': '2', 'min-approval-requirement': 'orchestrator' }))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'APPROVAL-FIELD-CONFLICT')).toEqual(['AAAAAAAA'])
+    expect(r.findings.find((f) => f.rule === 'APPROVAL-FIELD-CONFLICT')!.severity).toBe('error')
+  })
+
+  it('does NOT error when the two agree — it is a migration chore, not a defect', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-BBBBBBBB-agree.md',
+      good('BBBBBBBB', { 'approval-tier': '2', 'min-approval-requirement': 'manager' }))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'APPROVAL-FIELD-CONFLICT')).toEqual([])
+    // ...and it is still reported, as the deprecation it is:
+    expect(idsOf(r, 'APPROVAL-TIER-DEPRECATED')).toEqual(['BBBBBBBB'])
+    expect(r.errors).toBe(0)
+  })
+
+  it('IGNORES an approval field that appears only in the BODY — the false positive that shipped', () => {
+    // This is the regression that matters most. Authoring this rule, I grepped the corpus and
+    // "found" a card whose two approval fields disagreed — then discovered the second one was
+    // inside a fenced YAML EXAMPLE in the prose, 14 lines below the frontmatter. A grep hit is
+    // not a frontmatter fact. The linter reads the PARSED frontmatter and was right where I was
+    // wrong; this test is what keeps it right if someone ever "improves" it into a raw scan.
+    // The frontmatter carries ONLY the tier — exactly like the real card. The second field
+    // exists solely in the prose below, which is what made the grep look like a conflict.
+    const card = good('CCCCCCCC', { 'approval-tier': '2', 'min-approval-requirement': '' }) +
+      '\nThe forgeable pattern looks like this:\n\n```yaml\nmin-approval-requirement: orchestrator\n```\n'
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCC-body-example.md', card)
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'APPROVAL-FIELD-CONFLICT')).toEqual([])
+    expect(r.errors).toBe(0)
+  })
+})
+
+describe('META-MISSING is scoped to the zones the D4 watchdog actually scans (TRDD-5THSI5ZB)', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-doctor-'))
+    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+      fs.mkdirSync(path.join(tmp, z), { recursive: true })
+    }
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  const fieldsFor = (r: ReturnType<typeof lintCorpus>, id: string) =>
+    r.findings.filter((f) => f.rule === 'META-MISSING' && f.id === id)
+      .map((f) => f.message.replace(/^no `([a-z-]+):.*/s, '$1')).sort()
+
+  /** Drop the three overlay fields — `fmHas` reads an empty value as absent. */
+  const bare = { assignee: '', 'created-by': '', 'min-approval-requirement': '' }
+
+  it('names the missing overlay fields on an OPEN card', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-DDDDDDDD-open.md', good('DDDDDDDD', bare))
+    expect(fieldsFor(lintCorpus(tmp), 'DDDDDDDD'))
+      .toEqual(['assignee', 'created-by', 'min-approval-requirement'])
+  })
+
+  it('stays SILENT on an archived card — outside the watchdog scan set, so no consumer breaks', () => {
+    // Not politeness: the §D4 watchdog scans design/tasks + design/proposals and nothing else.
+    // Flagging archived work added 218 findings that named no broken reader, and a wall of
+    // warnings is how a linter gets routed around — which costs every finding it would make.
+    write('archived', 'TRDD-20260101_000000+0100-EEEEEEEE-done.md',
+      good('EEEEEEEE', { ...bare, column: 'completed' }))
+    expect(fieldsFor(lintCorpus(tmp), 'EEEEEEEE')).toEqual([])
+  })
+
+  it('does not ask a PROPOSAL for an assignee — unassigned is what a proposal IS', () => {
+    write('proposals', 'TRDD-20260101_000000+0100-FFFFFFFF-prop.md',
+      good('FFFFFFFF', { ...bare, column: 'proposal' }))
+    const fields = fieldsFor(lintCorpus(tmp), 'FFFFFFFF')
+    expect(fields).not.toContain('assignee')
+    expect(fields).toContain('created-by')
   })
 })
 

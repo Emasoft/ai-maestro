@@ -42,6 +42,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A comment citing a rule is NOT a guard enforcing it; the enforcement map is right more often than the comments.
 - A CONTRADICTED row with no guard is not automatically a stale citation — read the RULE TEXT before "fixing" it: R9.13 says REJECT while the code QUARANTINES, so the row was correct and the citation was the lie waiting to be written.
 - A guard reachable only when a flag is UNSET stays untested when every existing test sets that flag — grep the fixture for the skip flag before believing a gate is covered.
+- `awk '/^func/,/^}/'` stops at the FIRST `}` at column 0 and can report a 425-line function as 11 — brace-count the span before concluding a symbol lacks a guard.
+- A gate enforced in the ROUTE is absent from every non-route caller: headless routers call services directly, so a quarantine flag set by a pipeline is bypassable until the refusal lives in the SERVICE.
 - Prove a guard dead by EXPERIMENT (break it, watch a named test fail), never by reading — a static read produced a confident false positive the tests already refuted.
 - Verify a cited line range before writing against it: this repo's citations have been wrong roughly a third of the time.
 

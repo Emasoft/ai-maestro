@@ -247,6 +247,21 @@ export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
   'POST /api/agents/foreign-approvals/[id]/approve',
   'POST /api/agents/foreign-approvals/[id]/reject',
   'POST /api/system/aid-recover',
+
+  // ── TRDD-OX5TT5OT ────────────────────────────────────────────────────────
+  // The dashboard Claude re-login. Owner-only for a reason one step stronger than
+  // the rest of this list: the routes also demand PHYSICAL PRESENCE at the host
+  // (lib/oauth-rotator/reauth-guard.ts), so no agent can reach them from anywhere,
+  // by any credential. They capture a CREDENTIAL, and an agent that could mint one
+  // could mint its own account.
+  //
+  // NOTE for the R-2 superset scanner: these handlers do NOT contain the literal
+  // `enforceSystemOwner` — they call it through `guardReauthRoute`, which also
+  // carries the console and sudo factors so the three can never drift apart across
+  // two handlers. A source-shape scan cannot see that indirection, which is exactly
+  // why the DECLARED guardrail (TRDD-6A2I6ZO0) is the one that caught the omission.
+  'POST /api/oauth-rotator/reauth/start',
+  'POST /api/oauth-rotator/reauth/complete',
 ])
 
 /**

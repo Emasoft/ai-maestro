@@ -367,6 +367,10 @@ export async function fileSlot(
     writeSlot(email, blob)
     const st = loadState()
     if (!st.slots || typeof st.slots !== 'object') st.slots = {}
+    // REPLACE, never merge: a re-capture must drop the stale per-slot extras the tick writes
+    // (`refresh_failures`, `refresh_dead_fp`), because those are facts about the token that was
+    // just superseded. Merging them forward would carry a dead token's retry ban onto its healthy
+    // replacement — pinned by the reauth-flow ban-lift test (TRDD-OX5TT5OT).
     st.slots[email] = {
       captured_at: nowLocalTz(),
       fp: fingerprint(blob),

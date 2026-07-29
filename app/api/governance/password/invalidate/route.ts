@@ -17,10 +17,16 @@
  * holds the password but is not at the console cannot read it. That is the entire
  * security property; the moment the code travels over HTTP, this is theater.
  *
- * SCOPE (TRDD-P7XKV3N9 §2b): the console requirement binds THIS operation and
- * MAESTRO login. Every other route stays usable from any device on the Tailscale
- * VPN — remote administration from a phone is a feature, not a leak. Do not copy
- * the loopback check anywhere else.
+ * SCOPE (TRDD-P7XKV3N9 §2b, extended by TRDD-OX5TT5OT 2026-07-29): the console
+ * requirement binds THREE operations and no others — THIS one, MAESTRO login,
+ * and the dashboard Claude re-login (`POST /api/oauth-rotator/reauth/{start,
+ * complete}`, gated by lib/oauth-rotator/reauth-guard.ts). The third was added
+ * by an explicit USER ruling: it captures a CREDENTIAL, and Tailscale
+ * authenticates the DEVICE while physical presence authenticates the PERSON.
+ * Every other route stays usable from any device on the Tailscale VPN — remote
+ * administration from a phone is a feature, not a leak. Do not copy the loopback
+ * check to a fourth route without the same deliberate ruling; the value of this
+ * list is that it is short and every entry had to argue for itself.
  *
  * Flow (two calls):
  *   POST { password }         -> 200 { codeRequired: true, channel, hint }  (+ code on the desktop)

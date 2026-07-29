@@ -78,6 +78,8 @@
     "DELETE_/api/governance/maestro-delegate": "strict",
     "POST_/api/agents/foreign-approvals/[id]/approve": "strict",
     "POST_/api/agents/foreign-approvals/[id]/reject": "strict",
-    "POST_/api/system/aid-recover": "strict"
+    "POST_/api/system/aid-recover": "strict",
+    "POST_/api/oauth-rotator/reauth/start": "strict",
+    "POST_/api/oauth-rotator/reauth/complete": "strict"
   }
 }

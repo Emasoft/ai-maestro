@@ -38,7 +38,25 @@ const ROLES_URL = 'https://api.anthropic.com/api/oauth/claude_cli/roles'
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
 const OAUTH_BETA = 'oauth-2025-04-20'
-const CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
+
+/** The Claude Code OAuth app's client id — IDENTICAL to the janitor rotator's, deliberately: both
+ *  sides file into the same keychain slots, so a divergent client id would produce tokens the other
+ *  half cannot use. Exported because the AUTHORIZE half (reauth-flow.ts) must send the same one. */
+export const OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
+
+/** The OAuth app's REGISTERED redirect URI — Anthropic's own manual-callback page, which DISPLAYS
+ *  `<code>#<state>` for the human to copy. We cannot register a callback of our own, so the
+ *  paste-the-code shape is forced by the registration, not chosen. It must be sent VERBATIM in the
+ *  authorization-code grant body (the endpoint checks it against the authorize request). */
+export const OAUTH_REDIRECT_URI = 'https://platform.claude.com/oauth/code/callback'
+
+/**
+ * The REDUCED 4-scope set. **This exact set is what yields a REFRESH token** — a wider set does
+ * not, and a slot without a refresh token cannot be kept alive, which defeats the whole rotator.
+ * Verified against the audited reference implementation; do not "improve" it.
+ */
+export const DEFAULT_OAUTH_SCOPES =
+  'user:profile user:inference user:sessions:claude_code user:mcp_servers'
 
 /** The token endpoint's REQUIRED UA (Cloudflare 1010 without it). Never send this to /usage. */
 const ROTATOR_USER_AGENT = 'claude-account-rotator'
@@ -202,7 +220,11 @@ export async function refreshOauthToken(
   const inner = oauthOf(blob)
   const rtok = inner.refreshToken ?? inner.refresh_token
   if (typeof rtok !== 'string' || !rtok) return null
-  const body = JSON.stringify({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: rtok })
+  const body = JSON.stringify({
+    grant_type: 'refresh_token',
+    client_id: OAUTH_CLIENT_ID,
+    refresh_token: rtok,
+  })
   const { json } = await httpJson(
     TOKEN_URL,
     {
@@ -230,6 +252,88 @@ export async function refreshOauthToken(
   newInner.refreshToken = newRefresh
   if (expiresAt !== undefined && expiresAt !== null) newInner.expiresAt = expiresAt
   return { claudeAiOauth: newInner }
+}
+
+/** The token endpoint accepted the grant and returned a usable access token. */
+export interface CodeExchangeOk {
+  ok: true
+  blob: CredentialBlob
+  /** False when the response carried NO refresh token. The blob is still usable, but it behaves
+   *  like a setup-token — it cannot be keepalive-refreshed, so it will expire for good in hours.
+   *  Surfaced rather than swallowed: a re-login whose whole PURPOSE is to restore a dead refresh
+   *  would otherwise report success while having repaired nothing. */
+  hasRefreshToken: boolean
+}
+/** The grant was refused, unreachable, or answered without an access token. `status` is the HTTP
+ *  code (0 = network error / abort / unparseable body), which is what tells a human whether to
+ *  retry the paste or start a new login. */
+export interface CodeExchangeErr {
+  ok: false
+  status: number
+}
+export type CodeExchangeResult = CodeExchangeOk | CodeExchangeErr
+
+/**
+ * Exchange a PKCE authorization code for a token PAIR. This is the AUTHORIZE half's counterpart to
+ * {@link refreshOauthToken}: it mints a brand-new credential from a human's fresh consent, which is
+ * the ONLY repair for a slot whose refresh token is dead.
+ *
+ * Faithful to the janitor's `slot_capture_browser._exchange` — same endpoint, same JSON body keys,
+ * same 30 s timeout, and the same `claude-account-rotator` UA (Cloudflare answers the default UA
+ * with 403/1010 here). It lives in THIS module precisely so that UA is inherited rather than
+ * hand-rolled at a second call site, where it would drift.
+ *
+ * Unlike the fail-soft probes above it returns a DISCRIMINATED result rather than null. Those are
+ * background probes whose failure must never crash a tick; this one is an interactive operation
+ * whose failure a human has to act on, and "null" cannot tell them whether the code expired (400)
+ * or the network was down (0).
+ */
+export async function exchangeAuthorizationCode(
+  args: { code: string; verifier: string; state: string },
+  deps?: NetworkDeps,
+): Promise<CodeExchangeResult> {
+  const body = JSON.stringify({
+    grant_type: 'authorization_code',
+    client_id: OAUTH_CLIENT_ID,
+    code: args.code,
+    redirect_uri: OAUTH_REDIRECT_URI,
+    code_verifier: args.verifier,
+    state: args.state,
+  })
+  const { status, json } = await httpJson(
+    TOKEN_URL,
+    {
+      method: 'POST',
+      // The token endpoint REQUIRES the rotator UA — Cloudflare 1010 without it. (anthropic-beta
+      // is NOT needed for a token grant.)
+      headers: { 'Content-Type': 'application/json', 'User-Agent': ROTATOR_USER_AGENT },
+      body,
+      timeoutMs: 30_000,
+    },
+    resolveFetch(deps),
+  )
+  if (json === null || typeof json !== 'object') return { ok: false, status }
+  const tok = json as Record<string, unknown>
+  const access = tok.access_token ?? tok.accessToken
+  if (typeof access !== 'string' || !access) return { ok: false, status }
+  const refresh = tok.refresh_token ?? tok.refreshToken
+  const hasRefreshToken = typeof refresh === 'string' && refresh.length > 0
+  let expiresAt: unknown = tok.expiresAt
+  if (expiresAt === undefined && typeof tok.expires_in === 'number') {
+    expiresAt = Math.floor((Date.now() / 1000 + tok.expires_in) * 1000)
+  }
+  // `scope` comes back space-delimited. Python's bare .split() drops empties; the filter is what
+  // reproduces that (a JS split on /\s+/ alone yields an empty leading element on " a b").
+  const scopeVal = typeof tok.scope === 'string' ? tok.scope : ''
+  const scopes = (scopeVal || DEFAULT_OAUTH_SCOPES).trim().split(/\s+/).filter(Boolean)
+  const inner: Record<string, unknown> = {
+    accessToken: access,
+    refreshToken: hasRefreshToken ? refresh : null,
+    expiresAt: expiresAt ?? null,
+    scopes,
+    subscriptionType: typeof tok.subscriptionType === 'string' ? tok.subscriptionType : 'max',
+  }
+  return { ok: true, blob: { claudeAiOauth: inner }, hasRefreshToken }
 }
 
 /** Extract one window's utilization percent (0-100) from a usage dict, or null. */

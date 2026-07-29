@@ -186,20 +186,64 @@ fi
 echo -e "${BOLD}6. Security Checks${NC}"
 # ═══════════════════════════════════════════════════════════════
 
-# Check for exit nodes (could route traffic outside the tailnet)
-EXIT_NODE=$(tailscale status --json 2>/dev/null | python3 -c "
+# Exit node + advertised subnet routes. Both widen what this host carries for the
+# rest of the tailnet, which is why they belong in a script that certifies the
+# network posture.
+#
+# TWO BUGS FIXED HERE, both of which made this section quietly say "fine":
+#
+#   1. It read `Self.ExitNode`, which means "this is the exit node I am USING" —
+#      for Self that is essentially never true, so the check reported "not an
+#      exit node" no matter what. The field that means "this node OFFERS itself
+#      as an exit node" is `Self.ExitNodeOption`.
+#   2. The header has always advertised check #5, "verifies no subnet routes are
+#      exposing the host", and no such check existed anywhere in the body. A
+#      security claim in the documentation with no code behind it is worse than
+#      an absent check, because a reader stops looking.
+#
+# One python call emits both facts plus an explicit status token, so a missing
+# python3 or unparseable JSON is REPORTED rather than silently skipped — the old
+# code fell through to `unknown` and then printed nothing at all.
+TS_SEC=$(tailscale status --json 2>/dev/null | python3 -c "
 import json, sys
-d = json.load(sys.stdin)
-self_info = d.get('Self', {})
-# ExitNode flag means this machine is advertising as an exit node
-print('yes' if self_info.get('ExitNode', False) else 'no')
-" 2>/dev/null || echo "unknown")
+try:
+    s = json.load(sys.stdin).get('Self', {}) or {}
+except Exception:
+    print('status=unparseable'); sys.exit(0)
+# PrimaryRoutes is absent/null unless this node advertises subnet routes.
+routes = [r for r in (s.get('PrimaryRoutes') or []) if not r.endswith('/32') and not r.endswith('/128')]
+print('status=ok')
+print('exit_node=' + ('yes' if s.get('ExitNodeOption') else 'no'))
+print('routes=' + (','.join(routes) if routes else 'none'))
+" 2>/dev/null || echo "status=nopython")
 
-if [[ "$EXIT_NODE" == "yes" ]]; then
-  warn "This machine is configured as a Tailscale exit node — traffic from other devices may route through it"
-elif [[ "$EXIT_NODE" == "no" ]]; then
-  ok "Not configured as exit node"
-fi
+ts_sec_field() { printf '%s\n' "$TS_SEC" | sed -n "s/^$1=//p" | head -1; }
+TS_SEC_STATUS=$(ts_sec_field status)
+
+case "$TS_SEC_STATUS" in
+  ok)
+    if [[ "$(ts_sec_field exit_node)" == "yes" ]]; then
+      warn "This host ADVERTISES itself as a Tailscale exit node — other devices' traffic may route through it"
+    else
+      ok "Not advertising as an exit node"
+    fi
+
+    TS_ROUTES=$(ts_sec_field routes)
+    if [[ "$TS_ROUTES" == "none" ]]; then
+      ok "No subnet routes advertised (host is not bridging another network into the tailnet)"
+    else
+      warn "This host ADVERTISES subnet routes: $TS_ROUTES"
+      info "A subnet router bridges those networks into the tailnet. AI Maestro's own filter still"
+      info "admits only loopback + tailnet peers, but review whether this bridging is intended."
+    fi
+    ;;
+  nopython)
+    warn "python3 not available — could not check exit-node / subnet-route posture"
+    ;;
+  *)
+    warn "Could not parse 'tailscale status --json' — exit-node / subnet-route posture UNKNOWN"
+    ;;
+esac
 
 # Check that AI Maestro server would bind correctly
 if [[ "$(uname)" == "Darwin" ]]; then

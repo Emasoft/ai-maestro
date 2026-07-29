@@ -7,6 +7,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 
 - A test that passes with its guard removed pins NOTHING — never accept a new test without a recorded neuter run.
 - A neuter run that does NOT fail is a finding about the TEST: mine asserted through a table-level `since` skip and never reached the branch it named, so the guard was decorative.
+- When several ENABLED inputs can produce the same output, a test must switch off every one but the branch it names — mine left `localMarketplaces` at its default, so that branch added the same plugin first, `addCandidate` is first-write-wins, and stripping `agentId` from the `agentLocalScopePlugins` branch under test left the suite GREEN. Isolate the producer, or the assertion is about code you did not mean to test.
 - Encode a guard at the granularity the BUG had — janitor#123 was COLUMN-granular and my per-table `since` could not express it, making the branch unreachable by construction, not merely untested.
 - When one ladder step is all that ships, a version-skew guard cannot be exercised end-to-end — export the pure check and inject a synthetic spec, or it stays unverified until the bug recurs.
 - A test that passes for an unknown reason is a failure: isolate it (`-t "<full name>"`) before believing it.

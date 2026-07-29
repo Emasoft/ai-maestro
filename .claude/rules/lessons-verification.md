@@ -32,6 +32,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A subprocess test cannot be contained by `vi.mock` — redirect `$HOME` in the spawn env (`os.homedir()` honours it on POSIX), and PROVE containment by counting the real dir before and after, not by reading the code that was supposed to do it.
 - A negative test must assert WHY it failed, not merely THAT it failed: neutering my API mutation-gate left every gated call still exiting non-zero (it now reached the missing-API-key check downstream), so an `expect_refusal` asserting only exit≠0 would have passed against a deleted gate — match the specific message and the neuter run names exactly the 3 tests that pin it.
 - A seeded config file must satisfy its LOADER's version check or the loader returns DEFAULTS and every test silently exercises the OFF branch: my governance.json omitted `version: 1`, so 8 tests got the route's `user_authority_model_disabled` 409 instead of the guard under test — a fixture that tests the wrong branch, loudly enough to notice only because I read the error string.
+- Before adding to a corpus, grep for EVERY test that READS it, not just the one the plan names: my plan named the conformance test's family array and a SECOND file asserted the live spec's exact clause census (38), so +3 clauses reddened a test nothing had predicted. Re-derive such a census with your own `grep`, never by copying the number out of the failure output — the count and the code would then agree by construction.
 
 ## Tools that gate
 
@@ -146,6 +147,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Scope a new lint to the SCAN SET of the consumer it mirrors — flagging cards no consumer evaluates produced 218 findings that named no broken reader, and a wall of warnings is how a linter gets routed around.
 - Two `catch` arms in one function are two bugs with two fixes — I reported "the parser returns null on corrupt frontmatter" when that arm deliberately keeps the file and a DIFFERENT arm drops read errors; name the arm before writing the fix.
 - Before flagging a documented invariant as violated, check what the rule's own examples mechanically ARE: the reference DAG's legal edges are all frontmatter fields, so 18 prose mentions of a TRDD id in specs were never edges and a body-scanning lint would have flagged the arbiter itself.
+- A CENSUS inside a normative doc can be falsified by the very commit that writes it — my clause said "the specs carry 18 provenance mentions" while adding more of them. State the boundary test qualitatively and cite the card that holds the DATED count; a spec asserts a contract, not a headcount.
+- Never use REAL ids as format examples in a document others parse for references: four real TRDD ids illustrating "prefix optional, case-insensitive" would have minted phantom provenance edges inside the arbiter file itself. Generic forms (`[ABCD1234]`, `[TRDD-abcd1234]`, `[25]`) state the identical contract and cannot be mistaken for citations.
 
 ## Refactoring under static tooling
 
@@ -171,3 +174,4 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Scope the sweep to the ARTIFACT, not to the subdirectory you happen to be editing: I measured `references/*.md` for four passes and the skill's PRIMARY file, `SKILL.md`, was never once in scope — it held 8 sites, one of them a bullet still DESCRIBING the citation system I had already deleted, which is a false claim rather than mere leftover narration.
 - A near-miss synonym re-reads as clean: `the corpus` does not match `this corpus` or `corpus-derived`, so one file measured 0 twice and was not — widen to the bare stem and re-measure everything already called DONE.
 - `${PIPESTATUS[0]}` is bash-only — in zsh the `[` errors per iteration (`unknown condition: -ne`) and the trailing success line prints anyway, so my "38 files, syntax clean" was VACUOUS. Use `if cmd; then` directly, and prove the checker rejects a known-broken input before believing a clean sweep.
+- `grep -c FAIL` on a test log counts the word FAILED inside expected negative-path OUTPUT: mine reported "FAIL lines: 31" on a suite that was exit 0 / 274 files green. Count the runner's own failure MARKERS (`Failed Tests`, `×`) or read the summary line — never a substring that the tests under test are supposed to print.

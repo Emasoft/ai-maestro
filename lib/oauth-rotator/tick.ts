@@ -314,12 +314,28 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
     if (!(inner.refreshToken || inner.refresh_token)) continue // setup-token slot — unrefreshable
     const eh = expiresInH(blob)
     if (eh === null || eh > KEEPALIVE_AHEAD_H) continue // ample runway (or undatable)
+    // STOP RETRYING A TOKEN ALREADY CLASSIFIED DEAD. Observed 2026-07-29: a slot whose refresh
+    // token really was dead sat at MAX_REFRESH_FAILURES and kept getting one OAuth round-trip per
+    // 60 s beat anyway — its counter went 1 -> 26 in 25 minutes and would have grown forever. The
+    // cascade had ALREADY concluded "a human must re-login"; continuing to ask the endpoint cannot
+    // change that answer, so every one of those calls was pointless traffic against a known-dead
+    // credential.
+    //
+    // The gate is keyed on the FINGERPRINT that failed, not merely on the count, because a gate
+    // that never un-gates is worse than the retries it replaces: a human re-login writes a NEW
+    // blob with a different fp, and this slot must resume refreshing the instant that happens —
+    // otherwise the one action that fixes it would be silently ignored.
+    const meta0 = slots[email] as Record<string, unknown> | undefined
+    const fails0 = typeof meta0?.refresh_failures === 'number' ? meta0.refresh_failures : 0
+    if (fails0 >= MAX_REFRESH_FAILURES && meta0?.refresh_dead_fp === fingerprint(blob)) continue
     const fresh = await refreshOauthToken(blob, netDeps(deps))
     if (fresh === null) {
-      // A refresh that keeps failing is dead — count it so the cascade escalates to REAUTH.
+      // A refresh that keeps failing is dead — count it so the cascade escalates to REAUTH, and
+      // record WHICH credential failed so a replacement is retried rather than inheriting the ban.
       const meta = slots[email]
       if (meta && typeof meta === 'object') {
         meta.refresh_failures = (typeof meta.refresh_failures === 'number' ? meta.refresh_failures : 0) + 1
+        meta.refresh_dead_fp = fingerprint(blob)
         changed = true
       }
       continue
@@ -338,6 +354,7 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
       meta.fp = fingerprint(fresh)
       meta.expires_at = oauthOf(fresh).expiresAt ?? null
       meta.refresh_failures = 0 // a successful exchange clears the dead-refresh counter
+      delete meta.refresh_dead_fp // ...and the fingerprint that earned the retry ban
       changed = true
     }
     actions.push(email)

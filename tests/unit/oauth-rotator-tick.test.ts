@@ -168,6 +168,59 @@ describe('tick — autoRotate (ROTATE)', () => {
   })
 })
 
+/** A fetch stub that FAILS every token exchange and counts the attempts — the shape of a slot
+ *  whose refresh token is genuinely dead. `calls` is the assertion surface. */
+function countingFailingTokenFetch(): { impl: typeof fetch; calls: () => number } {
+  let n = 0
+  const impl = (async (url: unknown) => {
+    const u = String(url)
+    if (u.includes('/oauth/token')) { n++; return new Response('{}', { status: 400 }) }
+    if (u.includes('/oauth/usage')) return new Response('{}', { status: 200 })
+    if (u.includes('/roles')) return new Response(JSON.stringify({ organization_name: "x@x's Organization" }), { status: 200 })
+    return new Response('{}', { status: 404 })
+  }) as unknown as typeof fetch
+  return { impl, calls: () => n }
+}
+
+describe('tick — keepaliveRefresh retry ban on a token already classified DEAD', () => {
+  // Observed live 2026-07-29: a slot with a genuinely dead refresh token was retried once per 60s
+  // beat forever — its counter ran 1 -> 26 in 25 minutes. MAX_REFRESH_FAILURES classified it dead
+  // but never stopped the asking, so the cascade had already said "a human must re-login" while
+  // the beat kept interrogating a credential that could not answer.
+  it('stops attempting the exchange once the SAME credential has failed MAX times', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    const dead = blob('DEAD', H1()) // inside the keepalive window → a candidate every beat
+    addSlot('dead@x', dead)
+    const f = countingFailingTokenFetch()
+
+    // Three beats: each fails, each increments. The 4th must NOT reach the endpoint.
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    expect(f.calls()).toBe(3)
+    expect((loadState().slots?.['dead@x'] as unknown as Record<string, unknown>).refresh_failures).toBe(3)
+
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    expect(f.calls()).toBe(3) // banned — no further traffic against a known-dead credential
+  })
+
+  // The ban MUST un-gate itself: a human re-login is the one action that fixes this, and a gate
+  // keyed on the count alone would silently ignore it forever.
+  it('resumes the instant a DIFFERENT credential is captured for that slot', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('dead@x', blob('DEAD', H1()))
+    const f = countingFailingTokenFetch()
+    for (let i = 0; i < 4; i++) await keepaliveRefresh({ fetchImpl: f.impl })
+    expect(f.calls()).toBe(3) // banned
+
+    // A re-login writes a NEW blob → a different fingerprint → the ban must lift.
+    writeSlot('dead@x', blob('RECAPTURED', H1()))
+    await keepaliveRefresh({ fetchImpl: f.impl })
+    expect(f.calls()).toBe(4)
+  })
+})
+
 describe('tick — keepaliveRefresh (RENEW)', () => {
   it('refreshes an alternate slot within the keepalive window and writes the fresh token back', async () => {
     seedLive('live@x', blob('LIVE', H8()))

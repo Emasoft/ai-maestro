@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:15:45+0200
-updated: 2026-07-29T10:52:00+0200
+updated: 2026-07-29T12:56:54+0200
 implementation-commits: [7b3341ac, 17b55c24]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -156,6 +156,19 @@ it now.
   authenticated session. Reachable ≠ permitted: Tailscale authenticates the *device*, physical
   presence authenticates the *person*, and a credential capture demands the second. A stolen or
   borrowed session cookie on a remote device must not be able to initiate one.
+- **⚠ THE LOAD-BEARING CONTROL IS DEFEATABLE BY A UI BUTTON TODAY — NPT for this TRDD**
+  (MEASURED 2026-07-29, `reports_dev/tailscale-distill/FINDINGS-aimaestro.md` §F0). `tailscale
+  serve` reverse-proxies from loopback (`|-- proxy http://127.0.0.1:<port>`), so behind it EVERY
+  tailnet device is stamped `::ffff:127.0.0.1` and passes `isConsolePeer`. Measured on this host:
+  direct → `::ffff:100.99.233.43` (correctly refused); through serve → `::ffff:127.0.0.1`
+  (**gate defeated**). The Host Tool "Tailscale VPN Access" (`app/api/settings/host-tools/route.ts:164`)
+  runs `scripts/setup-tailscale-serve.sh`, which enables exactly that — and it is displayed as
+  **"Not installed"** on a working VPN, so it reads as a repair. Serve is NOT enabled today
+  (`tailscale serve status` = `No serve config`), so the gate currently holds; but shipping a
+  FOURTH console-gated operation on top of a control one owner-click can silently disable is
+  building on sand. **Close this before, or together with, the credential-capture route** — either
+  retire the serve Host Tool or make `peer-address` serve-aware (note: `--proxy-protocol` does NOT
+  help — it is scoped "for TCP forwarding", not the HTTP proxy path).
 - **MAESTRO-authenticated as well as console.** Both conditions, not either: the session must be
   the owner's, AND `peerAddress(req)` must satisfy `isConsolePeer`.
 - **This makes the THIRD console-gated operation.** The documented list was deliberately narrow —

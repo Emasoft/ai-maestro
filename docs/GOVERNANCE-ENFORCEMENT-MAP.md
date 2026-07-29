@@ -297,9 +297,9 @@ Row format is fixed so a regex parses each line:
 | R36.1 | UNENFORCED | — | — |
 | R36.2 | UNENFORCED | — | — |
 | R37.1 | BEHAVIOURAL | — | — |
-| R37.2 | ENFORCED | app/api/governance/maestro-delegate/route.ts:99-102 | — |
-| R37.3 | ENFORCED | app/api/governance/maestro-delegate/route.ts:129-167 | — |
-| R37.4 | ENFORCED | app/api/governance/maestro-delegate/route.ts:75-80 | — |
+| R37.2 | ENFORCED | app/api/governance/maestro-delegate/route.ts:99-102, lib/user-registry.ts:212-218 | tests/governance/r37-maestro-delegate.test.ts |
+| R37.3 | ENFORCED | app/api/governance/maestro-delegate/route.ts:129-167 | tests/governance/r37-maestro-delegate.test.ts |
+| R37.4 | ENFORCED | app/api/governance/maestro-delegate/route.ts:75-80, app/api/governance/maestro-delegate/route.ts:139-144 | tests/governance/r37-maestro-delegate.test.ts |
 | R38.1 | UNENFORCED | — | — |
 | R38.2 | UNENFORCED | — | — |
 | R38.3 | UNENFORCED | — | — |

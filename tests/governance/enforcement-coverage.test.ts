@@ -138,7 +138,11 @@ const UNAUDITED_RULES = new Set<number>([
 // 42 → 40. Both guards were read against the CURRENT rule text before pinning; the sibling R39.5/
 // R39.7 rows failed that same check (guards encode the pre-2026-07-22 shape) and were filed as
 // TRDD-SPS63XHA instead, since a test written against a superseded guard passes and certifies it.
-const MAX_ENFORCED_WITHOUT_TEST = 40
+// 2026-07-29: batch 4 pinned R37.2/R37.3/R37.4 in tests/governance/r37-maestro-delegate.test.ts —
+// 40 → 37. Chosen as the tightest single-FILE cluster left (all three guards live in
+// app/api/governance/maestro-delegate/route.ts), which is the batching rule the plan settled on:
+// one agent holds one file's mocking context instead of twenty rules' worth.
+const MAX_ENFORCED_WITHOUT_TEST = 37
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

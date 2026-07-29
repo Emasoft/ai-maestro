@@ -99,6 +99,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A complexity claim in a comment may be hypothetical and still correct: store.ts's "O(N^2 x refs)" names a lint written on `findRecord` that NOBODY WROTE, and says so one line later — the summariser dropped the qualifier, not the comment.
 - A note you wrote in your OWN task description is a second-hand report by the time you read it back: mine said "ORDER BY path — the walk now agrees", and TRDD_ZONES is `proposals,tasks,archived,refused`, not alphabetical, so path order silently reshuffles every tie-break.
 - A task title can outlive what shipped: #78 said "point trdd-doctor at the pillar index" and the commit made the LINTER streaming instead — read the commit, not the card, before believing a subsystem has a consumer.
+- A sub-agent's self-reported INPUT COUNT is not coverage: a batch report headed `units: 67` had cited 21 and JUNK-listed 5, silently dropping 46 — and a truncated report is indistinguishable from a thorough one, so the skipped inputs are lost invisibly rather than re-queued. Check every input is either CITED or explicitly DISCARDED, and make the agent emit that accounting itself.
+- A low yield is a question, not a result: 46 atoms from 67 units next to 91 from 21 is the signal that made me check — compare per-unit yield ACROSS sibling batches before accepting any of them.
 
 ## Claims about the codebase
 

@@ -866,6 +866,13 @@ referenced by current code — confirm before relying on them.
 │                                 #   team ledger), tasks-<teamId>.json, documents       (verified — task/group/document registries)
 ├── messages/                     #   AI-Maestro-native messages: inbox/ sent/ archived/ (per agent name)   (verified)
 ├── backups/                      # registry.json backups taken before mutations          (verified, lib/agent-registry)
+├── kanban-index/                 #   DERIVED CACHE — <hash>.json per design-dir board index. SAFE TO DELETE:
+│                                 #   rebuilt from the TRDD markdown on next read   (verified, lib/kanban-index.ts)
+├── pillar-index/                 #   DERIVED CACHE — <slug>-<hash>.sqlite (+ -wal/-shm + .heal.json) per corpus,
+│                                 #   keyed by a realpath hash. SAFE TO DELETE, rebuilt from markdown. N agents on
+│                                 #   one host share it, so a `busy` fault is CONTENTION, never damage — do not
+│                                 #   delete one to "fix" it, that is the bug TRDD-YN8EQWYP closed
+│                                 #                                              (verified, lib/pillar/index-db.ts)
 ├── agent-shell-guard.sh          # RUNTIME WRITE GUARD sourced into every agent tmux pane: overrides cd/pushd,
 │                                 #   allowlist = $AGENT_WORK_DIR + /tmp + /private/tmp + /var/folders   (verified, lib/agent-shell-guard.ts)
 ├── bin/aimaestro-daemon.sh       # installer-placed background daemon                       (install-messaging.sh)

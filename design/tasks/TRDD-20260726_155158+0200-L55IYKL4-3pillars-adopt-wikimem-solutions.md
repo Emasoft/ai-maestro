@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T00:48:24+0200
+updated: 2026-07-30T01:29:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -190,6 +190,32 @@ stays separate because the doctor's contract is *every TRDD in every zone* while
 the SPEC and PRRD corpora. **(b)** Phase 4's other listed rule, *"a PROJECT TRDD must not cite a
 LOCAL one"*, is **NOT implemented** — it needs a second (local) corpus root and is not one of
 LXLK7XGX's boxes. Do not read Phase 4 as complete.
+
+**EHT `YN8EQWYP` is ✅ COMPLETE + archived 2026-07-30 (`62d9db33`, `004c12a4`) — 4 of 4.** Box 3
+("what does a SECOND writer do?") was hiding a live defect rather than posing a design question:
+`openIndex` healed on every fault but `downgrade`, and `migrate` takes the write lock, so a second
+process opening a not-yet-migrated index timed out and **deleted the first process's index while it
+was still writing it** — the unlink succeeds against an open file, so writer one went on writing into
+an unlinked inode and reported success, while the heal ledger recorded "damage" that was only
+contention. **janitor#123 one level up.** Fixed with a `busy` fault that is NEVER healed (one
+`NEVER_HEALED` set, because "is this healable?" was already being decided in two places and neither
+knew about `busy`). Behaviour chosen: **wait (bounded) → re-check → never answer stale; on timeout
+answer from the WALK.** `syncIndex` now runs ONE `IMMEDIATE` transaction SPANNING the corpus read, so
+SQLite's own write lock IS the build lock — no lockfile, no stale-lock heuristic, OS-released on
+crash — and the delta is computed under it, so a second writer re-parses nothing. Its previous
+rationale was factually wrong (it feared blocking READERS; WAL writers never block readers). Proven
+live on the real 4.3 MB corpus index. **Three of that card's four boxes had a wrong premise**: box 1
+already satisfied, box 4's wording unachievable, box 2 naming the janitor-footprint rule for a path
+that rule never mentions — the owner is this repo's CLAUDE.md runtime inventory, where the
+`kanban-index/` precedent the card cites was itself undocumented. Measure a box before building for it.
+
+**NEXT — the parent's completion gate stays correctly shut. Five children are non-terminal, verified
+by reading each `column:` rather than inferring:** `Q3GZJI1X` (`dev`, **HELD FOR THE USER**),
+`8KDIB2LT` (`todo` — boxes 1/3/4 are doable now; box 2 needs `prrdgrep`/`specsgrep` to exist, so it
+is transitively gated on `Q3GZJI1X`), `C069SK9E` (`todo` — graph+board at 10⁵, entangled with
+`31LJK1CX`), `4VCXRHAY` (`dev` — its FTS follow-up shipped as `7CHUK1AZ`, so **check whether it is
+already closeable** before starting work), `31LJK1CX` (`backburner` — the warm graph query misses the
+budget; the freshness probe alone is 0.59 s of it). Best next: `8KDIB2LT` boxes 1/3/4.
 Also settled: `Q3GZJI1X` does **not** gate the lint — an ambiguous `relevant-rules:` target is still
 unambiguously a TRDD → PRRD edge, and that direction is legal under either reading.
 

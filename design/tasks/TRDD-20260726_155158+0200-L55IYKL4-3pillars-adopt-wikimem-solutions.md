@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-29T20:27:30+0200
+updated: 2026-07-30T00:03:29+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -161,7 +161,19 @@ is **8.07 s / 1.02 GB**; the linter is **22.6 s / 2.43 GB**.
 **NEXT: the critical path is 3 roots** (`greptrdd why L55IYKL4`), all DECIDED-not-IMPLEMENTED —
 `CTEQX0ZA` (the 10⁵ budget; in progress), `Q3GZJI1X` (**HELD FOR THE USER** — its one open box asks
 the janitor to change an IND-base contract that every project on this machine loads), and
-`LXLK7XGX` (needs `pillars:lint`, i.e. Phase 4).
+`LXLK7XGX` — **Phase 4 is now BUILT** (`1dee73c3`): `lib/pillar/dag.ts` +
+`scripts/pillars-lint.mjs` + `yarn pillars:lint`, 15 tests, live run **328 documents (323 trdd ·
+5 spec), 0 findings, 0.34 s**, and none of the 18 provenance mentions flagged. The card is `dev`
+with 2 of 3 boxes closed; box 1's second half ("recorded in spec clause `3P-DAG`") is Phase 6 /
+EHT `MUYRIKN3`, so the completion gate correctly holds it open.
+Two corrections this produced: **(a)** the plan's stated reason for making this a separate script
+("the lint requires scanning SPECS/PRRD bodies") is VOID — the lint must not scan bodies at all; it
+stays separate because the doctor's contract is *every TRDD in every zone* while this must also read
+the SPEC and PRRD corpora. **(b)** Phase 4's other listed rule, *"a PROJECT TRDD must not cite a
+LOCAL one"*, is **NOT implemented** — it needs a second (local) corpus root and is not one of
+LXLK7XGX's boxes. Do not read Phase 4 as complete.
+Also settled: `Q3GZJI1X` does **not** gate the lint — an ambiguous `relevant-rules:` target is still
+unambiguously a TRDD → PRRD edge, and that direction is legal under either reading.
 
 Do NOT extend this to the doctor: it must read every document anyway for the ~25 frontmatter fields
 its per-card rules use, so the index would replace no walk there while importing the native

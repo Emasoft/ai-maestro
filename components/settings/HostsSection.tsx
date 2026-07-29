@@ -7,6 +7,7 @@ import localVersion from '@/version.json'
 import PasswordDialog from '@/components/governance/PasswordDialog'
 import RevokePasswordDialog from '@/components/governance/RevokePasswordDialog'
 import RecoveryEmailSection from './RecoveryEmailSection'
+import ClaudeAccountsSection from './ClaudeAccountsSection'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
 import HostToolsSection from './HostToolsSection'
@@ -978,6 +979,11 @@ export default function HostsSection() {
                         password-reset channel; without a verified address the "Forgot? →
                         email" method has nowhere to send a code. */}
                     <RecoveryEmailSection />
+
+                    {/* Claude accounts + re-login (TRDD-OX5TT5OT). Self-host only, because the
+                        rotator's slots live in THIS machine's keychain — and the login itself is
+                        console-gated for the same reason a credential capture demands presence. */}
+                    <ClaudeAccountsSection />
                     </>
                   )}
 

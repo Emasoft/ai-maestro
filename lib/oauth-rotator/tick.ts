@@ -67,7 +67,12 @@ const EXPIRY_GRACE_H = 0.5
 const KEEPALIVE_AHEAD_H = 6
 /** Consecutive keepalive-refresh failures after which a present-but-failing refresh token is
  * treated as dead (escalated to the human REAUTH nudge by the cascade). */
-const MAX_REFRESH_FAILURES = 3
+/** Consecutive failed refreshes after which a slot's refresh token is treated as DEAD — only a
+ *  human re-login repairs it. Exported so the dashboard's account list calls a token dead on the
+ *  SAME threshold the tick does; a UI with its own number would eventually disagree with the
+ *  mechanism it is reporting on, and the owner would be told to re-login an account the rotator
+ *  still considers healthy (or worse, the reverse). */
+export const MAX_REFRESH_FAILURES = 3
 /** A live-account 429 must persist across this many consecutive ticks before it is believed
  * (a single 429 is often the usage endpoint's own throttle, not a real limit). */
 const LIVE_429_DEBOUNCE = 2

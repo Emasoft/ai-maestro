@@ -135,20 +135,37 @@ function diagnoseAgentCli(): ToolStatus {
  *  WHY this is factored out: both tools previously re-derived it, and the serve tool
  *  then collapsed "tailscale absent" and "tailscale fine, serve unconfigured" into the
  *  same `missing`. One prerequisite, one answer, so the two cannot drift apart again. */
+/** Per-request memo for tailscalePrerequisite(). TWO tools now share the prerequisite, and
+ *  GET runs every tool's diagnose() in one synchronous `TOOLS.map`, so without this the
+ *  `which` + `tailscale status` pair runs twice — doubling the worst-case event-loop block
+ *  (13s -> 26s) on a host where tailscaled is wedged and both calls sit on their timeouts.
+ *
+ *  Safe as module state because every diagnose() is SYNCHRONOUS: there is no `await` between
+ *  the reset in GET and the last read, so two requests cannot interleave and observe each
+ *  other's memo. If a diagnose() ever becomes async, this must move into a request-scoped
+ *  context instead. */
+let prereqMemo: { value: ToolStatus | null } | null = null
+
 function tailscalePrerequisite(): ToolStatus | null {
-  try {
-    // execFileSync (not exec) — no shell, so no injection surface
-    execFileSync('which', ['tailscale'], { encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] })
-  } catch {
-    return 'missing' // the binary genuinely is not installed
+  if (prereqMemo) return prereqMemo.value
+  const compute = (): ToolStatus | null => {
+    try {
+      // execFileSync (not exec) — no shell, so no injection surface
+      execFileSync('which', ['tailscale'], { encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] })
+    } catch {
+      return 'missing' // the binary genuinely is not installed
+    }
+    try {
+      execFileSync('tailscale', ['status'], { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] })
+    } catch (err) {
+      console.error('[host-tools] tailscale status check failed:', err instanceof Error ? err.message : String(err))
+      return 'error' // installed but the daemon is down / logged out
+    }
+    return null
   }
-  try {
-    execFileSync('tailscale', ['status'], { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] })
-  } catch (err) {
-    console.error('[host-tools] tailscale status check failed:', err instanceof Error ? err.message : String(err))
-    return 'error' // installed but the daemon is down / logged out
-  }
-  return null
+  const value = compute()
+  prereqMemo = { value }
+  return value
 }
 
 /** Diagnose ACTUAL VPN reachability — the thing the dashboard depends on for remote
@@ -163,7 +180,12 @@ function diagnoseTailscaleVpn(): ToolStatus {
     // Tailscale hands out 100.64.0.0/10 (CGNAT). Anything else means we are not on a tailnet.
     const first = ip.split('\n')[0]?.trim() ?? ''
     const octets = first.split('.').map(Number)
-    const inCgnat = octets.length === 4 && octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127
+    // Validate ALL four octets, not just the two that carry the range. Checking only
+    // octets[0..1] would accept `100.64.abc.def` as a tailnet address, because NaN fails
+    // every comparison silently and the two unchecked positions were never looked at.
+    const wellFormed = octets.length === 4
+      && octets.every(o => Number.isInteger(o) && o >= 0 && o <= 255)
+    const inCgnat = wellFormed && octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127
     return inCgnat ? 'installed' : 'partial' // running, but holds no tailnet address yet
   } catch (err) {
     console.error('[host-tools] tailscale ip check failed:', err instanceof Error ? err.message : String(err))
@@ -261,6 +283,10 @@ const TOOLS: ToolDef[] = [
 // --- GET: Diagnose all tools ---
 
 export async function GET() {
+  // Fresh probe every request — the memo exists only to stop the two Tailscale tools from
+  // each paying for the same `which` + `status`, never to cache a result across requests
+  // (a user who just started tailscaled must see the new state immediately).
+  prereqMemo = null
   const results = TOOLS.map(tool => {
     const scriptPath = path.join(PROJECT_ROOT, tool.script)
     let status: ToolStatus

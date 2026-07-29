@@ -39,11 +39,11 @@ Row format is fixed so a regex parses each line:
 | R1.2 | ENFORCED | lib/group-registry.ts | — |
 | R1.3 | ENFORCED | services/teams-service.ts:344-404 | — |
 | R1.4 | ENFORCED | services/teams-service.ts:279-282 | — |
-| R1.5 | ENFORCED | lib/team-registry.ts:427 | — |
+| R1.5 | ENFORCED | lib/team-registry.ts:427 | tests/governance/r1-r2-team-registry.test.ts |
 | R1.6 | INVENTED | — | — |
-| R2.1 | ENFORCED | lib/team-registry.ts:106-110 | — |
+| R2.1 | ENFORCED | lib/team-registry.ts:106-110 | tests/governance/r1-r2-team-registry.test.ts |
 | R2.2 | ENFORCED | lib/team-registry.ts:107 | — |
-| R2.3 | ENFORCED | lib/team-registry.ts:107 | — |
+| R2.3 | ENFORCED | lib/team-registry.ts:107 | tests/governance/r1-r2-team-registry.test.ts |
 | R3.1 | CONTRADICTED | — | — |
 | R3.2 | ENFORCED | services/element-management-service.ts:2291-2303 (ChangeTitle::G07) | tests/governance/r3-r9-team-governance.test.ts |
 | R3.3 | ENFORCED | services/element-management-service.ts:2338-2354 | tests/governance/r3-r9-team-governance.test.ts |

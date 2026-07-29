@@ -1691,6 +1691,17 @@ async function startServer(handleRequest) {
       console.warn('[SECURITY] env tamper-evidence sweep failed (non-fatal):', err?.message || err)
     }
 
+    // Warn BEFORE the ledger check, because a stale build is the thing most
+    // likely to make the ledger result confusing: a fix can be committed, the
+    // server restarted, and the old bundled code still running. Deliberately
+    // non-fatal and silent unless actually stale.
+    try {
+      const { warnIfBuildStale } = await import('./lib/build-freshness.mjs')
+      warnIfBuildStale({ projectRoot: process.cwd() })
+    } catch (err) {
+      console.warn('[BUILD] freshness check skipped (non-fatal):', err?.message || err)
+    }
+
     // Verify signed ledger chains before any registry writes (configurable)
     try {
       const { loadSecurityConfig } = await import('./lib/security-config.ts')

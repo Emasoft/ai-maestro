@@ -134,7 +134,7 @@ const UNAUDITED_RULES = new Set<number>([
 // 22 gate qualifiers added in c5173e59, of which 7 were wrong. Deriving a gate NAME from a line
 // RANGE is unsound when the ranges are themselves ~1/3 wrong — it turns a visibly vague citation
 // into an authoritative-looking false one. See TRDD-W8NA7ROZ.
-const MAX_ENFORCED_WITHOUT_TEST = 45
+const MAX_ENFORCED_WITHOUT_TEST = 42
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

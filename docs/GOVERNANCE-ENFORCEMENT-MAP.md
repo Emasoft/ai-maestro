@@ -101,7 +101,7 @@ Row format is fixed so a regex parses each line:
 | R8.1 | ENFORCED | lib/team-registry.ts:306 | — |
 | R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |
 | R8.3 | ENFORCED | services/element-management-service.ts:6240-6250 (DeleteTeam::G05) | — |
-| R8.4 | ENFORCED | lib/authorization.ts:580-592 | — |
+| R8.4 | ENFORCED | lib/authorization.ts:580-592 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |
 | R9.1 | ENFORCED | services/teams-service.ts:279-282 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.2 | ENFORCED | services/element-management-service.ts:2461-2474 (ChangeTitle::G10) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.3 | CONTRADICTED | — | — |
@@ -117,7 +117,7 @@ Row format is fixed so a regex parses each line:
 | R9.13 | ENFORCED | services/element-management-service.ts:3176-3181 (ChangeTitle::G17) | tests/governance/r3-r9-team-governance.test.ts |
 | R10.1 | ENFORCED | services/agents-core-service.ts:2003-2017 | — |
 | R10.2 | CONTRADICTED | — | — |
-| R10.3 | ENFORCED | lib/authorization.ts:456-466 | — |
+| R10.3 | ENFORCED | lib/authorization.ts:530-541 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |
 | R10.4 | CONTRADICTED | — | — |
 | R10.5 | ENFORCED | services/agents-core-service.ts:2019-2028 | — |
 | R10.6 | ENFORCED | app/api/sessions/[id]/restart/route.ts:97-107, services/headless-router.ts:919 | — |
@@ -271,7 +271,7 @@ Row format is fixed so a regex parses each line:
 | R25.2 | ENFORCED | lib/trdd-doctor.ts:48 | tests/unit/trdd-doctor.test.ts |
 | R26.1 | UNENFORCED | — | — |
 | R26.2 | UNENFORCED | — | — |
-| R26.3 | ENFORCED | lib/authorization.ts:290-300 | — |
+| R26.3 | ENFORCED | lib/authorization.ts:290-300 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |
 | R27.1 | CONTRADICTED | — | — |
 | R27.2 | UNENFORCED | — | — |
 | R27.3 | UNENFORCED | — | — |

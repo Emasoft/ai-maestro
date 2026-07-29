@@ -58,10 +58,15 @@ vi.mock('@/lib/file-lock', () => ({
   acquireLock: async () => () => { /* release no-op */ },
 }))
 
+// Mutable so a test can shrink the rotation window instead of appending 10001
+// entries to reach it. Reset in beforeEach so it cannot leak between tests.
+const LEDGER_CFG_DEFAULT = { maxEntriesPerFile: 10000, compactAfterEntries: 5000 }
+const ledgerCfg = vi.hoisted(() => ({
+  value: { maxEntriesPerFile: 10000, compactAfterEntries: 5000 },
+}))
+
 vi.mock('@/lib/security-config', () => ({
-  loadSecurityConfig: () => ({
-    ledger: { maxEntriesPerFile: 10000, compactAfterEntries: 5000 },
-  }),
+  loadSecurityConfig: () => ({ ledger: ledgerCfg.value }),
 }))
 
 vi.mock('@/lib/hosts-config', () => ({
@@ -75,6 +80,7 @@ vi.mock('@/lib/hosts-config', () => ({
 describe('signed-ledger — Phase 1.0.A per-op audit extension', () => {
   beforeEach(() => {
     fsStore = {}
+    ledgerCfg.value = { ...LEDGER_CFG_DEFAULT }
     // Reset modules so host-keys re-generates its keypair AND re-writes
     // public.hex/private.hex to the (now-empty) fsStore. Without this,
     // the cached keypair in host-keys signs correctly but verify() fails
@@ -201,6 +207,68 @@ describe('signed-ledger — Phase 1.0.A per-op audit extension', () => {
       const reloaded = new SignedLedger('/tmp/test-registry.json')
       const res = await reloaded.verify()
       expect(res.ok).toBe(false)
+    })
+  })
+
+  // Rotation had NO test at all, which is how the seq counter came to restart
+  // mid-file on the live registry ledger and pinned the server in READ-ONLY
+  // mode for a day. A tiny window reaches rotation in 8 appends instead of
+  // 10001.
+  describe('rotation', () => {
+    async function appendN(ledger: { append: (...a: never[]) => Promise<unknown> }, n: number) {
+      for (let i = 0; i < n; i++) {
+        await (ledger.append as unknown as (
+          op: string, p: string, d: unknown[],
+        ) => Promise<unknown>)('update', 'test.json', [{ op: 'replace', path: '/n', value: i }])
+      }
+    }
+
+    it('keeps seq strictly increasing ACROSS a rotation', async () => {
+      ledgerCfg.value = { maxEntriesPerFile: 6, compactAfterEntries: 3 }
+      const ledger = await makeLedger()
+      await appendN(ledger as never, 10)
+
+      const live = JSON.parse(fsStore['/tmp/test-registry.ledger.json']) as {
+        entries: Array<{ seq: number }>
+      }
+      const seqs = live.entries.map(e => e.seq)
+
+      // The bug: after rotation truncated the array, the next seq was derived
+      // from the new (shorter) length and restarted, duplicating a seq that
+      // had already been archived.
+      expect(new Set(seqs).size).toBe(seqs.length) // no duplicates
+      for (let i = 1; i < seqs.length; i++) {
+        expect(seqs[i]).toBe(seqs[i - 1] + 1) // contiguous and ascending
+      }
+    })
+
+    it('still verifies after rotating — the read-only trigger', async () => {
+      ledgerCfg.value = { maxEntriesPerFile: 6, compactAfterEntries: 3 }
+      const ledger = await makeLedger()
+      await appendN(ledger as never, 10)
+
+      // On failure vitest prints the whole result, so the "Sequence gap" reason
+      // is visible without asserting on a field the ok-branch does not carry.
+      const res = await ledger.verify()
+      expect(res).toEqual({ ok: true })
+    })
+
+    it('actually rotated — otherwise the two tests above prove nothing', async () => {
+      ledgerCfg.value = { maxEntriesPerFile: 6, compactAfterEntries: 3 }
+      const ledger = await makeLedger()
+      await appendN(ledger as never, 10)
+
+      // A positive control: an archive file must exist and the live file must
+      // be shorter than the total appended, or no rotation happened and the
+      // seq assertions are vacuous.
+      const archives = Object.keys(fsStore).filter(p => p.includes('.archive.json'))
+      expect(archives.length).toBeGreaterThan(0)
+
+      const live = JSON.parse(fsStore['/tmp/test-registry.ledger.json']) as {
+        entries: Array<{ seq: number }>
+      }
+      expect(live.entries.length).toBeLessThan(10)
+      expect(live.entries[0].seq).toBeGreaterThan(0) // the tail starts mid-chain
     })
   })
 })

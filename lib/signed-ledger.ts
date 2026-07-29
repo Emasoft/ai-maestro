@@ -149,7 +149,7 @@ export class SignedLedger {
       this.ensureLoaded()
 
       const partial: Omit<LedgerEntry, 'signature'> = {
-        seq: this.entries.length,
+        seq: this.nextSeq(),
         ts: new Date().toISOString(),
         prevHash: this.lastHash(),
         op,
@@ -294,6 +294,27 @@ export class SignedLedger {
   getEntriesForPath(registryPath: string): LedgerEntry[] {
     this.ensureLoaded()
     return this.entries.filter(e => e.path === registryPath)
+  }
+
+  /**
+   * The next sequence number.
+   *
+   * MUST come from the LAST ENTRY'S seq, never from `entries.length`.
+   * rotateLedger() truncates `this.entries` to a TAIL, so after the first
+   * rotation the array length no longer counts every entry ever written.
+   * Deriving seq from the length therefore RESTARTED the counter mid-file:
+   * the live registry ledger grew to seq 10000, rotated down to 5000 kept
+   * entries, and the next append was numbered 5000 again — a duplicate of a
+   * seq already archived. verify() then reports a permanent "Sequence gap"
+   * and the whole server drops into READ-ONLY mode, 503-ing every write.
+   *
+   * Behaviour is identical on a ledger that has never rotated (there,
+   * last.seq + 1 === entries.length), so this only changes the rotated case,
+   * which was broken.
+   */
+  private nextSeq(): number {
+    const last = this.entries[this.entries.length - 1]
+    return last ? last.seq + 1 : 0
   }
 
   private rotateLedger(): void {

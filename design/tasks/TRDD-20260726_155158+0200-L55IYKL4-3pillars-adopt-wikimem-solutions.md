@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T00:36:48+0200
+updated: 2026-07-30T00:48:24+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -166,12 +166,24 @@ Phase 4's lint is `lib/pillar/dag.ts` + `scripts/pillars-lint.mjs` + `yarn pilla
 live run **328 documents (323 trdd · 5 spec), 0 findings**, none of the provenance mentions flagged;
 box 1's recording half is now the **`3P-DAG` family at `spec-version: 1.2.0`**, so all 3 boxes are
 checked and the completion gate opened.
-**The spec bump is only HALF done — EHT `MUYRIKN3` is `dev`, not terminal.** Its box 2 requires the
-`3P-GREP` cheat-sheet to list **both** `IDX` and `DAG`, and **`3P-IDX` does not exist**: Phase 5's
-index shipped and was never spec'd. Its box 4 (tell the janitor) is deliberately held so the
-notification bundles both families into ONE 1.2.0 — safe only because `fork/governance-rules` is
-**65 commits behind local**, so no consumer can read 1.2.0 yet and `3P-VER-02` cannot fire. **That
-hold must not outlive the first push of this branch.**
+**EHT `MUYRIKN3` is also ✅ COMPLETE + archived (`89810d4b`, `728ff37c`) — Phase 6's spec half is
+DONE.** `spec-version: 1.2.0` now carries BOTH new families:
+- **`3P-DAG`** (3 clauses) — the reference DAG: direction, the dependency-field allowlist as the
+  edge set, and id-forms (prefix optional / case-insensitive / YAML number), because a checker can
+  satisfy the first two perfectly and still be blind.
+- **`3P-IDX`** (14 clauses) — the indexer-db safety contract, and **the real gap this pass found**:
+  Phase 5's index had shipped completely unspec'd. Written from `lib/pillar/index-db.ts` +
+  `index-open.ts`, NOT from the plan's prose. Selection rule, stated in the section preamble: every
+  clause pins a MUST whose violation is **SILENT**. It carries the janitor's own #123 defect
+  (`-05`, behind-vs-damaged with the stamp as sole discriminator, PLUS per-COLUMN granularity — our
+  first guard for it was per-TABLE, i.e. #123's bug one level down) and the retired vacuous FTS
+  parity check (`-14`).
+
+The janitor was notified ONCE, for the whole 1.2.0, as a comment on **their own open request**
+Emasoft/ai-maestro#85 (`issuecomment-5124165382`) — self-contained, since the branch is unpushed and
+they cannot fetch the file. The census consumer nobody had named — `tests/unit/pillar-store.test.ts`,
+which asserts the live spec's EXACT clause count — went **38 → 55** across the two commits,
+grep-counted independently each time.
 Two corrections this produced: **(a)** the plan's stated reason for making this a separate script
 ("the lint requires scanning SPECS/PRRD bodies") is VOID — the lint must not scan bodies at all; it
 stays separate because the doctor's contract is *every TRDD in every zone* while this must also read

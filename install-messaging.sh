@@ -933,6 +933,54 @@ if [ -f "$AGENTLENS_INSTALLER" ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
+# Tailscale readiness CHECK (task #84)
+#
+# Remote access to the dashboard is localhost + Tailscale ONLY — server.mjs
+# binds :: and drops every non-loopback, non-tailnet peer at the TCP level
+# (isAllowedSource in lib/tailscale-detect.mjs). So on a host that will be
+# reached from a phone or an iPad, a broken Tailscale setup is not a missing
+# nicety, it is the whole remote-access story failing — and until now the
+# installer never mentioned Tailscale at all, leaving the user to discover
+# scripts/setup-tailscale.sh on their own.
+#
+# This CHECKS and never installs. Installing a VPN daemon is a system-level
+# change that needs the user's consent and an interactive login (macOS opens
+# the Tailscale app; Linux needs `sudo tailscale up`), so doing it from an
+# unattended installer would be both rude and useless — the daemon would sit
+# there unauthenticated. `--check` is passed explicitly, which the script now
+# honours as "make no changes".
+#
+# FAIL-SOFT and advisory: a host that is only ever used at the keyboard needs
+# no tailnet, so a non-zero result must never abort or fail the install.
+# ═══════════════════════════════════════════════════════════════
+TAILSCALE_SETUP="$SCRIPT_DIR/scripts/setup-tailscale.sh"
+if [ -f "$TAILSCALE_SETUP" ]; then
+    echo ""
+    if ! command -v tailscale &> /dev/null; then
+        print_info "Tailscale not installed — the dashboard will be reachable at localhost only."
+        print_info "For phone/iPad/remote access: https://tailscale.com/download, then"
+        print_info "  bash scripts/setup-tailscale.sh"
+    else
+        # mktemp, not a $$-derived name: a predictable /tmp path can be
+        # pre-created as a symlink, and `>` follows symlinks.
+        TS_LOG=$(mktemp "${TMPDIR:-/tmp}/aim-tailscale-check.XXXXXX")
+        if bash "$TAILSCALE_SETUP" --check > "$TS_LOG" 2>&1; then
+            TS_ADDR=$(tailscale ip -4 2>/dev/null | head -1 || echo "")
+            print_success "Tailscale ready — dashboard reachable at http://${TS_ADDR:-<tailscale-ip>}:23000"
+        else
+            print_warning "Tailscale is installed but not ready for remote access."
+            # Surface the actual failing lines rather than a bare "it failed" —
+            # the fix differs completely between "logged out" and "no tailnet
+            # address". The log is written in full FIRST and read after, never
+            # piped through head while being written.
+            grep -E "ERROR|WARN" "$TS_LOG" 2>/dev/null | head -5 | sed 's/^/  /' || true
+            print_info "Details: bash scripts/setup-tailscale.sh"
+        fi
+        rm -f "$TS_LOG"
+    fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
 # Set up ALL local marketplaces (R20.3 v3.7.0 per-client layout)
 #
 # Two containers, each with per-client marketplace dirs:

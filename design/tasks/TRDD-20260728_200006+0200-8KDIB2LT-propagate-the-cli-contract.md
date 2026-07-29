@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-30T01:39:53+0200
+updated: 2026-07-30T01:46:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -92,6 +92,43 @@ ticking it.
 The word "trichotomy" appears only inside `.claude/chat_history/` exports — transcript noise, not
 documentation.
 
+### Box 4 RE-SWEPT and SATISFIED — but vacuously, and the sweep found something else
+
+Eight phrasings (`exits? 0`, `returns? 1`, `exit code`, `non-?zero`, `success/failure`, `fails with`,
+`0 on success`, `1 on failure|error`) across `docs/SCRIPT-LAYER.md`, `CLAUDE.md`,
+`docs/GOVERNANCE-ENFORCEMENT-MAP.md` and the memory page, filtered to lines naming these tools.
+**Positive control first** (the same patterns match 5 lines of `pillar-cli-exit-codes.test.ts`, so
+they are live and not silently broken). Result: seven patterns return zero, and `exits? 0` returns
+two — both in the MEMORY page and both MEASUREMENT records (`exit 0, 2.43 GB, 22.6 s`), not
+exit-code contract statements.
+
+So box 4 holds — **for the reason that makes box 1 fail.** There is no stale two-outcome wording
+because nothing documents these tools' exit codes at all. Ticking it as though a cleanup happened
+would misreport that.
+
+### ⚠ FOUND WHILE SWEEPING — the script layer ALREADY has a 1/2 convention, and it is INVERTED
+
+`scripts/aimaestro-trdd.sh:200-206` documents its own three-code contract for `verify`:
+
+> **EXITS NON-ZERO WHEN THE APPROVAL DOES NOT VERIFY (2 = INVALID, distinct from 1 = ERROR).**
+
+Against the pillar CLIs' trichotomy (`1` = findings · `2` = could-not-run) the two meanings are
+**swapped**: in the wrapper, `2` is the substantive negative ANSWER and `1` is the tool FAILING; in
+`greptrdd validate`, `1` is the substantive negative answer and `2` is the tool failing. An agent that
+learns one from the script layer and then reads the other has two contradictory contracts on the same
+surface, and nothing anywhere says so.
+
+The wrapper also *teaches* an idiom that erases the distinction —
+`aimaestro-trdd.sh verify "$CARD" || { echo "unverified — refusing"; exit 1; }`. That is correct for
+`verify` (both non-zero codes mean "do not proceed"), but copied onto `greptrdd validate` it collapses
+"found findings" into "could not run", which is exactly the conflation the trichotomy exists to
+prevent — and `||` is the obvious thing to copy.
+
+**This converts box 1 from prose into a DECISION**: document the trichotomy *and* reconcile it with the
+wrapper's existing inverted convention (renumber one, or state both explicitly and warn against `||`).
+Do not write the SCRIPT-LAYER.md section until that is chosen, or the canonical reference will document
+two conflicting meanings for `2`.
+
 **Revised order of work:** (a) write the pillar-CLI section in `docs/SCRIPT-LAYER.md` plus a CLAUDE.md
 pointer, stating the exit trichotomy (`0` clean · `1` findings · `2` could-not-run) and `--design-dir`
 / `--no-index`; (b) record the distribution decision (box 3) — today no `*.mjs` is copied to
@@ -105,7 +142,10 @@ the likely answer and needs writing down either way; (c) re-sweep for box 4 with
 - [ ] `docs/SCRIPT-LAYER.md` and `CLAUDE.md` name `prrdgrep` and `specsgrep` with their subcommands
 - [ ] The distribution decision is recorded explicitly — either "repo-local, and here is why" or
       "distributed, wrapper included"
-- [ ] A grep for the old two-outcome wording returns nothing
+- [x] A grep for the old two-outcome wording returns nothing — **8 phrasings, positive-controlled;
+      SATISFIED but VACUOUSLY**, because nothing documents these tools' exit codes at all. The sweep's
+      real yield is the inverted `1`/`2` convention in `scripts/aimaestro-trdd.sh:200-206`, recorded
+      above, which box 1 must now resolve before any prose is written
 
 ## Approval log
 

@@ -35,6 +35,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A reader that returns `[]` on an I/O error turns its gate into one that passes because it read nothing — separate ENOENT (legal absence) from every other errno (a fault), or "clean" and "unread" are the same answer.
 - A gate needs THREE exit codes: 0 clean · 1 findings · 2 could-not-run. With two, every failure to read reports success.
 - The non-vacuity guard belongs in the TOOL, not only in the test that happens to exercise it — ours asserted `scanned > 100` in vitest for months while the shipped CLI certified an empty read.
+- A secret/PII scan keyed on ONE shape is blind to every other shape BY CONSTRUCTION: mine matched `*.ts.net` FQDNs and so could never see the bare hostname, the raw `100.x` address, or the `user@` that were sitting in the same file — enumerate the classes, print a COUNT per class, and carry a positive control proving the scanner sees a string you know is present.
+- Never print an `empty = none` label unconditionally after a grep — mine printed under a NON-empty result and I read "clean" off a screen that was listing the hits; label from the count, not from hope.
 
 ## Verifying a fix
 

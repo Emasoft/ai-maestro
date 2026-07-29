@@ -17,6 +17,20 @@ module.exports = {
         // fleet agent that finishes a turn with no unread mail sits idle forever — SCEN-031's
         // "unsupervised, never-stopping" continuity requirement cannot hold. In the pm2 env (not a
         // shell export) so it survives SCEN-031's mid-run `pm2 restart ai-maestro`.
+        //
+        // ⚠️ ADDING A VAR HERE DOES NOT REACH A RUNNING APP. `pm2 restart <name>` replays the env
+        // pm2 CACHED when the app was first started; it never re-reads this file. This var was
+        // committed 2026-07-23 (fd87a461) and was still absent from the process on 2026-07-29 —
+        // six days of the actuator silently running detect-only, with the server saying so in its
+        // own log (`[detect-only: AIM_FLEET_RECOVERY_FIRE not set]`) that nobody read. The stale
+        // cache is visible: it carried AIM_INVARIANTS_WATCHDOG_INTERVAL_MS, a var this file no
+        // longer even defines.
+        //
+        //   After editing env here:  pm2 restart ecosystem.config.js --update-env
+        //   Verify it LANDED:        ps eww -p "$(pm2 jlist | jq -r '.[]|select(.name=="ai-maestro").pid')" | tr ' ' '\n' | grep ^AIM_
+        //
+        // Verify against the PROCESS, never against this file — the whole failure was a config
+        // that read as armed while the process was not.
         AIM_FLEET_RECOVERY_FIRE: '1',
       },
       env_development: {

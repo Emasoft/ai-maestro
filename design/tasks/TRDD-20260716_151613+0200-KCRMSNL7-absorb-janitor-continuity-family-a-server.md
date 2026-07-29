@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-29T21:12:04+0200
+updated: 2026-07-30T00:03:29+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -52,16 +52,25 @@ release-via: none
      rotation tick: SERVER-INTERNAL lock, DISTINCT filename. Hence `marketplace-op-server.lock`.
   The mechanism was EXTRACTED to `lib/server-lockfile.ts` and shared with the rotation tick, whose
   29 tests pass untouched.
-- **D3 (YLCTM8EU)** — behaviour VERIFIED (dynamic candidate set; the janitor is in it, nothing
-  filters it out). Its box 2 (a unit test pinning that inclusion) stays OPEN: the helpers are
-  module-private with no dep seam, so the test needs a small refactor first. Honest gap, not a
-  claim.
+- **D3 (YLCTM8EU) COMPLETE** (`25dca1bc`, archived 2026-07-30) — the box-2 gap is closed. The dep
+  seam it needed is **`collectUpdateCandidates(s, marketplacesTouched, readers)`**: `runTick()` fused
+  DECIDE with MUTATE, so Step 2 was extracted with the 3 corpus readers injected (defaulting to the
+  real ones), behaviour verbatim. 7 tests, fakes only ⇒ **0-IMPACT by construction** (no filesystem
+  path at all, so nothing to contain). 3 neuter runs; the third exposed a **vacuous assertion in the
+  test itself** — it was passing through the `localMarketplaces` branch rather than the
+  `agentLocalScopePlugins` one it names.
+  **It also corrected this flock's own understatement:** D3 recorded the master toggle as "the
+  remaining lever". It is not the only one — the janitor is USER-scope and `userScopePlugins` ships
+  OFF, so its currency rests on the single default-on `aiMaestroMarketplace` toggle. That coupling is
+  ai-maestro#102 / [[TRDD-5X3P79Q6]]'s subject; the test documents it as evidence and does not fix
+  it here.
 
 **Net — the 7-chore absorption is FUNCTIONALLY COMPLETE and live.** All 7 daemon chores now run on
 server timers (oauth-tick, oauth-supervisor, session-liveness+fleet-stop, version-update,
 server-liveness, marketplace-refresh, user-plugins-update); a `ps` snapshot shows zero `daemon.py`,
 so the dark window that caused the token death is closed. What is NOT claimed: cross-process
-exclusion against a live `#N` Python daemon (impossible in pure Node — see D4), and D3's test.
+exclusion against a live `#N` Python daemon (impossible in pure Node — see D4). *(D3's test was the
+other item here; it landed 2026-07-30 — `25dca1bc`.)*
 Parent stays `design` — several NPTs (H24DF6ZC, 9ZIF82HI, DXJZM3BW, …) are still open, and the
 completion gate correctly holds it open until every one is terminal.
 

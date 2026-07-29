@@ -36,6 +36,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Two guards over one file can look redundant and cover different failures: renaming `3P-IDX-01` → `3P-QQQ-01` reddened the family-NAME check while the exact-COUNT check correctly stayed green (still a valid declaration, count unchanged). Before deleting either as duplicate, name the mutation each one alone would miss.
 - MEASURE an acceptance box before building for it, and mistrust the instrument it names: of two "unmet" boxes, one was ALREADY satisfied and the other prescribed a `vi.mock` helper for a SUBPROCESS writer it cannot reach. When a SIBLING file does not exhibit the bug, diff its setup first — the neighbouring CLI test already redirected `$HOME`, which named the fix and made the +1-per-run vs +0 count decisive.
 
+- To prove a LOCK is taken BEFORE a read, make that read fail DISTINCTIVELY — then WHICH error arrives is the ordering assertion: mine returned `busy` when correct and `cannot read TRDD zone` under the neuter, and no assertion on "it threw" could have told those apart. Pair it with a positive control that the read really does throw when reached, or the whole test passes whatever the order.
+
 ## Tools that gate
 
 - A reader that returns `[]` on an I/O error turns its gate into one that passes because it read nothing — separate ENOENT (legal absence) from every other errno (a fault), or "clean" and "unread" are the same answer.
@@ -52,6 +54,17 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 
 - Diagnose by dumping the actual ops/trace, not by reasoning about what the code should have done — the trace named the real cause in one run, twice, after reasoning had blamed the wrong thing.
 - An acceptance box naming ANOTHER card as its destination is voided when that card goes terminal first: mine said "state the number in CTEQX0ZA's budget table" and CTEQX0ZA had reached `complete` hours earlier, where rule 12 freezes the body — name a destination you still own.
+
+- An acceptance box can name the wrong OWNER, not merely an unmet state: mine sent a `~/.aimaestro/` inventory row to the janitor's footprint rule, which contains ZERO mentions of that path (it documents what the JANITOR creates) — and the precedent it told me to copy, `kanban-index`, was itself undocumented in the real owner. Check the box's named document AND its cited precedent before writing to either. Three of that card's four boxes had a wrong premise.
+
+## Concurrent writers over shared derived state
+
+- A carve-out list naming only the fault you have MET destroys healthy state on the next one: `downgrade` was carved out of the self-heal and `busy` was not, so a second process's lock timeout took the generic "delete and rebuild" branch. And "is this healable?" was being decided in TWO places, neither of which knew about the new code — make it ONE set.
+- A `catch` that re-throws as `new Error(\`…: ${err.message}\`)` ERASES `err.code`, so an outer handler switching on that code cannot see it — and two conditions with OPPOSITE repairs silently collapse into one. Translate at the throw site, and guard the CONDITION rather than the reporter.
+- `unlink` SUCCEEDS against a file another process still holds open (POSIX), so "delete it and rebuild" as a repair destroys a concurrent writer's work IN SILENCE — it goes on writing into an unlinked inode and reports success — while the heal ledger fills with "damage" that was only contention.
+- A deliberate decision can rest on a false premise about a setting the SAME module enables: "holding the write lock across the read would block every other reader" is true for rollback-journal and FALSE in WAL, which `applyPragmas` turns on two files away. Check the mode before accepting the rationale that cites it.
+- `busy_timeout` does NOT retry a snapshot conflict — a deferred `BEGIN` that reads before it writes can fail `SQLITE_BUSY_SNAPSHOT` unretried — so such a transaction is safe only by the ACCIDENT of its statement order, and the first `SELECT` anyone adds inside it breaks that silently. `BEGIN IMMEDIATE` puts the wait where the timeout applies.
+- A handle leaked on an error path is bounded by what the CALLER does next: when the caller DEGRADES and keeps running (falls back to the slow path), the leak lasts the whole process rather than until exit.
 
 ## Measuring at scale
 

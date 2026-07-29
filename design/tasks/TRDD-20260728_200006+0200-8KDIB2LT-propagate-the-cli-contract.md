@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-30T01:46:00+0200
+updated: 2026-07-30T01:51:01+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -135,6 +135,36 @@ pointer, stating the exit trichotomy (`0` clean · `1` findings · `2` could-not
 `~/.local/bin`, and copying one means carrying the Node-22 wrapper, so "repo-local, and here is why" is
 the likely answer and needs writing down either way; (c) re-sweep for box 4 with several phrasings;
 (d) leave the `prrdgrep`/`specsgrep` naming for when those tools exist.
+
+### DECISION 2026-07-30 — document both; the trichotomy is canon, the wrapper's `verify` is a NAMED exception
+
+Neither side is renumbered. Measured, not preferred:
+
+| fact | measurement |
+|---|---|
+| **`grep`'s own convention is the trichotomy** | run directly: match → `0`, no match → `1`, unreadable path → `2`. The pillar CLIs match it EXACTLY, and `greptrdd` is a grep-shaped tool |
+| **the trichotomy is already PINNED** | `tests/unit/pillar-cli-exit-codes.test.ts` carries 12 exit-code assertions |
+| **the pillar CLIs are repo-local** | no `*.mjs` on `~/.local/bin`; `install-messaging.sh` names none of them. So they are the *cheap* side to change — and the side that is already right |
+| **the wrapper is the EXTERNAL contract** | `scripts/aimaestro-trdd.sh` is the decoupling layer plugins consume. It has NO in-repo caller that branches on its code — every in-repo mention is prose — so its only consumers live in repos I cannot grep |
+| **the SPEC pins only "non-zero"** | `governance-spec.md` `R41.enf-verify`: "`verify` exits **non-zero** when the approval does not verify". The `2 = INVALID / 1 = ERROR` split lives ONLY in the script's own header comment — the spec is satisfied under either numbering |
+
+So the wrapper is the one inverted against the universal convention, and its spec would *permit*
+renumbering. **Rejected anyway**, because the breaking case is exactly the one I cannot audit: a
+consumer doing `[ $? -eq 2 ]` in a repo outside this one. `||` consumers are unaffected (both codes are
+non-zero), and `||` is the idiom the wrapper itself teaches — but "probably nobody branches on 2" is an
+assumption, and a zero-risk option exists. Revisit only if auditing external consumers becomes possible.
+
+**What gets written, then:**
+
+1. The trichotomy (`0` clean · `1` findings · `2` could-not-run) is the **canonical convention for every
+   pillar CLI and every new surface** — it is grep's, so a reader already knows it.
+2. `aimaestro-trdd.sh verify` is documented as the **one grandfathered exception** (`2` = INVALID,
+   `1` = ERROR), *named as an exception with its reason*, not as a second convention. One legacy oddity a
+   reader is warned about beats two live conventions a reader must guess between.
+3. An explicit warning that **`cmd || { … }` collapses `1` and `2`**. It is correct for `verify` (both
+   non-zero mean "do not proceed") and WRONG for `greptrdd validate`, where it turns "could not run"
+   into "found findings" — the exact conflation the trichotomy exists to prevent, and `||` is the
+   obvious thing to copy across from the wrapper.
 
 ## Acceptance
 

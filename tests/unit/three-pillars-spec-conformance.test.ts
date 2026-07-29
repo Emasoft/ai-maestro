@@ -69,7 +69,7 @@ describe('3-pillars SPEC conformance — kanban vocabulary (ai-maestro#85)', () 
     // so a future edit cannot silently un-grep the reference doc.
     const md = readFileSync(SPEC_PATH, 'utf-8')
     expect(md).toContain('3P-GREP')
-    for (const family of ['META', 'VER', 'KAN', 'TRDD', 'PRRD', 'BND', 'CHK', 'MNT']) {
+    for (const family of ['META', 'VER', 'KAN', 'TRDD', 'PRRD', 'DAG', 'BND', 'CHK', 'MNT']) {
       expect(md).toMatch(new RegExp(`3P-${family}-01\\b`))
     }
   })

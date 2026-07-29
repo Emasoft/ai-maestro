@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.1.1
+spec-version: 1.2.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-22T09:28:36+0200
+updated: 2026-07-30T00:30:21+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -26,12 +26,12 @@ This is a REFERENCE doc: every normative clause starts with a stable `` `3P-<FAM
 anchor and a bold key-phrase, so you grep to the clause instead of reading through.
 
 ```text
-3P-GREP  all clauses of a family:   grep '3P-KAN'      (or META TRDD PRRD BND VER CHK MNT)
+3P-GREP  all clauses of a family:   grep '3P-KAN'  (or META TRDD PRRD DAG BND VER CHK MNT)
 3P-GREP  one clause by id:          grep '3P-KAN-01'
 3P-GREP  the authoritative columns: grep -A20 '@spec:kanban-columns'
 3P-GREP  the version stamp:         grep '^spec-version:'
-3P-GREP  families: META=arbiter KAN=kanban TRDD=trdd PRRD=prrd BND=ind/dep-boundary
-3P-GREP            VER=versioning CHK=conformance-checks MNT=maintenance
+3P-GREP  families: META=arbiter KAN=kanban TRDD=trdd PRRD=prrd DAG=reference-dag
+3P-GREP            BND=ind/dep-boundary VER=versioning CHK=conformance-checks MNT=maintenance
 ```
 
 ## 3P-META — the arbiter, and the anti-drift discipline
@@ -165,6 +165,28 @@ makes it greppable).
 `3P-PRRD-05` **mutation-authority** — base: USER may edit any rule; the project's own Claude
 may edit SILVER. The multi-agent per-TITLE authority matrix + COS-routed proposal queue is
 a DEP concern (see `aimaestro-prrd-governance.md`).
+
+## 3P-DAG — the cross-pillar reference DAG (which pillar may reference which)
+
+`3P-DAG-01` **reference-direction** — references point only UP the abstraction stack,
+`PRRD ← SPECS ← TRDD`. TRDD MAY reference {TRDD, SPECS, PRRD}; SPECS MAY reference
+{SPECS, PRRD}; PRRD `MUST NOT` reference anything. So `SPECS → TRDD` and `PRRD → *` are
+illegal edges.
+
+`3P-DAG-02` **dependency-fields-only** — the DAG constrains EXACTLY the frontmatter
+dependency allowlist `blocked-by`, `npt`, `eht`, `parent-trdd`, `superseded-by`,
+`relevant-rules`. Anything else that names a record — a BODY sentence, or a free-text
+frontmatter value — is PROVENANCE and `MUST NOT` be counted as an edge. *(Boundary test:
+the specs name TRDD ids in prose, this file included, and a checker scoped to "frontmatter,
+not bodies" rather than to the allowlist still wrongly flags the ones sitting inside the
+free-text `implementations:` and `authority:` values. Dated census: TRDD-LXLK7XGX.)*
+
+`3P-DAG-03` **id-forms** — a dependency-field value `MUST` be resolved through the target
+pillar's canonical id normalization: the id prefix is OPTIONAL and matching is
+case-insensitive, and a value may arrive as a YAML number. So all of `[ABCD1234]`,
+`[TRDD-ABCD1234]`, `[TRDD-abcd1234]` and `[25]` denote edges. A checker keyed on the
+prose-CITATION pattern (which requires the prefix) is NON-CONFORMANT: it yields ZERO edges
+for the bare and numeric forms and then reports a clean corpus because it saw nothing.
 
 ## 3P-BND — Pillar 4: the IND/DEP boundary (the classification test)
 

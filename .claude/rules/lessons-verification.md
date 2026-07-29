@@ -126,6 +126,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 ## Claims about the codebase
 
 - A comment citing a rule is NOT a guard enforcing it; the enforcement map is right more often than the comments.
+- A rule marked ENFORCED can have a guard implementing a SUPERSEDED version of its text, and both instruments are blind to it: the ratchet sees a citation naming real working code, and a test written against that code PASSES and thereby certifies the divergence. Read the rule TEXT against the guard before pinning — R39.5/R39.7 were two easy ratchet points that would have laundered a 2026-07-22 refinement out of existence.
 - A CONTRADICTED row with no guard is not automatically a stale citation — read the RULE TEXT before "fixing" it: R9.13 says REJECT while the code QUARANTINES, so the row was correct and the citation was the lie waiting to be written.
 - A guard reachable only when a flag is UNSET stays untested when every existing test sets that flag — grep the fixture for the skip flag before believing a gate is covered.
 - `awk '/^func/,/^}/'` stops at the FIRST `}` at column 0 and can report a 425-line function as 11 — brace-count the span before concluding a symbol lacks a guard.

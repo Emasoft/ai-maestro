@@ -3,7 +3,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import Database from 'better-sqlite3'
-import { openIndex, validate, validateAt, SCHEMA_VERSION } from '@/lib/pillar/index-db'
+import { openIndex, validate, validateAt, SCHEMA_VERSION, IndexFaultError } from '@/lib/pillar/index-db'
 import { syncIndex, danglingRefs } from '@/lib/pillar/index-build'
 import { TRDD_KIND } from '@/lib/pillar/kinds'
 import { loadTrddGraph } from '@/lib/trdd-graph'
@@ -256,5 +256,92 @@ describe('the v2 ladder step, with a REAL version skew', () => {
     const cols = (db.pragma('table_info(records_fts)') as Array<{ name: string }>).map((c) => c.name)
     db.close()
     expect(cols).toContain('path')
+  })
+})
+
+describe('N agents on one host — a second writer (TRDD-YN8EQWYP)', () => {
+  /**
+   * Hold the write lock exactly as a second PROCESS would.
+   *
+   * SQLite's write lock is per-DATABASE, not per-process, so two connections inside one
+   * test reproduce precisely the contention two agents produce — and deterministically,
+   * which two spawned processes racing each other would not be. The holder gets its own
+   * short busy_timeout so that if the TEST is ever the blocked party it fails fast
+   * instead of hanging the suite.
+   */
+  function holdWriteLock(file: string): Database.Database {
+    const holder = new Database(file)
+    holder.pragma('busy_timeout = 200')
+    holder.exec('BEGIN IMMEDIATE')
+    return holder
+  }
+
+  it('takes the lock BEFORE the first corpus read, not merely around the writes', () => {
+    write('tasks', 'AAAAAAAA')
+    const db = openIndex(dbFile, { busyTimeoutMs: 150 })
+    syncIndex(db, corpus, TRDD_KIND)
+
+    // Make the FIRST corpus read fail: a zone that is a FILE raises ENOTDIR, which the
+    // fail-loud reader must propagate (only ENOENT is a legally absent zone). ENOTDIR
+    // rather than chmod on purpose — a permissions fixture passes VACUOUSLY as root.
+    const zone = path.join(corpus, 'refused')
+    fs.rmSync(zone, { recursive: true, force: true })
+    fs.writeFileSync(zone, 'not a directory')
+
+    // POSITIVE CONTROL, and it is the load-bearing half of the pair: it proves the
+    // broken zone really does throw WHEN THE READ IS REACHED. Without it the `busy`
+    // below is satisfied whether or not the lock precedes the read — which is exactly
+    // the vacuous shape this test exists to rule out.
+    expect(() => syncIndex(db, corpus, TRDD_KIND)).toThrow(/cannot read TRDD zone/i)
+
+    const holder = holdWriteLock(dbFile)
+    try {
+      let caught: unknown
+      try {
+        syncIndex(db, corpus, TRDD_KIND)
+      } catch (e) {
+        caught = e
+      }
+      // `busy` INSTEAD OF the control's error IS the ordering assertion: the lock was
+      // demanded before `listDocuments` ran. With the transaction around the writes
+      // only, this same call reaches the read first and throws the control's error.
+      expect(caught).toBeInstanceOf(IndexFaultError)
+      expect((caught as IndexFaultError).fault.code).toBe('busy')
+      // The operator-facing text, because this string is what `greptrdd` prints as it
+      // degrades: it has to say contention, or a routine race reads as a broken cache.
+      expect((caught as Error).message).toMatch(/NOT damage/)
+    } finally {
+      holder.exec('ROLLBACK')
+      holder.close()
+      db.close()
+    }
+  })
+
+  it("a SEPARATE connection sees the first writer's COMMITTED state — an empty delta", () => {
+    write('tasks', 'AAAAAAAA', { 'blocked-by': '[BBBBBBBB]' })
+    write('tasks', 'BBBBBBBB')
+
+    const first = openIndex(dbFile)
+    const a = syncIndex(first, corpus, TRDD_KIND)
+    first.close()
+
+    // A genuinely separate connection, as a second agent's process would open.
+    const second = openIndex(dbFile)
+    const b = syncIndex(second, corpus, TRDD_KIND)
+    try {
+      expect(a.added).toBe(2)
+      expect(a.records).toBe(2)
+      // The delta is computed INSIDE the lock, so the second writer reads the first's
+      // committed identities and re-parses nothing. Computed outside it — the shape
+      // this replaced — both writers derive the same delta from the same pre-state and
+      // both do the entire job, which at 10^5 is two concurrent multi-GB builds.
+      expect(b.added).toBe(0)
+      expect(b.changed).toBe(0)
+      expect(b.records).toBe(0)
+      expect(b.edges).toBe(0)
+      expect(validate(second)).toEqual({ ok: true })
+    } finally {
+      second.close()
+    }
   })
 })

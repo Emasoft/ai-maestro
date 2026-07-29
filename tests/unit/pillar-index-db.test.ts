@@ -201,6 +201,66 @@ describe('downgrade — a DB newer than the binary is NOT damaged', () => {
   })
 })
 
+describe('busy — an index another process is WRITING is not damaged (TRDD-YN8EQWYP)', () => {
+  /**
+   * An index that still needs the ladder, with its write lock held by someone else.
+   *
+   * The PENDING MIGRATION is what makes contention possible at all: at SCHEMA_VERSION
+   * the ladder loop never runs, `migrate` takes no write lock, and there is nothing to
+   * contend for. `precious` is committed BEFORE the lock so that its survival proves
+   * the file on disk is the SAME one, not a fresh index built over the corpse.
+   */
+  function heldUnmigratedIndex(): Database.Database {
+    const holder = new Database(db1)
+    holder.pragma('journal_mode = WAL')
+    holder.exec('CREATE TABLE precious(x)')
+    holder.exec('BEGIN IMMEDIATE')
+    return holder
+  }
+
+  it('reports `busy` from a contended migration, not the generic failure that erased the code', () => {
+    const holder = heldUnmigratedIndex()
+    let caught: unknown
+    try {
+      openIndex(db1, { busyTimeoutMs: 150 })
+    } catch (e) {
+      caught = e
+    } finally {
+      holder.exec('ROLLBACK')
+      holder.close()
+    }
+    expect(caught).toBeInstanceOf(IndexFaultError)
+    expect((caught as IndexFaultError).fault.code).toBe('busy')
+  })
+
+  it('LEAVES THE FILE ON DISK and records NO heal event — nuking it destroys a build in progress', () => {
+    const holder = heldUnmigratedIndex()
+    try {
+      openIndex(db1, { busyTimeoutMs: 150 })
+    } catch {
+      /* expected */
+    } finally {
+      holder.exec('ROLLBACK')
+      holder.close()
+    }
+    // This is the whole bug, and it was live: `nuke` unlinks the main file plus -wal
+    // and -shm, and on POSIX that unlink SUCCEEDS against a file another process still
+    // has open — so the other writer went on writing into an unlinked inode and
+    // reported success with its entire build gone.
+    expect(fs.existsSync(db1)).toBe(true)
+    const after = new Database(db1)
+    const t = after
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='precious'`)
+      .get()
+    after.close()
+    expect(t).toBeTruthy()
+    // And no FALSE DAMAGE in the ledger. A contention logged as a heal is worse than
+    // an unlogged one: the ledger exists so a recurring corruption is visible, and
+    // filling it with routine races is how that signal gets discounted.
+    expect(readHealLedger(`${db1}.heal.json`)).toEqual([])
+  })
+})
+
 describe('self-heal, and the ledger that keeps it from being invisible', () => {
   it('rebuilds a corrupt file and RECORDS the event', () => {
     fs.writeFileSync(db1, 'this is not a sqlite database at all')

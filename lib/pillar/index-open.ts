@@ -122,9 +122,11 @@ export function cardsFromIndex(
  * On an unchanged corpus it costs the identity probe and zero document reads.
  *
  * THROWS on any fault — a missing native module, a downgraded index, an unreadable
- * corpus. The caller decides whether that is fatal or a reason to fall back to the
- * walk; this function never silently degrades, because "the index was skipped" and
- * "the index agreed" must not look the same from the outside.
+ * corpus, or `busy` when another process on this host is mid-reindex. The caller
+ * decides whether that is fatal or a reason to fall back to the walk; this function
+ * never silently degrades, because "the index was skipped" and "the index agreed" must
+ * not look the same from the outside. `busy` in particular must reach the WALK and not
+ * a stale read: see `syncIndex`.
  */
 export function loadTrddGraphViaIndex(designDir: string): GraphCard[] {
   const file = indexPath(statePath('pillar-index'), corpusKeyFor(designDir))

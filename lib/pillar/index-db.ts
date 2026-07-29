@@ -44,6 +44,12 @@ export type IndexFaultCode =
   | 'orphan'
   /** Behind the ladder — NOT damage. Migrate, do not rebuild. */
   | 'behind'
+  /**
+   * Another process holds the write lock. CONTENTION, NOT DAMAGE: the index is
+   * healthy and IN USE, so the repair is to retry or answer from the walk — never
+   * to rebuild. See NEVER_HEALED, and `syncIndex` for who takes that lock.
+   */
+  | 'busy'
 
 export interface IndexFault {
   code: IndexFaultCode
@@ -285,11 +291,42 @@ export function corpusKeyFor(corpusRoot: string): string {
   return `${slug}-${hash}`
 }
 
-function applyPragmas(db: Database.Database): void {
+/**
+ * How long a writer WAITS for another process's write lock before giving up.
+ *
+ * Chosen against the two measured cases, not as a round number. A WARM sync holds the
+ * lock for the freshness probe plus a small write — 0.59 s of it is the probe at 10⁵
+ * (TRDD-31LJK1CX) — so a second writer comfortably gets in and the common case never
+ * degrades. A COLD build holds it for the entire parse, far longer than any tolerable
+ * wait, so the second writer times out and its caller answers from the WALK instead —
+ * which is both correct AND faster than waiting (`board --no-index` walks 10⁵ in
+ * ~8 s). Raising this to cover a cold build would trade a fast correct answer for a
+ * slow one; that is why it is not raised.
+ */
+export const DEFAULT_BUSY_TIMEOUT_MS = 5000
+
+/**
+ * Is this SQLite declining to wait any longer, rather than reporting damage?
+ *
+ * Matched on a PREFIX because there is more than one: `SQLITE_BUSY` is the plain lock
+ * timeout, `SQLITE_BUSY_SNAPSHOT` is a deferred transaction that read before it wrote
+ * and lost the race (and `busy_timeout` does NOT cover that one — which is why
+ * `syncIndex` begins IMMEDIATE), and `SQLITE_LOCKED*` is the same situation inside one
+ * connection. Every one means "come back later"; none means the file is wrong.
+ */
+export function isBusyError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null | undefined)?.code
+  return (
+    typeof code === 'string' &&
+    (code.startsWith('SQLITE_BUSY') || code.startsWith('SQLITE_LOCKED'))
+  )
+}
+
+function applyPragmas(db: Database.Database, busyTimeoutMs: number): void {
   // busy_timeout FIRST: without it `journal_mode = WAL` silently fails to take when
   // another process holds the lock, and the DB quietly stays in rollback-journal
   // mode — the setting looks applied and is not.
-  db.pragma('busy_timeout = 5000')
+  db.pragma(`busy_timeout = ${Math.max(0, Math.floor(busyTimeoutMs))}`)
   db.pragma('journal_mode = WAL')
   db.pragma('synchronous = NORMAL')
   db.pragma('foreign_keys = ON')
@@ -336,6 +373,16 @@ export function migrate(db: Database.Database): void {
       // when the partial work has to be unwound under contention.
       tx.immediate()
     } catch (err) {
+      // A BUSY here is ANOTHER PROCESS migrating the same index — not a migration
+      // that lied. The generic wrap below stringifies the error and so ERASES
+      // `err.code`, which is exactly what made the two indistinguishable to
+      // `openIndex` and got a healthy, in-use index deleted (see NEVER_HEALED).
+      if (isBusyError(err)) {
+        throw new IndexFaultError({
+          code: 'busy',
+          detail: `another process holds the write lock while migrating this index to v${m.to} and it did not free within busy_timeout — retry; this is contention, NOT damage`,
+        })
+      }
       throw new Error(`pillar index migration to v${m.to} failed: ${(err as Error).message}`)
     }
   }
@@ -578,7 +625,29 @@ export interface OpenOptions {
    * checked before this option is ever consulted.
    */
   readonly verify?: ValidateDepth
+  /**
+   * How long to wait for another process's write lock. Defaults to
+   * DEFAULT_BUSY_TIMEOUT_MS. Injectable so a contention test does not have to spend
+   * the real timeout to reach the busy path — and so a caller that KNOWS it is behind
+   * a long cold build can choose to wait rather than degrade.
+   */
+  readonly busyTimeoutMs?: number
 }
+
+/**
+ * The faults whose repair is NOT a rebuild. Healing either one DESTROYS a healthy index.
+ *
+ * ONE set rather than a condition per site, because "is this healable?" was being
+ * decided in two places and they had already drifted apart: the throw path knew about
+ * `downgrade` and the validate path knew about `downgrade`, while NEITHER knew about
+ * `busy` — so a second process migrating the same index landed in the generic heal
+ * branch and `nuke`d the file the first process was still writing. On POSIX that
+ * unlink succeeds against an open file, so the first writer went on writing into an
+ * unlinked inode and reported success with its entire build gone, while the ledger
+ * recorded "damage" that was only contention — the precise false alarm the ledger
+ * exists to make impossible.
+ */
+const NEVER_HEALED: ReadonlySet<IndexFaultCode> = new Set(['downgrade', 'busy'])
 
 function nuke(file: string): void {
   // -wal and -shm carry committed pages. Deleting only the main file leaves SQLite
@@ -597,9 +666,9 @@ function nuke(file: string): void {
  *
  * The self-heal deletes and recreates. That is only defensible because every row is
  * DERIVED from markdown on disk; it would be a data-loss bug in a store that owned
- * anything. A `downgrade` fault is deliberately NOT healed: a DB newer than the
- * binary is not damaged, and deleting it would destroy a good index to satisfy old
- * code.
+ * anything. The NEVER_HEALED faults are the exceptions, and they are exceptions for
+ * the same reason: their repair is not a rebuild. A `downgrade` DB is newer than this
+ * binary; a `busy` DB is healthy and IN USE by another process.
  */
 export function openIndex(file: string, opts: OpenOptions = {}): Database.Database {
   const ledger = opts.ledgerFile ?? `${file}.heal.json`
@@ -607,16 +676,31 @@ export function openIndex(file: string, opts: OpenOptions = {}): Database.Databa
   fs.mkdirSync(path.dirname(file), { recursive: true })
 
   const depth = opts.verify ?? 'structural'
+  const busyMs = opts.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS
   const attempt = (): { db: Database.Database; result: ValidateResult } => {
     const db = new Database(file)
-    applyPragmas(db)
-    // `migrate` runs the FULL pass inside each ladder step's transaction, so a
-    // brand-new or just-migrated index has already been checked end to end by the
-    // time control returns here. What is left to decide is how hard to re-check an
-    // index that was ALREADY current — and that is a read, so it gets the cheap pass
-    // unless a caller explicitly asks for more.
-    migrate(db)
-    return { db, result: validateAt(db, SCHEMA_VERSION, depth) }
+    try {
+      applyPragmas(db, busyMs)
+      // `migrate` runs the FULL pass inside each ladder step's transaction, so a
+      // brand-new or just-migrated index has already been checked end to end by the
+      // time control returns here. What is left to decide is how hard to re-check an
+      // index that was ALREADY current — and that is a read, so it gets the cheap pass
+      // unless a caller explicitly asks for more.
+      migrate(db)
+      return { db, result: validateAt(db, SCHEMA_VERSION, depth) }
+    } catch (err) {
+      // Close on the way out. Every caller of `attempt` either rethrows or heals, so a
+      // handle leaked here outlives the failure — and on a `busy` throw the caller
+      // DEGRADES AND KEEPS RUNNING, which makes the leak last the whole process. The
+      // close is itself guarded: masking the real fault with a close error would trade
+      // a diagnosable failure for a mysterious one.
+      try {
+        db.close()
+      } catch {
+        /* the original error is the one that matters */
+      }
+      throw err
+    }
   }
 
   let db: Database.Database
@@ -624,7 +708,22 @@ export function openIndex(file: string, opts: OpenOptions = {}): Database.Databa
   try {
     ;({ db, result } = attempt())
   } catch (err) {
-    if (err instanceof IndexFaultError && err.fault.code === 'downgrade') throw err
+    // Both NEVER_HEALED faults arrive HERE rather than through `result` — `migrate`
+    // throws them — so this line, not the one below, is what decides whether a
+    // healthy index survives contention.
+    if (err instanceof IndexFaultError && NEVER_HEALED.has(err.fault.code)) throw err
+    // A BUSY that did NOT come through `migrate` — `journal_mode = WAL` on a file not
+    // yet in WAL needs a lock of its own, so two processes creating one index can race
+    // here before any migration runs. BOTH translations are required and neither is
+    // redundant: `migrate` wraps its failure into a plain Error, which ERASES `.code`
+    // and makes it unreachable from this line, while this line catches the busy errors
+    // `migrate` never sees. Guard the CONDITION, not the reporter.
+    if (isBusyError(err)) {
+      throw new IndexFaultError({
+        code: 'busy',
+        detail: `another process holds the write lock on this index and it did not free within busy_timeout (${busyMs}ms) — retry or answer from the walk; this is contention, NOT damage`,
+      })
+    }
     if (opts.noHeal) throw err
     recordHeal(ledger, { at: now(), reason: 'open failed', faults: [(err as Error).message] })
     nuke(file)
@@ -634,10 +733,10 @@ export function openIndex(file: string, opts: OpenOptions = {}): Database.Databa
 
   if (result.ok) return db
 
-  const downgrade = result.faults.find((f) => f.code === 'downgrade')
-  if (downgrade) {
+  const unhealable = result.faults.find((f) => NEVER_HEALED.has(f.code))
+  if (unhealable) {
     db.close()
-    throw new IndexFaultError(downgrade)
+    throw new IndexFaultError(unhealable)
   }
   if (opts.noHeal) {
     db.close()

@@ -16,6 +16,7 @@ import type Database from 'better-sqlite3'
 import { normalizeTrddRef, refList, optionalRef, normalizePriority } from '../trdd-graph'
 import type { PillarKind } from './kinds'
 import { listDocuments, readDocument, recordsOf } from './store'
+import { IndexFaultError, isBusyError } from './index-db'
 import { identifyFiles, diffIdentities, type FileIdentity } from './freshness'
 
 /** The frontmatter fields that ARE the TRDD dependency graph. */
@@ -60,11 +61,56 @@ function edgesFor(recordId: string, fm: Record<string, unknown>): PendingRow['ed
 /**
  * Bring the index in line with the corpus, touching only what moved.
  *
- * One transaction: an index that is half-updated is worse than one that is stale,
+ * ONE transaction: an index that is half-updated is worse than one that is stale,
  * because staleness is DETECTABLE (the identities disagree) while a partial write
  * looks exactly like a complete one.
+ *
+ * IMMEDIATE, and it SPANS THE CORPUS READ — which is what makes N agents on one host
+ * safe (TRDD-YN8EQWYP). Three things follow from that one choice:
+ *
+ *  1. **The wait happens at BEGIN, where `busy_timeout` actually applies.** A deferred
+ *     BEGIN that reads before it writes can fail with `SQLITE_BUSY_SNAPSHOT`, which
+ *     `busy_timeout` does NOT retry — so the old shape was safe only by the accident
+ *     that no SELECT preceded its first DELETE, and the first `SELECT` anyone added
+ *     inside it would have reintroduced an unretryable failure silently.
+ *  2. **The delta is computed under the lock, so a second writer that gets in sees the
+ *     first's COMMITTED state** — an empty delta, zero parses, zero redundant writes.
+ *     Reading `files` outside the lock instead had both writers derive the same delta
+ *     from the same pre-state and both do the whole job.
+ *  3. **SQLite's own write lock IS the build lock**, so there is no lockfile, no stale-
+ *     lock heuristic, and no orphaned lock after a crash: the OS releases it when the
+ *     process dies. `lib/server-lockfile.ts` was the alternative and is the wrong tool
+ *     here — it is async (this path is synchronous throughout) and it needs a staleness
+ *     guess, which is a whole class of bug the DB lock does not have.
+ *
+ * THE PREVIOUS RATIONALE FOR THE OPPOSITE CHOICE WAS FACTUALLY WRONG, which is why it
+ * is recorded rather than quietly replaced: it said holding the lock across the parse
+ * "would block every other reader for the whole scan". In WAL mode — which
+ * `applyPragmas` sets two files over — a writer does not block readers at all. It
+ * blocks other WRITERS, which is precisely the intent.
+ *
+ * On timeout the caller gets `busy` and must answer from the WALK. It must NEVER answer
+ * from the un-synced index: staleness that nothing reports is the one failure this
+ * whole subsystem is built to avoid, and `busy` is contention, never damage — see
+ * NEVER_HEALED in `index-db.ts` for what used to happen instead.
  */
 export function syncIndex(db: Database.Database, root: string, kind: PillarKind): SyncStats {
+  const run = db.transaction((): SyncStats => syncWithin(db, root, kind))
+  try {
+    return run.immediate()
+  } catch (err) {
+    if (isBusyError(err)) {
+      throw new IndexFaultError({
+        code: 'busy',
+        detail:
+          'another process is indexing this corpus and its write lock did not free within busy_timeout — answer from the corpus walk; this is contention, NOT damage',
+      })
+    }
+    throw err
+  }
+}
+
+function syncWithin(db: Database.Database, root: string, kind: PillarKind): SyncStats {
   const files = kind.zones.flatMap((zone) =>
     listDocuments(root, kind, zone).map((path) => ({ path, zone })),
   )
@@ -85,8 +131,8 @@ export function syncIndex(db: Database.Database, root: string, kind: PillarKind)
   const delta = diffIdentities(indexed, live)
   const toRead = [...delta.added, ...delta.changed]
 
-  // Parse OUTSIDE the transaction: reading is the slow part and holding the write
-  // lock across it would block every other reader for the whole scan.
+  // Parse INSIDE the transaction, deliberately — see `syncIndex` for why, and for the
+  // wrong reason this used to sit outside it.
   const pending: PendingRow[] = []
   for (const path of toRead) {
     const zone = zoneOf.get(path) ?? ''
@@ -163,22 +209,23 @@ export function syncIndex(db: Database.Database, root: string, kind: PillarKind)
     delFiles.run(path)
   }
 
+  // No transaction here: `syncIndex` already holds one, IMMEDIATE, spanning this whole
+  // function. A second one would add only a redundant SAVEPOINT — and having it here
+  // was what made the enclosing scope look transaction-free.
   const now = Date.now()
-  db.transaction(() => {
-    for (const path of delta.removed) evict(path)
-    for (const row of pending) {
-      evict(row.path)
-      insFile.run(row.path, kind.name, row.zone, row.identity, now)
-      for (const r of row.records) {
-        insRecord.run(kind.name, r.id, row.path, r.line, r.col, r.title, r.priority)
-        stats.records++
-      }
-      for (const e of row.edges) {
-        insEdge.run(kind.name, e.srcId, e.field, kind.name, e.dstId, row.path)
-        stats.edges++
-      }
+  for (const path of delta.removed) evict(path)
+  for (const row of pending) {
+    evict(row.path)
+    insFile.run(row.path, kind.name, row.zone, row.identity, now)
+    for (const r of row.records) {
+      insRecord.run(kind.name, r.id, row.path, r.line, r.col, r.title, r.priority)
+      stats.records++
     }
-  })()
+    for (const e of row.edges) {
+      insEdge.run(kind.name, e.srcId, e.field, kind.name, e.dstId, row.path)
+      stats.edges++
+    }
+  }
 
   return stats
 }

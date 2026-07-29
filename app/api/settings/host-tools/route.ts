@@ -128,42 +128,91 @@ function diagnoseAgentCli(): ToolStatus {
   return binExists('aimaestro-agent.sh') ? 'installed' : 'missing'
 }
 
-function diagnoseTailscaleServe(): ToolStatus {
+/** Is the Tailscale binary present AND the daemon up? Shared prerequisite of both
+ *  Tailscale tools below. Returns null when the prerequisite holds, or the ToolStatus
+ *  to report when it does not.
+ *
+ *  WHY this is factored out: both tools previously re-derived it, and the serve tool
+ *  then collapsed "tailscale absent" and "tailscale fine, serve unconfigured" into the
+ *  same `missing`. One prerequisite, one answer, so the two cannot drift apart again. */
+function tailscalePrerequisite(): ToolStatus | null {
   try {
-    // Check if tailscale is installed — use execFileSync to avoid shell injection
+    // execFileSync (not exec) — no shell, so no injection surface
     execFileSync('which', ['tailscale'], { encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] })
   } catch {
-    return 'missing' // tailscale not installed
+    return 'missing' // the binary genuinely is not installed
   }
   try {
-    // Check if tailscale is running
     execFileSync('tailscale', ['status'], { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] })
   } catch (err) {
     console.error('[host-tools] tailscale status check failed:', err instanceof Error ? err.message : String(err))
-    return 'error' // tailscale not running
+    return 'error' // installed but the daemon is down / logged out
   }
+  return null
+}
+
+/** Diagnose ACTUAL VPN reachability — the thing the dashboard depends on for remote
+ *  access. This host binds `::` and is reached directly at its tailnet IP
+ *  (`http://100.x.y.z:23000`), so a CGNAT-range address IS the capability.
+ *  Deliberately says nothing about `tailscale serve`, which is a separate mechanism. */
+function diagnoseTailscaleVpn(): ToolStatus {
+  const prereq = tailscalePrerequisite()
+  if (prereq) return prereq
   try {
-    // Check serve status
+    const ip = execFileSync('tailscale', ['ip', '-4'], { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }).trim()
+    // Tailscale hands out 100.64.0.0/10 (CGNAT). Anything else means we are not on a tailnet.
+    const first = ip.split('\n')[0]?.trim() ?? ''
+    const octets = first.split('.').map(Number)
+    const inCgnat = octets.length === 4 && octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127
+    return inCgnat ? 'installed' : 'partial' // running, but holds no tailnet address yet
+  } catch (err) {
+    console.error('[host-tools] tailscale ip check failed:', err instanceof Error ? err.message : String(err))
+    return 'error'
+  }
+}
+
+/** Diagnose `tailscale serve` ONLY — never VPN reachability (that is diagnoseTailscaleVpn).
+ *
+ *  The three non-installed outcomes are deliberately distinct. Reporting "serve is not
+ *  configured" as `missing` is what made the dashboard print "Not installed" three lines
+ *  below the working tailnet URL the user had just connected over: no-serve-config is the
+ *  HEALTHY steady state of this project's direct-bind architecture, not an absence. */
+function diagnoseTailscaleServe(): ToolStatus {
+  const prereq = tailscalePrerequisite()
+  if (prereq) return prereq
+  try {
     const status = execFileSync('tailscale', ['serve', 'status', '--json'], { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] })
     const config = JSON.parse(status)
-    // Check for HTTP/Web serve mode (correct) or TCP mode (outdated)
     if (config.Web && Object.keys(config.Web).length > 0) return 'installed'
     if (config.TCP && Object.keys(config.TCP).length > 0) return 'outdated' // TCP mode, needs upgrade to HTTP
-    return 'missing' // no serve config
+    // Healthy tailscale, no serve routes. `{}` is exactly what 1.98.5 returns here.
+    return 'partial'
   } catch (err) {
+    // We proved above that tailscale is installed AND running, so a failure here is an
+    // inability to DETERMINE the serve state — never evidence of absence. (`serve status
+    // --json` was a genuine regression in 1.98.1, fixed by 1.98.5.)
     console.error('[host-tools] tailscale serve status check failed:', err instanceof Error ? err.message : String(err))
-    return 'missing'
+    return 'error'
   }
 }
 
 const TOOLS: ToolDef[] = [
   {
-    id: 'tailscale-serve',
+    id: 'tailscale-vpn',
     name: 'Tailscale VPN Access',
-    description: 'Configures tailscale serve so the dashboard is accessible from any device in your Tailscale VPN (iPad, phone, laptop). Runs automatically on startup.',
+    description: 'Verifies this host is on your tailnet so the dashboard is reachable from any VPN device (iPad, phone, laptop) at http://<tailscale-ip>:23000. Checks the daemon, the CGNAT address, MagicDNS, and that no subnet route is leaking.',
+    script: 'scripts/setup-tailscale.sh',
+    runArgs: [],
+    confirmMessage: 'This validates the Tailscale setup for AI Maestro (install, daemon, tailnet address, MagicDNS, subnet routes) and reports what it finds. It does not change your Tailscale configuration.',
+    diagnose: diagnoseTailscaleVpn,
+  },
+  {
+    id: 'tailscale-serve',
+    name: 'Tailscale Serve (HTTPS reverse proxy)',
+    description: 'OPTIONAL, and not used by default: publishes the dashboard at https://<host>.<tailnet>.ts.net via tailscale serve. VPN access already works without it (see Tailscale VPN Access). Serve proxies from loopback, so every caller reaches the server as 127.0.0.1.',
     script: 'scripts/setup-tailscale-serve.sh',
     runArgs: [],
-    confirmMessage: 'This will configure tailscale serve to proxy VPN traffic to the AI Maestro dashboard. Requires Tailscale to be installed and running. Any existing tailscale serve config for port 23000 will be replaced.',
+    confirmMessage: 'This runs `tailscale serve reset`, which clears EVERY serve route on this node — not only port 23000 — and then publishes the dashboard. If you serve anything else from this machine, that config is removed too.',
     diagnose: diagnoseTailscaleServe,
   },
   // NOTE: 'hooks' entry removed. Hooks are NOT a host-level tool — they are

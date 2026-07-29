@@ -35,7 +35,17 @@ export const FLEET_CONTROL_FLAGS = [
   'global-pause.flag',
   'reload-needed.flag',
   'skills-reload-needed.flag',
-  'version-update-request',
+  // TRDD-4F40QCCH / ai-maestro#102. This read `'version-update-request'` — no `ed`, no `.flag`
+  // suffix — so `fleetControlFlagPresent` stat'd a path the janitor never writes and reported
+  // `absent` for a flag that was PRESENT on disk the whole time. Verified against the WRITER,
+  // not inferred from one file: janitor 0.64.1 `lib/global_state.py:596` resolves
+  // `_control_path("version-update-requested.flag")`.
+  //
+  // This is precisely the silent-healthy failure the fixed control path exists to prevent — the
+  // janitor's own architecture doc warns that a foreign reader guessing a rung "fails silently as
+  // flag-absent, i.e. ignores the control plane while looking healthy". A wrong FILENAME lands in
+  // the same place as a wrong DIRECTORY, and is harder to see because nothing errors.
+  'version-update-requested.flag',
 ] as const
 
 export type FleetControlFlag = (typeof FLEET_CONTROL_FLAGS)[number]

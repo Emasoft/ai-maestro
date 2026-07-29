@@ -16,7 +16,7 @@ approved: true
 approval-judge: ai-maestro
 approval-datetime: 2026-07-29T21:30:09+0200
 derived: false
-npt: []
+npt: [FHBGF0WG]
 eht: []
 severity: major
 priority: 1
@@ -48,10 +48,16 @@ exists.
 | the removal code that exists | `services/element-management-service.ts:1718` "Remove from installed_plugins.json" — in the **plugin-uninstall** path, which `DeleteAgent` never calls |
 
 **NEXT ACTION:** add a `DeleteAgent` gate that removes every record whose `projectPath` is the
-deleted agent's workdir, reusing the existing removal helper at
-`element-management-service.ts:1718`. It is a MUTATING gate, so under R50/R51 it needs a
-compensation registered before it runs — and it must land where the workdir path is still
-known (before `G09` deletes the folder, and before the registry row is gone at `G08`).
+deleted agent's workdir. It is a MUTATING gate, so under R50/R51 it needs a compensation
+registered before it runs — and it must land where the workdir path is still known (before
+`G09` deletes the folder, and before the registry row is gone at `G08`).
+
+**BLOCKED on NPT TRDD-FHBGF0WG.** The helper at `element-management-service.ts:1718` CANNOT be
+reused as-is: `installed_plugins.json` maps a key to an ARRAY of per-install records, and that
+code does `delete pluginsMap[pluginKey]` — the whole array, every agent, BOTH scopes. Reusing
+it from `DeleteAgent` would turn "clean up one agent's records" into "wipe every agent's
+records for that plugin, plus the user-scope row". FHBGF0WG makes the surgery record-scoped
+first.
 
 **Load-bearing facts / gotchas**
 

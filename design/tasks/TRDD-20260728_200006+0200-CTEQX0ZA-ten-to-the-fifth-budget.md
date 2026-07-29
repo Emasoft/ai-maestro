@@ -1,11 +1,11 @@
 ---
 trdd-id: CTEQX0ZA
 title: State the 100000-document budget before designing the pillar index
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-29T01:12:17+0200
+updated: 2026-07-29T02:26:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -134,9 +134,9 @@ an unmeasured cell says so rather than carrying a projection.
 |---|---|---|---|
 | full lint (`validate`) | **< 4 GB RSS, hard**; time secondary | 2.43 GB · 22.6 s · exit 0 | **MET** (`fc53ce99`) |
 | graph query, WALK fallback | < 4 GB RSS; seconds, never minutes | 1.02 GB · 8.07 s · exit 0 | **MET** |
-| graph query, INDEX warm | **< 1 s** — this is the whole point of having one | 0.37 s at 10⁴ (vs 1.12 s walk) | pending the cold build |
-| incremental reindex, 1 file changed | ~O(1) work + an O(N) freshness probe | probe was 50 ms at 10⁴ | pending |
-| cold full index build | no interactive budget (rare) — but must fit **< 4 GB** | 2.37 GB · **> 56 min and still running** | RSS met; the TIME is a defect, not a budget → **`TRDD-7CHUK1AZ`** |
+| graph query, INDEX warm | **< 1 s** — this is the whole point of having one | **not measurable at 10⁵** (needs a built index). At 10⁴ end-to-end: 2.36 s · 138 MiB, of which **1.57 s is work** (0.79 s is the node+tsx boot floor) vs **4.37 s of work** for the walk | **blocked on `TRDD-7CHUK1AZ`** |
+| incremental reindex, 1 file changed | ~O(1) work + an O(N) freshness probe | not measurable at 10⁵ (same reason). At 10⁴: **+0.24 s over warm** (2.60 s vs 2.36 s end-to-end) — a probe, not a rebuild | **blocked on `TRDD-7CHUK1AZ`** |
+| cold full index build | no interactive budget (rare) — but must fit **< 4 GB** | 2.37 GB peak · **KILLED at 1h32m** (84:55 CPU, 92% on-CPU throughout) with the main DB still **4096 bytes** | RSS met; **the build does not COMPLETE** → **`TRDD-7CHUK1AZ`** |
 | recall-by-symptom | — | does not exist | **Phase 5** designs it |
 
 Three of these are load-bearing and worth saying plainly:
@@ -149,6 +149,19 @@ Three of these are load-bearing and worth saying plainly:
 3. **The cold build is the only row with no defensible budget**, because its cost is currently
    spent on a table with no reader. Setting a number for it before Phase 5 decides the FTS would be
    budgeting for work that may not exist. `TRDD-7CHUK1AZ` carries the evidence.
+4. **Two rows are BLOCKED, and blocked is not the same as unmeasured.** The warm-index and
+   incremental-reindex budgets are the *interactive* ones — the whole reason for an index — and
+   they cannot be taken at 10⁵ until a cold build completes there. That is not a gap in this
+   card's diligence; it is `7CHUK1AZ` gating its own measurement, and the 10⁴ figures are the
+   evidence carried forward in the meantime.
+
+**Two instruments, both true — do not read them as a regression.** The earlier cells said
+"0.37 s at 10⁴ (vs 1.12 s walk)"; that is the *in-process query*. The cells above are
+`/usr/bin/time` on the whole CLI, which also pays a **0.79 s node+tsx boot floor** (measured
+separately with `--help`, same harness). Net of that floor at 10⁴: walk **4.37 s / 241 MiB**,
+index **1.57 s / 138 MiB** — the index removes ~2.8× of the work and ~43% of the memory, on an
+answer proven **byte-identical** to the walk's on the same 10 000-card corpus. A number quoted
+without its instrument is what makes a later reader think something got slower.
 
 The `board` row folds in "graph / cycle detection": both are served by the same `loadGraph`, so
 they are one measurement, not two. **Paging is NOT needed at 10⁵** — the earlier note assuming it
@@ -258,8 +271,11 @@ against this table.
       (memory, ~60-70k cards) rather than guessed
 - [x] A generated fixture corpus exists and is reproducible from a script
       (`scripts/gen-trdd-fixture.mjs`, deterministic ids, real edges, real frontmatter)
-- [ ] The remaining per-operation budgets are stated (they are stated against the index design,
-      so they land with Phase 5)
+- [x] The remaining per-operation budgets are stated. Four of six rows are MEASURED at 10⁵; the
+      two interactive rows (warm query, incremental reindex) are stated at 10⁴ and marked
+      **blocked on `TRDD-7CHUK1AZ`**, because a 10⁵ warm number requires a completed cold build
+      and that build does not complete. Stating them as "pending" would have hidden a defect
+      behind a schedule
 - [x] The correctness guarantee is restated for a world where the full walk is NOT an available
       fallback: index-backed and walk-backed answers proven byte-identical on a *small* corpus,
       including result ORDER — the guarantee moves from RUNTIME fallback to a BUILD-TIME

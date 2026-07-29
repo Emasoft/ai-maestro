@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T01:09:09+0200
-updated: 2026-07-29T01:09:09+0200
+updated: 2026-07-29T02:26:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -58,12 +58,39 @@ the rest of this flock uses.
 | | |
 |---|---|
 | peak RSS | **2.36 GB**, reached during accumulation and then FLAT for the whole write phase |
-| wall | **> 56 min and still running** — 10× the data of the 10⁴ run (117.6 s) taking **>28× the time**, i.e. clearly SUPER-LINEAR |
-| WAL at 17 min | 420 MB, growing ~10 MB/min — one transaction, so nothing checkpoints until the end |
+| wall | **KILLED at 1h32m — it does not complete.** 10× the data of the 10⁴ run (117.6 s) had already cost **>47×** the time with no end in sight |
+| CPU | `84:55` cumulative over 92 min elapsed — **92% on-CPU throughout**, state `R`. Not blocked, not deadlocked: it was working the whole time |
+| main DB at kill | **4096 bytes**, mtime unchanged since the run started | 
+| WAL at kill | **855 MiB**, uncommitted |
 
-The RSS plateau is the tell: it stops rising exactly when `pending` is full, which is the signature
-the mechanism above predicts. 2.36 GB against a 1.2 GB corpus is ~2× — consistent with V8 string
-and object overhead over the retained bodies.
+**It is not "slow", it DECELERATES — and that is the finding.** WAL growth, sampled across the run:
+
+| point | rate |
+|---|---|
+| first 17 min | ~24 MiB/min (420 MB reached) |
+| next 71 min | ~6.5 MiB/min |
+| at 88 min (120 s window) | **3.3 MiB/min** |
+| at 90 min (80 s window) | **2.25 MiB/min** |
+
+Monotonic decay, so the run has no bounded finish: extrapolating the remaining FTS content
+(~the corpus, 1.2 GB) at the *last* rate already gives 8+ hours, and the rate was still falling.
+A rare operation costing ~20 min is an accepted cost; one whose completion time diverges as the
+corpus grows is a defect.
+
+**The mechanism, restated with the deceleration included.** One giant transaction means nothing
+checkpoints, so every insert must locate pages through an ever-growing WAL index (`-shm` reached
+1.7 MB). The WAL is not a passive log here — it is what makes each *subsequent* insert more
+expensive. That compounds with the retained `pending` array: the memory wall and the time wall are
+the same design decision seen from two sides.
+
+The RSS plateau is the tell for the memory half: it stops rising exactly when `pending` is full,
+which is the signature the mechanism above predicts. 2.36 GB against a 1.2 GB corpus is ~2× —
+consistent with V8 string and object overhead over the retained bodies.
+
+**Killing it cost nothing that was not already at risk.** After 92 minutes the main DB was still
+4096 bytes: the entire run lived in an uncommitted transaction, so a crash, a kill, or a power
+blip were all worth exactly the same. That is itself an argument for bounded batches — a build
+this long with no durable intermediate state cannot survive anything.
 
 **This is the SAME defect `BQC8NQSW` just fixed one layer over.** There, `loadCorpus` held every
 card *including* `raw`, and at 10⁵ the linter did not run slowly — it CRASHED (exit 134, 4.45 GB).

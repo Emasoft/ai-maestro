@@ -61,6 +61,22 @@ tmux list-sessions                   # List all sessions (what the app discovers
 tmux kill-session -t test-session    # Clean up test session
 ```
 
+### The pillar CLIs — `0` clean · `1` findings · `2` COULD NOT RUN
+
+`yarn greptrdd` (query/lint/validate the TRDD corpus), `yarn trdd:doctor` (+`:fix`,
+`:board`), `yarn pillars:lint` (the cross-pillar DAG). All take `--design-dir`;
+`greptrdd` also takes `--no-index`.
+
+Their exit codes are a **trichotomy — `grep`'s own** — and `2` is the load-bearing
+one: before it existed, a gate run from the wrong directory read nothing and exited
+`0`, so "the corpus is clean" and "I never saw the corpus" were the same answer.
+**Never write `greptrdd validate || …`** — that collapses `1` into `2` and turns
+*could-not-run* into *found-findings*. The idiom is copied from
+`aimaestro-trdd.sh verify`, where it is correct because that verb is the one
+grandfathered exception (`2` = INVALID, `1` = ERROR — inverted, and named as an
+exception in [docs/SCRIPT-LAYER.md](./docs/SCRIPT-LAYER.md), which is also where
+the repo-local-not-`~/.local/bin` reasoning lives).
+
 ### A RESTART DOES NOT REBUILD — know which half you changed
 
 `pm2 restart` replays the **existing** build. The tree has two halves with different

@@ -205,6 +205,18 @@ cmd_read() {
 #
 # instead of believing a line of prose in a file that anyone with repo write can
 # type. A verifier that always exits 0 is not a verifier.
+#
+# NOTE — this numbering is INVERTED against the rest of the project, and it is a
+# grandfathered EXCEPTION, not a second convention. Every pillar CLI (greptrdd,
+# trdd-doctor, pillars-lint) uses grep's trichotomy: 0 clean, 1 = FINDINGS (the
+# substantive negative answer), 2 = THE CHECK COULD NOT RUN. Here 2 and 1 mean the
+# opposite. The `||` above is right for THIS verb only, because both non-zero codes
+# mean "do not proceed" — copy it onto `greptrdd validate` and you silently turn
+# could-not-run into found-findings. Kept as-is because this is the external
+# boundary plugins call and a consumer branching on `[ $? -eq 2 ]` lives in a repo
+# we cannot audit; governance-spec R41.enf-verify pins only "exits non-zero", so
+# the spec would permit renumbering but the unauditable consumers do not.
+# Documented in docs/SCRIPT-LAYER.md; decided in TRDD-8KDIB2LT.
 cmd_verify() {
     local id="${1:-}"; shift || true
     _check_trdd_id "$id" || return 1

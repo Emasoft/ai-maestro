@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-30T01:51:01+0200
+updated: 2026-07-30T01:53:44+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -168,10 +168,20 @@ assumption, and a zero-risk option exists. Revisit only if auditing external con
 
 ## Acceptance
 
-- [ ] Every document that states an exit-code meaning states the trichotomy
-- [ ] `docs/SCRIPT-LAYER.md` and `CLAUDE.md` name `prrdgrep` and `specsgrep` with their subcommands
-- [ ] The distribution decision is recorded explicitly — either "repo-local, and here is why" or
-      "distributed, wrapper included"
+- [x] Every document that states an exit-code meaning states the trichotomy — **all three now do**:
+      `docs/SCRIPT-LAYER.md` (new "The pillar CLIs" section: the trichotomy, `grep`-verified, plus the
+      `||` warning), `CLAUDE.md` (a tight pointer — it is injected every turn), and
+      `scripts/aimaestro-trdd.sh` itself, whose header now names its own numbering as the
+      grandfathered EXCEPTION and states the canon beside it. That last one is the load-bearing edit:
+      a reader of the script alone previously learned the inverted rule in isolation
+- [ ] `docs/SCRIPT-LAYER.md` and `CLAUDE.md` name `prrdgrep` and `specsgrep` with their subcommands —
+      **still gated**: neither tool exists (Phase 3, transitively on the user-held `Q3GZJI1X`)
+- [x] The distribution decision is recorded explicitly — **"repo-local, and here is why"**, written
+      into `docs/SCRIPT-LAYER.md`: they are `*.mjs` and the installer globs `scripts/*.sh`;
+      distributing one means shipping the Node-22 wrapper with it, because the index needs the native
+      `better-sqlite3` (hard-caps at Node 25) so a bare `greptrdd` on a Node-26 box dies on
+      `ERR_DLOPEN_FAILED` where the repo-local form works; and they are developer/agent tools over a
+      git-tracked corpus, not an API surface a plugin should couple to
 - [x] A grep for the old two-outcome wording returns nothing — **8 phrasings, positive-controlled;
       SATISFIED but VACUOUSLY**, because nothing documents these tools' exit codes at all. The sweep's
       real yield is the inverted `1`/`2` convention in `scripts/aimaestro-trdd.sh:200-206`, recorded

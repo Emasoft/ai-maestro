@@ -166,6 +166,17 @@ dashboard currently has that agent active.
 `failed`**, because a failed TRDD is retryable and stays open. Giving up on it is
 an explicit `cancel`.
 
+**`verify` is the one exit-code exception in this whole layer.** It uses `2` = the
+approval is INVALID (a substantive answer) and `1` = the check ERRORED — inverted
+against the pillar CLIs' trichotomy below, where `1` is the substantive answer and
+`2` is the tool failing. It is **grandfathered, not a second convention**:
+`governance-spec.md` `R41.enf-verify` pins only *"exits non-zero when the approval
+does not verify"*, so renumbering would satisfy the spec, but this is the external
+boundary plugins call and a consumer branching on `[ $? -eq 2 ]` lives in a repo
+this project cannot audit. Gate on it with `||` — for `verify` both non-zero codes
+mean "do not proceed", which is exactly why that idiom is right here and **wrong**
+for `greptrdd validate`.
+
 ### `amp-kanban-*.sh` — the team board
 
 `list` · `get` · `create-task` · `move` · `edit` · `archive`
@@ -239,6 +250,51 @@ picked up with no installer edit. Adding a script to `scripts/` is enough.
 
 If a wrapper is missing from `~/.local/bin/`, the installer simply has not been
 re-run since that wrapper landed. Re-run `./install-messaging.sh -y`.
+
+## The pillar CLIs — repo-local, and deliberately NOT on this boundary
+
+Three tools read the 3-pillars corpus (`design/`) **directly off disk, with no
+server and no API**, so they are not part of the boundary above:
+
+| `yarn` script | What it is |
+|---|---|
+| `yarn greptrdd` | query + `lint` + `validate` the TRDD corpus (`--help` lists every subcommand) |
+| `yarn trdd:doctor` / `trdd:fix` / `trdd:board` | the 19-rule doctor; `:fix` repairs only the mechanically-derivable findings |
+| `yarn pillars:lint` | the cross-pillar reference DAG (`PRRD ← SPECS ← TRDD`) |
+
+**Exit codes — the trichotomy, and it is `grep`'s own** (`0` found · `1` not found ·
+`2` could not run, verified by running `grep` directly):
+
+| Code | Meaning |
+|---|---|
+| `0` | clean — the check ran and found nothing |
+| `1` | **findings** — the check ran and the answer is negative |
+| `2` | **the check COULD NOT RUN** — an unreadable zone, a missing `design/` dir, a bad flag |
+
+`2` exists because the older two-outcome shape made a gate that read *nothing* exit
+`0`: run from the wrong directory and "the corpus is clean" and "I never saw the
+corpus" were the same answer. **Never collapse `1` and `2`.** In particular
+`greptrdd validate || handle` turns *could-not-run* into *found-findings*, which is
+the precise conflation the third code exists to prevent — and `||` is the obvious
+thing to copy across from `aimaestro-trdd.sh verify`, where it IS correct.
+`--strict` on `lint`/`validate` additionally fails on warnings (exit `1`).
+
+**Flags.** All three take `--design-dir <path>`, so none of them requires being run
+from the repo root. `greptrdd` alone takes `--no-index`: it answers the graph
+subcommands (`why`/`unblocks`/`roots`/board) from the SQLite index at
+`~/.aimaestro/pillar-index/` when one is fresh, and `--no-index` forces the corpus
+walk instead. Search is walk-only by design (FTS5 cannot evaluate a regex) and
+`show` always re-reads its one file for freshness.
+
+**Why they are NOT copied to `~/.local/bin/`.** They are `*.mjs`, and the installer
+copies `scripts/*.sh` by glob — no `*.mjs` is distributed today. Distributing one
+would mean shipping the Node-22 wrapper with it, because the index needs
+`better-sqlite3`, which is native and hard-caps at Node 25: a bare `greptrdd` on a
+Node-26 machine would die on `ERR_DLOPEN_FAILED` where the repo-local form works.
+They are also **developer/agent tools over a git-tracked corpus**, not an API
+surface a plugin should couple to — the API-facing task verbs are
+`aimaestro-trdd.sh` above. Run them through `bash scripts/with-node.sh yarn <script>`
+if your shell does not already select Node 22.
 
 ## Adding a capability
 

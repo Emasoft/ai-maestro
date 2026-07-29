@@ -4,7 +4,8 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-07-29T21:44:51+0200
+updated: 2026-07-29T23:45:00+0200
+implementation-commits: [973de2fe]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -156,8 +157,8 @@ either shape — it is what converts "we remember not to do this" into something
 
 - [ ] USER picks Shape A (delegate to the CLI) or Shape B (ratified carve-out with enforcer discipline)
 - [ ] `installed_plugins.json` mutation matches the chosen shape
-- [ ] A boundary test pins the complete set of out-of-root writes to an allowlist, each carrying its ratifying TRDD id
-- [ ] The boundary test is non-vacuous (asserts the scanned count) and fails on a seeded new violation
+- [x] A boundary test pins the complete set of out-of-root writes to an allowlist, each carrying its ratifying TRDD id — `lib/write-boundary.ts` + `tests/unit/write-boundary.test.ts` (`973de2fe`); MEASURED set is 5 sites (3 ratified, 2 labelled UNRATIFIED)
+- [x] The boundary test is non-vacuous (asserts the scanned count) and fails on a seeded new violation — asserts `scanned > 400` and `writeCallSites > 100`, plus a per-marker-class non-zero check; end-to-end neuter recorded (a real `writeFile(join(HOME, '.claude', …))` appended to `services/groups-service.ts` reddens the allowlist test naming that exact site)
 - [ ] The ratified `settings.json` carve-out is asserted as EXPECTED so a future audit cannot delete it
 - [ ] The `~/.claude/projects/` transcript purge is explicitly ratified or removed
 - [ ] The boundary is recorded as a governance rule, not only as a memory note

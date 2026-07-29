@@ -37,6 +37,10 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A gate needs THREE exit codes: 0 clean · 1 findings · 2 could-not-run. With two, every failure to read reports success.
 - The non-vacuity guard belongs in the TOOL, not only in the test that happens to exercise it — ours asserted `scanned > 100` in vitest for months while the shipped CLI certified an empty read.
 - A secret/PII scan keyed on ONE shape is blind to every other shape BY CONSTRUCTION: mine matched `*.ts.net` FQDNs and so could never see the bare hostname, the raw `100.x` address, or the `user@` that were sitting in the same file — enumerate the classes, print a COUNT per class, and carry a positive control proving the scanner sees a string you know is present.
+- A gate whose regex match CONSUMES its argument window skips every call site inside that window: mine matched `verb\s*\(` PLUS 240 chars, so `exec` advanced past a `saveJsonSafe(USER_GLOBAL_SETTINGS…)` sitting two lines below an `mkdir(…)` and reported it clean — match the verb ONLY, extract arguments separately.
+- Splitting a call's first argument with a regex mis-cuts nested calls: `/,(?![^(]*\))/` cut `mkdir(join(CLAUDE_DIR, 'plugins'), …)` in the wrong place and attributed the finding to whichever token appeared later, so the SITE was right and the REASON was wrong — count bracket depth and skip string literals.
+- A source scanner must EXCLUDE ITSELF — its own docs and pattern tables necessarily contain the patterns it hunts, so it reports its own prose as findings (the `pgrep -f` self-match trap, one layer up); mine flagged 2 violations in the detector file, which writes nothing.
+- PIN what a detector CANNOT see: a write through a local variable (`renameSync(tmp, file)`) is invisible to textual matching, and silence about it reads as absence — list the blind spot as data and test the list, so it cannot grow unnoticed.
 - Never print an `empty = none` label unconditionally after a grep — mine printed under a NON-empty result and I read "clean" off a screen that was listing the hits; label from the count, not from hope.
 
 ## Verifying a fix

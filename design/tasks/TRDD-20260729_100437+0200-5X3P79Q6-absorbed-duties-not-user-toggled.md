@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:04:37+0200
-updated: 2026-07-29T10:04:37+0200
+updated: 2026-07-29T21:40:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -50,6 +50,33 @@ duty transfer, and the two vocabularies do not line up (see §Open question).
   was filed against us — *"closing the window where the janitor daemon exits (server up) but its
   self-updates never land — **once auto-update's master toggle is on**"*. The design was correct;
   the condition was never satisfied and nothing reported it as unmet.
+
+### Added 2026-07-29 21:40 (folded in from the duplicate card 4F40QCCH — see its cancellation)
+
+- **A SECOND, INDEPENDENT DEFECT, FOUND AND FIXED — commit `87740ff9`.** `FLEET_CONTROL_FLAGS`
+  in `lib/janitor-control.ts` carried `'version-update-request'` (no `ed`, no `.flag` suffix), so
+  `fleetControlFlagPresent()` stat'd a path the janitor never writes and reported the flag ABSENT
+  while it sat on disk. **The server was structurally blind to the very request this card is
+  about**, and would have stayed blind after the duty split landed. Verified against the WRITER,
+  not one file: janitor 0.64.1 `scripts/lib/global_state.py:596` →
+  `_control_path("version-update-requested.flag")`. The pre-existing test wrote the wrong name AND
+  read the same wrong key, so it agreed with the bug and stayed green.
+- **Re-measured 21:07, and it has WORSENED since this card was written:** the flag's provenance
+  body now reads `{"set_at":1785352055,"reason":"0.64.1->0.65.0"}` (was `0.60.1->0.64.1`), and
+  **v0.65.0** published 18:55 today while the cache tops out at 0.64.1. The detector keeps
+  re-raising; nothing drains it.
+- **Three asks from the janitor's 13:42 / 13:43 comments on #102, all postdating this card:**
+  1. the duty is the **TRIO** — a `version-update` run against a stale marketplace manifest cannot
+     see a new release, so version-update alone is not a fix;
+  2. **consume the request flag clear-BEFORE-run**, not after — the janitor's daemon does it in
+     that order deliberately, so a crash mid-update re-raises instead of being swallowed;
+  3. **advertise the chore classes actually executed** in `server-liveness.json` — verified today
+     as `{"capabilities":["family-a"]}`, i.e. the server already states in the file the janitor
+     reads that it does not do this work. Under the binary yield rule this costs nothing and is
+     the only reason the gap was findable from outside.
+- The janitor explicitly declines to change the binary liveness→yield rule unilaterally (it is a
+  ratified owner directive; changing it risks two actors updating concurrently). Re-instating
+  per-class capability gating is **janitor#134** and is the owner's call, not ours.
 
 **SUPERSEDED — do NOT carry forward:**
 - ~~"flip `DEFAULT_SETTINGS.enabled` to true"~~ — refused in the #102 reply. It would fix the one

@@ -1,10 +1,10 @@
 ---
 trdd-id: 4F40QCCH
 title: Absorbed update duty must not hang off the user-facing auto-update toggle
-column: dev
+column: cancelled
 scope: project
 created: 2026-07-29T21:12:04+0200
-updated: 2026-07-29T21:12:04+0200
+updated: 2026-07-29T21:42:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -15,9 +15,7 @@ mandated-by: self
 approved: true
 approval-judge: ai-maestro
 approval-datetime: 2026-07-29T21:12:04+0200
-parent-trdd: KCRMSNL7
-derived: true
-derived-kind: eht
+derived: false
 npt: []
 eht: []
 severity: major
@@ -144,6 +142,17 @@ fixed control path.
 
 ## Approval log
 
+- 2026-07-29T21:42:00+0200 — CANCELLED by ai-maestro. **This card is a DUPLICATE of TRDD-5X3P79Q6**
+  ("An absorbed duty must not be gated on a user-facing preference the original owner never had",
+  authored 10:04 the same day, already ruled on and posted publicly to ai-maestro#102). The older
+  card is the survivor; everything genuinely new here — the `FLEET_CONTROL_FLAGS` filename defect,
+  the re-measurement at 21:07, and the janitor's three 13:42/13:43 asks — was folded into its STATE
+  block before this one was cancelled, so no knowledge is lost by archiving it.
+  **How the duplicate happened, because the method is the finding:** the dedup grep before
+  authoring was `"auto-update\|version-update\|absorbed update"`, and the existing card is named
+  *absorbed-**duties**-not-user-toggled*. A near-miss synonym reads exactly like a clean absence —
+  the same shape as the `the corpus` / `this corpus` miss recorded in the verification lessons.
+  Grep the CONCEPT (here: `absorb`) and the issue number in `external-refs:`, not a guessed phrase.
 - 2026-07-29T21:12:04+0200 — SELF-MANDATE by ai-maestro (min-approval-requirement: none).
   Tier 0: a defect in this repo's own absorbed duty, inside the authoring agent's assignment
   scope, reversible and local. Provenance note for honesty: ai-maestro#102 reports the invariant

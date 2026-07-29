@@ -166,6 +166,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A CENSUS inside a normative doc can be falsified by the very commit that writes it — my clause said "the specs carry 18 provenance mentions" while adding more of them. State the boundary test qualitatively and cite the card that holds the DATED count; a spec asserts a contract, not a headcount.
 - Never use REAL ids as format examples in a document others parse for references: four real TRDD ids illustrating "prefix optional, case-insensitive" would have minted phantom provenance edges inside the arbiter file itself. Generic forms (`[ABCD1234]`, `[TRDD-abcd1234]`, `[25]`) state the identical contract and cannot be mistaken for citations.
 
+- A SPEC can be WEAKER than the comment implementing it, and the gap is where a wrong "safe to change" comes from: `governance-spec` pinned only "`verify` exits non-zero", while the script's own header pinned `2 = INVALID, 1 = ERROR` — so reading the spec alone said renumbering was permitted and the unauditable external consumers said it was not. Read the spec AND the code's own documented contract AND who consumes it before calling a contract changeable.
+- When two conventions collide on one surface, MEASURE which is canonical instead of picking: `grep` itself exits 0/1/2 (match / no-match / error), so the grep-shaped CLIs were already right and the wrapper was the inverted one — and the file stating the exception must name the canon BESIDE it, or a reader of that file alone learns the inverted rule in isolation and copies its `||` idiom onto the tool where `||` silently means the opposite.
+
 ## Refactoring under static tooling
 
 - A static scraper keys on code SHAPE, so a refactor that preserves runtime behaviour can still break every citation — update the scraper in the FIRST refactor, not the 26th.

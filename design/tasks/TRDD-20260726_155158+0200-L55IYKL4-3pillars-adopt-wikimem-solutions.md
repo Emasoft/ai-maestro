@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T01:29:00+0200
+updated: 2026-07-30T01:56:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -229,12 +229,25 @@ Filed as a SIBLING EHT (depth-1: a derived TRDD may not spawn its own), the same
 for `7CHUK1AZ`.
 
 **NEXT — the completion gate stays correctly shut. Five children are non-terminal, each read from its
-own `column:` rather than inferred:** `Q3GZJI1X` (`dev`, **HELD FOR THE USER**), `8KDIB2LT` (`todo` —
-boxes 1/3/4 doable now; box 2 needs `prrdgrep`/`specsgrep` to exist, so it is transitively gated on
-`Q3GZJI1X`), `C069SK9E` (`todo` — graph+board at 10⁵, entangled with `31LJK1CX`), `31LJK1CX`
-(`backburner` — the warm graph query misses the budget; the freshness probe alone is 0.59 s of it),
-`C4YJAUD9` (`todo`, new — needs a DECISION on where the verifier lives before any code).
-**Best next: `8KDIB2LT` boxes 1/3/4.**
+own `column:` rather than inferred:** `Q3GZJI1X` (`dev`, **HELD FOR THE USER**), `8KDIB2LT`
+(**`blocked` as of 2026-07-30 — 3/4 boxes closed**; see below), `C069SK9E` (`todo` — graph+board at
+10⁵, entangled with `31LJK1CX`), `31LJK1CX` (`backburner` — the warm graph query misses the budget;
+the freshness probe alone is 0.59 s of it), `C4YJAUD9` (`todo`, new — needs a DECISION on where the
+verifier lives before any code).
+
+**`8KDIB2LT` delivered boxes 1, 3, 4 (`52e7ea4f`, `15d8f8d7`, `28e60ee9`) and is now `blocked` on
+`Q3GZJI1X`.** Its one open box needs `prrdgrep`/`specsgrep` to EXIST, nothing tracks their creation as
+its own card, and `Q3GZJI1X` gates Phase 3 — so `blocked-by: [Q3GZJI1X]` is the honest state and
+`greptrdd why 8KDIB2LT` now prints that root. Box 1 turned out to be a DECISION, not prose: the script
+layer already carried a `1`/`2` contract and it is INVERTED against the pillar CLIs'
+(`aimaestro-trdd.sh verify` uses `2` = INVALID, `1` = ERROR). Resolved by measurement — `grep` itself
+exits 0/1/2, so the grep-shaped CLIs were already canonical; the wrapper is the unauditable EXTERNAL
+boundary, so it is documented as the ONE grandfathered exception rather than renumbered. Box 3's
+answer is **repo-local, and why**: they are `*.mjs` while the installer globs `scripts/*.sh`, and
+distributing one means shipping the Node-22 wrapper because the index needs native `better-sqlite3`
+(caps at Node 25).
+**Best next: `C4YJAUD9` (a decision, no code) — the only non-terminal child that is neither
+USER-held nor blocked.**
 Also settled: `Q3GZJI1X` does **not** gate the lint — an ambiguous `relevant-rules:` target is still
 unambiguously a TRDD → PRRD edge, and that direction is legal under either reading.
 

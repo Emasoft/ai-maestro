@@ -264,7 +264,14 @@ if [[ -f "$FILTER_LIB" ]]; then
 
   # 100.64.0.0/10 is 100.64.x - 100.127.x. Accept either the written-out
   # alternation the filter uses or a literal CIDR mention.
-  scan '100\\\.\(6\[4-9\]|64\.0\.0/10)' "$FILTER_LIB" \
+  #
+  # The group is BALANCED on purpose. An earlier version ended with a bare `)`
+  # and behaved differently per implementation: BSD grep accepted it (treating
+  # the stray paren as a literal) while ugrep REJECTED it with "mismatched ( )"
+  # and exited 2 — so the same check said "found" on one machine and "could not
+  # scan" on the next. A pattern whose meaning depends on which grep is on PATH
+  # is not a check.
+  scan '(100\\\.\(6\[4-9\]|100\.64\.0\.0/10)' "$FILTER_LIB" \
     "CGNAT range check (100.64.0.0/10) found in the filter" \
     "CGNAT range check NOT found — isAllowedSource() must match 100.64.0.0/10" \
     "could not scan lib/tailscale-detect.mjs for the CGNAT range"

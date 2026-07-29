@@ -233,53 +233,13 @@ export async function runTick(s: AutoUpdateSettings): Promise<AutoUpdateRunEntry
   }
 
   // ── Step 2: enumerate update candidates per category ─────────────────
-  // Each candidate is a (name, marketplace, scope, agentDir?) tuple. We
-  // de-dup by (name, marketplace, scope, agentDir) so a plugin matched by
-  // multiple enabled categories still gets at most one update attempt.
-  const candidates = new Map<string, UpdateCandidate>()
-
-  if (s.categories.core) {
-    addCandidate(candidates, { name: MAIN_PLUGIN_NAME, marketplace: MARKETPLACE_NAME, scope: 'user' })
-  }
-
-  if (s.categories.aiMaestroMarketplace) {
-    const remotePlugins = await listInstalledPluginsInMarketplace(MARKETPLACE_NAME)
-    for (const p of remotePlugins) {
-      addCandidate(candidates, { name: p.name, marketplace: MARKETPLACE_NAME, scope: p.scope, agentDir: p.agentDir, agentId: p.agentId, sessionName: p.sessionName })
-    }
-  }
-
-  if (s.categories.localMarketplaces) {
-    for (const mkt of [LOCAL_MARKETPLACE_NAME, CUSTOM_MARKETPLACE_NAME]) {
-      const localPlugins = await listInstalledPluginsInMarketplace(mkt)
-      for (const p of localPlugins) {
-        addCandidate(candidates, { name: p.name, marketplace: mkt, scope: p.scope, agentDir: p.agentDir, agentId: p.agentId, sessionName: p.sessionName })
-      }
-    }
-  }
-
-  if (s.categories.dependencyPlugins) {
-    for (const mkt of marketplacesTouched) {
-      const plugins = await listInstalledPluginsInMarketplace(mkt)
-      for (const p of plugins) {
-        if (isDependencyPlugin(p.name)) {
-          addCandidate(candidates, { name: p.name, marketplace: mkt, scope: p.scope, agentDir: p.agentDir, agentId: p.agentId, sessionName: p.sessionName })
-        }
-      }
-    }
-  }
-
-  if (s.categories.userScopePlugins) {
-    for (const p of await listUserScopePlugins()) {
-      addCandidate(candidates, { name: p.name, marketplace: p.marketplace, scope: 'user' })
-    }
-  }
-
-  if (s.categories.agentLocalScopePlugins) {
-    for (const p of await listAgentLocalScopePlugins()) {
-      addCandidate(candidates, { name: p.name, marketplace: p.marketplace, scope: 'local', agentDir: p.agentDir, agentId: p.agentId, sessionName: p.sessionName })
-    }
-  }
+  // Extracted to collectUpdateCandidates() so "which plugins does the
+  // scheduler consider?" is answerable WITHOUT running Step 3's mutations.
+  // That separation is what makes TRDD-YLCTM8EU's claim ("the janitor is in
+  // the candidate set, nothing filters it out") a verified fact rather than
+  // an asserted one — the readers were module-private, so the only way to
+  // exercise this decision was to run the real updates against the real host.
+  const candidates = await collectUpdateCandidates(s, marketplacesTouched)
 
   // ── Step 3: run the updates ──────────────────────────────────────────
   // Dispatch through ChangePlugin (the AIO pipeline) instead of shelling
@@ -337,7 +297,7 @@ export async function runTick(s: AutoUpdateSettings): Promise<AutoUpdateRunEntry
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-interface UpdateCandidate {
+export interface UpdateCandidate {
   name: string
   marketplace: string
   scope: 'user' | 'local'
@@ -362,6 +322,96 @@ function addCandidate(map: Map<string, UpdateCandidate>, c: UpdateCandidate) {
   // overwritten by a later candidate without one.
   if (!map.has(k)) map.set(k, c)
   else if (c.sessionName && !map.get(k)!.sessionName) map.set(k, c)
+}
+
+/** The three corpus readers the candidate decision consumes. They are the
+ *  only I/O in Step 2, so injecting them makes the decision a pure function
+ *  of (settings, marketplacesTouched, installed-plugin facts).
+ *
+ *  Why an injected object rather than `vi.mock` of this module: a test that
+ *  mocks the module under test can only observe what it already decided to
+ *  stub, and it must first reproduce this file's whole import graph. Fakes
+ *  passed in touch no filesystem at all, so the test is 0-IMPACT BY
+ *  CONSTRUCTION — it cannot read or write the developer's real
+ *  ~/.claude/settings.json or agent registry even if it is wrong. */
+export interface CandidateReaders {
+  listUserScopePlugins: () => Promise<Array<{ name: string; marketplace: string }>>
+  listAgentLocalScopePlugins: () => Promise<Array<{
+    name: string; marketplace: string; agentDir: string; agentId: string; sessionName?: string
+  }>>
+  listInstalledPluginsInMarketplace: (marketplaceName: string) => Promise<Array<{
+    name: string; scope: 'user' | 'local'; agentDir?: string; agentId?: string; sessionName?: string
+  }>>
+}
+
+/** Function declarations hoist, so referencing the real readers here — above
+ *  their definitions — is safe at module-evaluation time. */
+const REAL_CANDIDATE_READERS: CandidateReaders = {
+  listUserScopePlugins,
+  listAgentLocalScopePlugins,
+  listInstalledPluginsInMarketplace,
+}
+
+/** Decide the set of plugins this tick will try to update.
+ *
+ *  Each candidate is a (name, marketplace, scope, agentDir?) tuple, de-duped
+ *  by that same key so a plugin matched by several enabled categories still
+ *  gets at most ONE update attempt.
+ *
+ *  `marketplacesTouched` is computed by the caller (Step 1) because it is
+ *  also what decides which manifests get refreshed — recomputing it here
+ *  would give two sources of truth for one set. */
+export async function collectUpdateCandidates(
+  s: AutoUpdateSettings,
+  marketplacesTouched: Iterable<string>,
+  readers: CandidateReaders = REAL_CANDIDATE_READERS,
+): Promise<Map<string, UpdateCandidate>> {
+  const candidates = new Map<string, UpdateCandidate>()
+
+  if (s.categories.core) {
+    addCandidate(candidates, { name: MAIN_PLUGIN_NAME, marketplace: MARKETPLACE_NAME, scope: 'user' })
+  }
+
+  if (s.categories.aiMaestroMarketplace) {
+    const remotePlugins = await readers.listInstalledPluginsInMarketplace(MARKETPLACE_NAME)
+    for (const p of remotePlugins) {
+      addCandidate(candidates, { name: p.name, marketplace: MARKETPLACE_NAME, scope: p.scope, agentDir: p.agentDir, agentId: p.agentId, sessionName: p.sessionName })
+    }
+  }
+
+  if (s.categories.localMarketplaces) {
+    for (const mkt of [LOCAL_MARKETPLACE_NAME, CUSTOM_MARKETPLACE_NAME]) {
+      const localPlugins = await readers.listInstalledPluginsInMarketplace(mkt)
+      for (const p of localPlugins) {
+        addCandidate(candidates, { name: p.name, marketplace: mkt, scope: p.scope, agentDir: p.agentDir, agentId: p.agentId, sessionName: p.sessionName })
+      }
+    }
+  }
+
+  if (s.categories.dependencyPlugins) {
+    for (const mkt of marketplacesTouched) {
+      const plugins = await readers.listInstalledPluginsInMarketplace(mkt)
+      for (const p of plugins) {
+        if (isDependencyPlugin(p.name)) {
+          addCandidate(candidates, { name: p.name, marketplace: mkt, scope: p.scope, agentDir: p.agentDir, agentId: p.agentId, sessionName: p.sessionName })
+        }
+      }
+    }
+  }
+
+  if (s.categories.userScopePlugins) {
+    for (const p of await readers.listUserScopePlugins()) {
+      addCandidate(candidates, { name: p.name, marketplace: p.marketplace, scope: 'user' })
+    }
+  }
+
+  if (s.categories.agentLocalScopePlugins) {
+    for (const p of await readers.listAgentLocalScopePlugins()) {
+      addCandidate(candidates, { name: p.name, marketplace: p.marketplace, scope: 'local', agentDir: p.agentDir, agentId: p.agentId, sessionName: p.sessionName })
+    }
+  }
+
+  return candidates
 }
 
 function entry(target: string, status: AutoUpdateRunEntry['status'], detail?: string): AutoUpdateRunEntry {

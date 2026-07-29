@@ -17,6 +17,7 @@ import { hostHints } from './lib/host-hints-server.mjs'
 import { getOrCreateBuffer } from './lib/cerebellum/session-bridge.mjs'
 import { validateSessionCookie } from './lib/session-validate-server.mjs'
 import { createAnalyticsProxy, checkAnalyticsUpstream } from './lib/analytics-proxy.mjs'
+import { isAllowedSource, detectTailscaleIPv4 } from './lib/tailscale-detect.mjs'
 import {
   sessionActivity,
   terminalSessions,
@@ -104,41 +105,23 @@ const port = parseInt(process.env.PORT || '23000', 10)
 // ai-maestro page does not get to exist).
 const ANALYTICS_PROXY_PORT = port + 1
 
-// Auto-detect Tailscale IP for VPN access (iPad, mobile, remote hosts)
-let tailscaleIp = null
-try {
-  const { execSync: execSyncBind } = await import('child_process')
-  tailscaleIp = execSyncBind('tailscale ip -4', { encoding: 'utf8', timeout: 3000 }).trim()
-  if (!/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(tailscaleIp)) tailscaleIp = null // Only Tailscale CGNAT (100.64.0.0/10)
-} catch (err) {
-  // Log the failure so operators can distinguish "not installed" from "misconfigured"
-  const msg = err?.message || String(err)
-  if (msg.includes('ENOENT') || msg.includes('not found')) {
-    console.log('[SECURITY] Tailscale CLI not found — binding to localhost only')
-  } else {
-    console.warn(`[SECURITY] Tailscale detection failed: ${msg.slice(0, 120)} — binding to localhost only`)
-  }
-}
-
-// IP filter: when bound to 0.0.0.0, only allow localhost + Tailscale IPs
-// This prevents LAN exposure while allowing VPN access.
+// Auto-detect Tailscale IP for VPN access (iPad, mobile, remote hosts).
 //
-// SRV-MIN-01 fix: removed the unreachable `ip === 'localhost'` branch.
-// Node.js's net.Socket#remoteAddress returns an IP string (never the hostname
-// 'localhost'), so that branch was dead code.
-//
-// SRV-MIN-02 fix: documented the Tailscale CGNAT regex below explaining the
-// 100.64.0.0/10 range it covers. The /10 prefix is 100.64.x.x through
-// 100.127.x.x. The regex captures: 64-69 (6[4-9]), 70-99 ([7-9]\d), 100-119
-// (1[01]\d), 120-127 (12[0-7]). Anything outside that band is rejected.
-function isAllowedSource(remoteAddress) {
-  if (!remoteAddress) return false
-  const ip = remoteAddress.replace(/^::ffff:/, '') // Strip IPv4-mapped IPv6 prefix
-  if (ip === '127.0.0.1' || ip === '::1') return true
-  // 100.64.0.0/10 = 100.64.x.x – 100.127.x.x (Tailscale CGNAT range, RFC 6598)
-  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return true
-  if (/^fd7a:115c:a1e0:/.test(ip)) return true // Tailscale IPv6 ULA range
-  return false
+// The detection and the source filter now live in lib/tailscale-detect.mjs so
+// they can be imported and TESTED — inline here, nothing could reach
+// isAllowedSource(), the one function standing between the LAN and this server,
+// and no test covered it. See that file's header for the full reasoning; the
+// SRV-MIN-01/02 notes moved there with the code.
+const { execSync: execSyncBind } = await import('child_process')
+const tsDetect = detectTailscaleIPv4((cmd) =>
+  execSyncBind(cmd, { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'pipe'] })
+)
+const tailscaleIp = tsDetect.ip
+if (tsDetect.message) {
+  // "not installed" is an ordinary local-only setup; anything else means
+  // Tailscale is present but not usable, which the operator should act on.
+  if (tsDetect.state === 'not-installed') console.log(`[SECURITY] ${tsDetect.message}`)
+  else console.warn(`[SECURITY] ${tsDetect.message}`)
 }
 
 // Server mode: 'full' (default) = Next.js + UI, 'headless' = API-only (no Next.js)

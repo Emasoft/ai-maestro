@@ -1,12 +1,12 @@
 ---
 trdd-id: LXLK7XGX
 title: The reference DAG constrains frontmatter edges not prose mentions
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-30T00:03:29+0200
-implementation-commits: [1dee73c3]
+updated: 2026-07-30T00:36:48+0200
+implementation-commits: [1dee73c3, 89810d4b]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -155,18 +155,56 @@ ambiguity, HELD FOR THE USER) does not gate this lint. An ambiguous target is st
 TRDD → PRRD edge, and that direction is legal under either reading — the lint checks DIRECTION, not
 resolvability.
 
+## RECORDED 2026-07-30 (`89810d4b`) — the spec half, and two rot risks caught while writing it
+
+`3P-DAG-01/-02/-03` landed in `design/specs/3-pillars-spec.md` at `spec-version: 1.2.0`, authorized
+by the spec's OWN `3P-VER-01` ("MINOR = … incl. adding a clause"); no clause id was renumbered
+(`3P-VER-03`). The `3P-GREP` cheat-sheet lists the new family, and `'DAG'` was added to the
+conformance test's family array — that array is what stops a family shipping un-grepped.
+
+**`-03` (id-forms) is a clause and not a footnote, because a checker can satisfy `-01` and `-02`
+perfectly and still be blind.** That is this card's neuter-C finding promoted into the contract: the
+obvious extractor requires the `TRDD-` prefix, so it yields ZERO edges for the bare and numeric forms
+the corpus actually writes — and then reports a CLEAN corpus because it saw nothing.
+
+Two rot risks were removed during drafting, both self-inflicted:
+1. A first draft stated *"the live specs carry 18 provenance mentions"* — **a census this very commit
+   invalidated**, since the clause text itself adds more. The dated count belongs here, in the card;
+   the spec states the boundary test qualitatively and points at this id.
+2. That draft also used four REAL TRDD ids as id-form examples, which would have minted **phantom
+   provenance references inside the arbiter file itself**. Generic forms (`[ABCD1234]`,
+   `[TRDD-abcd1234]`, `[25]`) state the identical contract and cannot rot.
+
+Also corrected before commit: an accidental renumber of `3P-BND` from "Pillar 4" to "Pillar 5",
+which left a numbering hole (DAG is a cross-pillar RELATION, not a pillar). Nothing outside the spec
+cites the label, so it broke nothing — but it was churn this change did not need.
+
+**The lint's live-corpus run is now itself a boundary test for `3P-DAG-02`:** this commit adds MORE
+TRDD-id prose to a spec body, and `pillars:lint` still reports 328 documents / 0 findings.
+
+**Deliberately NOT closed by this card** — both belong to EHT `MUYRIKN3`, not to this NPT, whose box
+1 asked only that the allowlist decision be recorded in `3P-DAG`:
+- the **`3P-IDX` family** — `MUYRIKN3` box 2 requires the cheat-sheet to list **both** `IDX` and
+  `DAG`, and Phase 5's index shipped without ever being spec'd;
+- the **janitor notification** (`MUYRIKN3` box 4). Safe to hold: `fork/governance-rules` is
+  **65 commits behind local**, so 1.2.0 is not visible to any consumer
+  and `3P-VER-02`'s detectable-mismatch harm cannot occur yet. Bundling the notification with `IDX`
+  gives the janitor ONE coherent 1.2.0 instead of two bumps and two messages.
+
 ## Acceptance
 
-- [ ] The lint's input is the DEPENDENCY-FIELD ALLOWLIST only (`blocked-by`, `npt`, `eht`,
+- [x] The lint's input is the DEPENDENCY-FIELD ALLOWLIST only (`blocked-by`, `npt`, `eht`,
       `parent-trdd`, `superseded-by`, `relevant-rules`) — not "frontmatter", which still admits
       prose values; the decision is recorded in the spec clause it implements (`3P-DAG`, Phase 6)
-      — **HALF DONE, and deliberately left unchecked.** The implementation half is done and pinned
-      (`DEPENDENCY_FIELD_TARGETS` in `lib/pillar/dag.ts`; the allowlist is asserted verbatim, and
-      neuter A — widening it to `implementations:`/`authority:` — reddens 4 named tests). The
-      RECORDING half is Phase 6's `3P-DAG` clause, which is a spec MINOR bump (1.1.1 → 1.2.0) the
-      janitor consumes via `3P-CHK-03`/`3P-VER-02` — see EHT `MUYRIKN3`. Checking this box now
-      would claim a cross-repo artifact that does not exist, so the completion gate correctly holds
-      this card in `dev`.
+      — **DONE, both halves.** IMPLEMENTATION: `DEPENDENCY_FIELD_TARGETS` in `lib/pillar/dag.ts`,
+      the allowlist asserted verbatim, and neuter A (widening it to `implementations:`/`authority:`)
+      reddens 4 named tests. RECORDING (`89810d4b`): `3P-DAG-01/-02/-03` in
+      `design/specs/3-pillars-spec.md` at `spec-version: 1.2.0` — `-02` states that the allowlist
+      IS the edge set and that a prose **or free-text-frontmatter** mention is PROVENANCE, which is
+      exactly the distinction this card exists to fix. `DAG` was added to the conformance test's
+      family array in the same commit; without it the new family ships UNGUARDED (neuter: renaming
+      `3P-DAG-01` → `3P-ZZZ-01` fails exactly the named greppable test — 1 failed | 3 passed, read
+      by COUNT — restored byte-clean).
 - [x] `pillars:lint` yields **zero** findings on the live corpus (if it flags any of the 18
       provenance mentions, this decision was implemented wrong) — **DONE** (`1dee73c3`): 328
       documents (323 trdd · 5 spec), 0 findings, 0.34 s. Non-vacuity proven on BOTH sides: the

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T00:03:29+0200
+updated: 2026-07-30T00:36:48+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -161,11 +161,17 @@ is **8.07 s / 1.02 GB**; the linter is **22.6 s / 2.43 GB**.
 **NEXT: the critical path is 3 roots** (`greptrdd why L55IYKL4`), all DECIDED-not-IMPLEMENTED —
 `CTEQX0ZA` (the 10⁵ budget; in progress), `Q3GZJI1X` (**HELD FOR THE USER** — its one open box asks
 the janitor to change an IND-base contract that every project on this machine loads), and
-`LXLK7XGX` — **Phase 4 is now BUILT** (`1dee73c3`): `lib/pillar/dag.ts` +
-`scripts/pillars-lint.mjs` + `yarn pillars:lint`, 15 tests, live run **328 documents (323 trdd ·
-5 spec), 0 findings, 0.34 s**, and none of the 18 provenance mentions flagged. The card is `dev`
-with 2 of 3 boxes closed; box 1's second half ("recorded in spec clause `3P-DAG`") is Phase 6 /
-EHT `MUYRIKN3`, so the completion gate correctly holds it open.
+`LXLK7XGX` — **✅ COMPLETE + archived 2026-07-30** (`1dee73c3` built it, `89810d4b` recorded it).
+Phase 4's lint is `lib/pillar/dag.ts` + `scripts/pillars-lint.mjs` + `yarn pillars:lint`, 15 tests,
+live run **328 documents (323 trdd · 5 spec), 0 findings**, none of the provenance mentions flagged;
+box 1's recording half is now the **`3P-DAG` family at `spec-version: 1.2.0`**, so all 3 boxes are
+checked and the completion gate opened.
+**The spec bump is only HALF done — EHT `MUYRIKN3` is `dev`, not terminal.** Its box 2 requires the
+`3P-GREP` cheat-sheet to list **both** `IDX` and `DAG`, and **`3P-IDX` does not exist**: Phase 5's
+index shipped and was never spec'd. Its box 4 (tell the janitor) is deliberately held so the
+notification bundles both families into ONE 1.2.0 — safe only because `fork/governance-rules` is
+**65 commits behind local**, so no consumer can read 1.2.0 yet and `3P-VER-02` cannot fire. **That
+hold must not outlive the first push of this branch.**
 Two corrections this produced: **(a)** the plan's stated reason for making this a separate script
 ("the lint requires scanning SPECS/PRRD bodies") is VOID — the lint must not scan bodies at all; it
 stays separate because the doctor's contract is *every TRDD in every zone* while this must also read

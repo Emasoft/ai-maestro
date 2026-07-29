@@ -192,6 +192,13 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/CHIEF-OF-STAFF options ARE shown (disabled, with the team-membership reason text) — not absent from the dialog. MANAGER disabled if already taken (names the holder), or selectable otherwise. MAINTAINER present and selectable. Screenshot: SCEN-001/S016-singleton-enforced.png
 
+#### S016a: Create a scen-prefixed MANAGER (R9.8 precondition for team creation)
+- **Action:** Cancel the title dialog. Open the Agent Creation Wizard ("Create new agent" → "Create Agent"). Client `Claude Code`; persona name EXACTLY `scen001-manager`; team `No team (Autonomous)`; title `MANAGER`; folder = the wizard default `~/agents/scen001-manager/`; role-plugin = the offered `ai-maestro-assistant-manager-agent`; finish with "Create Agent!".
+- **Goal:** The host has a MANAGER, so team creation is no longer blocked. Without this, the Teams tab shows "No MANAGER on this host. New teams would be blocked immediately (R9.8)" and S017 cannot succeed. (Added 2026-07-29 as an authoring fix: the scenario's `prerequisites` assumed a pre-existing team/MANAGER, which is not part of a clean environment.)
+- **Creates:** Agent `scen001-manager` (MANAGER) at `~/agents/scen001-manager/`
+- **Modifies:** Agent registry; all pre-existing teams are UNBLOCKED by ChangeTitle Gate 13 (restored at cleanup when the MANAGER is deleted and by STATE-WIPE of teams.json)
+- **Verify:** Sidebar shows `scen001-manager`; Teams tab no longer shows the no-MANAGER warning.
+
 #### S017: Create a dedicated test team for the test agent
 - **Action:** Click Teams tab in sidebar. Click "+" or "Create Team" button. Enter team name EXACTLY `scen001-title-team`. Description: `Isolated test team for SCEN-001 — delete in cleanup`. Click Next. When prompted for initial agents, do NOT select any existing agents. Click "Create Team". A sudo password modal MUST appear (TRDD-1LX5LMBD: `POST /api/teams` is a strict sudo route) — enter governance password `$AIM_GOVERNANCE_PASSWORD` in the modal and click Confirm. Wait for team creation to complete and its auto-COS (named `cos-scen001-title-team` per the scen-prefixed convention) to appear.
 - **Goal:** New isolated test team exists, created only after a fresh sudo token was minted via the modal. An auto-COS with scen001- prefix was created by the system.

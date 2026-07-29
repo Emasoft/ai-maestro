@@ -40,6 +40,7 @@
     "trdd:fix": "node --import tsx scripts/trdd-doctor.mjs --fix",
     "trdd:board": "node --import tsx scripts/trdd-doctor.mjs --board",
     "greptrdd": "node --import tsx scripts/greptrdd.mjs",
+    "pillars:lint": "node --import tsx scripts/pillars-lint.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:services": "vitest run tests/services/",

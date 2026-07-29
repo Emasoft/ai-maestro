@@ -41,11 +41,11 @@ describe('SPEC — N clauses per document, id in the body', () => {
   it('finds every clause the live 3-pillars spec declares (positive control on real data)', () => {
     const recs = [...walkRecords(path.join(REPO, 'design/specs'), SPEC_KIND)]
     const threeP = recs.filter((r) => r.filePath.endsWith('3-pillars-spec.md'))
-    // 41 line-anchored declarations, counted independently with grep (NOT copied from
+    // 55 line-anchored declarations, counted independently with grep (NOT copied from
     // this test's own failure output) each time the spec gains a family. A fixture of my
     // own making could not have caught a wrong regex; the live corpus can. Was 38 until
-    // the 3P-DAG family added 3 clauses in spec 1.2.0 (TRDD-LXLK7XGX / EHT MUYRIKN3).
-    expect(threeP.length).toBe(41)
+    // spec 1.2.0 added 3P-DAG (+3) and 3P-IDX (+14) — TRDD-LXLK7XGX / EHT MUYRIKN3.
+    expect(threeP.length).toBe(55)
     expect(threeP.every((r) => /^3P-[A-Z]+-\d{2}$/.test(r.id))).toBe(true)
     // Every record carries the line it was declared on — that is what a lint reports.
     expect(threeP.every((r) => typeof r.line === 'number' && r.line! > 0)).toBe(true)
@@ -56,9 +56,9 @@ describe('SPEC — N clauses per document, id in the body', () => {
     const files = new Set(recs.map((r) => path.basename(r.filePath)))
     expect(files.size).toBeGreaterThan(1)
     // Floor = the ONE biggest file's own clause count, so the corpus total must exceed
-    // what a single-file read could return. Track it with that count (41), or the
+    // what a single-file read could return. Track it with that count (55), or the
     // assertion quietly stops meaning "more than one file's worth".
-    expect(recs.length).toBeGreaterThan(41)
+    expect(recs.length).toBeGreaterThan(55)
   })
 
   it('DECLARATION is line-anchored — a citation inside prose is NOT a record', () => {

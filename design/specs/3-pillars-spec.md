@@ -3,7 +3,7 @@ spec: 3-pillars
 spec-version: 1.2.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-30T00:30:21+0200
+updated: 2026-07-30T00:45:58+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -26,12 +26,13 @@ This is a REFERENCE doc: every normative clause starts with a stable `` `3P-<FAM
 anchor and a bold key-phrase, so you grep to the clause instead of reading through.
 
 ```text
-3P-GREP  all clauses of a family:   grep '3P-KAN'  (or META TRDD PRRD DAG BND VER CHK MNT)
+3P-GREP  all clauses of a family:   grep '3P-KAN'  (or META TRDD PRRD DAG IDX BND VER CHK MNT)
 3P-GREP  one clause by id:          grep '3P-KAN-01'
 3P-GREP  the authoritative columns: grep -A20 '@spec:kanban-columns'
 3P-GREP  the version stamp:         grep '^spec-version:'
 3P-GREP  families: META=arbiter KAN=kanban TRDD=trdd PRRD=prrd DAG=reference-dag
-3P-GREP            BND=ind/dep-boundary VER=versioning CHK=conformance-checks MNT=maintenance
+3P-GREP            IDX=index-safety BND=ind/dep-boundary VER=versioning
+3P-GREP            CHK=conformance-checks MNT=maintenance
 ```
 
 ## 3P-META — the arbiter, and the anti-drift discipline
@@ -187,6 +188,87 @@ case-insensitive, and a value may arrive as a YAML number. So all of `[ABCD1234]
 `[TRDD-ABCD1234]`, `[TRDD-abcd1234]` and `[25]` denote edges. A checker keyed on the
 prose-CITATION pattern (which requires the prefix) is NON-CONFORMANT: it yields ZERO edges
 for the bare and numeric forms and then reports a clean corpus because it saw nothing.
+
+## 3P-IDX — the derived index and its safety contract
+
+Every clause here pins a MUST whose violation is **SILENT** — that is the selection rule. An index
+that fails loudly is a bug; one that quietly answers from a stale, emptied or nuked cache is the
+class this family exists to prevent.
+
+`3P-IDX-01` **accelerator-not-authority** — an index is DERIVED from the markdown corpus and
+`MUST NOT` be the only home of any answer. That is precisely what makes deleting it a legal repair;
+a store that owned anything could not self-heal by nuking itself.
+
+`3P-IDX-02` **outside-the-corpus** — the index file `MUST` live outside the corpus it indexes (host
+state, gitignored), and its key `MUST` include a hash of the REALPATH-resolved corpus root. A
+readable slug alone collides where it matters most — every agent workdir and every LOCAL corpus is
+named `design` — so slug-only keying silently makes N corpora share one index.
+
+`3P-IDX-03` **one-stamp-append-only** — the schema version is `PRAGMA user_version` checked against
+ONE `SCHEMA_VERSION` constant, and the ladder is APPEND-ONLY. A SHIPPED step is IMMUTABLE: adding a
+column `MUST` take a new number, or two machines reporting the same version disagree about their
+shape and no validate can detect it.
+
+`3P-IDX-04` **migrate-atomically** — each ladder step `MUST` run in its own `BEGIN IMMEDIATE`
+transaction, write the stamp INSIDE that transaction, and re-validate AT THAT VERSION before
+commit. Stamp and shape land or fail together: a step that half-applies and still stamps is exactly
+what makes a later validate report damage on a DB nothing damaged.
+
+`3P-IDX-05` **behind-is-not-damage** — a missing table or column means TWO different things, and the
+stamp is the only discriminator: `user_version < SCHEMA_VERSION` is BEHIND the ladder (`MUST`
+migrate, `MUST NOT` rebuild); `== SCHEMA_VERSION` means a migration LIED and the DB is damaged. The
+two verdicts `MUST` be ORTHOGONAL, never alternatives — a DB can be behind without damage (the
+common case), damaged without being behind, or both. The required shape `MUST` also be versioned PER
+COLUMN, not per table. *(Boundary test: janitor#123's defect was a column-granular skew; a per-table
+`since` cannot express it, so it demands the newest version's columns from a DB that legitimately
+predates them and reports a healthy behind-DB as damaged.)*
+
+`3P-IDX-06` **downgrade-is-never-healed** — a DB whose `user_version` EXCEEDS the binary's carries
+its own distinct fault code and `MUST NOT` be rebuilt. A newer index is not a broken one; the repair
+is the opposite one — upgrade the code.
+
+`3P-IDX-07` **validate-never-heals** — the validate path `MUST NOT` repair what it measures. An
+observer that silently fixed things makes a recurring corruption invisible to the very tool asked
+whether corruption recurs.
+
+`3P-IDX-08` **depth-is-a-schedule-not-a-weakening** — validate has two depths: `structural`
+(metadata-only, cost FLAT in corpus size) is what a READ path may afford, while `full` (adding the
+whole-file integrity walk) `MUST` run at every STATE TRANSITION — creation, each migration step, and
+every heal. A read cannot cause what it does not write, so paying for whole-index scans per read
+buys nothing. *(Boundary test, measured: the full pass on every open made the SAFETY MECHANISM the
+scaling wall — an 11 ms graph query behind a 666 ms open.)*
+
+`3P-IDX-09` **heal-is-an-event** — a self-heal `MUST` append to a BOUNDED, atomically-rewritten
+ledger, and `MUST NOT` fail because its own audit trail was unreadable. An untraced heal races the
+observer and wins, so a corruption recurring daily reads as a healthy index to anything inspecting
+only current state. Deleting an index `MUST` take its `-wal`/`-shm` sidecars with it — they carry
+committed pages, and SQLite would otherwise reconstruct from a WAL belonging to a database that no
+longer exists.
+
+`3P-IDX-10` **busy-timeout-before-wal** — `busy_timeout` `MUST` be set BEFORE
+`journal_mode = WAL`. Otherwise WAL silently fails to take while another process holds the lock, and
+the DB stays in rollback-journal mode with the setting appearing applied.
+
+`3P-IDX-11` **duplicate-ids-are-storable** — the record key `MUST` include the file path, so a
+duplicate id across two files is STORED and reportable as a lint finding rather than rejected by a
+constraint. An index that refuses to represent a defect the linter exists to report cannot describe
+its own corpus.
+
+`3P-IDX-12` **index-the-join-not-just-the-documents** — resolved reference EDGES `MUST` be stored,
+not documents alone. Validating a corpus is a JOIN — every `blocked-by`/`npt`/`eht`/`parent-trdd`/
+`superseded-by` must resolve — so a document-only index leaves that cost untouched: O(N × refs ×
+lookup), and quadratic when the lookup itself rescans.
+
+`3P-IDX-13` **accretion-line** — a column enters the index only when an INDEX-SERVED query reads it;
+a field a consumer starts reading takes a MIGRATION, not a widened SELECT. This is what bounds the
+schema's growth.
+
+`3P-IDX-14` **search-stays-on-the-walk** — regex search `MUST NOT` be served from FTS5: it cannot
+evaluate a regex, and its tokenizer splits a prefixed id into whole tokens, so even a literal
+prefilter misses substrings. "Index the search byte-identically" is self-contradictory, not deferred.
+And a parity check over an UNPOPULATED FTS table is satisfied by construction, so it `MUST NOT` be
+reported as passing — if a consumer is ever built, the INSERT and its parity check return together
+as ONE decision.
 
 ## 3P-BND — Pillar 4: the IND/DEP boundary (the classification test)
 

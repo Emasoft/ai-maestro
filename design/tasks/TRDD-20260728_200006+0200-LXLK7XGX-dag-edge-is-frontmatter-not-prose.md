@@ -1,11 +1,12 @@
 ---
 trdd-id: LXLK7XGX
 title: The reference DAG constrains frontmatter edges not prose mentions
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-29T00:05:00+0200
+updated: 2026-07-30T00:03:29+0200
+implementation-commits: [1dee73c3]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -106,15 +107,76 @@ findings naming no broken reader — the definition of a false positive under th
 law (a check must mirror a CONSUMER's own drop/misread branch). Written against frontmatter it
 produces findings that name a real dangling dependency.
 
+## BUILT 2026-07-30 (`1dee73c3`) — and the extractor, not the scope, was the near-miss
+
+`lib/pillar/dag.ts` + `scripts/pillars-lint.mjs` + `yarn pillars:lint`, 15 tests. The scope this
+card decided held up exactly as written: 328 documents, 0 findings, and none of the 18 provenance
+mentions flagged.
+
+**The finding this card did not anticipate.** Getting the SCOPE right is not sufficient — the
+EXTRACTOR can be blind, and a blind extractor passes this card's own box 2. The obvious choice is
+each pillar's `citationRe`, and it would have been wrong, because the live corpus writes these
+fields in more shapes than a prose-citation pattern admits (measured, not assumed):
+
+| shape | example | `citationRe` sees it? |
+|---|---|---|
+| prefixed | `blocked-by: [TRDD-K2WJH7RF]` | yes |
+| **bare** | `blocked-by: [Y916N7WL]` | **no** |
+| lowercase v1 | `superseded-by: [TRDD-a1019073]` | no (case) |
+| **YAML number** | `relevant-rules: [25]` | **no** (parsed as a number) |
+| null | `parent-trdd: null` (×96) | n/a — no edge |
+
+`normalizeId` is the right tool: it already absorbs the optional prefix and the case, per pillar,
+and it is what the store compares ids with.
+
+**Neuter C is the reason this is written down.** Swapping the extractor to `citationRe` reddens 4
+tests — but the LIVE corpus still reports clean at **exit 0**, and the *prefixed*-form seeded
+violation *also still passes*. So a lint blind to every bare-id edge would have shipped with box 2
+AND the obvious seeded-violation test both green. Only the **bare-id** variant catches it.
+Generalized: **a seeded violation must be seeded in every id form the corpus actually uses** — one
+form proves only that form.
+
+Neuters A (widen the input to the two prose fields → 4 named tests redden, and the CLI reproduces
+the predicted FP wall, flagging the mangled path fragment `~/.CLAUDE/RULES/{TRDD-DESIGN-TASKS` as a
+dependency) and B (make `spec → trdd` legal → the matrix test + both seeded-violation tests)
+behaved first time. All three restored, residue-checked.
+
+**Two corrections to the parent plan, recorded so they are not re-derived:**
+1. The plan justified a separate script because the lint *"requires scanning SPECS/PRRD bodies,
+   outside `trdd-doctor`'s contract"*. This card proves it must NOT scan bodies, so that rationale
+   is void. It stays separate for a different reason — the doctor's contract is *every TRDD in every
+   zone*, and this must also read the SPEC and PRRD corpora.
+2. Phase 4 in the plan also lists *"a PROJECT TRDD must not cite a LOCAL one"*. That needs a second
+   corpus root (the local `design/` tree) and is not one of this card's boxes. **Not implemented** —
+   named here rather than silently folded into a Phase-4-complete claim.
+
+**Also unblocked by construction:** sibling NPT `Q3GZJI1X` (the `relevant-rules:` two-catalogue
+ambiguity, HELD FOR THE USER) does not gate this lint. An ambiguous target is still unambiguously a
+TRDD → PRRD edge, and that direction is legal under either reading — the lint checks DIRECTION, not
+resolvability.
+
 ## Acceptance
 
 - [ ] The lint's input is the DEPENDENCY-FIELD ALLOWLIST only (`blocked-by`, `npt`, `eht`,
       `parent-trdd`, `superseded-by`, `relevant-rules`) — not "frontmatter", which still admits
       prose values; the decision is recorded in the spec clause it implements (`3P-DAG`, Phase 6)
-- [ ] `pillars:lint` yields **zero** findings on the live corpus (if it flags any of the 18
-      provenance mentions, this decision was implemented wrong)
-- [ ] The lint still FAILS on a seeded frontmatter violation (a spec whose frontmatter declares a
-      dependency on a TRDD), proven by mutation
+      — **HALF DONE, and deliberately left unchecked.** The implementation half is done and pinned
+      (`DEPENDENCY_FIELD_TARGETS` in `lib/pillar/dag.ts`; the allowlist is asserted verbatim, and
+      neuter A — widening it to `implementations:`/`authority:` — reddens 4 named tests). The
+      RECORDING half is Phase 6's `3P-DAG` clause, which is a spec MINOR bump (1.1.1 → 1.2.0) the
+      janitor consumes via `3P-CHK-03`/`3P-VER-02` — see EHT `MUYRIKN3`. Checking this box now
+      would claim a cross-repo artifact that does not exist, so the completion gate correctly holds
+      this card in `dev`.
+- [x] `pillars:lint` yields **zero** findings on the live corpus (if it flags any of the 18
+      provenance mentions, this decision was implemented wrong) — **DONE** (`1dee73c3`): 328
+      documents (323 trdd · 5 spec), 0 findings, 0.34 s. Non-vacuity proven on BOTH sides: the
+      scanned count is asserted (>300), and a separate test asserts the specs really do contain
+      ≥18 `TRDD-XXXXXXXX` mentions (measured: 3 + 4 + 11 = 18) — without that, the zero could be
+      true for a reason unrelated to the scope decision.
+- [x] The lint still FAILS on a seeded frontmatter violation (a spec whose frontmatter declares a
+      dependency on a TRDD), proven by mutation — **DONE**, and seeded in BOTH id forms, which
+      turned out to be load-bearing (see the finding below). Paired with a control: the same file,
+      same id, field renamed to a descriptive one ⇒ no finding.
 
 ## Approval log
 

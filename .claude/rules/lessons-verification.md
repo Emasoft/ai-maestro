@@ -56,6 +56,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A generated fixture of identical stubs measures filesystem throughput and nothing else — give it the real body size, the real field set, and real cross-references, or the number is theatre.
 - Before generalizing over N consumers, verify they share the shape you assume — I checked all three pillars on disk and found three different document models, one of which (PRRD) has no zones and no id in any filename.
 - When the repo lacks an instance of the thing you are encoding (no PRRD.md here), find a REAL one elsewhere rather than encoding the grammar from memory.
+- `\|` inside `grep -E` is a LITERAL pipe, not alternation — the pattern matches nothing and reads as "absent"; I nearly reported a subagent for a silent drop on the strength of it, four instrument-bugs into the same session.
+- When a subagent's self-report and your check disagree, suspect the CHECK first: today the report said MERGED and my grep said 0, and the content was on line 947 the whole time.
 - A wall-time delta whose SIGN flips between corpus sizes is noise, not a regression — mine read +12% at 50k and −6% at 10^5 for the same change, so the honest claim was "unchanged; the win is memory".
 - Isolate the variable before crediting your change: after a corpus-mutating session, re-run the SAME corpus with the change stashed — three "differences" I was about to attribute to a sort were a new card, an unblocked card, and a row pushed past a 25-row cutoff.
 - `readdirSync` order is POSIX-UNDEFINED — APFS returns it sorted, ext4 with dir_index returns hash order — so a byte-identical acceptance built on it passes at home and flakes in CI; sort at the ONE owner before building any differential on top.

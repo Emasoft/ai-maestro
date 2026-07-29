@@ -134,7 +134,11 @@ const UNAUDITED_RULES = new Set<number>([
 // 22 gate qualifiers added in c5173e59, of which 7 were wrong. Deriving a gate NAME from a line
 // RANGE is unsound when the ranges are themselves ~1/3 wrong — it turns a visibly vague citation
 // into an authoritative-looking false one. See TRDD-W8NA7ROZ.
-const MAX_ENFORCED_WITHOUT_TEST = 42
+// 2026-07-29: batch 3 pinned R32.1 + R32.2 in tests/governance/r32-agents-never-sudo.test.ts —
+// 42 → 40. Both guards were read against the CURRENT rule text before pinning; the sibling R39.5/
+// R39.7 rows failed that same check (guards encode the pre-2026-07-22 shape) and were filed as
+// TRDD-SPS63XHA instead, since a test written against a superseded guard passes and certifies it.
+const MAX_ENFORCED_WITHOUT_TEST = 40
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

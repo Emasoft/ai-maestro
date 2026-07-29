@@ -286,8 +286,8 @@ Row format is fixed so a regex parses each line:
 | R30.3 | CONTRADICTED | — | — |
 | R31.1 | UNENFORCED | — | — |
 | R31.2 | UNENFORCED | — | — |
-| R32.1 | ENFORCED | lib/sudo-guard.ts:86-88 | — |
-| R32.2 | ENFORCED | app/api/auth/sudo-password/route.ts:98-108, lib/sudo-guard.ts:86-88 | — |
+| R32.1 | ENFORCED | lib/sudo-guard.ts:86-88 | tests/governance/r32-agents-never-sudo.test.ts |
+| R32.2 | ENFORCED | app/api/auth/sudo-password/route.ts:98-108, lib/sudo-guard.ts:86-88 | tests/governance/r32-agents-never-sudo.test.ts |
 | R32.3 | UNENFORCED | — | — |
 | R33.1 | ENFORCED | lib/portfolio-ledger.ts:149-214 | — |
 | R34.1 | UNENFORCED | — | — |

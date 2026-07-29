@@ -5,7 +5,8 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:15:45+0200
-updated: 2026-07-29T10:15:45+0200
+updated: 2026-07-29T10:52:00+0200
+implementation-commits: [7b3341ac, 17b55c24]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -37,10 +38,42 @@ Anthropic's (`https://platform.claude.com/oauth/code/callback`), so we cannot re
 of our own; the manual "display the code" callback is the ONLY shape available. Paste-the-code is
 forced by the registration, not chosen for convenience.
 
-**NEXT ACTION:** implement `lib/oauth-rotator/reauth-flow.ts` — `startReauth()` (PKCE S256 verifier
-+ challenge + state, build the authorize URL, stash the verifier server-side keyed by state, TTL) and
-`completeReauth(state, pastedCode)` (split `code#state`, verify state, exchange with the verifier,
-write the SLOT via the already-ported `writeSlot`). Then the two routes, then the UI.
+**BUILT — commits `7b3341ac` (flow + routes) and `17b55c24` (status route + UI).** 28 new tests,
+11 recorded neuter runs, full suite 262 files / 3932 passed, build clean.
+
+**NEXT ACTION:** the ONE remaining box is not code — it is the human logging in. Open
+Settings → Hosts → this host → Claude Accounts **on the host itself**, press Re-login on
+`fmuaddib@gmail.com`, and confirm afterwards that its `refresh_failures` is 0 and the beat stops
+reporting `reauth-needed`.
+
+**What shipped:**
+- `lib/oauth-rotator/reauth-flow.ts` — `startReauth()` / `completeReauth(state, pastedCode)`, a
+  per-process state map with a 10-min TTL, single-use with a **tombstone** so a replay is
+  distinguishable from a state we never issued.
+- `lib/oauth-rotator/network.ts::exchangeAuthorizationCode` — the grant, so the required
+  `claude-account-rotator` UA is inherited rather than hand-rolled at a second call site.
+- `lib/oauth-rotator/reauth-guard.ts` — ONE gate for BOTH routes (console → MAESTRO → sudo, in
+  that order).
+- `GET /api/oauth-rotator/status` — MAESTRO-only, **not** console-gated (see below).
+- `components/settings/ClaudeAccountsSection.tsx` — the panel, in Settings → Hosts → self.
+
+**Facts established during the build (each changed something):**
+- **A Tailscale-arriving connection really does present a non-loopback peer** — measured with a
+  throwaway probe: loopback → `::ffff:127.0.0.1`, Tailscale IP → `::ffff:100.99.233.43`. That was
+  the ONE link in the console chain unit tests cannot cover, since it is an OS fact, not our code.
+- **On this host loopback ONLY ever takes the `::ffff:` form.** So that branch of `isConsolePeer`
+  is not an edge case — it is the sole path the owner takes, and losing it locks them out at their
+  own keyboard.
+- **A strict route must ALSO be declared in `sudo-guard`'s owner-only set** or an agent caller gets
+  a silent, misleading 403. The full suite caught it; the R-2 source scanner could not, because
+  these handlers reach `enforceMaestro` through the shared guard and a shape-based scan cannot see
+  the indirection.
+- **Nothing pinned `fileSlot`'s wholesale REPLACE of the state.json entry** — all 12 existing slot
+  tests passed with a merge in place. The ban-lift test is now its only guard, and `slots.ts` says
+  so at the site.
+- **`GET /status` is deliberately NOT console-gated.** Seeing that an account is dead is exactly
+  what the owner needs FROM their phone — it is what tells them a trip to the machine is required.
+  Only the login itself is bound to presence.
 
 **Load-bearing facts (all verified 2026-07-29, first-hand):**
 - `CLIENT_ID` is IDENTICAL on both sides — `9d1c250a-e61b-44d9-88ed-5944d1962f5e`
@@ -135,16 +168,17 @@ it now.
 
 ## Verification
 
-- [ ] Unit: `startReauth` produces a valid S256 challenge (RFC 7636 vector) and a URL carrying the exact 4-scope set
-- [ ] Unit: `completeReauth` refuses an unknown state, an expired state, and a REPLAYED state (three distinct refusals, not one)
-- [ ] Unit: a successful exchange writes the slot AND zeroes `refresh_failures` + clears `refresh_dead_fp`
-- [ ] Unit: the verifier is never present in any response body (assert the negative explicitly)
-- [ ] Unit: BOTH routes refuse a non-console peer even with a valid MAESTRO session (the gate is the point; assert the refusal, not just the happy path)
-- [ ] **The console-gate refusal is verified from a GENUINELY REMOTE peer** — the host's own Tailscale IP, never loopback. From loopback the peer really *is* `127.0.0.1`, so the test passes without exercising the branch and proves nothing. (Recorded lesson; this exact vacuity already bit the `x-aim-peer` spoof test.)
-- [ ] Unit: `::ffff:127.0.0.1` (the dual-stack form the `::` bind produces) is ACCEPTED — miss it and the owner is locked out at their own keyboard
-- [ ] 0-IMPACT: every test stubs the token endpoint and redirects HOME to a temp dir — the real keychain is never touched
-- [ ] A neuter run per guard (break it → the NAMED test fails; read the test COUNT, never the exit code)
-- [ ] End-to-end on `fmuaddib@`: after the flow, `refresh_failures` returns to 0 and the beat stops reporting `reauth-needed`
+- [x] Unit: `startReauth` produces a valid S256 challenge (RFC 7636 vector) and a URL carrying the exact 4-scope set
+- [x] Unit: `completeReauth` refuses an unknown state, an expired state, and a REPLAYED state (three distinct refusals, not one)
+- [x] Unit: a successful exchange writes the slot AND zeroes `refresh_failures` + clears `refresh_dead_fp`
+- [x] Unit: the verifier is never present in any response body (assert the negative explicitly)
+- [x] Unit: BOTH routes refuse a non-console peer even with a valid MAESTRO session (the gate is the point; assert the refusal, not just the happy path)
+- [x] **The remote peer is genuinely remote** — MEASURED with a throwaway probe, not assumed: a connection to the host's own Tailscale IP presents `::ffff:100.99.233.43`, loopback presents `::ffff:127.0.0.1`. That was the one link unit tests cannot cover (an OS fact), and it is the premise the whole gate rests on. (Recorded lesson; this exact vacuity already bit the `x-aim-peer` spoof test.)
+- [ ] Observe the route ITSELF answer `console_required` to an AUTHENTICATED remote caller. Not yet done: the global middleware rejects a credential-less request *before* the handler, so an unauthenticated curl from the Tailscale IP returns 401 and exercises nothing. Needs a session minted on the Tailscale origin. Every individual link is verified above; this is the end-to-end composition of them.
+- [x] Unit: `::ffff:127.0.0.1` (the dual-stack form the `::` bind produces) is ACCEPTED — and the probe showed it is the ONLY form loopback takes on this host, so it is the load-bearing branch rather than an edge case
+- [x] 0-IMPACT: every test stubs the token endpoint and redirects HOME to a temp dir — the real keychain is never touched
+- [x] A neuter run per guard — 11 recorded (console gate · replay tombstone · state mismatch · expiry · PKCE hash · verifier-never-emitted · roles-over-hint · slot-entry replacement · strict registration · fingerprint leak · MAESTRO gate), each failing only its NAMED test, each restored byte-clean
+- [ ] End-to-end on `fmuaddib@`: after the flow, `refresh_failures` returns to 0 and the beat stops reporting `reauth-needed` — this is the human's step, at the host
 
 ## Estimated risk
 

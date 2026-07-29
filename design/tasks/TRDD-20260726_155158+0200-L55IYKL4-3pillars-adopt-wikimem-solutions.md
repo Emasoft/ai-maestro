@@ -19,7 +19,7 @@ approval-datetime: 2026-07-26T15:51:58+0200
 relevant-rules: [R25]
 blocked-by: []
 npt: [Q3GZJI1X, LXLK7XGX, 7JK3NCV4, CTEQX0ZA]
-eht: [BQC8NQSW, C069SK9E, 8KDIB2LT, MUYRIKN3, YN8EQWYP, O4JK6RV3, 4VCXRHAY, 7CHUK1AZ, 31LJK1CX]
+eht: [BQC8NQSW, C069SK9E, 8KDIB2LT, MUYRIKN3, YN8EQWYP, O4JK6RV3, 4VCXRHAY, 7CHUK1AZ, 31LJK1CX, C4YJAUD9]
 external-refs: [Emasoft/ai-maestro#96, Emasoft/ai-maestro#98, Emasoft/ai-maestro-janitor#118, Emasoft/ai-maestro-janitor#123, Emasoft/ai-maestro-janitor#126, Emasoft/ai-maestro-janitor#127]
 ---
 
@@ -209,13 +209,32 @@ already satisfied, box 4's wording unachievable, box 2 naming the janitor-footpr
 that rule never mentions — the owner is this repo's CLAUDE.md runtime inventory, where the
 `kanban-index/` precedent the card cites was itself undocumented. Measure a box before building for it.
 
-**NEXT — the parent's completion gate stays correctly shut. Five children are non-terminal, verified
-by reading each `column:` rather than inferring:** `Q3GZJI1X` (`dev`, **HELD FOR THE USER**),
-`8KDIB2LT` (`todo` — boxes 1/3/4 are doable now; box 2 needs `prrdgrep`/`specsgrep` to exist, so it
-is transitively gated on `Q3GZJI1X`), `C069SK9E` (`todo` — graph+board at 10⁵, entangled with
-`31LJK1CX`), `4VCXRHAY` (`dev` — its FTS follow-up shipped as `7CHUK1AZ`, so **check whether it is
-already closeable** before starting work), `31LJK1CX` (`backburner` — the warm graph query misses the
-budget; the freshness probe alone is 0.59 s of it). Best next: `8KDIB2LT` boxes 1/3/4.
+**EHT `4VCXRHAY` is ✅ COMPLETE + archived 2026-07-30 (`d04ee6a6`, `916e729b`) — and it had been
+finished for a DAY.** All 6 boxes were already `[x]` with empty `npt`/`eht`/`blocked-by`; it was
+simply never advanced, and it carried **no `implementation-commits:` field at all**, so the SHAs that
+landed it were recorded nowhere — the one field that makes a bug found later traceable to the change
+that caused it. Re-verified first-hand against the code (not from the boxes): `ValidateDepth`,
+`validate()` keeping the strong name, `validateStructural()`, and `openIndex`'s
+`depth = opts.verify ?? 'structural'` all present.
+
+**But closing it surfaced a gap it had argued and not delivered, so that is now `C4YJAUD9`.** Its body
+says the depth split is only safe if *"the expensive half must have a real scheduled caller rather
+than only an opt-in flag — a check nobody runs is a check that does not exist."* Every non-test caller
+of the full pass across `lib/ scripts/ app/ services/ server.mjs` is exactly one: a BENCHMARK
+(`scripts/bench-cold-index.mjs`). So `integrity_check` — the only check that sees a genuinely damaged
+file — now runs solely at create, at each migration step, and after a heal; an index created once and
+never migrated again is never fully checked again. `YN8EQWYP` narrowed it further, since `busy` is
+now correctly never healed and so no longer triggers the heal path that incidentally full-checked.
+Filed as a SIBLING EHT (depth-1: a derived TRDD may not spawn its own), the same route this flock used
+for `7CHUK1AZ`.
+
+**NEXT — the completion gate stays correctly shut. Five children are non-terminal, each read from its
+own `column:` rather than inferred:** `Q3GZJI1X` (`dev`, **HELD FOR THE USER**), `8KDIB2LT` (`todo` —
+boxes 1/3/4 doable now; box 2 needs `prrdgrep`/`specsgrep` to exist, so it is transitively gated on
+`Q3GZJI1X`), `C069SK9E` (`todo` — graph+board at 10⁵, entangled with `31LJK1CX`), `31LJK1CX`
+(`backburner` — the warm graph query misses the budget; the freshness probe alone is 0.59 s of it),
+`C4YJAUD9` (`todo`, new — needs a DECISION on where the verifier lives before any code).
+**Best next: `8KDIB2LT` boxes 1/3/4.**
 Also settled: `Q3GZJI1X` does **not** gate the lint — an ambiguous `relevant-rules:` target is still
 unambiguously a TRDD → PRRD edge, and that direction is legal under either reading.
 

@@ -1,11 +1,12 @@
 ---
 trdd-id: 4VCXRHAY
 title: The index validates the whole corpus on every open and that is the scaling wall
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T00:36:05+0200
-updated: 2026-07-29T01:10:09+0200
+updated: 2026-07-30T01:36:00+0200
+implementation-commits: [d04ee6a6, 916e729b]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -106,6 +107,34 @@ external writer, a crash mid-write) is detected at the next transition or verify
 the next read. That window is the price, and it is why the expensive half must have a real
 scheduled caller rather than only an opt-in flag — a check nobody runs is a check that does not
 exist.
+
+## CLOSED 2026-07-30 — all 6 boxes were met a day ago; the card was simply never advanced
+
+Found while picking the next piece of work: `column: dev`, every box `[x]`, `npt`/`eht`/`blocked-by`
+all empty, and no `implementation-commits:` field at all — so the SHAs that landed it (`d04ee6a6` the
+split, `916e729b` the measurement) were recorded nowhere, which is the one field that makes a bug
+found later traceable to the change that introduced it. Both now recorded.
+
+The work was re-verified FIRST-HAND against the current code rather than taken from the boxes:
+`ValidateDepth = 'structural' | 'full'` exists, `validate()` keeps the strong name for the full pass,
+`validateStructural()` is the cheap one, and `openIndex` defaults `depth = opts.verify ?? 'structural'`.
+Its spun-off card `7CHUK1AZ` (the cold-build cost) is complete and archived.
+
+**ONE THING THIS CARD ARGUED AND DID NOT DELIVER, now its own card.** The body says the split is only
+safe if *"the expensive half must have a real scheduled caller rather than only an opt-in flag — a
+check nobody runs is a check that does not exist."* Grepping every non-test caller of the full pass
+across `lib/ scripts/ app/ services/ server.mjs` returns exactly one: `scripts/bench-cold-index.mjs`,
+a BENCHMARK. So box 3 is satisfied as WORDED (an entry point exists) while the principle the same
+paragraph states is not. Closing the card silently would have ratified the gap it named.
+
+Spun out as **`TRDD-C4YJAUD9`** — a SIBLING EHT under `L55IYKL4`, not a child, because a derived TRDD
+is depth-1 and may not spawn its own. That is the same route this card used for the cold-build cost
+(`7CHUK1AZ`), so the pattern is consistent rather than invented here.
+
+⚠️ **The line citations in the section below are ROTTEN and are kept as the historical record:**
+`index-build.ts:91 / :114 / :162` were true at measurement time. `TRDD-7CHUK1AZ` removed the FTS
+write and `TRDD-YN8EQWYP` moved the parse inside an `IMMEDIATE` transaction, so those numbers now
+point at unrelated code. Read them as "what was there on 2026-07-29", never as a current pointer.
 
 ## Acceptance
 

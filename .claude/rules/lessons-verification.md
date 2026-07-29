@@ -75,6 +75,14 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A snapshot nothing reads is not a safeguard — if a gate announces an archive, point at the artifact or stop announcing it.
 - "Nothing was deleted" is false the moment ANY earlier sub-step landed; a preserved parent row with its children stripped is a husk, not consistency.
 
+## Reading a running system
+
+- "No log line" is a claim about YOUR FILTER until proven otherwise — I concluded "the watchdog stopped beating" twice from my own instrument: first an `awk '$2 >= "09:09"'` whose `$2` was the literal `|` (pm2 prefixes each line), then a grep of `pm2-out.log` when the logger is `console.warn` → **stderr** → `pm2-error.log`. The beats were there the whole time.
+- Before concluding a periodic task is dead, find the ONE branch that decides whether it logs at all: this watchdog logs only `if (stalled.length || tokenBlocked.length || dead.length)`, so silence and health are the same output.
+- `pm2 restart <name>` replays the env pm2 CACHED at first start — it never re-reads `ecosystem.config.js`, so a var ADDED later never reaches the process no matter how often you restart. Use `pm2 restart ecosystem.config.js --update-env`, then verify against the PROCESS (`ps eww -p <pid>`), never against the file you just edited.
+- `pm2 save` is a THIRD copy: the live process, the config file, and `~/.pm2/dump.pm2` (what `resurrect` replays after a reboot) drift independently. Ours held a var the config no longer defined and lacked the one it did.
+- A gated feature that logs its own gate state (`[detect-only: FLAG not set]`) had been saying so on every beat for six days — detection nobody reads is not detection. Grep the log for the gate string before believing a flag is live.
+
 ## Second-hand reports (sub-agents, prior sessions, TRDD verdicts, audit findings)
 
 - A report from a sub-agent, a prior session, or a recorded TRDD verdict is a HYPOTHESIS — demand the exact file:line, grep it YOURSELF, and only then call it a fact.

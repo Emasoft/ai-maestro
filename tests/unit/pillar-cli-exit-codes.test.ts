@@ -21,13 +21,25 @@ import { spawnSync } from 'child_process'
 
 const REPO = process.cwd()
 
+/**
+ * CONTAINMENT (TRDD-YN8EQWYP box 4). `statePath()` is `join(homedir(), '.aimaestro')`, and
+ * `board` below is an INDEX-BACKED subcommand — so without a redirected HOME the spawned CLI
+ * writes a real SQLite index for each throwaway tmp corpus into the DEVELOPER'S OWN
+ * `~/.aimaestro/pillar-index/`. Measured before this was added: +1 file per suite run, 43
+ * accumulated. `vi.mock` cannot contain it — the writer is a SUBPROCESS, which never sees the
+ * parent's module mocks — so the only lever is the spawn env. `os.homedir()` honours $HOME on
+ * POSIX, which is what makes this work.
+ */
+let fakeHome: string
+
 function runCli(script: string, args: string[]): { status: number; stderr: string; stdout: string } {
   const r = spawnSync(process.execPath, ['--import', 'tsx', path.join('scripts', script), ...args], {
     cwd: REPO,
     encoding: 'utf-8',
     // Inherit the environment so tsx resolves, but never let a stray TRDD_DEBUG
-    // from the developer's shell change what these assertions see.
-    env: { ...process.env, TRDD_DEBUG: '' },
+    // from the developer's shell change what these assertions see — and never let the
+    // spawned CLI resolve state into the real home (see CONTAINMENT above).
+    env: { ...process.env, TRDD_DEBUG: '', HOME: fakeHome },
   })
   return { status: r.status ?? -1, stderr: r.stderr ?? '', stdout: r.stdout ?? '' }
 }
@@ -36,9 +48,11 @@ let emptyDir: string
 
 beforeEach(() => {
   emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-cli-'))
+  fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-cli-home-'))
 })
 afterEach(() => {
   fs.rmSync(emptyDir, { recursive: true, force: true })
+  fs.rmSync(fakeHome, { recursive: true, force: true })
 })
 
 describe('greptrdd exit codes', () => {
@@ -127,6 +141,67 @@ describe('greptrdd loads the corpus LAZILY (TRDD-L55IYKL4 / EHT 8KDIB2LT step 1)
   // measured instead — at 10^5 x 10 KB, `board` peak RSS 2.41 GB -> 1.52 GB and
   // search 2.41 GB -> 0.47 GB — and the numbers plus their reproduction live in
   // TRDD-8KDIB2LT.
+})
+
+describe('0-IMPACT — the spawned CLI never writes the real state dir (TRDD-YN8EQWYP)', () => {
+  // This suite SPAWNS the production CLI, and `board` builds a real SQLite index at
+  // `statePath('pillar-index')`. The containment therefore cannot be asserted by reading
+  // the spawn options — the only honest check is to COUNT the developer's real directory
+  // either side of a run that provably does index. Measured before the HOME redirect
+  // existed: +1 file per suite run, 43 accumulated in ~/.aimaestro/pillar-index/.
+  const realIndexDir = path.join(os.homedir(), '.aimaestro', 'pillar-index')
+  const countReal = (): number => {
+    try {
+      return fs.readdirSync(realIndexDir).length
+    } catch {
+      // Absent is the cleanest possible answer, and legal on a fresh machine.
+      return 0
+    }
+  }
+
+  let corpus: string
+  beforeEach(() => {
+    corpus = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-0impact-'))
+    const zone = path.join(corpus, 'design', 'tasks')
+    fs.mkdirSync(zone, { recursive: true })
+    fs.writeFileSync(
+      path.join(zone, 'TRDD-20260730_000000+0200-ZZ0IMPCT-containment-probe.md'),
+      [
+        '---',
+        'trdd-id: ZZ0IMPCT',
+        'title: containment probe',
+        'column: dev',
+        'created: 2026-07-30T00:00:00+0200',
+        'updated: 2026-07-30T00:00:00+0200',
+        'blocked-by: []',
+        '---',
+        '',
+        '# containment probe',
+        '',
+      ].join('\n'),
+    )
+  })
+  afterEach(() => {
+    fs.rmSync(corpus, { recursive: true, force: true })
+  })
+
+  it('leaves the real ~/.aimaestro/pillar-index/ byte-count unchanged, while PROVING it indexed', () => {
+    const before = countReal()
+    const r = runCli('greptrdd.mjs', ['board', '--design-dir', path.join(corpus, 'design')])
+    const after = countReal()
+
+    // The POSITIVE CONTROL, and it is load-bearing: without it this test passes when the
+    // command never indexed anything at all — which is the same shape as a gate that
+    // passes because it read nothing.
+    expect(r.status, `board failed, so nothing was indexed and the count below is meaningless: ${r.stderr}`).toBe(0)
+    const fakeIndexDir = path.join(fakeHome, '.aimaestro', 'pillar-index')
+    expect(
+      fs.existsSync(fakeIndexDir) && fs.readdirSync(fakeIndexDir).length > 0,
+      'the CLI wrote no index into the fake home — so this test cannot distinguish containment from inaction',
+    ).toBe(true)
+
+    expect(after, 'the spawned CLI wrote into the real state dir').toBe(before)
+  })
 })
 
 describe('trdd-doctor exit codes', () => {

@@ -30,6 +30,8 @@
 // usage endpoint, /roles works with this UA today, and changing it on a guess would be inventing a
 // fix for a defect nobody has observed. Open question raised upstream rather than assumed.
 
+import { execFileSync } from 'node:child_process'
+
 import { oauthOf, type CredentialBlob } from './slots'
 
 const ROLES_URL = 'https://api.anthropic.com/api/oauth/claude_cli/roles'
@@ -61,8 +63,12 @@ export function claudeCodeUserAgent(deps?: NetworkDeps): string {
   if (cachedClaudeCodeUA !== null) return cachedClaudeCodeUA
   let ua = CLAUDE_CODE_UA_FALLBACK
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { execFileSync } = require('child_process') as typeof import('child_process')
+    // The try/catch guards the CLI CALL, not the import: `node:child_process` is a core module and
+    // cannot fail to resolve, while `claude --version` can be missing, slow, or unrunnable. This
+    // used to lazy-`require` the module behind an eslint-disable naming a rule this project does
+    // not configure, so the directive itself failed the build (`Definition for rule ... was not
+    // found`). A static import removes both the lazy load and the bogus suppression; nothing
+    // client-side imports this module, so there is no bundle to keep it out of.
     const out = execFileSync('claude', ['--version'], { encoding: 'utf8', timeout: 5_000 }).trim()
     // `claude --version` prints e.g. "2.1.209 (Claude Code)" — take the leading semver token.
     const m = /^(\d+\.\d+\.\d+[^\s]*)/.exec(out)

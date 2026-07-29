@@ -41,6 +41,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 ## Verifying a fix
 
 - Diagnose by dumping the actual ops/trace, not by reasoning about what the code should have done — the trace named the real cause in one run, twice, after reasoning had blamed the wrong thing.
+- An acceptance box naming ANOTHER card as its destination is voided when that card goes terminal first: mine said "state the number in CTEQX0ZA's budget table" and CTEQX0ZA had reached `complete` hours earlier, where rule 12 freezes the body — name a destination you still own.
 
 ## Measuring at scale
 
@@ -73,6 +74,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A wall-time delta whose SIGN flips between corpus sizes is noise, not a regression — mine read +12% at 50k and −6% at 10^5 for the same change, so the honest claim was "unchanged; the win is memory".
 - Isolate the variable before crediting your change: after a corpus-mutating session, re-run the SAME corpus with the change stashed — three "differences" I was about to attribute to a sort were a new card, an unblocked card, and a row pushed past a 25-row cutoff.
 - `readdirSync` order is POSIX-UNDEFINED — APFS returns it sorted, ext4 with dir_index returns hash order — so a byte-identical acceptance built on it passes at home and flakes in CI; sort at the ONE owner before building any differential on top.
+- A benchmark measures its ENVIRONMENT until you make it not: two of my own probes overlapping read 17.35 s and 111.56 s for the SAME config, and the headline run — started the instant its 1.2 GB fixture landed, so it paid the write-back — read 33.29 s against 16.45 s once settled. Serialize, let the FS settle, THEN interleave the variants.
+- A heap CAP answers retention where peak RSS cannot: RSS counts garbage, but COMPLETION under `--max-old-space-size=256` is a boolean that contention and GC timing cannot fake — 1.29 GB of RSS over a live set under 256 MB was pure churn, and only the cap could prove it.
 
 ## Mocked modules
 

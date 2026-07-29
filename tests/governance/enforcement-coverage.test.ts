@@ -142,7 +142,11 @@ const UNAUDITED_RULES = new Set<number>([
 // 40 → 37. Chosen as the tightest single-FILE cluster left (all three guards live in
 // app/api/governance/maestro-delegate/route.ts), which is the batching rule the plan settled on:
 // one agent holds one file's mocking context instead of twenty rules' worth.
-const MAX_ENFORCED_WITHOUT_TEST = 37
+// 2026-07-29: batch 5 pinned R10.1 + R10.5 in tests/governance/r10-wake-gates.test.ts — 37 → 35.
+// Both citations were WRONG in the same way R10.3's was: they named `wakeAgent`'s return-type
+// declaration, ~26 lines above the gates. That is the citation defect the ratchet structurally
+// cannot see — the range exists and holds real code — so only reading it finds it.
+const MAX_ENFORCED_WITHOUT_TEST = 35
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

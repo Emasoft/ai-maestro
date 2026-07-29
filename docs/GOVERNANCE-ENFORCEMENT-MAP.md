@@ -115,11 +115,11 @@ Row format is fixed so a regex parses each line:
 | R9.11 | ENFORCED | services/teams-service.ts:285-291 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.12 | ENFORCED | services/agents-core-service.ts:417, app/api/agents/route.ts | tests/governance/r3-r9-team-governance.test.ts |
 | R9.13 | ENFORCED | services/element-management-service.ts:3176-3181 (ChangeTitle::G17) | tests/governance/r3-r9-team-governance.test.ts |
-| R10.1 | ENFORCED | services/agents-core-service.ts:2003-2017 | — |
+| R10.1 | ENFORCED | services/agents-core-service.ts:2029-2043 | tests/governance/r10-wake-gates.test.ts |
 | R10.2 | CONTRADICTED | — | — |
 | R10.3 | ENFORCED | lib/authorization.ts:530-541 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |
 | R10.4 | CONTRADICTED | — | — |
-| R10.5 | ENFORCED | services/agents-core-service.ts:2019-2028 | — |
+| R10.5 | ENFORCED | services/agents-core-service.ts:2045-2054 | tests/governance/r10-wake-gates.test.ts |
 | R10.6 | ENFORCED | app/api/sessions/[id]/restart/route.ts:97-107, services/headless-router.ts:919 | — |
 | R10.7 | UNENFORCED | — | — |
 | R11.1 | CONTRADICTED | — | — |

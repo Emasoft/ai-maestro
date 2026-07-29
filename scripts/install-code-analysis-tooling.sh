@@ -377,6 +377,19 @@ if [ -f "$DISTRIBUTE" ]; then
     fi
 fi
 
+# Install the universal Tailscale skill at Claude user scope — same fail-soft contract.
+# It rides HERE, in the tooling installer, rather than in install-messaging.sh directly,
+# because this is already the one place that distributes user-scope skills; a second
+# call site would be a second thing to keep in sync.
+TS_SKILL="$(dirname "${BASH_SOURCE[0]}")/distribute-tailscale-skill.sh"
+if [ -f "$TS_SKILL" ]; then
+    if [ "$NON_INTERACTIVE" = true ]; then
+        bash "$TS_SKILL" -y || print_warning "tailscale-skill install returned non-zero (continuing)"
+    else
+        bash "$TS_SKILL" || print_warning "tailscale-skill install returned non-zero (continuing)"
+    fi
+fi
+
 print_summary
 
 # Fail-soft contract: never propagate a non-zero status to the parent installer.

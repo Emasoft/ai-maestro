@@ -129,3 +129,6 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Never `pgrep`/`ps | grep` for a cmdline: the scanning shell matches itself. Snapshot `ps` to a file, then search the file.
 - `ls dir/*.md | wc -l` on an unmatched glob is not 0, it is MEANINGLESS — count with `find`; mine reported 65 files in two empty dirs and the sample listing beside it was already blank.
 - When two outputs of the same command block disagree, recount before building on either — the contradiction IS the finding.
+- A scripted bulk edit over PROSE destroys what its regex cannot parse: my "strip 1350 citations" pass ate the `[]` inside `s.get('DNSNames', [])` as an empty citation bracket and left ~600 broken sentences (`Sources:,,,,,.`) across 8 files. A removal that requires RE-GRAMMARING the surrounding sentence is a language task — Edit tool or one agent per file, never `sed`.
+- Back up before a bulk edit, because the repair is a RESTORE, not a patch: the deleted citations were the only thing that made those sentences parse, so nothing in the damaged file could reconstruct them.
+- A corruption scan for `` `` `` matches every ``` fence — mine returned ~600 hits that were 90% fences, hiding the real damage. Filter the fence out (`grep '``' | grep -v '```'`) before believing either the count or the clean.

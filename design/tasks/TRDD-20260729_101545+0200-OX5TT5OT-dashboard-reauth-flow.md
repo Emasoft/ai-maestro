@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:15:45+0200
-updated: 2026-07-29T12:56:54+0200
+updated: 2026-07-29T20:00:07+0200
 implementation-commits: [7b3341ac, 17b55c24]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -187,7 +187,7 @@ it now.
 - [x] Unit: the verifier is never present in any response body (assert the negative explicitly)
 - [x] Unit: BOTH routes refuse a non-console peer even with a valid MAESTRO session (the gate is the point; assert the refusal, not just the happy path)
 - [x] **The remote peer is genuinely remote** — MEASURED with a throwaway probe, not assumed: a connection to the host's own Tailscale IP presents `::ffff:100.99.233.43`, loopback presents `::ffff:127.0.0.1`. That was the one link unit tests cannot cover (an OS fact), and it is the premise the whole gate rests on. (Recorded lesson; this exact vacuity already bit the `x-aim-peer` spoof test.)
-- [ ] Observe the route ITSELF answer `console_required` to an AUTHENTICATED remote caller. Not yet done: the global middleware rejects a credential-less request *before* the handler, so an unauthenticated curl from the Tailscale IP returns 401 and exercises nothing. Needs a session minted on the Tailscale origin. Every individual link is verified above; this is the end-to-end composition of them.
+- [x] Observe the route ITSELF answer `console_required` to an AUTHENTICATED remote caller — **DONE 2026-07-29 20:0x, live against the running server.** A MAESTRO session was minted at loopback and replayed to the host's own Tailscale IP as an explicit `Cookie:` header (a jar will NOT do it: the cookie is host-scoped to `127.0.0.1`, so curl silently drops it and every probe comes back 401 looking exactly like the middleware rejection this box was written about). Three probes, and it is the DISAGREEMENT between the two controls that makes it proof: **positive control** `GET /status` (not console-gated), remote + authenticated → **200**, which rules out "the cookie is bad" and "everything remote 401s"; **the test** `POST /reauth/start`, remote + authenticated → **403 `console_required`**; **negative control** the SAME route with the SAME cookie from loopback → **403 `sudo_required`** — a DIFFERENT slug, so it cleared the console gate and stopped at the next one. That rules out "this route always 403s" and independently confirms the console → MAESTRO → sudo ordering. (First attempt was inconclusive in two ways at once — cookie dropped by host-scoping, and GET on a POST route returning 405 — and the controls are what exposed both.)
 - [x] Unit: `::ffff:127.0.0.1` (the dual-stack form the `::` bind produces) is ACCEPTED — and the probe showed it is the ONLY form loopback takes on this host, so it is the load-bearing branch rather than an edge case
 - [x] 0-IMPACT: every test stubs the token endpoint and redirects HOME to a temp dir — the real keychain is never touched
 - [x] A neuter run per guard — 11 recorded (console gate · replay tombstone · state mismatch · expiry · PKCE hash · verifier-never-emitted · roles-over-hint · slot-entry replacement · strict registration · fingerprint leak · MAESTRO gate), each failing only its NAMED test, each restored byte-clean

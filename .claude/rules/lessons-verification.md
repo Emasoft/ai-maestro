@@ -96,6 +96,10 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A gated feature that logs its own gate state (`[detect-only: FLAG not set]`) had been saying so on every beat for six days — detection nobody reads is not detection. Grep the log for the gate string before believing a flag is live.
 - A live end-to-end probe of a route-level gate proves NOTHING when an earlier layer refuses first: my curl from the real Tailscale IP got the middleware's 401, never reaching the console check. Isolate the ONE link you actually doubt — a throwaway server printing `req.socket.remoteAddress` settled it in seconds.
 - On a dual-stack (`::`) bind, loopback presents ONLY `::ffff:127.0.0.1` — so the "IPv4-compat" branch of a loopback check is the SOLE path the owner takes, not an edge case, and dropping it locks them out at their own keyboard.
+- ASK the supervisor where it logs — never assume the default: pm2 was configured to `<project>/logs/pm2-*.log` while I read `~/.pm2/logs/ai-maestro-*.log` (18 days stale), so a healthy boot read as "produced no output at all". `pm2 jlist` → `pm_out_log_path`/`pm_err_log_path` settles it in one call.
+- Do NOT append a marker into a log to bracket a restart: the supervisor REOPENS the file so the marker is orphaned, and the write freshens that file's mtime — which is exactly how I certified a dead log as live and read its silence as evidence.
+- A restart is not a redeploy of the half you changed: under `tsx server.mjs` in FULL mode, `server.mjs` is transpiled at runtime but API routes still come from the prebuilt `.next`, so a process started AFTER the fix commit was still executing pre-fix route code — check `MAESTRO_MODE`/`NODE_ENV` on the PROCESS before reasoning about which half moved.
+- Prove a deploy from the ARTIFACT THAT EXECUTES, not the commit: `grep`ping the compiled chunk for the new expression (`nextSeq(){…e.seq+1…}`) and for ZERO instances of the old shape is the check; `git log` showing the fix is what made this bug survive 20 minutes of believing it fixed.
 
 ## Second-hand reports (sub-agents, prior sessions, TRDD verdicts, audit findings)
 
@@ -136,6 +140,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 ## Shell
 
 - `cmd | tee FILE | head` truncates FILE via SIGPIPE — capture to the file first, then inspect it.
+- `cp -R` over an EXISTING file keeps the DESTINATION's old mode, so withdrawing an exec bit silently never lands on any machine that installed the previous version; `-p` forces it down (and is also the only form that survives a restrictive umask — plain `-R` under `umask 077` yields 700/600). Measure the overwrite case, not just the fresh one.
+- `stat -f` is two different tools: BSD reads it as a FORMAT string, GNU as "filesystem info", so `stat -f '%Lp' file` on GNU prints filesystem stats for a file literally named `%Lp` and errors on the real one — use `stat -c '%a'`, or sidestep it with `node -e 'fs.statSync(f).mode & 0o777'`.
+- A variable holding a COMMAND does not word-split in zsh either: `$mode src dst` with `mode="cp -R"` looks for a binary named `cp -R`, copies nothing, and every downstream check reads as a clean negative — the same non-splitting trap as `for x in $VAR`, and again only the positive control caught it.
 - Never `pgrep`/`ps | grep` for a cmdline: the scanning shell matches itself. Snapshot `ps` to a file, then search the file.
 - `ls dir/*.md | wc -l` on an unmatched glob is not 0, it is MEANINGLESS — count with `find`; mine reported 65 files in two empty dirs and the sample listing beside it was already blank.
 - When two outputs of the same command block disagree, recount before building on either — the contradiction IS the finding.

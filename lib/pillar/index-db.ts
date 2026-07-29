@@ -462,17 +462,22 @@ export function validateAt(
       ],
     }
   }
-  // FULL ONLY, and it is the more expensive of the two scans in practice.
-  if (depth === 'full') {
-    try {
-      // The PARITY form. The bare `('integrity-check')` passes on an emptied index —
-      // it verifies the b-tree, not that the index agrees with the content — so it
-      // would certify exactly the corruption worth catching.
-      db.prepare(`INSERT INTO records_fts(records_fts, rank) VALUES ('integrity-check', 1)`).run()
-    } catch (err) {
-      return { ok: false, faults: [{ code: 'fts-parity', detail: (err as Error).message }] }
-    }
-  }
+  // THE FTS PARITY CHECK IS RETIRED (TRDD-7CHUK1AZ). It used to run here, FULL only,
+  // and it was the more expensive of the two scans.
+  //
+  // It is gone because nothing populates `records_fts` any more, and a parity check
+  // over a table that is always empty is satisfied by construction — it would pass
+  // whatever happened, which is the exact shape of a gate that passes because it read
+  // nothing. Keeping it would have cost the scan AND reported reassurance it had not
+  // earned; that is strictly worse than not checking.
+  //
+  // The SHAPE check above still asserts `records_fts` exists with its v2 columns, so
+  // the schema is still guarded. If a consumer is ever built and the INSERT in
+  // index-build.ts comes back, this parity check MUST come back with it — the two are
+  // one decision, and the reason to prefer this `('integrity-check', 1)` PARITY form
+  // over the bare `('integrity-check')` is recorded here so it is not re-litigated:
+  // the bare form verifies the b-tree only, so it passes on an emptied index and
+  // certifies exactly the corruption worth catching.
 
   // 7. Orphans — rows pointing at a file no longer indexed. Last because it is the
   //    only check that scans rows rather than metadata.

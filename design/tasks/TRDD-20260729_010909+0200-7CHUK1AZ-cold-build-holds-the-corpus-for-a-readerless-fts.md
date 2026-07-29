@@ -1,11 +1,11 @@
 ---
 trdd-id: 7CHUK1AZ
 title: The cold index build holds the whole corpus in RAM to populate a table nothing reads
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T01:09:09+0200
-updated: 2026-07-29T02:26:28+0200
+updated: 2026-07-29T20:07:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -124,11 +124,11 @@ evidence survives to Phase 5 rather than being re-derived.
 
 ## Acceptance
 
-- [ ] Phase 5 decides the FTS's fate with recall's requirements in hand (option 1 or 2 above)
+- [x] Phase 5 decides the FTS's fate with recall's requirements in hand — **OPTION 1, 2026-07-29.** The requirements are in hand and they are negative: the FTS's only intended consumer is recall/search, search takes a REGEX (`scripts/greptrdd.mjs`, `new RegExp(cmd, 'i')`) which FTS5 structurally cannot serve, and the graph subcommands were index-backed instead with search ratified walk-only. So it was never a table awaiting a consumer — it was mis-designed for the consumer it had. Against that, keeping it costs a cold build that does not complete at the stated target. Implemented as the option words it: STOP POPULATING; table, migrations and shape check all stay, so restoring it is one INSERT.
 - [ ] If the FTS stays: `pending` no longer retains the corpus — bounded batches, with the peak RSS
       re-measured at 10⁵ and held under the 4 GB budget
-- [ ] If the FTS goes: `body` is removed from `PendingRow`, the parity check is retired with it, and
-      the cold build is re-measured
+- [x] `body` removed from `PendingRow` (the whole memory wall — it was the only large retained field) and the parity check retired in `index-db.ts`, because over an always-empty table it is satisfied by construction: a gate that passes because it read nothing. tsc clean; 49/49 pillar tests; a NEUTER run (re-add the INSERT) turns the new pinning test red, restored byte-clean.
+- [ ] The cold build is re-measured at 10^5 (the kill happened before this change; the new number is not yet taken)
 - [ ] Whichever way, the cold-build wall time at 10⁵ is stated in `TRDD-CTEQX0ZA`'s budget table
 
 ## Approval log

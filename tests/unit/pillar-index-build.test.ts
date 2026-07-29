@@ -120,28 +120,45 @@ describe('incremental — the property the 10^5 measurement forces', () => {
     expect(s.edges).toBe(1)
   })
 
-  it('a deleted card is evicted from records, edges AND the FTS', () => {
-    // The FTS row is the easy one to forget, and forgetting it leaves a deleted card
-    // still answering searches. This is the whole reason schema v2 added
-    // `path UNINDEXED` to records_fts.
+  it('a deleted card is evicted from records and edges', () => {
     const a = write('tasks', 'AAAAAAAA', {}, 'findmeplease')
     write('tasks', 'BBBBBBBB')
     const db = openIndex(dbFile)
     syncIndex(db, corpus, TRDD_KIND)
-    expect(
-      (db.prepare(`SELECT COUNT(*) n FROM records_fts WHERE records_fts MATCH 'findmeplease'`).get() as { n: number })
-        .n,
-    ).toBe(1)
 
     fs.rmSync(a)
     const s = syncIndex(db, corpus, TRDD_KIND)
     expect(s.removed).toBe(1)
     expect((db.prepare(`SELECT COUNT(*) n FROM records WHERE id='AAAAAAAA'`).get() as { n: number }).n).toBe(0)
     expect((db.prepare(`SELECT COUNT(*) n FROM edges WHERE src_id='AAAAAAAA'`).get() as { n: number }).n).toBe(0)
-    expect(
-      (db.prepare(`SELECT COUNT(*) n FROM records_fts WHERE records_fts MATCH 'findmeplease'`).get() as { n: number })
-        .n,
-    ).toBe(0)
+    // The surviving sibling must still be there — otherwise "evicted" would also be
+    // satisfied by a sync that wiped everything, and the assertions above would pass
+    // for the wrong reason.
+    expect((db.prepare(`SELECT COUNT(*) n FROM records WHERE id='BBBBBBBB'`).get() as { n: number }).n).toBe(1)
+    expect(validate(db)).toEqual({ ok: true })
+    db.close()
+  })
+
+  it('the build does NOT populate records_fts — the readerless-FTS decision, pinned', () => {
+    // TRDD-7CHUK1AZ: `body` was the only large field on the retained `pending` array,
+    // and its sole consumer was an FTS nothing ever queried (search takes a REGEX, which
+    // FTS5 cannot serve). At 10^5 that combination did not merely run slowly — the cold
+    // build was KILLED at 1h32m with the WAL rate still decaying. The write is gone; the
+    // table, its migrations and its shape check stay, so restoring it is one statement.
+    //
+    // This test is what makes that a DECISION rather than a drift: re-adding the INSERT
+    // turns it red, which is the moment to also restore the parity check retired in
+    // index-db.ts — the two are one decision and must not come back separately.
+    write('tasks', 'AAAAAAAA', {}, 'findmeplease')
+    const db = openIndex(dbFile)
+    const s = syncIndex(db, corpus, TRDD_KIND)
+
+    // POSITIVE CONTROL first: the sync really ran and really indexed the card. Without
+    // this, "the FTS is empty" would also be true of a sync that did nothing at all.
+    expect(s.records).toBeGreaterThan(0)
+    expect((db.prepare(`SELECT COUNT(*) n FROM records WHERE id='AAAAAAAA'`).get() as { n: number }).n).toBe(1)
+
+    expect((db.prepare(`SELECT COUNT(*) n FROM records_fts`).get() as { n: number }).n).toBe(0)
     expect(validate(db)).toEqual({ ok: true })
     db.close()
   })

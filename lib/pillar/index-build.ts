@@ -41,7 +41,6 @@ interface PendingRow {
     col: string
     title: string
     priority: string | null
-    body: string
   }>
   edges: Array<{ srcId: string; field: string; dstId: string }>
 }
@@ -111,7 +110,6 @@ export function syncIndex(db: Database.Database, root: string, kind: PillarKind)
         // the board reads this back out and compares it to what the WALK produced,
         // so a second stringification rule here would be a silent disagreement.
         priority: normalizePriority(doc.frontmatter.priority),
-        body: rec.text,
       })
       if (kind.name === 'trdd') row.edges.push(...edgesFor(id, doc.frontmatter))
     }
@@ -139,14 +137,28 @@ export function syncIndex(db: Database.Database, root: string, kind: PillarKind)
   // migration have to land in the same change.
   const insRecord = db.prepare(`INSERT INTO records VALUES (?, ?, ?, ?, ?, ?, ?)`)
   const insEdge = db.prepare(`INSERT INTO edges VALUES (?, ?, ?, ?, ?, ?)`)
-  const insFts = db.prepare(`INSERT INTO records_fts(id, title, body, path) VALUES (?, ?, ?, ?)`)
+  // NO insFts. `records_fts` IS NO LONGER POPULATED — see TRDD-7CHUK1AZ. The table,
+  // its migrations and its shape check all stay, so restoring it is exactly this one
+  // statement plus `body` back on PendingRow. What is gone is the WRITE, not the
+  // capability.
+  //
+  // WHY. The FTS had exactly one intended consumer — recall/search — and search takes
+  // a REGEX (`scripts/greptrdd.mjs`, `new RegExp(cmd, 'i')`), which FTS5 structurally
+  // cannot serve; the graph subcommands were index-backed instead and search was
+  // ratified walk-only. So it was not a table awaiting a consumer, it was a table
+  // mis-designed for the consumer it had — while `body` was the ONLY large field on
+  // the retained `pending` array, making it the whole memory wall. Measured at 10^5:
+  // peak RSS 2.36 GB and the build KILLED at 1h32m with the WAL rate still decaying,
+  // i.e. no bounded finish. Cost: a build that never completes. Benefit: nothing read.
 
   const evict = (path: string): void => {
     // Order matters only for readability; all four are unconditional. Missing any
-    // ONE of them leaves a deleted card still answering queries from that table —
-    // the FTS row is the easiest to forget and the most visible when it is wrong.
+    // ONE of them leaves a deleted card still answering queries from that table.
     delRecords.run(path)
     delEdges.run(path)
+    // Retained deliberately even though nothing inserts any more: an index built
+    // BEFORE this change still holds FTS rows, and this drains them as files change.
+    // Dropping it would strand those rows forever in every existing index.
     delFts.run(path)
     delFiles.run(path)
   }
@@ -159,7 +171,6 @@ export function syncIndex(db: Database.Database, root: string, kind: PillarKind)
       insFile.run(row.path, kind.name, row.zone, row.identity, now)
       for (const r of row.records) {
         insRecord.run(kind.name, r.id, row.path, r.line, r.col, r.title, r.priority)
-        insFts.run(r.id, r.title, r.body, row.path)
         stats.records++
       }
       for (const e of row.edges) {

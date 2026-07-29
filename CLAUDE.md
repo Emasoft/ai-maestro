@@ -61,6 +61,29 @@ tmux list-sessions                   # List all sessions (what the app discovers
 tmux kill-session -t test-session    # Clean up test session
 ```
 
+### A RESTART DOES NOT REBUILD — know which half you changed
+
+`pm2 restart` replays the **existing** build. The tree has two halves with different
+deploy semantics, and confusing them has already caused live data corruption:
+
+| You changed | Goes live on | Because |
+|---|---|---|
+| `server.mjs`, `lib/*.mjs` | `pm2 restart` alone | node loads them at runtime |
+| `lib/*.ts`, `app/`, `services/`, `components/` | **`yarn build` THEN restart** | bundled into `.next` |
+
+On 2026-07-29 a one-line fix to `lib/signed-ledger.ts` was committed and the server
+restarted. The old compiled code kept running and re-corrupted the signed ledger that
+had just been repaired — silently, while `git log` showed the fix present. So:
+
+- **`lib/build-freshness.mjs`** warns at boot when `.next` is older than the last
+  commit (`[BUILD] … STALE`), naming the rebuild command. It compares the git
+  **reflog** (`.git/logs/HEAD`), not `.git/HEAD` — a commit does not rewrite the
+  latter, which is why the first version of this check reported a month-stale repo as
+  fresh. It is a warning, never a refusal, and lives in `.mjs` so it can never itself
+  be the stale thing.
+- **Verify a fix by its EFFECT, not by `git log`.** After deploying, make the change
+  actually happen and observe the result.
+
 **Port Configuration:** The application is configured to run on port 23000. This is set in the PM2 configuration.
 
 **Health Check:** Do NOT use `/api/health` to check if the site is live (it doesn't exist). Use `/api/sessions` instead - it returns the list of agents and confirms the server is running.
@@ -1597,7 +1620,7 @@ The extended character set (`@` and `.`) supports `agentId@hostId` format used f
 
 **Dual-bind with IP filter (v0.27.2+):**
 
-The server binds to `::` (all interfaces, dual-stack IPv4+IPv6) when Tailscale is detected, but a TCP-level connection filter (`server.mjs:isAllowedSource()`) drops connections from non-allowed IPs before any HTTP/WebSocket processing:
+The server binds to `::` (all interfaces, dual-stack IPv4+IPv6) when Tailscale is detected, but a TCP-level connection filter (`isAllowedSource()`, in `lib/tailscale-detect.mjs`) drops connections from non-allowed IPs before any HTTP/WebSocket processing:
 
 | Source | Allowed | Why |
 |--------|---------|-----|
@@ -1624,9 +1647,18 @@ Without Tailscale installed, the server falls back to `127.0.0.1`-only binding (
 - **Tailscale IPv6 not routable from same host** — macOS Tailscale app doesn't loopback IPv6; works from remote devices but untested on iPad.
 - **`tailscale serve` is NOT used** — it breaks Next.js static file serving; direct bind with IP filter is used instead.
 
-**Key files:**
-- `server.mjs:92-122` — Tailscale IP detection + `isAllowedSource()` filter
-- `server.mjs:1383-1389` — TCP connection filter on `::` bind (inside `needsIpFilter` block)
+**Key files** (cited by SYMBOL, not line number — both citations here had rotted to
+unrelated code after the filter moved out of `server.mjs`):
+- `lib/tailscale-detect.mjs` — **where the filter LIVES**: `isAllowedSource()`,
+  `isTailscaleIPv4()`, `detectTailscaleIPv4()`, `diagnoseTailscale()`. Extracted from
+  `server.mjs` because that file binds sockets on import, so nothing could import the
+  gate and **no test covered it**. Now 16 tests pin it, including both CGNAT edges
+  (100.64.0.0 and 100.127.255.255 in; 100.63.255.255 and 100.128.0.0 out).
+- `server.mjs` — **where it is WIRED**: imported at the top and applied in the `::`
+  bind's TCP connection handler (`if (!isAllowedSource(socket.remoteAddress))`), which
+  drops the socket before any HTTP/WebSocket processing.
+- `scripts/setup-tailscale.sh` — operator validator; its section 7 asserts BOTH halves
+  (defined in the lib, imported by `server.mjs`). Run `--check` for a no-changes audit.
 - `lib/agent-auth.ts` — Agent auth bridge (current non-auth bypass for local development; confirm against active code before relying on specific line numbers)
 - `docs_dev/2026-04-02-maestro-auth-design.md` — Full maestro auth design for Phase 2
 - `docs_dev/2026-04-02-remote-host-deep-audit.md` — Deep security audit of all remote access paths

@@ -82,6 +82,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - `pm2 restart <name>` replays the env pm2 CACHED at first start — it never re-reads `ecosystem.config.js`, so a var ADDED later never reaches the process no matter how often you restart. Use `pm2 restart ecosystem.config.js --update-env`, then verify against the PROCESS (`ps eww -p <pid>`), never against the file you just edited.
 - `pm2 save` is a THIRD copy: the live process, the config file, and `~/.pm2/dump.pm2` (what `resurrect` replays after a reboot) drift independently. Ours held a var the config no longer defined and lacked the one it did.
 - A gated feature that logs its own gate state (`[detect-only: FLAG not set]`) had been saying so on every beat for six days — detection nobody reads is not detection. Grep the log for the gate string before believing a flag is live.
+- A live end-to-end probe of a route-level gate proves NOTHING when an earlier layer refuses first: my curl from the real Tailscale IP got the middleware's 401, never reaching the console check. Isolate the ONE link you actually doubt — a throwaway server printing `req.socket.remoteAddress` settled it in seconds.
+- On a dual-stack (`::`) bind, loopback presents ONLY `::ffff:127.0.0.1` — so the "IPv4-compat" branch of a loopback check is the SOLE path the owner takes, not an edge case, and dropping it locks them out at their own keyboard.
 
 ## Second-hand reports (sub-agents, prior sessions, TRDD verdicts, audit findings)
 

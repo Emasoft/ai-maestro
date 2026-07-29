@@ -77,9 +77,23 @@ const BEACON_MAX_AGE_S = 24 * 3600
 /** What the tick concluded — feeds DXJZM3BW's `status.next_action`. */
 export type NextAction = 'ok' | 'rotating' | 'reauth-needed'
 
+/**
+ * WHY `reauth-needed` needs a reason: the same word covers two failures with OPPOSITE owners.
+ *  - `refresh-dead`     — the credential really is unrecoverable; a HUMAN must re-login.
+ *  - `slot-unreadable`  — the slot could not be READ from this process at all (keychain ACL,
+ *                         locked login keychain, a security session the daemon isn't in). The
+ *                         credential may be perfectly healthy; nothing a re-login fixes.
+ * Collapsing them sent a human to re-login for a defect on the SERVER's side. `slot-unreadable`
+ * therefore takes precedence when both are present: a fault we caused must never be reported as
+ * a chore we are handing to the user.
+ */
+export type TickReason = 'refresh-dead' | 'slot-unreadable'
+
 export interface TickResult {
   /** The one-line status the continuity CLI surfaces. */
   nextAction: NextAction
+  /** Why `nextAction` is `reauth-needed`; absent for `ok` / `rotating`. */
+  reason?: TickReason
   /** Emails whose slot token was keepalive-refreshed this tick. */
   refreshed: string[]
   /** True iff the live credential was switched to an alternate this tick. */
@@ -505,13 +519,21 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
   // cheap local check: an alternate slot with no refresh token AND no live session, whose token
   // is dead/dying, is exactly the cascade's REAUTH_NUDGE leg.
   let nextAction: NextAction = switched ? 'rotating' : 'ok'
+  let reason: TickReason | undefined
+  let unreadable = 0
+  let deadRefresh = 0
   if (!switched) {
     const state = loadState()
     const slots = (state.slots ?? {}) as unknown as Record<string, Record<string, unknown>>
+    // Survey EVERY alternate rather than breaking on the first fault. One unreadable slot is a
+    // slot problem; ALL of them unreadable is a process-identity problem (the daemon cannot reach
+    // the keychain at all) — and only a full count can tell those apart. Breaking early made both
+    // look identical, so the operator could not distinguish "re-login one account" from "the
+    // server has no credential access", which are not even the same person's job.
     for (const email of Object.keys(slots)) {
       if (email === state.live_email) continue
       const b = readSlot(email)
-      if (!b) { nextAction = 'reauth-needed'; break } // unreadable alternate → needs attention
+      if (!b) { unreadable++; continue } // unreadable alternate → needs attention
       const inner = oauthOf(b)
       const hasRefresh = Boolean(inner.refreshToken || inner.refresh_token)
       // A dead-refresh alternate (no refresh at all, or a refresh whose exchange has failed
@@ -519,10 +541,25 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
       // re-login — the cascade's REAUTH_NUDGE leg. (No browser tier here, so a live-cookie
       // RENEW_COOKIE recovery is out of scope; this is the conservative "needs a human" signal.)
       const failures = typeof inner === 'object' ? Number((slots[email] as Record<string, unknown> | undefined)?.refresh_failures) || 0 : 0
-      const deadRefresh = !hasRefresh || failures >= MAX_REFRESH_FAILURES
-      if (deadRefresh && blobLocallyExpired(b)) { nextAction = 'reauth-needed'; break }
+      const refreshIsDead = !hasRefresh || failures >= MAX_REFRESH_FAILURES
+      if (refreshIsDead && blobLocallyExpired(b)) deadRefresh++
     }
+    // Precedence: OUR fault before THEIRS — see the TickReason doc comment.
+    if (unreadable > 0) { nextAction = 'reauth-needed'; reason = 'slot-unreadable' }
+    else if (deadRefresh > 0) { nextAction = 'reauth-needed'; reason = 'refresh-dead' }
   }
-  const decision = switched ? 'rotated the live account' : refreshed.length ? `refreshed ${refreshed.length} slot(s)` : 'no action needed'
-  return { nextAction, refreshed, switched, decision }
+  // The decision line is the beat's only log surface, so it must not say "no action needed" while
+  // nextAction is reauth-needed — that reads as health and is how this stayed unexamined. State
+  // the fault and its scope (counts only; never an email, never a token).
+  const decision = switched
+    ? 'rotated the live account'
+    : reason === 'slot-unreadable'
+      ? `reauth-needed: ${unreadable} alternate slot(s) UNREADABLE from this process — credential access, not a re-login`
+      : reason === 'refresh-dead'
+        ? `reauth-needed: ${deadRefresh} alternate slot(s) have a dead refresh and are expiring — a human must re-login`
+        : refreshed.length
+          ? `refreshed ${refreshed.length} slot(s)`
+          : 'no action needed'
+  if (reason) decide(deps, decision)
+  return { nextAction, reason, refreshed, switched, decision }
 }

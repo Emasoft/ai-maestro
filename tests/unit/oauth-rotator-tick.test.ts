@@ -202,5 +202,51 @@ describe('tick — runTick (compose)', () => {
     const res = await runTick({ fetchImpl: stubFetch({ LIVE: { fh: 20, sd: 20 }, ALT: { fh: 5, sd: 5 } }) })
     expect(res.switched).toBe(false)
     expect(res.nextAction).toBe('ok')
+    expect(res.reason).toBeUndefined() // a healthy tick attributes nothing
+  })
+
+  // A slot REGISTERED in state.json whose blob cannot be read back is the exact live failure
+  // (2026-07-29): three healthy, refresh-capable accounts, yet every beat concluded
+  // `reauth-needed`. `keepaliveRefresh` skips an unreadable slot SILENTLY (`if (!blob) continue`)
+  // and the bare verdict named no cause, so six days of it produced no log line anyone could act
+  // on — a human was told to re-login for a credential the SERVER could not open.
+  it('attributes reauth-needed to slot-unreadable when a registered slot cannot be read back', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    // Register the alternate WITHOUT writing its blob → readSlot() returns null.
+    const st = loadState()
+    st.slots = { ...(st.slots ?? {}), 'ghost@x': { captured_at: 'now', fp: 'deadbeef', expires_at: null, via: 'test' } }
+    saveState(st)
+    expect(readSlot('ghost@x')).toBeNull() // the premise, asserted — not assumed
+
+    const res = await runTick({ fetchImpl: stubFetch({ LIVE: { fh: 20, sd: 20 } }) })
+    expect(res.nextAction).toBe('reauth-needed')
+    expect(res.reason).toBe('slot-unreadable')
+    expect(res.decision).toContain('UNREADABLE')
+    expect(res.decision).not.toContain('no action needed') // the line that read as health
+  })
+
+  it('attributes reauth-needed to refresh-dead when a readable alternate has no refresh and is expired', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    // Empty refresh token = an unrefreshable setup-token slot (`Boolean('')` is false), expired.
+    addSlot('dead@x', blob('DEAD', Date.now() - 1000, ''))
+    const res = await runTick({ fetchImpl: stubFetch({ LIVE: { fh: 20, sd: 20 } }) })
+    expect(res.nextAction).toBe('reauth-needed')
+    expect(res.reason).toBe('refresh-dead')
+    expect(res.decision).toContain('re-login')
+  })
+
+  // Precedence is the whole point: with BOTH faults present the verdict must name OURS. Reporting
+  // "a human must re-login" while the server cannot open a slot sends the user to fix something
+  // that is not broken, and hides the defect that is.
+  it('prefers slot-unreadable over refresh-dead when both are present', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    // Empty refresh token = an unrefreshable setup-token slot (`Boolean('')` is false), expired.
+    addSlot('dead@x', blob('DEAD', Date.now() - 1000, ''))
+    const st = loadState()
+    st.slots = { ...(st.slots ?? {}), 'ghost@x': { captured_at: 'now', fp: 'deadbeef', expires_at: null, via: 'test' } }
+    saveState(st)
+
+    const res = await runTick({ fetchImpl: stubFetch({ LIVE: { fh: 20, sd: 20 } }) })
+    expect(res.reason).toBe('slot-unreadable')
   })
 })

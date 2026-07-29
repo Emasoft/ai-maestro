@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { statePath } from '../ecosystem-constants'
-import type { NextAction } from './tick'
+import type { NextAction, TickReason } from './tick'
 
 // The persisted stamp that bridges the OAuth-rotator beat to the continuity `status` verb
 // (TRDD-1GGQ4HWY → TRDD-DXJZM3BW). The beat (server-tick.ts::runOneTick) ACTUATES behind the R16
@@ -17,9 +17,19 @@ import type { NextAction } from './tick'
 /** The cascade states the tick can conclude — the SAME vocabulary as tick.ts's TickResult. */
 const VALID: ReadonlySet<string> = new Set<NextAction>(['ok', 'rotating', 'reauth-needed'])
 
-/** On-disk shape: the last tick's cascade conclusion plus when it was written (ISO 8601). */
+/** The reasons a `reauth-needed` can be attributed to — mirrors tick.ts's TickReason. */
+const VALID_REASON: ReadonlySet<string> = new Set<TickReason>(['refresh-dead', 'slot-unreadable'])
+
+/** On-disk shape: the last tick's cascade conclusion, WHY, plus when it was written (ISO 8601).
+ *
+ * `reason` is diagnostic-only and deliberately does NOT reach the agent-facing continuity verb —
+ * that surface is a fixed five-field ceiling (TRDD-H24DF6ZC Constraint 1) and widening it for a
+ * diagnostic would spend a security budget on convenience. It exists because the bare
+ * `reauth-needed` was unactionable: it says a human is needed without saying whether a human can
+ * even help, and a stamp nobody can interpret is a status that only looks like one. */
 interface TickStatusFile {
   nextAction: NextAction
+  reason?: TickReason
   at: string
 }
 
@@ -48,7 +58,11 @@ export function writeTickStatus(result: unknown): void {
   try {
     const na = (result as { nextAction?: unknown } | null)?.nextAction
     if (typeof na !== 'string' || !VALID.has(na)) return
+    const rs = (result as { reason?: unknown } | null)?.reason
     const payload: TickStatusFile = { nextAction: na as NextAction, at: new Date().toISOString() }
+    // An unrecognised reason is DROPPED, not written: the stamp must never carry a value the
+    // reader would reject, or the file becomes its own second vocabulary.
+    if (typeof rs === 'string' && VALID_REASON.has(rs)) payload.reason = rs as TickReason
     const file = tickStatusPath()
     fs.mkdirSync(path.dirname(file), { recursive: true })
     const tmp = `${file}.tmp`

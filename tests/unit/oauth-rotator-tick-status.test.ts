@@ -72,3 +72,26 @@ describe('tick-status — writeTickStatus / readTickStatus (PERSIST-THEN-READ, T
     expect(readTickStatus()).toBe('rotating') // still fresh when read at ~now
   })
 })
+
+describe('tick-status — the reason field (why a reauth-needed is needed)', () => {
+  it('persists a valid reason alongside nextAction', () => {
+    writeTickStatus({ nextAction: 'reauth-needed', reason: 'slot-unreadable' })
+    const raw = JSON.parse(fs.readFileSync(statePath('oauth-rotator-tick-status.json'), 'utf8'))
+    expect(raw.nextAction).toBe('reauth-needed')
+    expect(raw.reason).toBe('slot-unreadable')
+  })
+
+  it('DROPS an unrecognised reason rather than writing a value the reader would reject', () => {
+    writeTickStatus({ nextAction: 'reauth-needed', reason: 'something-invented' })
+    const raw = JSON.parse(fs.readFileSync(statePath('oauth-rotator-tick-status.json'), 'utf8'))
+    expect(raw.nextAction).toBe('reauth-needed') // the action still lands
+    expect(raw.reason).toBeUndefined() // the bogus attribution does not
+  })
+
+  it('omits reason entirely for a healthy tick, and readTickStatus is unaffected by it', () => {
+    writeTickStatus({ nextAction: 'ok' })
+    const raw = JSON.parse(fs.readFileSync(statePath('oauth-rotator-tick-status.json'), 'utf8'))
+    expect('reason' in raw).toBe(false)
+    expect(readTickStatus()).toBe('ok') // the existing 5-field contract is untouched
+  })
+})

@@ -62,17 +62,47 @@ const agentFilter = getFlag('--agent')
 const stateFor = getFlag('--state')
 const verifyOnly = hasFlag('--verify')
 
+// This tool reported "no ledger file" for all four registries from the day it was
+// written, while a 583 KB registry.ledger.json sat next to it. Two bugs:
+//
+//   - the PATH appended to the registry filename, giving
+//     `registry.json.ledger.jsonl`, where SignedLedger writes
+//     `registry.ledger.json` (it REPLACES the extension — see the archive naming
+//     in lib/signed-ledger.ts, which does `.replace('.ledger.json', …)`)
+//   - the FORMAT assumed JSONL (one entry per line) where the file is a single
+//     `{version, entries: [...]}` object
+//
+// It mattered because this is the tool you reach for WHEN the ledger is broken —
+// and a forensic aid that answers "nothing here" about a file it never opened
+// sends you looking in the wrong place at the worst moment.
+function ledgerPathFor(registryPath) {
+  return registryPath.replace(/\.json$/, '.ledger.json')
+}
+
 function readLedger(registryPath) {
-  const ledgerPath = `${registryPath}.ledger.jsonl`
-  if (!existsSync(ledgerPath)) return { entries: [], path: ledgerPath, exists: false }
-  const raw = readFileSync(ledgerPath, 'utf-8')
-  const entries = raw.split('\n').filter(Boolean).map((line, i) => {
-    try { return JSON.parse(line) } catch (err) {
-      console.error(`[ledger-replay] Bad line ${i + 1} in ${ledgerPath}: ${err.message}`)
-      return null
-    }
-  }).filter(Boolean)
-  return { entries, path: ledgerPath, exists: true }
+  const ledgerPath = ledgerPathFor(registryPath)
+  // ABSENT and UNREADABLE are different answers. Collapsing them is how a tool
+  // comes to report "nothing to see" about a file it could not parse.
+  if (!existsSync(ledgerPath)) {
+    return { entries: [], path: ledgerPath, exists: false, error: null }
+  }
+  let raw
+  try {
+    raw = readFileSync(ledgerPath, 'utf-8')
+  } catch (err) {
+    return { entries: [], path: ledgerPath, exists: true, error: `unreadable: ${err.message}` }
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch (err) {
+    return { entries: [], path: ledgerPath, exists: true, error: `not valid JSON: ${err.message}` }
+  }
+  const entries = Array.isArray(parsed) ? parsed : parsed?.entries
+  if (!Array.isArray(entries)) {
+    return { entries: [], path: ledgerPath, exists: true, error: 'no `entries` array in the ledger file' }
+  }
+  return { entries, path: ledgerPath, exists: true, error: null }
 }
 
 function applyPatch(doc, diff) {
@@ -110,17 +140,61 @@ function removeAt(root, segs) {
   delete cur[decodeURIComponent(segs[segs.length - 1])]
 }
 
+const GENESIS_HASH = '0'.repeat(64)
+
+/**
+ * Structural verification, deliberately mirroring lib/signed-ledger.ts::verify().
+ *
+ * This is a SECOND implementation of a security check, which is a thing to be
+ * uneasy about — and it had silently drifted from the authority in three ways,
+ * each of which made it cry TAMPER on a healthy ledger:
+ *
+ *   1. It required `e.seq === i` (the array index), so ANY rotated file failed at
+ *      entry 0. The authority ANCHORS on entries[0] precisely because
+ *      rotateLedger() keeps only a tail whose first entry legitimately has a
+ *      non-zero seq and a prevHash pointing into an archive.
+ *   2. It seeded prevHash with '' where the authority uses GENESIS_HASH
+ *      ('0' x 64) — so even an unrotated chain mismatched at entry 0.
+ *   3. It hashed canonicalize(entry) ALONE, while computeEntryHash() hashes
+ *      canonicalize(entry) + entry.signature. Every subsequent prevHash was
+ *      therefore wrong.
+ *
+ * A false TAMPER is not a harmless bug in a forensic tool: it is the tool you run
+ * when you already suspect the worst, and it would have confirmed the suspicion
+ * about a perfectly good file.
+ *
+ * SCOPE, stated because a reader will assume otherwise: this checks the seq and
+ * hash CHAIN only. It does NOT verify Ed25519 signatures — the host key is the
+ * server's. For the authoritative answer use the server's startup check or
+ * GET /api/system/ledger-health.
+ */
 function verifyChain(entries) {
-  let prevHash = ''
+  if (entries.length === 0) return { ok: true, count: 0 }
+
+  // Anchor exactly as the authority does.
+  const first = entries[0]
+  let expectedSeq = first.seq ?? 0
+  let prevHash = first.seq === 0 ? GENESIS_HASH : (first.prevHash ?? GENESIS_HASH)
+
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]
-    if (e.seq !== i) return { ok: false, at: i, reason: `seq mismatch: expected ${i}, got ${e.seq}` }
-    if (e.prevHash !== prevHash) return { ok: false, at: i, reason: `prevHash mismatch at seq ${i}` }
-    // Compute this entry's hash
+    if (e.prevHash !== prevHash) {
+      return { ok: false, at: i, reason: `prevHash mismatch at index ${i} (seq ${e.seq})` }
+    }
+    if (e.seq !== expectedSeq) {
+      return { ok: false, at: i, reason: `seq mismatch at index ${i}: expected ${expectedSeq}, got ${e.seq}` }
+    }
     const base = [e.seq, e.ts, e.prevHash, e.op, e.path, e.diff, e.signerHostId, e.signerKeyFingerprint]
     const hasAuth = e.authAction !== undefined || e.authAgentId !== undefined || e.authActor !== undefined
     if (hasAuth) base.push(e.authAction ?? null, e.authAgentId ?? null, e.authActor ?? null)
-    prevHash = crypto.createHash('blake2b512').update(JSON.stringify(base)).digest('hex').slice(0, 64)
+    // canonicalize(entry) + entry.signature — the signature IS part of the hashed
+    // material, which is what chains one entry to the next.
+    prevHash = crypto.createHash('blake2b512')
+      .update(JSON.stringify(base) + (e.signature ?? ''))
+      .digest()
+      .subarray(0, 32)
+      .toString('hex')
+    expectedSeq++
   }
   return { ok: true, count: entries.length }
 }
@@ -128,6 +202,11 @@ function verifyChain(entries) {
 function summarize(name, ledger) {
   if (!ledger.exists) {
     console.log(`  [${name.padEnd(12)}] no ledger file`)
+    return
+  }
+  // Present-but-unreadable must never render like present-but-empty.
+  if (ledger.error) {
+    console.log(`  [${name.padEnd(12)}] ERROR — ${ledger.error}`)
     return
   }
   const ops = {}
@@ -183,6 +262,12 @@ const ledger = readLedger(registryPath)
 if (!ledger.exists) {
   console.error(`No ledger file found at ${ledger.path}`)
   process.exit(3)
+}
+// Exit 4, not 3: "the ledger is damaged" is a different situation from "there is
+// no ledger", and a caller that cannot tell them apart will report the wrong one.
+if (ledger.error) {
+  console.error(`Ledger at ${ledger.path} could not be read: ${ledger.error}`)
+  process.exit(4)
 }
 
 if (verifyOnly) {

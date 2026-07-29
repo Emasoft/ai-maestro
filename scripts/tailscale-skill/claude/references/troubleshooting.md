@@ -56,10 +56,12 @@ port-mapping protocol availability; `PreferredDERP` = lowest-latency region; `Re
 (DERP fallback needs it).
 
 **⚠ CORRECTION — the `*`-means-direct claim is FALSE on 1.98.5 (VERIFIED 2026-07-29, this
-reference's own live check).** The last column of `tailscale status` is free text, not a symbol:
+reference's own live check).** The last column of `tailscale status` is free text, not a symbol.
+Device names and tailnet IPs are anonymized below; the column shape and field semantics are
+verbatim from that check:
 ```
-100.99.233.43  mac-mini-di-emanuele  user@  macOS  -
-100.68.40.29   ipad165               user@  iOS    active; direct 192.168.1.44:41641, tx 4574209016 rx 20844984
+100.101.5.12   workstation           user@  macOS  -
+100.102.7.34   tablet                user@  iOS    active; direct 192.168.1.44:41641, tx 4574209016 rx 20844984
 ```
 `-` = no active session; `active; direct <ip:port>` = direct p2p path; a relayed peer names its
 DERP region instead of `direct`. `--header` prints column names. **Script against
@@ -954,10 +956,10 @@ nameserver entries), `networksetup -getdnsservers "Wi-Fi"`, `tailscale status` (
 nameserver `100.100.100.100`; "Not Reachable" = MagicDNS not being used), `ping -c1
 100.100.100.100`. Fix: `sudo networksetup -setdnsservers "Wi-Fi" 223.5.5.5 119.29.29.29`
 (repeat per interface), `sudo dscacheutil -flushcache`. Optional hosts pin: `sudo sh -c 'echo
-"100.86.50.21 m3max" >> /etc/hosts'`. `[gotcha]` if ISP/router-level hijacking persists even
+"100.64.1.20 workstation" >> /etc/hosts'`. `[gotcha]` if ISP/router-level hijacking persists even
 after switching DNS servers, use SSH `HostName` with the full `*.ts.net` MagicDNS name
-(Tailscale resolves `*.ts.net` internally, bypassing system DNS): `Host m3max` /
-`HostName m3max.tailcc8506.ts.net` / `User m3max`.
+(Tailscale resolves `*.ts.net` internally, bypassing system DNS): `Host workstation` /
+`HostName workstation.example-tailnet.ts.net` / `User <your-user>`.
 
 *Deeper DNS-hijack forensics (Windows registry paths for NRPT, macOS `/etc/resolver/<domain>`
 orphan files, the generic safe-cleanup pattern with a protect-regex for `100.100.100.100`, and
@@ -1311,14 +1313,14 @@ status`, `tailscale up`."
 **Worked example — SSH over Tailscale times out because the CLIENT's own session expired**
 (not the target's): symptom is a plain connect timeout, not an auth failure —
 ```bash
-$ ssh greenhead@100.79.80.95
-ssh: connect to host 100.79.80.95 port 22: Operation timed out
+$ ssh <your-user>@100.64.1.30
+ssh: connect to host 100.64.1.30 port 22: Operation timed out
 ```
 Check the Tailscale admin console's machine list: the CLIENT shows `Expired <date>` while the
 TARGET shows `Connected` —
 ```
-macbookpro          100.126.197.36    Expired Sep 18, 2025
-greenhead-minipc     100.79.80.95      Connected
+laptop               100.64.1.40       Expired Sep 18, 2025
+minipc               100.64.1.30       Connected
 ```
 Fix — re-authenticate Tailscale on the CLIENT (macOS GUI: menu-bar Tailscale icon → Log in; or
 CLI `tailscale up` if installed). Verify with `tailscale status` (the peer should show
@@ -1379,7 +1381,7 @@ silent; downstream consumers of the pushed file (e.g. a sticky-state presence mo
 using the last successfully-pushed value for hours/days, causing silent misattribution.
 Hardening: surface stderr instead of discarding it:
 ```bash
-err=$(echo "$result" | tailscale file cp - dylans-mac-mini: 2>&1 >/dev/null)
+err=$(echo "$result" | tailscale file cp - peer-hostname: 2>&1 >/dev/null)
 if [ $? -eq 0 ]; then log "Pushed"; else log "WARN: Failed to push: $err"; fi
 ```
 `[gotcha]` `tailscale file cp` hangs indefinitely (rather than failing fast) when the LocalAPI

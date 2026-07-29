@@ -2,5 +2,5 @@
 
 - [ ] `tailscale status` shows node online
 - [ ] `tailscale netcheck` shows reachable DERP
-- [ ] `tailscale ping temporal-grpc.ide-newton.ts.net` succeeds
+- [ ] `tailscale ping <peer-hostname>` succeeds (resolve by hostname, never a hardcoded IP)
 - [ ] Service URL resolves and responds

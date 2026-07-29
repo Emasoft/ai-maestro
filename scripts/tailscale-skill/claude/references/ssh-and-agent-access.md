@@ -83,7 +83,7 @@ networking.firewall = {
 The macOS side of the same fleet is **NOT** declaratively managed by this repo's Nix config — just
 `tailscale status` / `tailscale ip -4` via the app/CLI to confirm login. `mosh` sessions are routed
 exclusively over the Tailscale IP (never LAN), e.g.
-`mosh greenhead@<minipc Tailscale IP> -- tmux attach -t main` (cross-reference §6's mosh
+`mosh <your-user>@<minipc Tailscale IP> -- tmux attach -t main` (cross-reference §6's mosh
 characteristics). **Gotcha, explicitly called out in the source:** "per-interface `allowedTCPPorts`
 rules are NOT used" — the firewall model here is **interface-trust** (trust the whole `tailscale0`
 interface), not a port-allowlist, for Tailscale traffic. Contrast with §8's UFW recipe, which is
@@ -100,16 +100,16 @@ hardcoded per host block), so day-to-day usage is just the alias:
 # machine A -> machine B
 ssh minipc
 # or, spelling it out
-ssh greenhead@<minipc-tailscale-ip>
+ssh <your-user>@<minipc-tailscale-ip>
 
 # machine B -> machine A
 ssh mac
 # or
-ssh greenhead@<macbook-tailscale-ip>
+ssh <your-user>@<macbook-tailscale-ip>
 
 # over an unstable network, use mosh (which tolerates roaming/drops far better than raw SSH,
 # see §6) instead of a bare shell, mosh straight into a persistent tmux session
-mosh greenhead@<minipc-tailscale-ip> -- tmux attach -t main
+mosh <your-user>@<minipc-tailscale-ip> -- tmux attach -t main
 ```
 
 Bidirectional summary:
@@ -740,9 +740,9 @@ blindly.
   `tag:api -> tag:database:5432`. Zero-trust service mesh without a separate mesh product
   (Istio/Linkerd). `[MED confidence]`.
 - **`chrome-devtools-mcp` remote over Tailscale-issued/self-signed HTTPS:** remote daemon + Chrome run on a REMOTE host reachable at
-  e.g. `https://macbook13-pro.tail3ce7a.ts.net/mcp`.
+  e.g. `https://workstation.example-tailnet.ts.net/mcp`.
   ```bash
-  export CHROME_DEVTOOLS_MCP_REMOTE_URL="https://macbook13-pro.tail3ce7a.ts.net/mcp"
+  export CHROME_DEVTOOLS_MCP_REMOTE_URL="https://workstation.example-tailnet.ts.net/mcp"
   chrome-devtools status --remote="$CHROME_DEVTOOLS_MCP_REMOTE_URL"   # healthy = status=ok http=200
   ```
   Self-signed cert (common on tailnets without Tailscale-issued certs): pass `--insecure` on every

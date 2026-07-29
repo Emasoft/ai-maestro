@@ -275,7 +275,7 @@ at the target's MagicDNS hostname or `100.x` IP.
 ## 4. MagicDNS — resolution model and cross-platform troubleshooting
 
 **Model:** auto-registers a DNS name per device; enabled by default on tailnets created after
-2022-10-20. FQDN format: `<machine-name>.<tailnet-name>.ts.net` (e.g. `monitoring.yak-bebop.ts.net`);
+2022-10-20. FQDN format: `<machine-name>.<tailnet-name>.ts.net` (e.g. `monitoring.example-tailnet.ts.net`);
 short names resolve within the same tailnet via automatic search-domain config. If not enabled:
 toggle in the admin console under **DNS**.
 

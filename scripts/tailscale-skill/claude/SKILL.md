@@ -54,11 +54,12 @@ Resolve peers by hostname (`tailscale ip <hostname>`), never by a hardcoded IP â
 re-auth, hostnames don't.
 
 **Reading the `tailscale status` table (measured on 1.98.5 â€” commonly documented wrong).**
-The last column is free text, not a symbol. There is **no `*` marker**:
+The last column is free text, not a symbol. There is **no `*` marker**. Device names and
+tailnet IPs below are anonymized; the column shape and field semantics are verbatim:
 
 ```
-100.99.233.43  mac-mini-di-emanuele  user@  macOS  -
-100.68.40.29   ipad165               user@  iOS    active; direct 192.168.1.44:41641, tx 4574209016 rx 20844984
+100.101.5.12   workstation           user@  macOS  -
+100.102.7.34   tablet                user@  iOS    active; direct 192.168.1.44:41641, tx 4574209016 rx 20844984
 ```
 
 `-` = no active session. `active; direct <ip:port>` = a **direct** peer-to-peer path. A relayed

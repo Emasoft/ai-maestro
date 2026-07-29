@@ -495,9 +495,9 @@ first-access browser cert warnings on a freshly-Served HTTPS endpoint are normal
 
 **Worked example of consuming a self-signed/Tailscale-issued endpoint remotely:** a
 chrome-devtools remote-debugging daemon + Chrome running on a REMOTE host, reachable at e.g.
-`https://macbook13-pro.tail3ce7a.ts.net/mcp`:
+`https://workstation.example-tailnet.ts.net/mcp`:
 ```bash
-export CHROME_DEVTOOLS_MCP_REMOTE_URL="https://macbook13-pro.tail3ce7a.ts.net/mcp"
+export CHROME_DEVTOOLS_MCP_REMOTE_URL="https://workstation.example-tailnet.ts.net/mcp"
 chrome-devtools status --remote="$CHROME_DEVTOOLS_MCP_REMOTE_URL"
 ```
 healthy = `status=ok http=200`. Self-signed cert (common on tailnets without Tailscale-issued
@@ -1214,7 +1214,7 @@ tailscale serve status
 This reports the `ts.net` HTTPS URL that now fronts the local service, of the form:
 
 ```
-https://srv1234567.tail8328fe.ts.net
+https://<machine-name>.<tailnet-name>.ts.net
 ```
 
 That URL is reachable from ANY device also joined to the same tailnet (after

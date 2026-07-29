@@ -74,6 +74,19 @@ export type LedgerOp =
    */
   | 'aid_associate' | 'aid_reissue' | 'aid_approve_foreign' | 'aid_revoke'
   | 'foreign_user_grant' | 'foreign_user_revoke'
+  // ── Plugin install records (TRDD-FHBGF0WG / TRDD-AQTGAY60) ───
+  /**
+   * Surgery on `~/.claude/plugins/installed_plugins.json`, the file that records WHERE each
+   * plugin is installed. It is mutated on every local uninstall and on agent deletion, and
+   * until now none of that reached the ledger — so a state-restore could put an agent's
+   * registry row back and leave its plugin installs unrecoverable.
+   *
+   * - remove_plugin_records  — local records taken out. `value` carries the FULL removed
+   *   records, which is what makes the op revertible: restoring is re-adding that value.
+   * - restore_plugin_records — those records put back. **The revert is itself recorded**, so
+   *   the chain shows both directions and no mutation of this file escapes the ledger.
+   */
+  | 'remove_plugin_records' | 'restore_plugin_records'
 
 /**
  * LedgerActor — who initiated the operation.

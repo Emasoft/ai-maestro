@@ -17,7 +17,7 @@
 // precisely the case where we know least, and reporting it clean is the failure mode this exists
 // to end.
 
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 
@@ -183,6 +183,49 @@ export const AGENT_STORES: AgentStore[] = [
       const { conversationSlug } = await import('@/lib/claude-conversation')
       const dir = join(homedir(), '.claude', 'projects', conversationSlug(ctx.workingDirectory))
       return existsSync(dir) ? `transcript dir still on disk: ${dir}` : null
+    },
+  },
+  {
+    id: 'plugin-records',
+    owns: '~/.claude/plugins/installed_plugins.json (local install records for the workdir)',
+    // TRDD-AQTGAY60. This store had no gate AND no probe, which is why it was invisible in
+    // exactly the way the header describes: 93 of 101 local records on this host pointed at
+    // workdirs that no longer existed (65 written by our own R17 core-plugin invariant), and
+    // every one of those deletions reported CLEAN. The gate is DeleteAgent's G09b; this is the
+    // probe that can prove it ran.
+    //
+    // It matters beyond tidiness because the file is read by OTHER actors: the janitor derives
+    // the fleet's plugin topology from it (ai-maestro#102 reached a wrong conclusion from four
+    // of these ghosts) and janitor#137's cache_prune decides which cached version directories
+    // are still in use from the same rows.
+    claims: async (ctx) => {
+      // Same scoping as workdir/transcript-dir: while the folder survives, a record asserting
+      // "installed for this directory" is TRUE, not residue — and a workdir outside ~/agents/
+      // is one G03-SAFETY deliberately refuses to delete, so its records stay true as well.
+      if (!ctx.expectFolderGone || !ctx.workingDirectory) return null
+      const managedRoot = join(homedir(), 'agents') + '/'
+      if (!ctx.workingDirectory.startsWith(managedRoot)) return null
+
+      const file = join(homedir(), '.claude', 'plugins', 'installed_plugins.json')
+      if (!existsSync(file)) return null
+      // A throw here is caught by verifyAgentRemoved and reported as residue (fail-closed) —
+      // an unreadable store is the case where we know least.
+      const parsed = JSON.parse(readFileSync(file, 'utf-8')) as { plugins?: Record<string, unknown> }
+      const pluginsMap = parsed.plugins || {}
+      const hits: string[] = []
+      for (const [key, value] of Object.entries(pluginsMap)) {
+        if (!Array.isArray(value)) continue
+        const n = value.filter((rec) => {
+          if (!rec || typeof rec !== 'object') return false
+          const r = rec as { scope?: string; projectPath?: string }
+          // `scope` is load-bearing — without it the user-scope row (which is global and has no
+          // projectPath) could never match, but a future record shape might, and counting it
+          // would report a correct global install as this agent's residue.
+          return r.scope === 'local' && r.projectPath === ctx.workingDirectory
+        }).length
+        if (n > 0) hits.push(`${key}(${n})`)
+      }
+      return hits.length ? `local plugin record(s) still present: ${hits.join(', ')}` : null
     },
   },
 ]

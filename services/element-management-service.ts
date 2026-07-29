@@ -1497,6 +1497,178 @@ function resolveMarketplaceName(marketplace: MarketplaceRef): string {
   return marketplace
 }
 
+// ── installed_plugins.json record surgery (TRDD-FHBGF0WG) ────
+
+/**
+ * One install record inside `installed_plugins.json`.
+ *
+ * The file's schema is `plugins: Record<pluginKey, InstallRecord[]>` — a plugin key maps to an
+ * ARRAY, one entry per place it is installed. On this host a single key
+ * (`ai-maestro-plugin@ai-maestro-plugins`) holds 73 entries spanning BOTH `local` and `user`
+ * scope. Treating that array as a single value is what TRDD-FHBGF0WG is about.
+ */
+type InstallRecord = {
+  scope?: string
+  projectPath?: string
+  version?: string
+  installedAt?: string
+  lastUpdated?: string
+  installPath?: string
+  [k: string]: unknown
+}
+
+/** Does this record describe a LOCAL install rooted at `projectPath`? */
+function isLocalRecordFor(rec: unknown, projectPath: string): boolean {
+  if (!rec || typeof rec !== 'object') return false
+  const r = rec as InstallRecord
+  // `scope` is load-bearing: a filter that forgets it eats the user-scope row, which is the
+  // single most damaging record in the file — it is what makes a plugin global (R20.30).
+  return r.scope === 'local' && r.projectPath === projectPath
+}
+
+/**
+ * Remove LOCAL install records rooted at `projectPath` from `installed_plugins.json`.
+ *
+ * Pass `pluginKey` to scope the removal to one plugin (the uninstall path); omit it to remove
+ * every plugin's records for that directory (the DeleteAgent path, TRDD-AQTGAY60).
+ *
+ * Returns the removed records keyed by plugin, so a caller inside a gate sequence can restore
+ * them if a later gate fails (R51 compensation).
+ *
+ * WHY this is a filter and not a `delete pluginsMap[key]`: that is exactly the bug this
+ * function replaces. `delete` removed the whole ARRAY, so uninstalling a plugin for ONE agent
+ * destroyed every other agent's record for it AND the user-scope row — and on the marketplace
+ * path it did so immediately after `claude plugin uninstall --scope local` had already
+ * performed the correct, narrow removal. We were undoing a correct operation with an
+ * over-broad one, on every ChangeTitle that swaps a role-plugin.
+ */
+export async function removeLocalInstallRecords(
+  projectPath: string,
+  pluginKey?: string,
+): Promise<Record<string, InstallRecord[]>> {
+  const removed: Record<string, InstallRecord[]> = {}
+  if (!existsSync(INSTALLED_FILE)) return removed
+
+  await withSettingsLock(INSTALLED_FILE, async () => {
+    const installed = await loadJsonSafe(INSTALLED_FILE) as Record<string, unknown>
+    const pluginsMap = (installed.plugins || {}) as Record<string, unknown>
+    const keys = pluginKey ? [pluginKey] : Object.keys(pluginsMap)
+    let dirty = false
+
+    for (const key of keys) {
+      const value = pluginsMap[key]
+      if (value === undefined) continue
+      if (!Array.isArray(value)) {
+        // An unrecognised shape (hand-edited file, or a future schema). Deleting on a shape we
+        // cannot narrow is precisely how the old code destroyed live state — leave it alone.
+        console.warn(`[element-mgmt] installed_plugins.json: "${key}" is not an array; leaving it untouched`)
+        continue
+      }
+      const keep = value.filter(rec => !isLocalRecordFor(rec, projectPath))
+      if (keep.length === value.length) continue
+
+      removed[key] = value.filter(rec => isLocalRecordFor(rec, projectPath)) as InstallRecord[]
+      dirty = true
+      // Drop the key only once nothing is left under it — an empty array would read as
+      // "installed nowhere" to some consumers and as "key present" to others.
+      if (keep.length === 0) delete pluginsMap[key]
+      else pluginsMap[key] = keep
+    }
+
+    if (!dirty) return
+    installed.plugins = pluginsMap
+    await saveJsonSafe(INSTALLED_FILE, installed)
+  })
+
+  // THE LEDGER IS THE GROUND TRUTH — nothing that changes state may escape it (USER directive
+  // 2026-07-29). This is the single choke point for record removal (the uninstall path and
+  // DeleteAgent's G09b both land here), so emitting once here covers both. `value` carries the
+  // FULL removed records, not a count: that is what makes the entry REVERTIBLE — restoring is
+  // re-adding exactly this value, and the restore is itself recorded (restore_plugin_records).
+  const removedKeys = Object.keys(removed)
+  if (removedKeys.length > 0) {
+    await emitPluginRecordOp('remove_plugin_records', 'remove', projectPath, removed)
+  }
+
+  return removed
+}
+
+/** JSON-Pointer escaping — `~` then `/`, in that order (RFC 6901). A marketplace segment can
+ *  contain a slash (`owner/repo`), so an unescaped key would silently split the path. */
+function jsonPointerEscape(segment: string): string {
+  return segment.replace(/~/g, '~0').replace(/\//g, '~1')
+}
+
+/** Append one ledger entry per affected plugin key, both directions of the operation. */
+async function emitPluginRecordOp(
+  op: 'remove_plugin_records' | 'restore_plugin_records',
+  patchOp: 'remove' | 'add',
+  projectPath: string,
+  records: Record<string, InstallRecord[]>,
+): Promise<void> {
+  const diff = Object.keys(records).map(key => ({
+    op: patchOp,
+    path: `/installedPlugins/${jsonPointerEscape(key)}/local/${jsonPointerEscape(projectPath)}`,
+    value: records[key],
+  })) as import('@/types/json-patch').JsonPatch
+  // `ops` is a local sink here: these helpers are called from low-level paths that have no
+  // pipeline ops array, and the wrapper's own catch keeps a ledger failure from aborting the
+  // state change it describes. A dropped append still logs AUDIT GAP inside emitAgentOp.
+  const sink: string[] = []
+  await tryEmitLedgerOp(op, diff, null, op, sink)
+  for (const line of sink) console.error(`[element-mgmt] ${line}`)
+}
+
+/**
+ * Restore records previously taken out by {@link removeLocalInstallRecords}.
+ * This is the compensation half — a mutating gate must be able to put back exactly what it
+ * took (R51), including the case where removing the last record dropped the key entirely.
+ */
+export async function restoreLocalInstallRecords(
+  records: Record<string, InstallRecord[]>,
+): Promise<void> {
+  const keys = Object.keys(records)
+  if (keys.length === 0) return
+
+  await withSettingsLock(INSTALLED_FILE, async () => {
+    await mkdir(join(CLAUDE_DIR, 'plugins'), { recursive: true })
+    const installed = await loadJsonSafe(INSTALLED_FILE) as Record<string, unknown>
+    const pluginsMap = (installed.plugins || {}) as Record<string, unknown>
+
+    for (const key of keys) {
+      const existing = pluginsMap[key]
+      if (existing !== undefined && !Array.isArray(existing)) continue
+      const arr = Array.isArray(existing) ? [...existing] : []
+      for (const rec of records[key]) {
+        // Idempotent: a retry must not create a duplicate record for the same install.
+        if (!arr.some(e => isLocalRecordFor(e, String(rec.projectPath ?? '')))) arr.push(rec)
+      }
+      pluginsMap[key] = arr
+    }
+
+    installed.plugins = pluginsMap
+    await saveJsonSafe(INSTALLED_FILE, installed)
+  })
+
+  // The REVERT is recorded too — a ledger that logs only destruction cannot prove the system
+  // was put back, and "even the operation of reverting must be recorded" (USER, 2026-07-29).
+  const restoredPaths: Record<string, InstallRecord[]> = {}
+  for (const key of keys) {
+    for (const rec of records[key]) {
+      const p = String(rec.projectPath ?? '')
+      if (!restoredPaths[p]) restoredPaths[p] = []
+    }
+  }
+  for (const p of Object.keys(restoredPaths)) {
+    const forPath: Record<string, InstallRecord[]> = {}
+    for (const key of keys) {
+      const hits = records[key].filter(r => String(r.projectPath ?? '') === p)
+      if (hits.length) forPath[key] = hits
+    }
+    if (Object.keys(forPath).length) await emitPluginRecordOp('restore_plugin_records', 'add', p, forPath)
+  }
+}
+
 // ── Legacy helpers (delegate to InstallElement) ──────────────
 
 /**
@@ -1627,14 +1799,30 @@ export async function installPluginLocally(
     const installed = await loadJsonSafe(INSTALLED_FILE) as Record<string, unknown>
     const pluginsMap = (installed.plugins || {}) as Record<string, unknown>
     const now = new Date().toISOString().replace('+00:00', 'Z')
-    pluginsMap[pluginKey] = [{
+    const record: InstallRecord = {
       scope: 'local',
       version: '1.0.0',
       installedAt: now,
       lastUpdated: now,
       installPath: join(PLUGINS_DIR, pluginName),
       projectPath: resolvedDir,
-    }]
+    }
+    // UPSERT by (scope, projectPath), never assign. This was
+    // `pluginsMap[pluginKey] = [record]`, which replaced the whole array — so installing a
+    // shared local plugin for agent B erased agent A's record for it (TRDD-FHBGF0WG).
+    const existing = pluginsMap[pluginKey]
+    if (existing !== undefined && !Array.isArray(existing)) {
+      console.warn(`[element-mgmt] installed_plugins.json: "${pluginKey}" is not an array; replacing it`)
+      pluginsMap[pluginKey] = [record]
+    } else {
+      const arr = Array.isArray(existing) ? [...existing] : []
+      const at = arr.findIndex(rec => isLocalRecordFor(rec, resolvedDir))
+      // Re-installing keeps ONE record for this dir (preserving installedAt) instead of
+      // appending a duplicate every time an agent is re-provisioned at the same path.
+      if (at >= 0) arr[at] = { ...(arr[at] as InstallRecord), ...record, installedAt: (arr[at] as InstallRecord).installedAt ?? now }
+      else arr.push(record)
+      pluginsMap[pluginKey] = arr
+    }
     installed.plugins = pluginsMap
     await saveJsonSafe(INSTALLED_FILE, installed)
   })
@@ -1715,16 +1903,10 @@ export async function uninstallPluginLocally(
     }
   }
 
-  // Remove from installed_plugins.json
-  if (existsSync(INSTALLED_FILE)) {
-    await withSettingsLock(INSTALLED_FILE, async () => {
-      const installed = await loadJsonSafe(INSTALLED_FILE) as Record<string, unknown>
-      const pluginsMap = (installed.plugins || {}) as Record<string, unknown>
-      delete pluginsMap[pluginKey]
-      installed.plugins = pluginsMap
-      await saveJsonSafe(INSTALLED_FILE, installed)
-    })
-  }
+  // Remove THIS agent's local record from installed_plugins.json — not the whole key.
+  // This used to be `delete pluginsMap[pluginKey]`, which took out the entire array: every
+  // other agent's local record and the user-scope row with it (TRDD-FHBGF0WG, R20.30).
+  await removeLocalInstallRecords(resolvedDir, pluginKey)
 }
 
 // ── Governance title → role-plugin lifecycle ──────────────────
@@ -7038,6 +7220,34 @@ export async function DeleteAgent(
             ops.push(`EXE: Deleted agent folder ${resolvedDir}`)
           } else {
             ops.push(`EXE: Folder ${resolvedDir} not found — skipped`)
+          }
+
+          // ── G09b: Drop this workdir's local plugin records (TRDD-AQTGAY60) ──
+          // Deleting the folder (or finding it already gone) makes every
+          // `{scope:'local', projectPath: resolvedDir}` record in
+          // ~/.claude/plugins/installed_plugins.json provably FALSE — it asserts a plugin is
+          // installed for a directory that does not exist. Nothing removed them, so they
+          // accumulated one per deleted agent: measured 2026-07-29, 93 of 101 local records on
+          // this host were orphans, 65 of them written by our own R17 core-plugin invariant.
+          //
+          // This is not bookkeeping. The janitor reads this file to learn the fleet's plugin
+          // topology; on ai-maestro#102 it derived a topology and a structural blocker from
+          // four of these ghosts, and janitor#137's cache_prune decides which cached version
+          // directories are still in use from the same rows.
+          //
+          // Placed AFTER the folder is gone deliberately: at this point the records are false,
+          // so removing them cannot be wrong and needs no compensation. It is scoped to the
+          // hard-delete-with-folder branch because a SOFT delete keeps the workdir — its
+          // records stay TRUE and must survive (re-adoption over a tombstone depends on it).
+          try {
+            const removedRecords = await removeLocalInstallRecords(resolvedDir)
+            const keys = Object.keys(removedRecords)
+            const n = keys.reduce((sum, k) => sum + removedRecords[k].length, 0)
+            ops.push(n > 0
+              ? `G09b: Removed ${n} local plugin record(s) for ${resolvedDir} (${keys.join(', ')})`
+              : `G09b: No local plugin records for ${resolvedDir}`)
+          } catch (recErr) {
+            ops.push(`G09b: WARN — plugin-record cleanup failed: ${recErr instanceof Error ? recErr.message : recErr}`)
           }
 
           // SCEN-014 P0-002: purge Claude Code conversation history for this

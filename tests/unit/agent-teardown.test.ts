@@ -196,6 +196,9 @@ describe('the manifest is pinned', () => {
         'governance-requests',
         'groups',
         'persisted-session',
+        // TRDD-AQTGAY60: had no gate AND no probe, so 93 of 101 local records on the dev host
+        // pointed at deleted agents while every one of those deletes reported CLEAN.
+        'plugin-records',
         'registry',
         'teams',
         'tmux-session',

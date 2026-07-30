@@ -1,12 +1,12 @@
 ---
 trdd-id: C4YJAUD9
 title: The index's expensive verify has an entry point and no caller, so corruption is detectable and undetected
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T01:35:31+0200
-updated: 2026-07-30T02:00:28+0200
-implementation-commits: []
+updated: 2026-07-30T02:27:51+0200
+implementation-commits: [5113591d]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -111,20 +111,100 @@ succeeds against an open file, so the writer keeps writing into an unlinked inod
 success). So the sweep must take `BEGIN IMMEDIATE` and **skip on `busy`**, never wait it out and
 never delete on contention. Written before that fix, this candidate would have been the bug.
 
+## BUILT 2026-07-30 — `lib/pillar/index-verify.ts`, the watchdog, and `greptrdd index-verify`
+
+**The split as decided, in three pieces.** `lib/pillar/index-verify.ts` holds the core
+(`verifyIndexFile` · `listIndexFiles` · `runIndexVerifySweep` · `runIndexVerifyTick` ·
+`startPillarIndexVerifyWatchdog`); `server.mjs` starts the watchdog beside the five existing ones
+(6-hourly, `AIM_PILLAR_INDEX_VERIFY_INTERVAL_MS`, 0 disables); `greptrdd index-verify [--repair|--all]`
+is the repairer and the serverless fallback.
+
+**Two design facts settled while building, neither of which was in the decision:**
+
+- **The observer sets ONE pragma, and it is not `applyPragmas`.** That helper also sets
+  `journal_mode = WAL`, which is a PERSISTENT write — on a rollback-journal index the "observer"
+  would silently convert it, violating `3P-IDX-07` by a route nobody would call healing. Only
+  `busy_timeout` is set, and a test pins that a `journal_mode = delete` index is still `delete`
+  afterwards.
+- **`fileMustExist: true`, or the observer becomes a writer.** `new Database(p)` MATERIALIZES an
+  empty database at any path, so a sweep with one bad path would leave litter shaped exactly like the
+  thing it audits. Neuter-proven.
+
+**The repair adds NO deletion code.** `--repair` asks `openIndex` for `verify: 'full'` and lets the
+already-tested self-heal do it. A second "is this healable?" decision is precisely what drifted apart
+once before and cost a healthy index (NEVER_HEALED), so there is still exactly one.
+
+**THE LEDGER RECORDS A TRANSITION, NOT A POLL — and this is load-bearing, not tidy.** The ledger
+holds 50 entries. A 6-hourly sweep over one unrepaired damaged index would re-append the same event
+~4x/day, so within two weeks all 50 slots are copies of it and every genuine heal has been evicted:
+the ledger would look full of history and contain none, destroying the exact signal `3P-IDX-09`
+exists to preserve. So damage is appended only when it is not already the newest entry, and a heal
+in between separates the records — which is how a RECURRENCE stays legible. `busy` and `behind`
+record NOTHING at all (a false alarm discredits the true ones).
+
+**MEASURED — the warm read path, and what the number actually is.** 10 000-card fixture, `HOME`
+redirected to a temp state dir (so nothing touched the real one). Same method throughout:
+
+| measurement | real |
+|---|---|
+| process startup only (`help` — reads nothing) | 0.49 / 0.53 s |
+| warm `board` **with** index | 0.57 / 0.58 / 0.62 s |
+| warm `board` at **HEAD, this change stashed away** | 0.60 / 0.57 / 0.57 s |
+| warm `board --no-index` (pure walk, for scale) | 1.32 s |
+
+**The A/B is the answer to the box, and it says UNCHANGED** — identical within noise, because the
+verifier is imported only by `server.mjs` and the new subcommand, so `board` never loads it. The
+absolute figure ALSO corrects how the 0.37 s should be quoted: ~0.5 s of this is `bash with-node.sh`
++ `npx tsx` startup, so the index-backed query does **~0.08 s of real work** at 10⁴ and the walk does
+~0.8 s. Do NOT quote my 0.57 s against 4VCXRHAY's 0.37 s as a regression — they are different
+harnesses, and the only sound comparison (same method, before vs after) shows no change.
+
+**6 NEUTER RUNS, each failing ONLY its named tests, each restored byte-clean:**
+
+| neuter | tests reddened |
+|---|---|
+| the ledger WRITE removed | the 3 ledger tests, and nothing else |
+| the de-dup disabled (always record) | 1 — "does NOT append the same damage twice" |
+| `fileMustExist` removed | 1 — "NEVER CREATES the file it was asked about" |
+| `behind` collapsed into `damaged` (the janitor#123 class) | 2 — the classifier AND its ledger consequence |
+| `BEGIN IMMEDIATE` contention probe removed | 2 — both `busy` guards |
+| a `nuke` ADDED to the observer (`3P-IDX-07` violated) | 2 — "LEAVES A DAMAGED INDEX EXACTLY AS IT FOUND IT" + the recurrence test |
+
+**Live end-to-end, on a contained `HOME`:** `--all` on one healthy index → `ok`, exit 0; with a
+seeded damaged one → both listed, the damaged one NAMED with its repair command, `1 newly recorded in
+the heal ledger`, exit 1; then damage this corpus's own index → `--repair` rebuilt it (10 000 records,
+389 edges), recorded the heal, re-verified `ok`, exit 0.
+
+Suite: 275 files / 4097 passed / 2 skipped; `tsc --noEmit` clean. New tests: 25.
+
 ## Acceptance
 
-- [ ] A caller of the FULL pass exists that runs in normal operation — not a benchmark, not a test,
-      not an opt-in flag a human must remember
+- [x] A caller of the FULL pass exists that runs in normal operation — not a benchmark, not a test,
+      not an opt-in flag a human must remember — **`startPillarIndexVerifyWatchdog()`, started from
+      `server.mjs`** beside the five existing watchdogs. Its FIRST sweep is DELAYED 60 s rather than
+      run at boot: the sweep is synchronous, so an inline boot pass would add N x the full pass to
+      the one moment a client is most likely waiting — and that delay is what makes starting it
+      unconditionally safe
 - [x] The chosen home is recorded here with the reason the other two were rejected — **recorded, with
       the box's own premise corrected**: it presumed one home and two rejections, and the measured
       answer is a SPLIT (server timer DETECTS, `greptrdd` verb REPAIRS) because `corpusKeyFor` is a
       one-way hash, so only ONE candidate was rejected (sampling). Reasons above
-- [ ] MEASURED: the warm read path is unchanged from 4VCXRHAY's 0.37 s at 10 000 cards — the
-      verifier must not put the wall back
-- [ ] A fault it finds is recorded in the heal ledger, so a corruption that recurs is visible
-      (`3P-IDX-09`); NEUTER-proven, by seeding a corrupt index and asserting the ledger grows
+- [x] MEASURED: the warm read path is unchanged — **A/B on the same 10⁴ fixture and the same method,
+      my change vs HEAD-with-it-stashed: 0.57/0.58/0.62 s vs 0.60/0.57/0.57 s, identical within
+      noise.** The box's phrasing ("unchanged from 0.37 s") could not be satisfied literally and the
+      attempt is what produced the useful number: ~0.5 s of any such reading is `npx tsx` startup, so
+      the index query is ~0.08 s of real work and the two harnesses' totals must not be quoted
+      against each other. The A/B controls for exactly that
+- [x] A fault it finds is recorded in the heal ledger, so a corruption that recurs is visible
+      (`3P-IDX-09`); NEUTER-proven — removing the ledger write reddens the 3 ledger tests and nothing
+      else, and a SECOND neuter proves the de-dup, without which a 6-hourly sweep fills all 50 slots
+      with copies of one event and evicts the real history
 - [ ] `3P-IDX` gains the clause that the expensive pass must have a real caller, batched with the
-      next spec bump rather than triggering one of its own (see the note on YN8EQWYP)
+      next spec bump rather than triggering one of its own (see the note on YN8EQWYP) — **STILL
+      DEFERRED, deliberately.** Adding a clause is a MINOR bump per `3P-VER-01`, which obliges a
+      janitor notification (`3P-CHK-03`/`3P-VER-02`) and reddens `pillar-store.test.ts`'s exact
+      clause census; batching it with YN8EQWYP's concurrency clause pays that cost once. This is the
+      ONE open box, so the card correctly cannot reach a terminal column (§D4 checklist gate)
 
 ## Approval log
 

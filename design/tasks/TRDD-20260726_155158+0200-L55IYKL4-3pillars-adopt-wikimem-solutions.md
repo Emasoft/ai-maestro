@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T01:56:25+0200
+updated: 2026-07-30T02:31:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -232,8 +232,9 @@ for `7CHUK1AZ`.
 own `column:` rather than inferred:** `Q3GZJI1X` (`dev`, **HELD FOR THE USER**), `8KDIB2LT`
 (**`blocked` as of 2026-07-30 — 3/4 boxes closed**; see below), `C069SK9E` (`todo` — graph+board at
 10⁵, entangled with `31LJK1CX`), `31LJK1CX` (`backburner` — the warm graph query misses the budget;
-the freshness probe alone is 0.59 s of it), `C4YJAUD9` (`todo`, new — needs a DECISION on where the
-verifier lives before any code).
+the freshness probe alone is 0.59 s of it), `C4YJAUD9` (`dev` — **BUILT and verified 2026-07-30**
+(`5113591d`); its ONE remaining box is the `3P-IDX` clause, deliberately batched with YN8EQWYP's into
+the next spec bump so the janitor is notified once, which is why it is not terminal).
 
 **`8KDIB2LT` delivered boxes 1, 3, 4 (`52e7ea4f`, `15d8f8d7`, `28e60ee9`) and is now `blocked` on
 `Q3GZJI1X`.** Its one open box needs `prrdgrep`/`specsgrep` to EXIST, nothing tracks their creation as
@@ -246,8 +247,25 @@ boundary, so it is documented as the ONE grandfathered exception rather than ren
 answer is **repo-local, and why**: they are `*.mjs` while the installer globs `scripts/*.sh`, and
 distributing one means shipping the Node-22 wrapper because the index needs native `better-sqlite3`
 (caps at Node 25).
-**Best next: `C4YJAUD9` (a decision, no code) — the only non-terminal child that is neither
-USER-held nor blocked.**
+**`C4YJAUD9` is BUILT (`5113591d`)** — the expensive verify finally has a caller that runs in normal
+operation: a 6-hourly server watchdog (first sweep delayed 60 s off the boot path) plus
+`greptrdd index-verify [--repair|--all]`. The decision's SPLIT held up, and two things it had not
+foreseen came out of building it: `applyPragmas` is wrong for an observer (it sets
+`journal_mode = WAL`, a persistent write — `3P-IDX-07` violated by a route nobody would call
+healing), and `fileMustExist: true` is what stops `new Database` from MATERIALIZING an index at any
+bad path. The ledger records a TRANSITION rather than a poll, because a 6-hourly sweep over one
+unrepaired index would otherwise fill all 50 slots with copies of one event and evict every real
+heal — destroying the signal `3P-IDX-09` exists to keep. 6 neuter runs; the warm read path is
+UNCHANGED, proven by A/B against HEAD-with-it-stashed on the same 10⁴ fixture (0.58 s vs 0.58 s),
+which also showed ~0.5 s of any such reading is `npx tsx` startup — so 4VCXRHAY's 0.37 s and this
+0.58 s are different harnesses and must not be quoted against each other.
+
+**Best next: `C069SK9E` (`todo`, graph+board at 10⁵) — the only non-terminal child that is neither
+USER-held, blocked, nor awaiting a batched spec bump.** It is entangled with `31LJK1CX`
+(`backburner`), whose measurement — the freshness probe costing 0.59 s of the warm query — is now
+corroborated from a second direction: today's 10⁴ A/B puts the index-backed query at ~0.08 s of real
+work once `npx tsx` startup is subtracted, so at 10⁵ the probe genuinely is the dominant term rather
+than an artefact of how the total was timed. Read them together, not separately.
 Also settled: `Q3GZJI1X` does **not** gate the lint — an ambiguous `relevant-rules:` target is still
 unambiguously a TRDD → PRRD edge, and that direction is legal under either reading.
 

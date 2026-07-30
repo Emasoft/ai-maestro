@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:17:16+0200
+updated: 2026-07-30T18:33:19+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,45 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### R10.6 TEST WRITTEN AND GREEN — **NOT YET A PIN. RATCHET STILL 8.**
+
+`tests/governance/r10-restart-manager-gate-parity.test.ts` — 6 tests, all green, whole governance
+suite 26 files / 377 green.
+
+**NEXT ACTION (small, exact): run the THREE neuters, then decrement 8 → 7.** Until they run this is
+a test, not a pin — the campaign's standard is "disabling the cited guard makes a named test fail",
+and nothing here has been shown to fail yet. Do not decrement first.
+
+| neuter | delete the manager gate in | expect to red |
+|---|---|---|
+| A | `app/api/sessions/[id]/restart/route.ts:73-91` | ONLY "app route" (+ the agreement test) |
+| B | `services/headless-router.ts:1024-1036` | ONLY "headless [id]/restart" (+ agreement) |
+| C | `services/headless-router.ts:952-962` | ONLY "headless me/restart" (+ agreement) |
+
+Any neuter reddening more than its own site (beyond the agreement test, which reads all three by
+construction) would mean the sites share an implementation — which would make R10.6 unnecessary.
+Then: cite all three sites in the map's Guard column (it currently has them), set the Test column,
+bump the ratchet, `git diff` empty on both guard files.
+
+**The harness — every unknown is resolved, do not re-scout.** Six drives: the Next route via
+`mod.POST(fakeRequest, { params: Promise.resolve({id}) })`, and both headless paths via the
+`makeReq`/`makeRes`/`router.handle()` shape copied from `headless-router-auth-mirror.test.ts`.
+Mocked: the layers IN FRONT of the gate (`@/lib/agent-auth` `authenticateAgent` +
+`authenticateFromRequest`, `@/lib/authorization` `authorize`, `@/lib/sudo-guard`
+`requireSudoToken`) and the gate's DATA SOURCES (`getManagerId`, `isAgentInAnyTeam`, the registry,
+`sessionExistsSync`). `runRestartSequence` is recorded so "refused" can be told from "refused and
+restarted anyway".
+
+**TRAP ALREADY PAID FOR — my own mock shape was the bug, not the code.** `requireSudoToken` and
+`authenticateFromRequest` are **synchronous** and the route calls them without `await`. An `async`
+stub returns a truthy Promise, so `if (sudoErr) return sudoErr` returned a Promise and the test saw
+`res === null`. Match the real sync/async shape of anything in front of a gate.
+
+**HONEST LIMIT recorded in the file:** the two positive controls prove the gate OPENED, not that the
+restart succeeded — past the gate the handler null-derefs on `.program` in this fixture. Do NOT
+"strengthen" them to `statusCode === 200` without building the relaunch fixture; an error response
+is also "not 403", so that would be the weaker claim dressed as the stronger one.
 
 ### R10.6 SCOUTED — a comment claimed coverage that does not exist (ratchet unchanged at 8)
 

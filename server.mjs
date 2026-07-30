@@ -2021,6 +2021,33 @@ async function startServer(handleRequest) {
       console.warn('[Startup] Fleet-liveness watchdog init failed (non-fatal):', err?.message || err)
     }
 
+    // ── Pillar-index full verifier (TRDD-C4YJAUD9) ─────────────────────────────
+    // TRDD-4VCXRHAY moved the index's whole-file `integrity_check` off the read path,
+    // because running it on every open made the SAFETY MECHANISM the scaling wall (an
+    // 11 ms graph query behind a 666 ms open). Correct — but it left the expensive half
+    // with no caller except a benchmark, and a check nobody runs is a check that does
+    // not exist: an index created once and never migrated again was never fully checked
+    // again for the rest of its life. This is that caller.
+    //
+    // DETECT-ONLY, BY CONSTRUCTION — it repairs nothing (`3P-IDX-07`), and could not
+    // even if allowed: `corpusKeyFor` is a one-way sha256(realpath), so from an index
+    // FILE you cannot recover the corpus that rebuilds it. It takes BEGIN IMMEDIATE as a
+    // contention probe and SKIPS on busy, so it can never delete under a live writer
+    // (TRDD-YN8EQWYP). The repair lives where the corpus path lives:
+    // `greptrdd index-verify --repair`. 6-hourly, first sweep delayed off the boot path;
+    // AIM_PILLAR_INDEX_VERIFY_INTERVAL_MS overrides, 0 disables.
+    try {
+      const { startPillarIndexVerifyWatchdog } = await import('./lib/pillar/index-verify.ts')
+      if (startPillarIndexVerifyWatchdog()) {
+        console.log('[Startup] Pillar-index verifier started (full pass, detect-only; C4YJAUD9)')
+      }
+    } catch (err) {
+      // A NATIVE module (better-sqlite3, capped at Node 25) sits under this. A server
+      // that cannot load it must still boot — the index is an accelerator, never an
+      // authority, so its verifier is not allowed to be a startup dependency.
+      console.warn('[Startup] Pillar-index verifier init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Claude Code runtime-env enforcer (TRDD-QZL828OD) ───────────────────────
     // USER-ratified carve-out (2026-07-17): the harness cannot function without a
     // fixed set of Claude Code runtime env keys (+ one timeout) in the user-scope

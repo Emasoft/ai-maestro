@@ -454,6 +454,115 @@ switch (cmd) {
     process.exit(report.errors > 0 || (strict && report.warnings > 0) ? 1 : 0)
   }
 
+  // ---- the INDEX's own health (TRDD-C4YJAUD9) ----
+  //
+  // This is the REPAIRER half. The server's sweep detects and deliberately cannot fix
+  // (`3P-IDX-07`, and `corpusKeyFor` is one-way so it could never rebuild), while this
+  // command is the only path that HOLDS the corpus path — so it is the only one that can.
+  // It is also the ONLY verification a standalone repo user with no ai-maestro server
+  // running will ever get, which is why it exists even though the sweep covers the host.
+  //
+  // `--repair` adds no deletion code: it asks `openIndex` for the FULL depth and lets the
+  // ALREADY-TESTED self-heal do the work. A second "is this healable?" decision is exactly
+  // what drifted apart once before and cost a healthy index (see NEVER_HEALED).
+  case 'index-verify': {
+    const all = argv.includes('--all')
+    const repair = argv.includes('--repair')
+    if (all && repair) {
+      console.error('greptrdd: --repair is per-corpus (it needs the corpus path); --all is detect-only')
+      process.exit(2)
+    }
+    // LAZY + guarded, like `tryIndex`: better-sqlite3 is native and caps at Node 25, and a
+    // health command that dies because its own dependency is unavailable has told the
+    // operator nothing about the thing they asked about.
+    let mod
+    try {
+      mod = await import('../lib/pillar/index-verify.ts')
+    } catch (err) {
+      console.error(`greptrdd: cannot load the index verifier — ${err?.message ?? err}`)
+      console.error('greptrdd: the index needs the native better-sqlite3 (Node <= 25); the corpus itself is unaffected')
+      process.exit(2)
+    }
+
+    // EXIT CODES follow the trichotomy, and `2` OUTRANKS `1` when both occur — grep's own
+    // precedence (`grep pat readable unreadable` exits 2 even though it matched). "I could
+    // not finish looking" must not be reported as "I looked and here is the verdict".
+    const rank = { ok: 0, behind: 1, downgrade: 1, damaged: 1, busy: 2, unreadable: 2 }
+    const describe = (v) => {
+      const base = `${path.basename(v.file)}: ${C.b(v.state)}`
+      const why = v.faults.length ? v.faults.map((f) => `${f.code}: ${f.detail}`).join('; ') : (v.detail ?? '')
+      return why ? `${base} — ${why}` : base
+    }
+
+    if (all) {
+      const r = mod.runIndexVerifySweep()
+      if (r.verdicts.length === 0) {
+        console.log(C.d(`\nno index files under ${r.dir} — nothing has been indexed on this host yet\n`))
+        break
+      }
+      console.log(C.b(`\n${r.verdicts.length} index(es) under ${r.dir}\n`))
+      let worst = 0
+      for (const v of r.verdicts) {
+        const colour = v.state === 'ok' ? C.g : v.state === 'damaged' ? C.r : C.y
+        console.log(`  ${colour(describe(v))}`)
+        worst = Math.max(worst, rank[v.state] ?? 2)
+      }
+      if (r.recorded.length) console.log(C.y(`\n  ${r.recorded.length} newly recorded in the heal ledger`))
+      console.log()
+      process.exit(worst)
+    }
+
+    const { indexPath, corpusKeyFor } = await import('../lib/pillar/index-db.ts')
+    const { statePath } = await import('../lib/ecosystem-constants.ts')
+    const file = indexPath(statePath('pillar-index'), corpusKeyFor(designDir))
+
+    // "No index yet" is the NORMAL state before the first index-backed query, not a fault.
+    // Reporting it as unreadable (which is what `fileMustExist` produces) would make a
+    // clean cold repo look broken.
+    const fsm = await import('fs')
+    if (!fsm.existsSync(file)) {
+      if (!repair) {
+        console.log(C.d(`\nno index for this corpus yet — built on the first index-backed query\n  ${file}\n`))
+        break
+      }
+      console.log(C.d(`no index yet — building it: ${file}`))
+    }
+
+    if (repair) {
+      const { openIndex } = await import('../lib/pillar/index-db.ts')
+      const { syncIndex } = await import('../lib/pillar/index-build.ts')
+      const { TRDD_KIND } = await import('../lib/pillar/kinds.ts')
+      const { readHealLedger } = await import('../lib/pillar/index-db.ts')
+      const before = readHealLedger(mod.ledgerFileFor(file)).length
+      // FULL depth on purpose: this is the one caller that WANTS the expensive pass on an
+      // already-current index, because finding damage is the entire point of being asked.
+      const db = openIndex(file, { verify: 'full' })
+      try {
+        const s = syncIndex(db, designDir, TRDD_KIND)
+        console.log(C.g(`\n✓ repaired/rebuilt — ${s.records ?? 0} record(s), ${s.edges ?? 0} edge(s) synced`))
+      } finally {
+        db.close()
+      }
+      const after = readHealLedger(mod.ledgerFileFor(file))
+      if (after.length > before) {
+        console.log(C.y(`  heal recorded: ${after[after.length - 1].reason}`))
+        for (const f of after[after.length - 1].faults) console.log(C.d(`    · ${f}`))
+      } else {
+        console.log(C.d('  no heal was needed — the index was already valid'))
+      }
+      console.log()
+    }
+
+    const v = mod.verifyIndexFile(file)
+    const colour = v.state === 'ok' ? C.g : v.state === 'damaged' ? C.r : C.y
+    console.log(`${colour(describe(v))}`)
+    if (v.state === 'damaged' && !repair) {
+      console.log(C.d('  repair with: greptrdd index-verify --repair'))
+    }
+    console.log()
+    process.exit(rank[v.state] ?? 2)
+  }
+
   case 'help':
   case '--help':
   case '-h':
@@ -471,6 +580,14 @@ ${C.b('greptrdd')} — query AND validate the TRDD corpus (offline; no server)
   ${C.c('greptrdd lint')}             every finding, grouped by rule (errors first)
   ${C.c('greptrdd validate')}         the WRITE GATE — TAB rows: SEV⇥CODE⇥id⇥path⇥msg
   ${C.d('  … add --strict to either to fail on warnings too (exit 1)')}
+
+  ${C.c('greptrdd index-verify')}     the FULL index check (integrity_check) for this corpus
+  ${C.d('  --repair   rebuild it if damaged — the only path that CAN, it holds the corpus')}
+  ${C.d('  --all      every index on this host, detect-only (the server sweeps this 6-hourly)')}
+
+  ${C.d('Exit: 0 clean · 1 findings · 2 THE CHECK COULD NOT RUN. 2 outranks 1 — grep\'s own')}
+  ${C.d('precedence. So never write `greptrdd validate || …`: that collapses "found')}
+  ${C.d('findings" into "could not run", the exact conflation the third code prevents.')}
 
   ${C.d('--no-index   answer the graph from the corpus WALK, not the SQLite index.')}
   ${C.d('             The index serves why/unblocks/roots/board; search is walk-only')}

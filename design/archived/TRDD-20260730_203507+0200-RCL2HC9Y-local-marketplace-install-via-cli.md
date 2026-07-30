@@ -4,9 +4,9 @@ title: Decide by live test whether the claude CLI can install from a directory m
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: dev
+column: completed
 created: 2026-07-30T20:35:07+0200
-updated: 2026-07-30T20:50:37+0200
+updated: 2026-07-30T21:58:42+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,25 +24,63 @@ relevant-rules: [R20]
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: [c898fa90]
+implementation-commits: [c898fa90, c0ebd710, 6396ace2]
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30 20:48
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30 22:10
 
-**THE SPIKE IS RUN. Both halves came back the OPPOSITE of what the code assumed, and the second
-one is a live bug the spike was not looking for.**
+**DONE.** The spike ran, the branch is collapsed, and the collapse turned out to be COMPLIANCE
+work rather than the cleanup this card was scoped as.
 
-1. **The CLI resolves a directory marketplace fine.** The branch's comment is STALE.
+1. **The CLI resolves a directory marketplace fine.** The branch's comment was STALE.
 2. **`--cwd` is not a `claude` option, and passing it fails OPEN.** The CLI prints
    `error: unknown option '--cwd'` and **exits 0**, so `promisify(execFile)` resolves and the
    adapter returns `{success:true}` having run nothing. **Every local-scope install and uninstall
-   through `claudeAdapter` has been a silent no-op** — including the `G08c` gate OWO449MR shipped
-   hours earlier. FIXED here: the directory is now the SPAWN cwd, which is what `--scope local`
-   actually keys off.
+   through `claudeAdapter` had been a silent no-op** — including the `G08c` gate OWO449MR shipped
+   hours earlier. Fixed in `c898fa90`: the directory is now the SPAWN cwd, which is what
+   `--scope local` actually keys off.
 
-NEXT ACTION: collapse the `isLocalOnlyMarketplace` branch in `installPluginLocally` /
-`uninstallPluginLocally` so every marketplace routes through the CLI, and delete the stale comment.
-The evidence for doing it is below; nothing else is owed.
+### THE FINDING THIS CARD DID NOT EXPECT — the branch VIOLATED R20.29, and R20.29's own test held it there
+
+`docs/GOVERNANCE-RULES.md:881` (R20.29, verdict **Explicit**) enumerates the four possible
+plugin SOURCES — "(a) a GitHub URL, (b) a local folder, **(c) one of the 3 AI Maestro local
+marketplaces**, or (d) a remote marketplace" — and says of ALL FOUR that "the install step
+**ALWAYS invokes the client's own protocol** to write into the client's target state". Case (c)
+is NAMED. The `isLocalOnlyMarketplace` branch took the one path the rule forbids, for the exact
+case the rule names.
+
+**Both enforcement-map columns were green over it:**
+
+| column | what it said | what was true |
+|---|---|---|
+| Guard | `element-management-service.ts:1712-1716` | rotted onto retry-backoff code |
+| Test | `tests/governance/r20-marketplace-governance.test.ts` | its case (c) test was titled *"routes a LOCAL-container source away from the CLI"* and asserted `expect(claude call).toBeUndefined()` — it **certified the violation under the rule's own name** |
+
+**The generalisable lesson: reading a rule's CITATION is not reading the RULE.** The routing
+decision the map pointed at was real, deliberate, working code, so a test written against it
+passes and looks exactly like coverage. Recorded in the map's `## Notes on individual rows`.
+
+**It was also worse than the CLI in the way that matters.** The hand-written path wrote the
+`enabledPlugins` key WITHOUT fetching the plugin into `~/.claude/plugins/cache/`, so Claude
+Code's resolver had a name it could not resolve — the silently role-less agent of SCEN-031,
+manufactured on purpose. The uninstall half was asymmetric the other way: it removed the key and
+left the CLI's cache entry and registry row behind.
+
+### THE NEUTER PAIR — and what it caught
+
+| neuter | red |
+|---|---|
+| A — restore the install-side short-circuit | **6**, all install-side |
+| B — restore the uninstall-side settings-only path | **0.** Exit 0, 4395 passed over a fully reverted half |
+
+The uninstall collapse was shipping **unpinned**: every existing uninstall case passes a REMOTE
+marketplace, which took the CLI path before and after, and nothing ever passed a local one.
+Neuter A alone would have certified the file while half of it was decorative — which is the
+whole reason to run a complementary PAIR rather than one neuter. `6396ace2` adds the missing
+case; re-running neuter B against it now reddens EXACTLY it (1 failed | 14 passed), a red set
+disjoint from A's.
+
+Nothing further is owed on this card.
 
 ## Evidence — the live runs, verbatim (this section IS the deliverable)
 
@@ -179,3 +217,8 @@ gated behind the observation rather than bundled into the refactor that surfaced
   a `parent-trdd:` (depth-1). So this card is OWO449MR's SIBLING under their shared parent, and the
   ordering is carried by `OWO449MR.blocked-by: [RCL2HC9Y]` rather than by a parent link. Caught by
   `trddgrep validate` — two ERRORs on my own board, not by review.
+- 2026-07-30T21:58:42+0200 — COMPLETED by ai-maestro. Branch collapsed on both sides
+  (`c0ebd710`), uninstall half pinned after a neuter proved it unpinned (`6396ace2`), R20.29's map
+  row re-cited off a rotted line range onto `(CreateAgent::G08)` with the finding recorded in the
+  map's Notes. `bash scripts/with-node.sh yarn test` → 4396 passed | 2 skipped; `yarn build` → exit
+  0; `tsc --noEmit` → clean; the enforcement ratchet → 10 passed. Unblocks `OWO449MR`.

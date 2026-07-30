@@ -245,7 +245,7 @@ Row format is fixed so a regex parses each line:
 | R20.26 | ENFORCED | services/plugin-storage-service.ts:199-203 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.27 | UNENFORCED | — | — |
 | R20.28 | ENFORCED | scripts/setup-local-marketplaces.sh | tests/governance/r20-installer-marketplace-layout.test.ts |
-| R20.29 | ENFORCED | services/element-management-service.ts:1712-1716 | tests/governance/r20-marketplace-governance.test.ts |
+| R20.29 | ENFORCED | services/element-management-service.ts (CreateAgent::G08) | tests/governance/r20-marketplace-governance.test.ts |
 | R20.30 | ENFORCED | components/agent-profile/PluginsTab.tsx:116-153 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.31 | ENFORCED | services/element-management-service.ts:1834-1910 | tests/governance/r20-marketplace-governance.test.ts |
 | R22.1 | BEHAVIOURAL | — | — |
@@ -362,6 +362,37 @@ Row format is fixed so a regex parses each line:
 | R49.6 | BEHAVIOURAL | — | — |
 
 ## Notes on individual rows
+
+- **R20.29 (ENFORCED, re-cited) — the row was green over a LIVE VIOLATION, and its
+  own test was what held the violation in place (TRDD-RCL2HC9Y, 2026-07-30).**
+  R20.29 enumerates four possible plugin SOURCES — "(a) a GitHub URL, (b) a local
+  folder, (c) one of the 3 AI Maestro local marketplaces, or (d) a remote
+  marketplace" — and says of ALL FOUR that "the install step ALWAYS invokes the
+  client's own protocol". Until this card, `installPluginLocally` branched on
+  `isLocalOnlyMarketplace` and hand-wrote `settings.local.json` for case (c),
+  never calling the CLI. That is the rule's named case, taking the one path the
+  rule forbids.
+
+  **Both columns were green over it.** The Guard cited
+  `element-management-service.ts:1712-1716`, a range that had rotted onto
+  retry-backoff code. The Test column named a real governance test — whose case (c)
+  assertion was titled *"routes a LOCAL-container source away from the CLI"* and
+  asserted `expect(claude call).toBeUndefined()`. So the test CERTIFIED the
+  violation, under the rule's own name, and passed forever.
+
+  **The generalisable lesson: reading a rule's CITATION is not reading the RULE.**
+  The routing decision the map pointed at was real, working, deliberate code, so a
+  test written against it passes and looks exactly like coverage. Nothing short of
+  reading R20.29's own text against the branch could have caught it — and the
+  branch's stated justification ("cannot be resolved by Claude CLI's marketplace
+  lookup") was independently false, disproved by a live install.
+
+  The Guard is now the gate-qualified `(CreateAgent::G08)` — the call site where
+  `mkt` resolves to `LOCAL_MARKETPLACE_NAME`, i.e. case (c) itself — rather than a
+  line range that will rot again. The primitive it calls,
+  `installPluginLocally`/`uninstallPluginLocally`, is where the rule actually
+  lives; it is named here rather than in the cell because the Guard column is
+  machine-parsed and a two-symbol citation would split on its own comma.
 
 - **R9.10 (ENFORCED, tested) — and the ruling on how a MULTI-CLAUSE rule gets ONE
   verdict (TRDD-DQ6XN2VP, 2026-07-30).** R9.10 states two things: (A) the Delete

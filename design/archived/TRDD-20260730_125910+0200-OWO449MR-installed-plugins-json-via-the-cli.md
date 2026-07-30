@@ -4,10 +4,9 @@ title: Shape A for installed_plugins.json needs DeleteAgent reordered, because a
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: blocked
-pre-block-column: dev
+column: completed
 created: 2026-07-30T12:59:10+0200
-updated: 2026-07-30T20:39:45+0200
+updated: 2026-07-30T21:58:42+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,7 +21,7 @@ derived: true
 derived-kind: npt
 parent-trdd: 0GCIMQ9F
 relevant-rules: [R50, R51, R21]
-blocked-by: [RCL2HC9Y]
+blocked-by: []
 npt: []
 eht: []
 implementation-commits: [f1e4d7ec, 5861db3b]
@@ -156,3 +155,14 @@ agent that then survives.
   TRDD-0GCIMQ9F rather than improvised inside it: the parent's other Shape-A items were removals,
   this one is a pipeline reorder with a compensation question, and folding it in would have hidden a
   HIGH-risk design decision inside a card whose other changes were deletions.
+- 2026-07-30T21:58:42+0200 — UNBLOCKED then COMPLETED by ai-maestro. The sibling this card was
+  waiting on, `TRDD-RCL2HC9Y`, reached `completed` (`c0ebd710`, `6396ace2`), so `blocked-by` is
+  empty and the STATE block's one stated condition — *"nothing further is owed here except that
+  sibling"* — is satisfied. This card's own code was already done and verified at f1e4d7ec /
+  5861db3b; nothing in it changed on the way out.
+
+  Worth recording for the sibling ordering, because it worked: RCL2HC9Y found that
+  `claudeAdapter`'s `--cwd` failed OPEN, which means **this card's G08c gate had been a silent
+  no-op from the moment it shipped**. The `blocked-by` edge is what made that discoverable — had
+  this card been marked `complete` when its tests went green, the hole would have been recorded as
+  closed while the gate did nothing.

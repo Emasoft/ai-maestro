@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T20:26:44+0200
-updated: 2026-07-30T03:52:00+0200
+updated: 2026-07-30T04:05:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -165,9 +165,21 @@ probe is not the check.**
 - So **~232 ms is an irreducible syscall floor** for "verify every file", and the shipped loop
   shape (stat + identity string + `Map<path,{id,source}>` + per-file try/catch) measures
   **281-311 ms** — the try/catch is free, the 100k-object Map costs ~54 ms.
-- `identifyFiles` measures **432 ms**, so **~120 ms sits above the loop shape** — the per-file
-  `path.resolve(file)`. The git-root probe is NOT the cause: it fails fast on a non-git corpus in
-  **7 ms**.
+- `identifyFiles` measures **432 ms**, so **~120 ms sits above the loop shape — and it is NOT yet
+  attributed.** Two candidates proposed and both REFUTED: the git-root probe fails fast in **7 ms**,
+  and the per-file `path.resolve(file)` costs **28 ms** (measured against a bare loop over the same
+  100 000 paths, which are all already absolute). Neither is the bulk.
+
+**Wider than that: the measured parts do not SUM to the whole.** 167 boot + 29 open + 162 list +
+232-311 identify + 197 select = **787-866 ms** against a ~1.05 s end-to-end, so **~180-260 ms is
+unaccounted for across the pipeline**, not merely inside `identifyFiles`. Some of that is
+cross-process variance (the stage probe and the loop-shape probe ran in different processes with
+different GC and FS-cache states), but "some of it is variance" is a hypothesis too.
+
+**So the paydown target is NOT yet specified well enough to build.** The sibling card's FIRST job is
+to close this accounting gap — one process, one interleaved run, parts that sum — because an
+optimisation aimed at an unattributed 120 ms is aimed at nothing. I proposed a cause for that gap
+twice and was wrong twice, which is the evidence for doing the accounting before the fusing.
 
 **A false lead worth recording, because reading the code is what killed it.** I measured
 `realpathSync` per file at **1 187 ms** and nearly reported it as the overhead. The shipped code
@@ -180,9 +192,13 @@ can measure a cost the code deliberately avoids, and the number looks just as re
 **Keep the exact O(N) probe — every file stat'ed, no heuristic — and pay down the userland work
 around it.** Failure mode: **none**, because the check itself is unchanged; the guarantee that the
 index is an accelerator and never an authority is preserved by construction. What it costs is
-engineering, not correctness: ~360 ms of the 591 ms is `readdir`+`path.resolve`+allocation, against
-a ~232 ms syscall floor. Zeroing all of it would put the whole-board verbs at ~623 ms end-to-end —
-**inside the < 1 s budget without a heuristic anywhere.**
+engineering, not correctness.
+
+**The SIZE of that paydown is bounded but not yet apportioned.** Bounded below by the ~232 ms syscall
+floor, and bounded above by the ~591 ms probe — so there is somewhere under ~360 ms of non-syscall
+work to reclaim, and if all of it went the whole-board verbs would land near ~620 ms end-to-end,
+**inside the < 1 s budget with no heuristic anywhere.** But which code that ~360 ms is in remains
+open (see the accounting gap above), so the number is a CEILING on the prize, not a plan.
 
 **A second, independent lever for the LOCAL verbs.** `why`/`unblocks`/`show` depend only on one
 card's transitive blocker chain, so freshness could be verified **as each node is visited** rather
@@ -208,10 +224,12 @@ and until that sibling exists the miss keeps its owner rather than evaporating.
 - [x] The differential test still passes: index-backed and walk-backed answers agree on the live
       corpus, ORDER included — full suite green (275 files / 4105 passed), and `C069SK9E` extended
       it to `next` **and to 10⁵**, byte-identical over 31 111 ranked rows
-- [x] Warm query re-measured at 10⁵ and the verdict re-stated — **MISSED, and the residual is now
-      named to the millisecond**: 591 ms of 817 ms real work is the probe, of which **~232 ms is an
-      irreducible syscall floor** and **~360 ms is `readdir` + `path.resolve` + allocation**. So the
-      budget is reachable without any heuristic; that paydown is a sibling card, not this one
+- [x] Warm query re-measured at 10⁵ and the verdict re-stated — **MISSED, with the residual bounded**:
+      591 ms of 817 ms real work is the probe, of which **~232 ms is an irreducible syscall floor**,
+      leaving **under ~360 ms of non-syscall work** as the ceiling on any paydown. The budget is
+      therefore reachable without a heuristic. Where that ~360 ms LIVES is deliberately left open —
+      two proposed causes were measured and refuted, and the parts do not yet sum to the whole, so
+      apportioning it is the sibling card's first job rather than a guess recorded here
 
 ## Approval log
 

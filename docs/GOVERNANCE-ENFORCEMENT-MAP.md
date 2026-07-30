@@ -36,7 +36,7 @@ Row format is fixed so a regex parses each line:
 | Sub-rule | Verdict | Guard (file:line or —) | Test (path or —) |
 |---|---|---|---|
 | R1.1 | ENFORCED | lib/team-acl.ts:54-103 | tests/governance/r1-team-acl.test.ts |
-| R1.2 | ENFORCED | lib/group-registry.ts | — |
+| R1.2 | ENFORCED | lib/group-registry.ts | tests/governance/r1-groups-are-lightweight.test.ts |
 | R1.3 | ENFORCED | services/teams-service.ts:342-405 | tests/governance/r1-teams-service.test.ts |
 | R1.4 | ENFORCED | services/teams-service.ts:279-283 | tests/governance/r1-teams-service.test.ts |
 | R1.5 | ENFORCED | lib/team-registry.ts:427 | tests/governance/r1-r2-team-registry.test.ts |

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:36:42+0200
+updated: 2026-07-30T18:46:16+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,58 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 7 → 6 — R1.2 DONE. The widest absence in the map, pinned by contrast.
+
+**The remaining 6:** R2.2, R4.8, R7.1, R7.3, R7.8, R20.28.
+
+R1.2 ("groups are lightweight — no governance, no COS, no kanban") had the map's only
+citation with **no line number at all**, and that is honest rather than sloppy: there is no
+`if` to point at. The rule is that a whole class of machinery is *never built* for a group,
+so the guard is the module's silence. `tests/governance/r1-groups-are-lightweight.test.ts`
+(5 tests) states it as post-conditions of NON-ACTION and takes R17.18a's shape — the neuter
+ADDS the forbidden behaviour.
+
+**What makes an absence assertion mean anything is the CONTRAST**, and all three halves were
+verified first-hand in the TEAM path rather than taken from a doc:
+
+| absence | the team path really does this |
+|---|---|
+| no COS | `services/teams-service.ts:356` — `` `cos-${teamSlug}` `` → `createCosAgent` |
+| no kanban | `lib/task-registry.ts:66` — every team gets `tasks-<teamId>.json` |
+| no governance | `types/team.ts` carries `chiefOfStaffId` / `orchestratorId` / `kanbanConfig` / `githubProject` / `blocked`; `types/group.ts` carries none |
+
+**Three neuters, each red on ONLY its own absence:**
+
+| neuter | added to `createGroup` | reddened |
+|---|---|---|
+| A | an agent row named `cos-<name>` | "creates NO COS agent" — and nothing else |
+| B | a `tasks-<id>.json` board | "creates NO task board" |
+| C | `chiefOfStaffId: null` on the record | "persists NO governance field" |
+
+Note how NARROW each red is. Neuter A adds its agent at CREATE time and the *delete* test
+still passes, because that test brackets only the delete — the granularity is the point. A
+neuter that reddened everything would not have told the four absences apart.
+
+**The presence half is load-bearing, not decoration.** Four assertions about what a subsystem
+does *not* do would all pass vacuously against a subsystem that does nothing, so the first
+test drives the one thing a group exists FOR — a broadcast reaching every subscriber —
+through the same real on-disk registry the absences are measured from. Everything is real
+here (groups.json, its signed ledger, the agent registry, all under a temp state dir); only
+`notifyAgent` is stubbed, because it drives the developer's real tmux. **Containment was
+proven positively, not assumed**: the fake state dir HOLDS `teams/groups.json`,
+`teams/groups.ledger.json` and `host-keys/` (so the redirect took effect and is not a silent
+no-op), while the real `~/.aimaestro` registry and groups.json contain zero occurrences of
+the fixture names.
+
+**The sweep was NEGATIVE a fifth time**, in a shape already catalogued: of the four group
+hits in the test tree, three MOCK the registry (`deleteagent-g09b`, `agent-teardown`,
+`element-management-assistant-title`) and the fourth (`r4-team-composition:202`) reads its
+SOURCE to assert there is no subscriber ceiling — a *different rule about the same file*.
+`all-in-one-single-path` names the module too, but for R50/R51 sole-path ownership.
+
+Verification: guard restored byte-identical (`git diff lib/group-registry.ts` empty); tsc 0;
+full suite **298 files / 4326 passed / 2 skipped**, exit 0 (was 297/4321 — exactly this file).
 
 ### RATCHET 8 → 7 — R10.6 DONE. The three neuters RAN and each red ONLY its own site.
 

@@ -365,7 +365,21 @@ const UNAUDITED_RULES = new Set<number>([
 // measured false: `grep -rln "Cannot restart team agent" tests/` returned nothing. A comment
 // asserting coverage is not coverage, and it is worse than silence because it stops the next reader
 // looking.
-const MAX_ENFORCED_WITHOUT_TEST = 7
+// 2026-07-30: 7 -> 6. R1.2 pinned by tests/governance/r1-groups-are-lightweight.test.ts. The
+// WIDEST absence in the map — its Guard column is a bare `lib/group-registry.ts` with no line,
+// because there is no `if` to cite: the rule is that a whole class of machinery (COS agent, task
+// board, governance fields) is never built for a group. So the neuters ADD the forbidden behaviour
+// (R17.18a's shape), and each of the three — write a `cos-<name>` agent row, write a
+// `tasks-<id>.json` board, put `chiefOfStaffId` on the record — reds ONLY its own absence. The
+// contrast is what makes each one mean something, and all three were verified first-hand in the
+// TEAM path: teams-service.ts:356 builds `cos-${teamSlug}`, task-registry.ts:66 names every team's
+// board, types/team.ts carries the five governance fields types/group.ts does not. The fan-out test
+// is not decoration: four absences about a subsystem that does nothing would pass vacuously, so a
+// real broadcast reaching every subscriber runs through the same real registry the absences are
+// measured from. The sweep was NEGATIVE a fifth time, in a shape already catalogued: three of the
+// four group hits in the test tree MOCK the registry, and the fourth (r4-team-composition) reads
+// its SOURCE to assert no subscriber ceiling — a different rule about the same file.
+const MAX_ENFORCED_WITHOUT_TEST = 6
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-27T13:05:00+0200
+updated: 2026-07-30T15:20:47+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,10 +20,81 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296]
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-27
+## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+**Ratchet 30 → 28.** R19.1 + R19.3 pinned by 13 tests in
+`tests/governance/r19-maintainer-title.test.ts`, driving the REAL `ChangeTitle`.
+Every negative asserts WHICH gate refused, not merely that something did —
+`success === false` passes on any earlier refusal, so it distinguishes nothing.
+
+**Two map defects, both found by reading the cited range against the rule's
+current text rather than trusting the verdict:**
+
+- **R19.2 was recorded `UNENFORCED` over a LIVE guard.** Gate 9a requires
+  `githubRepo` and validates its format. This is the MIRROR IMAGE of the
+  R39.5/R39.7 defect (there the row claimed MORE than the code did; here it
+  claimed LESS) and it is the one the ratchet is structurally blindest to: **a
+  row claiming nothing is never audited**, so the guard could be deleted and
+  nothing would redden. Now `ENFORCED` + tested, so it contributes 0 to the
+  drop — the −2 is exactly the two rules pinned.
+- **R19.1's guard is the STANDALONE reverse check**, whose own comments label it
+  R3 — and no R3 row cites it either. One block served two rules and was cited
+  by neither.
+
+**A LIVE BUG, found and FIXED en route (`4ffaa2a1`).** Re-pointing an EXISTING
+maintainer at a different repository validated nothing, stored nothing, and
+answered 200 OK. Two independent gates, both closed: `ChangeTitle` Gate 6
+returned success the moment the TITLE was unchanged (and Gate 9a is
+`githubRepo`'s only writer), while `agents-core-service` called ChangeTitle only
+`if (oldTitle !== newTitle)` and had deliberately stripped `githubRepo` from its
+own `updateAgent` body — so the field's single source of truth was unreachable in
+exactly the case where it was the only thing changing. The SCEN-020 fix closed
+the unvalidated leak-write and opened this. It survived because **a missing write
+produces a SUCCESS, not an error** — the same shape as an unenforced rule, one
+layer down. Format + uniqueness are now ONE predicate (`checkMaintainerRepo`)
+called by both sites, because two copies of a validator drift.
+
+**Verification:** tsc 0 · full suite **285/285, exit 0** · red-then-green proved
+by stashing the fix (the 3 regression tests fail against pre-fix code) · **4
+neuter runs**, each reddening exactly its named test. Built and DEPLOYED —
+`services/*.ts` is bundled, so a restart alone would have replayed the old build;
+verified from the artifact (`G06b` present in `.next/server/chunks/1.js`).
+
+**The neuter that PASSED is the useful one.** Deleting `checkMaintainerRepo`'s
+`a.id !== agentId` left the suite green. Reading Gate 5 explains it: it sets
+`oldTitle` from `agent.governanceTitle` and only overrides when that is empty, so
+a registry maintainer ALWAYS lands in Gate 6 — Gate 9a is reached only when the
+subject is not a maintainer and therefore cannot match itself. The clause is
+defence-in-depth, **deliberately left unpinned**, and both the code and the test
+file say so; a fixture contorted enough to reach it would be manufacturing
+coverage for an unreachable branch.
+
+**NEXT ACTION — the 28 that remain, and the two traps in them:**
+
+- **R19.10 is NOT a free pin.** Its citation is `lib/ecosystem-constants.ts:331`
+  — one row of the `TITLE_PLUGIN_MAP` const table. A test asserting a table's
+  contents survives the guard's deletion (the H2 anti-pattern), and its SECOND
+  clause (the R17 core-plugin requirement) is uncited entirely. It needs a
+  re-citation onto the site that ACTS on the binding (ChangeTitle G15/G16).
+- **R20.5 already has behavioural tests — against the OTHER site.** The map cites
+  G15/G16; `tests/governance/r20-marketplace-governance.test.ts` drives
+  `autoAssignRolePluginForTitle`. Naming that file in the row would drop the
+  ratchet by 1 while leaving G15/G16 unpinned — green columns over an untested
+  site. Pin G15/G16 first, then cite both.
+- Batch the rest **by the FILE the guard lives in**. Note 9 of the 28 are `.tsx`
+  components (R4.8, R7.1/7.2/7.3/7.7/7.8/7.9, R11.6, R17.16); a "guard" in a
+  React component is not a server-side refusal, so those may want a
+  `BEHAVIOURAL` verdict rather than an adversarial refusal test.
+
+**Take the count from the ratchet's own failure message, never a hand grep.**
+Mine said 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule
+`R17.18a` — a count from the wrong pattern reads as a clean win, and I was one
+commit from locking in a number my own awk had invented.
+
+## ⏵ STATE — 2026-07-27 (superseded by the block above)
 
 USER mandate (2026-07-26): *"the api implement the full all-in-one design and the governance rules
 enforced and tested"*, scoped to **Claude only** — codex/gemini/opencode/kiro stay parked.

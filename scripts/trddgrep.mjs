@@ -498,6 +498,11 @@ switch (cmd) {
   // exact. Greppability is a PROMISED property of that output, not an accident of it — a
   // consumer that split on prose would break the next time a message is reworded, which is
   // why the row is keyed on the stable CODE and never on the message text.
+  // `doctor` is an ALIAS for `lint`, not a fourth thing: the repo-local script was called
+  // `trdd-doctor` and `yarn trdd:doctor`, so that is the word an agent carries — and no
+  // `trdd-doctor` name is distributed, by design (one tool per corpus, four names total).
+  // An alias costs a line; a name an agent guesses and does not find costs the tool.
+  case 'doctor':
   case 'lint':
   case 'validate': {
     const { lintCorpus } = await import('../lib/trdd-doctor.ts')

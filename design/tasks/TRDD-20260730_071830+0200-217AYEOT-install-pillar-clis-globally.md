@@ -1,11 +1,11 @@
 ---
 trdd-id: 217AYEOT
 title: The pillar CLIs are misnamed and invisible to every agent outside this repo
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T07:18:30+0200
-updated: 2026-07-30T09:00:47+0200
+updated: 2026-07-30T12:07:54+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -263,10 +263,15 @@ name is the bug this card exists to fix.
       end-to-end from a seeded tmp project through a COPY of the launcher in a tmp bin dir, with
       `XDG_DATA_HOME` redirected so no real state was written
 - [x] invoked from a directory with NO `design/` it exits **2** (could-not-run), never 0
-- [ ] `trddgrep env` reports `standalone` in a plain dir and `agent` in a registered workdir, driven
+- [x] `trddgrep env` reports `standalone` in a plain dir and `agent` in a registered workdir, driven
       through an INJECTED home + registry — never the developer's real `~/.aimaestro` (0-IMPACT).
       *The detector itself is done and pinned (12 tests); this box is the CLI verb.*
-- [ ] **detection performs ZERO writes**: with a fake home containing no `.aimaestro`, assert
+      **Done in a real subprocess** (`tests/unit/pillar-cli-env.test.ts`), and the agent case is the
+      POSITIVE CONTROL for the box below. It found a LIVE bug: `process.cwd()` is always a kernel
+      realpath while `workingDirectory` is a typed string, so the lexical `path.resolve` compare
+      made a workdir registered under `/var`|`/tmp` never match a cwd of `/private/var` — an agent
+      standing in its own workdir reported `standalone`. Both sides are canonicalized now.
+- [x] **detection performs ZERO writes**: with a fake home containing no `.aimaestro`, assert
       `<fakehome>/.aimaestro` is still absent after a full `trddgrep env` run.
       **This box cannot be satisfied by a unit test, and the attempt to do so was itself a finding:**
       `lib/agent-registry.ts` fixes its paths at MODULE LOAD, so an in-process `$HOME` swap never
@@ -279,12 +284,22 @@ name is the bug this card exists to fix.
       because sourcing that script from zsh silently yields an out-of-range Node
 - [x] a caller with no ai-maestro install gets an explicit refusal naming what is missing (and a
       STALE recorded root gets its own refusal naming recorded-vs-expected)
-- [ ] `trddgrep doctor|fix|board` reach the doctor; no distributed `trdd-doctor` name exists
-- [ ] `docs/SCRIPT-LAYER.md` records the four-name convention, the two modes, and supersedes the
-      "repo-local, and here is why" paragraph (that decision is now reversed by USER mandate)
-- [ ] a recorded **neuter run** per guard (break it, watch the NAMED test fail; read the test COUNT,
-      never the exit code)
-- [ ] full suite green
+- [x] `trddgrep doctor|fix|board` reach the doctor; no distributed `trdd-doctor` name exists.
+      `board`/`lint`/`validate` already did; this card added `fix` (which `lint` had been
+      ADVERTISING as `[--fix]` while pointing at `yarn trdd:fix`, a repo-local script an agent in
+      another project cannot run) and `doctor` as an alias for `lint`, because `trdd-doctor` is the
+      word an agent carries and a guessed name that is not found costs the tool
+- [x] `docs/SCRIPT-LAYER.md` records the four-name convention, the two modes, and supersedes the
+      "repo-local, and here is why" paragraph (that decision is now reversed by USER mandate).
+      The section keeps the overruled argument's CAUSE, not just its conclusion — that a governance
+      corpus whose tools one repo can run is a corpus nobody can query
+- [x] a recorded **neuter run** per guard (break it, watch the NAMED test fail; read the test COUNT,
+      never the exit code). `canonical()` → `path.resolve` reddens exactly 2 named tests
+      ("recognises an agent standing in its own registered workdir" + the subprocess POSITIVE
+      CONTROL); restored 14/14. The earlier guards' neuters are recorded in this card's history
+- [x] full suite green — 279 files / 4153 passed / 2 skipped, with the corpus's 2 known
+      BODY-STATE-CLAIM errors still inside the test's explicit exactly-2 allowance (they are
+      ARCHIVED cards, frozen by IND rule 12, and awaiting janitor#139)
 
 ## Coordination with the other plugins
 

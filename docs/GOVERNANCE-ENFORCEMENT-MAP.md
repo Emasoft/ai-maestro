@@ -313,7 +313,7 @@ Row format is fixed so a regex parses each line:
 | R39.8 | UNENFORCED | — | — |
 | R39.9 | UNENFORCED | — | — |
 | R39.10 | UNENFORCED | — | — |
-| R40.1 | ENFORCED | services/element-management-service.ts:245-272, services/teams-service.ts:271-277 | — |
+| R40.1 | ENFORCED | services/element-management-service.ts:245-272, services/element-management-service.ts:7517-7531, services/teams-service.ts:271-277 | tests/governance/r40-foreign-user-creation.test.ts |
 | R40.2 | INVENTED | — | — |
 | R41.1 | ENFORCED | lib/trdd-authz.ts:105-131 | tests/unit/manage-trdd-authorization.test.ts |
 | R41.2 | UNENFORCED | — | — |

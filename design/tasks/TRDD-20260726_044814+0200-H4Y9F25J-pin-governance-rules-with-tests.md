@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:03:14+0200
+updated: 2026-07-30T18:08:42+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,45 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 10 → 9 — R40.1 DONE (`tests/governance/r40-foreign-user-creation.test.ts`)
+
+**The remaining 9:** R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R17.18a, R20.28.
+
+**This rule was ALREADY half-enforced once, and that history is why it is not pinnable off one
+site.** R40.1 quantifies over creation surfaces ("the MAESTRO's approval for **every** agent or
+team creation"). `create_team` sat in `R40_RESTRICTABLE_COMMANDS` while the guard was wired into
+`CreateAgent` ONLY — closed by the M3 fix of the 2026-06-19 R26-R40 audit, per the comment still
+standing at `teams-service.ts:257-271`. A single-surface test cannot see that failure, so this file
+is MECHANISM + COVERAGE, and **the row now cites the `CreateAgent` G00f block too** — an
+enforcement site nothing cites is exactly how the first half went missing.
+
+| half | what it drives |
+|---|---|
+| MECHANISM (9 tests) | `assertForeignUserMayCall` — native passes, no-userId passes, no-AID refuses, ungranted refuses, a grant for a DIFFERENT command refuses (and the granted one still passes), an approved grant passes, a non-`approved` status refuses, a non-restrictable command passes, and the **fail-closed** branch |
+| COVERAGE (3 tests) | `CreateAgent` and `createNewTeam` — each through its REAL public entry point, each asserting the refusal AND a post-condition that it landed before any side effect, plus a shared positive control |
+
+**FAIL-CLOSED is the one worth naming.** "R40 is a security ADD; a glitch must not silently grant a
+foreign user create rights" is a claim about a `catch` block — the kind that rots with nothing going
+red. Reaching it takes care: making `getUser` throw does NOT reach it, because `isForeignUser`
+catches and returns `false`, so the caller is treated as native and allowed. The store that must
+throw is `loadForeignApprovals`.
+
+**Three neuters, because the surfaces have to be provably independent:**
+
+| neuter | reds |
+|---|---|
+| `assertForeignUserMayCall` returns null on entry | the 5 refusal tests + BOTH coverage tests; the 5 allow/positive-control tests stay green |
+| delete the `G00f` block in `CreateAgent` | **only** the CreateAgent test — the M3 regression reproduced exactly |
+| delete the `create_team` gate in `createNewTeam` | **only** the createNewTeam test |
+
+Either single neuter alone would leave one surface free to lose its gate silently, which is the
+entire content of the word EVERY. Both guard files restored byte-identical.
+
+**`user-registry` and `foreign-approval-registry` are mocked** — the guard's two DATA SOURCES, both
+reached by DYNAMIC import inside it (vitest intercepts those), so `isForeignUser` and
+`assertForeignUserMayCall` run for real. The R1.1 distinction applies unchanged: mocking a guard's
+data sources is necessary; mocking the guard is the pattern that makes a sweep lie.
 
 ### RATCHET 11 → 10 — R1.1 DONE (`tests/governance/r1-team-acl.test.ts`)
 

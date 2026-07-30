@@ -325,7 +325,20 @@ const UNAUDITED_RULES = new Set<number>([
 // anonymous tests — and reds them on the REASON, because the request still ends at step 6 with
 // `allowed:false` for the wrong stated cause. A test asserting only `allowed === false` stays
 // green through that neuter, which is exactly why every assertion here pins the reason string.
-const MAX_ENFORCED_WITHOUT_TEST = 10
+// 2026-07-30: 10 -> 9. R40.1 pinned by tests/governance/r40-foreign-user-creation.test.ts. The rule
+// is quantified over creation surfaces ("EVERY agent or team creation"), and it has ALREADY been
+// half-enforced once: `create_team` sat in R40_RESTRICTABLE_COMMANDS while the guard was wired into
+// CreateAgent ONLY, until the M3 fix of the 2026-06-19 audit. That is the exact failure one surface
+// cannot see, so this is MECHANISM + COVERAGE — and the row now cites the CreateAgent G00f block
+// too, since an enforcement site nothing cites is how the first half went missing. The mechanism
+// half includes the FAIL-CLOSED branch: "a glitch must not silently grant a foreign user create
+// rights" is a claim about a catch block, the kind that rots unobserved. Three neuters, because the
+// surfaces must be provably independent: making the guard return null reds the 5 refusal tests and
+// both coverage tests (the 5 allow/positive-control tests stay green); deleting G00f reds ONLY the
+// CreateAgent test — the M3 regression reproduced exactly; deleting the create_team gate reds ONLY
+// the createNewTeam test. Either single neuter alone would leave one surface free to lose its gate
+// silently, which is the whole content of the word EVERY.
+const MAX_ENFORCED_WITHOUT_TEST = 9
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

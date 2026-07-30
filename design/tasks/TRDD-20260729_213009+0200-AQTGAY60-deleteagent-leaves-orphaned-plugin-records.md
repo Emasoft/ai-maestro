@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: dev
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-07-30T05:43:47+0200
+updated: 2026-07-30T19:29:14+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -267,6 +267,13 @@ neuter then reddened exactly that one test.
       `tests/unit/deleteagent-g09b-plugin-records.test.ts` over the shared harness
       `tests/helpers/drive-delete-agent.ts`, with the complementary neuters N1/N2 recorded in
       `34849d8d`; PROBE: 7 tests / 3 neuters (`6c11bd7f`)
-- [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged
+- [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged — **SEQUENCE THIS
+      AFTER TRDD-DQ6XN2VP's DeleteAgent retrofit, not before.** G09b's placement is one of the gates
+      that retrofit MOVES: TRDD-OWO449MR's shape A2 relocates the local-plugin cleanup to BEFORE the
+      `rm -rf` (the `claude plugin uninstall --scope local --cwd` it replaces the hand-edit with
+      needs the workdir to still exist), and DQ6XN2VP re-orders the whole pipeline around a commit
+      point. A live cycle measured against today's ordering is invalidated by that change, so
+      running it now buys a number that has to be thrown away — and, being a real create + hard
+      delete on this host, it is not free to repeat.
 - [ ] The pre-existing 93 orphans are reported to the USER with a proposed reconcile — RULE 0
 - [x] ai-maestro#102 answered with the measured topology and this defect

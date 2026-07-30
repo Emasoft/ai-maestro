@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T06:18:59+0200
-updated: 2026-07-30T06:18:59+0200
+updated: 2026-07-30T06:25:41+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -30,9 +30,27 @@ labels: [pillar, write-gate, corpus-integrity]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
 
-**Nothing is corrupted today.** The census is clean and that is the first thing to
-re-verify before acting, because the USER's report that "agents wrote a `non-started`
-column" is FALSE and the false premise is what makes this card look urgent when it is not.
+> **SUPERSEDED — do NOT carry forward:** earlier revisions of this block said *"nothing is
+> corrupted today, the census is clean"* and *"the detector invented the value"*. **Both are
+> false.** Four measurement errors, all mine, all recorded below because they are the more
+> useful half of this card. The real numbers: **622 ERRORs across 32 of 37 corpora**, plus
+> **98 files carrying a duplicate body-level `**Status:**` state field** — a class the linter
+> has NO rule for, so `ai-maestro`'s own "0 errors" hid 10 of them.
+
+**The corpus-wide truth (`greptrdd validate --design-dir` per corpus, 2026-07-30):**
+
+```
+270 ZONE-MISMATCH          158 COLUMN-MISSING      92 TITLE-MISSING
+ 66 RETIRED-STATUS-FIELD     8 DERIVED-FLAG-MISSING  7 GRAPH-CHILD-MISSING
+  6 GRAPH-FALSE-COMPLETE     4 ORDER-NPT-VIOLATED    4 GRAPH-UNKNOWN-BLOCKER
+  3 GRAPH-TWO-PARENTS        1 each: GRAPH-ORDER-CYCLE · GRAPH-CYCLE ·
+                                    GRAPH-DANGLING-BLOCKER · DANGLING-REF
+```
+
+**`COLUMN-MISSING` × 158 is the USER's complaint in its true form:** agents wrote TRDDs
+with **no `column:` field at all**. That is precisely the shape a pre-write gate refuses,
+and precisely what makes a downstream detector synthesize a default. The specific string
+`not-started` was wrong; the instinct behind the report was right.
 
 **NEXT ACTION:** add the validate-before-write gate to `editTrdd` in `lib/trdd-store.ts:270`
 — reject any field whose value violates the corpus grammar, BEFORE `fs.writeFileSync`.
@@ -43,42 +61,99 @@ of them.
 already have two of those (`greptrdd validate`, `trdd:doctor`) — both after the fact,
 neither in CI or a git hook.
 
+## How I got the measurement wrong four times
+
+Recorded first because it is the transferable part, and because both errors are ones this
+repo's own lessons file already warns about.
+
+**Error 1 — the glob was one level too shallow.** I swept `~/Code/*/design` and reported
+*"0 occurrences anywhere on this machine"*. The fleet's plugin repos are nested TWO deep
+(`~/Code/AI-MAESTRO-PLUGIN/ai-maestro-plugin/design`), so the three files the janitor named
+were never in scope. A search whose depth does not match the layout returns 0 and reads as
+*absent* — indistinguishable from a real negative. The fix is `find … -type d -name tasks
+-path "*/design/*"`, which discovers the corpora instead of assuming their shape: **37 of
+them, not the ~12 my glob could see.**
+
+**Error 2 — I hand-rolled grep when a tool already encoded the grammar.** The USER asked
+*"aren't you using trddgrep?"* and the answer was no. `greptrdd validate --design-dir`
+per corpus found **622 ERRORs in 13 distinct classes**; my census had counted `column:`
+values and would never have found ZONE-MISMATCH, COLUMN-MISSING, TITLE-MISSING, or any
+graph defect, because I never thought to look for them. A hand-rolled check tests the
+hypothesis you already have; the linter tests the grammar.
+
+Both errors point the same way: **the tool is the instrument, and my grep was a worse copy
+of it.** That is also the argument for this card — the same grammar that catches these
+after the fact should refuse them at write time.
+
 ## The USER's report, and the correction it needs
 
 > *"apparently some agents updated or created TRDDs with a non existent 'non-started'
 > column"*
 
-**No TRDD anywhere on this machine has ever carried that value.** Measured 2026-07-30:
+**Half right, and the half that is wrong matters.** Measured 2026-07-30 across all 37
+corpora:
 
-```
-grep -rn "^column:" design/            -> 297 values, every one in the ratified vocabulary
-   105 complete · 44 completed · 40 proposal · 37 dev · 22 planned · 19 refused
-    16 todo · 11 testing · 8 design · 6 blocked · 5 backburner · 4 cancelled
-     4 ai_review · 2 superseded · 2 human_review
-grep -rn "^column: *\(not\|non\)[-_]started" \
-  design/ ~/agents/*/design ~/.claude/projects/*/design ~/Code/*/design   -> 0 hits
-```
+- **`column: not-started` — 0 occurrences.** Nothing ever wrote an invalid column *value*.
+- **`status: not-started` (frontmatter) — 10 occurrences**, always the RETIRED v1 field, in 3
+  repos (`claude-plugins-validation` 5, `claude-acct-switcher` 4, `llm-externalizer-plugin` 1).
+- **`**Status:** Not started` (BODY, bold markdown) — this is the one that matters, and it is
+  where the value actually lives.
 
-The string comes from **`Emasoft/ai-maestro-janitor#135`** (filed by CORE 2026-07-29,
-still OPEN), and it says almost the opposite:
+### Error 3 — I repeated CORE's diagnosis without checking the body, and it is WRONG
+
+CORE's #135 says:
 
 > *"The detector appears to read `status:`, find nothing, and **default the absence to
 > `'not-started'`**. A missing field is being reported as a concrete value."*
 
-`status:` is the **retired v1 field**. Every TRDD here is v2 (`grep -l '^status:'` returns
-0). So the janitor's `trdd-drift` detector synthesizes `'not-started'` out of the *absence*
-of a field whose absence is *conformance*, then reports three frozen `complete` cards as
-stalled. It is a **reader** bug in the janitor, on the janitor's side, and no agent wrote
-anything wrong.
+**There is no defaulting. The value is in the file.** The janitor pushed back twice and
+supplied the grep that settles it — note the third alternative, which neither #135 nor I had
+looked for:
 
-**Worth keeping as a lesson in its own right:** a detector that invents a value for a
-missing field produces a finding that is indistinguishable, downstream, from real
-corruption — and it propagated to the USER as exactly that.
+```
+grep -nE '^column:|^status:|^\*\*Status:\*\*' TRDD-9a8aba94* TRDD-9e80e484* TRDD-9f10ed97*
+
+  …-9a8aba94-….md:4:column: complete
+  …-9a8aba94-….md:19:**Status:** Not started      ← the detector reads THIS
+  …-9e80e484-….md:4:column: complete
+  …-9e80e484-….md:19:**Status:** Not started
+  …-9f10ed97-….md:4:column: complete
+  …-9f10ed97-….md:19:**Status:** Not started
+```
+
+Each card carries **two state fields that contradict each other**: frontmatter
+`column: complete`, body `**Status:** Not started`. #135's own disproof — `grep -l '^status:'`
+→ 0 — could not see it, because it anchored on the frontmatter spelling. I ran the same
+frontmatter-only check, reached the same wrong conclusion, and **committed it** (`SCMPWF6R`'s
+first revision and its commit message both assert the synthesis). Retracted here.
+
+**The detector's real flaw is PRECEDENCE, not synthesis** — it prefers the prose line over
+frontmatter `column:`. A far smaller and different fix than "stop defaulting", and #135
+should be corrected rather than implemented as written.
+
+**The lesson is the one this repo keeps re-learning:** when an instrument and my reading
+disagree, suspect the READING. Twice in one hour I told the USER a real finding was an
+artifact, on the strength of a check whose scope I had not questioned.
+
+### Error 4 — this repo is NOT clean either
+
+`greptrdd validate` reports 0 errors on `ai-maestro`, and **10 of the 98 files carrying a
+body `**Status:**` line are ours.** Machine-wide: 98 files across 13 corpora, of which **4
+say `column: complete` and `**Status:** Not started` in the same file.** So the linter has a
+real blind spot — no rule detects a body-level state claim, let alone one contradicting the
+frontmatter — and "0 errors" meant "no rule looked".
+
+That blind spot is the second piece of work this turn found, and it is MINE, in MY repo: a
+`BODY-STATE-CLAIM` rule for `lib/trdd-doctor.ts`. One source of truth is the entire reason
+`status:` was retired; a duplicate in the body defeats it just as thoroughly as a duplicate
+in the frontmatter, and today nothing says so.
+
+- **`COLUMN-MISSING` × 158** remains the other real corruption: no state field at all.
 
 ## But the structural point is right, and it is confirmed at the seam
 
-The USER's actual argument survives the correction intact: *nothing stops it*. Read
-first-hand, 2026-07-30:
+The USER's actual argument survives intact — indeed the 622 errors are its proof: *nothing
+stops it*. Read first-hand, 2026-07-30:
 
 | claim | verified |
 |---|---|
@@ -129,8 +204,22 @@ put the check in the route.
 
 ## Explicitly NOT in scope
 
-- **The janitor's `trdd-drift` reader bug.** That is janitor#135, on their side, already
-  filed. Our gate would not have prevented it — the value was never in a file.
+- **Repairing the 32 dirty corpora.** They are OTHER user-owned projects, so the
+  cross-project rule binds: **issue or fork-PR, never a direct edit.** The gate stops the
+  BLEEDING; the migration is a separate card per repo, and most of it (`COLUMN-MISSING`,
+  `RETIRED-STATUS-FIELD`) is mechanically decodable by `yarn trdd:fix` run IN that repo by
+  ITS own Claude. **Do not bump `updated:` during a mechanical repair** — a tool must not
+  manufacture recency (ai-maestro#96 L8).
+- **The 270 ZONE-MISMATCH.** Blocked on `ai-maestro#93` (the unruled archival vocabulary,
+  board task #88). Fixing the parked cards before that ruling would pick the vocabulary by
+  accident.
+- **The janitor's `trdd-drift` PRECEDENCE bug** (it prefers the body `**Status:**` line over
+  frontmatter `column:`). Their side — but janitor#135 as written prescribes the WRONG fix
+  ("stop defaulting"), and I endorsed that diagnosis in a commit message, so correcting the
+  record there is owed. Their detector was right about the file all along.
+- **The `BODY-STATE-CLAIM` doctor rule.** Its own sibling card — same parent, empty
+  `npt:`/`eht:` per depth-1 — because it is a LINT rule (post-hoc, whole-corpus) while this
+  card is a WRITE gate (pre-hoc, one file). Different surfaces, different acceptance.
 - **Making `aimaestro-trdd.sh`'s write verbs reachable by an agent** (they 403 today). A
   separate authorization question; do not smuggle it in here.
 - **Wiring `greptrdd validate` into CI or a git hook.** Complementary, cheap, and a
@@ -141,23 +230,42 @@ put the check in the route.
 - [ ] `editTrdd` refuses an out-of-vocabulary `column` with a message naming the legal set,
       and the file on disk is **byte-identical** afterwards (a refusal that half-writes is
       worse than no gate)
+- [ ] a write that would leave `column:` ABSENT is refused — the 158-instance class, and the
+      one a value-checking gate would still let through
 - [ ] a dangling `blocked-by: [TRDD-XXXXXXXX]` is refused; a resolvable one is accepted
 - [ ] the grammar is READ from the doctor's existing rules, not re-authored — proven by
       deleting a rule from the doctor and watching the gate stop refusing that shape
 - [ ] every guard carries a recorded **neuter run** (break it, watch the NAMED test fail;
       read the test COUNT, never the exit code)
-- [ ] the full suite is green and the 297-value census is unchanged
+- [ ] the full suite is green, and `greptrdd validate` on THIS corpus still exits 0
 - [ ] the rule mandating the tool is written LAST, after the gate demonstrably refuses
 
 ## Notes and lessons learned
 
-- A detector that synthesizes a value for a missing field manufactures corruption reports
-  indistinguishable from real corruption — and this one reached the USER as a claim that
-  agents had written a bad column. Report *"no state field"*, never a default.
+- **A search whose glob depth does not match the layout returns 0 and reads as ABSENT.**
+  `~/Code/*/design` missed every fleet plugin repo (they nest two deep), so I reported
+  "0 occurrences on this machine" about files the janitor could name. DISCOVER the corpora
+  (`find -type d -name tasks -path "*/design/*"` → **37**, not the ~12 the glob saw) instead
+  of assuming their shape.
+- **When a linter for the grammar exists, hand-rolled grep is a worse copy of it.** My
+  census counted `column:` values; `greptrdd validate` found **622 ERRORs in 13 classes** I
+  never thought to look for — including the 158 cards with no `column:` at all. A hand-rolled
+  check tests the hypothesis you already hold; the linter tests the grammar.
+- **A field can have a SECOND spelling nobody's grep anchors on.** `status:` (frontmatter),
+  `column:` (frontmatter) and `**Status:**` (bold body prose) are three spellings of one
+  concept. CORE's #135 checked the first two, concluded the value was fabricated, and filed a
+  fix for a bug that does not exist; I re-ran the same two anchors and endorsed it in a
+  commit. The value was on line 19 of every file. **Enumerate the spellings before declaring
+  a field absent** — and when the report and your check disagree twice, the check is the
+  suspect.
+- **"0 errors" means "no rule looked".** `greptrdd validate` passes this corpus while 10 of
+  our own cards carry a duplicate body state field. A linter's silence is only as wide as its
+  rule set, so a clean verdict must be read as *clean of the classes it tests*, never as
+  clean.
 - A grep for `^column:` matches the BODY too. Chasing this, I flagged
   `~/Code/ANIME2SVG/…-3ZAF2O2I-…md:53` as a prose-valued column; the frontmatter closes at
   line 15 and the real value is `planned`. My own lessons file already carries this trap,
-  and I walked into it anyway — one command (`awk` for the closing `---`) settles it.
+  and I walked into it anyway — one `awk` for the closing `---` settles it.
 
 ## Approval log
 

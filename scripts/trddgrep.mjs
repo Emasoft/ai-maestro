@@ -124,7 +124,12 @@ const droppedNote = (list, hint) =>
     ? `  ${C.y(`… +${list.length - limit} more not shown`)} ${C.d(hint)}`
     : null
 
-assertDesignDir(designDir)
+// `env` is EXEMPT, and this is the one exemption that matters: it is the verb whose whole
+// job is to explain what this tool concluded about where it is running, so gating it on a
+// corpus existing means the diagnostic is unavailable in precisely the situation that
+// prompts a human to ask for it ("trddgrep says nothing in this project — why?"). Every
+// other verb READS the corpus and must still refuse loudly when it is absent.
+if (cmd !== 'env') assertDesignDir(designDir)
 
 // ---- the corpus walk, through the ONE owner ----
 //
@@ -651,6 +656,48 @@ switch (cmd) {
     process.exit(rank[v.state] ?? 2)
   }
 
+  // ---- the mechanical repair half. `lint` ADVERTISED `[--fix]` and this tool had no
+  // way to do it: the badge pointed at `yarn trdd:fix`, a repo-local script that an agent
+  // in another project cannot run. A tool that names a remedy it cannot perform is worse
+  // than one that names none — the reader stops looking. TRDD-217AYEOT.
+  case 'fix': {
+    const { fixCorpus } = await import('../lib/trdd-doctor.ts')
+    const dryRun = argv.includes('--dry-run')
+    const results = fixCorpus(designDir, { dryRun })
+    if (results.length === 0) {
+      console.log(C.g('nothing to repair — every TRDD already carries a valid frontmatter'))
+      process.exit(0)
+    }
+    console.log(C.b(`\n${dryRun ? 'WOULD REPAIR' : 'REPAIRED'} ${results.length} file(s):\n`))
+    for (const r of results) {
+      console.log(`  ${C.b(r.id)}  ${C.d(path.relative(process.cwd(), r.filePath))}`)
+      for (const c of r.changes) console.log(`      • ${c}`)
+    }
+    // COMMIT BEFORE ANY `git mv`: a zone move stages the rename from the blob already in
+    // the index, so a content edit made first stays UNSTAGED at the new path.
+    console.log(dryRun ? C.d('\n(dry run — nothing written)') : C.y('\nReview the diff, then COMMIT THE CONTENT BEFORE any `git mv`.'))
+    console.log()
+    process.exit(0)
+  }
+
+  // ---- which corpus am I, and why. The USER's mandate (2026-07-30) is that the tools
+  // DETECT their environment rather than being configured per project, so that detection
+  // has to be inspectable: an agent that cannot see what the tool concluded cannot tell
+  // "standalone project" from "the registry was unreadable". Read-only by construction —
+  // resolvePillarEnvironment never creates the state dir it looks in.
+  case 'env': {
+    const { resolvePillarEnvironment } = await import('../lib/pillar/environment.ts')
+    const env = resolvePillarEnvironment()
+    console.log(`mode=${env.mode}`)
+    if (env.mode === 'agent') {
+      console.log(`agent=${env.agentName}`)
+      console.log(`workdir=${env.workdir}`)
+    }
+    console.log(`reason=${env.reason}`)
+    console.log(`corpus=${designDir}`)
+    process.exit(0)
+  }
+
   case 'help':
   case '--help':
   case '-h':
@@ -668,6 +715,9 @@ ${C.b('trddgrep')} — query AND validate the TRDD corpus (offline; no server)
   ${C.c('trddgrep lint')}             every finding, grouped by rule (errors first)
   ${C.c('trddgrep validate')}         the WRITE GATE — TAB rows: SEV⇥CODE⇥id⇥path⇥msg
   ${C.d('  … add --strict to either to fail on warnings too (exit 1)')}
+  ${C.c('trddgrep fix')}              write the mechanically-derivable repairs (--dry-run first)
+
+  ${C.c('trddgrep env')}              which corpus this is — standalone project or ai-maestro agent
 
   ${C.c('trddgrep index-verify')}     the FULL index check (integrity_check) for this corpus
   ${C.d('  --repair   rebuild it if damaged — the only path that CAN, it holds the corpus')}

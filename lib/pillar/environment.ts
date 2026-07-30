@@ -59,10 +59,31 @@ interface RegistryRowLike {
   deletedAt?: unknown
 }
 
+/**
+ * The path as the KERNEL sees it, symlinks resolved — falling back to a lexical resolve for
+ * a path that does not exist (a registry row may name a folder since deleted, and that row
+ * must still be comparable rather than silently unmatchable).
+ *
+ * This is load-bearing, not tidiness. `process.cwd()` is ALWAYS a realpath (getcwd resolves
+ * symlinks), while `workingDirectory` is a string a human or a wizard typed — so on macOS a
+ * registered `/var/folders/...` or `/tmp/...` workdir compares against a cwd of
+ * `/private/var/folders/...` or `/private/tmp/...` and NEVER matches. `path.resolve` cannot
+ * see that: it is purely lexical. Measured 2026-07-30 — the subprocess test's positive
+ * control seeded a `/var/folders` workdir, the tool read the registry correctly, and still
+ * reported `standalone`. A symlinked $HOME (or any bind-mounted workdir) fails identically.
+ */
+function canonical(p: string): string {
+  try {
+    return fs.realpathSync.native(p)
+  } catch {
+    return path.resolve(p)
+  }
+}
+
 /** `child` is `parent` or sits beneath it. Separator-aware, so `/a/bc` is not under `/a/b`. */
 function isUnder(child: string, parent: string): boolean {
-  const c = path.resolve(child)
-  const p = path.resolve(parent)
+  const c = canonical(child)
+  const p = canonical(parent)
   return c === p || c.startsWith(p.endsWith(path.sep) ? p : p + path.sep)
 }
 
@@ -76,7 +97,7 @@ function isUnder(child: string, parent: string): boolean {
  * on the machine report `agent` mode, which is the loudest possible misdetection.
  */
 function isPathologicalWorkdir(resolved: string): boolean {
-  return resolved === path.parse(resolved).root || resolved === path.resolve(process.env.HOME ?? '~')
+  return resolved === path.parse(resolved).root || resolved === canonical(process.env.HOME ?? '~')
 }
 
 /**
@@ -113,10 +134,12 @@ export function resolvePillarEnvironment(cwd: string = process.cwd()): PillarEnv
     }
   }
 
-  const resolvedCwd = path.resolve(cwd)
+  // Canonical on BOTH sides, and reported canonical too: a `workdir:` in the answer that
+  // did not participate in the comparison would be a second, disagreeing truth.
+  const resolvedCwd = canonical(cwd)
   const candidates = rows
     .filter((r) => !r.deletedAt && typeof r.workingDirectory === 'string' && r.workingDirectory)
-    .map((r) => ({ name: String(r.name ?? '(unnamed)'), workdir: path.resolve(r.workingDirectory as string) }))
+    .map((r) => ({ name: String(r.name ?? '(unnamed)'), workdir: canonical(r.workingDirectory as string) }))
     .filter((r) => !isPathologicalWorkdir(r.workdir))
     .filter((r) => isUnder(resolvedCwd, r.workdir))
     // MOST SPECIFIC wins. Agent workdirs can nest (an adopted monorepo and a package

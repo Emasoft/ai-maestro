@@ -129,7 +129,12 @@ describe('resolvePillarEnvironment — agent', () => {
     expect(env.mode).toBe('agent')
     if (env.mode !== 'agent') return
     expect(env.agentName).toBe('alice')
-    expect(env.workdir).toBe(alice)
+    // CANONICAL, deliberately — not the string the registry held. `process.cwd()` is always
+    // a realpath, so the comparison canonicalizes both sides (macOS resolves /var →
+    // /private/var, and this fixture lives under $TMPDIR); reporting the pre-realpath string
+    // would publish a `workdir:` that did not take part in the match. Asserting through
+    // realpathSync is what makes this test independent of whether $TMPDIR is symlinked.
+    expect(env.workdir).toBe(fs.realpathSync.native(alice))
   })
 
   it('recognises a SUBDIRECTORY of the workdir — an agent works inside its own tree', () => {

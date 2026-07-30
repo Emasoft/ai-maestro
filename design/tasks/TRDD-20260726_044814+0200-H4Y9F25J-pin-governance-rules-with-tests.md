@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:33:06+0200
+updated: 2026-07-30T17:37:27+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,16 +20,35 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e, 5f9b2302]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e, 5f9b2302, c31c1805]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
 
-### RATCHET 16 → 15 — R7.7 DONE, and THREE rotted citations found and fixed
+### RATCHET 15 → 14 — R17.16 DONE (`tests/governance/r17-core-plugin-no-uninstall.test.tsx`)
 
-**The remaining 15, read off the ratchet's own failure message (constant → 0, run, restore):**
-R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R11.6, R17.16, R17.18a, R18.8, R20.28, R33.1,
-R40.1.
+**The remaining 14:** R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R11.6, R17.18a, R18.8,
+R20.28, R33.1, R40.1.
+
+R17.16 has TWO clauses on ONE ternary — *MUST NOT show the uninstall X* **and** *MUST show a
+"core" label* — so both are asserted: the label alone passes against a UI that shows the label
+AND keeps the X, which is precisely the state the rule forbids. The ordinary-plugin case is a
+third leg the neuter pair justifies: dropping the core branch reddens the two core tests;
+making it unconditional reddens ONLY the ordinary one (a read-only Plugins section — a louder
+bug than the one R17.16 prevents, and invisible to the first neuter).
+
+Rendering it needed `next/navigation` and `@/contexts/SudoContext` stubbed — `useRouter()` throws
+"invariant expected app router to be mounted" outside a Next app tree. Neither is in the branch
+under test (the ternary reads only `p.name`), and the uninstall HANDLER is never invoked: the rule
+is about whether the CONTROL is offered.
+
+**R4.8 was the other candidate and was NOT taken.** Its text names FOUR operations ("add to team,
+remove from team, transfer, team creation agent selection") — the same ALL-quantified shape as
+R7.1, with ONE cited site. Pinning `TeamOverviewSection.tsx:33-34` alone would launder an instance
+into a rule. It needs the MECHANISM+COVERAGE treatment R8.1 got, or its remaining sites cited
+first.
+
+### RATCHET 16 → 15 — R7.7 DONE, and THREE rotted citations found and fixed
 
 `tests/governance/r7-team-blocked-badge.test.tsx` pins **R7.7** — the second presentation rule
 pinned by rendering, and the cheapest shape available: a tiny default-export component, an exact

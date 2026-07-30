@@ -184,7 +184,7 @@ Row format is fixed so a regex parses each line:
 | R17.13 | ENFORCED | services/plugin-storage-service.ts:182-266 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.14 | UNENFORCED | — | — |
 | R17.15 | ENFORCED | services/element-management-service.ts (InstallElement::G08), services/element-management-service.ts (ChangePlugin::G01b) | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.16 | ENFORCED | components/agent-profile/PluginsTab.tsx:244-245 | — |
+| R17.16 | ENFORCED | components/agent-profile/PluginsTab.tsx:244-245 | tests/governance/r17-core-plugin-no-uninstall.test.tsx |
 | R17.17 | ENFORCED | lib/startup-user-scope-guard.mjs:28-65, server.mjs:1771-1774 | tests/unit/startup-guards.test.ts |
 | R17.18 | RULING-NEEDED | — | — |
 | R17.18a | ENFORCED | services/agents-core-service.ts | — |

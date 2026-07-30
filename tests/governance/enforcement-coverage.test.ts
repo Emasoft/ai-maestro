@@ -274,7 +274,14 @@ const UNAUDITED_RULES = new Set<number>([
 // row cited one of its TWO display sites — the second (`TitleAssignmentDialog.impl.tsx:274`,
 // `resolveAgentName`) was invisible to every instrument; now cited, still untested because that
 // resolver is an inline useCallback with no seam to drive short of rendering the whole dialog.
-const MAX_ENFORCED_WITHOUT_TEST = 15
+// 2026-07-30: 15 -> 14. R17.16 pinned by tests/governance/r17-core-plugin-no-uninstall.test.tsx.
+// Two clauses ("MUST NOT show the X" + "MUST show a core label") decided by ONE ternary, so both
+// have to be asserted: the label alone passes against a UI showing the label AND keeping the X,
+// which is exactly what the rule forbids. The ORDINARY-plugin case is the third leg, and the
+// neuter pair is what proves it earns its place — dropping the core branch reddens the two
+// core-plugin tests; making it unconditional reddens ONLY the ordinary-plugin one (a read-only
+// Plugins section, a louder bug than the one R17.16 prevents, that the first neuter cannot see).
+const MAX_ENFORCED_WITHOUT_TEST = 14
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

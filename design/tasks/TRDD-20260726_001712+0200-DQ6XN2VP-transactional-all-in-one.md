@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-26T03:52:00+0200
+updated: 2026-07-30T19:25:32+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -59,8 +59,74 @@ change, because a pid was never in the definition). ⇒ **And tightens the rest*
 definition — transcript, AMP inbox/outbox, config the ledger cannot replay — MUST be snapshotted
 before the gate that destroys it; "it was equivalent" is not available for those.
 
-NEXT ACTION: retrofit `DeleteAgent` first — it is the pipeline with a proven partial-state defect and
-it already has its snapshot (the cemetery zip), so its compensations are the cheapest to write.
+### RE-SCOPED 2026-07-30 — measured, and TWO of this card's premises are STALE
+
+**"`lib/gate-transaction.ts` has ZERO production callers" is no longer true.** Measured
+(`grep runGateSequence\|runAioPipeline`, excluding tests and the lib itself): **4 call sites**, so
+**7 of the 26 pipelines are already retrofitted** — `ChangePlugin` (:3830), `ChangeSkill` (:4640),
+`ChangeClient` (:6166/:6339), and `changeSimpleElement` (:4816), which serves `ChangeAgentDef`,
+`ChangeCommand`, `ChangeRule` and `ChangeOutputStyle`. TRDD-EE5YX5LF and TRDD-B6NUEGMP landed them.
+**19 pipelines still hand-roll**, `DeleteAgent` among them. `runAioPipeline` (the R51.8 PRE/EXE/POST
+decomposition) still has **zero** callers — B6NUEGMP deferred it here explicitly.
+
+**"The cemetery archive is not a true pre-mutation snapshot" is FIXED.** The archive is now **G01c**,
+running BEFORE the G02 MANAGER demotion, and its comment names exactly that bug ("THIS GATE USED TO
+RUN AFTER G02, AND G02 MUTATES … the cemetery zip recorded `autonomous`"). `G05b` (unpersist) also
+exists now. Do not re-derive either as a finding.
+
+**What SURVIVES, verified by reading 6932-7455:** zero `undo` declarations; and the concrete R51
+violation is at the **G08/G08b hard-return**. By then G04 (team rows stripped), G05 (tmux killed),
+G05b (session unpersisted), G06 (AMP keys + AID tokens revoked), G07/G07b (governance requests
+rejected) and G07c (groups unsubscribed) have all committed — so "Registry deletion failed" leaves a
+**gutted but still-registered agent** and reports failure with no rollback. Also verified: **no
+vitest test forces a mid-pipeline failure and asserts the system unchanged** (`gate-transaction.test.ts`
+drives synthetic gates only; the DeleteAgent tests assert return values).
+
+**THE DESIGN FORK — decide before writing a single `undo`.** `runGateSequence` REFUSES to start when
+a mutating gate lacks an `undo` (R51.7), and three of these gates have no honest one: a revoked AMP
+key cannot be un-revoked (re-issuing yields a DIFFERENT key its correspondents do not hold), and a
+rejected governance request cannot be un-rejected. Writing lossy undos to satisfy the pre-flight
+would be the "fake rollback" G10's own comment warns against. The alternative, which the code half
+implements already: **order by reversibility around an explicit COMMIT POINT** —
+
+- *reversible prefix, wrapped in `runGateSequence`*: G04 teams, G05b unpersist, G07c groups — each
+  compensated by snapshot-and-restore of the same JSON rows (cheap and EXACT);
+- *the commit point*: G08/G08b, the registry write that decides the agent is gone;
+- *irreversible tail, best-effort after the commit*: G05 tmux kill, G06 revocations, G07/G07b
+  rejections, G09 folder — where a failure is RESIDUE (G10 already reports it), not a rollback question.
+
+That is "check every precondition before the first mutation" applied to a pipeline whose mutations
+are not all equal, and it needs no dishonest compensation.
+
+**COUPLED CARD — and it reached the SAME architecture independently.** TRDD-OWO449MR (task #103)
+needs the local plugin-uninstall to run through the `claude` CLI, which requires the workdir to still
+EXIST — so its gate must move from after the `rm -rf` to before it. Of its three shapes it
+recommends **A2: "reorder, and accept irreversibility by placing the uninstall LAST among mutating
+gates — no `undo`; instead the gate cannot be reached until every gate that could still fail has
+passed"**, explicitly *"taken together with TRDD-DQ6XN2VP's DeleteAgent retrofit … doing A2 first, by
+hand, means editing the same 500 lines twice."* That is this card's commit-point split, arrived at
+from the other end. Two cards converging on one ordering is the strongest evidence available that the
+ordering is the right one.
+
+The unified target ordering:
+
+```
+READ-ONLY PRELUDE     G00 auth · G01 exists · G01b ASSISTANT refusal        (hard-return, no mutation yet)
+SNAPSHOT              G01c cemetery archive                                 (refuses the delete if it fails)
+REVERSIBLE PREFIX     G02? · G04 teams · G05b unpersist · G07c groups       (runGateSequence; exact snapshot/restore undos)
+COMMIT POINT          G08 registry delete + G08b on-disk verify             (the write that decides the agent is gone)
+IRREVERSIBLE TAIL     G05 tmux kill · G06 revocations · G07/G07b rejections
+                      · CLI plugin uninstall (OWO449MR A2, workdir still
+                        present) · G09 folder rm -rf                        (best-effort; failure = residue, not rollback)
+POST-CONDITION        G10 verify + residue on the result
+```
+
+G02's placement is the open question (a nested `ChangeTitle` is not obviously compensable) —
+advisor consulted 2026-07-30.
+
+NEXT ACTION: settle the commit-point design (advisor consulted 2026-07-30), read OWO449MR, then
+retrofit the reversible prefix + write the mid-pipeline-failure parity test that is the real
+acceptance criterion.
 
 ## Problem
 

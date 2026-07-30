@@ -1,0 +1,105 @@
+#!/bin/bash
+#
+# The ONE launcher behind every pillar CLI. Installed to ~/.local/bin/ once per pillar,
+# under the name of the corpus it queries — `memgrep`, `trddgrep`, `prrdgrep`, `specgrep`
+# (USER naming law, 2026-07-30: `<document type>grep`). It dispatches on the name it was
+# invoked as, so there is ONE implementation and N entry points, not N scripts.
+# TRDD-217AYEOT.
+#
+# WHY THIS FILE HAS NO `.sh` EXTENSION — it is deliberate, do not "fix" it.
+# install-messaging.sh copies `scripts/amp-*.sh` and then the rest of `scripts/*.sh`.
+# A `pillar-cli.sh` would therefore ALSO land in ~/.local/bin as `pillar-cli.sh`, giving
+# the same tool a second, wrong, discoverable name — exactly the confusion the USER
+# forbade ("don't create multiple versions of the tools"). Being invisible to that glob
+# is what makes the explicit install step below the ONLY way this reaches a bin dir.
+#
+# WHY IT MUST BE BASH, NOT SH/ZSH: it sources scripts/pin-node.sh, which is bash
+# (BASH_SOURCE, `local -a`). Sourced from zsh its version gate DEGRADES SILENTLY and
+# hands back an out-of-range Node — measured 2026-07-30: bash → v22.23.1 (correct),
+# zsh → v26.5.0, past the `engines: <26` cap that node-pty and better-sqlite3 need.
+set -euo pipefail
+
+TOOL="$(basename "$0")"
+if [ "$TOOL" = "pillar-cli" ]; then
+  echo "pillar-cli: invoke me under a pillar name — trddgrep, prrdgrep or specgrep." >&2
+  echo "pillar-cli: (install-messaging.sh copies this file to ~/.local/bin under each.)" >&2
+  exit 2
+fi
+
+# ── 1. Find the ai-maestro install that owns the implementation.
+#
+# NEVER hardcode ~/ai-maestro: when ai-maestro ships as a package there is no such
+# directory (CLAUDE.md, install-location independence). Only ~/.aimaestro and ~/agents
+# stay at fixed home paths.
+#
+# Two ways, in order, and the first is a TEST rather than a guess: if this script is
+# sitting in an ai-maestro tree that carries the implementation, use that tree — which is
+# what makes the in-repo `scripts/pillar-cli` and the installed copy behave identically.
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/aimaestro/install-root"
+ROOT=""
+
+if [ -f "$SELF_DIR/../scripts/$TOOL.mjs" ]; then
+  ROOT="$(cd "$SELF_DIR/.." && pwd)"
+elif [ -r "$ROOT_FILE" ]; then
+  read -r ROOT < "$ROOT_FILE" || true
+  if [ -z "$ROOT" ] || [ ! -f "$ROOT/scripts/$TOOL.mjs" ]; then
+    echo "$TOOL: the recorded ai-maestro install is stale or incomplete." >&2
+    echo "$TOOL:   recorded: ${ROOT:-<empty>} (from $ROOT_FILE)" >&2
+    echo "$TOOL:   expected: \$ROOT/scripts/$TOOL.mjs" >&2
+    echo "$TOOL: re-run install-messaging.sh from the ai-maestro checkout." >&2
+    exit 2
+  fi
+else
+  echo "$TOOL: no ai-maestro install recorded at $ROOT_FILE." >&2
+  echo "$TOOL: run install-messaging.sh from an ai-maestro checkout first." >&2
+  exit 2
+fi
+
+# ── 2. Node 22. Reuse the repo's selector; never re-derive it.
+#
+# pin-node.sh parses `engines` from package.json and version-CHECKS each candidate binary
+# (some brew node@N kegs are mislabelled and actually report v26), then prepends the
+# winner to PATH. It FAILS rather than falling back, which is the behaviour we want: a
+# wrong Node does not degrade the pillar tools, it breaks their native index outright.
+# shellcheck source=/dev/null
+if ! source "$ROOT/scripts/pin-node.sh"; then
+  echo "$TOOL: no Node matching ai-maestro's engines range is installed (see above)." >&2
+  exit 2
+fi
+
+# ── 3. Reach the TypeScript libs from a FOREIGN cwd.
+#
+# Both halves are required, and each was established by measurement (2026-07-30):
+#   · `--import tsx` resolves the bare specifier against the CWD, so from a caller's
+#     project it dies with "Cannot find package 'tsx'". An ABSOLUTE path is immune.
+#   · tsx discovers tsconfig.json from the CWD too, so without TSX_TSCONFIG_PATH the
+#     `@/lib/...` aliases inside lib/*.ts go unresolved (MODULE_NOT_FOUND, raised from
+#     lib/trdd-graph.ts). Pinning the install's tsconfig fixes the alias map.
+# The cwd deliberately stays the CALLER's, because that is what makes `--design-dir`
+# default correctly, environment detection see the caller's project, and printed paths
+# read relative to where the human actually is.
+TSX_ENTRY="$ROOT/node_modules/tsx/dist/loader.mjs"
+if [ ! -f "$TSX_ENTRY" ]; then
+  # tsx's "." export has moved before; ask node rather than hardcoding a second guess.
+  TSX_ENTRY="$(cd "$ROOT" && node -e 'console.log(require.resolve("tsx"))' 2>/dev/null || true)"
+fi
+if [ -z "$TSX_ENTRY" ] || [ ! -f "$TSX_ENTRY" ]; then
+  echo "$TOOL: cannot locate tsx in $ROOT/node_modules — run 'yarn install' there." >&2
+  exit 2
+fi
+export TSX_TSCONFIG_PATH="$ROOT/tsconfig.json"
+
+# ── 4. The corpus is the CALLER's, never the install's.
+#
+# A global tool that resolved `design/` against its own install would answer every
+# project's question with ai-maestro's corpus — the "gate that passes because it read
+# nothing" bug inverted into "a gate that read someone ELSE's corpus". When the caller
+# names a corpus we pass their line through untouched; otherwise we point at THEIR
+# $PWD/design and let the tool's own exit 2 fire if it does not exist.
+case " $* " in
+  *" --design-dir "* | *" --design-dir="*)
+    exec node --import "file://$TSX_ENTRY" "$ROOT/scripts/$TOOL.mjs" "$@"
+    ;;
+esac
+exec node --import "file://$TSX_ENTRY" "$ROOT/scripts/$TOOL.mjs" "$@" --design-dir "$PWD/design"

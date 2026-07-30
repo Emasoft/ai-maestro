@@ -782,6 +782,46 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
         print_success "Installed: shell-helpers/common.sh"
     fi
 
+    # ── The pillar CLIs (TRDD-217AYEOT) ──────────────────────────────────────────
+    #
+    # These need an EXPLICIT step, unlike every other tool above. Both loops over
+    # scripts/ match `*.sh`, and the USER's naming law makes these extensionless
+    # (`<document type>grep`: memgrep, trddgrep, prrdgrep, specgrep) — so no glob can
+    # see them. Naming the launcher `pillar-cli.sh` to ride the existing loop would
+    # instead install a FOURTH name for the same tool, which is the confusion the law
+    # exists to prevent.
+    #
+    # Record the install root FIRST: the launcher needs to find the implementation and
+    # this installer's own $SCRIPT_DIR is the one place that provably knows where it is.
+    # Never hardcode ~/ai-maestro — packaged installs have no such directory.
+    echo ""
+    print_info "Installing pillar CLIs (3-pillar corpus tools, usable in ANY project)..."
+    mkdir -p ~/.local/share/aimaestro
+    printf '%s\n' "$SCRIPT_DIR" > ~/.local/share/aimaestro/install-root
+    print_success "Recorded install root: $SCRIPT_DIR"
+
+    if [ -f "$SCRIPT_DIR/scripts/pillar-cli" ]; then
+        PILLAR_COUNT=0
+        # ONE launcher, installed under each pillar's name; it dispatches on basename.
+        # A name is installed only when its implementation EXISTS — prrdgrep/specgrep
+        # land with the PRRD/SPEC stores. Shipping them early as stubs that refuse would
+        # be worse than their absence: an agent that finds a tool and gets an error
+        # cannot tell "planned" from "broken".
+        for PILLAR_TOOL in trddgrep prrdgrep specgrep; do
+            if [ -f "$SCRIPT_DIR/scripts/$PILLAR_TOOL.mjs" ]; then
+                cp "$SCRIPT_DIR/scripts/pillar-cli" ~/.local/bin/"$PILLAR_TOOL"
+                chmod +x ~/.local/bin/"$PILLAR_TOOL"
+                print_success "Installed: $PILLAR_TOOL"
+                PILLAR_COUNT=$((PILLAR_COUNT + 1))
+            fi
+        done
+        if [ "$PILLAR_COUNT" -eq 0 ]; then
+            print_warning "No pillar implementations found in $SCRIPT_DIR/scripts/ — none installed"
+        fi
+    else
+        print_warning "scripts/pillar-cli missing — pillar CLIs not installed"
+    fi
+
     # Setup PATH
     echo ""
     print_info "Configuring PATH..."

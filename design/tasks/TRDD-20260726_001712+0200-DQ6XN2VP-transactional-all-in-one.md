@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T23:30:18+0200
+updated: 2026-07-30T23:48:04+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9]
 ---
 
 ## ⏵ MEASURED 2026-07-30 — the count was wrong, and there is now a ratchet that keeps it honest
@@ -140,6 +140,78 @@ still occupied. The `/team-xyz/` assertion is gone and the reason is written int
 `InstallElement` (101) yet — both are called BY the pipelines already retrofitted, so converting
 one changes the failure semantics of its callers, and that wants its own card. Not `ChangeAvatar`
 either, for the reason below.
+
+> **SUPERSEDED 2026-07-31 — `ChangeName` was the wrong half of that sentence, for the same reason
+> `ChangeAvatar` is excluded two paragraphs down.** Measured: `ChangeName` has ONE mutating gate
+> (G04 `updateAgent`) and everything after it — G05's restart flag, G06's verification WARN, the
+> `tryEmitLedgerOp` that swallows its own failure — cannot abort. Neither can `ChangeFolder`
+> (G05 is its only mutation). So both have NO partial-state window, exactly like `ChangeAvatar`:
+> retrofitting them moves the ratchet and buys zero safety. Picking by GATE-OP COUNT is what put
+> `ChangeName` in that sentence; the criterion is whether the pipeline can leave two stores
+> disagreeing. `ChangeTeam` was the half that was right, and it is done below.
+
+## ⏵ ChangeTeam RETROFITTED 2026-07-30 (`778151e9`) — 12 to go, and the LIFO trap
+
+Real inventory now: **19 pipelines · 7 transactional · 12 to go.** Ratchet lowered
+(`MAX_HANDROLLED` 13→12, `MIN_TRANSACTIONAL` 6→7, `ChangeTeam` pinned in `MUST_BE_TRANSACTIONAL`).
+
+**THE FINDING, and it generalises beyond this pipeline.** `ChangeTitle` Gate 9 enforces R3 in BOTH
+directions: a team title REQUIRES membership, and a standalone title (autonomous/manager/maintainer)
+is REFUSED while the agent still is a member — the SCEN-001 BUG-002 guard. So the forward order is
+join-then-title and the reverse order is leave-then-demote: **the reverse is not the mirror of the
+forward, it is the same order again.** Reverse-order unwinding gives LIFO, which would demote FIRST
+while the agent is still a member, Gate 9 would refuse, the undo would throw, and EVERY rollback of
+this pipeline would report the R51.5 "INVALID STATE" form about a system that was fully recoverable.
+So membership+title are **ONE gate** whose `undo` performs both in the order R3 permits. Found by
+reading ChangeTitle before writing a line — not by watching a test fail.
+
+**Sequences:** `G04b..PG01` (remove) and `G06..PG01` (add). `PG01` is the last gate that can abort in
+either branch — the ledger emit below it is `tryEmitLedgerOp`, which swallows its own failure by
+construction. Read-only gates (G00/G01/G01b/G02/G03, G04a's COS-immutability refusal, G05's
+single-team check) keep their early returns and their exact strings.
+
+**What it bought:** nothing here was compensated before. A throw at PG01 left the team registry and
+the agent registry disagreeing about the same membership — the agent inside `team.agentIds` and
+titled, with its own `team` field still naming the old team. That is the drift CreateAgent's G07 undo
+cleans up from outside.
+
+**Four neuters, disjoint red sets** (`tests/governance/r3-r9-team-governance.test.ts`):
+
+| neuter | reds |
+|---|---|
+| `restoreMembershipAndTitle` → return | ADD + REMOVE |
+| G04b's orchestrator undo → return | the orchestrator case ONLY |
+| **title BEFORE membership (simulating LIFO)** | ADD + REMOVE, with `INVALID STATE … Could not revert: G06` — which is what makes the R51.3-wording assertion an ORDERING pin |
+| both PG01 undos → return | ADD + REMOVE, on the `team`-field assertion only |
+
+**A test was vacuous and only the neuter said so.** "G04b restores the orchestratorId" passed with
+G04b's undo DELETED: ChangeTitle owns that field too (Gate 12 clears it, Gate 13b re-sets it), so the
+title restore in the next undo put the slot back and G04b's compensation was masked. Rewritten to
+fail the forward title write, so `titleChanged` stays false, no title restore runs, and G04b is the
+only thing that can restore the slot.
+
+**The fixture writes and THEN throws, deliberately** — a mock that throws first leaves nothing behind,
+so PG01's own compensation would be satisfied by having nothing to do and no assertion could tell it
+from a deleted one.
+
+### Deliberate, and named rather than left to be discovered
+
+1. **No new abort conditions.** `updateAgent`/`updateTeam` return values stay unchecked, exactly as
+   before. A silent null return still proceeds. Turning those into failures is a behaviour change
+   that deserves its own card, not a ride-along in a compensation refactor.
+2. **A MANAGER moving between teams cannot be rolled back.** Its `titleBefore` is `manager` while it
+   is still a member of the ORIGINAL team, so restoring it is refused by the very guard the ordering
+   respects; the undo throws and R51.5 names it. Honest — the system really cannot be put back by
+   this path.
+3. **A `null` previous title is not restorable and does not need to be** — ChangeTitle Gate 1
+   normalizes null to `autonomous`, so a null-titled agent demoted to AUTONOMOUS is already back.
+
+**NEXT ACTION — pick by WINDOW, not by gate count.** `DeleteTeam` (37 ops) and `ChangeMarketplace`
+(12) are the remaining candidates with plausible multi-store windows. Still not `ChangeTitle` (131)
+or `InstallElement` (101) — both are called BY retrofitted pipelines (and `ChangeTeam` now calls
+`ChangeTitle` from inside a gate), so converting one changes its callers' failure semantics and wants
+its own card. **Never** `ChangeName`/`ChangeFolder`/`ChangeAvatar`: one mutating gate each, nothing
+abortable after it, zero safety bought — see the superseded-note above.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
 

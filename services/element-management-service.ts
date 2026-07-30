@@ -8240,16 +8240,38 @@ export async function CreateAgent(
           githubRepo: desired.githubRepo,
         })
         if (!retitleResult.success) {
-          // Roll back: delete the half-created agent (same reasoning as G06)
+          // Roll back: delete the half-created agent (same reasoning as G06).
+          //
+          // R51.5 — this site kept the bug its three siblings were fixed for. G06 (both
+          // branches) and G07c stopped setting `result.agentId = null` unconditionally;
+          // G07b did not, so a FAILED delete still handed the caller "no agent exists"
+          // while the orphan sat in the registry — and this orphan is the WORST of the
+          // four, because it is already IN a team and carrying the wrong title. A fix
+          // applied at three of four sites is not a fix: the unpinned site is where the
+          // bug survives, and nothing reddened because the R51.5 test drives G06 only.
+          let rolledBack = true
+          let rollbackError = ''
           try {
             const { deleteAgent } = await import('@/lib/agent-registry')
             await deleteAgent(agent.id)
             ops.push(`G07b: FAIL — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}. Rolled back agent.`)
           } catch (rollbackErr) {
-            ops.push(`G07b: FAIL — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}. ROLLBACK ALSO FAILED: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`)
+            rolledBack = false
+            rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+            ops.push(`G07b: FAIL — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}. ROLLBACK ALSO FAILED: ${rollbackError}`)
           }
-          result.error = `Title assignment after team join failed: ${retitleResult.error}`
-          result.agentId = null
+          if (rolledBack) {
+            result.error = `Title assignment after team join failed: ${retitleResult.error}`
+            result.agentId = null
+          } else {
+            const { invalidStateMessage } = await import('@/lib/gate-transaction')
+            result.error = invalidStateMessage(
+              7,
+              'G07b',
+              `Title assignment after team join failed: ${retitleResult.error}`,
+              [{ id: `agent ${agent.id} (${agent.name}) — joined team ${desired.teamId}, title not applied`, error: rollbackError }],
+            )
+          }
           return result
         }
         titleOps = retitleResult.operations

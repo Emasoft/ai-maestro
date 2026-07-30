@@ -220,8 +220,12 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
     mockGetAgentByName.mockReset()
     mockLoadAgents.mockClear()
     mockCreateAgent.mockReset()
-    mockDeleteAgent.mockClear()
-    mockUpdateAgent.mockClear()
+    // mockReset (NOT mockClear) — `vi.clearAllMocks()` in afterEach clears CALLS but not
+    // IMPLEMENTATIONS, so a `mockRejectedValue` set by a rollback test used to leak into
+    // every test after it. Vitest 4's mockReset restores the impl passed to `vi.fn(impl)`,
+    // which is exactly the hoisted default both of these want back.
+    mockDeleteAgent.mockReset()
+    mockUpdateAgent.mockReset()
     mockCheckIbctScope.mockReset().mockReturnValue(null)
     mockDetectClientType.mockReset().mockReturnValue('claude')
     mockGetClientCapabilities.mockReset().mockReturnValue({
@@ -395,5 +399,73 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
     expect(result.error).toMatch(/orphan-alpha/)
     // And it must NOT claim nothing happened.
     expect(result.error).not.toMatch(/no agent was created/i)
+  })
+
+  /**
+   * R51.5 at G07b — the FOURTH rollback site, and the one the original fix missed.
+   *
+   * `4520ef9a` gave G06 (both branches) and G07c the two-branch shape above, and left
+   * G07b setting `result.agentId = null` unconditionally. Nothing reddened, because the
+   * R51.5 test drives G06 only: a fix applied at three of four sites looks identical to a
+   * complete one until someone reaches the fourth.
+   *
+   * G07b's orphan is the worst of the four. It is reached only on the team path, so by
+   * the time the revert fails the agent has ALREADY JOINED the team — an untitled member
+   * the caller has been told does not exist.
+   */
+  it('R51.5: a G07b rollback that FAILS keeps the orphan addressable — the team-path site the G06 fix missed', async () => {
+    // ChangeTitle('member') fails on its own governance gate (the mocked world has no
+    // team to join), so the failure under test is G07b's, not a rejected registry write.
+    // Only the COMPENSATION is sabotaged.
+    mockDeleteAgent.mockRejectedValue(new Error('registry locked'))
+
+    const { CreateAgent } = await import('@/services/element-management-service')
+    const result = await CreateAgent({
+      name: 'orphan-teamed',
+      client: 'claude',
+      governanceTitle: 'member',   // team-required → G06 DEFERs, G07 joins, G07b re-titles
+      teamId: 'team-xyz',
+      authContext: { isSystemOwner: true as const },
+    })
+
+    // NON-VACUITY: prove G07b actually ran and failed. Without this the assertions below
+    // would pass just as well for a pipeline that died at G06.
+    const g07b = result.operations.find(o => o.startsWith('G07b:'))
+    expect(g07b, 'G07b must have run — otherwise this test is about a different gate').toBeDefined()
+    expect(g07b).toMatch(/ROLLBACK ALSO FAILED/)
+
+    expect(result.success).toBe(false)
+    // THE POINT: the orphan — already in the team — stays addressable.
+    expect(result.agentId).not.toBeNull()
+    expect(result.error).toMatch(/INVALID STATE/i)
+    expect(result.error).toMatch(/orphan-teamed/)
+    expect(result.error).toMatch(/team-xyz/)
+  })
+
+  /**
+   * The positive control for the test above: same gate, same failure, WORKING revert.
+   * Without it, "agentId is not null" could be true because the branch never forked —
+   * this proves the two arms differ and that `agentId: null` is still correct when the
+   * rollback really landed.
+   */
+  it('R51.5 control: a G07b rollback that SUCCEEDS does report agentId null, with no INVALID STATE', async () => {
+    const { CreateAgent } = await import('@/services/element-management-service')
+    const result = await CreateAgent({
+      name: 'reverted-teamed',
+      client: 'claude',
+      governanceTitle: 'member',
+      teamId: 'team-xyz',
+      authContext: { isSystemOwner: true as const },
+    })
+
+    const g07b = result.operations.find(o => o.startsWith('G07b:'))
+    expect(g07b, 'G07b must have run').toBeDefined()
+    expect(g07b).toMatch(/Rolled back agent/)
+    expect(g07b).not.toMatch(/ROLLBACK ALSO FAILED/)
+
+    expect(result.success).toBe(false)
+    expect(result.agentId).toBeNull()
+    expect(result.error).not.toMatch(/INVALID STATE/i)
+    expect(mockDeleteAgent).toHaveBeenCalled()
   })
 })

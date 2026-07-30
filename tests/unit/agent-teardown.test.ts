@@ -215,16 +215,28 @@ describe('teardown verification — filesystem probes respect the pipeline contr
     expect(v.residue.map((r) => r.store)).toContain('workdir')
   })
 
-  it('DETECTS a surviving transcript dir, with the slug encoding pinned independently', async () => {
-    // The probe's own comment records a past failure: an earlier slug rule mangled '.' and '_', so
-    // it read clean while the real transcript dir survived. The workdir here carries BOTH, and the
-    // expected path is derived here by the rule (slashes → dashes, everything else kept) rather
-    // than by calling conversationSlug — a test that reuses the implementation to compute its own
-    // expectation cannot detect a change in that implementation.
+  it('does NOT report a surviving transcript dir as residue — it is policy, not residue (TRDD-0GCIMQ9F)', async () => {
+    // The INVERSE of what this test asserted until 2026-07-30, and the inversion is the point.
+    // DeleteAgent used to recursively delete `~/.claude/projects/<slug>/` — the user's own
+    // conversation history, in another tool's directory, outside both of our roots. Shape A removed
+    // it: Claude Code owns transcript retention, and a second deleter of someone else's data can
+    // only ever be the one that deleted too much.
+    //
+    // So a surviving transcript dir is now EXPECTED. This test exists so a future audit reading
+    // "the transcript dir was not cleaned up" cannot restore the purge without reddening a test that
+    // says why. The workdir deliberately carries both '.' and '_' — the characters an earlier slug
+    // rule mangled — so the directory really is the one a probe would have found.
     const dir = join(HOME_.FAKE_HOME, 'agents', 'ghost_v1.2')
     mkdirSync(join(HOME_.FAKE_HOME, '.claude', 'projects', dir.replace(/\//g, '-')), { recursive: true })
+    // The workdir is created too, and NOT incidentally: without it the residue list comes back
+    // EMPTY and `not.toContain` passes because nothing was reported at all — which is the same
+    // vacuous pass a deleted probe would produce. Seeding a store that DOES claim makes the
+    // assertion below about the transcript store specifically. (Caught by this guard failing.)
+    mkdirSync(dir, { recursive: true })
     const v = await verifyAgentRemoved({ ...CTX, workingDirectory: dir, expectFolderGone: true })
-    expect(v.residue.map((r) => r.store)).toContain('transcript-dir')
+    const stores = v.residue.map((r) => r.store)
+    expect(stores).toContain('workdir')
+    expect(stores).not.toContain('transcript-dir')
   })
 })
 
@@ -314,7 +326,10 @@ describe('the manifest is pinned', () => {
         'registry',
         'teams',
         'tmux-session',
-        'transcript-dir',
+        // NO 'transcript-dir' — asserted by ABSENCE, deliberately (TRDD-0GCIMQ9F, Shape A). The
+        // purge it probed for deleted the user's own conversation history outside our roots and is
+        // gone; a probe for it would mark every hard delete incomplete forever. Adding it back
+        // reddens this list.
         'workdir',
       ].sort(),
     )

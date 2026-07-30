@@ -91,6 +91,31 @@ describe('the boundary itself', () => {
     ).toEqual({ unexpected: [], stale: [] })
   })
 
+  it('the RATIFIED settings.json carve-out is asserted as EXPECTED, so an audit cannot quietly delete it', () => {
+    // The set-equality test above compares CODE to ALLOWLIST, so it catches a drifting pair — but
+    // it cannot tell "the ratified carve-out was removed on purpose" from "it never existed": delete
+    // the site AND its entry together and the comparison stays green. ai-maestro cannot register a
+    // marketplace without `extraKnownMarketplaces` in the user's settings.json, so that carve-out
+    // disappearing is a functional regression that would look like tidying.
+    //
+    // USER, 2026-07-17 (TRDD-QZL828OD D2): "it is a narrow exception, but it is important.
+    // ai-maestro cannot function without those settings." Asserted POSITIVELY, by key.
+    const keys = ALLOWED_OUT_OF_ROOT_WRITES.map((a) => a.key)
+    for (const required of [
+      'services/plugin-storage-service.ts :: saveJsonSafe :: USER_GLOBAL_SETTINGS',
+      'services/plugin-storage-service.ts :: mkdir :: USER_GLOBAL_SETTINGS',
+      'services/role-plugin-service.ts :: saveJsonSafe :: USER_GLOBAL_SETTINGS',
+    ]) {
+      expect(keys, `the RATIFIED user-settings carve-out lost its entry: ${required}`).toContain(required)
+    }
+    // And each is ratified by the USER decision, not by an UNRATIFIED placeholder — a ratified line
+    // silently downgraded to "pending" would pass the presence check above.
+    for (const a of ALLOWED_OUT_OF_ROOT_WRITES.filter((x) => /USER_GLOBAL_SETTINGS/.test(x.key))) {
+      expect(a.ratifiedBy, `${a.key} is no longer recorded as ratified`).toMatch(/TRDD-QZL828OD/)
+      expect(a.ratifiedBy).not.toMatch(/UNRATIFIED/)
+    }
+  })
+
   it('no allowlist entry is anonymous — an unratified line is a TODO, not permission', () => {
     for (const a of ALLOWED_OUT_OF_ROOT_WRITES) {
       expect(a.ratifiedBy, `allowlist entry "${a.key}" names no ratifying TRDD`).toMatch(/TRDD-[A-Z0-9]{8}/)

@@ -169,22 +169,21 @@ export const AGENT_STORES: AgentStore[] = [
       return existsSync(ctx.workingDirectory) ? `workdir still on disk: ${ctx.workingDirectory}` : null
     },
   },
-  {
-    id: 'transcript-dir',
-    owns: '~/.claude/projects/<workdir-slug>/ (chat transcripts)',
-    claims: async (ctx) => {
-      if (!ctx.expectFolderGone || !ctx.workingDirectory) return null
-      const managedRoot = join(homedir(), 'agents') + '/'
-      if (!ctx.workingDirectory.startsWith(managedRoot)) return null
-      // Use the ONE slug derivation (lib/claude-conversation.ts) that the resume decision and the
-      // DeleteAgent history-purge already use — slashes to '-', nothing else. Rolling a fourth
-      // variant here (`[^a-zA-Z0-9] -> '-'`) probed a DIFFERENT directory for any workdir holding a
-      // '.' or '_', so the probe read clean while the real transcript dir survived.
-      const { conversationSlug } = await import('@/lib/claude-conversation')
-      const dir = join(homedir(), '.claude', 'projects', conversationSlug(ctx.workingDirectory))
-      return existsSync(dir) ? `transcript dir still on disk: ${dir}` : null
-    },
-  },
+  // REMOVED 2026-07-30 — there is deliberately NO `transcript-dir` store (TRDD-0GCIMQ9F, Shape A).
+  //
+  // A surviving `~/.claude/projects/<workdir-slug>/` is no longer residue, it is POLICY: DeleteAgent
+  // used to recursively delete the user's own conversation transcripts, and that purge is gone
+  // because Claude Code owns transcript retention (`cleanupPeriodDays`) and we do not write — let
+  // alone delete — outside `~/.aimaestro` and `~/agents`.
+  //
+  // A probe left here would report every hard delete as INCOMPLETE forever, which is the failure
+  // mode this whole file exists to avoid from the other direction: a residue report nobody can act
+  // on trains its reader to ignore residue reports. `tests/unit/agent-teardown.test.ts` asserts the
+  // ABSENCE of this store by name, so restoring it (or the purge) reddens a test that says why.
+  //
+  // The cost of not purging — a new agent at a REUSED workdir can resume the previous agent's
+  // conversation, because Claude keys transcripts by path — is tracked as TRDD-KO4TQCJ0, not
+  // absorbed here.
   {
     id: 'plugin-records',
     owns: '~/.claude/plugins/installed_plugins.json (local install records for the workdir)',

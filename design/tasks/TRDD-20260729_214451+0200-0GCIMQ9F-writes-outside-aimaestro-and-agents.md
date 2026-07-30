@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-07-30T12:19:11+0200
+updated: 2026-07-30T13:04:00+0200
 implementation-commits: [973de2fe]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -17,8 +17,8 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-07-29T21:44:00+0200
 derived: false
-npt: []
-eht: []
+npt: [OWO449MR]
+eht: [KO4TQCJ0]
 severity: critical
 priority: 0
 release-via: none
@@ -28,10 +28,30 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 
 # ai-maestro must write only inside ~/.aimaestro and ~/agents
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-29
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
 
 **USER directive, verbatim (2026-07-29):** *"this is extremely dangerous, the only writings should
 be into ~/.aimaestro and into ~/agents"*.
+
+### 2026-07-30 — SHAPE A EXECUTED. 3 of the 4 remaining boxes closed; 2 items left, both named.
+
+| item | state |
+|---|---|
+| `~/.claude/projects/` transcript purge | **REMOVED** — plus its residue probe, plus an inverted test asserting the absence |
+| ratified `settings.json` carve-out | **pinned POSITIVELY** by key, with a downgrade check |
+| the boundary as a governance rule | **R52** — `GOV-R52` in the spec first, then the catalog (v5.0.0 → 5.1.0) |
+| `installed_plugins.json` | **SPLIT OUT → TRDD-OWO449MR** (NPT): Shape A needs DeleteAgent REORDERED, because a local CLI uninstall needs the folder that G09b deliberately deletes first |
+| the 44→47 leaked `t-*.sqlite` | **still needs the USER's permission** (RULE 0). Cause is settled: our own suite writing the real state dir |
+
+**SUPERSEDED — do NOT carry forward.** The inventory table below still lists the transcript purge as
+*"UNRATIFIED — a DELETE of user transcripts"* and `installed_plugins.json` as *"the real violation"*
+pending a Shape A/B choice. Both are decided: the purge is GONE, and the plugin-records write is a
+KNOWN, SPLIT-OUT reorder with its own card. The table is kept as the audit that found them.
+
+**One thing worth carrying, because it bounds what the gate can ever promise:** the purge — the
+highest-risk write on this card — was **invisible to the detector**. It called `rm(claudeProjectsDir)`
+through a local variable, and textual matching cannot see through a variable. It was found by
+READING. A green `write-boundary` gate means "no violation of the shapes I can see".
 
 ### AMENDMENT — USER, 2026-07-30: the USER-SCOPED-ELEMENT exception
 
@@ -250,14 +270,38 @@ either shape — it is what converts "we remember not to do this" into something
 ## Acceptance
 
 - [x] USER picks Shape A (delegate to the CLI) or Shape B (ratified carve-out with enforcer discipline) — SHAPE A, ruled 2026-07-30 under the USER's delegation; see the Approval log for why a second writer over another tool's file is the class of bug the safeguards would only have helped us survive
-- [ ] `installed_plugins.json` mutation matches the chosen shape
+- [ ] `installed_plugins.json` mutation matches the chosen shape → **SPLIT OUT as TRDD-OWO449MR
+      (NPT), not done here.** Shape A means "ask the CLI", and local-scope uninstall is
+      `claude plugin uninstall … --scope local --cwd <dir>` — it needs the workdir to EXIST, while
+      G09b deliberately runs AFTER the folder is deleted precisely so the records are already false
+      and the gate needs no compensation (R51). Executing Shape A here is therefore a REORDER of
+      DeleteAgent, the most irreversible pipeline in the system, with a live compensation question.
+      Improvising that at the tail of this card would have hidden a HIGH-risk design decision inside
+      a card whose other Shape-A items were deletions.
 - [x] A boundary test pins the complete set of out-of-root writes to an allowlist, each carrying its ratifying TRDD id — `lib/write-boundary.ts` + `tests/unit/write-boundary.test.ts` (`973de2fe`); MEASURED set is 5 sites (3 ratified, 2 labelled UNRATIFIED)
 - [x] The boundary test is non-vacuous (asserts the scanned count) and fails on a seeded new violation — asserts `scanned > 400` and `writeCallSites > 100`, plus a per-marker-class non-zero check; end-to-end neuter recorded (a real `writeFile(join(HOME, '.claude', …))` appended to `services/groups-service.ts` reddens the allowlist test naming that exact site)
-- [ ] The ratified `settings.json` carve-out is asserted as EXPECTED so a future audit cannot delete it
-- [ ] The `~/.claude/projects/` transcript purge is explicitly ratified or removed
-- [ ] The boundary is recorded as a governance rule, not only as a memory note — **must carry the
-      USER-SCOPED-ELEMENT exception (USER, 2026-07-30)**, or the rule outlaws the janitor, wikimem and
-      the 3-pillar system's own state the day it is promoted
+- [x] The ratified `settings.json` carve-out is asserted as EXPECTED so a future audit cannot delete it
+      — a POSITIVE per-key assertion in `tests/unit/write-boundary.test.ts`, plus a check that none of
+      the three has been quietly downgraded to `UNRATIFIED`. The pre-existing set-equality test could
+      not do this job: delete the site AND its entry together and it stays green, so it cannot tell
+      "removed on purpose" from "never existed". Neuter recorded: downgrading one entry's
+      `ratifiedBy` to UNRATIFIED reddens this test by name (and the UNRATIFIED-inventory test with it).
+- [x] The `~/.claude/projects/` transcript purge is explicitly ratified or removed — **REMOVED**
+      (`services/element-management-service.ts`, DeleteAgent G09). Two derived consequences handled
+      rather than absorbed: the `transcript-dir` residue probe is GONE from `lib/agent-teardown.ts`
+      (a surviving transcript dir is now POLICY, and a probe would have marked every hard delete
+      incomplete forever), and its test is INVERTED to assert the absence by name so a future audit
+      cannot restore the purge without reddening a test that says why. The transcript-inheritance
+      cost is tracked as **TRDD-KO4TQCJ0**, not left in a code comment.
+- [x] The boundary is recorded as a governance rule, not only as a memory note — **R52**, authored in
+      `design/specs/governance-spec.md` as `GOV-R52` FIRST (spec-version 2.1.0 → 2.2.0) because the
+      2026-07-22 authority inversion makes the spec the source of truth and `docs/GOVERNANCE-RULES.md`
+      its emanation (v5.0.0 → 5.1.0). Carries the **USER-SCOPED-ELEMENT exception as R52.3** with the
+      three readings it does NOT license, and **R52.2** records that the mandate binds the RUNTIME and
+      not a user-invoked installer — without which it would forbid `install-messaging.sh`, which the
+      same USER ordered in the same period (TRDD-217AYEOT). Part II row + tally updated from the
+      coverage script's own output (51 → 52), because the coverage test derives Part II independently
+      and caught the missing row.
 - [x] The user-scoped-element exception class is recorded where the boundary is ENFORCED, not only in
       prose — the class note on `ALLOWED_OUT_OF_ROOT_WRITES` in `lib/write-boundary.ts`, naming the
       closed set (janitor · wikimem · 3-pillars · a few user-scoped plugins) and the three readings it

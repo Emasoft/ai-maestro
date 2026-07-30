@@ -1,9 +1,9 @@
 ---
 spec: governance
-spec-version: 2.1.0
+spec-version: 2.2.0
 status: normative
 created: 2026-07-22T10:19:26+0200
-updated: 2026-07-22T18:30:00+0200
+updated: 2026-07-30T13:02:00+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a governance rule changes; docs/GOVERNANCE-RULES.md and the code/personas/DEP-overlays are its IMPLEMENTATIONS, authored AFTER it (see `implementations`). Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). This spec was previously derived FROM the catalog; that direction is reversed for good."
@@ -1825,6 +1825,40 @@ clear is written, greppable, and survives a compaction (the message delivers it;
 `R49.overlay` **operating-detail-in-DEP** — R49 is the fleet REFUSAL PROTOCOL; the operating detail for agents lives in
 the DEP overlay `rules/aimaestro/aimaestro-trdd-approval.md` (Part B); fleet-side propagation is tracked on
 ai-maestro#71 and the sibling role-plugin issues.
+
+### GOV-R52 — The Write Boundary — ai-maestro Writes Inside Its Own Two Roots [CRITICAL · IRON · USER-set]
+`R52.0` **invariant** [Explicit, USER · TRDD-0GCIMQ9F · 2026-07-29] — a host shared with other tools comes back
+UNCHANGED except where ai-maestro owns the ground. USER, verbatim: *"this is extremely dangerous, the only writings
+should be into `~/.aimaestro` and into `~/agents`"*. Derive from the aim when no clause below covers a case.
+`R52.1` **two-roots** [Explicit, USER · TRDD-0GCIMQ9F] — the **running server and its agents** MUST confine filesystem
+WRITES to `~/.aimaestro/` (per-host server state) and `~/agents/` (agent working directories, including an adopted
+project folder the registry records). READS are unrestricted — reading another tool's files is how a harness cooperates,
+writing them is how it corrupts them.
+`R52.2` **binds-the-runtime-not-the-installer** [Explicit, USER · TRDD-217AYEOT + TRDD-0GCIMQ9F] — a user-invoked
+INSTALLER placing a tool on PATH (`~/.local/bin/`, `~/.local/share/`) is the user acting on their own machine, and the
+USER ordered exactly that in the same period ("the tools must be installed where everyone can reach for them"). The
+subject of R52.1 is load-bearing: *the server and its agents*, not every process in the repo — read as a blanket path
+rule it would outlaw `install-messaging.sh` itself.
+`R52.3` **user-scoped-element-exception** [Explicit, USER · 2026-07-30] — some ecosystem elements are user-scoped BY
+DESIGN and their state necessarily sits outside both roots, because that is what user scope MEANS. The list is SHORT and
+CLOSED: the **janitor**, the **wikimem memory system**, the **3-pillar system**, and a few user-scoped plugins keeping
+their own user-scoped files. Without this clause R52 would outlaw three systems the project depends on, for doing the one
+thing user scope means. It does NOT license: (a) INSTALLING or ENABLING anything at user scope — still prohibited, human
+only (cf. R17.17); (b) writing such a store on a WHIM — an out-of-root write still names a ratifying TRDD and still owes
+allowlist + atomic tmp+rename + fail-closed + idempotent; (c) DELETING the user's own data.
+`R52.4` **one-writer-per-file** [Explicit, USER · TRDD-0GCIMQ9F Shape A] — where a file is owned by another tool's CLI,
+mutate it by ASKING THAT CLI, never by hand-editing. Two writers over one file do not disagree on day one; they disagree
+the day the other side changes its schema, and the discovery is a corrupted user store.
+`R52.5` **allowlist-with-ratification** [Explicit · TRDD-0GCIMQ9F] — every out-of-root write is ALLOWLISTED and names the
+TRDD that ratified it; an unratified line is a TODO, not permission. A ratified entry is asserted POSITIVELY, so a later
+audit cannot tidy away a carve-out the server needs in order to function.
+`R52.enforcement` **textual-gate-with-a-stated-blind-spot** — `lib/write-boundary.ts` scans for a write verb whose target
+carries an out-of-root marker and compares the result to `ALLOWED_OUT_OF_ROOT_WRITES` in BOTH directions (an unexpected
+site is a new crossing; a stale entry silently widens what is permitted); `tests/unit/write-boundary.test.ts` asserts a
+non-vacuous scan, flags a seeded violation, and pins the ratified carve-out by key. The gate is TEXTUAL, so a write
+through a local VARIABLE is invisible to it — that is how the `~/.claude/projects/` transcript purge, the highest-risk
+write the audit found, was missed by the scanner and found by reading. `KNOWN_INDIRECT_WRITERS` records what it cannot
+see. A green gate means "no violation of the shapes I can see", never "no violation".
 
 ## GOV-COMM — the communication graph (machine-parseable)
 

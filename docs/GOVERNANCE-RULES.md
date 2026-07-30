@@ -1,8 +1,9 @@
 ---
-version: "5.0.0"
-date: 2026-07-22
+version: "5.1.0"
+date: 2026-07-30
 branch: governance-rules
 changelog:
+  - "5.1.0: NEW RULE R52 — THE WRITE BOUNDARY (USER, 2026-07-29, TRDD-0GCIMQ9F): the running server and its agents write only inside ~/.aimaestro and ~/agents. Authored in design/specs/governance-spec.md FIRST as GOV-R52 (spec-version 2.1.0 -> 2.2.0), per the v4.8.0 authority inversion — this catalog entry is its emanation. Carries the USER-SCOPED-ELEMENT exception (R52.3) without which the rule would outlaw the janitor, wikimem and the 3-pillar system on the day it was written, plus the three readings it does NOT license (no user-scope install; no undisciplined write; no deleting the user's data). R52.2 records that the mandate binds the RUNTIME, not a user-invoked installer — the USER ordered the pillar CLIs onto PATH in the same period (TRDD-217AYEOT). R52.4 states the one-writer-per-file rule that decided installed_plugins.json (TRDD-OWO449MR). Enforcement: lib/write-boundary.ts + tests/unit/write-boundary.test.ts, with the textual gate's blind spot stated rather than assumed."
   - "4.8.0: AUTHORITY INVERSION (USER, 2026-07-22, TRDD-CJWC3JLU) — design/specs/governance-spec.md is now the SOURCE OF TRUTH; this catalog is its PRIMARY EMANATION. Specs come before the implementation: a rule is authored in the SPEC first, then this prose + the code + the DEP overlays + the personas follow it. Reverses the prior direction (this file canonical, the spec a mirror synced from it — the 'Mirror-sync: design/specs/governance-spec.md' note in every v4.5-v4.7.1 entry now flows the other way). Structural — no rule-behavior change; §0 + §0.1 flipped; the spec's authority block + frontmatter inverted (spec-version 2.0.0)."
   - "4.7.1: TERMINOLOGY REVERSION (USER, 2026-07-22) — 'the MAESTRO agent' was a wrong expression (the USER's own, now retracted); the correct term is 'the MANAGER'. All R39 rule bodies (R39.5/R39.7/R39.9/R39.10) + the governance-spec clauses + TRDD-W9FA6ACZ + the plugin persona reverted 'the MAESTRO agent (the MANAGER)' -> 'the MANAGER'. SAME entity, SAME substance — only the wording changes; the obedience model (obeys its user unconditionally + the MANAGER only with the user's explicit permission, refusable; not the MAESTRO USER) is unchanged. The 4.6.1 changelog entry (which INTRODUCED 'the MAESTRO agent') and the 4.7.0 entry are left intact as history. PATCH — wording only, no behavior change."
   - "4.7.0: ADDED R39.10 (USER, 2026-07-22) — the ASSISTANT's SCOPED, REVOCABLE collaboration expansion. MINOR (new sub-rule, new behavior). Once the user has permitted MANAGER collaboration (R39.9), the MANAGER may assign ANOTHER agent to collaborate with the ASSISTANT on a specific shared GitHub project; scoped to that collaboration the ASSISTANT becomes MUTUALLY VISIBLE with that collaborator (the R39.7 invisibility opens ONLY to the assigned collaborator(s), never generally), the two may exchange AMP messages, and the ASSISTANT may be assigned tasks via the kanban linked to that GitHub project — each still REFUSABLE (R41). The USER may at ANY time order the ASSISTANT to STOP/PAUSE the collaboration or REFUSE specific MANAGER orders (absolute user authority over its own ASSISTANT). R39.7 updated with the collaborator carve-out. ENFORCEMENT of the ASSISTANT<->collaborator AMP + kanban edges is a pending comm-graph build item (code stays stricter than the rule). Mirror-sync: design/specs/governance-spec.md + the ASSISTANT plugin persona at ~/Code/ai-maestro-assistant-role-agent + TRDD-W9FA6ACZ."
@@ -1864,3 +1865,63 @@ Two consequences that decide real compensations:
 **Enforcement.** `lib/gate-transaction.ts` provides the runner; `tests/unit/gate-transaction.test.ts`
 proves reverse-order compensation, the exact R51.3 message, and the R51.5 refusal. Retrofitting the
 existing pipelines, including their R51.7 invariant checks, is tracked in TRDD-DQ6XN2VP.
+
+---
+
+## R52. The Write Boundary — ai-maestro Writes Inside Its Own Two Roots (CRITICAL — IRON, USER-set)
+
+**R52.0 — THE AIM: a host shared with other tools comes back unchanged except where ai-maestro
+owns the ground.** (USER, 2026-07-29, verbatim: *"this is extremely dangerous, the only writings
+should be into `~/.aimaestro` and into `~/agents`"*.) Derive the answer from the aim when a clause
+below does not cover a case.
+
+**R52.1 — The two roots.** The **running server and its agents** MUST confine filesystem WRITES to
+`~/.aimaestro/` (per-host server state) and `~/agents/` (agent working directories, including an
+adopted project folder recorded in the registry). READS are unrestricted — reading another tool's
+files is how a harness cooperates; writing them is how it corrupts them.
+
+**R52.2 — This binds the RUNTIME, not the INSTALLER.** A user-invoked installer placing a tool on
+PATH (`~/.local/bin/`, `~/.local/share/`) is the user acting on their own machine, and the USER
+ordered exactly that in the same period as R52.0 (TRDD-217AYEOT: the pillar CLIs "must be installed
+where everyone can reach for them"). Read as a blanket path rule, R52.1 would outlaw
+`install-messaging.sh` itself. The subject of the sentence is load-bearing: *the server and its
+agents*, not *every process in this repo*.
+
+**R52.3 — The USER-SCOPED-ELEMENT exception, and its three non-readings.** Some ecosystem elements
+are user-scoped BY DESIGN, and their state lives outside both roots because that is what user scope
+MEANS. The list is SHORT and CLOSED: the **janitor**, the **wikimem memory system**, the **3-pillar
+system**, and a small number of user-scoped plugins that keep their own user-scoped files. Writing
+into one of those stores is entering another element's state dir by design, not widening our
+footprint. Without this clause, R52 would outlaw the janitor, wikimem and the 3-pillar system's own
+state the day it was written. It does NOT license:
+
+- **installing or enabling anything at user scope** — that remains prohibited, and only the human may
+  do it (R17.17 disables the core plugin found at user scope precisely because of this);
+- **writing a user-scoped element's state on a whim** — an out-of-root write still names a ratifying
+  TRDD and still owes the discipline that earned the settings carve-out: an allowlist entry, atomic
+  tmp+rename, fail-closed, idempotent;
+- **deleting the user's own data.** DeleteAgent's `~/.claude/projects/<slug>/` transcript purge was
+  removed for this reason (TRDD-0GCIMQ9F): Claude Code owns transcript retention, and a second
+  deleter of someone else's data can only ever be the one that deleted too much.
+
+**R52.4 — Another tool's file has ONE writer, and it is that tool.** Where a file is owned by another
+tool's CLI, mutate it BY ASKING THAT CLI, never by hand-editing. Two writers over one file do not
+disagree on day one; they disagree on the day the other side changes its schema, and the discovery
+is a corrupted user store. `~/.claude/plugins/installed_plugins.json` is the open instance
+(TRDD-OWO449MR).
+
+**R52.5 — Every out-of-root write is ALLOWLISTED, with the TRDD that ratified it.** An unratified
+line is a TODO, not permission. An entry names its ratifying TRDD and says why; a ratified entry is
+asserted POSITIVELY so a later audit cannot tidy away a carve-out the server needs to function.
+
+**Enforcement.** `lib/write-boundary.ts` scans the tree for a filesystem write verb whose target
+carries an out-of-root marker and compares the result to `ALLOWED_OUT_OF_ROOT_WRITES` in BOTH
+directions (an unexpected site is a new crossing; a stale entry silently widens what is permitted).
+`tests/unit/write-boundary.test.ts` asserts a non-vacuous scan (the scanned-file and call-site
+counts, and a non-zero hit per marker class), flags a seeded violation, and pins the ratified
+carve-out by key.
+
+**The gate's reach is stated, not assumed.** It is TEXTUAL, so a write through a local variable is
+invisible to it — that is how the transcript purge, the highest-risk write the audit found, was
+missed by the scanner and found by reading. `KNOWN_INDIRECT_WRITERS` records the writers it cannot
+see. A green gate means "no violation of the shapes I can see", never "no violation".

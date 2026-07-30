@@ -235,9 +235,16 @@ export function scanWriteBoundary(repoRoot: string, roots: string[]): WriteBound
  *   · it does not permit writing a user-scoped element's state on a WHIM — the entry still names a
  *     ratifying TRDD, and the write still owes the enforcer discipline (allowlist, atomic
  *     tmp+rename, fail-closed, idempotent) that earned the settings carve-out;
- *   · it does not cover DELETING user data. The `~/.claude/projects/<slug>/` transcript purge is a
- *     delete of the USER's chat history, not an element's state, and stays UNRATIFIED under
- *     TRDD-0GCIMQ9F until decided on its own terms.
+ *   · it does not cover DELETING user data. The `~/.claude/projects/<slug>/` transcript purge was a
+ *     delete of the USER's chat history, not an element's state — DECIDED and REMOVED 2026-07-30
+ *     (TRDD-0GCIMQ9F, Shape A): Claude Code owns transcript retention, and a second deleter of
+ *     someone else's data can only ever be the one that deleted too much.
+ *
+ * WORTH KNOWING, because it shapes how much this file can promise: that purge — the highest-risk
+ * write the audit found — was INVISIBLE to the detector below. It called `rm(claudeProjectsDir)`,
+ * passing a local variable, and textual matching cannot see through a variable. It was found by
+ * reading, not by scanning. Treat a green gate as "no violation of the shapes I can see", never as
+ * "no violation"; that is what `KNOWN_INDIRECT_WRITERS` and this note exist to keep honest.
  */
 export const ALLOWED_OUT_OF_ROOT_WRITES: { key: string; ratifiedBy: string; why: string }[] = [
   {

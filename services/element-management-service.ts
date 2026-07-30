@@ -7250,51 +7250,27 @@ export async function DeleteAgent(
             ops.push(`G09b: WARN — plugin-record cleanup failed: ${recErr instanceof Error ? recErr.message : recErr}`)
           }
 
-          // SCEN-014 P0-002: purge Claude Code conversation history for this
-          // workdir. Without this, ~/.claude/projects/-Users-<u>-agents-<n>/*.jsonl
-          // survives the agent deletion. Two consequences:
-          //   1) Re-creating an agent with the SAME workingDirectory loads the
-          //      previous agent's transcript on first launch (`claude --continue`
-          //      / `--resume` look up by workdir slug).
-          //   2) Privacy leak: transcripts are full-fidelity logs of prior
-          //      conversations and persist on disk after the user thinks the
-          //      agent is gone.
-          // SAFETY: the slug we derive must match Claude Code's encoding for
-          // `resolvedDir` exactly (slashes -> '-', leading slash kept). We work
-          // off `resolvedDir` (not `agent.workingDirectory`) so symlinks and
-          // ~ expansion are normalised before slugging — otherwise an agent
-          // whose registry workdir is `/Users/foo/agents/bar` and another
-          // whose workdir is `/Users/foo//agents/bar` would derive different
-          // slugs even though Claude resolved them to the same project. The
-          // outer `startsWith(agentsRoot)` guard already proves resolvedDir
-          // is inside ~/agents/, so the slug cannot accidentally target an
-          // unrelated project (e.g. ~/Code/<name>).
-          // TODO (per-client): also handle ~/.codex/sessions/<...> via
-          // lib/client-plugin-adapters/codex.ts. For now Claude-only is OK.
-          try {
-            const workdirSlug = '-' + resolvedDir.replace(/\//g, '-').replace(/^-/, '')
-            const claudeProjectsDir = resolve(HOME, '.claude', 'projects', workdirSlug)
-            const claudeProjectsRoot = resolve(HOME, '.claude', 'projects')
-            // Defensive: derived slug must actually live under ~/.claude/projects/
-            // and must not equal the projects root itself. If both checks pass and
-            // the dir exists, it is safe to remove.
-            if (
-              claudeProjectsDir.startsWith(claudeProjectsRoot + '/') &&
-              claudeProjectsDir !== claudeProjectsRoot
-            ) {
-              const histStat = await stat(claudeProjectsDir).catch(() => null)
-              if (histStat?.isDirectory()) {
-                await rm(claudeProjectsDir, { recursive: true, force: true })
-                ops.push(`EXE: Purged Claude conversation history ${claudeProjectsDir}`)
-              } else {
-                ops.push(`EXE: No Claude conversation history at ${claudeProjectsDir}`)
-              }
-            } else {
-              ops.push(`EXE: REFUSED — derived Claude history slug outside ~/.claude/projects/: ${claudeProjectsDir}`)
-            }
-          } catch (histErr) {
-            ops.push(`EXE: WARN — Claude history purge failed: ${histErr instanceof Error ? histErr.message : histErr}`)
-          }
+          // REMOVED 2026-07-30 (TRDD-0GCIMQ9F, Shape A): this used to RECURSIVELY DELETE
+          // `~/.claude/projects/<workdir-slug>/` — the user's own conversation transcripts, in
+          // another tool's directory, outside both of our roots. It was the single highest-risk
+          // write on the boundary audit and it was never ratified.
+          //
+          // WHY IT IS GONE RATHER THAN RATIFIED. Claude Code already owns transcript retention
+          // (`cleanupPeriodDays`, default 30). A SECOND deleter of someone else's data buys
+          // nothing the owner does not already do, and can only ever be the thing that deleted
+          // too much — the guard was careful (slug re-derivation, prefix check, root-equality
+          // check) precisely because the operation is unforgiving, and careful is not the same as
+          // safe. The USER's mandate is that we write only inside `~/.aimaestro` and `~/agents`;
+          // deleting the user's own history is the clearest thing that mandate excludes.
+          //
+          // WHAT WE GIVE UP, STATED PLAINLY rather than quietly: the two consequences the old
+          // comment listed are now real on a hard delete. (1) A NEW agent created at the SAME
+          // workingDirectory can resume the previous agent's conversation, because Claude keys
+          // transcripts by workdir path and `hasPriorConversation` is what the restart routes and
+          // boot-restore consult. (2) Transcripts outlive the agent on disk. Note (1) was ALREADY
+          // true for every SOFT delete — the default, and the only one that keeps a cemetery
+          // archive — so this widens an existing hole rather than opening a new one, and the fix
+          // is per-agent transcript identity, not a delete. Tracked as TRDD-KO4TQCJ0.
         } else {
           ops.push(`EXE: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
         }

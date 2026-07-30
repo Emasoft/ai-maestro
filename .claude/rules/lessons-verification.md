@@ -49,6 +49,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A source scanner must EXCLUDE ITSELF — its own docs and pattern tables necessarily contain the patterns it hunts, so it reports its own prose as findings (the `pgrep -f` self-match trap, one layer up); mine flagged 2 violations in the detector file, which writes nothing.
 - PIN what a detector CANNOT see: a write through a local variable (`renameSync(tmp, file)`) is invisible to textual matching, and silence about it reads as absence — list the blind spot as data and test the list, so it cannot grow unnoticed.
 - Never print an `empty = none` label unconditionally after a grep — mine printed under a NON-empty result and I read "clean" off a screen that was listing the hits; label from the count, not from hope.
+- A shared "set up the connection" helper can contain a WRITE, so an OBSERVER that calls it modifies what it measures by a route nobody would call healing: `applyPragmas` sets `journal_mode = WAL`, which is persistent, so a read-only verifier would have silently converted every rollback-journal index it inspected. Read what the helper does before reusing it on a path you only mean to look at.
+- An observer that OPENS a path CREATES it unless told not to — `new Database(p)` materializes an empty db, so a sweep with one bad path leaves litter shaped exactly like the thing it audits. `fileMustExist: true` is the difference between an observer and a writer, and it is one word.
+- A BOUNDED audit log written by a POLLING observer destroys the signal it exists to keep: at 50 slots and a 6-hourly sweep, one unrepaired fault fills every slot with copies of itself in two weeks and evicts all real history — the log then looks full of history and contains none. Record a TRANSITION (append only when this is not already the newest entry), never a poll.
 
 ## Verifying a fix
 
@@ -100,6 +103,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - `readdirSync` order is POSIX-UNDEFINED — APFS returns it sorted, ext4 with dir_index returns hash order — so a byte-identical acceptance built on it passes at home and flakes in CI; sort at the ONE owner before building any differential on top.
 - A benchmark measures its ENVIRONMENT until you make it not: two of my own probes overlapping read 17.35 s and 111.56 s for the SAME config, and the headline run — started the instant its 1.2 GB fixture landed, so it paid the write-back — read 33.29 s against 16.45 s once settled. Serialize, let the FS settle, THEN interleave the variants.
 - A heap CAP answers retention where peak RSS cannot: RSS counts garbage, but COMPLETION under `--max-old-space-size=256` is a boolean that contention and GC timing cannot fake — 1.29 GB of RSS over a live set under 256 MB was pure churn, and only the cap could prove it.
+- When a box asks "is X still <a number measured in another session>", do NOT compare against the recorded number — its harness is gone. Run the A/B: same fixture, same method, your change vs HEAD with it stashed. Mine read 0.58 s against a recorded 0.37 s and looked like a 60% regression; HEAD read 0.58 s too.
+- Isolate the harness FLOOR before attributing a total to the work: `help`, which reads nothing, cost 0.49 s of the 0.57 s total, so the thing I was measuring was ~0.08 s and four fifths of my "measurement" was `npx tsx` starting up. One extra run of the do-nothing command makes the number mean something.
 
 ## Mocked modules
 
@@ -146,6 +151,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - A task title can outlive what shipped: #78 said "point trdd-doctor at the pillar index" and the commit made the LINTER streaming instead — read the commit, not the card, before believing a subsystem has a consumer.
 - A sub-agent's self-reported INPUT COUNT is not coverage: a batch report headed `units: 67` had cited 21 and JUNK-listed 5, silently dropping 46 — and a truncated report is indistinguishable from a thorough one, so the skipped inputs are lost invisibly rather than re-queued. Check every input is either CITED or explicitly DISCARDED, and make the agent emit that accounting itself.
 - A low yield is a question, not a result: 46 atoms from 67 units next to 91 from 21 is the signal that made me check — compare per-unit yield ACROSS sibling batches before accepting any of them.
+- A COUNT is not an IDENTIFICATION, and my own note carried the gap forward twice: "44 leaked `t-*.sqlite`" was numerically right and said nothing about what they were — they turned out to be MY OWN test suite writing the developer's real state dir, which is a different bug with a different owner and a different fix than the leak I had been assuming. Decode the name before reporting the number (`t-` was `basename($TMPDIR)`, which named the cause outright).
+- Read what a rule would FORBID if promoted verbatim, before promoting it: "ai-maestro must write only inside ~/.aimaestro and ~/agents" binds a WRITER but reads as a claim about PATHS, so as an ecosystem rule it would have outlawed the janitor, the memory system and the 3-pillar system writing their own user-scoped state — three systems the project depends on, for doing the one thing user-scope means.
 
 ## Claims about the codebase
 

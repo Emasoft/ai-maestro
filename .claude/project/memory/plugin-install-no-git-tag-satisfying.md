@@ -9,7 +9,7 @@ metadata:
   tier: component
 ---
 
-^plugin-dep-tags-need-the-name-prefix [desc: version_constrained_plugin_dependencies_resolve_only_against_tags_named_pluginname__vversion, keywords: has no git tag satisfying, no-matching-tag, plugin dependency version constraint, claude plugin tag --push, role plugin will not install, ocd: 2026-07-13, lmd: 2026-07-13]
+^plugin-dep-tags-need-the-name-prefix [desc:"version_constrained_plugin_dependencies_resolve_only_against_tags_named_pluginname__vversion", keywords:"has_no_git_tag_satisfying no-matching-tag plugin_dependency_version_constraint claude_plugin_tag_--push role_plugin_will_not_install", ocd: 2026-07-13, lmd: 2026-07-30]
 **A version-constrained plugin dependency resolves ONLY against git tags named
 `{plugin-name}--v{version}`** — not `v{version}`, not bare `{version}`. Claude Code lists
 the dependency's tags, **filters by the `{plugin-name}--v` prefix**, and takes the
@@ -32,7 +32,7 @@ though the repo is full of tags. Spec:
   nothing still fails while any other installed plugin pins the same dependency — and
   one correctly-named tag on the dependency satisfies the whole union at once.
 
-^plugin-dep-fleet-impact-role-plugins [desc: why_a_missing_tag_name_stopped_every_agent_from_getting_a_role, keywords: no agent can get a role, CreateAgent fails role plugin, ChangeTitle G16 failed to install, R9.13 rejects agent with zero role plugins, fleet cannot stand up, ocd: 2026-07-13, lmd: 2026-07-13]
+^plugin-dep-fleet-impact-role-plugins [desc:"why_a_missing_tag_name_stopped_every_agent_from_getting_a_role", keywords:"no_agent_can_get_a_role CreateAgent_fails_role_plugin ChangeTitle_G16_failed_to_install R9.13_rejects_agent_with_zero_role_plugins fleet_cannot_stand_up", ocd: 2026-07-13, lmd: 2026-07-30]
 All 8 ai-maestro role-plugins pin `^2.x` on `ai-maestro-plugin`, whose releases were
 tagged `v2.8.0` rather than `ai-maestro-plugin--v2.8.0` — so **every role-plugin install
 failed**. `ChangeTitle` (Gates 15-16) and `CreateAgent` install the role-plugin, and R9.13

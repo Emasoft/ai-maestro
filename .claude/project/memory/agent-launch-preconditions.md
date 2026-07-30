@@ -9,7 +9,7 @@ metadata:
   tier: component
 ---
 
-^agent-launch-two_silent_failures [desc: ai_maestro_launches_agent_clients_that_cannot_possibly_work_and_they_look_alive, keywords: agent says not logged in but dashboard shows it online, agent pane falls back to zsh, claude --agent exits printing the available agents list, agent looks alive but can do nothing, ocd: 2026-07-12, lmd: 2026-07-12]
+^agent-launch-two_silent_failures [desc:"ai_maestro_launches_agent_clients_that_cannot_possibly_work_and_they_look_alive", keywords:"agent_says_not_logged_in_but_dashboard_shows_it_online agent_pane_falls_back_to_zsh claude_--agent_exits_printing_the_available_agents_list agent_looks_alive_but_can_do_nothing", ocd: 2026-07-12, lmd: 2026-07-30]
 ai-maestro spawns each agent as `claude --agent <main-agent>` in a tmux pane. **Two
 preconditions can be false at launch, and in BOTH cases the agent still appears
 healthy in the dashboard while being unable to do anything:**
@@ -26,7 +26,7 @@ healthy in the dashboard while being unable to do anything:**
    `claude --agent <name>-main-agent` exits printing the available-agents list, and
    the pane falls back to a shell prompt.
 
-^agent-launch-preflight-contract [desc: what_the_launch_path_must_verify_before_exec_claude_and_why_refusing_beats_launching, keywords: preflight before launching an agent client, verify keychain access in the pane, verify the plugin is installed not just enabled, refuse to launch and say why, ocd: 2026-07-12, lmd: 2026-07-12]
+^agent-launch-preflight-contract [desc:"what_the_launch_path_must_verify_before_exec_claude_and_why_refusing_beats_launching", keywords:"preflight_before_launching_an_agent_client verify_keychain_access_in_the_pane verify_the_plugin_is_installed_not_just_enabled refuse_to_launch_and_say_why", ocd: 2026-07-12, lmd: 2026-07-30]
 **The launch path must verify both preconditions IN THE PANE, before `exec claude`,
 and REFUSE to launch (with a clear reason) if either fails.** A refused launch is
 strictly better than a launched-but-dead agent: the dead one looks alive, so nobody
@@ -46,7 +46,7 @@ claude plugin list | grep -q "<role-plugin>@<marketplace>" || refuse "role-plugi
 Never verify #2 by reading `settings.local.json` — that file records what SHOULD be
 loaded, not what IS.
 
-^agent-launch-changetitle-must-verify-install [desc: ChangeTitle_writes_enabledPlugins_without_guaranteeing_the_plugin_is_installed, keywords: ChangeTitle enables a role plugin without installing it, title cycle appears to fix an agent then it regresses, element management pipeline install gap, ocd: 2026-07-12, lmd: 2026-07-12]
+^agent-launch-changetitle-must-verify-install [desc:"ChangeTitle_writes_enabledPlugins_without_guaranteeing_the_plugin_is_installed", keywords:"ChangeTitle_enables_a_role_plugin_without_installing_it title_cycle_appears_to_fix_an_agent_then_it_regresses element_management_pipeline_install_gap", ocd: 2026-07-12, lmd: 2026-07-30]
 Observed 2026-07-12: an agent's `ChangeTitle` had left the role-plugin **enabled in
 `settings.local.json` but not installed**. A title-cycle (X → autonomous → X)
 appeared to "fix" the agent — because that path happened to install it — and the
@@ -58,7 +58,7 @@ plugin is installed** — `claude plugin list` in the workdir — and install it
 Writing the enable flag is not the operation; making the agent's main-agent
 resolvable is.
 
-^agent-launch-tmux-server-is-shared-fate [desc: every_agent_pane_inherits_the_tmux_servers_security_session_so_one_bad_server_takes_the_whole_fleet, keywords: whole fleet loses auth at once, restarting the agent does not help, the tmux server is the poison not the client, recreate the server from a healthy context, ocd: 2026-07-12, lmd: 2026-07-12]
+^agent-launch-tmux-server-is-shared-fate [desc:"every_agent_pane_inherits_the_tmux_servers_security_session_so_one_bad_server_takes_the_whole_fleet", keywords:"whole_fleet_loses_auth_at_once restarting_the_agent_does_not_help the_tmux_server_is_the_poison_not_the_client recreate_the_server_from_a_healthy_context", ocd: 2026-07-12, lmd: 2026-07-30]
 **All agent panes are forked by ONE long-lived tmux server, so they share its fate.**
 If that server's security session loses keychain access, restarting individual
 agents changes NOTHING — a fresh child of a poisoned parent is still poisoned. The
@@ -73,7 +73,7 @@ turns it from a silent fleet outage into an explicit, diagnosable refusal.
 Related: the general platform knowledge lives in the user-scope notes
 `claude-code-client-authentication` and `macos-keychain-access-inheritance`.
 
-^agent-launch-agent-flag-dropped [status: superseded, superseded-by: agent-launch-agent-flag-dropped-v2, desc: role_plugin_installed_but_--agent_dropped_at_launch_so_agent_runs_a_live_generic_claude, keywords: titled agent runs generic claude persona never loads, MANAGER builds the project solo instead of creating a fleet, agent is logged in and alive but not running its role persona, --agent missing from ps argv though registry programArgs has it, fresh Wizard-created titled agent has no --agent in its process, ocd:2026-07-22, lmd:2026-07-22]
+^agent-launch-agent-flag-dropped [status: superseded, superseded-by: agent-launch-agent-flag-dropped-v2, desc:"role_plugin_installed_but_--agent_dropped_at_launch_so_agent_runs_a_live_generic_claude", keywords:"titled_agent_runs_generic_claude_persona_never_loads MANAGER_builds_the_project_solo_instead_of_creating_a_fleet agent_is_logged_in_and_alive_but_not_running_its_role_persona --agent_missing_from_ps_argv_though_registry_programArgs_has_it fresh_Wizard-created_titled_agent_has_no_--agent_in_its_process", ocd:2026-07-22, lmd:2026-07-30]
 ⚠ **SUPERSEDED by `^agent-launch-agent-flag-dropped-v2` — do NOT apply; preserved as history.** This block over-generalized ("the launch chokepoints" plural) — only the fresh-CREATE path drops `--agent`; `wakeAgent`/restart read the registry which already carries it. Why it was wrong: `[^6]`.
 
 **Third silent failure — the MOST insidious, because the agent is genuinely ALIVE and
@@ -101,7 +101,7 @@ persona is REFUSED (fail-fast, R9.13), mirroring the keychain refuse. Derive at 
 the role-plugin (the source of truth), NOT from stored programArgs — the stored copy can be
 stale. See also `scen031-manager-role-violation-not-substrate`.
 
-^agent-launch-agent-flag-dropped-v2 [desc: only_the_FRESH-CREATE_path_dropped_--agent_because_createSession_uses_desired.programArgs_not_the_registry, keywords: titled agent runs generic claude persona never loads, MANAGER builds the project solo, fresh Wizard-created titled agent has no --agent in its ps argv, createSession uses desired.programArgs not the registry value ChangeTitle updated, wakeAgent and restart read the registry which already has --agent, why only freshly-created agents dropped the persona, --continue relaunch omits --agent by design, ocd:2026-07-22, lmd:2026-07-22]
+^agent-launch-agent-flag-dropped-v2 [desc:"only_the_FRESH-CREATE_path_dropped_--agent_because_createSession_uses_desired.programArgs_not_the_registry", keywords:"titled_agent_runs_generic_claude_persona_never_loads MANAGER_builds_the_project_solo fresh_Wizard-created_titled_agent_has_no_--agent_in_its_ps_argv createSession_uses_desired.programArgs_not_the_registry_value_ChangeTitle_updated wakeAgent_and_restart_read_the_registry_which_already_has_--agent why_only_freshly-created_agents_dropped_the_persona --continue_relaunch_omits_--agent_by_design", ocd:2026-07-22, lmd:2026-07-30]
 **Third silent failure — a live, logged-in but GENERIC claude** (not "Not logged in" #1, not a
 shell prompt #2): the role-plugin IS installed and `--agent` WOULD resolve, but the launch command
 lacks `--agent`, so the pane runs vanilla Claude and the role persona never loads — e.g. a MANAGER

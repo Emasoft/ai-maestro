@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T06:27:51+0200
-updated: 2026-07-30T06:27:51+0200
+updated: 2026-07-30T06:37:50+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -126,7 +126,9 @@ this is migration residue, and it will keep being authored as long as old cards 
 - [ ] `BODY-STATE-CLAIM` ERRORs on a seeded card whose body claim contradicts `column:`, and
       WARNs on one that agrees — two fixtures, not one
 - [ ] the rule computes the frontmatter boundary and does NOT flag a frontmatter `status:`
-      (that is `RETIRED-STATUS-FIELD`'s job — two rules, two messages, no overlap)
+      (a frontmatter `status:` holding a column value is `STATUS-HOLDS-COLUMN-VALUE`'s job —
+      two rules, two messages, no overlap; and note per the USER's 2026-07-30 ruling that a
+      frontmatter `status:` carrying a NON-column value is legitimate and neither rule fires)
 - [ ] it does NOT flag a `**Status:**` inside a fenced code block or a quoted example (this
       very card contains three; if the rule flags its own TRDD the rule is wrong)
 - [ ] run against the live corpus it finds exactly our 10, listed by path

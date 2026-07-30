@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T06:18:59+0200
-updated: 2026-07-30T06:25:41+0200
+updated: 2026-07-30T06:37:50+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -41,7 +41,7 @@ labels: [pillar, write-gate, corpus-integrity]
 
 ```
 270 ZONE-MISMATCH          158 COLUMN-MISSING      92 TITLE-MISSING
- 66 RETIRED-STATUS-FIELD     8 DERIVED-FLAG-MISSING  7 GRAPH-CHILD-MISSING
+ 66 STATUS-HOLDS-COLUMN-VALUE (was RETIRED-STATUS-FIELD)     8 DERIVED-FLAG-MISSING  7 GRAPH-CHILD-MISSING
   6 GRAPH-FALSE-COMPLETE     4 ORDER-NPT-VIOLATED    4 GRAPH-UNKNOWN-BLOCKER
   3 GRAPH-TWO-PARENTS        1 each: GRAPH-ORDER-CYCLE · GRAPH-CYCLE ·
                                     GRAPH-DANGLING-BLOCKER · DANGLING-REF
@@ -150,6 +150,37 @@ in the frontmatter, and today nothing says so.
 
 - **`COLUMN-MISSING` × 158** remains the other real corruption: no state field at all.
 
+### Error 5 — my own linter asserted the same false premise, and its autofix DESTROYED data
+
+**USER ruling 2026-07-30: `status:` is NOT a duplicate of `column:` — it carries a different
+aspect, by requirement.** The pillar specs prove it in this very repo: `design/specs/*.md`
+each carry `status: normative`. What v1 kept in `status:` was the PIPELINE STATE, and v2 moved
+*that one aspect* to `column:`. Measured: of 66 `status:` values in TRDD zones machine-wide,
+all 66 are pipeline states (`completed` 41, `not-started` 10, `in-progress` 10, `superseded` 3,
+`proposal` 1, `blocked` 1) — so the residue is real, and the field is still legitimate.
+
+`lib/trdd-doctor.ts` keyed its rule on `fmHas('status')` — the FIELD NAME — called it
+"retired", and marked it **`autofixable: true`**. So `yarn trdd:fix`:
+
+- with a column present → **deleted the `status:` line whatever it held**;
+- with no column → **rewrote `status: X` into `column: <mapped>`**, `?? 'todo'` swallowing every
+  unrecognised value. Worse than a delete: a field converted into a different field with an
+  invented value, the original unrecoverable, the card asserting a state nobody chose.
+
+Fixed to `STATUS-HOLDS-COLUMN-VALUE`, keyed on `isPipelineStateValue(value)` — **ONE exported
+predicate the linter and `fixCorpus` now share**, because they had already drifted: the lint
+checked only `VALID_COLUMNS` while the fixer also accepted the v1 map, so it repaired a shape
+it never reported. That is the worst asymmetry a fix pipeline can have, since the report is all
+a human reviews before running `--fix`. Complementary neuters: `→ false` reddens 4 tests,
+`→ true` reddens 2, each on its own guard.
+
+**The USER's `column: todo` fallback is preserved and now GUARDED.** It is a deliberate
+requirement — force the agent to evaluate the task — but *only* for a genuinely missing column,
+never licence to repurpose another field. The condition became
+`!c.column && !statusIsPipelineState` (the complement of branch (b), or a card falls through
+both and stays column-less forever), and the test asserts BOTH halves: the column is added
+**and** the `status:` survives.
+
 ## But the structural point is right, and it is confirmed at the seam
 
 The USER's actual argument survives intact — indeed the 622 errors are its proof: *nothing
@@ -207,9 +238,10 @@ put the check in the route.
 - **Repairing the 32 dirty corpora.** They are OTHER user-owned projects, so the
   cross-project rule binds: **issue or fork-PR, never a direct edit.** The gate stops the
   BLEEDING; the migration is a separate card per repo, and most of it (`COLUMN-MISSING`,
-  `RETIRED-STATUS-FIELD`) is mechanically decodable by `yarn trdd:fix` run IN that repo by
-  ITS own Claude. **Do not bump `updated:` during a mechanical repair** — a tool must not
-  manufacture recency (ai-maestro#96 L8).
+  `STATUS-HOLDS-COLUMN-VALUE`) is mechanically decodable by `yarn trdd:fix` run IN that repo
+  by ITS own Claude. **Do not bump `updated:` during a mechanical repair** — a tool must not
+  manufacture recency (ai-maestro#96 L8). Note this is only safe AFTER Error 5's fix: before
+  it, `trdd:fix` would have destroyed a legitimate `status:` in every one of those repos.
 - **The 270 ZONE-MISMATCH.** Blocked on `ai-maestro#93` (the unruled archival vocabulary,
   board task #88). Fixing the parked cards before that ruling would pick the vocabulary by
   accident.

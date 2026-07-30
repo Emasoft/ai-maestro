@@ -344,10 +344,24 @@ it. Recording it as `rejected` would attribute a decision to someone who never m
 one.
 
 **Declined, and why** — `status: superseded|valid` and `archived: yes|no` from the
-same directive are not fields. `status:` was the v1 field that `column:` replaced;
-reintroducing it with a new meaning would make every legacy file ambiguous. And
-both restate what `column:` and the file's folder already say. The rule below is
-the general form of that judgment.
+same directive are not fields, because both restate what `column:` and the file's
+folder already say. The rule below is the general form of that judgment.
+
+> **CORRECTED 2026-07-30 (USER ruling).** This passage previously added *"`status:`
+> was the v1 field that `column:` replaced; reintroducing it with a new meaning would
+> make every legacy file ambiguous."* **That is wrong.** `status:` is NOT a retired
+> duplicate of `column:` — it carries a DIFFERENT aspect, by requirement, and the
+> pillar specs already use it that way (`design/specs/*.md` each carry
+> `status: normative`). What v1 did was spell the PIPELINE STATE in `status:`; v2
+> moved that one aspect to `column:`. So the ambiguity to guard against is a **column
+> VALUE sitting in `status:`**, never the field's existence.
+>
+> The distinction is load-bearing, not pedantic: `lib/trdd-doctor.ts` keyed its rule
+> on the field NAME and marked it `autofixable`, so `yarn trdd:fix` DELETED a
+> `status:` beside a column and REWROTE a column-less one into `column: <mapped>`
+> with `?? 'todo'` swallowing every value it did not recognise. A tool that destroys
+> a legitimate field, in the one place a tool must not guess. Now `STATUS-HOLDS-
+> COLUMN-VALUE`, keyed on `isPipelineStateValue(value)`.
 
 #### The field set — what is a field, and what is derived from one
 
@@ -364,7 +378,8 @@ supposed to be one thing. So:
 | `created-by` | **field** — authorship, set once. Not `current-owner` (write-lock) and not `assignee` (executor); those change hands, authorship does not |
 | `approved` / `approval-judge` / `approval-datetime` | **fields** — the judgment. `approved` is denormalized (see the invariant above); the judge and the datetime are recorded nowhere else |
 | *proposal?* | **derived**: `column == proposal` (and the file sits in `design/proposals/`) |
-| *status? archived?* | **derived**: `column == superseded`, and the file's folder. `status:` is additionally the retired v1 field name — reusing it would make every legacy TRDD ambiguous |
+| *archived?* | **derived**: the file's folder. And a *superseded?* flag would restate `column == superseded` |
+| `status` | **a FIELD, and NOT this one** — it carries a different aspect (the specs use `status: normative`), so it is neither derived from `column:` nor a duplicate of it. What v1 kept here was the PIPELINE STATE, which v2 moved to `column:`; a column VALUE in `status:` is therefore the defect (`STATUS-HOLDS-COLUMN-VALUE`), not the field. Corrected 2026-07-30 by USER ruling — see the note above for the data-loss bug the old wording licensed |
 | *the flock (list of D-TRDDs)* | **derived**: `npt: ∪ eht:` — already listed, and split by KIND, which the union would throw away. NPT gates the parent's `dev`; EHT gates its `complete`; a flat `derived-trdd:` list could not express that difference |
 
 **`derived:` is DENORMALIZED, and denormalized fields drift.** A TRDD is derived

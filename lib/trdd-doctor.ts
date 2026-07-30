@@ -50,6 +50,26 @@ export const BRACKET_COLUMNS = ['proposal', 'planned', 'refused', 'completed', '
 export const VALID_COLUMNS: readonly string[] = [...DEFAULT_STATUSES, ...BRACKET_COLUMNS]
 
 /**
+ * Does this value name a point in the PIPELINE — in either the v2 or the v1 spelling?
+ *
+ * The one predicate for "a column value is sitting where it should not be". The linter and
+ * `fixCorpus` MUST share it: they disagreed once (the lint checked only `VALID_COLUMNS` while
+ * the fixer also accepted the v1 map), which made the fixer repair a shape the linter never
+ * reported — the worst asymmetry a fix pipeline can have, because the report is the only
+ * thing a human reviews before running `--fix`.
+ *
+ * Why it must key on the VALUE and never on the field name: `status:` is NOT a retired
+ * duplicate of `column:` (USER ruling 2026-07-30). It carries a different aspect, and the
+ * pillar specs already use it that way (`status: normative`). A pipeline value in it is
+ * provably v1 residue; anything else is the field doing its own job.
+ */
+export function isPipelineStateValue(raw: string): boolean {
+  const key = raw.trim().toLowerCase()
+  if (!key) return false
+  return Boolean(V1_STATUS_TO_COLUMN[key]) || VALID_COLUMNS.includes(key)
+}
+
+/**
  * Columns that mean "this work is finished and leaves the board".
  *
  * RE-EXPORTED from lib/trdd-graph.ts — NOT redefined. It is the one owner of the graph
@@ -313,13 +333,24 @@ export function lintCorpus(designDir: string): DoctorReport {
       })
     }
 
-    if (fmHas('status')) {
+    // ---- a COLUMN value in the `status:` field ----
+    // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it carries
+    // a DIFFERENT aspect, and the pillar specs already use it that way (`status: normative`).
+    // So this rule may never key on the FIELD NAME. It keyed on `fmHas('status')` and was
+    // marked autofixable, which made `trdd:fix` a deleter of a legitimate field the moment
+    // one appeared — data loss from a tool, in the one place a tool must not guess.
+    //
+    // Key on the VALUE instead: a `status:` holding a COLUMN value is v1 residue (the v1
+    // field spelled the pipeline state), and that is the only shape we can prove is wrong.
+    // Anything else is the field doing its own job — not a finding, not even a warning.
+    const statusVal = fmHas('status') ? String(c.fm['status']).trim() : ''
+    if (statusVal && isPipelineStateValue(statusVal)) {
       add({
-        rule: 'RETIRED-STATUS-FIELD',
+        rule: 'STATUS-HOLDS-COLUMN-VALUE',
         severity: 'error',
         id: c.id,
         filePath: c.filePath,
-        message: `carries the retired v1 \`status: ${c.fm['status']}\` — v2 replaced it with \`column:\`. Two state fields = two truths`,
+        message: `\`status: ${statusVal}\` holds a COLUMN value — the v1 field spelled the pipeline state, and v2 moved that to \`column:\`. Two state fields = two truths. (\`status:\` itself is legitimate for a different aspect; only a column value in it is wrong.)`,
         autofixable: true,
       })
     }
@@ -846,30 +877,55 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       text = fm + text
       changes.push('added a full frontmatter (was: none) — column=todo per the uncertainty law')
     } else {
-      // The retired `status:` field. TWO distinct cases, and conflating them would
-      // invert the v2 rule — `column:` is the state machine, `status:` is dead.
+      // A COLUMN VALUE sitting in the `status:` field.
       //
-      //   (a) column ALREADY EXISTS → `status:` is redundant. DELETE it, and never
-      //       let it overwrite the column: that would make the retired field
-      //       authoritative over the live one.
-      //   (b) no column → `status:` is the only state we have. Migrate it, mapping
-      //       only unambiguous values; anything else falls to `todo`.
+      // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it
+      // carries a DIFFERENT aspect, and the pillar specs already use it that way
+      // (`status: normative`). Both branches below used to key on the FIELD NAME, which made
+      // this fixer a DESTROYER of a legitimate field:
+      //
+      //   (a) with a column present it DELETED the `status:` line whatever it held, so a
+      //       `status: normative` vanished silently;
+      //   (b) with no column it REWROTE `status: X` into `column: <mapped>`, and the
+      //       `?? 'todo'` swallowed every unmapped value — converting a field into a
+      //       different field with an invented value. Worse than a delete: the original is
+      //       unrecoverable and the card now asserts a state nobody chose.
+      //
+      // So both branches now require the VALUE to be a recognised pipeline state. That is
+      // the only shape we can PROVE is v1 residue. A `status:` holding anything else is the
+      // field doing its own job and is left untouched — a fixer must never guess.
       const status = c.fm['status']
-      if (status !== undefined && c.column) {
-        const agrees = V1_STATUS_TO_COLUMN[String(status).trim().toLowerCase()] === c.column
+      const statusRaw = status === undefined ? '' : String(status).trim()
+      const statusKey = statusRaw.toLowerCase()
+      const mappedFromV1 = V1_STATUS_TO_COLUMN[statusKey]
+      const statusIsPipelineState = isPipelineStateValue(statusRaw)
+
+      if (statusIsPipelineState && c.column) {
+        // (a) redundant pipeline state alongside a live column → drop it. Never let the
+        // dead spelling overwrite the live one.
+        const agrees = mappedFromV1 === c.column || statusKey === c.column
         text = text.replace(/^status:.*\n/m, '')
         changes.push(
-          agrees || String(status).trim().toLowerCase() === c.column
-            ? `dropped the retired \`status: ${status}\` (redundant — \`column: ${c.column}\` already says it)`
-            : `dropped the retired \`status: ${status}\`; KEPT \`column: ${c.column}\` (the v2 state machine wins — the dead field must never overwrite the live one)`,
+          agrees
+            ? `dropped \`status: ${statusRaw}\` (a column value, redundant — \`column: ${c.column}\` already says it)`
+            : `dropped \`status: ${statusRaw}\`; KEPT \`column: ${c.column}\` (both held a pipeline state and disagreed — the v2 state machine wins)`,
         )
-      } else if (status !== undefined) {
-        const mapped = V1_STATUS_TO_COLUMN[String(status).trim().toLowerCase()] ?? 'todo'
+      } else if (statusIsPipelineState) {
+        // (b) the pipeline state is only in `status:` → migrate it to its own field. Safe
+        // ONLY because the value is a recognised state; no default, no guess.
+        const mapped = mappedFromV1 ?? statusKey
         text = text.replace(/^status:.*$/m, `column: ${mapped}`)
-        changes.push(`status: ${status} → column: ${mapped}`)
+        changes.push(`status: ${statusRaw} → column: ${mapped} (a column value in the wrong field)`)
       }
-      // missing column entirely
-      if (!c.column && status === undefined) {
+      // A `status:` whose value is NOT a pipeline state is deliberately left alone.
+      //
+      // Missing column. The condition is `!statusIsPipelineState`, NOT `status === undefined`:
+      // a card carrying a legitimate `status: normative` and no column must still GET a
+      // column, exactly like a card carrying no status at all. Keying on the field's mere
+      // presence would leave it column-less forever, because branch (b) above no longer
+      // fires for it — the two conditions have to be complements or the card falls through
+      // both. Adding the missing field is not repurposing the other one: `status:` survives.
+      if (!c.column && !statusIsPipelineState) {
         text = text.replace(/^(trdd-id:.*)$/m, `$1\ncolumn: todo`)
         changes.push('column: todo (was missing — the uncertainty law)')
       }

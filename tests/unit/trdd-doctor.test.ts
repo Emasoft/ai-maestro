@@ -77,9 +77,23 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(idsOf(lintCorpus(tmp), 'COLUMN-MISSING')).toContain('BBBBBBBB')
   })
 
-  it('RETIRED-STATUS-FIELD — v1 `status:` is a second state field, i.e. a second truth', () => {
+  it('STATUS-HOLDS-COLUMN-VALUE — a COLUMN value in `status:` is a second state field, i.e. a second truth', () => {
     write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCC-x.md', good('CCCCCCCC', { status: 'not-started' }))
-    expect(idsOf(lintCorpus(tmp), 'RETIRED-STATUS-FIELD')).toContain('CCCCCCCC')
+    expect(idsOf(lintCorpus(tmp), 'STATUS-HOLDS-COLUMN-VALUE')).toContain('CCCCCCCC')
+  })
+
+  // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it carries a
+  // DIFFERENT aspect, and the pillar specs already use it that way (`status: normative`). The
+  // rule keyed on the FIELD NAME and was `autofixable`, so `trdd:fix` would have DELETED a
+  // legitimate field the moment one appeared. Data loss from a tool, in the one place a tool
+  // must not guess. This is the guard that pins the corrected shape: value, never field name.
+  it('STATUS-HOLDS-COLUMN-VALUE — a non-column `status:` is LEGITIMATE and must not be flagged at all', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCD-x.md', good('CCCCCCCD', { status: 'normative' }))
+    const findings = lintCorpus(tmp).findings.filter(f => f.id === 'CCCCCCCD')
+    expect(findings.map(f => f.rule)).not.toContain('STATUS-HOLDS-COLUMN-VALUE')
+    // Positive control: the card is otherwise clean, so nothing else may fire either — an
+    // empty result here could otherwise mean the fixture never reached the rule at all.
+    expect(findings).toEqual([])
   })
 
   it('COLUMN-UNKNOWN — a column outside the ratified 17 is rejected', () => {
@@ -309,12 +323,22 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
     expect(out).toContain('column: ai_review') // the live one is UNTOUCHED (not 'dev' from the status map)
   })
 
-  it('an UNKNOWN status falls to `todo` — it does not invent a column', () => {
+  // USER ruling 2026-07-30, TWO halves that must BOTH hold:
+  //   (1) `column: todo` for a MISSING column is a deliberate requirement — it forces the
+  //       agent to evaluate the task before acting, for the extreme case of a card with no
+  //       column at all.
+  //   (2) it is ONLY for a missing column. It is NOT licence to repurpose another field:
+  //       `status:` carries a different aspect and MUST survive the repair.
+  // The old fixer keyed on the field name and rewrote `status: X` into `column: todo`,
+  // satisfying (1) by violating (2) — the original value was unrecoverable and the card then
+  // asserted a state nobody chose. Both assertions below, or the guard is half a guard.
+  it('an UNKNOWN status falls to `todo` — the missing column is ADDED and the status SURVIVES', () => {
     write('tasks', 'TRDD-20260101_000000+0100-RRRRRRRR-x.md',
       good('RRRRRRRR', { status: 'mostly-ish-done-probably' }).replace(/^column:.*$/m, ''))
     fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
     const out = fs.readFileSync(path.join(tmp, 'tasks', 'TRDD-20260101_000000+0100-RRRRRRRR-x.md'), 'utf8')
     expect(out).toContain('column: todo')
+    expect(out).toContain('status: mostly-ish-done-probably')
   })
 
   it('a missing derivation back-link is repaired from the PARENT — but only when unambiguous', () => {

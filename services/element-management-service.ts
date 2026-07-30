@@ -6999,282 +6999,413 @@ export async function DeleteAgent(
       ops.push('G01b: Not an ASSISTANT — OK to delete')
     }
 
-    // ── G01c: Archive agent to cemetery BEFORE ANY mutation ───
+    // ══ THE MUTATING SEQUENCE — R51 all-or-nothing (TRDD-DQ6XN2VP) ══
     //
-    // ORDERING IS THE GUARANTEE HERE, because almost nothing below can be undone: revoked AMP
-    // keys, a killed tmux session, `rm -rf` of the working directory and the Claude transcripts.
-    // A destructive pipeline cannot be made all-or-nothing by rollback, so it is made safe by
-    // taking a COMPLETE, RESTORABLE SNAPSHOT FIRST and only then mutating.
+    // Everything from G01c to G08b used to be a flat run of try/catch blocks in two shapes, and
+    // BOTH broke the guarantee:
+    //   - HARD-RETURN (G08, G08b): a failure returned an error with every earlier mutation still
+    //     committed — a G08b failure left the cemetery archive written, the teams stripped, the
+    //     session killed, the PersistedSession dropped and the credentials revoked, then told the
+    //     caller the delete failed.
+    //   - WARN-AND-CONTINUE (G04..G07c): a failure was swallowed and the pipeline proceeded, so a
+    //     partial teardown and a complete one returned the SAME success.
     //
-    // THIS GATE USED TO RUN AFTER G02, AND G02 MUTATES. Its own comment said the archive "must
-    // happen before … cleanup so the archive captures the agent's full state (team membership,
-    // COS slot, title, etc.)" — while the gate immediately above it demoted a MANAGER to
-    // AUTONOMOUS. So for the one agent whose title matters most, the cemetery zip recorded
-    // `autonomous`, and restoring it silently returned an agent with the WRONG TITLE. The comment
-    // stated the exact invariant the ordering broke.
-    if (!hard) {
-      try {
-        const { exportAgentZip } = await import('@/services/agents-transfer-service')
-        const zipResult = await exportAgentZip(agentId)
-        if (zipResult.data) {
+    // Now every mutating gate declares the compensation R51.4 requires, and `runGateSequence`
+    // reverts the executed ones in REVERSE order on any failure. It also REFUSES TO START if a
+    // mutating gate has no `undo`, which is what stops "I'll add the undo later" from becoming
+    // permanent.
+    //
+    // ORDERING IS STILL LOAD-BEARING, in two places rollback cannot rescue:
+    //   - G01c archives BEFORE G02 demotes. The archive is the restore substrate, and G02 mutates
+    //     the very field (title) that made the agent worth archiving. Demoting first wrote
+    //     `autonomous` into the snapshot for the one agent whose title matters most.
+    //   - G06 revokes EARLY, not after the registry write. A rollback only runs while this process
+    //     lives; a crash mid-pipeline is not compensated at all. Revoking late would mean a crash
+    //     could leave an agent deleted from the registry with its credentials still live —
+    //     permanently, with nothing to detect it. Revoking early fails the safe way round.
+    //
+    // G09 (the folder delete) is NOT in the sequence: it is the sole genuinely irreversible
+    // mutation, so it runs AFTER the sequence has committed, where nothing that could still fail
+    // follows it.
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+
+    interface DeleteCtx {
+      /** Absolute path of the cemetery zip G01c wrote, so its undo can remove it. */
+      archivePath: string | null
+      /** True once G02 actually demoted; false when the agent was never MANAGER. */
+      demoted: boolean
+      /** Sessions alive BEFORE the demote, so G02's undo can re-wake what the R10 cascade slept. */
+      liveBeforeDemote: string[]
+      /** Whole-store snapshots. Restoring the whole store is the ChangeClient precedent: the
+       *  pipeline runs in seconds, and a partial restore is harder to reason about than a rewind. */
+      teamsBefore: unknown[] | null
+      sessionKilled: boolean
+      persistedBefore: unknown | null
+      keyRevocation: { count: number; restore: () => Promise<number> } | null
+      tokenRevocation: { count: number; restore: () => Promise<number> } | null
+      requestsBefore: unknown | null
+      groupsBefore: unknown[] | null
+      registryBefore: unknown[] | null
+    }
+    const dc: DeleteCtx = {
+      archivePath: null,
+      demoted: false,
+      liveBeforeDemote: [],
+      teamsBefore: null,
+      sessionKilled: false,
+      persistedBefore: null,
+      keyRevocation: null,
+      tokenRevocation: null,
+      requestsBefore: null,
+      groupsBefore: null,
+      registryBefore: null,
+    }
+
+    // Detail lines go into `ops` from inside `run`, preserving today's exact strings. The runner's
+    // own ops are appended ONLY on failure, where they carry the `reverted` / `ROLLBACK FAILED`
+    // lines that are the whole point of the sequence.
+    const deleteGates = [
+      {
+        id: 'G01c',
+        what: 'Archived agent to cemetery',
+        run: async (c: DeleteCtx) => {
+          if (hard) {
+            // TRDD-0301PUYW (SCEN-024 P2-PROP-002): a HARD delete intentionally skips the cemetery
+            // archive. hard=true is the UI's explicit "Delete Forever" path — the user asked for a
+            // permanent, non-recoverable deletion, so producing a zip would contradict that intent
+            // and leave recoverable data behind. The asymmetry is by design, not an oversight.
+            ops.push('G01c: Hard-delete — skipping cemetery archive')
+            return
+          }
+          const { exportAgentZip } = await import('@/services/agents-transfer-service')
+          const zipResult = await exportAgentZip(agentId)
+          if (!zipResult.data) {
+            // A FAILED ARCHIVE IS A FAILED SOFT DELETE. "Soft" means exactly one thing: it is
+            // recoverable, and the zip IS the recovery. Continuing without it does not degrade the
+            // operation, it CHANGES it into an irreversible delete the caller never asked for.
+            // Nothing downstream could detect that, because the only evidence would have been the
+            // archive. Refusing costs the user a retry; proceeding costs them the agent.
+            throw new Error(
+              `the cemetery archive failed (${zipResult.error || 'unknown'}), so the deletion would NOT be recoverable — use hard delete if you intend a permanent, non-recoverable deletion`,
+            )
+          }
           const cemeteryDir = statePath('cemetery')
           const { mkdirSync, writeFileSync } = await import('fs')
           mkdirSync(cemeteryDir, { recursive: true, mode: 0o700 })
           const archFile = join(cemeteryDir, zipResult.data.filename)
           writeFileSync(archFile, zipResult.data.buffer)
+          c.archivePath = archFile
           ops.push(`G01c: Archived to cemetery: ${zipResult.data.filename} (${Math.round(zipResult.data.buffer.length / 1024)}KB)`)
-        } else {
-          // A FAILED ARCHIVE IS A FAILED SOFT DELETE — it used to WARN and proceed.
-          // "Soft" delete means exactly one thing: it is recoverable, and the cemetery zip IS the
-          // recovery. Continuing without it does not degrade the operation, it CHANGES it into an
-          // irreversible delete the caller never asked for — and then reports success. Nothing
-          // downstream can detect that, because the only evidence would have been the archive.
-          // Refusing costs the user a retry; proceeding costs them the agent.
-          result.error = `Cannot soft-delete "${agent.name}": the cemetery archive failed (${zipResult.error || 'unknown'}), so the deletion would NOT be recoverable. No changes were made. Retry, or use hard delete if you intend a permanent, non-recoverable deletion.`
-          ops.push('G01c: DENIED — archive failed; refusing to turn a recoverable delete into a permanent one')
-          return result
-        }
-      } catch (err) {
-        result.error = `Cannot soft-delete "${agent.name}": the cemetery archive failed (${err instanceof Error ? err.message : String(err)}), so the deletion would NOT be recoverable. No changes were made. Retry, or use hard delete if you intend a permanent, non-recoverable deletion.`
-        ops.push('G01c: DENIED — archive failed; refusing to turn a recoverable delete into a permanent one')
-        return result
-      }
-    } else {
-      // TRDD-0301PUYW (SCEN-024 P2-PROP-002): a HARD delete intentionally
-      // skips the cemetery archive. hard=true is the UI's explicit "Delete
-      // Forever" path (DeleteAgentDialog "Delete Forever" button) — the user
-      // asked for a permanent, non-recoverable deletion, so producing a
-      // cemetery zip would contradict that intent and leave recoverable data
-      // behind. The recoverable path is hard=false ("Move to Cemetery"), which
-      // takes the archive branch above. This asymmetry is by design, not an
-      // oversight.
-      ops.push('G01c: Hard-delete — skipping cemetery archive')
-    }
+        },
+        undo: async (c: DeleteCtx) => {
+          // A rolled-back delete must not leave a cemetery entry for a still-live agent: the
+          // cemetery is the list of agents that ARE deleted, and a ghost row there is read by the
+          // restore UI as a recoverable agent that never went anywhere.
+          if (!c.archivePath) return
+          const { unlinkSync, existsSync: exists } = await import('fs')
+          if (exists(c.archivePath)) unlinkSync(c.archivePath)
+          c.archivePath = null
+        },
+      },
+      {
+        id: 'G02',
+        what: 'Auto-demoted MANAGER to AUTONOMOUS',
+        run: async (c: DeleteCtx) => {
+          // R9.10 MANDATES this auto-demotion (GOVERNANCE-RULES.md:482, verdict Explicit; pinned by
+          // tests/governance/r3-r9-team-governance.test.ts:1134). An earlier design ruling to
+          // replace it with a refusal was RETRACTED — it treated this gate's own comment as
+          // authority over the rule. It is not convenience; it is required.
+          const { isManager: checkManager } = await import('@/lib/governance')
+          if (!checkManager(agentId)) {
+            ops.push('G02: Agent is not MANAGER — OK to delete')
+            return
+          }
+          ops.push('G02: Agent is MANAGER — auto-demoting to AUTONOMOUS before deletion')
 
-    // ── G02: Auto-demote MANAGER before deletion ───────────────
-    // If the agent is MANAGER, auto-demote to AUTONOMOUS first. This removes the MANAGER
-    // designation (triggering the R10 blocking cascade on all teams) but avoids forcing the user
-    // through 2 manual steps.
-    //
-    // RUNS AFTER THE ARCHIVE (G01c), NOT BEFORE IT. This is the FIRST mutation in the
-    // pipeline, and the archive above is what makes it recoverable — demoting before snapshotting
-    // wrote the demoted title into the snapshot.
-    try {
-      const { isManager: checkManager } = await import('@/lib/governance')
-      if (checkManager(agentId)) {
-        ops.push('G02: Agent is MANAGER — auto-demoting to AUTONOMOUS before deletion')
-        const titleResult = await ChangeTitle(agentId, 'autonomous', {
-          authContext: options?.authContext,
-          skipRestart: true,  // No point restarting — we're about to delete
-        })
-        if (!titleResult.success) {
-          result.error = `Cannot delete the MANAGER: auto-demotion failed — ${titleResult.error}`
-          ops.push(`G02: FAILED — ChangeTitle to AUTONOMOUS failed: ${titleResult.error}`)
-          return result
-        }
-        ops.push('G02: MANAGER auto-demoted to AUTONOMOUS — proceeding with deletion')
-      } else {
-        ops.push('G02: Agent is not MANAGER — OK to delete')
-      }
-    } catch {
-      ops.push('G02: WARN — governance check failed, proceeding')
-    }
+          // Record who is awake FIRST. Demoting the MANAGER fires the R10 cascade, which blocks
+          // every team and KILLS its agents' sessions — so the undo has to re-wake them, and only
+          // a pre-demote snapshot can say which ones were awake to begin with.
+          try {
+            const { getRuntime } = await import('@/lib/agent-runtime')
+            const live = await getRuntime().listSessions()
+            c.liveBeforeDemote = live.map((s) => s.name)
+          } catch {
+            c.liveBeforeDemote = []
+          }
 
-    // ── G04: Strip COS/Orchestrator from teams + remove from all teams ──
-    // Atomic: load teams once, make all changes, save once.
-    try {
-      const { loadTeams, saveTeams } = await import('@/lib/team-registry')
-      const teams = loadTeams()
-      let dirty = false
-      for (const team of teams) {
-        if (team.chiefOfStaffId === agentId) {
-          team.chiefOfStaffId = null
-          ops.push(`G04: Cleared COS slot in team "${team.name}"`)
-          dirty = true
-        }
-        if (team.orchestratorId === agentId) {
-          team.orchestratorId = null
-          ops.push(`G04: Cleared Orchestrator slot in team "${team.name}"`)
-          dirty = true
-        }
-        const before = team.agentIds.length
-        team.agentIds = team.agentIds.filter((id: string) => id !== agentId)
-        if (team.agentIds.length < before) {
-          ops.push(`G04: Removed from team "${team.name}"`)
-          dirty = true
-        }
-      }
-      if (dirty) saveTeams(teams)
-      else ops.push('G04: Agent not in any team')
-    } catch (err) {
-      ops.push(`G04: WARN — team cleanup failed: ${err instanceof Error ? err.message : err}`)
-    }
+          const titleResult = await ChangeTitle(agentId, 'autonomous', {
+            authContext: options?.authContext,
+            skipRestart: true,  // No point restarting — we're about to delete
+          })
+          if (!titleResult.success) {
+            throw new Error(`cannot delete the MANAGER: auto-demotion failed — ${titleResult.error}`)
+          }
+          c.demoted = true
+          ops.push('G02: MANAGER auto-demoted to AUTONOMOUS — proceeding with deletion')
+        },
+        undo: async (c: DeleteCtx) => {
+          if (!c.demoted) return
+          // Restoring the TITLE alone is not restoring the system: the R10 cascade slept the whole
+          // fleet on the way down and re-promotion does not wake it. An undo that returns a
+          // sleeping fleet is one the caller would not recognise (R51.10), so the wake is part of
+          // the compensation, not a nicety.
+          const back = await ChangeTitle(agentId, 'manager', {
+            authContext: options?.authContext,
+            skipRestart: true,
+          })
+          if (!back.success) {
+            throw new Error(`could not restore the MANAGER title: ${back.error}`)
+          }
+          c.demoted = false
 
-    // ── G05: Kill tmux sessions ────────────────────────────────
-    // The agent's tmux session name is the agent name (convention)
-    try {
-      const { getRuntime } = await import('@/lib/agent-runtime')
-      const runtime = getRuntime()
-      const sessionName = agent.name
-      if (sessionName) {
-        try {
+          const { getRuntime } = await import('@/lib/agent-runtime')
+          const runtime = getRuntime()
+          const nowLive = new Set((await runtime.listSessions()).map((s) => s.name))
+          const toWake = c.liveBeforeDemote.filter((name) => !nowLive.has(name))
+          if (toWake.length === 0) return
+
+          const { getAgentByName } = await import('@/lib/agent-registry')
+          const { wakeAgent } = await import('@/services/agents-core-service')
+          const failed: string[] = []
+          for (const name of toWake) {
+            try {
+              const sleeper = getAgentByName(name)
+              if (!sleeper) { failed.push(`${name} (no registry entry)`); continue }
+              // wakeAgent returns a ServiceResult: success is `data` present, not a `success` field.
+              const woke = await wakeAgent(sleeper.id, { authContext: options?.authContext })
+              if (woke.error || !woke.data?.woken) failed.push(`${name} (${woke.error ?? 'wake reported not woken'})`)
+            } catch (wakeErr) {
+              failed.push(`${name} (${wakeErr instanceof Error ? wakeErr.message : wakeErr})`)
+            }
+          }
+          // Throwing here is deliberate: the fleet really is still asleep, and R51.5 forbids
+          // reporting "no changes were made" when changes remain. A CRITICAL message naming the
+          // agents a human must wake is the honest outcome.
+          if (failed.length) {
+            throw new Error(`title restored, but ${failed.length} session(s) could not be re-woken: ${failed.join(', ')}`)
+          }
+        },
+      },
+      {
+        id: 'G04',
+        what: 'Removed agent from every team (COS/Orchestrator slots cleared)',
+        run: async (c: DeleteCtx) => {
+          const { loadTeams, saveTeams } = await import('@/lib/team-registry')
+          const teams = loadTeams()
+          c.teamsBefore = JSON.parse(JSON.stringify(teams))
+          let dirty = false
+          for (const team of teams) {
+            if (team.chiefOfStaffId === agentId) {
+              team.chiefOfStaffId = null
+              ops.push(`G04: Cleared COS slot in team "${team.name}"`)
+              dirty = true
+            }
+            if (team.orchestratorId === agentId) {
+              team.orchestratorId = null
+              ops.push(`G04: Cleared Orchestrator slot in team "${team.name}"`)
+              dirty = true
+            }
+            const before = team.agentIds.length
+            team.agentIds = team.agentIds.filter((id: string) => id !== agentId)
+            if (team.agentIds.length < before) {
+              ops.push(`G04: Removed from team "${team.name}"`)
+              dirty = true
+            }
+          }
+          if (dirty) saveTeams(teams)
+          else ops.push('G04: Agent not in any team')
+        },
+        undo: async (c: DeleteCtx) => {
+          if (!c.teamsBefore) return   // run threw before snapshotting: nothing was written
+          const { saveTeams } = await import('@/lib/team-registry')
+          saveTeams(c.teamsBefore as Parameters<typeof saveTeams>[0])
+        },
+      },
+      {
+        id: 'G05',
+        what: 'Killed the agent tmux session',
+        run: async (c: DeleteCtx) => {
+          const { getRuntime } = await import('@/lib/agent-runtime')
+          const runtime = getRuntime()
+          const sessionName = agent.name
+          if (!sessionName) { ops.push('G05: No session name — skipped'); return }
+          // Record whether it was actually alive: relaunching a session that was already dead
+          // would CREATE state the rollback is supposed to restore, not restore it.
+          c.sessionKilled = await runtime.sessionExists(sessionName as string).catch(() => false)
+          if (!c.sessionKilled) { ops.push(`G05: Session "${sessionName}" already dead or not found`); return }
           await runtime.killSession(sessionName as string)
           ops.push(`G05: Killed tmux session "${sessionName}"`)
-        } catch {
-          ops.push(`G05: Session "${sessionName}" already dead or not found`)
-        }
-      } else {
-        ops.push('G05: No session name — skipped')
-      }
-    } catch (err) {
-      ops.push(`G05: WARN — session kill failed: ${err instanceof Error ? err.message : err}`)
-    }
+        },
+        undo: async (c: DeleteCtx) => {
+          if (!c.sessionKilled) return
+          const { wakeAgent } = await import('@/services/agents-core-service')
+          const woke = await wakeAgent(agentId, { authContext: options?.authContext })
+          if (woke.error || !woke.data?.woken) {
+            throw new Error(`could not relaunch session "${agent.name}": ${woke.error ?? 'wake reported not woken'}`)
+          }
+          c.sessionKilled = false
+        },
+      },
+      {
+        id: 'G05b',
+        what: 'Dropped the PersistedSession record',
+        run: async (c: DeleteCtx) => {
+          // Killing the tmux session (G05) is NOT enough: ~/.aimaestro/sessions.json keeps its own
+          // PersistedSession row, and nothing else in this pipeline removed it. A deleted agent then
+          // stayed "a session that ought to exist" forever — the liveness/recovery paths treat a
+          // persisted-but-absent session as a DEAD agent, and reviving it runs the wake invariants,
+          // which re-create <workdir>/.claude/ and re-seed the aimaestro-*.md DEP rules. Observed
+          // 2026-07-25: three hard-deleted SCEN-031 agents kept regrowing their workdirs after every
+          // recursive folder delete, because the row outlived them. Unpersist on BOTH soft and hard
+          // delete — a soft-deleted agent is a tombstone, not a session to restore.
+          const { loadPersistedSessions, unpersistSession } = await import('@/lib/session-persistence')
+          const sessionName = agent.name
+          if (!sessionName) { ops.push('G05b: No session name — skipped'); return }
+          c.persistedBefore = loadPersistedSessions()
+          const outcome = await unpersistSession(sessionName as string)
+          ops.push(`G05b: PersistedSession "${sessionName}" — ${outcome}`)
+        },
+        undo: async (c: DeleteCtx) => {
+          if (!c.persistedBefore) return
+          const { savePersistedSessions } = await import('@/lib/session-persistence')
+          savePersistedSessions(c.persistedBefore as Parameters<typeof savePersistedSessions>[0])
+        },
+      },
+      {
+        id: 'G06',
+        what: 'Revoked AMP API keys and AID governance tokens',
+        run: async (c: DeleteCtx) => {
+          // Both stores keep their writers module-private behind a lock, so the compensation had to
+          // be built INSIDE them (TRDD-DQ6XN2VP step 0). Each returns a `restore` CLOSURE, which is
+          // what keeps key hashes and token records out of this ctx entirely.
+          const { revokeAllKeysForAgentCompensable } = await import('@/lib/amp-auth')
+          c.keyRevocation = await revokeAllKeysForAgentCompensable(agentId)
+          ops.push(`G06: ${c.keyRevocation.count} AMP API key(s) revoked`)
 
-    // ── G05b: Drop the PersistedSession record ─────────────────
-    // Killing the tmux session (G05) is NOT enough: ~/.aimaestro/sessions.json keeps its own
-    // PersistedSession row, and nothing else in this pipeline removed it. A deleted agent then
-    // stayed "a session that ought to exist" forever — the liveness/recovery paths treat a
-    // persisted-but-absent session as a DEAD agent, and reviving it runs the wake invariants,
-    // which re-create <workdir>/.claude/ and re-seed the aimaestro-*.md DEP rules. Observed
-    // 2026-07-25: three hard-deleted SCEN-031 agents kept regrowing their workdirs after every
-    // `rm -rf`, because the row outlived them. Unpersist on BOTH soft and hard delete — a
-    // soft-deleted agent is a tombstone, not a session to restore.
-    try {
-      const { unpersistSession } = await import('@/lib/session-persistence')
-      const sessionName = agent.name
-      if (sessionName) {
-        const outcome = await unpersistSession(sessionName as string)
-        ops.push(`G05b: PersistedSession "${sessionName}" — ${outcome}`)
-      } else {
-        ops.push('G05b: No session name — skipped')
-      }
-    } catch (err) {
-      ops.push(`G05b: WARN — unpersist failed: ${err instanceof Error ? err.message : err}`)
-    }
+          const { revokeTokensForAgentCompensable } = await import('@/lib/aid-token')
+          c.tokenRevocation = await revokeTokensForAgentCompensable(agentId)
+          ops.push(`G06: ${c.tokenRevocation.count} AID governance token(s) revoked`)
+        },
+        undo: async (c: DeleteCtx) => {
+          // Reverse within the gate too: tokens were revoked second, so they are restored first.
+          await c.tokenRevocation?.restore()
+          await c.keyRevocation?.restore()
+          c.tokenRevocation = null
+          c.keyRevocation = null
+        },
+      },
+      {
+        id: 'G07',
+        what: 'Auto-rejected pending governance requests and transfers',
+        run: async (c: DeleteCtx) => {
+          // G07 and G07b were two gates reading and writing ONE store, which meant two snapshots of
+          // the same file and a reverse-order undo that had to rewind it twice. They are one gate:
+          // the transfer cancellation (R8.3) is a filter over the same pending set.
+          const { loadGovernanceRequests, rejectGovernanceRequest } = await import('@/lib/governance-request-registry')
+          c.requestsBefore = JSON.parse(JSON.stringify(loadGovernanceRequests()))
 
-    // ── G06: Revoke credentials ────────────────────────────────
-    // Revoke AMP API keys so stolen keys can't be reused
-    try {
-      const { revokeAllKeysForAgent } = await import('@/lib/amp-auth')
-      await revokeAllKeysForAgent(agentId)
-      ops.push('G06: AMP API keys revoked')
-    } catch (err) {
-      ops.push(`G06: WARN — AMP key revocation failed: ${err instanceof Error ? err.message : err}`)
-    }
-    // Revoke AID governance tokens
-    try {
-      const { revokeTokensForAgent } = await import('@/lib/aid-token')
-      const count = await revokeTokensForAgent(agentId)
-      ops.push(`G06: ${count} AID governance token(s) revoked`)
-    } catch {
-      ops.push('G06: AID token revocation skipped')
-    }
+          const file = loadGovernanceRequests()
+          const actor = options?.authContext?.agentId || 'system'
+          const pending = file.requests.filter((r: { status: string; payload: { agentId?: string } }) =>
+            r.status === 'pending' && r.payload?.agentId === agentId
+          )
+          const transfers = pending.filter((r: { type: string }) => r.type === 'transfer-agent')
+          for (const req of pending) {
+            const reason = req.type === 'transfer-agent'
+              ? 'Agent deleted — transfer cancelled'
+              : 'Target agent deleted'
+            await rejectGovernanceRequest(req.id, actor, reason)
+          }
+          ops.push(pending.length > 0
+            ? `G07: Auto-rejected ${pending.length} pending governance request(s)`
+            : 'G07: No pending governance requests')
+          ops.push(transfers.length > 0
+            ? `G07b: Cancelled ${transfers.length} pending transfer(s)`
+            : 'G07b: No pending transfers')
+        },
+        undo: async (c: DeleteCtx) => {
+          if (!c.requestsBefore) return
+          const { saveGovernanceRequests } = await import('@/lib/governance-request-registry')
+          saveGovernanceRequests(c.requestsBefore as Parameters<typeof saveGovernanceRequests>[0])
+        },
+      },
+      {
+        id: 'G07c',
+        what: 'Unsubscribed the agent from every group',
+        run: async (c: DeleteCtx) => {
+          const { loadGroups, saveGroups } = await import('@/lib/group-registry')
+          const groups = loadGroups()
+          c.groupsBefore = JSON.parse(JSON.stringify(groups))
+          let unsubbed = 0
+          for (const group of groups) {
+            if (group.subscriberIds?.includes(agentId)) {
+              group.subscriberIds = group.subscriberIds.filter((id: string) => id !== agentId)
+              unsubbed++
+            }
+          }
+          if (unsubbed > 0) {
+            saveGroups(groups)
+            ops.push(`G07c: Unsubscribed from ${unsubbed} group(s)`)
+          } else {
+            ops.push('G07c: Not in any groups')
+          }
+        },
+        undo: async (c: DeleteCtx) => {
+          if (!c.groupsBefore) return
+          const { saveGroups } = await import('@/lib/group-registry')
+          saveGroups(c.groupsBefore as Parameters<typeof saveGroups>[0])
+        },
+      },
+      {
+        id: 'G08',
+        what: 'Deleted the agent from the registry',
+        run: async (c: DeleteCtx) => {
+          const { loadAgents } = await import('@/lib/agent-registry')
+          c.registryBefore = JSON.parse(JSON.stringify(loadAgents()))
+          const deleted = await registryDelete(agentId, hard)
+          if (!deleted) throw new Error('registry delete returned false')
+          ops.push(`G08: ${hard ? 'Hard' : 'Soft'}-deleted from registry`)
+        },
+        undo: async (c: DeleteCtx) => {
+          if (!c.registryBefore) return
+          const { saveAgents } = await import('@/lib/agent-registry')
+          saveAgents(c.registryBefore as Parameters<typeof saveAgents>[0])
+        },
+      },
+      {
+        id: 'G08b',
+        what: 'Verified the registry delete landed on disk',
+        // READ-ONLY: it inspects registry.json and never writes. Declaring it so is what lets the
+        // pre-flight accept it without an `undo` — and what makes its failure roll G08 back.
+        readOnly: true,
+        run: async () => {
+          // SCEN-002 P0-003: registryDelete() can return true even when the on-disk write silently
+          // failed (cache glitch, lock contention). Without this check the UI reports success while
+          // registry.json still contains the agent — which resurrects on the next restart.
+          const { readFileSync } = await import('fs')
+          // Same seam as ChangeTitle's G14 — see the note there (TRDD-N7X4KDQ2).
+          const REGISTRY_PATH_G08 = statePath('agents', 'registry.json')
+          const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH_G08, 'utf-8')) as Array<Record<string, unknown>>
+          const diskAgent = diskAgents.find((a) => a.id === agentId)
+          if (hard) {
+            if (diskAgent) throw new Error(`hard-delete verification failed — agent ${agentId} still present in registry.json`)
+            ops.push('G08b: Verified on disk — agent removed from registry.json')
+            return
+          }
+          // Soft-delete should KEEP the entry, just mark it deleted.
+          if (!diskAgent) throw new Error(`soft-delete verification failed — agent ${agentId} removed from registry.json (expected deletedAt marker)`)
+          if (!diskAgent.deletedAt) throw new Error(`soft-delete verification failed — agent ${agentId} on disk lacks deletedAt`)
+          ops.push('G08b: Verified on disk — agent marked deletedAt in registry.json')
+        },
+      },
+    ]
 
-    // ── G07: Auto-reject pending governance requests ───────────
-    try {
-      const { loadGovernanceRequests, rejectGovernanceRequest } = await import('@/lib/governance-request-registry')
-      const file = loadGovernanceRequests()
-      const pending = file.requests.filter((r: { status: string; payload: { agentId?: string } }) =>
-        r.status === 'pending' && r.payload?.agentId === agentId
-      )
-      for (const req of pending) {
-        await rejectGovernanceRequest(req.id, options?.authContext?.agentId || 'system', 'Target agent deleted')
-      }
-      if (pending.length > 0) {
-        ops.push(`G07: Auto-rejected ${pending.length} pending governance request(s)`)
-      } else {
-        ops.push('G07: No pending governance requests')
-      }
-    } catch (err) {
-      ops.push(`G07: WARN — governance request cleanup failed: ${err instanceof Error ? err.message : err}`)
-    }
-
-    // ── G07b: Cancel pending transfers involving this agent (R8.3) ──
-    try {
-      const { loadGovernanceRequests, rejectGovernanceRequest: rejectGov } = await import('@/lib/governance-request-registry')
-      const file = loadGovernanceRequests()
-      const transfersPending = file.requests.filter((r: { type: string; status: string; payload: { agentId?: string } }) =>
-        r.status === 'pending' && r.type === 'transfer-agent' && r.payload?.agentId === agentId
-      )
-      for (const req of transfersPending) {
-        await rejectGov(req.id, options?.authContext?.agentId || 'system', 'Agent deleted — transfer cancelled')
-      }
-      if (transfersPending.length > 0) {
-        ops.push(`G07b: Cancelled ${transfersPending.length} pending transfer(s)`)
-      } else {
-        ops.push('G07b: No pending transfers')
-      }
-    } catch (err) {
-      ops.push(`G07b: WARN — transfer cleanup failed: ${err instanceof Error ? err.message : err}`)
-    }
-
-    // ── G07c: Unsubscribe from all groups ─────────────────────
-    try {
-      const { loadGroups, saveGroups } = await import('@/lib/group-registry')
-      const groups = loadGroups()
-      let unsubbed = 0
-      for (const group of groups) {
-        if (group.subscriberIds?.includes(agentId)) {
-          group.subscriberIds = group.subscriberIds.filter((id: string) => id !== agentId)
-          unsubbed++
-        }
-      }
-      if (unsubbed > 0) {
-        saveGroups(groups)
-        ops.push(`G07c: Unsubscribed from ${unsubbed} group(s)`)
-      } else {
-        ops.push('G07c: Not in any groups')
-      }
-    } catch (err) {
-      ops.push(`G07c: WARN — group cleanup failed: ${err instanceof Error ? err.message : err}`)
-    }
-
-    // ── G08: Delete from registry ──────────────────────────────
-    const deleted = await registryDelete(agentId, hard)
-    if (!deleted) {
-      result.error = 'Registry deletion failed'
-      ops.push('G08: FAILED — registry delete returned false')
-      return result
-    }
-    ops.push(`G08: ${hard ? 'Hard' : 'Soft'}-deleted from registry`)
-
-    // ── G08b: Verify deletion landed on disk ───────────────────
-    // SCEN-002 P0-003: registryDelete() can return true even when the
-    // on-disk write silently failed (cache glitch, lock contention). Without
-    // this check, UI reports success while ~/.aimaestro/agents/registry.json
-    // still contains the deleted agent — which resurrects on next restart.
-    // For soft-delete: verify the agent has `deletedAt` set on disk.
-    // For hard-delete: verify the agent entry is GONE from disk.
-    try {
-      const { readFileSync } = await import('fs')
-      // Same seam as ChangeTitle's G14 — see the note there (TRDD-N7X4KDQ2).
-      const REGISTRY_PATH_G08 = statePath('agents', 'registry.json')
-      const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH_G08, 'utf-8')) as Array<Record<string, unknown>>
-      const diskAgent = diskAgents.find((a) => a.id === agentId)
-      if (hard) {
-        if (diskAgent) {
-          result.error = `G08b: Hard-delete verification failed — agent ${agentId} still present in registry.json`
-          ops.push(`G08b: DENIED — agent still in registry.json after hard-delete`)
-          return result
-        }
-        ops.push(`G08b: Verified on disk — agent removed from registry.json`)
-      } else {
-        if (!diskAgent) {
-          // Soft-delete should KEEP the entry, just mark it deleted
-          result.error = `G08b: Soft-delete verification failed — agent ${agentId} removed from registry.json (expected deletedAt marker)`
-          ops.push(`G08b: DENIED — agent missing from registry.json after soft-delete`)
-          return result
-        }
-        if (!diskAgent.deletedAt) {
-          result.error = `G08b: Soft-delete verification failed — agent ${agentId} on disk lacks deletedAt`
-          ops.push(`G08b: DENIED — agent lacks deletedAt after soft-delete`)
-          return result
-        }
-        ops.push(`G08b: Verified on disk — agent marked deletedAt in registry.json`)
-      }
-    } catch (verifyErr) {
-      result.error = `G08b: Registry verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
-      ops.push(`G08b: DENIED — registry verification failed`)
+    const txn = await runGateSequence(deleteGates, dc)
+    if (!txn.ok) {
+      // R51.3/R51.5 wording comes from the runner: "NO CHANGES WERE MADE" when the rollback was
+      // complete, the CRITICAL "INVALID STATE" form naming each unrevertable gate when it was not.
+      ops.push(...txn.ops)
+      result.error = txn.message
       return result
     }
 

@@ -185,7 +185,16 @@ const {
       getSelfHostId: vi.fn(() => 'test-host'),
       isSelf: vi.fn(() => true),
     },
-    mockSessionPersistence: { persistSession: vi.fn(), unpersistSession: vi.fn() },
+    // `load`/`save` are what DeleteAgent's G05b snapshots and its undo restores (TRDD-DQ6XN2VP).
+    // Omitting the loader made the gate throw, abort the transactional sequence, and roll back —
+    // which surfaced as G02's undo UNBLOCKING the teams this file asserts stay blocked. A missing
+    // stub export now fails a test about something else entirely, so keep this surface complete.
+    mockSessionPersistence: {
+      persistSession: vi.fn(),
+      unpersistSession: vi.fn(),
+      loadPersistedSessions: vi.fn(() => []),
+      savePersistedSessions: vi.fn(),
+    },
     mockAmpInboxWriter: {
       initAgentAMPHome: vi.fn(async () => undefined),
       getAgentAMPDir: vi.fn(() => '/tmp/amp/r3-r9'),

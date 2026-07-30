@@ -201,16 +201,33 @@ export const stubs = {
     getRuntime: () => ({
       killSession: async () => undefined,
       sessionExists: async () => false,
+      // Reached only by G02's undo, which needs to know who was awake before the R10 cascade slept
+      // them. Unreachable while `isManager` is false, but a stub that omits a call some branch CAN
+      // make fails as a confusing destructure error rather than as the assertion it belongs to.
+      listSessions: async () => [],
     }),
   }),
   sessionPersistence: () => ({
     unpersistSession: async () => 'removed',
     loadPersistedSessions: () => [],
+    savePersistedSessions: () => undefined,
   }),
-  ampAuth: () => ({ revokeAllKeysForAgent: async () => 0, getKeysForAgent: () => [] }),
-  aidToken: () => ({ revokeTokensForAgent: async () => 0, countTokensForAgent: () => 0 }),
+  // Since TRDD-DQ6XN2VP the gates call the COMPENSABLE forms, which return a `restore` closure
+  // rather than a bare count. Both names stay: the old ones still have callers elsewhere, and
+  // production now delegates old → new so there is one implementation of each mutation.
+  ampAuth: () => ({
+    revokeAllKeysForAgent: async () => 0,
+    revokeAllKeysForAgentCompensable: async () => ({ count: 0, restore: async () => 0 }),
+    getKeysForAgent: () => [],
+  }),
+  aidToken: () => ({
+    revokeTokensForAgent: async () => 0,
+    revokeTokensForAgentCompensable: async () => ({ count: 0, restore: async () => 0 }),
+    countTokensForAgent: () => 0,
+  }),
   governanceRequests: () => ({
     loadGovernanceRequests: () => ({ requests: [] }),
+    saveGovernanceRequests: () => undefined,
     rejectGovernanceRequest: async () => undefined,
     approveGovernanceRequest: async () => undefined,
     createGovernanceRequest: async () => undefined,

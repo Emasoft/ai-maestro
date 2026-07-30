@@ -116,6 +116,10 @@ vi.mock('@/lib/governance-sync', () => ({
 
 vi.mock('@/lib/governance-request-registry', () => ({
   loadGovernanceRequests: vi.fn(() => ({ requests: [] })),
+  // Since TRDD-DQ6XN2VP every mutating DeleteAgent gate carries an `undo`, so each store's mock
+  // must expose the WRITER the compensation calls as well as the reader the gate calls. A missing
+  // export makes the gate's destructure throw, which now aborts the whole transactional sequence.
+  saveGovernanceRequests: vi.fn(),
   rejectGovernanceRequest: vi.fn(),
   approveGovernanceRequest: vi.fn(),
   createGovernanceRequest: vi.fn(),
@@ -150,6 +154,7 @@ vi.mock('@/lib/ledger-emit', () => ({
 }))
 vi.mock('@/lib/aid-token', () => ({
   revokeTokensForAgent: vi.fn(async () => 0),
+  revokeTokensForAgentCompensable: vi.fn(async () => ({ count: 0, restore: async () => 0 })),
 }))
 vi.mock('@/lib/portfolio-store', () => ({
   revokeTokensFromIssuer: vi.fn(async () => 0),
@@ -159,6 +164,7 @@ vi.mock('@/lib/portfolio-ledger', () => ({
 }))
 vi.mock('@/lib/amp-auth', () => ({
   revokeAllKeysForAgent: vi.fn(async () => 0),
+  revokeAllKeysForAgentCompensable: vi.fn(async () => ({ count: 0, restore: async () => 0 })),
 }))
 vi.mock('@/lib/group-registry', () => ({
   loadGroups: vi.fn(() => []),
@@ -177,7 +183,14 @@ vi.mock('@/services/agents-transfer-service', () => ({
 }))
 
 vi.mock('@/lib/agent-runtime', () => ({
-  getRuntime: vi.fn(() => ({ killSession: vi.fn(async () => undefined) })),
+  getRuntime: vi.fn(() => ({
+    killSession: vi.fn(async () => undefined),
+    // G05 now asks whether the session was actually ALIVE before killing it — relaunching one that
+    // was already dead would CREATE state the rollback is meant to restore, not restore it.
+    sessionExists: vi.fn(async () => false),
+    // Reached only by G02's undo (unreachable here: these agents are not MANAGER).
+    listSessions: vi.fn(async () => []),
+  })),
 }))
 
 vi.mock('child_process', () => ({

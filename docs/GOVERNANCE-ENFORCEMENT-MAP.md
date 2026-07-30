@@ -307,9 +307,9 @@ Row format is fixed so a regex parses each line:
 | R39.2 | UNENFORCED | — | — |
 | R39.3 | UNENFORCED | — | — |
 | R39.4 | UNENFORCED | — | — |
-| R39.5 | ENFORCED | lib/communication-graph.ts:363-371 | — |
+| R39.5 | CONTRADICTED | lib/communication-graph.ts:361-373 — the branch grants `recipientIsOwnUser \|\| recipientIsActiveMaestro`, i.e. the pre-2026-07-22 shape; the CURRENT text grants own user + **the MANAGER** and says outright it obeys "not the MAESTRO *user*". Also UNREACHABLE — nothing in production builds an `assistantSender` block, so the branch always falls through to deny. Downgraded from ENFORCED by the TRDD-SPS63XHA ruling: a citation naming real, working code that enforces a SUPERSEDED rule is invisible to every instrument we have. | tests/unit/communication-graph-user-routing.test.ts (pins the drift + the no-producer fact) |
 | R39.6 | ENFORCED | services/element-management-service.ts:6906-6925 (DeleteAgent::G01b) | tests/services/element-management-assistant-title.test.ts |
-| R39.7 | ENFORCED | lib/communication-graph.ts:113-118 | — |
+| R39.7 | CONTRADICTED | lib/communication-graph.ts:113-118 — the empty `'assistant'` edge set is a CORRECT encoding of invisibility, but its own comment states the pre-2026-07-22 shape ("its own user + the active MAESTRO") and the relational branch it defers to is the R39.5 one downgraded above. The current text adds **the MANAGER** (R39.9) and any MANAGER-assigned collaborator on a shared repo (R39.10) as the exceptions to invisibility, and neither is encoded anywhere. Downgraded by the TRDD-SPS63XHA ruling. | tests/unit/communication-graph-user-routing.test.ts (pins the drift + the no-producer fact) |
 | R39.8 | UNENFORCED | — | — |
 | R39.9 | UNENFORCED | — | — |
 | R39.10 | UNENFORCED | — | — |

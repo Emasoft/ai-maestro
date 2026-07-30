@@ -1,11 +1,11 @@
 ---
 trdd-id: SPS63XHA
 title: R39.5 and R39.7 are marked ENFORCED but their guards encode the pre-2026-07-22 rule
-column: planned
+column: blocked
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T20:44:27+0200
-updated: 2026-07-30T12:17:34+0200
+updated: 2026-07-30T13:10:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,8 +22,9 @@ effort: small
 release-via: none
 relevant-rules: [39]
 npt: []
-eht: []
-blocked-by: []
+eht: [HW72YBZW]
+blocked-by: [HW72YBZW]
+pre-block-column: planned
 external-refs: []
 ---
 
@@ -85,12 +86,30 @@ ASSISTANT obeys "not the MAESTRO *user*", and the code lets it message exactly t
 
 ## Acceptance
 
-- [ ] The MANAGER rules which of the three above holds, recorded in this card's Approval log
-- [ ] The chosen side is implemented, and R39.5/R39.7's map rows say something TRUE of the
+- [x] The MANAGER rules which of the three above holds, recorded in this card's Approval log — RULED
+      2026-07-30: **the TEXT is authoritative; code may be STRICTER, never LOOSER.**
+- [x] **The MAP half is done here; the CODE half is TRDD-HW72YBZW**, per the ruling's own "implementation
+      is a separate card". R39.5 and R39.7 are now **CONTRADICTED**, each row naming the drift in full.
+      And the ruling's ONE OPEN QUESTION is ANSWERED — by reading R39.5's messaging clause as it
+      instructed: `recipientIsActiveMaestro` is a SEPARATE disjunct from `recipientIsOwnUser`, so it is
+      a genuinely broader grant, not the misnamed MANAGER channel (`AssistantSenderContext` has no
+      `recipientIsManager` field at all). **AND the whole branch is UNREACHABLE** — `assistantSender`
+      is built ONLY in tests, so at runtime an ASSISTANT sender always hits the fail-closed deny. The
+      hole is LATENT, not live, which is why the edge was left in place exactly as the ruling directed.
+      (superseded box text: the chosen side is implemented, and R39.5/R39.7's map rows say something TRUE of the
       guard as it then stands (ENFORCED with a test, or a partial verdict)
-- [ ] R39.9/R39.10's UNENFORCED rows are re-evaluated in the same pass — they are the other
+- [x] R39.9/R39.10's UNENFORCED rows are re-evaluated — already TRUE, and the rules doc's own 4.7.0
+      changelog says so ("code stays stricter than the rule"): the empty `'assistant'` edge set IS the
+      documented interim state. Nothing to walk back. (was: they are the other
       half of this same gap and must not be left describing a state that changed
-- [ ] Whatever lands carries a drift-failing test with a recorded neuter run
+- [x] Whatever lands carries a drift-failing test with a recorded neuter run — TWO landed in
+      `tests/unit/communication-graph-user-routing.test.ts`: (a) the R39.9 gap is now a live assertion
+      that reddens when the channel is built, and (b) a source scan pinning that NO production caller
+      builds an `assistantSender` block — the fact that makes the superseded grant harmless, and the
+      one that would otherwise stop being true silently. Neuter recorded: adding a real producer to a
+      `lib/` file reddens exactly that test (1 failed / 37 passed). The pre-existing
+      `ASSISTANT -> active MAESTRO = allow` test was CERTIFYING the superseded shape; it is kept green
+      (the branch is unreachable) but re-commented as DRIFT, not as the rule.
 
 ## Approval log
 

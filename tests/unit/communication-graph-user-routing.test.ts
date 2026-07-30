@@ -17,6 +17,8 @@
  *     and is invisible to all other agents.
  */
 import { describe, it, expect } from 'vitest'
+import { readdirSync, readFileSync } from 'fs'
+import { join } from 'path'
 import { validateMessageRoute } from '@/lib/communication-graph'
 import type { UserSenderContext, AssistantSenderContext } from '@/lib/communication-graph'
 
@@ -142,9 +144,36 @@ describe('communication-graph — FLAG ON: ASSISTANT outbound (R39.5)', () => {
     expect(r.allowed).toBe(true)
   })
 
-  it('ASSISTANT → active MAESTRO = allow', () => {
+  it('ASSISTANT → active MAESTRO = allow — the SUPERSEDED shape, pinned as DRIFT not as the rule', () => {
+    // READ THIS BEFORE "FIXING" EITHER SIDE (TRDD-SPS63XHA ruling, 2026-07-30).
+    //
+    // This assertion describes the CODE, and the code encodes the PRE-2026-07-22 R39.5. The
+    // current text grants the ASSISTANT its own user plus — user-permitting — **the MANAGER**, and
+    // says outright that it obeys "no one else — not the MAESTRO *user*, no other agent". So the
+    // `recipientIsActiveMaestro` disjunct is code LOOSER than the rule, which is the one direction
+    // the ruling's principle forbids (code may be STRICTER than the text, never looser).
+    //
+    // It is left in place, and this test left green, for one measured reason: the branch is
+    // UNREACHABLE (see the no-producer test below), so removing the disjunct is an implementation
+    // change with no live behaviour to preserve — and deleting a channel a rule requires is worse
+    // than leaving one a rule merely fails to mention. The map rows for R39.5/R39.7 are
+    // CONTRADICTED, so no instrument reports this as enforced any more.
     const r = validateMessageRoute('assistant', 'human', { assistantSender: toMaestro })
     expect(r.allowed).toBe(true)
+  })
+
+  it('R39.9 DRIFT: the ASSISTANT→MANAGER channel the text requires does NOT exist yet', () => {
+    // R39.5/R39.9 (2026-07-22): the MANAGER is "the single agent it may exchange messages with",
+    // carrying only a refusable, USER-gated task assignment. `AssistantSenderContext` has no
+    // `recipientIsManager` field at all, so there is no way to express it — an ASSISTANT sender
+    // aimed at a MANAGER is denied like any other agent.
+    //
+    // Asserted so the gap is a FAILING EXPECTATION the day someone adds the field rather than a
+    // paragraph in a card: this test reddens when the channel is built, which is the reminder to
+    // re-upgrade the map rows in the same commit.
+    const r = validateMessageRoute('assistant', 'manager', { assistantSender: toOther })
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/ASSISTANT/i)
   })
 
   it('ASSISTANT → any other agent = deny (R39.5)', () => {
@@ -156,6 +185,39 @@ describe('communication-graph — FLAG ON: ASSISTANT outbound (R39.5)', () => {
   it('ASSISTANT with NO assistantSender block = deny (fail closed)', () => {
     const r = validateMessageRoute('assistant', 'human', {})
     expect(r.allowed).toBe(false)
+  })
+
+  it('NO PRODUCTION CALLER builds an assistantSender block — so the whole R39.5 branch is unreachable', () => {
+    // This is the fact that makes the superseded grant above HARMLESS today, and it is exactly the
+    // kind of fact that stops being true silently. `assistantSender` is declared in
+    // lib/communication-graph.ts, read once in validateMessageRoute, and constructed ONLY in tests
+    // — no route, service, or handler supplies it, so at runtime an ASSISTANT sender always falls
+    // through to the fail-closed deny.
+    //
+    // The moment a producer is wired, the over-broad `recipientIsActiveMaestro` grant goes LIVE.
+    // This test reddens at that moment, which is the point: it converts a latent hole into a build
+    // step that cannot be skipped. Verified by reading the call graph, not by grep alone — the
+    // TITLE_PLUGIN_MAP episode is what a confident grep-only reading costs.
+    const roots = ['app', 'services', 'lib']
+    const producers: string[] = []
+    const walk = (dir: string): void => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name)
+        if (e.isDirectory()) { if (e.name !== 'node_modules') walk(p); continue }
+        if (!/\.(ts|tsx|mjs)$/.test(e.name)) continue
+        const src = readFileSync(p, 'utf-8')
+        // A PRODUCER passes the block into a call; the declaration and the single read live in
+        // communication-graph.ts itself and are not producers.
+        if (/assistantSender\s*:/.test(src) && !p.endsWith('lib/communication-graph.ts')) producers.push(p)
+      }
+    }
+    for (const r of roots) walk(join(process.cwd(), r))
+    expect(
+      producers,
+      'A production caller now builds an assistantSender block. The R39.5 branch is LIVE, and it ' +
+        'still encodes the pre-2026-07-22 shape (own user + MAESTRO, missing the MANAGER). Fix the ' +
+        'branch to the current text and re-upgrade the R39.5/R39.7 map rows in the same commit.',
+    ).toEqual([])
   })
 })
 

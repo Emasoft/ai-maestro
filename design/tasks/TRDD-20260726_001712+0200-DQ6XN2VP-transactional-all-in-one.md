@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T19:33:40+0200
+updated: 2026-07-30T19:38:05+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -127,23 +127,44 @@ Wrap the WHOLE pipeline in `runAioPipeline`. Every mutating gate gets a real `un
 
 ### TWO DECISIONS — ruled 2026-07-30 under the standing USER delegation, stated so they can be overruled
 
-**D1 — G02 becomes a PRE REFUSAL: "demote the MANAGER first, then delete." The auto-demote is
-removed.**
+**D1 — ⚠ RETRACTED WITHIN THE HOUR. I ruled it, then found it would have VIOLATED A GOVERNANCE RULE.**
 
-The alternative was to keep the auto-demote and compensate it with the inverse AIO call
-`ChangeTitle(id,'manager')` (R51.8 permits a post-gate to call another AIO). Rejected because that
-compensation is **lossy fleet-wide and silently so**: the R10 demotion cascade HIBERNATES every team
-agent, and re-promotion does not re-wake them (CLAUDE.md §10 — "Agents remain hibernated; user or
-MANAGER must wake them manually"). So a rolled-back MANAGER delete would restore the title and leave
-the entire fleet asleep — an "undo" that returns a system the caller would not recognise, which is
-exactly what R51.10's *"resume its job without interruption"* forbids. Recording and relaunching
-every killed session is theoretically allowed (R51.10.1 blesses a rebuilt equivalent) but makes a
-delete's rollback depend on N wake operations that can each fail.
+I ruled that G02 should become a PRE refusal and the auto-demote be removed, on this stated ground:
+*"the auto-demote was convenience, not mandate — its own comment (:7055-7057) says it exists to avoid
+2 manual steps."* **The comment is not the authority.** `docs/GOVERNANCE-RULES.md:482`, verdict
+**Explicit**, and its normative twin `design/specs/governance-spec.md:446`
+(`R9.10 delete-manager-warns-demotes`) both say:
 
-The cost is honest and small: deleting a MANAGER now takes two steps instead of one. That is
-precisely the convenience the gate was written for — its own comment (:7055-7057) says it exists to
-avoid "forcing the user through 2 manual steps" — and **a convenience does not outrank a USER
-mandate**. Refusing is also fail-closed, which is what a destructive pipeline should be.
+> "The system **auto-demotes the MANAGER to AUTONOMOUS** before proceeding with deletion."
+
+It is also PINNED: `tests/governance/r3-r9-team-governance.test.ts:1134` drives it and asserts the
+R9.2 cascade fires, under the title *"deleting G02 would delete the MANAGER and leave every team live
+and ownerless."*
+
+**How the error happened, because that matters more than the error.** The advisor wrote "the
+auto-demote was convenience, not mandate (comment at 7055-7057)" and I carried it into a ruling
+without checking the rule — the exact failure `~/.claude/rules/decide-on-facts.md` names, and the
+same shape as this repo's `TITLE_PLUGIN_MAP` false positive. A sub-agent reading a CODE COMMENT is
+not evidence about a RULE.
+
+**And it was outside my authority regardless.** Removing the auto-demote rewrites a normative
+governance rule, its spec clause, and the test that pins it. The USER's standing *"you solve them"*
+delegates rulings; it does not delegate rewriting the governance corpus, which the tier table puts at
+MANAGER/USER. A ruling that requires editing `GOVERNANCE-RULES.md` is by construction not a ruling I
+may make alone.
+
+**So G02 KEEPS the auto-demote, and its compensation problem is real and must be SOLVED, not
+designed away.** The honest undo is `ChangeTitle(id,'manager')` (R51.8 permits a gate to call another
+AIO) **plus relaunching the sessions the R10 cascade hibernated** — R51.10.1 blesses a rebuilt
+equivalent, and without the relaunch the "undo" returns a system with the title restored and the
+fleet asleep, which R51.10's *"resume its job without interruption"* forbids. That makes a MANAGER
+delete's rollback depend on N wake operations that can each fail; when one does, R51.5's CRITICAL
+path is the correct, honest outcome.
+
+**OPEN FOR THE USER (a real R51-vs-R9.10 tension, not a preference):** R9.10 mandates a convenience
+whose compensation is the most expensive in the pipeline. Either (a) implement record-and-relaunch as
+above, or (b) amend R9.10 to require a refusal instead — which is a governance change only the USER
+can authorize. Proceeding with (a) needs no approval, so that is the default unless overruled.
 
 **D2 — the plugin uninstall takes shape A1 (CLI-uninstall with a CLI-reinstall `undo`), not A2.**
 
@@ -197,15 +218,35 @@ POST                            G09 folder delete — the SOLE true irreversible
                                 G10 verification (kept as R51.7's success-path validation)
 ```
 
-NEXT ACTION: implement. D1 and D2 are ruled, so nothing is blocking. Order of work:
+### A SEPARATE FINDING, surfaced by the D1 retraction — R9.10's map row is WRONG
+
+`docs/GOVERNANCE-ENFORCEMENT-MAP.md:114` reads `| R9.10 | UNENFORCED | — | — |`. R9.10 has **two
+clauses** and the row is right about one and wrong about the other:
+
+| clause | reality |
+|---|---|
+| the Delete Agent dialog MUST warn "This agent holds the MANAGER title…" | genuinely UNENFORCED — that string appears NOWHERE in `components/` or `app/` |
+| the system auto-demotes the MANAGER before deleting | **ENFORCED** at `element-management-service.ts` `DeleteAgent::G02`, and PINNED by `tests/governance/r3-r9-team-governance.test.ts:1134` |
+
+**Why this matters now that the ratchet is at 0:** the ratchet counts ENFORCED rows lacking a proof.
+An enforced clause hiding inside an UNENFORCED row is invisible to it — the "a rule enforced at N
+sites, cited at one" shape, one level up. The verdict vocabulary has no PARTIAL, so this needs either
+a split into R9.10a/R9.10b or a ruling on which verdict a half-enforced rule carries. Recorded here
+rather than fixed in passing: changing the row is cheap, but choosing how the map represents a
+half-enforced rule is a decision that affects every other multi-clause row.
+
+NEXT ACTION: implement, with G02's auto-demote KEPT (R9.10). Order of work:
 1. `ctx`-carried row snapshots + `undo` for G01c (delete the zip), G04, G05, G05b, G06, G07/G07b, G07c.
-2. G02 → PRE refusal (D1); delete the auto-demote and its nested `ChangeTitle`.
+2. G02's undo: `ChangeTitle(id,'manager')` **plus** relaunch of the sessions the R10 cascade
+   hibernated — record them in `ctx` during `run`, reverse only what is recorded (the `Gate.undo`
+   contract in `gate-transaction.ts:34-44`).
 3. Wrap in `runAioPipeline`; G09 folder delete dead-last as the sole irreversible.
 4. The parity test: seed five stores, inject at G08, assert **`failedGateId === 'G08'`** AND
    per-store byte equality AND the success-path positive control. Then BOTH neuters — delete an
    `undo` (must red on the gate-id, not on byte equality) and empty an `undo` body (must red on byte
    equality).
 5. Fold in OWO449MR's CLI uninstall under D2 and close both cards together.
+6. Separately: rule on R9.10's map row (above).
 
 OPEN, not yet traced: whether AMP routing validates on the key alone. If it does, the crash-window
 argument for keeping G06 early is stronger still. It does not change the decision (G06 is

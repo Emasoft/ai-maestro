@@ -3,13 +3,14 @@ spec: all-in-one
 spec-version: 1.1.0
 status: normative
 created: 2026-07-26T04:05:00+0200
-updated: 2026-07-27T12:05:00+0200
+updated: 2026-07-30T22:56:21+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: USER mandate 2026-07-26 ("the api implement the full all-in-one design")
 implementations:
   - "the runner — lib/gate-transaction.ts (runAioPipeline, runGateSequence)"
-  - "the 26 pipelines — services/element-management-service.ts (retrofit tracked in TRDD-DQ6XN2VP)"
+  - "the pipelines — services/element-management-service.ts (retrofit tracked in TRDD-DQ6XN2VP). MEASURED 2026-07-30: 19 pipelines, not 26 — the 26-name list counts 7 one-line delegators and omits changeSimpleElement"
+  - "the AIO-TXN-10 ratchet — tests/governance/aio-txn-10-runner-coverage.test.ts (AST inventory of which pipelines route through the runner; MAX_HANDROLLED only ever goes down)"
   - "the rules it formalises — docs/GOVERNANCE-RULES.md R50, R51 (ratified, USER-set)"
   - "the authoring procedure — ~/.claude/skills/make-all-in-one/ (upstream, superseded here per AIO-SKILL)"
   - "the coverage inventory — docs/GOVERNANCE-ENFORCEMENT-MAP.md Part II, scripts/aio-gate-coverage.py"

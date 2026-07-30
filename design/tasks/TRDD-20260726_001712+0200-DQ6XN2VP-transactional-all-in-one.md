@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T20:59:40+0200
+updated: 2026-07-30T22:56:21+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,6 +20,56 @@ relevant-rules: [R50, R51]
 blocked-by: []
 implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b]
 ---
+
+## ⏵ MEASURED 2026-07-30 — the count was wrong, and there is now a ratchet that keeps it honest
+
+**14 pipelines still hand-roll their gates, not 21 and not 19.** Every prior number on this card
+was a hand count of the 26-NAME LIST below, and that list is not an inventory of pipelines:
+
+| the list says | reality |
+|---|---|
+| `CreateMarketplace`, `DeleteMarketplace`, `UpdateMarketplace` | one-line delegators — `return ChangeMarketplace({action: …})`. Not pipelines. |
+| `ChangeAgentDef`, `ChangeCommand`, `ChangeRule`, `ChangeOutputStyle` | one-line delegators — `return changeSimpleElement(…)`. Not pipelines. |
+| — | `changeSimpleElement` IS a pipeline, is already transactional, and the list omits it. |
+
+Real inventory: **19 pipelines · 5 transactional · 14 to go.** Transactional today are
+`DeleteAgent`, `ChangeClient`, `ChangePlugin`, `ChangeSkill`, `changeSimpleElement`. Remaining:
+`ChangeTitle` (131 gate ops), `InstallElement` (101), `CreateAgent` (62), `DeleteTeam` (37),
+`ChangeTeam` (18), `ChangeMarketplace` (12), `ChangeFolder` (10), `ChangeName` (9),
+`ChangeMetadata` (7), `ChangeCLIArgs`/`ChangeHook`/`ChangeLSP`/`ChangeMCP` (6 each), `ChangeAvatar` (3).
+
+**`AIO-TXN-10` had an empty Guard and no checker at all** — the clause every one of these 14
+violates was DOC-ONLY, so nothing could notice a NEW hand-rolled pipeline either.
+`tests/governance/aio-txn-10-runner-coverage.test.ts` is now that checker: it parses the service's
+AST (not its text — a needle counts this file's JSDoc gate manifests, 764 by text vs 492 real
+emissions), discovers pipelines rather than reading a list, and holds `MAX_HANDROLLED = 14` as a
+ratchet that only ever goes down. Retrofitting one and forgetting to lower it is green; raising it
+is not possible without editing the constant deliberately.
+
+Two things it gets right that a grep cannot, both learned by neutering it:
+- **A pipeline OWNS its ops array; a helper receives one.** `gate0Auth` emits a real `G00:` line
+  into its *caller's* array, so by gate ops alone it is indistinguishable from a pipeline — and it
+  would have sat in the violation list forever as something that cannot be fixed, because there is
+  nothing there to wrap. The discriminator drops it and nothing else.
+- **An ALIASED runner import reads as hand-rolled** (`{runGateSequence: seq}`). A false positive
+  that reddens, so it fails the safe way — but worth knowing before someone re-retrofits a pipeline
+  that was already fine.
+
+Neuters, disjoint red sets: aliasing `ChangeSkill`'s runner call at the SOURCE reddened 3 (the
+floor 5→4, the ratchet 14→15, and the by-name pin naming `ChangeSkill`) while the non-vacuity test
+correctly stayed green — the pipeline did not vanish, it left the runner. Dropping the
+ops-ownership discriminator reddened only the ratchet.
+
+**Also fixed en route: `CreateAgent` G07b was the FOURTH R51.5 site and `4520ef9a` had missed it**
+(`dc034515`). That commit gave G06's two branches and G07c the "keep the orphan addressable when
+the revert fails" shape; G07b kept `result.agentId = null` unconditional. Nothing reddened because
+the R51.5 test drives G06 only — a fix at three of four sites is indistinguishable from a complete
+one until someone reaches the fourth. G07b's orphan is the worst of them: it is reachable only on
+the team path, so the agent has ALREADY JOINED the team when the caller is told it does not exist.
+
+**NEXT ACTION: `CreateAgent` (priority #2 below, 62 gate ops).** Its mutating set and the shape of
+each compensation are read and recorded in "THE PATH" further down; the work is per-gate `undo` +
+`runGateSequence`, then lower `MAX_HANDROLLED` to 13.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
 
@@ -425,12 +475,22 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       `scripts/aio-gate-coverage.py`. GATED 21 · ENFORCED 16 · DOC-ONLY 14 · UNMAPPED 0. Put in
       the existing map rather than a new file: a second doc answering "what enforces rule X" is a
       second source of truth (§2.1 of the spec, applied to documentation)
-- [ ] `DeleteAgent` transactional
+- [x] `DeleteAgent` transactional — `runGateSequence(deleteGates, dc)`, 11 gates (10 `undo` +
+      1 `readOnly`), `tests/unit/deleteagent-rollback-parity.test.ts` green
 - [ ] `CreateAgent` transactional
-- [ ] `ChangeTitle` / `ChangeClient` / `ChangePlugin` transactional
+- [ ] `ChangeTitle` transactional — **`ChangeClient` and `ChangePlugin` are DONE**; this box is
+      split because they were, and `ChangeTitle` (131 gate ops, the largest) is not
 - [ ] `ChangeTeam` / `DeleteTeam` transactional
-- [ ] The remaining 18 `Change*` / marketplace / element pipelines transactional
-- [ ] Parity test: zero uncompensated mutating gates across all 26 pipelines
+- [ ] The remaining `Change*` / marketplace / element pipelines transactional — **9 of them**, not
+      18: `ChangeSkill` + `changeSimpleElement` (which serves 4 of the named Change*) are done, and
+      3 marketplace names are delegators to `ChangeMarketplace`
+- [x] An enforceable ratchet for `AIO-TXN-10` — `tests/governance/aio-txn-10-runner-coverage.test.ts`
+      discovers the inventory from the AST and fails when a pipeline hand-rolls beyond
+      `MAX_HANDROLLED`. NOT the parity box below: this asks "is it under the runner", which is
+      answerable today; that one asks "are its gates compensated", which `findUncompensatedGates`
+      already guarantees at runtime for every pipeline that IS under the runner
+- [ ] Parity test: zero uncompensated mutating gates across all 19 pipelines — unreachable until
+      all 19 are retrofitted, since the runtime pre-flight only sees pipelines that use the runner
 - [ ] Each pipeline declares its R51.7 INVARIANTS (not only its gates) — leftovers and
       contradictions are two different ways to be invalid, and the KERM18NX residue check only
       catches the first

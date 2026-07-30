@@ -195,12 +195,24 @@ const UNAUDITED_RULES = new Set<number>([
 // Note the two gates are partly REDUNDANT: neutering either leaves the end state correct, and only
 // the path-specific assertion reddens. That is a property worth stating rather than hiding behind a
 // single end-state assertion that would survive losing one defender.
+// 2026-07-30: R8.3 pinned in tests/governance/r3-r9-team-governance.test.ts — 25 → 24. DeleteTeam's
+// G05 rejects the pending governance requests that named the team being deleted, so the risk is not
+// "does the loop run" but "does it reject only what it should": a blunter guard that rejected every
+// pending request, or every request of any status, satisfies the rule's own case perfectly. The
+// fixture therefore carries four records, one per branch — a pending transfer for THIS team, a
+// pending non-transfer for THIS team (the `else` arm, counted separately), a pending transfer for
+// ANOTHER team, and an already-approved transfer for this one. The last two are the whole test; the
+// first two would pass against a guard with no filters at all. Both neuters confirm it: dropping
+// `if (!involvesTeam) continue` and dropping `if (req.status !== 'pending') continue` each redden it.
+// Nothing is mocked — `governance-request-registry` resolves its file through `getStateDir()`, which
+// this fixture already redirects, so the real registry writes a real file inside the fake home and
+// the effect is read back off disk rather than off a spy.
 //
 // Take this number from THIS test's own failure message, never from a hand-written grep. Mine said
 // 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule `R17.18a`, and a count from the
 // wrong pattern reads as a clean win — I was one commit from locking in a number my own awk had
 // invented.
-const MAX_ENFORCED_WITHOUT_TEST = 25
+const MAX_ENFORCED_WITHOUT_TEST = 24
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

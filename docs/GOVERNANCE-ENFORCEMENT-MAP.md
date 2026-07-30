@@ -100,7 +100,7 @@ Row format is fixed so a regex parses each line:
 | R7.9 | ENFORCED | hooks/useGovernance.ts:48 | — |
 | R8.1 | ENFORCED | lib/team-registry.ts:306 | — |
 | R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |
-| R8.3 | ENFORCED | services/element-management-service.ts (DeleteTeam::G05) | — |
+| R8.3 | ENFORCED | services/element-management-service.ts (DeleteTeam::G05) | tests/governance/r3-r9-team-governance.test.ts |
 | R8.4 | ENFORCED | lib/authorization.ts:580-592 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |
 | R9.1 | ENFORCED | services/teams-service.ts:279-282 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.2 | ENFORCED | services/element-management-service.ts (ChangeTitle::G10) | tests/governance/r3-r9-team-governance.test.ts |

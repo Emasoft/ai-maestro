@@ -1243,6 +1243,97 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
   })
 })
 
+describe('DeleteTeam::G05 — deleting a team cancels the transfers that pointed at it (R8.3)', () => {
+  it('rejects THIS team\'s pending requests and leaves every other request untouched', async () => {
+    /**
+     * R8.3: a deleted team must not leave live governance requests aimed at it. A pending
+     * `transfer-agent` naming a team that no longer exists is worse than a dangling row — approving
+     * it later runs an agent move into a team id nothing resolves.
+     *
+     * G05 walks the pending requests and rejects the ones whose payload names this team, counting
+     * transfers separately from other request types. So the fixture has to DISCRIMINATE, or the
+     * test cannot tell the guard from a blunter one that rejects everything it can reach. Four
+     * records, one per branch the guard actually has:
+     *
+     *   pending  transfer-agent   THIS team   -> cancelled  (the rule's own case)
+     *   pending  join-team        THIS team   -> rejected   (the `else` arm, counted separately)
+     *   pending  transfer-agent   OTHER team  -> UNTOUCHED  (pins `involvesTeam`)
+     *   approved transfer-agent   THIS team   -> UNTOUCHED  (pins `status !== 'pending'`)
+     *
+     * Without the last two a G05 that rejected every pending request in the file — or every request
+     * of any status — would pass. They are the two assertions that make this a test of the filter
+     * rather than of the loop.
+     *
+     * Nothing is mocked here: `governance-request-registry` resolves its file through
+     * `getStateDir()`, which this fixture already redirects to FAKE_STATE, so the real registry
+     * reads and writes a real file inside the fake home. That is the point — the guard's effect is
+     * read back off disk, not off a spy.
+     */
+    seedTeams([{ id: 'team-doomed', name: 'Doomed Team', agentIds: [] }])
+    seedAgents([])
+
+    const REQUESTS_FILE = path.join(FAKE_STATE, 'governance-requests.json')
+    const base = {
+      sourceHostId: 'host-1',
+      targetHostId: 'host-1',
+      requestedBy: 'agent-req',
+      requestedByRole: 'member',
+      approvals: {},
+      createdAt: '2026-07-30T10:00:00+0200',
+      updatedAt: '2026-07-30T10:00:00+0200',
+    }
+    mkdirSync(path.dirname(REQUESTS_FILE), { recursive: true })
+    writeFileSync(
+      REQUESTS_FILE,
+      JSON.stringify({
+        version: 1,
+        requests: [
+          { ...base, id: 'req-transfer-doomed', type: 'transfer-agent', status: 'pending',
+            payload: { agentId: 'agent-x', fromTeamId: 'team-doomed', toTeamId: 'team-other' } },
+          { ...base, id: 'req-other-type-doomed', type: 'join-team', status: 'pending',
+            payload: { agentId: 'agent-y', teamId: 'team-doomed' } },
+          { ...base, id: 'req-transfer-elsewhere', type: 'transfer-agent', status: 'pending',
+            payload: { agentId: 'agent-z', fromTeamId: 'team-other', toTeamId: 'team-third' } },
+          { ...base, id: 'req-already-approved', type: 'transfer-agent', status: 'approved',
+            payload: { agentId: 'agent-w', fromTeamId: 'team-doomed', toTeamId: 'team-other' } },
+        ],
+      }),
+      'utf8',
+    )
+
+    // G00b gates on the governance password; `verifyPassword` is a mock, so this is an arbitrary
+    // token the mock accepts — never the real governance secret, which no test may name.
+    mockGovernance.verifyPassword.mockResolvedValue(true)
+
+    const { DeleteTeam } = await import('@/services/element-management-service')
+    const result = await DeleteTeam('team-doomed', { authContext: OWNER_CTX, password: 'mocked-ok' })
+
+    // Pin the REASON, not just the outcome: several earlier gates also yield success===false, so a
+    // bare falsy check would pass on a run that never reached G05.
+    expect(result.success).toBe(true)
+    expect(
+      result.operations.some(o => o === 'G05: 1 transfer(s) cancelled, 1 governance request(s) rejected'),
+      `G05 op line missing or miscounted. ops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+
+    const after = JSON.parse(readFileSync(REQUESTS_FILE, 'utf8')) as {
+      requests: Array<{ id: string; status: string; rejectReason?: string }>
+    }
+    const byId = (id: string) => after.requests.find(r => r.id === id)!
+
+    // The rule's own case, and the reason is part of it — an operator reading the row later needs
+    // to know the team went away rather than that someone declined the move.
+    expect(byId('req-transfer-doomed').status).toBe('rejected')
+    expect(byId('req-transfer-doomed').rejectReason).toBe('Team deleted — transfer cancelled')
+    expect(byId('req-other-type-doomed').status).toBe('rejected')
+
+    // THE DISCRIMINATING HALF. Deleting one team must not touch another team's queue, and an
+    // already-decided request must not be re-decided.
+    expect(byId('req-transfer-elsewhere').status).toBe('pending')
+    expect(byId('req-already-approved').status).toBe('approved')
+  })
+})
+
 describe('ChangeTitle::G17 — a title whose role-plugin cannot be installed is QUARANTINED, not rejected', () => {
   it('TRDD-C9LXXT76: 0 role-plugins after G16 ⇒ roleMissing=true + hibernate — deleting the G17 recovery leaves a titled, role-less, RUNNABLE agent', async () => {
     /**

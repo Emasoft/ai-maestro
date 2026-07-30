@@ -133,6 +133,22 @@ General debugging discipline this page's own `[^1]` lesson applies now lives on 
 USER-scope aspect page `debugging-methodology` (cross-scope; referenced in prose,
 not as a `[[wikilink]]`, per the link-hygiene rule).
 
+
+^ATOM-RQ04-QDMJ [desc:"claude has no --cwd flag and exits 0 when given one, so every local-scope install/uninstall through claudeAdapter silently did nothing; pass the dir as the spawn cwd", keywords: plugin_installed_but_the_agent_does_not_have_it local_scope_install_did_nothing_but_reported_success why_does_the_code_write_settings_local_json_after_calling_the_CLI claude_plugin_install_scope_local belt_and_braces_settings_write_back adapter_returned_success_having_run_nothing unknown_CLI_option_exits_zero, type: project, ocd: 2026-07-30, lmd: 2026-07-30]
+
+`claude` has **no `--cwd` flag**. Given one it prints `error: unknown option '--cwd'` and
+**exits 0** — so `promisify(execFile)` RESOLVES and the caller reports success having run
+nothing. `claudeAdapter.install`/`.uninstall` passed `--cwd` until 2026-07-30, so EVERY
+local-scope plugin operation through the adapter was a silent no-op. That is why callers grew
+"belt-and-braces" direct `settings.local.json` writes: those writes, not the CLI, were doing
+the work — this page's subject seen from its cause.
+`--scope local` keys off the PROCESS cwd, so the directory belongs in the spawn OPTIONS
+(`execFileAsync(…, {cwd: resolved})`), never in the argv. Verified live: with the flag the
+command never runs; without it, from the same cwd, the install lands and the CLI writes both
+`settings.local.json` and its own `installed_plugins.json` row. Fixed in `c898fa90`, pinned by
+`tests/lib/claude-adapter-cli-argv.test.ts` (14 tests) asserting the dir is in the options and
+NOT in the arguments — a fake-adapter test at the boundary cannot see this.
+
 ## Notes and lessons learned
 
 [^1]: [ocd:2026-07-12 lmd:2026-07-12] This was found the hard way: the entire fleet

@@ -367,28 +367,96 @@ export async function revokeApiKey(apiKey: string): Promise<boolean> {
 }
 
 /**
- * Revoke all API keys for an agent
+ * The compensation half of a bulk revocation (R51 / TRDD-DQ6XN2VP).
+ *
+ * `restore` is a CLOSURE over the key hashes this call actually flipped, so a pipeline can undo the
+ * revocation without ever HOLDING a key hash itself. That is deliberate: `getKeysForAgent` strips
+ * `key_hash` for the same reason, and a rollback snapshot sitting in a pipeline's ctx is exactly the
+ * kind of object that ends up in a log line or a report.
+ */
+export interface AMPKeyRevocation {
+  /** How many ACTIVE keys this call flipped to 'revoked'. */
+  count: number
+  /**
+   * Undo exactly THIS revocation and nothing else — only the keys this call flipped go back to
+   * 'active'. Keys that were already revoked before the call stay revoked: a blanket "reactivate
+   * every revoked key of this agent" would resurrect an old rotated-out key, which is a security
+   * regression wearing a rollback's clothes. Idempotent, so it is safe to call after a partial run.
+   * Returns how many it restored.
+   */
+  restore: () => Promise<number>
+}
+
+/**
+ * Revoke all API keys for an agent, returning a handle that can undo it.
+ *
+ * The compensation lives HERE rather than in the caller because `loadApiKeys`/`saveApiKeys` are
+ * module-private and every mutation runs under `withLock('amp-api-keys')`. Exporting the writers so
+ * a pipeline could snapshot-and-restore from outside would bypass that serialization — a
+ * concurrency regression, not a convenience (TRDD-DQ6XN2VP).
+ */
+export async function revokeAllKeysForAgentCompensable(agentId: string): Promise<AMPKeyRevocation> {
+  // SF-004: Serialize read-modify-write on the API keys file
+  const flipped = await withLock('amp-api-keys', () => {
+    const keys = loadApiKeys()
+    const hashes: string[] = []
+
+    // Build NEW records instead of mutating in place. loadApiKeys returns a defensive copy of the
+    // ARRAY but the record objects are shared with the module cache, so an in-place flip followed by
+    // a failing saveApiKeys would leave the cache reporting keys as revoked that are still active on
+    // disk. Copy-then-publish makes "the save threw" mean "nothing changed" — which is what lets a
+    // gate's undo tolerate a run that threw part-way (Gate.undo, gate-transaction.ts).
+    const next = keys.map((key) => {
+      if (key.agent_id === agentId && key.status === 'active') {
+        hashes.push(key.key_hash)
+        return { ...key, status: 'revoked' as const }
+      }
+      return key
+    })
+
+    if (hashes.length > 0) {
+      saveApiKeys(next)
+      console.log(`[AMP Auth] Revoked ${hashes.length} key(s) for agent ${agentId.substring(0, 8)}...`)
+    }
+
+    return hashes
+  }) // end withLock('amp-api-keys')
+
+  return { count: flipped.length, restore: () => restoreRevokedKeys(flipped) }
+}
+
+/** Flip the named hashes back to 'active'. Module-private: the hashes never leave this file. */
+async function restoreRevokedKeys(keyHashes: string[]): Promise<number> {
+  if (keyHashes.length === 0) return 0
+
+  return withLock('amp-api-keys', () => {
+    const keys = loadApiKeys()
+    const wanted = new Set(keyHashes)
+    let restored = 0
+
+    const next = keys.map((key) => {
+      if (wanted.has(key.key_hash) && key.status === 'revoked') {
+        restored++
+        return { ...key, status: 'active' as const }
+      }
+      return key
+    })
+
+    if (restored > 0) {
+      saveApiKeys(next)
+      console.log(`[AMP Auth] Restored ${restored} revoked key(s) (rollback)`)
+    }
+
+    return restored
+  }) // end withLock('amp-api-keys')
+}
+
+/**
+ * Revoke all API keys for an agent.
+ * Delegates to the compensable form so there is ONE implementation of the flip.
  */
 export async function revokeAllKeysForAgent(agentId: string): Promise<number> {
-  // SF-004: Serialize read-modify-write on the API keys file
-  return withLock('amp-api-keys', () => {
-  const keys = loadApiKeys()
-  let revokedCount = 0
-
-  for (const key of keys) {
-    if (key.agent_id === agentId && key.status === 'active') {
-      key.status = 'revoked'
-      revokedCount++
-    }
-  }
-
-  if (revokedCount > 0) {
-    saveApiKeys(keys)
-    console.log(`[AMP Auth] Revoked ${revokedCount} key(s) for agent ${agentId.substring(0, 8)}...`)
-  }
-
-  return revokedCount
-  }) // end withLock('amp-api-keys')
+  return (await revokeAllKeysForAgentCompensable(agentId)).count
 }
 
 /**

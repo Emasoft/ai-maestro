@@ -511,23 +511,81 @@ export function validateGovernanceToken(token: string): AIDTokenRecord | null {
 }
 
 /**
- * Revoke all governance tokens for a specific agent.
- * Used when agent is deleted or title changes.
+ * The compensation half of a bulk revocation (R51 / TRDD-DQ6XN2VP).
+ *
+ * `restore` is a CLOSURE over the records this call actually removed, so a pipeline can undo the
+ * revocation without holding token records in its own ctx. Unlike the AMP key store this mutation
+ * REMOVES rows rather than flipping a field, so the undo needs the rows themselves — which is
+ * exactly why the two stores cannot share one compensation.
  */
-export async function revokeTokensForAgent(agentId: string): Promise<number> {
-  let revoked = 0
+export interface AIDTokenRevocation {
+  /** How many token records this call removed. */
+  count: number
+  /**
+   * Re-insert exactly the records this call removed. A token that EXPIRED between the revoke and
+   * the restore is deliberately NOT re-inserted: `loadTokens` prunes expired rows on every load, so
+   * putting it back would write a row that the next read drops — a rollback that only appears to
+   * have worked. Idempotent, so it is safe to call after a partial run. Returns how many it restored.
+   */
+  restore: () => Promise<number>
+}
+
+/**
+ * Revoke all governance tokens for a specific agent, returning a handle that can undo it.
+ * Used when an agent is deleted or its title changes.
+ *
+ * The compensation lives HERE rather than in the caller because `loadTokens`/`saveTokens` are
+ * module-private and every mutation runs under `withLock('governance-tokens')`. Exporting the
+ * writers so a pipeline could snapshot-and-restore from outside would bypass that serialization —
+ * a concurrency regression, not a convenience (TRDD-DQ6XN2VP).
+ */
+export async function revokeTokensForAgentCompensable(agentId: string): Promise<AIDTokenRevocation> {
+  const removed: AIDTokenRecord[] = []
   await withLock('governance-tokens', () => {
     const tokens = loadTokens()
     const remaining = tokens.filter(t => {
       if (t.agent_id === agentId) {
-        revoked++
+        removed.push(t)
         return false
       }
       return true
     })
+    // Saved unconditionally, as before: loadTokens already pruned expired rows, so this write is
+    // what persists that pruning even when this agent had no tokens.
     saveTokens(remaining)
   })
-  return revoked
+  return { count: removed.length, restore: () => restoreTokens(removed) }
+}
+
+/** Re-insert the named records. Module-private: the records never leave this file. */
+async function restoreTokens(records: AIDTokenRecord[]): Promise<number> {
+  if (records.length === 0) return 0
+
+  let restored = 0
+  await withLock('governance-tokens', () => {
+    const tokens = loadTokens()
+    const present = new Set(tokens.map(t => t.token_hash))
+    const now = Date.now()
+    const next = [...tokens]
+
+    for (const record of records) {
+      if (present.has(record.token_hash)) continue          // already back — undo ran twice
+      if (new Date(record.expires_at).getTime() <= now) continue  // expired meanwhile; see restore's doc
+      next.push(record)
+      restored++
+    }
+
+    if (restored > 0) saveTokens(next)
+  })
+  return restored
+}
+
+/**
+ * Revoke all governance tokens for a specific agent.
+ * Delegates to the compensable form so there is ONE implementation of the removal.
+ */
+export async function revokeTokensForAgent(agentId: string): Promise<number> {
+  return (await revokeTokensForAgentCompensable(agentId)).count
 }
 
 /**

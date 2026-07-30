@@ -153,7 +153,14 @@ const UNAUDITED_RULES = new Set<number>([
 // lib/session-validate-server.mjs) is what made them observable — the count did not fall because
 // tests were written, it fell because the code became testable. The map rows now cite the seam AND
 // the server.mjs call site, so an extracted-but-unwired guard is caught too.
-const MAX_ENFORCED_WITHOUT_TEST = 32
+// 2026-07-30: TRDD-SPS63XHA's ruling DOWNGRADED R39.5 + R39.7 from ENFORCED to CONTRADICTED — 32 → 30.
+// This one did not fall by pinning anything: both rows cited real, working code that enforces the
+// PRE-2026-07-22 rule text, and a test written against such a guard PASSES and thereby CERTIFIES the
+// divergence. So the honest move was to stop claiming enforcement, not to write a green test. That is
+// the defect this counter structurally cannot see — the guard exists, runs, and is wrong — and the
+// only reason it was caught is that the re-citation campaign reads each cited range against the rule's
+// CURRENT text. Re-upgrading them is TRDD-HW72YBZW's job, in the commit that builds the real channel.
+const MAX_ENFORCED_WITHOUT_TEST = 30
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

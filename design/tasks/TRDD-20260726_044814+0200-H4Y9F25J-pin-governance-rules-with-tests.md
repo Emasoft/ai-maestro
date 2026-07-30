@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T15:24:26+0200
+updated: 2026-07-30T15:44:16+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
@@ -72,20 +72,47 @@ defence-in-depth, **deliberately left unpinned**, and both the code and the test
 file say so; a fixture contorted enough to reach it would be manufacturing
 coverage for an unreachable branch.
 
-**NEXT ACTION — the 28 that remain, and the two traps in them:**
+**Ratchet 28 → 26 (`654e116b`, `82055ec1`). Both traps this block named are
+closed, and neither turned out to be a free pin.**
 
-- **R19.10 is NOT a free pin.** Its citation is `lib/ecosystem-constants.ts:331`
-  — one row of the `TITLE_PLUGIN_MAP` const table. A test asserting a table's
-  contents survives the guard's deletion (the H2 anti-pattern), and its SECOND
-  clause (the R17 core-plugin requirement) is uncited entirely. It needs a
-  re-citation onto the site that ACTS on the binding (ChangeTitle G15/G16).
+- **R19.10** was cited at `lib/ecosystem-constants.ts:331` — ONE line of the
+  `TITLE_PLUGIN_MAP` table. That is worth LESS than no citation: a test written
+  against a table stays green after every guard that READS the table is deleted,
+  so the row advertises a pin it never had. Re-cited onto ChangeTitle G15
+  (resolves title → plugin) + G16 (installs it) and pinned behaviourally — the
+  only tests in that file that do NOT pass `skipPluginSync`, asserting the argv
+  that actually reaches `claude plugin install`. Its SECOND clause (per R17 the
+  core plugin is also required) is enforced OUTSIDE ChangeTitle — the
+  `enforceAgentInvariants` core-plugin row and CreateAgent G11, which R17's own
+  rows cite — so it is not re-cited here.
+- **R20.5 then looked free — same two gates, now driven. "Free" is exactly what
+  invites pinning only the easy CLAUSE.** R20.5 has two: the default auto-installs
+  on grant, UNLESS the caller explicitly picked a different COMPATIBLE plugin.
+  ChangeTitle has no option for that pick; the way an earlier pick SURVIVES a
+  grant is G15's keep-branch — cited by nothing and driven by nothing. Pinned too.
+  Its row's ranges were also ~74 lines adrift, which the gate-qualifier check
+  structurally cannot see: it verifies the LABEL exists in the pipeline, never
+  that the range still contains it.
 
-- **R20.5 already has behavioural tests — against the OTHER site.** The map cites
-  G15/G16; `tests/governance/r20-marketplace-governance.test.ts` drives
-  `autoAssignRolePluginForTitle`. Naming that file in the row would drop the
-  ratchet by 1 while leaving G15/G16 unpinned — green columns over an untested
-  site. Pin G15/G16 first, then cite both.
-- Batch the rest **by the FILE the guard lives in**. Note 9 of the 28 are `.tsx`
+**The FIXTURE was the bug, not the assertion.** The `child_process` double
+modelled `claude plugin install` as a pure no-op, so G16 "succeeded" leaving no
+trace, G17's post-install re-scan found 0 active role-plugins, and its R9.13
+recovery reinstalled — every run made TWO install calls. Relaxing to `>= 1` would
+have passed while the test described the RECOVERY path and claimed to pin the
+happy one. The double now writes the one side effect the pipeline reads back.
+
+**Two ordering traps, each of which would have shipped a vacuous test:**
+
+- G15's else-branch picks `compatibles[0]`, so listing the standing pick FIRST
+  makes the keep-branch test pass with the keep-branch DELETED. The default goes
+  first, which is what makes the branch load-bearing.
+- **One neuter certifies only half a cited row.** Disabling G16 reddens ONE test;
+  mis-resolving G15 reddens BOTH. That asymmetry is the reason both gates are
+  cited rather than whichever one was convenient.
+
+**NEXT ACTION — the 26 that remain:**
+
+- Batch them **by the FILE the guard lives in**. Note 9 of the 26 are `.tsx`
   components (R4.8, R7.1/7.2/7.3/7.7/7.8/7.9, R11.6, R17.16); a "guard" in a
   React component is not a server-side refusal, so those may want a
   `BEHAVIOURAL` verdict rather than an adversarial refusal test.
@@ -111,13 +138,14 @@ without seeding a marketplace on disk. It is not:
    use it: it kept `mockExecFileImpl` but not a calls ARRAY (the r3-r9 and r20
    files both carry `mockExecFileCalls` — copy that shape).
 
-So the next batch is: add the calls array to `tests/governance/r19-maintainer-title.test.ts`,
-pin R19.10 behaviourally (assigning MAINTAINER really installs
-`ai-maestro-maintainer-agent`), re-cite its row off the const table onto G15/G16,
-and note that its R17 clause is enforced by R17's own guards rather than left
-uncited. R20.5's G15/G16 half wants the same fixture but belongs topically in
-`r20-marketplace-governance.test.ts`, which lacks the ChangeTitle registry-file
-sync — porting that is the only real cost left.
+**All three held when the batch ran**, and the predicted cost was right: the calls
+array plus the settings side effect was the whole of it. The last sentence of the
+earlier plan — "R20.5's half belongs topically in `r20-marketplace-governance.test.ts`,
+and porting the registry-file sync is the only real cost left" — was WRONG and the
+port was never needed. R20.5's guard is the SAME `ChangeTitle` G15/G16 the r19 file
+already drives, so the pin costs one test in a file that is already wired, not a
+fixture migration. Topical tidiness is not worth re-deriving a working fixture; a
+cross-file pointer in each row's Test column says the same thing for free.
 
 **Take the count from the ratchet's own failure message, never a hand grep.**
 Mine said 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule

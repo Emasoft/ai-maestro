@@ -1,10 +1,10 @@
 ---
 trdd-id: AQTGAY60
 title: DeleteAgent leaves the agent's local plugin records behind in installed_plugins.json
-column: todo
+column: dev
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-07-29T21:30:09+0200
+updated: 2026-07-30T04:23:54+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -51,6 +51,11 @@ exists.
 deleted agent's workdir. It is a MUTATING gate, so under R50/R51 it needs a compensation
 registered before it runs — and it must land where the workdir path is still known (before
 `G09` deletes the folder, and before the registry row is gone at `G08`).
+
+**⚠ SUPERSEDED 2026-07-30 — no longer blocked, and the gate is built.** Read
+`## ⏵ UNBLOCKED + PARTLY BUILT` below before acting on anything in this STATE block: the NPT is
+terminal, G09b exists, and the only open work is a test that drives `DeleteAgent` itself. The
+paragraph below is kept because it records WHY the block existed.
 
 **BLOCKED on NPT TRDD-FHBGF0WG.** The helper at `element-management-service.ts:1718` CANNOT be
 reused as-is: `installed_plugins.json` maps a key to an ARRAY of per-install records, and that
@@ -150,12 +155,61 @@ until the user rules on it.
   assignment scope, reversible and local. The reconcile of pre-existing orphans is explicitly
   carved out as USER-gated and is not covered by this mandate.
 
+## ⏵ UNBLOCKED + PARTLY BUILT — read this before the Acceptance list — 2026-07-30
+
+**The NPT is terminal.** TRDD-FHBGF0WG reached `complete` (5/5 boxes, each neutered) and sits in
+`design/archived/`, so the record-scoped remover this card was waiting on exists and is exported.
+`column:` moved `todo → dev` — the code landed, the card had simply never been advanced.
+
+**What is actually in the tree** (read, not inferred):
+
+| piece | where |
+|---|---|
+| the gate | `DeleteAgent` **G09b**, inside the hard-delete-with-folder branch, right after the workdir is removed. Calls `removeLocalInstallRecords(resolvedDir)` and pushes a counted ops line |
+| the post-condition probe | `lib/agent-teardown.ts` store id `plugin-records` — the thing that can PROVE the gate ran |
+| the manifest pin | `AGENT_STORES` includes `plugin-records`, and `tests/unit/agent-teardown.test.ts` pins the id list, so adding a store without a probe now breaks a test |
+| the probe's tests | 7 cases + 3 recorded neuter runs (commit `6c11bd7f`) |
+
+**Box 2's premise was wrong, and the code is right.** The box asks for a compensation. G09b
+deliberately has none, and says why: it runs **after** the folder is gone, at which point every
+`{scope:'local', projectPath: resolvedDir}` record asserts a plugin is installed for a directory
+that does not exist — the record is provably FALSE, so removing it cannot be the wrong call and
+there is nothing a rollback would restore that anyone should want back. That is a better answer
+than the box asked for; the box is rewritten below rather than ticked.
+
+**The probe was VACUOUS before this session, in a way worth recording.** Its body was
+*unreachable*: the shared guard pair returns null unless `expectFolderGone` is true AND the workdir
+is under `~/agents/`, and the fixture CTX is deliberately neither — so no test reached the file
+read. The two filesystem-probe tests that did exist are `not.toContain` assertions, which pass
+whenever a probe returns null **for any reason**. Same shape for `workdir` and `transcript-dir`, so
+all three got positive controls in the same pass.
+
+**Neuter B is the honest part.** Dropping `scope === 'local'` reddened NOTHING — a today-shaped
+user row has no `projectPath`, so the path comparison alone already excluded it and my first draft
+of that test pinned nothing. Re-seeded with a user row that DOES carry the workdir path (the
+"future record shape" the probe's own comment names as the reason the check exists) and the same
+neuter then reddened exactly that one test.
+
+**What is still open, precisely:**
+
+1. **No test drives `DeleteAgent` itself.** The probe tests prove the VERIFIER behaves correctly;
+   they do not prove G09b removes on hard-delete and leaves alone on soft-delete. That split is
+   true **by construction** (the gate sits inside the folder-deleted branch) and I read the code to
+   confirm it — but "true by construction" is a claim about the code, not a guard against the next
+   edit. This is the same distinction the FHBGF0WG gap was: implemented, and pinned by nothing.
+2. The live create/hard-delete cycle.
+3. The 93 pre-existing orphans — untracked data outside the repo on the USER's machine, so RULE 0
+   holds it. This card IS the report; the ruling is not mine.
+
 ## Acceptance
 
-- [ ] A `DeleteAgent` gate removes the deleted agent's `installed_plugins.json` records
-- [ ] The gate registers a compensation and restores on a later-gate failure
-- [ ] A soft delete provably does NOT remove them
-- [ ] Unit tests cover all three, each with a recorded neuter run
+- [x] A `DeleteAgent` gate removes the deleted agent's `installed_plugins.json` records — G09b
+- [x] ~~The gate registers a compensation~~ → **resolved by placement instead**: G09b runs after the
+      folder is gone, so the records are provably false and no compensation is meaningful
+- [ ] A soft delete provably does NOT remove them — true by construction and pinned at the VERIFIER
+      level; **no test drives `DeleteAgent` on a soft delete**, so this stays open
+- [ ] Unit tests cover all three, each with a recorded neuter run — the PROBE has 7 tests / 3
+      neuters; the GATE has none
 - [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged
-- [ ] The pre-existing 93 orphans are reported to the USER with a proposed reconcile
-- [ ] ai-maestro#102 answered with the measured topology and this defect
+- [ ] The pre-existing 93 orphans are reported to the USER with a proposed reconcile — RULE 0
+- [x] ai-maestro#102 answered with the measured topology and this defect

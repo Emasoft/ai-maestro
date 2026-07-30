@@ -1,11 +1,11 @@
 ---
 trdd-id: C4YJAUD9
 title: The index's expensive verify has an entry point and no caller, so corruption is detectable and undetected
-column: dev
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T01:35:31+0200
-updated: 2026-07-30T02:27:51+0200
+updated: 2026-07-30T07:14:38+0200
 implementation-commits: [5113591d]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -199,15 +199,23 @@ Suite: 275 files / 4097 passed / 2 skipped; `tsc --noEmit` clean. New tests: 25.
       (`3P-IDX-09`); NEUTER-proven — removing the ledger write reddens the 3 ledger tests and nothing
       else, and a SECOND neuter proves the de-dup, without which a 6-hourly sweep fills all 50 slots
       with copies of one event and evicts the real history
-- [ ] `3P-IDX` gains the clause that the expensive pass must have a real caller, batched with the
-      next spec bump rather than triggering one of its own (see the note on YN8EQWYP) — **STILL
-      DEFERRED, deliberately.** Adding a clause is a MINOR bump per `3P-VER-01`, which obliges a
-      janitor notification (`3P-CHK-03`/`3P-VER-02`) and reddens `pillar-store.test.ts`'s exact
-      clause census; batching it with YN8EQWYP's concurrency clause pays that cost once. This is the
-      ONE open box, so the card correctly cannot reach a terminal column (§D4 checklist gate)
+- [x] `3P-IDX` gains the clause that the expensive pass must have a real caller, batched with the
+      next spec bump rather than triggering one of its own (see the note on YN8EQWYP) — **DONE
+      2026-07-30 as `3P-IDX-15` expensive-pass-needs-a-caller, batched into `spec-version: 1.3.0`.**
+      The batching worked, and only just: 1.3.0 was committed hours earlier for the
+      `status:`-is-not-`column:` ruling but had **not yet been communicated to the janitor**
+      (verified — no issue or comment on Emasoft/ai-maestro-janitor mentions any 3P clause), so this
+      clause rode the SAME bump and the cost is paid once: one MINOR version, one janitor
+      notification, one census update (`pillar-store.test.ts` 58 → 59, re-derived with my own grep,
+      never copied out of the failure output). Had the notification already gone out, this clause
+      would have forced 1.4.0 — the window was open only because a deliverable was still owed, which
+      is luck, not design
 
 ## Approval log
 
 - 2026-07-30T01:35:31+0200 — MANDATE issued by self (min-approval-requirement: none).
   Tier 0: a derived EHT inside the parent's own scope, reversible, no baseline deviation.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-07-30T07:14:38+0200 — COMPLETED by ai-maestro. All 5 boxes checked: the last one
+  (`3P-IDX-15`) landed batched into the already-committed-but-not-yet-notified 1.3.0, so the
+  MINOR-bump cost is paid once as the box required.

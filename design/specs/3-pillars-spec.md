@@ -297,6 +297,14 @@ And a parity check over an UNPOPULATED FTS table is satisfied by construction, s
 reported as passing — if a consumer is ever built, the INSERT and its parity check return together
 as ONE decision.
 
+`3P-IDX-15` **expensive-pass-needs-a-caller** — an integrity pass that no code path invokes `MUST
+NOT` be counted as a safety mechanism. A validator reachable only from a test proves the FUNCTION
+works, never that the SYSTEM is checked: the cheap per-open validate ran on every query while the
+full pass (`integrity_check`, FTS parity, orphan rows) had no production caller at all, so the
+expensive half of the contract was documented, tested, and never executed. Every declared pass
+`MUST` name the caller that runs it and the cadence — a detector, a repairer, a scheduled sweep —
+and a pass whose only caller is its own test `MUST` be reported as unwired rather than as present.
+
 ## 3P-BND — Pillar 4: the IND/DEP boundary (the classification test)
 
 `3P-BND-01` **the-test** — a normative statement belongs to the **IND universal base** iff

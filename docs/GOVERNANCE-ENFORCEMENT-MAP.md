@@ -111,7 +111,7 @@ Row format is fixed so a regex parses each line:
 | R9.7 | ENFORCED | lib/team-registry.ts:518-534 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.8 | ENFORCED | services/element-management-service.ts (DeleteAgent::G02) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.9 | ENFORCED | lib/startup-manager-gate.mjs:25-36, server.mjs:1749-1757 | tests/unit/startup-guards.test.ts |
-| R9.10 | UNENFORCED | — | — |
+| R9.10 | ENFORCED | services/element-management-service.ts (DeleteAgent::G02) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.11 | ENFORCED | services/teams-service.ts:285-291 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.12 | ENFORCED | services/agents-core-service.ts:417, app/api/agents/route.ts | tests/governance/r3-r9-team-governance.test.ts |
 | R9.13 | ENFORCED | services/element-management-service.ts (ChangeTitle::G17) | tests/governance/r3-r9-team-governance.test.ts |
@@ -362,6 +362,39 @@ Row format is fixed so a regex parses each line:
 | R49.6 | BEHAVIOURAL | — | — |
 
 ## Notes on individual rows
+
+- **R9.10 (ENFORCED, tested) — and the ruling on how a MULTI-CLAUSE rule gets ONE
+  verdict (TRDD-DQ6XN2VP, 2026-07-30).** R9.10 states two things: (A) the Delete
+  Agent dialog MUST show a warning naming the MANAGER title, and (B) the system
+  auto-demotes that MANAGER to AUTONOMOUS before deletion. They have *different*
+  verdicts. **B is enforced and tested** — `DeleteAgent::G02` calls
+  `ChangeTitle(agentId, 'autonomous')`, pinned by a test whose own name states the
+  neuter ("deleting G02 would delete the MANAGER and leave every team live and
+  ownerless"). **A is absent**: neither the warning string nor any paraphrase of it
+  appears anywhere in `components/` or `app/`.
+
+  **The row is ENFORCED, and the ruling is: a row's verdict describes the rule's
+  ENFORCED SURFACE — the strongest clause, never the weakest.** The reason is
+  operational, not cosmetic. `UNENFORCED` is exactly the verdict the ratchet
+  IGNORES: it demands no citation, so a live guard sitting under one is invisible,
+  and deleting `G02` tomorrow would redden nothing while the map still read
+  "nothing to lose here". Marking the row by its weakest clause would trade a real
+  guard's protection for the appearance of caution. There is precedent in this
+  file's own history: a rule "recorded UNENFORCED over a LIVE guard" was upgraded
+  the same way, arriving with its test already written.
+
+  **What the verdict does NOT do is absorb the missing clause** — that is what this
+  note is for, and why the gap is recorded in prose HERE rather than in the table.
+  The Guard column is machine-parsed (split on commas, each piece resolved as a
+  path), so an explanatory phrase in a cell breaks the ratchet rather than
+  informing anyone. Clause A remains an open UI gap.
+
+  No new verdict was invented. `PARTIAL` was considered and rejected: `VERDICTS` is
+  a closed union in `enforcement-coverage.test.ts`, and a machine cannot act on
+  "partly" — it must decide whether to demand a citation. Splitting the row into
+  R9.10a/R9.10b was also rejected: sub-rule ids are parsed out of
+  `GOVERNANCE-RULES.md`, so ids the rules document does not contain would decouple
+  the map from the only thing that defines it.
 
 - **R49.1-R49.6 (BEHAVIOURAL)** — the refusal protocol binds what an approver
   WRITES when it declines a proposal: name the precise defect, state the bar for

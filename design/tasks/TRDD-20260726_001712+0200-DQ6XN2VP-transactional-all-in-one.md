@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T20:08:47+0200
+updated: 2026-07-30T20:59:40+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -265,7 +265,51 @@ Existing signatures both return a COUNT, which is insufficient for either undo (
 WHICH rows). Add companions rather than change them — `revokeAllKeysForAgent` has a second caller in
 `services/amp-service.ts`.
 
-NEXT ACTION: implement, with G02's auto-demote KEPT (R9.10). Order of work:
+> **⚠ THE LIST BELOW IS STALE — steps 0-6 have ALL LANDED. Do not re-do them.** Verified by
+> measurement 2026-07-30, not by reading this card: `DeleteAgent` calls
+> `runGateSequence(deleteGates, dc)`; the array holds **11 gates, 10 with `undo` + 1 `readOnly`** —
+> full compensation coverage; `tests/unit/deleteagent-rollback-parity.test.ts` exists and is green
+> (5 tests). Step 5's CLI uninstall landed as `G08c` (`5861db3b`). Step 6 is ruled below.
+>
+> **NEXT ACTION: the remaining 21 pipelines.** `runGateSequence` has **5** callers in
+> `services/element-management-service.ts` against ~26 hand-rolled pipelines, so `AIO-TXN-10` is
+> still violated by the majority of them. DeleteAgent was the designated first target because it is
+> the irreversible one; it is done, and it is not the job.
+>
+> **A card whose STATE block lists landed work as pending is worse than one with no list** — it
+> spends the next session's context re-deriving what shipped. This block is the authority; the
+> ordered list is kept only because its per-step reasoning is still the record.
+>
+> **STEP 6 — RULED 2026-07-30. How a MULTI-CLAUSE rule gets ONE verdict.**
+> R9.10 has two clauses with different verdicts: (A) the delete dialog must warn that the agent
+> holds MANAGER — **absent**, the string is nowhere in `components/` or `app/`; (B) the system
+> auto-demotes that MANAGER — **enforced and tested** at `DeleteAgent::G02` via
+> `ChangeTitle(agentId,'autonomous')`, pinned by `r3-r9-team-governance.test.ts:1143`. The row said
+> `UNENFORCED | — | —`.
+>
+> **RULING: a row's verdict describes the rule's ENFORCED SURFACE — the strongest clause, never the
+> weakest.** `UNENFORCED` is precisely the verdict the ratchet IGNORES (it demands no citation), so
+> a live guard sitting under one is invisible: deleting `G02` would have reddened nothing. Marking
+> by the weakest clause trades a real guard's protection for the appearance of caution. **Proved by
+> neuter:** with the row upgraded, breaking the gate qualifier now reds a named test —
+> *"R9.10: DeleteAgent() no longer pushes a G99 gate — the guard this row cites is gone"*. Before
+> the upgrade, no ratchet test looked at R9.10 at all.
+>
+> The unenforced clause is NOT absorbed by the verdict — it is recorded in the map's
+> `## Notes on individual rows`, in prose, **outside the table**, because the Guard column is
+> machine-parsed (split on commas, each piece resolved as a path) and an explanatory phrase in a
+> cell breaks the ratchet instead of informing anyone.
+>
+> `PARTIAL` was considered and rejected — `VERDICTS` is a closed union and a machine cannot act on
+> "partly"; it must decide whether to demand a citation. Splitting into R9.10a/R9.10b was rejected
+> too — sub-rule ids are parsed out of `GOVERNANCE-RULES.md`, so ids that document does not contain
+> would decouple the map from the only thing defining it.
+>
+> **Owed, not done:** this was one row found by chance. Whether OTHER `UNENFORCED` rows (117 remain)
+> also hide live clauses is unmeasured, and a blind sweep at the end of a long turn is exactly how a
+> wrong verdict gets committed at scale. It needs its own card.
+
+NEXT ACTION (SUPERSEDED — see the block above): implement, with G02's auto-demote KEPT (R9.10). Order of work:
 0. ~~Add the two module-owned seams~~ **DONE 2026-07-30 (`8a47c5a2`)** —
    `revokeAllKeysForAgentCompensable` (`lib/amp-auth.ts`) and
    `revokeTokensForAgentCompensable` (`lib/aid-token.ts`), each returning a `restore` CLOSURE so no

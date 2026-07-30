@@ -45,8 +45,8 @@ Row format is fixed so a regex parses each line:
 | R2.2 | ENFORCED | lib/team-registry.ts:107 | — |
 | R2.3 | ENFORCED | lib/team-registry.ts:107 | tests/governance/r1-r2-team-registry.test.ts |
 | R3.1 | CONTRADICTED | — | — |
-| R3.2 | ENFORCED | services/element-management-service.ts:2291-2303 (ChangeTitle::G07) | tests/governance/r3-r9-team-governance.test.ts |
-| R3.3 | ENFORCED | services/element-management-service.ts:2539-2544 (ChangeTitle::G08) | tests/governance/r3-r9-team-governance.test.ts |
+| R3.2 | ENFORCED | services/element-management-service.ts (ChangeTitle::G07) | tests/governance/r3-r9-team-governance.test.ts |
+| R3.3 | ENFORCED | services/element-management-service.ts (ChangeTitle::G08) | tests/governance/r3-r9-team-governance.test.ts |
 | R3.4 | ENFORCED | lib/team-registry.ts:131-138 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.5 | ENFORCED | services/governance-service.ts:66-83 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.6 | ENFORCED | lib/authorization.ts:321-326 | tests/unit/headless-router-auth-mirror.test.ts |
@@ -59,7 +59,7 @@ Row format is fixed so a regex parses each line:
 | R4.1 | ENFORCED | lib/team-registry.ts:158-176, services/element-management-service.ts:5110 | tests/governance/r4-team-composition.test.ts |
 | R4.2 | ENFORCED | lib/group-registry.ts | tests/governance/r4-team-composition.test.ts |
 | R4.3 | CONTRADICTED | — | — |
-| R4.4 | ENFORCED | services/element-management-service.ts:5378-5394 (ChangeTeam::G07) | — |
+| R4.4 | ENFORCED | services/element-management-service.ts (ChangeTeam::G07) | — |
 | R4.5 | UNENFORCED | — | — |
 | R4.6 | ENFORCED | lib/team-registry.ts:142-145 | tests/governance/r4-team-composition.test.ts |
 | R4.7 | ENFORCED | lib/team-registry.ts:148-154, services/element-management-service.ts:5056 | tests/governance/r4-team-composition.test.ts |
@@ -100,21 +100,21 @@ Row format is fixed so a regex parses each line:
 | R7.9 | ENFORCED | hooks/useGovernance.ts:48 | — |
 | R8.1 | ENFORCED | lib/team-registry.ts:306 | — |
 | R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |
-| R8.3 | ENFORCED | services/element-management-service.ts:6240-6250 (DeleteTeam::G05) | — |
+| R8.3 | ENFORCED | services/element-management-service.ts (DeleteTeam::G05) | — |
 | R8.4 | ENFORCED | lib/authorization.ts:580-592 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |
 | R9.1 | ENFORCED | services/teams-service.ts:279-282 | tests/governance/r3-r9-team-governance.test.ts |
-| R9.2 | ENFORCED | services/element-management-service.ts:2461-2474 (ChangeTitle::G10) | tests/governance/r3-r9-team-governance.test.ts |
+| R9.2 | ENFORCED | services/element-management-service.ts (ChangeTitle::G10) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.3 | CONTRADICTED | — | — |
 | R9.4 | ENFORCED | lib/team-registry.ts:472-501 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.5 | ENFORCED | services/agents-core-service.ts:2045-2054 | tests/governance/r3-r9-team-governance.test.ts |
-| R9.6 | ENFORCED | services/element-management-service.ts:2539-2554 (ChangeTitle::G13) | tests/governance/r3-r9-team-governance.test.ts |
+| R9.6 | ENFORCED | services/element-management-service.ts (ChangeTitle::G13) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.7 | ENFORCED | lib/team-registry.ts:518-534 | tests/governance/r3-r9-team-governance.test.ts |
-| R9.8 | ENFORCED | services/element-management-service.ts:6442-6465 (DeleteAgent::G02) | tests/governance/r3-r9-team-governance.test.ts |
+| R9.8 | ENFORCED | services/element-management-service.ts (DeleteAgent::G02) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.9 | ENFORCED | lib/startup-manager-gate.mjs:25-36, server.mjs:1749-1757 | tests/unit/startup-guards.test.ts |
 | R9.10 | UNENFORCED | — | — |
 | R9.11 | ENFORCED | services/teams-service.ts:285-291 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.12 | ENFORCED | services/agents-core-service.ts:417, app/api/agents/route.ts | tests/governance/r3-r9-team-governance.test.ts |
-| R9.13 | ENFORCED | services/element-management-service.ts:3176-3181 (ChangeTitle::G17) | tests/governance/r3-r9-team-governance.test.ts |
+| R9.13 | ENFORCED | services/element-management-service.ts (ChangeTitle::G17) | tests/governance/r3-r9-team-governance.test.ts |
 | R10.1 | ENFORCED | services/agents-core-service.ts:2029-2043 | tests/governance/r10-wake-gates.test.ts |
 | R10.2 | CONTRADICTED | — | — |
 | R10.3 | ENFORCED | lib/authorization.ts:530-541 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |
@@ -125,8 +125,8 @@ Row format is fixed so a regex parses each line:
 | R11.1 | CONTRADICTED | — | — |
 | R11.2 | ENFORCED | lib/ecosystem-constants.ts:330 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R11.3 | ENFORCED | lib/ecosystem-constants.ts:332 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R11.4 | ENFORCED | services/element-management-service.ts:4996-5008 (ChangeTeam::G07) | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R11.5 | ENFORCED | services/element-management-service.ts:4938-4947 (ChangeTeam::G04d) | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R11.4 | ENFORCED | services/element-management-service.ts (ChangeTeam::G07) | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R11.5 | ENFORCED | services/element-management-service.ts (ChangeTeam::G04d) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R11.6 | ENFORCED | components/agent-profile/RoleTab.tsx:63-74 | — |
 | R11.7 | CONTRADICTED | — | — |
 | R11.8 | CONTRADICTED | — | — |
@@ -136,7 +136,7 @@ Row format is fixed so a regex parses each line:
 | R11.12 | CONTRADICTED | — | — |
 | R12.1 | UNENFORCED | — | — |
 | R12.2 | CONTRADICTED | — | — |
-| R12.3 | ENFORCED | services/element-management-service.ts:3029-3161 (ChangeTitle::G14d), services/element-management-service.ts:3222-3231 (ChangeTitle::G15) | tests/governance/r19-maintainer-title.test.ts |
+| R12.3 | ENFORCED | services/element-management-service.ts (ChangeTitle::G14d), services/element-management-service.ts (ChangeTitle::G15) | tests/governance/r19-maintainer-title.test.ts |
 | R12.4 | INVENTED | — | — |
 | R12.5 | CONTRADICTED | — | — |
 | R12.6 | UNENFORCED | — | — |
@@ -170,20 +170,20 @@ Row format is fixed so a regex parses each line:
 | R16.6 | BEHAVIOURAL | — | — |
 | R16.7 | CONTRADICTED | — | — |
 | R17.1 | ENFORCED | lib/agent-invariants.ts:111-146, services/element-management-service.ts:8220-8252 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.2 | ENFORCED | services/element-management-service.ts:932-939 (InstallElement::EXE) | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.2 | ENFORCED | services/element-management-service.ts (InstallElement::EXE) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.3 | UNENFORCED | — | — |
 | R17.4 | UNENFORCED | — | — |
 | R17.5 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.6 | ENFORCED | services/element-management-service.ts:8220-8252 (CreateAgent::G11) | tests/integration/createagent-g11-r17-core.test.ts |
+| R17.6 | ENFORCED | services/element-management-service.ts (CreateAgent::G11) | tests/integration/createagent-g11-r17-core.test.ts |
 | R17.7 | UNENFORCED | — | — |
-| R17.8 | ENFORCED | services/element-management-service.ts:740-745 (InstallElement::G08) | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.9 | ENFORCED | services/element-management-service.ts:1193-1194 (InstallElement::PG01) | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.8 | ENFORCED | services/element-management-service.ts (InstallElement::G08) | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.9 | ENFORCED | services/element-management-service.ts (InstallElement::PG01) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.10 | UNENFORCED | — | — |
 | R17.11 | CONTRADICTED | — | — |
 | R17.12 | UNENFORCED | — | — |
 | R17.13 | ENFORCED | services/plugin-storage-service.ts:182-266 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.14 | UNENFORCED | — | — |
-| R17.15 | ENFORCED | services/element-management-service.ts:731-738 (InstallElement::G08), services/element-management-service.ts:3590-3594 (ChangePlugin::G01b) | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.15 | ENFORCED | services/element-management-service.ts (InstallElement::G08), services/element-management-service.ts (ChangePlugin::G01b) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.16 | ENFORCED | components/agent-profile/PluginsTab.tsx:244-245 | — |
 | R17.17 | ENFORCED | lib/startup-user-scope-guard.mjs:28-65, server.mjs:1771-1774 | tests/unit/startup-guards.test.ts |
 | R17.18 | RULING-NEEDED | — | — |
@@ -193,20 +193,20 @@ Row format is fixed so a regex parses each line:
 | R17.21 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.22 | ENFORCED | services/agents-core-service.ts:1833-1866 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.23 | ENFORCED | services/agents-core-service.ts:2300-2303 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R18.1 | ENFORCED | services/element-management-service.ts:5697-5727 (ChangeClient::G06) | tests/governance/r18-client-change-continuity.test.ts |
-| R18.2 | ENFORCED | services/element-management-service.ts:5568-5607 (ChangeClient::G05) | tests/governance/r18-client-change-continuity.test.ts |
-| R18.3 | ENFORCED | services/element-management-service.ts:5645-5727 (ChangeClient::G06) | tests/governance/r18-client-change-continuity.test.ts |
+| R18.1 | ENFORCED | services/element-management-service.ts (ChangeClient::G06) | tests/governance/r18-client-change-continuity.test.ts |
+| R18.2 | ENFORCED | services/element-management-service.ts (ChangeClient::G05) | tests/governance/r18-client-change-continuity.test.ts |
+| R18.3 | ENFORCED | services/element-management-service.ts (ChangeClient::G06) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.3b | CONTRADICTED | — | — |
 | R18.3c | UNENFORCED | — | — |
 | R18.3d | UNENFORCED | — | — |
-| R18.4 | ENFORCED | services/element-management-service.ts:5834-5883 (ChangeClient::G07), services/element-management-service.ts:5884-5932 (ChangeClient::G08), services/element-management-service.ts:5933-5945 (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
-| R18.5 | ENFORCED | services/element-management-service.ts:5594-5605 (ChangeClient::G05b) | tests/governance/r18-client-change-continuity.test.ts |
+| R18.4 | ENFORCED | services/element-management-service.ts (ChangeClient::G07), services/element-management-service.ts (ChangeClient::G08), services/element-management-service.ts (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
+| R18.5 | ENFORCED | services/element-management-service.ts (ChangeClient::G05b) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.6 | CONTRADICTED | — | — |
-| R18.7 | ENFORCED | services/element-management-service.ts:5889-5891 (ChangeClient::G10) | tests/governance/r18-client-change-continuity.test.ts |
+| R18.7 | ENFORCED | services/element-management-service.ts (ChangeClient::G10) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.8 | ENFORCED | lib/converter/utils/warnings.ts:14-22, services/element-management-service.ts:5705-5715 | — |
 | R18.9 | ENFORCED | services/element-management-service.ts:5517-5908 | tests/governance/r18-client-change-continuity.test.ts |
-| R18.10 | ENFORCED | services/element-management-service.ts:5882 (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
-| R19.1 | ENFORCED | services/element-management-service.ts:2688-2706 (ChangeTitle::EXE) | tests/governance/r19-maintainer-title.test.ts |
+| R18.10 | ENFORCED | services/element-management-service.ts (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
+| R19.1 | ENFORCED | services/element-management-service.ts (ChangeTitle::EXE) | tests/governance/r19-maintainer-title.test.ts |
 | R19.2 | ENFORCED | services/element-management-service.ts:2328-2335, services/element-management-service.ts:2560-2575, services/element-management-service.ts:2711-2724, services/agents-core-service.ts:825-827 | tests/governance/r19-maintainer-title.test.ts |
 | R19.3 | ENFORCED | services/element-management-service.ts:2336-2360, services/element-management-service.ts:2560-2575, services/element-management-service.ts:2711-2724 | tests/governance/r19-maintainer-title.test.ts |
 | R19.4 | UNENFORCED | — | — |
@@ -215,13 +215,13 @@ Row format is fixed so a regex parses each line:
 | R19.7 | UNENFORCED | — | — |
 | R19.8 | UNENFORCED | — | — |
 | R19.9 | CONTRADICTED | — | — |
-| R19.10 | ENFORCED | services/element-management-service.ts:3163-3234 (ChangeTitle::G15), services/element-management-service.ts:3236-3284 (ChangeTitle::G16) | tests/governance/r19-maintainer-title.test.ts |
+| R19.10 | ENFORCED | services/element-management-service.ts (ChangeTitle::G15), services/element-management-service.ts (ChangeTitle::G16) | tests/governance/r19-maintainer-title.test.ts |
 | R19.11 | UNENFORCED | — | — |
 | R20.1 | ENFORCED | lib/ecosystem-constants.ts:70-90 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.2 | ENFORCED | lib/agent-invariants.ts:110-150 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.3 | RULING-NEEDED | — | — |
 | R20.4 | ENFORCED | lib/ecosystem-constants.ts:334-344 | tests/governance/r20-marketplace-governance.test.ts |
-| R20.5 | ENFORCED | services/element-management-service.ts:3163-3234 (ChangeTitle::G15), services/element-management-service.ts:3236-3284 (ChangeTitle::G16) | tests/governance/r19-maintainer-title.test.ts |
+| R20.5 | ENFORCED | services/element-management-service.ts (ChangeTitle::G15), services/element-management-service.ts (ChangeTitle::G16) | tests/governance/r19-maintainer-title.test.ts |
 | R20.6 | ENFORCED | services/element-management-service.ts:1791-1806, services/element-management-service.ts:7531-7570 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.7 | UNENFORCED | — | — |
 | R20.8 | ENFORCED | services/plugin-storage-service.ts:166-170 | tests/governance/r20-marketplace-governance.test.ts |
@@ -229,7 +229,7 @@ Row format is fixed so a regex parses each line:
 | R20.10 | UNENFORCED | — | — |
 | R20.11 | UNENFORCED | — | — |
 | R20.12 | UNENFORCED | — | — |
-| R20.13 | ENFORCED | services/element-management-service.ts:6953-6966 (CreateAgent::G01b) | tests/governance/r20-marketplace-governance.test.ts |
+| R20.13 | ENFORCED | services/element-management-service.ts (CreateAgent::G01b) | tests/governance/r20-marketplace-governance.test.ts |
 | R20.14 | ENFORCED | lib/agent-directory.ts:338-341, lib/agent-directory.ts:206-211 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.15 | ENFORCED | lib/agent-auth.ts:110-116 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.16 | ENFORCED | lib/agent-auth.ts:125 | tests/governance/r20-marketplace-governance.test.ts |
@@ -308,7 +308,7 @@ Row format is fixed so a regex parses each line:
 | R39.3 | UNENFORCED | — | — |
 | R39.4 | UNENFORCED | — | — |
 | R39.5 | CONTRADICTED | lib/communication-graph.ts:361-373 — the branch grants `recipientIsOwnUser \|\| recipientIsActiveMaestro`, i.e. the pre-2026-07-22 shape; the CURRENT text grants own user + **the MANAGER** and says outright it obeys "not the MAESTRO *user*". Also UNREACHABLE — nothing in production builds an `assistantSender` block, so the branch always falls through to deny. Downgraded from ENFORCED by the TRDD-SPS63XHA ruling: a citation naming real, working code that enforces a SUPERSEDED rule is invisible to every instrument we have. | tests/unit/communication-graph-user-routing.test.ts (pins the drift + the no-producer fact) |
-| R39.6 | ENFORCED | services/element-management-service.ts:6906-6925 (DeleteAgent::G01b) | tests/services/element-management-assistant-title.test.ts |
+| R39.6 | ENFORCED | services/element-management-service.ts (DeleteAgent::G01b) | tests/services/element-management-assistant-title.test.ts |
 | R39.7 | CONTRADICTED | lib/communication-graph.ts:113-118 — the empty `'assistant'` edge set is a CORRECT encoding of invisibility, but its own comment states the pre-2026-07-22 shape ("its own user + the active MAESTRO") and the relational branch it defers to is the R39.5 one downgraded above. The current text adds **the MANAGER** (R39.9) and any MANAGER-assigned collaborator on a shared repo (R39.10) as the exceptions to invisibility, and neither is encoded anywhere. Downgraded by the TRDD-SPS63XHA ruling. | tests/unit/communication-graph-user-routing.test.ts (pins the drift + the no-producer fact) |
 | R39.8 | UNENFORCED | — | — |
 | R39.9 | UNENFORCED | — | — |

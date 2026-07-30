@@ -462,6 +462,47 @@ describe('governance enforcement coverage — the ratchet', () => {
     expect(broken, `Gate qualifiers that no longer resolve:\n  ${broken.join('\n  ')}`).toEqual([])
   })
 
+  it('a gate-qualified citation carries NO line range', () => {
+    // Measured 2026-07-30, and the number is why this is a hard rule rather than advice: of the 31
+    // gate-qualified citations in the map, 22 (71%) pointed at the wrong lines. Every single drift
+    // was POSITIVE, +63 to +623 — not random rot but the mechanical consequence of code being
+    // inserted above, which the range cannot survive and the label does not notice.
+    //
+    // A range beside a qualifier is strictly worse than no range. It is unmaintainable by hand
+    // (R4.4's rotted THREE times: :4956 landed inside ChangeHook, then :5128-5137, then :5304-5320),
+    // it is not what the reader should trust, and — the part that made this invisible for months —
+    // the test above proves only that the LABEL exists in the pipeline, never that the cited RANGE
+    // contains it. So a row could contradict itself (R12.3 cited 3149-3152, inside G14d, while its
+    // qualifier said G15) and still read green.
+    //
+    // The qualifier is the durable half BECAUSE it is the checked half. Keeping a second,
+    // unchecked coordinate beside it buys nothing and decays continuously, so the grammar drops it:
+    //
+    //   gate-backed guard      services/element-management-service.ts (ChangeTitle::G15)
+    //   no gate label exists   lib/team-acl.ts:120-140
+    //
+    // The range stays legal for guards with no label surface (route handlers, lib/ helpers) — there
+    // is nothing better for those. This forbids only the combination that rots.
+    const RANGED_QUALIFIER =
+      /([^\s,|]+):(\d+)(?:-(\d+))?\s*\(([A-Za-z_][\w]*)::(G\d+[a-z]?|EXE|PG\d+)\)/g
+    const offenders: string[] = []
+
+    for (const r of rows.filter(r => r.verdict === 'ENFORCED')) {
+      for (const [, file, start, end, pipeline, label] of r.guard.matchAll(RANGED_QUALIFIER)) {
+        offenders.push(
+          `${r.subRule}: ${file}:${start}${end ? `-${end}` : ''} (${pipeline}::${label}) ` +
+            `— drop ":${start}${end ? `-${end}` : ''}", the qualifier already locates the guard`,
+        )
+      }
+    }
+
+    expect(
+      offenders,
+      `A citation may carry a line range OR a gate qualifier, never both — the range rots and\n` +
+        `nothing checks it, so it silently sends readers to unrelated code:\n  ${offenders.join('\n  ')}`,
+    ).toEqual([])
+  })
+
   it("Part II's published gate coverage still matches what the code says", () => {
     // Part II is DERIVED from code — `scripts/aio-gate-coverage.py` greps the enforcement dirs and
     // asks whether each rule's citation sits at a gate label. But the table in the doc is a

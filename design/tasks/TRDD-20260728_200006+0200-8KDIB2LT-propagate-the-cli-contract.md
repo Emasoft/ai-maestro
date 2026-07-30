@@ -1,12 +1,11 @@
 ---
 trdd-id: 8KDIB2LT
 title: Propagate the new pillar CLI contract to every consumer and document
-column: blocked
-pre-block-column: todo
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-30T01:54:53+0200
+updated: 2026-07-30T12:22:17+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -27,7 +26,7 @@ release-via: none
 relevant-rules: []
 npt: []
 eht: []
-blocked-by: [Q3GZJI1X]
+blocked-by: []
 external-refs: []
 ---
 
@@ -175,14 +174,27 @@ assumption, and a zero-risk option exists. Revisit only if auditing external con
       `scripts/aimaestro-trdd.sh` itself, whose header now names its own numbering as the
       grandfathered EXCEPTION and states the canon beside it. That last one is the load-bearing edit:
       a reader of the script alone previously learned the inverted rule in isolation
-- [ ] `docs/SCRIPT-LAYER.md` and `CLAUDE.md` name `prrdgrep` and `specsgrep` with their subcommands —
-      **still gated**: neither tool exists (Phase 3, transitively on the user-held `Q3GZJI1X`)
-- [x] The distribution decision is recorded explicitly — **"repo-local, and here is why"**, written
-      into `docs/SCRIPT-LAYER.md`: they are `*.mjs` and the installer globs `scripts/*.sh`;
-      distributing one means shipping the Node-22 wrapper with it, because the index needs the native
-      `better-sqlite3` (hard-caps at Node 25) so a bare `greptrdd` on a Node-26 box dies on
-      `ERR_DLOPEN_FAILED` where the repo-local form works; and they are developer/agent tools over a
-      git-tracked corpus, not an API surface a plugin should couple to
+- [ ] `docs/SCRIPT-LAYER.md` and `CLAUDE.md` name `prrdgrep` and `specgrep` with their subcommands —
+      **still open, but no longer GATED on a decision**: `Q3GZJI1X` closed 2026-07-30 (janitor#144
+      filed), so this is now plain Phase-3 build work — the two tools do not exist yet. The docs
+      deliberately say so rather than describing them: a name is installed only when its `.mjs`
+      exists, because an agent that finds a tool and gets an error cannot tell *planned* from
+      *broken*. **Note the spelling: `specgrep`, not `specsgrep`** — the USER's naming law
+      (2026-07-30) is `<document type>grep`.
+- [x] ~~The distribution decision is recorded explicitly — **"repo-local, and here is why"**~~
+      **SUPERSEDED 2026-07-30 by USER mandate (TRDD-217AYEOT). Do not restore it.** The recorded
+      reasoning was internally sound and still wrong, which is why the section that replaced it keeps
+      the CAUSE and not just the conclusion: the janitor's Claude reported *"no access to the trddgrep
+      tool at all"* while the file sat in this repo. A 3-pillar system every agent is governed by,
+      whose tools only one repo can run, is a governance corpus nobody can query. Two independent
+      causes had to be fixed — not distributed (the installer globs `scripts/*.sh`, these are `*.mjs`)
+      AND not guessable (the tool was named `greptrdd`, the two words backwards).
+      The Node-22 objection quoted above was REAL and is now HANDLED rather than avoided:
+      `scripts/pillar-cli` sources `scripts/pin-node.sh` (which version-CHECKS each candidate and
+      FAILS rather than falling back) and loads tsx by ABSOLUTE path with `TSX_TSCONFIG_PATH` pinned,
+      because both `--import tsx` and tsx's tsconfig discovery resolve against the CWD. The
+      "not an API surface" half SURVIVES unchanged and is still recorded: these are developer/agent
+      tools over a git-tracked corpus; the API-facing verbs remain `aimaestro-trdd.sh`.
 - [x] A grep for the old two-outcome wording returns nothing — **8 phrasings, positive-controlled;
       SATISFIED but VACUOUSLY**, because nothing documents these tools' exit codes at all. The sweep's
       real yield is the inverted `1`/`2` convention in `scripts/aimaestro-trdd.sh:200-206`, recorded

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:46:16+0200
+updated: 2026-07-30T18:51:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,63 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 6 → 5 — R7.3 DONE. The cited line was only the DISPLAY; the rule needed three.
+
+**The remaining 5:** R2.2, R4.8, R7.1, R7.8, R20.28.
+
+R7.3 ("show error messages for ALL failures — no silent failures allowed") was cited at
+`TeamListView.tsx:636`, the `{error && …}` block. **That line on its own proves nothing:** a
+component that renders `error` faithfully while three of its four failure paths never SET it
+satisfies :636 and violates the rule. The quantifier is ALL, so
+`tests/governance/r7-no-silent-failures.test.tsx` (6 tests) is MECHANISM + COVERAGE, and the
+row now cites **three** sites — a rule cited at one of its sites leaves the others invisible
+to every instrument, because the citation they lack names real working code and nothing
+reddens.
+
+**The failure paths were enumerated from the source, not guessed:**
+
+| path | site | what speaks |
+|---|---|---|
+| server rejects | `:247` | `data.error` verbatim (not a generic message) |
+| body unparseable | `:245` | the `.catch` fallback → `HTTP <status>` |
+| the call throws | `:261` | `'Network error'` / the thrown message |
+| client-side refusal | `:489` | the GitHub-URL message, **and submit is blocked** |
+| the LIST fails | `:63`/`:71` → `:277` | its own banner, with a Retry |
+
+The middle two are the classic silent-failure shapes and are why the rule exists: a
+`res.json()` that throws and a `fetch` that rejects both end with the operator staring at an
+unchanged dialog unless something deliberately speaks.
+
+**Three neuters, and B is the load-bearing one:**
+
+| neuter | site | reddened |
+|---|---|---|
+| A | delete the `{error && …}` display (`:636`) | the four dialog tests; success + list stay green |
+| B | no-op `if (err) setError(err)` (`:521`) | **only the SERVER trio** — client-validation stays green |
+| C | delete the `{fetchError && …}` banner (`:277`) | only the list test |
+
+With A alone this file would look like five assertions about a single `&&`. B is what proves
+the two `setError` sites are **distinct guards** rather than one counted twice — the
+client-validation path never reaches `:521` at all.
+
+**The success case is not padding.** An error box rendered unconditionally satisfies all four
+failure assertions while screaming at the operator on every successful create; asserting that
+a successful create shows nothing is what makes the other four about a real conditional.
+
+**The sweep was NEGATIVE a sixth time**, in a new shape worth naming: `TeamListView` appears
+in exactly one test file — `tests/unit/password-dialog.test.tsx` — and only in its **header
+comment**, listing it as one of five callers of the shared `PasswordDialog`, which the create
+flow does not use. A comment naming a file is not coverage of it, which is the same lesson
+R10.6 taught from the other direction (a comment CLAIMING coverage).
+
+**A `.tsx` guard is not a category error here.** R7.3 is a PRESENTATION rule — its entire
+content is what the operator sees — so the component is its only possible enforcement point.
+"A check in a client is no check" governs AUTHORIZATION (every route is curl-able), and
+reading it as a blanket ban on `.tsx` guards would wrongly gut this row and eight others.
+
+Verification: guard restored byte-identical (`git diff components/sidebar/TeamListView.tsx`
+empty); tsc 0; full suite **299 files / 4332 passed / 2 skipped**, exit 0.
 
 ### RATCHET 7 → 6 — R1.2 DONE. The widest absence in the map, pinned by contrast.
 

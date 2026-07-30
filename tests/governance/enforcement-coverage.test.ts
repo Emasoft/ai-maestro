@@ -379,7 +379,23 @@ const UNAUDITED_RULES = new Set<number>([
 // measured from. The sweep was NEGATIVE a fifth time, in a shape already catalogued: three of the
 // four group hits in the test tree MOCK the registry, and the fourth (r4-team-composition) reads
 // its SOURCE to assert no subscriber ceiling — a different rule about the same file.
-const MAX_ENFORCED_WITHOUT_TEST = 6
+// 2026-07-30: 6 -> 5. R7.3 pinned by tests/governance/r7-no-silent-failures.test.tsx. The cited
+// :636 is only the DISPLAY, and on its own it proves nothing — a component that renders `error`
+// faithfully while three of its four failure paths never SET it satisfies that line and violates
+// the rule, whose quantifier is "ALL failures". So this is MECHANISM + COVERAGE, and the row now
+// cites all THREE sites (:636 display, :521 the setError seam, :277 the list banner) — a rule
+// cited at one of its sites leaves the others invisible, because the citation they lack names
+// real working code and nothing reddens. The failure paths were enumerated from the source: a
+// server rejection, an unparseable body (the `.catch` fallback at :245), a thrown request, a
+// client-side refusal, and a failed list load. The middle two are the classic silent-failure
+// shapes and are the reason the rule exists. THREE neuters: deleting :636 reds the four
+// dialog tests, no-op-ing :521 reds only the SERVER trio (the client-validation test stays
+// green — that is what proves the two setError sites are distinct guards rather than one
+// counted twice), deleting :277 reds only the list test. Neuter B is the load-bearing one:
+// with A alone the file would look like five assertions about a single `&&`. Sweep NEGATIVE a
+// sixth time: TeamListView is named in exactly one test file, and only in its HEADER COMMENT,
+// as one of five callers of the shared PasswordDialog — which the create flow does not use.
+const MAX_ENFORCED_WITHOUT_TEST = 5
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

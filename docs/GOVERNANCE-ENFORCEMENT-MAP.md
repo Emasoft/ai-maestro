@@ -91,7 +91,7 @@ Row format is fixed so a regex parses each line:
 | R6.14 | UNENFORCED | — | — |
 | R7.1 | ENFORCED | components/sidebar/TeamListView.tsx:661, components/governance/PasswordDialog.tsx:334 | — |
 | R7.2 | ENFORCED | hooks/useGovernance.ts:48 | tests/governance/r7-governance-loading-state.test.ts |
-| R7.3 | ENFORCED | components/sidebar/TeamListView.tsx:636 | — |
+| R7.3 | ENFORCED | components/sidebar/TeamListView.tsx:636, components/sidebar/TeamListView.tsx:521, components/sidebar/TeamListView.tsx:277 | tests/governance/r7-no-silent-failures.test.tsx |
 | R7.4 | UNENFORCED | — | — |
 | R7.5 | UNENFORCED | — | — |
 | R7.6 | CONTRADICTED | — | — |

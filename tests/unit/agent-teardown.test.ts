@@ -9,6 +9,28 @@
  * 0-IMPACT: every store module is mocked. No registry, no tmux, no filesystem writes.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
+
+// A fake $HOME so the `plugin-records` probe can be driven against a SEEDED store. Without it that
+// probe reads the developer's real ~/.claude/plugins/installed_plugins.json, and since no real
+// record points at this file's fixture workdir it would answer "clean" for a reason the fixture
+// never established — the vacuous-gate shape. Read-only either way, but a probe nothing exercises
+// positively is a probe that could be broken in any way and still let the suite pass.
+const HOME_ = vi.hoisted(() => {
+  // `require` inline: vi.hoisted runs above every static import, so the `fs`/`path` bindings at the
+  // top of this file are not initialised yet.
+  const { mkdtempSync } = require('fs') as typeof import('fs')
+  const { join: j } = require('path') as typeof import('path')
+  const root = (process.env.TMPDIR || '/tmp').replace(/\/$/, '')
+  return { FAKE_HOME: mkdtempSync(j(root, 'aim-teardown-')) }
+})
+
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>()
+  const homedir = () => HOME_.FAKE_HOME
+  return { ...actual, homedir, default: { ...actual, homedir } }
+})
 
 const h = vi.hoisted(() => ({
   getAgent: vi.fn(),
@@ -182,6 +204,96 @@ describe('teardown verification — filesystem probes respect the pipeline contr
     })
     expect(v.residue.map((r) => r.store)).not.toContain('workdir')
   })
+
+  // Both cases above are `not.toContain` — they pass whenever the probe returns null, for ANY
+  // reason, so on their own they cannot tell a working probe from a broken one. These two are the
+  // positive controls that make the pair above mean something.
+  it('DETECTS a workdir that survived a delete-with-folder', async () => {
+    const dir = join(HOME_.FAKE_HOME, 'agents', 'survivor')
+    mkdirSync(dir, { recursive: true })
+    const v = await verifyAgentRemoved({ ...CTX, workingDirectory: dir, expectFolderGone: true })
+    expect(v.residue.map((r) => r.store)).toContain('workdir')
+  })
+
+  it('DETECTS a surviving transcript dir, with the slug encoding pinned independently', async () => {
+    // The probe's own comment records a past failure: an earlier slug rule mangled '.' and '_', so
+    // it read clean while the real transcript dir survived. The workdir here carries BOTH, and the
+    // expected path is derived here by the rule (slashes → dashes, everything else kept) rather
+    // than by calling conversationSlug — a test that reuses the implementation to compute its own
+    // expectation cannot detect a change in that implementation.
+    const dir = join(HOME_.FAKE_HOME, 'agents', 'ghost_v1.2')
+    mkdirSync(join(HOME_.FAKE_HOME, '.claude', 'projects', dir.replace(/\//g, '-')), { recursive: true })
+    const v = await verifyAgentRemoved({ ...CTX, workingDirectory: dir, expectFolderGone: true })
+    expect(v.residue.map((r) => r.store)).toContain('transcript-dir')
+  })
+})
+
+describe('the plugin-records probe — driven against a seeded store (TRDD-AQTGAY60)', () => {
+  // Under the fake $HOME, so `managedRoot` and the store path both resolve inside the fixture.
+  const MANAGED = join(HOME_.FAKE_HOME, 'agents', 'ghost')
+  const SIBLING = join(HOME_.FAKE_HOME, 'agents', 'other')
+  const STORE = join(HOME_.FAKE_HOME, '.claude', 'plugins', 'installed_plugins.json')
+  const KEY = 'ai-maestro-plugin@ai-maestro-plugins'
+  const HARD = { ...CTX, workingDirectory: MANAGED, expectFolderGone: true, hard: true }
+
+  function seedStore(plugins: Record<string, unknown>): void {
+    mkdirSync(join(HOME_.FAKE_HOME, '.claude', 'plugins'), { recursive: true })
+    writeFileSync(STORE, JSON.stringify({ version: 1, plugins }, null, 2), 'utf-8')
+  }
+
+  it('detects a local record left behind for the deleted workdir (G09b did not run)', async () => {
+    // THE positive control this probe never had: every other store has a "detects a surviving X"
+    // test, and until now this one only ever returned early at the expectFolderGone guard.
+    seedStore({ [KEY]: [{ scope: 'local', projectPath: MANAGED }] })
+    const v = await verifyAgentRemoved(HARD)
+    expect(v.clean).toBe(false)
+    expect(v.residue.find((r) => r.store === 'plugin-records')?.detail).toContain(`${KEY}(1)`)
+  })
+
+  it('does NOT count a user-scope row even when it carries this workdir path', async () => {
+    // The row is seeded WITH `projectPath` on purpose. A today-shaped user row has none, so
+    // `projectPath === workdir` already excludes it and a test using that shape would pass with
+    // the `scope === 'local'` check DELETED — measured, not assumed (neuter B reddened nothing).
+    // This is the "future record shape" the probe's own comment names as the reason the check
+    // exists, and it is the only seed that actually pins that line.
+    seedStore({ [KEY]: [{ scope: 'user', projectPath: MANAGED, version: '2.8.0' }] })
+    expect((await verifyAgentRemoved(HARD)).clean).toBe(true)
+  })
+
+  it('does NOT count another agent record for the same plugin', async () => {
+    seedStore({ [KEY]: [{ scope: 'local', projectPath: SIBLING }] })
+    expect((await verifyAgentRemoved(HARD)).clean).toBe(true)
+  })
+
+  it('leaves the SAME record alone after a soft delete — the workdir survives, so it is TRUE', async () => {
+    // The split G09b is scoped on, checked from the verifier side: a soft delete keeps the folder,
+    // so a record asserting "installed for this directory" is a fact, not residue. A probe that
+    // flagged it would make every soft delete report INCOMPLETE forever.
+    seedStore({ [KEY]: [{ scope: 'local', projectPath: MANAGED }] })
+    const soft = { ...CTX, workingDirectory: MANAGED, expectFolderGone: false, hard: false }
+    expect((await verifyAgentRemoved(soft)).clean).toBe(true)
+  })
+
+  it('stays inert for a workdir outside ~/agents/, whose records G03-SAFETY keeps true', async () => {
+    seedStore({ [KEY]: [{ scope: 'local', projectPath: '/tmp/not-managed/ghost' }] })
+    const outside = { ...CTX, workingDirectory: '/tmp/not-managed/ghost', expectFolderGone: true }
+    expect((await verifyAgentRemoved(outside)).clean).toBe(true)
+  })
+
+  it('reports an unreadable store as residue rather than clean (fail-closed)', async () => {
+    seedStore({})
+    writeFileSync(STORE, '{ this is not json', 'utf-8')
+    const v = await verifyAgentRemoved(HARD)
+    expect(v.residue.map((r) => r.store)).toContain('plugin-records')
+  })
+
+  it('0-IMPACT: the fixture store is inside the temp $HOME, never the developer own', () => {
+    expect(STORE.startsWith(HOME_.FAKE_HOME)).toBe(true)
+    expect(HOME_.FAKE_HOME).not.toBe(process.env.HOME)
+  })
+
+  // The temp dir is deliberately NOT removed: /tmp is swept by the OS, and tearing it down here
+  // would delete the evidence if one of the cases above failed mid-run.
 })
 
 describe('the manifest is pinned', () => {

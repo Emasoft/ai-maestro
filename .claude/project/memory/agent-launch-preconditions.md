@@ -2,7 +2,7 @@
 name: agent-launch-preconditions
 description: "an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in' / 'API Usage Billing' and can do nothing — or its pane falls back to a shell prompt because --agent did not resolve — or it runs a live but GENERIC claude (role persona never loads, e.g. a MANAGER builds solo) because --agent was DROPPED at the launch chokepoint"
 ocd: 2026-07-12
-lmd: 2026-07-22
+lmd: 2026-07-30
 metadata:
   node_type: memory
   type: project

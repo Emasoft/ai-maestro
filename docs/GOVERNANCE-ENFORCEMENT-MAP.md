@@ -170,7 +170,7 @@ Row format is fixed so a regex parses each line:
 | R16.6 | BEHAVIOURAL | — | — |
 | R16.7 | CONTRADICTED | — | — |
 | R17.1 | ENFORCED | lib/agent-invariants.ts:111-146, services/element-management-service.ts:8220-8252 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.2 | ENFORCED | services/element-management-service.ts:1531-1533 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.2 | ENFORCED | services/element-management-service.ts:932-939 (InstallElement::EXE) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.3 | UNENFORCED | — | — |
 | R17.4 | UNENFORCED | — | — |
 | R17.5 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
@@ -245,7 +245,7 @@ Row format is fixed so a regex parses each line:
 | R20.26 | ENFORCED | services/plugin-storage-service.ts:199-203 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.27 | UNENFORCED | — | — |
 | R20.28 | ENFORCED | install-messaging.sh:936-1110 | — |
-| R20.29 | ENFORCED | services/element-management-service.ts:1531-1533 | tests/governance/r20-marketplace-governance.test.ts |
+| R20.29 | ENFORCED | services/element-management-service.ts:1712-1716 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.30 | ENFORCED | components/agent-profile/PluginsTab.tsx:116-153 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.31 | ENFORCED | services/element-management-service.ts:1634-1712 | tests/governance/r20-marketplace-governance.test.ts |
 | R22.1 | BEHAVIOURAL | — | — |
@@ -308,7 +308,7 @@ Row format is fixed so a regex parses each line:
 | R39.3 | UNENFORCED | — | — |
 | R39.4 | UNENFORCED | — | — |
 | R39.5 | ENFORCED | lib/communication-graph.ts:363-371 | — |
-| R39.6 | ENFORCED | services/element-management-service.ts:6381-6385 | — |
+| R39.6 | ENFORCED | services/element-management-service.ts:6906-6925 (DeleteAgent::G01b) | tests/services/element-management-assistant-title.test.ts |
 | R39.7 | ENFORCED | lib/communication-graph.ts:113-118 | — |
 | R39.8 | UNENFORCED | — | — |
 | R39.9 | UNENFORCED | — | — |

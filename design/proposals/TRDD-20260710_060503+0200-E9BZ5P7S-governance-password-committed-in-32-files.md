@@ -3,7 +3,7 @@ trdd-id: E9BZ5P7S
 title: The governance password is committed verbatim in 32 tracked files and one published plugin
 column: completed
 created: 2026-07-10T06:05:03+0200
-updated: 2026-07-30T12:12:18+0200
+updated: 2026-07-30T12:13:46+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: null
@@ -30,7 +30,22 @@ external-refs: []
 
 # TRDD-E9BZ5P7S — the governance password is in the repository
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — RESOLVED 2026-07-30
+
+**DONE. Both halves landed; see the Approval log at the foot of this page for the evidence
+and for what is still open elsewhere.** Everything below this block is the record of the
+problem as it stood on 2026-07-10 and is kept for that reason — it is history, not the
+current state. In particular the next paragraph's "nothing here has been changed" and every
+"the USER must authorize" line are SUPERSEDED: rotation happened 2026-07-17, and the repo
+half shipped in `1e6246ff`.
+
+**SUPERSEDED — do NOT carry forward:** the 32-file count (now 0 tracked files carry the
+current password), "blocked on the USER", and the sequencing advice — steps 1 and 2 are done.
+**STILL TRUE and still open:** the public `web-scenario-tester` residue (`TRDD-44RGLOO8`,
+`Emasoft/ai-maestro-web-scenario-tester#3`) and the general lesson — a redaction of 1 of N is
+theatre, and the durable fix was making the secret impossible to name, not being careful.
+
+<details><summary>The 2026-07-10 state, verbatim (history)</summary>
 
 **Blocked on the USER. Credential rotation is never an agent's action, and this cannot
 be fixed by an edit.** Nothing here has been changed. Read the whole page before touching
@@ -170,6 +185,8 @@ Neither fact makes it safe: it is defence-in-depth's last layer, published.
 - Rotating the password (an agent must never rotate a credential).
 - Any `git push --force`, `filter-repo`, or remote branch deletion.
 - Editing `SCENARIOS_TESTS_RULES.md` (a rules doc — a governance edit).
+
+</details>
 
 ## Approval log
 

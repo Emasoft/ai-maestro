@@ -144,18 +144,19 @@ function analyze(): PipelineInfo[] {
  * hand-rolled pipeline reddens this immediately, which is the whole point — AIO-TXN-10
  * previously had no way to notice one.
  *
- * 14, MEASURED — and it corrects the card that drove this work. TRDD-DQ6XN2VP says "26
- * pipelines" and its STATE block says 19 still hand-roll; both are hand counts of a NAME
+ * 13, MEASURED — and it corrects the card that drove this work. TRDD-DQ6XN2VP says "26
+ * pipelines" and its STATE block said 19 still hand-roll; both were hand counts of a NAME
  * LIST, and that list contains 7 thin delegators that are not pipelines at all
- * (`CreateAgent`/`Delete`/`UpdateMarketplace` forward one line to `ChangeMarketplace`;
+ * (`CreateMarketplace`/`Delete`/`UpdateMarketplace` forward one line to `ChangeMarketplace`;
  * `ChangeAgentDef`/`Command`/`Rule`/`OutputStyle` forward one line to
  * `changeSimpleElement`) while omitting `changeSimpleElement` itself, which IS one and is
- * already transactional. Real inventory: 19 pipelines, 5 transactional, 14 to go.
+ * already transactional. Real inventory when this landed: 19 pipelines, 5 transactional,
+ * 14 to go — now 6 and 13, `CreateAgent` having been retrofitted.
  */
-const MAX_HANDROLLED = 14
+const MAX_HANDROLLED = 13
 
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */
-const MIN_TRANSACTIONAL = 5
+const MIN_TRANSACTIONAL = 6
 
 /**
  * The pipelines already under the runner, pinned BY NAME. A count alone cannot see an
@@ -164,6 +165,7 @@ const MIN_TRANSACTIONAL = 5
  * hand-rolling. Membership, not equality — retrofitting a new one must not red this.
  */
 const MUST_BE_TRANSACTIONAL = [
+  'CreateAgent',
   'DeleteAgent',
   'ChangeClient',
   'ChangePlugin',

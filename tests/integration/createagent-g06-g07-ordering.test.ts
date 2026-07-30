@@ -41,6 +41,7 @@ const {
   mockDetectClientType,
   mockGetClientCapabilities,
   mockHasKP,
+  mockRm,
   registryStore,
 } = vi.hoisted(() => {
   const store = new Map<string, { id: string; name: string; program?: string; workingDirectory?: string; governanceTitle?: string | null }>()
@@ -71,6 +72,11 @@ const {
       plugins: true, skills: true, agents: true, hooks: true,
     })),
     mockHasKP: vi.fn(() => true),
+    // The workdir removal is the compensation the retrofit ADDED (TRDD-DQ6XN2VP): before it,
+    // a failed G06/G07b deleted the registry row and left ~/agents/<name>/ on disk. A pure
+    // no-op double could not tell "the undo removed it" from "the undo was never written", so
+    // this is a spy the parity test asserts on rather than a stub that swallows the call.
+    mockRm: vi.fn(async () => undefined),
   }
 })
 
@@ -191,6 +197,13 @@ vi.mock('fs/promises', () => ({
   }),
   readFile: vi.fn(async () => ''),
   writeFile: vi.fn(async () => undefined),
+  // G03's undo removes a workdir this pipeline created. Left out of the double, `rm` would be
+  // `undefined` and the undo would die with a TypeError — which the runner reports as an
+  // UNREVERTABLE gate, so every rollback test would fail for a fixture reason wearing the
+  // costume of a product bug.
+  rm: mockRm,
+  readdir: vi.fn(async () => [] as string[]),
+  rmdir: vi.fn(async () => undefined),
 }))
 
 // ChangeTitle Gates 14 + 22 verify that the registry write landed by reading
@@ -226,6 +239,7 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
     // which is exactly the hoisted default both of these want back.
     mockDeleteAgent.mockReset()
     mockUpdateAgent.mockReset()
+    mockRm.mockClear()
     mockCheckIbctScope.mockReset().mockReturnValue(null)
     mockDetectClientType.mockReset().mockReturnValue('claude')
     mockGetClientCapabilities.mockReset().mockReturnValue({
@@ -392,13 +406,63 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
 
     expect(result.success).toBe(false)
     // The rollback was attempted and failed — pin the REASON, not just the outcome.
-    expect(result.operations.some(o => /ROLLBACK ALSO FAILED/.test(o))).toBe(true)
+    //
+    // The LINE this lands on moved when CreateAgent was retrofitted onto runGateSequence
+    // (TRDD-DQ6XN2VP): the failure is reported against the gate whose COMPENSATION failed (G04,
+    // the registry write) rather than against the gate that failed (G06). That is strictly more
+    // accurate — G06's own undo had nothing to do with the stuck delete — and the runner's
+    // wording is `ROLLBACK FAILED`, not the hand-rolled `ROLLBACK ALSO FAILED`.
+    expect(result.operations.some(o => /^G04: ROLLBACK FAILED/.test(o))).toBe(true)
     // THE POINT: the orphan stays addressable.
     expect(result.agentId).not.toBeNull()
     expect(result.error).toMatch(/INVALID STATE/i)
+    // The runner names an unrevertable gate as "<id> (<error>)", so "G04 (registry locked)" alone
+    // would not say WHICH agent survived. G04's undo re-throws with the record in the message —
+    // that is what keeps R51.5's promise that the orphan stays findable.
     expect(result.error).toMatch(/orphan-alpha/)
     // And it must NOT claim nothing happened.
-    expect(result.error).not.toMatch(/no agent was created/i)
+    expect(result.error).not.toMatch(/no changes were made/i)
+  })
+
+  /**
+   * ROLLBACK PARITY — the guarantee the retrofit ADDED, not one it preserved.
+   *
+   * Every one of the four hand-rolled rollbacks deleted the registry row and stopped there,
+   * so a failed creation left `~/agents/<name>/` on disk with its seeded rules inside. The
+   * next attempt at the same name then took the "Reusing orphaned folder" branch — a different
+   * code path, entered because of a failure nobody was told about.
+   *
+   * Under the runner G03 records whether IT created the directory and removes it on the way
+   * back out. The two assertions are deliberately paired: the row is gone AND the directory is
+   * gone. Asserting only the row is what the old code already did.
+   */
+  it('R51.5 parity: a rollback removes the workdir this pipeline created, not just the registry row', async () => {
+    mockUpdateAgent.mockRejectedValue(new Error('registry write refused'))
+
+    const { CreateAgent } = await import('@/services/element-management-service')
+    const result = await CreateAgent({
+      name: 'reverted-alpha',
+      client: 'claude',
+      governanceTitle: 'manager',
+      authContext: { isSystemOwner: true as const },
+    })
+
+    expect(result.success).toBe(false)
+    // The revert landed, so the caller is told the truth: nothing survives.
+    expect(result.agentId).toBeNull()
+    expect(result.error).toMatch(/NO CHANGES WERE MADE/i)
+    expect(result.error).not.toMatch(/INVALID STATE/i)
+    expect(mockDeleteAgent).toHaveBeenCalled()
+    // THE NEW HALF: the directory G03 created is removed, recursively, because by rollback time
+    // it holds whatever the later gates wrote into it.
+    const rmCalls = mockRm.mock.calls as unknown as [string, { recursive?: boolean }][]
+    expect(
+      rmCalls.some(([p, o]) => typeof p === 'string' && p.endsWith('/agents/reverted-alpha') && o?.recursive === true),
+      `expected the workdir to be removed; rm was called with: ${JSON.stringify(rmCalls)}`,
+    ).toBe(true)
+    // And the ops carry the runner's own audit of the unwind.
+    expect(result.operations.some(o => o === 'G04: reverted')).toBe(true)
+    expect(result.operations.some(o => o === 'G03: reverted')).toBe(true)
   })
 
   /**
@@ -432,14 +496,22 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
     // would pass just as well for a pipeline that died at G06.
     const g07b = result.operations.find(o => o.startsWith('G07b:'))
     expect(g07b, 'G07b must have run — otherwise this test is about a different gate').toBeDefined()
-    expect(g07b).toMatch(/ROLLBACK ALSO FAILED/)
+    expect(g07b).toMatch(/FAILED — Title assignment after team join failed/)
+    // The rollback failure is reported against the gate whose COMPENSATION failed, which is G04.
+    expect(result.operations.some(o => /^G04: ROLLBACK FAILED/.test(o))).toBe(true)
 
     expect(result.success).toBe(false)
-    // THE POINT: the orphan — already in the team — stays addressable.
+    // THE POINT: the orphan stays addressable.
     expect(result.agentId).not.toBeNull()
     expect(result.error).toMatch(/INVALID STATE/i)
     expect(result.error).toMatch(/orphan-teamed/)
-    expect(result.error).toMatch(/team-xyz/)
+    // DROPPED, and the drop is the finding: this used to assert the message named `team-xyz`,
+    // because the hand-rolled G07b hardcoded "joined team <id>" into it whether or not the join
+    // had succeeded — and it never left the team on the way out, so the claim was doing double
+    // duty as an apology. Under the runner G07 records the join and its undo reverses it, so a
+    // team is named ONLY when one is genuinely still occupied. Here ChangeTeam WARNed (the mocked
+    // world has no team), nothing was joined, and a message naming the team would now be false.
+    expect(result.operations.some(o => /^G07: WARN — ChangeTeam failed/.test(o))).toBe(true)
   })
 
   /**
@@ -460,8 +532,12 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
 
     const g07b = result.operations.find(o => o.startsWith('G07b:'))
     expect(g07b, 'G07b must have run').toBeDefined()
-    expect(g07b).toMatch(/Rolled back agent/)
-    expect(g07b).not.toMatch(/ROLLBACK ALSO FAILED/)
+    expect(g07b).toMatch(/FAILED — Title assignment after team join failed/)
+    // The revert landed, so the runner's audit says `reverted`, not `ROLLBACK FAILED`. The line
+    // moved from G07b to G04 for the same reason as in the test above: it belongs to the gate
+    // whose compensation ran, not to the gate that failed.
+    expect(result.operations.some(o => o === 'G04: reverted')).toBe(true)
+    expect(result.operations.some(o => /ROLLBACK FAILED/.test(o))).toBe(false)
 
     expect(result.success).toBe(false)
     expect(result.agentId).toBeNull()

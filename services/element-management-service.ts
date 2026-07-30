@@ -21,7 +21,7 @@
  * concurrent read-modify-write races.
  */
 
-import type { AgentRole } from '@/types/agent'
+import type { Agent, AgentRole } from '@/types/agent'
 import type { Residue, TeardownVerification } from '@/lib/agent-teardown'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -8053,287 +8053,413 @@ export async function CreateAgent(
       ops.push(`G03-OVERLAP: No directory overlap with ${allAgents.length} existing agents`)
     }
 
-    await mkdir(workDir, { recursive: true })
-    ops.push(`G03: Working directory: ${workDir}`)
-
-    // ── G04: Create agent in registry ────────────────────────
-    const { createAgent } = await import('@/lib/agent-registry')
-    const agent = await createAgent({
-      name,
-      label: desired.label || undefined,
-      program,
-      workingDirectory: workDir,
-      avatar: desired.avatar || undefined,
-      programArgs: desired.programArgs || (program.includes('claude') ? '--dangerously-skip-permissions' : ''),
-      owner: desired.owner || undefined,
-      tags: desired.tags || undefined,
-      model: desired.model || undefined,
-      taskDescription: desired.taskDescription || '',
-      role: 'autonomous',
-    })
-    result.agentId = agent.id
-    ops.push(`G04: Agent created: id=${agent.id}, name=${agent.name}`)
-
-    // ── G05: Establish the workdir invariants (TRDD-VYQ8N4KR) ──────
-    // Was three hand-rolled gates — mkdir .claude/ (G05), seed the DEP rules
-    // (G05b), restore the managed git-exclude (G05c) — each with its own
-    // try/catch, and each duplicated in ensureCorePluginInstalled. They are now
-    // ONE list (lib/agent-invariants.ts) run by ONE runner, so adding a
-    // guarantee is a row rather than a fourth copy of this block.
+    // ── The abortable tail runs as ONE transaction (R51 · AIO-TXN-10) ───────────
     //
-    // Best-effort, exactly as before: a failed invariant is a WARN op and never
-    // aborts agent creation. (The one invariant whose failure IS fatal — the R17
-    // core plugin — is deliberately not on the 'create' trigger: it is installed
-    // on first wake, and this consolidation does not change that.)
+    // WHERE THE SEQUENCE STARTS. Everything above is READ-ONLY — validation,
+    // authorization, and the resolution of `program` and `workDir` — so those gates
+    // keep their early returns and their exact error strings. There is nothing for a
+    // transaction to compensate before the first mutation, and wrapping them would
+    // only rewrite messages callers already read. It therefore starts at `mkdir`,
+    // the first thing this pipeline changes. (Same split as DeleteAgent, whose
+    // G00/G01/G01b stayed outside its own sequence.)
     //
-    // The G05/G05b/G05c op labels are kept: they are the AIO's public
-    // per-gate contract, read by callers and pinned by tests.
-    const INVARIANT_OPS: Record<string, string> = {
-      'claude-dir': 'G05',
-      'dep-rules': 'G05b',
-      'git-exclude': 'G05c',
+    // WHERE IT ENDS, AND WHY THAT IS NOT ARBITRARY. G07c is the LAST gate that can
+    // abort: G08 (explicit plugin), G09 (session), G10 (keypair), G11 (core plugin)
+    // and G12 (AMP identity) are all WARN-and-continue, and nothing after them can
+    // fail either. A gate's `undo` runs only when a LATER gate fails, so undos
+    // written for those five could never execute — unreachable code that READS as a
+    // guarantee, which is worse than no code at all. They stay outside, exactly as
+    // DeleteAgent's irreversible G09 runs after its sequence has committed.
+    // ⚠ If any of G08..G12 is ever made fatal, it MUST move into this list with a
+    // real compensation — that is the one change that would make them reachable.
+    //
+    // WHAT THIS REPLACES: four hand-rolled rollbacks — G06 twice, G07b and G07c —
+    // each of which deleted the registry row and nothing else. That was the entire
+    // compensation for a pipeline that also creates a directory, seeds governed
+    // rules into it, joins a team and installs a role-plugin. So a failed G07b left
+    // a team slot pointing at a deleted agent. The four collapse into one `undo`
+    // chain, and the runner REFUSES TO START when a mutating gate has no
+    // compensation — which is what stops a fifth site being written the old way.
+    //
+    // WORKDIR-SCOPED COMPENSATION IS DELEGATED TO G03, DELIBERATELY. When this
+    // pipeline created the directory, removing it reverts everything written inside
+    // it — the seeded rules, the role-plugin install — so G05 and G06 return early
+    // instead of each unpicking its own files. Reverse-order unwinding is what makes
+    // that sound: G03's undo runs LAST, after every gate that wrote into it. When
+    // the directory PRE-EXISTED (an adopted project folder, or a reused orphan) G03
+    // must never delete it, and those gates do unpick their own writes.
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+
+    interface CreateCtx {
+      /** The row G04 created. Every later gate keys off its id; every undo no-ops without it. */
+      agent: Agent | null
+      /** True when workDir was already on disk — the one fact that decides whether G03 may remove it. */
+      workDirExisted: boolean
+      /** Same question for `<workDir>/.claude/`, so G05 removes only a directory it created. */
+      claudeDirExisted: boolean
+      /**
+       * `aimaestro-*.md` rule files present BEFORE G05 seeded. Its undo removes only the ones that
+       * were not there — it deliberately does NOT restore a pre-existing file's bytes, because
+       * ai-maestro OWNS that name (TRDD-JGCEA6CQ) and a rollback must not re-introduce the tampered
+       * copy the seeder had just repaired.
+       */
+      depRulesBefore: Set<string> | null
+      /** The role-plugin ChangeTitle installed, recorded only once the title actually landed. */
+      titlePlugin: { name: string; marketplace: string } | null
+      /** The team G07 actually joined — null when the join was skipped or WARNed. */
+      teamJoined: string | null
     }
-    const { enforceAgentInvariants } = await import('@/lib/agent-invariants')
-    const invariants = await enforceAgentInvariants({
-      agentId: agent.id,
-      agentName: agent.name,
-      workdir: workDir,
-      clientType: (program.includes('claude') ? 'claude' : 'unknown'),
-      trigger: 'create',
-    })
-    for (const o of invariants.outcomes) {
-      const label = INVARIANT_OPS[o.id] || 'G05x'
-      ops.push(
-        o.status === 'failed'
-          ? `${label}: WARN — invariant ${o.id} failed (non-fatal): ${o.detail}`
-          : `${label}: invariant ${o.id}=${o.status}${o.detail ? ` (${o.detail})` : ''}`
-      )
+    const cc: CreateCtx = {
+      agent: null,
+      workDirExisted: false,
+      claudeDirExisted: false,
+      depRulesBefore: null,
+      titlePlugin: null,
+      teamJoined: null,
     }
 
-    // ── G06: Set governance title if requested ───────────────
-    // BUG-002 FIX: On failure, ROLL BACK the agent and ABORT. Silently creating
-    // an AUTONOMOUS agent when MAINTAINER was requested violates the user's
-    // intent and was the root cause of SCEN-018 S005 failing with no error.
-    //
-    // SCEN-003 FIX: When a teamId is provided AND the title is a team-required
-    // title (member, chief-of-staff, orchestrator, architect, integrator),
-    // SKIP the title assignment here — ChangeTitle's Gate 9 would reject it
-    // because the agent isn't in the team yet. The team join happens in G07,
-    // then G07b applies the requested title after the agent is in the team.
-    // Only standalone titles (manager, autonomous, maintainer) and
-    // no-teamId-provided cases proceed at G06.
-    const TEAM_REQUIRED_TITLES_G06 = new Set(['member', 'chief-of-staff', 'orchestrator', 'architect', 'integrator'])
-    const titleNeedsTeamFirst = desired.governanceTitle &&
-      desired.teamId &&
-      TEAM_REQUIRED_TITLES_G06.has(desired.governanceTitle)
+    // Which role-plugin ChangeTitle installs for a title, so G06/G07b's undo can remove exactly
+    // that one. On a FRESH agent nothing is installed yet, so Gates 15/16 always take the default
+    // this resolves; the N:1 "keep the current plugin if it is compatible" branch cannot apply.
+    const titlePluginFor = (title: string): { name: string; marketplace: string } | null => {
+      const pluginName = getRequiredPluginForTitle(title)
+      if (!pluginName) return null
+      return {
+        name: pluginName,
+        marketplace: PREDEFINED_ROLE_PLUGINS[pluginName]?.marketplace || LOCAL_MARKETPLACE_NAME,
+      }
+    }
 
     // ChangeTitle's own gate log — kept so G07c can name the REAL reason a role-plugin
     // failed to install, instead of the useless summary this pipeline records.
     let titleOps: string[] = []
 
-    // R9.13: AUTONOMOUS is now a real title that resolves to
-    // ai-maestro-autonomous-agent. It MUST flow through ChangeTitle like any
-    // other title so Gates 15/16 install its mandatory role-plugin. The
-    // earlier `!== 'autonomous'` exclusion was the root cause of agents
-    // being left with no persona and full gh-user privileges.
-    if (desired.governanceTitle && !titleNeedsTeamFirst) {
-      const titleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
-        authContext: desired.authContext,
-        githubRepo: desired.githubRepo,
-      })
-      if (!titleResult.success) {
-        // Roll back: delete the half-created agent so the caller can retry cleanly.
-        // R51.5 — a FAILED rollback may never be reported as "nothing was created".
-        // `result.agentId = null` used to run in BOTH branches, so a failed delete left
-        // an orphan agent in the registry while the caller was told no agent existed:
-        // the one record nobody would ever go clean up, because nothing named it. On a
-        // failed revert we KEEP agentId set (the orphan stays addressable) and say the
-        // state is invalid.
-        let rolledBack = true
-        let rollbackError = ''
-        try {
-          const { deleteAgent } = await import('@/lib/agent-registry')
-          await deleteAgent(agent.id)
-          ops.push(`G06: FAIL — ChangeTitle failed: ${titleResult.error}. Rolled back agent.`)
-        } catch (rollbackErr) {
-          rolledBack = false
-          rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
-          ops.push(`G06: FAIL — ChangeTitle failed: ${titleResult.error}. ROLLBACK ALSO FAILED: ${rollbackError}`)
-        }
-        if (rolledBack) {
-          result.error = `Title assignment failed: ${titleResult.error}`
-          result.agentId = null
-        } else {
-          const { invalidStateMessage } = await import('@/lib/gate-transaction')
-          result.error = invalidStateMessage(6, 'G06', `Title assignment failed: ${titleResult.error}`, [
-            { id: `agent ${agent.id} (${agent.name})`, error: rollbackError },
-          ])
-        }
-        return result
-      }
-      titleOps = titleResult.operations
-      ops.push(`G06: Title set to ${desired.governanceTitle.toUpperCase()} (${titleResult.operations.length} sub-gates)`)
-      result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
-    } else if (titleNeedsTeamFirst) {
-      ops.push(`G06: DEFER — Title ${desired.governanceTitle?.toUpperCase()} requires team membership; will be applied at G07b after team join`)
-    } else {
-      // R9.13 fallback: every persisted agent MUST have a role-plugin. When
-      // the caller omits governanceTitle entirely, default to AUTONOMOUS so
-      // ChangeTitle installs ai-maestro-autonomous-agent — the minimum
-      // privilege tier with an explicit governance persona.
-      ops.push(`G06: No title requested — defaulting to AUTONOMOUS (R9.13 mandatory-plugin)`)
-      const titleResult = await ChangeTitle(agent.id, 'autonomous', {
-        authContext: desired.authContext,
-      })
-      if (!titleResult.success) {
-        // R51.5 — see the G06 explicit-title branch above: a failed rollback must keep
-        // the orphan addressable instead of reporting "no agent was created".
-        let rolledBack = true
-        let rollbackError = ''
-        try {
-          const { deleteAgent } = await import('@/lib/agent-registry')
-          await deleteAgent(agent.id)
-          ops.push(`G06: FAIL — default AUTONOMOUS assignment failed: ${titleResult.error}. Rolled back agent.`)
-        } catch (rollbackErr) {
-          rolledBack = false
-          rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
-          ops.push(`G06: FAIL — default AUTONOMOUS assignment failed: ${titleResult.error}. ROLLBACK ALSO FAILED: ${rollbackError}`)
-        }
-        if (rolledBack) {
-          result.error = `Default AUTONOMOUS assignment failed: ${titleResult.error}`
-          result.agentId = null
-        } else {
-          const { invalidStateMessage } = await import('@/lib/gate-transaction')
-          result.error = invalidStateMessage(6, 'G06', `Default AUTONOMOUS assignment failed: ${titleResult.error}`, [
-            { id: `agent ${agent.id} (${agent.name})`, error: rollbackError },
-          ])
-        }
-        return result
-      }
-      titleOps = titleResult.operations
-      result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
-    }
+    // SCEN-003 FIX: when a teamId is provided AND the title is a team-required title
+    // (member, chief-of-staff, orchestrator, architect, integrator), G06 SKIPS the
+    // assignment — ChangeTitle's Gate 9 would reject it because the agent is not in the
+    // team yet. G07 joins the team, then G07b applies the requested title. Only standalone
+    // titles (manager, autonomous, maintainer) and no-teamId cases proceed at G06.
+    const TEAM_REQUIRED_TITLES_G06 = new Set(['member', 'chief-of-staff', 'orchestrator', 'architect', 'integrator'])
+    const titleNeedsTeamFirst = desired.governanceTitle &&
+      desired.teamId &&
+      TEAM_REQUIRED_TITLES_G06.has(desired.governanceTitle)
 
-    // ── G07: Add to team if requested ────────────────────────
-    if (desired.teamId) {
-      // CRITICAL (SCEN-007/010/020 P0): Pass authContext so the internal
-      // ChangeTitle call inside ChangeTeam can satisfy Gate 0 (authContext
-      // is mandatory). Without this, ChangeTeam would auto-assign 'member'
-      // silently failing — leaving governanceTitle=null in the registry.
-      const teamResult = await ChangeTeam(agent.id, { teamId: desired.teamId }, desired.authContext)
-      if (!teamResult.success) {
-        ops.push(`G07: WARN — ChangeTeam failed: ${teamResult.error}`)
-      } else {
-        ops.push(`G07: Added to team (${teamResult.operations.length} sub-gates)`)
-        result.restartNeeded = result.restartNeeded || teamResult.restartNeeded
-      }
-
-      // G07b: ChangeTeam tries to auto-assign "member" title, but that internal
-      // ChangeTitle call lacks authContext and FAILS silently at Gate 0.
-      // ALWAYS re-apply the requested title after team join (including 'member')
-      // to guarantee governanceTitle is persisted to the registry.
-      // This fixes SCEN-020 BUG-001 (registry missing governanceTitle after wizard
-      // creation) and BUG-022 (non-member titles being ignored).
-      if (desired.governanceTitle && desired.governanceTitle !== 'autonomous') {
-        const retitleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
-          authContext: desired.authContext,
-          githubRepo: desired.githubRepo,
-        })
-        if (!retitleResult.success) {
-          // Roll back: delete the half-created agent (same reasoning as G06).
-          //
-          // R51.5 — this site kept the bug its three siblings were fixed for. G06 (both
-          // branches) and G07c stopped setting `result.agentId = null` unconditionally;
-          // G07b did not, so a FAILED delete still handed the caller "no agent exists"
-          // while the orphan sat in the registry — and this orphan is the WORST of the
-          // four, because it is already IN a team and carrying the wrong title. A fix
-          // applied at three of four sites is not a fix: the unpinned site is where the
-          // bug survives, and nothing reddened because the R51.5 test drives G06 only.
-          let rolledBack = true
-          let rollbackError = ''
-          try {
-            const { deleteAgent } = await import('@/lib/agent-registry')
-            await deleteAgent(agent.id)
-            ops.push(`G07b: FAIL — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}. Rolled back agent.`)
-          } catch (rollbackErr) {
-            rolledBack = false
-            rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
-            ops.push(`G07b: FAIL — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}. ROLLBACK ALSO FAILED: ${rollbackError}`)
+    // Detail lines go into `ops` from inside each `run`, preserving today's exact strings.
+    // The runner's own ops are appended ONLY on failure, where they carry the `reverted` /
+    // `ROLLBACK FAILED` lines that are the whole point of the sequence.
+    const createGates = [
+      {
+        id: 'G03',
+        what: `Working directory ${workDir}`,
+        run: async (c: CreateCtx) => {
+          // Learn whether the directory is ours BEFORE creating it. Its undo may only remove a
+          // directory this call brought into existence: the "reusing orphaned folder" branch above
+          // and every adopted project folder arrive here pre-existing, and deleting one of those
+          // would destroy a user's work to compensate a failure it did not cause.
+          c.workDirExisted = existsSync(workDir)
+          await mkdir(workDir, { recursive: true })
+          ops.push(`G03: Working directory: ${workDir}`)
+        },
+        undo: async (c: CreateCtx) => {
+          if (c.workDirExisted) return
+          // Recursive, because by now the directory holds whatever the later gates wrote. Bounded
+          // to ~/agents/: anywhere else we attempt only a non-recursive rmdir, so a workDir
+          // computed wrong fails loudly (and lands in `unrevertable`) rather than removing a tree.
+          const agentsRootUndo = resolve(HOME, 'agents')
+          if (workDir !== agentsRootUndo && workDir.startsWith(agentsRootUndo + sep)) {
+            await rm(workDir, { recursive: true, force: true })
+            return
           }
-          if (rolledBack) {
-            result.error = `Title assignment after team join failed: ${retitleResult.error}`
-            result.agentId = null
-          } else {
-            const { invalidStateMessage } = await import('@/lib/gate-transaction')
-            result.error = invalidStateMessage(
-              7,
-              'G07b',
-              `Title assignment after team join failed: ${retitleResult.error}`,
-              [{ id: `agent ${agent.id} (${agent.name}) — joined team ${desired.teamId}, title not applied`, error: rollbackError }],
+          const { rmdir } = await import('fs/promises')
+          await rmdir(workDir)
+        },
+      },
+      {
+        id: 'G04',
+        what: 'Agent created in registry',
+        run: async (c: CreateCtx) => {
+          const { createAgent } = await import('@/lib/agent-registry')
+          const created = await createAgent({
+            name,
+            label: desired.label || undefined,
+            program,
+            workingDirectory: workDir,
+            avatar: desired.avatar || undefined,
+            programArgs: desired.programArgs || (program.includes('claude') ? '--dangerously-skip-permissions' : ''),
+            owner: desired.owner || undefined,
+            tags: desired.tags || undefined,
+            model: desired.model || undefined,
+            taskDescription: desired.taskDescription || '',
+            role: 'autonomous',
+          })
+          c.agent = created
+          result.agentId = created.id
+          ops.push(`G04: Agent created: id=${created.id}, name=${created.name}`)
+        },
+        undo: async (c: CreateCtx) => {
+          if (!c.agent) return
+          const { deleteAgent } = await import('@/lib/agent-registry')
+          try {
+            // SOFT, exactly as all four hand-rolled rollbacks did — a tombstone row survives. That
+            // residue is deliberate and unchanged here: `getAgentByName` (G01b) and the G03 overlap
+            // check both filter tombstones, so a retry is unblocked. Switching to a HARD delete is
+            // a behaviour decision that deserves its own change, not a ride-along in a refactor of
+            // the most-used pipeline on the host.
+            await deleteAgent(c.agent.id)
+          } catch (err) {
+            // Re-throw NAMING the record. The runner reports an unrevertable gate as
+            // "<id> (<error>)", and "G04 (registry locked)" tells a human nothing about WHICH agent
+            // survived — R51.5 exists precisely so the orphan stays findable.
+            throw new Error(
+              `agent ${c.agent.id} ("${c.agent.name}") still exists in the registry: ${err instanceof Error ? err.message : String(err)}`,
             )
           }
-          return result
-        }
-        titleOps = retitleResult.operations
-        ops.push(`G07b: Title confirmed as ${desired.governanceTitle.toUpperCase()} after team join`)
-        result.restartNeeded = result.restartNeeded || retitleResult.restartNeeded
-      }
-    } else {
-      ops.push(`G07: No team requested`)
-    }
+        },
+      },
+      {
+        id: 'G05',
+        what: 'Workdir invariants enforced',
+        run: async (c: CreateCtx) => {
+          // ── G05: Establish the workdir invariants (TRDD-VYQ8N4KR) ──────
+          // Was three hand-rolled gates — mkdir .claude/ (G05), seed the DEP rules
+          // (G05b), restore the managed git-exclude (G05c) — each with its own
+          // try/catch, and each duplicated in ensureCorePluginInstalled. They are now
+          // ONE list (lib/agent-invariants.ts) run by ONE runner, so adding a
+          // guarantee is a row rather than a fourth copy of this block.
+          //
+          // Best-effort, exactly as before: a failed invariant is a WARN op and never
+          // aborts agent creation. (The one invariant whose failure IS fatal — the R17
+          // core plugin — is deliberately not on the 'create' trigger: it is installed
+          // on first wake, and this consolidation does not change that.)
+          //
+          // The G05/G05b/G05c op labels are kept: they are the AIO's public
+          // per-gate contract, read by callers and pinned by tests.
+          const claudeDir = join(workDir, '.claude')
+          const rulesDir = join(claudeDir, 'rules')
+          if (c.workDirExisted) {
+            // Snapshot ONLY in the case whose compensation cannot be delegated to G03.
+            c.claudeDirExisted = existsSync(claudeDir)
+            c.depRulesBefore = new Set(
+              existsSync(rulesDir)
+                ? (await readdir(rulesDir)).filter(f => f.startsWith('aimaestro-') && f.endsWith('.md'))
+                : [],
+            )
+          }
+          const INVARIANT_OPS: Record<string, string> = {
+            'claude-dir': 'G05',
+            'dep-rules': 'G05b',
+            'git-exclude': 'G05c',
+          }
+          const { enforceAgentInvariants } = await import('@/lib/agent-invariants')
+          const invariants = await enforceAgentInvariants({
+            agentId: c.agent!.id,
+            agentName: c.agent!.name,
+            workdir: workDir,
+            clientType: (program.includes('claude') ? 'claude' : 'unknown'),
+            trigger: 'create',
+          })
+          for (const o of invariants.outcomes) {
+            const label = INVARIANT_OPS[o.id] || 'G05x'
+            ops.push(
+              o.status === 'failed'
+                ? `${label}: WARN — invariant ${o.id} failed (non-fatal): ${o.detail}`
+                : `${label}: invariant ${o.id}=${o.status}${o.detail ? ` (${o.detail})` : ''}`
+            )
+          }
+        },
+        undo: async (c: CreateCtx) => {
+          if (!c.workDirExisted || !c.depRulesBefore) return   // G03 removes the whole directory
+          const claudeDir = join(workDir, '.claude')
+          const rulesDir = join(claudeDir, 'rules')
+          if (existsSync(rulesDir)) {
+            for (const f of await readdir(rulesDir)) {
+              if (f.startsWith('aimaestro-') && f.endsWith('.md') && !c.depRulesBefore.has(f)) {
+                await rm(join(rulesDir, f), { force: true })
+              }
+            }
+          }
+          if (!c.claudeDirExisted && existsSync(claudeDir)) {
+            await rm(claudeDir, { recursive: true, force: true })
+          }
+          // NOT reverted, and named here rather than left to be discovered: the managed block G05c
+          // appends to `.git/info/exclude`. It is marker-delimited, additive, idempotent, and
+          // re-created by the periodic invariants watchdog for any agent at this workdir — so
+          // removing it buys nothing durable, while re-deriving the `.git` location (dir /
+          // gitdir-file / worktree commondir) in a SECOND place is exactly the duplicated path
+          // logic that drifts away from the seeder it is supposed to mirror.
+        },
+      },
 
-    // ── G07c: R9.13 HARD REJECT — no agent may exist with zero role-plugins ──
-    //
-    // ChangeTitle's G17 already DETECTS this (it sets roleMissing=true and hibernates
-    // the agent), but ChangeTitle still returns success — so CreateAgent went on to
-    // return 201 for an agent that can never be woken (the wake route answers 409
-    // role_plugin_required forever). R9.13 says the pipeline must HARD REJECT a
-    // desired-state with zero role-plugins; it was doing neither that nor an
-    // auto-install. Any failure of the role-plugin install therefore produced a
-    // silently, permanently broken agent — and a real one: the install fails whenever
-    // the server cannot reach GitHub (`Could not resolve host: github.com` when the
-    // process inherits a network-restricted environment), which is exactly the kind of
-    // transient condition this gate exists to refuse rather than paper over.
-    //
-    // Roll the agent back and surface the real reason (now that degraded gates are
-    // logged, the cause is in the ops we return).
-    const { getAgent: getAgentG07c } = await import('@/lib/agent-registry')
-    const postTitleAgent = getAgentG07c(agent.id)
-    if (postTitleAgent?.roleMissing) {
-      // The cause lives in ChangeTitle's OWN ops (G16's install error), which this
-      // pipeline only ever summarised as "(N sub-gates)". Carry it through verbatim —
-      // an error that says "install failed" and nothing else sends the operator
-      // hunting, when the actual message ("Could not resolve host: github.com") names
-      // the problem outright.
-      const why = titleOps.filter(o => /G1[67]:.*(WARN|VIOLATION)/.test(o)).join(' | ') || 'role-plugin install failed'
-      // R51.5 — the old message asserted "so no agent was created" unconditionally, which
-      // is FALSE on a failed rollback: the agent survives, role-less, while the caller is
-      // told it does not exist. Only claim it when the delete actually landed.
-      let rolledBack = true
-      let rollbackError = ''
-      try {
-        const { deleteAgent } = await import('@/lib/agent-registry')
-        await deleteAgent(agent.id)
-        ops.push(`G07c: DENIED — R9.13: agent has 0 role-plugins after title assignment. Rolled back.`)
-      } catch (rollbackErr) {
-        rolledBack = false
-        rollbackError = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
-        ops.push(`G07c: DENIED — R9.13: agent has 0 role-plugins. ROLLBACK FAILED: ${rollbackError}`)
-      }
-      if (rolledBack) {
-        result.error = `role-plugin is mandatory (R9.13) — the agent's role-plugin could not be installed, so no agent was created. Cause: ${why}`
-        result.agentId = null
-      } else {
-        const { invalidStateMessage } = await import('@/lib/gate-transaction')
-        result.error = invalidStateMessage(
-          7,
-          'G07c',
-          `role-plugin is mandatory (R9.13) and could not be installed. Cause: ${why}`,
-          [{ id: `agent ${agent.id} (${agent.name}) — role-less, R9.13-violating`, error: rollbackError }],
-        )
-      }
+      {
+        id: 'G06',
+        what: 'Governance title assigned',
+        run: async (c: CreateCtx) => {
+          // BUG-002 FIX: on failure, ROLL BACK and ABORT. Silently creating an AUTONOMOUS agent
+          // when MAINTAINER was requested violates the user's intent and was the root cause of
+          // SCEN-018 S005 failing with no error. The four hand-rolled "delete the agent and
+          // return" blocks this replaces each reverted exactly one thing; throwing hands the job
+          // to the runner, which reverts every executed gate in reverse and picks the R51.3
+          // "NO CHANGES WERE MADE" wording or the R51.5 "INVALID STATE" wording according to
+          // whether the compensations actually landed.
+          //
+          // R9.13: AUTONOMOUS is a real title resolving to ai-maestro-autonomous-agent, so it
+          // MUST flow through ChangeTitle like any other title — Gates 15/16 install its
+          // mandatory role-plugin. The earlier `!== 'autonomous'` exclusion was the root cause of
+          // agents left with no persona and full gh-user privileges.
+          if (desired.governanceTitle && !titleNeedsTeamFirst) {
+            const titleResult = await ChangeTitle(c.agent!.id, desired.governanceTitle, {
+              authContext: desired.authContext,
+              githubRepo: desired.githubRepo,
+            })
+            if (!titleResult.success) throw new Error(`Title assignment failed: ${titleResult.error}`)
+            titleOps = titleResult.operations
+            c.titlePlugin = titlePluginFor(desired.governanceTitle)
+            ops.push(`G06: Title set to ${desired.governanceTitle.toUpperCase()} (${titleResult.operations.length} sub-gates)`)
+            result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
+          } else if (titleNeedsTeamFirst) {
+            ops.push(`G06: DEFER — Title ${desired.governanceTitle?.toUpperCase()} requires team membership; will be applied at G07b after team join`)
+          } else {
+            // R9.13 fallback: every persisted agent MUST have a role-plugin. When the caller omits
+            // governanceTitle entirely, default to AUTONOMOUS so ChangeTitle installs
+            // ai-maestro-autonomous-agent — the minimum privilege tier with an explicit persona.
+            ops.push(`G06: No title requested — defaulting to AUTONOMOUS (R9.13 mandatory-plugin)`)
+            const titleResult = await ChangeTitle(c.agent!.id, 'autonomous', {
+              authContext: desired.authContext,
+            })
+            if (!titleResult.success) throw new Error(`Default AUTONOMOUS assignment failed: ${titleResult.error}`)
+            titleOps = titleResult.operations
+            c.titlePlugin = titlePluginFor('autonomous')
+            result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
+          }
+        },
+        undo: async (c: CreateCtx) => {
+          // The title itself needs no compensation — it lives on the registry row G04 removes.
+          // The role-plugin ChangeTitle installed into the workdir does, but only when that
+          // directory survives; otherwise G03 takes it along with everything else inside.
+          if (!c.workDirExisted || !c.titlePlugin) return
+          await uninstallPluginLocally(c.titlePlugin.name, workDir, c.titlePlugin.marketplace)
+          c.titlePlugin = null
+        },
+      },
+
+      {
+        id: 'G07',
+        what: 'Team membership applied',
+        run: async (c: CreateCtx) => {
+          if (!desired.teamId) {
+            ops.push(`G07: No team requested`)
+            return
+          }
+          // CRITICAL (SCEN-007/010/020 P0): pass authContext so the internal ChangeTitle call
+          // inside ChangeTeam can satisfy Gate 0 (authContext is mandatory). Without it ChangeTeam
+          // auto-assigns 'member' and fails silently, leaving governanceTitle=null in the registry.
+          const teamResult = await ChangeTeam(c.agent!.id, { teamId: desired.teamId }, desired.authContext)
+          if (!teamResult.success) {
+            // WARN-and-continue, exactly as before: G07b re-applies the title either way, and a
+            // team that could not be joined is not a reason to destroy an otherwise valid agent.
+            ops.push(`G07: WARN — ChangeTeam failed: ${teamResult.error}`)
+            return
+          }
+          c.teamJoined = desired.teamId
+          ops.push(`G07: Added to team (${teamResult.operations.length} sub-gates)`)
+          result.restartNeeded = result.restartNeeded || teamResult.restartNeeded
+        },
+        undo: async (c: CreateCtx) => {
+          // THE GAP THAT MADE THIS RETROFIT WORTH DOING. The hand-rolled G07b rollback deleted the
+          // agent and left the team slot pointing at it — a member row referencing a record that no
+          // longer exists, which no later operation ever reconciles. Recorded only on a SUCCESSFUL
+          // join, so a WARNed one correctly reverts nothing.
+          if (!c.teamJoined || !c.agent) return
+          const leave = await ChangeTeam(c.agent.id, { teamId: null }, desired.authContext)
+          if (!leave.success) {
+            throw new Error(`agent ${c.agent.id} ("${c.agent.name}") is still in team ${c.teamJoined}: ${leave.error}`)
+          }
+          c.teamJoined = null
+        },
+      },
+      {
+        id: 'G07b',
+        what: 'Title re-applied after team join',
+        run: async (c: CreateCtx) => {
+          // ChangeTeam tries to auto-assign the "member" title, but that internal ChangeTitle call
+          // lacks authContext and FAILS silently at Gate 0. ALWAYS re-apply the requested title
+          // after the join (including 'member') so governanceTitle is persisted to the registry —
+          // SCEN-020 BUG-001 (registry missing governanceTitle after wizard creation) and BUG-022
+          // (non-member titles being ignored).
+          if (!desired.teamId || !desired.governanceTitle || desired.governanceTitle === 'autonomous') return
+          const retitleResult = await ChangeTitle(c.agent!.id, desired.governanceTitle, {
+            authContext: desired.authContext,
+            githubRepo: desired.githubRepo,
+          })
+          if (!retitleResult.success) {
+            throw new Error(`Title assignment after team join failed: ${retitleResult.error}`)
+          }
+          titleOps = retitleResult.operations
+          c.titlePlugin = titlePluginFor(desired.governanceTitle)
+          ops.push(`G07b: Title confirmed as ${desired.governanceTitle.toUpperCase()} after team join`)
+          result.restartNeeded = result.restartNeeded || retitleResult.restartNeeded
+        },
+        undo: async (c: CreateCtx) => {
+          // Same shape as G06's: the title rides the registry row, the plugin does not. G06 and
+          // G07b share `titlePlugin` and both null it, so the plugin is uninstalled exactly once
+          // however the two branches combined.
+          if (!c.workDirExisted || !c.titlePlugin) return
+          await uninstallPluginLocally(c.titlePlugin.name, workDir, c.titlePlugin.marketplace)
+          c.titlePlugin = null
+        },
+      },
+
+      {
+        id: 'G07c',
+        what: 'R9.13 role-plugin presence verified',
+        // READ-ONLY, and honestly so: it inspects the registry row G06/G07b wrote and refuses.
+        // The refusal is what triggers the rollback; the gate itself changes nothing, so it needs
+        // no compensation of its own.
+        readOnly: true,
+        run: async (c: CreateCtx) => {
+          // ── G07c: R9.13 HARD REJECT — no agent may exist with zero role-plugins ──
+          //
+          // ChangeTitle's G17 already DETECTS this (it sets roleMissing=true and hibernates the
+          // agent), but ChangeTitle still returns success — so CreateAgent went on to return 201
+          // for an agent that can never be woken (the wake route answers 409 role_plugin_required
+          // forever). R9.13 says the pipeline must HARD REJECT a desired-state with zero
+          // role-plugins; it was doing neither that nor an auto-install. Any failure of the
+          // role-plugin install therefore produced a silently, permanently broken agent — and a
+          // real one: the install fails whenever the server cannot reach GitHub (`Could not
+          // resolve host: github.com` when the process inherits a network-restricted
+          // environment), exactly the kind of transient condition this gate exists to refuse
+          // rather than paper over.
+          const { getAgent: getAgentG07c } = await import('@/lib/agent-registry')
+          const postTitleAgent = getAgentG07c(c.agent!.id)
+          if (!postTitleAgent?.roleMissing) return
+          // The cause lives in ChangeTitle's OWN ops (G16's install error), which this pipeline
+          // only ever summarised as "(N sub-gates)". Carry it through verbatim — an error that
+          // says "install failed" and nothing else sends the operator hunting, when the actual
+          // message ("Could not resolve host: github.com") names the problem outright.
+          const why = titleOps.filter(o => /G1[67]:.*(WARN|VIOLATION)/.test(o)).join(' | ') || 'role-plugin install failed'
+          ops.push(`G07c: DENIED — R9.13: agent has 0 role-plugins after title assignment`)
+          throw new Error(`role-plugin is mandatory (R9.13) and could not be installed. Cause: ${why}`)
+        },
+      },
+    ]
+
+    const txn = await runGateSequence(createGates, cc)
+    if (!txn.ok) {
+      // R51.3/R51.5 wording comes from the runner: "NO CHANGES WERE MADE" when every compensation
+      // landed, the CRITICAL "INVALID STATE" form naming each unrevertable gate when one did not.
+      ops.push(...txn.ops)
+      result.error = txn.message
+      // The R51.5 half this pipeline previously got right at three of its four sites, now decided
+      // in ONE place: only report "no agent" when the revert actually removed it. On a failed
+      // rollback the orphan stays ADDRESSABLE, because a caller that is told nothing exists will
+      // never go and clean it up.
+      result.agentId = txn.rolledBack ? null : (cc.agent?.id ?? null)
       return result
     }
+
+    // Past the transaction: the agent is committed. Every gate below is WARN-and-continue, which
+    // is why they sit outside the sequence — see the note at the top of this block.
+    const agent = cc.agent!
 
     // ── G08: Install role-plugin if specified ─────────────────
     // This handles the case where a specific plugin was chosen in the wizard

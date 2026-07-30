@@ -25,7 +25,8 @@ what proves it, or the suite goes red. Governance-by-prose stops being free.
 parser itself); (2) an audited sub-rule with no map row; (3) a stale map row (rule
 renumbered/deleted); (4) an unknown verdict; (5) an ENFORCED row whose guard `file:line` vanished
 (file gone or shrunk past the line — catches a guard being moved/gutted, the usual way a citation
-dies); (6) an ENFORCED row naming a test file that doesn't exist; (7) the ENFORCED-without-test
+dies; note it cannot catch a guard that was never IMPORTABLE in the first place [^5]); (6) an
+ENFORCED row naming a test file that doesn't exist; (7) the ENFORCED-without-test
 count exceeding `MAX_ENFORCED_WITHOUT_TEST`.
 
 **Keeping it green:**
@@ -35,7 +36,9 @@ count exceeding `MAX_ENFORCED_WITHOUT_TEST`.
   free-form parenthetical or prose (`called from …`), so a citation is a path, optionally plus
   `(Pipeline::Gnn)`. Cite the SEAM *and* the CALL SITE: an extracted-but-unwired guard is dead
   code, and a citation naming only the seam cannot tell the two apart. The first token before a
-  comma is validated to exist. A rule enforced in BOTH server modes cites both guards comma-separated, e.g.
+  comma is validated to exist. **Count the rule's CLAUSES and find that many enforcement sites** —
+  a multi-clause rule cited once leaves the uncited site invisible to every instrument. [^4]
+  A rule enforced in BOTH server modes cites both guards comma-separated, e.g.
   `app/api/.../route.ts:NN, services/headless-router.ts:NN` — the map tracks per-mode parity (see
   [[two-server-modes-the-headless-router-reimplements-routes]]; the headless router reimplements
   routes, so a guard in one mode can be absent in the other).
@@ -43,7 +46,10 @@ count exceeding `MAX_ENFORCED_WITHOUT_TEST`.
   refusal test for an ENFORCED rule → cite it in the row → drop the constant to the new floor to
   lock the gain. It began as honest debt (the audit cited guards far more often than tests) and is
   paid down monotonically, never regrown; adding a new ENFORCED rule without a test turns it red.
-- The ratchet proves a claim EXISTS (something enforces + something tests), NOT correctness. The
+  It also falls when an ENFORCED verdict is DOWNGRADED, which pins nothing — so say WHICH mechanism
+  moved it. [^2]
+- The ratchet proves a claim EXISTS (something enforces + something tests), NOT correctness — and
+  not even that the guard matches the rule's current TEXT. [^3] The
   adversarial suites (attempt the forbidden act, assert the 403) prove correctness. Coverage ≠
   correctness — but zero coverage = guaranteed-incorrectness, and that is the state it ends.
 

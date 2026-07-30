@@ -12,7 +12,9 @@ metadata:
 **An agent is not a folder.** Deleting one touches the registry record, the cemetery archive, team
 slots (COS/orchestrator), the tmux session, the **PersistedSession row** in
 `~/.aimaestro/sessions.json`, AMP API keys, AID governance tokens, pending governance requests and
-transfers, and the Claude transcript dir under `~/.claude/projects/<workdir-slug>/`. That is why
+transfers, and its local plugin records in `~/.claude/plugins/installed_plugins.json`. It does NOT
+touch the Claude transcript dir under `~/.claude/projects/<workdir-slug>/` — that is the USER's
+conversation history and Claude Code owns its retention. [^6] That is why
 the server exposes exactly ONE all-in-one operation — `DeleteAgent` in
 `services/element-management-service.ts`, reached from the UI (Profile → Advanced → Danger Zone →
 Delete Agent) or `DELETE /api/agents/[id]`.

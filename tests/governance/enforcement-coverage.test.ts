@@ -410,7 +410,23 @@ const UNAUDITED_RULES = new Set<number>([
 // (2) neuter C reddened an R4.8 test too, because the roster had pinned the COS name to exactly 2
 // occurrences (banner + row) — a coupling between two rows meant to be independent; the roster now
 // asserts a floor and the both-places claim moved into R7.8, whose own word is "everywhere".
-const MAX_ENFORCED_WITHOUT_TEST = 3
+// 2026-07-30: 3 -> 2. R7.1 pinned by tests/governance/r7-submitting-guards.test.tsx. The rule's
+// content is a COUNT — "prevent accidental multiple operations from fast repeated clicks" is not
+// "the button looks greyed out", it is "N clicks produce ONE mutation" — so every mechanism test
+// clicks THREE times against a submit still in flight and asserts the mutating call fired EXACTLY
+// once. A `disabled`-only assertion passes against a handler still reachable by another path,
+// which is how a double-create ships. The cited :334 was `disabled={busy}` on the password INPUT,
+// one of ~15 such sites; the load-bearing button is :487 and the Enter handler at :331 is a THIRD,
+// independent re-entry the attribute cannot cover — the row now cites all three. The "ALL mutating
+// buttons" quantifier is a DOM sweep (every button disabled in flight EXCEPT four named
+// navigation-only ones, which mutate nothing so R7.1 does not reach them) rather than a per-button
+// list that would go stale on the next button added. THREE neuters: dropping `saving` reds only the
+// TeamListView pair, dropping `busy` from :487 reds the click-count + sweep, and dropping `!busy`
+// from :331 reds ONLY the Enter test — that last one is what proves the keyboard path is a separate
+// guard and not the button's attribute counted twice. Sweep NEGATIVE: password-dialog.test.tsx is
+// the only test of PasswordDialog and contains zero occurrences of disabled/busy/submitting or any
+// repeated-click case.
+const MAX_ENFORCED_WITHOUT_TEST = 2
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:57:27+0200
+updated: 2026-07-30T19:03:23+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,49 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 3 → 2 — R7.1 DONE. The rule's content is a COUNT, so the assertion is a count.
+
+**The remaining 2:** R2.2, R20.28.
+
+R7.1 ("prevent accidental multiple operations from fast repeated clicks — all mutating
+buttons must have `submitting` guards") is pinned by
+`tests/governance/r7-submitting-guards.test.tsx` (5 tests).
+
+**"Prevent accidental multiple operations" is not "the button looks greyed out."** It is
+"N clicks produce ONE mutation", so every mechanism test holds the submit promise open,
+clicks **three times**, and asserts the mutating call fired **exactly once**. A
+`disabled`-only assertion passes against a handler still reachable by some other path —
+which is precisely how a double-create ships.
+
+**The cited site was not the load-bearing one.** `PasswordDialog.tsx:334` is
+`disabled={busy}` on the password INPUT, one of ~15 such sites in that file. R7.1 is about
+mutating BUTTONS, so the enforcing site is the submit button at `:487`, and the Enter
+handler at `:331` (`&& !busy`) is a **third, independent re-entry** the attribute cannot
+cover. The row now cites all three.
+
+**The ALL-quantifier is a DOM sweep, not a per-button list.** While a submit is in flight,
+every button in the dialog must be disabled EXCEPT four that are pure navigation
+(forgot-password, two Backs, Close) — those mutate nothing, so R7.1 does not reach them,
+and naming them is what makes the sweep meaningful. A new mutating button added without a
+guard reddens it; a new navigation button forces a deliberate re-read of the list. A
+per-button list would have gone stale on the next button added.
+
+| neuter | site | reddened |
+|---|---|---|
+| A | drop `saving` from `disabled` (`TeamListView:661`) | only the TeamListView pair |
+| B | drop `busy` from the submit `disabled` (`PasswordDialog:487`) | the click-count + the sweep; **Enter stays green** |
+| C | drop `&& !busy` from the Enter handler (`:331`) | **ONLY** the Enter test |
+
+Neuter C is the one that matters: it proves the keyboard path is a separate guard rather
+than the button's attribute counted twice.
+
+**Sweep NEGATIVE.** `tests/unit/password-dialog.test.tsx` is the only test of PasswordDialog
+and contains **zero** occurrences of `disabled`, `busy`, `submitting`, or any repeated-click
+case — it drives the happy and error paths only.
+
+Verification: both guard files restored byte-identical; tsc 0; full suite **301 files /
+4343 passed / 2 skipped**, exit 0.
 
 ### RATCHET 5 → 3 — R4.8 + R7.8 DONE together. Two neuters found bugs in the TEST.
 

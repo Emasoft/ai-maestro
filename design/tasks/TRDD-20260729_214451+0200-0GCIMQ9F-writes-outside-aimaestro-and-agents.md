@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-07-30T02:18:00+0200
+updated: 2026-07-30T12:19:11+0200
 implementation-commits: [973de2fe]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -212,9 +212,44 @@ either shape — it is what converts "we remember not to do this" into something
   *"this is extremely dangerous, the only writings should be into ~/.aimaestro and into ~/agents"*.
   The choice between Shape A and Shape B is left to the USER and is the card's NEXT ACTION.
 
+- 2026-07-30T12:25:00+0200 — **SHAPE A, ruled under the USER's delegation** *"i don't care of
+  those details. you solve them."*
+
+  **`installed_plugins.json` → delegate to the `claude plugin` CLI. No hand-edit.** Shape B
+  would make us a SECOND WRITER over a file another tool owns, and every safeguard it proposes
+  (allowlist, `.aim-bak`, fail-closed) is machinery for surviving that fact rather than for
+  removing it. Two writers over one file is the same class as the two same-named
+  `TITLE_PLUGIN_MAP`s and the two memgrep crates: they do not disagree on day one, they
+  disagree on the day the other side changes its schema — and we would find out by corrupting
+  a user's plugin registry. The CLI is the owner; ask the owner.
+
+  **The `~/.claude/projects/` transcript purge → REMOVED, not ratified.** It is the highest-risk
+  item on the card (a RECURSIVE DELETE of the user's own conversation history, outside our roots,
+  unratified), and it is also **unnecessary**: Claude Code already owns transcript retention
+  through its `cleanupPeriodDays` setting (default 30). A second deleter of someone else's data
+  buys nothing and can only ever be the thing that deleted too much. Deleting the user's data is
+  explicitly one of the three readings the user-scoped-element exception does NOT license.
+
+  **The mandate binds the RUNTIME, not the INSTALLER — a refinement discovered by doing the
+  work, not by reading the card.** Two hours before this ruling the USER ordered the pillar CLIs
+  installed "where everyone can reach for them" (TRDD-217AYEOT), which wrote
+  `~/.local/bin/trddgrep` and `~/.local/share/aimaestro/install-root` — a FOURTH out-of-root
+  write site, ordered in the same breath as the boundary. So *"the only writings should be into
+  `~/.aimaestro` and into `~/agents`"* is a constraint on what the **running server and its
+  agents** do to a machine they share, not on a user-invoked installer placing a tool on PATH.
+  Read the other way it forbids `install-messaging.sh` itself. The allowlist must therefore
+  carry the installer class explicitly, or the next audit "fixes" the install by deleting it.
+
+  Still NOT delegated, and deliberately left for the USER: the 44 leaked test indexes under
+  `~/.aimaestro/pillar-index/`. They are untracked and outside the repo, so RULE 0 requires
+  explicit permission per deletion — "you solve them" is not that permission. (They are also
+  not a mystery any more: they are `t-*.sqlite`, i.e. OUR OWN test suite writing the
+  developer's real state dir, named from `basename $TMPDIR`. Containing the two leaking tests
+  is in scope and does not require deleting anything.)
+
 ## Acceptance
 
-- [ ] USER picks Shape A (delegate to the CLI) or Shape B (ratified carve-out with enforcer discipline)
+- [x] USER picks Shape A (delegate to the CLI) or Shape B (ratified carve-out with enforcer discipline) — SHAPE A, ruled 2026-07-30 under the USER's delegation; see the Approval log for why a second writer over another tool's file is the class of bug the safeguards would only have helped us survive
 - [ ] `installed_plugins.json` mutation matches the chosen shape
 - [x] A boundary test pins the complete set of out-of-root writes to an allowlist, each carrying its ratifying TRDD id — `lib/write-boundary.ts` + `tests/unit/write-boundary.test.ts` (`973de2fe`); MEASURED set is 5 sites (3 ratified, 2 labelled UNRATIFIED)
 - [x] The boundary test is non-vacuous (asserts the scanned count) and fails on a seeded new violation — asserts `scanned > 400` and `writeCallSites > 100`, plus a per-marker-class non-zero check; end-to-end neuter recorded (a real `writeFile(join(HOME, '.claude', …))` appended to `services/groups-service.ts` reddens the allowlist test naming that exact site)

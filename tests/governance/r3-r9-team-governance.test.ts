@@ -288,12 +288,20 @@ vi.mock('child_process', async (importOriginal) => {
 // The guard bodies (blockAllTeams's hibernation loop, unblockAllTeams's
 // no-wake contract, updateTeam's write path) all still execute for real.
 // ============================================================================
-const { spyBlockAllTeams, spyUnblockAllTeams, spyUpdateTeam, spyUpdateTeamById } =
+const { spyBlockAllTeams, spyUnblockAllTeams, spyUpdateTeam, spyUpdateTeamById, failDeleteTeam } =
   vi.hoisted((): any => ({
     spyBlockAllTeams: vi.fn(),
     spyUnblockAllTeams: vi.fn(),
     spyUpdateTeam: vi.fn(),
     spyUpdateTeamById: vi.fn(),
+    // A one-shot switch, NOT a spy. DeleteTeam::G04 has two distinct failure shapes and they
+    // exercise DIFFERENT halves of the transaction, so the fixture has to be able to produce both:
+    //   'return-false'       — the registry refuses; NOTHING was deleted, so only G03's undo runs.
+    //   'throw-after-delete' — the row IS gone and then the gate throws; this is the partial-work
+    //                          case write-ahead registration exists for, and the ONLY one in which
+    //                          G04's own undo has anything to restore.
+    // Default 'none', so every other test in this file runs the real deleteTeam.
+    failDeleteTeam: { mode: 'none' as 'none' | 'return-false' | 'throw-after-delete' },
   }))
 
 vi.mock('@/lib/team-registry', async (importOriginal) => {
@@ -305,6 +313,18 @@ vi.mock('@/lib/team-registry', async (importOriginal) => {
     updateTeam: (...a: Parameters<typeof actual.updateTeam>) => {
       spyUpdateTeam(...a)
       return actual.updateTeam(...a)
+    },
+    deleteTeam: async (...a: Parameters<typeof actual.deleteTeam>) => {
+      // Disarms itself, so the ROLLBACK's own reads/writes still see the real registry — a
+      // blanket refusal would also break the restore path and the test would pass proving nothing.
+      const mode = failDeleteTeam.mode
+      failDeleteTeam.mode = 'none'
+      if (mode === 'return-false') return false
+      if (mode === 'throw-after-delete') {
+        await actual.deleteTeam(...a)
+        throw new Error('registry write failed after the row was dropped')
+      }
+      return actual.deleteTeam(...a)
     },
   }
 })
@@ -1233,8 +1253,23 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
 
     // Pin the REASON, not just the outcome: without this, an early refusal (a missing password, a
     // failed auth gate) also yields success===false and the test passes having never reached G03.
+    // The line reads `G03: FAILED — …` rather than the hand-built `G03: ABORTED — …` since
+    // TRDD-DQ6XN2VP routed G03/G04 through `runGateSequence`: the runner owns the wording now,
+    // which is the point of AIO-TXN-10. Same claim, one implementation.
     expect(result.success).toBe(false)
-    expect(result.operations.some(o => o.startsWith('G03: ABORTED'))).toBe(true)
+    expect(
+      result.operations.some(o => o.startsWith('G03: FAILED —')),
+      `no G03 failure line — the abort came from somewhere else. ops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+
+    // AND THIS IS AN ORDERING ASSERTION, not a wording one. The undo must re-add the agent to
+    // team.agentIds BEFORE restoring its title, because ChangeTitle Gate 9 refuses a team-scoped
+    // title to a non-member — the reverse of the do-path is the SAME order, not its mirror. If
+    // membership and title were ever split into two gates, reverse-order (LIFO) unwinding would
+    // restore the title first, Gate 9 would refuse it, and this message would be the R51.5
+    // CRITICAL "INVALID STATE" form about a system that was in fact fully recoverable.
+    expect(result.error).toContain('NO CHANGES WERE MADE')
+    expect(result.error).not.toContain('INVALID STATE')
 
     // THE POINT: both agents were pulled out of team.agentIds before the abort. A team that still
     // exists but has been emptied of its members is not "unchanged" — it is a husk, and the old
@@ -1249,6 +1284,108 @@ describe('DeleteTeam::G03 — an aborted delete puts the half-dismantled team ba
     // The third restore step: agent-a's revert SUCCEEDED before agent-b failed, so its title was
     // stripped to autonomous. It must be back. This is the assertion TRDD-N7X4KDQ2 unblocked.
     expect(agents.find(x => x.id === 'agent-a')!.governanceTitle).toBe('member')
+  })
+
+  it('rolls the SAME dismantling back when it is G04, not an agent, that fails', async () => {
+    /**
+     * THE GAP THE RETROFIT CLOSED (TRDD-DQ6XN2VP). The restore above ran only when a per-agent
+     * revert failed. The other abort — `deleteTeam` returning false at G04 — reached a bare
+     * `return result`, so "Team deletion from registry failed" was reported over a team whose
+     * every agent had ALREADY been pulled out of agentIds, demoted to AUTONOMOUS with its
+     * role-plugin stripped, had its legacy `team` field cleared, and been hibernated. The team row
+     * survived, so the operator saw a team that still existed and looked intact in teams.json —
+     * and was in fact an empty husk whose members no longer belonged to it.
+     *
+     * Nothing pinned that, because the compensation and the abort were written as one `if` block:
+     * the code could only roll back the failure it was written for. Under `runGateSequence` the
+     * runner decides when the undo runs, so ONE compensation now covers BOTH aborts — and this
+     * test is the half that was unreachable before.
+     *
+     * The failure is injected at the registry rather than by breaking an agent write, because
+     * G04's only failure mode IS the registry returning false: by then G01 has proven the team
+     * exists, so nothing the fixture can do to the agents would make the delete itself fail.
+     */
+    failDeleteTeam.mode = 'return-false'
+    seedTeams([{ id: 'team-g04', name: 'Rollback Team', agentIds: ['agent-p', 'agent-q'] }])
+    const agents = [
+      makeAgentRecord({ id: 'agent-p', name: 'agent-p', governanceTitle: 'member', team: 'Rollback Team' }),
+      makeAgentRecord({ id: 'agent-q', name: 'agent-q', governanceTitle: 'member', team: 'Rollback Team' }),
+    ]
+    seedAgents(agents)
+
+    // G00b gates on the governance password; `verifyPassword` is a mock, so this is an arbitrary
+    // token the mock accepts — never the real governance secret, which no test may name.
+    mockGovernance.verifyPassword.mockResolvedValue(true)
+
+    const { DeleteTeam } = await import('@/services/element-management-service')
+    const result = await DeleteTeam('team-g04', { authContext: OWNER_CTX, password: 'mocked-ok' })
+
+    // Pin WHICH gate failed. Without this the test passes on an early refusal that never reached
+    // G03 at all — in which case "nothing was dismantled" is trivially true and proves nothing.
+    expect(result.success).toBe(false)
+    expect(
+      result.operations.some(o => o.startsWith('G04: FAILED —')),
+      `the abort did not come from G04. ops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+    expect(result.error).toContain('NO CHANGES WERE MADE')
+
+    // VACUITY CONTROL: G03 must actually have RUN and dismantled both agents, or the restore
+    // assertions below are about work that never happened.
+    expect(result.operations.some(o => /^G03: Agent agent-p → AUTONOMOUS/.test(o))).toBe(true)
+    expect(result.operations.some(o => /^G03: Agent agent-q → AUTONOMOUS/.test(o))).toBe(true)
+
+    // THE POINT — every one of those sub-steps is back.
+    const { loadTeams } = await import('@/lib/team-registry')
+    const team = loadTeams().find(t => t.id === 'team-g04')
+    expect(team, 'the team row itself must survive a failed delete').toBeDefined()
+    expect(team!.agentIds).toEqual(expect.arrayContaining(['agent-p', 'agent-q']))
+    for (const id of ['agent-p', 'agent-q']) {
+      expect(agents.find(x => x.id === id)!.governanceTitle, `${id} title`).toBe('member')
+      expect(agents.find(x => x.id === id)!.team, `${id} legacy team field`).toBe('Rollback Team')
+    }
+  })
+
+  it('puts the team ROW back when the row was already gone — G04s own undo, not G03s', async () => {
+    /**
+     * The other G04 shape, and the one that makes its `undo` more than decoration. Above, the
+     * registry REFUSED, so nothing was deleted and G04's compensation short-circuits on its first
+     * line — deleting that compensation entirely would not have reddened a thing. Here the row is
+     * really dropped and the gate THEN throws, which is precisely the partial-work case
+     * `runGateSequence`'s write-ahead registration exists for: the failing gate is registered
+     * BEFORE it runs, so its own undo is the first thing the unwind calls.
+     *
+     * It cannot be `createTeam` — that mints a NEW uuid, and every agent, session and pending
+     * transfer still naming the old one would dangle. The restore has to write the snapshot row
+     * back under its original id, which is why G02 takes one.
+     */
+    failDeleteTeam.mode = 'throw-after-delete'
+    seedTeams([{ id: 'team-g04b', name: 'Restore Row Team', agentIds: ['agent-r'] }])
+    const agents = [
+      makeAgentRecord({ id: 'agent-r', name: 'agent-r', governanceTitle: 'member', team: 'Restore Row Team' }),
+    ]
+    seedAgents(agents)
+
+    // G00b gates on the governance password; `verifyPassword` is a mock, so this is an arbitrary
+    // token the mock accepts — never the real governance secret, which no test may name.
+    mockGovernance.verifyPassword.mockResolvedValue(true)
+
+    const { DeleteTeam } = await import('@/services/element-management-service')
+    const result = await DeleteTeam('team-g04b', { authContext: OWNER_CTX, password: 'mocked-ok' })
+
+    expect(result.success).toBe(false)
+    // NON-VACUITY, and it is the whole test: this string can only appear if the fixture's
+    // throw-AFTER-delete branch ran, i.e. the row really was dropped. Without it, "the team still
+    // exists" would be indistinguishable from a delete that never happened, and the assertion
+    // below would pass against a G04 with no compensation at all.
+    expect(result.error).toContain('registry write failed after the row was dropped')
+    expect(result.error).toContain('NO CHANGES WERE MADE')
+
+    const { loadTeams } = await import('@/lib/team-registry')
+    const team = loadTeams().find(t => t.id === 'team-g04b')
+    expect(team, 'the deleted row was not restored').toBeDefined()
+    expect(team!.name).toBe('Restore Row Team')
+    expect(team!.agentIds).toContain('agent-r')
+    expect(agents[0].governanceTitle).toBe('member')
   })
 })
 

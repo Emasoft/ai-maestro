@@ -6560,7 +6560,7 @@ export async function DeleteTeam(
     result.teamName = team.name
     ops.push(`G01: Team "${team.name}" found (${team.agentIds.length} agents)`)
 
-    // ── G02: Record what G03 must be able to put back ──────────
+    // ── G02: Record what the rollback must be able to put back ──────────
     // This gate used to deep-clone `team` into a local `_teamSnapshot` "archived for future
     // recovery". Nothing ever read it: it was a local that died with the call, so the ops line
     // promised the operator a recovery artifact that did not exist. The durable record is
@@ -6568,14 +6568,30 @@ export async function DeleteTeam(
     // so a COMPLETED delete is reconstructible from the ledger, and an ABORTED one leaves the
     // team in teams.json. What was genuinely missing is the per-agent restore data below, because
     // G03 dismantles the team agent by agent BEFORE G04 deletes it.
-    const restoreRecords: Array<{
-      agentId: string
-      previousTitle: string | null   // non-null ⇒ the title was reverted and must be put back
-      previousTeamField: string | null // non-null ⇒ the legacy `team` field was cleared
-      removedFromAgentIds: boolean
-      wasChiefOfStaff: boolean
-      wasOrchestrator: boolean
-    }> = []
+    //
+    // The team-row snapshot is real NOW, because G04 finally has a compensation that reads it:
+    // `deleteTeam` drops the whole row and `createTeam` cannot put it back — it MINTS A NEW id,
+    // which every agent reference, session and transfer would then fail to resolve. Restoring the
+    // exact row is `saveTeams([...loadTeams(), snapshot])` and nothing else.
+    /**
+     * What the compensation needs. `run` records each sub-step that LANDED; `undo` reverses only
+     * what is recorded there — the `Gate.undo` contract in `lib/gate-transaction.ts`, and not
+     * optional here: G03's run is a LOOP over N agents, so "it did some of it" is the ordinary
+     * failure rather than the exotic one.
+     */
+    interface DeleteTeamCtx {
+      restoreRecords: Array<{
+        agentId: string
+        previousTitle: string | null   // non-null ⇒ the title was reverted and must be put back
+        previousTeamField: string | null // non-null ⇒ the legacy `team` field was cleared
+        removedFromAgentIds: boolean
+        wasChiefOfStaff: boolean
+        wasOrchestrator: boolean
+      }>
+      revertFailures: Array<{ agentId: string; error: string }>
+    }
+    const dtc: DeleteTeamCtx = { restoreRecords: [], revertFailures: [] }
+    const teamSnapshot: NonNullable<typeof team> = JSON.parse(JSON.stringify(team))
     ops.push(`G02: Pre-mutation state recorded (COS=${team.chiefOfStaffId || 'none'}, ORCH=${team.orchestratorId || 'none'}, ${team.agentIds.length} agent(s))`)
 
     // ── G03: Revert all team agents to AUTONOMOUS + hibernate ──
@@ -6596,198 +6612,227 @@ export async function DeleteTeam(
     // non-AUTONOMOUS title on an agent whose team has been deleted. Do
     // NOT treat as "best effort WARN"; escalate to pipeline error so the
     // UI surfaces it and the operator can retry or intervene.
-    const revertFailures: Array<{ agentId: string; error: string }> = []
-    if (agentsToRevert.length > 0) {
-      const { hibernateAgent } = await import('@/services/agents-core-service')
-      const { getAgent: getAgentFromRegistry, updateAgent } = await import('@/lib/agent-registry')
-      // Titles that are team-scoped and MUST be reverted when their team is deleted.
-      // MANAGER and MAINTAINER are global (host-scoped) titles — they are NOT
-      // team-specific. Even if a MANAGER was used as the bootstrap agent when
-      // creating a team (because the Create Team modal forces ≥1 agent), deleting
-      // that team MUST NOT strip the MANAGER title — otherwise every subsequent
-      // team operation is blocked because no MANAGER exists. AUTONOMOUS agents
-      // in the list (should not happen, but defensive) are also skipped.
-      // See: tests/scenarios/reports/scenario_proposed-improvements_007_20260414T015913Z.md (P0).
-      const TEAM_SCOPED_TITLES = new Set([
-        'member',
-        'chief-of-staff',
-        'orchestrator',
-        'architect',
-        'integrator',
-      ])
-      for (const agentId of agentsToRevert) {
-        let currentTitle: string | null = null
-        let currentTeamField: string | null = null
-        let agentExists = false
-        try {
-          const a = getAgentFromRegistry(agentId)
-          if (a) {
-            agentExists = true
-            currentTitle = a.governanceTitle || null
-            currentTeamField = a.team || null
-          }
-        } catch { /* best effort */ }
-
-        // One record per agent, filled in as each sub-step lands. It is the ONLY thing that makes
-        // the abort path below able to put the team back together — the sub-steps are individually
-        // reversible, but only if we remember which of them actually ran for this agent.
-        const record = {
-          agentId,
-          previousTitle: null as string | null,
-          previousTeamField: null as string | null,
-          removedFromAgentIds: false,
-          wasChiefOfStaff: false,
-          wasOrchestrator: false,
-        }
-        restoreRecords.push(record)
-
-        // SCEN-008 BUG-001 fix (2026-04-30): If an agent ID is in team.agentIds
-        // but the agent no longer exists in the registry (orphan reference from
-        // prior failed cleanup, manual JSON edits, etc.), skip the title-revert
-        // and hibernate gracefully. Returning a "not found" error here would
-        // permanently brick the team (DeleteTeam aborts on revert failures to
-        // preserve consistency, but the consistency we're protecting is between
-        // EXISTING agents — orphan IDs already represent broken state and
-        // blocking on them prevents the cleanup the operator is trying to do).
-        if (!agentExists) {
-          ops.push(`G03: Agent ${agentId.substring(0, 8)} not found in registry (orphan reference) — skipped`)
-          continue
-        }
-
-        const shouldRevertTitle = currentTitle
-          ? TEAM_SCOPED_TITLES.has(currentTitle)
-          : true // unknown title → err on safe side and revert
-
-        if (!shouldRevertTitle) {
-          ops.push(`G03: Agent ${agentId.substring(0, 8)} title "${currentTitle}" is global — NOT reverted (R7: MANAGER/MAINTAINER are host-scoped, not team-scoped)`)
-        } else {
-          // SCEN-001 BUG-003 fix (2026-04-26): remove agent from team.agentIds
-          // BEFORE calling ChangeTitle. The ChangeTitle pipeline gained a Gate
-          // 9b R3-reverse-enforcement check (commit 50673eac, BUG-002 fix)
-          // that REJECTS revert-to-AUTONOMOUS while the agent is still listed
-          // in any team's agentIds. Without this preliminary removal, every
-          // DeleteTeam call now fails on the first agent because the team
-          // hasn't been deleted yet (G04 runs later) so Gate 9b sees the
-          // agent in team.agentIds and refuses. Pre-removing from agentIds
-          // here keeps the pipeline atomic from the agent's perspective —
-          // the team itself is deleted from teams.json a few gates later.
-          // If the agent is the team's COS, clear chiefOfStaffId in the same
-          // updateTeam call to satisfy R4.7 (cannot remove COS from agentIds
-          // unless COS role is also cleared) and R4.6 (auto-add COS to
-          // agentIds is harmless when chiefOfStaffId is null).
+    /**
+     * G03's `run`. It collects per-agent failures across the WHOLE loop and throws once at the
+     * end rather than on the first one — deliberately, because the operator's error names the
+     * count, and because every agent processed after the failure is compensated by the same undo
+     * anyway. Throwing is what hands control to `runGateSequence`.
+     */
+    const dismantleTeamAgents = async (c: DeleteTeamCtx): Promise<void> => {
+      if (agentsToRevert.length > 0) {
+        const { hibernateAgent } = await import('@/services/agents-core-service')
+        const { getAgent: getAgentFromRegistry, updateAgent } = await import('@/lib/agent-registry')
+        // Titles that are team-scoped and MUST be reverted when their team is deleted.
+        // MANAGER and MAINTAINER are global (host-scoped) titles — they are NOT
+        // team-specific. Even if a MANAGER was used as the bootstrap agent when
+        // creating a team (because the Create Team modal forces ≥1 agent), deleting
+        // that team MUST NOT strip the MANAGER title — otherwise every subsequent
+        // team operation is blocked because no MANAGER exists. AUTONOMOUS agents
+        // in the list (should not happen, but defensive) are also skipped.
+        // See: tests/scenarios/reports/scenario_proposed-improvements_007_20260414T015913Z.md (P0).
+        const TEAM_SCOPED_TITLES = new Set([
+          'member',
+          'chief-of-staff',
+          'orchestrator',
+          'architect',
+          'integrator',
+        ])
+        for (const agentId of agentsToRevert) {
+          let currentTitle: string | null = null
+          let currentTeamField: string | null = null
+          let agentExists = false
           try {
-            const { loadTeams: loadTeamsG03, updateTeam: updateTeamG03 } = await import('@/lib/team-registry')
-            const teamsG03 = loadTeamsG03()
-            const teamG03 = teamsG03.find(t => t.id === teamId)
-            if (teamG03 && teamG03.agentIds.includes(agentId)) {
-              const newAgentIds = teamG03.agentIds.filter(x => x !== agentId)
-              const updates: { agentIds: string[]; chiefOfStaffId?: string | null; orchestratorId?: string | null } = { agentIds: newAgentIds }
-              if (teamG03.chiefOfStaffId === agentId) {
-                updates.chiefOfStaffId = null
-              }
-              if (teamG03.orchestratorId === agentId) {
-                updates.orchestratorId = null
-              }
-              await updateTeamG03(teamId, updates)
-              record.removedFromAgentIds = true
-              record.wasChiefOfStaff = teamG03.chiefOfStaffId === agentId
-              record.wasOrchestrator = teamG03.orchestratorId === agentId
-              ops.push(`G03: Removed ${agentId.substring(0, 8)} from team.agentIds (pre-revert, R3 Gate 9b prep)`)
+            const a = getAgentFromRegistry(agentId)
+            if (a) {
+              agentExists = true
+              currentTitle = a.governanceTitle || null
+              currentTeamField = a.team || null
             }
-          } catch (err) {
-            ops.push(`G03: WARN — pre-revert agentIds removal failed for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+          } catch { /* best effort */ }
+
+          // One record per agent, filled in as each sub-step lands. It is the ONLY thing that makes
+          // the abort path below able to put the team back together — the sub-steps are individually
+          // reversible, but only if we remember which of them actually ran for this agent.
+          const record = {
+            agentId,
+            previousTitle: null as string | null,
+            previousTeamField: null as string | null,
+            removedFromAgentIds: false,
+            wasChiefOfStaff: false,
+            wasOrchestrator: false,
           }
+          c.restoreRecords.push(record)
+
+          // SCEN-008 BUG-001 fix (2026-04-30): If an agent ID is in team.agentIds
+          // but the agent no longer exists in the registry (orphan reference from
+          // prior failed cleanup, manual JSON edits, etc.), skip the title-revert
+          // and hibernate gracefully. Returning a "not found" error here would
+          // permanently brick the team (DeleteTeam aborts on revert failures to
+          // preserve consistency, but the consistency we're protecting is between
+          // EXISTING agents — orphan IDs already represent broken state and
+          // blocking on them prevents the cleanup the operator is trying to do).
+          if (!agentExists) {
+            ops.push(`G03: Agent ${agentId.substring(0, 8)} not found in registry (orphan reference) — skipped`)
+            continue
+          }
+
+          const shouldRevertTitle = currentTitle
+            ? TEAM_SCOPED_TITLES.has(currentTitle)
+            : true // unknown title → err on safe side and revert
+
+          if (!shouldRevertTitle) {
+            ops.push(`G03: Agent ${agentId.substring(0, 8)} title "${currentTitle}" is global — NOT reverted (R7: MANAGER/MAINTAINER are host-scoped, not team-scoped)`)
+          } else {
+            // SCEN-001 BUG-003 fix (2026-04-26): remove agent from team.agentIds
+            // BEFORE calling ChangeTitle. The ChangeTitle pipeline gained a Gate
+            // 9b R3-reverse-enforcement check (commit 50673eac, BUG-002 fix)
+            // that REJECTS revert-to-AUTONOMOUS while the agent is still listed
+            // in any team's agentIds. Without this preliminary removal, every
+            // DeleteTeam call now fails on the first agent because the team
+            // hasn't been deleted yet (G04 runs later) so Gate 9b sees the
+            // agent in team.agentIds and refuses. Pre-removing from agentIds
+            // here keeps the pipeline atomic from the agent's perspective —
+            // the team itself is deleted from teams.json a few gates later.
+            // If the agent is the team's COS, clear chiefOfStaffId in the same
+            // updateTeam call to satisfy R4.7 (cannot remove COS from agentIds
+            // unless COS role is also cleared) and R4.6 (auto-add COS to
+            // agentIds is harmless when chiefOfStaffId is null).
+            //
+            // THE ORDER IS WHY THIS AND THE ChangeTitle BELOW ARE ONE GATE, NOT TWO. Gate 9b
+            // refuses a demotion while the agent is still a member, so the do-path must remove
+            // membership FIRST — and its mirror holds on the way back: a team-scoped title cannot
+            // be restored to a non-member, so the undo must RE-ADD membership first and only then
+            // restore the title. The reverse of this pair is the SAME order, not its mirror, and
+            // reverse-order unwinding gives LIFO. Split into two gates, LIFO would restore the
+            // title first, Gate 9 would refuse it, and every rollback would report an R51.5
+            // INVALID STATE about a fully recoverable system.
+            try {
+              const { loadTeams: loadTeamsG03, updateTeam: updateTeamG03 } = await import('@/lib/team-registry')
+              const teamsG03 = loadTeamsG03()
+              const teamG03 = teamsG03.find(t => t.id === teamId)
+              if (teamG03 && teamG03.agentIds.includes(agentId)) {
+                const newAgentIds = teamG03.agentIds.filter(x => x !== agentId)
+                const updates: { agentIds: string[]; chiefOfStaffId?: string | null; orchestratorId?: string | null } = { agentIds: newAgentIds }
+                if (teamG03.chiefOfStaffId === agentId) {
+                  updates.chiefOfStaffId = null
+                }
+                if (teamG03.orchestratorId === agentId) {
+                  updates.orchestratorId = null
+                }
+                await updateTeamG03(teamId, updates)
+                record.removedFromAgentIds = true
+                record.wasChiefOfStaff = teamG03.chiefOfStaffId === agentId
+                record.wasOrchestrator = teamG03.orchestratorId === agentId
+                ops.push(`G03: Removed ${agentId.substring(0, 8)} from team.agentIds (pre-revert, R3 Gate 9b prep)`)
+              }
+            } catch (err) {
+              ops.push(`G03: WARN — pre-revert agentIds removal failed for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+            }
+            try {
+              // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
+              // invariant. Without it the call returns "authContext is mandatory" and
+              // the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
+              // its former agents retain their titles AND their role-plugins. Pass
+              // through the DeleteTeam authContext so ChangeTitle treats this revert
+              // as an already-authorized governance operation.
+              const titleResult = await ChangeTitle(agentId, 'autonomous', {
+                authContext: options.authContext,
+              })
+              if (titleResult.success) {
+                record.previousTitle = currentTitle
+                ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS (verified in registry)`)
+              } else {
+                // SCEN-002 P0-001: ChangeTitle now includes strong persistence
+                // verification (G14 + G22). A non-success result here means
+                // the title reversion did NOT land on disk, so we MUST surface
+                // the error rather than claim success.
+                const reason = titleResult.error || 'unknown'
+                c.revertFailures.push({ agentId, error: reason })
+                ops.push(`G03: FAILED — ChangeTitle failed for ${agentId.substring(0, 8)}: ${reason}`)
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              c.revertFailures.push({ agentId, error: msg })
+              ops.push(`G03: FAILED — ChangeTitle exception for ${agentId.substring(0, 8)}: ${msg}`)
+            }
+          }
+
+          // Clear the legacy `team` field on the agent's registry record.
+          // ChangeTitle only writes `governanceTitle`; it does NOT clear `team`.
+          // Without this, the agent's record keeps the old team name as a ghost
+          // reference (seen in SCEN-007 ISSUE-001).
           try {
-            // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
-            // invariant. Without it the call returns "authContext is mandatory" and
-            // the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
-            // its former agents retain their titles AND their role-plugins. Pass
-            // through the DeleteTeam authContext so ChangeTitle treats this revert
-            // as an already-authorized governance operation.
-            const titleResult = await ChangeTitle(agentId, 'autonomous', {
+            await updateAgent(agentId, { team: '' })
+            record.previousTeamField = currentTeamField
+            ops.push(`G03: Cleared legacy team field for ${agentId.substring(0, 8)}`)
+          } catch (err) {
+            ops.push(`G03: WARN — team field clear failed for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+          }
+          // Hibernate the agent via the canonical hibernateAgent pipeline
+          // (same code path used by POST /api/agents/[id]/hibernate). This
+          // kills the tmux session, updates the registry session status to
+          // offline, and cleans up any stale activity entry. Running with a
+          // stale role-plugin after ChangeTitle stripped it would be an
+          // inconsistent state; hibernation forces a clean restart on next
+          // wake. We pass authContext so the internal authorization gate
+          // treats this as an already-authorized team-delete call.
+          try {
+            const hibResult = await hibernateAgent(agentId, {
+              sessionIndex: 0,
               authContext: options.authContext,
             })
-            if (titleResult.success) {
-              record.previousTitle = currentTitle
-              ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS (verified in registry)`)
-            } else {
-              // SCEN-002 P0-001: ChangeTitle now includes strong persistence
-              // verification (G14 + G22). A non-success result here means
-              // the title reversion did NOT land on disk, so we MUST surface
-              // the error rather than claim success.
-              const reason = titleResult.error || 'unknown'
-              revertFailures.push({ agentId, error: reason })
-              ops.push(`G03: FAILED — ChangeTitle failed for ${agentId.substring(0, 8)}: ${reason}`)
+            if (hibResult.data?.success) {
+              ops.push(`G03: Hibernated ${agentId.substring(0, 8)}`)
+            } else if (hibResult.error) {
+              // Session-not-found, already-offline, etc. are not fatal —
+              // log as a warning but continue the pipeline.
+              ops.push(`G03: ${agentId.substring(0, 8)} hibernate note: ${hibResult.error}`)
             }
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            revertFailures.push({ agentId, error: msg })
-            ops.push(`G03: FAILED — ChangeTitle exception for ${agentId.substring(0, 8)}: ${msg}`)
+            ops.push(`G03: WARN — hibernate exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
           }
         }
-
-        // Clear the legacy `team` field on the agent's registry record.
-        // ChangeTitle only writes `governanceTitle`; it does NOT clear `team`.
-        // Without this, the agent's record keeps the old team name as a ghost
-        // reference (seen in SCEN-007 ISSUE-001).
-        try {
-          await updateAgent(agentId, { team: '' })
-          record.previousTeamField = currentTeamField
-          ops.push(`G03: Cleared legacy team field for ${agentId.substring(0, 8)}`)
-        } catch (err) {
-          ops.push(`G03: WARN — team field clear failed for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
-        }
-        // Hibernate the agent via the canonical hibernateAgent pipeline
-        // (same code path used by POST /api/agents/[id]/hibernate). This
-        // kills the tmux session, updates the registry session status to
-        // offline, and cleans up any stale activity entry. Running with a
-        // stale role-plugin after ChangeTitle stripped it would be an
-        // inconsistent state; hibernation forces a clean restart on next
-        // wake. We pass authContext so the internal authorization gate
-        // treats this as an already-authorized team-delete call.
-        try {
-          const hibResult = await hibernateAgent(agentId, {
-            sessionIndex: 0,
-            authContext: options.authContext,
-          })
-          if (hibResult.data?.success) {
-            ops.push(`G03: Hibernated ${agentId.substring(0, 8)}`)
-          } else if (hibResult.error) {
-            // Session-not-found, already-offline, etc. are not fatal —
-            // log as a warning but continue the pipeline.
-            ops.push(`G03: ${agentId.substring(0, 8)} hibernate note: ${hibResult.error}`)
-          }
-        } catch (err) {
-          ops.push(`G03: WARN — hibernate exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
-        }
+      } else {
+        ops.push('G03: No agents in team — skipped')
       }
-    } else {
-      ops.push('G03: No agents in team — skipped')
+
+      // SCEN-002 P0-001: any per-agent revert failure aborts the pipeline. Throwing is what hands
+      // control to `runGateSequence`, which unwinds this gate (and any before it) and produces the
+      // R51.3 wording. The message is the CAUSE the operator reads.
+      if (c.revertFailures.length > 0) {
+        throw new Error(
+          `${c.revertFailures.length} agent(s) failed to revert to AUTONOMOUS; first: ` +
+          `${c.revertFailures[0].agentId.substring(0, 8)}=${c.revertFailures[0].error}`,
+        )
+      }
     }
 
-    // SCEN-002 P0-001 fix: If ANY agent title revert failed, abort BEFORE
-    // deleting the team from the registry. Continuing would leave the
-    // system in the exact inconsistent state the bug reports flagged:
-    // team gone from teams.json, but its former agents still carry the
-    // old title in agents/registry.json (ghost titles). The caller can
-    // inspect `operations` for per-agent reasons and retry if desired.
-    if (revertFailures.length > 0) {
-      // Leaving the team row in teams.json was NEVER enough to "preserve consistency", and saying
-      // so was the most dangerous line in this pipeline: by the time we get here G03 has already
-      // dismantled the team agent by agent — every agent processed before the failure was removed
-      // from team.agentIds (possibly clearing chiefOfStaffId/orchestratorId), reverted to
-      // AUTONOMOUS with its role-plugin stripped, and had its legacy `team` field cleared. So the
-      // operator was told "nothing was deleted" while holding a half-dismantled team, and the
-      // obvious response — retry — ran against state that no longer matched the first attempt.
-      //
-      // Every one of those sub-steps is individually invertible, and `restoreRecords` says exactly
-      // which ones ran, so we put them back in REVERSE order. Hibernation is deliberately NOT
-      // undone: waking an agent is a heavier, side-effectful act than the data changes above, and
-      // an offline agent is a recoverable state, not a corrupted one. It is reported, not hidden.
-      const { noChangesMessage, invalidStateMessage } = await import('@/lib/gate-transaction')
+    // G03's `undo`. Leaving the team row in teams.json was NEVER enough to "preserve consistency",
+    // and saying so was the most dangerous line in this pipeline: by the time a failure lands, G03
+    // has already dismantled the team agent by agent — every agent processed before it was removed
+    // from team.agentIds (possibly clearing chiefOfStaffId/orchestratorId), reverted to AUTONOMOUS
+    // with its role-plugin stripped, and had its legacy `team` field cleared. So the operator was
+    // told "nothing was deleted" while holding a half-dismantled team, and the obvious response —
+    // retry — ran against state that no longer matched the first attempt.
+    //
+    // Every one of those sub-steps is individually invertible, and `restoreRecords` says exactly
+    // which ones ran, so we put them back in REVERSE order. Hibernation is deliberately NOT
+    // undone: waking an agent is a heavier, side-effectful act than the data changes above, and
+    // an offline agent is a recoverable state, not a corrupted one. It is reported, not hidden.
+    // KNOWN LIMIT, stated rather than hidden: R51.10 asks that a restored agent be able to "resume
+    // its job without interruption", and a hibernated one cannot until someone wakes it. Wiring the
+    // wake in is a real change with its own failure modes (N wake calls in a rollback path), so it
+    // is named here and in the TRDD rather than smuggled into a retrofit.
+    //
+    // WHY THIS IS NOW A GATE. It used to run only when a per-agent revert FAILED. The far more
+    // likely abort — G04's registry delete returning false — reached a bare `return result`, so
+    // "Team deletion from registry failed" was reported over a team whose every agent had already
+    // been un-enrolled, demoted, plugin-stripped and hibernated. Under the runner the same undo
+    // covers both, because the runner decides when to call it.
+    const restoreTeamAgents = async (c: DeleteTeamCtx): Promise<void> => {
       const { updateAgent: updateAgentUndo } = await import('@/lib/agent-registry')
       const stranded: { id: string; error: string }[] = []
-      for (const rec of [...restoreRecords].reverse()) {
+      for (const rec of [...c.restoreRecords].reverse()) {
         const short = rec.agentId.substring(0, 8)
         // ORDER: re-add to the team BEFORE restoring the title. This is deliberately NOT the exact
         // reverse of the do-path, and the asymmetry is forced by the same rule that shaped the
@@ -6833,29 +6878,70 @@ export async function DeleteTeam(
         }
       }
 
-      const hibernated = restoreRecords.filter(r => r.previousTitle || r.removedFromAgentIds).length
-      const cause = `${revertFailures.length} agent(s) failed to revert to AUTONOMOUS; first: ` +
-        `${revertFailures[0].agentId.substring(0, 8)}=${revertFailures[0].error}`
-      result.error = stranded.length
-        ? invalidStateMessage(3, 'G03', cause, stranded)
-        : `${noChangesMessage(3, 'G03', cause)} The team and every agent's title/membership were restored` +
-          `${hibernated ? `, but ${hibernated} agent(s) remain hibernated and must be woken manually` : ''}.`
-      ops.push(
-        stranded.length
-          ? `G03: ABORTED — restore INCOMPLETE, ${stranded.length} residue item(s): ${stranded.join('; ')}`
-          : `G03: ABORTED — ${revertFailures.length} revert failure(s); team membership and titles restored`,
-      )
-      return result
+      if (stranded.length) {
+        // R51.5 — a compensation that itself fails may NOT be reported as "no changes". THROWING
+        // is how that reaches the operator now: the runner records this gate as unrevertable and
+        // emits the CRITICAL INVALID STATE wording naming it. Building that message by hand here
+        // is exactly what made this pipeline a second implementation of the transaction semantics.
+        // (It also formatted it wrong — the old ops line interpolated an array of objects and
+        // printed "[object Object]" for every stranded agent.)
+        throw new Error(stranded.map(s => `${s.id}: ${s.error}`).join('; '))
+      }
     }
 
-    // ── G04: Delete team from registry ─────────────────────────
-    const deleted = await registryDeleteTeam(teamId)
-    if (!deleted) {
-      result.error = 'Team deletion from registry failed'
-      ops.push('G04: FAILED — registry delete returned false')
+    // ── G03 + G04 — ONE TRANSACTION (R51 · AIO-TXN-10) ──────────
+    // The boundary is "first mutation .. LAST gate that can abort". G04 is that last gate; G05/G06/
+    // G07 below are WARN-and-continue by construction, so an `undo` written for them would be
+    // unreachable code that reads as a guarantee.
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(
+      [
+        {
+          id: 'G03',
+          what: `Revert ${agentsToRevert.length} team agent(s) to AUTONOMOUS and hibernate them`,
+          run: dismantleTeamAgents,
+          undo: restoreTeamAgents,
+        },
+        {
+          id: 'G04',
+          what: 'Delete the team row from teams.json',
+          run: async () => {
+            const deleted = await registryDeleteTeam(teamId)
+            if (!deleted) throw new Error('Team deletion from registry failed')
+            ops.push('G04: Deleted from teams.json')
+          },
+          // Reads the STORE rather than trusting a flag, so it is correct whether `run` deleted
+          // nothing, or deleted and then threw — the `Gate.undo` partial-work contract.
+          //
+          // It writes through `saveTeams` because `createTeam` cannot restore a row: it MINTS A NEW
+          // id, and every agent, session and transfer still naming the old one would dangle. The
+          // cost is that this is the one team write that does not take the registry's `withLock`
+          // (the lock is module-private and unexported), so it races a concurrent team mutation —
+          // acceptable only because it runs on the rollback path of an operation that already holds
+          // the operator's attention.
+          undo: async () => {
+            const { loadTeams: loadTeamsUndo, saveTeams: saveTeamsUndo } = await import('@/lib/team-registry')
+            const teams = loadTeamsUndo()
+            if (teams.some(t => t.id === teamId)) return
+            saveTeamsUndo([...teams, teamSnapshot])
+          },
+        },
+      ],
+      dtc,
+    )
+    if (!txn.ok) {
+      ops.push(...txn.ops)
+      // The R51.3 "NO CHANGES WERE MADE" / R51.5 CRITICAL wording comes from the runner. The one
+      // thing it cannot know is that the undo deliberately leaves agents asleep, so say it here —
+      // and only when the rollback actually completed, because on the INVALID-STATE path a
+      // reassuring sentence about restored membership would be false.
+      const hibernated = dtc.restoreRecords.filter(r => r.previousTitle || r.removedFromAgentIds).length
+      result.error = txn.rolledBack
+        ? `${txn.message} The team and every agent's title/membership were restored` +
+          `${hibernated ? `, but ${hibernated} agent(s) remain hibernated and must be woken manually` : ''}.`
+        : txn.message
       return result
     }
-    ops.push('G04: Deleted from teams.json')
 
     // ── G05: Cancel pending transfers + reject governance requests ──
     // Single pass over governance requests: cancel transfers involving this team (R8.3)
@@ -6911,48 +6997,61 @@ export async function DeleteTeam(
     // fail. Every successful DeleteAgent emits its own ledger entry
     // (see TRDD-eac02238).
     if (options?.deleteAgents && agentsToRevert.length > 0) {
-      const { getAgent: getAgentForCascade } = await import('@/lib/agent-registry')
-      const deleteFailures: Array<{ agentId: string; error: string }> = []
-      let deletedCount = 0
-      for (const agentId of agentsToRevert) {
-        // SCEN-008 BUG-001 fix (2026-04-30): Skip orphan IDs in cascade delete
-        // for the same reason as the G03 revert path — the agent already
-        // doesn't exist, so calling DeleteAgent would just produce a
-        // misleading "not found" failure. Treat it as already deleted.
-        try {
-          const exists = !!getAgentForCascade(agentId)
-          if (!exists) {
-            ops.push(`G07: Agent ${agentId.substring(0, 8)} not in registry (orphan) — skipped`)
-            continue
+      // The block's SETUP is wrapped too, not just each agent. Its `await import` used to sit
+      // outside any try, so a module-resolution failure reached the function's outer catch and
+      // reported total failure over a delete that had in fact succeeded — with nothing rolled
+      // back, because the transaction closed at G04. Per-agent failures were already non-fatal by
+      // design; this makes the setup match them, and it is what makes the "G04 is the last gate
+      // that can abort" boundary above TRUE rather than approximately true.
+      try {
+        const { getAgent: getAgentForCascade } = await import('@/lib/agent-registry')
+        const deleteFailures: Array<{ agentId: string; error: string }> = []
+        let deletedCount = 0
+        for (const agentId of agentsToRevert) {
+          // SCEN-008 BUG-001 fix (2026-04-30): Skip orphan IDs in cascade delete
+          // for the same reason as the G03 revert path — the agent already
+          // doesn't exist, so calling DeleteAgent would just produce a
+          // misleading "not found" failure. Treat it as already deleted.
+          try {
+            const exists = !!getAgentForCascade(agentId)
+            if (!exists) {
+              ops.push(`G07: Agent ${agentId.substring(0, 8)} not in registry (orphan) — skipped`)
+              continue
+            }
+          } catch { /* if registry read throws, fall through and let DeleteAgent surface */ }
+          try {
+            const delResult = await DeleteAgent(agentId, {
+              authContext: options.authContext,
+              hard: true,
+              deleteFolder: true,
+            })
+            if (delResult.success) {
+              deletedCount++
+              ops.push(`G07: DeleteAgent succeeded for ${agentId.substring(0, 8)} (hard, folder wiped)`)
+            } else {
+              deleteFailures.push({ agentId, error: delResult.error || 'unknown' })
+              ops.push(`G07: DeleteAgent FAILED for ${agentId.substring(0, 8)}: ${delResult.error || 'unknown'}`)
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            deleteFailures.push({ agentId, error: msg })
+            ops.push(`G07: DeleteAgent EXCEPTION for ${agentId.substring(0, 8)}: ${msg}`)
           }
-        } catch { /* if registry read throws, fall through and let DeleteAgent surface */ }
-        try {
-          const delResult = await DeleteAgent(agentId, {
-            authContext: options.authContext,
-            hard: true,
-            deleteFolder: true,
-          })
-          if (delResult.success) {
-            deletedCount++
-            ops.push(`G07: DeleteAgent succeeded for ${agentId.substring(0, 8)} (hard, folder wiped)`)
-          } else {
-            deleteFailures.push({ agentId, error: delResult.error || 'unknown' })
-            ops.push(`G07: DeleteAgent FAILED for ${agentId.substring(0, 8)}: ${delResult.error || 'unknown'}`)
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err)
-          deleteFailures.push({ agentId, error: msg })
-          ops.push(`G07: DeleteAgent EXCEPTION for ${agentId.substring(0, 8)}: ${msg}`)
         }
-      }
-      ops.push(`G07: Cascade summary — ${deletedCount}/${agentsToRevert.length} agents deleted, ${deleteFailures.length} failed`)
-      if (deleteFailures.length > 0) {
-        // Team is already deleted — surface a non-fatal warning in the
-        // success path so the caller can display a toast but the sidebar
-        // still removes the team row.
-        result.error = `Team deleted, but ${deleteFailures.length} of ${agentsToRevert.length} agents failed to delete. ` +
-          `First failure: ${deleteFailures[0].agentId.substring(0, 8)}=${deleteFailures[0].error}. ` +
-          `Retry via Profile → Advanced → Danger Zone → Delete Agent.`
+        ops.push(`G07: Cascade summary — ${deletedCount}/${agentsToRevert.length} agents deleted, ${deleteFailures.length} failed`)
+        if (deleteFailures.length > 0) {
+          // Team is already deleted — surface a non-fatal warning in the
+          // success path so the caller can display a toast but the sidebar
+          // still removes the team row.
+          result.error = `Team deleted, but ${deleteFailures.length} of ${agentsToRevert.length} agents failed to delete. ` +
+            `First failure: ${deleteFailures[0].agentId.substring(0, 8)}=${deleteFailures[0].error}. ` +
+            `Retry via Profile → Advanced → Danger Zone → Delete Agent.`
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        ops.push(`G07: WARN — cascade could not run: ${msg}`)
+        result.error = `Team deleted, but the agent cascade could not run: ${msg}. ` +
+          `Delete the agents via Profile → Advanced → Danger Zone → Delete Agent.`
       }
     } else {
       ops.push('G07: Agents preserved as AUTONOMOUS (deleteAgents not requested)')

@@ -151,18 +151,19 @@ function analyze(): PipelineInfo[] {
  * `ChangeAgentDef`/`Command`/`Rule`/`OutputStyle` forward one line to
  * `changeSimpleElement`) while omitting `changeSimpleElement` itself, which IS one and is
  * already transactional. Real inventory when this landed: 19 pipelines, 5 transactional,
- * 14 to go — then 6 and 13 with `CreateAgent`, now 7 and 12 with `ChangeTeam`.
+ * 14 to go — then 6 and 13 with `CreateAgent`, 7 and 12 with `ChangeTeam`, now 8 and 11 with
+ * `DeleteTeam`.
  *
  * NOTE FOR WHOEVER LOWERS IT NEXT: the count is a conformance measure, NOT a safety measure,
- * and the two diverge. Several of the remaining 12 have exactly ONE mutating gate with nothing
+ * and the two diverge. Several of the remaining 11 have exactly ONE mutating gate with nothing
  * abortable after it — `ChangeAvatar` (G03), `ChangeName` (G04), `ChangeFolder` (G05) — so they
  * have no partial-state window at all and retrofitting them moves this number while buying zero
  * safety. Pick the next target by whether it can leave two stores disagreeing, not by gate count.
  */
-const MAX_HANDROLLED = 12
+const MAX_HANDROLLED = 11
 
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */
-const MIN_TRANSACTIONAL = 7
+const MIN_TRANSACTIONAL = 8
 
 /**
  * The pipelines already under the runner, pinned BY NAME. A count alone cannot see an
@@ -173,6 +174,7 @@ const MIN_TRANSACTIONAL = 7
 const MUST_BE_TRANSACTIONAL = [
   'CreateAgent',
   'ChangeTeam',
+  'DeleteTeam',
   'DeleteAgent',
   'ChangeClient',
   'ChangePlugin',

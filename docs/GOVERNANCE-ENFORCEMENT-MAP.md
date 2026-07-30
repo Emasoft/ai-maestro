@@ -176,7 +176,7 @@ Row format is fixed so a regex parses each line:
 | R17.5 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.6 | ENFORCED | services/element-management-service.ts:8220-8252 (CreateAgent::G11) | tests/integration/createagent-g11-r17-core.test.ts |
 | R17.7 | UNENFORCED | — | — |
-| R17.8 | ENFORCED | services/element-management-service.ts:724-729 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.8 | ENFORCED | services/element-management-service.ts:740-745 (InstallElement::G08) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.9 | ENFORCED | services/element-management-service.ts:1193-1194 (InstallElement::PG01) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.10 | UNENFORCED | — | — |
 | R17.11 | CONTRADICTED | — | — |

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T06:27:51+0200
-updated: 2026-07-30T07:04:06+0200
+updated: 2026-07-30T07:18:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -38,9 +38,7 @@ suite is green (276 files / 4133 tests, exit 0).
 cards carry a body claim the rule correctly reports, and **IND §12 forbids the remedy**
 ("Do not edit the body of a `complete` / `failed` / `superseded` / `published` / `live` TRDD").
 §12 is the janitor's IND base, so reinterpreting it to authorise our own edit is the move the
-cross-project rule forbids. Route the question to the janitor (precedent: janitor#103 for an
-IND-base proposal) and get the USER's call; then repair the two cards and DELETE the gate
-allowance, which is written to fail the moment they heal.
+cross-project rule forbids. FILED as janitor#139 (2026-07-30), with the 1.3.0 notification and the IND-wording ask. Awaiting the ruling; then repair the two cards and DELETE the gate allowance, which is written to fail the moment they heal.
 
 | card | zone · column | body claim | why it is blocked |
 |---|---|---|---|
@@ -196,8 +194,13 @@ this is migration residue, and it will keep being authored as long as old cards 
       N3 rule presence → ERROR + WARN + gate · N4 fixer's agreement gate → refusal test only ·
       N5 fixer's frontmatter boundary → repair test only
 - [x] full suite green — 276 files / 4133 passed / 2 skipped, exit 0
-- [ ] **OPEN (governance):** route the §12 question for `C7A81642` + `7123D51A` to the janitor
-      and the USER, repair the two cards, then DELETE the gate allowance in
+- [x] route the §12 question for `C7A81642` + `7123D51A` to the janitor — **filed 2026-07-30 as
+      [janitor#139](https://github.com/Emasoft/ai-maestro-janitor/issues/139)**, together with the
+      1.3.0 spec-version notification `3P-CHK-03` obliges and a second ASK: `trdd-design-tasks.md`
+      step 6's *"v2 replaced v1's `status:`"* reads as "retired", which is the reading that made
+      this project's own autofix a data destroyer
+- [ ] **OPEN (awaiting the janitor's / USER's ruling on janitor#139):** repair the two archived
+      cards, then DELETE the gate allowance in
       `tests/unit/trdd-doctor.test.ts` (it asserts the count EXACTLY, so it fails the moment
       they heal — an allowance that tolerates its own healing is how a known-issue list
       outlives the issue and starts hiding new ones)

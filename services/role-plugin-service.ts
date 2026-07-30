@@ -78,7 +78,10 @@ const CLAUDE_DIR = join(HOME, '.claude')
 // settings.json. Writing to ~/.claude/settings.local.json creates a phantom
 // file that Claude CLI never reads (see BUG-POLLUTION-001).
 const USER_GLOBAL_SETTINGS = join(CLAUDE_DIR, 'settings.json')
-const INSTALLED_FILE = join(CLAUDE_DIR, 'plugins', 'installed_plugins.json')
+// `INSTALLED_FILE` was declared here and never read by anything in this file — a path to another
+// tool's registry, sitting in a service that has no business writing it. Removed with the rest of
+// the hand-edit (TRDD-0GCIMQ9F Shape A): an unused pointer at a file we have renounced writing is
+// an invitation to start writing it again.
 
 // GitHub marketplace for predefined role plugins (from ecosystem-constants)
 // Role-plugins are NOT auto-installed. They are installed ON-DEMAND when a user selects one

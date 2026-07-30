@@ -262,14 +262,10 @@ export const ALLOWED_OUT_OF_ROOT_WRITES: { key: string; ratifiedBy: string; why:
     ratifiedBy: 'TRDD-QZL828OD D2 (USER, 2026-07-17)',
     why: 'Same ratified carve-out.',
   },
-  {
-    key: 'services/element-management-service.ts :: saveJsonSafe :: INSTALLED_FILE',
-    ratifiedBy: 'TRDD-0GCIMQ9F — UNRATIFIED, pending the USER Shape A/B decision',
-    why: 'Listed so the gate is green on the CURRENT tree while the shape is decided. This line IS the honest record that an unratified out-of-root write still exists; the card removes it (Shape A) or ratifies it (Shape B).',
-  },
-  {
-    key: 'services/element-management-service.ts :: mkdir :: CLAUDE_DIR',
-    ratifiedBy: 'TRDD-0GCIMQ9F — UNRATIFIED, pending the USER Shape A/B decision',
-    why: 'Creates ~/.claude/plugins/ for the write above; goes away with it under Shape A.',
-  },
+  // THE TWO `installed_plugins.json` ENTRIES ARE GONE, and their absence is the deliverable
+  // (TRDD-0GCIMQ9F Shape A, executed by TRDD-OWO449MR). They were the only UNRATIFIED lines here —
+  // an honest record that ai-maestro was a second writer over a file the `claude plugin` CLI owns.
+  // Shape A removed the writes rather than ratifying them: every mutation of that file is now asked
+  // of the CLI (`claude plugin install|uninstall --scope local --cwd <dir>`), so there is no
+  // exception left to grant. The allowlist is back to exactly the ONE ratified carve-out.
 ]

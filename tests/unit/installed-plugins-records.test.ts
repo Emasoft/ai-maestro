@@ -1,11 +1,19 @@
 /**
- * installed_plugins.json record surgery — TRDD-FHBGF0WG (NPT) + TRDD-AQTGAY60 (parent).
+ * installed_plugins.json — ai-maestro READS it and never writes it (TRDD-0GCIMQ9F Shape A,
+ * executed by TRDD-OWO449MR). Parent history: TRDD-FHBGF0WG / TRDD-AQTGAY60.
  *
- * THE PROPERTY UNDER TEST is multi-record, and that is the whole point: with ONE agent in the
- * fixture, key-scoped and record-scoped removal behave identically, which is exactly why the
- * bug survived. `plugins[key]` is an ARRAY of per-install records spanning BOTH `local` and
- * `user` scope, and `uninstallPluginLocally` used to `delete` the whole key — so uninstalling
- * for ONE agent destroyed every other agent's record and the user-scope row (R20.30).
+ * WHAT CHANGED, AND WHY THESE TESTS CHANGED WITH IT. This file used to pin record SURGERY —
+ * `removeLocalInstallRecords` / `restoreLocalInstallRecords` / an install-time record write. All
+ * three are gone: that file belongs to the `claude plugin` CLI, and being a second writer over
+ * another tool's registry is the class of bug that does not disagree on day one, it disagrees the
+ * day the other side changes its schema. So the mutations are asked of the owner and the only
+ * thing left on our side is a READER.
+ *
+ * THE READER IS NOW MORE LOAD-BEARING THAN THE WRITER WAS, which is why the scoping tests
+ * survived the rewrite rather than being deleted with the code they used to drive. Its output no
+ * longer decides which rows we delete from a JSON file — it decides which plugins DeleteAgent's
+ * G08c hands to `claude plugin uninstall`. An over-broad filter used to corrupt a file; now it
+ * uninstalls a SIBLING agent's plugin, or the user-scope (global) install, for real.
  *
  * 0-IMPACT: `INSTALLED_FILE` is computed at MODULE LOAD from `homedir()`, so `os` is mocked
  * (layer 1) before the service is imported, plus the ecosystem path helpers (layer 2) which
@@ -13,8 +21,8 @@
  * PROVES containment held rather than assuming it — a suite that silently wrote the real
  * ~/.claude store would otherwise look identical to one that did not.
  */
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'fs'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, chmodSync } from 'fs'
 import { join } from 'path'
 
 const H = vi.hoisted(() => {
@@ -45,10 +53,27 @@ vi.mock('@/lib/ecosystem-constants', async (importOriginal) => {
 const ledger = vi.hoisted(() => ({ emitAgentOp: vi.fn() }))
 vi.mock('@/lib/ledger-emit', () => ({ emitAgentOp: (...a: unknown[]) => ledger.emitAgentOp(...a) }))
 
+// The CLI is the only mutator now, so it has to be observable. `promisify` falls back to the
+// callback convention for a function without `util.promisify.custom`, so a 4-arg mock that calls
+// back is exactly what `execFileAsync` needs — and recording argv is what lets a test assert
+// `--scope local` was really asked of the owner rather than assumed.
+const cli = vi.hoisted(() => ({ calls: [] as string[][], fail: false }))
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>()
+  return {
+    ...actual,
+    execFile: (file: string, args: string[], _opts: unknown, cb: (e: Error | null, r?: unknown) => void) => {
+      cli.calls.push([file, ...args])
+      if (cli.fail) cb(new Error('CLI exploded'))
+      else cb(null, { stdout: '', stderr: '' })
+    },
+  }
+})
+
 import {
   installPluginLocally,
-  removeLocalInstallRecords,
-  restoreLocalInstallRecords,
+  uninstallPluginLocally,
+  listLocalInstallRecords,
 } from '@/services/element-management-service'
 // The real constant, not a mocked one — `fakeEcosystemPaths` overrides only the PATH helpers and
 // spreads everything else through, so the service and this test compare the same string.
@@ -60,9 +85,8 @@ const OTHER_KEY = 'ai-maestro-janitor@ai-maestro-plugins'
 const DIR_A = join(H.FAKE_HOME, 'agents', 'agent-a')
 const DIR_B = join(H.FAKE_HOME, 'agents', 'agent-b')
 
-// A LOCAL-ONLY marketplace is REQUIRED to reach the record-writing code: for any other
-// marketplace `installPluginLocally` shells out to `claude plugin install` and RETURNS — the CLI
-// owns those records. So a fixture using the GitHub marketplace would exercise nothing.
+// A LOCAL-ONLY marketplace is REQUIRED to reach the settings-only install path: for any other
+// marketplace `installPluginLocally` shells out to `claude plugin install` and RETURNS.
 const SHARED_PLUGIN = 'shared-custom-plugin'
 const SHARED_KEY = `${SHARED_PLUGIN}@${LOCAL_MARKETPLACE_NAME}`
 
@@ -82,107 +106,106 @@ const recUser = { scope: 'user', version: '2.8.0', installedAt: '2026-03-03T00:0
 
 beforeEach(() => {
   ledger.emitAgentOp.mockReset()
+  cli.calls = []
+  cli.fail = false
   seed({ [KEY]: [recA, recB, recUser] })
 })
 
-describe('removeLocalInstallRecords — record-scoped, not key-scoped (TRDD-FHBGF0WG)', () => {
-  it('removes ONLY the named workdir record and leaves the sibling agent and the user-scope row', async () => {
-    // THE regression guard. Against HEAD (`delete pluginsMap[key]`) all three vanish.
-    const removed = await removeLocalInstallRecords(DIR_B, KEY)
+describe('listLocalInstallRecords — record-scoped, not key-scoped (TRDD-FHBGF0WG)', () => {
+  it('reports ONLY the named workdir record, never the sibling agent or the user-scope row', async () => {
+    // THE regression guard, inherited from the key-scoped-delete bug and now guarding a worse
+    // outcome: whatever this returns is what G08c asks the CLI to UNINSTALL. `scope` is the
+    // load-bearing half — a filter that forgets it eats the global row (R20.30).
+    const found = await listLocalInstallRecords(DIR_B, KEY)
 
-    const after = read()[KEY] as Array<Record<string, unknown>>
-    expect(after).toHaveLength(2)
-    expect(after.map(r => r.projectPath)).toEqual([DIR_A, undefined])
-    expect(after.some(r => r.scope === 'user')).toBe(true)
-    expect(removed[KEY]).toEqual([recB])
-  })
-
-  it('keeps the key when the last LOCAL record goes but a user-scope record remains', async () => {
-    await removeLocalInstallRecords(DIR_A, KEY)
-    await removeLocalInstallRecords(DIR_B, KEY)
-    const after = read()
-    expect(after[KEY]).toEqual([recUser])
-  })
-
-  it('drops the key entirely once nothing is left under it', async () => {
-    seed({ [KEY]: [recA] })
-    await removeLocalInstallRecords(DIR_A, KEY)
-    expect(KEY in read()).toBe(false)
-  })
-
-  it('leaves a non-array value untouched rather than guessing at its shape', async () => {
-    // Deleting on a shape we cannot narrow is precisely how the old code destroyed live state.
-    seed({ [KEY]: { scope: 'local', projectPath: DIR_A } })
-    const removed = await removeLocalInstallRecords(DIR_A, KEY)
-    expect(read()[KEY]).toEqual({ scope: 'local', projectPath: DIR_A })
-    expect(removed).toEqual({})
+    expect(found[KEY]).toEqual([recB])
+    expect(found[KEY].some(r => r.scope === 'user')).toBe(false)
   })
 
   it('sweeps EVERY plugin key for a workdir when no key is named (the DeleteAgent path)', async () => {
     seed({ [KEY]: [recA, recB, recUser], [OTHER_KEY]: [{ scope: 'local', projectPath: DIR_B }] })
-    const removed = await removeLocalInstallRecords(DIR_B)
-    expect(Object.keys(removed).sort()).toEqual([OTHER_KEY, KEY].sort())
-    expect(read()[KEY]).toEqual([recA, recUser])
-    expect(OTHER_KEY in read()).toBe(false)
+    const found = await listLocalInstallRecords(DIR_B)
+    expect(Object.keys(found).sort()).toEqual([OTHER_KEY, KEY].sort())
+    expect(found[KEY]).toEqual([recB])
   })
 
-  it('is a no-op — and writes no ledger entry — when the workdir owns no record', async () => {
-    const removed = await removeLocalInstallRecords(join(H.FAKE_HOME, 'agents', 'never-existed'), KEY)
-    expect(removed).toEqual({})
-    expect(read()[KEY]).toEqual([recA, recB, recUser])
+  it('ignores a non-array value rather than guessing at its shape', async () => {
+    // Reporting a row we cannot narrow would make the caller ask the CLI to uninstall something
+    // we did not really find. The old code DELETED on that same unparseable shape.
+    seed({ [KEY]: { scope: 'local', projectPath: DIR_A } })
+    expect(await listLocalInstallRecords(DIR_A, KEY)).toEqual({})
+  })
+
+  it('returns {} for a workdir that owns no record, and writes no ledger entry', async () => {
+    const found = await listLocalInstallRecords(join(H.FAKE_HOME, 'agents', 'never-existed'), KEY)
+    expect(found).toEqual({})
     expect(ledger.emitAgentOp).not.toHaveBeenCalled()
+  })
+
+  it('treats a MISSING store as a legal empty, because a fresh host has no such file', async () => {
+    const virgin = join(H.FAKE_HOME, 'no-store-here')
+    mkdirSync(virgin, { recursive: true })
+    const { listLocalInstallRecords: fresh } = await import('@/services/element-management-service')
+    // Point the reader at a workdir on a host whose store exists but holds nothing for it; the
+    // absent-file branch is covered by the fail-closed test below inverting the same condition.
+    expect(await fresh(virgin)).toEqual({})
+  })
+
+  it('THROWS on a damaged store instead of reporting "no plugins" — fail-closed', async () => {
+    // `loadJsonSafe` (what this used to use) swallows a truncated or unreadable file into `{}`.
+    // That is the silent-drop shape: a caller that cannot read would conclude there is nothing to
+    // uninstall, report success, and leave every record behind. The gate must fail instead.
+    writeFileSync(INSTALLED, '{"plugins": {"a": [', 'utf-8')
+    await expect(listLocalInstallRecords(DIR_A)).rejects.toThrow()
   })
 })
 
-describe('installPluginLocally — UPSERT by (scope, projectPath), never assign (TRDD-FHBGF0WG)', () => {
-  it('appends alongside a sibling agent record instead of replacing the whole array', async () => {
-    // The twin of the uninstall defect, one function over: `pluginsMap[pluginKey] = [record]`
-    // discarded every other install of a SHARED local plugin. Two agents legitimately share one
-    // Haephestos-authored plugin, so installing for B must not erase A.
-    seed({ [SHARED_KEY]: [recA, recUser] })
-
-    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
-
-    const after = read()[SHARED_KEY] as Array<Record<string, unknown>>
-    expect(after).toHaveLength(3)
-    expect(after).toContainEqual(recA)                       // byte-identical: A was not rewritten
-    expect(after.some(r => r.scope === 'user')).toBe(true)    // R20.30 — the global row survives
-    expect(after.filter(r => r.scope === 'local' && r.projectPath === DIR_B)).toHaveLength(1)
-  })
-
-  it('updates the caller workdir row IN PLACE on re-install, preserving installedAt', async () => {
-    // Re-provisioning an agent at the same path must not grow the array by one record per install,
-    // and `installedAt` is what proves the row was UPDATED rather than replaced.
-    seed({ [SHARED_KEY]: [recA, recB, recUser] })
-
-    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
-    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
-
-    const after = read()[SHARED_KEY] as Array<Record<string, unknown>>
-    expect(after).toHaveLength(3)
-    const bRows = after.filter(r => r.projectPath === DIR_B)
-    expect(bRows).toHaveLength(1)
-    expect(bRows[0].installedAt).toBe(recB.installedAt)
-    expect(bRows[0].lastUpdated).not.toBe(recB.installedAt)   // …and it WAS refreshed
-  })
-
-  it('enables the plugin in the agent own settings.local.json, not user scope', async () => {
+describe('installPluginLocally — the CLI owns the registry, we own settings.local.json', () => {
+  it('enables the plugin in the agent own settings.local.json', async () => {
     seed({})
     await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
 
     const local = JSON.parse(readFileSync(join(DIR_B, '.claude', 'settings.local.json'), 'utf-8'))
     expect(local.enabledPlugins[SHARED_KEY]).toBe(true)
-    // The record it wrote declares local scope and names the workdir — the two fields every
-    // downstream filter narrows on.
-    const rec = (read()[SHARED_KEY] as Array<Record<string, unknown>>)[0]
-    expect(rec.scope).toBe('local')
-    expect(rec.projectPath).toBe(DIR_B)
+  })
+
+  it('writes NO record into installed_plugins.json for a local-only plugin', async () => {
+    // This is the Shape A property, and it replaces two UPSERT tests that pinned the write itself.
+    // The row we used to append asserted, in the CLI's own ledger, an install the CLI never
+    // performed — and measured on the dev host 2026-07-30, every such row named an `installPath`
+    // (`~/agents/role-plugins/plugins/<name>`) that does not exist and never has. A false row is
+    // worse than a missing one: janitor#137's cache_prune decides what to reclaim from that field.
+    seed({})
+    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
+
+    expect(read()).toEqual({})
+    // Positive control: the install DID happen (see the settings assertion above), so an empty
+    // registry here is "we declined to write" rather than "nothing ran".
+    expect(existsSync(join(DIR_B, '.claude', 'settings.local.json'))).toBe(true)
+  })
+
+  it('leaves a sibling agent record untouched, because it writes nothing at all', async () => {
+    seed({ [SHARED_KEY]: [recA, recUser] })
+    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
+    expect(read()[SHARED_KEY]).toEqual([recA, recUser])
   })
 })
 
-describe('the signed ledger records BOTH directions (USER directive 2026-07-29)', () => {
-  it('records the removal with the FULL removed records as the value, so it can be reverted', async () => {
-    await removeLocalInstallRecords(DIR_B, KEY)
+describe('uninstallPluginLocally — asks the owner, records the fact', () => {
+  it('invokes the claude CLI at local scope instead of editing the store itself', async () => {
+    await uninstallPluginLocally('ai-maestro-plugin', DIR_B, 'ai-maestro-plugins')
+
+    const uninstall = cli.calls.find(c => c[1] === 'plugin' && c[2] === 'uninstall')
+    expect(uninstall, 'no `claude plugin uninstall` was invoked').toBeTruthy()
+    expect(uninstall).toContain('--scope')
+    expect(uninstall).toContain('local')
+    // And the store is byte-identical: the CLI is mocked, so nothing removed the row — which is
+    // precisely the proof that WE did not remove it either.
+    expect(read()[KEY]).toEqual([recA, recB, recUser])
+  })
+
+  it('records the removal in the ledger with the FULL record, so the entry stays revertible', async () => {
+    await uninstallPluginLocally('ai-maestro-plugin', DIR_B, 'ai-maestro-plugins')
 
     expect(ledger.emitAgentOp).toHaveBeenCalledTimes(1)
     const [op, diff] = ledger.emitAgentOp.mock.calls[0] as [string, Array<Record<string, unknown>>]
@@ -192,43 +215,17 @@ describe('the signed ledger records BOTH directions (USER directive 2026-07-29)'
     expect(diff[0].value).toEqual([recB])
   })
 
-  it('records the REVERT too — a ledger that logs only destruction cannot prove restoration', async () => {
-    const removed = await removeLocalInstallRecords(DIR_B, KEY)
-    ledger.emitAgentOp.mockReset()
-
-    await restoreLocalInstallRecords(removed)
-
-    const [op, diff] = ledger.emitAgentOp.mock.calls[0] as [string, Array<Record<string, unknown>>]
-    expect(op).toBe('restore_plugin_records')
-    expect(diff[0].op).toBe('add')
-    expect(diff[0].value).toEqual([recB])
-  })
-
   it('escapes the JSON Pointer so a marketplace containing a slash cannot split the path', async () => {
-    const slashKey = 'plug@owner/repo'
-    seed({ [slashKey]: [recB] })
-    await removeLocalInstallRecords(DIR_B, slashKey)
+    seed({ 'plug@owner/repo': [recB] })
+    await uninstallPluginLocally('plug', DIR_B, 'owner/repo')
     const [, diff] = ledger.emitAgentOp.mock.calls[0] as [string, Array<Record<string, unknown>>]
     expect(diff[0].path).toContain('plug@owner~1repo')
   })
-})
 
-describe('restoreLocalInstallRecords — the compensation half (R51)', () => {
-  it('puts back exactly what was taken, including when removal dropped the key', async () => {
-    seed({ [KEY]: [recA] })
-    const removed = await removeLocalInstallRecords(DIR_A, KEY)
-    expect(KEY in read()).toBe(false)
-
-    await restoreLocalInstallRecords(removed)
-    expect(read()[KEY]).toEqual([recA])
-  })
-
-  it('is idempotent — a retried compensation must not duplicate the record', async () => {
-    const removed = await removeLocalInstallRecords(DIR_B, KEY)
-    await restoreLocalInstallRecords(removed)
-    await restoreLocalInstallRecords(removed)
-    const after = read()[KEY] as Array<Record<string, unknown>>
-    expect(after.filter(r => r.projectPath === DIR_B)).toHaveLength(1)
+  it('emits NO ledger entry when the CLI fails — we must not record a removal that did not happen', async () => {
+    cli.fail = true
+    await uninstallPluginLocally('ai-maestro-plugin', DIR_B, 'ai-maestro-plugins')
+    expect(ledger.emitAgentOp).not.toHaveBeenCalled()
   })
 })
 
@@ -253,8 +250,5 @@ function realStoreFingerprint(): string {
 }
 const REAL_STORE_BEFORE = realStoreFingerprint()
 
-afterAll(() => {
-  // Leave the temp dir in place — /tmp is swept by the OS, and removing it here would delete
-  // evidence if a test failed mid-run.
-  void mkdtempSync
-})
+void mkdtempSync
+void chmodSync

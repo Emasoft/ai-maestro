@@ -33,7 +33,6 @@ import { promisify } from 'util'
 import {
   MARKETPLACE_NAME as GITHUB_MARKETPLACE_NAME_IMPORT,
   LOCAL_MARKETPLACE_NAME,
-  LOCAL_MARKETPLACE_DIR_NAME,
   CUSTOM_MARKETPLACE_NAME,
   MAIN_PLUGIN_NAME,
   PREDEFINED_ROLE_PLUGIN_NAMES,
@@ -79,8 +78,12 @@ async function tryEmitLedgerOp(
 
 // ── Paths ─────────────────────────────────────────────────────
 const HOME = homedir()
-const ROLE_PLUGINS_DIR = join(HOME, 'agents', LOCAL_MARKETPLACE_DIR_NAME)
-const PLUGINS_DIR = join(ROLE_PLUGINS_DIR, 'plugins')
+// `ROLE_PLUGINS_DIR` and `PLUGINS_DIR = join(ROLE_PLUGINS_DIR, 'plugins')` lived here and are gone
+// with their only reader
+// (TRDD-OWO449MR). It was the `installPath` we hand-wrote into the CLI's registry, and it named a
+// directory that does not exist on this host and never has — the local marketplace lays plugins out
+// under `roles-marketplace/`, not `plugins/`. Deleting the constant removes the last trace of a
+// path we were asserting to another tool as fact.
 const CLAUDE_DIR = join(HOME, '.claude')
 // User-global Claude Code settings. NOT settings.local.json (which is a
 // project-only override). Claude CLI stores user-scope enabledPlugins and
@@ -1527,70 +1530,54 @@ function isLocalRecordFor(rec: unknown, projectPath: string): boolean {
 }
 
 /**
- * Remove LOCAL install records rooted at `projectPath` from `installed_plugins.json`.
+ * READ the LOCAL install records rooted at `projectPath`, keyed by plugin.
  *
- * Pass `pluginKey` to scope the removal to one plugin (the uninstall path); omit it to remove
- * every plugin's records for that directory (the DeleteAgent path, TRDD-AQTGAY60).
+ * Pass `pluginKey` to scope the read to one plugin (the uninstall path); omit it for every
+ * plugin's records for that directory (the DeleteAgent path).
  *
- * Returns the removed records keyed by plugin, so a caller inside a gate sequence can restore
- * them if a later gate fails (R51 compensation).
+ * READ-ONLY BY CONSTRUCTION, and that is the whole point (TRDD-0GCIMQ9F Shape A). This used to
+ * be `removeLocalInstallRecords`, which REWROTE `installed_plugins.json` — a file the `claude
+ * plugin` CLI owns. Being a second writer over another tool's file is not a bug that shows up on
+ * day one; it shows up the day the other side changes its schema, and we would find out by
+ * corrupting a user's plugin registry. The CLI is the owner, so mutations are now asked of it
+ * (`claude plugin uninstall --scope local --cwd <dir>`) and this function only reports what the
+ * owner currently believes.
  *
- * WHY this is a filter and not a `delete pluginsMap[key]`: that is exactly the bug this
- * function replaces. `delete` removed the whole ARRAY, so uninstalling a plugin for ONE agent
- * destroyed every other agent's record for it AND the user-scope row — and on the marketplace
- * path it did so immediately after `claude plugin uninstall --scope local` had already
- * performed the correct, narrow removal. We were undoing a correct operation with an
- * over-broad one, on every ChangeTitle that swaps a role-plugin.
+ * We still READ it, and read it rather than `settings.local.json`, because the two answer
+ * different questions: this file says what is INSTALLED, `enabledPlugins` says what is ENABLED,
+ * and an installed-but-disabled plugin exists in exactly the gap between them.
+ *
+ * FAIL-CLOSED on a damaged file. A missing file is a legal "no records"; anything else throws.
+ * `loadJsonSafe` would swallow a permissions error or a truncated file into `{}`, and a reader
+ * that answers "there is nothing here" when it could not read is what turns a caller into a gate
+ * that passes because it saw nothing.
  */
-export async function removeLocalInstallRecords(
+export async function listLocalInstallRecords(
   projectPath: string,
   pluginKey?: string,
 ): Promise<Record<string, InstallRecord[]>> {
-  const removed: Record<string, InstallRecord[]> = {}
-  if (!existsSync(INSTALLED_FILE)) return removed
+  const found: Record<string, InstallRecord[]> = {}
+  if (!existsSync(INSTALLED_FILE)) return found
 
-  await withSettingsLock(INSTALLED_FILE, async () => {
-    const installed = await loadJsonSafe(INSTALLED_FILE) as Record<string, unknown>
-    const pluginsMap = (installed.plugins || {}) as Record<string, unknown>
-    const keys = pluginKey ? [pluginKey] : Object.keys(pluginsMap)
-    let dirty = false
+  const raw = await readFile(INSTALLED_FILE, 'utf-8')
+  const installed = JSON.parse(raw) as Record<string, unknown>
+  const pluginsMap = (installed.plugins || {}) as Record<string, unknown>
+  const keys = pluginKey ? [pluginKey] : Object.keys(pluginsMap)
 
-    for (const key of keys) {
-      const value = pluginsMap[key]
-      if (value === undefined) continue
-      if (!Array.isArray(value)) {
-        // An unrecognised shape (hand-edited file, or a future schema). Deleting on a shape we
-        // cannot narrow is precisely how the old code destroyed live state — leave it alone.
-        console.warn(`[element-mgmt] installed_plugins.json: "${key}" is not an array; leaving it untouched`)
-        continue
-      }
-      const keep = value.filter(rec => !isLocalRecordFor(rec, projectPath))
-      if (keep.length === value.length) continue
-
-      removed[key] = value.filter(rec => isLocalRecordFor(rec, projectPath)) as InstallRecord[]
-      dirty = true
-      // Drop the key only once nothing is left under it — an empty array would read as
-      // "installed nowhere" to some consumers and as "key present" to others.
-      if (keep.length === 0) delete pluginsMap[key]
-      else pluginsMap[key] = keep
+  for (const key of keys) {
+    const value = pluginsMap[key]
+    if (value === undefined) continue
+    if (!Array.isArray(value)) {
+      // An unrecognised shape (hand-edited file, or a future schema). Reporting a row we cannot
+      // narrow would make the caller ask the CLI to uninstall something we did not really find.
+      console.warn(`[element-mgmt] installed_plugins.json: "${key}" is not an array; ignoring it`)
+      continue
     }
-
-    if (!dirty) return
-    installed.plugins = pluginsMap
-    await saveJsonSafe(INSTALLED_FILE, installed)
-  })
-
-  // THE LEDGER IS THE GROUND TRUTH — nothing that changes state may escape it (USER directive
-  // 2026-07-29). This is the single choke point for record removal (the uninstall path and
-  // DeleteAgent's G09b both land here), so emitting once here covers both. `value` carries the
-  // FULL removed records, not a count: that is what makes the entry REVERTIBLE — restoring is
-  // re-adding exactly this value, and the restore is itself recorded (restore_plugin_records).
-  const removedKeys = Object.keys(removed)
-  if (removedKeys.length > 0) {
-    await emitPluginRecordOp('remove_plugin_records', 'remove', projectPath, removed)
+    const mine = value.filter(rec => isLocalRecordFor(rec, projectPath)) as InstallRecord[]
+    if (mine.length > 0) found[key] = mine
   }
 
-  return removed
+  return found
 }
 
 /** JSON-Pointer escaping — `~` then `/`, in that order (RFC 6901). A marketplace segment can
@@ -1619,55 +1606,15 @@ async function emitPluginRecordOp(
   for (const line of sink) console.error(`[element-mgmt] ${line}`)
 }
 
-/**
- * Restore records previously taken out by {@link removeLocalInstallRecords}.
- * This is the compensation half — a mutating gate must be able to put back exactly what it
- * took (R51), including the case where removing the last record dropped the key entirely.
- */
-export async function restoreLocalInstallRecords(
-  records: Record<string, InstallRecord[]>,
-): Promise<void> {
-  const keys = Object.keys(records)
-  if (keys.length === 0) return
-
-  await withSettingsLock(INSTALLED_FILE, async () => {
-    await mkdir(join(CLAUDE_DIR, 'plugins'), { recursive: true })
-    const installed = await loadJsonSafe(INSTALLED_FILE) as Record<string, unknown>
-    const pluginsMap = (installed.plugins || {}) as Record<string, unknown>
-
-    for (const key of keys) {
-      const existing = pluginsMap[key]
-      if (existing !== undefined && !Array.isArray(existing)) continue
-      const arr = Array.isArray(existing) ? [...existing] : []
-      for (const rec of records[key]) {
-        // Idempotent: a retry must not create a duplicate record for the same install.
-        if (!arr.some(e => isLocalRecordFor(e, String(rec.projectPath ?? '')))) arr.push(rec)
-      }
-      pluginsMap[key] = arr
-    }
-
-    installed.plugins = pluginsMap
-    await saveJsonSafe(INSTALLED_FILE, installed)
-  })
-
-  // The REVERT is recorded too — a ledger that logs only destruction cannot prove the system
-  // was put back, and "even the operation of reverting must be recorded" (USER, 2026-07-29).
-  const restoredPaths: Record<string, InstallRecord[]> = {}
-  for (const key of keys) {
-    for (const rec of records[key]) {
-      const p = String(rec.projectPath ?? '')
-      if (!restoredPaths[p]) restoredPaths[p] = []
-    }
-  }
-  for (const p of Object.keys(restoredPaths)) {
-    const forPath: Record<string, InstallRecord[]> = {}
-    for (const key of keys) {
-      const hits = records[key].filter(r => String(r.projectPath ?? '') === p)
-      if (hits.length) forPath[key] = hits
-    }
-    if (Object.keys(forPath).length) await emitPluginRecordOp('restore_plugin_records', 'add', p, forPath)
-  }
-}
+// `restoreLocalInstallRecords` USED TO LIVE HERE, and its deletion is the point rather than a
+// side effect (TRDD-0GCIMQ9F Shape A / TRDD-OWO449MR). It was the compensation half of the
+// hand-edit: it re-added removed rows to `installed_plugins.json` by hand. Under Shape A the
+// removal is performed by the CLI, so the only honest compensation is also the CLI's
+// (`claude plugin install --scope local --cwd <dir>`) — writing the rows back ourselves would
+// re-introduce the second writer through the back door, and would additionally assert an install
+// the owner no longer believes in. DeleteAgent's G08c carries that compensation now; the
+// `restore_plugin_records` ledger op it emits is unchanged, because what is being recorded
+// ("those records put back") is still exactly what happens.
 
 // ── Legacy helpers (delegate to InstallElement) ──────────────
 
@@ -1793,39 +1740,28 @@ export async function installPluginLocally(
     await saveJsonSafe(localSettings, settings)
   })
 
-  // Track in global installed_plugins.json
-  await withSettingsLock(INSTALLED_FILE, async () => {
-    await mkdir(join(CLAUDE_DIR, 'plugins'), { recursive: true })
-    const installed = await loadJsonSafe(INSTALLED_FILE) as Record<string, unknown>
-    const pluginsMap = (installed.plugins || {}) as Record<string, unknown>
-    const now = new Date().toISOString().replace('+00:00', 'Z')
-    const record: InstallRecord = {
-      scope: 'local',
-      version: '1.0.0',
-      installedAt: now,
-      lastUpdated: now,
-      installPath: join(PLUGINS_DIR, pluginName),
-      projectPath: resolvedDir,
-    }
-    // UPSERT by (scope, projectPath), never assign. This was
-    // `pluginsMap[pluginKey] = [record]`, which replaced the whole array — so installing a
-    // shared local plugin for agent B erased agent A's record for it (TRDD-FHBGF0WG).
-    const existing = pluginsMap[pluginKey]
-    if (existing !== undefined && !Array.isArray(existing)) {
-      console.warn(`[element-mgmt] installed_plugins.json: "${pluginKey}" is not an array; replacing it`)
-      pluginsMap[pluginKey] = [record]
-    } else {
-      const arr = Array.isArray(existing) ? [...existing] : []
-      const at = arr.findIndex(rec => isLocalRecordFor(rec, resolvedDir))
-      // Re-installing keeps ONE record for this dir (preserving installedAt) instead of
-      // appending a duplicate every time an agent is re-provisioned at the same path.
-      if (at >= 0) arr[at] = { ...(arr[at] as InstallRecord), ...record, installedAt: (arr[at] as InstallRecord).installedAt ?? now }
-      else arr.push(record)
-      pluginsMap[pluginKey] = arr
-    }
-    installed.plugins = pluginsMap
-    await saveJsonSafe(INSTALLED_FILE, installed)
-  })
+  // WE NO LONGER "track in global installed_plugins.json" HERE (TRDD-0GCIMQ9F Shape A).
+  //
+  // This branch is reached only for the LOCAL-ONLY marketplaces, where no `claude plugin install`
+  // ran — so the row we used to append asserted, in the CLI's own ledger, an install the CLI had
+  // never performed. Measured on this host 2026-07-30: every such row carried
+  // `installPath: ~/agents/role-plugins/plugins/<name>`, a directory that does not exist and never
+  // has (the real layout is `~/agents/role-plugins/roles-marketplace/<name>`). So these rows were
+  // not merely unauthorised, they were FALSE — and false in the field that janitor#137's
+  // `cache_prune` uses to decide which cached version directories are still in use.
+  //
+  // Dropping the row loses nothing a reader depends on: the dashboard's per-agent plugin list
+  // reads this agent's own `.claude/settings.local.json` (written just above, inside our permitted
+  // root), and no TypeScript consumer outside `lib/agent-teardown.ts`'s absence probe reads
+  // `installed_plugins.json` at all. A row that never exists keeps that probe green by
+  // construction — which is the same reason DeleteAgent no longer has to hand-remove one.
+  //
+  // NOT DONE HERE, deliberately: routing this branch through `claude plugin install` as well.
+  // Evidence says the CLI probably CAN resolve a directory marketplace — both local marketplaces
+  // are registered in `extraKnownMarketplaces`, and one live row for
+  // `@ai-maestro-local-roles-marketplace` carries a CLI-cache installPath that our code cannot
+  // produce — but "probably" is not a basis for changing the install path of every Haephestos
+  // custom. That needs a live install to settle, and it is TRDD-YQ7CDU3B.
 }
 
 /**
@@ -1861,11 +1797,27 @@ export async function uninstallPluginLocally(
     marketplaceName === CUSTOM_MARKETPLACE_NAME
   )
   if (!isLocalOnlyMarketplace) {
+    // Read the row BEFORE asking the CLI to drop it, so the ledger entry below can carry the
+    // FULL record rather than a count — that is what makes the entry revertible (USER, 2026-07-29:
+    // the ledger is the ground truth, and even the revert must be recorded).
+    const doomed = await listLocalInstallRecords(resolvedDir, pluginKey).catch(() => ({}))
     try {
-      await execFileAsync('claude', [
-        'plugin', 'uninstall', pluginName, marketplaceName, '--scope', 'local',
-      ], { timeout: 30000, cwd: resolvedDir })
+      // SERIALIZED on INSTALLED_FILE for the same reason the INSTALL path is (see the long note
+      // there): `claude plugin uninstall` does its own read-modify-write on that single shared
+      // file inside its own process, which our lock cannot see unless we hold it across the child.
+      // The install side was serialized after the SCEN-031 lost-update race; the uninstall side
+      // was not, and it races exactly the same way — a lost update here silently RESURRECTS a row
+      // for a plugin that is gone. It matters more now, not less: under Shape A the CLI is the
+      // only writer, so there is no longer a hand-edit afterwards to paper over the loss.
+      await withSettingsLock(INSTALLED_FILE, async () => {
+        await execFileAsync('claude', [
+          'plugin', 'uninstall', pluginName, marketplaceName, '--scope', 'local',
+        ], { timeout: 30000, cwd: resolvedDir })
+      }, { staleMs: 180_000, maxWaitMs: 180_000 })
       console.log(`[element-mgmt] Uninstalled ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
+      if (Object.keys(doomed).length > 0) {
+        await emitPluginRecordOp('remove_plugin_records', 'remove', resolvedDir, doomed)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (!msg.includes('not found') && !msg.includes('not installed')) {
@@ -1887,7 +1839,6 @@ export async function uninstallPluginLocally(
         }
       })
     }
-    // Fall through to installed_plugins.json cleanup below.
   } else {
     // For Haephestos-authored local/custom plugins: manipulate settings.local.json directly
     const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
@@ -1903,10 +1854,15 @@ export async function uninstallPluginLocally(
     }
   }
 
-  // Remove THIS agent's local record from installed_plugins.json — not the whole key.
-  // This used to be `delete pluginsMap[pluginKey]`, which took out the entire array: every
-  // other agent's local record and the user-scope row with it (TRDD-FHBGF0WG, R20.30).
-  await removeLocalInstallRecords(resolvedDir, pluginKey)
+  // NO installed_plugins.json CLEANUP HAPPENS HERE ANY MORE (TRDD-0GCIMQ9F Shape A).
+  //
+  // On the marketplace path the CLI above already removed exactly this agent's row — narrowly and
+  // correctly — and our hand-edit ran immediately afterwards to do the same job again. That
+  // redundancy was not free: it is what let the ORIGINAL bug hide, because the hand-edit was a
+  // `delete pluginsMap[pluginKey]` that took out the whole array (every other agent's row and the
+  // user-scope row with it, TRDD-FHBGF0WG / R20.30) while the CLI's correct removal made the end
+  // state look plausible. On the local-only path there is nothing to clean because nothing is
+  // written any more (see installPluginLocally).
 }
 
 // ── Governance title → role-plugin lifecycle ──────────────────
@@ -7046,6 +7002,12 @@ export async function DeleteAgent(
       requestsBefore: unknown | null
       groupsBefore: unknown[] | null
       registryBefore: unknown[] | null
+      /** Records the CLI reported as locally installed at the workdir, keyed by plugin key, and
+       *  removed by G08c. The undo hands each key back to the CLI to re-install, so the records
+       *  are carried for the ledger entry rather than to be re-written by hand (TRDD-OWO449MR). */
+      uninstalledPlugins: Record<string, InstallRecord[]> | null
+      /** The workdir G08c uninstalled from — captured so the undo cannot drift from the run. */
+      uninstalledFrom: string | null
     }
     const dc: DeleteCtx = {
       archivePath: null,
@@ -7059,6 +7021,8 @@ export async function DeleteAgent(
       requestsBefore: null,
       groupsBefore: null,
       registryBefore: null,
+      uninstalledPlugins: null,
+      uninstalledFrom: null,
     }
 
     // Detail lines go into `ops` from inside `run`, preserving today's exact strings. The runner's
@@ -7398,6 +7362,129 @@ export async function DeleteAgent(
           ops.push('G08b: Verified on disk — agent marked deletedAt in registry.json')
         },
       },
+      {
+        id: 'G08c',
+        what: 'Uninstalled this workdir local plugins via the claude CLI',
+        run: async (c: DeleteCtx) => {
+          // THIS WAS G09b, AND IT RAN AFTER THE FOLDER DELETE (TRDD-AQTGAY60 → TRDD-OWO449MR).
+          // There it hand-edited ~/.claude/plugins/installed_plugins.json, and that placement was
+          // deliberate: once the workdir is gone every `{scope:'local', projectPath:<dir>}` row is
+          // provably FALSE, so removing it could not be wrong and needed no compensation. The
+          // ordering bought irreversibility for free.
+          //
+          // TRDD-0GCIMQ9F's Shape A takes that away on purpose. The file belongs to the `claude
+          // plugin` CLI, and `claude plugin uninstall --scope local --cwd <dir>` needs <dir> to
+          // EXIST — so asking the owner means asking BEFORE G09 deletes it, while the agent is
+          // still live. That turns a free irreversible step into a mutation with a fallible gate
+          // after it, which R51 requires be compensated; hence the undo below, and hence this gate
+          // sits LAST in the sequence, where the only thing that can still fail is G09 itself.
+          //
+          // THE TWO CONDITIONS BELOW ARE THE OLD PLACEMENT'S GUARDS, CARRIED WITH IT — this is the
+          // part a reorder loses silently. G09b was nested inside `hard && deleteFolder` AND inside
+          // G09's `startsWith(agentsRoot)` check. Lifting the gate out of that branch without them
+          // would uninstall the plugins of an ADOPTED workdir (a MAINTAINER at ~/Code/<project>)
+          // whose folder G09 then correctly REFUSES to delete — stripping a directory we
+          // deliberately preserve. In both skipped cases the folder survives, so the records stay
+          // TRUE and there is nothing to remove.
+          if (!(hard && options?.deleteFolder && agent.workingDirectory)) {
+            ops.push('G08c: Folder preserved — local plugin records stay true, nothing to uninstall')
+            return
+          }
+          const { resolve: resolveG08c } = await import('path')
+          const resolvedDir = resolveG08c(agent.workingDirectory)
+          const agentsRoot = resolveG08c(HOME, 'agents')
+          if (!(resolvedDir.startsWith(agentsRoot + '/') && resolvedDir !== agentsRoot)) {
+            ops.push(`G08c: Folder outside ~/agents/ — G09 will refuse to delete it, so its records stay true: ${resolvedDir}`)
+            return
+          }
+
+          // A damaged installed_plugins.json THROWS here (listLocalInstallRecords is fail-closed)
+          // and fails the delete rather than reporting "no plugins". A teardown that proceeds
+          // because it could not read is the failure this whole retrofit exists to remove.
+          const records = await listLocalInstallRecords(resolvedDir)
+          const keys = Object.keys(records)
+          if (keys.length === 0) {
+            ops.push(`G08c: No local plugin records for ${resolvedDir}`)
+            return
+          }
+
+          const { getAdapter } = await import('@/lib/client-plugin-adapters')
+          // The CLAUDE adapter, not the agent's own client: these rows live in Claude's registry,
+          // so Claude's CLI is the one that can retract them. A non-Claude agent simply has no
+          // rows here and returned above.
+          const adapter = await getAdapter('claude')
+          if (!adapter) throw new Error('no claude plugin adapter available to uninstall local plugins')
+
+          const done: Record<string, InstallRecord[]> = {}
+          for (const key of keys) {
+            const at = key.lastIndexOf('@')
+            const name = at > 0 ? key.slice(0, at) : key
+            const marketplace = at > 0 ? key.slice(at + 1) : ''
+            const res = await inAdapterContext('DeleteAgent.G08c', () => adapter.uninstall(
+              { name, clientType: 'claude', storageDir: '', providerId: 'claude-code', sourcePlugin: marketplace || undefined },
+              resolvedDir,
+              { scope: 'local' },
+            ))
+            // A failed uninstall is FATAL, not a warning. The old gate could shrug because it was
+            // operating on records already known false; this one is asking a live agent's registry
+            // to change, and "some of the plugins came out" is precisely the partial state R51
+            // exists to forbid. Failing here rolls back the whole delete, including the plugins
+            // already uninstalled in this loop (recorded in `done` before the throw).
+            if (!res.success) {
+              c.uninstalledPlugins = Object.keys(done).length ? done : null
+              c.uninstalledFrom = resolvedDir
+              throw new Error(`claude plugin uninstall failed for "${key}" at ${resolvedDir}: ${res.error || 'unknown error'}`)
+            }
+            done[key] = records[key]
+          }
+          c.uninstalledPlugins = done
+          c.uninstalledFrom = resolvedDir
+          // THE LEDGER IS THE GROUND TRUTH — nothing that changes state may escape it (USER,
+          // 2026-07-29). We no longer perform the write, but we still CAUSE it, so the entry is
+          // still owed. `value` carries the full records, which is what makes it revertible.
+          await emitPluginRecordOp('remove_plugin_records', 'remove', resolvedDir, done)
+          const n = keys.reduce((sum, k) => sum + records[k].length, 0)
+          ops.push(`G08c: Uninstalled ${keys.length} local plugin(s) (${n} record(s)) for ${resolvedDir} via the claude CLI (${keys.join(', ')})`)
+        },
+        undo: async (c: DeleteCtx) => {
+          if (!c.uninstalledPlugins || !c.uninstalledFrom) return
+          const dir = c.uninstalledFrom
+          const { getAdapter } = await import('@/lib/client-plugin-adapters')
+          const adapter = await getAdapter('claude')
+          if (!adapter) throw new Error(`cannot re-install local plugins at ${dir}: no claude plugin adapter`)
+
+          const restored: Record<string, InstallRecord[]> = {}
+          const failed: string[] = []
+          for (const key of Object.keys(c.uninstalledPlugins)) {
+            const at = key.lastIndexOf('@')
+            const name = at > 0 ? key.slice(0, at) : key
+            const marketplace = at > 0 ? key.slice(at + 1) : ''
+            const res = await inAdapterContext('DeleteAgent.G08c.undo', () => adapter.install(
+              { name, clientType: 'claude', storageDir: '', providerId: 'claude-code' },
+              dir,
+              { scope: 'local', marketplace },
+            ))
+            if (res.success) restored[key] = c.uninstalledPlugins[key]
+            else failed.push(`${key} (${res.error || 'unknown error'})`)
+          }
+          if (Object.keys(restored).length > 0) {
+            await emitPluginRecordOp('restore_plugin_records', 'add', dir, restored)
+          }
+          c.uninstalledPlugins = null
+          c.uninstalledFrom = null
+          // A THROW HERE IS THE HONEST OUTCOME, not a defect. `claude plugin install` clones from a
+          // marketplace, so it fails the way network operations fail, and this compensation can
+          // genuinely be unable to complete. R51.5 forbids telling the caller "no changes were
+          // made" when changes remain: throwing makes the runner emit the CRITICAL INVALID STATE
+          // message naming this gate, so a human learns which agent kept its folder and lost its
+          // plugins. The residual exposure is bounded — R17's wake invariant re-installs the CORE
+          // plugin on the agent's next wake, so what can actually persist is non-core local
+          // plugins.
+          if (failed.length > 0) {
+            throw new Error(`could not re-install ${failed.length} local plugin(s) at ${dir}: ${failed.join('; ')}`)
+          }
+        },
+      },
     ]
 
     const txn = await runGateSequence(deleteGates, dc)
@@ -7427,33 +7514,12 @@ export async function DeleteAgent(
             ops.push(`EXE: Folder ${resolvedDir} not found — skipped`)
           }
 
-          // ── G09b: Drop this workdir's local plugin records (TRDD-AQTGAY60) ──
-          // Deleting the folder (or finding it already gone) makes every
-          // `{scope:'local', projectPath: resolvedDir}` record in
-          // ~/.claude/plugins/installed_plugins.json provably FALSE — it asserts a plugin is
-          // installed for a directory that does not exist. Nothing removed them, so they
-          // accumulated one per deleted agent: measured 2026-07-29, 93 of 101 local records on
-          // this host were orphans, 65 of them written by our own R17 core-plugin invariant.
-          //
-          // This is not bookkeeping. The janitor reads this file to learn the fleet's plugin
-          // topology; on ai-maestro#102 it derived a topology and a structural blocker from
-          // four of these ghosts, and janitor#137's cache_prune decides which cached version
-          // directories are still in use from the same rows.
-          //
-          // Placed AFTER the folder is gone deliberately: at this point the records are false,
-          // so removing them cannot be wrong and needs no compensation. It is scoped to the
-          // hard-delete-with-folder branch because a SOFT delete keeps the workdir — its
-          // records stay TRUE and must survive (re-adoption over a tombstone depends on it).
-          try {
-            const removedRecords = await removeLocalInstallRecords(resolvedDir)
-            const keys = Object.keys(removedRecords)
-            const n = keys.reduce((sum, k) => sum + removedRecords[k].length, 0)
-            ops.push(n > 0
-              ? `G09b: Removed ${n} local plugin record(s) for ${resolvedDir} (${keys.join(', ')})`
-              : `G09b: No local plugin records for ${resolvedDir}`)
-          } catch (recErr) {
-            ops.push(`G09b: WARN — plugin-record cleanup failed: ${recErr instanceof Error ? recErr.message : recErr}`)
-          }
+          // G09b USED TO SIT HERE — the hand-edit that dropped this workdir's rows from
+          // ~/.claude/plugins/installed_plugins.json, placed after the folder delete precisely so
+          // the rows were already false and needed no compensation. It is now G08c, inside the
+          // gate sequence and BEFORE this deletion, because Shape A hands the mutation to the
+          // `claude plugin` CLI and the CLI needs the directory to still exist (TRDD-OWO449MR).
+          // Both of this branch's guards moved with it; see the gate for why that mattered.
 
           // REMOVED 2026-07-30 (TRDD-0GCIMQ9F, Shape A): this used to RECURSIVELY DELETE
           // `~/.claude/projects/<workdir-slug>/` — the user's own conversation transcripts, in

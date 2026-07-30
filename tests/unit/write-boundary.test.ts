@@ -151,13 +151,24 @@ describe('the boundary itself', () => {
     expect(scan.sites.some((s) => s.file === 'lib/write-boundary.ts')).toBe(false)
   })
 
-  it('records which entries are still UNRATIFIED, so the debt is visible not forgotten', () => {
-    // These are the ones TRDD-0GCIMQ9F must resolve. This test does not fail on them — it makes
-    // the count explicit, so shipping while they exist is a decision rather than an oversight.
+  it('has NO unratified entries left — the debt TRDD-0GCIMQ9F opened is paid, not carried', () => {
+    // This assertion used to name the two `installed_plugins.json` entries and pass BECAUSE they
+    // were there: it made the debt visible while the Shape A/B question was open. TRDD-OWO449MR
+    // closed it by removing the writes rather than ratifying them, so the honest form of the same
+    // test is the empty set — and it is now a RATCHET. Re-introducing any hand-write to a file
+    // outside ~/.aimaestro and ~/agents reddens this line, which is the point: the previous
+    // version would have accepted a THIRD unratified entry as long as someone updated the list.
     const unratified = ALLOWED_OUT_OF_ROOT_WRITES.filter((a) => /UNRATIFIED/.test(a.ratifiedBy))
-    expect(unratified.map((a) => a.key).sort()).toEqual([
-      'services/element-management-service.ts :: mkdir :: CLAUDE_DIR',
-      'services/element-management-service.ts :: saveJsonSafe :: INSTALLED_FILE',
-    ])
+    expect(unratified.map((a) => a.key).sort()).toEqual([])
+  })
+
+  it('no write to installed_plugins.json survives anywhere — the CLI owns that file', () => {
+    // The set-equality test above compares detected sites to the allowlist, so it would stay green
+    // if a new INSTALLED_FILE write were added AND allowlisted. This one is about the FILE, not the
+    // bookkeeping: Shape A's claim is that ai-maestro never writes another tool's plugin registry,
+    // and a claim nothing checks is a convention. Detected sites carry their target constant in the
+    // key, so an INSTALLED_FILE write is visible here whatever its verb or its allowlist status.
+    const offenders = scan.sites.filter((s) => /INSTALLED_FILE/.test(s.key))
+    expect(offenders.map((s) => s.key)).toEqual([])
   })
 })

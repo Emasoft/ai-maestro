@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:33:19+0200
+updated: 2026-07-30T18:36:42+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -25,7 +25,28 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
 
-### R10.6 TEST WRITTEN AND GREEN — **NOT YET A PIN. RATCHET STILL 8.**
+### RATCHET 8 → 7 — R10.6 DONE. The three neuters RAN and each red ONLY its own site.
+
+**The remaining 7:** R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R20.28.
+
+| neuter | gate disabled | reddened |
+|---|---|---|
+| A | `app/api/sessions/[id]/restart/route.ts` | "app route" + the agreement test — nothing else |
+| B | `services/headless-router.ts` `[id]/restart` | "headless [id]/restart" + agreement |
+| C | `services/headless-router.ts` `me/restart` | "headless me/restart" + agreement |
+
+**That independence IS the proof**, and it is the whole reason R10.6 exists as a rule: if any one
+neuter had reddened another site, the three would share an implementation and there would be no
+parity to enforce. The agreement test reds under all three by construction — it reads all three.
+
+Both guard files restored byte-identical. tsc 0; full suite **297 files / 4321 passed / 2 skipped**.
+Map row re-cited to the true block bounds (`:73-91`, `:1024-1036`, `:952-962` — the previous ranges
+were each a few lines short of the gate they name).
+
+**Superseded by the above — kept only for the reasoning:** the section below described this as
+written-but-not-a-pin. It is a pin now.
+
+### R10.6 test written and green — NOT YET A PIN (superseded; the neuters have since run)
 
 `tests/governance/r10-restart-manager-gate-parity.test.ts` — 6 tests, all green, whole governance
 suite 26 files / 377 green.

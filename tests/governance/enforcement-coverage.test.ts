@@ -351,7 +351,21 @@ const UNAUDITED_RULES = new Set<number>([
 // adopting them", and a neuter reddening both could not tell those apart). The workdir/AMP test
 // stays green under that mutation too, correctly — it guards a different absence and would need its
 // own; it is a second claim in the rule's text, not a duplicate of the first.
-const MAX_ENFORCED_WITHOUT_TEST = 8
+// 2026-07-30: 8 -> 7. R10.6 pinned by tests/governance/r10-restart-manager-gate-parity.test.ts. A
+// PARITY claim across THREE sites: `wakeAgent` is one service function, but restart's gate is
+// duplicated into a Next route handler and two headless handlers, and duplication is the shape that
+// drifts — headless [id]/restart was authenticate-only until the 2026-07-14 audit, so full mode
+// 403'd a restart headless allowed. All three are driven with ONE fixture and must answer the same
+// status and the SAME message; agreement is the assertion, not merely refusal. THREE neuters, each
+// reddening ONLY its own site plus the agreement test (which reads all three by construction) —
+// that independence is what proves the sites do not share an implementation, which is the entire
+// reason R10.6 exists as a rule. The wake half stays where it is (r3-r9-team-governance.test.ts's
+// R9.5 block drives the real wakeAgent); together they are R10.6. This row was unpinned because the
+// headless parity file's header CLAIMED the gate was "covered there by the governance suite" —
+// measured false: `grep -rln "Cannot restart team agent" tests/` returned nothing. A comment
+// asserting coverage is not coverage, and it is worse than silence because it stops the next reader
+// looking.
+const MAX_ENFORCED_WITHOUT_TEST = 7
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

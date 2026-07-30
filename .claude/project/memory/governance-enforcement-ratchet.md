@@ -2,7 +2,7 @@
 name: governance-enforcement-ratchet
 description: "I added/edited a governance rule and the build went red — what is the enforcement map / how do I keep the governance ratchet green / how do I prove a rule is actually enforced, not just documented"
 ocd: 2026-07-14
-lmd: 2026-07-30
+lmd: 2026-07-31
 metadata:
   node_type: memory
   type: project
@@ -77,6 +77,12 @@ plus three ratified `~/.claude` settings keys). The CONTRADICTED column is the g
 of which rules conflict (rule-vs-code or rule-vs-rule); most need a USER ruling because they pit an
 IRON (user-set) rule against the code. Full per-rule detail is gitignored evidence under
 `reports/governance-audit/` (the map is the durable git-tracked half).
+
+## See also
+
+- [[aio-pipeline-rollback-transactions]] — the same ratchet shape pointed at R51 instead of the
+  rule map: `tests/governance/aio-txn-10-runner-coverage.test.ts` discovers pipelines from the AST
+  and caps how many may still hand-roll their compensations.
 
 ## Notes and lessons learned
 

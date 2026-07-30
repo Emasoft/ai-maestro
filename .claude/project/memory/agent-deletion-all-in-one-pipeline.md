@@ -2,7 +2,7 @@
 name: agent-deletion-all-in-one-pipeline
 description: "I deleted an agent but its folder keeps coming back / rm -rf the workdir and it reappears with a bare .claude/rules / leftover agent after cleanup / how do I fully delete an agent / can I just call the service function from a script instead of the UI"
 ocd: 2026-07-25
-lmd: 2026-07-30
+lmd: 2026-07-31
 metadata:
   node_type: memory
   type: project
@@ -39,6 +39,11 @@ one people reach for — and it is the least load-bearing.
   is deliberate, and it means adopted test agents need a separate decision.
 - If the pipeline leaves something behind, fix **the pipeline**. Every caller then benefits, and the
   next person is not left doing archaeology with a shell.
+
+## Governed by
+
+- [[aio-pipeline-rollback-transactions]] — R51: this pipeline's gates must unwind in reverse on any
+  failure, through `lib/gate-transaction.ts`. That page owns the rule; this one owns the stores.
 
 Related: the scenario-side obligation is **Rule 1 CLEAN-AFTER-YOURSELF** in
 `tests/scenarios/SCENARIOS_TESTS_RULES.md` — its artifact ledger also covers the repo half (a

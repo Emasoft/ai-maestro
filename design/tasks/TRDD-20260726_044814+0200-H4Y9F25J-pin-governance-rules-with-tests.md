@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:41:08+0200
+updated: 2026-07-30T17:43:33+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,29 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### SCOUTED, NOT YET WRITTEN — R10.6, whose BOTH cited sites were wrong
+
+**Verified by reading, 2026-07-30.** R10.6 ("the restart endpoint follows the same governance
+rules as the wake endpoint") cited `restart/route.ts:97-107` — which is the **subagent** gate
+(TRDD-O8NCNRWO), a different rule — and `headless-router.ts:919`, which is inside the **/stop**
+handler, a different ENDPOINT. Neither named the guard.
+
+Its real guard is the **manager gate** ("Cannot restart team agent: no MANAGER exists on this
+host"), and it has **THREE** sites, all of which must stay in parity:
+
+| site | what |
+|---|---|
+| `app/api/sessions/[id]/restart/route.ts:73-82` | full mode, dynamic `import('@/lib/governance')` |
+| `services/headless-router.ts:1028-1036` | headless `[id]/restart` |
+| `services/headless-router.ts:956-959` | headless `me/restart` (TRDD-4P1M8I18 self-restart) |
+
+Row re-cited to all three. **Still untested, and pinning it off ONE mode would launder the rule**:
+"the same governance rules as wake" is a PARITY claim, so a test that drives only the app route
+proves the app route and says nothing about the drift the rule exists to prevent — and headless
+drift is not hypothetical here (the comments at both headless sites record that each was
+authenticate-only until a governance audit added the gate). The honest instrument drives all three
+with the same inputs and asserts the same 403 + same message.
 
 ### RATCHET 14 → 13 — R11.6 DONE, and a NEUTER THAT REDDENED NOTHING
 

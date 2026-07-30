@@ -120,7 +120,7 @@ Row format is fixed so a regex parses each line:
 | R10.3 | ENFORCED | lib/authorization.ts:530-541 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |
 | R10.4 | CONTRADICTED | — | — |
 | R10.5 | ENFORCED | services/agents-core-service.ts:2045-2054 | tests/governance/r10-wake-gates.test.ts |
-| R10.6 | ENFORCED | app/api/sessions/[id]/restart/route.ts:97-107, services/headless-router.ts:919 | — |
+| R10.6 | ENFORCED | app/api/sessions/[id]/restart/route.ts:73-82, services/headless-router.ts:1028-1036, services/headless-router.ts:956-959 | — |
 | R10.7 | UNENFORCED | — | — |
 | R11.1 | CONTRADICTED | — | — |
 | R11.2 | ENFORCED | lib/ecosystem-constants.ts:330 | tests/governance/r17-r11-core-plugin-binding.test.ts |

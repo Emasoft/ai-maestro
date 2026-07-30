@@ -76,6 +76,15 @@ GitHub repo a test agent created is a test artifact like any other) — and
   session-store mutations left no trace at all. DO use the UI button, or the same endpoint with a
   valid signed token; if no authenticated path exists, treat it as a BLOCKING gap (ai-maestro#55).
 
+[^6]: [id:ATOM-KSQM-GWZJ, status:valid, keywords:"deleted_the_users_conversation_history transcript_dir_purge_removed residue_report_nobody_can_act_on claude_projects_recursive_delete R52", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT purge `~/.claude/projects/<workdir-slug>/` in G09, BECAUSE those are the USER's own
+  conversation transcripts — Claude Code owns their retention (`cleanupPeriodDays`) and R52 forbids
+  writing outside `~/.aimaestro`/`~/agents`. DO leave them; a survivor is POLICY, not residue, so
+  `lib/agent-teardown.ts` also carries NO `transcript-dir` store (a probe there would mark every
+  hard delete INCOMPLETE forever, and a residue report nobody can act on trains its reader to
+  ignore residue reports). The cost — a new agent at a REUSED workdir inherits the old
+  conversation, since Claude keys transcripts by PATH — is tracked as TRDD-KO4TQCJ0, not absorbed.
+
 [^5]: [id:ATOM-5QW2-M8BT, status:valid, keywords:"emitAgentOp_not_awaited ledger_append_fire_and_forget process_exit_drops_audit_entry short_lived_cli", ocd:2026-07-26, lmd:2026-07-26]
   DO NOT assume an operation that "emits to the ledger" is durably recorded when you run it from a
   short-lived process, BECAUSE `emitAgentOp` calls `registryLedger.append(...)` WITHOUT awaiting it

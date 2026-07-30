@@ -63,8 +63,9 @@ instead (R50/R51 are in `all-in-one-spec.md`). And `scripts/aio-gate-coverage.py
 Part II table INDEPENDENTLY — it never opens the map — so take a new rule's Part II row *and the
 tally* from that script's own output rather than hand-writing them.
 
-**State (2026-07-30):** catalog **v5.1.0**, **52** rules, `MAX_ENFORCED_WITHOUT_TEST = 18` (was
-134 at the 2026-07-14 audit; 35 → 32 → 30 → 28 → 23 → 18 across 2026-07-30). **Read the count and
+**State (2026-07-30):** catalog **v5.1.0**, **52** rules, `MAX_ENFORCED_WITHOUT_TEST = 13` (was
+134 at the 2026-07-14 audit; 35 → 32 → 30 → 28 → 23 → 18 → 16 → 15 → 14 → 13 across 2026-07-30).
+**Read the count and
 the remaining rule LIST from the ratchet's own failure message** — set the constant to 0, run
 `-t "shrinking ratchet"`, restore. A hand grep gets it wrong twice over. [^7] The cheapest unit of
 work is a **shared-guard pair**: two rules enforced by one guard, so one test file pins both
@@ -118,3 +119,17 @@ IRON (user-set) rule against the code. Full per-rule detail is gitignored eviden
   `—` guards. DO set `MAX_ENFORCED_WITHOUT_TEST = 0`, run `-t "shrinking ratchet"`, and read the
   count and the list off the failure message — the parser that gates the build is the only one whose
   answer matters.
+
+[^8]: [id:ATOM-VQ3E-M2LC, status:valid, keywords:"neuter_reddened_nothing mutated_the_wrong_expression earlier_ternary_arm_already_matched guard_is_not_the_line_the_rule_names", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT read a no-op neuter as "the test is vacuous", BECAUSE it may mean you mutated a SHADOWED
+  expression — mine flipped `hasMultipleOptions = len > 1` → `> 0` and nothing reddened, since the
+  render is `isSingleLocked ? … : hasMultipleOptions ? …` and the single-item fixture never reaches
+  the second arm. DO find which branch actually MATCHES for your fixture before naming a guard; the
+  rule's text pointed at `> 1` and the working guard was the arm above it.
+
+[^9]: [id:ATOM-K7WD-N1RA, status:valid, keywords:"citation_points_at_a_different_rule cited_the_subagent_gate_not_the_manager_gate wrong_endpoint_entirely parity_rule_has_three_sites", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT trust a Guard citation because the file exists and the line is in range, BECAUSE the
+  ratchet only checks bounds — R10.6 cited the SUBAGENT gate (another rule) and a line inside the
+  /stop handler (another ENDPOINT), and R7.1/R7.3 cited a `useState` and a comment. DO read the
+  cited line and confirm it is the rule's own guard; a parity rule needs EVERY mode's site cited
+  (R10.6 had three).

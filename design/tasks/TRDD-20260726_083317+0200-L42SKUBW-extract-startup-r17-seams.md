@@ -3,9 +3,9 @@ trdd-id: L42SKUBW
 title: Extract the two R17 startup guards from server.mjs into importable seams
 scope: project
 project-id: ai-maestro
-column: todo
+column: completed
 created: 2026-07-26T08:33:17+0200
-updated: 2026-07-26T08:33:17+0200
+updated: 2026-07-30T12:50:46+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,21 +23,51 @@ relevant-rules: [R17, R51]
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [30fabeb7]
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
 
-Batch 1 of TRDD-H4Y9F25J pinned 17 of 22 rules. **R17.17 and R17.20 could not be pinned** — not
-because their guards are missing (both are real and correct), but because they sit INLINE in
-`server.mjs`'s `startServer`, which binds sockets on import. A test cannot call them without
-starting a server. They are still counted in `MAX_ENFORCED_WITHOUT_TEST` (117), which is the honest
-record: an unobservable guard is one refactor away from silently not existing.
+**DONE.** Three guards extracted, three seams, 17 tests, three neuter runs, live restart verified.
+`MAX_ENFORCED_WITHOUT_TEST` **35 → 32**.
 
-This TRDD extracts both into importable modules so batch-1's two leftovers can be pinned.
+| rule | seam | driven by |
+|---|---|---|
+| R17.17 | `lib/startup-user-scope-guard.mjs` (`stripUserScopeCorePlugin` pure + `disableCorePluginAtUserScope` shell) | 9 tests |
+| R17.20 | `lib/startup-marketplaces.mjs` (`ensureMarketplacesRegistered`, DI) | 5 tests |
+| R9.9 | `lib/startup-manager-gate.mjs` (`enforceStartupManagerGate`, DI) | 3 tests |
 
-NEXT ACTION: extract R17.17 first — it is a pure function wearing I/O, so its seam is trivial and it
-carries the more valuable regression (see the SCEN-012 note below).
+**THREE, not the two the title says.** R9.9 (the MANAGER gate) sat in the SAME 120 lines with the
+identical defect — cited `server.mjs:1750-1764`, Test column `—` — so extracting it now cost one
+extra 36-line module instead of a second refactor of the same region later. In-scope Tier-0 dev work
+on the same seam; the title is left as authored rather than rewritten after the fact.
+
+**SUPERSEDED — do NOT carry forward:** the ratchet figure in the original STATE block (117 → 115).
+Four intervening batches had already paid it down; the real move was 35 → 32.
+
+### Load-bearing facts
+
+- **The `blockAllTeams` import must stay LAZY.** `lib/team-registry.ts` constructs a `SignedLedger`
+  at module scope, so importing it eagerly would pull that construction forward on every healthy
+  host — a behaviour change an extraction has no business making. It is passed as a thunk
+  (`async () => (await import(...)).blockAllTeams()`), which is also why the test needs no mock.
+- **DI, never module mocking.** `server.mjs` imports the AIOs *inside* the try block, so a
+  module-level mock would have to intercept a dynamic import — the trap that made an earlier batch
+  write real dirs under `~/agents/`.
+- **0-IMPACT is by construction here**, not by mocking: `disableCorePluginAtUserScope` takes the
+  home dir as a PARAMETER, so no test can reach the developer's `~/.claude/settings.json`.
+- **The map citations name the seam AND the `server.mjs` call site.** An extracted-but-unwired guard
+  is dead; two citations catch that, one does not.
+- **The map's citation grammar is `file[:start[-end]]` + an optional `(Pipeline::Gnn)`.** A free-form
+  parenthetical (`(enforceStartupManagerGate)`) or prose (`called from …`) is REJECTED by
+  `enforcement-coverage.test.ts` — which is the check working, and cost one red run to learn.
+
+### Live corroboration of the SCEN-012 regression
+
+Read off THIS host during the verification restart: `~/.claude/settings.json` holds **2** keys whose
+*marketplace* contains `ai-maestro-plugin` as a substring while their *plugin* part does not. The old
+`k.includes(...)` match would have disabled one of those role-plugins on that very restart. The
+regression is not hypothetical here; it is one boot away.
 
 ## Problem
 
@@ -128,17 +158,33 @@ before the commit — not just a green suite.
 
 ## Acceptance
 
-- [ ] `lib/startup-user-scope-guard.mjs` exists; `server.mjs` calls it; behaviour identical
-- [ ] `lib/startup-marketplaces.mjs` exists; `server.mjs` calls it; behaviour identical
-- [ ] Tests for both, each proven to FAIL when its guard is neutered
-- [ ] The SCEN-012 boundary-match regression is pinned by name
-- [ ] `node --check` clean on every touched `.mjs`; tsc clean; full suite green
-- [ ] Server restarts and both R17 startup log lines still appear
-- [ ] Map Test column filled for R17.17 + R17.20; `MAX_ENFORCED_WITHOUT_TEST` 117 → 115
-- [ ] The R17.17 rule-text mismatch (`settings.local.json` → `settings.json`) is routed as a
-      governance edit, not fixed here
+- [x] `lib/startup-user-scope-guard.mjs` exists; `server.mjs:1771-1774` calls it; behaviour identical
+- [x] `lib/startup-marketplaces.mjs` exists; `server.mjs:1794-1797` calls it; behaviour identical
+- [x] `lib/startup-manager-gate.mjs` (R9.9) — the third guard in the same region, same defect
+- [x] Tests for all three (17 in `tests/unit/startup-guards.test.ts`), each proven by a neuter run:
+      substring match → only `SCEN-012 regression` reds (16/17 pass); per-call try/catch removed →
+      only `BEST EFFORT: a THROW …` reds; `getManagerId()` inverted → exactly the 3 R9.9 tests red.
+      Disjoint, and each names its test rather than reporting an exit code.
+- [x] The SCEN-012 boundary-match regression is pinned by name — and corroborated live: 2 keys in
+      this host's real `settings.json` have the false-positive shape TODAY
+- [x] `node --check` clean on all 4 touched `.mjs`; tsc exit 0; suite 283 files / 4225 passed;
+      `yarn build` exit 0 (warnings all pre-existing, in `components/`)
+- [x] Server restarts (401 on `/api/sessions`) and the startup lines still appear — **with one
+      correction to this box's own premise: only R17.20's line appears, and that is CORRECT.**
+      R17.17 logs only when it WRITES, and the core plugin on this host is already `false`, so its
+      silence is the no-pointless-write path. Verified by reading the real settings.json rather than
+      inferring it from the absent line — an absent log and a broken guard look identical.
+- [x] Map Test column filled for R17.17 + R17.20 **+ R9.9**; `MAX_ENFORCED_WITHOUT_TEST` **35 → 32**
+      (the box's `117 → 115` was stale by four batches — see the STATE block's SUPERSEDED note)
+- [x] The R17.17 rule-text mismatch (`settings.local.json` → `settings.json`) is routed as a
+      governance edit, not fixed here → **TRDD-RAMCTTHD** (`design/proposals/`, `column: proposal`,
+      `min-approval-requirement: manager`). Routed, not resolved: `docs/GOVERNANCE-RULES.md` is a
+      governance file, so §D3's objective floor is MANAGER however small the diff.
 
 ## Approval log
 
 - 2026-07-26T08:33:17+0200 — MANDATE (self, min-approval-requirement: none). In-scope dev work
   derived from TRDD-H4Y9F25J batch 1; no governance surface touched, so it is born approved.
+- 2026-07-30T12:52:00+0200 — COMPLETED by ai-maestro. All 9 boxes checked; the R9.9 extension and
+  the two boxes whose own text was wrong (the R17.17 log line, the stale ratchet figure) are recorded
+  above rather than silently ticked. The rule-text mismatch left this card as TRDD-RAMCTTHD.

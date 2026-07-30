@@ -5,7 +5,7 @@ column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
 updated: 2026-07-30T13:04:00+0200
-implementation-commits: [973de2fe]
+implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

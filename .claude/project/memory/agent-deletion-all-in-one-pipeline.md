@@ -2,7 +2,7 @@
 name: agent-deletion-all-in-one-pipeline
 description: "I deleted an agent but its folder keeps coming back / rm -rf the workdir and it reappears with a bare .claude/rules / leftover agent after cleanup / how do I fully delete an agent / can I just call the service function from a script instead of the UI"
 ocd: 2026-07-25
-lmd: 2026-07-26
+lmd: 2026-07-30
 metadata:
   node_type: memory
   type: project
@@ -38,8 +38,10 @@ one people reach for — and it is the least load-bearing.
 - If the pipeline leaves something behind, fix **the pipeline**. Every caller then benefits, and the
   next person is not left doing archaeology with a shell.
 
-Related: [[ui-test-cleanup-rule]] (the scenario-side obligation),
-[[github-repo-deletion-and-scenario-repo-cleanup]] (the repo half), [[folder-adoption-import]].
+Related: the scenario-side obligation is **Rule 1 CLEAN-AFTER-YOURSELF** in
+`tests/scenarios/SCENARIOS_TESTS_RULES.md` — its artifact ledger also covers the repo half (a
+GitHub repo a test agent created is a test artifact like any other) — and
+[[folder-adoption-import]].
 
 ## Notes and lessons learned
 

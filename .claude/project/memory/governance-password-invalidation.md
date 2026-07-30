@@ -2,7 +2,7 @@
 name: governance-password-invalidation
 description: "how does the user rotate / revoke / reset the governance password / forgot password / password leaked, must change it / next login asks to create a new password / why is a route denied only from my phone but works on the Mac (console_required 403) / how does a route know the real client IP / x-forwarded-for spoof / server crashed at boot 'does not provide an export named' after adding a lib import to server.mjs — the invalidate-by-possession + console-presence design (TRDD-P7XKV3N9)"
 ocd: 2026-07-13
-lmd: 2026-07-13
+lmd: 2026-07-30
 metadata:
   node_type: memory
   type: project
@@ -66,9 +66,10 @@ POST and render what the endpoint says. Every gate lives in the endpoint, becaus
 **every route is curl-able**: a check placed in a client is skippable with one
 curl, so it is not a weak check, it is no check.
 
-**Governs / see also:** [[security]] (the security hub), [[network-security-model]]
-(the perimeter + trusted-peer plumbing this page's console gate rides on), and the
-still-open successor
+**Governs / see also:** the project's security model and network perimeter — CLAUDE.md
+§ *Network Security Model*, plus `lib/tailscale-detect.mjs` (`isAllowedSource`) and
+`lib/peer-address.mjs`, which are the perimeter + trusted-peer plumbing this page's
+console gate rides on — and the still-open successor
 **TRDD-9MZQ4T7E** (the general TTY→sudo-token path for OTHER strict routes — this
 endpoint sidestepped it by self-authenticating). MAESTRO *login* is not yet
 console-gated: §2b binds the rule to two operations and only the password-change

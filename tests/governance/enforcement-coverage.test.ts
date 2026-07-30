@@ -146,7 +146,14 @@ const UNAUDITED_RULES = new Set<number>([
 // Both citations were WRONG in the same way R10.3's was: they named `wakeAgent`'s return-type
 // declaration, ~26 lines above the gates. That is the citation defect the ratchet structurally
 // cannot see — the range exists and holds real code — so only reading it finds it.
-const MAX_ENFORCED_WITHOUT_TEST = 35
+// 2026-07-30: TRDD-L42SKUBW pinned R9.9 + R17.17 + R17.20 in tests/unit/startup-guards.test.ts —
+// 35 → 32. These three were unpinnable for ONE STRUCTURAL reason, not for lack of effort: all three
+// guards sat inline in `server.mjs::startServer`, whose import side effect is a LISTENING SERVER, so
+// no test could call them. Extracting each into an importable `.mjs` seam (precedent
+// lib/session-validate-server.mjs) is what made them observable — the count did not fall because
+// tests were written, it fell because the code became testable. The map rows now cite the seam AND
+// the server.mjs call site, so an extracted-but-unwired guard is caught too.
+const MAX_ENFORCED_WITHOUT_TEST = 32
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

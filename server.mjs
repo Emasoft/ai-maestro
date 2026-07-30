@@ -1741,18 +1741,20 @@ async function startServer(handleRequest) {
       console.error('[SECURITY] Key rotation check failed:', error)
     }
 
-    // Manager gate: if no MANAGER exists, block all teams + hibernate team agents
+    // R9.9 — Manager gate: if no MANAGER exists, block all teams + hibernate team
+    // agents. The guard itself lives in lib/startup-manager-gate.mjs so a test can
+    // drive it; this file only supplies the real dependencies (TRDD-L42SKUBW).
     try {
       const { getManagerId } = await import('./lib/governance.ts')
-      if (!getManagerId()) {
-        const { blockAllTeams } = await import('./lib/team-registry.ts')
-        const hibernated = await blockAllTeams()
-        if (hibernated.length > 0) {
-          console.log(`[Startup] No MANAGER detected — blocked all teams, hibernated ${hibernated.length} team agent(s)`)
-        } else {
-          console.log(`[Startup] No MANAGER detected — all teams blocked (no active team agents to hibernate)`)
-        }
-      }
+      const { enforceStartupManagerGate } = await import('./lib/startup-manager-gate.mjs')
+      // team-registry stays behind a thunk so the import still happens ONLY when
+      // there is no MANAGER — it constructs a SignedLedger at module scope, and
+      // pulling that forward on a healthy host would be a behaviour change this
+      // extraction has no business making.
+      await enforceStartupManagerGate({
+        getManagerId,
+        blockAllTeams: async () => (await import('./lib/team-registry.ts')).blockAllTeams(),
+      })
     } catch (error) {
       console.error('[Startup] Manager gate check failed:', error)
     }
@@ -1766,30 +1768,9 @@ async function startServer(handleRequest) {
     // settings.local.json is a project-only override; writing it at the user-home level
     // is a silent no-op that Claude CLI never reads (see BUG-POLLUTION-001).
     try {
-      const { existsSync, readFileSync, writeFileSync } = await import('fs')
-      const { join: joinPath } = await import('path')
-      const HOME = process.env.HOME || '/tmp'
-      const userSettingsPath = joinPath(HOME, '.claude', 'settings.json')
-      if (existsSync(userSettingsPath)) {
-        try {
-          const us = JSON.parse(readFileSync(userSettingsPath, 'utf-8'))
-          const userPlugins = us.enabledPlugins || {}
-          // SCEN-012 FIX: Boundary-aware match. `k.includes('ai-maestro-plugin')`
-          // false-positive matched on ai-maestro-autonomous-agent@ai-maestro-plugins
-          // because the marketplace name contains the core plugin name as a
-          // substring. Require exact name match before "@".
-          const userPluginKey = Object.keys(userPlugins).find(k => {
-            const at = k.indexOf('@')
-            const pluginPart = at >= 0 ? k.substring(0, at) : k
-            return pluginPart === 'ai-maestro-plugin'
-          })
-          if (userPluginKey && userPlugins[userPluginKey] !== false) {
-            userPlugins[userPluginKey] = false
-            us.enabledPlugins = userPlugins
-            writeFileSync(userSettingsPath, JSON.stringify(us, null, 2), 'utf-8')
-            console.log(`[Startup] R17.17: Disabled ai-maestro-plugin at user scope (must be local-scope only)`)
-          }
-        } catch { /* ignore */ }
+      const { disableCorePluginAtUserScope } = await import('./lib/startup-user-scope-guard.mjs')
+      if (disableCorePluginAtUserScope(process.env.HOME || '/tmp')) {
+        console.log(`[Startup] R17.17: Disabled ai-maestro-plugin at user scope (must be local-scope only)`)
       }
 
       // R17 + R20.21: Ensure all marketplaces are registered.
@@ -1810,54 +1791,10 @@ async function startServer(handleRequest) {
         const os = await import('os')
         const { CreateMarketplace, UpdateMarketplace, DeleteMarketplace } =
           await import('./services/element-management-service.ts')
-        const sysAuth = { isSystemOwner: true }
-
-        const tryCall = async (label, fn) => {
-          try {
-            const r = await fn()
-            if (r && r.success === false && r.error) {
-              // Idempotent/already-exists/not-found are NORMAL on reboot;
-              // log at debug level only.
-              console.log(`[Startup/${label}] noop:`, r.error.slice(0, 80))
-            }
-          } catch (e) {
-            console.log(`[Startup/${label}] threw:`, (e?.message || String(e)).slice(0, 80))
-          }
-        }
-
-        // Remote GitHub marketplace (Emasoft/ai-maestro-plugins)
-        await tryCall('add-remote', () =>
-          CreateMarketplace({ name: 'ai-maestro-plugins', source: { repo: 'Emasoft/ai-maestro-plugins' } }, sysAuth))
-
-        // Local role-plugins container
-        const rolesDir = os.homedir() + '/agents/role-plugins'
-        await tryCall('add-roles', () =>
-          CreateMarketplace({ name: 'ai-maestro-local-roles-marketplace', source: { path: rolesDir } }, sysAuth))
-        await tryCall('update-roles', () =>
-          UpdateMarketplace({ name: 'ai-maestro-local-roles-marketplace' }, sysAuth))
-
-        // Local custom-plugins container
-        const customDir = os.homedir() + '/agents/custom-plugins'
-        await tryCall('add-custom', () =>
-          CreateMarketplace({ name: 'ai-maestro-local-custom-marketplace', source: { path: customDir } }, sysAuth))
-        await tryCall('update-custom', () =>
-          UpdateMarketplace({ name: 'ai-maestro-local-custom-marketplace' }, sysAuth))
-
-        // R20.25 (clarified 2026-04-16): Claude installs the core plugin
-        // from the REMOTE marketplace — there is NO local Claude core
-        // marketplace. Non-Claude clients install via per-client adapter
-        // which copies directly from <client>-core-marketplace/ — no
-        // Claude CLI marketplace registration needed for the core-plugins
-        // container. Cleanup: remove the stale name if a previous server
-        // run created it. The DeleteMarketplace AIO cascades through
-        // UninstallPlugin per plugin (R21.6) — if any agent had a plugin
-        // from this deprecated marketplace, the cascade unblocks the
-        // agent (those plugins were pointing at an already-broken
-        // marketplace registration).
-        await tryCall('remove-stale-core', () =>
-          DeleteMarketplace({ name: 'ai-maestro-local-core-marketplace' }, sysAuth))
-
-        console.log('[Startup] Marketplaces registered via AIOs (remote + 2 Claude containers; per-client core via adapters)')
+        const { ensureMarketplacesRegistered } = await import('./lib/startup-marketplaces.mjs')
+        await ensureMarketplacesRegistered({
+          CreateMarketplace, UpdateMarketplace, DeleteMarketplace, homedir: os.homedir,
+        })
       } catch (err) {
         console.warn('[Startup] Marketplace registration partial:', err?.message?.slice(0, 80))
       }

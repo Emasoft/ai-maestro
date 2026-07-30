@@ -110,7 +110,7 @@ Row format is fixed so a regex parses each line:
 | R9.6 | ENFORCED | services/element-management-service.ts:2539-2554 (ChangeTitle::G13) | tests/governance/r3-r9-team-governance.test.ts |
 | R9.7 | ENFORCED | lib/team-registry.ts:518-534 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.8 | ENFORCED | services/element-management-service.ts:6442-6465 (DeleteAgent::G02) | tests/governance/r3-r9-team-governance.test.ts |
-| R9.9 | ENFORCED | server.mjs:1750-1764 | — |
+| R9.9 | ENFORCED | lib/startup-manager-gate.mjs:25-36, server.mjs:1749-1757 | tests/unit/startup-guards.test.ts |
 | R9.10 | UNENFORCED | — | — |
 | R9.11 | ENFORCED | services/teams-service.ts:285-291 | tests/governance/r3-r9-team-governance.test.ts |
 | R9.12 | ENFORCED | services/agents-core-service.ts:417, app/api/agents/route.ts | tests/governance/r3-r9-team-governance.test.ts |
@@ -185,11 +185,11 @@ Row format is fixed so a regex parses each line:
 | R17.14 | UNENFORCED | — | — |
 | R17.15 | ENFORCED | services/element-management-service.ts:731-738 (InstallElement::G08), services/element-management-service.ts:3590-3594 (ChangePlugin::G01b) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.16 | ENFORCED | components/agent-profile/PluginsTab.tsx:244-245 | — |
-| R17.17 | ENFORCED | server.mjs:1766-1799 | — |
+| R17.17 | ENFORCED | lib/startup-user-scope-guard.mjs:28-65, server.mjs:1771-1774 | tests/unit/startup-guards.test.ts |
 | R17.18 | RULING-NEEDED | — | — |
 | R17.18a | ENFORCED | services/agents-core-service.ts | — |
 | R17.19 | ENFORCED | scripts/bump-version.sh:225-228 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.20 | ENFORCED | server.mjs:1801-1869 | — |
+| R17.20 | ENFORCED | lib/startup-marketplaces.mjs:29-78, server.mjs:1794-1797 | tests/unit/startup-guards.test.ts |
 | R17.21 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.22 | ENFORCED | services/agents-core-service.ts:1833-1866 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.23 | ENFORCED | services/agents-core-service.ts:2300-2303 | tests/governance/r17-r11-core-plugin-binding.test.ts |

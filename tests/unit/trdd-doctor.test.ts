@@ -189,6 +189,37 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(idsOf(lintCorpus(tmp), 'ORDER-NPT-VIOLATED')).toEqual([])
   })
 
+  /**
+   * A bare SCALAR ref (`npt: TRDD-X`) is legal frontmatter — `refList` accepts it, the
+   * pillar index stores it as an edge, and `greptrdd why` prints it as a blocker. This
+   * file's `asList` was array-only, so the WRITE GATE could not see one, in all seven of
+   * its call sites. That is not a missing feature but a gate reporting no finding
+   * because it looked at nothing, and it survived because every card in the live corpus
+   * happens to use the array form (measured: 0 of 196) — so no live run could expose it.
+   *
+   * Found by TRDD-C069SK9E's walk-vs-index differential, where the walk-fed ready queue
+   * called a scalar-blocked card READY and the index-fed one did not. Both directions
+   * are pinned below, because the ranking and the lint are different consumers of the
+   * same blindness.
+   */
+  it('a SCALAR npt is a real edge to the LINTER too — ORDER-NPT-VIOLATED fires on it', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-S1S1S1S1-n.md', good('S1S1S1S1', { column: 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-S2S2S2S2-p.md',
+      good('S2S2S2S2', { column: 'testing', npt: 'TRDD-S1S1S1S1' }))
+    expect(idsOf(lintCorpus(tmp), 'ORDER-NPT-VIOLATED')).toContain('S2S2S2S2')
+  })
+
+  it('a SCALAR npt keeps a card OUT of the ready queue — it used to be reported workable', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-S3S3S3S3-blk.md', good('S3S3S3S3', { column: 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-S4S4S4S4-wait.md',
+      good('S4S4S4S4', { column: 'dev', npt: 'TRDD-S3S3S3S3' }))
+    const ids = readyQueue(tmp).map((c) => c.id)
+    // POSITIVE CONTROL — the blocker itself IS ready, so "S4 absent" is a verdict about
+    // the scalar edge and not about an empty queue.
+    expect(ids).toContain('S3S3S3S3')
+    expect(ids).not.toContain('S4S4S4S4')
+  })
+
   // trdd-graph's `cycle` check catches a DERIVATION ring (two TRDDs each naming the
   // other as their own npt/eht child) — NOT a general `blocked-by` chain of arbitrary
   // length. The doctor's old `findCycles()` walked BOTH blocked-by and npt edges with a

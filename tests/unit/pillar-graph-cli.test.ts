@@ -356,4 +356,130 @@ describe('the INDEX answers the graph exactly as the WALK does (TRDD-L55IYKL4)',
     expect(r.status).toBe(0)
     expect(stripAnsi(r.stdout ?? '')).toMatch(/3 open cards/)
   })
+
+  /**
+   * `next` was the LAST graph question the index could not answer — it re-asked the
+   * corpus through `readyQueue(designDir)`, a second full walk (TRDD-C069SK9E).
+   *
+   * The fixture discriminates the two things a naive index-backed rewrite gets wrong:
+   * `ROOTAAAA` is a prerequisite of cards in THREE zones (tasks, proposals, archived),
+   * so its `unblocks` count is only right if the feeder spans zones exactly as the
+   * walk does; and it must outrank `TASKEEEE`, which is ready but frees nothing — so
+   * the RANKING is exercised, not just the membership.
+   */
+  it('`next` is byte-identical, and its ranking counts blockers across ALL zones', () => {
+    const r = runBoth(['next'])
+    expect(r.indexed).toBe(r.walk)
+    // Non-vacuity: a `next` that returned nothing would compare two empty strings.
+    expect(r.walk).toMatch(/READY — 2 card\(s\)/)
+    expect(r.walk).toMatch(/ROOTAAAA.*unblocks 3/)
+    expect(r.walk.indexOf('ROOTAAAA')).toBeLessThan(r.walk.indexOf('TASKEEEE'))
+
+    // THE DISCRIMINATING ASSERTION, and the reason `runBoth`'s own guard is not enough
+    // here. That guard proves the indexed run did not FALL BACK; it cannot prove this
+    // subcommand consulted the index at all. Reverting `next` to its old
+    // `readyQueue(designDir)` walk would leave both runs walking, produce no fallback
+    // warning, and pass every assertion above — the exact shape of a vacuous control.
+    // A `next` that never touched the index also never builds one, so the artefact's
+    // existence is the proof.
+    const indexDir = path.join(home, '.aimaestro', 'pillar-index')
+    const dbs = fs.existsSync(indexDir) ? fs.readdirSync(indexDir).filter((f) => f.endsWith('.sqlite')) : []
+    expect(dbs.length, '`next` built no index, so it answered from the walk').toBe(1)
+    expect(fs.statSync(path.join(indexDir, dbs[0])).size).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * TRDD-C069SK9E box 4 — a bounded list that SAYS what it dropped.
+ *
+ * At 10⁵ these answers were not merely long: `board` printed 100 000 lines and `roots`
+ * 7 782. The bound is a DEFAULT, not a capability removed, and the pair of properties
+ * below is what makes it safe: the cap always announces itself, and `--limit 0`
+ * reproduces the un-capped bytes exactly. A cap that did only the first would still be
+ * a cap you cannot get out of; one that did only the second would be a silent
+ * truncation, which is the same class of bug as a silent empty result.
+ */
+describe('the list verbs are BOUNDED and state what they truncated (TRDD-C069SK9E)', () => {
+  beforeEach(() => {
+    // Four cards in ONE column, so a cap of 2 must drop exactly 2 — a fixture with
+    // fewer rows than the limit can never distinguish "capped" from "nothing to cap".
+    card('DEVAAAAA', { column: 'dev', title: 'first', priority: 0 })
+    card('DEVBBBBB', { column: 'dev', title: 'second', priority: 1 })
+    card('DEVCCCCC', { column: 'dev', title: 'third', priority: 2 })
+    card('DEVDDDDD', { column: 'dev', title: 'fourth', priority: 3 })
+  })
+
+  it('`board --limit 2` prints two rows and names the two it did not', () => {
+    const r = runCli(['board', '--design-dir', corpus, '--limit', '2'])
+    expect(r.status).toBe(0)
+    // The column HEADING still reports the true size — the board's shape stays readable
+    // even where the listing under it stops early.
+    expect(r.stdout).toMatch(/DEV \(4\)/)
+    expect(r.stdout).toMatch(/\+2 more not shown/)
+    expect(r.stdout).toMatch(/DEVAAAAA/)
+    expect(r.stdout).not.toMatch(/DEVDDDDD/)
+  })
+
+  it('`--limit 0` restores the un-capped listing, so the bound is escapable', () => {
+    const capped = runCli(['board', '--design-dir', corpus, '--limit', '2'])
+    const all = runCli(['board', '--design-dir', corpus, '--limit', '0'])
+    expect(all.status).toBe(0)
+    expect(all.stdout).toMatch(/DEVDDDDD/)
+    expect(all.stdout).not.toMatch(/more not shown/)
+    // …and the two really did differ, so neither assertion above is about one output.
+    expect(capped.stdout).not.toBe(all.stdout)
+  })
+
+  it('`roots` and `next` carry the same bound, because they have the same defect', () => {
+    // TWO of the four are blocked, not all four: blocking every card would leave a
+    // single ready one, and a `--limit 1` over one row can never distinguish "capped"
+    // from "nothing to cap" — the same non-discriminating-fixture trap as above.
+    card('ROOTZZZZ', { column: 'todo', title: 'the one blocker', priority: 0 })
+    for (const id of ['DEVAAAAA', 'DEVBBBBB']) {
+      const f = path.join(corpus, 'tasks', `TRDD-20260101_000000+0000-${id}-fixture.md`)
+      fs.writeFileSync(f, fs.readFileSync(f, 'utf-8').replace('column: dev', 'column: dev\nnpt: TRDD-ROOTZZZZ'))
+    }
+    // ready = ROOTZZZZ (nothing gates it) + DEVCCCCC + DEVDDDDD = 3.
+    const next = runCli(['next', '--design-dir', corpus, '--limit', '1'])
+    expect(next.status).toBe(0)
+    expect(next.stdout).toMatch(/READY — 3 card\(s\)/)
+    expect(next.stdout).toMatch(/\+2 more not shown/)
+    // The rows really were DROPPED, not merely announced. Asserting only the note lets
+    // an identity `capped()` pass — a neuter run proved exactly that on the sibling test.
+    expect(next.stdout).not.toMatch(/DEVCCCCC|DEVDDDDD/)
+    // The cap keeps the TOP of the ranking, which is what makes truncating it
+    // defensible: ROOTZZZZ frees 2, the other two free nothing.
+    expect(next.stdout).toMatch(/ROOTZZZZ.*unblocks 2/)
+
+    const roots = runCli(['roots', '--design-dir', corpus, '--limit', '1'])
+    expect(roots.status).toBe(0)
+    expect(roots.stdout).toMatch(/ROOTZZZZ/)
+    expect(roots.stdout).toMatch(/holds up 2/)
+  })
+
+  it('`--column` lists one column, and says so rather than looking like an empty board', () => {
+    const one = runCli(['board', '--design-dir', corpus, '--column', 'dev', '--limit', '0'])
+    expect(one.status).toBe(0)
+    expect(one.stdout).toMatch(/column dev/)
+    expect(one.stdout).toMatch(/DEVDDDDD/)
+
+    // The discriminating case: a column that matches NOTHING must not render as a board
+    // with no work on it. "no cards in this column" and "the corpus is empty" are
+    // different answers and must not print the same.
+    const none = runCli(['board', '--design-dir', corpus, '--column', 'nosuchcolumn'])
+    expect(none.status).toBe(0)
+    expect(none.stdout).toMatch(/no open cards in column "nosuchcolumn"/)
+    expect(none.stdout).not.toMatch(/0 open cards/)
+  })
+
+  it('a nonsense `--limit` exits 2 — THE CHECK COULD NOT RUN, not "nothing found"', () => {
+    // `Number('lots')` is NaN and `Number('-1')` is negative; either would silently
+    // slice nothing or everything. The exit code has to say the tool could not run,
+    // which is the whole point of the trichotomy the CLI already carries.
+    for (const bad of ['lots', '-1', '2.5']) {
+      const r = runCli(['board', '--design-dir', corpus, '--limit', bad])
+      expect(r.status, `--limit ${bad} should exit 2`).toBe(2)
+      expect(r.stderr).toMatch(/--limit takes a non-negative integer/)
+    }
+  })
 })

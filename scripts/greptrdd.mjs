@@ -41,7 +41,7 @@ const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
   await import('../lib/trdd-store.ts')
 const { TERMINAL_DONE, normalizeTrddRef, refList, normalizePriority, BLOCKER_FIELDS } =
   await import('../lib/trdd-graph.ts')
-const { readyQueue } = await import('../lib/trdd-doctor.ts')
+const { readyQueueFrom } = await import('../lib/trdd-doctor.ts')
 
 const C = {
   b: (s) => `\x1b[1m${s}\x1b[0m`,
@@ -62,20 +62,58 @@ process.on('uncaughtException', (err) => {
   process.exit(2)
 })
 
-// `--design-dir` is stripped before `cmd`/`arg` are read, so the flag may sit
-// anywhere in the line without shifting the positional arguments.
+// Value flags are STRIPPED before `cmd`/`arg` are read, so a flag may sit anywhere in
+// the line without shifting the positional arguments. They go through ONE helper for a
+// reason: the first version located `--design-dir` by index in a list that still held
+// other flags, and the `--no-index` filter had to run first or it shifted that value by
+// one. That ordering hazard is a property of index arithmetic on a shared list, so it
+// would return with every flag added. Taking each flag OUT removes it structurally.
 const rawArgv = process.argv.slice(2)
-// `--no-index` is valueless, so it is filtered out FIRST — before `--design-dir` is
-// located — or its position would shift that flag's value by one.
 const noIndex = rawArgv.includes('--no-index')
-const flagless = rawArgv.filter((a) => a !== '--no-index')
-const ddIdx = flagless.indexOf('--design-dir')
-const designDir = path.resolve(
-  ddIdx >= 0 ? (flagless[ddIdx + 1] ?? '') : path.join(process.cwd(), 'design'),
-)
-const argv = ddIdx >= 0 ? [...flagless.slice(0, ddIdx), ...flagless.slice(ddIdx + 2)] : flagless
+let rest = rawArgv.filter((a) => a !== '--no-index')
+
+/** Take `--name <value>` out of the list; returns the value (or undefined) and the rest. */
+function takeFlag(list, name) {
+  const i = list.indexOf(name)
+  if (i < 0) return [undefined, list]
+  // A flag with no value yields '' — NOT undefined, so "absent" and "given empty" stay
+  // distinguishable. Each consumer below validates its own value.
+  return [list[i + 1] ?? '', [...list.slice(0, i), ...list.slice(i + 2)]]
+}
+
+let designDirVal, limitVal, columnVal
+;[designDirVal, rest] = takeFlag(rest, '--design-dir')
+;[limitVal, rest] = takeFlag(rest, '--limit')
+;[columnVal, rest] = takeFlag(rest, '--column')
+
+const designDir = path.resolve(designDirVal ?? path.join(process.cwd(), 'design'))
+const argv = rest
 const cmd = argv[0] ?? 'board'
 const arg = argv[1]
+
+// Rows a list-shaped answer prints before it STOPS AND SAYS SO.
+//
+// A silent cap is the same class of bug as a silent empty result, and at 10⁵ these
+// answers were not merely long: `board` printed 100 000 lines and `roots` 7 782, which
+// is output no reader can use and no pager makes meaningful — rendering it was also a
+// measurable slice of the query's own cost (TRDD-C069SK9E). `0` means unlimited, and it
+// is what reproduces the pre-cap output byte-for-byte, so the bound is a DEFAULT rather
+// than a capability removed. The default SEARCH is untouched: it has always capped at
+// its own 25 and has always said what it dropped, which is the convention these follow.
+const DEFAULT_LIMIT = 20
+const limit = limitVal === undefined ? DEFAULT_LIMIT : Number(limitVal)
+if (!Number.isInteger(limit) || limit < 0) {
+  console.error(
+    `greptrdd: --limit takes a non-negative integer (0 = no limit), not ${JSON.stringify(limitVal)}`,
+  )
+  process.exit(2)
+}
+const capped = (list) => (limit === 0 ? list : list.slice(0, limit))
+/** The line a truncation OWES its reader: what was dropped, and how to see it. */
+const droppedNote = (list, hint) =>
+  limit > 0 && list.length > limit
+    ? `  ${C.y(`… +${list.length - limit} more not shown`)} ${C.d(hint)}`
+    : null
 
 assertDesignDir(designDir)
 
@@ -273,11 +311,18 @@ function printChain(c, depth = 0, seen = new Set()) {
 }
 
 // Which subcommands need the graph — and, just as deliberately, which do not.
-// `next`, `lint` and `validate` each load their own corpus through
-// `lib/trdd-doctor.ts`; `help` reads nothing. The default branch (search) is
-// absent on purpose too: it streams its OWN walk, because it is the one command
-// that must see every body and must therefore keep none of them.
-if (['why', 'unblocks', 'roots', 'show', 'board'].includes(cmd)) await loadGraph()
+// `lint` and `validate` load their own corpus through `lib/trdd-doctor.ts`, which is
+// the LINTER and walk-only by design; `help` reads nothing. The default branch
+// (search) is absent on purpose too: it streams its OWN walk, because it is the one
+// command that must see every body and must therefore keep none of them.
+//
+// `next` joined this list in TRDD-C069SK9E. It used to call `readyQueue(designDir)`,
+// which walks the corpus a SECOND time through the doctor — so the one subcommand whose
+// entire job is "what should I work on right now?" was the only graph question that
+// could not be answered from the index. The RANKING did not move: it lives once, in
+// `readyQueueFrom`, and only the feeder changed. That is what makes the walk-vs-index
+// differential meaningful — the two paths run identical code over identical shapes.
+if (['why', 'unblocks', 'roots', 'show', 'board', 'next'].includes(cmd)) await loadGraph()
 
 switch (cmd) {
   case 'why': {
@@ -326,26 +371,44 @@ switch (cmd) {
       break
     }
     console.log(C.b('\nROOT BLOCKERS — the critical path. Everything else moves once these do.\n'))
-    for (const r of roots) {
+    for (const r of capped(roots)) {
       const human = r.column === 'human_review' || r.column === 'proposal' || r.zone === 'proposals'
       console.log(`  ${fmt(r)}`)
       console.log(`      ${C.g(`holds up ${blocks.get(r.id)}`)}${human ? '  ' + C.y('⇒ needs a HUMAN decision') : ''}`)
     }
+    // Already sorted by how much each root holds up, so a cap keeps the WORST ones —
+    // the property that makes truncating this list defensible at all.
+    const rootsNote = droppedNote(roots, '(sorted worst-first; --limit 0 for all)')
+    if (rootsNote) console.log(rootsNote)
     console.log()
     break
   }
 
   case 'next': {
-    const q = readyQueue(designDir)
+    // Ranked by `lib/trdd-doctor.ts`'s ONE ranker, over the graph this tool already
+    // loaded — index-backed when there is an index. `blockerRefs` IS the ranker's
+    // `orderEdges`: both are exactly `BLOCKER_FIELDS` (`blocked-by` + `npt`) read
+    // through `refList`, which is why the two feeders can be held byte-identical.
+    const q = readyQueueFrom(
+      cards.map((c) => ({
+        id: c.id,
+        column: c.column,
+        title: c.title,
+        priority: c.priority,
+        orderEdges: c.blockerRefs,
+      })),
+    )
     if (q.length === 0) {
       console.log(C.y('\nNOTHING IS READY — every open card waits on another. Check for a cycle: greptrdd roots\n'))
       break
     }
     console.log(C.b(`\nREADY — ${q.length} card(s), ranked by how much finishing them frees\n`))
-    for (const r of q) {
+    for (const r of capped(q)) {
       const lev = r.unblocks > 0 ? C.g(`unblocks ${r.unblocks}`) : C.d('unblocks 0')
       console.log(`  ${C.b(r.id.padEnd(9))} ${C.d(`P${r.priority ?? '?'}`)} ${String(r.column).padEnd(13)} ${lev.padEnd(22)} ${String(r.title).slice(0, 54)}`)
     }
+    const nextNote = droppedNote(q, '(ranked; --limit 0 for all)')
+    if (nextNote) console.log(nextNote)
     console.log()
     break
   }
@@ -382,18 +445,34 @@ switch (cmd) {
     const grouped = new Map()
     for (const c of cards) {
       if (c.zone !== 'tasks') continue
+      if (columnVal !== undefined && c.column !== columnVal) continue
       if (!grouped.has(c.column)) grouped.set(c.column, [])
       grouped.get(c.column).push(c)
     }
     const n = [...grouped.values()].reduce((a, b) => a + b.length, 0)
-    console.log(C.b(`\n${n} open cards (design/tasks)\n`))
+    // An empty board under a filter must not look like an empty board: "no cards match
+    // this column" and "the corpus has no open work" are different answers.
+    if (n === 0 && columnVal !== undefined) {
+      console.log(
+        C.y(`\nno open cards in column ${JSON.stringify(columnVal)}`) +
+          C.d(' — `greptrdd board` lists every column\n'),
+      )
+      break
+    }
+    const filtered = columnVal !== undefined ? `, column ${columnVal}` : ''
+    console.log(C.b(`\n${n} open cards (design/tasks${filtered})\n`))
     for (const [col, cs] of [...grouped].sort((a, b) => b[1].length - a[1].length)) {
       const head = col === '(none)' ? C.r('(NO COLUMN — INVISIBLE TO THE BOARD)') : C.b(col.toUpperCase())
+      // The heading count is the column's TRUE size, never the shown count — it is what
+      // makes the board's shape readable even where the listing under it stops early.
       console.log(`═══ ${head} (${cs.length})`)
-      for (const c of cs.sort((a, b) => String(a.priority ?? 9).localeCompare(String(b.priority ?? 9)))) {
+      const sorted = cs.sort((a, b) => String(a.priority ?? 9).localeCompare(String(b.priority ?? 9)))
+      for (const c of capped(sorted)) {
         const blk = openBlockers(c).length
         console.log(`  ${fmt(c)}${blk ? '  ' + C.r(`⛔${blk}`) : ''}`)
       }
+      const note = droppedNote(sorted, `(--column ${col} for this one, --limit 0 for all)`)
+      if (note) console.log(note)
       console.log()
     }
     break
@@ -589,8 +668,13 @@ ${C.b('greptrdd')} — query AND validate the TRDD corpus (offline; no server)
   ${C.d('precedence. So never write `greptrdd validate || …`: that collapses "found')}
   ${C.d('findings" into "could not run", the exact conflation the third code prevents.')}
 
+  ${C.d('--limit N    rows per list before board/roots/next stop AND SAY SO (default 20;')}
+  ${C.d('             0 = no limit, which reproduces the un-capped output exactly). The')}
+  ${C.d('             search has always had its own stated cap of 25 and is unaffected.')}
+  ${C.d('--column C   board only — list just column C (its heading still shows the true size)')}
+
   ${C.d('--no-index   answer the graph from the corpus WALK, not the SQLite index.')}
-  ${C.d('             The index serves why/unblocks/roots/board; search is walk-only')}
+  ${C.d('             The index serves why/unblocks/roots/board/next; search is walk-only')}
   ${C.d('             by design, and `show` re-reads its one file for freshness.')}
 
 Repair of the mechanically-derivable findings: ${C.c('yarn trdd:fix')}

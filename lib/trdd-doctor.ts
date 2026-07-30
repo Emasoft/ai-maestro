@@ -39,6 +39,7 @@ import {
   type TrddNode,
   checkTrddInvariants,
   normalizeTrddRef,
+  refList,
   V1_STATUS_TO_COLUMN,
   TERMINAL_DONE as GRAPH_TERMINAL_DONE,
 } from './trdd-graph'
@@ -132,8 +133,26 @@ export interface Card {
   h1: string
 }
 
-const asList = (v: unknown): string[] =>
-  Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []
+/**
+ * Every field this file reads through `asList` is a REFERENCE field — `npt`, `eht`,
+ * `blocked-by`, `superseded-by` — so what counts as a reference is `lib/trdd-graph.ts`'s
+ * to decide, not this file's.
+ *
+ * It used to be `Array.isArray(v) ? … : []`, which made a legal bare scalar
+ * (`npt: TRDD-X`) INVISIBLE to the linter in all seven of its call sites: the depth-1
+ * derivation rules, GRAPH-BLOCKED-NOT-BLOCKED, ORDER-NPT-VIOLATED, the supersede check,
+ * the ready queue, and the fixer. That is precisely the divergence `refList` was
+ * exported to end one layer down — greptrdd carried the identical array-only reader and
+ * reported a scalar-blocked card as READY — and the WRITE GATE kept it for longer,
+ * silently, because a rule that cannot see an edge reports no finding about it.
+ *
+ * Found by TRDD-C069SK9E's walk-vs-index differential: the two feeders disagreed on the
+ * ready queue over a fixture whose blocker is written as a scalar, and the walk was the
+ * wrong one. `normalizeTrddRef` is idempotent, so the sites that re-normalize are
+ * unaffected; the one deliberate behaviour change is that a literal `null` placeholder
+ * is now dropped rather than carried as the ref `"NULL"`.
+ */
+const asList = (v: unknown): string[] => refList(v)
 
 /**
  * A STATE block that reads as finished. Hoisted to module scope so the reduction in
@@ -655,17 +674,40 @@ export interface ReadyCard {
 }
 
 /**
- * The READY QUEUE — every card whose prerequisites are ALL satisfied, so it can be
- * worked on right now, ordered by how much work finishing it would unblock.
+ * The minimum a card must expose to be RANKED — and deliberately nothing more.
+ *
+ * Two feeders build it: this file's corpus walk, and `greptrdd`'s shared graph
+ * (index-backed at 10⁵, `TRDD-C069SK9E`). Naming the shape here is what keeps the
+ * ranking ONE implementation instead of two that agree until they don't — the exact
+ * "two consumers of one store, divergent on identical input" bug Phase 1 fixed a
+ * layer down. `orderEdges` arrives already normalized, because whose job it is to
+ * normalize a ref is settled in `lib/trdd-graph.ts` and not re-decided per caller.
+ */
+export interface ReadyInput {
+  id: string
+  column: string
+  title: string
+  priority: unknown
+  orderEdges: string[]
+}
+
+/**
+ * The READY QUEUE, over cards someone else read — every card whose prerequisites are
+ * ALL satisfied, so it can be worked on right now, ordered by how much work finishing
+ * it would unblock.
  *
  * This is the answer to "what should I do next?", and it is derived purely from the
  * dependency graph — never from how long something has been waiting. Age tells you
  * nothing: a card that has waited a month may still be blocked, and a card created
  * this morning may be the one thing unblocking six others.
+ *
+ * A ref to a card that is not in `inputs` counts as DONE, not as a blocker: a dangling
+ * reference is a lint finding (`GRAPH-DANGLING-BLOCKER`), never a reason to call work
+ * unstartable. The graph reader reaches the same verdict by a membership test, so both
+ * feeders drop the same rows for the same reason.
  */
-export function readyQueue(designDir: string): ReadyCard[] {
-  const { cards } = loadCorpus(designDir)
-  const byId = new Map(cards.map((c) => [c.id, c]))
+export function readyQueueFrom(inputs: readonly ReadyInput[]): ReadyCard[] {
+  const byId = new Map(inputs.map((c) => [c.id, c]))
   const isDone = (id: string) => {
     const c = byId.get(id)
     return !c || TERMINAL_DONE.includes(c.column)
@@ -673,19 +715,19 @@ export function readyQueue(designDir: string): ReadyCard[] {
 
   // How many OPEN cards each card would unblock if it were finished.
   const unblocks = new Map<string, number>()
-  for (const c of cards) {
+  for (const c of inputs) {
     if (TERMINAL_DONE.includes(c.column)) continue
-    for (const dep of orderEdges(c)) unblocks.set(dep, (unblocks.get(dep) ?? 0) + 1)
+    for (const dep of c.orderEdges) unblocks.set(dep, (unblocks.get(dep) ?? 0) + 1)
   }
 
-  return cards
+  return inputs
     .filter((c) => WORKING_COLUMNS.includes(c.column) && c.column !== 'blocked')
-    .filter((c) => orderEdges(c).every(isDone))
+    .filter((c) => c.orderEdges.every(isDone))
     .map((c) => ({
       id: c.id,
       column: c.column,
       title: c.title,
-      priority: c.fm['priority'],
+      priority: c.priority,
       unblocks: unblocks.get(c.id) ?? 0,
     }))
     .sort(
@@ -693,6 +735,20 @@ export function readyQueue(designDir: string): ReadyCard[] {
         b.unblocks - a.unblocks ||
         String(a.priority ?? 9).localeCompare(String(b.priority ?? 9)),
     )
+}
+
+/** The READY QUEUE over this file's own corpus walk. Public API, frozen. */
+export function readyQueue(designDir: string): ReadyCard[] {
+  const { cards } = loadCorpus(designDir)
+  return readyQueueFrom(
+    cards.map((c) => ({
+      id: c.id,
+      column: c.column,
+      title: c.title,
+      priority: c.fm['priority'],
+      orderEdges: orderEdges(c),
+    })),
+  )
 }
 
 /* ------------------------------------------------------------------ *

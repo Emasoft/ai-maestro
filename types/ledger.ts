@@ -31,6 +31,12 @@ export type LedgerOp =
   // ── R9.13 enforcement (TRDD-c7a81642) ────────────────────────
   | 'hibernate_role_missing' | 'hibernate_role_missing_at_boot'
   | 'wake' | 'hibernate'
+  // ── R42.7 daemon fleet restart (TRDD-QZL828OD) ───────────────
+  /** The server-as-daemon restarted a harness agent after a global change it just
+   *  applied. Declared rather than left to the open taxonomy because R42.7(e) makes
+   *  the audit trail part of the grant: an unattended fan-out has to be groupable by
+   *  an external audit tool, not just technically verifiable. */
+  | 'fleet_restart'
   // ── Team lifecycle ───────────────────────────────────────────
   | 'create_team' | 'delete_team' | 'update_team'
   // ── Group lifecycle ──────────────────────────────────────────

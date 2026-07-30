@@ -105,6 +105,17 @@ const ABSORBED_DUTY_INTERVAL_MS = 60 * 60 * 1000
 type RestartNotifier = (sessionNames: string[]) => void
 let restartNotifier: RestartNotifier | null = null
 
+/** WHOLE-FLEET restart notifier — R42.7 / TRDD-QZL828OD.
+ *
+ *  Distinct from `RestartNotifier` above because the two lanes know different
+ *  things. The master-toggle lane updates a plugin AT a known agent, so it can name
+ *  the sessions. The absorbed lane updates plugins at USER scope, which every
+ *  harness agent reads at launch — there is no session list to compute, the answer
+ *  is "all of them". Collapsing the two would force this lane to enumerate the
+ *  fleet, which is the fan-out layer's job and its workdir gate. */
+type FleetRestartNotifier = (reason: string) => void
+let fleetRestartNotifier: FleetRestartNotifier | null = null
+
 // ── Public API ───────────────────────────────────────────────────────────
 
 /**
@@ -188,7 +199,8 @@ export async function runTickNow(): Promise<{ ran: boolean; entries: AutoUpdateR
  *  that installs/arms the janitor later starts benefiting on the very next
  *  tick with no restart, and a host that never had the janitor just skips
  *  every tick (self-healing, both directions). */
-export function startAbsorbedDutyScheduler(): void {
+export function startAbsorbedDutyScheduler(notifier?: FleetRestartNotifier): void {
+  if (notifier) fleetRestartNotifier = notifier
   if (absorbedTimerHandle) return
   absorbedTimerHandle = setInterval(() => {
     runAbsorbedDutyTickSafely().catch(err => {
@@ -337,6 +349,20 @@ async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoU
       }
     } catch (err) {
       entries.push(entry(key, 'failed', errMsg(err)))
+    }
+  }
+
+  // R42.7 — a user-scope plugin that actually CHANGED is a global change: every
+  // harness agent loads it at launch, so every one of them is running stale code
+  // until it restarts. Fire the whole-fleet notifier, and only on a real 'updated'
+  // (never on 'already-current', or an idle host would churn its fleet hourly for
+  // no reason). The fan-out layer decides WHICH agents it may touch; the driver's
+  // safe-state gate decides which are safe right now.
+  if (fleetRestartNotifier && entries.some(e => e.status === 'updated')) {
+    try {
+      fleetRestartNotifier('user-scope plugin update (absorbed duty)')
+    } catch (err) {
+      console.error('[auto-update] fleetRestartNotifier threw:', err)
     }
   }
 

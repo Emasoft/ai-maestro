@@ -1,9 +1,9 @@
 ---
 spec: governance
-spec-version: 2.2.0
+spec-version: 2.3.0
 status: normative
 created: 2026-07-22T10:19:26+0200
-updated: 2026-07-30T13:02:00+0200
+updated: 2026-07-30T13:20:29+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a governance rule changes; docs/GOVERNANCE-RULES.md and the code/personas/DEP-overlays are its IMPLEMENTATIONS, authored AFTER it (see `implementations`). Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). This spec was previously derived FROM the catalog; that direction is reversed for good."
@@ -1710,6 +1710,24 @@ switches, **not** commands targeted at an agent. Every other janitor command (`/
 `R42.6` **config-is-not-driving** [Explicit, USER] — MANAGER and COS retain a **separate, non-injection** authority:
 changing an agent's **configuration** (local-scope skills, subagents, MCP, hooks) and its **TEAM** / **TITLE** (rare —
 both normally set at creation and kept for the agent's life). Configuring an agent is NOT driving it.
+`R42.7` **daemon-fleet-restart-exception** [Explicit, USER — delegated 2026-07-30, TRDD-QZL828OD] — the **ai-maestro
+server acting as the absorbed janitor daemon** (infrastructure — never an agent, never a title, holding no AID) may
+RESTART harness agents on its OWN host after a **global change it has just applied**: an `ai-maestro-plugins` plugin
+update, or a `~/.claude/settings.json` runtime-env re-apply (R42.5's sibling — the update lane's equivalent of a
+machine-wide switch). Six constraints, every one load-bearing, because together they are the whole reason this is not
+R42.1 injection under another name:
+(a) **uniform fan-out** — it restarts EVERY harness agent affected by that global change; it may never select a
+    particular agent. A targeted restart is injection wearing a different name and stays forbidden.
+(b) **zero content** — exit → relaunch with the agent's own STORED args. Never a keystroke, never text, never a queued
+    prompt. The operation cannot express anything, which is what makes it safe to automate.
+(c) **safe-state gated** — it goes through the same `idle_prompt` + subagent-counter gates as the human's Restart
+    button (`POST /api/sessions/[id]/restart`'s 409); it never interrupts a working agent to make the fleet current.
+(d) **same-host, harness-only** — never another host, never a non-harness agent (those belong to the standalone
+    janitor daemon, which R42 leaves untouched).
+(e) **audited** — every restart it performs is recorded in the agent ops ledger, because an unattended fan-out nobody
+    can reconstruct afterwards is indistinguishable from an intrusion.
+(f) **no agent may invoke it** — it is reachable only from the server's own update/enforce tick, never from a route, a
+    script, or a CLI an agent can call. An agent asking for a fleet restart remains an R42.1 violation.
 `R42.super` **superseded-prior-design** [TRDD-BF3JN4TL] — `lib/authorization.ts` `send-command` formerly allowed a
 MANAGER to drive ANY agent and a COS to drive its own team's (`SELF_DRIVE_ACTIONS` permitted self; another agent required
 MANAGER / own-team COS). Six routes carried it: `POST …/[id]/{panel,queue,prompt/answer}`, `PATCH …/[id]/session`

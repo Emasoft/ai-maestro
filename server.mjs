@@ -1811,7 +1811,22 @@ async function startServer(handleRequest) {
     // shutdown.
     try {
       const { startAutoUpdateScheduler } = await import('./services/auto-update-service.ts')
-      await startAutoUpdateScheduler()
+      // R42.7 / TRDD-QZL828OD — supply the restart notifier. The seam has existed
+      // since the service was written, but this call passed NOTHING, so
+      // `restartNotifier` stayed null and the tick's notify step was a no-op
+      // forever. Its doc comment described broadcasting to the UI's
+      // `useRestartQueue`, which could never have served the case that matters: a
+      // browser-driven restart does not happen on an unattended host, i.e. exactly
+      // the host that most needs to pick up a plugin update. So the driver is
+      // server-side, which is what R42.7 grants and constrains.
+      await startAutoUpdateScheduler(async (sessionNames) => {
+        try {
+          const { restartFleetForSessions } = await import('./lib/fleet-restart-fanout.ts')
+          await restartFleetForSessions(sessionNames, 'ai-maestro-plugins update')
+        } catch (err) {
+          console.warn('[fleet-restart] notifier failed (non-fatal):', err?.message || err)
+        }
+      })
       console.log('[Startup] Auto-update scheduler initialized (off by default; enable in Settings → Plugin Updates)')
     } catch (err) {
       console.warn('[Startup] Auto-update scheduler init failed (non-fatal):', err?.message || err)
@@ -1828,7 +1843,18 @@ async function startServer(handleRequest) {
     // directions with no restart needed.
     try {
       const { startAbsorbedDutyScheduler } = await import('./services/auto-update-service.ts')
-      startAbsorbedDutyScheduler()
+      // R42.7 — whole-fleet notifier. A user-scope plugin update is read by EVERY
+      // harness agent at launch, so there is no session subset to compute: the
+      // honest answer is "all of them", and the fan-out layer applies the workdir
+      // authority while the driver's safe-state gate skips whoever is busy.
+      startAbsorbedDutyScheduler(async (reason) => {
+        try {
+          const { restartEntireHarnessFleet } = await import('./lib/fleet-restart-fanout.ts')
+          await restartEntireHarnessFleet(reason)
+        } catch (err) {
+          console.warn('[fleet-restart] absorbed notifier failed (non-fatal):', err?.message || err)
+        }
+      })
       console.log('[Startup] Absorbed-duty scheduler initialized (always on; gated per-tick on janitor installed+armed)')
     } catch (err) {
       console.warn('[Startup] Absorbed-duty scheduler init failed (non-fatal):', err?.message || err)

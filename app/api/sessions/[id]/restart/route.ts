@@ -30,15 +30,8 @@ import { getAgentBySession } from '@/lib/agent-registry'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 import { requireSudoToken } from '@/lib/sudo-guard'
-import {
-  isValidProgramArgs,
-  resolveRestartBin,
-  sanitizePersonaName,
-  buildRelaunchCommand,
-  runRestartSequence,
-} from '@/lib/session-restart'
-import { resolveLaunchArgs } from '@/services/agent-launch-args'
-import { hasPriorConversation } from '@/lib/claude-conversation'
+import { runRestartSequence } from '@/lib/session-restart'
+import { prepareRelaunchCommand } from '@/lib/session-relaunch'
 
 export const dynamic = 'force-dynamic'
 
@@ -122,44 +115,26 @@ export async function POST(
   const program = body.program || agent?.program || 'claude'
   const programArgs = body.programArgs || agent?.programArgs || ''
 
-  // CC-GOV-002: reject programArgs with shell metacharacters that could escape
-  // the `--name "…"` quoting the receiving shell parses. The allowlist is the
-  // single definition in lib/session-restart.ts, shared with me/restart, so the
-  // two surfaces cannot validate differently.
-  if (!isValidProgramArgs(programArgs)) {
+  // Validate + build through the ONE shared composition (lib/session-relaunch.ts):
+  // programArgs allowlist (CC-GOV-002), `--agent <persona>` enforcement
+  // (TRDD-GZ1KOHNR), bin resolution, persona-name allowlist, and `--continue`
+  // (TRDD-6AMXSG3S). It was inline here until TRDD-QZL828OD added a SECOND
+  // restarter (the R42.7 fleet driver) — two clones of a security-validated build
+  // is how the two silently drift, so the build moved out and this route now maps
+  // its refusals to HTTP instead of re-deriving them. Every refusal still happens
+  // BEFORE anything is stopped, so a running agent is never disrupted by one.
+  const prep = await prepareRelaunchCommand(agent, sessionName, { program, programArgs })
+  if (prep.kind === 'invalid-args') {
     return NextResponse.json({ error: 'Invalid programArgs: contains disallowed characters' }, { status: 400 })
   }
-
-  // TRDD-GZ1KOHNR: enforce `--agent <persona>` on relaunch too — a restart must
-  // not resurrect a titled Claude agent as generic claude. resolveLaunchArgs
-  // derives it from the installed role-plugin; refuse (before any stop, so a
-  // running agent is never disrupted) if a Claude agent has no resolvable persona.
-  const enforced = await resolveLaunchArgs(agent?.id, program, programArgs)
-  if (enforced.kind === 'refuse') {
+  if (prep.kind === 'persona-unresolved') {
     return NextResponse.json(
-      { error: 'agent_persona_unresolved', message: `Refusing to restart "${sessionName}": ${enforced.reason}` },
+      { error: 'agent_persona_unresolved', message: `Refusing to restart "${sessionName}": ${prep.reason}` },
       { status: 409 },
     )
   }
 
-  // Build the relaunch command through the shared, security-validated construction
-  // (bin resolution + persona-name allowlist + --name injection), then run the
-  // mechanical stop→poll→relaunch sequence. Both live in lib/session-restart.ts.
-  const bin = resolveRestartBin(program)
-  const personaName = sanitizePersonaName(agent?.label || agent?.name || sessionName, sessionName)
-
-  // TRDD-6AMXSG3S: resume the agent's own transcript instead of cold-starting it.
-  // A restart exists to pick up new config, NOT to discard the task in flight —
-  // and useRestartQueue fires one after every element change, so without this a
-  // plugin install silently destroys whatever the agent was doing. `--continue`
-  // is Claude-only and fails with no prior transcript, hence both guards.
-  const restartWorkdir = agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory
-  const continueConversation =
-    bin === 'claude' && !!restartWorkdir && (await hasPriorConversation(restartWorkdir))
-
-  const command = buildRelaunchCommand(bin, enforced.args, personaName, { continueConversation })
-
-  const outcome = await runRestartSequence(sessionName, command)
+  const outcome = await runRestartSequence(sessionName, prep.command)
 
   if (outcome.status === 'timeout') {
     return NextResponse.json(

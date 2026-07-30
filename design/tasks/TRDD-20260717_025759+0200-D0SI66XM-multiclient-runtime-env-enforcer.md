@@ -1,17 +1,103 @@
 ---
 trdd-id: D0SI66XM
 title: Multi-client runtime-behaviour settings enforcer (codex / gemini / opencode / kiro / kimi)
-column: backburner
+column: design
 created: 2026-07-17T02:57:59+0200
-updated: 2026-07-17T02:57:59+0200
+updated: 2026-07-30T13:52:00+0200
 current-owner: ai-maestro
+assignee: ai-maestro
+created-by: ai-maestro
 task-type: feature
 parent-trdd: QZL828OD
 relevant-rules: [42, 20]
 scope: project
+project-id: ai-maestro
+repo: Emasoft/ai-maestro
+min-approval-requirement: none
+mandate: true
+mandated-by: self
+approved: true
+approval-judge: ai-maestro
+approval-datetime: 2026-07-30T13:52:00+0200
+implementation-commits: [26ed75dc]
+blocked-by: []
+npt: []
+eht: []
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-30
+
+**The INVESTIGATION is done for everything the repo can answer. It produced a bug fix
+and a design finding that changes the build's shape, so the build has NOT started —
+deliberately, not by omission.** `column: design`.
+
+**D1 is no longer a blocker.** The card said restart-after-change "needs the R42
+restart extension (D1), still unratified" — D1 was ratified today as **R42.7**
+(TRDD-QZL828OD, `e4a4bedb`). That dependency is lifted.
+
+### Finding 1 — the launchable client set, authoritatively (investigation step 1)
+
+`lib/client-capabilities.ts` is the ONE authority. `SUPPORTED_CLIENTS =
+['claude', 'codex', 'gemini', 'opencode', 'kiro']` — tmux-launchable. Also:
+
+- **`kimi` is NOT a supported client.** The USER named it in the origin directive, but
+  nothing in this repo drives it: no `ClientType` member, no capabilities entry, no
+  adapter, no converter provider. **Enforcing settings for a client we cannot launch
+  would be enforcing nothing**, so kimi is OUT OF SCOPE until it is added as a client.
+  That is a correction to this card's own title and needs saying rather than quietly
+  dropping.
+- **`aider`** is in `ClientType` but out of `SUPPORTED_CLIENTS` and was **explicitly
+  excluded by the USER** (recorded in TRDD-ANYCPRTX). Out of scope.
+- **`github-copilot` / `kilocode`** are converter/skill TARGETS only, never launched.
+  Out of scope.
+- Every one of the 11 agents on this host runs `claude-code`. So the whole non-Claude
+  half of this card is, today, about clients nobody is running — which is why the
+  bug below was latent.
+
+### Finding 2 — a REAL BUG, found and FIXED (`26ed75dc`)
+
+`resolveRestartBin` carried its own client→binary ladder and had **drifted from the
+authority**: `opencode` and `kiro` are both launchable and had **no branch**, so both
+fell through to `return 'claude'` — a restart relaunched an opencode agent **as
+Claude**, with that agent's own stored args. And `kiro`'s binary is **`kiro-cli`**, so
+hand-adding the two missing branches (the obvious fix) would have got one wrong. Now
+delegated to `getClientCapabilities().cli.binary`. The shadow-map footgun one layer
+below the TITLE_PLUGIN_MAP episode. Latent (all agents are claude-code) but the R42.7
+fan-out had just automated that path, so severity rose without the trigger moving.
+
+### Finding 3 — investigation step 2 is UNANSWERABLE from the repo
+
+**`configFile` in `client-capabilities.ts` is NOT the global settings file.** It is the
+per-PROJECT instructions file: `CLAUDE.md`, `AGENTS.md` (opencode), `GEMINI.md`,
+`config.toml` (codex), `.kiro/settings.json`. The only GLOBAL settings path the repo
+knows is Claude's `~/.claude/settings.json` (`claude-adapter.ts`). So the global
+config path + format for **codex / gemini / opencode / kiro** is genuinely unknown
+here, and this card forbids guessing it ("VERIFY each from the client's own docs, do
+not guess a path"). That research is the remaining input for the file-writing design.
+
+### Finding 4 — there may be no need to write a foreign settings file at all
+
+`ClientCliCommands` already carries **`envVars: Record<string, string>`** —
+"environment variables to prepend to launch command" — and Claude's is
+`{ CLAUDE_CODE_NO_FLICKER: '1' }`. That is a mechanism **we fully own**: it needs no
+per-client path discovery, no TOML/JSON/YAML writer per client, no foreign-file
+merge-without-clobber, and no user-scope carve-out per client, because we are not
+writing anyone's config — we are setting the environment of a process we launch.
+
+**This is a materially better shape than the card's A/B**, and it reframes the whole
+task: for any runtime toggle a client reads from the ENVIRONMENT, the enforcer is a
+per-client `envVars` entry plus the existing launch builder. Only toggles a client
+reads **exclusively from its config file** need Finding 3's research. The Claude
+enforcer stays as-is either way (its `env` object is Claude-specific and already live).
+
+**NEXT ACTION — a design decision, before any research or code:** for each key in the
+QZL828OD allowlist, determine whether the target client reads it from the environment
+(→ `envVars`, cheap, ours) or only from its config file (→ needs Finding 3). Do that
+for **codex and gemini first** — they are the two non-Claude clients with adapters and
+real converter support, so they are where a second enforcer would actually be
+exercised. `opencode`/`kiro` follow.
+
+## ⏵ STATE — superseded 2026-07-17 entry (do NOT act on it)
 
 **Origin:** USER directive (2026-07-17), alongside ratifying the Claude enforcer (TRDD-QZL828OD):
 *"i also ask you to search the codex and kimi and opencode, etc. equivalent settings and make sure
@@ -82,7 +168,31 @@ keys up at launch.
 - tsc + `yarn test` + `yarn build` clean.
 - The memory carve-out note lists every client the enforcer touches.
 
+## ✔ Acceptance
+
+- [x] Investigation step 1 — the launchable client set, from the authority; `kimi`,
+      `aider`, `github-copilot`, `kilocode` ruled OUT with reasons
+- [x] A bug found and fixed en route (`26ed75dc`) with a recorded neuter run
+- [x] Investigation step 3 — the runtime-key surface: `envVars` exists and is
+      launch-time, NOT settings-file; recorded as a candidate design
+- [ ] Investigation step 2 — global config path + format per client. **Blocked on
+      each client's own docs**; this card forbids guessing. Do codex + gemini first.
+- [ ] Per-key decision: environment-read (→ `envVars`) vs config-file-only (→ writer)
+- [ ] Build the chosen shape; per-client 0-IMPACT tests; amend the user-scope
+      carve-out memory note with every client the enforcer ends up touching
+- [ ] tsc + `yarn test` + `yarn build` clean
+
 ## Approval log
+- 2026-07-30T13:52:00+0200 — **Investigation phase EXECUTED**; build deliberately NOT
+  started, because it produced a design finding (Finding 4) that changes the shape and
+  an unanswerable input (Finding 3) that this card forbids guessing at. `mandate: true`
+  / `mandated-by: self` at `min-approval-requirement: none`: the investigation is
+  read-only and in-scope, so it is a self-mandate. The USER's 2026-07-30 delegation
+  ("I need all 14 pending tasks completed today!!!") is the go-ahead the 2026-07-17
+  entry was waiting for — but a go-ahead is not a licence to guess four third-party
+  config schemas, and shipping an enforcer aimed at a client we cannot launch (`kimi`)
+  would be motion, not progress. What is genuinely done is recorded; what is not is
+  named.
 - 2026-07-17 — Authored (USER-mandated, delayed) as the multi-client companion to TRDD-QZL828OD.
   USER explicitly deferred the build ("this other TRDD can be delayed"). Awaiting a USER go-ahead
   to start the investigation phase.

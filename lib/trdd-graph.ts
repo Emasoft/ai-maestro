@@ -23,15 +23,12 @@
  * so a TRDD without it is claimed but unguarded. Adding it is migrate-on-touch.
  */
 import { TRDD_ZONES, listTrddFiles, parseTrddFile, type ParsedTrdd, type TrddZone } from '@/lib/trdd-store'
-
-/** Columns the flock gate treats as done (IND base: complete|published|live|superseded). */
-export const TERMINAL_DONE: ReadonlySet<string> = new Set([
-  'complete',
-  'completed',
-  'published',
-  'live',
-  'superseded',
-])
+// V1_STATUS_TO_COLUMN and TERMINAL_DONE moved to lib/trdd-vocabulary.ts (a LEAF module,
+// importing only @/types/task) so lib/trdd-edit-guard.ts can share this grammar without
+// closing a cycle back through trdd-store.ts. Re-exported here so every existing importer
+// of this module (and its own use below) is unaffected by the move.
+import { TERMINAL_DONE, V1_STATUS_TO_COLUMN } from '@/lib/trdd-vocabulary'
+export { TERMINAL_DONE, V1_STATUS_TO_COLUMN }
 
 export interface TrddNode {
   id: string
@@ -125,28 +122,6 @@ export function optionalRef(v: unknown): string | null {
   const s = v.trim()
   if (!s || s === 'null') return null
   return normalizeTrddRef(s)
-}
-
-/**
- * v1 TRDDs predate `column:` and carry a six-value `status:` instead. The IND base
- * says tools accept both and apply this mapping read-only. Without it a v1 file
- * reads as column `''`, which is in neither TERMINAL_DONE nor `blocked` — so the
- * day a v1 TRDD becomes someone's child, its parent would be reported as a false
- * completion for a child that finished years ago.
- */
-export const V1_STATUS_TO_COLUMN: Readonly<Record<string, string>> = {
-  'not-started': 'backburner',
-  'in-progress': 'dev',
-  completed: 'complete',
-  failed: 'failed',
-  blocked: 'blocked',
-  superseded: 'superseded',
-  // Not one of the six documented v1 values — a hand-written v2 folder-lifecycle
-  // state in a v1 `status:` field. It is in the corpus (TRDD-1d4ea74e, the
-  // package-manager migration the USER declined), and an unmapped status reads as
-  // column '', which puts the card on no board at all. Map what exists, not what
-  // the enum says should exist.
-  cancelled: 'cancelled',
 }
 
 /** The TRDD's column, reading a v1 `status:` when `column:` is absent. */

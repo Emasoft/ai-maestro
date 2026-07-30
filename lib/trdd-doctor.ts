@@ -43,31 +43,20 @@ import {
   V1_STATUS_TO_COLUMN,
   TERMINAL_DONE as GRAPH_TERMINAL_DONE,
 } from './trdd-graph'
-import { DEFAULT_STATUSES } from '@/types/task'
-
-/** The 17 ratified kanban columns, plus the lifecycle values that bracket them. */
-export const BRACKET_COLUMNS = ['proposal', 'planned', 'refused', 'completed', 'cancelled'] as const
-export const VALID_COLUMNS: readonly string[] = [...DEFAULT_STATUSES, ...BRACKET_COLUMNS]
-
-/**
- * Does this value name a point in the PIPELINE — in either the v2 or the v1 spelling?
- *
- * The one predicate for "a column value is sitting where it should not be". The linter and
- * `fixCorpus` MUST share it: they disagreed once (the lint checked only `VALID_COLUMNS` while
- * the fixer also accepted the v1 map), which made the fixer repair a shape the linter never
- * reported — the worst asymmetry a fix pipeline can have, because the report is the only
- * thing a human reviews before running `--fix`.
- *
- * Why it must key on the VALUE and never on the field name: `status:` is NOT a retired
- * duplicate of `column:` (USER ruling 2026-07-30). It carries a different aspect, and the
- * pillar specs already use it that way (`status: normative`). A pipeline value in it is
- * provably v1 residue; anything else is the field doing its own job.
- */
-export function isPipelineStateValue(raw: string): boolean {
-  const key = raw.trim().toLowerCase()
-  if (!key) return false
-  return Boolean(V1_STATUS_TO_COLUMN[key]) || VALID_COLUMNS.includes(key)
-}
+// BRACKET_COLUMNS / VALID_COLUMNS / isPipelineStateValue / WORKING_COLUMNS / AUTHORITY_RANK /
+// TIER_TO_REQUIREMENT moved to lib/trdd-vocabulary.ts (a LEAF module) so the write-time gate
+// (lib/trdd-edit-guard.ts, called FROM trdd-store.ts::editTrdd) can share this grammar without
+// closing a cycle back through trdd-store.ts. Imported AND re-exported here — imported for this
+// file's own use below, re-exported so every existing importer of this module is unaffected.
+import {
+  BRACKET_COLUMNS,
+  VALID_COLUMNS,
+  isPipelineStateValue,
+  WORKING_COLUMNS,
+  AUTHORITY_RANK,
+  TIER_TO_REQUIREMENT,
+} from './trdd-vocabulary'
+export { BRACKET_COLUMNS, VALID_COLUMNS, isPipelineStateValue, WORKING_COLUMNS, AUTHORITY_RANK, TIER_TO_REQUIREMENT }
 
 /**
  * Columns that mean "this work is finished and leaves the board".
@@ -80,36 +69,6 @@ export function isPipelineStateValue(raw: string): boolean {
  * file itself.)
  */
 export const TERMINAL_DONE: readonly string[] = [...GRAPH_TERMINAL_DONE]
-/** Working columns — a card here is OPEN. `failed` is OPEN too: it is retryable. */
-export const WORKING_COLUMNS = DEFAULT_STATUSES.filter(
-  (c) => !['complete', 'published', 'live', 'superseded'].includes(c),
-).concat('planned')
-
-/** The authority ladder. A mandate is valid only if the issuer sits at or above the floor. */
-export const AUTHORITY_RANK: Record<string, number> = {
-  none: 0,
-  orchestrator: 1,
-  'chief-of-staff': 2,
-  manager: 3,
-  user: 4,
-  maestro: 4, // the human owner, as this project names them
-}
-
-/**
- * The DEPRECATED `approval-tier:` decoded to the ladder rung it always meant. The overlay
- * retired the number because reading `2` required a lookup to learn it said "MANAGER"; the
- * field survives only as a read-alias on legacy cards, and is never written on a new one.
- *
- * This decodes against AUTHORITY_RANK above rather than carrying its own ordering — two
- * hand-maintained ladders is the footgun one level up, and the whole point of the migration
- * was to have ONE spelling per rung.
- */
-export const TIER_TO_REQUIREMENT: Record<string, string> = {
-  '0': 'none',
-  '1': 'chief-of-staff',
-  '2': 'manager',
-  '3': 'user',
-}
 
 export type Severity = 'error' | 'warn'
 

@@ -25,6 +25,7 @@ import path from 'path'
 import { execFileSync } from 'child_process'
 import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
+import { validateTrddFieldEdits } from './trdd-edit-guard'
 
 // Re-exported so this module's PUBLIC API is unchanged by the move to lib/pillar/:
 // every existing caller imports TrddZone / TRDD_ZONES from here, and the proof the
@@ -266,7 +267,14 @@ export function appendApprovalLog(content: string, logLine: string): string {
 
 // ── mutations ────────────────────────────────────────────────────────────────
 
-/** Edit arbitrary frontmatter fields in place (no folder move); bumps `updated`. */
+/**
+ * Edit arbitrary frontmatter fields in place (no folder move); bumps `updated`.
+ *
+ * This is the ONE write funnel every caller (the API route, the CLI, every
+ * lifecycle verb) shares, so it is where the validate-BEFORE-write gate lives
+ * (TRDD-SCMPWF6R). The gate runs before the FIRST `fs.writeFileSync` — a refusal
+ * leaves the file byte-identical, because nothing has touched it yet.
+ */
 export function editTrdd(
   designDir: string,
   id: string,
@@ -275,6 +283,17 @@ export function editTrdd(
 ): TrddResult {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
+
+  // Validate the exact set of fields that will actually land on disk — including
+  // `updated`, which this function always writes alongside the caller's edits, so
+  // the guard's terminal-freeze exception for it (and its own date-shape check)
+  // see the real write, not a partial view of it.
+  const guard = validateTrddFieldEdits(
+    { ...fields, updated: iso },
+    trdd.frontmatter,
+    (refId) => Boolean(findTrdd(designDir, refId)),
+  )
+  if (!guard.ok) return { ok: false, error: guard.error, status: 400 }
 
   let content = fs.readFileSync(trdd.filePath, 'utf-8')
   for (const [k, v] of Object.entries(fields)) {

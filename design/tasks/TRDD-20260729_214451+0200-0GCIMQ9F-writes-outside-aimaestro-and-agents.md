@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-07-29T23:45:00+0200
+updated: 2026-07-30T02:18:00+0200
 implementation-commits: [973de2fe]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -32,6 +32,65 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
 
 **USER directive, verbatim (2026-07-29):** *"this is extremely dangerous, the only writings should
 be into ~/.aimaestro and into ~/agents"*.
+
+### AMENDMENT — USER, 2026-07-30: the USER-SCOPED-ELEMENT exception
+
+**Verbatim:** *"Change the rule to make an exception for user scoped elements. But very few user
+scoped elements are allowed, almost all from the janitor, the wikimem system and the 3-pillar
+system. some user scoped plugin can also save user scoped files outside of the project folder."*
+
+**What this fixes.** The rule as first written binds a WRITER but reads like a claim about PATHS —
+and the card's own open box asks for it to become a governance rule for the ecosystem. Promoted
+verbatim it would have forbidden the **janitor** from writing `~/.claude/rules/`, the **wikimem**
+system from writing `~/.claude/projects/<slug>/memory/`, and the **3-pillar** system from writing a
+LOCAL-scope corpus at `~/.claude/projects/<slug>/design/` — i.e. it would have outlawed three
+systems this project depends on, for doing the one thing user-scope means. The boundary is about
+ai-maestro not annexing `~/.claude`; it was never about denying a user-scoped element its own state.
+
+**The class, and why it is not a loophole.** A user-scoped element's state lives outside any project
+folder BY DEFINITION, and the allowed set is SHORT and closed: the janitor, wikimem, the 3-pillar
+system, plus a small number of user-scoped plugins keeping their own user-scoped files. Where
+ai-maestro writes into one of those stores it is entering ANOTHER element's dir by design, not
+widening its own footprint. Three things the class explicitly does NOT cover — each is the reading
+that would turn it into a loophole:
+
+1. **Installing or enabling anything at user scope stays the IRON prohibition**
+   (`ai-maestro-never-installs-user-scope`); only the human may do that. The exception is about an
+   element's own DATA, never about plugin installation.
+2. **The write still owes the enforcer discipline** that earned the `settings.json` carve-out —
+   named allowlist entry with a ratifying TRDD, atomic tmp+rename, fail-closed on a corrupt file,
+   idempotent. "User-scoped" licenses the LOCATION, not sloppiness.
+3. **Deleting the USER's own data is NOT in the class.** The `~/.claude/projects/<slug>/` transcript
+   purge deletes chat history, not an element's state, and stays UNRATIFIED pending its own decision.
+
+Recorded in `lib/write-boundary.ts` as the exception-class note on `ALLOWED_OUT_OF_ROOT_WRITES`.
+
+### Two facts established while applying it (both by measurement, both corrections)
+
+**1. The 45 files in `~/.aimaestro/pillar-index/` are NOT user-scoped state — 44 are OUR OWN TEST
+LEAKAGE.** Counted and identified 2026-07-30: 43 named `t-<hash12>.sqlite`, all exactly 65536 bytes,
+mtimes only 2026-07-29 (36) and 2026-07-30 (9) — two days of test runs; 1 named
+`pillar-0impact-xdmckp-…`; and exactly **1 legitimate** index, `ai-maestro-e916c2513721.sqlite`, for
+this repo's own corpus. The `t-` slug decodes the cause: `corpusKeyFor` takes
+`basename(dirname(realpath))`, so a corpus that IS a `mkdtemp` directory yields the basename of
+`$TMPDIR`, which on macOS is `T`. `tests/unit/pillar-graph-cli.test.ts` and
+`tests/unit/pillar-cli-exit-codes.test.ts` both reach `statePath('pillar-index')`, and **neither uses
+`tests/helpers/fake-ecosystem-home.ts`** — so every run writes one index into the developer's REAL
+`~/.aimaestro`. That is a 0-IMPACT violation in our own suite (a plugin's tests are the plugin's job),
+not an artefact of the write boundary and not user-scoped state. The FOLDER is right: `3P-IDX-02`
+requires the index outside the corpus, and `~/.aimaestro` is the ratified state root. Cleanup of the
+44 needs USER permission (RULE 0 — untracked, outside the repo) and is asked separately.
+
+**2. `lib/oauth-rotator/slots.ts` was writing outside both roots, recorded in NEITHER list.** It
+writes `~/.claude/plugins/data/ai-maestro-janitor-…/oauth-rotator/` (`mkdirSync` +
+`writeFileSync`/`renameSync` + `rmSync`, lines 295-329) through a local `p` from
+`oauthRotatorDir()` — so the write-boundary detector's first-argument markers cannot see it, and it
+was absent from both `ALLOWED_OUT_OF_ROOT_WRITES` and `KNOWN_INDIRECT_WRITERS`. The gate was green
+while an unrecorded out-of-root write existed. It is LEGITIMATE and lands squarely in the new class
+(the janitor owns that dir; OAuth custody is split across the two plugins by design, and only SLOTS
+are written, never the live credential) — but *legitimate* and *written down* are different
+properties and only the second is checkable. Added to `KNOWN_INDIRECT_WRITERS` with the pin updated,
+which is the mechanism working: the list could not grow silently.
 
 **Measured inventory — every write/delete this repo performs OUTSIDE those two roots.** Produced
 by grepping the write verbs in `lib/ services/ app/ server.mjs` and filtering to `~/.claude`
@@ -161,4 +220,15 @@ either shape — it is what converts "we remember not to do this" into something
 - [x] The boundary test is non-vacuous (asserts the scanned count) and fails on a seeded new violation — asserts `scanned > 400` and `writeCallSites > 100`, plus a per-marker-class non-zero check; end-to-end neuter recorded (a real `writeFile(join(HOME, '.claude', …))` appended to `services/groups-service.ts` reddens the allowlist test naming that exact site)
 - [ ] The ratified `settings.json` carve-out is asserted as EXPECTED so a future audit cannot delete it
 - [ ] The `~/.claude/projects/` transcript purge is explicitly ratified or removed
-- [ ] The boundary is recorded as a governance rule, not only as a memory note
+- [ ] The boundary is recorded as a governance rule, not only as a memory note — **must carry the
+      USER-SCOPED-ELEMENT exception (USER, 2026-07-30)**, or the rule outlaws the janitor, wikimem and
+      the 3-pillar system's own state the day it is promoted
+- [x] The user-scoped-element exception class is recorded where the boundary is ENFORCED, not only in
+      prose — the class note on `ALLOWED_OUT_OF_ROOT_WRITES` in `lib/write-boundary.ts`, naming the
+      closed set (janitor · wikimem · 3-pillars · a few user-scoped plugins) and the three readings it
+      does NOT license (user-scope install, undisciplined writes, deleting the user's own data)
+- [x] `lib/oauth-rotator/slots.ts` — the out-of-root write the detector cannot see and nobody had
+      recorded — is in `KNOWN_INDIRECT_WRITERS` with its class, and the test pin updated with it
+- [ ] The 44 leaked test indexes in `~/.aimaestro/pillar-index/` are removed **after USER permission**
+      (RULE 0: untracked, outside the repo) and the two leaking tests are contained via
+      `tests/helpers/fake-ecosystem-home.ts` so the leak cannot recur

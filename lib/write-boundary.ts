@@ -93,6 +93,18 @@ export const KNOWN_INDIRECT_WRITERS: { file: string; target: string; ratifiedBy:
     target: '~/.claude/settings.json (via a local `file` variable — atomic tmp+rename)',
     ratifiedBy: 'TRDD-QZL828OD D2 (USER, 2026-07-17)',
   },
+  {
+    file: 'lib/oauth-rotator/slots.ts',
+    target:
+      '~/.claude/plugins/data/ai-maestro-janitor-ai-maestro-plugins/oauth-rotator/ (via a local `p` from oauthRotatorDir(); mkdir + atomic tmp+rename + rmSync)',
+    // USER-SCOPED ELEMENT STATE (see the class note on ALLOWED_OUT_OF_ROOT_WRITES). The janitor is
+    // a user-scope plugin and this is ITS data dir; ai-maestro writes OAuth SLOTS (never the live
+    // credential) there because custody is deliberately split across the two plugins. Found
+    // 2026-07-30 while answering the USER's user-scope question — it was in NEITHER list, which is
+    // the failure mode this list exists to prevent: an undetectable write that nobody wrote down
+    // reads exactly like a write that does not happen.
+    ratifiedBy: 'TRDD-0GCIMQ9F (USER, 2026-07-30) — user-scoped-element state',
+  },
 ]
 
 function walk(dir: string, out: string[]): void {
@@ -206,6 +218,26 @@ export function scanWriteBoundary(repoRoot: string, roots: string[]): WriteBound
  *
  * Adding a line is a deliberate act: it says "ai-maestro writes outside its own two roots, and
  * here is who approved that". Anything not listed fails the gate.
+ *
+ * THE USER-SCOPED-ELEMENT EXCEPTION CLASS (USER, 2026-07-30). The boundary binds ai-maestro as a
+ * WRITER; it is not a claim that `~/.aimaestro` + `~/agents` are the only legitimate paths on the
+ * machine. A USER-SCOPED element's own state lives outside any project folder because that is what
+ * user-scope MEANS, and the ecosystem has a SHORT, closed list of them: the **janitor**, the
+ * **wikimem memory system**, the **3-pillar system**, and a small number of user-scoped plugins that
+ * keep their own user-scoped files. Where ai-maestro writes into one of those stores it is entering
+ * ANOTHER element's state dir by design, not widening its own footprint — so such a site is
+ * allowlisted under this class rather than treated as a violation to remove.
+ *
+ * The class is NARROW and it is not a loophole. Three things it does NOT cover, called out because
+ * each is the reading that would turn it into one:
+ *   · it does not permit INSTALLING or ENABLING anything at user scope — that remains the IRON
+ *     prohibition (`ai-maestro-never-installs-user-scope`), and only the human may do it;
+ *   · it does not permit writing a user-scoped element's state on a WHIM — the entry still names a
+ *     ratifying TRDD, and the write still owes the enforcer discipline (allowlist, atomic
+ *     tmp+rename, fail-closed, idempotent) that earned the settings carve-out;
+ *   · it does not cover DELETING user data. The `~/.claude/projects/<slug>/` transcript purge is a
+ *     delete of the USER's chat history, not an element's state, and stays UNRATIFIED under
+ *     TRDD-0GCIMQ9F until decided on its own terms.
  */
 export const ALLOWED_OUT_OF_ROOT_WRITES: { key: string; ratifiedBy: string; why: string }[] = [
   {

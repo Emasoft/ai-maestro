@@ -103,7 +103,17 @@ describe('the boundary itself', () => {
     // `claude-settings-enforcer.ts` writes ~/.claude/settings.json through a local `file` variable,
     // so no marker appears in the first argument — exactly the shape a future violation could hide
     // in. Pinning the list means the blind spot cannot grow without this test failing.
-    expect(KNOWN_INDIRECT_WRITERS.map((w) => w.file)).toEqual(['lib/claude-settings-enforcer.ts'])
+    //
+    // `oauth-rotator/slots.ts` is the SECOND, added 2026-07-30 — and it is the proof this pin
+    // earns its keep. It had been writing the janitor's plugin-data dir through a local `p` since
+    // the OAuth port landed, in NEITHER list, so the gate was green while an out-of-root write went
+    // unrecorded. It is legitimate (USER-SCOPED ELEMENT STATE — the janitor owns that dir and
+    // custody is split by design), but "legitimate" and "written down" are different properties and
+    // only the second one is checkable.
+    expect(KNOWN_INDIRECT_WRITERS.map((w) => w.file)).toEqual([
+      'lib/claude-settings-enforcer.ts',
+      'lib/oauth-rotator/slots.ts',
+    ])
     for (const w of KNOWN_INDIRECT_WRITERS) {
       expect(w.ratifiedBy).toMatch(/TRDD-[A-Z0-9]{8}/)
     }

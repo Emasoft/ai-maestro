@@ -395,7 +395,22 @@ const UNAUDITED_RULES = new Set<number>([
 // with A alone the file would look like five assertions about a single `&&`. Sweep NEGATIVE a
 // sixth time: TeamListView is named in exactly one test file, and only in its HEADER COMMENT,
 // as one of five callers of the shared PasswordDialog — which the create flow does not use.
-const MAX_ENFORCED_WITHOUT_TEST = 5
+// 2026-07-30: 5 -> 3. R4.8 + R7.8 pinned together by
+// tests/governance/r4-r7-team-overview-display.test.tsx — two PRESENTATION rules whose guards sit
+// four lines apart in TeamOverviewSection, so one render drives both. R4.8 is a PARTITION (:33-34
+// splits the fleet into members and non-members) and needs BOTH halves: a roster-only test passes
+// against a picker offering everyone, and a picker-only test passes against an empty roster.
+// R7.8's second clause is the one a test would skip — "resolve the UUID" is easy with a resolvable
+// COS; "NEVER show raw UUIDs" is about the branch where resolution FAILS, which is where a
+// regression actually lands. Four neuters, each reddening exactly one test, so no neuter crosses
+// between the two rules — that independence is what makes these two rows and not one counted twice.
+// TWO of the four found bugs IN THE TEST, not in the code: (1) neuter A reddened NOTHING at first
+// because `queryByRole('button', {name: /^bob$/i})` can never match — each picker entry renders an
+// avatar initial, so the accessible name is "B Bob"; the assertion read as a guard and was vacuous.
+// (2) neuter C reddened an R4.8 test too, because the roster had pinned the COS name to exactly 2
+// occurrences (banner + row) — a coupling between two rows meant to be independent; the roster now
+// asserts a floor and the both-places claim moved into R7.8, whose own word is "everywhere".
+const MAX_ENFORCED_WITHOUT_TEST = 3
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

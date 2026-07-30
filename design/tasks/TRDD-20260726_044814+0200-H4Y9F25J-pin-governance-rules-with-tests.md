@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:51:52+0200
+updated: 2026-07-30T18:57:27+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,49 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 5 → 3 — R4.8 + R7.8 DONE together. Two neuters found bugs in the TEST.
+
+**The remaining 3:** R2.2, R7.1, R20.28.
+
+Two PRESENTATION rules whose guards sit **four lines apart** in
+`components/teams/TeamOverviewSection.tsx`, so one render drives both:
+`tests/governance/r4-r7-team-overview-display.test.tsx` (6 tests).
+
+- **R4.8** ("always show team memberships when selecting agents") is a **PARTITION** — `:33-34`
+  splits the fleet into members and non-members — and needs BOTH halves. A roster-only test
+  passes against a picker that offers everyone (the operator re-adds a member and eats a
+  server error); a picker-only test passes against an empty roster. Neither half alone is the
+  rule.
+- **R7.8** ("resolve COS UUID to a name everywhere; NEVER show raw UUIDs") has a second clause
+  that a test would skip. "Resolve it" is easy to assert with a resolvable COS. "Never show a
+  raw UUID" is about the branch where resolution FAILS — the COS agent deleted out from under
+  the team — and that is where a regression actually lands, because nobody looks at it.
+
+**Four neuters, each red on exactly ONE test**, and none crossing between the two rules —
+that independence is what makes these two rows rather than one counted twice:
+
+| neuter | site | reddened |
+|---|---|---|
+| A | drop the `!` from `availableAgents` (`:34`) | the picker test |
+| B | `teamAgents = agents` (`:33`) | the roster test |
+| C | `cosDisplay` returns the raw id | the resolve test |
+| D | the unresolved branch returns the FULL id | the never-raw test |
+
+**TWO of the four found bugs in the TEST, not in the code** — which is the whole reason the
+neuter run is not optional:
+
+1. **Neuter A reddened NOTHING on its first run.** The assertion was
+   `queryByRole('button', {name: /^bob$/i})`, and each picker entry renders an avatar initial
+   beside the name, so the accessible name is `"B Bob"` — the anchored regex could never
+   match, present or absent. It *read* as a guard and was vacuous. Unanchored now.
+2. **Neuter C reddened an R4.8 test as well.** The roster had pinned the COS name to exactly
+   2 occurrences (banner + row), so breaking R7.8's resolver broke an R4.8 assertion — a
+   coupling between two rows meant to be independent. The roster now asserts a FLOOR, and the
+   both-places claim moved into the R7.8 block, whose own word is "everywhere".
+
+Verification: guard restored byte-identical; tsc 0; full suite **300 files / 4338 passed /
+2 skipped**, exit 0.
 
 ### RATCHET 6 → 5 — R7.3 DONE. The cited line was only the DISPLAY; the rule needed three.
 

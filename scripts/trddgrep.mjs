@@ -1,23 +1,32 @@
 #!/usr/bin/env node
 /**
- * greptrdd — the offline query surface over the TRDD corpus.
+ * trddgrep — the offline query surface over the TRDD corpus.
+ *
+ * NAMED BY LAW, not by taste (USER, 2026-07-30): every corpus tool is
+ * `<document type>grep` — memgrep, trddgrep, prrdgrep, specgrep. This file was called
+ * `greptrdd` for its whole life, i.e. the two words backwards, and that alone made it
+ * unreachable. The janitor's agent reasoned "memgrep exists for the memory corpus, so
+ * trddgrep exists for the TRDD corpus", searched for exactly that name, and found
+ * nothing — while the tool it wanted sat right here under a reversed one. So do not
+ * "tidy" this back: a tool whose name cannot be GUESSED from the corpus it reads is not
+ * installed, whatever the filesystem says (TRDD-217AYEOT).
  *
  * The memgrep of the task board. memgrep answers "have we hit this before?" from a
- * SYMPTOM; greptrdd answers "what is the state of this work, and what is holding it
+ * SYMPTOM; trddgrep answers "what is the state of this work, and what is holding it
  * up?" from an id, a word, or nothing at all.
  *
  * WHY IT EXISTS, given three TRDD tools already do:
  *   lib/trdd-store.ts   — the ONE owner of "what is a TRDD" (parse, list, search)
  *   lib/trdd-graph.ts   — the ONE owner of the edges + invariants (cycle, gates)
  *   scripts/trdd-doctor — HEALTH: lint the corpus, repair what is derivable
- *   greptrdd            — QUERY: read the corpus. This file. It COMPOSES the two
+ *   trddgrep            — QUERY: read the corpus. This file. It COMPOSES the two
  *                         libraries above and OWNS NOTHING. Adding a fourth parser or
  *                         a second cycle detector would create a second truth — which
  *                         is exactly the bug the doctor was built to catch, and which
  *                         the doctor itself committed by not looking first.
  *
  * It needs NO SERVER. `aimaestro-trdd.sh` goes through the HTTP API (and 403s an agent
- * on the write verbs); greptrdd reads the files, so it works in a cold repo, in CI, and
+ * on the write verbs); trddgrep reads the files, so it works in a cold repo, in CI, and
  * in an agent's tmux pane at 3am when the dashboard is down.
  *
  * THE CENTRAL QUERY IS `why`. Timing is noise — how long a card has waited says nothing.
@@ -26,13 +35,13 @@
  * that, if it moved, would move everything behind it. A column list cannot show you
  * that, and neither can an age.
  *
- *   greptrdd                     the board
- *   greptrdd next                what is workable RIGHT NOW, ranked by what it frees
- *   greptrdd why <id>            the transitive blocker chain, down to the root cause
- *   greptrdd unblocks <id>       what finishing this would free
- *   greptrdd roots               every root cause on the board — the whole critical path
- *   greptrdd show <id>           the card + its STATE block (authoritative on resume)
- *   greptrdd <pattern>           ranked search over title, labels, id and body
+ *   trddgrep                     the board
+ *   trddgrep next                what is workable RIGHT NOW, ranked by what it frees
+ *   trddgrep why <id>            the transitive blocker chain, down to the root cause
+ *   trddgrep unblocks <id>       what finishing this would free
+ *   trddgrep roots               every root cause on the board — the whole critical path
+ *   trddgrep show <id>           the card + its STATE block (authoritative on resume)
+ *   trddgrep <pattern>           ranked search over title, labels, id and body
  */
 import path from 'path'
 import process from 'process'
@@ -57,7 +66,7 @@ const C = {
 // corpus exited 0 — "I found nothing wrong" and "I looked at nothing" were the
 // same answer. They are now different answers with different exit codes.
 process.on('uncaughtException', (err) => {
-  console.error(`greptrdd: could not run — ${err?.message ?? err}`)
+  console.error(`trddgrep: could not run — ${err?.message ?? err}`)
   if (process.env.TRDD_DEBUG) console.error(err?.stack ?? '')
   process.exit(2)
 })
@@ -104,7 +113,7 @@ const DEFAULT_LIMIT = 20
 const limit = limitVal === undefined ? DEFAULT_LIMIT : Number(limitVal)
 if (!Number.isInteger(limit) || limit < 0) {
   console.error(
-    `greptrdd: --limit takes a non-negative integer (0 = no limit), not ${JSON.stringify(limitVal)}`,
+    `trddgrep: --limit takes a non-negative integer (0 = no limit), not ${JSON.stringify(limitVal)}`,
   )
   process.exit(2)
 }
@@ -121,8 +130,8 @@ assertDesignDir(designDir)
 //
 // LAZY and BODY-FREE. Two separate wins, and the second is the one that scales:
 //
-//  · LAZY — this ran at top level, before the switch, so `greptrdd help` walked
-//    all four zones to print a usage string, and `greptrdd next` walked them to
+//  · LAZY — this ran at top level, before the switch, so `trddgrep help` walked
+//    all four zones to print a usage string, and `trddgrep next` walked them to
 //    answer a question it then re-asks of `lib/trdd-doctor.ts` anyway.
 //  · BODY-FREE — an array of cards carrying `body` IS the memory wall. Measured
 //    on the linter, which had the identical defect: at 100 000 cards x ~10 KB it
@@ -148,7 +157,7 @@ function cardFieldsFrom(fm) {
     // A STRING or null, never a number — the one form the index's TEXT column can
     // round-trip to. Invisible at the surface: `P${0}` and `P${'0'}` print the same.
     priority: normalizePriority(fm.priority),
-    // The refs that impose ORDER, through the graph's OWN helpers. greptrdd carried a
+    // The refs that impose ORDER, through the graph's OWN helpers. trddgrep carried a
     // private `list()` that accepted ONLY arrays, so a scalar `npt: TRDD-X` was a
     // reference to `lib/trdd-graph.ts` and to the pillar index but NOT to this file —
     // the same "two consumers of one store, divergent on identical input" bug Phase 1
@@ -192,7 +201,7 @@ function* walkCards() {
 /** The mid-scan casualties, reported once — after the walk that found them. */
 function reportVanished() {
   if (!vanished.length) return
-  console.error(`greptrdd: ${vanished.length} file(s) vanished mid-scan and were skipped:`)
+  console.error(`trddgrep: ${vanished.length} file(s) vanished mid-scan and were skipped:`)
   for (const f of vanished.slice(0, 5)) console.error(`  · ${path.relative(process.cwd(), f)}`)
   if (vanished.length > 5) console.error(`  … and ${vanished.length - 5} more`)
 }
@@ -219,8 +228,8 @@ async function tryIndex() {
     const { loadTrddGraphViaIndex } = await import('../lib/pillar/index-open.ts')
     return loadTrddGraphViaIndex(designDir)
   } catch (err) {
-    console.error(`greptrdd: the index could not answer — ${err?.message ?? err}`)
-    console.error('greptrdd: falling back to the corpus walk (--no-index skips this attempt)')
+    console.error(`trddgrep: the index could not answer — ${err?.message ?? err}`)
+    console.error('trddgrep: falling back to the corpus walk (--no-index skips this attempt)')
     return null
   }
 }
@@ -399,7 +408,7 @@ switch (cmd) {
       })),
     )
     if (q.length === 0) {
-      console.log(C.y('\nNOTHING IS READY — every open card waits on another. Check for a cycle: greptrdd roots\n'))
+      console.log(C.y('\nNOTHING IS READY — every open card waits on another. Check for a cycle: trddgrep roots\n'))
       break
     }
     console.log(C.b(`\nREADY — ${q.length} card(s), ranked by how much finishing them frees\n`))
@@ -418,7 +427,7 @@ switch (cmd) {
     console.log(`\n${fmt(c)}`)
     console.log(C.d(`  ${path.relative(process.cwd(), c.filePath)}`))
     const ob = openBlockers(c)
-    if (ob.length) console.log(`  ${C.r('blocked by')} ${ob.join(', ')}   ${C.d('(greptrdd why ' + c.id + ')')}`)
+    if (ob.length) console.log(`  ${C.r('blocked by')} ${ob.join(', ')}   ${C.d('(trddgrep why ' + c.id + ')')}`)
     // The body is read HERE, for this ONE card — the walk above kept none. Through
     // the same store, so the semantics are the walk's: null means the file was
     // `git mv`d between the walk and now (benign, and worth saying out loud), while
@@ -455,7 +464,7 @@ switch (cmd) {
     if (n === 0 && columnVal !== undefined) {
       console.log(
         C.y(`\nno open cards in column ${JSON.stringify(columnVal)}`) +
-          C.d(' — `greptrdd board` lists every column\n'),
+          C.d(' — `trddgrep board` lists every column\n'),
       )
       break
     }
@@ -494,7 +503,7 @@ switch (cmd) {
     // certified a clean corpus. Zero scanned is "could not run", never "clean".
     if (report.scanned === 0) {
       console.error(
-        `greptrdd: scanned 0 TRDDs under ${designDir} — refusing to certify a corpus it never read`,
+        `trddgrep: scanned 0 TRDDs under ${designDir} — refusing to certify a corpus it never read`,
       )
       process.exit(2)
     }
@@ -548,7 +557,7 @@ switch (cmd) {
     const all = argv.includes('--all')
     const repair = argv.includes('--repair')
     if (all && repair) {
-      console.error('greptrdd: --repair is per-corpus (it needs the corpus path); --all is detect-only')
+      console.error('trddgrep: --repair is per-corpus (it needs the corpus path); --all is detect-only')
       process.exit(2)
     }
     // LAZY + guarded, like `tryIndex`: better-sqlite3 is native and caps at Node 25, and a
@@ -558,8 +567,8 @@ switch (cmd) {
     try {
       mod = await import('../lib/pillar/index-verify.ts')
     } catch (err) {
-      console.error(`greptrdd: cannot load the index verifier — ${err?.message ?? err}`)
-      console.error('greptrdd: the index needs the native better-sqlite3 (Node <= 25); the corpus itself is unaffected')
+      console.error(`trddgrep: cannot load the index verifier — ${err?.message ?? err}`)
+      console.error('trddgrep: the index needs the native better-sqlite3 (Node <= 25); the corpus itself is unaffected')
       process.exit(2)
     }
 
@@ -636,7 +645,7 @@ switch (cmd) {
     const colour = v.state === 'ok' ? C.g : v.state === 'damaged' ? C.r : C.y
     console.log(`${colour(describe(v))}`)
     if (v.state === 'damaged' && !repair) {
-      console.log(C.d('  repair with: greptrdd index-verify --repair'))
+      console.log(C.d('  repair with: trddgrep index-verify --repair'))
     }
     console.log()
     process.exit(rank[v.state] ?? 2)
@@ -646,26 +655,26 @@ switch (cmd) {
   case '--help':
   case '-h':
     console.log(`
-${C.b('greptrdd')} — query AND validate the TRDD corpus (offline; no server)
+${C.b('trddgrep')} — query AND validate the TRDD corpus (offline; no server)
 
-  ${C.c('greptrdd')}                  the board
-  ${C.c('greptrdd next')}             what is workable RIGHT NOW, ranked by what it frees
-  ${C.c('greptrdd why <id>')}         the transitive blocker chain, down to the ROOT CAUSE
-  ${C.c('greptrdd unblocks <id>')}    what finishing this would free
-  ${C.c('greptrdd roots')}            every root blocker — the critical path of the board
-  ${C.c('greptrdd show <id>')}        the card + its STATE block
-  ${C.c('greptrdd <pattern>')}        ranked search over title, labels, id, body
+  ${C.c('trddgrep')}                  the board
+  ${C.c('trddgrep next')}             what is workable RIGHT NOW, ranked by what it frees
+  ${C.c('trddgrep why <id>')}         the transitive blocker chain, down to the ROOT CAUSE
+  ${C.c('trddgrep unblocks <id>')}    what finishing this would free
+  ${C.c('trddgrep roots')}            every root blocker — the critical path of the board
+  ${C.c('trddgrep show <id>')}        the card + its STATE block
+  ${C.c('trddgrep <pattern>')}        ranked search over title, labels, id, body
 
-  ${C.c('greptrdd lint')}             every finding, grouped by rule (errors first)
-  ${C.c('greptrdd validate')}         the WRITE GATE — TAB rows: SEV⇥CODE⇥id⇥path⇥msg
+  ${C.c('trddgrep lint')}             every finding, grouped by rule (errors first)
+  ${C.c('trddgrep validate')}         the WRITE GATE — TAB rows: SEV⇥CODE⇥id⇥path⇥msg
   ${C.d('  … add --strict to either to fail on warnings too (exit 1)')}
 
-  ${C.c('greptrdd index-verify')}     the FULL index check (integrity_check) for this corpus
+  ${C.c('trddgrep index-verify')}     the FULL index check (integrity_check) for this corpus
   ${C.d('  --repair   rebuild it if damaged — the only path that CAN, it holds the corpus')}
   ${C.d('  --all      every index on this host, detect-only (the server sweeps this 6-hourly)')}
 
   ${C.d('Exit: 0 clean · 1 findings · 2 THE CHECK COULD NOT RUN. 2 outranks 1 — grep\'s own')}
-  ${C.d('precedence. So never write `greptrdd validate || …`: that collapses "found')}
+  ${C.d('precedence. So never write `trddgrep validate || …`: that collapses "found')}
   ${C.d('findings" into "could not run", the exact conflation the third code prevents.')}
 
   ${C.d('--limit N    rows per list before board/roots/next stop AND SAY SO (default 20;')}

@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { spawnSync } from 'child_process'
 
 /**
- * TRDD-L55IYKL4 — greptrdd's GRAPH subcommands, pinned at the BINARY.
+ * TRDD-L55IYKL4 — trddgrep's GRAPH subcommands, pinned at the BINARY.
  *
  * These spawn the real CLI rather than importing a library, for the same reason
  * `pillar-cli-exit-codes.test.ts` does: the thing under test is what a human or an
@@ -20,7 +20,7 @@ import { spawnSync } from 'child_process'
 const REPO = process.cwd()
 
 /**
- * greptrdd colours its output, and the escapes land BETWEEN the fields an assertion
+ * trddgrep colours its output, and the escapes land BETWEEN the fields an assertion
  * wants to relate — `P0` and its column are `\x1b[2mP0\x1b[0m dev`, so a plain
  * `/P0\s+dev/` fails for a reason that has nothing to do with the behaviour. Strip
  * once, here, rather than teaching every assertion to step around the escapes.
@@ -39,7 +39,7 @@ let corpus: string
 let home: string
 
 function runCli(args: string[]): { status: number; stdout: string; stderr: string } {
-  const r = spawnSync(process.execPath, ['--import', 'tsx', path.join('scripts', 'greptrdd.mjs'), ...args], {
+  const r = spawnSync(process.execPath, ['--import', 'tsx', path.join('scripts', 'trddgrep.mjs'), ...args], {
     cwd: REPO,
     encoding: 'utf-8',
     env: { ...process.env, TRDD_DEBUG: '', HOME: home },
@@ -79,7 +79,7 @@ afterEach(() => {
 
 describe('a dependency written as a bare SCALAR is a real edge (TRDD-L55IYKL4)', () => {
   /**
-   * greptrdd used to carry a private `list()` that accepted ONLY arrays. So
+   * trddgrep used to carry a private `list()` that accepted ONLY arrays. So
    * `npt: TRDD-X` — one prerequisite, written the obvious way — was a reference to
    * `lib/trdd-graph.ts` (`refList` handles the scalar), a reference to the pillar
    * index (built with `refList`), and NOT a reference to the board. The card read
@@ -182,7 +182,7 @@ describe('the INDEX answers the graph exactly as the WALK does (TRDD-L55IYKL4)',
    * walks.
    *
    * The guard lives HERE, not in a sibling test, because a neuter run proved the
-   * alternative worthless: breaking the index query made greptrdd fall back (loudly,
+   * alternative worthless: breaking the index query made trddgrep fall back (loudly,
    * as designed), both runs became walks, and five of six `expect(indexed).toBe(walk)`
    * assertions went GREEN comparing a walk to itself. A separate positive-control
    * test noticed; anyone running `-t "byte-identical"` would not have. A shared
@@ -198,7 +198,7 @@ describe('the INDEX answers the graph exactly as the WALK does (TRDD-L55IYKL4)',
     const run = (extra: string[]) =>
       spawnSync(
         process.execPath,
-        ['--import', 'tsx', path.join('scripts', 'greptrdd.mjs'), ...args, '--design-dir', corpus, ...extra],
+        ['--import', 'tsx', path.join('scripts', 'trddgrep.mjs'), ...args, '--design-dir', corpus, ...extra],
         { cwd: REPO, encoding: 'utf-8', env },
       )
     const w = run(['--no-index'])
@@ -236,7 +236,7 @@ describe('the INDEX answers the graph exactly as the WALK does (TRDD-L55IYKL4)',
 
   it('POSITIVE CONTROL — the indexed run really used the index, so the diffs below are not two walks', () => {
     const r = runBoth(['board'])
-    // If the native module failed to load, greptrdd falls back LOUDLY. Both runs
+    // If the native module failed to load, trddgrep falls back LOUDLY. Both runs
     // would then be walks and every byte-identical assertion below would hold
     // while proving nothing whatsoever about the index.
     expect(r.stderr).not.toMatch(/falling back to the corpus walk/)
@@ -347,10 +347,10 @@ describe('the INDEX answers the graph exactly as the WALK does (TRDD-L55IYKL4)',
   it('the CLI still WORKS when the index cannot be loaded at all', () => {
     // The `--no-index` path IS the fallback path, exercised end-to-end: if the lazy
     // import were not guarded, a wrong Node or a missing native build would make
-    // greptrdd die rather than degrade — a query tool killed by its own cache.
+    // trddgrep die rather than degrade — a query tool killed by its own cache.
     const r = spawnSync(
       process.execPath,
-      ['--import', 'tsx', path.join('scripts', 'greptrdd.mjs'), 'board', '--design-dir', corpus, '--no-index'],
+      ['--import', 'tsx', path.join('scripts', 'trddgrep.mjs'), 'board', '--design-dir', corpus, '--no-index'],
       { cwd: REPO, encoding: 'utf-8', env: { ...process.env, TRDD_DEBUG: '', HOME: home } },
     )
     expect(r.status).toBe(0)

@@ -27,7 +27,7 @@
  *     into a doomed file, and report success. That is why `busy` is a NEVER_HEALED
  *     fault one layer down, and it is why the window is closed here by not opening it.
  *
- * The repair lives where the corpus path lives: `greptrdd index-verify --repair`, which
+ * The repair lives where the corpus path lives: `trddgrep index-verify --repair`, which
  * reuses the ALREADY-TESTED self-heal in `openIndex` rather than adding a second
  * "is this healable?" decision. Two such decisions had already drifted apart once
  * (see NEVER_HEALED in `index-db.ts`), and the drift cost a healthy index.
@@ -331,7 +331,7 @@ export function runIndexVerifyTick(opts: VerifyWatchdogOptions = {}): SweepResul
       // operator needs the path to run it on.
       for (const v of damaged) {
         parts.push(
-          `DAMAGED ${path.basename(v.file)} (${v.faults.map((f) => f.code).join(', ')}) — rebuild with: greptrdd index-verify --repair --design-dir <that corpus>/design`,
+          `DAMAGED ${path.basename(v.file)} (${v.faults.map((f) => f.code).join(', ')}) — rebuild with: trddgrep index-verify --repair --design-dir <that corpus>/design`,
         )
       }
       if (behind.length) parts.push(`${behind.length} behind the ladder (migrate on next open — NOT damage)`)

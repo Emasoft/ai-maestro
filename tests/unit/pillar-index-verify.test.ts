@@ -310,7 +310,7 @@ describe('the tick reports honestly, and never throws', () => {
     })
     expect(lines).toHaveLength(1)
     expect(lines[0]).toContain('DAMAGED')
-    expect(lines[0]).toContain('greptrdd index-verify --repair')
+    expect(lines[0]).toContain('trddgrep index-verify --repair')
   })
 
   it('reports `behind` and `unreadable` too — silence is not success', () => {

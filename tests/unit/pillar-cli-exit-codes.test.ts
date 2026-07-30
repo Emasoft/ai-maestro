@@ -11,7 +11,7 @@ import { spawnSync } from 'child_process'
  *   1  findings   · scanned a real corpus, found something
  *   2  could-not-run
  *
- * The third one is the whole point. `greptrdd validate` calls itself the WRITE
+ * The third one is the whole point. `trddgrep validate` calls itself the WRITE
  * GATE in its own help; run from the wrong directory it used to print zero rows
  * and exit 0, so "I found nothing wrong" and "I looked at nothing" were the same
  * answer. The library-level guards are pinned in `trdd-store.test.ts`; these
@@ -98,9 +98,9 @@ afterEach(() => {
   fs.rmSync(warnOnlyDir, { recursive: true, force: true })
 })
 
-describe('greptrdd exit codes', () => {
+describe('trddgrep exit codes', () => {
   it('exits 0 on a warnings-only corpus — the positive control, without which every 2 below is vacuous', () => {
-    const r = runCli('greptrdd.mjs', ['validate', '--design-dir', warnOnlyDir])
+    const r = runCli('trddgrep.mjs', ['validate', '--design-dir', warnOnlyDir])
     expect(r.status).toBe(0)
     // It really did read something, and read the ONE card we seeded — a bare `status === 0`
     // is exactly the shape this file exists to distrust.
@@ -109,17 +109,17 @@ describe('greptrdd exit codes', () => {
   })
 
   it('exits 1 under --strict, because warnings ARE findings to a gate that asked for them', () => {
-    expect(runCli('greptrdd.mjs', ['validate', '--strict', '--design-dir', warnOnlyDir]).status).toBe(1)
+    expect(runCli('trddgrep.mjs', ['validate', '--strict', '--design-dir', warnOnlyDir]).status).toBe(1)
   })
 
   it('exits 2 when the corpus root does not exist — NOT 0, which is what it used to do', () => {
-    const r = runCli('greptrdd.mjs', ['validate', '--design-dir', path.join(emptyDir, 'nope')])
+    const r = runCli('trddgrep.mjs', ['validate', '--design-dir', path.join(emptyDir, 'nope')])
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/no TRDD corpus at/)
   })
 
   it('exits 2 when the corpus exists but holds no TRDDs — an unread corpus is not a clean one', () => {
-    const r = runCli('greptrdd.mjs', ['validate', '--design-dir', emptyDir])
+    const r = runCli('trddgrep.mjs', ['validate', '--design-dir', emptyDir])
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/refusing to certify a corpus it never read/)
   })
@@ -127,13 +127,13 @@ describe('greptrdd exit codes', () => {
   it('accepts --design-dir anywhere on the line without eating the subcommand', () => {
     // The flag is stripped before `cmd`/`arg` are read. If it were not, `validate`
     // would land in the wrong argv slot and the tool would silently run `board`.
-    const r = runCli('greptrdd.mjs', ['--design-dir', emptyDir, 'validate'])
+    const r = runCli('trddgrep.mjs', ['--design-dir', emptyDir, 'validate'])
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/refusing to certify/)
   })
 })
 
-describe('greptrdd loads the corpus LAZILY (TRDD-L55IYKL4 / EHT 8KDIB2LT step 1)', () => {
+describe('trddgrep loads the corpus LAZILY (TRDD-L55IYKL4 / EHT 8KDIB2LT step 1)', () => {
   /**
    * A corpus whose `tasks` zone is a FILE, so `readdirSync` raises ENOTDIR.
    *
@@ -160,13 +160,13 @@ describe('greptrdd loads the corpus LAZILY (TRDD-L55IYKL4 / EHT 8KDIB2LT step 1)
   // the fixture really is unreadable and really does reach the walk. Without it,
   // `help` exiting 0 below would be satisfied by a fixture nothing ever read.
   it('a graph subcommand DOES read the corpus, and fails loud when it cannot', () => {
-    const r = runCli('greptrdd.mjs', ['board', '--design-dir', corpus])
+    const r = runCli('trddgrep.mjs', ['board', '--design-dir', corpus])
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/cannot read TRDD zone/)
   })
 
   it('`help` does NOT read the corpus — it walked all four zones to print a usage string', () => {
-    const r = runCli('greptrdd.mjs', ['help', '--design-dir', corpus])
+    const r = runCli('trddgrep.mjs', ['help', '--design-dir', corpus])
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/the transitive blocker chain/)
   })
@@ -175,7 +175,7 @@ describe('greptrdd loads the corpus LAZILY (TRDD-L55IYKL4 / EHT 8KDIB2LT step 1)
     // It still exits 2 — but on the DOCTOR's non-vacuity guard, not on the walk
     // this change removed. Distinguishing the two is the point: an assertion on
     // the status alone would pass either way and pin nothing.
-    const r = runCli('greptrdd.mjs', ['validate', '--design-dir', corpus])
+    const r = runCli('trddgrep.mjs', ['validate', '--design-dir', corpus])
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/cannot read TRDD zone/)
   })
@@ -232,7 +232,7 @@ describe('0-IMPACT — the spawned CLI never writes the real state dir (TRDD-YN8
 
   it('leaves the real ~/.aimaestro/pillar-index/ byte-count unchanged, while PROVING it indexed', () => {
     const before = countReal()
-    const r = runCli('greptrdd.mjs', ['board', '--design-dir', path.join(corpus, 'design')])
+    const r = runCli('trddgrep.mjs', ['board', '--design-dir', path.join(corpus, 'design')])
     const after = countReal()
 
     // The POSITIVE CONTROL, and it is load-bearing: without it this test passes when the

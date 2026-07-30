@@ -2294,6 +2294,72 @@ const STANDALONE_TITLES: ReadonlySet<string> = new Set([
 // Singleton titles (only one agent can hold this on the host/team)
 const SINGLETON_TEAM_TITLES: ReadonlySet<string> = new Set(['chief-of-staff', 'orchestrator'])
 
+/** One agent record, reduced to the fields the MAINTAINER repo check reads. */
+type MaintainerCandidate = {
+  id: string
+  name: string
+  governanceTitle?: string | null
+  githubRepo?: string | null
+  deletedAt?: string | null
+}
+
+/**
+ * R19.2 + R19.3 — the MAINTAINER `githubRepo` attribute, validated in ONE place.
+ *
+ * Extracted because it now has TWO call sites (ChangeTitle Gate 9a on a title
+ * transition, and Gate 6's repo-only branch when the title is already
+ * MAINTAINER). Two copies of a validator drift: the sibling BODY-STATE-CLAIM
+ * rule shipped with the lint and the `--fix` accepting different vocabularies,
+ * so `--fix` silently repaired a shape the lint never reported. One predicate,
+ * two callers, no drift.
+ *
+ * Pure by design — the caller supplies the agent list, so this is testable with
+ * no filesystem and no registry.
+ *
+ * `deletedAt` is filtered because a soft-deleted maintainer would otherwise hold
+ * its repository hostage forever: the tombstone stays in the registry by design,
+ * so treating it as an active owner makes the repo permanently unassignable.
+ */
+function checkMaintainerRepo(
+  agentId: string,
+  githubRepo: unknown,
+  allAgents: MaintainerCandidate[],
+): { error: string; repo?: undefined } | { error?: undefined; repo: string } {
+  if (!githubRepo || typeof githubRepo !== 'string') {
+    return { error: 'MAINTAINER requires a githubRepo attribute (format: "owner/repo")' }
+  }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(githubRepo)) {
+    return {
+      error: `Invalid githubRepo format: "${githubRepo}". Must be "owner/repo" (e.g. "Emasoft/my-project")`,
+    }
+  }
+  // BUG-FIX (SCEN-018 BUG-R19.3-UNIQUENESS-001): the caller must pass FULL Agent
+  // objects (loadAgents), never AgentSummary — the summary strips governanceTitle
+  // and githubRepo, so every comparison saw `undefined === 'owner/repo'` and the
+  // uniqueness check passed for every input while looking like it ran.
+  // `a.id !== agentId` is DEFENCE IN DEPTH, and deliberately unpinned: no test can
+  // redden it today because it is unreachable. Gate 5 sets oldTitle from
+  // agent.governanceTitle (the isManager/isChiefOfStaff overrides fire only when it
+  // is empty), so a registry maintainer ALWAYS lands in Gate 6's titleUnchanged
+  // branch — meaning Gate 9a is reached only when the subject is NOT a maintainer,
+  // and the subject's own record then fails the governanceTitle test anyway. Kept
+  // because it costs nothing and a future change to Gate 5's precedence would make
+  // it load-bearing again; recorded here so the next reader does not "cover" it with
+  // a contorted fixture and mistake that for coverage.
+  const existingMaintainer = allAgents.find(a =>
+    a.id !== agentId &&
+    a.governanceTitle === 'maintainer' &&
+    a.githubRepo === githubRepo &&
+    !a.deletedAt
+  )
+  if (existingMaintainer) {
+    return {
+      error: `Repository "${githubRepo}" is already maintained by "${existingMaintainer.name}". One MAINTAINER per repo per host (R19.3).`,
+    }
+  }
+  return { repo: githubRepo }
+}
+
 export async function ChangeTitle(
   agentId: string,
   newTitle: string | null,
@@ -2474,9 +2540,37 @@ export async function ChangeTitle(
     // but the registry doesn't have governanceTitle stored, we still need to write
     // the registry and install the plugin.
     const registryTitle = agent.governanceTitle || null
-    if (oldTitle === effectiveTitle && registryTitle === effectiveTitle) {
+    const titleUnchanged = oldTitle === effectiveTitle && registryTitle === effectiveTitle
+    // A no-op TITLE is not a no-op REQUEST. For MAINTAINER the caller may be
+    // re-pointing an existing maintainer at a DIFFERENT repository, and that value
+    // is validated and stored by Gate 9a alone — which this short-circuit skips.
+    // Returning success here wrote nothing and reported nothing: a missing write
+    // produces a SUCCESS, not an error, so no caller, log, or test could see the
+    // loss. The PATCH route made it unreachable from the other side too, by
+    // calling ChangeTitle only when the title changes while deliberately
+    // stripping githubRepo from its own updateAgent body — so the field's single
+    // source of truth was unreachable exactly when it was the only thing changing.
+    const repoChangeRequested =
+      effectiveTitle === 'maintainer' &&
+      typeof options?.githubRepo === 'string' &&
+      options.githubRepo !== (agent.githubRepo || null)
+    if (titleUnchanged && !repoChangeRequested) {
       result.success = true
       ops.push(`G06: Title already "${effectiveTitle || 'none'}" — no change`)
+      return result
+    }
+    if (titleUnchanged && repoChangeRequested) {
+      // Repo-ONLY change: validate + store, then stop. Falling through to the
+      // full pipeline would re-run the governance cascades, the plugin swap and
+      // the restart decision for a change that is pure agent data — a repo
+      // re-point needs no relaunch, and claiming restartNeeded would bounce a
+      // live session for nothing.
+      const { loadAgents: loadAgentsG06 } = await import('@/lib/agent-registry')
+      const check = checkMaintainerRepo(agentId, options?.githubRepo, loadAgentsG06() as MaintainerCandidate[])
+      if (check.error) { result.error = check.error; return result }
+      await updateAgent(agentId, { githubRepo: check.repo } as Record<string, unknown>)
+      result.success = true
+      ops.push(`G06b: Title unchanged — MAINTAINER repo re-pointed to "${check.repo}"`)
       return result
     }
     ops.push(`G06: Title change needed: "${oldTitle || 'none'}" → "${effectiveTitle || 'none'}"`)
@@ -2618,35 +2712,15 @@ export async function ChangeTitle(
     // When assigning MAINTAINER: require githubRepo, check repo uniqueness.
     // Polling-based design (no webhook, no port, no secret).
     if (newTitle === 'maintainer') {
-      // R19.2: githubRepo required and must match owner/repo format
-      const githubRepo = options?.githubRepo
-      if (!githubRepo || typeof githubRepo !== 'string') {
-        result.error = 'MAINTAINER requires a githubRepo attribute (format: "owner/repo")'
-        return result
-      }
-      if (!/^[\w.-]+\/[\w.-]+$/.test(githubRepo)) {
-        result.error = `Invalid githubRepo format: "${githubRepo}". Must be "owner/repo" (e.g. "Emasoft/my-project")`
-        return result
-      }
-      // R19.3: One MAINTAINER per repo on this host
-      // BUG-FIX (SCEN-018 BUG-R19.3-UNIQUENESS-001): use loadAgents() (full Agent objects)
-      // instead of listAgents() (AgentSummary strips governanceTitle/githubRepo fields,
-      // making the uniqueness check always pass silently).
+      // R19.2 (format + required) and R19.3 (per-repo uniqueness) both live in
+      // checkMaintainerRepo — the SAME predicate Gate 6's repo-only branch calls,
+      // so the two paths cannot diverge on what a valid repo is.
       const { loadAgents } = await import('@/lib/agent-registry')
-      const allAgents = loadAgents()
-      const existingMaintainer = allAgents.find(a =>
-        a.id !== agentId &&
-        a.governanceTitle === 'maintainer' &&
-        a.githubRepo === githubRepo &&
-        !a.deletedAt
-      )
-      if (existingMaintainer) {
-        result.error = `Repository "${githubRepo}" is already maintained by "${existingMaintainer.name}". One MAINTAINER per repo per host (R19.3).`
-        return result
-      }
+      const check = checkMaintainerRepo(agentId, options?.githubRepo, loadAgents() as MaintainerCandidate[])
+      if (check.error) { result.error = check.error; return result }
       // Store githubRepo on agent
-      await updateAgent(agentId, { githubRepo } as Record<string, unknown>)
-      ops.push(`G9a: MAINTAINER validated — repo="${githubRepo}"`)
+      await updateAgent(agentId, { githubRepo: check.repo } as Record<string, unknown>)
+      ops.push(`G9a: MAINTAINER validated — repo="${check.repo}"`)
     } else {
       ops.push(`G9a: Not MAINTAINER — maintainer validation skipped`)
     }

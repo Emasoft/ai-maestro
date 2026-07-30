@@ -812,7 +812,19 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     // failure now becomes a returned ServiceResult error; throw paths get
     // mapped to 500. The asymmetry that left non-ChangeClient mutations
     // failing invisibly is closed.
-    if (oldTitle !== newTitle) {
+    // A repo re-point is a CHANGE even when the title is not. githubRepo is
+    // stripped from cleanBody above (so updateAgent cannot leak-write it), which
+    // makes ChangeTitle the field's only writer — so gating the call on the TITLE
+    // alone dropped `PATCH { githubRepo }` on an agent that is already MAINTAINER:
+    // nothing validated it, nothing stored it, and the route still answered 200 OK
+    // with a stale record. The SCEN-020 fix closed the unvalidated leak-write and
+    // opened this hole; before it the value at least landed.
+    const requestedRepo = typeof changeableFields.githubRepo === 'string'
+      ? changeableFields.githubRepo.trim()
+      : ''
+    const repoChangeRequested =
+      requestedRepo.length > 0 && requestedRepo !== (existing.githubRepo || '')
+    if (oldTitle !== newTitle || repoChangeRequested) {
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
         const ac = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }

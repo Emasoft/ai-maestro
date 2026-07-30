@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T15:52:05+0200
+updated: 2026-07-30T15:56:20+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -134,7 +134,39 @@ wrong gate, R4.4 ~74 lines).** This is not bad luck — it is what a citation fo
 whose only machine-checked half is the LABEL produces over time. Assume the range
 is wrong and re-measure it on every row you touch.
 
-**NEXT ACTION — the 25 that remain. R4.4 is measured and ready:**
+**MEASURED 2026-07-30, and it reframes the whole campaign: 46 of the map's qualified
+citations point at the WRONG LINES — 21 distinct rules.** I stopped chasing R4.4's
+range (its THIRD wrong citation: `:4956` landed inside `ChangeHook`, then
+`:5128-5137`, then `:5304-5320`, each corrected by hand and each rotting again) and
+asked instead why the same defect keeps recurring. Answer: **only ONE half of a
+citation is machine-checked.** The qualifier check proves the LABEL exists in the
+pipeline; nothing has ever checked that the cited RANGE contains it.
+
+I extended the ratchet to require agreement — the cited range must contain the
+cited gate's `ops.push` — and it reported **46 violations**, each with the correct
+line. Sample: `R9.13` cites `:3176-3181` for `ChangeTitle::G17`, which lives at
+`:3348+`; `R18.4` is ~340 lines adrift on three gates at once; `R8.3` cites
+`:6240-6250` for `DeleteTeam::G05`, really at `:6807`.
+
+Rules affected: R3.2 R3.3 R8.3 R9.2 R9.6 R9.8 R9.13 R11.4 R11.5 R17.6 R17.9 R17.15
+R18.1 R18.2 R18.3 R18.4 R18.5 R18.7 R18.10 R20.13 R39.6.
+
+**The check is REVERTED, not committed** — landing it red would have left the suite
+failing, and the 46 fixes do not fit one context honestly. It is ~25 lines: parse
+the guard cell into per-segment `{file, start, end, pipeline, label}` (so each
+qualifier stays paired with ITS citation, which the current strip-then-split parse
+destroys), record the hit line numbers, and fail when no hit falls in range.
+
+**DECISION OWED before re-landing it, and the evidence points one way.** Re-measuring
+46 ranges by hand resets a clock that has already rewound three times on R4.4 alone.
+The alternative is to **DROP the range from any citation that carries a qualifier**:
+the qualifier is the durable, checked half, and deleting `:NNNN-NNNN` is a mechanical
+edit rather than 46 fresh guesses. That makes the grammar `file (Pipeline::Gnn)` for
+gate-backed rows and keeps `file:start-end` only where there is no gate label. Cheaper
+to land, and it removes the rotting half instead of restarting it.
+
+**NEXT ACTION — decide the above FIRST; it changes what the remaining rows should say.
+Then the 25 that remain. R4.4 is measured and ready:**
 
 - **R4.4** ("joining a team auto-assigns MEMBER + the programmer plugin"). Its row
   cited `:5304-5320`, which is the REMOVE branch (G04a/G04b) — the real G07 is

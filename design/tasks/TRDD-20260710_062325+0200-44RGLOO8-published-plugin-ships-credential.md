@@ -6,11 +6,11 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-07-13T14:05:00+0200
+updated: 2026-07-30T03:47:53+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
-priority: 0
-severity: CRITICAL
+priority: 1
+severity: major
 effort: S
 task-type: security
 labels: [security, credential, scenario-testing, plugin, cross-repo]
@@ -31,7 +31,7 @@ audit-requirements: [security-scan]
 review-requirements: [human-review]
 runtime-targets: []
 impacts: []
-external-refs: ["https://github.com/Emasoft/ai-maestro-web-scenario-tester"]
+external-refs: ["https://github.com/Emasoft/ai-maestro-web-scenario-tester", "https://github.com/Emasoft/ai-maestro-web-scenario-tester/issues/3"]
 ---
 
 # TRDD-44RGLOO8 — the publish carried the credential out of the repo
@@ -184,5 +184,49 @@ prevent.
   (min-approval-requirement: user). Not a mandate: the author's authority is below the
   tier this TRDD requires. Touches a shared credential and a public artifact, so the
   D3 objective floor is `user`. No approval has been requested or granted.
+
+## ⏵ ROTATION LANDED — the gate is OPEN and the leak is DEAD (verified 2026-07-30)
+
+**Supersedes the STATE block's "the credential is confirmed live, not stale."** It is stale now.
+
+| checked | method | result |
+|---|---|---|
+| is the published literal still the live password? | fetched the blob at `v0.1.3`, compared against `$AIM_GOVERNANCE_PASSWORD` in a pipeline whose ONLY output was a boolean — env → sed → fd → `grep -qFf`, never argv, never disk, never a model's context; guarded by a positive control that the pattern is non-empty and matches itself | **SUPERSEDED** |
+| same, at `master` | ditto | **no live credential** |
+| `passwordSetAt` in `~/.aimaestro/governance.json` | metadata read only | **2026-07-17T07:50:55Z** — a week after this card was authored |
+| is the CURRENT password anywhere in THIS repo? | `git ls-files -z \| xargs -0 grep -lFf <(extract)` | **0 tracked files** |
+| …in recent history? | `git grep -IFf` across the last 60 commits | **absent** |
+| is `.env.local` ignored? | `git check-ignore -v` | yes, `.gitignore:33` (`.env*.local`) |
+
+So **step 1 of the forced order is DONE** — the USER rotated, which is what makes every copy
+(the 32 here, the 2 there, every tag, every already-installed plugin cache) worthless. The
+standing warning *"no public issue may be filed until after the rotation"* is therefore
+**satisfied**, and step 2 became ordinary hygiene, in the open.
+
+**What is still live is not the secret — it is the MANDATE.** At `master`, the doc still
+*requires* the literal (`L546` `governance_password: "<password>"   # The actual password value,
+in quotes.`; `L576` *"Actual password in quotes. Referenced verbatim in steps."*), while the
+plugin's own `scenarios.config.json` spec defines `governancePasswordRef:
+env:AIM_GOVERNANCE_PASSWORD` and says the key holds *a REFERENCE — never the literal secret*.
+The config spec forbids what the rules doc requires, so the next scenario authored re-creates
+the exposure. Scrubbing two occurrences without amending the rule fixes the symptom for exactly
+one commit.
+
+**Filed: `Emasoft/ai-maestro-web-scenario-tester#3`** — root cause (the two rule lines), the
+verified-dead status stated up front so nobody treats it as an incident, the 197-literals /
+34-files evidence for why "be careful" is not a fix, the `1e6246ff` reference implementation
+(*helpers take no password argument*), a shape-not-value CI regression check, and the divergence
+of the second shipped copy at `skills/amwst-scenarios-rules/references/`. Method 1 per the
+cross-project rule; this session did not touch that tree, and offered a fork+PR if the owner
+wants the patch instead of the report.
+
+**Severity re-ranked CRITICAL → major, priority 0 → 1.** Not closed: a dead credential in a
+public tagged release is still bad hygiene and a false signal to any reader, and the mandate is
+a live root cause. But it is no longer an exposure, and leaving it ranked P0/CRITICAL would make
+the board's own top-priority signal a lie.
+
+**Still the owner's alone (unchanged):** whether tags `v0.1.1`-`v0.1.3` are deleted or left
+standing. Now that the string is dead, *leave them standing* is defensible and avoids a history
+rewrite — the issue says so and proposes neither.
 
 ## Notes and lessons learned

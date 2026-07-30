@@ -144,19 +144,25 @@ function analyze(): PipelineInfo[] {
  * hand-rolled pipeline reddens this immediately, which is the whole point — AIO-TXN-10
  * previously had no way to notice one.
  *
- * 13, MEASURED — and it corrects the card that drove this work. TRDD-DQ6XN2VP says "26
+ * 12, MEASURED — and it corrects the card that drove this work. TRDD-DQ6XN2VP says "26
  * pipelines" and its STATE block said 19 still hand-roll; both were hand counts of a NAME
  * LIST, and that list contains 7 thin delegators that are not pipelines at all
  * (`CreateMarketplace`/`Delete`/`UpdateMarketplace` forward one line to `ChangeMarketplace`;
  * `ChangeAgentDef`/`Command`/`Rule`/`OutputStyle` forward one line to
  * `changeSimpleElement`) while omitting `changeSimpleElement` itself, which IS one and is
  * already transactional. Real inventory when this landed: 19 pipelines, 5 transactional,
- * 14 to go — now 6 and 13, `CreateAgent` having been retrofitted.
+ * 14 to go — then 6 and 13 with `CreateAgent`, now 7 and 12 with `ChangeTeam`.
+ *
+ * NOTE FOR WHOEVER LOWERS IT NEXT: the count is a conformance measure, NOT a safety measure,
+ * and the two diverge. Several of the remaining 12 have exactly ONE mutating gate with nothing
+ * abortable after it — `ChangeAvatar` (G03), `ChangeName` (G04), `ChangeFolder` (G05) — so they
+ * have no partial-state window at all and retrofitting them moves this number while buying zero
+ * safety. Pick the next target by whether it can leave two stores disagreeing, not by gate count.
  */
-const MAX_HANDROLLED = 13
+const MAX_HANDROLLED = 12
 
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */
-const MIN_TRANSACTIONAL = 6
+const MIN_TRANSACTIONAL = 7
 
 /**
  * The pipelines already under the runner, pinned BY NAME. A count alone cannot see an
@@ -166,6 +172,7 @@ const MIN_TRANSACTIONAL = 6
  */
 const MUST_BE_TRANSACTIONAL = [
   'CreateAgent',
+  'ChangeTeam',
   'DeleteAgent',
   'ChangeClient',
   'ChangePlugin',

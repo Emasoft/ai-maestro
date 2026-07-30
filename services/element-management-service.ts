@@ -5220,6 +5220,94 @@ export async function ChangeTeam(
 
     const managerId = getManagerId()
 
+    // ── The mutating tail runs as ONE transaction per branch (R51 · AIO-TXN-10) ──
+    //
+    // WHERE IT STARTS. Everything above is READ-ONLY — authorization, the agent and team
+    // lookups, the manager gate, and the membership detection — so those gates keep their
+    // early returns and their exact error strings. There is nothing for a transaction to
+    // compensate before the first mutation. (Same split as CreateAgent and DeleteAgent.)
+    //
+    // WHERE IT ENDS. `PG01` is the last gate that can abort in either branch: the ledger
+    // emit below it is `tryEmitLedgerOp`, which swallows its own failure by construction,
+    // and nothing follows that. An `undo` written past that point could never run — see
+    // the note in CreateAgent for why unreachable compensation is worse than none.
+    //
+    // WHY MEMBERSHIP AND TITLE ARE **ONE** GATE, NOT TWO — the finding that shaped this
+    // block. ChangeTitle Gate 9 enforces R3 in BOTH directions: a team title REQUIRES the
+    // agent to be in `team.agentIds`, and a standalone title (autonomous / manager /
+    // maintainer) is REFUSED while the agent still is (the SCEN-001 BUG-002 guard). So the
+    // forward order is join-then-title and the reverse order is leave-then-demote — the
+    // reverse is NOT the mirror of the forward, it is the same order again. Reverse-order
+    // unwinding gives LIFO, which would run the demote FIRST, while the agent is still a
+    // member, and ChangeTitle would refuse it: EVERY rollback of this branch would report
+    // an R51.5 "INVALID STATE" about a system that was in fact fully recoverable. Two
+    // writes whose reverse order is not the mirror of their forward order cannot be two
+    // gates — they are one gate whose `undo` performs both, in the order R3 permits.
+    //
+    // WHAT THIS BUYS. Nothing here was compensated before: a throw at PG01 left the team
+    // registry and the agent registry disagreeing about the same membership — the agent in
+    // `team.agentIds` and titled, with its own `team` field still naming the old team (or
+    // empty). That is the exact drift CreateAgent's G07 undo has to clean up from outside.
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const { updateAgent } = await import('@/lib/agent-registry')
+
+    interface TeamCtx {
+      /** Team whose `agentIds` this call moved the agent into or out of — null once reverted. */
+      membershipMoved: string | null
+      /** True only when G04b actually cleared an orchestratorId, so its undo restores only what it took. */
+      orchestratorCleared: boolean
+      /** The title held BEFORE this call. `null` is not restorable and does not need to be: ChangeTitle Gate 1 normalizes null to 'autonomous', so a null-titled agent demoted to AUTONOMOUS is already back where it started. */
+      titleBefore: string | null
+      /** Whether the title write actually landed AND changed something. A WARNed title is not reverted. */
+      titleChanged: boolean
+      /** The agent's registry `team` field before PG01 overwrote it. */
+      teamFieldBefore: string
+      /** Propagated to the caller on success, exactly as the hand-rolled version did. */
+      restartNeeded: boolean
+    }
+    const tc: TeamCtx = {
+      membershipMoved: null,
+      orchestratorCleared: false,
+      titleBefore: agent.governanceTitle ?? null,
+      titleChanged: false,
+      teamFieldBefore: agent.team ?? '',
+      restartNeeded: false,
+    }
+
+    /**
+     * Put the agent back where it was: rejoin/leave `agentIds` FIRST, then restore the
+     * title. Shared by both branches because the ordering constraint is the same one —
+     * see the R3 note above.
+     *
+     * KNOWN LIMIT, stated rather than hidden: a MANAGER moving between teams has
+     * `titleBefore = 'manager'` while still a member of the ORIGINAL team, so restoring it
+     * is refused by the very guard this ordering exists to respect. The undo then throws,
+     * the runner records the gate as unrevertable, and R51.5 names it. That is the honest
+     * outcome — the system really cannot be put back by this path.
+     */
+    const restoreMembershipAndTitle = async (
+      c: TeamCtx,
+      rejoin: boolean,
+      what: string,
+    ): Promise<void> => {
+      if (c.membershipMoved) {
+        const team = getTeam(c.membershipMoved)
+        if (team) {
+          const restored = rejoin
+            ? (team.agentIds.includes(agentId) ? team.agentIds : [...team.agentIds, agentId])
+            : team.agentIds.filter(id => id !== agentId)
+          await updateTeam(c.membershipMoved, { agentIds: restored }, managerId)
+        }
+        c.membershipMoved = null
+      }
+      if (!c.titleChanged || !c.titleBefore) return
+      const back = await ChangeTitle(agentId, c.titleBefore, { authContext })
+      if (!back.success) {
+        throw new Error(`${what} (title should be "${c.titleBefore}"): ${back.error}`)
+      }
+      c.titleChanged = false
+    }
+
     // ── REMOVE from team (teamId=null) ────────────────────────
     if (desired.teamId === null) {
       if (!currentTeam) {
@@ -5230,42 +5318,81 @@ export async function ChangeTeam(
 
       // G04a: COS cannot be removed from their team (R4.7 — COS immutability invariant)
       // COS title is locked to team lifecycle — only deleting the team removes COS.
+      // Read-only, so it stays outside the sequence with its exact message.
       if (currentTeam.chiefOfStaffId === agentId) {
         result.error = `Cannot remove COS "${agent.name}" from team "${currentTeam.name}". COS is locked to team lifecycle (R4.7). Delete the team to remove the COS.`
         ops.push(`G04a: DENIED — Agent is COS of "${currentTeam.name}" — R4.7 COS immutability`)
         return result
       }
 
-      // G04b: Check if agent is orchestrator
-      if (currentTeam.orchestratorId === agentId) {
-        ops.push(`G04b: Agent is orchestrator of "${currentTeam.name}" — clearing orchestratorId`)
-        await updateTeam(currentTeam.id, { orchestratorId: null }, managerId)
-      } else {
-        ops.push(`G04b: Agent is not orchestrator — skip`)
+      const removeGates = [
+        {
+          id: 'G04b',
+          what: `Clear orchestratorId on "${currentTeam.name}" when this agent holds it`,
+          run: async (c: TeamCtx) => {
+            if (currentTeam.orchestratorId !== agentId) {
+              ops.push(`G04b: Agent is not orchestrator — skip`)
+              return
+            }
+            await updateTeam(currentTeam.id, { orchestratorId: null }, managerId)
+            c.orchestratorCleared = true
+            ops.push(`G04b: Agent is orchestrator of "${currentTeam.name}" — clearing orchestratorId`)
+          },
+          undo: async (c: TeamCtx) => {
+            if (!c.orchestratorCleared) return
+            await updateTeam(currentTeam.id, { orchestratorId: agentId }, managerId)
+            c.orchestratorCleared = false
+          },
+        },
+        {
+          id: 'G04c',
+          what: `Remove from "${currentTeam.name}" and revert the title to AUTONOMOUS`,
+          run: async (c: TeamCtx) => {
+            const newAgentIds = currentTeam.agentIds.filter(id => id !== agentId)
+            await updateTeam(currentTeam.id, { agentIds: newAgentIds }, managerId)
+            c.membershipMoved = currentTeam.id
+            ops.push(`G04c: Removed agent from team "${currentTeam.name}" agentIds`)
+
+            // G04d, inside this gate and AFTER the removal — see the R3 note above.
+            // CRITICAL (SCEN-010/020 P0): Pass authContext so ChangeTitle Gate 0 doesn't
+            // hard-reject with "authContext is mandatory". Without this, the title write
+            // silently fails and the registry governanceTitle becomes stale/null.
+            const titleResult = await ChangeTitle(agentId, 'autonomous', { authContext })
+            c.restartNeeded = titleResult.restartNeeded
+            if (!titleResult.success) {
+              ops.push(`G04d: WARN — ChangeTitle to AUTONOMOUS failed: ${titleResult.error}`)
+              return
+            }
+            c.titleChanged = c.titleBefore !== 'autonomous'
+            ops.push(`G04d: Title reverted to AUTONOMOUS`)
+          },
+          undo: async (c: TeamCtx) =>
+            restoreMembershipAndTitle(c, true, `agent ${agentId} ("${agent.name}") is still OUT of team "${currentTeam.name}"`),
+        },
+        {
+          id: 'PG01',
+          what: `Clear the agent's registry team field`,
+          run: async () => {
+            await updateAgent(agentId, { team: '' })
+            ops.push(`PG01: Cleared agent team field in registry`)
+          },
+          undo: async (c: TeamCtx) => {
+            await updateAgent(agentId, { team: c.teamFieldBefore })
+          },
+        },
+      ]
+
+      const txn = await runGateSequence(removeGates, tc)
+      if (!txn.ok) {
+        // R51.3/R51.5 wording comes from the runner: "NO CHANGES WERE MADE" when every
+        // compensation landed, the CRITICAL "INVALID STATE" form naming each unrevertable
+        // gate when one did not.
+        ops.push(...txn.ops)
+        result.error = txn.message
+        return result
       }
 
-      // G04c: Remove agent from team.agentIds
-      const newAgentIds = currentTeam.agentIds.filter(id => id !== agentId)
-      await updateTeam(currentTeam.id, { agentIds: newAgentIds }, managerId)
-      ops.push(`G04c: Removed agent from team "${currentTeam.name}" agentIds`)
-
-      // G04d: Revert title to AUTONOMOUS
-      // CRITICAL (SCEN-010/020 P0): Pass authContext so ChangeTitle Gate 0 doesn't
-      // hard-reject with "authContext is mandatory". Without this, the title write
-      // silently fails and the registry governanceTitle becomes stale/null.
-      const titleResult = await ChangeTitle(agentId, 'autonomous', { authContext })
-      if (!titleResult.success) {
-        ops.push(`G04d: WARN — ChangeTitle to AUTONOMOUS failed: ${titleResult.error}`)
-      } else {
-        ops.push(`G04d: Title reverted to AUTONOMOUS`)
-      }
-
-      // PG01: Clear agent's team field in registry
-      const { updateAgent } = await import('@/lib/agent-registry')
-      await updateAgent(agentId, { team: '' })
-      ops.push(`PG01: Cleared agent team field in registry`)
-
-      result.restartNeeded = titleResult.restartNeeded
+      result.restartNeeded = tc.restartNeeded
       await tryEmitLedgerOp(
         'change_team',
         [{ op: 'replace', path: `/agents/${agentId}/team`, value: null }],
@@ -5279,49 +5406,74 @@ export async function ChangeTeam(
     }
 
     // ── ADD to team (teamId provided) ─────────────────────────
-    const targetTeam = getTeam(desired.teamId)!
+    const targetTeamId = desired.teamId
+    const targetTeam = getTeam(targetTeamId)!
 
-    // G05: Check single-team membership (unless MANAGER)
-    if (currentTeam && currentTeam.id !== desired.teamId && !isManager(agentId)) {
+    // G05: Check single-team membership (unless MANAGER) — read-only, stays outside.
+    if (currentTeam && currentTeam.id !== targetTeamId && !isManager(agentId)) {
       result.error = `Agent "${agent.name}" is already in team "${currentTeam.name}". Remove from current team first (closed teams enforce single membership).`
       return result
     }
     ops.push(`G05: Single-team membership check passed`)
 
-    // G06: Check if already in target team
-    if (targetTeam.agentIds.includes(agentId)) {
-      ops.push(`G06: Agent already in target team — skip add`)
-    } else {
-      // G06: Add agentId to team.agentIds
-      const newAgentIds = [...targetTeam.agentIds, agentId]
-      await updateTeam(desired.teamId, { agentIds: newAgentIds }, managerId)
-      ops.push(`G06: Added agent to team "${targetTeam.name}" agentIds`)
-    }
-
-    // G07: Set title
     // CRITICAL (SCEN-007/010/020 P0): The effective role MUST be a canonical kebab
     // string from VALID_TITLES (e.g., 'member', 'chief-of-staff'), never a display
     // label like "MEMBER" or "Chief of Staff". desired.role is already kebab by
     // contract; we also normalize defensively by lower-casing to prevent UI
     // regressions from writing a display value into the registry.
     const effectiveRole = (desired.role || 'member').toLowerCase()
-    // CRITICAL: Pass authContext so ChangeTitle Gate 0 doesn't hard-reject with
-    // "authContext is mandatory". Without this, ChangeTeam would silently fail
-    // to assign the title — leaving agent in team but governanceTitle=null.
-    // This is the root cause of SCEN-020 BUG-001 / SCEN-007 P0-003.
-    const titleResult = await ChangeTitle(agentId, effectiveRole, { authContext })
-    if (!titleResult.success) {
-      ops.push(`G07: WARN — ChangeTitle to ${effectiveRole} failed: ${titleResult.error}`)
-    } else {
-      ops.push(`G07: Title set to ${effectiveRole.toUpperCase()}`)
+
+    const addGates = [
+      {
+        id: 'G06',
+        what: `Add to team "${targetTeam.name}" and set the title to ${effectiveRole}`,
+        run: async (c: TeamCtx) => {
+          if (targetTeam.agentIds.includes(agentId)) {
+            ops.push(`G06: Agent already in target team — skip add`)
+          } else {
+            await updateTeam(targetTeamId, { agentIds: [...targetTeam.agentIds, agentId] }, managerId)
+            c.membershipMoved = targetTeamId
+            ops.push(`G06: Added agent to team "${targetTeam.name}" agentIds`)
+          }
+
+          // G07, inside this gate and AFTER the join — see the R3 note above.
+          // CRITICAL: Pass authContext so ChangeTitle Gate 0 doesn't hard-reject with
+          // "authContext is mandatory". Without this, ChangeTeam would silently fail
+          // to assign the title — leaving agent in team but governanceTitle=null.
+          // This is the root cause of SCEN-020 BUG-001 / SCEN-007 P0-003.
+          const titleResult = await ChangeTitle(agentId, effectiveRole, { authContext })
+          c.restartNeeded = titleResult.restartNeeded
+          if (!titleResult.success) {
+            ops.push(`G07: WARN — ChangeTitle to ${effectiveRole} failed: ${titleResult.error}`)
+            return
+          }
+          c.titleChanged = c.titleBefore !== effectiveRole
+          ops.push(`G07: Title set to ${effectiveRole.toUpperCase()}`)
+        },
+        undo: async (c: TeamCtx) =>
+          restoreMembershipAndTitle(c, false, `agent ${agentId} ("${agent.name}") is still IN team "${targetTeam.name}"`),
+      },
+      {
+        id: 'PG01',
+        what: `Set the agent's registry team field to "${targetTeam.name}"`,
+        run: async () => {
+          await updateAgent(agentId, { team: targetTeam.name })
+          ops.push(`PG01: Set agent team field to "${targetTeam.name}" in registry`)
+        },
+        undo: async (c: TeamCtx) => {
+          await updateAgent(agentId, { team: c.teamFieldBefore })
+        },
+      },
+    ]
+
+    const txn = await runGateSequence(addGates, tc)
+    if (!txn.ok) {
+      ops.push(...txn.ops)
+      result.error = txn.message
+      return result
     }
 
-    // PG01: Set agent's team field in registry
-    const { updateAgent } = await import('@/lib/agent-registry')
-    await updateAgent(agentId, { team: targetTeam.name })
-    ops.push(`PG01: Set agent team field to "${targetTeam.name}" in registry`)
-
-    result.restartNeeded = titleResult.restartNeeded
+    result.restartNeeded = tc.restartNeeded
     await tryEmitLedgerOp(
       'change_team',
       [{ op: 'replace', path: `/agents/${agentId}/team`, value: targetTeam.name }],

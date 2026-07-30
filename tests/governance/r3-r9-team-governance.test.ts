@@ -1424,6 +1424,173 @@ describe('ChangeTeam::G07 — joining a team with no role stated makes the agent
   })
 })
 
+describe('ChangeTeam — the mutating tail is ONE transaction, and membership+title unwind together (R51 · AIO-TXN-10)', () => {
+  /**
+   * TRDD-DQ6XN2VP. Before the retrofit NOTHING here was compensated: a throw at PG01 left the two
+   * registries disagreeing about the same membership — the agent inside `team.agentIds` and titled,
+   * with its own registry `team` field still naming the old team.
+   *
+   * WHY THESE TESTS PIN THE ORDERING WITHOUT ASSERTING AN ORDER. `updateTeam` is the REAL
+   * team-registry (see the partial mock at the top of this file — it spies and delegates), so it
+   * persists to teams.json, and the REAL ChangeTitle runs against that file. ChangeTitle Gate 9
+   * enforces R3 in BOTH directions: a team title REQUIRES membership, a standalone title is REFUSED
+   * while a member. So the hazard reproduces here for free — if membership and title were ever split
+   * into two gates, reverse-order (LIFO) unwinding would attempt the title FIRST, Gate 9 would
+   * refuse it, the undo would throw, and the runner would report the R51.5 "INVALID STATE" form
+   * instead of "NO CHANGES WERE MADE". Asserting the R51.3 wording is therefore an assertion about
+   * the unwind ORDER, not merely about the outcome — which is why each case pins the message shape
+   * as well as the final state.
+   */
+
+  /** Seed a host where team ops are permitted (R9/R10 gate `getManagerId`, per the note in joinFixture). */
+  const teamFixture = (agents: Array<Record<string, unknown>>, teams: SeedTeam[]) => {
+    seedTeams(teams)
+    seedAgents(agents)
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+    return agents
+  }
+
+  /**
+   * Fail the FIRST registry write that carries a `team` field — PG01's, and only PG01's.
+   *
+   * The discriminator matters twice over. ChangeTitle writes `governanceTitle` through the same
+   * `updateAgent`, so a blanket throw would break the gate ABOVE the one under test and the
+   * rollback would be of something else entirely. And the fail-ONCE counter is what lets PG01's own
+   * `undo` (which restores the same field) succeed — otherwise every case would land in
+   * `unrevertable` for a reason the fixture invented rather than one the code has.
+   *
+   * IT WRITES AND *THEN* THROWS, DELIBERATELY. A mock that throws first leaves nothing behind, so
+   * PG01's own compensation would be satisfied by having nothing to do and no assertion could tell
+   * it from a deleted one. Writing first models the failure the runner's write-ahead registration
+   * exists for — `run` did part of its work — and it is what makes the `team` assertions below a
+   * real pin on PG01's undo rather than a restatement of the gate above it.
+   */
+  const failFirstTeamFieldWrite = (agents: Array<Record<string, unknown>>) => {
+    let remaining = 1
+    mockAgentRegistry.updateAgent.mockImplementation(async (id: string, patch: Record<string, unknown>) => {
+      const rec = agents.find(a => a.id === id)
+      if (rec) Object.assign(rec, patch)
+      mkdirSync(path.dirname(REGISTRY_FILE), { recursive: true })
+      writeFileSync(REGISTRY_FILE, JSON.stringify(agents))
+      if ('team' in patch && remaining-- > 0) throw new Error('registry write failed')
+      return rec ?? null
+    })
+  }
+
+  it('ADD — a failed PG01 puts the agent back OUT of the team and back to its previous title', async () => {
+    const agents = teamFixture(
+      [makeAgentRecord({ id: 'agent-t', name: 'agent-t', governanceTitle: 'autonomous' })],
+      [{ id: 'team-t', name: 'Team T', agentIds: [] }],
+    )
+    failFirstTeamFieldWrite(agents)
+
+    const { ChangeTeam } = await import('@/services/element-management-service')
+    const result = await ChangeTeam('agent-t', { teamId: 'team-t', role: 'member' }, OWNER_CTX)
+
+    expect(result.success).toBe(false)
+    // R51.3's exact wording — and, per the note above, the proof the unwind ran leave-then-demote.
+    expect(
+      result.error,
+      `expected the R51.3 "no changes" form. A "INVALID STATE" here means a compensation THREW — ` +
+        `the likely cause is membership and title having been split into two gates.\nops:\n${result.operations.join('\n')}`,
+    ).toContain('NO CHANGES WERE MADE')
+
+    // THE STATE, not the log line: an undo that merely returns without throwing still earns the
+    // runner's `G06: reverted` op, so only the stores can say whether anything was reverted.
+    expect(readTeamsFile().find(t => t.id === 'team-t')!.agentIds).not.toContain('agent-t')
+    expect(agents.find(a => a.id === 'agent-t')!.governanceTitle).toBe('autonomous')
+    // PG01's OWN undo: its `run` wrote the field and then failed, so the value it wrote is exactly
+    // the partial work the write-ahead registration exists to reverse.
+    expect(agents.find(a => a.id === 'agent-t')!.team, 'PG01 did not restore the registry team field').toBe('')
+  })
+
+  it('REMOVE — a failed PG01 puts the agent back INTO the team and restores the title it held', async () => {
+    const agents = teamFixture(
+      [makeAgentRecord({ id: 'agent-t', name: 'agent-t', governanceTitle: 'member', team: 'Team T' })],
+      [{ id: 'team-t', name: 'Team T', agentIds: ['agent-t'] }],
+    )
+    failFirstTeamFieldWrite(agents)
+
+    const { ChangeTeam } = await import('@/services/element-management-service')
+    const result = await ChangeTeam('agent-t', { teamId: null }, OWNER_CTX)
+
+    expect(result.success).toBe(false)
+    expect(result.error, `ops:\n${result.operations.join('\n')}`).toContain('NO CHANGES WERE MADE')
+
+    expect(readTeamsFile().find(t => t.id === 'team-t')!.agentIds).toContain('agent-t')
+    expect(agents.find(a => a.id === 'agent-t')!.governanceTitle).toBe('member')
+    expect(agents.find(a => a.id === 'agent-t')!.team, 'PG01 did not restore the registry team field').toBe('Team T')
+  })
+
+  it('REMOVE — G04b restores the orchestratorId when the title revert is SKIPPED', async () => {
+    /**
+     * WHY THIS TEST DRIVES A FAILED TITLE WRITE, WHICH LOOKS LIKE A DETOUR AND IS NOT.
+     *
+     * The obvious version of this case — orchestrator leaves, PG01 fails, assert the slot came
+     * back — PASSES WITH G04b's UNDO DELETED, and only the neuter said so. ChangeTitle owns that
+     * field too: its Gate 12 clears `orchestratorId` when the OLD title was ORCHESTRATOR, and its
+     * Gate 13b re-sets it when the NEW title is. So on the happy rollback the title restore in
+     * G04c's undo puts the slot back, and G04b's compensation is masked by another gate's.
+     *
+     * G04b's undo is load-bearing in exactly one situation: when the title revert does NOT run —
+     * i.e. the forward ChangeTitle WARNed, so `titleChanged` stayed false and there is no title
+     * restore to piggyback on. That is a real failure mode (a registry write for the title fails
+     * while the team writes succeed), and it is the one where losing the orchestrator slot would
+     * be silent. Failing the `governanceTitle` write is how the fixture reaches it.
+     */
+    const agents = teamFixture(
+      [makeAgentRecord({ id: 'agent-t', name: 'agent-t', governanceTitle: 'orchestrator', team: 'Team T' })],
+      [{ id: 'team-t', name: 'Team T', agentIds: ['agent-t'], orchestratorId: 'agent-t' }],
+    )
+    let remainingTeamFailures = 1
+    mockAgentRegistry.updateAgent.mockImplementation(async (id: string, patch: Record<string, unknown>) => {
+      // ChangeTitle cannot land its write → it returns success:false → G04d WARNs.
+      if ('governanceTitle' in patch) throw new Error('title write failed')
+      const rec = agents.find(a => a.id === id)
+      if (rec) Object.assign(rec, patch)
+      mkdirSync(path.dirname(REGISTRY_FILE), { recursive: true })
+      writeFileSync(REGISTRY_FILE, JSON.stringify(agents))
+      if ('team' in patch && remainingTeamFailures-- > 0) throw new Error('registry write failed')
+      return rec ?? null
+    })
+
+    const { ChangeTeam } = await import('@/services/element-management-service')
+    const result = await ChangeTeam('agent-t', { teamId: null }, OWNER_CTX)
+
+    expect(result.success).toBe(false)
+    // Both halves of the precondition, or the assertion below is about a path this test never took.
+    expect(
+      result.operations.some(o => o === `G04b: Agent is orchestrator of "Team T" — clearing orchestratorId`),
+      `G04b never fired, so its undo is not being exercised.\nops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+    expect(
+      result.operations.some(o => o.startsWith('G04d: WARN')),
+      `the title write SUCCEEDED, so the title restore would mask G04b and this test would be ` +
+        `vacuous — exactly the version the neuter caught.\nops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+
+    expect(readTeamsFile().find(t => t.id === 'team-t')!.orchestratorId).toBe('agent-t')
+  })
+
+  it('SUCCESS is unchanged — the transaction commits and nothing is reverted', async () => {
+    // The vacuity control for all three cases above: they assert a restored state, and a pipeline
+    // that never mutated anything would satisfy every one of them. This is what proves the forward
+    // path still writes both stores, so "restored" means restored and not "never touched".
+    const agents = teamFixture(
+      [makeAgentRecord({ id: 'agent-t', name: 'agent-t', governanceTitle: 'autonomous' })],
+      [{ id: 'team-t', name: 'Team T', agentIds: [] }],
+    )
+
+    const { ChangeTeam } = await import('@/services/element-management-service')
+    const result = await ChangeTeam('agent-t', { teamId: 'team-t', role: 'member' }, OWNER_CTX)
+
+    expect(result.success, `${result.error}\nops:\n${result.operations.join('\n')}`).toBe(true)
+    expect(readTeamsFile().find(t => t.id === 'team-t')!.agentIds).toContain('agent-t')
+    expect(agents.find(a => a.id === 'agent-t')!.governanceTitle).toBe('member')
+    expect(agents.find(a => a.id === 'agent-t')!.team).toBe('Team T')
+  })
+})
+
 describe('ChangeTitle::G17 — a title whose role-plugin cannot be installed is QUARANTINED, not rejected', () => {
   it('TRDD-C9LXXT76: 0 role-plugins after G16 ⇒ roleMissing=true + hibernate — deleting the G17 recovery leaves a titled, role-less, RUNNABLE agent', async () => {
     /**

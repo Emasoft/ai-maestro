@@ -1,11 +1,11 @@
 ---
 trdd-id: Q3GZJI1X
 title: Resolve what relevant-rules cites before a PRRD.md exists to make it ambiguous
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-28T23:40:00+0200
+updated: 2026-07-30T12:21:19+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -27,7 +27,7 @@ relevant-rules: []
 npt: []
 eht: []
 blocked-by: []
-external-refs: [Emasoft/ai-maestro-janitor#103]
+external-refs: [Emasoft/ai-maestro-janitor#103, Emasoft/ai-maestro-janitor#144]
 ---
 
 # Resolve what relevant-rules cites before a PRRD.md exists to make it ambiguous
@@ -135,7 +135,7 @@ and should land as one deliberate pass, not card-by-card as files happen to be t
 
 - [x] The two catalogues and the two syntaxes are stated in one place, with counts
 - [x] A decision is recorded: referent + syntax + migration-or-accept-both
-- [ ] If the decision needs the IND base changed, a janitor proposal issue is filed and linked here
+- [x] If the decision needs the IND base changed, a janitor proposal issue is filed and linked here — Emasoft/ai-maestro-janitor#144, carrying the measured counts, the prefix-class amendment, the explicit check that the base's promote/demote invariant is UNTOUCHED (G/S stay interchangeable WITHIN the PRRD; only the class {G,S} vs R selects the catalogue), and the github-project.ts consumer that EXPORTS the ambiguity as a rule:<v> label
 - [x] `PRRD.md` is NOT created until this is closed — it does not exist; creating it is Phase 3
 
 ## Approval log

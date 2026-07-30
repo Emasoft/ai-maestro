@@ -5,7 +5,7 @@ column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T07:18:30+0200
-updated: 2026-07-30T12:07:54+0200
+updated: 2026-07-30T12:08:34+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -28,7 +28,7 @@ labels: [pillar, script-layer, distribution, cross-project, naming]
 
 # The pillar CLIs are misnamed and invisible to every agent outside this repo
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30T07:32
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — COMPLETE 2026-07-30T12:08:34+0200
 
 **USER MANDATE, 2026-07-30, in two parts, relayed verbatim.** First the janitor Claude reported it
 *"has no access to the trddgrep at all"*, and the USER answered it —
@@ -57,20 +57,37 @@ plan's out-of-scope list, and it **supersedes this card's own first cut** (a `tr
 wrapping `greptrdd.mjs`, plus a second `trdd-doctor.sh`) — that shape violated *"only one"* three
 ways. Do not re-litigate any of it.
 
-**NEXT ACTION:** Phase 4 — add the `env` verb to `scripts/trddgrep.mjs` (print the resolved mode +
-reason) and the `doctor`/`fix`/`board` subcommands delegating to `lib/trdd-doctor.ts`; then the
-end-to-end zero-writes test (`trddgrep env` under a fake `$HOME`), which is the one acceptance box
-no unit test can carry — see the note under it.
+**NEXT ACTION: none — this card is COMPLETE** (all 12 boxes, 2026-07-30T12:07). The only
+follow-up it spawned is not its own: whether IND rule 12 permits deleting a FALSE duplicate state
+line in an ARCHIVED card, asked in **janitor#139**, which is what still holds the corpus's last 2
+BODY-STATE-CLAIM errors (`C7A81642`, `7123D51A`) and the exactly-2 allowance in
+`tests/unit/trdd-doctor.test.ts`.
 
-**DONE so far (commits `84be70dd`, `6fb580bc`, `2d241d3d`, `79845e28`):**
+**DONE (commits `84be70dd`, `6fb580bc`, `2d241d3d`, `79845e28`, `81a8ccdc`, `fb86650d`, `9c7a8213`):**
 
 | phase | state |
 |---|---|
-| 1 · rename `greptrdd` → `trddgrep` | **done** — 6 load-bearing sites; 57 tests green. 10 prose/comment mentions remain (Phase 5), and `design/archived/` stays frozen |
-| 2 · `lib/pillar/environment.ts` | **done** — 12 tests, 4 neuter runs recorded |
+| 1 · rename `greptrdd` → `trddgrep` | **done** — 6 load-bearing sites; 57 tests green. Verified at Phase 5: **zero** executable references to the old name remain (the one hit is the test asserting its absence), so the ~115 prose/comment mentions are not broken references; `design/archived/` stays frozen |
+| 2 · `lib/pillar/environment.ts` | **done** — 12 tests, 4 neuter runs recorded; later CORRECTED to canonicalize paths (below) |
 | 3 · `scripts/pillar-cli` + installer step | **done** — 6 tests; verified end-to-end from a foreign project |
-| 4 · `env` verb + doctor subcommands | **NEXT** |
-| 5 · docs, prose sweep, coordination issues | pending |
+| 4 · `env` + `fix` + `doctor` verbs, subprocess zero-writes test | **done** — `env` is exempt from the corpus check (its job is to explain a silent corpus); `fix` closed a badge that advertised a remedy this tool could not perform |
+| 5 · docs, prose sweep, coordination issues | **done** — CLAUDE.md + `docs/SCRIPT-LAYER.md` (whose "why they are NOT installed" section is now the record of why that reasoning was wrong), the memory page with 2 new lessons, and **janitor#142** + **plugin#51** |
+
+**A LIVE BUG the Phase-4 subprocess test found, worth carrying forward:** `process.cwd()` is
+always a kernel realpath; a registry `workingDirectory` is a string a human or the wizard typed.
+Comparing them with the purely-lexical `path.resolve` meant a workdir registered under `/var/...`
+or `/tmp/...` never matched a cwd of `/private/var/...` on macOS — so an agent standing in **its
+own** workdir was reported `standalone`. A symlinked `$HOME` or any bind-mounted workdir fails
+identically. Both sides canonicalize through `realpathSync.native` now (lexical fallback for a
+since-deleted path, so such a row stays comparable rather than silently unmatchable), and the
+reported `workdir:` is the canonical one — publishing the pre-realpath string would be a second
+truth that did not take part in the match. The neuter reddens exactly 2 named tests.
+
+**AND the reason the test had to be a subprocess at all:** `lib/agent-registry.ts` fixes its state
+path at MODULE LOAD, so an in-process `$HOME` swap arrives too late. A zero-writes assertion is
+also **vacuous** unless something proves the subprocess read the injected home — hence the
+agent-detection case is that positive control, and 0-IMPACT is shown by counting `~/.aimaestro`
+before and after rather than by reading the code that was supposed to leave it alone.
 
 **Four things were MEASURED here that a reader must not re-derive from reasoning:**
 

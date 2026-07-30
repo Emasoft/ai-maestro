@@ -1,8 +1,8 @@
 ---
 name: pillar-tooling-scale-and-index
-description: "greptrdd / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can greptrdd's search be served by FTS5 / the cold index build takes forever and eats gigabytes"
+description: "greptrdd / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can greptrdd's search be served by FTS5 / the cold index build takes forever and eats gigabytes / the warm query is just over the one-second budget / where does the time in a warm index query actually go / my stage timings do not add up to the total / the probe stats every file and I want to skip it"
 ocd: 2026-07-28
-lmd: 2026-07-29
+lmd: 2026-07-30
 metadata:
   node_type: memory
   type: project
@@ -101,6 +101,28 @@ consumer is the FTS insert (`:162`) — so a cold build's peak RSS is the SIZE O
 (**2.36 GB at 10⁵**, flat once accumulation ends), spent entirely on a table nothing reads. That is
 the same hoist-and-retain shape as *(2a)*, one layer up, and it survived because the comment
 explains the hoist. Decision deferred to the phase that designs recall — `TRDD-7CHUK1AZ`.[^14]
+
+**9. The WARM query is probe-bound, and the < 1 s budget at 10⁵ is MET (2026-07-30).** The index
+removed the walk (8.07 s → ~1 s), and what was left over budget was the cost of *proving the cache
+valid*, not of answering. Full warm decomposition, all in ONE process on a 10⁵ non-git corpus:
+harness floor **210 ms** (node + `tsx` + greptrdd's own transpile — measure it as
+`greptrdd help`, which reads nothing) · `openIndex` 25 · `syncIndex` **557** (of which
+`listTrddFiles` 121, `identifyFiles` 302, its own diff 134) · `cardsFromIndex` 151 · everything
+after the graph returns (`push(...spread)` + `new Map` + compute + render) **51**.
+
+What bought the budget was not a cheaper staleness check. A layer-by-layer decomposition of
+`identifyFiles` showed **43 ms of 302** building a git lookup key and probing two git maps that are
+**EMPTY** on a non-git corpus — a fast path `gitRoot` returning `null` makes unreachable *by design*
+(`freshness.ts:59`: every LOCAL-scope corpus is in that case). Hoisting `canBeGit = shas.size > 0`
+out of the loop: `identifyFiles` 299-306 → **236-241 ms**, and all five graph verbs cross
+**≥1.00 s → ≤0.98 s** in a stashed-BEFORE A/B. The probe still `stat`s every file; the guarantee is
+untouched. Of the 236 ms remaining, **216 is the raw `statSync` syscall** — the floor is what the
+guarantee costs, so that avenue is retired rather than deferred. The largest item left anywhere is
+the 210 ms harness floor, which is a bundling / resident-process question, not `lib/pillar` work.[^15]
+
+**Do NOT quote absolute timings across harnesses.** `bash scripts/with-node.sh` pays a 210 ms floor
+where a bare probe pays ~101 ms; earlier cards used a 0.12 s boot. Two correct measurements ~0.1 s
+apart before any work is done — comparing them manufactures changes that never happened.[^16]
 
 **Where things are.** `lib/pillar/kinds.ts` (the three descriptors) · `lib/pillar/store.ts`
 (fail-loud reader; the primary read is an ITERATOR because an array-returning read *is* the 6.5 GB)
@@ -211,3 +233,21 @@ abstraction fits is that its tests pass unchanged.
   to maintain a derived table — and note the related trap: hoisting a parse OUT of a transaction
   (sound, to avoid holding the write lock) does NOT excuse RETAINING the rows, which makes peak
   memory the corpus size; that identical shape had already been fixed one layer up.
+
+[^15]: [id:ATOM-PTSI-0015, status:valid, keywords:"index_slower_than_expected warm_query_over_budget freshness_probe_dominates unreachable_fast_path_costs_per_file empty_git_map_lookup hoist_the_branch_check", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT optimise inside a branch before asking whether it can EVER be taken — 43 ms of a 302 ms
+  probe was building git lookup keys for maps that are EMPTY on a non-git corpus, a path
+  `gitRoot` returning null makes unreachable BY DESIGN. BECAUSE three sessions attacked this budget
+  from the expensive side (a cheaper staleness check) while the win was a 6-line hoist that touches
+  no guarantee. DO decompose the loop body layer by layer and check each layer's REACHABILITY, then
+  A/B the removal — cumulative increments UNDERSTATE the win (predicted 43 ms, measured 63-68,
+  because a skipped layer also skips the garbage it allocates).
+
+[^16]: [id:ATOM-PTSI-0016, status:valid, keywords:"parts_do_not_sum missing_stage unaccounted_milliseconds two_probes_two_processes boot_floor_differs harness_not_code", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT name a cause for time that is "missing" between two measurements taken in two PROCESSES —
+  I proposed one twice and was refuted twice for the same 120 ms. BECAUSE my probe's node boot read
+  101 ms against the real CLI's 210 ms do-nothing floor, and `identifyFiles` read 432 ms in one
+  process and 299-306 in another, so BOTH gaps (an outer 180-260 ms and an inner ~120 ms) were the
+  instrument and vanished on one clock at 0.6% residual. DO instrument every stage AND the wall in
+  the SAME process first — and prove the instrument (my excluded diagnostic layers summed to exactly
+  the reported residual, to the millisecond, which is what made the figure believable).

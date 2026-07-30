@@ -474,8 +474,17 @@ describe('headless-router — /api/trdd/* is registered AND authenticates (TRDD-
  *     caller but dropped this second gate. FIX: mirror the exact full-mode check.
  *     (The manager-gate runs AFTER authenticate+authorize, so the forged-token
  *     harness below cannot reach it — it exercises the auth-layer parity the gate
- *     builds on; the gate's condition is byte-identical to full mode's and is
- *     covered there by the governance suite.)
+ *     builds on.
+ *
+ *     CORRECTED 2026-07-30: this note used to end "…the gate's condition is
+ *     byte-identical to full mode's and is covered there by the governance suite."
+ *     MEASURED: the string "Cannot restart team agent" appears in ZERO tests, in
+ *     either mode. Only the WAKE twin is driven — `r3-r9-team-governance.test.ts`
+ *     calls the real `wakeAgent` and asserts its 403. So no test reaches ANY of
+ *     R10.6's three restart gates, and this comment was asserting a coverage that
+ *     does not exist — which is worse than admitting the gap, because it tells the
+ *     next reader not to look. R10.6 is tracked as unpinned in TRDD-H4Y9F25J; the
+ *     harness it needs is described in that card's STATE block.)
  *
  * Same forged-bearer harness: `aim_tk_AAAA…` is shape-valid (passes the structural
  * gate, reaches the per-handler / delegated auth) but cryptographically invalid

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:12:59+0200
+updated: 2026-07-30T18:17:16+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,42 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### R10.6 SCOUTED — a comment claimed coverage that does not exist (ratchet unchanged at 8)
+
+**MEASURED: `grep -rln "Cannot restart team agent" tests/` returns NOTHING.** No test in either
+mode reaches any of R10.6's three gates. Only the WAKE twin is driven —
+`tests/governance/r3-r9-team-governance.test.ts:1089` calls the real `wakeAgent` and asserts its
+403 on `/Cannot wake team agent: no MANAGER exists/i`.
+
+**The header of `tests/unit/headless-router-auth-mirror.test.ts` said otherwise**, and said it
+about exactly this gate: *"the gate's condition is byte-identical to full mode's and is covered
+there by the governance suite."* It is not. **Corrected in place** — a comment asserting a
+coverage that does not exist is worse than silence, because it tells the next reader not to look.
+The two tests under it are honest about their own reach (both stop at the auth layer *before* the
+manager gate, and say so).
+
+**Why R10.6 needs a harness and not a quick pin.** The wake gate lives in a SERVICE
+(`wakeAgent`), so it is drivable in one call. The restart gates do not: they sit in a Next route
+handler plus TWO headless handlers —
+
+| site | shape |
+|---|---|
+| `app/api/sessions/[id]/restart/route.ts:73-91` | `authorize('restart-session')` then the manager gate |
+| `services/headless-router.ts:1024-1036` | the mirrored gate, reached through the headless dispatcher |
+| `services/headless-router.ts:952-962` | a second restart path with the same gate + a subagent gate |
+
+That asymmetry IS the rule ("the restart endpoint follows the same governance rules as the wake
+endpoint") and is exactly why one site proves nothing. **The harness must drive all three with an
+AUTHORIZED caller** — the existing `call('POST', path, headers)` fixture in
+`headless-router-auth-mirror.test.ts` only ever sends a forged or absent credential, so it cannot
+reach a gate that runs after `authorize()`. Getting past it needs `@/lib/agent-auth` +
+`authorize` stubbed to ALLOW, then the seeded no-MANAGER + team-agent fixture from
+`r3-r9-team-governance.test.ts` (`seedTeams` / `seedAgents` / `mockGovernance.getManagerId`),
+whose `vi.mock('@/lib/governance')` already intercepts the route's DYNAMIC import.
+
+**Neuter set it will need:** three, one per site, each reddening exactly one — the same shape
+R40.1 used, and for the same reason.
 
 ### RATCHET 9 → 8 — R17.18a DONE (`tests/governance/r17-no-auto-register.test.ts`)
 

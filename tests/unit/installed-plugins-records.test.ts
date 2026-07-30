@@ -215,6 +215,33 @@ describe('uninstallPluginLocally — asks the owner, records the fact', () => {
     expect(read()[KEY]).toEqual([recA, recB, recUser])
   })
 
+  it('asks the CLI for a LOCAL-marketplace uninstall too, and records it the same way', async () => {
+    // THE UNINSTALL HALF OF R20.29, and it existed for a measured reason: a neuter that
+    // restored ONLY the old install-side short-circuit reddened 6 tests, while the same
+    // neuter applied to the UNINSTALL side reddened NOTHING — 4395 green over a fully
+    // reverted half. One neuter certifies only the half it reaches, so the uninstall
+    // collapse was shipping unpinned until this case existed.
+    //
+    // The old local-only path deleted the enabledPlugins key and left the CLI's cache entry
+    // and registry row in place, so the plugin stayed installed as far as its owner was
+    // concerned — the exact mirror of the install bug, which wrote a key with no plugin
+    // behind it.
+    seed({ [SHARED_KEY]: [recB] })
+    await uninstallPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
+
+    const uninstall = cli.calls.find(c => c[1] === 'plugin' && c[2] === 'uninstall')
+    expect(uninstall, 'a local-marketplace uninstall must also go through the client protocol').toBeTruthy()
+    expect(uninstall).toEqual([
+      'claude', 'plugin', 'uninstall', SHARED_PLUGIN, LOCAL_MARKETPLACE_NAME, '--scope', 'local',
+    ])
+    // …and the ledger entry lands exactly as it does for a remote marketplace: one path, one
+    // audit trail. Before the collapse this emitted nothing at all for a local marketplace.
+    expect(ledger.emitAgentOp).toHaveBeenCalledTimes(1)
+    const [op, diff] = ledger.emitAgentOp.mock.calls[0] as [string, Array<Record<string, unknown>>]
+    expect(op).toBe('remove_plugin_records')
+    expect(diff[0].value).toEqual([recB])
+  })
+
   it('records the removal in the ledger with the FULL record, so the entry stays revertible', async () => {
     await uninstallPluginLocally('ai-maestro-plugin', DIR_B, 'ai-maestro-plugins')
 

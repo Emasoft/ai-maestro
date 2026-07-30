@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T19:37:50+0200
+updated: 2026-07-30T19:43:18+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -235,7 +235,40 @@ a split into R9.10a/R9.10b or a ruling on which verdict a half-enforced rule car
 rather than fixed in passing: changing the row is cheap, but choosing how the map represents a
 half-enforced rule is a decision that affects every other multi-clause row.
 
+### MEASURED 2026-07-30 — step 1 is NOT symmetric: 2 of the 6 stores need a new module-owned seam
+
+The plan said "row snapshots + `undo`" as if every store were alike. Measured — which stores export a
+writer at all, and what shape their mutation has:
+
+| store | writer exported? | mutation shape | undo |
+|---|---|---|---|
+| `lib/team-registry.ts` | ✅ `loadTeams`/`saveTeams` | field edits + array filter | restore the rows |
+| `lib/group-registry.ts` | ✅ `loadGroups`/`saveGroups` | array filter | restore the rows |
+| `lib/governance-request-registry.ts` | ✅ `load`/`saveGovernanceRequests` | 3 fields on a row | restore the fields |
+| `lib/session-persistence.ts` | ✅ `load`/`savePersistedSessions`, `persistSession` | row removal | re-persist |
+| **`lib/amp-auth.ts`** | ❌ `loadApiKeys`/`saveApiKeys` are **module-private** | `status 'active'→'revoked'` **in place** | flip the recorded ids back |
+| **`lib/aid-token.ts`** | ❌ `loadTokens`/`saveTokens` are **module-private** | rows **REMOVED** by filter | re-insert the recorded rows |
+
+**Exporting the two private writers would be a CONCURRENCY REGRESSION, not a convenience.** Every
+mutation in both modules runs inside `withLock('amp-api-keys')` / `withLock('governance-tokens')`; a
+caller doing its own load/save from outside would bypass that serialization entirely. So the
+compensation seam belongs INSIDE each module — which is already this codebase's stated pattern:
+`lib/aid-token.ts:533-540` says `countTokensForAgent` exists *"so a teardown POST-CONDITION can ask
+… without reaching around the module to its JSON file."*
+
+**And the two undos are NOT the same code**, because the two mutations are not the same shape: a
+status FLIP is undone from a list of ids, a row REMOVAL is undone from the rows themselves. The
+token undo therefore has to carry actual token records in `ctx` for the pipeline's lifetime — in
+memory only, never persisted — which needs saying out loud in the code rather than discovered later.
+
+Existing signatures both return a COUNT, which is insufficient for either undo (a count cannot say
+WHICH rows). Add companions rather than change them — `revokeAllKeysForAgent` has a second caller in
+`services/amp-service.ts`.
+
 NEXT ACTION: implement, with G02's auto-demote KEPT (R9.10). Order of work:
+0. Add the two module-owned seams above (`lib/amp-auth.ts`, `lib/aid-token.ts`), each with its own
+   test, BEFORE touching DeleteAgent — they are the only part that cannot be expressed at the
+   pipeline layer.
 1. `ctx`-carried row snapshots + `undo` for G01c (delete the zip), G04, G05, G05b, G06, G07/G07b, G07c.
 2. G02's undo: `ChangeTitle(id,'manager')` **plus** relaunch of the sessions the R10 cascade
    hibernated — record them in `ctx` during `run`, reverse only what is recorded (the `Gate.undo`

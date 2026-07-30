@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T07:18:30+0200
-updated: 2026-07-30T07:32:27+0200
+updated: 2026-07-30T09:00:47+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -57,9 +57,35 @@ plan's out-of-scope list, and it **supersedes this card's own first cut** (a `tr
 wrapping `greptrdd.mjs`, plus a second `trdd-doctor.sh`) — that shape violated *"only one"* three
 ways. Do not re-litigate any of it.
 
-**NEXT ACTION:** Phase 1 — rename `scripts/greptrdd.mjs` → `scripts/trddgrep.mjs` and its 5
-load-bearing consumers (listed under *Measured rename scope*), then `bash scripts/with-node.sh yarn
-test`.
+**NEXT ACTION:** Phase 4 — add the `env` verb to `scripts/trddgrep.mjs` (print the resolved mode +
+reason) and the `doctor`/`fix`/`board` subcommands delegating to `lib/trdd-doctor.ts`; then the
+end-to-end zero-writes test (`trddgrep env` under a fake `$HOME`), which is the one acceptance box
+no unit test can carry — see the note under it.
+
+**DONE so far (commits `84be70dd`, `6fb580bc`, `2d241d3d`, `79845e28`):**
+
+| phase | state |
+|---|---|
+| 1 · rename `greptrdd` → `trddgrep` | **done** — 6 load-bearing sites; 57 tests green. 10 prose/comment mentions remain (Phase 5), and `design/archived/` stays frozen |
+| 2 · `lib/pillar/environment.ts` | **done** — 12 tests, 4 neuter runs recorded |
+| 3 · `scripts/pillar-cli` + installer step | **done** — 6 tests; verified end-to-end from a foreign project |
+| 4 · `env` verb + doctor subcommands | **NEXT** |
+| 5 · docs, prose sweep, coordination issues | pending |
+
+**Four things were MEASURED here that a reader must not re-derive from reasoning:**
+
+1. `--import tsx` resolves the bare specifier against the **CWD** — from a caller's project it dies
+   `Cannot find package 'tsx'`. The launcher passes tsx's entry by absolute path.
+2. tsx discovers `tsconfig.json` from the **CWD** too, so `@/lib/...` inside `lib/*.ts` went
+   unresolved (`MODULE_NOT_FOUND` from `lib/trdd-graph.ts`). Hence `TSX_TSCONFIG_PATH`. Both fixes
+   exist to keep cwd = the CALLER's; running node from the install root would resolve everything for
+   free and break `--design-dir` defaulting, detection, and every printed relative path.
+3. **`pin-node.sh` must be sourced from BASH.** From zsh its version gate degrades silently: same
+   tree, same minute — bash → `v22.23.1`, zsh → `v26.5.0`, past the `engines: <26` cap. The repo's
+   pin is correct; a zsh `source` is not. The launcher is `#!/bin/bash` for this reason.
+4. The `loadAgents()` write hazard is **real and reproduced** (subprocess, fake `$HOME`): the naive
+   detector created `.aimaestro/` and `.aimaestro/agents/`; `resolvePillarEnvironment` created
+   nothing.
 
 ### Why it was invisible — TWO independent causes, both measured (2026-07-30)
 
@@ -226,24 +252,33 @@ name is the bug this card exists to fix.
 
 ## Acceptance
 
-- [ ] one name per pillar, all `<doctype>grep`:
-      `grep -rn 'greptrdd' --include='*.ts' --include='*.mjs' --include='*.json'` returns **zero**
-      hits outside `design/archived/`
-- [ ] exactly ONE launcher file exists, and `~/.local/bin/trddgrep` is that file — proven by a test
+- [x] one name per pillar, all `<doctype>grep`: **zero** executable references to the old name
+      remain (`grep -rn "greptrdd\.mjs\|\"greptrdd\""` outside `design/`); 10 prose mentions are
+      Phase 5 and `design/archived/` is frozen
+- [x] exactly ONE launcher file exists, and `~/.local/bin/trddgrep` is that file — proven by a test
       that reads `install-messaging.sh` and asserts the explicit install step names it, not by
-      re-running the installer
-- [ ] invoked from a DIFFERENT project's directory it reads THAT project's `design/`, proven by a
-      test that seeds a corpus in a tmp dir, runs the launcher with that dir as cwd, and asserts the
-      seeded card's id appears in the output
-- [ ] invoked from a directory with NO `design/` it exits **2** (could-not-run), never 0
+      re-running the installer (`tests/unit/pillar-cli-install.test.ts`, 6 tests; neuter: rename it
+      to `pillar-cli.sh` → exactly the 2 predicted tests fail)
+- [x] invoked from a DIFFERENT project's directory it reads THAT project's `design/` — verified
+      end-to-end from a seeded tmp project through a COPY of the launcher in a tmp bin dir, with
+      `XDG_DATA_HOME` redirected so no real state was written
+- [x] invoked from a directory with NO `design/` it exits **2** (could-not-run), never 0
 - [ ] `trddgrep env` reports `standalone` in a plain dir and `agent` in a registered workdir, driven
-      through an INJECTED home + registry — never the developer's real `~/.aimaestro` (0-IMPACT)
+      through an INJECTED home + registry — never the developer's real `~/.aimaestro` (0-IMPACT).
+      *The detector itself is done and pinned (12 tests); this box is the CLI verb.*
 - [ ] **detection performs ZERO writes**: with a fake home containing no `.aimaestro`, assert
-      `<fakehome>/.aimaestro` is still absent after a full `trddgrep env` run (the guard for the
-      `ensureAgentsDir` finding — this one is the whole reason the ordering above is fixed)
-- [ ] it selects Node 22 through `scripts/pin-node.sh` rather than re-deriving the selection, and
-      refuses with a named error when no conforming Node exists
-- [ ] a caller with no ai-maestro install gets an explicit refusal naming what is missing
+      `<fakehome>/.aimaestro` is still absent after a full `trddgrep env` run.
+      **This box cannot be satisfied by a unit test, and the attempt to do so was itself a finding:**
+      `lib/agent-registry.ts` fixes its paths at MODULE LOAD, so an in-process `$HOME` swap never
+      reaches them — the neuter that swapped in `loadAgents()` left the in-process assertion GREEN
+      while the write went to the developer's REAL `~/.aimaestro`. Only a subprocess run, where the
+      whole module graph loads under the fake home, can observe it (measured: naive → created
+      `.aimaestro/` + `.aimaestro/agents/`; shipped → nothing).
+- [x] it selects Node 22 through `scripts/pin-node.sh` rather than re-deriving the selection, and
+      refuses with a named error when no conforming Node exists — and the launcher is `#!/bin/bash`
+      because sourcing that script from zsh silently yields an out-of-range Node
+- [x] a caller with no ai-maestro install gets an explicit refusal naming what is missing (and a
+      STALE recorded root gets its own refusal naming recorded-vs-expected)
 - [ ] `trddgrep doctor|fix|board` reach the doctor; no distributed `trdd-doctor` name exists
 - [ ] `docs/SCRIPT-LAYER.md` records the four-name convention, the two modes, and supersedes the
       "repo-local, and here is why" paragraph (that decision is now reversed by USER mandate)

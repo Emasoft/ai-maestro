@@ -249,7 +249,17 @@ const UNAUDITED_RULES = new Set<number>([
 // server 409 AND a client-side inline error before POST — and only the server half is pinned.
 // Its Guard column now cites BOTH sites (it previously cited one), so the gap is visible instead
 // of being laundered into a "tested" row by a test that covers half the rule.
-const MAX_ENFORCED_WITHOUT_TEST = 18
+// 2026-07-30: 18 -> 16. R1.3 + R1.4 pinned by tests/governance/r1-teams-service.test.ts — one
+// file, one guard-bearing function (`createNewTeam`), two rules of DIFFERENT SHAPES, and reading
+// them the same way was the trap. R1.4 is a MUST enforced as a refusal (400 with no MANAGER), so a
+// refusal test fits. R1.3 is a SHOULD enforced by AUTO-CREATION, not by refusing a COS-less create
+// — a refusal test there would assert a behaviour the rule never claims and would break the
+// one-field create dialog if anyone "fixed" the code to match it. Its honest assertion is the
+// post-condition: the persisted team ends up carrying a COS. THREE neuters, because one certifies
+// only the half it reaches: delete the manager check -> only the R1.4 test; never auto-create ->
+// the R1.3 test (+ the containment test, which checks the auto-COS mkdir landed in the FAKE home);
+// auto-create UNCONDITIONALLY -> only the "keeps an explicitly supplied COS" test.
+const MAX_ENFORCED_WITHOUT_TEST = 16
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

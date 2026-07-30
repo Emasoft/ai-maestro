@@ -37,8 +37,8 @@ Row format is fixed so a regex parses each line:
 |---|---|---|---|
 | R1.1 | ENFORCED | lib/team-acl.ts:102 | — |
 | R1.2 | ENFORCED | lib/group-registry.ts | — |
-| R1.3 | ENFORCED | services/teams-service.ts:344-404 | — |
-| R1.4 | ENFORCED | services/teams-service.ts:279-282 | — |
+| R1.3 | ENFORCED | services/teams-service.ts:342-405 | tests/governance/r1-teams-service.test.ts |
+| R1.4 | ENFORCED | services/teams-service.ts:279-283 | tests/governance/r1-teams-service.test.ts |
 | R1.5 | ENFORCED | lib/team-registry.ts:427 | tests/governance/r1-r2-team-registry.test.ts |
 | R1.6 | INVENTED | — | — |
 | R2.1 | ENFORCED | lib/team-registry.ts:106-110 | tests/governance/r1-r2-team-registry.test.ts |

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:07:00+0200
+updated: 2026-07-30T17:27:38+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,12 +20,46 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e, b29579f0]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
 
-### SCOUTED, NOT YET WRITTEN — R1.3 + R1.4 (`services/teams-service.ts`)
+### RATCHET 18 → 16 — R1.3 + R1.4 DONE (`tests/governance/r1-teams-service.test.ts`)
+
+**The remaining 16, read off the ratchet's own failure message (constant → 0, run, restore):**
+R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.7, R7.8, R10.6, R11.6, R17.16, R17.18a, R18.8, R20.28,
+R33.1, R40.1.
+
+Shared-guard pairs still available: `components/teams/TeamOverviewSection.tsx` → **R4.8 + R7.8**;
+`components/sidebar/TeamListView.tsx` → **R7.1 + R7.3**. **R20.28**'s guard is `install-messaging.sh`
+— a shell script, so it needs a subprocess test; treat it separately.
+
+**Instrument note.** A first attempt at the 0-run was driven with `sed -i ''` in the same compound
+command and reported **24** — a stale read, contradicted by the suite passing at 16 moments earlier.
+Re-measured with the Edit tool: **16**. Two runs of the same measurement disagreeing is a finding
+about the harness, not the corpus; the arithmetic (18 − 2 rows that gained a Test path) agreed with
+the clean run. Do not drive a measurement through `sed` — it is also the repo's own edit rule.
+
+The scouting notes below were correct in every particular and are kept as the record of what the
+guards are:
+
+- **R1.4 is a hard refusal** — `:279-283`, `if (!getManagerId())` → **400**. Ordinary refusal test.
+  The SECOND clause immediately below at `:285-291` (only MANAGER or the web UI may create a team →
+  **403**) is a DIFFERENT rule's guard; the test passes no `requestingAgentId` so it never fires.
+- **R1.3 is a `SHOULD`, NOT a MUST**, so the test asserts the AUTO-CREATION post-condition and not a
+  refusal — writing the refusal test would have asserted a behaviour the rule never claims, and
+  "fixing" the code to match would break the sidebar's one-field create dialog.
+- **The 0-IMPACT trap was real and the containment held.** `tests/helpers/fake-ecosystem-home.ts`
+  (layer 2) plus `vi.mock('os')` (layer 1 — needed because `lib/workdir-path-policy.ts` does
+  `const HOME = homedir()` at module level and the REAL `createAgent` refuses any workdir outside
+  `$HOME`). The containment test asserts the auto-COS dir landed under the FAKE home.
+- **Three neuters, not one** — deleting the manager check reddens only the R1.4 test; never
+  auto-creating reddens the R1.3 test (+ containment, which checks that same mkdir); auto-creating
+  UNCONDITIONALLY reddens only the "keeps an explicitly supplied COS" test. One neuter alone would
+  have certified half the file.
+
+<details><summary>Original scouting notes (2026-07-30, before the test was written)</summary>
 
 Read the guards; ran out of context before writing the test. Do NOT re-derive:
 
@@ -46,6 +80,8 @@ Read the guards; ran out of context before writing the test. Do NOT re-derive:
   `tests/helpers/fake-ecosystem-home.ts` was written for. Use that helper (layer 2) or the test
   will create directories in the developer's real `~/agents/`. Governance batch 1 already did this
   once.
+
+</details>
 
 ### RATCHET 23 → 18 — 5 pinned this session
 

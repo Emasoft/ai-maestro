@@ -89,14 +89,14 @@ Row format is fixed so a regex parses each line:
 | R6.12 | UNENFORCED | — | — |
 | R6.13 | ENFORCED | lib/agent-registry.ts:312-332 | tests/governance/r6-communication-graph.test.ts |
 | R6.14 | UNENFORCED | — | — |
-| R7.1 | ENFORCED | components/sidebar/TeamListView.tsx:94 | — |
+| R7.1 | ENFORCED | components/sidebar/TeamListView.tsx:661, components/governance/PasswordDialog.tsx:334 | — |
 | R7.2 | ENFORCED | hooks/useGovernance.ts:48 | tests/governance/r7-governance-loading-state.test.ts |
-| R7.3 | ENFORCED | components/sidebar/TeamListView.tsx:192 | — |
+| R7.3 | ENFORCED | components/sidebar/TeamListView.tsx:636 | — |
 | R7.4 | UNENFORCED | — | — |
 | R7.5 | UNENFORCED | — | — |
 | R7.6 | CONTRADICTED | — | — |
-| R7.7 | ENFORCED | components/sidebar/TeamCard.tsx:71 | — |
-| R7.8 | ENFORCED | components/teams/TeamOverviewSection.tsx | — |
+| R7.7 | ENFORCED | components/sidebar/TeamCard.tsx:71, lib/team-registry.ts:427 | tests/governance/r7-team-blocked-badge.test.tsx |
+| R7.8 | ENFORCED | components/teams/TeamOverviewSection.tsx:37-42, components/governance/TitleAssignmentDialog.impl.tsx:274 | — |
 | R7.9 | ENFORCED | hooks/useGovernance.ts:48 | tests/governance/r7-governance-loading-state.test.ts |
 | R8.1 | ENFORCED | lib/team-registry.ts | tests/governance/r2-r8-team-registry-invariants.test.ts |
 | R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |

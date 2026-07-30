@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:28:31+0200
+updated: 2026-07-30T17:33:06+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -25,15 +25,43 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
 
+### RATCHET 16 → 15 — R7.7 DONE, and THREE rotted citations found and fixed
+
+**The remaining 15, read off the ratchet's own failure message (constant → 0, run, restore):**
+R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R11.6, R17.16, R17.18a, R18.8, R20.28, R33.1,
+R40.1.
+
+`tests/governance/r7-team-blocked-badge.test.tsx` pins **R7.7** — the second presentation rule
+pinned by rendering, and the cheapest shape available: a tiny default-export component, an exact
+citation, and a complementary pair built into the `&&` (badge present when blocked, ABSENT when
+healthy AND when the flag is absent entirely — a guard written `!== false` passes the first and
+fails the third). Its two clauses live in two files, so the row cites both: the BADGE in
+`TeamCard.tsx:71`, the CONDITION in `lib/team-registry.ts:427` (R1.5's already-pinned
+`blockAllTeams`).
+
+**THREE rotted citations, found while scoping — the more valuable half of this unit.** A rotted
+citation is worse than a missing one: it names real working code, so nothing reddens and the row
+reads as enforced at a place it is not.
+
+| rule | cited | actually | fixed to |
+|---|---|---|---|
+| R7.1 | `TeamListView.tsx:94` | a `useState` for the cascade-delete flag — the submitting guard MOVED into `PasswordDialog` (the comment two lines above says so) | `TeamListView.tsx:661, components/governance/PasswordDialog.tsx:334` |
+| R7.3 | `TeamListView.tsx:192` | the middle of a comment block about `githubProject` | `TeamListView.tsx:636` |
+| R7.8 | `TeamOverviewSection.tsx` (file only) | ONE of its TWO display sites; the other was invisible to every instrument | `TeamOverviewSection.tsx:37-42, TitleAssignmentDialog.impl.tsx:274` |
+
+All three stay **untested, deliberately**: R7.1 is ALL-quantified ("ALL mutating buttons"), so
+pinning one button would launder an instance into a rule — it needs the MECHANISM+COVERAGE shape
+R8.1 got. R7.8's second site is `resolveAgentName`, an inline `useCallback` with no seam short of
+rendering the whole dialog. R7.3's guard is inside the non-exported `TeamFormModal`, so driving it
+means rendering `TeamListView` with its governance hook and fetches.
+
+Next cheapest, both the same shape as R7.7 (render, assert, two branches): **R4.8**
+(`components/teams/TeamOverviewSection.tsx:33-34` — the membership split that decides which agents
+the add-picker offers) and **R17.16** (`components/agent-profile/PluginsTab.tsx:244-245` — the core
+plugin must show a "core" label and NOT an uninstall X). **R20.28**'s guard is
+`install-messaging.sh` — a shell script, so it needs a subprocess test; treat it separately.
+
 ### RATCHET 18 → 16 — R1.3 + R1.4 DONE (`tests/governance/r1-teams-service.test.ts`)
-
-**The remaining 16, read off the ratchet's own failure message (constant → 0, run, restore):**
-R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.7, R7.8, R10.6, R11.6, R17.16, R17.18a, R18.8, R20.28,
-R33.1, R40.1.
-
-Shared-guard pairs still available: `components/teams/TeamOverviewSection.tsx` → **R4.8 + R7.8**;
-`components/sidebar/TeamListView.tsx` → **R7.1 + R7.3**. **R20.28**'s guard is `install-messaging.sh`
-— a shell script, so it needs a subprocess test; treat it separately.
 
 **Instrument note.** A first attempt at the 0-run was driven with `sed -i ''` in the same compound
 command and reported **24** — a stale read, contradicted by the suite passing at 16 moments earlier.

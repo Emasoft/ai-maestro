@@ -259,7 +259,22 @@ const UNAUDITED_RULES = new Set<number>([
 // only the half it reaches: delete the manager check -> only the R1.4 test; never auto-create ->
 // the R1.3 test (+ the containment test, which checks the auto-COS mkdir landed in the FAKE home);
 // auto-create UNCONDITIONALLY -> only the "keeps an explicitly supplied COS" test.
-const MAX_ENFORCED_WITHOUT_TEST = 16
+// 2026-07-30: 16 -> 15. R7.7 pinned by tests/governance/r7-team-blocked-badge.test.tsx. Its two
+// clauses live in two files — the BADGE in `TeamCard.tsx:71`, the CONDITION (`team.blocked`) in
+// `lib/team-registry.ts:427`'s blockAllTeams, which is R1.5's already-pinned guard — so the row now
+// cites both and this test drives the display half. Neuters: render the badge unconditionally ->
+// only the healthy-team test; delete the badge -> only the blocked-team test.
+//
+// THREE citations were found ROTTED while scoping this batch, and a rotted citation is worse than
+// a missing one: it names real working code, so nothing reddens and the row reads as enforced at a
+// place it is not. R7.1 cited `TeamListView.tsx:94` (a `useState` for a cascade flag — the
+// submitting guard had MOVED into PasswordDialog) and R7.3 cited `:192` (the middle of a comment
+// block). Both re-cited to their real sites; both stay UNTESTED, because R7.1 is ALL-quantified
+// ("ALL mutating buttons") and pinning one button would launder an instance into a rule. R7.8's
+// row cited one of its TWO display sites — the second (`TitleAssignmentDialog.impl.tsx:274`,
+// `resolveAgentName`) was invisible to every instrument; now cited, still untested because that
+// resolver is an inline useCallback with no seam to drive short of rendering the whole dialog.
+const MAX_ENFORCED_WITHOUT_TEST = 15
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

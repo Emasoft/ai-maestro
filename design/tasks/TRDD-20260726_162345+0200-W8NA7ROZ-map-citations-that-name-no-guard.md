@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T16:23:45+0200
-updated: 2026-07-30T06:00:37+0200
+updated: 2026-07-30T06:13:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -17,6 +17,7 @@ approved: true
 approval-judge: ai-maestro
 approval-datetime: 2026-07-26T16:23:45+0200
 relevant-rules: [R51.9]
+implementation-commits: [9a11a51b, 47f54bf2]
 parent-trdd: H4Y9F25J
 derived: true
 derived-kind: eht
@@ -104,8 +105,10 @@ confirm by experiment before acting.
 - [ ] Each of the 7 genuinely-defective category-B rows is narrowed to a real guard — **R18.2/R18.3/
       R18.8/R18.9 done 2026-07-27; R20.5, R20.31 and R40.1 REMAIN** (R20.5/R20.31 also carry the
       independent anti-guard suspicion below — confirm by experiment, not by reading)
-- [ ] The 3 helper-function rows (R17.2, R20.29, R39.6) are confirmed as correctly un-qualifiable
-      and annotated as such — not yet annotated
+- [x] The 3 helper-function rows (R17.2, R20.29, R39.6) are confirmed as correctly un-qualifiable
+      and annotated as such — **the premise was WRONG on all three**: none was correct, two are
+      gate-shaped after all, and each citation had rotted. Re-cited + mutation-proven 2026-07-30,
+      `47f54bf2`; see the section below
 - [x] `tests/governance/enforcement-coverage.test.ts` stays green, and each new qualifier is
       mutation-proved (break the gate in the source, watch the named test fail) — 4 mutations run
       2026-07-30; the R17.6 one is the finding (named file stayed green), and the R17.15
@@ -217,6 +220,56 @@ citation should cost.
   `r3-r9-team-governance.test.ts` creates `~/agents/cos-manager-team` and rolls it back —
   `md5` of `ls ~/agents` is identical before and after, so net zero, but a kill mid-test would
   leave it. A 0-IMPACT boundary touch, worth its own card.
+
+## 2026-07-30 — the 3 "helper" rows: the premise was wrong on all three (`47f54bf2`)
+
+The acceptance box asked me to CONFIRM these three as correctly un-qualifiable. That framing was
+itself a claim, and reading them refuted it. Nothing here was a helper row.
+
+| rule | was | is | shape |
+|---|---|---|---|
+| R17.2 | `:1531-1533` | `:932-939 (InstallElement::EXE)` | gate-shaped after all |
+| R39.6 | `:6381-6385` | `:6906-6925 (DeleteAgent::G01b)` | gate-shaped after all |
+| R20.29 | `:1531-1533` | `:1712-1716` | genuinely not pipeline-shaped — bare range is honest |
+
+**Both stale citations landed on the SAME shifted line, and it shifted under my own hand.**
+`:1531-1533` is now a docblock inside `removeLocalInstallRecords`, moved there by `c08e8303`
+earlier the same day. `:6381-6385` is now a governance-password check. So a row can rot between
+one commit of a session and the next, which is the whole argument for citing something a test can
+re-resolve.
+
+**R39.6's Test column was an OVERSTATEMENT, not an omission.** The row read `—`, but
+`tests/services/element-management-assistant-title.test.ts` already asserts the `G01b` refusal by
+name. Same class of error as R17.6 above, in the opposite direction: the debt ledger was wrong
+about a rule being unpinned.
+
+Each mutation-proven against the FULL suite, never the named file:
+
+| neuter | reddened |
+|---|---|
+| R17.2 — argv `'install'` → `'add'` | 1 / 4128 — the R17.2 argv test |
+| R39.6 — `G01b` condition forced false | 1 / 11 — the R39.6 refusal test |
+| R20.29 — `isLocalOnlyMarketplace` → false | 6 / 4128 across 4 files, the R20.29-named one among them |
+
+R20.29 is the interesting one: 6 tests hold that routing decision, so it was the *best*-pinned of
+the three while carrying the *worst* citation. Pinning and citing are independent properties, and
+only the citation rots.
+
+**Two more things found on the way, NOT fixed here:**
+
+- **`inAdapterContext('ChangePlugin', …)` is MISLABELLED at `:917` and `:989`** — both sites are
+  inside `InstallElement` (which begins at `:559`), and the other two call sites in the file name
+  their own enclosing function correctly. It is inert today: `currentAdapterCaller()` has **zero
+  production readers** (only its own test), so the audit string the module's docblock promises
+  — "so the offending stack frame is easy to find", "the bypass is audit-visible" — is written and
+  never read. A diagnostic with no reader, the same class as the FTS index that had no reader.
+  And it is a DECISION, not a fix: the docblock's allowlist is `ChangePlugin` / `ChangeClient` /
+  `TEST:` / `Bootstrap:`, so renaming the label to `InstallElement` would contradict the doc these
+  two sites were presumably written to satisfy. Either the allowlist is stale or the label is —
+  one of the two documents is wrong and I do not yet know which.
+- **R20.31's citation `:1634-1712` ends exactly where R20.29's guard begins.** It is a category-B
+  row still on the list above, and it already carries the anti-guard suspicion; this makes a
+  drifted range the more likely reading. Check it by experiment when that row comes up.
 
 ## Approval log
 

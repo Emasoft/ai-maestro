@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T16:45:25+0200
+updated: 2026-07-30T16:55:41+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,10 +20,32 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 23 → 19 — 4 pinned this session, in 2 shared-guard pairs
+
+`d7a8f3dc` **R34.2 + R35.2** (`r34-r35-foreign-approval.test.ts`) · `50a52952` **R7.2 + R7.9**
+(`r7-governance-loading-state.test.ts`). Both pairs share ONE guard, so one file pins two rules.
+
+**Prefer a shared-guard pair as the next unit of work** — it is the cheapest ratchet movement
+available and it forces the complementary-neuter discipline, because two gates on one path can
+each mask the other. Remaining pairs: `services/teams-service.ts` → R1.3 + R1.4 ·
+`lib/team-registry.ts` → R2.2 + R8.1 · `components/teams/TeamOverviewSection.tsx` → R4.8 + R7.8 ·
+`components/sidebar/TeamListView.tsx` → R7.1 + R7.3.
+
+**Two traps this session, both worth carrying forward:**
+- **A one-expression guard's first test was VACUOUS and only the neuter knew.** `useState(true)`
+  asserted via `result.current.loading` passed with the value INVERTED — `result.current` is read
+  AFTER effects flush and the hook's own effect sets `loading=true`, so the assertion observed the
+  effect, not the initial state. Sample DURING render (push from the render callback) when the
+  guard is an initial value.
+- **A stale comment kept 2 rules unpinned for months.** `tests/use-governance-hook.test.ts` said
+  three times that RTL was unavailable here; it has been installed for some time. Corrected in
+  place, pointing at the new test. When a file explains why something cannot be tested, re-measure
+  the claim before believing it.
 
 ### SETTLED — the 9 client-side-guarded rules ARE pinnable; do NOT downgrade them
 

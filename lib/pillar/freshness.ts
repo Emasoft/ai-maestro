@@ -157,18 +157,30 @@ export function identifyFiles(files: readonly string[], corpusRoot: string): Map
   const root = gitRoot(realRoot)
   const shas = root ? gitBlobShas(root) : new Map<string, string>()
   const dirty = root && shas.size > 0 ? gitDirtyPaths(root) : new Set<string>()
+  // With no git shas there is no key to look one up BY, so neither the remap nor the
+  // two map probes below can change any answer. Hoisting that out of the loop is what
+  // keeps a LOCAL-scope corpus — which is in no repo AT ALL, `gitRoot` returning null
+  // by design — from paying per-file for a fast path it can never take. Measured at
+  // 10^5 (TRDD-YHYP5XIZ): 43 ms of 302 ms, on the only path a non-git corpus has.
+  const canBeGit = shas.size > 0
 
   for (const file of files) {
-    // Prefix-remap rather than a per-file realpath: ONE syscall for the whole corpus
-    // keeps the all-clean fast path free of per-file I/O, which is the entire point
-    // of checking freshness before doing any work.
-    const abs = path.resolve(file)
-    const key = needsRemap && abs.startsWith(absRoot) ? realRoot + abs.slice(absRoot.length) : abs
-
-    const sha = shas.get(key)
-    if (sha && !dirty.has(key)) {
-      out.set(file, { id: `git:${sha}`, source: 'git' })
-      continue
+    if (canBeGit) {
+      // Prefix-remap rather than a per-file realpath: ONE syscall for the whole corpus
+      // keeps the all-clean fast path free of per-file I/O, which is the entire point
+      // of checking freshness before doing any work.
+      // `path.resolve` and NOT `isAbsolute(file) ? file : …`: resolve also NORMALIZES,
+      // so an absolute path carrying `..` still prefix-matches `absRoot`. Skipping it
+      // for absolute inputs would save ~28 ms/10^5 and silently change which files the
+      // git fast path can match — the hoist above already avoids the cost where it is
+      // provably pointless, which is the whole win without touching the semantics.
+      const abs = path.resolve(file)
+      const key = needsRemap && abs.startsWith(absRoot) ? realRoot + abs.slice(absRoot.length) : abs
+      const sha = shas.get(key)
+      if (sha && !dirty.has(key)) {
+        out.set(file, { id: `git:${sha}`, source: 'git' })
+        continue
+      }
     }
     const st = statIdentity(file)
     if (st) out.set(file, st)

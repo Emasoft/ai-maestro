@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T03:25:00+0200
+updated: 2026-07-30T03:41:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -63,7 +63,7 @@ a rock."* Full plan: `~/.claude/plans/iterative-foraging-wadler.md` (top section
 | EHT | `8KDIB2LT` | propagate the new CLI contract (exit trichotomy, `--design-dir`, two new tools) |
 | EHT | `MUYRIKN3` | the spec bump 1.1.1 → 1.2.0 is consumed by the janitor (`3P-CHK-03`, `3P-VER-02`) |
 | EHT | `YN8EQWYP` | the index is new shared server state — register it, handle N writers, contain the tests |
-| EHT | `YHYP5XIZ` | (added 2026-07-30) make the warm-query stage timings SUM before optimising any of them — `31LJK1CX` blocks on it |
+| EHT | `YHYP5XIZ` | (added 2026-07-30, **complete**) make the warm-query stage timings SUM before optimising any of them — closed the accounting AND met the budget |
 
 ### Two findings that CHANGE the seam design (2026-07-28, both verified first-hand)
 
@@ -286,14 +286,31 @@ by nothing (`board` 1.02-1.06 capped vs 1.06-1.08 uncapped), so *"remainder = co
 rendering 7 782 rows"* credited rendering with a cost it does not have. The probe is the whole
 residual, bounded under **~360 ms of non-syscall work** above a **~232 ms** irreducible syscall floor.
 
-**Best next: `YHYP5XIZ` (`todo`) — the accounting, before any paydown.** The budget is still missed
-and the target is not yet specified well enough to build: the stage parts (787 ms) do not sum to the
-end-to-end (~1 050 ms), and the ~120 ms sitting above the raw-stat loop shape inside `identifyFiles`
-has now survived **two refuted attributions** (`realpathSync` at 1 187 ms — work `freshness.ts:162`
-avoids via a one-shot prefix remap; `path.resolve` at 28 ms — far too small). Two wrong guesses at
-one number is the evidence for measuring before optimising, so `YHYP5XIZ` closes the accounting in
-ONE interleaved process first and only then decides whether a reachable win exists. "The prize is
-not there" is a legitimate outcome.
+**`YHYP5XIZ` is COMPLETE, and with it the < 1 s interactive budget is MET.** It closed the accounting
+first, in ONE process — and the accounting is what dissolved the problem rather than solving it. Both
+"missing times" were the INSTRUMENT: my probe's node boot read 101 ms against a real CLI floor of
+**210 ms** (`greptrdd help` reads nothing and costs that), so comparing pipeline-work to
+pipeline-work the residual is **0.6%** (835 vs 829 ms); and `identifyFiles` reads 299-306 ms on the
+same clock where a faithful reconstruction of its own body reads 297-304 ms, so the "unattributed
+~120 ms" was two other processes being subtracted from each other. Two attributions I had proposed
+and refuted were answers to a question that was never real.
+
+**What bought the budget was not a cheaper staleness check.** The layer table showed 43 ms of
+`identifyFiles` building a git lookup key and probing two git maps that are EMPTY on a non-git
+corpus — a fast path `gitRoot` returning `null` makes unreachable *by design*. One hoist
+(`canBeGit = shas.size > 0`): `identifyFiles` 299-306 → **236-241 ms**, and in a stashed-BEFORE A/B
+on one warm 10⁵ corpus every graph verb crosses **≥1.00 s → ≤0.98 s** (`roots` 1.02-1.04 → 0.98,
+`board` 1.03-1.11 → 0.94-0.97, `next` 1.05-1.08 → 0.97-0.98, `unblocks` 1.00-1.09 → 0.93-0.97,
+`why` 1.01-1.07 → 0.95-0.97). The probe still `stat`s every file; the guarantee is untouched, and a
+`canBeGit = false` neuter proves the git path is still live (4 named tests fail, including the
+file's positive control).
+
+**Best next: the remaining EHTs — `8KDIB2LT` (`blocked`), `C4YJAUD9` and `MUYRIKN3`'s deliberately
+batched spec bump.** The performance thread is DONE at 10⁵: the largest item left anywhere in the
+warm path is the **210 ms harness floor** (node + `tsx` boot + greptrdd.mjs's own transpile), and it
+is deliberately nobody's card — it affects every subcommand, not just the graph verbs, and its fix
+is a bundling/resident-process change rather than anything in `lib/pillar/`. `YHYP5XIZ` records the
+number so whoever picks it up starts from a measurement.
 Also settled: `Q3GZJI1X` does **not** gate the lint — an ambiguous `relevant-rules:` target is still
 unambiguously a TRDD → PRRD edge, and that direction is legal under either reading.
 

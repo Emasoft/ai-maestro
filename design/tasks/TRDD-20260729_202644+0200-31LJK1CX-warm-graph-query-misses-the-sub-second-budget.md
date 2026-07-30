@@ -1,12 +1,11 @@
 ---
 trdd-id: 31LJK1CX
 title: The warm graph query misses the sub-second budget and the freshness probe is why
-column: blocked
-pre-block-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T20:26:44+0200
-updated: 2026-07-30T03:23:00+0200
+updated: 2026-07-30T03:39:43+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -27,7 +26,7 @@ release-via: none
 relevant-rules: []
 npt: []
 eht: []
-blocked-by: [YHYP5XIZ]
+blocked-by: []
 external-refs: []
 ---
 
@@ -232,18 +231,34 @@ and until that sibling exists the miss keeps its owner rather than evaporating.
       two proposed causes were measured and refuted, and the parts do not yet sum to the whole, so
       apportioning it is the sibling card's first job rather than a guess recorded here
 
-## BLOCKED on `TRDD-YHYP5XIZ` — 2026-07-30
+## CLOSED — the budget is MET (`TRDD-YHYP5XIZ`, 2026-07-30)
 
-Every box above is answered, and the **budget is still missed** — so this card is not `complete`,
-it is `blocked` (`pre-block-column: dev`). What it owed was the diagnosis and the decision, and both
-landed: the probe is the residual, the three floated options are decided on evidence, and the prize
-is bounded under ~360 ms of non-syscall work.
+This card briefly sat `blocked` on `YHYP5XIZ`, because every box above was answered while the budget
+was still missed and `complete` would have read as *solved*. `YHYP5XIZ` has now reported, and the
+budget is met — all five graph verbs at 10⁵ cross from **≥1.00 s to ≤0.98 s** in a stashed-BEFORE
+A/B on one warm corpus.
 
-What it cannot do is claim the budget met, because the paydown target is not yet specified well
-enough to build — the stage parts do not sum to the whole, and the inner ~120 ms has survived two
-refuted attributions. `YHYP5XIZ` closes that accounting first (one process, one interleaved run,
-parts that sum), and only then decides the paydown. When it reports, this card either meets the
-budget or records — with numbers — that the prize was not reachable.
+**Two of this card's own claims are RETRACTED by that work, and both were instrument errors:**
+
+- *"~180-260 ms is unaccounted for across the pipeline"* — no. My probe's node boot read **101 ms**
+  while the real CLI's do-nothing floor (`greptrdd help`, which reads nothing) is **210 ms**.
+  Comparing pipeline-work to pipeline-work, the residual is **0.6%** (835 ms vs 829 ms).
+- *"~120 ms sits above the loop shape inside `identifyFiles`, NOT yet attributed"* — it does not
+  exist. On ONE clock `identifyFiles` is 299-306 ms and a faithful reconstruction of its own body is
+  297-304 ms. The 432 ms and the 281-311 ms it was compared against came from two *other* processes.
+
+So the honest verdict on this card's decomposition table is that its *shape* was right — the probe
+is the dominant term, the query is not the problem — and three of its absolute numbers were harness
+artefacts. The **decisions** it took stand unchanged and on their own evidence: git short-circuit
+dead here (100 000/100 000 `stat:` identities), dir-mtime filter rejected (an in-place APFS edit
+leaves the dir mtime unchanged), exact probe kept.
+
+**What actually bought the budget** was not a cheaper staleness check at all: a layer-by-layer
+decomposition showed 43 ms of `identifyFiles` was building a git lookup key and probing two git maps
+that are EMPTY on a non-git corpus — a fast path `gitRoot` returning `null` makes unreachable by
+design. Hoisting `canBeGit = shas.size > 0` out of the loop took `identifyFiles` from 299-306 ms to
+236-241 ms with the probe's guarantee completely untouched. The remaining largest item is the 210 ms
+harness floor, which is nobody's card yet and is named in `YHYP5XIZ`.
 
 ## Approval log
 

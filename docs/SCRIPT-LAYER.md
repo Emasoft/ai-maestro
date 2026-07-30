@@ -175,7 +175,7 @@ does not verify"*, so renumbering would satisfy the spec, but this is the extern
 boundary plugins call and a consumer branching on `[ $? -eq 2 ]` lives in a repo
 this project cannot audit. Gate on it with `||` — for `verify` both non-zero codes
 mean "do not proceed", which is exactly why that idiom is right here and **wrong**
-for `greptrdd validate`.
+for `trddgrep validate`.
 
 ### `amp-kanban-*.sh` — the team board
 
@@ -258,7 +258,7 @@ server and no API**, so they are not part of the boundary above:
 
 | `yarn` script | What it is |
 |---|---|
-| `yarn greptrdd` | query + `lint` + `validate` the TRDD corpus (`--help` lists every subcommand) |
+| `yarn trddgrep` | query + `lint` + `validate` + `fix` + `env` the TRDD corpus (`--help` lists every subcommand) |
 | `yarn trdd:doctor` / `trdd:fix` / `trdd:board` | the 19-rule doctor; `:fix` repairs only the mechanically-derivable findings |
 | `yarn pillars:lint` | the cross-pillar reference DAG (`PRRD ← SPECS ← TRDD`) |
 
@@ -274,27 +274,75 @@ server and no API**, so they are not part of the boundary above:
 `2` exists because the older two-outcome shape made a gate that read *nothing* exit
 `0`: run from the wrong directory and "the corpus is clean" and "I never saw the
 corpus" were the same answer. **Never collapse `1` and `2`.** In particular
-`greptrdd validate || handle` turns *could-not-run* into *found-findings*, which is
+`trddgrep validate || handle` turns *could-not-run* into *found-findings*, which is
 the precise conflation the third code exists to prevent — and `||` is the obvious
 thing to copy across from `aimaestro-trdd.sh verify`, where it IS correct.
 `--strict` on `lint`/`validate` additionally fails on warnings (exit `1`).
 
 **Flags.** All three take `--design-dir <path>`, so none of them requires being run
-from the repo root. `greptrdd` alone takes `--no-index`: it answers the graph
+from the repo root. `trddgrep` alone takes `--no-index`: it answers the graph
 subcommands (`why`/`unblocks`/`roots`/board) from the SQLite index at
 `~/.aimaestro/pillar-index/` when one is fresh, and `--no-index` forces the corpus
 walk instead. Search is walk-only by design (FTS5 cannot evaluate a regex) and
 `show` always re-reads its one file for freshness.
 
-**Why they are NOT copied to `~/.local/bin/`.** They are `*.mjs`, and the installer
-copies `scripts/*.sh` by glob — no `*.mjs` is distributed today. Distributing one
-would mean shipping the Node-22 wrapper with it, because the index needs
-`better-sqlite3`, which is native and hard-caps at Node 25: a bare `greptrdd` on a
-Node-26 machine would die on `ERR_DLOPEN_FAILED` where the repo-local form works.
-They are also **developer/agent tools over a git-tracked corpus**, not an API
-surface a plugin should couple to — the API-facing task verbs are
-`aimaestro-trdd.sh` above. Run them through `bash scripts/with-node.sh yarn <script>`
-if your shell does not already select Node 22.
+### They ARE installed to `~/.local/bin/` — one launcher, one name per pillar
+
+This section used to argue the opposite, and the argument was overruled by the USER
+(2026-07-30) for a reason no amount of internal reasoning would have surfaced: **the
+janitor's Claude reported it "has no access to the trddgrep tool at all."** A
+3-pillar system every agent is governed by, whose tools only one repo can run, is a
+governance document nobody can query. Two independent causes, and both had to be
+fixed (TRDD-217AYEOT):
+
+1. **Not distributed.** The installer copies `scripts/*.sh` by glob, and these are
+   `*.mjs`.
+2. **Not guessable.** The tool was named `greptrdd` — the two words backwards. The
+   USER's naming law is that every corpus tool is `<document type>grep`: `memgrep`,
+   `trddgrep`, `prrdgrep`, `specgrep`. **A tool whose name cannot be GUESSED from the
+   corpus it reads is not installed, whatever the filesystem says.**
+
+`install-messaging.sh` now records the install root at
+`~/.local/share/aimaestro/install-root` (never a hardcoded `~/ai-maestro` — a packaged
+install has no such directory) and copies **`scripts/pillar-cli`** to `~/.local/bin/`
+once per pillar name. That file is the ONE launcher for all of them: it dispatches on
+`basename $0`, so there is one implementation and N entry points rather than N scripts
+to drift apart. It carries no `.sh` extension **on purpose** — a `pillar-cli.sh` would
+also be picked up by the `scripts/*.sh` glob and land under a fourth, undocumented
+name. A pillar name is installed only when its `.mjs` exists, so `prrdgrep` and
+`specgrep` appear the day they are implemented and never as a stub that refuses: an
+agent that finds a tool and gets an error cannot tell *planned* from *broken*.
+
+The Node-22 objection was real and is handled rather than avoided: the launcher sources
+`scripts/pin-node.sh` (which version-CHECKS each candidate binary and FAILS rather than
+falling back — `better-sqlite3` hard-caps at Node 25), then loads tsx by **absolute**
+path with `TSX_TSCONFIG_PATH` pinned. Both halves are required and both were established
+by measurement: a bare `--import tsx` resolves against the CWD and dies with "Cannot
+find package 'tsx'" from a caller's project, and tsx discovers `tsconfig.json` from the
+CWD too, so without the pin the `@/lib/...` aliases go unresolved. It must be `#!/bin/bash`:
+sourced from zsh, `pin-node.sh` degrades silently and hands back an out-of-range Node
+(measured: bash → v22.23.1, zsh → v26.5.0).
+
+**The corpus is the CALLER's, never the install's.** The launcher keeps the caller's cwd
+and defaults `--design-dir` to `$PWD/design`, so `trddgrep` in any project answers about
+*that* project. A global tool that resolved `design/` against its own install would
+answer every question with ai-maestro's corpus — the "gate that passed because it read
+nothing" bug inverted into one that read someone *else's* corpus.
+
+**Which environment am I in?** `trddgrep env` prints `mode=standalone` (a plain project:
+the whole 3-pillar surface, never degraded) or `mode=agent` + the agent name (an
+ai-maestro registered workdir, which additionally unlocks the verbs that are impossible
+without a live server and an AID), always with the reason it concluded that. Detection
+reads `~/.aimaestro/agents/registry.json` **read-only** — deliberately not through
+`loadAgents()`, which `mkdir`s the state dir before its own existence guard and carries a
+migration that SAVES the registry, i.e. an observer that creates what it measures. `env`
+is the one verb exempt from the corpus check, because gating it on a corpus existing
+removes the diagnostic from exactly the situation that prompts someone to ask for it.
+
+These remain **developer/agent tools over a git-tracked corpus**, not an API surface a
+plugin should couple to — the API-facing task verbs are `aimaestro-trdd.sh` above. From
+inside this repo, run them through `bash scripts/with-node.sh yarn <script>` if your
+shell does not already select Node 22; the installed `trddgrep` selects Node itself.
 
 ## Adding a capability
 

@@ -1,6 +1,6 @@
 ---
 name: pillar-tooling-scale-and-index
-description: "greptrdd / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can greptrdd's search be served by FTS5 / the cold index build takes forever and eats gigabytes / the warm query is just over the one-second budget / where does the time in a warm index query actually go / my stage timings do not add up to the total / the probe stats every file and I want to skip it"
+description: "trddgrep / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can trddgrep's search be served by FTS5 / the cold index build takes forever and eats gigabytes / the warm query is just over the one-second budget / where does the time in a warm index query actually go / my stage timings do not add up to the total / the probe stats every file and I want to skip it"
 ocd: 2026-07-28
 lmd: 2026-07-30
 metadata:
@@ -9,7 +9,7 @@ metadata:
   tier: component
 ---
 The 3-pillars corpus tooling (`lib/pillar/*`, `lib/trdd-store.ts`, `lib/trdd-doctor.ts`,
-`scripts/greptrdd.mjs`) was stateless and full-rescan until 2026-07-28. It is now built on a
+`scripts/trddgrep.mjs`) was stateless and full-rescan until 2026-07-28. It is now built on a
 shared seam with a SQLite index, for reasons that were MEASURED rather than argued — and the
 measurements contradict the two things people assume.
 
@@ -82,12 +82,12 @@ warm `board` at 10⁴ went **1.03 s → 0.37 s**, against the walk's 1.12 s.[^11
 **6. The walk is NOT the outage it was assumed to be, so the degradation policy is FALL BACK, not
 refuse.** Measured at 10⁵: `board --no-index` = **8.07 s / 1.02 GB / exit 0**; `validate` =
 22.6 s / 2.43 GB. Both sit well inside the 4 GB ceiling. A tool that REFUSES when its cache is
-broken fails exactly where falling back works, so greptrdd falls back LOUDLY (two stderr lines
+broken fails exactly where falling back works, so trddgrep falls back LOUDLY (two stderr lines
 naming the fault and which path answered) and `--no-index` skips the attempt outright. The trigger
 that would flip this is measurable rather than arguable: a measured walk exceeding 4 GB or crossing
 into minutes.[^12]
 
-**7. SEARCH cannot be served by the index, BY DESIGN.** greptrdd's default search is a REGEX
+**7. SEARCH cannot be served by the index, BY DESIGN.** trddgrep's default search is a REGEX
 search. FTS5 is token matching + bm25 — it cannot evaluate a regex, and its unicode61 tokenizer
 splits `TRDD-BQC8NQSW` into whole tokens, so even a literal-only prefilter misses substrings. Search
 stays walk-only; that is a documented CONTRACT in `lib/pillar/index-open.ts`, not an unfilled gap.
@@ -105,8 +105,8 @@ explains the hoist. Decision deferred to the phase that designs recall — `TRDD
 **9. The WARM query is probe-bound, and the < 1 s budget at 10⁵ is MET (2026-07-30).** The index
 removed the walk (8.07 s → ~1 s), and what was left over budget was the cost of *proving the cache
 valid*, not of answering. Full warm decomposition, all in ONE process on a 10⁵ non-git corpus:
-harness floor **210 ms** (node + `tsx` + greptrdd's own transpile — measure it as
-`greptrdd help`, which reads nothing) · `openIndex` 25 · `syncIndex` **557** (of which
+harness floor **210 ms** (node + `tsx` + trddgrep's own transpile — measure it as
+`trddgrep help`, which reads nothing) · `openIndex` 25 · `syncIndex` **557** (of which
 `listTrddFiles` 121, `identifyFiles` 302, its own diff 134) · `cardsFromIndex` 151 · everything
 after the graph returns (`push(...spread)` + `new Map` + compute + render) **51**.
 
@@ -141,7 +141,32 @@ abstraction fits is that its tests pass unchanged.
   that rule, which is why its self-heal may delete the file: every row is reconstructible from
   markdown, so nothing authoritative can live only in it.
 
+**The tool is `trddgrep`, installed to `~/.local/bin/` for every agent** (2026-07-30,
+TRDD-217AYEOT). It was `greptrdd` — the two words backwards — and repo-local, and BOTH were
+why the janitor's Claude reported "no access to the trddgrep tool at all" while the file sat
+in this repo[^7]. USER naming law: every corpus tool is `<document type>grep` — `memgrep`,
+`trddgrep`, `prrdgrep`, `specgrep`. ONE launcher (`scripts/pillar-cli`) dispatches on
+`basename $0`, so there is one implementation and N entry points; a pillar name is installed
+only when its `.mjs` exists (never a stub that refuses). `trddgrep env` prints
+`mode=standalone` or `mode=agent <name>` with its reason — detection is read-only by
+construction (an `existsSync` gate + a minimal parse, deliberately NOT `loadAgents()`, which
+`mkdir`s the state dir before its own guard and SAVES a migration)[^8].
+
 ## Notes and lessons learned
+
+[^7]: [id:ATOM-PTSI-0007, status:valid, keywords:"agent_cannot_find_the_tool tool_not_installed name_backwards greptrdd guessable_name discoverability", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT treat "the file exists in the repo" as evidence a tool is available, BECAUSE
+  distribution and DISCOVERABILITY are independent failures and this tool had both: never
+  copied to a bin dir, and named the two words backwards so no agent would guess it. DO name
+  a corpus tool after the corpus (`<type>grep`) and install it, then ask an outside agent to
+  find it.
+
+[^8]: [id:ATOM-PTSI-0008, status:valid, keywords:"cwd_realpath registry_workdir_never_matches private_var symlinked_home path_resolve_is_lexical", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT compare `process.cwd()` against a recorded directory with `path.resolve`, BECAUSE
+  cwd is ALWAYS a kernel realpath while the record is a string a human typed — so on macOS a
+  workdir registered under `/var` or `/tmp` never matched a cwd of `/private/var`, and an
+  agent standing in its own workdir was reported `standalone`. DO canonicalize both sides
+  through `realpathSync.native` (lexical fallback for a since-deleted path).
 
 [^1]: [id:ATOM-PTSI-0001, status:valid, keywords:"corpus_too_slow do_we_need_a_database index_already_in_ram loadCorpus rebuilt_every_run", ocd:2026-07-28, lmd:2026-07-28]
   DO NOT ask "does this corpus need an index" without first grepping for the Maps, BECAUSE the

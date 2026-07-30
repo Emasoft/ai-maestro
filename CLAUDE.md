@@ -63,14 +63,36 @@ tmux kill-session -t test-session    # Clean up test session
 
 ### The pillar CLIs — `0` clean · `1` findings · `2` COULD NOT RUN
 
-`yarn greptrdd` (query/lint/validate the TRDD corpus), `yarn trdd:doctor` (+`:fix`,
-`:board`), `yarn pillars:lint` (the cross-pillar DAG). All take `--design-dir`;
-`greptrdd` also takes `--no-index`.
+**`trddgrep` is the ONE name and the ONE implementation** (USER naming law, 2026-07-30:
+every corpus tool is `<document type>grep` — `memgrep`, `trddgrep`, `prrdgrep`,
+`specgrep`). It was called `greptrdd` — the two words backwards — for its whole life, and
+that alone made it unreachable: the janitor's Claude reported it "has no access to the
+trddgrep tool" while the file sat in this repo, because **a tool whose name cannot be
+GUESSED from the corpus it reads is not installed, whatever the filesystem says**
+(TRDD-217AYEOT). Distribution and discoverability are independent failures; that one was
+the second.
+
+It is **installed globally**, not repo-local: `install-messaging.sh` records the install
+root and copies `scripts/pillar-cli` to `~/.local/bin/` once per pillar name, so any
+agent in any project — ai-maestro or not — runs `trddgrep` on **its own** `design/`.
+`scripts/pillar-cli` is ONE launcher dispatching on `basename $0`; a name appears only
+when its `.mjs` exists (`prrdgrep`/`specgrep` are not shipped yet), never as a stub that
+refuses — an agent that finds a tool and gets an error cannot tell *planned* from *broken*.
+
+**The tool detects its own environment** — `trddgrep env` prints `standalone` (any plain
+project; the whole 3-pillar surface, never degraded) or `agent` (an ai-maestro registered
+workdir, which additionally unlocks the server/AID-dependent verbs). `env` is the one verb
+exempt from the corpus check, because its job is to answer "why does this say nothing
+here?".
+
+`yarn trddgrep` (query/lint/validate/`fix`/`env`), `yarn trdd:doctor` (+`:fix`, `:board`),
+`yarn pillars:lint` (the cross-pillar DAG). All take `--design-dir`; `trddgrep` also takes
+`--no-index`.
 
 Their exit codes are a **trichotomy — `grep`'s own** — and `2` is the load-bearing
 one: before it existed, a gate run from the wrong directory read nothing and exited
 `0`, so "the corpus is clean" and "I never saw the corpus" were the same answer.
-**Never write `greptrdd validate || …`** — that collapses `1` into `2` and turns
+**Never write `trddgrep validate || …`** — that collapses `1` into `2` and turns
 *could-not-run* into *found-findings*. The idiom is copied from
 `aimaestro-trdd.sh verify`, where it is correct because that verb is the one
 grandfathered exception (`2` = INVALID, `1` = ERROR — inverted, and named as an

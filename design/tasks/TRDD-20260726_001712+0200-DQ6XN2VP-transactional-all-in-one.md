@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T23:48:04+0200
+updated: 2026-07-31T00:07:17+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1]
 ---
 
 ## ⏵ MEASURED 2026-07-30 — the count was wrong, and there is now a ratchet that keeps it honest
@@ -150,6 +150,96 @@ either, for the reason below.
 > `ChangeName` in that sentence; the criterion is whether the pipeline can leave two stores
 > disagreeing. `ChangeTeam` was the half that was right, and it is done below.
 
+## ⏵ DeleteTeam RETROFITTED 2026-07-31 (`72886dd1`) — 11 to go; a compensation that only covered ONE abort
+
+Real inventory now: **19 pipelines · 8 transactional · 11 to go.** Ratchet lowered
+(`MAX_HANDROLLED` 12→11, `MIN_TRANSACTIONAL` 7→8, `DeleteTeam` pinned in `MUST_BE_TRANSACTIONAL`).
+
+**THE FINDING, and it is a NEW shape — not a missing compensation, a MIS-SCOPED one.** DeleteTeam
+already had a careful hand-rolled restore: 45 lines, reverse order, per-agent records, the R51.3/R51.5
+messages, even a comment explaining the ordering constraint. It ran on exactly **one** abort — the
+per-agent revert failure it was written beside, inside the same `if (revertFailures.length > 0)`
+block. The far likelier abort, `deleteTeam` returning false at **G04**, reached a bare `return
+result`. So the operator was told *"Team deletion from registry failed"* over a team row that still
+existed and looked intact in `teams.json`, and was in fact an **empty husk**: every member already
+pulled out of `agentIds`, demoted to AUTONOMOUS with its role-plugin stripped, its legacy `team`
+field cleared, and hibernated.
+
+Generalised: **code can only roll back the failure it is written for.** A compensation fused to one
+abort site is invisible to every other one, and it looks like coverage — this one was more thorough
+than most gates that have none. What the runner buys is not the undo (that existed) but *deciding
+when the undo runs*.
+
+**Sequence:** `G03..G04`. G04 is the last gate that can abort; G05/G06/G07 are WARN-and-continue, so
+an `undo` for them would be unreachable code that reads as a guarantee (the BOUNDARY RULE).
+Read-only G00/G00c/G00b/G01/G02 keep their early returns and exact strings.
+
+**THE LIFO TRAP RECURRED, in a second pipeline, for the same reason** — so it is a property of R3,
+not of ChangeTeam. G03 removes membership BEFORE `ChangeTitle`, because Gate 9b refuses a demotion
+while the agent is still listed in a team; the mirror holds coming back, so the undo must re-add
+membership FIRST and only then restore the title. Same order, not its mirror ⇒ **ONE gate**. The
+existing code already had the right undo order *and a comment saying why* — what it lacked was the
+constraint that keeps a future edit from splitting them, which the neuter now supplies.
+
+**G04's undo, and why `saveTeams` and not `createTeam`.** `createTeam` MINTS A NEW uuid, so it cannot
+restore a row — every agent, session and pending transfer naming the old id would dangle. The undo
+writes the G02 snapshot back with `saveTeams`, and it decides by READING the store (`if
+(teams.some(...)) return`) rather than trusting a flag, so it is correct whether `run` deleted
+nothing or deleted and then threw.
+
+**A latent abort outside the boundary, fixed so the boundary claim is TRUE.** G07's `await
+import('@/lib/agent-registry')` sat outside any try. It runs after the transaction closes, so a throw
+there hit the function's outer catch and reported *total failure* over a delete that had in fact
+succeeded — with nothing rolled back. Per-agent cascade failures were already non-fatal by design;
+the setup now matches them.
+
+**Also fixed, a message the old path got wrong:** its abort ops line interpolated an array of objects
+and printed `[object Object]` for every stranded agent. The runner formats it.
+
+**Four neuters, disjoint red sets** (`tests/governance/r3-r9-team-governance.test.ts`, 3 tests):
+
+| neuter | reds |
+|---|---|
+| G03's undo → return | all 3 |
+| **G04's undo → return** | **ONLY the throw-after-delete test** |
+| title BEFORE membership (simulating LIFO) | the 2 ordering tests, verbatim `CRITICAL … GATE NUMBER 1 (G03)` and `… GATE NUMBER 2 (G04) … INVALID STATE` |
+| G04 stops aborting on a `false` return | ONLY the return-false test |
+
+**The second row is why there are three tests and not two.** With the registry merely REFUSING,
+nothing was deleted, so G04's compensation short-circuits on its first line and deleting it entirely
+reddens nothing — the near-vacuous shape this campaign keeps finding. Only a fixture that really
+drops the row and THEN throws (the partial-work case write-ahead registration exists for) makes that
+undo load-bearing. Its non-vacuity control is the thrown message appearing in `result.error`: without
+it, "the team still exists" cannot be told from a delete that never happened.
+
+**A masking relationship worth knowing before the next edit.** In the throw-after-delete case G04's
+undo restores the **pre-G03** snapshot, whose `agentIds` already contains every agent — so it also
+restores membership, and the LIFO neuter leaves that third test GREEN. G03's undo is still
+load-bearing there (title + `team` field), which neuter A confirms. Two compensations overlapping on
+one field is not a bug, but a test written only against that path could not see G03's membership half.
+
+### Deliberate, and named rather than left to be discovered
+
+1. **The undo does NOT wake the agents it left hibernated**, preserving the existing choice and its
+   stated reason (waking is heavier and side-effectful; an offline agent is recoverable, not
+   corrupted). It IS an R51.10 gap — *"resume its job without interruption"* — of exactly the shape
+   D1 identifies for the MANAGER demote. Wiring N wake calls into a rollback path is its own change.
+   The operator is told: the error names how many remain asleep.
+2. **G04's undo writes outside the registry's `withLock`.** `withLock` is module-private and
+   unexported, so `saveTeams` is the only way to restore an exact row; it races a concurrent team
+   mutation. Acceptable only because it runs on the rollback path of an operation that already has
+   the operator's attention — but it is a real, named limit, not an oversight.
+3. **`deleteTeam` also unlinks `docs-<id>.json`, and the undo does not restore it.** Legacy back-compat
+   only (the registry's own comment says local task/doc files no longer exist), so no snapshot was
+   built for it. If that file ever becomes load-bearing again, it needs one.
+
+**NEXT ACTION — pick by WINDOW, not by gate count.** `ChangeMarketplace` (12 ops) is the remaining
+named candidate with a plausible multi-store window; re-measure before committing to it. Still not
+`ChangeTitle` (131) or `InstallElement` (101) — both are now called BY retrofitted pipelines
+(`ChangeTeam` and `DeleteTeam` each call `ChangeTitle` from inside a gate), so converting one changes
+its callers' failure semantics and wants its own card. **Never**
+`ChangeName`/`ChangeFolder`/`ChangeAvatar`.
+
 ## ⏵ ChangeTeam RETROFITTED 2026-07-30 (`778151e9`) — 12 to go, and the LIFO trap
 
 Real inventory now: **19 pipelines · 7 transactional · 12 to go.** Ratchet lowered
@@ -206,7 +296,8 @@ from a deleted one.
 3. **A `null` previous title is not restorable and does not need to be** — ChangeTitle Gate 1
    normalizes null to `autonomous`, so a null-titled agent demoted to AUTONOMOUS is already back.
 
-**NEXT ACTION — pick by WINDOW, not by gate count.** `DeleteTeam` (37 ops) and `ChangeMarketplace`
+**NEXT ACTION — pick by WINDOW, not by gate count.** *(SUPERSEDED 2026-07-31 — `DeleteTeam` is done;
+see the section above for the current next action.)* `DeleteTeam` (37 ops) and `ChangeMarketplace`
 (12) are the remaining candidates with plausible multi-store windows. Still not `ChangeTitle` (131)
 or `InstallElement` (101) — both are called BY retrofitted pipelines (and `ChangeTeam` now calls
 `ChangeTitle` from inside a gate), so converting one changes its callers' failure semantics and wants

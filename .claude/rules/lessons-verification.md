@@ -172,7 +172,9 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 
 ## All-in-one functions (R50/R51)
 
+- A COMPENSATION FUSED TO ONE ABORT SITE IS INVISIBLE TO EVERY OTHER ONE, and it reads as coverage because it is real, careful code: DeleteTeam's 45-line reverse restore lived inside `if (revertFailures.length)` and so ran ONLY for a per-agent failure, while G04's `return result` reported "registry delete failed" over a team whose every member had already been un-enrolled, demoted, plugin-stripped and hibernated. Code can only roll back the failure it is written for — the runner's value is not the undo but DECIDING WHEN IT RUNS.
 - A gate whose `run` is a LOOP is not atomic: register its compensation BEFORE running it, or its own partial work is the one thing nothing reverts.
+- WHEN TWO COMPENSATIONS OVERLAP ON ONE FIELD, a test that drives only the path where the outer one runs cannot see the inner one: G04's undo restores the PRE-G03 team snapshot, whose `agentIds` already holds every agent, so it silently also restores membership and the LIFO neuter left that test green. Not a bug — but name the overlap, or the next edit deletes the half no test can miss.
 - An `undo` must tolerate `run` having done none, some, or all of its work — reverse only what `run` recorded in ctx.
 - Check every precondition (adapters, permissions, reachability) BEFORE the first mutation; ordering prevents states that rollback can only repair.
 - The last write in a pipeline still needs a compensation — a registry write after the filesystem work leaves the two disagreeing forever.

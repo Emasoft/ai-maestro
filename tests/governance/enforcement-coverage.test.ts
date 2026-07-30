@@ -176,12 +176,21 @@ const UNAUDITED_RULES = new Set<number>([
 // plugin sync ON, asserting the argv that reaches `claude plugin install`. Both neuters redden it, and
 // they redden DIFFERENT halves — disabling G16 fails one test, mis-resolving G15 fails both — which is
 // why the row cites both gates rather than whichever one was convenient.
+// 2026-07-30: R20.5 pinned by the SAME tests — 27 → 26. It cites the same two gates, so once G15/G16
+// were driven it became a free pin; the trap was that "free" invites pinning only the easy CLAUSE.
+// R20.5 has two: the default auto-installs on grant, UNLESS the caller explicitly picked a different
+// COMPATIBLE plugin. ChangeTitle has no option for that pick — the way an earlier pick SURVIVES a
+// grant is G15's keep-branch, cited by nothing and driven by nothing. It is now pinned too, with the
+// DEFAULT listed first in the compatible set, because with the standing pick first the else-branch
+// selects the same plugin anyway and the test would stay green over a deleted guard. Its own neuter
+// reddens exactly it. The row's line ranges were also stale (3089-3160 / 3162-3210, ~74 lines adrift);
+// the gate-qualifier check cannot see that, since it verifies the LABEL exists, never the range.
 //
 // Take this number from THIS test's own failure message, never from a hand-written grep. Mine said
 // 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule `R17.18a`, and a count from the
 // wrong pattern reads as a clean win — I was one commit from locking in a number my own awk had
 // invented.
-const MAX_ENFORCED_WITHOUT_TEST = 27
+const MAX_ENFORCED_WITHOUT_TEST = 26
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

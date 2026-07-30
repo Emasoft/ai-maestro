@@ -697,4 +697,46 @@ describe('R19.10 — MAINTAINER is bound to ai-maestro-maintainer-agent (ChangeT
     expect(calls).toHaveLength(1)
     expect((calls[0].args as string[])[2]).toBe('ai-maestro-autonomous-agent')
   })
+
+  // R20.5's SECOND clause. The rule is "the default role-plugin MUST be installed
+  // automatically when the title is granted, UNLESS the user (or a privileged
+  // caller) explicitly picks a different COMPATIBLE role-plugin". ChangeTitle has
+  // no option for that pick — the mechanism by which an earlier explicit pick
+  // SURVIVES a title grant is G15's keep-branch, and that branch was cited by
+  // nothing and driven by nothing. Two clauses, two sites; pinning only the
+  // auto-install half would leave the "unless" enforceable-on-paper only.
+  it('an already-installed COMPATIBLE plugin is KEPT, not replaced by the default — this is the whole of R20.5\'s "unless the user picks a different compatible role-plugin"', async () => {
+    // The N:1 model: a plugin whose .agent.toml declares compatible-titles
+    // ["MEMBER","MAINTAINER"] is a legitimate MAINTAINER choice, so granting
+    // MAINTAINER must not force the default over the operator's standing pick.
+    // ORDER MATTERS, and getting it wrong makes this test vacuous: G15's else-branch
+    // picks compatibles[0]. With the standing pick listed FIRST, deleting the
+    // keep-branch would select the same plugin anyway and the test would stay green
+    // over a deleted guard. The DEFAULT goes first, so the keep-branch is the only
+    // thing that can produce the expected outcome.
+    mockRolePluginService.getPluginsForTitle.mockReturnValue([
+      { name: 'ai-maestro-maintainer-agent', marketplace: 'ai-maestro-plugins' },
+      { name: 'ai-maestro-programmer-agent', marketplace: 'ai-maestro-plugins' },
+    ])
+    const agentDir = path.join(FAKE_HOME, 'agents', 'agent-a')
+    const settingsFile = path.join(agentDir, '.claude', 'settings.local.json')
+    mkdirSync(path.dirname(settingsFile), { recursive: true })
+    writeFileSync(settingsFile, JSON.stringify({
+      enabledPlugins: { 'ai-maestro-programmer-agent@ai-maestro-plugins': true },
+    }))
+    seedAgents([makeAgentRecord({ id: 'agent-a', governanceTitle: 'member' })])
+
+    const r = await changeTitle('agent-a', 'maintainer', {
+      githubRepo: 'Emasoft/ai-maestro',
+      skipPluginSync: false,
+    })
+
+    expect(r.success).toBe(true)
+    expect(r.operations.some(op =>
+      /^G15: Current plugin "ai-maestro-programmer-agent" is compatible with MAINTAINER — keeping/.test(op))).toBe(true)
+    // The load-bearing half: nothing was installed OVER the standing pick. An ops
+    // line alone would not distinguish "kept" from "kept, then replaced anyway".
+    expect(installCalls()).toHaveLength(0)
+    expect(r.installedPlugin).toBeNull()
+  })
 })

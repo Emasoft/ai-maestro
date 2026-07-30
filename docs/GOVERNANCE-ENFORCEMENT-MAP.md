@@ -289,7 +289,7 @@ Row format is fixed so a regex parses each line:
 | R32.1 | ENFORCED | lib/sudo-guard.ts:86-88 | tests/governance/r32-agents-never-sudo.test.ts |
 | R32.2 | ENFORCED | app/api/auth/sudo-password/route.ts:98-108, lib/sudo-guard.ts:86-88 | tests/governance/r32-agents-never-sudo.test.ts |
 | R32.3 | UNENFORCED | — | — |
-| R33.1 | ENFORCED | lib/portfolio-ledger.ts:149-214 | — |
+| R33.1 | ENFORCED | lib/portfolio-ledger.ts:148-211 | tests/unit/portfolio-ledger.test.ts |
 | R34.1 | UNENFORCED | — | — |
 | R34.2 | ENFORCED | app/api/agents/foreign-approvals/[id]/approve/route.ts:46-49 | tests/governance/r34-r35-foreign-approval.test.ts |
 | R35.1 | UNENFORCED | — | — |

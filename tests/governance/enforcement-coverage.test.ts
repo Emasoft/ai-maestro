@@ -289,7 +289,15 @@ const UNAUDITED_RULES = new Set<number>([
 // single-plugin case never reaches the expression the rule's text points at. A neuter that changes
 // nothing is a finding about the TEST; the real pair is `isSingleLocked = false` (locked test only)
 // and `hasMultipleOptions = false` (dropdown test + positive control).
-const MAX_ENFORCED_WITHOUT_TEST = 13
+// 2026-07-30: 13 -> 12. R33.1 needed NO new test — `tests/unit/portfolio-ledger.test.ts:115`
+// already had a `describe('reconstructPortfoliosFromLedger (R33)')` that wipes the disk mirror so
+// reconstruct is the only writer, then asserts all four replayed statuses (active / consumed /
+// revoked / expired), `uses_remaining`, and the per-token `ledger_seq` re-anchoring. Neuter-proven:
+// skipping the consume branch reddens exactly that test. The row's Test column was empty, which is
+// the OPPOSITE failure to a rotted Guard — it understates coverage, inflates the ratchet, and makes
+// the campaign look further from done than it is. Before writing a test for a remaining row, grep
+// the test tree for the guard's exported symbol first.
+const MAX_ENFORCED_WITHOUT_TEST = 12
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

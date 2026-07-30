@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:43:33+0200
+updated: 2026-07-30T17:47:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,28 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 13 → 12 — R33.1 needed NO new test, and that is its own finding
+
+**The remaining 12:** R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R17.18a, R18.8, R20.28,
+R40.1.
+
+`tests/unit/portfolio-ledger.test.ts:115` already carried
+`describe('reconstructPortfoliosFromLedger (R33)')` — it wipes the disk mirror so reconstruct is
+the ONLY writer, then asserts all four replayed statuses (active / consumed / revoked / expired),
+`uses_remaining`, and the per-token `ledger_seq` re-anchoring. Neuter-proven: disabling the
+`consume_portfolio_token` branch reddens exactly that test. The row's Test column was simply empty.
+
+**This is the OPPOSITE failure to a rotted Guard, and it is easy to miss because nothing goes red.**
+A rotted Guard makes a row look enforced where it is not; an empty Test column on a row that IS
+tested understates coverage, inflates the ratchet, and makes the campaign look further from done
+than it is — so work gets spent re-writing a test that exists.
+
+**NEXT ACTION — sweep for more of these BEFORE writing another test.** For each remaining row, grep
+the test tree for the guard's exported symbol (`grep -rln "<symbol>" tests/`). Cheapest candidates
+to check first: R1.1 (`lib/team-acl.ts` → `checkTeamAccess`), R1.2 (`lib/group-registry.ts`),
+R18.8 (`lib/converter/utils/warnings.ts`), R40.1. Only after the sweep is exhausted is writing a
+new test the right move.
 
 ### SCOUTED, NOT YET WRITTEN — R10.6, whose BOTH cited sites were wrong
 

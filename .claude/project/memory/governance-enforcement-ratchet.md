@@ -31,7 +31,9 @@ count exceeding `MAX_ENFORCED_WITHOUT_TEST`.
 
 **Keeping it green:**
 - Add/edit a rule → add/adjust its map row. A new rule with no row = red.
-- Verdicts: `ENFORCED | UNENFORCED | INVENTED | CONTRADICTED | RULING-NEEDED | BEHAVIOURAL`.
+- Verdicts: `ENFORCED | UNENFORCED | INVENTED | CONTRADICTED | RULING-NEEDED | BEHAVIOURAL`. A guard
+  living in a `.tsx`/hook is CORRECT and complete when the rule is a PRESENTATION rule — do not
+  downgrade it on the "a check in a client is no check" reflex, which governs AUTHORIZATION. [^6]
 - Guard may be `file`, `file:N`, or `file:N-M` and **nothing else** — the grammar rejects a
   free-form parenthetical or prose (`called from …`), so a citation is a path, optionally plus
   `(Pipeline::Gnn)`. Cite the SEAM *and* the CALL SITE: an extracted-but-unwired guard is dead
@@ -61,8 +63,14 @@ instead (R50/R51 are in `all-in-one-spec.md`). And `scripts/aio-gate-coverage.py
 Part II table INDEPENDENTLY — it never opens the map — so take a new rule's Part II row *and the
 tally* from that script's own output rather than hand-writing them.
 
-**State (2026-07-30):** catalog **v5.1.0**, **52** rules, `MAX_ENFORCED_WITHOUT_TEST = 30` (was
-134 at the 2026-07-14 audit; 35 → 32 → 30 on 2026-07-30 alone). Newest rule is **R52 — the write
+**State (2026-07-30):** catalog **v5.1.0**, **52** rules, `MAX_ENFORCED_WITHOUT_TEST = 18` (was
+134 at the 2026-07-14 audit; 35 → 32 → 30 → 28 → 23 → 18 across 2026-07-30). **Read the count and
+the remaining rule LIST from the ratchet's own failure message** — set the constant to 0, run
+`-t "shrinking ratchet"`, restore. A hand grep gets it wrong twice over. [^7] The cheapest unit of
+work is a **shared-guard pair**: two rules enforced by one guard, so one test file pins both
+(R34.2+R35.2 on one route's two auth lines; R7.2+R7.9 on one `useState`). It also forces the right
+discipline — when two gates run in ORDER, each refusal test must let the OTHER gate pass, or it
+passes with its own gate deleted. Newest rule is **R52 — the write
 boundary** (`lib/write-boundary.ts`: ai-maestro writes only inside `~/.aimaestro` and `~/agents`,
 plus three ratified `~/.claude` settings keys). The CONTRADICTED column is the git-tracked record
 of which rules conflict (rule-vs-code or rule-vs-rule); most need a USER ruling because they pit an
@@ -96,3 +104,17 @@ IRON (user-set) rule against the code. Full per-rule detail is gitignored eviden
   import so nothing can import it, and an unobservable guard is one refactor away from silently not
   existing. DO extract it to an importable `.mjs` seam (R9.9/R17.17/R17.20 — TRDD-L42SKUBW) and
   cite seam + call site.
+
+[^6]: [id:ATOM-Y4BK-8FYY, status:valid, keywords:"guard_lives_in_a_tsx_component client_side_check_is_no_check downgrade_a_ui_rule_to_behavioural presentation_rule_vs_authorization_rule", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT downgrade a rule because its only guard is client-side, BECAUSE "a check in a client is no
+  check" governs AUTHORIZATION (every route is curl-able, so that check must land in the route) and
+  says nothing about what the UI DISPLAYS — applying it to the 9 presentation rules would have gutted
+  9 correct rows. DO ask which kind of rule it is first; a presentation rule is fully enforced by its
+  `.tsx`/hook guard and is pinnable today with `renderHook`/`render`.
+
+[^7]: [id:ATOM-OX2U-OE9S, status:valid, keywords:"which_rules_are_still_untested hand_grep_of_the_enforcement_map awk_split_on_pipe_phantom_guards ratchet_count_disagrees", ocd:2026-07-30, lmd:2026-07-30]
+  DO NOT hand-grep the map for the untested-ENFORCED list, BECAUSE it misses lettered ids (`R17.18a`)
+  AND the map has a SECOND 3-column table further down that poisons `awk -F'|'` with ~118 phantom
+  `—` guards. DO set `MAX_ENFORCED_WITHOUT_TEST = 0`, run `-t "shrinking ratchet"`, and read the
+  count and the list off the failure message — the parser that gates the build is the only one whose
+  answer matters.

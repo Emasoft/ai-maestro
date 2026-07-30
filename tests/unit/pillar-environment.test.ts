@@ -61,21 +61,32 @@ describe('resolvePillarEnvironment — standalone', () => {
     expect(env.reason).toContain('registry.json')
   })
 
-  it('DETECTS WITHOUT WRITING — the whole reason the existsSync gate comes first', () => {
+  it('creates nothing under the state dir it resolves', () => {
     // POSITIVE CONTROL, and it must come first: if $HOME injection silently stopped
-    // working, every assertion below would pass while the detector touched the real
-    // ~/.aimaestro. Proving the fake home is in effect is what makes the rest mean
-    // anything.
+    // working, the assertion below would pass while the detector touched the real
+    // ~/.aimaestro. Proving the fake home is in effect is what makes it mean anything.
+    // It works here because environment.ts calls statePath() at CALL time.
     expect(statePath()).toBe(path.join(home, '.aimaestro'))
 
     resolvePillarEnvironment(mkdir('Code', 'some-project'))
-
-    // `loadAgents()` would have created this on the way to answering — it calls
-    // ensureAgentsDir() BEFORE its own existsSync guard, and can additionally SAVE the
-    // registry via the claudeArgs→programArgs migration. A read-only query tool must do
-    // neither. Neuter: swap the reader in environment.ts for loadAgents() and this fails.
     expect(fs.existsSync(path.join(home, '.aimaestro'))).toBe(false)
   })
+
+  // WHAT THIS FILE CANNOT PIN, stated so nobody mistakes the test above for the guard.
+  //
+  // The real hazard is using `loadAgents()` as the detector: it calls ensureAgentsDir()
+  // BEFORE its own existsSync guard, and carries a claudeArgs→programArgs migration that
+  // SAVES the registry. But `lib/agent-registry.ts` fixes AIMAESTRO_DIR at MODULE LOAD
+  // (`const AIMAESTRO_DIR = getStateDir()`), so an IN-PROCESS $HOME swap never reaches
+  // it — the neuter run proved this: swapping in loadAgents() left the assertion above
+  // GREEN while the write went to the developer's REAL ~/.aimaestro instead. An
+  // in-process test cannot observe it, and one that claims to is worse than none.
+  //
+  // Measured instead in a SUBPROCESS, where the whole module graph loads under the fake
+  // home (TRDD-217AYEOT, 2026-07-30): the naive detector created `.aimaestro/` AND
+  // `.aimaestro/agents/`; resolvePillarEnvironment created nothing. The shipped guard for
+  // that property is the end-to-end `trddgrep env` test — a CLI-level run is the only
+  // place the property is real, which is what the card's acceptance box asks for.
 
   it('is standalone in a directory no agent has registered, even under ~/agents', () => {
     const alice = mkdir('agents', 'alice')

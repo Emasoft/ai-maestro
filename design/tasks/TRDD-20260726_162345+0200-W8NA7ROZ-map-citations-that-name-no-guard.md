@@ -1,11 +1,11 @@
 ---
 trdd-id: W8NA7ROZ
 title: Fifteen enforcement-map citations cannot name a single guard
-column: todo
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T16:23:45+0200
-updated: 2026-07-30T12:26:00+0200
+updated: 2026-07-30T12:51:48+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -17,7 +17,7 @@ approved: true
 approval-judge: ai-maestro
 approval-datetime: 2026-07-26T16:23:45+0200
 relevant-rules: [R51.9]
-implementation-commits: [9a11a51b, 47f54bf2]
+implementation-commits: [9a11a51b, 47f54bf2, a92bf954, 9367b390]
 parent-trdd: H4Y9F25J
 derived: true
 derived-kind: eht

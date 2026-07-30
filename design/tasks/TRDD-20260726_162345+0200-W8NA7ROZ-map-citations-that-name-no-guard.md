@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T16:23:45+0200
-updated: 2026-07-30T06:13:11+0200
+updated: 2026-07-30T12:26:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -26,7 +26,16 @@ npt: []
 eht: []
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
+
+**ALL ACCEPTANCE BOXES CHECKED. All 15 originally-flagged rows (5 category-A + 7 category-B + 3
+helper) are re-cited and mutation-proven; the last 5 (R4.4, R17.8, R20.5, R20.31, R40.1) closed
+today — see the "2026-07-30 — the final 5 rows" section near the bottom for the per-row detail.
+`tests/governance/enforcement-coverage.test.ts` is 9/9 green; `services/element-management-service.ts`
+is byte-identical to HEAD. NEXT ACTION: none — this TRDD is done; move `column:` to a terminal state
+(`complete` or equivalent) on next pass. The sections below (dated 2026-07-26/27) are the ORIGINAL
+measurement and are kept as the historical record — read the 2026-07-30 sections for what actually
+shipped.
 
 Surfaced while adding gate qualifiers to `docs/GOVERNANCE-ENFORCEMENT-MAP.md` (commit
 `c5173e59`, TRDD-H4Y9F25J Phase 1a). **32 ENFORCED rows cite
@@ -100,11 +109,11 @@ confirm by experiment before acting.
 
 ## Acceptance
 
-- [ ] Each of the 5 category-A rows is read and either qualified or corrected — **R18.1/R18.7/R18.10
-      done 2026-07-27; R4.4 and R17.8 REMAIN**
-- [ ] Each of the 7 genuinely-defective category-B rows is narrowed to a real guard — **R18.2/R18.3/
-      R18.8/R18.9 done 2026-07-27; R20.5, R20.31 and R40.1 REMAIN** (R20.5/R20.31 also carry the
-      independent anti-guard suspicion below — confirm by experiment, not by reading)
+- [x] Each of the 5 category-A rows is read and either qualified or corrected — **R18.1/R18.7/R18.10
+      done 2026-07-27; R17.8 done 2026-07-30 (`a92bf954`); R4.4 done 2026-07-30, see below**
+- [x] Each of the 7 genuinely-defective category-B rows is narrowed to a real guard — **R18.2/R18.3/
+      R18.8/R18.9 done 2026-07-27; R20.5, R20.31 and R40.1 done 2026-07-30, see below** (R20.5/R20.31
+      also carried the independent anti-guard suspicion — CONFIRMED by experiment, see below)
 - [x] The 3 helper-function rows (R17.2, R20.29, R39.6) are confirmed as correctly un-qualifiable
       and annotated as such — **the premise was WRONG on all three**: none was correct, two are
       gate-shaped after all, and each citation had rotted. Re-cited + mutation-proven 2026-07-30,
@@ -270,6 +279,69 @@ only the citation rots.
 - **R20.31's citation `:1634-1712` ends exactly where R20.29's guard begins.** It is a category-B
   row still on the list above, and it already carries the anti-guard suspicion; this makes a
   drifted range the more likely reading. Check it by experiment when that row comes up.
+
+## 2026-07-30 — the final 5 rows: R4.4, R17.8, R20.5, R20.31, R40.1
+
+**R17.8** was already re-cited earlier this session (`a92bf954`, `InstallElement::G08` at `:740-745` —
+the user-scope refusal branch, split from R17.15's uninstall/disable branch at `:731-738`).
+
+**R4.4** — "auto-assigned MEMBER + programmer plugin on team join." The cited `:5128-5137` is now
+`ChangeHook`'s G04/G05 (a `change_hook` ledger emit), proving the same drift class as everything
+above: the citation was correct when `bd701701` wrote it, and unrelated code inserted above it since
+pushed the real gate down. The real guard — `ChangeTeam::G07`, `const effectiveRole = …` through
+`ChangeTitle(agentId, effectiveRole, …)` — now sits at `:5304-5320`. Mutation-proven: replacing
+`titleResult` with a stub `{ success: true }` (so the real `ChangeTitle` call never fires) reddened
+**0 / 4184** tests beyond two pre-existing, unrelated `design/`-corpus failures (confirmed identical
+with and without the neuter) — so the Test column stays honest at `—`; nothing pins this end-to-end
+today.
+
+**R20.5** — "the default role-plugin MUST be installed automatically… See ChangeTitle Gate 15." The
+cited `:1722-1778` is `getRequiredPluginForTitle` + `getCompatiblePluginsForTitle` (the lookup, not
+the install). The rule's OWN text names Gate 15, and reading `ChangeTitle` confirms it: G15
+(`:3089-3160`) computes the target plugin and uninstalls the outgoing one; G16 (`:3162-3210`) installs
+it. Neither is `autoAssignRolePluginForTitle` (`:1957-2008`), the function the existing test in
+`r20-marketplace-governance.test.ts` calls directly — that helper is invoked only via `syncRolePlugin`,
+which nothing in `ChangeTitle`, `ChangeTeam`, or `CreateAgent` calls (grepped clean; every title-grant
+path routes through `ChangeTitle` itself, which has its own inline G15/G16 rather than delegating).
+Mutation-proven: forcing G16's install branch to `if (false && …)` reddened **0 / 4155** tests beyond
+the same 2 pre-existing corpus failures — the currently-listed test does not exercise the real
+pipeline. Re-cited to `ChangeTitle::G15` + `::G16` (two same-file gate-qualified sites, per the R17.15
+multi-site grammar) and the Test column corrected to `—` rather than leave a wrong "verified" claim
+standing.
+
+**R20.31** — "AI Maestro's uninstall button never reaches into the [3 source] folders." The cited
+`:1634-1712` is `restoreLocalInstallRecords` (an R51 rollback helper) bleeding into the start of
+`installPluginLocally` — not `uninstallPluginLocally` at all, and this is the SAME range the TRDD's
+2026-07-30 helper-rows section already flagged as suspicious ("R20.31's citation ends exactly where
+R20.29's guard begins"). Confirmed by experiment, not reading: wiring the real anti-guard
+`removeConvertedPlugin` (from `plugin-storage-service.ts`, which the existing test-file comment
+already named as "the exact opposite of a guard") into the end of `uninstallPluginLocally` reddened
+**exactly 1 test** — `R20.29 / R20.31 … UNINSTALL never deletes from the three source containers
+(R20.31)` — with all other failures being the same 2 pre-existing unrelated ones. Re-cited to
+`uninstallPluginLocally` at `:1834-1910` (a helper function, no `ops.push` gate labels — bare range is
+the honest form, same class as R20.29/R39.6).
+
+**R40.1** — "non-native users need MAESTRO approval for every agent OR team creation." The cited
+`:244-271` spans `isForeignUser` (`:225-237`) into `assertForeignUserMayCall` (`:245-272`) — off by
+one line at each end (stale by a small, non-uniform shift, the same "drift is not uniform" lesson
+from the R3.2/R9.2 comparison earlier this TRDD). More importantly the rule's TWO clauses (agent
+creation, team creation) are enforced at TWO call sites in TWO DIFFERENT FILES:
+`CreateAgent::G00f` (`element-management-service.ts:7467-7481`) and `createNewTeam`'s inline R40 gate
+(`teams-service.ts:271-277`, no gate label — this pipeline carries no `ops` trace). Per the R17.1
+precedent (two files ⇒ no qualifier permitted), re-cited as the shared decision function's own bounds
+plus the second file, comma-separated: `element-management-service.ts:245-272,
+services/teams-service.ts:271-277`. No test names either call site directly (`teams-service.test.ts`
+mocks `assertForeignUserMayCall` rather than exercising it), so `—` is unchanged and honest.
+
+**Verification.** `tests/governance/enforcement-coverage.test.ts` — 9/9 green (the "cites a guard file
+that exists" test caught my first R20.31 attempt, which appended `(uninstallPluginLocally)` as
+non-gate-qualifier prose the file-path regex cannot parse — fixed to a bare range). `bash
+scripts/with-node.sh npx tsc --noEmit` — one PRE-EXISTING, unrelated error
+(`tests/services/auto-update-absorbed-duty.test.ts:145` `afterEach` not found) in a file this TRDD
+never touches; `services/element-management-service.ts` and `docs/GOVERNANCE-ENFORCEMENT-MAP.md`
+themselves type-check clean. `services/element-management-service.ts` restored byte-identical to HEAD
+after every neuter (`git diff --stat` empty each time). Category A and category B are now BOTH fully
+closed — this TRDD's remaining acceptance boxes were already ticked.
 
 ## Approval log
 

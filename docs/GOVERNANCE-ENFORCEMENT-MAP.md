@@ -59,7 +59,7 @@ Row format is fixed so a regex parses each line:
 | R4.1 | ENFORCED | lib/team-registry.ts:158-176, services/element-management-service.ts:5110 | tests/governance/r4-team-composition.test.ts |
 | R4.2 | ENFORCED | lib/group-registry.ts | tests/governance/r4-team-composition.test.ts |
 | R4.3 | CONTRADICTED | — | — |
-| R4.4 | ENFORCED | services/element-management-service.ts:5128-5137 (ChangeTeam::G07) | — |
+| R4.4 | ENFORCED | services/element-management-service.ts:5304-5320 (ChangeTeam::G07) | — |
 | R4.5 | UNENFORCED | — | — |
 | R4.6 | ENFORCED | lib/team-registry.ts:142-145 | tests/governance/r4-team-composition.test.ts |
 | R4.7 | ENFORCED | lib/team-registry.ts:148-154, services/element-management-service.ts:5056 | tests/governance/r4-team-composition.test.ts |
@@ -221,7 +221,7 @@ Row format is fixed so a regex parses each line:
 | R20.2 | ENFORCED | lib/agent-invariants.ts:110-150 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.3 | RULING-NEEDED | — | — |
 | R20.4 | ENFORCED | lib/ecosystem-constants.ts:334-344 | tests/governance/r20-marketplace-governance.test.ts |
-| R20.5 | ENFORCED | services/element-management-service.ts:1722-1778 | tests/governance/r20-marketplace-governance.test.ts |
+| R20.5 | ENFORCED | services/element-management-service.ts:3089-3160 (ChangeTitle::G15), services/element-management-service.ts:3162-3210 (ChangeTitle::G16) | — |
 | R20.6 | ENFORCED | services/element-management-service.ts:1791-1806, services/element-management-service.ts:7531-7570 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.7 | UNENFORCED | — | — |
 | R20.8 | ENFORCED | services/plugin-storage-service.ts:166-170 | tests/governance/r20-marketplace-governance.test.ts |
@@ -247,7 +247,7 @@ Row format is fixed so a regex parses each line:
 | R20.28 | ENFORCED | install-messaging.sh:936-1110 | — |
 | R20.29 | ENFORCED | services/element-management-service.ts:1712-1716 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.30 | ENFORCED | components/agent-profile/PluginsTab.tsx:116-153 | tests/governance/r20-marketplace-governance.test.ts |
-| R20.31 | ENFORCED | services/element-management-service.ts:1634-1712 | tests/governance/r20-marketplace-governance.test.ts |
+| R20.31 | ENFORCED | services/element-management-service.ts:1834-1910 | tests/governance/r20-marketplace-governance.test.ts |
 | R22.1 | BEHAVIOURAL | — | — |
 | R22.2 | BEHAVIOURAL | — | — |
 | R22.3 | BEHAVIOURAL | — | — |
@@ -313,7 +313,7 @@ Row format is fixed so a regex parses each line:
 | R39.8 | UNENFORCED | — | — |
 | R39.9 | UNENFORCED | — | — |
 | R39.10 | UNENFORCED | — | — |
-| R40.1 | ENFORCED | services/element-management-service.ts:244-271 | — |
+| R40.1 | ENFORCED | services/element-management-service.ts:245-272, services/teams-service.ts:271-277 | — |
 | R40.2 | INVENTED | — | — |
 | R41.1 | ENFORCED | lib/trdd-authz.ts:105-131 | tests/unit/manage-trdd-authorization.test.ts |
 | R41.2 | UNENFORCED | — | — |

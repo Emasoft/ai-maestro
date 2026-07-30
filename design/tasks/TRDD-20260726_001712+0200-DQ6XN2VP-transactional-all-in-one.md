@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T19:38:05+0200
+updated: 2026-07-30T19:37:50+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

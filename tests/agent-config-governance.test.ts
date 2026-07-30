@@ -140,9 +140,16 @@ vi.mock('@/lib/governance-sync', () => ({
 // --- element-management-service: agents-core-service delegates to these pipelines ---
 const mockDeleteAgentPipeline = vi.fn()
 const mockCreateAgentPipeline = vi.fn()
+// ChangeTitle is mocked DELIBERATELY here: the guard under test in this file is
+// the CALLER's routing decision (does updateAgentById reach the pipeline at all),
+// not the pipeline's own gates. The gates are pinned against the real ChangeTitle
+// in tests/governance/r19-maintainer-title.test.ts — two sites, two tests, so
+// neither can be claimed to cover the other.
+const mockChangeTitlePipeline = vi.fn()
 vi.mock('@/services/element-management-service', () => ({
   DeleteAgent: (...args: unknown[]) => mockDeleteAgentPipeline(...args),
   CreateAgent: (...args: unknown[]) => mockCreateAgentPipeline(...args),
+  ChangeTitle: (...args: unknown[]) => mockChangeTitlePipeline(...args),
 }))
 
 // ============================================================================
@@ -227,6 +234,7 @@ beforeEach(() => {
   // Default: Pipeline mocks for element-management-service (used by updateAgentById Change* functions)
   mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: TARGET_AGENT_ID, hard: false, operations: [] })
   mockCreateAgentPipeline.mockResolvedValue({ success: true, agentId: 'test-uuid-1', operations: [], restartNeeded: false })
+  mockChangeTitlePipeline.mockResolvedValue({ success: true, agentId: TARGET_AGENT_ID, operations: [], restartNeeded: false })
 })
 
 // ============================================================================
@@ -245,6 +253,46 @@ describe('updateAgentById governance', () => {
     // (isManager may be called with the TARGET agent id for title detection, which is acceptable)
     expect(mockIsManager).not.toHaveBeenCalledWith(undefined)
     expect(mockIsManager).not.toHaveBeenCalledWith(null)
+  })
+
+  it('routes a MAINTAINER repo re-point into ChangeTitle even though the TITLE is unchanged — githubRepo is stripped from the updateAgent body, so gating on the title alone dropped the value silently at 200 OK', async () => {
+    /** R19.2/R19.3 caller half. ChangeTitle is githubRepo's ONLY writer (the field
+     *  is deliberately stripped from cleanBody so updateAgent cannot leak-write it),
+     *  so if the call is skipped the requested change reaches nothing at all. */
+    mockIsManager.mockReturnValue(true)
+    mockGetAgent.mockReturnValue(makeAgent({
+      id: TARGET_AGENT_ID, governanceTitle: 'maintainer', githubRepo: 'Emasoft/old-repo',
+    }))
+
+    const result = await updateAgentById(
+      TARGET_AGENT_ID,
+      makeUpdateRequest({ githubRepo: 'Emasoft/new-repo' }),
+      MANAGER_ID,
+    )
+
+    expect(result.status).toBe(200)
+    expect(mockChangeTitlePipeline).toHaveBeenCalledTimes(1)
+    const [, title, options] = mockChangeTitlePipeline.mock.calls[0] as [string, string, Record<string, unknown>]
+    // The title is passed UNCHANGED — this is a repo re-point, not a transition…
+    expect(title).toBe('maintainer')
+    // …and the new repo must actually reach the pipeline's validator.
+    expect(options.githubRepo).toBe('Emasoft/new-repo')
+  })
+
+  it('does NOT invoke ChangeTitle when the repo is submitted unchanged — the widened condition must not fire a governance pipeline on every PATCH', async () => {
+    mockIsManager.mockReturnValue(true)
+    mockGetAgent.mockReturnValue(makeAgent({
+      id: TARGET_AGENT_ID, governanceTitle: 'maintainer', githubRepo: 'Emasoft/old-repo',
+    }))
+
+    const result = await updateAgentById(
+      TARGET_AGENT_ID,
+      makeUpdateRequest({ githubRepo: 'Emasoft/old-repo' }),
+      MANAGER_ID,
+    )
+
+    expect(result.status).toBe(200)
+    expect(mockChangeTitlePipeline).not.toHaveBeenCalled()
   })
 
   it('allows update when requestingAgentId is MANAGER', async () => {

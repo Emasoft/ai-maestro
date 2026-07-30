@@ -206,9 +206,9 @@ Row format is fixed so a regex parses each line:
 | R18.8 | ENFORCED | lib/converter/utils/warnings.ts:14-22, services/element-management-service.ts:5705-5715 | — |
 | R18.9 | ENFORCED | services/element-management-service.ts:5517-5908 | tests/governance/r18-client-change-continuity.test.ts |
 | R18.10 | ENFORCED | services/element-management-service.ts:5882 (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
-| R19.1 | ENFORCED | services/element-management-service.ts:2595-2612 (ChangeTitle::EXE) | — |
-| R19.2 | UNENFORCED | — | — |
-| R19.3 | ENFORCED | services/element-management-service.ts:2631-2645 (ChangeTitle::G9a) | — |
+| R19.1 | ENFORCED | services/element-management-service.ts:2688-2706 (ChangeTitle::EXE) | tests/governance/r19-maintainer-title.test.ts |
+| R19.2 | ENFORCED | services/element-management-service.ts:2328-2335, services/element-management-service.ts:2560-2575, services/element-management-service.ts:2711-2724, services/agents-core-service.ts:825-827 | tests/governance/r19-maintainer-title.test.ts |
+| R19.3 | ENFORCED | services/element-management-service.ts:2336-2360, services/element-management-service.ts:2560-2575, services/element-management-service.ts:2711-2724 | tests/governance/r19-maintainer-title.test.ts |
 | R19.4 | UNENFORCED | — | — |
 | R19.5 | UNENFORCED | — | — |
 | R19.6 | UNENFORCED | — | — |

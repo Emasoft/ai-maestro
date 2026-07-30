@@ -160,7 +160,20 @@ const UNAUDITED_RULES = new Set<number>([
 // the defect this counter structurally cannot see — the guard exists, runs, and is wrong — and the
 // only reason it was caught is that the re-citation campaign reads each cited range against the rule's
 // CURRENT text. Re-upgrading them is TRDD-HW72YBZW's job, in the commit that builds the real channel.
-const MAX_ENFORCED_WITHOUT_TEST = 30
+// 2026-07-30: R19.1 + R19.3 pinned in tests/governance/r19-maintainer-title.test.ts — 30 → 28.
+// It fell by pinning, two rules and two counts, with no downgrade in the mix. R19.2 moved in the
+// same commit and is deliberately NOT part of the drop: it was recorded UNENFORCED over a LIVE
+// guard, so upgrading it ADDED an ENFORCED row that arrived with its test already written — net
+// zero here. That mis-verdict is the mirror image of the R39.5/R39.7 defect above (there the row
+// claimed MORE than the code did; here it claimed LESS) and it is the one this counter is
+// structurally blindest to, because a row claiming nothing is never audited. Both were found the
+// same way: reading the cited range against the rule's CURRENT text instead of trusting a verdict.
+//
+// Take this number from THIS test's own failure message, never from a hand-written grep. Mine said
+// 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule `R17.18a`, and a count from the
+// wrong pattern reads as a clean win — I was one commit from locking in a number my own awk had
+// invented.
+const MAX_ENFORCED_WITHOUT_TEST = 28
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

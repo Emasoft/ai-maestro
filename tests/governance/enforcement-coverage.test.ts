@@ -310,7 +310,22 @@ const UNAUDITED_RULES = new Set<number>([
 // Neuter pair: removing the loss-report call reddens ONLY clause (a); throwing on the unmappable
 // field reddens the two proceed tests, coverage included — which is also what proves that loop
 // reaches a real emitter rather than iterating vacuously.
-const MAX_ENFORCED_WITHOUT_TEST = 11
+// 2026-07-30: 11 -> 10. R1.1 pinned by tests/governance/r1-team-acl.test.ts — the row the sweep
+// had just proven UNPINNED, which is what made it the obvious next one. R1.1 is definitional
+// ("teams have isolated messaging, ACL, governance titles, and a COS") and three of those clauses
+// own their own rows (R1.3/R1.4, R6, R9), so the ACL is the clause this row's guard carries. The
+// load-bearing word is ISOLATED, so every membership assertion is a PAIR — allowed on the agent's
+// own team, DENIED on another — because a guard returning `allowed` unconditionally satisfies "a
+// member can reach their team" while violating the rule entirely. The two deliberate crossings
+// (MANAGER everywhere; ORCHESTRATOR its own team only) are asserted so "isolated" is precise
+// rather than approximate. Re-cited from the bare `:102` to the whole ladder `:54-103`, which is
+// what the test actually drives. Neuter pair: making step 6 return `allowed:true` reds the
+// outsider test and all three isolation pairs and NOTHING else; deleting the anonymous deny
+// (LIB2-CRIT-02, where omitting a header once bought MANAGER-equivalent access) reds ONLY the two
+// anonymous tests — and reds them on the REASON, because the request still ends at step 6 with
+// `allowed:false` for the wrong stated cause. A test asserting only `allowed === false` stays
+// green through that neuter, which is exactly why every assertion here pins the reason string.
+const MAX_ENFORCED_WITHOUT_TEST = 10
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

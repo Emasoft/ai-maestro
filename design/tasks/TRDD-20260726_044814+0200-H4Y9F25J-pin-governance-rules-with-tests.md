@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:57:41+0200
+updated: 2026-07-30T18:03:14+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,48 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 11 → 10 — R1.1 DONE (`tests/governance/r1-team-acl.test.ts`)
+
+**The remaining 10:** R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R17.18a, R20.28, R40.1.
+
+The sweep (below) had just proven R1.1 UNPINNED, which is what made it the next row: its guard is a
+pure decision ladder with no `~` containment, no jsdom, and a documented security history.
+
+**Which clause this row's guard carries.** R1.1 is definitional — "teams have isolated messaging,
+ACL, governance titles, and a COS" — and three of those four clauses own their own rows (COS =
+R1.3/R1.4, messaging = R6, titles = R9). The ACL is what `lib/team-acl.ts` enforces, and it is the
+only clause the row cites.
+
+**The load-bearing word is ISOLATED**, so every membership assertion is a PAIR — allowed on the
+agent's own team, DENIED on another. A guard that returned `allowed` unconditionally satisfies "a
+member can reach their team" while violating the rule completely; only the second half of the pair
+can see that. The two DELIBERATE crossings are asserted for the same reason: a MANAGER reaches every
+team, an ORCHESTRATOR reaches its own team only ("not any team", per the guard's decision-order
+comment). Without them "isolated" would be approximate.
+
+**Re-cited** from the bare `lib/team-acl.ts:102` to `:54-103` — the whole ladder, which is what the
+test drives (system-owner short-circuit, anonymous deny, manager, orchestrator, COS, member, deny).
+
+**Neuter pair, and the second one earned its documentation:**
+
+| neuter | reds | proves |
+|---|---|---|
+| step 6 → `return { allowed: true }` | the outsider test + all three isolation pairs, nothing else | the isolation pairs are what carry the rule; the anonymous tests exercise a different branch |
+| delete the `if (!input.requestingAgentId)` deny | ONLY the two anonymous tests — **on the REASON** | see below |
+
+Under the second neuter the request falls through to step 6 and is still denied, so `allowed` is
+`false` either way. The failure output is the lesson verbatim:
+`expected 'Access denied: you are not a member o…' to match /anonymous request/`. **A test asserting
+only `allowed === false` stays GREEN through it** — which is why every assertion in the file pins
+the reason string. That branch is the LIB2-CRIT-02 fix (2026-05-06), where omitting a header once
+bought MANAGER-equivalent team access from any local or Tailscale peer; it had no test at all.
+
+`lib/team-acl.ts` restored byte-identical after both runs (`git diff` empty).
+
+**`getTeam` / `isManager` / `isOrchestrator` are mocked, and that is not the excluded pattern** —
+they are the guard's DATA SOURCES; the decision ladder runs for real. Mocking `checkTeamAccess`
+itself is what the five pre-existing references do, and is why none of them pinned this rule.
 
 ### THE ALREADY-TESTED SWEEP RAN — all three candidates NEGATIVE, and that is the finding
 

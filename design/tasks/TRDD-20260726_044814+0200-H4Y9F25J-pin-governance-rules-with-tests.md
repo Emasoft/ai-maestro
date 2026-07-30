@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T15:56:20+0200
+updated: 2026-07-30T16:16:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
@@ -142,36 +142,63 @@ asked instead why the same defect keeps recurring. Answer: **only ONE half of a
 citation is machine-checked.** The qualifier check proves the LABEL exists in the
 pipeline; nothing has ever checked that the cited RANGE contains it.
 
-I extended the ratchet to require agreement — the cited range must contain the
-cited gate's `ops.push` — and it reported **46 violations**, each with the correct
-line. Sample: `R9.13` cites `:3176-3181` for `ChangeTitle::G17`, which lives at
-`:3348+`; `R18.4` is ~340 lines adrift on three gates at once; `R8.3` cites
-`:6240-6250` for `DeleteTeam::G05`, really at `:6807`.
+### RESOLVED 2026-07-30 — the range is GONE from every gate-qualified citation (`d5ba8d23`)
 
-Rules affected: R3.2 R3.3 R8.3 R9.2 R9.6 R9.8 R9.13 R11.4 R11.5 R17.6 R17.9 R17.15
-R18.1 R18.2 R18.3 R18.4 R18.5 R18.7 R18.10 R20.13 R39.6.
+**The "46 violations" figure was my own broken instrument, and correcting it four
+times is worth more than the number.** 46 could not be right: there are only **31**
+gate-qualified citations in the whole map, and a violation count larger than its
+population is a parse bug, not a finding. Four errors, each inflating:
 
-**The check is REVERTED, not committed** — landing it red would have left the suite
-failing, and the 46 fixes do not fit one context honestly. It is ~25 lines: parse
-the guard cell into per-segment `{file, start, end, pipeline, label}` (so each
-qualifier stays paired with ITS citation, which the current strip-then-split parse
-destroys), record the hit line numbers, and fail when no hit falls in range.
+1. **strip-then-split cross-produced** every qualifier in a row against every
+   citation in it (→ the phantom 46);
+2. the needle matched **JSDoc gate manifests** (`* G10: Idempotency check`) rather
+   than `ops.push` emissions — 764 textual hits vs 492 real ones;
+3. it searched the **whole file**, though gate numbers are per-pipeline local and
+   reused (`G10` is one gate in `InstallElement`, another in `DeleteAgent`);
+4. it knew only **one of two gate forms** — a gate is `ops.push(\`G07: …\`)` when
+   hand-rolled and `{ id: 'G07', … }` under `runGateSequence` — so it declared four
+   live `ChangeClient` gates missing.
 
-**DECISION OWED before re-landing it, and the evidence points one way.** Re-measuring
-46 ranges by hand resets a clock that has already rewound three times on R4.4 alone.
-The alternative is to **DROP the range from any citation that carries a qualifier**:
-the qualifier is the durable, checked half, and deleting `:NNNN-NNNN` is a mechanical
-edit rather than 46 fresh guesses. That makes the grammar `file (Pipeline::Gnn)` for
-gate-backed rows and keeps `file:start-end` only where there is no gate label. Cheaper
-to land, and it removes the rotting half instead of restarting it.
+**The honest measurement: 22 of 31 (71%) had drifted.** Every drift POSITIVE, +63 to
++623 — not random rot but the mechanical consequence of code inserted above. Positive
+control: `R12.3`'s `G14d` resolved to 3108/3125/3140, inside its cited 3029-3161, the
+row hand-verified earlier that session.
 
-**NEXT ACTION — decide the above FIRST; it changes what the remaining rows should say.
-Then the 25 that remain. R4.4 is measured and ready:**
+**DECIDED (delegated authority) — drop the range, keep the qualifier.** A coordinate
+nothing checks is not documentation; it is a lie with a timestamp. 28 rows re-cited to
+`file (Pipeline::Gnn)`; a range stays legal only where no gate label exists (route
+handlers, `lib/` helpers), because nothing better exists for those. All 28 qualifiers
+verified to RESOLVE afterwards — pipeline function found, gate found inside it, both
+forms — so the change loses no information.
 
-- **R4.4** ("joining a team auto-assigns MEMBER + the programmer plugin"). Its row
-  cited `:5304-5320`, which is the REMOVE branch (G04a/G04b) — the real G07 is
-  **`:5378-5394`**, already corrected in the map this session (uncited by a test, so
-  no ratchet change). The guard is one line: `ChangeTitle(agentId, desired.role ||
+A new ratchet test, `a gate-qualified citation carries NO line range`, makes the
+combination impossible, and **caught 3 rows my corrected script still missed on its
+first run** (`InstallElement::EXE`, `InstallElement::PG01`, `ChangeTitle::EXE` — my
+regex matched only `G\d+`; the real grammar also admits `PG\d+` and `EXE`).
+
+**Complementary neuter pair, each reddening a DIFFERENT test** — required because
+deleting one half of a redundant pair obliges proving the survivor bites:
+re-adding a range → `carries NO line range` fails; `G07`→`G99` →
+`every gate qualifier names a real gate inside that pipeline` fails.
+
+**Correction owed to the ACTIVE PLAN** (`~/.claude/plans/iterative-foraging-wadler.md`,
+finding **J**): it states `lib/gate-transaction.ts` has **ZERO production callers** and
+drives Phase 5 off that. **False.** `runGateSequence` is dynamically imported at
+`services/element-management-service.ts` lines 3830, 4640, 4816, 6166, and `ChangeClient`
+runs its G07/G08/G09 through it. The ratchet test already encodes this (TRDD-B6NUEGMP
+names ChangeClient "the runner's first production caller"); only the plan is stale.
+Re-scope #68 against the real caller set before starting it.
+
+**NEXT ACTION — the grammar question is settled; go straight to the remaining rules.
+R4.4 is measured and ready:**
+
+- **R4.4** ("joining a team auto-assigns MEMBER + the programmer plugin"). Its row now
+  cites `services/element-management-service.ts (ChangeTeam::G07)` — **do not look for
+  a line number, there deliberately is none**; `grep -n "G07:"` inside `ChangeTeam` is
+  the lookup, and it stays correct as the file moves. (Its three successive wrong
+  ranges — `:4956` inside `ChangeHook`, `:5128-5137`, `:5304-5320` which is the REMOVE
+  branch G04a/G04b — are what motivated dropping the range at all.) Uncited by a test,
+  so pinning it still lowers the ratchet. The guard is one line: `ChangeTitle(agentId, desired.role ||
   'member', { authContext })` — the `|| 'member'` IS R4.4's first half, and its
   second half (the programmer plugin) is the G15/G16 chain this session just pinned,
   so the test is "ChangeTeam with NO role ⇒ title member ⇒ `claude plugin install

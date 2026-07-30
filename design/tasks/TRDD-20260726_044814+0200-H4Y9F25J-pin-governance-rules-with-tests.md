@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T19:08:49+0200
+updated: 2026-07-30T19:22:37+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,17 +20,61 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e, 5f9b2302, c31c1805, 5353f2c4, 1b2bb133, e556dbee, 14dacb6d, 5b2b55cf, 3568620c, 9adb02d9, 5da2500c, 831a26b8, 0a446a77, b18f3c15, 13ef08a3, c79db35f, beca1d98, 829f1c8e, 6db31ede]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e, 5f9b2302, c31c1805, 5353f2c4, 1b2bb133, e556dbee, 14dacb6d, 5b2b55cf, 3568620c, 9adb02d9, 5da2500c, 831a26b8, 0a446a77, b18f3c15, 13ef08a3, c79db35f, beca1d98, 829f1c8e, 6db31ede, 764b9f2c]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
 
-### RATCHET 2 → 1 — R2.2 DONE. Its server half was ALREADY covered; the client half was not.
+### RATCHET 1 → 0 — R20.28 DONE. **Every ENFORCED rule is now pinned. 23 → 0 in one day.**
 
-**The remaining 1: R20.28** (`install-messaging.sh:936-1110` — a SHELL guard, so it needs a
-subprocess harness with `$HOME` redirected in the spawn env; prove containment by counting the
-real dir BEFORE and AFTER, since an in-process `$HOME` swap cannot contain a process that
-resolves paths at exec).
+`MAX_ENFORCED_WITHOUT_TEST = 0`. There is no NEXT ACTION on the counter; from here the ratchet's
+job is to stay at 0, which it does by failing the moment a new ENFORCED row lands without a proof.
+
+R20.28 is a claim about what the installer **puts on disk**, so the only honest proof runs the code
+and looks. Two things had to change before that was possible, and both are the finding:
+
+1. **The citation had ROTTED.** `install-messaging.sh:936-1110` had drifted ~87 lines and pointed
+   at skill migration and the code-analysis tooling installer — real working code belonging to no
+   rule, which is exactly why nothing reddened and the row sat unproven behind a green bounds-check.
+   The block actually lived at 1023-1205.
+2. **The guard was unreachable.** 180 lines inside a 1,386-line installer that also shells out to
+   `claude`, to cargo/npm, and copies into `~/.local/bin` — running it to observe one block is
+   neither fast nor 0-IMPACT. Extracted **verbatim** to `scripts/setup-local-marketplaces.sh` (only
+   5 lines differ from HEAD, all `SCRIPT_DIR` path adjustments, proven by diff against
+   `git show HEAD:install-messaging.sh`). This is the same delegation the block already used twice,
+   for `migrate-r20-disk-layout.sh` (now its own step 0) and `install-code-analysis-tooling.sh`.
+   **The guard is now a whole FILE — a citation that cannot rot.**
+
+`tests/governance/r20-installer-marketplace-layout.test.ts` (13 tests) spawns it with `$HOME`
+redirected in the **spawn env** (an in-process swap cannot contain a process that resolves paths at
+exec) and a `claude` **PATH shim** so nothing reaches the real CLI. Containment is proven
+**positively**: every assertion reads the FAKE home, which can only exist if the redirect took
+effect, and the real `~/agents` listing is compared before and after — "the real dir is clean"
+alone is indistinguishable from "the script never ran".
+
+| neuter | reddened |
+|---|---|
+| A. delete `mkdir -p "$ROLES_DIR/roles-marketplace"` | **1** — the fresh-install test only (see below) |
+| B. drop `kiro` from the client loop | **4** — per-client coverage, exact-set, per-client manifests, fresh-install |
+| C. skip writing the flat per-client `marketplace.json` | **2** — the manifest + re-run tests; every folder-pattern test correctly stays green |
+| D. invent a Claude core marketplace | **3** — R20.25 core-absence, exact-set, re-run |
+
+**Neuter A reddened NOTHING at first — the third vacuous catch of the day, and a NEW shape.**
+`migrate-r20-disk-layout.sh:135/:269` is a **second producer** of `roles-marketplace/` and
+`custom-marketplace/`, so with the migration script present the guard's own `mkdir` is dead weight
+and deleting it changes nothing. It is load-bearing on exactly one branch — the one the guard
+documents itself, *"migration script not found (fresh install)"* — which no test reached. A
+fresh-install test now copies the guard to a directory **without** the migration script, asserts
+that branch actually printed, and only then checks the layout. Generalized: **when several enabled
+inputs can produce the same output, a neuter must switch off every producer but the one it names.**
+
+**Sweep NEGATIVE.** The two test-tree mentions of `install-messaging.sh` are a header COMMENT in
+`r20-marketplace-governance.test.ts` explaining why it did *not* pin R20.28, and
+`pillar-cli-install.test.ts`, which greps the installer's TEXT for a different rule. That comment's
+argument — *"a vitest assertion could only grep the script's TEXT, which pins the text and not the
+behaviour"* — was right about grepping and wrong that grepping was the only option.
+
+### RATCHET 2 → 1 — R2.2 DONE. Its server half was ALREADY covered; the client half was not.
 
 R2.2's whole content is the word **BOTH** — "enforced both server-side (409) AND client-side
 (inline error BEFORE POST)" — and the two halves defend different failures. The SERVER half is

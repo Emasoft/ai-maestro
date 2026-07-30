@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T15:20:47+0200
+updated: 2026-07-30T15:24:26+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -79,6 +79,35 @@ coverage for an unreachable branch.
   contents survives the guard's deletion (the H2 anti-pattern), and its SECOND
   clause (the R17 core-plugin requirement) is uncited entirely. It needs a
   re-citation onto the site that ACTS on the binding (ChangeTitle G15/G16).
+
+**Three facts measured 2026-07-30 that make the G15/G16 batch CHEAP — they remove
+the obstacle this card previously assumed.** I had expected G15 to be unreachable
+without seeding a marketplace on disk. It is not:
+
+1. **`getCompatiblePluginsForTitle` never returns empty for a valid title**
+   (`:1927-1951`). When `getPluginsForTitle` yields nothing it falls back to
+   `TITLE_PLUGIN_MAP[title?.toLowerCase()]` and returns the hardcoded default. So
+   a bare fixture with `getPluginsForTitle → []` still reaches G15's selection
+   branch and G16's install — **no marketplace seeding, no `seedSourcePlugin`.**
+2. **That `.toLowerCase()` is CORRECT, not the old footgun.** `TITLE_PLUGIN_MAP`
+   here is the module-local **lowercase-keyed shadow** built at `:290-292` from
+   the ecosystem export, which is imported aliased as `ECOSYSTEM_TITLE_PLUGIN_MAP`
+   (`:41`). Re-verified this turn; it is the same shadow the 2026-07-26 false
+   positive turned on, so do not "fix" it again.
+3. **G16's `installPluginLocally` is LOCAL to this file** (`:1678`, exported), not
+   the role-plugin-service one — it shells out to `claude plugin install`. So the
+   assertion is the REAL CLI op captured by the `child_process` mock, which is a
+   stronger pin than a mocked service call. The r19 fixture needs one addition to
+   use it: it kept `mockExecFileImpl` but not a calls ARRAY (the r3-r9 and r20
+   files both carry `mockExecFileCalls` — copy that shape).
+
+So the next batch is: add the calls array to `tests/governance/r19-maintainer-title.test.ts`,
+pin R19.10 behaviourally (assigning MAINTAINER really installs
+`ai-maestro-maintainer-agent`), re-cite its row off the const table onto G15/G16,
+and note that its R17 clause is enforced by R17's own guards rather than left
+uncited. R20.5's G15/G16 half wants the same fixture but belongs topically in
+`r20-marketplace-governance.test.ts`, which lacks the ChangeTitle registry-file
+sync — porting that is the only real cost left.
 - **R20.5 already has behavioural tests — against the OTHER site.** The map cites
   G15/G16; `tests/governance/r20-marketplace-governance.test.ts` drives
   `autoAssignRolePluginForTitle`. Naming that file in the row would drop the

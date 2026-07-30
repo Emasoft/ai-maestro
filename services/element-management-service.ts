@@ -7446,7 +7446,22 @@ export async function DeleteAgent(
           const n = keys.reduce((sum, k) => sum + records[k].length, 0)
           ops.push(`G08c: Uninstalled ${keys.length} local plugin(s) (${n} record(s)) for ${resolvedDir} via the claude CLI (${keys.join(', ')})`)
         },
-        undo: async (c: DeleteCtx) => {
+        // NAMED, because it has TWO callers and only one of them is the runner. G08c is the LAST
+        // gate in the sequence, so no later gate can fail and trigger this — the runner reaches it
+        // only when G08c itself throws part-way (it records what it already uninstalled before
+        // throwing, and the runner's write-ahead means a gate that throws mid-run is still
+        // compensated). The OTHER caller is G09: the folder delete runs AFTER the sequence has
+        // committed, cannot be a gate (it is irreversible, and the pre-flight rightly refuses a
+        // mutating gate with no undo), and its failure is exactly the case D2 ruled must be
+        // compensated — "a gate with a fallible gate after it needs a compensation; R51 admits no
+        // residue". Leaving it to the runner alone would mean the one failure this gate was
+        // reordered INTO the path of is the one failure nothing answers.
+        undo: compensateG08c,
+      },
+    ]
+
+    // eslint-disable-next-line no-inner-declarations
+    async function compensateG08c(c: DeleteCtx): Promise<void> {
           if (!c.uninstalledPlugins || !c.uninstalledFrom) return
           const dir = c.uninstalledFrom
           const { getAdapter } = await import('@/lib/client-plugin-adapters')
@@ -7483,9 +7498,7 @@ export async function DeleteAgent(
           if (failed.length > 0) {
             throw new Error(`could not re-install ${failed.length} local plugin(s) at ${dir}: ${failed.join('; ')}`)
           }
-        },
-      },
-    ]
+    }
 
     const txn = await runGateSequence(deleteGates, dc)
     if (!txn.ok) {
@@ -7547,6 +7560,19 @@ export async function DeleteAgent(
         }
       } catch (err) {
         ops.push(`EXE: WARN — folder deletion failed: ${err instanceof Error ? err.message : err}`)
+        // THE FOLDER SURVIVED, SO G08c's UNINSTALL IS NO LONGER TRUE (TRDD-OWO449MR, D2).
+        // G08c ran on the promise that this directory was about to vanish. It did not, so the agent
+        // is left with a live workdir whose plugins we removed — the residue R51 forbids, and the
+        // exact failure the gate was reordered into the path of. The sequence has already
+        // committed, so the runner cannot roll this back; this is the compensation's other caller.
+        try {
+          await compensateG08c(dc)
+          ops.push('G08c: Re-installed the local plugins — the folder they belong to still exists')
+        } catch (undoErr) {
+          // Both the delete AND its compensation failed. Say so in full: a human has to reconcile
+          // an agent that is gone from the registry, keeps its folder, and lost its plugins.
+          ops.push(`G08c: CRITICAL — folder deletion failed AND the plugins could not be re-installed: ${undoErr instanceof Error ? undoErr.message : undoErr}`)
+        }
       }
     } else if (hard) {
       ops.push('G09: Hard-delete but no folder deletion requested')

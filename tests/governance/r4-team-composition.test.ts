@@ -17,11 +17,16 @@
  *   - **R4.4's citation was WRONG** (defect #9 in the running tally). The map cited
  *     `services/element-management-service.ts:4956`, which is inside `ChangeHook` — a
  *     `change_hook` ledger emit followed by `G05: Success`. R4.4 is about ChangeTeam
- *     auto-assigning MEMBER on join. The real guard is `ChangeTeam::G07` at :5128-5137.
+ *     auto-assigning MEMBER on join. The real guard is `ChangeTeam::G07`.
  *   - **R4.7 has a SECOND enforcement site the map never listed** — `ChangeTeam::G04a`
- *     (:5056) refuses to remove a COS from its team, mirroring the registry guard.
- *   - **R4.1 likewise** — `ChangeTeam::G05` (:5110) re-checks single-team membership at
+ *     refuses to remove a COS from its team, mirroring the registry guard.
+ *   - **R4.1 likewise** — `ChangeTeam::G05` re-checks single-team membership at
  *     the pipeline layer.
+ *
+ * The line numbers those three carried (:5128-5137, :5056, :5110) are GONE, not updated:
+ * TRDD-DQ6XN2VP's ChangeTeam retrofit moved every one of them, which is the third time this
+ * repo has watched a range rot while the label beside it stayed true. A `<Pipeline>::<Gnn>`
+ * label moves with the code; a range is a coordinate nothing checks. Cite the label.
  */
 import { describe, it, expect } from 'vitest'
 import { validateTeamMutation } from '@/lib/team-registry'

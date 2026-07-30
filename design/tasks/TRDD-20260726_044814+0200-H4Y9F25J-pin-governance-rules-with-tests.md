@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:04:40+0200
+updated: 2026-07-30T17:04:59+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,14 +20,14 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
 
 ### RATCHET 23 → 18 — 5 pinned this session
 
-`d7a8f3dc` **R34.2 + R35.2** · `50a52952` **R7.2 + R7.9** · `<this>` **R8.1**.
+`d7a8f3dc` **R34.2 + R35.2** · `50a52952` **R7.2 + R7.9** · `8321338e` **R8.1**.
 
 **R2.2 is deliberately NOT counted, and that is the interesting part.** It shares a guard FILE
 with R8.1 (`lib/team-registry.ts`) and its server clause IS pinned in the same test — but the

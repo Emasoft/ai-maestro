@@ -85,8 +85,11 @@ const OTHER_KEY = 'ai-maestro-janitor@ai-maestro-plugins'
 const DIR_A = join(H.FAKE_HOME, 'agents', 'agent-a')
 const DIR_B = join(H.FAKE_HOME, 'agents', 'agent-b')
 
-// A LOCAL-ONLY marketplace is REQUIRED to reach the settings-only install path: for any other
-// marketplace `installPluginLocally` shells out to `claude plugin install` and RETURNS.
+// A LOCAL-ONLY marketplace is used here precisely BECAUSE it used to be the special case. Until
+// TRDD-RCL2HC9Y it reached a settings-only path that never invoked the CLI at all — which R20.29
+// forbids, since it names "(c) one of the 3 AI Maestro local marketplaces" among the sources for
+// which "the install step ALWAYS invokes the client's own protocol". Driving the collapsed code
+// with the marketplace that used to escape it is the regression guard.
 const SHARED_PLUGIN = 'shared-custom-plugin'
 const SHARED_KEY = `${SHARED_PLUGIN}@${LOCAL_MARKETPLACE_NAME}`
 
@@ -160,16 +163,21 @@ describe('listLocalInstallRecords — record-scoped, not key-scoped (TRDD-FHBGF0
   })
 })
 
-describe('installPluginLocally — the CLI owns the registry, we own settings.local.json', () => {
-  it('enables the plugin in the agent own settings.local.json', async () => {
+describe('installPluginLocally — the CLI owns the registry AND the enablement (R20.29)', () => {
+  it('asks the CLI to install a LOCAL-marketplace plugin, exactly as it does a remote one', async () => {
+    // R20.29 case (c). This test would have FAILED before TRDD-RCL2HC9Y collapsed the branch:
+    // a local marketplace took a settings-only path and no `claude` process was ever spawned.
     seed({})
     await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
 
-    const local = JSON.parse(readFileSync(join(DIR_B, '.claude', 'settings.local.json'), 'utf-8'))
-    expect(local.enabledPlugins[SHARED_KEY]).toBe(true)
+    const install = cli.calls.find(c => c[1] === 'plugin' && c[2] === 'install')
+    expect(install, 'a local-marketplace install must still go through the client protocol').toBeTruthy()
+    expect(install).toEqual([
+      'claude', 'plugin', 'install', SHARED_PLUGIN, LOCAL_MARKETPLACE_NAME, '--scope', 'local',
+    ])
   })
 
-  it('writes NO record into installed_plugins.json for a local-only plugin', async () => {
+  it('writes NO record into installed_plugins.json BY HAND — the CLI is the only writer', async () => {
     // This is the Shape A property, and it replaces two UPSERT tests that pinned the write itself.
     // The row we used to append asserted, in the CLI's own ledger, an install the CLI never
     // performed — and measured on the dev host 2026-07-30, every such row named an `installPath`
@@ -179,9 +187,12 @@ describe('installPluginLocally — the CLI owns the registry, we own settings.lo
     await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
 
     expect(read()).toEqual({})
-    // Positive control: the install DID happen (see the settings assertion above), so an empty
-    // registry here is "we declined to write" rather than "nothing ran".
-    expect(existsSync(join(DIR_B, '.claude', 'settings.local.json'))).toBe(true)
+    // Positive control, and it had to CHANGE with the collapse. It used to assert that
+    // settings.local.json exists — true only while WE wrote that file. The CLI writes it now, and
+    // the CLI is mocked here, so that assertion would fail for a reason that has nothing to do
+    // with the property. The honest control is that the code path ran at all: an empty registry
+    // means "we declined to write it", not "nothing happened".
+    expect(cli.calls.some(c => c[1] === 'plugin' && c[2] === 'install')).toBe(true)
   })
 
   it('leaves a sibling agent record untouched, because it writes nothing at all', async () => {

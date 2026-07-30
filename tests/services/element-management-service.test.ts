@@ -171,22 +171,29 @@ describe('element-management-service', () => {
       )
     })
 
-    it('should write settings.local.json for local/custom plugins', async () => {
-      /** Validates that custom plugins are installed by writing to settings.local.json */
+    it('should use Claude CLI for local/custom-marketplace plugins TOO, and write no settings itself', async () => {
+      /** Validates R20.29 case (c): a local-marketplace source installs through the client protocol */
+      // This test asserted the OPPOSITE until TRDD-RCL2HC9Y — that a local marketplace was
+      // installed by hand-writing settings.local.json and never calling the CLI. R20.29 names
+      // "(c) one of the 3 AI Maestro local marketplaces" among the sources for which "the install
+      // step ALWAYS invokes the client's own protocol", so the old assertion pinned a violation.
+      // The live spike also disproved the branch's premise: the CLI resolves a directory
+      // marketplace fine. Note this is the same argv as the predefined-marketplace test above —
+      // that identity IS the property.
       const { installPluginLocally } = await import('@/services/element-management-service')
       await installPluginLocally('my-custom-plugin', '/tmp/agent-dir', 'ai-maestro-local-roles-marketplace')
 
-      // Should create .claude dir and write settings
-      expect(mockFsMkdir).toHaveBeenCalled()
-      expect(mockFsWriteFile).toHaveBeenCalled()
-
-      // Check the written settings contain the plugin key
-      const writeCall = mockFsWriteFile.mock.calls.find(
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'claude',
+        ['plugin', 'install', 'my-custom-plugin', 'ai-maestro-local-roles-marketplace', '--scope', 'local'],
+        expect.objectContaining({ cwd: '/tmp/agent-dir' }),
+      )
+      // …and we no longer hand-write the agent's settings for it: the CLI owns that file now,
+      // exactly as it already did for every other marketplace.
+      const settingsWrite = mockFsWriteFile.mock.calls.find(
         (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
       )
-      expect(writeCall).toBeTruthy()
-      const writtenData = JSON.parse(writeCall![1] as string)
-      expect(writtenData.enabledPlugins['my-custom-plugin@ai-maestro-local-roles-marketplace']).toBe(true)
+      expect(settingsWrite, 'installPluginLocally must not write settings.local.json itself').toBeUndefined()
     })
 
     it('should resolve ~ in agentDir', async () => {

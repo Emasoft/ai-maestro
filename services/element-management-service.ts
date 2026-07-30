@@ -1648,120 +1648,97 @@ export async function installPluginLocally(
     throw new Error('agentDir must not contain ".."')
   }
 
-  // For predefined marketplace role-plugins AND any other non-custom plugin:
-  // use `claude plugin install` CLI. This ensures the plugin is actually
-  // downloaded into the user-scope cache (~/.claude/plugins/cache/<mkt>/<name>/)
-  // and that the agent's `.claude/settings.local.json` enabledPlugins key is
-  // added atomically. The check for LOCAL_MARKETPLACE_NAME / CUSTOM_MARKETPLACE_NAME
-  // routes Haephestos-authored local plugins through the legacy direct-settings
-  // write path (those plugins live in `~/agents/{role,custom}-plugins/…` and
-  // cannot be resolved by Claude CLI).
-  const isLocalOnlyMarketplace = (
-    marketplaceName === LOCAL_MARKETPLACE_NAME ||
-    marketplaceName === CUSTOM_MARKETPLACE_NAME
-  )
-  if (!isLocalOnlyMarketplace) {
-    // A marketplace install CLONES the plugin's repo from GitHub, so it is a NETWORK
-    // operation and it fails the way network operations fail: DNS blips, a flaky
-    // resolver, GitHub rate-limiting, a laptop that just woke up. It was attempted
-    // exactly once, and one failure marked the agent permanently role-less
-    // (TRDD-IXUV1XHD made that a hard reject, which without a retry means a single
-    // transient blip DESTROYS the agent instead of costing it a few seconds).
-    //
-    // Retry with exponential backoff on transient-looking failures only. A wrong
-    // plugin name or an unregistered marketplace is NOT transient — retrying those
-    // just burns two minutes before failing with the same message, so they fail fast.
-    //
-    // SERIALIZED across concurrent installs for DIFFERENT agents (SCEN-031 phase-2
-    // finding, 2026-07-23): `claude plugin install` mutates the single shared
-    // ~/.claude/plugins/installed_plugins.json as an internal side effect of the CLI
-    // process itself — a side effect our own withSettingsLock() cannot see or guard
-    // when it wraps only OUR writes. When ai-maestro creates/wakes several agents in
-    // quick succession (e.g. a MANAGER dispatching a fresh AUTONOMOUS + MAINTAINER
-    // pair), each spawns its own `claude plugin install` child process, and two
-    // concurrent CLI processes doing read-modify-write on that one JSON file is a
-    // classic lost-update race: the loser's plugin entry never lands in
-    // installed_plugins.json even though settings.local.json (which OUR code writes
-    // directly, under our own lock) still shows it enabled. The agent then launches
-    // with `--agent <persona>` but the persona is invisible to Claude Code's plugin
-    // resolver ("not found. Available agents: ..." — no crash, no error surfaced to
-    // ai-maestro, just a silently role-less agent). Observed live: scen031-manager's
-    // MANAGER persona vanished this way while two sibling agents created moments
-    // earlier survived. Wrapping the CLI call in the SAME lock used for our own
-    // installed_plugins.json writes serializes every install attempt (ours and the
-    // CLI's) against that file, so no two `claude plugin install` invocations for
-    // different agents can interleave their read-modify-write on it.
-    let lastErr = ''
-    for (let attempt = 1; attempt <= INSTALL_MAX_ATTEMPTS; attempt++) {
-      try {
-        // The windows must OUTLIVE the guarded child process. With the 30s default a waiter
-        // declares this lock stale mid-install and starts a SECOND concurrent `claude plugin
-        // install` — the exact lost-update race described above — and with the 10s wait a
-        // legitimately-queued second install fails instead of waiting its turn.
-        await withSettingsLock(INSTALLED_FILE, async () => {
-          await execFileAsync('claude', [
-            'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
-          ], { timeout: 120000, cwd: resolvedDir })
-        }, { staleMs: 180_000, maxWaitMs: 180_000 })
-        if (attempt > 1) {
-          console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} on attempt ${attempt}/${INSTALL_MAX_ATTEMPTS} (earlier attempts failed transiently)`)
-        } else {
-          console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
-        }
-        return
-      } catch (err) {
-        lastErr = err instanceof Error ? err.message : String(err)
-        const transient = isTransientInstallError(lastErr)
-        if (!transient || attempt === INSTALL_MAX_ATTEMPTS) break
-        const delay = installBackoffMs(attempt)
-        console.warn(`[element-mgmt] Install of ${pluginName} failed transiently (attempt ${attempt}/${INSTALL_MAX_ATTEMPTS}), retrying in ${delay}ms: ${lastErr.split('\n')[0]}`)
-        await sleep(delay)
+  // EVERY marketplace installs through the client's own protocol. There is no second
+  // path, and there must not be one: R20.29 (docs/GOVERNANCE-RULES.md, verdict Explicit)
+  // enumerates the four possible SOURCES — "(a) a GitHub URL, (b) a local folder, (c) one
+  // of the 3 AI Maestro local marketplaces, or (d) a remote marketplace" — and says of all
+  // four that "the install step ALWAYS invokes the client's own protocol to write into the
+  // client's target state". Case (c) is named, not implied.
+  //
+  // This function USED to branch on `isLocalOnlyMarketplace` and write
+  // `settings.local.json` by hand for (c), on the stated grounds that those plugins
+  // "cannot be resolved by Claude CLI's marketplace lookup". TRDD-RCL2HC9Y ran the live
+  // install and that claim is FALSE — the CLI resolves a directory marketplace fine, cache
+  // dir and all. So the branch was violating a rule its own governance test then pinned in
+  // place ("routes a LOCAL-container source away from the CLI" asserted that no `claude`
+  // call happens for (c) — i.e. it certified the violation under the rule's own name).
+  //
+  // The hand-written path was not merely non-compliant, it was WORSE THAN THE CLI in the
+  // way that matters: it wrote the enabledPlugins key WITHOUT ever fetching the plugin into
+  // ~/.claude/plugins/cache/, so Claude Code's resolver had a name it could not resolve.
+  // That is the silently role-less agent of SCEN-031, manufactured on purpose. Routing
+  // through the CLI means a plugin that cannot be resolved now FAILS LOUDLY here instead of
+  // producing an agent that launches and then cannot find its own persona.
+  //
+  // A marketplace install CLONES the plugin's repo from GitHub, so it is a NETWORK
+  // operation and it fails the way network operations fail: DNS blips, a flaky
+  // resolver, GitHub rate-limiting, a laptop that just woke up. It was attempted
+  // exactly once, and one failure marked the agent permanently role-less
+  // (TRDD-IXUV1XHD made that a hard reject, which without a retry means a single
+  // transient blip DESTROYS the agent instead of costing it a few seconds).
+  //
+  // Retry with exponential backoff on transient-looking failures only. A wrong
+  // plugin name or an unregistered marketplace is NOT transient — retrying those
+  // just burns two minutes before failing with the same message, so they fail fast.
+  // (A local-marketplace install is a local copy, so it never NEEDS the retry — but it
+  // costs nothing there, and one code path with one failure mode beats two.)
+  //
+  // SERIALIZED across concurrent installs for DIFFERENT agents (SCEN-031 phase-2
+  // finding, 2026-07-23): `claude plugin install` mutates the single shared
+  // ~/.claude/plugins/installed_plugins.json as an internal side effect of the CLI
+  // process itself — a side effect our own withSettingsLock() cannot see or guard
+  // when it wraps only OUR writes. When ai-maestro creates/wakes several agents in
+  // quick succession (e.g. a MANAGER dispatching a fresh AUTONOMOUS + MAINTAINER
+  // pair), each spawns its own `claude plugin install` child process, and two
+  // concurrent CLI processes doing read-modify-write on that one JSON file is a
+  // classic lost-update race: the loser's plugin entry never lands in
+  // installed_plugins.json even though settings.local.json (which the CLI writes
+  // inside its own process) still shows it enabled. The agent then launches
+  // with `--agent <persona>` but the persona is invisible to Claude Code's plugin
+  // resolver ("not found. Available agents: ..." — no crash, no error surfaced to
+  // ai-maestro, just a silently role-less agent). Observed live: scen031-manager's
+  // MANAGER persona vanished this way while two sibling agents created moments
+  // earlier survived. Wrapping the CLI call in the SAME lock used for our own
+  // installed_plugins.json writes serializes every install attempt (ours and the
+  // CLI's) against that file, so no two `claude plugin install` invocations for
+  // different agents can interleave their read-modify-write on it.
+  //
+  // WE STILL DO NOT WRITE installed_plugins.json BY HAND (TRDD-0GCIMQ9F Shape A). The CLI
+  // writes it as a side effect of the install below, and is the ONLY writer. Before the
+  // collapse, the local-only branch appended a row asserting — in the CLI's own ledger — an
+  // install the CLI had never performed. Measured on this host 2026-07-30: every such row
+  // carried `installPath: ~/agents/role-plugins/plugins/<name>`, a directory that does not
+  // exist and never has (the real layout is `~/agents/role-plugins/roles-marketplace/<name>`).
+  // Those rows were not merely unauthorised, they were FALSE — and false in the field
+  // janitor#137's `cache_prune` reads to decide which cached versions are still in use.
+  let lastErr = ''
+  for (let attempt = 1; attempt <= INSTALL_MAX_ATTEMPTS; attempt++) {
+    try {
+      // The windows must OUTLIVE the guarded child process. With the 30s default a waiter
+      // declares this lock stale mid-install and starts a SECOND concurrent `claude plugin
+      // install` — the exact lost-update race described above — and with the 10s wait a
+      // legitimately-queued second install fails instead of waiting its turn.
+      await withSettingsLock(INSTALLED_FILE, async () => {
+        await execFileAsync('claude', [
+          'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
+        ], { timeout: 120000, cwd: resolvedDir })
+      }, { staleMs: 180_000, maxWaitMs: 180_000 })
+      if (attempt > 1) {
+        console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} on attempt ${attempt}/${INSTALL_MAX_ATTEMPTS} (earlier attempts failed transiently)`)
+      } else {
+        console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
       }
+      return
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err)
+      const transient = isTransientInstallError(lastErr)
+      if (!transient || attempt === INSTALL_MAX_ATTEMPTS) break
+      const delay = installBackoffMs(attempt)
+      console.warn(`[element-mgmt] Install of ${pluginName} failed transiently (attempt ${attempt}/${INSTALL_MAX_ATTEMPTS}), retrying in ${delay}ms: ${lastErr.split('\n')[0]}`)
+      await sleep(delay)
     }
-    throw new Error(`Failed to install plugin "${pluginName}" from ${marketplaceName} after ${INSTALL_MAX_ATTEMPTS} attempt(s): ${lastErr}`)
   }
-
-  // For Haephestos-authored local/custom plugins, write settings.local.json directly.
-  // These plugins live in `~/agents/{role,custom}-plugins/…` and cannot be
-  // resolved by Claude CLI's marketplace lookup.
-  const pluginKey = `${pluginName}@${marketplaceName}`
-  const claudeDir = join(resolvedDir, '.claude')
-  const localSettings = join(claudeDir, 'settings.local.json')
-
-  await withSettingsLock(localSettings, async () => {
-    // Create .claude directory in agent's project
-    await mkdir(claudeDir, { recursive: true })
-
-    // Read or create settings.local.json
-    const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-    const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-    ep[pluginKey] = true
-    settings.enabledPlugins = ep
-    await saveJsonSafe(localSettings, settings)
-  })
-
-  // WE NO LONGER "track in global installed_plugins.json" HERE (TRDD-0GCIMQ9F Shape A).
-  //
-  // This branch is reached only for the LOCAL-ONLY marketplaces, where no `claude plugin install`
-  // ran — so the row we used to append asserted, in the CLI's own ledger, an install the CLI had
-  // never performed. Measured on this host 2026-07-30: every such row carried
-  // `installPath: ~/agents/role-plugins/plugins/<name>`, a directory that does not exist and never
-  // has (the real layout is `~/agents/role-plugins/roles-marketplace/<name>`). So these rows were
-  // not merely unauthorised, they were FALSE — and false in the field that janitor#137's
-  // `cache_prune` uses to decide which cached version directories are still in use.
-  //
-  // Dropping the row loses nothing a reader depends on: the dashboard's per-agent plugin list
-  // reads this agent's own `.claude/settings.local.json` (written just above, inside our permitted
-  // root), and no TypeScript consumer outside `lib/agent-teardown.ts`'s absence probe reads
-  // `installed_plugins.json` at all. A row that never exists keeps that probe green by
-  // construction — which is the same reason DeleteAgent no longer has to hand-remove one.
-  //
-  // NOT DONE HERE, deliberately: routing this branch through `claude plugin install` as well.
-  // Evidence says the CLI probably CAN resolve a directory marketplace — both local marketplaces
-  // are registered in `extraKnownMarketplaces`, and one live row for
-  // `@ai-maestro-local-roles-marketplace` carries a CLI-cache installPath that our code cannot
-  // produce — but "probably" is not a basis for changing the install path of every Haephestos
-  // custom. That needs a live install to settle, and it is TRDD-RCL2HC9Y.
+  throw new Error(`Failed to install plugin "${pluginName}" from ${marketplaceName} after ${INSTALL_MAX_ATTEMPTS} attempt(s): ${lastErr}`)
 }
 
 /**
@@ -1786,83 +1763,73 @@ export async function uninstallPluginLocally(
 
   const pluginKey = `${pluginName}@${marketplaceName}`
 
-  // For non-custom marketplaces: use `claude plugin uninstall` CLI + settings cleanup.
-  // This matches installPluginLocally's symmetric path — Claude CLI owns the
-  // plugin cache and the agent's enabledPlugins entry for any plugin whose
-  // source is a registered GitHub marketplace (predefined role-plugins and
-  // third-party plugins alike). Haephestos-authored local customs keep the
-  // legacy direct-settings path.
-  const isLocalOnlyMarketplace = (
-    marketplaceName === LOCAL_MARKETPLACE_NAME ||
-    marketplaceName === CUSTOM_MARKETPLACE_NAME
-  )
-  if (!isLocalOnlyMarketplace) {
-    // Read the row BEFORE asking the CLI to drop it, so the ledger entry below can carry the
-    // FULL record rather than a count — that is what makes the entry revertible (USER, 2026-07-29:
-    // the ledger is the ground truth, and even the revert must be recorded).
-    const doomed = await listLocalInstallRecords(resolvedDir, pluginKey).catch(() => ({}))
-    try {
-      // SERIALIZED on INSTALLED_FILE for the same reason the INSTALL path is (see the long note
-      // there): `claude plugin uninstall` does its own read-modify-write on that single shared
-      // file inside its own process, which our lock cannot see unless we hold it across the child.
-      // The install side was serialized after the SCEN-031 lost-update race; the uninstall side
-      // was not, and it races exactly the same way — a lost update here silently RESURRECTS a row
-      // for a plugin that is gone. It matters more now, not less: under Shape A the CLI is the
-      // only writer, so there is no longer a hand-edit afterwards to paper over the loss.
-      await withSettingsLock(INSTALLED_FILE, async () => {
-        await execFileAsync('claude', [
-          'plugin', 'uninstall', pluginName, marketplaceName, '--scope', 'local',
-        ], { timeout: 30000, cwd: resolvedDir })
-      }, { staleMs: 180_000, maxWaitMs: 180_000 })
-      console.log(`[element-mgmt] Uninstalled ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
-      if (Object.keys(doomed).length > 0) {
-        await emitPluginRecordOp('remove_plugin_records', 'remove', resolvedDir, doomed)
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!msg.includes('not found') && !msg.includes('not installed')) {
-        console.warn(`[element-mgmt] CLI uninstall failed for ${pluginName}: ${msg}`)
-      }
-    }
-    // SAFEGUARD: Also remove from settings.local.json directly (defence in depth —
-    // Claude CLI has historically been flaky about settings.local.json cleanup).
-    const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
-    if (existsSync(localSettings)) {
-      await withSettingsLock(localSettings, async () => {
-        const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-        if (pluginKey in ep) {
-          delete ep[pluginKey]
-          settings.enabledPlugins = ep
-          await saveJsonSafe(localSettings, settings)
-          console.log(`[element-mgmt] Removed ${pluginKey} from settings.local.json (safeguard cleanup)`)
-        }
-      })
-    }
-  } else {
-    // For Haephestos-authored local/custom plugins: manipulate settings.local.json directly
-    const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
+  // EVERY marketplace uninstalls through the client's own protocol — the mirror of
+  // installPluginLocally, and for the same reason. R20.29: "Uninstall operates on the client
+  // target only", and R20.30 makes a LOCAL-scope uninstall remove the plugin "for ONE agent
+  // only". Both are the CLI's semantics; a hand-edit of settings.local.json only ever
+  // approximated them.
+  //
+  // The local-only branch that used to live here was the uninstall half of the R20.29
+  // violation TRDD-RCL2HC9Y found: it deleted the enabledPlugins key and left the CLI's
+  // cache entry and registry row untouched, so the plugin stayed installed as far as its
+  // owner was concerned. Asymmetric with the install side in the worst direction — install
+  // wrote a key with no plugin behind it, uninstall removed a key with a plugin still behind
+  // it. Collapsing both leaves one path with one failure mode.
 
-    if (existsSync(localSettings)) {
-      await withSettingsLock(localSettings, async () => {
-        const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+  // Read the row BEFORE asking the CLI to drop it, so the ledger entry below can carry the
+  // FULL record rather than a count — that is what makes the entry revertible (USER, 2026-07-29:
+  // the ledger is the ground truth, and even the revert must be recorded).
+  const doomed = await listLocalInstallRecords(resolvedDir, pluginKey).catch(() => ({}))
+  try {
+    // SERIALIZED on INSTALLED_FILE for the same reason the INSTALL path is (see the long note
+    // there): `claude plugin uninstall` does its own read-modify-write on that single shared
+    // file inside its own process, which our lock cannot see unless we hold it across the child.
+    // The install side was serialized after the SCEN-031 lost-update race; the uninstall side
+    // was not, and it races exactly the same way — a lost update here silently RESURRECTS a row
+    // for a plugin that is gone. It matters more now, not less: under Shape A the CLI is the
+    // only writer, so there is no longer a hand-edit afterwards to paper over the loss.
+    await withSettingsLock(INSTALLED_FILE, async () => {
+      await execFileAsync('claude', [
+        'plugin', 'uninstall', pluginName, marketplaceName, '--scope', 'local',
+      ], { timeout: 30000, cwd: resolvedDir })
+    }, { staleMs: 180_000, maxWaitMs: 180_000 })
+    console.log(`[element-mgmt] Uninstalled ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
+    if (Object.keys(doomed).length > 0) {
+      await emitPluginRecordOp('remove_plugin_records', 'remove', resolvedDir, doomed)
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes('not found') && !msg.includes('not installed')) {
+      console.warn(`[element-mgmt] CLI uninstall failed for ${pluginName}: ${msg}`)
+    }
+  }
+  // SAFEGUARD: Also remove from settings.local.json directly (defence in depth —
+  // Claude CLI has historically been flaky about settings.local.json cleanup).
+  // This is NOT the old local-only branch returning: it runs for EVERY marketplace, it runs
+  // AFTER the CLI rather than instead of it, and it only removes a key the CLI was already
+  // asked to remove. A second writer that can only ever converge on the CLI's own outcome.
+  const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
+  if (existsSync(localSettings)) {
+    await withSettingsLock(localSettings, async () => {
+      const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+      const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+      if (pluginKey in ep) {
         delete ep[pluginKey]
         settings.enabledPlugins = ep
         await saveJsonSafe(localSettings, settings)
-      })
-    }
+        console.log(`[element-mgmt] Removed ${pluginKey} from settings.local.json (safeguard cleanup)`)
+      }
+    })
   }
 
   // NO installed_plugins.json CLEANUP HAPPENS HERE ANY MORE (TRDD-0GCIMQ9F Shape A).
   //
-  // On the marketplace path the CLI above already removed exactly this agent's row — narrowly and
-  // correctly — and our hand-edit ran immediately afterwards to do the same job again. That
-  // redundancy was not free: it is what let the ORIGINAL bug hide, because the hand-edit was a
+  // The CLI above already removed exactly this agent's row — narrowly and correctly — and our
+  // hand-edit used to run immediately afterwards to do the same job again. That redundancy was
+  // not free: it is what let the ORIGINAL bug hide, because the hand-edit was a
   // `delete pluginsMap[pluginKey]` that took out the whole array (every other agent's row and the
   // user-scope row with it, TRDD-FHBGF0WG / R20.30) while the CLI's correct removal made the end
-  // state look plausible. On the local-only path there is nothing to clean because nothing is
-  // written any more (see installPluginLocally).
+  // state look plausible.
 }
 
 // ── Governance title → role-plugin lifecycle ──────────────────

@@ -947,10 +947,26 @@ describe('R20.5 / R20.6 — automatic role-plugin assignment on title grant', ()
 // ════════════════════════════════════════════════════════════════════════════
 // R20.29 / R20.31 — a plugin LIVES at its install target (the client's own
 // state), and uninstall NEVER reaches into the AI Maestro source containers.
-// MAP SAYS R20.29 → element-management-service.ts:1531-1533 (the
-// isLocalOnlyMarketplace routing decision — correct, though it is the SOURCE
-// routing half only). MAP SAYS R20.31 → plugin-storage-service.ts:426-460, which
-// is `removeConvertedPlugin` — a function that DELETES from all three source
+//
+// ⚠ THIS BLOCK USED TO PIN A VIOLATION OF THE RULE IT IS NAMED AFTER. Its second
+// test was titled "routes a LOCAL-container source away from the CLI" and
+// asserted `expect(claude call).toBeUndefined()` for a local marketplace. But
+// R20.29's text (GOVERNANCE-RULES.md, verdict Explicit) enumerates the sources —
+// "(a) a GitHub URL, (b) a local folder, (c) one of the 3 AI Maestro local
+// marketplaces, or (d) a remote marketplace" — and says of ALL FOUR that "the
+// install step ALWAYS invokes the client's own protocol". Case (c) is named. The
+// old assertion therefore certified, under the rule's own name, that the rule was
+// being broken; and the map's citation had rotted onto retry-backoff code, so
+// neither column could show it. Corrected by TRDD-RCL2HC9Y, whose live spike
+// proved the CLI resolves a directory marketplace fine — the branch's stated
+// justification ("cannot be resolved by Claude CLI") was simply false.
+//
+// THE LESSON, because it generalises: reading a rule's CITATION is not reading
+// the RULE. The routing decision the map pointed at is real working code, so a
+// test written against it passes and looks like coverage.
+//
+// MAP SAYS R20.31 → plugin-storage-service.ts:426-460, which is
+// `removeConvertedPlugin` — a function that DELETES from all three source
 // containers, i.e. the exact opposite of a guard. It has ZERO call sites; R20.31
 // holds because nothing invokes it. Both halves are pinned behaviourally below.
 // ════════════════════════════════════════════════════════════════════════════
@@ -970,7 +986,7 @@ describe('R20.29 / R20.31 — install target vs source container', () => {
     )
   })
 
-  it('routes a LOCAL-container source away from the CLI, and still writes only into the agent workdir', async () => {
+  it('installs a LOCAL-CONTAINER source through the SAME client protocol, and never touches the source folder', async () => {
     const { installPluginLocally } = await import('@/services/element-management-service')
     const { LOCAL_MARKETPLACE_NAME } = await import('@/lib/ecosystem-constants')
 
@@ -985,16 +1001,21 @@ describe('R20.29 / R20.31 — install target vs source container', () => {
 
     await installPluginLocally('authored-plugin', dir, LOCAL_MARKETPLACE_NAME)
 
-    // Non-vacuity vs the previous test: this source is NOT installed via the CLI.
-    expect(mockExecFileCalls.find((c: ExecCall) => c.cmd === 'claude')).toBeUndefined()
-    // The write landed in the CLIENT target (the agent's own settings), …
-    const settings = JSON.parse(
-      readFileSync(path.join(dir, '.claude', 'settings.local.json'), 'utf-8'),
+    // R20.29 case (c): a local-marketplace SOURCE installs through the client's own
+    // protocol, identically to the remote-marketplace case in the test above. The
+    // marketplace NAME is what differs between the two tests; the protocol must not.
+    const cli = mockExecFileCalls.find((c: ExecCall) => c.cmd === 'claude')
+    expect(cli, 'R20.29 names local marketplaces among the sources that ALWAYS use the client protocol').toBeDefined()
+    expect(cli!.args).toEqual(
+      expect.arrayContaining(['plugin', 'install', 'authored-plugin', LOCAL_MARKETPLACE_NAME, '--scope', 'local']),
     )
-    expect(Object.keys(settings.enabledPlugins ?? {})).toContain(
-      `authored-plugin@${LOCAL_MARKETPLACE_NAME}`,
-    )
-    // …and the SOURCE artifact is untouched.
+    // The install runs in the AGENT'S workdir, because `--scope local` keys off the
+    // process cwd — the directory is NOT an argument (there is no `--cwd` option;
+    // passing one made the CLI exit 0 having run nothing, TRDD-RCL2HC9Y).
+    expect(cli!.args).not.toContain('--cwd')
+
+    // R20.31, unchanged and still the point of this pair: the SOURCE artifact survives.
+    // ai-maestro reads a source container, it never deletes from one.
     expect(existsSync(path.join(sourceDir, 'marker.txt'))).toBe(true)
   })
 

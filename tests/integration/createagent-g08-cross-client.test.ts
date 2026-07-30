@@ -158,9 +158,26 @@ vi.mock('@/lib/amp-keys', () => ({
   hasKeyPair: mockHasKP,
 }))
 
+// `claude plugin …` must SUCCEED here; everything else keeps the failing stub.
+//
+// The blanket always-fail was harmless only while the Claude branch of G08 never shelled
+// out: `my-plugin` is not in PREDEFINED_ROLE_PLUGINS, so its marketplace resolves to
+// LOCAL_MARKETPLACE_NAME, and a local marketplace used to take a settings-only install path.
+// TRDD-RCL2HC9Y collapsed that branch (R20.29 requires the client protocol for local
+// marketplaces too), so this test's own subject now runs through execFile — and a mock that
+// always errors would make it assert the WARN path instead of the install it is named after.
+// `vi.hoisted`, not a bare const: `vi.mock` factories are hoisted above every module-scope
+// binding, so a plain `const` captured by the factory throws "Cannot access before
+// initialization" at import time.
+const g08Cli = vi.hoisted(() => ({ calls: [] as Array<{ args: string[]; cwd?: string }> }))
 vi.mock('child_process', () => ({
   execFileSync: vi.fn(() => '/usr/bin/stub'),
-  execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb?: (err: Error | null, stdout: string, stderr: string) => void) => {
+  execFile: vi.fn((cmd: string, args: string[], opts: unknown, cb?: (err: Error | null, stdout: string, stderr: string) => void) => {
+    if (cmd === 'claude' && args?.[0] === 'plugin') {
+      g08Cli.calls.push({ args, cwd: (opts as { cwd?: string } | undefined)?.cwd })
+      if (typeof cb === 'function') cb(null, '', '')
+      return
+    }
     if (typeof cb === 'function') cb(new Error('stub'), '', '')
   }),
 }))
@@ -401,5 +418,17 @@ describe('CreateAgent G08 — R18.3d priority chain', () => {
     // The op records the destination, and it is the agent's workdir — never ~/agents/<label>/.
     expect(claudeLine).toMatch(/claude-native/)
     expect(claudeLine).not.toMatch(/Claude Persona/)
+
+    // …and now the destination is asserted at the SYSCALL, not inferred from the ops string.
+    // An ops line is something we chose to print; the spawn cwd is what the CLI actually acted
+    // on, and `--scope local` keys off exactly that. Worth pinning here because both halves of
+    // the bug TRDD-RCL2HC9Y found are visible from this altitude: the directory must be the
+    // spawn cwd, and must NOT be an argument (`--cwd` is not a claude option — passing one made
+    // the CLI print "unknown option" and exit 0, so the adapter reported success having run
+    // nothing).
+    const install = g08Cli.calls.find(c => c.args[1] === 'install' && c.args[2] === 'my-plugin')
+    expect(install, 'the Claude branch must install through the client protocol').toBeDefined()
+    expect(install!.cwd).toMatch(/claude-native/)
+    expect(install!.args).not.toContain('--cwd')
   })
 })

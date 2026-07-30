@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.2.0
+spec-version: 1.3.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-30T00:45:58+0200
+updated: 2026-07-30T06:41:55+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -147,6 +147,33 @@ it).
 
 `3P-TRDD-08` **state-block** — a TRDD spanning more than one session `MUST` carry the STATE
 head block.
+
+`3P-TRDD-09` **status-is-not-column** — `status:` is a DISTINCT field, `NOT` a retired
+duplicate of `column:`. It carries a different aspect and `MUST NOT` be treated as dead: the
+pillar specs themselves use it (`status: normative`). What v1 kept in `status:` was the
+PIPELINE STATE, and v2 moved *that one aspect* to `column:`. Therefore:
+- a tool `MUST NOT` key on the FIELD NAME. A `status:` holding a **pipeline-state value**
+  (either spelling — v2 per 3P-KAN, or a v1 value such as `not-started`) is the v1 residue and
+  `MAY` be reported and auto-repaired; a `status:` holding anything else is the field doing its
+  own job and `MUST` be left untouched, not even warned.
+- `column:` `MUST` win over any `status:` on disagreement (3P-TRDD-05 — `column:` is the state
+  machine). A v1 `status:` `MUST NEVER` override a v2 `column:`.
+- a detector `MUST NOT` synthesize a state for a missing field. Report *"no state field"*; a
+  fabricated value is indistinguishable downstream from a real one.
+- v1 `status:` frontmatter is `NOT` extinct fleet-wide (measured 2026-07-30: 66 instances in
+  TRDD zones across 3 repos), so a reader `MAY` be gated but `MUST NOT` be deleted as dead.
+
+`3P-TRDD-10` **one-state-claim** — a TRDD `MUST` state its pipeline position exactly ONCE. A
+body-level state claim (`**Status:**`, `**Column:**`, a line-initial `Status:`) is a SECOND
+source of truth and `MUST` be reported: an ERROR when it disagrees with `column:`, a WARN when
+it merely duplicates it. A disagreeing pair `MUST NOT` be auto-resolved — which claim is true
+is a judgment, and a tool that picks one silently loses work.
+
+`3P-TRDD-11` **missing-column-fallback** — when `column:` is ABSENT a repair tool `MAY`
+insert `column: todo`, deliberately, so the next agent must evaluate the task before acting.
+This fallback applies `ONLY` to a genuinely missing field. It is `NOT` licence to repurpose
+another field: any other frontmatter field, `status:` included, `MUST` survive the repair with
+its value intact.
 
 ## 3P-PRRD — Pillar 3: the PRRD contract
 

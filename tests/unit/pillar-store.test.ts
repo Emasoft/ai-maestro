@@ -41,11 +41,13 @@ describe('SPEC — N clauses per document, id in the body', () => {
   it('finds every clause the live 3-pillars spec declares (positive control on real data)', () => {
     const recs = [...walkRecords(path.join(REPO, 'design/specs'), SPEC_KIND)]
     const threeP = recs.filter((r) => r.filePath.endsWith('3-pillars-spec.md'))
-    // 55 line-anchored declarations, counted independently with grep (NOT copied from
+    // 58 line-anchored declarations, counted independently with grep (NOT copied from
     // this test's own failure output) each time the spec gains a family. A fixture of my
     // own making could not have caught a wrong regex; the live corpus can. Was 38 until
-    // spec 1.2.0 added 3P-DAG (+3) and 3P-IDX (+14) — TRDD-LXLK7XGX / EHT MUYRIKN3.
-    expect(threeP.length).toBe(55)
+    // spec 1.2.0 added 3P-DAG (+3) and 3P-IDX (+14) — TRDD-LXLK7XGX / EHT MUYRIKN3; then
+    // 1.3.0 added 3P-TRDD-09/10/11 (+3) for the `status:`-is-not-`column:` ruling
+    // (`grep -cE '^\`3P-[A-Z]+-[0-9]{2}\`' design/specs/3-pillars-spec.md` → 58).
+    expect(threeP.length).toBe(58)
     expect(threeP.every((r) => /^3P-[A-Z]+-\d{2}$/.test(r.id))).toBe(true)
     // Every record carries the line it was declared on — that is what a lint reports.
     expect(threeP.every((r) => typeof r.line === 'number' && r.line! > 0)).toBe(true)

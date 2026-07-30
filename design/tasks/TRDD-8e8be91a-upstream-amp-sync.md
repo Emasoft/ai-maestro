@@ -25,7 +25,7 @@ implementation-commits: []
 **TRDD ID:** `8e8be91a-cf88-426c-ac12-dcffba7dbdd6`
 **Filename:** `design/tasks/TRDD-8e8be91a-upstream-amp-sync.md`
 **Tracked in:** this repo (`design/tasks/` is git-tracked)
-**Status:** Not started — deferred until governance + jsonl-viewer work is done
+**Deferred until:** governance + jsonl-viewer work is done
 **Priority:** P1 (gates upstream PR submission; not blocking current work)
 
 ---

@@ -26,7 +26,7 @@ implementation-commits: []
 **Filename:** `design/tasks/TRDD-80557822-comm-graph-downstream-sync.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
 
-**Status:** In progress — v1 tightening covered; v2 expansion (HUMAN node + reply-only edges) added 2026-04-22.
+**Coverage:** v1 tightening covered; v2 expansion (HUMAN node + reply-only edges) added 2026-04-22.
 **Priority:** P1 (drift exists — agents still carry the OLD graph in their personas until these repos are re-published).
 **Blocked by:** nothing. In-repo changes shipped in `b411352a` (v1) and the next commit (v2 — HUMAN node + reply-only `1>` edges). This TRDD covers the downstream propagation.
 

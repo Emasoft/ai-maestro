@@ -26,7 +26,7 @@ implementation-commits: []
 **Filename:** `design/tasks/TRDD-d46b42e9-52fa-4f04-9be5-2fb4131fcdd1-jsonl-session-browser.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
 **Feature branch:** `feature/jsonl-session-browser` (already cut from `feature/team-governance` HEAD `9dcb520b`)
-**Status:** Not started — specs only. Parallel-worker-agent will implement phase-by-phase.
+**Scope:** specs only. Parallel-worker-agent will implement phase-by-phase.
 **Orchestration:** Parallel-worker-agent lands each phase on the feature branch; parallel-tester-agent smoke-tests after each phase merges. The 25-scenario batch runs concurrently on `feature/team-governance` — no merge conflicts because file scopes do not overlap.
 
 ---

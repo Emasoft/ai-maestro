@@ -25,7 +25,6 @@ implementation-commits: []
 **TRDD ID:** `e5aae555-1090-4fbf-ab4b-1ac99f82486c`
 **Filename:** `design/tasks/TRDD-e5aae555-1090-4fbf-ab4b-1ac99f82486c-haephestos-ephemeral.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
-**Status:** Not started
 **Created:** 2026-04-20
 **Owner:** TBD
 **Priority:** P1 — locks in guarantees that already mostly exist, gates Haephestos visibility on client availability, and removes surprise when Claude CLI is missing.

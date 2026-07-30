@@ -25,7 +25,7 @@ implementation-commits: []
 **TRDD ID:** `b02f376b-85d8-4f7d-a303-26e9050c4cb1`
 **Filename:** `design/tasks/TRDD-b02f376b-85d8-4f7d-a303-26e9050c4cb1-manager-user-scope-writes.md`
 **Tracked in:** `Emasoft/ai-maestro-plugins` → `ai-maestro-plugin/` (this repo, `design/tasks/` is git-tracked)
-**Status:** Not started — awaiting AI Maestro core API support
+**Waiting on:** AI Maestro core API support
 **Owners:** AI Maestro core API agent (server) + ai-maestro-plugin maintainer (hook)
 **Affects:** `scripts/directory-guard.cjs` (this plugin), `aimaestro-agent.sh` CLI behavior, AI Maestro server
 

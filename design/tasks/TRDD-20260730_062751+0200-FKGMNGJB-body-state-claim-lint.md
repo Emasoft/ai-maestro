@@ -1,11 +1,11 @@
 ---
 trdd-id: FKGMNGJB
 title: A TRDD can carry a SECOND state field in its body and every gate passes it
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T06:27:51+0200
-updated: 2026-07-30T06:37:50+0200
+updated: 2026-07-30T07:04:06+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -28,13 +28,65 @@ labels: [pillar, linter, corpus-integrity, one-source-of-truth]
 
 # A TRDD can carry a SECOND state field in its body and every gate passes it
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30T07:04
 
-**NEXT ACTION:** add a `BODY-STATE-CLAIM` rule to `lib/trdd-doctor.ts` — ERROR when a card's
-body carries a state claim (`**Status:**`, `**Column:**`, `Status:` at line start) and it
-DISAGREES with frontmatter `column:`; WARN when it agrees (still a duplicate source of truth).
+**The rule SHIPPED.** `BODY-STATE-CLAIM` is live in `lib/trdd-doctor.ts`, the `--fix` half is
+implemented, 6 new guards pin it, 5 recorded neuters each redden a NAMED test, and the full
+suite is green (276 files / 4133 tests, exit 0).
 
-**The measurement that motivates it, machine-wide, 2026-07-30:**
+**NEXT ACTION — the ONE open item is a governance question, not code:** two of our own archived
+cards carry a body claim the rule correctly reports, and **IND §12 forbids the remedy**
+("Do not edit the body of a `complete` / `failed` / `superseded` / `published` / `live` TRDD").
+§12 is the janitor's IND base, so reinterpreting it to authorise our own edit is the move the
+cross-project rule forbids. Route the question to the janitor (precedent: janitor#103 for an
+IND-base proposal) and get the USER's call; then repair the two cards and DELETE the gate
+allowance, which is written to fail the moment they heal.
+
+| card | zone · column | body claim | why it is blocked |
+|---|---|---|---|
+| `C7A81642` | archived · `complete` | `**Status:** Not started` | a TRUE contradiction — the exact incident shape, in our own corpus |
+| `7123D51A` | archived · `completed` | `**Status:** Implemented 2026-04-20 (…)` | semantically agrees; unprovable by a tool (a date follows the verb) |
+
+**Disposition of the 10 (measured, then acted on):**
+
+| where | n | done |
+|---|---|---|
+| `design/tasks/`, all `column: todo` | 5 | **repaired** — the state word removed, the explanation KEPT under a label that names it (`**Deferred until:**`, `**Coverage:**`, `**Waiting on:**`, `**Scope:**`; one bare `Not started` carried no information and the line went). `updated:` deliberately NOT bumped — a hygiene repair must not manufacture recency (ai-maestro#96 L8). |
+| `design/archived/`, terminal, AGREEING | 3 | reported as WARN, `--fix`-able, left alone under §12 |
+| `design/archived/`, terminal, DISAGREEING | 2 | **blocked** — the table above |
+
+**Load-bearing facts a re-reader needs:**
+
+- **`bodyClaimAgreesWithColumn` is ONE predicate shared by the lint and the fixer.** The sibling
+  rule shipped hours earlier with two copies and they had already diverged — the lint accepted
+  only `VALID_COLUMNS`, the fixer also accepted `V1_STATUS_TO_COLUMN`, so `--fix` silently
+  repaired a shape the lint never reported.
+- **`done` is the ONE inflection accepted beyond the two vocabularies**, and only against a
+  terminal column. Not a synonym guess: it is the past participle of the terminal set itself, and
+  calling `**Status:** Done` on a `column: completed` card a CONTRADICTION is the tool
+  misclassifying, not the tool being careful. Deliberately NOT `implemented` / `shipped` /
+  `fixed`, which name an ACTION and can predate the column.
+- **The claim regex matches a line-initial `Column:` — which is exactly a frontmatter field
+  name.** Both entry points compute the frontmatter boundary themselves rather than trusting the
+  caller; handed a whole file, an unguarded scan would flag every card in the corpus and the
+  repair would DELETE `column:`. Neuter N5 proves it.
+- **The live corpus does not exercise the fence/blockquote exclusion.** Every `**Status:**` this
+  card quotes is prefixed (`…-9a8aba94-….md:19:**Status:** …`), so `^\s*` never matches — the
+  seeded fixture is the only thing reaching that path, which is why it exists.
+
+**SUPERSEDED — do NOT carry forward:**
+
+- ~~"`V1_STATUS_TO_COLUMN` has only two keys, so `Done`/`Completed` can never map"~~ — it has
+  **seven**. My probe printed only the two that need quoting in JS (`'not-started'`,
+  `'in-progress'`) and hid the five bare ones, and I read the display artifact as the data.
+- ~~"all 10 findings are ERROR, so the WARN branch is dead code"~~ — the split was **9 + 1** from
+  the first run. `scripts/trdd-doctor.mjs` grouped by RULE alone and labelled the whole group
+  `fs_[0].severity`, so the heading said ERROR ×10 over a mixed set. The summary line said
+  `9 error` the entire time — two numbers on one screen disagreed and I read the wrong one.
+  Fixed: the CLI now groups by (rule, severity) and counts `--fix`-ability instead of sampling
+  row 0. The dangerous ordering was the mirror image — nine ERRORs under a WARN heading.
+
+**The measurement that motivated it, machine-wide, 2026-07-30:**
 
 | | |
 |---|---|
@@ -123,20 +175,32 @@ this is migration residue, and it will keep being authored as long as old cards 
 
 ## Acceptance
 
-- [ ] `BODY-STATE-CLAIM` ERRORs on a seeded card whose body claim contradicts `column:`, and
+- [x] `BODY-STATE-CLAIM` ERRORs on a seeded card whose body claim contradicts `column:`, and
       WARNs on one that agrees — two fixtures, not one
-- [ ] the rule computes the frontmatter boundary and does NOT flag a frontmatter `status:`
+- [x] the rule computes the frontmatter boundary and does NOT flag a frontmatter `status:`
       (a frontmatter `status:` holding a column value is `STATUS-HOLDS-COLUMN-VALUE`'s job —
       two rules, two messages, no overlap; and note per the USER's 2026-07-30 ruling that a
       frontmatter `status:` carrying a NON-column value is legitimate and neither rule fires)
-- [ ] it does NOT flag a `**Status:**` inside a fenced code block or a quoted example (this
+      — pinned with a positive control asserting the SIBLING rule did fire, so the absence
+      assertion cannot pass on a fixture that never parsed
+- [x] it does NOT flag a `**Status:**` inside a fenced code block or a quoted example (this
       very card contains three; if the rule flags its own TRDD the rule is wrong)
-- [ ] run against the live corpus it finds exactly our 10, listed by path
-- [ ] `trdd:fix` removes an AGREEING duplicate and REFUSES a disagreeing one, leaving the file
+- [x] run against the live corpus it finds exactly our 10, listed by path — 10 found
+      (7 ERROR + 3 WARN after the `done` inflection), dispositions in the STATE table
+- [x] `trdd:fix` removes an AGREEING duplicate and REFUSES a disagreeing one, leaving the file
       byte-identical in the refusal case
-- [ ] a recorded **neuter run** per guard (break it, watch the NAMED test fail; read the test
-      COUNT, never the exit code)
-- [ ] full suite green
+- [x] a recorded **neuter run** per guard (break it, watch the NAMED test fail; read the test
+      COUNT, never the exit code) — 5 neuters, each reddening a named test, and each
+      behavioural test falling to exactly one:
+      N1 severity split → WARN test + gate · N2 fence/quote skip → fenced test only ·
+      N3 rule presence → ERROR + WARN + gate · N4 fixer's agreement gate → refusal test only ·
+      N5 fixer's frontmatter boundary → repair test only
+- [x] full suite green — 276 files / 4133 passed / 2 skipped, exit 0
+- [ ] **OPEN (governance):** route the §12 question for `C7A81642` + `7123D51A` to the janitor
+      and the USER, repair the two cards, then DELETE the gate allowance in
+      `tests/unit/trdd-doctor.test.ts` (it asserts the count EXACTLY, so it fails the moment
+      they heal — an allowance that tolerates its own healing is how a known-issue list
+      outlives the issue and starts hiding new ones)
 
 ## Notes and lessons learned
 

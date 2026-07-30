@@ -1761,7 +1761,7 @@ export async function installPluginLocally(
   // are registered in `extraKnownMarketplaces`, and one live row for
   // `@ai-maestro-local-roles-marketplace` carries a CLI-cache installPath that our code cannot
   // produce — but "probably" is not a basis for changing the install path of every Haephestos
-  // custom. That needs a live install to settle, and it is TRDD-YQ7CDU3B.
+  // custom. That needs a live install to settle, and it is TRDD-RCL2HC9Y.
 }
 
 /**

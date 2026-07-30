@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-07-30T13:04:00+0200
+updated: 2026-07-30T20:39:45+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-29T21:44:00+0200
 derived: false
 npt: [OWO449MR]
-eht: [KO4TQCJ0]
+eht: [KO4TQCJ0, RCL2HC9Y]
 severity: critical
 priority: 0
 release-via: none

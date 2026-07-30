@@ -4,9 +4,10 @@ title: Shape A for installed_plugins.json needs DeleteAgent reordered, because a
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: todo
+column: blocked
+pre-block-column: dev
 created: 2026-07-30T12:59:10+0200
-updated: 2026-07-30T12:59:10+0200
+updated: 2026-07-30T20:39:45+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,20 +22,66 @@ derived: true
 derived-kind: npt
 parent-trdd: 0GCIMQ9F
 relevant-rules: [R50, R51, R21]
-blocked-by: []
+blocked-by: [RCL2HC9Y]
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [f1e4d7ec, 5861db3b]
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30 20:35
 
-This is the ONE piece of TRDD-0GCIMQ9F's Shape-A ruling that could not be executed as a
-find-and-replace, and the reason is a real ordering constraint, not reluctance.
+**THE CODE IS DONE AND VERIFIED.** Shape A1 is implemented, tested, and both neuters ran. The card
+is `blocked` rather than `complete` only because the work opened one hole — TRDD-RCL2HC9Y — and this
+card cannot be honest about completion while that hole is open. Nothing further is owed here except
+that sibling.
 
-NEXT ACTION: decide between the three shapes below. Do NOT start editing DeleteAgent before that
-decision — it is the highest-blast-radius pipeline in the system and its current ordering is
-deliberate and commented.
+**RCL2HC9Y is a SIBLING, not a child, and the distinction is load-bearing.** This card is itself
+`derived: true`, and the depth-1 rule forbids a derived TRDD from owning an `npt:`/`eht:` or from
+being anyone's `parent-trdd:`. So the platelet is registered in the PARENT's (`0GCIMQ9F`) `eht:`,
+and the ordering lives here in `blocked-by:` — exactly the shape the rule prescribes. I got this
+wrong on the first write (registered it as my own EHT) and `trddgrep validate` caught it with two
+ERRORs, `GRAPH-DEPTH1` and `GRAPH-PARENT-IS-DERIVED`, on my own board.
+
+DONE (`f1e4d7ec` code, `5861db3b` gate test):
+- All THREE hand-writers of `installed_plugins.json` are gone, not the one this card described.
+  `removeLocalInstallRecords` → the read-only, fail-closed `listLocalInstallRecords`;
+  `restoreLocalInstallRecords` deleted; `installPluginLocally`'s local-only tracking row deleted.
+- `G09b` → **`G08c`**, inside the gate sequence, BEFORE `G09`'s folder delete, using the CLAUDE
+  adapter with a CLI-reinstall compensation.
+- Both allowlist entries left `ALLOWED_OUT_OF_ROOT_WRITES`; the UNRATIFIED-inventory test is now a
+  RATCHET on the empty set, plus a new guard that no `INSTALLED_FILE` write survives anywhere.
+- `uninstallPluginLocally`'s CLI call is now serialized on `INSTALLED_FILE` like the install side.
+
+**TWO THINGS A READER SHOULD NOT MISTAKE FOR DONE:**
+
+1. **The argv is asserted at the ADAPTER boundary, not literally.** The card asked for a test
+   proving `--scope local --cwd <workdir>`; the test drives a fake adapter and asserts
+   `targetDir === <workdir>` and `scope === 'local'`. The mapping from those to that argv is
+   `lib/client-plugin-adapters/claude-adapter.ts`'s own contract, not something this test observes.
+2. **Pre-existing orphan rows are now UNCLEANABLE by us, and that is the correct outcome.** A row
+   the CLI does not believe in (the six hand-forged local-marketplace rows measured on this host)
+   cannot be retracted by `claude plugin uninstall`, and we have renounced hand-editing. G10 will
+   report them honestly as residue. Removing them is the USER's call, and it is the same question
+   already owed on TRDD-AQTGAY60 (the 93 orphans) — not a new debt this card created.
+
+## Historical — the decision, kept because the reasoning is the record
+
+This was the ONE piece of TRDD-0GCIMQ9F's Shape-A ruling that could not be executed as a
+find-and-replace, and the reason was a real ordering constraint, not reluctance.
+
+**Shape A1 was chosen** (D2, commit `869e23be`), NOT the A2 recommended below: A2's "place it last
+so no undo is needed" holds only while it really is last, and under the corrected ordering it is
+not — the folder delete follows it and can fail.
+
+**The hazard the reorder nearly shipped**, caught in review and verified first-hand: G09b was nested
+inside `hard && deleteFolder` AND inside G09's `startsWith(agentsRoot)` check. Lifting it out of
+that branch without carrying BOTH guards would strip the plugins of an adopted `~/Code/<project>`
+workdir that G09 then correctly refuses to delete. Both conditions moved with the gate, and a test
+now pins the adopted case.
+
+**A design bug the test forced out:** G08c is the LAST gate, so the runner can never reach its undo
+from a later-gate failure — yet D2 required compensation precisely because G09 can fail, and G09
+runs after the sequence commits. The compensator is now a named function with two callers.
 
 ## Problem
 

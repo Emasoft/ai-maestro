@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T22:56:21+0200
+updated: 2026-07-30T23:01:05+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -67,9 +67,28 @@ the R51.5 test drives G06 only — a fix at three of four sites is indistinguish
 one until someone reaches the fourth. G07b's orphan is the worst of them: it is reachable only on
 the team path, so the agent has ALREADY JOINED the team when the caller is told it does not exist.
 
+**R51.5 SWEEP — NEGATIVE, so do not redo it.** After fixing G07b I grepped for the SHAPE rather
+than the symptom (the rule the fix itself produced). Every hand-rolled rollback in the codebase:
+CreateAgent's four (G06 ×2, G07b, G07c — all now two-branch) and `DeleteTeam` at :6635-6688, which
+already reports via `noChangesMessage`/`invalidStateMessage`. Nothing outside
+`services/element-management-service.ts` hand-rolls a compensation at all. So `DeleteTeam` is
+R51.5-compliant while still violating AIO-TXN-10 — correctly counted as hand-rolled above; the two
+are different claims and it satisfies one of them.
+
+**`ChangeAvatar` is NOT the next one to convert, despite being the smallest.** It has exactly ONE
+mutating gate (`G03 updateAgent`) with nothing after it that can fail, so it has no partial-state
+window: retrofitting it buys AIO-TXN-10 conformance and zero safety. Converting it would move
+`MAX_HANDROLLED` 14→13 without making anything safer, which is gaming the ratchet rather than
+using it. Do it last, with the other ceremonial ones.
+
 **NEXT ACTION: `CreateAgent` (priority #2 below, 62 gate ops).** Its mutating set and the shape of
 each compensation are read and recorded in "THE PATH" further down; the work is per-gate `undo` +
-`runGateSequence`, then lower `MAX_HANDROLLED` to 13.
+`runGateSequence`, then lower `MAX_HANDROLLED` to 13. Mutating set as read 2026-07-30:
+`mkdir(workDir)` (undo: rmdir ONLY if this call created it — the "reusing orphaned folder" branch
+must not delete a folder it found), `G04 createAgent`, `G05` invariants (write inside workDir),
+`G06`/`G07b` ChangeTitle, `G07` ChangeTeam, `G08` role-plugin, `G09` tmux, `G10` keypair,
+`G11` core plugin, `G12` AMP identity + the shared `.index.json`. The four existing ad-hoc
+rollbacks all collapse into ONE `undo` chain once it is under the runner.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
 

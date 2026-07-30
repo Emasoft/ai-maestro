@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T23:01:05+0200
+updated: 2026-07-30T23:22:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d]
 ---
 
 ## ⏵ MEASURED 2026-07-30 — the count was wrong, and there is now a ratchet that keeps it honest
@@ -32,7 +32,8 @@ was a hand count of the 26-NAME LIST below, and that list is not an inventory of
 | `ChangeAgentDef`, `ChangeCommand`, `ChangeRule`, `ChangeOutputStyle` | one-line delegators — `return changeSimpleElement(…)`. Not pipelines. |
 | — | `changeSimpleElement` IS a pipeline, is already transactional, and the list omits it. |
 
-Real inventory: **19 pipelines · 5 transactional · 14 to go.** Transactional today are
+Real inventory AS MEASURED THAT MORNING — **19 pipelines · 5 transactional · 14 to go**; superseded
+the same day by the CreateAgent section below, which took it to 6 and 13. Transactional then were
 `DeleteAgent`, `ChangeClient`, `ChangePlugin`, `ChangeSkill`, `changeSimpleElement`. Remaining:
 `ChangeTitle` (131 gate ops), `InstallElement` (101), `CreateAgent` (62), `DeleteTeam` (37),
 `ChangeTeam` (18), `ChangeMarketplace` (12), `ChangeFolder` (10), `ChangeName` (9),
@@ -81,14 +82,62 @@ window: retrofitting it buys AIO-TXN-10 conformance and zero safety. Converting 
 `MAX_HANDROLLED` 14→13 without making anything safer, which is gaming the ratchet rather than
 using it. Do it last, with the other ceremonial ones.
 
-**NEXT ACTION: `CreateAgent` (priority #2 below, 62 gate ops).** Its mutating set and the shape of
-each compensation are read and recorded in "THE PATH" further down; the work is per-gate `undo` +
-`runGateSequence`, then lower `MAX_HANDROLLED` to 13. Mutating set as read 2026-07-30:
-`mkdir(workDir)` (undo: rmdir ONLY if this call created it — the "reusing orphaned folder" branch
-must not delete a folder it found), `G04 createAgent`, `G05` invariants (write inside workDir),
-`G06`/`G07b` ChangeTitle, `G07` ChangeTeam, `G08` role-plugin, `G09` tmux, `G10` keypair,
-`G11` core plugin, `G12` AMP identity + the shared `.index.json`. The four existing ad-hoc
-rollbacks all collapse into ONE `undo` chain once it is under the runner.
+## ⏵ CreateAgent RETROFITTED 2026-07-30 (`3f2e0e1d`) — 13 to go, and where the sequence ends
+
+Real inventory now: **19 pipelines · 6 transactional · 13 to go.** Ratchet lowered
+(`MAX_HANDROLLED` 14→13, `MIN_TRANSACTIONAL` 5→6, `CreateAgent` pinned in `MUST_BE_TRANSACTIONAL`).
+
+**THE SEQUENCE ENDS AT G07c, AND THAT IS A FINDING, NOT A SHORTCUT.** G07c is the last gate that
+can abort: `G08` (explicit plugin), `G09` (session), `G10` (keypair), `G11` (core plugin) and
+`G12` (AMP identity) are all WARN-and-continue, and nothing after them can fail either. A gate's
+`undo` runs only when a LATER gate fails — so undos written for those five could never execute.
+That is ~150 lines of unreachable code that READS as a guarantee, which is worse than no code:
+the next reader would believe the AMP index row is compensated. They stay outside, exactly as
+DeleteAgent's irreversible G09 runs after its sequence commits. ⚠ **If any of G08..G12 is ever
+made fatal it MUST move into the list with a real compensation** — that is the one change that
+makes them reachable, and the code carries this warning at the gate list.
+
+**What the retrofit actually BOUGHT** (the four ad-hoc rollbacks each reverted exactly one thing —
+the registry row — so all of this was uncompensated before): the workdir when this pipeline
+created it, recursively and bounded to `~/agents/`; the team membership (`ChangeTeam(null)`); the
+role-plugin when the workdir survives; and R51.5 decided in ONE place instead of four.
+
+**G04's undo re-throws NAMING the record.** The runner reports an unrevertable gate as
+`<id> (<error>)`, so `G04 (registry locked)` would tell a human nothing about WHICH agent is
+stranded — and R51.5 exists precisely so the orphan stays findable.
+
+**Three neuters, disjoint red sets:** G03's undo neutered reds the new parity test ALONE; the
+`txn.rolledBack ? null : …` ternary and G04's naming re-throw each red exactly the two
+orphan-addressable tests (two halves of one claim — the return value and the message).
+
+**A test was propped up by the old imprecision.** The G07b invalid-state message hardcoded
+`joined team <id>` whether or not the join had succeeded, and the rollback never left the team —
+so the string was doing double duty as an apology for the missing compensation. Under the runner
+G07 records the join and its undo reverses it, so a team is named only when one is genuinely
+still occupied. The `/team-xyz/` assertion is gone and the reason is written into the test.
+
+### OPEN, and named rather than left to be discovered
+
+1. **G07's team-leave undo is UNPINNED.** In `createagent-g06-g07-ordering`'s fixture `ChangeTeam`
+   WARNs (no team, no MANAGER in the mocked world), so `teamJoined` stays null and the undo is a
+   no-op — the one compensation this card calls the reason for the retrofit has no test driving
+   it. Pinning it needs a fixture where `ChangeTeam` genuinely SUCCEEDS (getTeam + a MANAGER +
+   its gate chain), which is its own piece of work and must not be faked, or the test measures
+   the mocks. **Do this before the card reaches `complete`.**
+2. **G05 does not un-append the managed `.git/info/exclude` block** when the workdir pre-existed.
+   Deliberate: the block is marker-delimited, additive, idempotent and re-created by the
+   invariants watchdog, while re-deriving the `.git` location (dir / gitdir-file / worktree
+   commondir) in a SECOND place is exactly the duplicated path logic that drifts from the seeder.
+3. **G04's undo is a SOFT delete, so a tombstone row survives the rollback** — unchanged from all
+   four hand-rolled sites. `getAgentByName` and the G03 overlap check both filter tombstones, so
+   a retry is unblocked, but it is not literally "the exact state". Soft→hard is a behaviour
+   decision that deserves its own change, not a ride-along in a refactor of the most-used
+   pipeline on the host.
+
+**NEXT ACTION: `ChangeTeam` (18 gate ops) or `ChangeName` (9).** Not `ChangeTitle` (131) or
+`InstallElement` (101) yet — both are called BY the pipelines already retrofitted, so converting
+one changes the failure semantics of its callers, and that wants its own card. Not `ChangeAvatar`
+either, for the reason below.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
 
@@ -496,7 +545,12 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       second source of truth (§2.1 of the spec, applied to documentation)
 - [x] `DeleteAgent` transactional — `runGateSequence(deleteGates, dc)`, 11 gates (10 `undo` +
       1 `readOnly`), `tests/unit/deleteagent-rollback-parity.test.ts` green
-- [ ] `CreateAgent` transactional
+- [x] `CreateAgent` transactional — `runGateSequence(createGates, cc)` over G03..G07c, the last
+      gate that can abort (`3f2e0e1d`). Its four hand-rolled rollbacks collapsed into one `undo`
+      chain; parity test asserts the workdir removal, three neuters have disjoint red sets
+- [ ] G07's team-leave `undo` PINNED by a test where `ChangeTitle` fails AFTER a SUCCESSFUL
+      `ChangeTeam` — today's fixture WARNs the join, so the compensation this card calls its
+      reason for existing is written but undriven (see the CreateAgent section above)
 - [ ] `ChangeTitle` transactional — **`ChangeClient` and `ChangePlugin` are DONE**; this box is
       split because they were, and `ChangeTitle` (131 gate ops, the largest) is not
 - [ ] `ChangeTeam` / `DeleteTeam` transactional

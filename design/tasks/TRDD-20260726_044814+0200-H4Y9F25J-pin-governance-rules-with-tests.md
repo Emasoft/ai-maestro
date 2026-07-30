@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:04:59+0200
+updated: 2026-07-30T17:07:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,28 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### SCOUTED, NOT YET WRITTEN — R1.3 + R1.4 (`services/teams-service.ts`)
+
+Read the guards; ran out of context before writing the test. Do NOT re-derive:
+
+- **R1.4 is a hard refusal** — `:279-282`, `if (!getManagerId())` → **400** with "Teams require an
+  existing MANAGER first". Ordinary refusal test. Note a SECOND clause immediately below at
+  `:285-291` (only MANAGER or the web UI may create a team → **403**), so the same
+  let-the-other-gate-pass discipline applies: a test that supplies no manager AND an agent caller
+  cannot tell the 400 from the 403.
+- **R1.3 is a `SHOULD`, NOT a MUST** — "every team SHOULD have a COS". **A refusal test would
+  misread the rule.** Its enforcement is AUTO-CREATION: `:344-404` mints a `cos-<teamslug>` agent
+  with a random robot avatar and assigns it when no `cosId` was supplied. So the honest assertion
+  is *create a team without a COS → one is assigned*, plus the SVC2-MIN-08 rollback (if
+  `createCosAgent` throws after `mkdir`, the empty `~/agents/cos-*` dir is removed — and ONLY when
+  this call created it, never a pre-existing dir).
+- **0-IMPACT TRAP, mandatory:** that path resolves the workdir through a **runtime**
+  `await import('os')` + `os.homedir()` and really does `mkdir ~/agents/cos-<slug>`. `vi.mock('os')`
+  intercepts STATIC imports only, so it does NOT contain this — the exact failure
+  `tests/helpers/fake-ecosystem-home.ts` was written for. Use that helper (layer 2) or the test
+  will create directories in the developer's real `~/agents/`. Governance batch 1 already did this
+  once.
 
 ### RATCHET 23 → 18 — 5 pinned this session
 

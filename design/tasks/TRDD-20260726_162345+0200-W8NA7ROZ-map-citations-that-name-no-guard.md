@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T16:23:45+0200
-updated: 2026-07-27T09:44:50+0200
+updated: 2026-07-30T06:00:37+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -99,12 +99,20 @@ confirm by experiment before acting.
 
 ## Acceptance
 
-- [ ] Each of the 5 category-A rows is read and either qualified or corrected
-- [ ] Each of the 7 genuinely-defective category-B rows is narrowed to a real guard
-- [ ] The 3 helper-function rows are confirmed as correctly un-qualifiable and annotated as such
-- [ ] `tests/governance/enforcement-coverage.test.ts` stays green, and each new qualifier is
-      mutation-proved (break the gate in the source, watch the named test fail)
-- [ ] `bash scripts/with-node.sh npx tsc --noEmit` clean; governance suite green
+- [ ] Each of the 5 category-A rows is read and either qualified or corrected — **R18.1/R18.7/R18.10
+      done 2026-07-27; R4.4 and R17.8 REMAIN**
+- [ ] Each of the 7 genuinely-defective category-B rows is narrowed to a real guard — **R18.2/R18.3/
+      R18.8/R18.9 done 2026-07-27; R20.5, R20.31 and R40.1 REMAIN** (R20.5/R20.31 also carry the
+      independent anti-guard suspicion below — confirm by experiment, not by reading)
+- [ ] The 3 helper-function rows (R17.2, R20.29, R39.6) are confirmed as correctly un-qualifiable
+      and annotated as such — not yet annotated
+- [x] `tests/governance/enforcement-coverage.test.ts` stays green, and each new qualifier is
+      mutation-proved (break the gate in the source, watch the named test fail) — 4 mutations run
+      2026-07-30; the R17.6 one is the finding (named file stayed green), and the R17.15
+      ChangePlugin one exposed an unpinned guard now closed by 3 new tests + its own neuter
+- [x] `bash scripts/with-node.sh npx tsc --noEmit` clean; governance suite green — tsc 0; full
+      suite 276 files / 4126 passed (was 4123 — the 3 new R17.15 tests); the service file verified
+      byte-identical to HEAD after every mutation
 
 ## 2026-07-27 — the qualifier pass was ALSO a detector, and it found 7 wrong ranges
 
@@ -146,9 +154,69 @@ behaviour and nobody noticed the citation pointed at another pipeline entirely.
 **Rule adopted:** a gate qualifier may only be added by READING the gate and the rule together.
 Never derive one from a line range, and never add one in bulk.
 
-- [ ] Re-cite the 7 stripped rows against their real guard, by reading
-- [ ] R18.8's two-site citation (converter warning collector + the ChangeClient path that proceeds
-      anyway) is confirmed to be the honest shape for a "proceed despite loss" rule
+- [x] Re-cite the 7 stripped rows against their real guard, by reading — DONE 2026-07-30, `9a11a51b`
+- [x] R18.8's two-site citation is confirmed to be the honest shape — and the grammar now KNOWN:
+      the ratchet's multi-site separator is a COMMA (R18.8's own form), each cite needs a full
+      path, and a gate qualifier is REJECTED when the row cites two different files. Applied to
+      R17.15 (two sites, same file ⇒ both qualifiers kept) and R17.1 (two files ⇒ qualifier dropped)
+
+## 2026-07-30 — the 7 stripped rows, re-cited by reading (`9a11a51b`)
+
+| row | real guard | note |
+|---|---|---|
+| R3.3 | `ChangeTitle::G08` `:2539-2544` | **the stripped qualifier was RIGHT** — see finding 1 |
+| R12.3 | `ChangeTitle::G15` `:3149-3152` | the swap's uninstall-old; see the open question below |
+| R17.1 | `lib/agent-invariants.ts:111-146` + `:8220-8252` | two FILES ⇒ no qualifier permitted |
+| R17.6 | `CreateAgent::G11` `:8220-8252` | its TEST column was also wrong — finding 3 |
+| R17.15 | `InstallElement::G08` `:731-738` + `ChangePlugin::G01b` `:3590-3594` | second half was unpinned — finding 4 |
+| R19.1 | `ChangeTitle::EXE` `:2595-2612` | GATE 9's ops label really is `EXE:` |
+| R19.3 | `ChangeTitle::G9a` `:2631-2645` | the label is `G9a`, **not** `G09a` |
+
+**1. R3.3's stripped qualifier was CORRECT, and the strip came from a partial read.** GATE 8 is
+"Singleton check — **COS/ORCHESTRATOR** per team" and contains both branches; the 2026-07-27 audit
+saw only the ORCHESTRATOR half. Only the RANGE was wrong. A verdict reached by reading half a gate
+is still a wrong verdict — the same failure mode as deriving a qualifier from a range, one level up.
+
+**2. The ranges are STALE, and the drift is NOT uniform — this is the measurement that validates
+the do-not-batch-convert rule.** R3.2's cited `2291` + 193 = **2484 = exactly** the real GATE 7
+line. Apply the same +193 to R9.2 and you land on GATE 14, not GATE 10. So a plausible constant
+shift is confirmed EXACTLY on one row and wrong on the next: the one exact hit is precisely what
+would have made a mass shift look verified.
+
+**3. R17.6's TEST column was wrong too, and only a mutation found it.** Disabling `G11` left the
+named file **18/18 GREEN**; the full suite caught it in
+`tests/integration/createagent-g11-r17-core.test.ts`, whose name says exactly what it pins. The
+right test existed all along — the map pointed elsewhere. Corrected.
+
+**4. R17.15's `ChangePlugin::G01b` half was ENFORCED BUT PINNED BY NOTHING.** Deleting
+`|| desired.action === 'disable'` left the ENTIRE suite green (276 files / 4123 tests / 0 failures),
+on the pipeline the rule names FIRST. Closed with 3 tests + a neuter that reddens exactly the
+disable case. General trap, now in that test file's header: **when a rule cites N enforcement
+sites, a suite pinning N-1 looks identical to one pinning all N** — count the sites in the RULE
+TEXT and mutation-prove each separately.
+
+**5. This TRDD's note that "the ratchet never asserted qualifier correctness anyway" is STALE.**
+It has a test `every gate qualifier names a real gate inside that pipeline`, and it refuses a
+qualifier on a row citing two different files. My first four edits failed it; the grammar was then
+read from the parser rather than guessed.
+
+**6. Three sources agree on two of the citations.** The reddened describe blocks name the gate
+themselves — "R3.3 — one CHIEF-OF-STAFF per team (**ChangeTitle GATE 8**)" and "R17.8 / R17.15 —
+**InstallElement G08** core-plugin protection gate". Rule text + code + test title is what a
+citation should cost.
+
+**Two things found on the way, NOT fixed here:**
+
+- **R12.3 has no REFUSAL.** "One role only" is maintained by `G15` uninstalling the old
+  role-plugin, not by rejecting a second one — and `G15` detects the current plugin by scanning
+  `enabledPlugins` and `break`s on the FIRST match, so two already-enabled role-plugins would leave
+  the second in place. Under the map's own Verdict definitions (`ENFORCED` = "a guard refuses the
+  violation") that is arguably not ENFORCED but *unrepresentable-by-construction*. A verdict change
+  is a bigger act than a citation fix — recorded as a claim, for a decision.
+- **The governance suite transiently writes the developer's REAL `~/agents`.** A clean run of
+  `r3-r9-team-governance.test.ts` creates `~/agents/cos-manager-team` and rolls it back —
+  `md5` of `ls ~/agents` is identical before and after, so net zero, but a kill mid-test would
+  leave it. A 0-IMPACT boundary touch, worth its own card.
 
 ## Approval log
 

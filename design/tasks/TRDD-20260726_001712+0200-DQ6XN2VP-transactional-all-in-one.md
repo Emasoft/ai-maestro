@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T19:25:32+0200
+updated: 2026-07-30T19:33:40+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -125,17 +125,37 @@ Wrap the WHOLE pipeline in `runAioPipeline`. Every mutating gate gets a real `un
 - **G09 folder delete stays dead-last** as the sole true irreversible; a failure after it is the
   legitimate R51.5 CRITICAL (a rollback that itself failed), not a "reported residue".
 
-**TWO THINGS NEEDING A USER DECISION BEFORE CODING:**
+### TWO DECISIONS — ruled 2026-07-30 under the standing USER delegation, stated so they can be overruled
 
-1. **G02's compensation is lossy FLEET-WIDE.** The inverse AIO call `ChangeTitle(id,'manager')` is
-   the honest undo (R51.8 permits post-gates to call other AIOs), but the R10 demotion cascade
-   HIBERNATES every team agent and re-promotion does not re-wake them. Either record the killed
-   sessions and relaunch them (R51.10.1 blesses a rebuilt equivalent), or convert G02 into a PRE
-   REFUSAL ("demote the MANAGER first, then delete"). The auto-demote was convenience, not mandate —
-   its own comment (:7055-7057) says it exists to avoid "2 manual steps".
-2. Whether OWO449MR's **A2** framing ("accept irreversibility by placing the uninstall last, no
-   `undo`") survives R51's no-reporting clause, or must become **A1** (CLI-uninstall with a
-   CLI-reinstall undo). The ORDERING both shapes require is unaffected; only the compensation is.
+**D1 — G02 becomes a PRE REFUSAL: "demote the MANAGER first, then delete." The auto-demote is
+removed.**
+
+The alternative was to keep the auto-demote and compensate it with the inverse AIO call
+`ChangeTitle(id,'manager')` (R51.8 permits a post-gate to call another AIO). Rejected because that
+compensation is **lossy fleet-wide and silently so**: the R10 demotion cascade HIBERNATES every team
+agent, and re-promotion does not re-wake them (CLAUDE.md §10 — "Agents remain hibernated; user or
+MANAGER must wake them manually"). So a rolled-back MANAGER delete would restore the title and leave
+the entire fleet asleep — an "undo" that returns a system the caller would not recognise, which is
+exactly what R51.10's *"resume its job without interruption"* forbids. Recording and relaunching
+every killed session is theoretically allowed (R51.10.1 blesses a rebuilt equivalent) but makes a
+delete's rollback depend on N wake operations that can each fail.
+
+The cost is honest and small: deleting a MANAGER now takes two steps instead of one. That is
+precisely the convenience the gate was written for — its own comment (:7055-7057) says it exists to
+avoid "forcing the user through 2 manual steps" — and **a convenience does not outrank a USER
+mandate**. Refusing is also fail-closed, which is what a destructive pipeline should be.
+
+**D2 — the plugin uninstall takes shape A1 (CLI-uninstall with a CLI-reinstall `undo`), not A2.**
+
+A2's "accept irreversibility by placing it last, so no `undo` is needed" is only sound while the gate
+really is last. Under the corrected ordering it is NOT: it must run while the workdir still EXISTS,
+so **G09's folder delete follows it and can fail**. A gate with a gate after it that can fail needs a
+compensation — R51 admits no residue. `claude plugin install --scope local --cwd <dir>` is that
+compensation, and R17's wake invariant already self-heals the core plugin independently, so the
+residual exposure is non-core local plugins only.
+
+**Overrule either in one sentence and the card adapts** — D1 costs a UI step, D2 costs one CLI call
+in a rollback path that should almost never run.
 
 ### THE TEST, and the vacuous pass it must avoid
 
@@ -177,12 +197,15 @@ POST                            G09 folder delete — the SOLE true irreversible
                                 G10 verification (kept as R51.7's success-path validation)
 ```
 
-NEXT ACTION: **ask the USER the two questions above** (G02's fleet-wide-lossy compensation vs
-converting it to a PRE refusal; A1-vs-A2 for the plugin uninstall). Both change what the code must
-be, and both are the kind of decision R51 reserves. Everything else is settled: wrap the whole
-pipeline in `runAioPipeline`, give every mutating gate a row-snapshot `undo`, keep G06 early, put
-G09 dead-last, and write the G08-injection parity test with the load-bearing `failedGateId`
-assertion.
+NEXT ACTION: implement. D1 and D2 are ruled, so nothing is blocking. Order of work:
+1. `ctx`-carried row snapshots + `undo` for G01c (delete the zip), G04, G05, G05b, G06, G07/G07b, G07c.
+2. G02 → PRE refusal (D1); delete the auto-demote and its nested `ChangeTitle`.
+3. Wrap in `runAioPipeline`; G09 folder delete dead-last as the sole irreversible.
+4. The parity test: seed five stores, inject at G08, assert **`failedGateId === 'G08'`** AND
+   per-store byte equality AND the success-path positive control. Then BOTH neuters — delete an
+   `undo` (must red on the gate-id, not on byte equality) and empty an `undo` body (must red on byte
+   equality).
+5. Fold in OWO449MR's CLI uninstall under D2 and close both cards together.
 
 OPEN, not yet traced: whether AMP routing validates on the key alone. If it does, the crash-window
 argument for keeping G06 early is stronger still. It does not change the decision (G06 is

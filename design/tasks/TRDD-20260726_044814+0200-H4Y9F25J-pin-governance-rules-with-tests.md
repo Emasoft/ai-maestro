@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T15:44:16+0200
+updated: 2026-07-30T15:52:05+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
@@ -110,7 +110,46 @@ happy one. The double now writes the one side effect the pipeline reads back.
   mis-resolving G15 reddens BOTH. That asymmetry is the reason both gates are
   cited rather than whichever one was convenient.
 
-**NEXT ACTION — the 26 that remain:**
+**Then R12.3 — 26 → 25 (`7cd4de7d`), and its row was INTERNALLY INCONSISTENT.** It
+cited `:3149-3152 (ChangeTitle::G15)`, and 3149-3152 is squarely inside **G14d**:
+the range named one gate, the qualifier named another, and the qualifier check
+passed regardless because it only proves the LABEL exists in the pipeline. **Two
+guesses from reading were wrong; the ops trace settled it in one run.** On a title
+CHANGE the enforcer is G14d — it uninstalls EVERY enabled role-plugin incompatible
+with the new title, so G15 finds nothing to swap and logs "Cleaned stale
+role-plugins". G15's swap branch is still load-bearing on the path G14d declines by
+its own condition (an agent with NO old title carrying a stale plugin). Both cited,
+each with its own test and neuter. **Recorded rather than hidden: the two gates are
+partly REDUNDANT** — neutering either leaves the end state correct and only the
+path-specific assertion reddens, so a lone end-state assertion would have survived
+losing one defender.
+
+**A mock leak the batch exposed, fixed at the `beforeEach`:** `getPluginsForTitle`,
+set inside the R20.5 test, persisted into R12.3 and routed it through the
+keep-branch — no uninstall, no install, `success === true` throughout.
+`clearAllMocks()` clears CALLS, not IMPLEMENTATIONS.
+
+**THREE consecutive rows had drifted line ranges (R20.5 ~74 lines, R12.3 into the
+wrong gate, R4.4 ~74 lines).** This is not bad luck — it is what a citation format
+whose only machine-checked half is the LABEL produces over time. Assume the range
+is wrong and re-measure it on every row you touch.
+
+**NEXT ACTION — the 25 that remain. R4.4 is measured and ready:**
+
+- **R4.4** ("joining a team auto-assigns MEMBER + the programmer plugin"). Its row
+  cited `:5304-5320`, which is the REMOVE branch (G04a/G04b) — the real G07 is
+  **`:5378-5394`**, already corrected in the map this session (uncited by a test, so
+  no ratchet change). The guard is one line: `ChangeTitle(agentId, desired.role ||
+  'member', { authContext })` — the `|| 'member'` IS R4.4's first half, and its
+  second half (the programmer plugin) is the G15/G16 chain this session just pinned,
+  so the test is "ChangeTeam with NO role ⇒ title member ⇒ `claude plugin install
+  ai-maestro-programmer-agent`". **The cost is the FIXTURE, not the test**: ChangeTeam
+  needs a MANAGER on the host (team ops are manager-gated, R9/R10) plus a team with a
+  COS. `tests/governance/r4-team-composition.test.ts` and `r3-r9-team-governance.test.ts`
+  both already drive ChangeTeam — start from whichever one already seeds a MANAGER
+  rather than porting the r19 fixture.
+- **R8.3** (`DeleteTeam::G05`, "team deletion cancels pending transfers") wants the
+  same team fixture — do it in the same batch, not separately.
 
 - Batch them **by the FILE the guard lives in**. Note 9 of the 26 are `.tsx`
   components (R4.8, R7.1/7.2/7.3/7.7/7.8/7.9, R11.6, R17.16); a "guard" in a

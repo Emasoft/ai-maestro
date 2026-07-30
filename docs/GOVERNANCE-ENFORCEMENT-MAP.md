@@ -59,7 +59,7 @@ Row format is fixed so a regex parses each line:
 | R4.1 | ENFORCED | lib/team-registry.ts:158-176, services/element-management-service.ts:5110 | tests/governance/r4-team-composition.test.ts |
 | R4.2 | ENFORCED | lib/group-registry.ts | tests/governance/r4-team-composition.test.ts |
 | R4.3 | CONTRADICTED | — | — |
-| R4.4 | ENFORCED | services/element-management-service.ts:5304-5320 (ChangeTeam::G07) | — |
+| R4.4 | ENFORCED | services/element-management-service.ts:5378-5394 (ChangeTeam::G07) | — |
 | R4.5 | UNENFORCED | — | — |
 | R4.6 | ENFORCED | lib/team-registry.ts:142-145 | tests/governance/r4-team-composition.test.ts |
 | R4.7 | ENFORCED | lib/team-registry.ts:148-154, services/element-management-service.ts:5056 | tests/governance/r4-team-composition.test.ts |

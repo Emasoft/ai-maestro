@@ -82,21 +82,72 @@ rejected) and G07c (groups unsubscribed) have all committed — so "Registry del
 vitest test forces a mid-pipeline failure and asserts the system unchanged** (`gate-transaction.test.ts`
 drives synthetic gates only; the DeleteAgent tests assert return values).
 
-**THE DESIGN FORK — decide before writing a single `undo`.** `runGateSequence` REFUSES to start when
-a mutating gate lacks an `undo` (R51.7), and three of these gates have no honest one: a revoked AMP
-key cannot be un-revoked (re-issuing yields a DIFFERENT key its correspondents do not hold), and a
-rejected governance request cannot be un-rejected. Writing lossy undos to satisfy the pre-flight
-would be the "fake rollback" G10's own comment warns against. The alternative, which the code half
-implements already: **order by reversibility around an explicit COMMIT POINT** —
+### ⚠ RETRACTED 2026-07-30 — the "commit point" design I proposed here was wrong in BOTH halves
 
-- *reversible prefix, wrapped in `runGateSequence`*: G04 teams, G05b unpersist, G07c groups — each
-  compensated by snapshot-and-restore of the same JSON rows (cheap and EXACT);
-- *the commit point*: G08/G08b, the registry write that decides the agent is gone;
-- *irreversible tail, best-effort after the commit*: G05 tmux kill, G06 revocations, G07/G07b
-  rejections, G09 folder — where a failure is RESIDUE (G10 already reports it), not a rollback question.
+I proposed splitting the pipeline at a commit point because *"three gates have no honest `undo`"*.
+**That premise is false, and I reached it by inferring irreversibility from a verb instead of
+reading the mutation.** Verified first-hand after the advisor challenged it:
 
-That is "check every precondition before the first mutation" applied to a pipeline whose mutations
-are not all equal, and it needs no dishonest compensation.
+| gate | what I claimed | what the code does |
+|---|---|---|
+| G06 AMP keys | "a revoked key cannot be un-revoked; re-issuing yields a DIFFERENT key its correspondents do not hold" | `lib/amp-auth.ts:376-381` flips `key.status 'active'→'revoked'` **on the same record**. `key_hash` is never touched, and correspondents hold no key material the server could invalidate. Undo = flip the recorded rows back — EXACT. |
+| G06 AID tokens | (same) | `lib/aid-token.ts:519-527` is a row `filter`. The rows are removed, not mangled; a snapshot restores them byte-for-byte. |
+| G07/G07b requests | "a rejected request cannot be un-rejected" | `lib/governance-request-registry.ts:242-245` sets `status`/`updatedAt`/`rejectReason` on the same row. Undo = restore three fields. |
+
+All three are lossless JSON row mutations. There was never a gate needing a dishonest compensation,
+so the fork the split existed to resolve does not exist.
+
+**And the split's failure semantics are FORBIDDEN by the rule it was trying to satisfy.**
+`docs/GOVERNANCE-RULES.md:1748-1750`, verbatim: *"**There is no reporting option.** This supersedes
+the 'detect and report the residue' contract of TRDD-KERM18NX … Reporting an invalid state is not an
+alternative to preventing one."* My "irreversible tail, best-effort, failure is RESIDUE that G10
+already reports" **is** the superseded contract, re-proposed under a new name. R51.8 (:1823-1824)
+adds *"a failed post-gate reverts the CHANGE too."*
+
+**What SURVIVES the retraction:** the ORDERING half. Running gates PRE → EXE → POST with the one
+genuinely irreversible operation dead-last is just R51.8's decomposition, and it is still the target.
+What dies is the idea that anything after a "commit point" may be left un-reverted.
+
+### THE PATH (advisor-recommended, citations verified)
+
+Wrap the WHOLE pipeline in `runAioPipeline`. Every mutating gate gets a real `undo`:
+
+- **G01c** — writes the cemetery zip, which IS a mutation and had no `undo` in my plan. Its undo must
+  DELETE the zip, or a rolled-back delete leaves a cemetery entry for a LIVE agent. (Hard delete
+  writes no zip by design, so the hard path relies on per-gate row snapshots instead.)
+- **G04 / G05b / G06 / G07 / G07b / G07c** — snapshot the affected rows into `ctx` before mutating;
+  undo restores them. This is the `Gate.undo` contract in `lib/gate-transaction.ts:34-44`.
+- **G05 tmux kill** — undo = relaunch. R51.10 already blesses this: a new pid is not a state change.
+- **G06 STAYS WHERE IT IS.** Moving revocation after the registry write is a **security regression**:
+  rollback machinery does not survive a process crash, so a crash between the two leaves a deleted
+  agent with LIVE keys, permanently. Today's order fails closed, which is the stated intent at
+  `element-management-service.ts:7156`. Since G06 is reversible, nothing ever forced it late.
+- **G09 folder delete stays dead-last** as the sole true irreversible; a failure after it is the
+  legitimate R51.5 CRITICAL (a rollback that itself failed), not a "reported residue".
+
+**TWO THINGS NEEDING A USER DECISION BEFORE CODING:**
+
+1. **G02's compensation is lossy FLEET-WIDE.** The inverse AIO call `ChangeTitle(id,'manager')` is
+   the honest undo (R51.8 permits post-gates to call other AIOs), but the R10 demotion cascade
+   HIBERNATES every team agent and re-promotion does not re-wake them. Either record the killed
+   sessions and relaunch them (R51.10.1 blesses a rebuilt equivalent), or convert G02 into a PRE
+   REFUSAL ("demote the MANAGER first, then delete"). The auto-demote was convenience, not mandate —
+   its own comment (:7055-7057) says it exists to avoid "2 manual steps".
+2. Whether OWO449MR's **A2** framing ("accept irreversibility by placing the uninstall last, no
+   `undo`") survives R51's no-reporting clause, or must become **A1** (CLI-uninstall with a
+   CLI-reinstall undo). The ORDERING both shapes require is unaffected; only the compensation is.
+
+### THE TEST, and the vacuous pass it must avoid
+
+Seed all five stores (team slot, `sessions.json` row, group subscription, active AMP key, pending
+request), inject a failure at G08, then assert **`failedGateId === 'G08'` AND per-store byte
+equality** — plus a positive control that the success path empties them.
+
+**The reason-assertion is load-bearing, not decoration.** Deleting an `undo` makes the pre-flight
+REFUSE the whole pipeline (`gate-transaction.ts:126-139`): nothing runs, every store is trivially
+unchanged, and a byte-equality-only test passes VACUOUSLY. Only `'G08' !== 'PRECHECK'` reddens.
+Second neuter: empty an undo's BODY (keeping the property) → byte-equality reddens. This is the
+fourth vacuous-assertion trap of the day and the only one caught before the test was written.
 
 **COUPLED CARD — and it reached the SAME architecture independently.** TRDD-OWO449MR (task #103)
 needs the local plugin-uninstall to run through the `claude` CLI, which requires the workdir to still
@@ -108,25 +159,34 @@ hand, means editing the same 500 lines twice."* That is this card's commit-point
 from the other end. Two cards converging on one ordering is the strongest evidence available that the
 ordering is the right one.
 
-The unified target ordering:
+The convergence stands, but read A2 against the retraction above: what both cards genuinely share is
+the ORDERING (the one irreversible operation dead-last), not A2's "no `undo`, accept
+irreversibility" — which is the same clause R51:1748 supersedes. Whether the plugin uninstall is
+reversible via `claude plugin install` decides A1-vs-A2, and it is open question 2 above.
+
+Target ordering, post-retraction — every gate compensated, ONE irreversible, no residue contract:
 
 ```
-READ-ONLY PRELUDE     G00 auth · G01 exists · G01b ASSISTANT refusal        (hard-return, no mutation yet)
-SNAPSHOT              G01c cemetery archive                                 (refuses the delete if it fails)
-REVERSIBLE PREFIX     G02? · G04 teams · G05b unpersist · G07c groups       (runGateSequence; exact snapshot/restore undos)
-COMMIT POINT          G08 registry delete + G08b on-disk verify             (the write that decides the agent is gone)
-IRREVERSIBLE TAIL     G05 tmux kill · G06 revocations · G07/G07b rejections
-                      · CLI plugin uninstall (OWO449MR A2, workdir still
-                        present) · G09 folder rm -rf                        (best-effort; failure = residue, not rollback)
-POST-CONDITION        G10 verify + residue on the result
+PRE  (read-only, no mutation)   G00 auth · G01 exists · G01b ASSISTANT refusal · [G02 as a REFUSAL?]
+EXE  (every gate has an undo)   G01c archive (undo: delete the zip) · G02? · G04 teams · G05 tmux
+                                (undo: relaunch) · G05b unpersist · G06 revocations (STAYS EARLY —
+                                fails closed across a crash) · G07/G07b requests · G07c groups ·
+                                G08 registry + G08b verify · CLI plugin uninstall (workdir alive)
+POST                            G09 folder delete — the SOLE true irreversible, dead-last; a
+                                failure after it is the R51.5 CRITICAL, not a reported residue
+                                G10 verification (kept as R51.7's success-path validation)
 ```
 
-G02's placement is the open question (a nested `ChangeTitle` is not obviously compensable) —
-advisor consulted 2026-07-30.
+NEXT ACTION: **ask the USER the two questions above** (G02's fleet-wide-lossy compensation vs
+converting it to a PRE refusal; A1-vs-A2 for the plugin uninstall). Both change what the code must
+be, and both are the kind of decision R51 reserves. Everything else is settled: wrap the whole
+pipeline in `runAioPipeline`, give every mutating gate a row-snapshot `undo`, keep G06 early, put
+G09 dead-last, and write the G08-injection parity test with the load-bearing `failedGateId`
+assertion.
 
-NEXT ACTION: settle the commit-point design (advisor consulted 2026-07-30), read OWO449MR, then
-retrofit the reversible prefix + write the mid-pipeline-failure parity test that is the real
-acceptance criterion.
+OPEN, not yet traced: whether AMP routing validates on the key alone. If it does, the crash-window
+argument for keeping G06 early is stronger still. It does not change the decision (G06 is
+reversible, so nothing forces it late) — it only raises the cost of getting it wrong.
 
 ## Problem
 

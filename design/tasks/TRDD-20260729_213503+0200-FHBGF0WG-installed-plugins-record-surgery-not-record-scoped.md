@@ -1,10 +1,10 @@
 ---
 trdd-id: FHBGF0WG
 title: installed_plugins.json surgery is key-scoped not record-scoped so one agent's uninstall wipes every agent's record
-column: todo
+column: dev
 scope: project
 created: 2026-07-29T21:35:03+0200
-updated: 2026-07-29T21:35:03+0200
+updated: 2026-07-30T04:04:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

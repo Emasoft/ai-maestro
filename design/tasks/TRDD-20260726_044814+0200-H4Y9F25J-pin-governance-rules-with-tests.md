@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T16:16:11+0200
+updated: 2026-07-30T16:28:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
@@ -189,8 +189,34 @@ runs its G07/G08/G09 through it. The ratchet test already encodes this (TRDD-B6N
 names ChangeClient "the runner's first production caller"); only the plan is stale.
 Re-scope #68 against the real caller set before starting it.
 
-**NEXT ACTION — the grammar question is settled; go straight to the remaining rules.
-R4.4 is measured and ready:**
+### DONE 2026-07-30 — R8.3 (`c895b72b`) and R4.4 (`bfcf8761`). Ratchet **25 → 23**.
+
+Both went in off `r3-r9-team-governance.test.ts`, which already drove `DeleteTeam` — no new fixture.
+
+- **R8.3** (`DeleteTeam::G05`). The risk was never "does the loop run" but "does it reject ONLY
+  what it should" — a guard that rejected every pending request satisfies the rule's own case
+  perfectly. So the fixture carries one record per branch: a pending transfer for THIS team, a
+  pending non-transfer for THIS team, a pending transfer for ANOTHER team, and an already-approved
+  one. The last two ARE the test. Nothing is mocked: `governance-request-registry` resolves through
+  `getStateDir()`, already redirected, so the real registry writes a real file in the fake home and
+  the effect is read back off disk. Neuters: dropping `involvesTeam`, and dropping the
+  `status !== 'pending'` filter — each reddens it.
+- **R4.4** (`ChangeTeam::G07`). One expression, `(desired.role || 'member')`, so the danger was a
+  VACUOUS test: asserting MEMBER after a role-less join passes just as well against a guard that
+  ignores `desired.role` and hardcodes it. The explicit-role case is therefore the vacuity control,
+  and the neuter shows they are independent — defaulting to `'autonomous'` reddens the default case
+  and leaves the control green. R4.4's plugin clause is NOT re-asserted here: it is ChangeTitle's
+  G15/G16, already pinned in `r19-maintainer-title.test.ts`, and re-proving it would mean growing a
+  plugin-resolution fixture to make a weaker copy of an existing pin. The test title was corrected
+  to match what it actually asserts.
+
+**Fixture fact that cost a cycle and will recur:** ChangeTeam's manager gate is **G01b** and calls
+**`getManagerId()` directly** — seeding `loadGovernance`'s return value does nothing and the gate
+still refuses. Diagnosed from the ops trace, which named it in one line, after a first run failed
+with a bare `success === false` naming no gate. The success assertions now carry `result.error` +
+the ops trace in their message so that cannot recur.
+
+**NEXT ACTION — 23 remain. Batch by the FILE the guard lives in:**
 
 - **R4.4** ("joining a team auto-assigns MEMBER + the programmer plugin"). Its row now
   cites `services/element-management-service.ts (ChangeTeam::G07)` — **do not look for

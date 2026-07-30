@@ -1,18 +1,20 @@
 ---
 trdd-id: SPS63XHA
 title: R39.5 and R39.7 are marked ENFORCED but their guards encode the pre-2026-07-22 rule
-column: proposal
+column: planned
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T20:44:27+0200
-updated: 2026-07-29T20:44:27+0200
+updated: 2026-07-30T12:17:34+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: audit
 min-approval-requirement: manager
 mandate: false
-approved: false
+approved: true
+approval-judge: manager
+approval-datetime: 2026-07-30T12:17:34+0200
 derived: false
 priority: 1
 severity: major
@@ -96,3 +98,46 @@ ASSISTANT obeys "not the MAESTRO *user*", and the code lets it message exactly t
   batch 2. NOT a mandate: `min-approval-requirement: manager` because resolving it changes
   either a governance rule's text or the comm-graph's shape, and neither is this agent's to
   decide.
+
+- 2026-07-30T12:20:00+0200 — **RULED** by manager, under the USER's delegation *"i don't care
+  of those details. you solve them."* (recorded verbatim: this is a security boundary, so what
+  authorized the ruling must be auditable rather than inferred).
+
+  **THE TEXT IS AUTHORITATIVE. THE CODE MAY BE STRICTER THAN THE TEXT, NEVER LOOSER.** That
+  single principle resolves both halves of the drift without needing them to be the same kind
+  of defect — and they are not:
+
+  1. **The MISSING `ASSISTANT ↔ MANAGER` channel (R39.9/R39.10) is NOT a defect.** It is code
+     being stricter than the text, and the rules doc already says so in its own changelog —
+     4.7.0: *"ENFORCEMENT of the ASSISTANT<->collaborator AMP + kanban edges is a pending
+     comm-graph build item (code stays stricter than the rule)."* So `'assistant'` holding an
+     empty static edge set is the DOCUMENTED interim state, and the map's UNENFORCED rows for
+     R39.9/R39.10 are already telling the truth. Nothing to walk back; this is a build item.
+  2. **The `ASSISTANT → MAESTRO` grant is the half that must not stand**, because it is the
+     one direction the principle forbids: code LOOSER than the text. R39.5 as tightened on
+     2026-07-22 names the obedience set as *its own user unconditionally* plus — only with the
+     user's explicit permission — *the MANAGER*, and says outright that it does **NOT** obey
+     the MAESTRO USER, who administers only the 4 locked identity fields via the UI (R39.4).
+
+  **AND the map rows for R39.5/R39.7 are DOWNGRADED from ENFORCED**, because they cite code
+  that encodes the pre-2026-07-22 shape. A citation naming real, working code that enforces a
+  SUPERSEDED version of a rule is invisible to every instrument we have — the ratchet sees a
+  live guard, and a test written against that guard PASSES and thereby certifies the
+  divergence. That is the failure mode this whole re-citation campaign exists to catch, and
+  R39.5/R39.7 are two easy ratchet points that would otherwise have laundered a refinement out
+  of existence.
+
+  **ONE QUESTION IS DELIBERATELY LEFT OPEN, and the edge stays until it is answered.**
+  `AssistantSenderContext.recipientIsActiveMaestro` is cited to R37.2 (the *acting* MAESTRO),
+  and obedience is not the same relation as reachability — "does not OBEY the MAESTRO USER"
+  does not by itself forbid *messaging* them. Two readings survive the evidence I gathered:
+  either the field means the human MAESTRO (a channel the text does not grant), or it is the
+  MANAGER channel under the retracted name *"the MAESTRO agent"* that 4.7.1 reverted (in which
+  case it is R39.9, misnamed, and finding (1) above is wrong in the other direction). **Do not
+  delete the edge on the strength of either reading.** Read R39.5's *messaging* clause in full
+  first — deleting a channel a rule requires is worse than leaving one a rule merely fails to
+  mention, and this exact "confident reading of the code beats the instrument" move produced a
+  false positive in this repo before (the `TITLE_PLUGIN_MAP` shadow).
+
+  Implementation is a separate card, not this one: this card's question was *which side is
+  authoritative*, and that is now answered.

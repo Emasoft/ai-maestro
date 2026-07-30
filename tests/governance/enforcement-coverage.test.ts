@@ -426,7 +426,22 @@ const UNAUDITED_RULES = new Set<number>([
 // guard and not the button's attribute counted twice. Sweep NEGATIVE: password-dialog.test.tsx is
 // the only test of PasswordDialog and contains zero occurrences of disabled/busy/submitting or any
 // repeated-click case.
-const MAX_ENFORCED_WITHOUT_TEST = 2
+// 2026-07-30: 2 -> 1. R2.2 pinned by tests/governance/r2-duplicate-name-both-sides.test.tsx +
+// the pre-existing tests/validate-team-mutation.test.ts. The rule's whole content is the word
+// BOTH, and the sweep found one genuine half ALREADY covered: validate-team-mutation drives the
+// real validateTeamMutation and asserts {valid:false, 'A team named "Alpha Squad" already
+// exists', code:409}. The CLIENT half had no vitest coverage at all — the only mentions of
+// TeamCreationWizard in the test tree are inside .scen.md scenario DOCUMENTS, which are prose
+// (a seventh false-positive shape: a file "covered" only by documents describing how to drive
+// it). "Before POST" is asserted against the NETWORK (fetch never called) and against the step
+// gate, not against a red border; and the case-INSENSITIVE case is asserted client-side too,
+// because a case-sensitive client check would pass "shows an inline error" and still hand the
+// user a 409. THREE neuters: killing teamDupe reds the team tests only, killing agentDupe reds
+// the agent test only, and dropping !nameValidation.error from the step gate reds ONLY the
+// cannot-advance test. That last neuter reddened NOTHING at first — step 0's gate also requires
+// a password the test never filled, so Next was disabled for the PASSWORD and the assertion
+// passed for the wrong reason. Second vacuous-assertion catch of the day, same shape as R4.8's.
+const MAX_ENFORCED_WITHOUT_TEST = 1
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [
@@ -572,11 +587,25 @@ describe('governance enforcement coverage — the ratchet', () => {
   })
 
   it('every ENFORCED row names an adversarial test that exists', () => {
+    // Split on commas, exactly as the GUARD column is split. A rule whose guard
+    // lives in two files is often proved by two test files (R2.2: the server
+    // half by tests/validate-team-mutation.test.ts, the client half by the
+    // governance file), and this check validated only the whole string — so a
+    // legitimate two-file Test column read as one nonexistent path. That is the
+    // same asymmetry the Guard column already fixed: a rule cited at one of its
+    // proofs leaves the other invisible, because the citation it lacks names a
+    // real passing test and nothing reddens. Every listed path is now checked.
     const broken = rows
       .filter(r => r.verdict === 'ENFORCED')
       .filter(r => r.test && r.test !== '—')
-      .filter(r => !existsSync(resolve(ROOT, r.test.split(':')[0])))
-      .map(r => `${r.subRule} → ${r.test}`)
+      .flatMap(r =>
+        r.test
+          .split(',')
+          .map(t => t.trim())
+          .filter(t => t && t !== '—')
+          .filter(t => !existsSync(resolve(ROOT, t.split(':')[0])))
+          .map(t => `${r.subRule} → ${t}`),
+      )
     expect(
       broken,
       `An ENFORCED rule names a proof that does not exist:\n  ${broken.join('\n  ')}`,

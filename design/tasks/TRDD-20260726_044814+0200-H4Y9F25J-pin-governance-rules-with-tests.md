@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T19:03:23+0200
+updated: 2026-07-30T19:08:49+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,60 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 2 → 1 — R2.2 DONE. Its server half was ALREADY covered; the client half was not.
+
+**The remaining 1: R20.28** (`install-messaging.sh:936-1110` — a SHELL guard, so it needs a
+subprocess harness with `$HOME` redirected in the spawn env; prove containment by counting the
+real dir BEFORE and AFTER, since an in-process `$HOME` swap cannot contain a process that
+resolves paths at exec).
+
+R2.2's whole content is the word **BOTH** — "enforced both server-side (409) AND client-side
+(inline error BEFORE POST)" — and the two halves defend different failures. The SERVER half is
+the only real gate (every route is curl-able). The CLIENT half is not security: it is the
+difference between the field turning red as you type and filling five wizard steps before
+eating a 409.
+
+**The sweep found one genuine half already covered**, which is a first for this campaign:
+`tests/validate-team-mutation.test.ts` drives the real `validateTeamMutation` and asserts
+`{valid:false, 'A team named "Alpha Squad" already exists', code:409}`. The CLIENT half had no
+vitest coverage at all — the only mentions of `TeamCreationWizard` in the whole test tree are
+inside `.scen.md` scenario DOCUMENTS, which are prose. That is a **seventh** false-positive
+shape: a file "covered" only by documents describing how to drive it.
+
+`tests/governance/r2-duplicate-name-both-sides.test.tsx` (5 tests) adds only what was missing,
+and R2.2's row now cites BOTH test files.
+
+- **"Before POST" is asserted against the NETWORK**, not against a red border: `fetch` was never
+  called, and the step gate refuses to advance.
+- **The case-INSENSITIVE case is asserted client-side too.** `lib/team-registry.ts:106`
+  lowercases both sides; a case-SENSITIVE client check would pass "shows an inline error" on an
+  exact match and still hand the user a 409 on `alpha squad`. The halves must AGREE, not merely
+  both exist.
+
+| neuter | reddened |
+|---|---|
+| kill `teamDupe` | the two team tests only |
+| kill `agentDupe` | the agent test only |
+| drop `!nameValidation.error` from the step gate (`:324`) | ONLY the cannot-advance test |
+
+**Neuter C reddened NOTHING at first** — the second vacuous-assertion catch of the day, same
+shape as R4.8's anchored regex. Step 0's gate is
+`name.length >= 4 && !nameValidation.error && password.length > 0`, and the test never filled
+the password, so Next was disabled for the PASSWORD and `expect(disabled).toBe(true)` passed
+for a reason unrelated to the duplicate. The test now fills the password AND asserts Next is
+ENABLED on a clean name first, so the duplicate is provably the only thing that can block it.
+
+**A ratchet bug this surfaced, and fixed.** The map's **Test** column was validated as a SINGLE
+path while the **Guard** column has always been comma-split — so a legitimate two-file Test
+column read as one nonexistent path. That is the very asymmetry this campaign keeps finding one
+level up: a rule cited at one of its proofs leaves the other invisible, because the citation it
+lacks names a real passing test and nothing reddens. The check now splits on commas and
+validates every path; proven load-bearing by pointing the SECOND path at a nonexistent file and
+watching it red (the old check could not see it).
+
+Verification: guard restored byte-identical; tsc 0; full suite **302 files / 4348 passed /
+2 skipped**, exit 0.
 
 ### RATCHET 3 → 2 — R7.1 DONE. The rule's content is a COUNT, so the assertion is a count.
 

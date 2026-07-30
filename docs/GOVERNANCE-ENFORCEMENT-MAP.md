@@ -42,7 +42,7 @@ Row format is fixed so a regex parses each line:
 | R1.5 | ENFORCED | lib/team-registry.ts:427 | tests/governance/r1-r2-team-registry.test.ts |
 | R1.6 | INVENTED | — | — |
 | R2.1 | ENFORCED | lib/team-registry.ts:106-110 | tests/governance/r1-r2-team-registry.test.ts |
-| R2.2 | ENFORCED | lib/team-registry.ts:107, components/teams/TeamCreationWizard.tsx:201 | — |
+| R2.2 | ENFORCED | lib/team-registry.ts:107, components/teams/TeamCreationWizard.tsx:201 | tests/governance/r2-duplicate-name-both-sides.test.tsx, tests/validate-team-mutation.test.ts |
 | R2.3 | ENFORCED | lib/team-registry.ts:107 | tests/governance/r1-r2-team-registry.test.ts |
 | R3.1 | CONTRADICTED | — | — |
 | R3.2 | ENFORCED | services/element-management-service.ts (ChangeTitle::G07) | tests/governance/r3-r9-team-governance.test.ts |

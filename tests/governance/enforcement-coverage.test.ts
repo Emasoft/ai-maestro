@@ -207,12 +207,22 @@ const UNAUDITED_RULES = new Set<number>([
 // Nothing is mocked — `governance-request-registry` resolves its file through `getStateDir()`, which
 // this fixture already redirects, so the real registry writes a real file inside the fake home and
 // the effect is read back off disk rather than off a spy.
+// 2026-07-30: R4.4 pinned in the same file — 24 → 23. Its guard is ONE expression,
+// `(desired.role || 'member')`, so the risk is not that it fails but that a test of it is vacuous:
+// joining without a role and asserting MEMBER passes equally well against a guard that IGNORES
+// desired.role and hardcodes 'member' — a different and wrong rule. The explicit-role case is
+// therefore not a second scenario but the vacuity control, and the neuter shows they are
+// independent: changing the default to 'autonomous' reddens the default case and leaves the control
+// green. R4.4's second clause (the programmer plugin) is deliberately NOT re-asserted here — it is
+// ChangeTitle's G15/G16 chain, already pinned with its own neuters in r19-maintainer-title.test.ts,
+// and re-proving it through ChangeTeam would mean growing a plugin-resolution fixture to produce a
+// weaker copy of an existing pin.
 //
 // Take this number from THIS test's own failure message, never from a hand-written grep. Mine said
 // 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule `R17.18a`, and a count from the
 // wrong pattern reads as a clean win — I was one commit from locking in a number my own awk had
 // invented.
-const MAX_ENFORCED_WITHOUT_TEST = 24
+const MAX_ENFORCED_WITHOUT_TEST = 23
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

@@ -1334,6 +1334,87 @@ describe('DeleteTeam::G05 — deleting a team cancels the transfers that pointed
   })
 })
 
+describe('ChangeTeam::G07 — joining a team with no role stated makes the agent a MEMBER (R4.4)', () => {
+  /**
+   * R4.4: joining a team auto-assigns MEMBER and the programmer role-plugin. The whole guard is one
+   * expression — `const effectiveRole = (desired.role || 'member').toLowerCase()` — feeding
+   * `ChangeTitle(agentId, effectiveRole, { authContext })`. The `|| 'member'` IS the rule.
+   *
+   * Why this needs TWO cases and not one. A test that only joins without a role, and only asserts
+   * the title came out MEMBER, passes just as well against a guard that IGNORES `desired.role` and
+   * hardcodes 'member' — which is a different (and wrong) rule. The explicit-role case is what
+   * separates "member is the DEFAULT" from "member is the ONLY value", so it is not an extra
+   * scenario, it is this test's vacuity control.
+   *
+   * Historical note worth keeping: the pre-2026 bug here was the OPPOSITE of a missing default —
+   * `authContext` was not forwarded, so ChangeTitle's Gate 0 hard-rejected, the title was never
+   * assigned, and the agent sat in the team with governanceTitle=null (SCEN-020 BUG-001 /
+   * SCEN-007 P0-003). Both cases below assert a real title, so losing the forward reddens them too.
+   */
+  const joinFixture = (title: string | null) => {
+    seedTeams([{ id: 'team-join', name: 'Join Team', agentIds: [] }])
+    const agents = [makeAgentRecord({ id: 'agent-j', name: 'agent-j', governanceTitle: title })]
+    seedAgents(agents) // write-through updateAgent mutates this array, so it reads back the persist
+    // Team ops are manager-gated (R9/R10) and this file's beforeEach deliberately leaves the host
+    // manager-less, so without this ChangeTeam refuses at G01b — "Team operations are blocked: no
+    // MANAGER exists on this host" — and never reaches G07. Diagnosed from the ops trace, not from
+    // reading: the failure was a bare `success === false` naming no gate.
+    //
+    // It must be `getManagerId`, NOT `loadGovernance`. G01b calls `getManagerId()` directly, so
+    // seeding a managerId into loadGovernance's return value changes nothing and the gate still
+    // refuses — which is exactly what the second run showed.
+    mockGovernance.getManagerId.mockReturnValue('agent-mgr')
+    return agents
+  }
+
+  it('with NO role stated, sets and PERSISTS the title MEMBER', async () => {
+    const agents = joinFixture(null)
+
+    const { ChangeTeam } = await import('@/services/element-management-service')
+    // NOTE the desired-state object: `teamId` only. No `role` key at all — that absence is the
+    // input under test.
+    const result = await ChangeTeam('agent-j', { teamId: 'team-join' }, OWNER_CTX)
+
+    // Pin the REASON, not just the outcome — an earlier gate refusing also yields success===false,
+    // so carry the trace into the message or a failure here says nothing about which gate refused.
+    expect(result.success, `${result.error}\nops:\n${result.operations.join('\n')}`).toBe(true)
+    expect(
+      result.operations.some(o => o === 'G07: Title set to MEMBER'),
+      `G07 did not set MEMBER. ops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+    // ...and that it PERSISTED, not merely that a log line was pushed.
+    expect(agents.find(a => a.id === 'agent-j')!.governanceTitle).toBe('member')
+
+    // R4.4's SECOND half — "and the programmer role-plugin" — is deliberately NOT asserted here,
+    // and the reason is worth stating so nobody adds it back as an oversight.
+    //
+    // That half is not ChangeTeam's code at all: G07 hands off to ChangeTitle, whose G15 resolves
+    // title→plugin and G16 installs it. That chain is already pinned, adversarially and with its
+    // own neuters, in tests/governance/r19-maintainer-title.test.ts (R19.10 + R20.5, which assert
+    // the actual `claude plugin install <plugin> <marketplace> --scope local` argv). Re-asserting it
+    // through ChangeTeam would need this file to grow a whole plugin-resolution fixture —
+    // `listRolePlugins`/`getPluginsForTitle` are stubbed to [] here, so nothing resolves and nothing
+    // installs — to re-prove a guard that is already covered. A second, weaker copy of an existing
+    // pin is not coverage; it is a second thing to keep true.
+    //
+    // What ChangeTeam::G07 uniquely owns is the DEFAULT, and that is what the two cases above pin.
+  })
+
+  it('VACUITY CONTROL — an explicit role wins, so MEMBER is the default and not a constant', async () => {
+    const agents = joinFixture(null)
+
+    const { ChangeTeam } = await import('@/services/element-management-service')
+    const result = await ChangeTeam('agent-j', { teamId: 'team-join', role: 'architect' }, OWNER_CTX)
+
+    expect(result.success).toBe(true)
+    expect(
+      result.operations.some(o => o === 'G07: Title set to ARCHITECT'),
+      `an explicitly requested role was overridden. ops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+    expect(agents.find(a => a.id === 'agent-j')!.governanceTitle).toBe('architect')
+  })
+})
+
 describe('ChangeTitle::G17 — a title whose role-plugin cannot be installed is QUARANTINED, not rejected', () => {
   it('TRDD-C9LXXT76: 0 role-plugins after G16 ⇒ roleMissing=true + hibernate — deleting the G17 recovery leaves a titled, role-less, RUNNABLE agent', async () => {
     /**

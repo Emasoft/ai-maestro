@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: dev
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-07-30T04:23:54+0200
+updated: 2026-07-30T04:27:18+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -197,6 +197,28 @@ neuter then reddened exactly that one test.
    true **by construction** (the gate sits inside the folder-deleted branch) and I read the code to
    confirm it — but "true by construction" is a claim about the code, not a guard against the next
    edit. This is the same distinction the FHBGF0WG gap was: implemented, and pinned by nothing.
+
+   **And it is harder than it looks — measured, so the next session does not walk into it.** Five
+   test files DO drive `DeleteAgent` end-to-end (`tests/governance/r3-r9-team-governance.test.ts`
+   with both `hard: true` and `hard: false`, `tests/services/element-management-assistant-title.test.ts`,
+   …), and **none of them can reach G09b.** They contain themselves with **layer 2 only** — the
+   `@/lib/ecosystem-constants` path functions — and deliberately do NOT `vi.mock('os')` (the file's
+   own comment explains why layer 2 is the reliable one). But `element-management-service.ts`
+   resolves `const HOME = homedir()` at MODULE LOAD, so in those files `agentsRoot` is the
+   **developer's real `~/agents`** while the fixture workdir is under a temp `FAKE_HOME/agents/` —
+   `resolvedDir.startsWith(agentsRoot)` is false, and the whole branch is skipped.
+
+   So the very containment that makes those hard-delete tests SAFE (no real `rm -rf`, no real
+   record write) is what makes the branch **unreachable**: `rm -rf`, the transcript-dir purge, and
+   G09b are all inside it, and no test has ever executed any of them. Adding `vi.mock('os')` to one
+   of those existing files is NOT the fix — it would flip `agentsRoot` to the fake home and thereby
+   ARM the real `rm -rf` for every existing hard-delete case in a ~1 400-line file at once.
+
+   The fix is a **dedicated file** that mocks BOTH layers from the start, so the branch is armed
+   only against a temp tree it owns: seed `FAKE_HOME/agents/<name>/`, seed the store with one local
+   record for it plus a sibling and a user row, drive `DeleteAgent(hard)`, assert the folder is gone
+   AND only that record went; then `DeleteAgent(soft)` and assert both the folder and the record
+   survive. Neuter: move G09b out of the branch and confirm the soft case reddens.
 2. The live create/hard-delete cycle.
 3. The 93 pre-existing orphans — untracked data outside the repo on the USER's machine, so RULE 0
    holds it. This card IS the report; the ruling is not mine.

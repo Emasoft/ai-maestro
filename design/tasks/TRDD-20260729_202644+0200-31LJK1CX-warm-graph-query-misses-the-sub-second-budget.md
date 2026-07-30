@@ -5,7 +5,7 @@ column: backburner
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T20:26:44+0200
-updated: 2026-07-29T20:26:44+0200
+updated: 2026-07-30T03:18:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -84,6 +84,38 @@ Whatever is chosen, it must keep the property the index was built to have: **an 
 an authority.** A staleness check that can be wrong converts a fast answer into a wrong one, and
 the differential test (`tests/unit/pillar-graph-cli.test.ts`) is what any change here has to keep
 green.
+
+## ADDENDUM 2026-07-30 — `TRDD-C069SK9E` re-measured this, and REFUTED one row of the table above
+
+C069SK9E bounded the list verbs (`--limit`, default 20) and index-backed `next`, which gave a clean
+A/B on the one attribution this card guessed at.
+
+**The decomposition row *"remainder ~0.20 s = computing `roots` + rendering 7 782 rows"* credits
+rendering with a cost it does not have.** On a fresh 10⁵ fixture, capping the output to 20 rows
+changes the wall clock by nothing:
+
+| verb | default cap (20 rows) | `--limit 0` (all rows) |
+|---|---|---|
+| `board` | 1.02 · 1.06 s | 1.06 · 1.07 · 1.08 s |
+| `roots` | 1.03 · 1.05 s | 1.05 · 1.07 · 1.10 s |
+
+So the residual over budget is the **freshness probe alone** — this card's actual subject — and the
+bound C069SK9E added is a usability fix, not a performance one. Worth stating because the two are
+easy to conflate: 100 000 lines of output is unusable *and* nearly free.
+
+**Two more datapoints that narrow the target:**
+
+- **`unblocks` MEETS the budget** at 0.98-1.00 s, while `roots`/`board`/`why`/`next` sit at
+  1.01-1.11 s. Every one of them pays the same O(N) probe, so the ~0.05 s that separates them is the
+  per-verb compute — small, and NOT where the fix is.
+- **`next` is now inside the same band** (17.1 s → 1.03-1.08 s), so all five graph verbs are
+  uniformly probe-bound. Whatever replaces the probe fixes all of them at once, which is what makes
+  this card the single remaining lever on `C069SK9E`'s box 1.
+
+**Do not read the absolute numbers against this card's originals.** Its 1.13-1.17 s was taken with a
+**0.12 s** boot floor; the 2026-07-30 runs go through `scripts/with-node.sh` and pay **0.21 s**. Two
+harnesses, both correct, ~0.09 s apart before any work is done — quoting one against the other would
+manufacture a change that did not happen.
 
 ## Acceptance
 

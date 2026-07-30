@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T02:31:00+0200
+updated: 2026-07-30T03:22:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -230,9 +230,10 @@ for `7CHUK1AZ`.
 
 **NEXT — the completion gate stays correctly shut. Five children are non-terminal, each read from its
 own `column:` rather than inferred:** `Q3GZJI1X` (`dev`, **HELD FOR THE USER**), `8KDIB2LT`
-(**`blocked` as of 2026-07-30 — 3/4 boxes closed**; see below), `C069SK9E` (`todo` — graph+board at
-10⁵, entangled with `31LJK1CX`), `31LJK1CX` (`backburner` — the warm graph query misses the budget;
-the freshness probe alone is 0.59 s of it), `C4YJAUD9` (`dev` — **BUILT and verified 2026-07-30**
+(**`blocked` as of 2026-07-30 — 3/4 boxes closed**; see below), `C069SK9E` (`dev` — **BUILT
+2026-07-30** (`2ecf491c`); 3 of 4 boxes closed, box 1 left open on purpose because it closes in
+`31LJK1CX`), `31LJK1CX` (`backburner` — the warm graph query misses the budget; the freshness probe
+alone is 0.59 s of it, and it is now the SINGLE remaining lever, see below), `C4YJAUD9` (`dev` — **BUILT and verified 2026-07-30**
 (`5113591d`); its ONE remaining box is the `3P-IDX` clause, deliberately batched with YN8EQWYP's into
 the next spec bump so the janitor is notified once, which is why it is not terminal).
 
@@ -260,12 +261,27 @@ UNCHANGED, proven by A/B against HEAD-with-it-stashed on the same 10⁴ fixture 
 which also showed ~0.5 s of any such reading is `npx tsx` startup — so 4VCXRHAY's 0.37 s and this
 0.58 s are different harnesses and must not be quoted against each other.
 
-**Best next: `C069SK9E` (`todo`, graph+board at 10⁵) — the only non-terminal child that is neither
-USER-held, blocked, nor awaiting a batched spec bump.** It is entangled with `31LJK1CX`
-(`backburner`), whose measurement — the freshness probe costing 0.59 s of the warm query — is now
-corroborated from a second direction: today's 10⁴ A/B puts the index-backed query at ~0.08 s of real
-work once `npx tsx` startup is subtracted, so at 10⁵ the probe genuinely is the dominant term rather
-than an artefact of how the total was timed. Read them together, not separately.
+**`C069SK9E` is BUILT (`2ecf491c`)** — `next` was the last graph question the index could not answer
+(it called `readyQueue(designDir)`, a SECOND corpus walk through the doctor): **17.1 s → 1.05 s at
+10⁵**, byte-identical over **31 111 ranked rows**. `board`/`roots`/`next` are now bounded
+(`--limit`, default 20; `--column`), every truncation names what it dropped, and `--limit 0`
+reproduces the pre-change bytes exactly — the bound is a default, not a capability removed. Two of
+its four boxes were already met before any code was written, and the one the card *named* (`board`)
+turned out to be one of **three** verbs with the identical unbounded defect.
+
+Its differential also found a **real bug in the WRITE GATE**: `lib/trdd-doctor.ts`'s `asList` was
+array-only, so a legal bare scalar (`npt: TRDD-X`) was invisible to the linter in **all seven** of
+its call sites — the same divergence `refList` was exported to end one layer down, kept longer here
+because a rule that cannot see an edge reports no finding about it. Inert on today's corpus
+(**0 of 196** live cards use the scalar form) and now pinned from both ends.
+
+**Best next: `31LJK1CX` (`backburner`) — it is the SINGLE remaining lever on the interactive
+budget.** C069SK9E's measurement collapsed five separate questions into one: all five graph verbs
+now sit at 0.98-1.11 s against a < 1 s budget, all paying the same O(N) `syncIndex` freshness probe,
+so whatever replaces that probe fixes every one of them at once. It also **refuted** one row of
+31LJK1CX's own decomposition — capping the output moves the clock by nothing (`board` 1.02-1.06
+capped vs 1.06-1.08 uncapped), so the *"remainder = computing roots + rendering 7 782 rows"*
+attribution credited rendering with a cost it does not have. The probe is the whole residual.
 Also settled: `Q3GZJI1X` does **not** gate the lint — an ambiguous `relevant-rules:` target is still
 unambiguously a TRDD → PRRD edge, and that direction is legal under either reading.
 

@@ -46,7 +46,7 @@ Row format is fixed so a regex parses each line:
 | R2.3 | ENFORCED | lib/team-registry.ts:107 | tests/governance/r1-r2-team-registry.test.ts |
 | R3.1 | CONTRADICTED | — | — |
 | R3.2 | ENFORCED | services/element-management-service.ts:2291-2303 (ChangeTitle::G07) | tests/governance/r3-r9-team-governance.test.ts |
-| R3.3 | ENFORCED | services/element-management-service.ts:2338-2354 | tests/governance/r3-r9-team-governance.test.ts |
+| R3.3 | ENFORCED | services/element-management-service.ts:2539-2544 (ChangeTitle::G08) | tests/governance/r3-r9-team-governance.test.ts |
 | R3.4 | ENFORCED | lib/team-registry.ts:131-138 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.5 | ENFORCED | services/governance-service.ts:66-83 | tests/governance/r3-r9-team-governance.test.ts |
 | R3.6 | ENFORCED | lib/authorization.ts:321-326 | tests/unit/headless-router-auth-mirror.test.ts |
@@ -136,7 +136,7 @@ Row format is fixed so a regex parses each line:
 | R11.12 | CONTRADICTED | — | — |
 | R12.1 | UNENFORCED | — | — |
 | R12.2 | CONTRADICTED | — | — |
-| R12.3 | ENFORCED | services/element-management-service.ts:2296-2314 | — |
+| R12.3 | ENFORCED | services/element-management-service.ts:3149-3152 (ChangeTitle::G15) | — |
 | R12.4 | INVENTED | — | — |
 | R12.5 | CONTRADICTED | — | — |
 | R12.6 | UNENFORCED | — | — |
@@ -169,12 +169,12 @@ Row format is fixed so a regex parses each line:
 | R16.5 | CONTRADICTED | — | — |
 | R16.6 | BEHAVIOURAL | — | — |
 | R16.7 | CONTRADICTED | — | — |
-| R17.1 | ENFORCED | services/element-management-service.ts:7530-7551 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.1 | ENFORCED | lib/agent-invariants.ts:111-146, services/element-management-service.ts:8220-8252 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.2 | ENFORCED | services/element-management-service.ts:1531-1533 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.3 | UNENFORCED | — | — |
 | R17.4 | UNENFORCED | — | — |
 | R17.5 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R17.6 | ENFORCED | services/element-management-service.ts:7522-7551 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.6 | ENFORCED | services/element-management-service.ts:8220-8252 (CreateAgent::G11) | tests/integration/createagent-g11-r17-core.test.ts |
 | R17.7 | UNENFORCED | — | — |
 | R17.8 | ENFORCED | services/element-management-service.ts:724-729 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.9 | ENFORCED | services/element-management-service.ts:1193-1194 (InstallElement::PG01) | tests/governance/r17-r11-core-plugin-binding.test.ts |
@@ -183,7 +183,7 @@ Row format is fixed so a regex parses each line:
 | R17.12 | UNENFORCED | — | — |
 | R17.13 | ENFORCED | services/plugin-storage-service.ts:182-266 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.14 | UNENFORCED | — | — |
-| R17.15 | ENFORCED | services/element-management-service.ts:714-722 | tests/governance/r17-r11-core-plugin-binding.test.ts |
+| R17.15 | ENFORCED | services/element-management-service.ts:731-738 (InstallElement::G08), services/element-management-service.ts:3590-3594 (ChangePlugin::G01b) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.16 | ENFORCED | components/agent-profile/PluginsTab.tsx:244-245 | — |
 | R17.17 | ENFORCED | server.mjs:1766-1799 | — |
 | R17.18 | RULING-NEEDED | — | — |
@@ -206,9 +206,9 @@ Row format is fixed so a regex parses each line:
 | R18.8 | ENFORCED | lib/converter/utils/warnings.ts:14-22, services/element-management-service.ts:5705-5715 | — |
 | R18.9 | ENFORCED | services/element-management-service.ts:5517-5908 | tests/governance/r18-client-change-continuity.test.ts |
 | R18.10 | ENFORCED | services/element-management-service.ts:5882 (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
-| R19.1 | ENFORCED | services/element-management-service.ts:2385 | — |
+| R19.1 | ENFORCED | services/element-management-service.ts:2595-2612 (ChangeTitle::EXE) | — |
 | R19.2 | UNENFORCED | — | — |
-| R19.3 | ENFORCED | services/element-management-service.ts:2400-2411 | — |
+| R19.3 | ENFORCED | services/element-management-service.ts:2631-2645 (ChangeTitle::G9a) | — |
 | R19.4 | UNENFORCED | — | — |
 | R19.5 | UNENFORCED | — | — |
 | R19.6 | UNENFORCED | — | — |

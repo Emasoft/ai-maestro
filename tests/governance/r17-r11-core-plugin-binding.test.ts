@@ -337,6 +337,65 @@ describe('R17.8 / R17.15 — InstallElement G08 core-plugin protection gate (ser
 })
 
 // ============================================================================
+// R17.15 — ChangePlugin's G01b core-plugin guard: the OTHER pipeline the rule names
+// ============================================================================
+// WHY THIS BLOCK EXISTS (TRDD-W8NA7ROZ). R17.15 names TWO pipelines — "The
+// `ChangePlugin` / `InstallElement` pipeline MUST reject disable requests" — and only the
+// InstallElement half was pinned. Measured 2026-07-30: deleting the `|| desired.action ===
+// 'disable'` clause from ChangePlugin's G01b left the ENTIRE suite green (276 files, 4123
+// tests, 0 failures). So an edit could have silently reopened core-plugin disabling through
+// the pipeline the rule names FIRST, and nothing would have said a word.
+//
+// This is the general trap, worth naming: when a rule cites N enforcement sites, a suite that
+// pins N-1 of them looks exactly like a suite that pins all N. Count the sites in the RULE
+// TEXT, then mutation-prove each one separately.
+describe('R17.15 — ChangePlugin G01b core-plugin protection gate (services/element-management-service.ts)', () => {
+  let agentDir: string
+
+  beforeEach(() => {
+    agentDir = makeTempDir('r17-15-changeplugin-')
+  })
+
+  it('R17.15: ChangePlugin refuses to DISABLE the core plugin — the half of the rule that was enforced but unpinned', async () => {
+    const { ChangePlugin } = await import('@/services/element-management-service')
+    const result = await ChangePlugin(
+      null,
+      { name: 'ai-maestro-plugin', marketplace: 'ai-maestro-plugins', action: 'disable', scope: 'local', agentDir },
+      OWNER_CTX,
+    )
+    expect(result.success).toBe(false)
+    // Assert the REASON, not merely that it failed: without this, any earlier gate refusing
+    // for an unrelated cause would satisfy the test and the guard could still be gone.
+    expect(result.error).toMatch(/core system plugin and cannot be disabled/i)
+  })
+
+  it('R17.15/R17.14: ChangePlugin refuses to UNINSTALL it too — the sibling clause in the same guard', async () => {
+    const { ChangePlugin } = await import('@/services/element-management-service')
+    const result = await ChangePlugin(
+      null,
+      { name: 'ai-maestro-plugin', marketplace: 'ai-maestro-plugins', action: 'uninstall', scope: 'local', agentDir },
+      OWNER_CTX,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/core system plugin and cannot be uninstalled/i)
+  })
+
+  it('positive control — ChangePlugin ALLOWS enable, so the two refusals above are about the ACTION and not a blanket block', async () => {
+    // Without this, a guard that rejected every core-plugin action whatsoever would pass both
+    // tests above while breaking R17's re-enablement path (which the rule explicitly permits
+    // inside an AIO pipeline). The assertion is that G01b did NOT refuse — a later gate may
+    // still fail on this bare temp dir, so pin the ABSENCE of the R17 refusal, not success.
+    const { ChangePlugin } = await import('@/services/element-management-service')
+    const result = await ChangePlugin(
+      null,
+      { name: 'ai-maestro-plugin', marketplace: 'ai-maestro-plugins', action: 'enable', scope: 'local', agentDir },
+      OWNER_CTX,
+    )
+    expect(result.error || '').not.toMatch(/cannot be (disabled|uninstalled)/i)
+  })
+})
+
+// ============================================================================
 // R17.1 / R17.2 / R17.6 / R17.9 — InstallElement's install/verify/flag chain
 // ============================================================================
 describe('R17.1 / R17.2 / R17.6 / R17.9 — InstallElement CLI-install + PG01 verify + PG02 registry-flag gates', () => {

@@ -7,13 +7,27 @@
  *     correct endpoint routing, error handling, JSON parse failure on error response
  *
  * Strategy:
- * Since useGovernance is a React hook (requires render context), and this project uses
- * vitest in node environment without @testing-library/react, we test the fetch call
+ * Since useGovernance is a React hook (requires render context), we test the fetch call
  * contracts by directly invoking the logic patterns from the hook. We mock global.fetch
  * and verify the exact request bodies, endpoints, and error handling.
  *
  * The functions under test are extracted into standalone async functions that mirror
  * the hook's submitConfigRequest and resolveConfigRequest callbacks exactly.
+ *
+ * CORRECTION 2026-07-30 — the premise below is STALE, and it had a cost. This header used to
+ * say the project "uses vitest in node environment WITHOUT @testing-library/react" and filed a
+ * "Phase 2: add it" TODO. That library (v14) and jsdom (v25) are BOTH installed, and
+ * tests/unit/password-dialog.test.tsx has been rendering components via a per-file
+ * `// @vitest-environment jsdom` for some time. So the limitation was real when written and is
+ * not real now — and because nothing re-checked it, R7.2/R7.9 (the loading-state rules, whose
+ * only guard is this hook's `useState(true)`) stayed unpinned on the strength of a comment.
+ * They are now pinned for real, against the REAL hook, in
+ * tests/governance/r7-governance-loading-state.test.ts.
+ *
+ * The replica approach below is kept because it does verify the request/response contract
+ * usefully — but note what it cannot do: a replica survives deleting the thing it replicates,
+ * so it pins the CONTRACT, never the hook. Anything asserting the hook's own behaviour belongs
+ * in a renderHook test, not here.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -28,14 +42,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 //   2. React state updates (loading, error) are NOT tested.
 //   3. Memoization via useCallback is NOT tested.
 // Testing the real hook requires @testing-library/react or a minimal hook
-// wrapper to render it in a React context, which is not available in this
-// project's vitest node environment. The replicas verify the API call contract
-// (correct endpoints, request bodies, error handling) which is the most
-// critical aspect for integration correctness.
+// wrapper to render it in a React context. That WAS unavailable here; it is
+// available now (RTL v14 + jsdom v25, per-file `// @vitest-environment jsdom`),
+// so limitation 2 is LIFTED — the loading state is pinned against the real hook
+// in tests/governance/r7-governance-loading-state.test.ts (R7.2 + R7.9).
+// Limitations 1 and 3 remain open and are now merely untested, not untestable.
+// The replicas verify the API call contract (correct endpoints, request bodies,
+// error handling) which is the most critical aspect for integration correctness.
 // ============================================================================
 
 // KNOWN LIMITATION: Tests standalone function replicas, NOT the actual useGovernance hook.
-// Phase 2: Add @testing-library/react to render the hook and test refresh(), state updates, and memoization.
+// (refresh() and useCallback memoization only — the state half is covered, see above.)
 
 /**
  * Replica of useGovernance.submitConfigRequest — sends a configure-agent governance request.

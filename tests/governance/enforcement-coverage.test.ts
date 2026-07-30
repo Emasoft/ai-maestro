@@ -229,7 +229,16 @@ const UNAUDITED_RULES = new Set<number>([
 // the two gates run in order, so a refusal test that withheld both credentials would pass with
 // either gate deleted. Each test lets the OTHER gate pass, and each neuter reddens exactly one
 // test (drop enforceMaestro -> only the R35.2 test; drop requireSudoToken -> only the R34.2 test).
-const MAX_ENFORCED_WITHOUT_TEST = 21
+// 2026-07-30: 21 -> 19. R7.2 + R7.9 pinned by tests/governance/r7-governance-loading-state.test.ts
+// — the FIRST rules here pinned by rendering a component/hook, which the 2026-07-30 STATE ruling
+// unblocked (a presentation rule's only possible enforcement point IS the client, so `.tsx` is
+// correct and complete; the "a client check is no check" principle governs AUTHORIZATION).
+// R7.9's guard is ONE expression (`useState(true)`), so its first version was VACUOUS and the
+// neuter caught it: `result.current` is read AFTER effects flush, and the hook's effect sets
+// loading=true itself, so the assertion passed with the initial value INVERTED. It now samples
+// DURING render. Paired with a vacuity control (loading must reach false), because a lone
+// "loading === true" assertion also passes against a hardcoded constant.
+const MAX_ENFORCED_WITHOUT_TEST = 19
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

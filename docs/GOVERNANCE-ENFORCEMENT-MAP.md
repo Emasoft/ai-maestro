@@ -90,14 +90,14 @@ Row format is fixed so a regex parses each line:
 | R6.13 | ENFORCED | lib/agent-registry.ts:312-332 | tests/governance/r6-communication-graph.test.ts |
 | R6.14 | UNENFORCED | — | — |
 | R7.1 | ENFORCED | components/sidebar/TeamListView.tsx:94 | — |
-| R7.2 | ENFORCED | hooks/useGovernance.ts:48 | — |
+| R7.2 | ENFORCED | hooks/useGovernance.ts:48 | tests/governance/r7-governance-loading-state.test.ts |
 | R7.3 | ENFORCED | components/sidebar/TeamListView.tsx:192 | — |
 | R7.4 | UNENFORCED | — | — |
 | R7.5 | UNENFORCED | — | — |
 | R7.6 | CONTRADICTED | — | — |
 | R7.7 | ENFORCED | components/sidebar/TeamCard.tsx:71 | — |
 | R7.8 | ENFORCED | components/teams/TeamOverviewSection.tsx | — |
-| R7.9 | ENFORCED | hooks/useGovernance.ts:48 | — |
+| R7.9 | ENFORCED | hooks/useGovernance.ts:48 | tests/governance/r7-governance-loading-state.test.ts |
 | R8.1 | ENFORCED | lib/team-registry.ts:306 | — |
 | R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |
 | R8.3 | ENFORCED | services/element-management-service.ts (DeleteTeam::G05) | tests/governance/r3-r9-team-governance.test.ts |

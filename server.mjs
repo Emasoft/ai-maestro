@@ -1880,6 +1880,23 @@ async function startServer(handleRequest) {
       console.warn('[Startup] Auto-update scheduler init failed (non-fatal):', err?.message || err)
     }
 
+    // ── Absorbed-duty scheduler (ai-maestro#102, TRDD-5X3P79Q6) ─────────
+    // UNCONDITIONAL — never gated on the master toggle above. These three
+    // chores (marketplace-refresh, version-update, user-plugins-update) were
+    // absorbed from the janitor daemon, which ran them whenever the janitor
+    // was installed+armed — no user-facing preference. Re-gating them behind
+    // this server's OWN opt-in toggle would silently revoke a consent the
+    // user already gave the janitor. Each tick re-checks
+    // isJanitorInstalledAndArmed() itself, so it self-heals in both
+    // directions with no restart needed.
+    try {
+      const { startAbsorbedDutyScheduler } = await import('./services/auto-update-service.ts')
+      startAbsorbedDutyScheduler()
+      console.log('[Startup] Absorbed-duty scheduler initialized (always on; gated per-tick on janitor installed+armed)')
+    } catch (err) {
+      console.warn('[Startup] Absorbed-duty scheduler init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Agent-workdir invariants: boot sweep + the ONE watchdog (TRDD-VYQ8N4KR) ──
     // Everything ai-maestro guarantees about an agent workdir is declared in ONE
     // list (lib/agent-invariants.ts). The per-agent triggers (CreateAgent,
@@ -2268,7 +2285,7 @@ async function startServer(handleRequest) {
     // is cheaper and clearer than relying on unref alone.
     try {
       import('./services/auto-update-service.ts')
-        .then(m => m.stopAutoUpdateScheduler())
+        .then(m => { m.stopAutoUpdateScheduler(); m.stopAbsorbedDutyScheduler() })
         .catch(() => { /* best-effort */ })
     } catch { /* best-effort */ }
 

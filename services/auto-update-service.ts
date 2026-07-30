@@ -64,11 +64,17 @@ import {
 } from '@/lib/ecosystem-constants'
 import { isDependencyPlugin } from '@/lib/dependency-plugins'
 import { withMarketplaceLock } from '@/lib/marketplace-lock'
+import { isJanitorInstalledAndArmed as realIsJanitorInstalledAndArmed } from '@/lib/janitor-presence'
 
 /** AuthContext used for every pipeline call this scheduler makes. The
  *  scheduler runs in-process inside the server and has no per-agent
  *  caller — system-owner is the right trust class. */
 const SYSTEM_AUTH_CONTEXT = { isSystemOwner: true } as const
+
+/** The janitor plugin's canonical name. Only the `version-update` absorbed
+ *  duty targets it specifically (self-update); the other two absorbed
+ *  duties are scope-wide, not plugin-specific. */
+const JANITOR_PLUGIN_NAME = 'ai-maestro-janitor'
 
 // ── Module-level scheduler state ─────────────────────────────────────────
 // We keep a single in-memory timer handle. start/stop are idempotent so
@@ -77,6 +83,18 @@ let timerHandle: NodeJS.Timeout | null = null
 let currentIntervalMinutes: number | null = null
 let tickInFlight = false  // prevents two ticks running concurrently if a slow
                           // run overlaps the next interval boundary
+
+// ── Absorbed-duty lane state (ai-maestro#102, TRDD-5X3P79Q6) ─────────────
+// A SEPARATE timer from the master-toggle-gated scheduler above. It runs
+// UNCONDITIONALLY at boot (never torn down by the user's `enabled: false`)
+// because the three duties it drives were never gated by a user preference
+// before this server absorbed them — see lib/janitor-presence.ts's module
+// doc for the full "consent-to-add is not consent-to-remove" argument.
+let absorbedTimerHandle: NodeJS.Timeout | null = null
+let absorbedTickInFlight = false
+/** Mirrors the pre-absorption janitor daemon's own cadence for
+ *  `marketplace-refresh` / `user-plugins-update` (3600 s — ai-maestro#102 §2). */
+const ABSORBED_DUTY_INTERVAL_MS = 60 * 60 * 1000
 
 /** Restart-queue notifier — wired by start(). The server.mjs entry point
  *  passes a callback that broadcasts a restart-needed signal to the UI's
@@ -149,6 +167,180 @@ export async function rescheduleFromSettings(): Promise<void> {
 export async function runTickNow(): Promise<{ ran: boolean; entries: AutoUpdateRunEntry[] }> {
   if (tickInFlight) return { ran: false, entries: [] }
   return runTickSafely()
+}
+
+// ── Absorbed-duty lane (ai-maestro#102, TRDD-5X3P79Q6) ───────────────────
+//
+// The three chores the janitor daemon ran unconditionally BEFORE this server
+// absorbed them: refresh every registered marketplace ("marketplace-refresh"),
+// keep the janitor plugin itself current at user scope ("version-update"),
+// and keep every user-scope plugin current ("user-plugins-update"). None of
+// them ever had a user-facing category — the janitor being installed+armed
+// WAS the consent. So this lane checks `isJanitorInstalledAndArmed()`
+// instead of `settings.enabled`, and its own scheduler is started
+// UNCONDITIONALLY at boot (server.mjs), never torn down by the master
+// toggle. The genuinely-new broad sweeps (`agentLocalScopePlugins`,
+// `userScopePlugins` AS A USER-FACING CATEGORY) are unaffected — they still
+// gate on `settings.enabled` exactly as before, in `runTick` above.
+
+/** Start the absorbed-duty scheduler. Idempotent. Ticks unconditionally —
+ *  every tick re-checks `isJanitorInstalledAndArmed()` itself, so a host
+ *  that installs/arms the janitor later starts benefiting on the very next
+ *  tick with no restart, and a host that never had the janitor just skips
+ *  every tick (self-healing, both directions). */
+export function startAbsorbedDutyScheduler(): void {
+  if (absorbedTimerHandle) return
+  absorbedTimerHandle = setInterval(() => {
+    runAbsorbedDutyTickSafely().catch(err => {
+      console.error('[auto-update] Absorbed-duty tick threw:', err)
+    })
+  }, ABSORBED_DUTY_INTERVAL_MS)
+  if (typeof absorbedTimerHandle.unref === 'function') absorbedTimerHandle.unref()
+}
+
+/** Stop the absorbed-duty scheduler. Idempotent. server.mjs calls this on SIGTERM. */
+export function stopAbsorbedDutyScheduler(): void {
+  if (absorbedTimerHandle) {
+    clearInterval(absorbedTimerHandle)
+    absorbedTimerHandle = null
+  }
+}
+
+/** True iff the absorbed-duty scheduler's timer is currently running. This is
+ *  the SERVER-CAPABILITY signal (`lib/server-liveness.ts::currentCapabilities`
+ *  reads it) — distinct from `isJanitorInstalledAndArmed()`, which is a
+ *  per-host EXTERNAL fact the scheduler re-checks every tick. The server
+ *  "owns and runs" this duty the moment the scheduler is ticking, even on a
+ *  tick where the external fact says skip — exactly like any other chore
+ *  that can no-op on a given run without ceasing to be "live". */
+export function isAbsorbedDutySchedulerRunning(): boolean {
+  return absorbedTimerHandle !== null
+}
+
+/** Trigger a single absorbed-duty tick out-of-band. Used by tests and by any
+ *  future manual "run now" affordance. Concurrency-safe like runTickNow. */
+export async function runAbsorbedDutyTickNow(): Promise<{ ran: boolean; entries: AutoUpdateRunEntry[] }> {
+  if (absorbedTickInFlight) return { ran: false, entries: [] }
+  return runAbsorbedDutyTickSafely()
+}
+
+async function runAbsorbedDutyTickSafely(): Promise<{ ran: boolean; entries: AutoUpdateRunEntry[] }> {
+  if (absorbedTickInFlight) return { ran: false, entries: [] }
+  absorbedTickInFlight = true
+  try {
+    const entries = await runAbsorbedDutyTick()
+    if (entries.length === 0) return { ran: false, entries: [] }
+    // Persist into the SAME lastRunSummary the master-toggle lane writes, so
+    // the existing settings UI shows absorbed-duty activity without new UI
+    // work — but NEVER touch `enabled`. This lane's consent is the janitor's
+    // install+arm state, not this preference.
+    try {
+      const s = await loadSettings()
+      let next = s
+      for (const e of entries) next = appendRunEntry(next, e)
+      await saveSettings(next)
+    } catch (err) {
+      console.error('[auto-update] Failed to persist absorbed-duty run summary:', err)
+    }
+    return { ran: true, entries }
+  } finally {
+    absorbedTickInFlight = false
+  }
+}
+
+/** Injected seam so a test can force the janitor-presence gate without
+ *  touching the real `~/.claude/settings.json` / data dir. Defaults to the
+ *  real `lib/janitor-presence.ts` check. */
+export interface AbsorbedDutyDeps {
+  isJanitorInstalledAndArmed?: () => boolean
+  readers?: CandidateReaders
+}
+
+/** The absorbed-duty tick body. Separated from the safe/scheduled wrapper so
+ *  tests can call it directly with injected deps, exactly like `runTick`. */
+export async function runAbsorbedDutyTick(deps: AbsorbedDutyDeps = {}): Promise<AutoUpdateRunEntry[]> {
+  const installedAndArmed = (deps.isJanitorInstalledAndArmed ?? realIsJanitorInstalledAndArmed)()
+  if (!installedAndArmed) {
+    // Not an error — the janitor simply isn't this host's consenting owner
+    // right now (never installed, or deliberately disarmed). Skip silently;
+    // the next tick re-checks.
+    return []
+  }
+  const readers = deps.readers ?? REAL_CANDIDATE_READERS
+  const result = await withMarketplaceLock(() => runAbsorbedDutyTickBody(readers))
+  if (result === null) {
+    console.warn('[auto-update] marketplace-op lock held by another process — skipping absorbed-duty tick')
+    return []
+  }
+  return result
+}
+
+async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoUpdateRunEntry[]> {
+  const entries: AutoUpdateRunEntry[] = []
+  const { UpdateMarketplace, ChangePlugin } = await import('@/services/element-management-service')
+
+  // 1. marketplace-refresh — EVERY registered marketplace, argless-equivalent
+  //    (the pre-absorption daemon called `claude plugin marketplace update`
+  //    with no name filter at all).
+  for (const mkt of await listRegisteredMarketplaces(readers)) {
+    try {
+      const r = await UpdateMarketplace({ name: mkt }, SYSTEM_AUTH_CONTEXT)
+      entries.push(entry(
+        `absorbed:marketplace:${mkt}`,
+        r.success ? 'updated' : 'failed',
+        r.success ? 'Refreshed marketplace manifest (absorbed duty)' : (r.error || 'Unknown failure'),
+      ))
+    } catch (err) {
+      entries.push(entry(`absorbed:marketplace:${mkt}`, 'failed', errMsg(err)))
+    }
+  }
+
+  // 2. version-update — keep the janitor plugin itself current at user scope.
+  try {
+    const r = await ChangePlugin(null, {
+      name: JANITOR_PLUGIN_NAME,
+      marketplace: MARKETPLACE_NAME,
+      action: 'update',
+      scope: 'user',
+      rolePluginSwap: true,
+    }, SYSTEM_AUTH_CONTEXT)
+    if (r.success) {
+      entries.push(entry(`absorbed:${JANITOR_PLUGIN_NAME}@${MARKETPLACE_NAME}`, 'updated', 'Updated to latest (user, absorbed duty)'))
+    } else {
+      const msg = r.error || 'Unknown failure'
+      entries.push(entry(
+        `absorbed:${JANITOR_PLUGIN_NAME}@${MARKETPLACE_NAME}`,
+        /idempotent|already.*installed|no.?op/i.test(msg) ? 'already-current' : 'failed',
+        /idempotent|already.*installed|no.?op/i.test(msg) ? undefined : msg,
+      ))
+    }
+  } catch (err) {
+    entries.push(entry(`absorbed:${JANITOR_PLUGIN_NAME}@${MARKETPLACE_NAME}`, 'failed', errMsg(err)))
+  }
+
+  // 3. user-plugins-update — every plugin currently installed at user scope.
+  for (const p of await readers.listUserScopePlugins()) {
+    const key = `absorbed:${p.name}@${p.marketplace}`
+    try {
+      const r = await ChangePlugin(null, {
+        name: p.name,
+        marketplace: p.marketplace,
+        action: 'update',
+        scope: 'user',
+        rolePluginSwap: true,
+      }, SYSTEM_AUTH_CONTEXT)
+      if (r.success) {
+        entries.push(entry(key, 'updated', 'Updated to latest (user, absorbed duty)'))
+      } else {
+        const msg = r.error || 'Unknown failure'
+        entries.push(entry(key, /idempotent|already.*installed|no.?op/i.test(msg) ? 'already-current' : 'failed', /idempotent|already.*installed|no.?op/i.test(msg) ? undefined : msg))
+      }
+    } catch (err) {
+      entries.push(entry(key, 'failed', errMsg(err)))
+    }
+  }
+
+  return entries
 }
 
 // ── Tick implementation ──────────────────────────────────────────────────
@@ -449,10 +641,10 @@ function resolveHome(p: string): string {
  *  go through Change* services, not raw CLI invocations) AND gives us the
  *  exact set of marketplaces any installed plugin references — which is
  *  the only set the auto-update categories actually need to refresh. */
-async function listRegisteredMarketplaces(): Promise<string[]> {
+async function listRegisteredMarketplaces(readers: CandidateReaders = REAL_CANDIDATE_READERS): Promise<string[]> {
   const found = new Set<string>([MARKETPLACE_NAME, LOCAL_MARKETPLACE_NAME, CUSTOM_MARKETPLACE_NAME])
-  for (const u of await listUserScopePlugins()) found.add(u.marketplace)
-  for (const l of await listAgentLocalScopePlugins()) found.add(l.marketplace)
+  for (const u of await readers.listUserScopePlugins()) found.add(u.marketplace)
+  for (const l of await readers.listAgentLocalScopePlugins()) found.add(l.marketplace)
   return Array.from(found)
 }
 

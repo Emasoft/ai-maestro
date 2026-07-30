@@ -44,10 +44,21 @@ describe('currentCapabilities — advertises ONLY what is live (janitor#100 rule
   it("advertises 'family-a' only when the OAuth rotator tick is enabled", () => {
     expect(currentCapabilities({ oauthEnabled: () => true })).toEqual(['family-a'])
   })
-  it("never advertises 'singleton-chores' or 'fleet-recovery' (their chores are not built)", () => {
-    const caps = currentCapabilities({ oauthEnabled: () => true })
-    expect(caps).not.toContain('singleton-chores')
+  it("never advertises 'fleet-recovery' (that chore is not built yet)", () => {
+    const caps = currentCapabilities({ oauthEnabled: () => true, singletonChoresLive: () => true })
     expect(caps).not.toContain('fleet-recovery')
+  })
+  it("'singleton-chores' is absent when the absorbed-duty scheduler isn't running", () => {
+    expect(currentCapabilities({ oauthEnabled: () => false, singletonChoresLive: () => false })).toEqual([])
+  })
+  it("advertises 'singleton-chores' only when the absorbed-duty scheduler IS running (ai-maestro#102)", () => {
+    const caps = currentCapabilities({ oauthEnabled: () => false, singletonChoresLive: () => true })
+    expect(caps).toEqual(['singleton-chores'])
+  })
+  it('defaults singletonChoresLive to the real isAbsorbedDutySchedulerRunning check (non-vacuity)', () => {
+    // No injected dep at all — the real check must be consulted. In a plain unit-test process
+    // the absorbed-duty scheduler was never started, so this reads honestly as absent.
+    expect(currentCapabilities({ oauthEnabled: () => false })).toEqual([])
   })
 })
 

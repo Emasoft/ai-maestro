@@ -18,6 +18,7 @@ import * as path from 'path'
 import { execSync } from 'child_process'
 import { statePath } from './ecosystem-constants'
 import { oauthTickEnabled } from './oauth-rotator/server-tick'
+import { isAbsorbedDutySchedulerRunning } from '@/services/auto-update-service'
 
 /** The liveness+capability file the server maintains; both janitor backends read it. */
 export const SERVER_LIVENESS_FILE = statePath('server-liveness.json')
@@ -49,19 +50,27 @@ export interface ServerLiveness {
  *   - `family-a`         → the OAuth rotator tick is ENABLED (the R16 flag file is present). Reuses
  *                          `oauthTickEnabled()` so the flag name is never duplicated. Absent today
  *                          (the flag is USER-held and absent by default — the rotator ships INERT).
- *   - `singleton-chores` → marketplace/user-plugins/version-update absorption is running. NOT built
- *                          yet, so intentionally NOT pushed (a token without its live chore silences
- *                          the janitor on work nobody does). It ships WITH `marketplace-op.lock`.
+ *   - `singleton-chores` → marketplace-refresh / version-update / user-plugins-update absorption is
+ *                          running. Live as of ai-maestro#102 / TRDD-5X3P79Q6 — the absorbed-duty
+ *                          scheduler (`services/auto-update-service.ts::startAbsorbedDutyScheduler`)
+ *                          is started unconditionally at boot, so its OWN ticking (not the per-host
+ *                          "is the janitor installed+armed?" fact it re-checks every tick) is what
+ *                          this token reports. It ships WITH `marketplace-op.lock`.
  *   - `fleet-recovery`   → server-internal session-liveness/fleet-stop for harness agents (CHN16JXZ,
  *                          gated on ai-maestro#60). NOT built yet, so not pushed.
  * An absent token means "the janitor still owns this" — the safe default.
  */
-export function currentCapabilities(deps: { oauthEnabled?: () => boolean } = {}): string[] {
+export function currentCapabilities(deps: {
+  oauthEnabled?: () => boolean
+  singletonChoresLive?: () => boolean
+} = {}): string[] {
   const oauthEnabled = deps.oauthEnabled ?? oauthTickEnabled
+  const singletonChoresLive = deps.singletonChoresLive ?? isAbsorbedDutySchedulerRunning
   const caps: string[] = []
   if (oauthEnabled()) caps.push('family-a')
-  // 'singleton-chores' and 'fleet-recovery' are deliberately NOT computed until their chores are
-  // live — their owning NPTs add the guard here when they land (see TRDD-P7RPOR5O STATE).
+  if (singletonChoresLive()) caps.push('singleton-chores')
+  // 'fleet-recovery' is deliberately NOT computed until its chore is live — its owning NPT adds the
+  // guard here when it lands (see TRDD-P7RPOR5O STATE).
   return caps
 }
 

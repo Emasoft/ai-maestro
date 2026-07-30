@@ -151,6 +151,132 @@ export interface Card {
    * from it). One line retained, not one document.
    */
   h1: string
+  /**
+   * A pipeline-state claim found in the BODY (`**Status:** Not started`) — 3P-TRDD-10.
+   * Decided IN THE STREAM, same reason as `stateReadsDone`: one short string per card
+   * instead of ~10 KB of body, which is what the 10^5 budget cost last time.
+   * Empty when the body makes no such claim.
+   */
+  bodyStateClaim: string
+}
+
+/**
+ * Find a pipeline-state claim in a TRDD's BODY — the 3P-TRDD-10 second-source-of-truth.
+ *
+ * Matches `**Status:** X`, `**Column:** X`, and a line-initial `Status:` / `Column:`.
+ *
+ * Two exclusions, both of them the difference between a rule and a nuisance:
+ *  - FENCED CODE is stripped first. A rule that scans bodies for a pattern matches its OWN
+ *    documentation: the TRDD that specifies this rule quotes `**Status:**` several times, so
+ *    a naive implementation flags the card that defines it. Same self-match trap as a source
+ *    scanner flagging its own pattern table.
+ *  - BLOCKQUOTED lines (`> …`) are skipped — a quoted example or a relayed report is
+ *    evidence, not the card's own claim.
+ *
+ * Returns the raw claimed value, or '' when the body makes no claim.
+ */
+export function findBodyStateClaim(body: string): string {
+  const lines = body.split('\n')
+  const start = bodyStartIndex(lines)
+  return start === null ? '' : (scanStateClaimLines(lines.slice(start))?.claim ?? '')
+}
+
+/**
+ * Where the BODY begins — index of the first line after the closing `---`, or 0 when there is
+ * no frontmatter block, or null when a block was opened and never closed.
+ *
+ * Both entry points compute it rather than trusting their caller, because the claim regex
+ * matches a line-initial `Column:` — which is EXACTLY a frontmatter field name. Handed a whole
+ * file, an unguarded scan would report every card in the corpus (frontmatter `column: dev`) and
+ * the repair would DELETE that field. Today `findBodyStateClaim` happens to be called with a
+ * body, so the guard is only latent; a function that is correct only because of what one caller
+ * passes is a trap with a due date.
+ */
+function bodyStartIndex(lines: readonly string[]): number | null {
+  if (lines[0]?.trimEnd() !== '---') return 0
+  const close = lines.findIndex((l, i) => i > 0 && l.trimEnd() === '---')
+  return close === -1 ? null : close + 1
+}
+
+/**
+ * The ONE line-walk behind the lint, the exported finder, and the auto-repair. It returns the
+ * line INDEX as well as the value, because the repair must delete exactly the line the rule
+ * matched — a literal string-replace would hit a fenced copy earlier in the file, i.e. the
+ * self-match trap again, one layer down in the fixer.
+ *
+ * The fence handling is a TOGGLE, not a strip-by-regex: an unclosed fence then makes the rest
+ * of the file fenced, which is the conservative direction (no claim found → nothing flagged,
+ * nothing deleted). The regex form would have re-exposed the tail.
+ */
+function scanStateClaimLines(lines: readonly string[]): { idx: number; claim: string } | null {
+  let inFence = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence || /^\s*>/.test(line)) continue
+    const m = line.match(/^\s*(?:\*\*(?:Status|Column):\*\*|(?:Status|Column):)\s*(\S.*)$/i)
+    if (m) return { idx: i, claim: (m[1] ?? '').trim() }
+  }
+  return null
+}
+
+/**
+ * Does a body state claim AGREE with the card's `column:`?
+ *
+ * Exported and shared by the lint and the fixer deliberately. The sibling rule
+ * STATUS-HOLDS-COLUMN-VALUE shipped earlier this session with two copies of its predicate —
+ * the lint accepted only `VALID_COLUMNS` while the fixer also accepted `V1_STATUS_TO_COLUMN`,
+ * so `--fix` silently REPAIRED a shape the lint never reported. One predicate, two callers.
+ *
+ * Compares the LEADING clause, not the whole line. Every real claim in this corpus carries an
+ * explanation ("Not started — deferred until…", "DONE — Phases 0-8 landed in…"), so a
+ * whole-line key can never equal a column value: the first cut of this rule made agreement
+ * unreachable, and with it the WARN severity and the only auto-repairable case.
+ *
+ * Two spellings are accepted, and only two, because they are the two we can PROVE: the column
+ * vocabulary itself and the v1 map (`trdd-graph` owns it). There is deliberately NO synonym
+ * table — "Done" beside `column: completed` reads as agreement to a human and cannot be proven
+ * by a tool, so it stays an ERROR for a human to judge. Inventing the synonyms would be the
+ * tool guessing at which of two states a card is in, which is the one thing 3P-TRDD-10 forbids.
+ */
+export function bodyClaimAgreesWithColumn(claim: string, column: string): boolean {
+  if (!claim || !column) return false
+  const key = claim
+    .split(/\s+[—–]\s+|\s+-\s+|[.(]/)[0]
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+  // The ONE inflection accepted beyond the two vocabularies: `done` beside a terminal column.
+  // It is not a synonym guess — it is the plain past participle of the terminal set itself, and
+  // every reader (human or machine) reads `**Status:** Done` on a `column: completed` card as
+  // agreement. Classifying that as a CONTRADICTION would be the tool misreporting, not the tool
+  // being careful: the conservative-when-unsure posture only applies where the tool genuinely
+  // cannot tell. Deliberately NOT extended to `implemented` / `shipped` / `fixed`, which name an
+  // ACTION rather than the pipeline position and can legitimately predate the column.
+  if (key === 'done' && TERMINAL_DONE.includes(column)) return true
+  return (V1_STATUS_TO_COLUMN[key] ?? key) === column || key === column
+}
+
+/**
+ * Delete the FIRST body state-claim line from a TRDD's full file text, or return null when
+ * there is none. Used only for an AGREEING claim — a disagreement is never auto-resolved.
+ *
+ * The frontmatter boundary is COMPUTED from the closing `---`, never assumed to be a fixed
+ * line: without that, the scan would reach a frontmatter `status:` and the repair would delete
+ * a legitimate field (`status: normative`), which is exactly how the sibling fixer destroyed
+ * data before the USER's 2026-07-30 ruling.
+ */
+export function removeBodyStateClaimLine(text: string): string | null {
+  const lines = text.split('\n')
+  const bodyStart = bodyStartIndex(lines)
+  if (bodyStart === null) return null // frontmatter opened and never closed: nothing is body yet
+  const hit = scanStateClaimLines(lines.slice(bodyStart))
+  if (!hit) return null
+  lines.splice(bodyStart + hit.idx, 1)
+  return lines.join('\n')
 }
 
 /**
@@ -236,6 +362,7 @@ function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[]; nod
           body.match(/##\s*⏵?\s*STATE[\s\S]{0,1200}/i)?.[0] ?? '',
         ),
         h1: body.match(/^#\s+(.+)$/m)?.[1] ?? '',
+        bodyStateClaim: findBodyStateClaim(body),
       })
       const node = toGraphNode(parsed)
       if (node) nodes.push(node)
@@ -352,6 +479,31 @@ export function lintCorpus(designDir: string): DoctorReport {
         filePath: c.filePath,
         message: `\`status: ${statusVal}\` holds a COLUMN value — the v1 field spelled the pipeline state, and v2 moved that to \`column:\`. Two state fields = two truths. (\`status:\` itself is legitimate for a different aspect; only a column value in it is wrong.)`,
         autofixable: true,
+      })
+    }
+
+    // ---- 3P-TRDD-10 one-state-claim: the body must not state the pipeline position too ----
+    // One source of truth is the whole reason the pipeline state moved to `column:`; a body
+    // line defeats it just as thoroughly as a second frontmatter field. This is how the
+    // janitor's drift detector came to report three `column: complete` cards as unstarted —
+    // it read line 19, which said so (janitor#135).
+    //
+    // Severity splits on AGREEMENT, because the two cases need different human actions:
+    // a contradiction is a card asserting two states at once and someone must decide which
+    // is true; a duplicate is merely a second copy waiting to go stale.
+    if (c.bodyStateClaim) {
+      const agrees = bodyClaimAgreesWithColumn(c.bodyStateClaim, c.column)
+      add({
+        rule: 'BODY-STATE-CLAIM',
+        severity: agrees ? 'warn' : 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: agrees
+          ? `the body restates the pipeline position ("${c.bodyStateClaim}") that \`column: ${c.column}\` already owns — a second copy, free to go stale (3P-TRDD-10)`
+          : `the body claims "${c.bodyStateClaim}" while \`column: ${c.column}\` — the card asserts TWO states at once, and a reader nineteen lines in believes the body (3P-TRDD-10). Which is true is a judgement, so this is never auto-repaired`,
+        // Only the AGREEING case is derivable: drop the redundant line. A disagreement must
+        // never be auto-resolved — picking one silently is how a tool loses work.
+        autofixable: agrees,
       })
     }
 
@@ -941,6 +1093,26 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         if (title) {
           text = text.replace(/^(trdd-id:.*)$/m, `$1\ntitle: ${title.replace(/:/g, ' —')}`)
           changes.push('title lifted from the H1')
+        }
+      }
+
+      // A body state claim that AGREES with `column:` → drop the duplicate line (3P-TRDD-10).
+      //
+      // Only the agreeing case is derivable. A DISAGREEING claim is left byte-for-byte alone:
+      // which of the two states is true is a judgement — four of this corpus's cards say
+      // `column: complete` beside `**Status:** Not started` and either could be the truth —
+      // and picking one silently is how a tool loses work. The lint reports it; nothing here
+      // touches it.
+      //
+      // `bodyClaimAgreesWithColumn` is the SAME predicate the lint uses, so `--fix` can never
+      // repair a shape the lint did not report (the drift the sibling rule shipped with).
+      if (c.bodyStateClaim && bodyClaimAgreesWithColumn(c.bodyStateClaim, c.column)) {
+        const stripped = removeBodyStateClaimLine(text)
+        if (stripped !== null) {
+          text = stripped
+          changes.push(
+            `dropped the body's \`Status: ${c.bodyStateClaim.slice(0, 40)}\` line (a second copy of \`column: ${c.column}\`, free to go stale)`,
+          )
         }
       }
 

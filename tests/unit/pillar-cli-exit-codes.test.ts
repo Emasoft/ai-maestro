@@ -46,25 +46,70 @@ function runCli(script: string, args: string[]): { status: number; stderr: strin
 
 let emptyDir: string
 
+/**
+ * A corpus that is WARNINGS-ONLY by construction: one well-formed card missing `created-by:`,
+ * which is META-MISSING (warn) and nothing else. It is the substrate for the two `exit 0`
+ * positive controls below.
+ *
+ * Those controls used to run against the LIVE `design/` corpus, which coupled a claim about the
+ * TOOL ("0 means clean-enough; warnings alone do not fail") to a transient property of our DATA.
+ * The moment a new rule legitimately found an ERROR in our own cards (BODY-STATE-CLAIM, 2 cards
+ * blocked by IND §12), both controls went red — reporting a corpus problem as a CLI regression.
+ * A fixture states the tool's contract and cannot rot when the corpus does. The live corpus is
+ * still gated, in the place that owns that question: `trdd-doctor.test.ts`'s "THE GATE".
+ */
+let warnOnlyDir: string
+
+function seedWarnOnlyCorpus(root: string) {
+  for (const zone of ['proposals', 'tasks', 'archived', 'refused']) {
+    fs.mkdirSync(path.join(root, zone), { recursive: true })
+  }
+  const fm = [
+    '---',
+    'trdd-id: WARNONLY',
+    'title: A card whose only defect is a missing created-by',
+    'column: dev',
+    'created: 2026-01-01T00:00:00+0100',
+    'updated: 2026-01-01T00:00:00+0100',
+    'assignee: someone',
+    'min-approval-requirement: none',
+    'npt: []',
+    'eht: []',
+    'blocked-by: []',
+    '---',
+    '',
+    '# TRDD-WARNONLY — A card whose only defect is a missing created-by',
+    '',
+    'body',
+    '',
+  ].join('\n')
+  fs.writeFileSync(path.join(root, 'tasks', 'TRDD-20260101_000000+0100-WARNONLY-x.md'), fm, 'utf8')
+}
+
 beforeEach(() => {
   emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-cli-'))
   fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-cli-home-'))
+  warnOnlyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pillar-cli-warn-'))
+  seedWarnOnlyCorpus(warnOnlyDir)
 })
 afterEach(() => {
   fs.rmSync(emptyDir, { recursive: true, force: true })
   fs.rmSync(fakeHome, { recursive: true, force: true })
+  fs.rmSync(warnOnlyDir, { recursive: true, force: true })
 })
 
 describe('greptrdd exit codes', () => {
-  it('exits 0 on the live corpus — the positive control, without which every 2 below is vacuous', () => {
-    const r = runCli('greptrdd.mjs', ['validate'])
+  it('exits 0 on a warnings-only corpus — the positive control, without which every 2 below is vacuous', () => {
+    const r = runCli('greptrdd.mjs', ['validate', '--design-dir', warnOnlyDir])
     expect(r.status).toBe(0)
-    // It really did read something: the corpus emits warnings today.
+    // It really did read something, and read the ONE card we seeded — a bare `status === 0`
+    // is exactly the shape this file exists to distrust.
     expect(r.stdout.split('\n').filter((l) => l.startsWith('WARN')).length).toBeGreaterThan(0)
+    expect(r.stdout).toContain('WARNONLY')
   })
 
   it('exits 1 under --strict, because warnings ARE findings to a gate that asked for them', () => {
-    expect(runCli('greptrdd.mjs', ['validate', '--strict']).status).toBe(1)
+    expect(runCli('greptrdd.mjs', ['validate', '--strict', '--design-dir', warnOnlyDir]).status).toBe(1)
   })
 
   it('exits 2 when the corpus root does not exist — NOT 0, which is what it used to do', () => {
@@ -205,8 +250,11 @@ describe('0-IMPACT — the spawned CLI never writes the real state dir (TRDD-YN8
 })
 
 describe('trdd-doctor exit codes', () => {
-  it('exits 0 on the live corpus (positive control — warnings alone do not fail the doctor)', () => {
-    expect(runCli('trdd-doctor.mjs', []).status).toBe(0)
+  it('exits 0 on a warnings-only corpus (positive control — warnings alone do not fail the doctor)', () => {
+    const r = runCli('trdd-doctor.mjs', ['--design-dir', warnOnlyDir])
+    expect(r.status).toBe(0)
+    // Non-vacuity: it scanned the seeded card, rather than exiting 0 having read nothing.
+    expect(r.stdout).toContain('WARNONLY')
   })
 
   it('exits 2 when the corpus root does not exist', () => {

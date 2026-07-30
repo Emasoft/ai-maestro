@@ -96,6 +96,70 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(findings).toEqual([])
   })
 
+  // BODY-STATE-CLAIM (3P-TRDD-10). The janitor's drift detector reported three plugin cards as
+  // `status='not-started' but untouched for 35d`; two greps of `^status:` / `^column:` found
+  // nothing, so the finding was called an artifact — twice, in a commit message. The value was
+  // on line 19 as `**Status:** Not started`, a third spelling neither grep covered. Ten of THIS
+  // corpus's cards carry one and `greptrdd validate` reported 0 errors, because no rule looked.
+  it('BODY-STATE-CLAIM — a body claim that CONTRADICTS `column:` is a card asserting two states at once', () => {
+    // `Not started` maps (v1) to `backburner`, and the card says `column: dev`.
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCE-x.md', `${good('CCCCCCCE')}\n**Status:** Not started — deferred\n`)
+    const f = lintCorpus(tmp).findings.filter((x) => x.rule === 'BODY-STATE-CLAIM')
+    expect(f.map((x) => x.id)).toContain('CCCCCCCE')
+    expect(f[0].severity).toBe('error')
+    // Never auto-repaired: which of the two states is true is a judgement, not a derivation.
+    expect(f[0].autofixable).toBe(false)
+  })
+
+  // The WARN half. It is a SEPARATE fixture on purpose: the rule's first cut compared the whole
+  // claim line against the column, and since every real claim carries a trailing explanation
+  // ("Not started — deferred…"), agreement was UNREACHABLE — the WARN severity and the only
+  // auto-repairable case were both dead code, and a 10-for-10 ERROR run looked like proof the
+  // rule worked. This fixture is what makes that branch exist.
+  it('BODY-STATE-CLAIM — a body claim that AGREES is a mere duplicate, so WARN and repairable', () => {
+    // `In progress` → v1 map → `dev`, which is what `good()` sets. Exercises the map AND the
+    // space→hyphen normalization, so a claim written the way humans write it still matches.
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCCF-x.md', `${good('CCCCCCCF')}\n**Status:** In progress\n`)
+    const f = lintCorpus(tmp).findings.filter((x) => x.rule === 'BODY-STATE-CLAIM')
+    expect(f.map((x) => x.id)).toContain('CCCCCCCF')
+    expect(f[0].severity).toBe('warn')
+    expect(f[0].autofixable).toBe(true)
+  })
+
+  // The frontmatter boundary is COMPUTED, never assumed. Without that, this rule would reach a
+  // frontmatter `status:` and double-report what STATUS-HOLDS-COLUMN-VALUE already owns — two
+  // rules, two messages, one defect each.
+  it('BODY-STATE-CLAIM — a FRONTMATTER `status:` is the sibling rule\'s job, not this one\'s', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCD0-x.md', good('CCCCCCD0', { status: 'not-started' }))
+    const rules = lintCorpus(tmp).findings.filter((x) => x.id === 'CCCCCCD0').map((x) => x.rule)
+    expect(rules).not.toContain('BODY-STATE-CLAIM')
+    // Positive control: the sibling rule DID fire, so the fixture reached the lint at all. An
+    // absence assertion alone passes just as happily when nothing was ever scanned.
+    expect(rules).toContain('STATUS-HOLDS-COLUMN-VALUE')
+  })
+
+  // The self-match trap. A rule that scans bodies for a pattern matches its OWN documentation:
+  // TRDD-FKGMNGJB, which specifies this rule, quotes `**Status:**` three times, and the card
+  // that reports the janitor's grep quotes it inside a fence. Flagging the card that defines the
+  // rule is the same failure as a source scanner flagging its own pattern table.
+  it('BODY-STATE-CLAIM — a FENCED or QUOTED claim is documentation, not the card\'s own claim', () => {
+    const body = [
+      good('CCCCCCD1'),
+      '```',
+      '**Status:** Not started',
+      '```',
+      '',
+      '> **Status:** Not started   ← a relayed report, evidence not assertion',
+      '',
+    ].join('\n')
+    write('tasks', 'TRDD-20260101_000000+0100-CCCCCCD1-x.md', body)
+    const f = lintCorpus(tmp).findings.filter((x) => x.id === 'CCCCCCD1')
+    expect(f.map((x) => x.rule)).not.toContain('BODY-STATE-CLAIM')
+    // Positive control: the card is otherwise clean, so an empty result cannot be hiding a
+    // fixture that never parsed.
+    expect(f).toEqual([])
+  })
+
   it('COLUMN-UNKNOWN — a column outside the ratified 17 is rejected', () => {
     write('tasks', 'TRDD-20260101_000000+0100-DDDDDDDD-x.md', good('DDDDDDDD', { column: 'in-progress' }))
     expect(idsOf(lintCorpus(tmp), 'COLUMN-UNKNOWN')).toContain('DDDDDDDD')
@@ -311,6 +375,33 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
     expect(out).not.toMatch(/^status:/m)
   })
 
+  it('an AGREEING body state claim is dropped — the duplicate line goes, the card does not', () => {
+    const file = 'TRDD-20260101_000000+0100-BSCAGREE-x.md'
+    write('tasks', file, `${good('BSCAGREE')}\n**Status:** In progress\n\nkeep this paragraph.\n`)
+    const res = fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    expect(res).toHaveLength(1)
+    const out = fs.readFileSync(path.join(tmp, 'tasks', file), 'utf8')
+    expect(out).not.toMatch(/\*\*Status:\*\*/)
+    // Surgical: only that line. The surrounding body and the frontmatter survive intact —
+    // a repair that removes a line must not reflow the document around it.
+    expect(out).toContain('keep this paragraph.')
+    expect(out).toContain('column: dev')
+    expect(out).toContain('# TRDD-BSCAGREE — Title for BSCAGREE')
+  })
+
+  // The refusal is the load-bearing half. Four of this corpus's cards say `column: complete`
+  // beside `**Status:** Not started` and EITHER could be the truth; a fixer that picks one
+  // silently is how a tool loses work. So the disagreeing case must come out byte-identical —
+  // not "mostly unchanged", not "the claim rewritten to match" — and the lint reports it for a
+  // human instead.
+  it('a DISAGREEING body state claim is REFUSED — the file is left byte-identical', () => {
+    const file = 'TRDD-20260101_000000+0100-BSCFIGHT-x.md'
+    const before = `${good('BSCFIGHT')}\n**Status:** Not started — deferred\n`
+    write('tasks', file, before)
+    fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
+    expect(fs.readFileSync(path.join(tmp, 'tasks', file), 'utf8')).toBe(before)
+  })
+
   it('a redundant `status:` beside an existing `column:` is DELETED — the dead field never overwrites the live one', () => {
     // The real corpus had six of these. If the repairer treated `status:` as the source
     // of truth it would work here by luck (they agree) — and silently CORRUPT the day
@@ -495,6 +586,27 @@ describe('THE GATE — the real corpus lints clean', () => {
     // `[] === []` and would pass while checking nothing.
     expect(report.scanned).toBeGreaterThan(100)
     const errors = report.findings.filter((f) => f.severity === 'error')
-    expect(errors.map((e) => `${e.rule} ${e.id} — ${e.message.slice(0, 90)}`)).toEqual([])
+
+    // TWO known-blocked cards, and the block is a GOVERNANCE one, not a backlog item.
+    //
+    // Both carry a body state claim that BODY-STATE-CLAIM correctly reports, and both sit in
+    // design/archived/ with a terminal column — where IND §12 says, without qualification:
+    // "Do not edit the body of a `complete` / `failed` / `superseded` / `published` / `live`
+    // TRDD." Removing the line IS a body edit. §12 belongs to the janitor's IND base, so
+    // reinterpreting it to authorise our own edit is exactly the move the cross-project rule
+    // forbids — the question is routed there instead (tracked on TRDD-FKGMNGJB).
+    //
+    // The five cards that were in design/tasks/ had no such block and are repaired.
+    const BLOCKED_BY_IND_SECTION_12 = new Set(['7123D51A', 'C7A81642'])
+    const unexpected = errors.filter(
+      (e) => !(e.rule === 'BODY-STATE-CLAIM' && BLOCKED_BY_IND_SECTION_12.has(e.id)),
+    )
+    expect(unexpected.map((e) => `${e.rule} ${e.id} — ${e.message.slice(0, 90)}`)).toEqual([])
+
+    // The allowance is SELF-RETIRING, and that is the whole point of asserting the exact count
+    // rather than `<=`: the day §12 is answered and the two are repaired, THIS line fails and
+    // forces the allowance to be deleted. An allowance that silently tolerates its own healing
+    // is how a known-issue list outlives the issue and starts hiding new ones.
+    expect(errors.filter((e) => BLOCKED_BY_IND_SECTION_12.has(e.id))).toHaveLength(2)
   })
 })

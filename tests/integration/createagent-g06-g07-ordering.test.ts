@@ -42,11 +42,27 @@ const {
   mockGetClientCapabilities,
   mockHasKP,
   mockRm,
+  mockGetManagerId,
+  mockUpdateTeam,
   registryStore,
+  teamStore,
 } = vi.hoisted(() => {
-  const store = new Map<string, { id: string; name: string; program?: string; workingDirectory?: string; governanceTitle?: string | null }>()
+  const store = new Map<string, { id: string; name: string; program?: string; workingDirectory?: string; governanceTitle?: string | null; roleMissing?: boolean }>()
+  // A STATEFUL team double, because the compensation under test is a round trip: G07 joins and its
+  // undo leaves. A `getTeam: () => undefined` stub can only ever exercise the WARN branch, which is
+  // exactly why G07's undo sat written-but-undriven when it was first shipped.
+  const teams = new Map<string, { id: string; name: string; agentIds: string[]; chiefOfStaffId?: string | null }>()
   return {
     registryStore: store,
+    teamStore: teams,
+    mockGetManagerId: vi.fn(() => null as string | null),
+    mockUpdateTeam: vi.fn(async (id: string, patch: Record<string, unknown>) => {
+      const existing = teams.get(id)
+      if (!existing) return undefined
+      const updated = { ...existing, ...patch } as { id: string; name: string; agentIds: string[] }
+      teams.set(id, updated)
+      return updated
+    }),
     mockGetAgentByName: vi.fn(),
     mockLoadAgents: vi.fn(() => Array.from(store.values())),
     mockCreateAgent: vi.fn(),
@@ -119,11 +135,19 @@ vi.mock('@/lib/amp-keys', () => ({
 // pipelines touch so they fail gracefully and CreateAgent's ops log
 // still reflects the branch taken.
 vi.mock('@/lib/team-registry', () => ({
-  loadTeams: vi.fn(() => []),
-  saveTeams: vi.fn(),
-  getTeam: vi.fn(() => undefined),
-  getTeamsForAgent: vi.fn(() => []),
-  isAgentInAnyTeam: vi.fn(() => false),
+  // Backed by `teamStore` so a join is READ BACK by the leave. The previous constant stubs
+  // (`getTeam: () => undefined`) could only produce G07's WARN branch, so the join/leave round
+  // trip — the compensation the retrofit added — had no way to be exercised at all.
+  loadTeams: vi.fn(() => Array.from(teamStore.values())),
+  saveTeams: vi.fn((teams: { id: string; name: string; agentIds: string[] }[]) => {
+    teamStore.clear()
+    for (const t of teams) teamStore.set(t.id, t)
+  }),
+  getTeam: vi.fn((id: string) => teamStore.get(id)),
+  getTeamsForAgent: vi.fn((agentId: string) =>
+    Array.from(teamStore.values()).filter(t => t.agentIds.includes(agentId))),
+  isAgentInAnyTeam: vi.fn((agentId: string) =>
+    Array.from(teamStore.values()).some(t => t.agentIds.includes(agentId))),
   blockAllTeams: vi.fn(),
   unblockAllTeams: vi.fn(),
   // ChangeTitle Gates 11/12/13b call updateTeam to clear/set
@@ -131,7 +155,7 @@ vi.mock('@/lib/team-registry', () => ({
   // from CreateAgent G07 for the team-required-title branch) also relies
   // on this. Without it, "No updateTeam export defined" is thrown and the
   // pipeline collapses before G07/G07b ops are logged.
-  updateTeam: vi.fn(async () => undefined),
+  updateTeam: mockUpdateTeam,
   deleteTeam: vi.fn(async () => undefined),
   addTeam: vi.fn(async () => undefined),
 }))
@@ -141,7 +165,9 @@ vi.mock('@/lib/team-registry', () => ({
 // checks without touching governance.json.
 vi.mock('@/lib/governance', () => ({
   isManager: vi.fn(() => false),
-  getManagerId: vi.fn(() => null),
+  // Hoisted so ONE test can seed a MANAGER: team ops are manager-gated (R9/R10), so with a
+  // manager-less host ChangeTeam refuses at its G01b and never reaches the join.
+  getManagerId: mockGetManagerId,
   isChiefOfStaffAnywhere: vi.fn(() => false),
   setManager: vi.fn(async () => undefined),
   removeManager: vi.fn(async () => undefined),
@@ -230,6 +256,9 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
   beforeEach(() => {
     vi.resetModules()
     registryStore.clear()
+    teamStore.clear()
+    mockGetManagerId.mockReset().mockReturnValue(null)
+    mockUpdateTeam.mockClear()
     mockGetAgentByName.mockReset()
     mockLoadAgents.mockClear()
     mockCreateAgent.mockReset()
@@ -463,6 +492,73 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
     // And the ops carry the runner's own audit of the unwind.
     expect(result.operations.some(o => o === 'G04: reverted')).toBe(true)
     expect(result.operations.some(o => o === 'G03: reverted')).toBe(true)
+  })
+
+  /**
+   * G07's TEAM-LEAVE compensation — the gap that made the retrofit worth doing, and the one that
+   * shipped WRITTEN BUT UNDRIVEN because every other test in this file lands on G07's WARN branch.
+   *
+   * Before the retrofit, a failure after the team join deleted the registry row and left the team
+   * slot pointing at it: a member id referencing a record that no longer exists, which no later
+   * operation reconciles. Asserting that is only possible once the join genuinely SUCCEEDS, which
+   * is why this test seeds a real team and a MANAGER (team ops are manager-gated, R9/R10) instead
+   * of the file's default manager-less, teamless world.
+   *
+   * The abort is G07c's R9.13 hard reject — the real-world case, not a contrived one: the
+   * role-plugin install fails whenever the server cannot reach GitHub, and the pipeline must
+   * refuse rather than persist an agent that can never be woken.
+   */
+  it('G07 undo: a gate that aborts AFTER a successful team join takes the agent back out of the team', async () => {
+    teamStore.set('team-live', { id: 'team-live', name: 'Live Team', agentIds: [] })
+    mockGetManagerId.mockReturnValue('agent-mgr')
+    // G07c reads `roleMissing` off the registry row and refuses. Overlaid on the live record so
+    // ChangeTitle still sees a coherent agent through G06/G07b.
+    mockGetAgent.mockImplementation((id: string) => {
+      const a = registryStore.get(id)
+      return a ? { ...a, roleMissing: true } : undefined
+    })
+
+    const { CreateAgent } = await import('@/services/element-management-service')
+    const result = await CreateAgent({
+      name: 'left-the-team',
+      client: 'claude',
+      governanceTitle: 'member',
+      teamId: 'team-live',
+      authContext: { isSystemOwner: true as const },
+    })
+
+    // NON-VACUITY, and it is the whole reason this test exists: the join must have LANDED. Without
+    // this the assertions below hold just as well for the WARN branch, where there is no
+    // membership to reverse and the undo is a no-op — which is precisely how the compensation
+    // stayed unpinned.
+    expect(
+      result.operations.some(o => /^G07: Added to team/.test(o)),
+      `G07 did not join — this test would be about the WARN branch. ops:\n${result.operations.join('\n')}`,
+    ).toBe(true)
+    expect(result.operations.some(o => /^G07c: DENIED/.test(o))).toBe(true)
+    expect(result.success).toBe(false)
+
+    // THE POINT — asserted on the MEMBERSHIP WRITES, not on the log. Two earlier attempts at this
+    // assertion were VACUOUS and only a neuter said so:
+    //   - `G07: reverted` is the runner's line for a compensation that did not THROW, and an empty
+    //     undo does not throw either — so it passed with the undo disabled.
+    //   - `not.toContain(result.agentId)` compared against NULL, because a clean rollback is
+    //     exactly the case where the pipeline nulls agentId. Nothing contains null.
+    // `updateTeam` is where membership actually moves (ChangeTeam G06 on the way in, G04c on the
+    // way out), so the call sequence is the fact: the id goes in, then it comes out.
+    const AGENT_ID = 'agent-left-the-team-uuid'   // deterministic in this fixture's createAgent double
+    const memberships = mockUpdateTeam.mock.calls
+      .map(c => (c as unknown as [string, { agentIds?: string[] }])[1])
+      .filter(p => Array.isArray(p?.agentIds))
+      .map(p => p.agentIds as string[])
+    expect(
+      memberships.length,
+      `expected a join AND a leave write; saw ${memberships.length}: ${JSON.stringify(memberships)}`,
+    ).toBeGreaterThanOrEqual(2)
+    expect(memberships[0], 'the join did not add the agent').toContain(AGENT_ID)
+    expect(memberships[memberships.length - 1], 'the undo did not remove the agent').not.toContain(AGENT_ID)
+    // End state, read from the store rather than from the call log.
+    expect(teamStore.get('team-live')!.agentIds).not.toContain(AGENT_ID)
   })
 
   /**

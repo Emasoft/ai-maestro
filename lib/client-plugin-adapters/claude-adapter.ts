@@ -79,12 +79,24 @@ const claudeAdapter: ClientPluginAdapter = {
       if (scope === 'user') {
         await execFileAsync('claude', ['plugin', 'install', plugin.name, marketplace, '--scope', 'user'], { timeout: 120000 })
       } else {
-        // Local scope: use claude CLI with --scope local --cwd
+        // Local scope: the CLI has NO --cwd flag. `--scope local` means "the
+        // project dir this process is running in", so the directory is passed
+        // as the SPAWN cwd, never as an argument.
+        //
+        // It was `--cwd <dir>` until 2026-07-30 (TRDD-RCL2HC9Y), and that is
+        // the worst shape a bug can take: `claude` prints
+        // `error: unknown option '--cwd'` and EXITS 0, so execFileAsync
+        // resolves and this returns {success:true} having run NOTHING. Every
+        // local install/uninstall through this adapter was a silent no-op —
+        // which is why callers grew "belt-and-braces" direct settings writes
+        // to compensate. Verified live: with the flag the command never runs;
+        // without it, from the same cwd, the install lands and the CLI writes
+        // both settings.local.json and its own installed_plugins.json row.
         const resolved = resolveDir(targetDir)
         await execFileAsync('claude', [
           'plugin', 'install', plugin.name, marketplace,
-          '--scope', 'local', '--cwd', resolved
-        ], { timeout: 120000 })
+          '--scope', 'local'
+        ], { timeout: 120000, cwd: resolved })
       }
       return { success: true, installedPaths: [] }
     } catch (err) {
@@ -101,11 +113,15 @@ const claudeAdapter: ClientPluginAdapter = {
       if (scope === 'user') {
         await execFileAsync('claude', ['plugin', 'uninstall', pluginKey, '--scope', 'user'], { timeout: 30000 })
       } else {
+        // Same as install: cwd is a SPAWN option, not an argument. See the
+        // comment there for why the old `--cwd` form failed open (exit 0).
+        // `-y` because --prune's confirmation prompt is required when stdout
+        // is not a TTY, which it never is here.
         const resolved = resolveDir(targetDir)
         await execFileAsync('claude', [
           'plugin', 'uninstall', pluginKey,
-          '--scope', 'local', '--cwd', resolved
-        ], { timeout: 30000 })
+          '--scope', 'local', '-y'
+        ], { timeout: 30000, cwd: resolved })
       }
       return { success: true }
     } catch (err) {

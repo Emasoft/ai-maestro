@@ -4,9 +4,9 @@ title: Decide by live test whether the claude CLI can install from a directory m
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: todo
+column: dev
 created: 2026-07-30T20:35:07+0200
-updated: 2026-07-30T20:39:45+0200
+updated: 2026-07-30T20:50:37+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -27,15 +27,88 @@ eht: []
 implementation-commits: []
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30 20:48
 
-TRDD-OWO449MR removed the hand-written `installed_plugins.json` row that `installPluginLocally`
-appended on the LOCAL-ONLY marketplace branch. That branch still does NOT call the CLI, because its
-comment claims the CLI cannot resolve a directory marketplace — and that claim is probably stale.
+**THE SPIKE IS RUN. Both halves came back the OPPOSITE of what the code assumed, and the second
+one is a live bug the spike was not looking for.**
 
-NEXT ACTION: run ONE live `claude plugin install <name> ai-maestro-local-roles-marketplace --scope
-local --cwd <a throwaway dir>` and read the result. Everything else here follows from that one
-observation, and nothing should be changed before it.
+1. **The CLI resolves a directory marketplace fine.** The branch's comment is STALE.
+2. **`--cwd` is not a `claude` option, and passing it fails OPEN.** The CLI prints
+   `error: unknown option '--cwd'` and **exits 0**, so `promisify(execFile)` resolves and the
+   adapter returns `{success:true}` having run nothing. **Every local-scope install and uninstall
+   through `claudeAdapter` has been a silent no-op** — including the `G08c` gate OWO449MR shipped
+   hours earlier. FIXED here: the directory is now the SPAWN cwd, which is what `--scope local`
+   actually keys off.
+
+NEXT ACTION: collapse the `isLocalOnlyMarketplace` branch in `installPluginLocally` /
+`uninstallPluginLocally` so every marketplace routes through the CLI, and delete the stale comment.
+The evidence for doing it is below; nothing else is owed.
+
+## Evidence — the live runs, verbatim (this section IS the deliverable)
+
+**The probe that found the bigger bug.** A nonexistent plugin, so nothing could mutate:
+
+```
+$ claude plugin uninstall no-such-plugin@no-such-marketplace --scope local --cwd /tmp/... -y
+error: unknown option '--cwd'
+--- exit: 0 ---
+
+$ claude plugin uninstall no-such-plugin@no-such-marketplace --scope local -y     # control
+✘ Failed to uninstall plugin "...": Plugin "..." not found in installed plugins
+```
+
+The control reaches the real code path; the `--cwd` form never runs the command at all. `--cwd`
+appears in **no** help output — not `claude --help`, not `claude plugin --help`, not
+`plugin install --help`, not `plugin uninstall --help`.
+
+**The spike proper**, from inside a throwaway dir (`--scope local` keys off the process cwd):
+
+```
+$ cd /tmp/aim-spike.MgfqFF
+$ claude plugin install backend-infra-engineer@ai-maestro-local-roles-marketplace --scope local
+Installing plugin "backend-infra-engineer@ai-maestro-local-roles-marketplace"...
+✔ Successfully installed plugin: backend-infra-engineer@ai-maestro-local-roles-marketplace (scope: local)
+
+$ cat .claude/settings.local.json
+{ "enabledPlugins": { "backend-infra-engineer@ai-maestro-local-roles-marketplace": true } }
+
+$ find ~/.claude/plugins/cache/ai-maestro-local-roles-marketplace -maxdepth 2
+.../ai-maestro-local-roles-marketplace/backend-infra-engineer/1.0.0
+```
+
+That cache path is the shape this card called "a shape ai-maestro's code cannot produce" — now
+explained: the CLI produces it, exactly like this. The mystery seventh row was a real CLI install.
+
+**The row it wrote, beside the hand-forged one, same plugin key** — the cleanest possible statement
+of what OWO449MR was about:
+
+```json
+{ "scope":"local", "projectPath":"/Users/…/agents/jhonny-bot",
+  "installPath":"/Users/…/agents/role-plugins/plugins/backend-infra-engineer" },   ← ours, forged, path never existed
+{ "scope":"local", "projectPath":"/private/tmp/aim-spike.MgfqFF",
+  "installPath":"/Users/…/.claude/plugins/cache/ai-maestro-local-roles-marketplace/backend-infra-engineer/1.0.0" }   ← the CLI's
+```
+
+**Cleanup, through the owning CLI** (`uninstall … --scope local -y` from the same cwd) removed the
+CLI's row and left the forged one untouched. That is this card's second first-hand confirmation of
+OWO449MR's STATE note: an orphan row the CLI does not believe in **cannot** be retracted by
+`claude plugin uninstall`, so it is residue only the USER can authorise removing.
+
+## Why the bug survived — and the guard that now stops it
+
+Nothing tested the argv. The only test driving this path (`deleteagent-g08c-plugin-uninstall`) uses
+a **fake adapter** and asserts `targetDir` and `scope` at the adapter BOUNDARY — the right altitude
+for the gate's ordering, and structurally incapable of seeing that the real adapter turns those two
+values into an invalid command line. OWO449MR's own STATE block flagged this as caveat 1. The
+caveat was correct and the thing it warned about was already true.
+
+`tests/lib/claude-adapter-cli-argv.test.ts` (14 tests) now asserts the two halves separately,
+because the bug is exactly a swap between them: the directory must be in the SPAWN OPTIONS and must
+NOT be in the arguments. Complementary neuters, disjoint red sets: restoring `--cwd` on install
+reds 4 (all install-side), on uninstall reds 3 (all uninstall-side).
+
+**Not filed upstream:** `claude` exiting 0 on an unknown option is arguably a CLI bug, but that
+repo is not the user's — needs their say-so before an issue.
 
 ## Problem
 

@@ -185,12 +185,22 @@ const UNAUDITED_RULES = new Set<number>([
 // selects the same plugin anyway and the test would stay green over a deleted guard. Its own neuter
 // reddens exactly it. The row's line ranges were also stale (3089-3160 / 3162-3210, ~74 lines adrift);
 // the gate-qualifier check cannot see that, since it verifies the LABEL exists, never the range.
+// 2026-07-30: R12.3 pinned in the same file — 26 → 25, and its row was INTERNALLY INCONSISTENT:
+// the range `3149-3152` sits squarely inside G14d while the qualifier said `ChangeTitle::G15`. The
+// qualifier check passed regardless, because it proves the LABEL exists somewhere in the pipeline.
+// The ops trace settled which was right, after two wrong guesses from reading: on a title CHANGE the
+// enforcer is G14d — it uninstalls EVERY enabled role-plugin incompatible with the new title, leaving
+// G15 nothing to swap. G15's swap branch is still load-bearing on the path G14d declines (an agent
+// with NO old title carrying a stale plugin), so both are cited and each has its own test and neuter.
+// Note the two gates are partly REDUNDANT: neutering either leaves the end state correct, and only
+// the path-specific assertion reddens. That is a property worth stating rather than hiding behind a
+// single end-state assertion that would survive losing one defender.
 //
 // Take this number from THIS test's own failure message, never from a hand-written grep. Mine said
 // 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule `R17.18a`, and a count from the
 // wrong pattern reads as a clean win — I was one commit from locking in a number my own awk had
 // invented.
-const MAX_ENFORCED_WITHOUT_TEST = 26
+const MAX_ENFORCED_WITHOUT_TEST = 25
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

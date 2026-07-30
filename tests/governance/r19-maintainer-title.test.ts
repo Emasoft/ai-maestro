@@ -369,6 +369,12 @@ beforeEach(() => {
     outcomes: [{ id: 'core-plugin', status: 'ok' }], repaired: [], failed: [],
   })
   mockRuntime.sessionExists.mockResolvedValue(false)
+  // MUST be reset by hand. vi.clearAllMocks() clears CALLS, not IMPLEMENTATIONS, so a
+  // mockReturnValue set inside one test leaks into every test after it — and this one
+  // decides which G15 branch runs. When R20.5's two-compatible-plugins value leaked
+  // forward, R12.3's swap test took the KEEP branch instead: no uninstall, no install,
+  // and `success === true` the whole way, so only the ops assertion caught it.
+  mockRolePluginService.getPluginsForTitle.mockReturnValue([])
   seedAgents([])
   seedTeams([])
 })
@@ -738,5 +744,90 @@ describe('R19.10 — MAINTAINER is bound to ai-maestro-maintainer-agent (ChangeT
     // line alone would not distinguish "kept" from "kept, then replaced anyway".
     expect(installCalls()).toHaveLength(0)
     expect(r.installedPlugin).toBeNull()
+  })
+})
+
+// ============================================================================
+// R12.3 — a role-plugin serves ONE role, so an agent can never hold two at once
+// ("an agent cannot simultaneously serve as COS and ARCHITECT").
+//
+// MAP CORRECTION, of a kind the ratchet cannot detect. The row read
+// `:3149-3152 (ChangeTitle::G15)` — and 3149-3152 is squarely inside **G14d**. The
+// range named one gate and the qualifier named another, and the qualifier check
+// passed anyway because it proves the LABEL exists somewhere in the pipeline, never
+// that the cited range contains it. Reading the trace settled which is right:
+//
+//   G14d: Uninstalled "ai-maestro-programmer-agent@..." (bound to old title "member")
+//   G15:  Cleaned stale role-plugins          <- the no-incumbent branch, not the swap
+//
+// So on a title CHANGE the enforcer is G14d: it uninstalls EVERY enabled role-plugin
+// not compatible with the new title, which leaves G15 nothing to swap. G15's swap
+// branch is still reachable — and still load-bearing — in the case G14d declines:
+// an agent with NO old title carrying a stale role-plugin. Two paths to one
+// guarantee, so both are cited and both are driven.
+//
+// Each test's load-bearing assertion is the END STATE. An "Uninstalled" ops line is
+// written by the same code that would still write it if the uninstall silently
+// failed, and R12.3 is a claim about HOW MANY role-plugins are active — so count them.
+// ============================================================================
+describe('R12.3 — one role-plugin at a time (ChangeTitle G14d + G15)', () => {
+  const agentDir = path.join(FAKE_HOME, 'agents', 'agent-a')
+  const settingsFile = path.join(agentDir, '.claude', 'settings.local.json')
+
+  function seedInstalledPlugin(name: string): void {
+    mkdirSync(path.dirname(settingsFile), { recursive: true })
+    writeFileSync(settingsFile, JSON.stringify({
+      enabledPlugins: { [`${name}@ai-maestro-plugins`]: true },
+    }))
+  }
+
+  /** The role-plugins actually enabled in the agent's settings after the run. */
+  function activeRolePlugins(): string[] {
+    const after = JSON.parse(readFileSync(settingsFile, 'utf8')) as {
+      enabledPlugins: Record<string, boolean>
+    }
+    return Object.keys(after.enabledPlugins)
+      .filter(k => after.enabledPlugins[k])
+      .map(k => k.split('@')[0])
+      .filter(n => n.startsWith('ai-maestro-') && n !== 'ai-maestro-plugin')
+  }
+
+  it('changing title uninstalls the incumbent bound to the OLD title (G14d) — the end state has exactly one role-plugin, which is the whole rule', async () => {
+    seedInstalledPlugin('ai-maestro-programmer-agent')
+    seedAgents([makeAgentRecord({ id: 'agent-a', governanceTitle: 'member' })])
+
+    // getPluginsForTitle stays [] (the beforeEach default), so `compatibles` is the
+    // hardcoded MAINTAINER default alone — the incumbent is NOT compatible with the
+    // new title, which is what makes G14d schedule it for uninstall instead of
+    // keeping it (R20.5's keep-branch, pinned above).
+    const r = await changeTitle('agent-a', 'maintainer', {
+      githubRepo: 'Emasoft/ai-maestro',
+      skipPluginSync: false,
+    })
+
+    expect(r.success).toBe(true)
+    expect(r.operations.some(op =>
+      /^G14d: Uninstalled "ai-maestro-programmer-agent@ai-maestro-plugins" \(bound to old title "member"\)/.test(op))).toBe(true)
+    expect(r.installedPlugin).toBe('ai-maestro-maintainer-agent')
+    // Asserting only that the NEW plugin arrived would pass on exactly the state
+    // this rule forbids — both installed at once.
+    expect(activeRolePlugins()).toEqual(['ai-maestro-maintainer-agent'])
+  })
+
+  it('a stale role-plugin on an agent with NO old title is swept by G15 — G14d declines (it needs an old title), so this is the path that would leave two installed if the swap branch went away', async () => {
+    seedInstalledPlugin('ai-maestro-architect-agent')
+    seedAgents([makeAgentRecord({ id: 'agent-a', governanceTitle: null })])
+
+    const r = await changeTitle('agent-a', 'maintainer', {
+      githubRepo: 'Emasoft/ai-maestro',
+      skipPluginSync: false,
+    })
+
+    expect(r.success).toBe(true)
+    expect(r.operations.some(op =>
+      /^G15: Uninstalled old role-plugin "ai-maestro-architect-agent"/.test(op))).toBe(true)
+    expect(r.uninstalledPlugin).toBe('ai-maestro-architect-agent')
+    expect(r.installedPlugin).toBe('ai-maestro-maintainer-agent')
+    expect(activeRolePlugins()).toEqual(['ai-maestro-maintainer-agent'])
   })
 })

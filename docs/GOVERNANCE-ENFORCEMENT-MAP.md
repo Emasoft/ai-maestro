@@ -136,7 +136,7 @@ Row format is fixed so a regex parses each line:
 | R11.12 | CONTRADICTED | — | — |
 | R12.1 | UNENFORCED | — | — |
 | R12.2 | CONTRADICTED | — | — |
-| R12.3 | ENFORCED | services/element-management-service.ts:3149-3152 (ChangeTitle::G15) | — |
+| R12.3 | ENFORCED | services/element-management-service.ts:3029-3161 (ChangeTitle::G14d), services/element-management-service.ts:3222-3231 (ChangeTitle::G15) | tests/governance/r19-maintainer-title.test.ts |
 | R12.4 | INVENTED | — | — |
 | R12.5 | CONTRADICTED | — | — |
 | R12.6 | UNENFORCED | — | — |

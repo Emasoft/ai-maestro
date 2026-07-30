@@ -238,7 +238,18 @@ const UNAUDITED_RULES = new Set<number>([
 // loading=true itself, so the assertion passed with the initial value INVERTED. It now samples
 // DURING render. Paired with a vacuity control (loading must reach false), because a lone
 // "loading === true" assertion also passes against a hardcoded constant.
-const MAX_ENFORCED_WITHOUT_TEST = 19
+// 2026-07-30: 19 -> 18. R8.1 pinned by tests/governance/r2-r8-team-registry-invariants.test.ts.
+// R8.1 is ALL-quantified ("ALL write operations use withLock"), so one mutator pins an instance,
+// not the rule — it needs a MECHANISM half (drive a real mutator, prove the lock is taken at
+// runtime) AND a COVERAGE half (no write site escapes it, which is what catches the sixth mutator
+// added next year). Proven by neutering deleteTeam, which the mechanism half never drives: only
+// COVERAGE reddened, naming deleteTeam by line.
+//
+// R2.2 is deliberately NOT counted despite living in the same test file. It has TWO clauses —
+// server 409 AND a client-side inline error before POST — and only the server half is pinned.
+// Its Guard column now cites BOTH sites (it previously cited one), so the gap is visible instead
+// of being laundered into a "tested" row by a test that covers half the rule.
+const MAX_ENFORCED_WITHOUT_TEST = 18
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

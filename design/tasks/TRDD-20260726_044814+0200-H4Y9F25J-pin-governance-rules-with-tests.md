@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T16:55:41+0200
+updated: 2026-07-30T17:04:40+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,24 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 23 → 18 — 5 pinned this session
+
+`d7a8f3dc` **R34.2 + R35.2** · `50a52952` **R7.2 + R7.9** · `<this>` **R8.1**.
+
+**R2.2 is deliberately NOT counted, and that is the interesting part.** It shares a guard FILE
+with R8.1 (`lib/team-registry.ts`) and its server clause IS pinned in the same test — but the
+rule has TWO clauses ("server-side 409 **and** client-side inline error before POST") and the
+client half lives at `components/teams/TeamCreationWizard.tsx:201`, which the map did not cite
+at all. Citation now names BOTH sites; the row stays untested until the client half is pinned
+(render the wizard, type a duplicate, assert the inline error AND that no POST fired — "before
+POST" is the load-bearing half). Counting it would have laundered a half-covered rule into a
+"tested" row, which is the exact defect this campaign exists to remove.
+
+**The map's columns are MACHINE-PARSED — keep prose out of them.** Guard is split on commas
+and every piece must resolve as a file path; Test must be `—` or a real path. A prose citation
+("lib/team-registry.ts — withLock in all 5 mutators (createTeam, …)") reddened two ratchet
+tests at once. Explanations belong in the test file or here.
 
 ### RATCHET 23 → 19 — 4 pinned this session, in 2 shared-guard pairs
 

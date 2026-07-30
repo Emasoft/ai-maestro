@@ -42,7 +42,7 @@ Row format is fixed so a regex parses each line:
 | R1.5 | ENFORCED | lib/team-registry.ts:427 | tests/governance/r1-r2-team-registry.test.ts |
 | R1.6 | INVENTED | — | — |
 | R2.1 | ENFORCED | lib/team-registry.ts:106-110 | tests/governance/r1-r2-team-registry.test.ts |
-| R2.2 | ENFORCED | lib/team-registry.ts:107 | — |
+| R2.2 | ENFORCED | lib/team-registry.ts:107, components/teams/TeamCreationWizard.tsx:201 | — |
 | R2.3 | ENFORCED | lib/team-registry.ts:107 | tests/governance/r1-r2-team-registry.test.ts |
 | R3.1 | CONTRADICTED | — | — |
 | R3.2 | ENFORCED | services/element-management-service.ts (ChangeTitle::G07) | tests/governance/r3-r9-team-governance.test.ts |
@@ -98,7 +98,7 @@ Row format is fixed so a regex parses each line:
 | R7.7 | ENFORCED | components/sidebar/TeamCard.tsx:71 | — |
 | R7.8 | ENFORCED | components/teams/TeamOverviewSection.tsx | — |
 | R7.9 | ENFORCED | hooks/useGovernance.ts:48 | tests/governance/r7-governance-loading-state.test.ts |
-| R8.1 | ENFORCED | lib/team-registry.ts:306 | — |
+| R8.1 | ENFORCED | lib/team-registry.ts | tests/governance/r2-r8-team-registry-invariants.test.ts |
 | R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |
 | R8.3 | ENFORCED | services/element-management-service.ts (DeleteTeam::G05) | tests/governance/r3-r9-team-governance.test.ts |
 | R8.4 | ENFORCED | lib/authorization.ts:580-592 | tests/governance/r8-r10-r26-authorization-team-scope.test.ts |

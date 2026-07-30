@@ -1,7 +1,7 @@
 /**
  * Governance drift tests — R19 (MAINTAINER title) sub-rules that have a REAL
  * code guard inside `ChangeTitle` but were never pinned by any test
- * (docs/GOVERNANCE-ENFORCEMENT-MAP.md rows R19.1, R19.2, R19.3).
+ * (docs/GOVERNANCE-ENFORCEMENT-MAP.md rows R19.1, R19.2, R19.3, R19.10).
  *
  * Every test below calls the REAL exported `ChangeTitle` (never a
  * re-implementation, never the guard's own module mocked away) and asserts the
@@ -25,14 +25,18 @@
  *     R3 row cites it either — so one guard was serving two rules and was
  *     cited by neither.
  *
+ *   - **R19.10 was cited at the CONST TABLE, `lib/ecosystem-constants.ts:331`** —
+ *     one row of `TITLE_PLUGIN_MAP`. A test asserting a table's contents
+ *     survives the deletion of every guard that READS the table, so a pin there
+ *     buys a green column and no coverage. The row is re-cited onto the two
+ *     gates that ACT on the binding — `ChangeTitle` G15 (selection) and G16
+ *     (install) — and pinned by driving the real pipeline with plugin sync ON,
+ *     asserting the actual `claude plugin install` argv. R19.10's SECOND clause
+ *     (per R17 the core plugin is also required) is enforced OUTSIDE ChangeTitle
+ *     — `enforceAgentInvariants`' `core-plugin` row and CreateAgent G11, which
+ *     the R17 rows cite — so it is not re-cited here.
+ *
  * Deliberately OUT of scope, named rather than silently skipped:
- *   - **R19.10** — its citation is `lib/ecosystem-constants.ts:331`, a single
- *     row of the `TITLE_PLUGIN_MAP` const table. A test asserting a table's
- *     contents survives the guard's deletion, so pinning it there would buy a
- *     green column and no coverage. R19.10 also has a SECOND clause (the R17
- *     core-plugin requirement) that nothing cites at all. It needs a
- *     re-citation decision onto the site that ACTS on the binding
- *     (ChangeTitle G15/G16), not a test written against the table.
  *   - **`checkMaintainerRepo`'s `a.id !== agentId` self-exclusion** — a neuter run
  *     deleting it left this whole file GREEN, and reading Gate 5 explains why: it
  *     sets `oldTitle` from `agent.governanceTitle` and only overrides when that is
@@ -50,7 +54,7 @@
  *     `services/element-management-service.ts` run for real.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
-import { rmSync, mkdirSync, writeFileSync } from 'fs'
+import { rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs'
 import path from 'path'
 
 // services/element-management-service.ts is ~8,000 lines with a large transitive
@@ -216,7 +220,10 @@ vi.mock('child_process', async (importOriginal) => {
   const overrides = {
     execFile: (...args: unknown[]) => {
       const cb = args[args.length - 1] as (e: Error | null, r: { stdout: string; stderr: string }) => void
-      mockExecFileImpl(args[0], args[1])
+      // args[2] is promisify(execFile)'s OPTIONS object — forwarded because the
+      // install double needs its `cwd` to know which agent dir the CLI would
+      // have written into.
+      mockExecFileImpl(args[0], args[1], args[2])
         .then((r: { stdout: string; stderr: string }) => cb(null, r))
         .catch((err: Error) => cb(err, { stdout: '', stderr: '' }))
     },
@@ -233,6 +240,16 @@ vi.mock('child_process', async (importOriginal) => {
 const OWNER_CTX = { isSystemOwner: true as const }
 const TEAMS_FILE = path.join(FAKE_STATE, 'teams', 'teams.json')
 const REGISTRY_FILE = path.join(FAKE_STATE, 'agents', 'registry.json')
+
+/** One recorded external-process invocation (see the child_process mock above). */
+type ExecCall = { cmd: unknown; args: unknown }
+
+// Recording array for that double. `mockExecFileImpl` on its own proves only that
+// SOMETHING shelled out; the argv is what distinguishes "a role-plugin was
+// installed" from "THE maintainer role-plugin was installed", and that distinction
+// is the whole of R19.10. It needs no vi.hoisted(): nothing in a vi.mock factory
+// touches it — only the implementation installed in beforeEach pushes to it.
+const mockExecFileCalls: ExecCall[] = []
 
 type SeedTeam = { id: string; name: string; agentIds: string[]; chiefOfStaffId?: string | null }
 
@@ -316,7 +333,33 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockExecFileImpl.mockImplementation(async () => ({ stdout: '', stderr: '' }))
+  // clearAllMocks() clears CALLS, not IMPLEMENTATIONS, and it cannot see this
+  // array at all — so both are reset by hand, or one test's installs leak into
+  // the next test's assertion of "exactly one install".
+  mockExecFileCalls.length = 0
+  mockExecFileImpl.mockImplementation(async (cmd: unknown, args: unknown, opts: unknown) => {
+    mockExecFileCalls.push({ cmd, args })
+    // Model the ONE side effect of `claude plugin install` that this pipeline
+    // reads back: the agent's enabledPlugins entry. A double that treats the
+    // external command as a pure no-op cannot distinguish "installed" from
+    // "install left no trace" — and the pipeline CAN: G17 re-scans
+    // settings.local.json after G16 and, finding 0 active role-plugins, runs its
+    // R9.13 recovery and reinstalls. Without this the run made TWO install calls
+    // and every assertion below would have been describing the RECOVERY path
+    // while claiming to pin the happy one.
+    // The UNINSTALL side effect is deliberately NOT modelled: uninstallPluginLocally
+    // deletes the key from settings.local.json itself, as defence in depth.
+    const argv = Array.isArray(args) ? (args as string[]) : []
+    const cwd = (opts as { cwd?: string } | undefined)?.cwd
+    if (cmd === 'claude' && argv[0] === 'plugin' && argv[1] === 'install' && cwd) {
+      const file = path.join(cwd, '.claude', 'settings.local.json')
+      mkdirSync(path.dirname(file), { recursive: true })
+      const cur = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {}
+      cur.enabledPlugins = { ...(cur.enabledPlugins ?? {}), [`${argv[2]}@${argv[3]}`]: true }
+      writeFileSync(file, JSON.stringify(cur, null, 2))
+    }
+    return { stdout: '', stderr: '' }
+  })
   mockGovernance.getManagerId.mockReturnValue(null)
   mockGovernance.isManager.mockReturnValue(false)
   mockGovernance.isChiefOfStaffAnywhere.mockReturnValue(false)
@@ -588,5 +631,70 @@ describe('R19.2 / R19.3 — re-pointing an existing MAINTAINER at another repo (
 
     expect(r.success).toBe(true)
     expect(r.restartNeeded).toBe(false)
+  })
+})
+
+// ============================================================================
+// R19.10 — the MAINTAINER title is BOUND to the ai-maestro-maintainer-agent
+// role-plugin.
+//
+// MAP RE-CITATION. The row cited `lib/ecosystem-constants.ts:331` — ONE line of
+// the TITLE_PLUGIN_MAP const table. A table is not a guard: delete G15 and G16
+// and that line still reads exactly the same, so a test written against it stays
+// green while the binding stops being applied to a single agent. The binding is
+// only real where something ACTS on it, so the row now cites the two gates that
+// do: G15 RESOLVES title → plugin, G16 INSTALLS it.
+//
+// These are the only tests in this file that do NOT pass skipPluginSync — every
+// other test here suppresses G15/G16 precisely because they shell out. The
+// external command is safe to let run because child_process is doubled; what
+// reaches it is recorded in mockExecFileCalls and asserted verbatim.
+// ============================================================================
+describe('R19.10 — MAINTAINER is bound to ai-maestro-maintainer-agent (ChangeTitle G15/G16)', () => {
+  /** The `claude plugin install …` invocations this pipeline run actually made. */
+  function installCalls(): ExecCall[] {
+    return mockExecFileCalls.filter(c =>
+      c.cmd === 'claude' && Array.isArray(c.args) && c.args[0] === 'plugin' && c.args[1] === 'install')
+  }
+
+  it('assigning MAINTAINER installs the maintainer role-plugin — asserted on the real `claude plugin install` argv, so removing G15 or G16 reddens this where a const-table assertion would not', async () => {
+    seedAgents([makeAgentRecord({ id: 'agent-a' })])
+
+    const r = await changeTitle('agent-a', 'maintainer', {
+      githubRepo: 'Emasoft/ai-maestro',
+      skipPluginSync: false,
+    })
+
+    expect(r.success).toBe(true)
+    // G15 RESOLVED the binding …
+    expect(r.operations.some(op =>
+      /^G15: Selected compatible plugin "ai-maestro-maintainer-agent" for MAINTAINER/.test(op))).toBe(true)
+    // … and G16 ACTED on it.
+    expect(r.operations.some(op =>
+      /^G16: Installed role-plugin "ai-maestro-maintainer-agent"/.test(op))).toBe(true)
+    expect(r.installedPlugin).toBe('ai-maestro-maintainer-agent')
+
+    // The load-bearing assertion. An ops line is written by the same function that
+    // would still write it if the install were skipped; the argv can only exist
+    // because the CLI was genuinely invoked with this plugin name.
+    const calls = installCalls()
+    expect(calls).toHaveLength(1)
+    const argv = calls[0].args as string[]
+    expect(argv[2]).toBe('ai-maestro-maintainer-agent')
+    // Local scope, never user scope: a role-plugin installed globally would bind
+    // every agent on this client to the MAINTAINER persona (R17.8 / R20.20).
+    expect(argv).toContain('--scope')
+    expect(argv).toContain('local')
+  })
+
+  it('a DIFFERENT title installs a DIFFERENT plugin — the name is resolved from the title, not hardcoded (without this control the test above also passes on a pipeline that installs one fixed plugin for everyone)', async () => {
+    seedAgents([makeAgentRecord({ id: 'agent-a' })])
+
+    const r = await changeTitle('agent-a', 'autonomous', { skipPluginSync: false })
+
+    expect(r.success).toBe(true)
+    const calls = installCalls()
+    expect(calls).toHaveLength(1)
+    expect((calls[0].args as string[])[2]).toBe('ai-maestro-autonomous-agent')
   })
 })

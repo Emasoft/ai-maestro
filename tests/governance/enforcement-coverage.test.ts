@@ -168,12 +168,20 @@ const UNAUDITED_RULES = new Set<number>([
 // claimed MORE than the code did; here it claimed LESS) and it is the one this counter is
 // structurally blindest to, because a row claiming nothing is never audited. Both were found the
 // same way: reading the cited range against the rule's CURRENT text instead of trusting a verdict.
+// 2026-07-30: R19.10 pinned in the same file — 28 → 27. Its row cited `lib/ecosystem-constants.ts:331`,
+// ONE line of the TITLE_PLUGIN_MAP const table, and a citation like that is worth less than none: a
+// test written against a table stays green after every guard that READS the table is deleted, so the
+// row would have reported a pin it never had. The row now cites the two gates that ACT on the binding
+// (ChangeTitle G15 resolves title → plugin, G16 installs it) and the test drives the real pipeline with
+// plugin sync ON, asserting the argv that reaches `claude plugin install`. Both neuters redden it, and
+// they redden DIFFERENT halves — disabling G16 fails one test, mis-resolving G15 fails both — which is
+// why the row cites both gates rather than whichever one was convenient.
 //
 // Take this number from THIS test's own failure message, never from a hand-written grep. Mine said
 // 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule `R17.18a`, and a count from the
 // wrong pattern reads as a clean win — I was one commit from locking in a number my own awk had
 // invented.
-const MAX_ENFORCED_WITHOUT_TEST = 28
+const MAX_ENFORCED_WITHOUT_TEST = 27
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

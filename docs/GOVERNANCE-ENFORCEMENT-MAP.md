@@ -215,7 +215,7 @@ Row format is fixed so a regex parses each line:
 | R19.7 | UNENFORCED | — | — |
 | R19.8 | UNENFORCED | — | — |
 | R19.9 | CONTRADICTED | — | — |
-| R19.10 | ENFORCED | lib/ecosystem-constants.ts:331 | — |
+| R19.10 | ENFORCED | services/element-management-service.ts:3191-3220 (ChangeTitle::G15), services/element-management-service.ts:3236-3284 (ChangeTitle::G16) | tests/governance/r19-maintainer-title.test.ts |
 | R19.11 | UNENFORCED | — | — |
 | R20.1 | ENFORCED | lib/ecosystem-constants.ts:70-90 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.2 | ENFORCED | lib/agent-invariants.ts:110-150 | tests/governance/r20-marketplace-governance.test.ts |

@@ -291,9 +291,9 @@ Row format is fixed so a regex parses each line:
 | R32.3 | UNENFORCED | — | — |
 | R33.1 | ENFORCED | lib/portfolio-ledger.ts:149-214 | — |
 | R34.1 | UNENFORCED | — | — |
-| R34.2 | ENFORCED | app/api/agents/foreign-approvals/[id]/approve/route.ts:46-49 | — |
+| R34.2 | ENFORCED | app/api/agents/foreign-approvals/[id]/approve/route.ts:46-49 | tests/governance/r34-r35-foreign-approval.test.ts |
 | R35.1 | UNENFORCED | — | — |
-| R35.2 | ENFORCED | app/api/agents/foreign-approvals/[id]/approve/route.ts:46-49 | — |
+| R35.2 | ENFORCED | app/api/agents/foreign-approvals/[id]/approve/route.ts:46-49 | tests/governance/r34-r35-foreign-approval.test.ts |
 | R36.1 | UNENFORCED | — | — |
 | R36.2 | UNENFORCED | — | — |
 | R37.1 | BEHAVIOURAL | — | — |

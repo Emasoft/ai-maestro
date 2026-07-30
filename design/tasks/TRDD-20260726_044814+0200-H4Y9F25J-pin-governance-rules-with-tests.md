@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T16:28:00+0200
+updated: 2026-07-30T16:45:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,49 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### SETTLED — the 9 client-side-guarded rules ARE pinnable; do NOT downgrade them
+
+The blocking question ("a guard in a `.tsx` is not a server-side refusal — do those
+9 warrant a BEHAVIOURAL verdict instead of a test?") is **answered NO, on facts.
+NEXT ACTION: write the tests; the decision needs no further deliberation.**
+
+The 23 (read from the ratchet's OWN failure message — a hand grep misses the
+lettered `R17.18a`, and the map has a SECOND 3-column table at line 471 that
+poisons a naive `awk -F'|'` with 118 phantom `—` guards):
+
+`R1.1 R1.2 R1.3 R1.4 R2.2 R4.8 R7.1 R7.2 R7.3 R7.7 R7.8 R7.9 R8.1 R10.6 R11.6
+R17.16 R17.18a R18.8 R20.28 R33.1 R34.2 R35.2 R40.1`
+
+**I nearly downgraded 9 correct rows by applying a security principle to UX rules.**
+CLAUDE.md says a check in a client "is not a weak check, it is **no check** — enforce
+in the route", which reads as decisive until you read what the rules SAY. All 9 are
+**presentation** rules — "the UI must always show team memberships" (R4.8), a
+`submitting` guard against double-click (R7.1), spinners (R7.2), error messages
+(R7.3), a blocked badge (R7.7), resolve a COS UUID to a name (R7.8), a loading state
+instead of a stale role (R7.9), a dropdown at 2+ compatible plugins (R11.6), a "core"
+label instead of an uninstall button (R17.16). The curl principle governs
+AUTHORIZATION; nobody attacks themselves by double-clicking. For a rule about what
+the UI DISPLAYS, the component is the only possible enforcement point, so `.tsx` is
+correct and complete. **Read the rule TEXT against the guard before re-verdicting it**
+— the same lesson that saved R9.13.
+
+**They are pinnable TODAY — no infrastructure work.** `jsdom ^25` +
+`@testing-library/react ^14` are installed, and `tests/unit/password-dialog.test.tsx`
+is the working precedent: a per-file `// @vitest-environment jsdom` (vitest.config's
+default stays `node`). The adversarial form for a presentation rule is: render in the
+state the rule governs, assert the required element present/absent, and neuter-prove
+by deleting the guard.
+
+**Batch by GUARD FILE (the directive's rule), not by rule id.** Clusters, incl. two
+pairs that share one guard line so one file pins both:
+`foreign-approvals/[id]/approve/route.ts:46-49` → R34.2 + R35.2 ·
+`hooks/useGovernance.ts:48` → R7.2 + R7.9 · `services/teams-service.ts` → R1.3 + R1.4 ·
+`lib/team-registry.ts` → R2.2 + R8.1 · `components/teams/TeamOverviewSection.tsx` →
+R4.8 + R7.8 · `components/sidebar/TeamListView.tsx` → R7.1 + R7.3.
+Singletons: R1.1 · R1.2 · R7.7 · R10.6 · R11.6 · R17.16 · R17.18a · R18.8 · R33.1 · R40.1.
+`R20.28`'s guard is `install-messaging.sh` — a SHELL script, so it needs a
+subprocess-shaped test, not a vitest import; treat it as its own thing.
 
 **Ratchet 30 → 28.** R19.1 + R19.3 pinned by 13 tests in
 `tests/governance/r19-maintainer-title.test.ts`, driving the REAL `ChangeTitle`.

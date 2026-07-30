@@ -222,7 +222,14 @@ const UNAUDITED_RULES = new Set<number>([
 // 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule `R17.18a`, and a count from the
 // wrong pattern reads as a clean win — I was one commit from locking in a number my own awk had
 // invented.
-const MAX_ENFORCED_WITHOUT_TEST = 23
+// 2026-07-30: 23 -> 21. R34.2 + R35.2 pinned by tests/governance/r34-r35-foreign-approval.test.ts.
+// One file pins two rules because they share ONE guard (route.ts:46-49) — and each rule's THIRD
+// clause (the signed-ledger write) sits at an UNCITED site further down the handler, so it is the
+// half a citation-shaped audit structurally cannot see. Proven by a COMPLEMENTARY neuter pair:
+// the two gates run in order, so a refusal test that withheld both credentials would pass with
+// either gate deleted. Each test lets the OTHER gate pass, and each neuter reddens exactly one
+// test (drop enforceMaestro -> only the R35.2 test; drop requireSudoToken -> only the R34.2 test).
+const MAX_ENFORCED_WITHOUT_TEST = 21
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:37:27+0200
+updated: 2026-07-30T17:41:08+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,15 +20,37 @@ relevant-rules: [R51]
 blocked-by: []
 eht: [L42SKUBW, W8NA7ROZ]
 npt: []
-implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e, 5f9b2302, c31c1805]
+implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63baa1, b07cfd78, c5173e59, 17471dd3, f379b2b7, 73856fe0, 32d890f2, b74b01bf, bd701701, 4ffaa2a1, c6e52296, 654e116b, 82055ec1, 7cd4de7d, d5ba8d23, d1f6f760, c895b72b, bfcf8761, d7a8f3dc, 50a52952, 05d3e83e, 8321338e, 5f9b2302, c31c1805, 5353f2c4]
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
 
-### RATCHET 15 → 14 — R17.16 DONE (`tests/governance/r17-core-plugin-no-uninstall.test.tsx`)
+### RATCHET 14 → 13 — R11.6 DONE, and a NEUTER THAT REDDENED NOTHING
 
-**The remaining 14:** R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R11.6, R17.18a, R18.8,
-R20.28, R33.1, R40.1.
+**The remaining 13:** R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R17.18a, R18.8, R20.28,
+R33.1, R40.1.
+
+`tests/governance/r11-role-plugin-n-to-1.test.tsx` pins **R11.6**. "Show a dropdown when 2+ plugins
+are compatible" is only meaningful against its complement — a UI that ALWAYS showed the dropdown
+satisfies the rule's literal text while offering a choice of one — so the single-plugin lock is
+asserted too.
+
+**The instructive part: my first neuter changed NOTHING.** I mutated
+`hasMultipleOptions = length > 1` → `> 0`, expecting the single-plugin test to redden. All three
+stayed green, because the render is `isSingleLocked ? … : hasMultipleOptions ? … : …` and with one
+plugin the FIRST arm already matches — `hasMultipleOptions` is never consulted. The single-plugin
+case is guarded by `isSingleLocked`, *not* by the `> 1` the rule's text points at. **A neuter that
+reddens nothing is a finding about the TEST**, and here it said the expression I had named as the
+guard was shadowed by an earlier one in the same ternary. The real pair: `isSingleLocked = false`
+→ only the locked test; `hasMultipleOptions = false` → the dropdown test + the positive control.
+Both expressions sit inside the cited range `:63-74`, so the citation was right and my reasoning
+about which line does the work was not.
+
+**Not asserted, deliberately:** the third arm is MEMBER's free choice (`isFreeChoice` — "MEMBER
+always gets Change, whatever the count"). That is a SUPERSET behaviour and is not in R11.6's text;
+asserting it under this row would claim the rule says something it does not.
+
+### RATCHET 15 → 14 — R17.16 DONE (`tests/governance/r17-core-plugin-no-uninstall.test.tsx`)
 
 R17.16 has TWO clauses on ONE ternary — *MUST NOT show the uninstall X* **and** *MUST show a
 "core" label* — so both are asserted: the label alone passes against a UI that shows the label

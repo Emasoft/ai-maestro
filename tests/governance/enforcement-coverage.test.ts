@@ -281,7 +281,15 @@ const UNAUDITED_RULES = new Set<number>([
 // neuter pair is what proves it earns its place — dropping the core branch reddens the two
 // core-plugin tests; making it unconditional reddens ONLY the ordinary-plugin one (a read-only
 // Plugins section, a louder bug than the one R17.16 prevents, that the first neuter cannot see).
-const MAX_ENFORCED_WITHOUT_TEST = 14
+// 2026-07-30: 14 -> 13. R11.6 pinned by tests/governance/r11-role-plugin-n-to-1.test.tsx. "Shows a
+// dropdown when 2+ plugins are compatible" is only meaningful against its complement — a UI that
+// ALWAYS showed the dropdown satisfies it while offering a choice of one — so the single-plugin
+// lock is asserted too. The first neuter here was WRONG and reddened nothing: I mutated
+// `hasMultipleOptions`, but the render is `isSingleLocked ? … : hasMultipleOptions ? …`, so the
+// single-plugin case never reaches the expression the rule's text points at. A neuter that changes
+// nothing is a finding about the TEST; the real pair is `isSingleLocked = false` (locked test only)
+// and `hasMultipleOptions = false` (dropdown test + positive control).
+const MAX_ENFORCED_WITHOUT_TEST = 13
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

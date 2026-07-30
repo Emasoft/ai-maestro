@@ -127,7 +127,7 @@ Row format is fixed so a regex parses each line:
 | R11.3 | ENFORCED | lib/ecosystem-constants.ts:332 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R11.4 | ENFORCED | services/element-management-service.ts (ChangeTeam::G07) | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R11.5 | ENFORCED | services/element-management-service.ts (ChangeTeam::G04d) | tests/governance/r17-r11-core-plugin-binding.test.ts |
-| R11.6 | ENFORCED | components/agent-profile/RoleTab.tsx:63-74 | — |
+| R11.6 | ENFORCED | components/agent-profile/RoleTab.tsx:63-74 | tests/governance/r11-role-plugin-n-to-1.test.tsx |
 | R11.7 | CONTRADICTED | — | — |
 | R11.8 | CONTRADICTED | — | — |
 | R11.9 | CONTRADICTED | — | — |

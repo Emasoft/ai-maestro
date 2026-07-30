@@ -441,7 +441,27 @@ const UNAUDITED_RULES = new Set<number>([
 // cannot-advance test. That last neuter reddened NOTHING at first — step 0's gate also requires
 // a password the test never filled, so Next was disabled for the PASSWORD and the assertion
 // passed for the wrong reason. Second vacuous-assertion catch of the day, same shape as R4.8's.
-const MAX_ENFORCED_WITHOUT_TEST = 1
+// 2026-07-30: 1 -> 0. R20.28 pinned by tests/governance/r20-installer-marketplace-layout.test.ts —
+// the LAST enforced-but-untested rule (23 -> 0 in one day). Its guard is a SHELL script, and the
+// rule is a claim about what the installer PUTS ON DISK, so the only honest proof runs it and
+// looks: a subprocess with $HOME redirected in the SPAWN ENV (an in-process swap cannot contain a
+// process that resolves paths at exec) and a `claude` PATH shim so nothing reaches the real CLI.
+// Containment is proven POSITIVELY — every assertion reads the FAKE home, which can only exist if
+// the redirect took effect, and the real ~/agents listing is compared before/after. Two things had
+// to change first: the citation had ROTTED ~87 lines (install-messaging.sh:936-1110 pointed at
+// skill migration and the tooling installer), and the guard sat inside a 1,386-line installer that
+// also shells out to claude/cargo/npm — so it was extracted to scripts/setup-local-marketplaces.sh,
+// the same delegation pattern that block already used twice. The guard is now a whole FILE, which
+// is a citation that cannot rot. FOUR neuters, complementary (A:1, B:4, C:2, D:3 tests red).
+// Neuter A reddened NOTHING at first — migrate-r20-disk-layout.sh:135/:269 is a SECOND producer of
+// the two Claude subdirs, so the guard's own mkdir is load-bearing only on the fresh-install branch
+// no test reached; a fresh-install test (guard copied to a dir with no migration script, asserting
+// the "migration script not found" line actually printed) now covers it. Third vacuous-assertion
+// catch of the day, and the first of the "several enabled inputs, one output" shape. Sweep
+// NEGATIVE: the two test-tree mentions of install-messaging.sh are a header COMMENT in
+// r20-marketplace-governance.test.ts explaining why it did NOT pin R20.28, and
+// pillar-cli-install.test.ts, which greps the installer's TEXT for a different rule.
+const MAX_ENFORCED_WITHOUT_TEST = 0
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

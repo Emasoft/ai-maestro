@@ -244,7 +244,7 @@ Row format is fixed so a regex parses each line:
 | R20.25 | ENFORCED | services/plugin-storage-service.ts:227-230 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.26 | ENFORCED | services/plugin-storage-service.ts:199-203 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.27 | UNENFORCED | — | — |
-| R20.28 | ENFORCED | install-messaging.sh:936-1110 | — |
+| R20.28 | ENFORCED | scripts/setup-local-marketplaces.sh | tests/governance/r20-installer-marketplace-layout.test.ts |
 | R20.29 | ENFORCED | services/element-management-service.ts:1712-1716 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.30 | ENFORCED | components/agent-profile/PluginsTab.tsx:116-153 | tests/governance/r20-marketplace-governance.test.ts |
 | R20.31 | ENFORCED | services/element-management-service.ts:1834-1910 | tests/governance/r20-marketplace-governance.test.ts |

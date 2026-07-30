@@ -151,12 +151,45 @@ which is "too much removed" across agents and scopes.
   assignment scope, reversible and local. Registered as an NPT of TRDD-AQTGAY60 because the
   parent's gate cannot reuse a remover that deletes every agent's records.
 
+## ⏵ VERIFIED 2026-07-30 — the CODE all landed with the parent; ONE test gap is the only work left
+
+Re-read the live code rather than trusting this card's `column: todo`: **both defects it describes
+are already fixed**, evidently as part of the parent `AQTGAY60` (which needed the record-scoped
+remover for its `DeleteAgent` gate). Verified per box, by reading the implementation:
+
+| box | evidence in current code |
+|---|---|
+| record-scoped uninstall | `uninstallPluginLocally` no longer deletes the key — it calls `removeLocalInstallRecords(resolvedDir, pluginKey)`, and carries a comment naming what it used to be |
+| user-scope survives (R20.30) | `isLocalRecordFor` requires **`r.scope === 'local'`**, with a comment saying `scope` is load-bearing because a filter that forgets it eats the user-scope row |
+| key dropped only when empty | `if (keep.length === 0) delete pluginsMap[key]` else `pluginsMap[key] = keep` |
+| non-array untouched + warns | `console.warn(… "is not an array; leaving it untouched")` then `continue` |
+| install upserts | `findIndex(rec => isLocalRecordFor(rec, resolvedDir))` → replace at index, else `push`; never a fresh array assignment |
+| remover exported | `export async function removeLocalInstallRecords(projectPath, pluginKey?)` |
+
+`tests/unit/installed-plugins-records.test.ts` — **12 tests, all passing** — covers four of the five
+cases plus the ledger/compensation halves and a 0-IMPACT guard *("never touched the developer real
+`~/.claude/plugins/installed_plugins.json`")*.
+
+**The one real gap: `installPluginLocally`'s UPSERT is implemented but pinned by NOTHING.** The
+test file mentions the function only in a header comment; grepping every test for `isLocalRecordFor`
+or upsert semantics on the install side returns nothing. So the code is right and a future edit
+could silently restore `pluginsMap[pluginKey] = [record]` with the suite still green — which is the
+exact shape of defect this card exists to close, one function over.
+
+That test is the whole remaining scope: two agents share one local-only-marketplace plugin (the
+Haephestos-custom case, since `:1592` returns early on the CLI path), install for B must not disturb
+A's record, and re-installing for B must update B's row **in place** rather than append a duplicate.
+With a recorded neuter run — reverting the upsert to the assignment must redden it, or it pins
+nothing.
+
 ## Acceptance
 
-- [ ] `uninstallPluginLocally` removes only the caller's `(local, projectPath)` record
-- [ ] The user-scope record provably survives a local uninstall (R20.30)
-- [ ] The key is dropped only when its array becomes empty
-- [ ] A non-array value is left untouched with a warning
-- [ ] `installPluginLocally` upserts by `(scope, projectPath)` instead of assigning
-- [ ] Tests cover all five, each with a recorded neuter run
-- [ ] The record-scoped remover is exported for TRDD-AQTGAY60's DeleteAgent gate
+- [x] `uninstallPluginLocally` removes only the caller's `(local, projectPath)` record
+- [x] The user-scope record provably survives a local uninstall (R20.30) — `isLocalRecordFor`
+      requires `scope === 'local'`; test L79 asserts the sibling agent AND the user row survive
+- [x] The key is dropped only when its array becomes empty — test L90 / L97
+- [x] A non-array value is left untouched with a warning — test L103
+- [x] `installPluginLocally` upserts by `(scope, projectPath)` instead of assigning
+- [ ] Tests cover all five, each with a recorded neuter run — **4 of 5**; the install-upsert case
+      is unpinned (see above). This is the only open work on this card.
+- [x] The record-scoped remover is exported for TRDD-AQTGAY60's DeleteAgent gate

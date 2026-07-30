@@ -219,6 +219,21 @@ neuter then reddened exactly that one test.
    record for it plus a sibling and a user row, drive `DeleteAgent(hard)`, assert the folder is gone
    AND only that record went; then `DeleteAgent(soft)` and assert both the folder and the record
    survive. Neuter: move G09b out of the branch and confirm the soft case reddens.
+
+   **Arming the `rm -rf` is safe BY CONSTRUCTION, and that is worth stating rather than trusting.**
+   If either mock layer fails, `agentsRoot` stays the developer's real `~/agents` while
+   `resolvedDir` is built from `FAKE_HOME` — `startsWith` is false and the branch is **skipped**. So
+   a broken mock makes the test FAIL INERT (the fixture folder survives, the assertion reddens) and
+   can never delete something real. The "folder is gone" assertion doubles as the containment proof:
+   it can only pass if the fake root took effect.
+
+   **Measured cost, so the next session scopes it right:** the two existing scaffolds carry **200
+   and 460 lines of mock preamble** before their first `describe` (20 and 26 `vi.mock` calls), and
+   the containment idiom is now hand-rolled in **9+ files**. Copying a third slab is the wrong
+   move — the remaining work is really *a shared `driveDeleteAgent(ctx)` test helper* (the natural
+   sibling of `tests/helpers/fake-ecosystem-home.ts`, which already owns layer 2) *plus* a thin
+   file that uses it. Sized that way it also unblocks the pipeline tests TRDD-DQ6XN2VP will need,
+   which is why it is worth building as a helper rather than inlined once.
 2. The live create/hard-delete cycle.
 3. The 93 pre-existing orphans — untracked data outside the repo on the USER's machine, so RULE 0
    holds it. This card IS the report; the ruling is not mine.

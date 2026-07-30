@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T01:35:31+0200
-updated: 2026-07-30T01:35:31+0200
+updated: 2026-07-30T02:00:28+0200
 implementation-commits: []
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -84,11 +84,41 @@ Whatever is chosen must NOT reintroduce the wall 4VCXRHAY measured, and must rec
 when it finds something (`recordHeal`) so a recurring corruption is visible rather than repaired in
 silence.
 
+## DECISION 2026-07-30 — a server timer DETECTS, a `greptrdd` verb REPAIRS; sampling is rejected
+
+**Adopt 2 AND 1, in different roles. Reject 3.** The box below asked for one home and two
+rejections; the measured shape is a split, because one structural fact divides the work:
+
+**`corpusKeyFor` is a ONE-WAY hash.** It is `<slug>-sha256(realpath).slice(0,12)`
+(`lib/pillar/index-db.ts:275`). Given an index FILE you cannot recover its corpus, and nothing in
+`lib/`, `scripts/` or `server.mjs` enumerates the index dir today (2 references, both computing ONE
+path from a known `designDir`). So a host-wide sweep can **detect** (an `integrity_check` is a
+property of the file alone) and can **nuke** (the index is derived), but it can NEVER **rebuild** —
+rebuilding needs the corpus path only the caller has. That is not a defect: it forces exactly the
+non-healing-observer shape the plan's contract point 9 requires — *an observer must not repair what
+it measures.*
+
+| candidate | verdict |
+|---|---|
+| **2 · server timer** | **ADOPTED as the scheduled DETECTOR.** It is the only option that satisfies the acceptance box literally — runs in normal operation, not a benchmark, not a flag a human must remember. The pattern is proven: `server.mjs` already starts five (`startAgentInvariantsWatchdog`, `startOauthRotatorTick`, `startServerLiveness`, `startFleetLivenessWatchdog`, `startClaudeSettingsEnforcerWatchdog`). Its stated objection — "the server is not the index's only writer" — is **weaker than the card assumed**: the verifier does not need to know who wrote the file or what corpus it indexes. |
+| **1 · `greptrdd` subcommand** | **ADOPTED as the manual REPAIRER and the serverless fallback.** Its only flaw was being the *sole* caller; that dissolves once it is not. It is also the only path that HOLDS the `designDir`, hence the only one that can rebuild — and the only verification a standalone repo user with no ai-maestro server running will ever get. Cheap enough that omitting it buys nothing. |
+| **3 · sampled 1/N on read** | **REJECTED.** At the epic's stated 10⁵ target a full pass is ~3.7 s (measured 367 ms at 10⁴), so a 1-in-N open becomes a multi-second unpredictable hang on an interactive command — reintroducing the wall 4VCXRHAY removed, and doing it *at the moment a user is waiting*, which is precisely the "detection by ACCIDENT, while someone asks a question" failure this card was opened to fix. It would replace a silent gap with a visible stall. |
+
+**`YN8EQWYP` is what makes the sweep SAFE, and the two cards are coupled.** A background verifier
+that meets a live writer must not touch the file — and until `busy` became a NEVER_HEALED fault, the
+generic heal branch would have `nuke()`d an index another process was mid-build on (POSIX `unlink`
+succeeds against an open file, so the writer keeps writing into an unlinked inode and reports
+success). So the sweep must take `BEGIN IMMEDIATE` and **skip on `busy`**, never wait it out and
+never delete on contention. Written before that fix, this candidate would have been the bug.
+
 ## Acceptance
 
 - [ ] A caller of the FULL pass exists that runs in normal operation — not a benchmark, not a test,
       not an opt-in flag a human must remember
-- [ ] The chosen home is recorded here with the reason the other two were rejected
+- [x] The chosen home is recorded here with the reason the other two were rejected — **recorded, with
+      the box's own premise corrected**: it presumed one home and two rejections, and the measured
+      answer is a SPLIT (server timer DETECTS, `greptrdd` verb REPAIRS) because `corpusKeyFor` is a
+      one-way hash, so only ONE candidate was rejected (sampling). Reasons above
 - [ ] MEASURED: the warm read path is unchanged from 4VCXRHAY's 0.37 s at 10 000 cards — the
       verifier must not put the wall back
 - [ ] A fault it finds is recorded in the heal ledger, so a corruption that recurs is visible

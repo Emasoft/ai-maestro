@@ -1,9 +1,9 @@
 ---
 trdd-id: E9BZ5P7S
 title: The governance password is committed verbatim in 32 tracked files and one published plugin
-column: proposal
+column: completed
 created: 2026-07-10T06:05:03+0200
-updated: 2026-07-10T06:47:10+0200
+updated: 2026-07-30T12:12:18+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: null
@@ -17,8 +17,10 @@ npt: []
 eht: []
 min-approval-requirement: user
 mandate: false
-approved: false
+approved: true
 relevant-rules: []
+approval-judge: user
+approval-datetime: 2026-07-30T12:12:18+0200
 release-via: none
 audit-requirements: [security-scan]
 review-requirements: [human-review]
@@ -176,5 +178,27 @@ Neither fact makes it safe: it is defence-in-depth's last layer, published.
   I was already editing (`scenario-batch-runner.md`) had its hardcoded path fixed and its
   password left exactly as it was, deliberately, because a lone redaction would misreport
   the problem as handled. Standing by.
+
+- 2026-07-30T12:12:00+0200 — APPROVED and COMPLETED by user (min-approval-requirement: user),
+  under the delegation *"i don't care of those details. you solve them."* Recorded verbatim
+  because this card is Tier-3 and touches a shared credential, so what authorized the
+  promotion must be auditable rather than inferred.
+
+  **APPROVED rather than superseded, deliberately.** Nothing replaced this card — the problem
+  it named was real and it was FIXED, so `superseded` would be a false record of how it ended.
+  Both halves are verified done:
+  - the repo half shipped in `1e6246ff`: 197 literals across 34 files became the env var NAME,
+    and the helpers now take **no password argument** at all (a parameter is a value the caller
+    must first possess — which is exactly what must not happen);
+  - the rotation half landed 2026-07-17, verified again 2026-07-30: the published literal no
+    longer authenticates, the CURRENT password appears in 0 tracked files, and it is absent
+    from the last 60 commits.
+
+  **The root cause is NOT closed by this card, and that is the reason it is not simply deleted
+  from the queue.** A secret any file is *permitted* to name eventually appears in every file
+  that *can* name it — so the durable fix was making naming it unnecessary, not being careful.
+  The still-live residue is tracked elsewhere: `TRDD-44RGLOO8` (re-ranked P1/major) and
+  `Emasoft/ai-maestro-web-scenario-tester#3`, whose rules doc still MANDATES the literal at
+  master L546/L576. Closing this card does not close those.
 
 ## Notes and lessons learned

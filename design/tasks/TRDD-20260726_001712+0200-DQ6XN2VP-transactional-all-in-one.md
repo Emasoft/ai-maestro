@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T19:43:18+0200
+updated: 2026-07-30T19:52:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: []
+implementation-commits: [8a47c5a2]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26
@@ -266,10 +266,20 @@ WHICH rows). Add companions rather than change them — `revokeAllKeysForAgent` 
 `services/amp-service.ts`.
 
 NEXT ACTION: implement, with G02's auto-demote KEPT (R9.10). Order of work:
-0. Add the two module-owned seams above (`lib/amp-auth.ts`, `lib/aid-token.ts`), each with its own
-   test, BEFORE touching DeleteAgent — they are the only part that cannot be expressed at the
-   pipeline layer.
-1. `ctx`-carried row snapshots + `undo` for G01c (delete the zip), G04, G05, G05b, G06, G07/G07b, G07c.
+0. ~~Add the two module-owned seams~~ **DONE 2026-07-30 (`8a47c5a2`)** —
+   `revokeAllKeysForAgentCompensable` (`lib/amp-auth.ts`) and
+   `revokeTokensForAgentCompensable` (`lib/aid-token.ts`), each returning a `restore` CLOSURE so no
+   key hash or token record crosses the module boundary. Both existing revokers now delegate to
+   them, so there is ONE implementation of each mutation. 13 tests
+   (`tests/unit/store-revocation-compensation.test.ts`), three neuters run, each reddening exactly
+   one test: restore-ignores-the-hashes → the already-revoked security test; in-place-mutation →
+   the failed-save residue test; expiry-skip-removed → the expired-between-calls test.
+   Two properties worth carrying into G06's gate: the undo restores ONLY what this call flipped (a
+   blanket reactivate would resurrect a rotated-out key), and a failed save now leaves NO residue
+   (copy-then-publish), so "run did none of it" is true rather than merely tolerated.
+1. `ctx`-carried row snapshots + `undo` for G01c (delete the zip), G04, G05, G05b, G07/G07b, G07c —
+   and G06 is now just `ctx.keyRevocation = await revokeAllKeysForAgentCompensable(id)` in `run`,
+   `await ctx.keyRevocation?.restore()` in `undo` (same shape for the token revocation).
 2. G02's undo: `ChangeTitle(id,'manager')` **plus** relaunch of the sessions the R10 cascade
    hibernated — record them in `ctx` during `run`, reverse only what is recorded (the `Gate.undo`
    contract in `gate-transaction.ts:34-44`).

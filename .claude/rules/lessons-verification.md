@@ -114,6 +114,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Optimising N verbs to the SAME number is a finding, not a coincidence: all five graph verbs landing at 0.98-1.11 s says one shared term dominates them all (the O(N) freshness probe), which collapses five budget rows into one lever. Look for the common floor before tuning any single row.
 - A gap between your parts and your whole is a measurement you have NOT made — never an overhead you may name: I proposed a cause for the same ~120 ms twice and was wrong twice (`realpathSync` at 1187 ms, which the code deliberately avoids; `path.resolve` at a real but tiny 28 ms), and my stage parts summed to 787-866 ms against a ~1.05 s end-to-end. Make the parts SUM in ONE interleaved process before aiming an optimisation at the difference.
 - A probe can faithfully measure a cost the code does not pay: `realpathSync` per file really is 1187 ms, and `freshness.ts` really does a one-shot PREFIX REMAP instead — so the number was true and the attribution was fiction. Read the code path before believing your own benchmark of it.
+- Never TYPE a timestamp — read the clock: I wrote plausible `updated:` values into 3 TRDDs (03:12, 03:22, 03:52 → one 43 min in the FUTURE) while the commits landed at 03:00-03:19, so the board's sort key was fiction in every one. Nothing rejects a future date, and a card that looks freshest is read first. `date +%Y-%m-%dT%H:%M:%S%z`, every time.
 
 ## Mocked modules
 

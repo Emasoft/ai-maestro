@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T03:22:00+0200
+updated: 2026-07-30T03:25:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -19,7 +19,7 @@ approval-datetime: 2026-07-26T15:51:58+0200
 relevant-rules: [R25]
 blocked-by: []
 npt: [Q3GZJI1X, LXLK7XGX, 7JK3NCV4, CTEQX0ZA]
-eht: [BQC8NQSW, C069SK9E, 8KDIB2LT, MUYRIKN3, YN8EQWYP, O4JK6RV3, 4VCXRHAY, 7CHUK1AZ, 31LJK1CX, C4YJAUD9]
+eht: [BQC8NQSW, C069SK9E, 8KDIB2LT, MUYRIKN3, YN8EQWYP, O4JK6RV3, 4VCXRHAY, 7CHUK1AZ, 31LJK1CX, C4YJAUD9, YHYP5XIZ]
 external-refs: [Emasoft/ai-maestro#96, Emasoft/ai-maestro#98, Emasoft/ai-maestro-janitor#118, Emasoft/ai-maestro-janitor#123, Emasoft/ai-maestro-janitor#126, Emasoft/ai-maestro-janitor#127]
 ---
 
@@ -63,6 +63,7 @@ a rock."* Full plan: `~/.claude/plans/iterative-foraging-wadler.md` (top section
 | EHT | `8KDIB2LT` | propagate the new CLI contract (exit trichotomy, `--design-dir`, two new tools) |
 | EHT | `MUYRIKN3` | the spec bump 1.1.1 → 1.2.0 is consumed by the janitor (`3P-CHK-03`, `3P-VER-02`) |
 | EHT | `YN8EQWYP` | the index is new shared server state — register it, handle N writers, contain the tests |
+| EHT | `YHYP5XIZ` | (added 2026-07-30) make the warm-query stage timings SUM before optimising any of them — `31LJK1CX` blocks on it |
 
 ### Two findings that CHANGE the seam design (2026-07-28, both verified first-hand)
 
@@ -275,13 +276,24 @@ its call sites — the same divergence `refList` was exported to end one layer d
 because a rule that cannot see an edge reports no finding about it. Inert on today's corpus
 (**0 of 196** live cards use the scalar form) and now pinned from both ends.
 
-**Best next: `31LJK1CX` (`backburner`) — it is the SINGLE remaining lever on the interactive
-budget.** C069SK9E's measurement collapsed five separate questions into one: all five graph verbs
-now sit at 0.98-1.11 s against a < 1 s budget, all paying the same O(N) `syncIndex` freshness probe,
-so whatever replaces that probe fixes every one of them at once. It also **refuted** one row of
-31LJK1CX's own decomposition — capping the output moves the clock by nothing (`board` 1.02-1.06
-capped vs 1.06-1.08 uncapped), so the *"remainder = computing roots + rendering 7 782 rows"*
-attribution credited rendering with a cost it does not have. The probe is the whole residual.
+**`31LJK1CX` DIAGNOSED and is now `blocked` on a new sibling.** It answered every box — all five
+graph verbs sit at 0.98-1.11 s against a < 1 s budget, all paying the same O(N) `syncIndex` probe,
+so whatever replaces that probe fixes every one of them at once; the git short-circuit is **dead**
+on this corpus (100 000/100 000 `stat:` identities) and the dir-mtime filter is **rejected** on an
+APFS measurement (an in-place edit leaves the dir mtime unchanged, which is the modal way a TRDD
+changes). It also **refuted** one row of its own decomposition — capping the output moves the clock
+by nothing (`board` 1.02-1.06 capped vs 1.06-1.08 uncapped), so *"remainder = computing roots +
+rendering 7 782 rows"* credited rendering with a cost it does not have. The probe is the whole
+residual, bounded under **~360 ms of non-syscall work** above a **~232 ms** irreducible syscall floor.
+
+**Best next: `YHYP5XIZ` (`todo`) — the accounting, before any paydown.** The budget is still missed
+and the target is not yet specified well enough to build: the stage parts (787 ms) do not sum to the
+end-to-end (~1 050 ms), and the ~120 ms sitting above the raw-stat loop shape inside `identifyFiles`
+has now survived **two refuted attributions** (`realpathSync` at 1 187 ms — work `freshness.ts:162`
+avoids via a one-shot prefix remap; `path.resolve` at 28 ms — far too small). Two wrong guesses at
+one number is the evidence for measuring before optimising, so `YHYP5XIZ` closes the accounting in
+ONE interleaved process first and only then decides whether a reachable win exists. "The prize is
+not there" is a legitimate outcome.
 Also settled: `Q3GZJI1X` does **not** gate the lint — an ambiguous `relevant-rules:` target is still
 unambiguously a TRDD → PRRD edge, and that direction is legal under either reading.
 

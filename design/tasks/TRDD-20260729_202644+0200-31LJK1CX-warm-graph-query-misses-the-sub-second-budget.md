@@ -1,11 +1,12 @@
 ---
 trdd-id: 31LJK1CX
 title: The warm graph query misses the sub-second budget and the freshness probe is why
-column: dev
+column: blocked
+pre-block-column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T20:26:44+0200
-updated: 2026-07-30T04:05:00+0200
+updated: 2026-07-30T03:23:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -26,7 +27,7 @@ release-via: none
 relevant-rules: []
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [YHYP5XIZ]
 external-refs: []
 ---
 
@@ -230,6 +231,19 @@ and until that sibling exists the miss keeps its owner rather than evaporating.
       therefore reachable without a heuristic. Where that ~360 ms LIVES is deliberately left open —
       two proposed causes were measured and refuted, and the parts do not yet sum to the whole, so
       apportioning it is the sibling card's first job rather than a guess recorded here
+
+## BLOCKED on `TRDD-YHYP5XIZ` — 2026-07-30
+
+Every box above is answered, and the **budget is still missed** — so this card is not `complete`,
+it is `blocked` (`pre-block-column: dev`). What it owed was the diagnosis and the decision, and both
+landed: the probe is the residual, the three floated options are decided on evidence, and the prize
+is bounded under ~360 ms of non-syscall work.
+
+What it cannot do is claim the budget met, because the paydown target is not yet specified well
+enough to build — the stage parts do not sum to the whole, and the inner ~120 ms has survived two
+refuted attributions. `YHYP5XIZ` closes that accounting first (one process, one interleaved run,
+parts that sum), and only then decides the paydown. When it reports, this card either meets the
+budget or records — with numbers — that the prize was not reachable.
 
 ## Approval log
 

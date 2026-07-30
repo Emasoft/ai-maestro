@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: dev
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-07-30T04:27:18+0200
+updated: 2026-07-30T05:43:47+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,6 +22,7 @@ severity: major
 priority: 1
 release-via: none
 relevant-rules: [R17, R20.30]
+implementation-commits: [c08e8303, 6c11bd7f, 34849d8d]
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/102, https://github.com/Emasoft/ai-maestro-janitor/issues/137]
 ---
 
@@ -192,7 +193,22 @@ neuter then reddened exactly that one test.
 
 **What is still open, precisely:**
 
-1. **No test drives `DeleteAgent` itself.** The probe tests prove the VERIFIER behaves correctly;
+1. **✅ CLOSED 2026-07-30 (commit `34849d8d`) — `DeleteAgent` is now driven.** Built exactly as
+   sized below: a shared harness `tests/helpers/drive-delete-agent.ts` (both mock layers, real
+   `fs`, collaborators stubbed on BOTH their gate and their G10-probe halves) plus a thin
+   `tests/unit/deleteagent-g09b-plugin-records.test.ts` — 6 tests, 2 recorded neuters that are
+   exact complements: **N1** (move G09b out of the folder-deleted branch) reddens the 2
+   soft/no-folder cases and leaves the 3 hard ones green, so those two are what pin the
+   PLACEMENT; **N2** (delete the gate) reddens the 3 hard cases — including the G10-residue
+   case, which is the independent confirmation that the probe really does report
+   `plugin-records` when the gate is absent — and leaves the 2 soft ones green. Every
+   behavioural test falls to exactly one neuter, so none passes for an unknown reason; the
+   containment test correctly survives both, because it is about the sandbox and not the gate.
+   Containment was then checked from OUTSIDE the run (real `~/agents` still 20 entries, real
+   `installed_plugins.json` still 101 local records) rather than from the in-process assertion.
+   The paragraphs below are kept because they are the WHY the shape had to be a shared helper.
+
+   **The original finding —** The probe tests prove the VERIFIER behaves correctly;
    they do not prove G09b removes on hard-delete and leaves alone on soft-delete. That split is
    true **by construction** (the gate sits inside the folder-deleted branch) and I read the code to
    confirm it — but "true by construction" is a claim about the code, not a guard against the next
@@ -243,10 +259,14 @@ neuter then reddened exactly that one test.
 - [x] A `DeleteAgent` gate removes the deleted agent's `installed_plugins.json` records — G09b
 - [x] ~~The gate registers a compensation~~ → **resolved by placement instead**: G09b runs after the
       folder is gone, so the records are provably false and no compensation is meaningful
-- [ ] A soft delete provably does NOT remove them — true by construction and pinned at the VERIFIER
-      level; **no test drives `DeleteAgent` on a soft delete**, so this stays open
-- [ ] Unit tests cover all three, each with a recorded neuter run — the PROBE has 7 tests / 3
-      neuters; the GATE has none
+- [x] A soft delete provably does NOT remove them — now DRIVEN, not merely true by construction:
+      two cases (soft, and hard-without-folder) assert the workdir AND its records survive and that
+      no `G09b:` op line was emitted. Neuter N1 (move the gate out of the branch) reddens exactly
+      those two
+- [x] Unit tests cover all three, each with a recorded neuter run — GATE: 6 tests in
+      `tests/unit/deleteagent-g09b-plugin-records.test.ts` over the shared harness
+      `tests/helpers/drive-delete-agent.ts`, with the complementary neuters N1/N2 recorded in
+      `34849d8d`; PROBE: 7 tests / 3 neuters (`6c11bd7f`)
 - [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged
 - [ ] The pre-existing 93 orphans are reported to the USER with a proposed reconcile — RULE 0
 - [x] ai-maestro#102 answered with the measured topology and this defect

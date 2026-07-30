@@ -23,6 +23,7 @@
  */
 
 import { looksLikeAbandonPrompt } from '@/lib/session-safe-state'
+import { getClientCapabilities } from '@/lib/client-capabilities'
 
 /**
  * Execute a command with an args array (NO shell) to prevent injection.
@@ -81,15 +82,39 @@ export function sanitizePersonaName(raw: string, fallback: string): string {
   return raw.replace(PERSONA_NAME_STRIP, '').trim() || fallback
 }
 
-/** Resolve a display program name (e.g. "Claude Code") to the actual CLI binary. */
+/**
+ * Resolve a display program name (e.g. "Claude Code") to the actual CLI binary.
+ *
+ * DELEGATES to `lib/client-capabilities.ts` — the ONE authority for "which binary
+ * does this client launch" — rather than carrying its own ladder. It used to carry
+ * one, and the two had drifted (TRDD-D0SI66XM investigation, 2026-07-30):
+ *
+ *   - `opencode` and `kiro` are both in `SUPPORTED_CLIENTS` (tmux-launchable) and
+ *     had NO branch here, so they fell through to `return 'claude'` — a restart
+ *     relaunched an opencode agent AS CLAUDE, silently, with the agent's own args.
+ *   - `kiro`'s binary is `kiro-cli`, not `kiro`, so even hand-adding the missing
+ *     branches would have got it wrong. That is the whole argument for delegating:
+ *     the authority carries the value AND the provenance comment that verified it.
+ *   - `aider` had a branch here while being USER-EXCLUDED and absent from
+ *     `SUPPORTED_CLIENTS`. It keeps working (the authority still lists its binary),
+ *     but it is no longer a fact this file asserts independently.
+ *
+ * Latent rather than live when found — every agent on the host runs `claude-code` —
+ * but the R42.7 fleet restart automates this path, and an unattended wrong relaunch
+ * has nobody watching, so the severity is not what it was when only a human button
+ * reached it.
+ *
+ * The unknown-program fallback is UNCHANGED (warn + `claude`) so no call site or
+ * test contract moves with this fix. That fallback is itself fail-open and is
+ * tracked separately — see the note on `tests/unit/session-restart.test.ts`.
+ */
 export function resolveRestartBin(program: string): string {
-  const lower = program.toLowerCase()
-  if (lower.includes('claude')) return 'claude'
-  if (lower.includes('codex')) return 'codex'
-  if (lower.includes('aider')) return 'aider'
-  if (lower.includes('gemini')) return 'gemini'
+  const binary = getClientCapabilities(program).cli.binary
+  if (binary) return binary
+  // Reached for a converter-only target (github-copilot, kilocode) or a genuinely
+  // unrecognized program: the authority has no launchable binary for it.
   // CC-GOV-002: warn on fallback — may indicate unexpected input.
-  console.warn(`[session-restart] resolveRestartBin: unrecognized program "${program}", falling back to "claude"`)
+  console.warn(`[session-restart] resolveRestartBin: no launchable binary for program "${program}", falling back to "claude"`)
   return 'claude'
 }
 

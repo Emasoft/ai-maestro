@@ -51,8 +51,29 @@ describe('resolveRestartBin', () => {
     expect(resolveRestartBin('Gemini')).toBe('gemini')
     expect(resolveRestartBin('aider')).toBe('aider')
   })
-  it('falls back to claude for an unrecognized program', () => {
+  // TRDD-D0SI66XM, 2026-07-30. These two were in SUPPORTED_CLIENTS (tmux-launchable)
+  // and had NO branch in resolveRestartBin, so both silently resolved to 'claude' — a
+  // restart relaunched an opencode agent AS CLAUDE, running Claude with the agent's
+  // own stored args. Latent on this host (all agents are claude-code) but reachable
+  // the moment such an agent exists, and the R42.7 fleet restart automates the path.
+  it('resolves the launchable clients that were silently falling back to claude', () => {
+    expect(resolveRestartBin('opencode')).toBe('opencode')
+    // NOT 'kiro' — the binary is kiro-cli, which is exactly why this delegates to
+    // lib/client-capabilities.ts instead of carrying a hand-written ladder: a
+    // hand-added branch would have guessed the wrong name here.
+    expect(resolveRestartBin('kiro')).toBe('kiro-cli')
+  })
+
+  // The fallback is deliberately UNCHANGED by that fix, so no call site moved. It is
+  // still fail-OPEN: an unrecognized program launches `claude` rather than refusing,
+  // which for a converter-only target (github-copilot, kilocode) means starting the
+  // wrong program instead of saying so. Changing it is a contract change across four
+  // call sites in both server modes, so it is recorded here rather than smuggled into
+  // a fix for a different bug.
+  it('falls back to claude for an unrecognized program (fail-OPEN, tracked not fixed)', () => {
     expect(resolveRestartBin('some-unknown-thing')).toBe('claude')
+    // A converter-only target has no launchable binary and takes the same path.
+    expect(resolveRestartBin('github-copilot')).toBe('claude')
   })
 })
 

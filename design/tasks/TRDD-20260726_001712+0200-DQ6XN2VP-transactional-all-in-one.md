@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-30T23:22:52+0200
+updated: 2026-07-30T23:30:18+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2]
 ---
 
 ## ⏵ MEASURED 2026-07-30 — the count was wrong, and there is now a ratchet that keeps it honest
@@ -118,12 +118,14 @@ still occupied. The `/team-xyz/` assertion is gone and the reason is written int
 
 ### OPEN, and named rather than left to be discovered
 
-1. **G07's team-leave undo is UNPINNED.** In `createagent-g06-g07-ordering`'s fixture `ChangeTeam`
-   WARNs (no team, no MANAGER in the mocked world), so `teamJoined` stays null and the undo is a
-   no-op — the one compensation this card calls the reason for the retrofit has no test driving
-   it. Pinning it needs a fixture where `ChangeTeam` genuinely SUCCEEDS (getTeam + a MANAGER +
-   its gate chain), which is its own piece of work and must not be faked, or the test measures
-   the mocks. **Do this before the card reaches `complete`.**
+1. ~~G07's team-leave undo is UNPINNED.~~ **CLOSED `944063f2`** — stateful team double + a seeded
+   MANAGER (team ops are manager-gated, so a manager-less host refuses at ChangeTeam's G01b and
+   never reaches the join), aborting at G07c's R9.13 reject. **Two assertions were VACUOUS and
+   only the neuter said so**, both passing with the undo entirely disabled: `G07: reverted` is the
+   runner's line for a compensation that did not THROW — and an empty undo does not throw either;
+   and `not.toContain(result.agentId)` compared against NULL, because a clean rollback is exactly
+   the case where the pipeline nulls agentId. Both replaced by the `updateTeam` call sequence (the
+   id goes in on the join, comes out on the undo), which is where membership actually moves.
 2. **G05 does not un-append the managed `.git/info/exclude` block** when the workdir pre-existed.
    Deliberate: the block is marker-delimited, additive, idempotent and re-created by the
    invariants watchdog, while re-deriving the `.git` location (dir / gitdir-file / worktree
@@ -548,9 +550,9 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
 - [x] `CreateAgent` transactional — `runGateSequence(createGates, cc)` over G03..G07c, the last
       gate that can abort (`3f2e0e1d`). Its four hand-rolled rollbacks collapsed into one `undo`
       chain; parity test asserts the workdir removal, three neuters have disjoint red sets
-- [ ] G07's team-leave `undo` PINNED by a test where `ChangeTitle` fails AFTER a SUCCESSFUL
-      `ChangeTeam` — today's fixture WARNs the join, so the compensation this card calls its
-      reason for existing is written but undriven (see the CreateAgent section above)
+- [x] G07's team-leave `undo` PINNED (`944063f2`) — stateful team double + a seeded MANAGER so the
+      join genuinely lands, aborting at G07c's R9.13 reject. Asserted on the `updateTeam` call
+      sequence (id in on the join, out on the undo); the neuter reds that test and only it
 - [ ] `ChangeTitle` transactional — **`ChangeClient` and `ChangePlugin` are DONE**; this box is
       split because they were, and `ChangeTitle` (131 gate ops, the largest) is not
 - [ ] `ChangeTeam` / `DeleteTeam` transactional

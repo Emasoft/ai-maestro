@@ -46,15 +46,25 @@ const ledger = vi.hoisted(() => ({ emitAgentOp: vi.fn() }))
 vi.mock('@/lib/ledger-emit', () => ({ emitAgentOp: (...a: unknown[]) => ledger.emitAgentOp(...a) }))
 
 import {
+  installPluginLocally,
   removeLocalInstallRecords,
   restoreLocalInstallRecords,
 } from '@/services/element-management-service'
+// The real constant, not a mocked one — `fakeEcosystemPaths` overrides only the PATH helpers and
+// spreads everything else through, so the service and this test compare the same string.
+import { LOCAL_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 
 const INSTALLED = join(H.FAKE_HOME, '.claude', 'plugins', 'installed_plugins.json')
 const KEY = 'ai-maestro-plugin@ai-maestro-plugins'
 const OTHER_KEY = 'ai-maestro-janitor@ai-maestro-plugins'
 const DIR_A = join(H.FAKE_HOME, 'agents', 'agent-a')
 const DIR_B = join(H.FAKE_HOME, 'agents', 'agent-b')
+
+// A LOCAL-ONLY marketplace is REQUIRED to reach the record-writing code: for any other
+// marketplace `installPluginLocally` shells out to `claude plugin install` and RETURNS — the CLI
+// owns those records. So a fixture using the GitHub marketplace would exercise nothing.
+const SHARED_PLUGIN = 'shared-custom-plugin'
+const SHARED_KEY = `${SHARED_PLUGIN}@${LOCAL_MARKETPLACE_NAME}`
 
 /** The shape that actually ships: one key, several records, mixed scope. */
 function seed(plugins: Record<string, unknown>): void {
@@ -121,6 +131,52 @@ describe('removeLocalInstallRecords — record-scoped, not key-scoped (TRDD-FHBG
     expect(removed).toEqual({})
     expect(read()[KEY]).toEqual([recA, recB, recUser])
     expect(ledger.emitAgentOp).not.toHaveBeenCalled()
+  })
+})
+
+describe('installPluginLocally — UPSERT by (scope, projectPath), never assign (TRDD-FHBGF0WG)', () => {
+  it('appends alongside a sibling agent record instead of replacing the whole array', async () => {
+    // The twin of the uninstall defect, one function over: `pluginsMap[pluginKey] = [record]`
+    // discarded every other install of a SHARED local plugin. Two agents legitimately share one
+    // Haephestos-authored plugin, so installing for B must not erase A.
+    seed({ [SHARED_KEY]: [recA, recUser] })
+
+    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
+
+    const after = read()[SHARED_KEY] as Array<Record<string, unknown>>
+    expect(after).toHaveLength(3)
+    expect(after).toContainEqual(recA)                       // byte-identical: A was not rewritten
+    expect(after.some(r => r.scope === 'user')).toBe(true)    // R20.30 — the global row survives
+    expect(after.filter(r => r.scope === 'local' && r.projectPath === DIR_B)).toHaveLength(1)
+  })
+
+  it('updates the caller workdir row IN PLACE on re-install, preserving installedAt', async () => {
+    // Re-provisioning an agent at the same path must not grow the array by one record per install,
+    // and `installedAt` is what proves the row was UPDATED rather than replaced.
+    seed({ [SHARED_KEY]: [recA, recB, recUser] })
+
+    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
+    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
+
+    const after = read()[SHARED_KEY] as Array<Record<string, unknown>>
+    expect(after).toHaveLength(3)
+    const bRows = after.filter(r => r.projectPath === DIR_B)
+    expect(bRows).toHaveLength(1)
+    expect(bRows[0].installedAt).toBe(recB.installedAt)
+    expect(bRows[0].lastUpdated).not.toBe(recB.installedAt)   // …and it WAS refreshed
+  })
+
+  it('enables the plugin in the agent own settings.local.json, not user scope', async () => {
+    seed({})
+    await installPluginLocally(SHARED_PLUGIN, DIR_B, LOCAL_MARKETPLACE_NAME)
+
+    const local = JSON.parse(readFileSync(join(DIR_B, '.claude', 'settings.local.json'), 'utf-8'))
+    expect(local.enabledPlugins[SHARED_KEY]).toBe(true)
+    // The record it wrote declares local scope and names the workdir — the two fields every
+    // downstream filter narrows on.
+    const rec = (read()[SHARED_KEY] as Array<Record<string, unknown>>)[0]
+    expect(rec.scope).toBe('local')
+    expect(rec.projectPath).toBe(DIR_B)
   })
 })
 

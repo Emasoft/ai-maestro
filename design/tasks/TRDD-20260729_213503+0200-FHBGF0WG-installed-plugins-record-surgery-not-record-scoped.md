@@ -1,10 +1,10 @@
 ---
 trdd-id: FHBGF0WG
 title: installed_plugins.json surgery is key-scoped not record-scoped so one agent's uninstall wipes every agent's record
-column: dev
+column: complete
 scope: project
 created: 2026-07-29T21:35:03+0200
-updated: 2026-07-30T04:04:00+0200
+updated: 2026-07-30T04:15:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -190,6 +190,31 @@ nothing.
 - [x] The key is dropped only when its array becomes empty — test L90 / L97
 - [x] A non-array value is left untouched with a warning — test L103
 - [x] `installPluginLocally` upserts by `(scope, projectPath)` instead of assigning
-- [ ] Tests cover all five, each with a recorded neuter run — **4 of 5**; the install-upsert case
-      is unpinned (see above). This is the only open work on this card.
+- [x] Tests cover all five, each with a recorded neuter run — **5 of 5** (see CLOSED below)
 - [x] The record-scoped remover is exported for TRDD-AQTGAY60's DeleteAgent gate
+
+## ⏵ CLOSED 2026-07-30 — the install-upsert is pinned; nothing is left open
+
+`tests/unit/installed-plugins-records.test.ts` grew 3 cases (12 → **15, all passing**) for
+`installPluginLocally`, the half that was implemented but pinned by nothing.
+
+**The fixture had to use a LOCAL-ONLY marketplace, and that is not a detail.** For any other
+marketplace `installPluginLocally` shells out to `claude plugin install` and **returns** — the CLI
+owns those records. A fixture naming `ai-maestro-plugins` would have exercised zero lines of the
+code under test while looking like a real test, so the test names the constant
+(`LOCAL_MARKETPLACE_NAME`) rather than a literal, and a comment says why.
+
+**Neuter run** — reverted the upsert to the pre-fix `pluginsMap[pluginKey] = [record]`:
+
+| test | neuter |
+|---|---|
+| appends alongside a sibling agent record instead of replacing the whole array | **× FAILS** (array collapses to 1) |
+| updates the caller workdir row IN PLACE on re-install, preserving `installedAt` | **× FAILS** (row re-created, `installedAt` lost) |
+| enables the plugin in the agent's own `settings.local.json` | ✓ passes — **honest**: it pins the enablement write and the record's `(scope, projectPath)` shape, not the upsert |
+
+Exactly the two guards named as guards reddened; the other 12 tests and the 0-IMPACT containment
+check stayed green, so the neuter isolated the branch under test rather than breaking the file. The
+third case is kept and labelled for what it is — a companion assertion, not a regression guard.
+
+`tsc --noEmit` clean; `git diff` after restoring the fix touches the test file only, which is how
+the neuter is proven reverted rather than merely believed to be.

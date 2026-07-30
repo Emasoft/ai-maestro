@@ -144,26 +144,30 @@ function analyze(): PipelineInfo[] {
  * hand-rolled pipeline reddens this immediately, which is the whole point — AIO-TXN-10
  * previously had no way to notice one.
  *
- * 12, MEASURED — and it corrects the card that drove this work. TRDD-DQ6XN2VP says "26
+ * MEASURED — and it corrects the card that drove this work. TRDD-DQ6XN2VP says "26
  * pipelines" and its STATE block said 19 still hand-roll; both were hand counts of a NAME
  * LIST, and that list contains 7 thin delegators that are not pipelines at all
  * (`CreateMarketplace`/`Delete`/`UpdateMarketplace` forward one line to `ChangeMarketplace`;
  * `ChangeAgentDef`/`Command`/`Rule`/`OutputStyle` forward one line to
  * `changeSimpleElement`) while omitting `changeSimpleElement` itself, which IS one and is
  * already transactional. Real inventory when this landed: 19 pipelines, 5 transactional,
- * 14 to go — then 6 and 13 with `CreateAgent`, 7 and 12 with `ChangeTeam`, now 8 and 11 with
- * `DeleteTeam`.
+ * 14 to go — then 6 and 13 with `CreateAgent`, 7 and 12 with `ChangeTeam`, 8 and 11 with
+ * `DeleteTeam`, now 9 and 10 with `ChangeMarketplace`.
  *
  * NOTE FOR WHOEVER LOWERS IT NEXT: the count is a conformance measure, NOT a safety measure,
- * and the two diverge. Several of the remaining 11 have exactly ONE mutating gate with nothing
- * abortable after it — `ChangeAvatar` (G03), `ChangeName` (G04), `ChangeFolder` (G05) — so they
- * have no partial-state window at all and retrofitting them moves this number while buying zero
- * safety. Pick the next target by whether it can leave two stores disagreeing, not by gate count.
+ * and as of `ChangeMarketplace` the two have fully diverged. Every one of the remaining 10 is
+ * either a single-mutation pipeline with nothing abortable after it — `ChangeAvatar` (G03),
+ * `ChangeName` (G04), `ChangeFolder` (G05), and, MEASURED 2026-07-31, `ChangeMCP` (G04),
+ * `ChangeLSP` (G04), `ChangeHook` (G04), `ChangeMetadata` (EXE), `ChangeCLIArgs` (G04) — so it has
+ * no partial-state window at all; or one of the two large pipelines that retrofitted pipelines now
+ * CALL (`ChangeTitle` 131 ops, `InstallElement` 101), where converting one changes its callers'
+ * failure semantics and wants its own card. Lowering this number further therefore buys
+ * conformance, not safety. Pick by whether the pipeline can leave two stores disagreeing.
  */
-const MAX_HANDROLLED = 11
+const MAX_HANDROLLED = 10
 
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */
-const MIN_TRANSACTIONAL = 8
+const MIN_TRANSACTIONAL = 9
 
 /**
  * The pipelines already under the runner, pinned BY NAME. A count alone cannot see an
@@ -175,6 +179,7 @@ const MUST_BE_TRANSACTIONAL = [
   'CreateAgent',
   'ChangeTeam',
   'DeleteTeam',
+  'ChangeMarketplace',
   'DeleteAgent',
   'ChangeClient',
   'ChangePlugin',

@@ -4316,6 +4316,28 @@ export async function UpdateMarketplace(desired: {
   return ChangeMarketplace({ action: 'update', name: desired.name }, authContext)
 }
 
+/**
+ * The CLI argument that RE-ADDS a marketplace, read out of its `extraKnownMarketplaces` entry.
+ *
+ * This is the rollback substrate for `ChangeMarketplace`'s remove. `claude plugin marketplace add
+ * <arg>` restores BOTH the CLI registration and the `~/.claude/plugins/marketplaces/<name>/` cache
+ * in one call — which is exactly why those two are ONE gate down there rather than two: reversing
+ * them separately is not the mirror of doing them separately.
+ *
+ * Returns null when the entry names no source. The undo then throws rather than pretending it
+ * restored something (R51.5) — a compensation that silently does nothing is the vacuous shape this
+ * campaign keeps finding.
+ */
+function marketplaceAddArg(entry: unknown): string | null {
+  const src = (entry as { source?: unknown } | undefined)?.source
+  if (!src || typeof src !== 'object') return null
+  for (const key of ['repo', 'url', 'path'] as const) {
+    const value = (src as Record<string, unknown>)[key]
+    if (typeof value === 'string' && value.length > 0) return value
+  }
+  return null
+}
+
 export async function ChangeMarketplace(desired: {
   action: 'add' | 'remove' | 'update'
   name: string
@@ -4377,87 +4399,208 @@ export async function ChangeMarketplace(desired: {
       await execFileAsync('claude', ['plugin', 'marketplace', 'add', sourceArg], { timeout: 120000 })
       ops.push(`G03: Added marketplace "${desired.name}" from ${sourceArg}`)
     } else if (desired.action === 'remove') {
-      // ── G02b: CASCADE through UninstallPlugin (R21.6) ────────
-      // Before tearing down the marketplace registration / cache / settings,
-      // uninstall every plugin that came from this marketplace from every
-      // target where it's installed (user-scope + every agent's local-scope).
-      // Without this cascade, agents are left with dangling
-      // `<plugin>@<deleted-marketplace>` keys in settings.local.json — the
-      // next claude launch breaks because the marketplace no longer exists.
+      // ── The transaction (AIO-TXN-10 / R51) ────────────────────
+      // ONLY `remove` is wrapped, and that is the BOUNDARY RULE rather than laziness.
+      // `add` and `update` each have exactly ONE mutating gate with nothing abortable
+      // after it, so any `undo` written for them would be unreachable code that READS as
+      // a guarantee — and `update` has no honest compensation at all (you cannot un-pull
+      // a marketplace), which is precisely the case `runGateSequence`'s refuse-to-start
+      // check exists to reject. `remove` is the branch with a real window: four stores in
+      // sequence, three of them able to abort after the first has already mutated.
       //
-      // We do this BEFORE the CLI/cache/settings cleanup so:
-      //   1. The plugin enumeration helpers can still find the marketplace
-      //      manifest at ~/.claude/plugins/marketplaces/<name>/ to list
-      //      its plugins. After G04 below clears the cache directory the
-      //      manifest is gone and the cascade would have nothing to walk.
-      //   2. ChangePlugin's per-target uninstall can still verify final
-      //      state via PG01 — the marketplace registration lookup still
-      //      resolves at this point.
-      //
-      // Each cascade failure is logged but does NOT abort the marketplace
-      // removal — the user explicitly chose to delete this marketplace,
-      // and a stuck per-agent uninstall (e.g. read-only filesystem on a
-      // remote host) should not block the local cleanup. The aggregate
-      // result is reported via the operations log.
-      try {
-        const { listPluginsInMarketplace } = await import('@/lib/plugin-enumeration')
-        const plugins = await listPluginsInMarketplace(desired.name)
-        ops.push(`G02b: Cascade — ${plugins.length} plugin(s) in marketplace, dispatching UninstallPlugin per plugin`)
-        let totalTargets = 0
-        let totalFailures = 0
-        for (const p of plugins) {
-          const ur = await UninstallPlugin({
-            name: p.name,
-            marketplace: desired.name,
-            rolePluginSwap: true,
-          }, authContext)
-          totalTargets += ur.targets.length
-          totalFailures += ur.targets.filter(t => !t.success).length
-        }
-        ops.push(`G02b: Cascade complete — ${totalTargets} per-target uninstall(s), ${totalFailures} failure(s)`)
-      } catch (cascadeErr) {
-        const msg = cascadeErr instanceof Error ? cascadeErr.message : String(cascadeErr)
-        ops.push(`G02b: Cascade WARN — ${msg} (proceeding with marketplace removal anyway)`)
+      // Before this, a `claude plugin marketplace remove` that failed for any reason other
+      // than "not found" returned a bare error over a host where the cascade had ALREADY
+      // uninstalled that marketplace's plugins from every agent — the marketplace still
+      // registered, its plugins gone everywhere. Nothing rolled that back.
+      interface RemoveCtx {
+        /** Every (plugin, target) the cascade actually uninstalled. The undo reinstalls these. */
+        uninstalled: Array<{ name: string; scope: 'user' | 'local'; agentId?: string }>
+        /** Set only once the CLI really deregistered it — an orphan-path no-op leaves it false. */
+        deregistered: boolean
+        /** Set only once the cache dir was really removed. */
+        cacheDropped: boolean
+        /** Set only once the settings entry was really deleted. */
+        ekmRemoved: boolean
       }
-
-      // SCEN-019 BUG-004 (2026-04-30): the CLI returns non-zero with
-      // "not found" if the marketplace name isn't registered with Claude
-      // CLI itself. That is NOT a fatal error for the pipeline — the
-      // caller may be cleaning up an orphan key in settings.json (e.g.
-      // a derived owner-repo name that the route stamped but the CLI
-      // never registered). Treat "not found" as a no-op for G03 and
-      // proceed to G04 (cache cleanup) and G05 (settings cleanup), so
-      // an orphan extraKnownMarketplaces key can still be reaped.
-      try {
-        await execFileAsync('claude', ['plugin', 'marketplace', 'remove', desired.name], { timeout: 120000 })
-        ops.push(`G03: Removed marketplace "${desired.name}"`)
-      } catch (cliErr) {
-        const msg = cliErr instanceof Error ? cliErr.message : String(cliErr)
-        if (msg.includes('not found')) {
-          ops.push(`G03: CLI did not know "${desired.name}" — proceeding to file cleanup (orphan path)`)
-        } else {
-          throw cliErr
-        }
-      }
-
-      // Clean up cached plugins
+      const rc: RemoveCtx = { uninstalled: [], deregistered: false, cacheDropped: false, ekmRemoved: false }
       const cacheDir = join(HOME, '.claude', 'plugins', 'marketplaces', desired.name)
-      if (existsSync(cacheDir)) {
-        await rm(cacheDir, { recursive: true, force: true })
-        ops.push(`G04: Cleaned up cached plugins at ${cacheDir}`)
-      }
 
-      // Remove from extraKnownMarketplaces in settings.json
-      await withSettingsLock(SETTINGS_JSON, async () => {
-        const settings = await loadJsonSafe(SETTINGS_JSON) as Record<string, Record<string, unknown>>
-        const ekm = settings.extraKnownMarketplaces as Record<string, unknown> | undefined
-        if (ekm && ekm[desired.name] !== undefined) {
-          delete ekm[desired.name]
-          settings.extraKnownMarketplaces = ekm
-          await saveJsonSafe(SETTINGS_JSON, settings)
-          ops.push(`G05: Removed from extraKnownMarketplaces`)
-        }
-      })
+      // Snapshot BEFORE anything mutates. The store that holds the source is the very one
+      // G05 is about to delete from, so reading it later would read a hole.
+      const preSettings = await loadJsonSafe(SETTINGS_JSON)
+      const ekmEntry = ((preSettings.extraKnownMarketplaces || {}) as Record<string, unknown>)[desired.name]
+      const addArg = marketplaceAddArg(ekmEntry)
+
+      const { runGateSequence } = await import('@/lib/gate-transaction')
+      const txn = await runGateSequence<RemoveCtx>(
+        [
+          {
+            id: 'G02b',
+            what: `Uninstall every plugin from "${desired.name}" from every target it is installed on`,
+            // ── G02b: CASCADE through UninstallPlugin (R21.6) ────────
+            // Before tearing down the marketplace registration / cache / settings,
+            // uninstall every plugin that came from this marketplace from every
+            // target where it's installed (user-scope + every agent's local-scope).
+            // Without this cascade, agents are left with dangling
+            // `<plugin>@<deleted-marketplace>` keys in settings.local.json — the
+            // next claude launch breaks because the marketplace no longer exists.
+            //
+            // We do this BEFORE the CLI/cache/settings cleanup so:
+            //   1. The plugin enumeration helpers can still find the marketplace
+            //      manifest at ~/.claude/plugins/marketplaces/<name>/ to list
+            //      its plugins. After G04 below clears the cache directory the
+            //      manifest is gone and the cascade would have nothing to walk.
+            //   2. ChangePlugin's per-target uninstall can still verify final
+            //      state via PG01 — the marketplace registration lookup still
+            //      resolves at this point.
+            //
+            // Each cascade failure is logged but does NOT abort the marketplace
+            // removal — the user explicitly chose to delete this marketplace,
+            // and a stuck per-agent uninstall (e.g. read-only filesystem on a
+            // remote host) should not block the local cleanup. The aggregate
+            // result is reported via the operations log.
+            run: async (c) => {
+              try {
+                const { listPluginsInMarketplace } = await import('@/lib/plugin-enumeration')
+                const plugins = await listPluginsInMarketplace(desired.name)
+                ops.push(`G02b: Cascade — ${plugins.length} plugin(s) in marketplace, dispatching UninstallPlugin per plugin`)
+                let totalTargets = 0
+                let totalFailures = 0
+                for (const p of plugins) {
+                  const ur = await UninstallPlugin({
+                    name: p.name,
+                    marketplace: desired.name,
+                    rolePluginSwap: true,
+                  }, authContext)
+                  totalTargets += ur.targets.length
+                  totalFailures += ur.targets.filter(t => !t.success).length
+                  // Recorded per plugin, not after the loop: a throw further down must still
+                  // leave every already-uninstalled target reversible. That is the write-ahead
+                  // discipline `Gate.undo` documents, and it is why the undo below pops a list
+                  // instead of re-deriving what "should" have happened.
+                  for (const t of ur.targets) {
+                    if (t.success) c.uninstalled.push({ name: p.name, scope: t.scope, agentId: t.agentId })
+                  }
+                }
+                ops.push(`G02b: Cascade complete — ${totalTargets} per-target uninstall(s), ${totalFailures} failure(s)`)
+              } catch (cascadeErr) {
+                const msg = cascadeErr instanceof Error ? cascadeErr.message : String(cascadeErr)
+                ops.push(`G02b: Cascade WARN — ${msg} (proceeding with marketplace removal anyway)`)
+              }
+            },
+            // LIFO IS CORRECT HERE, and that is worth saying out loud because in this service
+            // it usually is not: ChangeTeam and DeleteTeam each had to FUSE two gates because
+            // the reverse order was not the mirror of the forward one. A reinstall needs the
+            // marketplace registered, and reverse unwinding runs G03's undo — the re-add —
+            // before this one. The dependency and the unwind agree, so they stay two gates.
+            undo: async (c) => {
+              const failed: string[] = []
+              while (c.uninstalled.length) {
+                const t = c.uninstalled.pop()!
+                const r = await InstallPlugin({
+                  name: t.name,
+                  marketplace: desired.name,
+                  targets: [{ scope: t.scope, agentId: t.agentId }],
+                  rolePluginSwap: true,
+                }, authContext)
+                if (!r.success) {
+                  failed.push(`${t.name}@${t.scope}${t.agentId ? `/${t.agentId.substring(0, 8)}` : ''}: ${r.error ?? 'unknown error'}`)
+                }
+              }
+              if (failed.length) {
+                throw new Error(`${failed.length} plugin(s) could not be reinstalled: ${failed.join('; ')}`)
+              }
+            },
+          },
+          {
+            id: 'G03',
+            what: `Deregister marketplace "${desired.name}" and drop its plugin cache`,
+            // ONE gate for two stores, on purpose. `marketplace add <source>` restores the CLI
+            // registration AND re-clones the cache in a single call, so splitting them would put
+            // a restore-the-cache step BEFORE the re-add that re-creates it — the LIFO trap.
+            run: async (c) => {
+              // SCEN-019 BUG-004 (2026-04-30): the CLI returns non-zero with
+              // "not found" if the marketplace name isn't registered with Claude
+              // CLI itself. That is NOT a fatal error for the pipeline — the
+              // caller may be cleaning up an orphan key in settings.json (e.g.
+              // a derived owner-repo name that the route stamped but the CLI
+              // never registered). Treat "not found" as a no-op for G03 and
+              // proceed to G04 (cache cleanup) and G05 (settings cleanup), so
+              // an orphan extraKnownMarketplaces key can still be reaped.
+              try {
+                await execFileAsync('claude', ['plugin', 'marketplace', 'remove', desired.name], { timeout: 120000 })
+                c.deregistered = true
+                ops.push(`G03: Removed marketplace "${desired.name}"`)
+              } catch (cliErr) {
+                const msg = cliErr instanceof Error ? cliErr.message : String(cliErr)
+                if (msg.includes('not found')) {
+                  ops.push(`G03: CLI did not know "${desired.name}" — proceeding to file cleanup (orphan path)`)
+                } else {
+                  throw cliErr
+                }
+              }
+
+              // Clean up cached plugins
+              if (existsSync(cacheDir)) {
+                await rm(cacheDir, { recursive: true, force: true })
+                c.cacheDropped = true
+                ops.push(`G04: Cleaned up cached plugins at ${cacheDir}`)
+              }
+            },
+            undo: async (c) => {
+              // Decides from what `run` RECORDED, never from a flag set up front — so it is
+              // correct whether run did none of its work (the orphan path, where the CLI never
+              // knew this name and no cache existed), some of it, or all of it.
+              if (!c.deregistered && !c.cacheDropped) return
+              if (!addArg) {
+                throw new Error(
+                  `cannot re-add marketplace "${desired.name}": no source recorded in extraKnownMarketplaces`,
+                )
+              }
+              await execFileAsync('claude', ['plugin', 'marketplace', 'add', addArg], { timeout: 120000 })
+            },
+          },
+          {
+            id: 'G05',
+            what: 'Remove the marketplace from extraKnownMarketplaces in settings.json',
+            // Remove from extraKnownMarketplaces in settings.json
+            run: async (c) => {
+              await withSettingsLock(SETTINGS_JSON, async () => {
+                const settings = await loadJsonSafe(SETTINGS_JSON) as Record<string, Record<string, unknown>>
+                const ekm = settings.extraKnownMarketplaces as Record<string, unknown> | undefined
+                if (ekm && ekm[desired.name] !== undefined) {
+                  delete ekm[desired.name]
+                  settings.extraKnownMarketplaces = ekm
+                  await saveJsonSafe(SETTINGS_JSON, settings)
+                  c.ekmRemoved = true
+                  ops.push(`G05: Removed from extraKnownMarketplaces`)
+                }
+              })
+            },
+            undo: async (c) => {
+              if (!c.ekmRemoved) return
+              await withSettingsLock(SETTINGS_JSON, async () => {
+                const settings = await loadJsonSafe(SETTINGS_JSON) as Record<string, Record<string, unknown>>
+                const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
+                ekm[desired.name] = ekmEntry
+                settings.extraKnownMarketplaces = ekm
+                await saveJsonSafe(SETTINGS_JSON, settings)
+              })
+            },
+          },
+        ],
+        rc,
+      )
+      if (!txn.ok) {
+        ops.push(...txn.ops)
+        // The R51.3 "NO CHANGES WERE MADE" / R51.5 CRITICAL wording comes from the runner.
+        // What it cannot know is WHICH stores this pipeline put back, and naming them is the
+        // difference between an operator who trusts the rollback and one who goes looking.
+        result.error = txn.rolledBack
+          ? `${txn.message} The marketplace registration, its plugin cache and every plugin the cascade uninstalled were restored.`
+          : txn.message
+        return result
+      }
     } else if (desired.action === 'update') {
       await execFileAsync('claude', ['plugin', 'marketplace', 'update', desired.name], { timeout: 120000 })
       ops.push(`G03: Updated marketplace "${desired.name}"`)

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T17:47:00+0200
+updated: 2026-07-30T17:57:41+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,62 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### THE ALREADY-TESTED SWEEP RAN — all three candidates NEGATIVE, and that is the finding
+
+R33.1 (below) cost zero new code because its test already existed, so the next action was to sweep
+the remaining rows the same way before writing anything. **All three candidates came back
+negative** — the sweep's value was not the row it saved but the two traps it caught:
+
+- **R1.1** (`lib/team-acl.ts:102` → `checkTeamAccess`) — five test files reference the symbol and
+  **every one of them MOCKS it**: `vi.mock('@/lib/team-acl', () => ({ checkTeamAccess: vi.fn(() =>
+  ({ allowed: true })) }))` in `tests/document-api.test.ts`, `tests/team-api.test.ts`,
+  `tests/services/teams-service.test.ts`; `tests/unit/headless-router-auth-mirror.test.ts:462`
+  mentions it only in a COMMENT. Mocking the guard to prove the guard is the excluded pattern —
+  every one of those survives the guard's deletion. **A grep hit only proves the module is
+  IMPORTED**, which is exactly why the sweep says OPEN each hit.
+- **R18.8** — the one `WarningCollector` hit
+  (`tests/unit/converter-model-mapping.test.ts:143-163`) drives a model REWRITE: a Claude id that
+  MAPS to a Codex id, with a note. R18.8 governs the id that **cannot** map. Reading the rule TEXT
+  against the guard is what separates them; the row would otherwise have been cited off a test
+  about a different case.
+- **R1.2** — its Guard is a bare `lib/group-registry.ts` with no line at all. Left as-is; a
+  definitional row ("Groups are lightweight … no governance, no COS, no kanban") whose enforcement
+  is the ABSENCE of machinery, which no single site carries.
+
+### RATCHET 12 → 11 — R18.8 DONE (`tests/governance/r18-conversion-loss-report.test.ts`)
+
+**The remaining 11:** R1.1, R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R17.18a, R20.28, R40.1.
+
+**A fourth rotted citation.** R18.8's row cited
+`services/element-management-service.ts:5705-5715` — which is `ChangeMetadata`, agent metadata
+mutation, nothing to do with plugin conversion. Nothing caught it because the ratchet only
+bounds-checks. Re-cited to the real warn-and-continue path: `lib/converter/emitters/codex.ts:47-52`
+(`warnLossySkill` — the four fields Codex cannot represent) and `:245-253` (the block that attaches
+the collected warnings to `files[0]` and **returns the files anyway**).
+
+**Two clauses that fail in OPPOSITE directions**, so both are driven:
+
+| clause | failure it forbids | assertion |
+|---|---|---|
+| (a) emits a loss report | the feature is silently dropped — the caller ships a plugin missing it and nothing says so | the report NAMES `allowed-tools`, `metadata`, `paths` and the owning skill; the mappable skill is NOT reported |
+| (b) the operation MUST still proceed | the conversion ABORTS — "a plugin with reduced features is acceptable, an agent with no plugins is not" | the lossy skill's file still comes back, and it does not take the mappable skill with it |
+
+**Clause (b) is quantified over target clients**, so pinning codex alone would launder an instance
+into a rule. The coverage leg walks `getRegisteredEmitters()` (7 clients) and asserts each returns
+files for the same lossy project — a new client cannot ship an abort-on-loss path invisibly. It
+carries `expect(ids.length).toBeGreaterThan(1)` so an empty registry cannot pass it vacuously.
+
+**Neuter pair (complementary, one per clause):** deleting the `warnLossySkill(skill, warnings)` call
+reds ONLY clause (a) — the two proceed tests stay green, proving they do not lean on the report.
+`if (skill.allowedTools) throw` reds the two proceed tests **including coverage**, which is also
+what proves that loop reaches a real emitter rather than iterating over nothing. Guard restored
+byte-identical (`git diff` empty).
+
+**Noted, not fixed (out of scope, not a rule violation):** `codex.ts:245-251`'s comment says
+"attach to the first file **or create a warnings file**", and the `else` branch does not exist — so
+for a project that emits ZERO files the loss report is dropped. Only reachable when there is
+nothing to report about, but the comment promises a branch the code lacks.
 
 ### RATCHET 13 → 12 — R33.1 needed NO new test, and that is its own finding
 

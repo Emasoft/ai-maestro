@@ -203,7 +203,7 @@ Row format is fixed so a regex parses each line:
 | R18.5 | ENFORCED | services/element-management-service.ts (ChangeClient::G05b) | tests/governance/r18-client-change-continuity.test.ts |
 | R18.6 | CONTRADICTED | — | — |
 | R18.7 | ENFORCED | services/element-management-service.ts (ChangeClient::G10) | tests/governance/r18-client-change-continuity.test.ts |
-| R18.8 | ENFORCED | lib/converter/utils/warnings.ts:14-22, services/element-management-service.ts:5705-5715 | — |
+| R18.8 | ENFORCED | lib/converter/utils/warnings.ts:14-22, lib/converter/emitters/codex.ts:47-52, lib/converter/emitters/codex.ts:245-253 | tests/governance/r18-conversion-loss-report.test.ts |
 | R18.9 | ENFORCED | services/element-management-service.ts:5517-5908 | tests/governance/r18-client-change-continuity.test.ts |
 | R18.10 | ENFORCED | services/element-management-service.ts (ChangeClient::G09) | tests/governance/r18-client-change-continuity.test.ts |
 | R19.1 | ENFORCED | services/element-management-service.ts (ChangeTitle::EXE) | tests/governance/r19-maintainer-title.test.ts |

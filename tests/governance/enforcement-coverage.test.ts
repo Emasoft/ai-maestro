@@ -297,7 +297,20 @@ const UNAUDITED_RULES = new Set<number>([
 // the OPPOSITE failure to a rotted Guard — it understates coverage, inflates the ratchet, and makes
 // the campaign look further from done than it is. Before writing a test for a remaining row, grep
 // the test tree for the guard's exported symbol first.
-const MAX_ENFORCED_WITHOUT_TEST = 12
+// 2026-07-30: 12 -> 11. R18.8 pinned by tests/governance/r18-conversion-loss-report.test.ts. The
+// already-tested sweep ran first and came back NEGATIVE for all three candidates, which is what
+// made the shape of this test obvious. R1.1: all five hits `vi.mock` `checkTeamAccess` to return
+// `{allowed:true}` — mocking the guard to prove the guard, so every one survives its deletion.
+// R18.8: the only `WarningCollector` hit pins a model REWRITE (a mappable id with a note), while
+// R18.8 governs the UNMAPPABLE case; and the row's second citation named `ChangeMetadata`, a rotted
+// range with nothing to do with conversion — re-cited to the warn-and-continue path in the emitter.
+// Two clauses that fail in OPPOSITE directions (silently dropping the feature vs aborting the
+// conversion), so both are driven, and clause (b) is quantified over target clients — the coverage
+// leg walks the emitter REGISTRY so a new client cannot ship an abort-on-loss path invisibly.
+// Neuter pair: removing the loss-report call reddens ONLY clause (a); throwing on the unmappable
+// field reddens the two proceed tests, coverage included — which is also what proves that loop
+// reaches a real emitter rather than iterating vacuously.
+const MAX_ENFORCED_WITHOUT_TEST = 11
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

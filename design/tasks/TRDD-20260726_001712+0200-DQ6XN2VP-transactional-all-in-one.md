@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T00:07:17+0200
+updated: 2026-07-31T00:28:13+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8]
 ---
 
 ## ⏵ MEASURED 2026-07-30 — the count was wrong, and there is now a ratchet that keeps it honest
@@ -150,6 +150,96 @@ either, for the reason below.
 > `ChangeName` in that sentence; the criterion is whether the pipeline can leave two stores
 > disagreeing. `ChangeTeam` was the half that was right, and it is done below.
 
+## ⏵ ChangeMarketplace RETROFITTED 2026-07-31 (`1b129db8`) — 10 to go, and the window is now EXHAUSTED
+
+Real inventory now: **19 pipelines · 9 transactional · 10 to go.** Ratchet lowered
+(`MAX_HANDROLLED` 11→10, `MIN_TRANSACTIONAL` 8→9, `ChangeMarketplace` pinned in
+`MUST_BE_TRANSACTIONAL`).
+
+**THE FINDING.** `remove` runs four stores in sequence — cascade-uninstall every plugin the
+marketplace shipped, from every target (G02b) → deregister the marketplace and drop its cache
+(G03/G04) → strip the `extraKnownMarketplaces` entry (G05). Three of them can abort after the
+first has already mutated, and nothing rolled back. So a `marketplace remove` that failed for any
+reason other than the tolerated `"not found"` returned a bare CLI error over a host where **every
+agent had already lost that marketplace's plugins**, with the marketplace still registered. The
+operator sees a failed removal and an intact-looking marketplace; the plugins are gone fleet-wide.
+
+**THE BOUNDARY IS PER BRANCH, NOT PER FUNCTION — and that is the new rule this one adds.** Only
+`remove` is wrapped. `add` and `update` each have exactly ONE mutating gate with nothing abortable
+after it, so an `undo` there would be unreachable code that reads as a guarantee (the CreateAgent
+lesson); and `update` has no honest compensation at all — you cannot un-pull a marketplace —
+which is exactly the case `runGateSequence`'s refuse-to-start check exists to reject. Wrapping the
+whole function to look thorough would have manufactured two fake guarantees to buy one real one.
+
+**THE LIFO TRAP, AND ITS MIRROR — both in one pipeline.**
+
+- **G03+G04 FUSE.** `claude plugin marketplace add <source>` restores the CLI registration AND
+  re-clones the cache in ONE call. Split, the unwind would run restore-the-cache *before* the
+  re-add that re-creates it — reverse order that is not the mirror ⇒ one gate. Third sighting
+  after ChangeTeam and DeleteTeam.
+- **G02b+G03 STAY SPLIT**, by the *same* test reaching the opposite answer: a reinstall needs the
+  marketplace registered, and reverse unwinding runs G03's undo (the re-add) *before* G02b's. The
+  dependency and the unwind agree, so fusing them would be superstition. Worth stating, because
+  after three fusions the reflex is to fuse.
+
+**The source is snapshotted before anything mutates**, from `extraKnownMarketplaces[name].source`
+— because G05 is about to delete the very store that holds it. `marketplaceAddArg` (a pure
+top-level helper, invisible to the ratchet's pipeline detection since it owns no `ops` array)
+returns null when the entry names no source, and G03's undo then THROWS rather than silently
+no-op'ing: the marketplace really is deregistered and its cache really is gone, so R51.5's INVALID
+STATE is the honest answer. G03's undo also decides from what `run` RECORDED, so the orphan path
+(CLI never knew the name, no cache dir) correctly re-adds nothing.
+
+**Four neuters** (`tests/integration/change-marketplace-rollback.test.ts`, 4 tests):
+
+| neuter | reds |
+|---|---|
+| G02b's undo → return | tests 1 and 2 |
+| G03's undo → return | tests 2 and 3 |
+| `addArg` forced non-null | ONLY test 3 (the R51.5 path) |
+| **G05's `run` stops recording `ekmRemoved`** | **NOTHING** — see below |
+
+**THE FOURTH ROW IS A FINDING, NOT A GAP IN THE TESTS.** G05 is the LAST gate that can abort. The
+runner's write-ahead registration makes a failing gate's own `undo` reachable *in principle* — it
+is called even when `run` threw part-way — but G05's only mutation is its `saveJsonSafe`, and
+nothing after that save can throw. So `c.ekmRemoved` is either set with the write durable (no
+failure) or never set (the write failed and there is nothing to restore). Its compensation is
+**latent by construction**, and no fixture can red it without adding a throw to production code
+purely to be tested. It stays because the runner requires it and because the partial-work contract
+is what makes it correct — but it is named here rather than counted as coverage. The generalisation:
+*the last abortable gate in any sequence has a latent undo; its FAILURE is what unwinds the others,
+and that — not its own undo — is what a test can pin.*
+
+**The new test file is deliberately separate** from `delete-marketplace-pipeline.test.ts`. That
+file drives the same pipeline against the developer's REAL `$HOME` and only gets away with it
+because its fixture name is absent from the real `settings.json`, so G05's
+`ekm[name] !== undefined` is false and nothing is ever written. These tests must SEED that entry,
+so they need a fake home — and arming one inside the existing file would silently arm it for its
+five other cases (the "never add the arming mock to an existing multi-case file" lesson).
+
+### MEASURED 2026-07-31 — the remaining 10 have no window, so the ratchet and safety have parted
+
+Measured before picking, exactly as the DeleteTeam next-action demanded, and the measurement is
+what makes this the LAST safety-motivated retrofit on this card:
+
+| pipeline | mutating gates | window |
+|---|---|---|
+| `ChangeMCP` | one (`claude mcp add-json`/`remove`) | none |
+| `ChangeLSP` | one (`writeFile` lsp.json) | none |
+| `ChangeHook` | one (`saveJsonSafe` settings; the `if (result.error) return` after it is a refusal set BEFORE the write) | none |
+| `ChangeMetadata` | one (`updateAgent`) | none |
+| `ChangeCLIArgs` | one (`updateAgent`) | none |
+| `ChangeName` / `ChangeFolder` / `ChangeAvatar` | one each | none (already recorded) |
+| `ChangeTitle` (131 ops) / `InstallElement` (101) | many | real, but both are now CALLED from inside retrofitted pipelines' gates |
+
+**NEXT ACTION — this card's safety work is DONE; what remains is a deliberate choice, not a queue.**
+Retrofitting any of the eight single-mutation pipelines moves `MAX_HANDROLLED` and buys nothing;
+doing it for conformance is legitimate but should be named as such. The two that WOULD buy safety
+are `ChangeTitle` and `InstallElement`, and converting either changes the failure semantics of the
+pipelines that call it (`ChangeTeam` and `DeleteTeam` both call `ChangeTitle` from inside a gate,
+and its own Gate 9/9b bidirectional constraint is the source of the LIFO trap) — so each wants its
+own card with that blast radius stated up front, not a line in this one.
+
 ## ⏵ DeleteTeam RETROFITTED 2026-07-31 (`72886dd1`) — 11 to go; a compensation that only covered ONE abort
 
 Real inventory now: **19 pipelines · 8 transactional · 11 to go.** Ratchet lowered
@@ -233,7 +323,10 @@ one field is not a bug, but a test written only against that path could not see 
    only (the registry's own comment says local task/doc files no longer exist), so no snapshot was
    built for it. If that file ever becomes load-bearing again, it needs one.
 
-**NEXT ACTION — pick by WINDOW, not by gate count.** `ChangeMarketplace` (12 ops) is the remaining
+**NEXT ACTION** *(SUPERSEDED 2026-07-31 — `ChangeMarketplace` was re-measured, it did have the
+window, and it is done in `1b129db8`. Read the ChangeMarketplace section above instead: the
+measurement it demanded also showed the remaining eight small pipelines have NO window at all.)*
+**— pick by WINDOW, not by gate count.** `ChangeMarketplace` (12 ops) is the remaining
 named candidate with a plausible multi-store window; re-measure before committing to it. Still not
 `ChangeTitle` (131) or `InstallElement` (101) — both are now called BY retrofitted pipelines
 (`ChangeTeam` and `DeleteTeam` each call `ChangeTitle` from inside a gate), so converting one changes

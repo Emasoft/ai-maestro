@@ -1,11 +1,11 @@
 ---
 trdd-id: 31LJK1CX
 title: The warm graph query misses the sub-second budget and the freshness probe is why
-column: backburner
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T20:26:44+0200
-updated: 2026-07-30T03:18:00+0200
+updated: 2026-07-30T03:52:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -117,16 +117,101 @@ easy to conflate: 100 000 lines of output is unusable *and* nearly free.
 harnesses, both correct, ~0.09 s apart before any work is done — quoting one against the other would
 manufacture a change that did not happen.
 
+## ADDENDUM 2026-07-30 (later) — the non-git decomposition, and the design question ANSWERED
+
+### Box 1 — the corpus really is the case a git short-circuit cannot serve
+
+Not inferred from its location: the index's own `files.identity` column says
+**`stat:` for 100 000 of 100 000 rows** (`stat:<size>:<mtime_ns>`), zero `git:`. So a
+`git rev-parse HEAD` short-circuit would have saved **nothing at all** here — the card's own
+prediction, now a measurement rather than a caveat. `freshness.ts:59` states the general case:
+*"Not a git repo — every LOCAL-scope corpus is in this case, by design."*
+
+**The stage table** (in-process, 10⁵ non-git corpus, second run = warm FS cache):
+
+| stage | ms | what it is |
+|---|---|---|
+| boot + lib imports | 167 | node + tsx, charged to any CLI invocation |
+| `openIndex` (open + validate) | 29 | |
+| `listTrddFiles` (4 zones) | 162 | 4 `readdir`s + sort |
+| `identifyFiles` (100 000 files) | 432 | the `stat` probe |
+| `cardsFromIndex` (SELECT + build) | 197 | 100 000 rows → `GraphCard[]` |
+| **real work (excl. boot)** | **817** | of which the probe is **591 = 72%** |
+
+`syncIndex` reported `scanned: 100000, added/changed/removed: 0, records: 0, edges: 0` — zero
+re-reads, pure staleness checking. And it cost **591 ms** against my own separate
+list+identify of **594 ms**, which cross-checks the attribution: `syncIndex`'s cost *is*
+list+identify, essentially entirely.
+
+### The three options this card floated, each now decided on evidence
+
+**1 · git short-circuit — DEAD on this corpus.** See above: no git identities exist to short-circuit.
+
+**2 · directory-mtime pre-filter — REJECTED, and now on measurement rather than suspicion.**
+Tested on APFS: an **in-place content edit leaves the directory mtime UNCHANGED**
+(`1785373641.749577506` before and after), while adding a file changes it. An in-place edit is
+how a TRDD *normally* changes — bump `updated:`, flip `column:` — so this filter would skip the
+probe in exactly the common case and answer confidently from a stale index. That is the failure
+the card named as "strictly worse than being slow", and it is not a corner case but the modal one.
+
+**3 · accept the probe and attack the rest — CHOSEN, and it turns out not to require weakening
+anything.** The card assumed "cheaper staleness check" meant *weaker*. It does not: **60% of the
+probe is not the check.**
+
+- The stat FORM is not the cost. Four variants over the same 100 000 files:
+  `bigint` (shipped) **228 ms** · `number mtimeMs` 251 · `+ throwIfNoEntry:false` 242 ·
+  `lstat` 246 — all ~2.3-2.5 µs/file, and **the shipped form is the fastest**. There is no free
+  win in how the stat is called.
+- So **~232 ms is an irreducible syscall floor** for "verify every file", and the shipped loop
+  shape (stat + identity string + `Map<path,{id,source}>` + per-file try/catch) measures
+  **281-311 ms** — the try/catch is free, the 100k-object Map costs ~54 ms.
+- `identifyFiles` measures **432 ms**, so **~120 ms sits above the loop shape** — the per-file
+  `path.resolve(file)`. The git-root probe is NOT the cause: it fails fast on a non-git corpus in
+  **7 ms**.
+
+**A false lead worth recording, because reading the code is what killed it.** I measured
+`realpathSync` per file at **1 187 ms** and nearly reported it as the overhead. The shipped code
+does not do that — `freshness.ts:162` does a **prefix remap**: ONE `realpath` for the corpus root,
+then a string slice per file, precisely so the all-clean path stays free of per-file I/O. A probe
+can measure a cost the code deliberately avoids, and the number looks just as real.
+
+### The decision, with its failure mode stated
+
+**Keep the exact O(N) probe — every file stat'ed, no heuristic — and pay down the userland work
+around it.** Failure mode: **none**, because the check itself is unchanged; the guarantee that the
+index is an accelerator and never an authority is preserved by construction. What it costs is
+engineering, not correctness: ~360 ms of the 591 ms is `readdir`+`path.resolve`+allocation, against
+a ~232 ms syscall floor. Zeroing all of it would put the whole-board verbs at ~623 ms end-to-end —
+**inside the < 1 s budget without a heuristic anywhere.**
+
+**A second, independent lever for the LOCAL verbs.** `why`/`unblocks`/`show` depend only on one
+card's transitive blocker chain, so freshness could be verified **as each node is visited** rather
+than for the whole corpus. The induction is sound: if X is fresh then X's edge list is current, so
+the footprint discovered from X is the true footprint. It fixes 3 of 5 verbs completely (a ~3-node
+chain on the live corpus) and `roots`/`board`/`next` not at all, since their answer genuinely
+depends on every card.
+
+**Neither is done here.** This card's acceptance was to decompose, choose, and re-state the verdict;
+the paydown is a sibling under `L55IYKL4` (depth-1 forbids this card having children of its own),
+and until that sibling exists the miss keeps its owner rather than evaporating.
+
 ## Acceptance
 
-- [ ] The warm-query cost is decomposed against a corpus that is NOT in a git repo, since that is
-      the case a git-based short-circuit cannot serve
-- [ ] A staleness check is chosen with its failure mode stated explicitly — what input makes it say
-      FRESH when the corpus moved, and why that is acceptable or impossible
-- [ ] The differential test still passes: index-backed and walk-backed answers agree on the live
-      corpus, ORDER included
-- [ ] Warm query re-measured at 10⁵ and the verdict re-stated — MET, or MISSED with the residual
-      named
+- [x] The warm-query cost is decomposed against a corpus that is NOT in a git repo, since that is
+      the case a git-based short-circuit cannot serve — **proven non-git by the index's own
+      `files.identity`: `stat:` for 100 000 of 100 000 rows**, and decomposed stage by stage above
+- [x] A staleness check is chosen with its failure mode stated explicitly — what input makes it say
+      FRESH when the corpus moved, and why that is acceptable or impossible. **Chosen: the exact
+      O(N) probe, unchanged, so the failure mode is NONE.** The rejected alternative is stated with
+      the input that breaks it: a directory-mtime filter says FRESH after any in-place edit
+      (measured on APFS — dir mtime unchanged), which is the modal way a TRDD changes
+- [x] The differential test still passes: index-backed and walk-backed answers agree on the live
+      corpus, ORDER included — full suite green (275 files / 4105 passed), and `C069SK9E` extended
+      it to `next` **and to 10⁵**, byte-identical over 31 111 ranked rows
+- [x] Warm query re-measured at 10⁵ and the verdict re-stated — **MISSED, and the residual is now
+      named to the millisecond**: 591 ms of 817 ms real work is the probe, of which **~232 ms is an
+      irreducible syscall floor** and **~360 ms is `readdir` + `path.resolve` + allocation**. So the
+      budget is reachable without any heuristic; that paydown is a sibling card, not this one
 
 ## Approval log
 

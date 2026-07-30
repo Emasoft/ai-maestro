@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T04:48:14+0200
-updated: 2026-07-30T18:08:42+0200
+updated: 2026-07-30T18:12:59+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -24,6 +24,40 @@ implementation-commits: [7bec032e, 2298646a, 62b5e58d, 59893d08, 8e77d834, 8b63b
 ---
 
 ## ⏵ STATE — 2026-07-30 (newest; supersedes the 2026-07-27 block below)
+
+### RATCHET 9 → 8 — R17.18a DONE (`tests/governance/r17-no-auto-register.test.ts`)
+
+**The remaining 8:** R1.2, R2.2, R4.8, R7.1, R7.3, R7.8, R10.6, R20.28 — **all eight are now in the
+"deliberately not pinnable off one site" set** (see the table further down). The next batch is a
+DIFFERENT kind of work: the MECHANISM+COVERAGE shape for the ALL-quantified pair, a subprocess
+harness for the shell guard, and a reachable seam for the two half-unreachable clauses.
+
+**This rule is ENFORCED BY AN ABSENCE**, which is what made it awkward and worth doing. The
+discovery loop collects strangers into `unregisteredSessions` and simply never calls the registry
+writer — there is no `if` to delete, so the neuter has to **ADD** the forbidden behaviour rather
+than remove a guard.
+
+**An absence assertion is the vacuous-pass shape**, so the first test proves the poll RAN and
+DISCRIMINATED — `unregisteredSessions === [stranger]` and the known agent matched — in the same call
+the absences are measured from. Without it, "the registry gained no row" would pass against a
+discovery that returned nothing at all.
+
+**Neuter:** write the stranger into `registry.json` inside the collection loop → the two
+registry-absence tests red while the SURFACING test stays **green**. That discrimination is the
+point: the rule is not "hide strangers", it is "show them WITHOUT adopting them", and a neuter that
+reddened both could not tell those apart. The workdir/AMP-absence test also stays green under that
+mutation — correctly, since it guards a SECOND claim in the rule's text ("no plugin is installed, no
+AMP identity is provisioned") and would need its own mutation. Recorded rather than overclaimed.
+
+**The registry is REAL** (seeded on disk in the temp state dir). It has to be — "the registry gained
+no row" IS the rule, and a mocked registry would assert nothing. What is mocked is `getRuntime`
+(the tmux data source: "what sessions exist?") and `child_process` (so `getPaneCommand` cannot reach
+the developer's real tmux).
+
+**Sweep note:** `listAgents` appears in `tests/agent-registry.test.ts`, but that is
+`lib/agent-registry`'s `listAgents` — a DIFFERENT function with the same name in a different module.
+`unregisteredSessions` appears in zero tests. Same-name-different-module is a way a sweep can return
+a false POSITIVE, the mirror of R1.1's all-mocks false positive.
 
 ### RATCHET 10 → 9 — R40.1 DONE (`tests/governance/r40-foreign-user-creation.test.ts`)
 

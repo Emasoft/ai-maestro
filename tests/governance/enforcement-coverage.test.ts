@@ -338,7 +338,20 @@ const UNAUDITED_RULES = new Set<number>([
 // CreateAgent test — the M3 regression reproduced exactly; deleting the create_team gate reds ONLY
 // the createNewTeam test. Either single neuter alone would leave one surface free to lose its gate
 // silently, which is the whole content of the word EVERY.
-const MAX_ENFORCED_WITHOUT_TEST = 9
+// 2026-07-30: 9 -> 8. R17.18a pinned by tests/governance/r17-no-auto-register.test.ts. This rule is
+// ENFORCED BY AN ABSENCE — the discovery loop collects strangers into an array and simply never
+// calls the registry writer — so there is no `if` to delete and the neuter has to ADD the forbidden
+// behaviour instead of removing a guard. The assertions are post-conditions of NON-ACTION (the
+// registry, the agent-workdir root and the AMP home are unchanged after a poll that saw a
+// stranger), which is exactly the shape that passes VACUOUSLY against a discovery that found
+// nothing — so the first test proves the poll ran and discriminated (stranger surfaced, known
+// matched) in the same call the absences are measured from. Neuter: write the stranger into
+// registry.json inside the collection loop → the two registry-absence tests red while the SURFACING
+// test stays green, which is the discrimination that matters (the rule is "show them WITHOUT
+// adopting them", and a neuter reddening both could not tell those apart). The workdir/AMP test
+// stays green under that mutation too, correctly — it guards a different absence and would need its
+// own; it is a second claim in the rule's text, not a duplicate of the first.
+const MAX_ENFORCED_WITHOUT_TEST = 8
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

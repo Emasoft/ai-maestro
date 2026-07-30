@@ -187,7 +187,7 @@ Row format is fixed so a regex parses each line:
 | R17.16 | ENFORCED | components/agent-profile/PluginsTab.tsx:244-245 | tests/governance/r17-core-plugin-no-uninstall.test.tsx |
 | R17.17 | ENFORCED | lib/startup-user-scope-guard.mjs:28-65, server.mjs:1771-1774 | tests/unit/startup-guards.test.ts |
 | R17.18 | RULING-NEEDED | — | — |
-| R17.18a | ENFORCED | services/agents-core-service.ts | — |
+| R17.18a | ENFORCED | services/agents-core-service.ts:532-565 | tests/governance/r17-no-auto-register.test.ts |
 | R17.19 | ENFORCED | scripts/bump-version.sh:225-228 | tests/governance/r17-r11-core-plugin-binding.test.ts |
 | R17.20 | ENFORCED | lib/startup-marketplaces.mjs:29-78, server.mjs:1794-1797 | tests/unit/startup-guards.test.ts |
 | R17.21 | ENFORCED | services/agents-core-service.ts:2121-2137 | tests/governance/r17-r11-core-plugin-binding.test.ts |

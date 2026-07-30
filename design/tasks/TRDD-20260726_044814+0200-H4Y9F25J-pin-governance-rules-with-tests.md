@@ -80,6 +80,16 @@ coverage for an unreachable branch.
   clause (the R17 core-plugin requirement) is uncited entirely. It needs a
   re-citation onto the site that ACTS on the binding (ChangeTitle G15/G16).
 
+- **R20.5 already has behavioural tests — against the OTHER site.** The map cites
+  G15/G16; `tests/governance/r20-marketplace-governance.test.ts` drives
+  `autoAssignRolePluginForTitle`. Naming that file in the row would drop the
+  ratchet by 1 while leaving G15/G16 unpinned — green columns over an untested
+  site. Pin G15/G16 first, then cite both.
+- Batch the rest **by the FILE the guard lives in**. Note 9 of the 28 are `.tsx`
+  components (R4.8, R7.1/7.2/7.3/7.7/7.8/7.9, R11.6, R17.16); a "guard" in a
+  React component is not a server-side refusal, so those may want a
+  `BEHAVIOURAL` verdict rather than an adversarial refusal test.
+
 **Three facts measured 2026-07-30 that make the G15/G16 batch CHEAP — they remove
 the obstacle this card previously assumed.** I had expected G15 to be unreachable
 without seeding a marketplace on disk. It is not:
@@ -108,15 +118,6 @@ and note that its R17 clause is enforced by R17's own guards rather than left
 uncited. R20.5's G15/G16 half wants the same fixture but belongs topically in
 `r20-marketplace-governance.test.ts`, which lacks the ChangeTitle registry-file
 sync — porting that is the only real cost left.
-- **R20.5 already has behavioural tests — against the OTHER site.** The map cites
-  G15/G16; `tests/governance/r20-marketplace-governance.test.ts` drives
-  `autoAssignRolePluginForTitle`. Naming that file in the row would drop the
-  ratchet by 1 while leaving G15/G16 unpinned — green columns over an untested
-  site. Pin G15/G16 first, then cite both.
-- Batch the rest **by the FILE the guard lives in**. Note 9 of the 28 are `.tsx`
-  components (R4.8, R7.1/7.2/7.3/7.7/7.8/7.9, R11.6, R17.16); a "guard" in a
-  React component is not a server-side refusal, so those may want a
-  `BEHAVIOURAL` verdict rather than an adversarial refusal test.
 
 **Take the count from the ratchet's own failure message, never a hand grep.**
 Mine said 27 because `R[0-9]+\.[0-9]+` does not match the lettered sub-rule

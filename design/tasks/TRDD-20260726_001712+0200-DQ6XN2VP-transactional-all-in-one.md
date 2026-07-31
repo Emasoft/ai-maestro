@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T14:31:29+0200
+updated: 2026-07-31T14:41:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,10 +18,17 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa, aca4c858, be35ec55, 4d81aa69, 75a7d9e7]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa, aca4c858, be35ec55, 4d81aa69, 75a7d9e7, 73fa3db0, 790cd8cb]
 ---
 
-## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
+## ⏵ MEASURED 2026-07-31 — 10 done, 9 left, and NONE of the nine has a compensable window
+
+**⚠ SUPERSEDED HEADLINE — do NOT carry forward "the remaining work is ONE pipeline, `ChangeTitle`".**
+`ChangeTitle` LANDED (runner at `:4204`) and its rollback coverage is COMPLETE — thirteen of its
+fourteen mutating undos pinned by a named neuter, the fourteenth (G15's) unreachable by construction.
+The nine below are **conformance only**: each is one mutating call with nothing abortable after it,
+so there is no state a compensation could restore. The paragraph below is kept because its MEASURING
+DISCIPLINE is the load-bearing part.
 
 **The remaining work is not "10 pipelines". It is ONE** — `ChangeTitle`. Every candidate's
 partial-state window was measured, per the standing rule that you measure the window before picking
@@ -30,7 +37,7 @@ morning by reading the function; the correction is the finding, and it is record
 
 | pipeline | gate ops | mutating calls | window | verdict |
 |---|---|---|---|---|
-| `ChangeTitle` | 131 | **~15** — `updateAgent` ×6, `blockAllTeams`/`unblockAllTeams`, `updateTeam` ×4, `revokeTokensForAgent`, `revokeTokensFromIssuer`, `installPluginLocally` ×4, `hibernateAgent` | **REAL, and the only one left** | retrofit |
+| `ChangeTitle` | 131 | **~15** — `updateAgent` ×6, `blockAllTeams`/`unblockAllTeams`, `updateTeam` ×4, `revokeTokensForAgent`, `revokeTokensFromIssuer`, `installPluginLocally` ×4, `hibernateAgent` | **REAL — CLOSED** (runner `:4204`, 13/14 undos pinned) | **DONE** |
 | `InstallElement` | 101 | 13 — `mkdir` ×2, `saveJsonSafe` ×7 (5 local, 2 user), `execFileAsync` ×4, `rm` ×1 | **NONE that may legally be compensated** — see below | conformance only |
 | `ChangeFolder` | 10 | 1 (`updateAgent`) | none | conformance only |
 | `ChangeName` | 9 | 1 (`updateAgent`) | none | conformance only |
@@ -173,11 +180,11 @@ entry (G14c), G14e's portfolio entry, and G18's mesh broadcast — left the arra
 `txn.ok`. `MAX_HANDROLLED` 10 → **9**, `MIN_TRANSACTIONAL` 9 → **10**, `ChangeTitle` added to
 `MUST_BE_TRANSACTIONAL` (the membership guard that a bare count cannot make).
 
-**NEXT ACTION — G17 is the ONLY undo left to pin.** **TWELVE of the fourteen mutating gates are
-pinned**, all in `tests/services/change-title-window.test.ts`, each by a named neuter; **G15's undo
-is UNREACHABLE** on this path (below); **G17's** needs an install that FAILS, so the `claude` shim
-in `installClaudeShim` has to be made to fail for the target plugin — that is the whole remaining
-job. Then the card can move off `dev`.
+**NEXT ACTION — EVERY REACHABLE UNDO IS NOW PINNED. ChangeTitle's rollback coverage is DONE.**
+**THIRTEEN of the fourteen mutating gates are pinned**, all in
+`tests/services/change-title-window.test.ts`, each by a named neuter; the fourteenth, **G15's undo,
+is UNREACHABLE** on any compatibility-altering title change (below) and is recorded as such, not as
+a gap. The card's remaining work is the OTHER pipelines — this one is closed.
 
 | undo | pinned by | commit |
 |---|---|---|
@@ -188,12 +195,26 @@ job. Then the card can move off `dev`.
 | **G14d** | the old title's role-plugin reinstalled; attributed by measurement, NOT by array order | `be35ec55` |
 | **G9a** | `githubRepo` restored on a rolled-back MAINTAINER assignment | `4d81aa69` |
 | **G11** · **G12** · **G13** · **G13b** | the governance pointers, each on the ONE transition that reaches it; G13 asserts BOTH halves of its cascade (pointer AND team block) | `75a7d9e7` |
+| **G17** | the R9.13 quarantine lifted BEFORE the re-wake — reachable only via `AIM_SHIM_FAIL_INSTALL`, a nominated-failure branch in `installClaudeShim` | `790cd8cb` |
+| **G15** | **UNREACHABLE** on any compatibility-altering title change — not a gap; see below | — |
 
 The harness now has `failOn`, an observation ledger where every collaborator variant records under
 its OWN name, a live `awake` set, token stores modelled as STATE, `armLateDriftAbort(extra,
-driftTitle)` armed on BOTH revocations, and a `driveChangeTitle(id, title, extra)` options bag.
-Verify: `tsc` 0 lines + the suite at **310/4452/2** + `trddgrep validate` exit 1 with only
+driftTitle)` armed on BOTH revocations, a `driveChangeTitle(id, title, extra)` options bag, and
+`AIM_SHIM_FAIL_INSTALL` (a nominated plugin the fake `claude` refuses to install, so G16 fails and
+G17's quarantine is the only way the pipeline can proceed).
+Verify: `tsc` 0 lines + the suite at **310/4453/2** + `trddgrep validate` exit 1 with only
 `7123D51A` and `C7A81642`.
+
+**THE G17 TEST NEEDED A THIRD NEUTER TO STOP BEING VACUOUS ABOUT THE ONE THING IT NAMES.** Its claim
+is an ORDER (`wakeAgent` refuses while `roleMissing` is set, so the flag must be lifted first), and
+an order is invisible to an end-state assertion — the end state is the same either way. Two traps,
+both measured: (a) the probe originally recorded the LAST wake, and **G10's undo re-wakes too**,
+later in the unwind and after G17 has already restored the flag, so a swapped G17 undo read G10's
+`false` and passed — the probe now records only the FIRST wake; (b) with the end-state assertion
+placed first, both of the obvious neuters died on it and the order line never executed, so no
+mutation could reach the assertion the test exists for. Order assertion first, and the proof is
+explicit: under the order-swapped service, commenting out that one line turns the file GREEN.
 
 **TWO FIXTURE FACTS THE POINTER GATES MEASURED.** (a) **The abort anchor had to move**: G14e runs
 only when the OLD title was an issuer and the new one is not, so on a PROMOTION it never fires and
@@ -1502,8 +1523,15 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
 - [x] G07's team-leave `undo` PINNED (`944063f2`) — stateful team double + a seeded MANAGER so the
       join genuinely lands, aborting at G07c's R9.13 reject. Asserted on the `updateTeam` call
       sequence (id in on the join, out on the undo); the neuter reds that test and only it
-- [ ] `ChangeTitle` transactional — **`ChangeClient` and `ChangePlugin` are DONE**; this box is
-      split because they were, and `ChangeTitle` (131 gate ops, the largest) is not
+- [x] `ChangeTitle` transactional — **`ChangeClient` and `ChangePlugin` were DONE first**; this box
+      was split because they were. `ChangeTitle` (131 gate ops, the largest) now runs on
+      `runGateSequence(gates, ctx)` at `:4204`, its window opening at G9a and closing at G17, with
+      **THIRTEEN of the fourteen mutating gates pinned by a named neuter** in
+      `tests/services/change-title-window.test.ts` and the fourteenth (G15's) recorded as
+      UNREACHABLE rather than untested. The rollback coverage found and fixed one real bug —
+      G16's undo routed through `ChangePlugin`, whose G08 refuses to uninstall the plugin the
+      CURRENT title requires, so every rollback past G16 reported R51.5 CRITICAL over a fully
+      recoverable system (`63e56bfa`)
 - [x] A DRIVER for `ChangeTitle`, with a caller (`d3694d48` + `4529c77e`) —
       `tests/helpers/drive-change-title.ts` and `tests/services/change-title-window.test.ts`.
       Three layers of containment + a `claude` PATH shim that MODELS the CLI's one settings write;

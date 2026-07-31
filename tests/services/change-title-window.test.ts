@@ -191,7 +191,7 @@ describe('ChangeTitle happy path (the harness drives the real pipeline)', () => 
  * manager→autonomous demotion. Probing all four post-G10 collaborators is what found the two that
  * are reachable — and the one that matters is not the one that fails.
  */
-describe('ChangeTitle window — CHARACTERIZATION of pre-retrofit behaviour', () => {
+describe('ChangeTitle window — what a mid-pipeline failure actually leaves behind', () => {
   /**
    * The G14-first ordering paying off, OBSERVED rather than argued. `removeManager()` is the first
    * thing G10 does and it is NOT individually wrapped, so its failure aborts the whole pipeline —
@@ -214,30 +214,48 @@ describe('ChangeTitle window — CHARACTERIZATION of pre-retrofit behaviour', ()
   })
 
   /**
-   * THE FINDING, and the reason this file exists.
+   * THE FINDING THIS FILE WAS WRITTEN FOR, now FIXED — the DEFERRED FAIL.
    *
    * G10 is a CASCADE: remove the manager, then block every team, because a team must not operate
-   * without one. Only the second half is wrapped (`catch { ops.push('G10: WARN — blockAllTeams
-   * failed') }`), so when it fails the pipeline CONTINUES and returns `success: true` over a host
-   * that now has NO manager and UNBLOCKED teams — the exact state the cascade exists to prevent,
-   * reported to the caller as a clean success. Nothing downstream can detect it: the ops array
-   * carries the WARN, and no caller reads ops.
+   * without one. Only the second half was wrapped, so a `blockAllTeams` failure let the pipeline
+   * continue and return `success: true` over a host with NO manager and UNBLOCKED teams — the exact
+   * state the cascade exists to prevent, reported as a clean success, traced only by an op nobody
+   * reads. R51.3's forbidden lie, in production, on the governance-critical pipeline.
    *
-   * This is R51's "swallowing a per-item failure into console.warn converts one bad item into an
-   * invalid system", in production, on the governance-critical pipeline. The retrofit must make
-   * G10 atomic — either both halves land or neither does — at which point THIS TEST MUST BE
-   * UPDATED, and its failure is the signal that the retrofit did its job.
+   * THE OBVIOUS FIX IS WRONG, AND THAT IS THE POINT OF THIS TEST. "Un-wrap `blockAllTeams` so its
+   * failure aborts" is a SECURITY REGRESSION as a standalone change: G14 has already written the
+   * new title (deliberately first — TRDD-EE5YX5LF), so an abort at G10 skips G14b/G14e and leaves a
+   * demoted MANAGER holding AID tokens that EMBED "manager", and the retry cannot repair it because
+   * Gate 6 sees the title already changed and returns success before reaching revocation. The
+   * tokens would be stranded for good.
+   *
+   * So the fix withholds the VERDICT, not the WORK: every alignment gate still runs (they align the
+   * agent with the title G14 wrote), and the terminal converts success into a failure NAMING the
+   * residue. The residue is real and is NOT repaired here — reporting it honestly is the whole
+   * change. Abort-at-G10 becomes correct only once the retrofit makes G14's write compensable.
    */
-  it('reports SUCCESS over a half-executed G10 — manager gone, teams left unblocked', async () => {
+  it('withholds the verdict on a half-executed G10 — and still runs the alignment gates', async () => {
     const { driveChangeTitle } = await import(HELPER)
     H.world.failOn = { blockAllTeams: 1 }
 
     const result = await driveChangeTitle(AGENT_ID, 'autonomous')
 
-    expect(result.success).toBe(true)              // ← the problem, not the assertion's fault
+    // The verdict is the fix: no more success over a host the cascade was meant to protect.
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/G10 cascade broken/)
+    expect(result.error).toMatch(/UNBLOCKED with no MANAGER/)
+
+    // The residue is REAL and deliberately NOT repaired — this fix reports, it does not compensate.
     expect(H.world.managerId).toBeNull()           // first half of the cascade LANDED
     expect(H.world.teams[0].blocked).toBe(false)   // second half did NOT
-    // The only trace is an op nobody reads.
-    expect((result.operations ?? []).some((op: string) => /G10: WARN — blockAllTeams failed/.test(op))).toBe(true)
+
+    // THE LOAD-BEARING ASSERTION — what makes this a DEFERRED fail and not an abort at G10.
+    // Both token stores were still drained, so no stale-title credential outlives the demotion.
+    // An abort-at-G10 implementation passes every assertion above and FAILS these two.
+    expect(H.world.calls).toContain('revokeTokensForAgent')
+    expect(H.world.calls).toContain('revokeTokensFromIssuer')
+
+    // The op is no longer a WARN nobody reads — it names the broken invariant.
+    expect((result.operations ?? []).some((op: string) => /G10: CASCADE BROKEN/.test(op))).toBe(true)
   })
 })

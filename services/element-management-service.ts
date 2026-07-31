@@ -2730,6 +2730,14 @@ export async function ChangeTitle(
     }
 
     // ── GATE 10: Clear old MANAGER from governance.json ──────
+    // G10 is a CASCADE, not two independent writes: remove the manager, THEN block every team,
+    // because a team must not operate without one. Only the second half used to be try-wrapped, so
+    // a blockAllTeams failure let the pipeline continue and return success:true over a host with NO
+    // MANAGER and UNBLOCKED TEAMS — precisely the state the cascade exists to prevent, reported as
+    // a clean success with the only trace an op nobody reads. That is R51.3's forbidden lie.
+    // The verdict is now withheld at the terminal; see the `g10CascadeFailed` check there for WHY
+    // this is a DEFERRED fail rather than an abort right here.
+    let g10CascadeFailed: string | null = null
     if (oldTitle === 'manager') {
       const { removeManager } = await import('@/lib/governance')
       await removeManager()
@@ -2740,7 +2748,8 @@ export async function ChangeTitle(
         const hibernated = await blockAllTeams()
         ops.push(`G10: Blocked all teams, hibernated ${hibernated.length} team agent(s)`)
       } catch (err) {
-        ops.push(`G10: WARN — blockAllTeams failed: ${err instanceof Error ? err.message : err}`)
+        g10CascadeFailed = err instanceof Error ? err.message : String(err)
+        ops.push(`G10: CASCADE BROKEN — manager removed but blockAllTeams failed: ${g10CascadeFailed}`)
       }
     } else {
       ops.push(`G10: Old title not MANAGER — governance.json unchanged`)
@@ -3476,7 +3485,27 @@ export async function ChangeTitle(
       ops.push(`G23: governance.json check N/A`)
     }
 
-    result.success = true
+    // R51.3 — a half-executed G10 cascade must NOT be reported as success (see Gate 10 above).
+    //
+    // WHY this is deferred to here instead of aborting at Gate 10, which is the obvious shape and
+    // is WRONG as a standalone fix: G14 has already written the new title by then (deliberately
+    // first — TRDD-EE5YX5LF crash-safety), so returning at Gate 10 skips G14b/G14e and leaves a
+    // demoted MANAGER holding AID governance tokens that EMBED "manager" (see Gate 14b's comment).
+    // A retry cannot repair it either — Gate 6 sees the title already changed and returns success
+    // before reaching revocation. So the ALIGNMENT gates must still run (they align the agent with
+    // the title G14 wrote: revoke the stale-title tokens, swap the role-plugin); only the VERDICT
+    // is withheld. Abort-at-G10 becomes correct only once the retrofit makes G14's write itself
+    // compensable, at which point this flag is deleted along with the hand-rolled control flow.
+    if (g10CascadeFailed) {
+      result.error =
+        `G10 cascade broken: the manager was removed from governance.json but blockAllTeams failed ` +
+        `(${g10CascadeFailed}). Teams are UNBLOCKED with no MANAGER. The title change and its ` +
+        `alignment (token revocation, role-plugin swap) DID complete — assign a MANAGER, or block ` +
+        `the teams manually, to restore the invariant.`
+      console.error(`[ChangeTitle] Agent ${agentId} "${agent.name}": G10 CASCADE BROKEN — ${result.error}`)
+    } else {
+      result.success = true
+    }
     console.log(`[ChangeTitle] Agent ${agentId} "${agent.name}": ${oldTitle || 'none'} → ${effectiveTitle || 'none'} (${ops.length} gates, restart=${result.restartNeeded})`)
     // A gate that fails but does not abort records a WARN in `ops` — and `ops` is
     // returned to the caller, which in the CreateAgent path is a route that prints

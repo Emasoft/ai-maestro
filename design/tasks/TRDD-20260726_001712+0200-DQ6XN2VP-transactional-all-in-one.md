@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T19:32:17+0200
+updated: 2026-07-31T20:09:49+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,8 +18,54 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa, aca4c858, be35ec55, 4d81aa69, 75a7d9e7, 73fa3db0, 790cd8cb]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa, aca4c858, be35ec55, 4d81aa69, 75a7d9e7, 73fa3db0, 790cd8cb, 2613c907]
 ---
+
+## ⏵ EIGHT OF THE NINE LANDED 2026-07-31 (`2613c907`) — ONE left, and it is not more of the same
+
+**⚠ SUPERSEDES the headline below.** The nine conformance rows are now **eight done, one left**.
+`ChangeAvatar`, `ChangeName`, `ChangeFolder`, `ChangeMetadata`, `ChangeCLIArgs`, `ChangeMCP`,
+`ChangeLSP` and `ChangeHook` each put their single mutating call under `runGateSequence` — the
+runner every landed retrofit uses, per the *"Which runner do the nine conformance rows call?"*
+measurement below. `MAX_HANDROLLED` 9 → **1**, `MIN_TRANSACTIONAL` 10 → **18**, and all eight are in
+`MUST_BE_TRANSACTIONAL`, so a later un-retrofit cannot hide behind an unchanged total.
+
+**WHAT IT BOUGHT, and the number NOT to quote back:** conformance, plus **ONE** real compensation.
+The measurement below was right — seven of the eight have nothing abortable after the write, so
+their `undo` is **LATENT BY CONSTRUCTION**: no failure path reaches it, and no neuter can redden a
+test for it. That is written into each one's own comment rather than counted as rollback coverage,
+per this repo's standing rule that an unreachable undo is *named*, not tallied. They exist because
+`runGateSequence` REFUSES to start a mutating gate lacking one, and because a gate appended after
+one of these must find the compensation already there rather than remember to write it.
+
+**`ChangeLSP` is the exception the op-count screen could not see.** Its write is a bare `writeFile`,
+NOT the atomic tmp+rename of `saveJsonSafe` — so a torn write leaves a truncated `.lsp.json` that
+every later load parses as `{}`, silently discarding every OTHER language server the file held. Its
+undo restores the bytes read before the write and is **pinned**
+(`tests/services/element-management-service.test.ts`, *"restores the prior .lsp.json when the write
+dies part-way"*). Neutered by making the undo write the POST-mutation state back: exactly one test
+reds, and it dies on the **byte-equality** assertion rather than on the write-COUNT — which is what
+distinguishes *a compensation ran* from *a compensation restored the right thing*. A no-op undo
+would have died on the count; both assertions are therefore live.
+
+**Three places a quieter choice would have shipped a LYING compensation:**
+
+| pipeline | the choice | why the quiet alternative lies |
+|---|---|---|
+| `ChangeMCP` (remove) | the undo **THROWS** | restoring a removed server means re-adding it with the config it had, and nothing here READ that config. An early `return` still earns the runner's `G04: reverted` line — a claimed restore that never happened. Its `add` undo *is* exact (`mcp remove` inverts `add-json`), and both branches record the completed unit in ctx so `undo` reverses only what landed. |
+| `ChangeName` | the undo goes back through **`updateAgent`** | `updateAgent` also renames every live tmux session (`computeSessionName`). Restoring the field by hand leaves the sessions on the NEW name and the registry on the old — undo through the mechanism that performed it. |
+| `ChangeHook` · `ChangeLSP` | validation moved **OUT** of the write path | a gate that legitimately does nothing still earns its op line from the runner, so a "hook not found" check left inside the mutation records an edit that never happened. |
+
+**`InstallElement` is the one left, and it is a DIFFERENT problem, not a ninth of the same.** It is
+the large pipeline that retrofitted pipelines CALL, so converting it changes its callers' failure
+semantics; and three of its pre-EXE mutations are ones a compensation is FORBIDDEN (R20.31, verdict
+**Explicit**) or harmful to reverse — see the `⚠ CORRECTED` section below, which measured exactly
+that. It wants its own card. **Do not fold it into a "finish the last one" session.**
+
+Verified at `2613c907`: `tsc --noEmit` = 0 lines; `yarn test` = **313 files / 4528 passed / 2
+skipped** (+1, the new ChangeLSP test; the 310/4453 baseline recorded further down predates the
+three oauth-rotator test files that landed for TRDD-CVQJNW3A); `trddgrep validate` = exit **1** with
+only `7123D51A` and `C7A81642`.
 
 ## ⏵ MEASURED 2026-07-31 — 10 done, 9 left, and NONE of the nine has a compensable window
 
@@ -1572,17 +1618,17 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       sites (`ChangeTeam` runs TWO sequences, `runGateSequence(removeGates, tc)` and
       `(addGates, tc)`; `DeleteTeam` one). They had already left the hand-rolled list; this box was
       simply never ticked
-- [ ] The remaining `Change*` / marketplace / element pipelines transactional — **9 of them, and
-      MEASURED 2026-07-31 to buy ZERO safety.** See `## ⏵ MEASURED 2026-07-31` — eight are a single
-      mutating call with nothing abortable after it, and the ninth is `InstallElement`, whose three
-      pre-EXE mutations are ones a compensation is FORBIDDEN (R20.31, Explicit) or harmful to
-      reverse. Retrofitting any of them moves the conformance ratchet and closes no window. Keep the
-      box open (AIO-TXN-10 is still violated), but do NOT spend a session on them ahead of
-      `ChangeTitle`. **⚠ THAT ORDERING GATE IS NOW DISCHARGED (2026-07-31, `790cd8cb`)** —
-      `ChangeTitle` is retrofitted AND its rollback coverage is closed, so "ahead of `ChangeTitle`"
-      no longer defers anything. What still holds is the MEASUREMENT: these nine buy zero safety,
-      so the box stays open on the CONFORMANCE ratchet alone, and the next session should not read
-      the discharged ordering as permission to start them
+- [ ] The remaining `Change*` / marketplace / element pipelines transactional — **8 of the 9 LANDED
+      2026-07-31 (`2613c907`); `InstallElement` is the one left.** `ChangeAvatar`, `ChangeName`,
+      `ChangeFolder`, `ChangeMetadata`, `ChangeCLIArgs`, `ChangeMCP`, `ChangeLSP` and `ChangeHook`
+      are under `runGateSequence`; `MAX_HANDROLLED` 9 → 1, `MIN_TRANSACTIONAL` 10 → 18, all eight
+      pinned by name. The MEASUREMENT that said they buy zero safety was RIGHT for seven of them —
+      their undos are latent by construction and are named as such rather than counted — and WRONG
+      for `ChangeLSP`, whose bare `writeFile` really can leave a truncated `.lsp.json`; that undo is
+      reachable and is pinned by a neuter. **The box stays open on `InstallElement` alone, and it is
+      not a ninth of the same:** it is the pipeline other retrofitted pipelines CALL, and three of
+      its pre-EXE mutations are ones a compensation is FORBIDDEN (R20.31, Explicit) or harmful to
+      reverse. It wants its own card — do not fold it into a "finish the last one" session
 - [x] An enforceable ratchet for `AIO-TXN-10` — `tests/governance/aio-txn-10-runner-coverage.test.ts`
       discovers the inventory from the AST and fails when a pipeline hand-rolls beyond
       `MAX_HANDROLLED`. NOT the parity box below: this asks "is it under the runner", which is

@@ -2682,7 +2682,28 @@ export async function ChangeTitle(
     let targetPluginName: string | null = null
     let targetMarketplace: string = GITHUB_MARKETPLACE_NAME
 
-    const gates: Array<{ id: string; what: string; run: () => Promise<void> }> = [
+    // THE UNDO LEDGER (R51.4) — commit 3 of TRDD-DQ6XN2VP.
+    //
+    // Each gate's `run` records here what it ACTUALLY did, and its `undo` reverses ONLY what is
+    // recorded — never a fixed amount of work, because `undo` is called even when `run` threw
+    // part-way through (see the `Gate.undo` contract in lib/gate-transaction.ts).
+    //
+    // It is a plain lexical object rather than a threaded parameter because today's `run` takes no
+    // argument and closes over its surroundings. When the driver swaps to `runGateSequence` this
+    // SAME object is handed over as the runner's ctx, so not one undo has to be rewritten.
+    const ctx: {
+      /** G9a: the `githubRepo` that was on the agent BEFORE the maintainer write. */
+      g9aPriorGithubRepo?: { value: unknown }
+      /** G14: set once `updateAgent` returned non-null — i.e. the title really moved in memory. */
+      g14Wrote?: boolean
+    } = {}
+
+    // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
+    // nothing else, and the only thing that rejects a mutating gate for lacking a compensation is
+    // `findUncompensatedGates`, which runs INSIDE `runGateSequence` — a function ChangeTitle does
+    // not call yet. That is what lets commit 3 land the undos in reviewable slices instead of one
+    // all-or-nothing rewrite: an undo attached today ships dead until the driver swaps.
+    const gates: Array<{ id: string; what: string; run: () => Promise<void>; undo?: () => Promise<void> }> = [
       {
         id: 'G9a',
         what: 'MAINTAINER repo validated and stored',
@@ -2697,12 +2718,23 @@ export async function ChangeTitle(
             const { loadAgents } = await import('@/lib/agent-registry')
             const check = checkMaintainerRepo(agentId, options?.githubRepo, loadAgents() as MaintainerCandidate[])
             if (check.error) throw new GateAbort(check.error)
+            // WRITE-AHEAD: capture the prior value BEFORE mutating, so `undo` can restore even if
+            // the write lands and something later in this gate throws. Recording it afterwards
+            // would leave exactly that window uncompensated.
+            ctx.g9aPriorGithubRepo = { value: (getAgent(agentId) as Record<string, unknown> | null)?.githubRepo ?? null }
             // Store githubRepo on agent
             await updateAgent(agentId, { githubRepo: check.repo } as Record<string, unknown>)
             ops.push(`G9a: MAINTAINER validated — repo="${check.repo}"`)
           } else {
             ops.push(`G9a: Not MAINTAINER — maintainer validation skipped`)
           }
+        },
+        // Nothing recorded ⇒ the non-maintainer branch ran and this gate mutated nothing.
+        // Restoring a value the write never changed is a harmless no-op, which is the property
+        // that makes write-ahead capture safe here.
+        undo: async () => {
+          if (!ctx.g9aPriorGithubRepo) return
+          await updateAgent(agentId, { githubRepo: ctx.g9aPriorGithubRepo.value } as Record<string, unknown>)
         },
       },
 
@@ -2749,6 +2781,11 @@ export async function ChangeTitle(
             ops.push(`G14: DENIED — updateAgent returned null`)
             throw new GateAbort(`G14: updateAgent returned null for ${agentId} — registry not written`)
           }
+          // RECORDED HERE, BEFORE THE VERIFICATION — not after it. The title has already moved in
+          // the registry at this point, so every abort below (in-memory mismatch, unreadable file,
+          // disk drift) is a case where the write LANDED and must still be reversed. Setting this
+          // after the checks would leave exactly the failing paths uncompensated.
+          ctx.g14Wrote = true
           if ((g14Updated.governanceTitle || null) !== (effectiveTitle || null)) {
             ops.push(`G14: DENIED — in-memory post-write mismatch`)
             throw new GateAbort(`G14: in-memory post-write mismatch — expected "${effectiveTitle || 'null'}", got "${g14Updated.governanceTitle || 'null'}"`)
@@ -2792,6 +2829,15 @@ export async function ChangeTitle(
             throw new GateAbort(`G14: registry.json title drift — disk="${diskTitle ?? 'null'}", expected="${expectedTitle ?? 'null'}"`)
           }
           ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in registry (verified on disk)`)
+        },
+        // Restore the title the agent had on the way in. This is THE compensation the whole
+        // retrofit is for: every governance gate after this one (G10's cascade, the token
+        // revocations, the plugin swap) exists to align the agent with the title written here, so
+        // a rollback that left the new title in place would leave all of them correctly aligned to
+        // a change that was supposed to have been undone.
+        undo: async () => {
+          if (!ctx.g14Wrote) return
+          await updateAgent(agentId, { governanceTitle: oldTitle as any })
         },
       },
       // ── GATE 10: Clear old MANAGER from governance.json ──────

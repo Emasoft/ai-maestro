@@ -1,11 +1,11 @@
 ---
 trdd-id: K71FV649
 title: loadJsonSafe returns an empty object on a PARSE failure, so every verification built on it reads unreadable as absent
-column: dev
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T21:26:06+0200
-updated: 2026-07-31T21:57:34+0200
+updated: 2026-07-31T22:07:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -212,3 +212,9 @@ audit, not the edit, is the deliverable.
 - 2026-07-31T21:26:06+0200 — SELF-MANDATE (min-approval-requirement: none). Tier 0: a bugfix inside
   this agent's own assignment scope, filed from two first-hand measurements taken while completing
   TRDD-YAGRX7W3 and TRDD-DQ6XN2VP. Pre-approved: issuer authority >= required approver.
+- 2026-07-31T22:07:28+0200 — COMPLETED by ai-maestro. All 7 boxes closed. Own work landed at `69e801a9` (the reader),
+  `6c175813` (the write guard + the reader's non-object hole + PG03/PG07), `a044f390` (PG01, which
+  turned out to be a live wake-bricking bug rather than a blocked promotion). The completion gate is
+  satisfied: its only EHT, `TRDD-CS25TA6W`, reached `completed` at `6d818c12`. Two independent
+  findings were filed rather than folded in — `TRDD-RO90UCKQ` (ChangePlugin never reports failure)
+  stays open.

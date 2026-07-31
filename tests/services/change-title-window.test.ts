@@ -474,7 +474,7 @@ describe('ChangeTitle window — what a mid-pipeline failure actually leaves beh
  * The undo test therefore seeds NO role-plugin, so `ctx.g15Uninstalled` is empty, G15's undo
  * no-ops, and G16b's undo is the only thing that can put the flag back.
  */
-describe('ChangeTitle G16b — the --agent flag on the way out and the way back', () => {
+describe('ChangeTitle plugin window — G15 removes, G16 installs, G16b renames the flag', () => {
   const MANAGER_PLUGIN = 'ai-maestro-assistant-manager-agent'
   const MANAGER_ARGS = `--agent ${MANAGER_PLUGIN}-main-agent --dangerously-skip-permissions`
   const AUTONOMOUS_ARGS = `--agent ${AUTONOMOUS_PLUGIN}-main-agent --dangerously-skip-permissions`
@@ -536,6 +536,42 @@ describe('ChangeTitle G16b — the --agent flag on the way out and the way back'
     // points at have to be restored together, or the agent wakes naming a persona it does not have.
     expect(enabledNow()).not.toContain(AUTONOMOUS_PLUGIN)
     // A restored flag is a CLEAN rollback, not a reported residue — R51.3, never R51.5.
+    expect(result.error).not.toMatch(/INVALID STATE/)
+  })
+
+  /**
+   * THE OLD TITLE'S PLUGIN COMES BACK — and the gate that brings it back is **G14d**, not G15.
+   *
+   * That attribution was measured, and the measurement is the only thing that could have produced
+   * it: BOTH gates uninstall role-plugins and BOTH undos reinstall them, so they are
+   * indistinguishable from the observable. Neutering G15's undo left this file 15/15 GREEN;
+   * neutering G14d's reddened exactly this test with `expected [] to include
+   * 'ai-maestro-assistant-manager-agent'`. The reason is upstream: G14d runs FIRST and removes
+   * every role-plugin incompatible with the new title, so by the time G15's detection reads
+   * `settings.local.json` there is nothing left — `currentPluginName` is null, G15 takes its
+   * "Cleaned stale role-plugins" branch, and `ctx.g15Uninstalled` is never set. **G15's undo is
+   * therefore unreachable on a title change that alters compatibility**, which is every demotion;
+   * it exists for the case where a plugin survives G14d and G15 still swaps it.
+   *
+   * WHAT THE ASSERTION IS ABOUT, whichever gate performs it: if the reinstall does not happen, a
+   * failed title change leaves the agent back on its MANAGER title with NO role-plugin at all —
+   * an R9.13 violation the wake path then quarantines (`roleMissing` ⇒ `/wake` refuses), so the
+   * agent is not merely mis-configured, it is unusable, over a change reported as reverted. The
+   * neuter's `expected []` is exactly that state.
+   *
+   * This test needs the MANAGER-plugin fixture for the opposite reason the flag test needs the
+   * empty one: the reinstall can only be observed when there was something to remove.
+   */
+  it('reinstalls the old title role-plugin (G14d) when the final invariants fail', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    await seedWithArgs(MANAGER_ARGS, MANAGER_PLUGIN)
+    armLateDriftAbort()
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    expect(enabledNow()).toContain(MANAGER_PLUGIN)
+    expect(enabledNow()).not.toContain(AUTONOMOUS_PLUGIN)
     expect(result.error).not.toMatch(/INVALID STATE/)
   })
 })

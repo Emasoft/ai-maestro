@@ -1467,7 +1467,28 @@ export async function InstallElement(
       } else {
         const verifyPath = join(agentDir, '.claude', 'settings.local.json')
         try {
-          const settings = await loadJsonSafe(verifyPath) as Record<string, Record<string, unknown>>
+          // READS STRICTLY (TRDD-K71FV649) — an UNKNOWN must never be reported as a VIOLATION.
+          //
+          // This branch does not merely warn: every arm below sets `result.success = false`, and
+          // PG02 (:1514) turns that into `corePluginMissing: true` in the REGISTRY, which the wake
+          // route then refuses to start the agent on. So with the lenient reader, a corrupt
+          // settings.local.json — read as `{}`, key "absent" — made a CORRECT install report
+          // failure and BRICK the agent's wake, on the strength of a file nothing could read.
+          // That is this card's defect at its worst, and it was live, not hypothetical.
+          //
+          // The honest branch was already written: the `catch` below says "Could not read settings
+          // for verification" and pointedly does NOT flip `success`. It could never fire, because
+          // `loadJsonSafe` does not throw. This is the third gate in this file with that exact
+          // shape (PG03 and PG07 are the others) — the right answer had been written down three
+          // times and made unreachable three times by the same reader.
+          //
+          // `missing` keeps today's behaviour deliberately: no settings file after a local install
+          // means the key really IS absent, and that is a true violation.
+          const read = await readJson(verifyPath)
+          if (!read.ok && read.reason === 'unreadable') {
+            throw new Error(`${verifyPath} exists but does not parse (${read.error}) — state UNKNOWN, not absent`)
+          }
+          const settings = (read.ok ? read.data : {}) as Record<string, Record<string, unknown>>
           const ep = settings.enabledPlugins as Record<string, boolean> | undefined
           // SCEN-012 FIX: Use boundary-aware matching instead of substring `includes`.
           // The old `k.includes(name)` returned TRUE for "ai-maestro-autonomous-agent@ai-maestro-plugins"
@@ -1503,8 +1524,10 @@ export async function InstallElement(
           } else {
             ops.push(`PG01: Verification for "${action}" — skipped (update verified by CLI exit code)`)
           }
-        } catch {
-          ops.push(`PG01: WARN — Could not read settings for verification`)
+        } catch (readErr) {
+          // NOTE the absence: `result.success` is NOT flipped here, and that is the whole point.
+          // "I could not verify" is not "the verification failed" — see the strict read above.
+          ops.push(`PG01: WARN — Could not read settings for verification: ${readErr instanceof Error ? readErr.message : readErr}`)
         }
       }
     } else {

@@ -520,7 +520,49 @@ export async function autoRotate(deps?: TickDeps): Promise<boolean> {
   return false
 }
 
-// ── The composed tick (cmd_tick) ─────────────────────────────────────────────────────────────
+// ── The alternate survey: WHICH slots are faulted, not merely how many ───────────────────────
+
+/** What a sweep of the non-live slots found. EMAILS, not counts — a repair has to know WHOSE slot
+ *  to re-capture, and a count cannot say. The tick renders `.length` for its decision line; the
+ *  repair leg reads the identities. ONE definition, so the beat that REPORTS a fault and the leg
+ *  that FIXES it can never disagree about which slots are faulted. */
+export interface AlternateSurvey {
+  /** Slots this process could not read AT ALL — a credential-ACCESS fault (the keychain is out of
+   *  reach), not something a re-login repairs. */
+  unreadable: string[]
+  /** Slots whose refresh token is absent or has failed MAX_REFRESH_FAILURES times running AND
+   *  whose access token is expired. This is the ONE class a re-capture actually repairs. */
+  refreshDead: string[]
+}
+
+/** Survey EVERY alternate rather than breaking on the first fault. One unreadable slot is a slot
+ * problem; ALL of them unreadable is a process-identity problem (this process cannot reach the
+ * keychain at all) — and only a full count can tell those apart. Breaking early made both look
+ * identical, so the operator could not distinguish "re-login one account" from "the server has no
+ * credential access", which are not even the same person's job. */
+export function surveyAlternates(): AlternateSurvey {
+  const state = loadState()
+  const slots = (state.slots ?? {}) as unknown as Record<string, Record<string, unknown>>
+  const unreadable: string[] = []
+  const refreshDead: string[] = []
+  for (const email of Object.keys(slots)) {
+    if (email === state.live_email) continue
+    const b = readSlot(email)
+    if (!b) { unreadable.push(email); continue } // unreadable alternate → needs attention
+    const inner = oauthOf(b)
+    const hasRefresh = Boolean(inner.refreshToken || inner.refresh_token)
+    // A dead-refresh alternate (no refresh at all, or a refresh whose exchange has failed
+    // MAX_REFRESH_FAILURES times running) that is ALSO expiring can only be fixed by a re-login.
+    // Expiry is half the test on purpose: a dead refresh on a token that still has runway is not
+    // yet a fault, and re-capturing it would spend a browser window on an account that works.
+    const failures = typeof inner === 'object' ? Number((slots[email] as Record<string, unknown> | undefined)?.refresh_failures) || 0 : 0
+    const refreshIsDead = !hasRefresh || failures >= MAX_REFRESH_FAILURES
+    if (refreshIsDead && blobLocallyExpired(b)) refreshDead.push(email)
+  }
+  return { unreadable, refreshDead }
+}
+
+// ── The composed tick (cmd_tick)─────────────────────────────────────────────────────────────
 /**
  * One rotation beat: keepalive-refresh idle slots (RENEW), then usage-based auto-rotate
  * (ROTATE), then derive the `next_action` status. Faithful to `cmd_tick`'s ordering
@@ -545,27 +587,13 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
   let unreadable = 0
   let deadRefresh = 0
   if (!switched) {
-    const state = loadState()
-    const slots = (state.slots ?? {}) as unknown as Record<string, Record<string, unknown>>
-    // Survey EVERY alternate rather than breaking on the first fault. One unreadable slot is a
-    // slot problem; ALL of them unreadable is a process-identity problem (the daemon cannot reach
-    // the keychain at all) — and only a full count can tell those apart. Breaking early made both
-    // look identical, so the operator could not distinguish "re-login one account" from "the
-    // server has no credential access", which are not even the same person's job.
-    for (const email of Object.keys(slots)) {
-      if (email === state.live_email) continue
-      const b = readSlot(email)
-      if (!b) { unreadable++; continue } // unreadable alternate → needs attention
-      const inner = oauthOf(b)
-      const hasRefresh = Boolean(inner.refreshToken || inner.refresh_token)
-      // A dead-refresh alternate (no refresh at all, or a refresh whose exchange has failed
-      // MAX_REFRESH_FAILURES times running) that is also expiring can only be fixed by a human
-      // re-login — the cascade's REAUTH_NUDGE leg. (No browser tier here, so a live-cookie
-      // RENEW_COOKIE recovery is out of scope; this is the conservative "needs a human" signal.)
-      const failures = typeof inner === 'object' ? Number((slots[email] as Record<string, unknown> | undefined)?.refresh_failures) || 0 : 0
-      const refreshIsDead = !hasRefresh || failures >= MAX_REFRESH_FAILURES
-      if (refreshIsDead && blobLocallyExpired(b)) deadRefresh++
-    }
+    // The sweep itself lives in `surveyAlternates` so the leg that REPAIRS a dead slot reads the
+    // same definition of "dead" this beat reports (TRDD-CVQJNW3A). The tick needs only the counts
+    // — its decision line is counts-only by rule, never an email — but a repair must know WHOSE
+    // slot to re-capture, and that identity is exactly what this loop used to throw away.
+    const survey = surveyAlternates()
+    unreadable = survey.unreadable.length
+    deadRefresh = survey.refreshDead.length
     // Precedence: OUR fault before THEIRS — see the TickReason doc comment.
     if (unreadable > 0) { nextAction = 'reauth-needed'; reason = 'slot-unreadable' }
     else if (deadRefresh > 0) { nextAction = 'reauth-needed'; reason = 'refresh-dead' }

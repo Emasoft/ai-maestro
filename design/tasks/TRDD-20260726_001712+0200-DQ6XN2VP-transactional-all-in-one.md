@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T10:55:26+0200
+updated: 2026-07-31T10:59:32+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -263,6 +263,33 @@ hand-rolled and nothing is claimed that is not yet true.
    P0-003, SCEN-020 BUG-001, SCEN-002 P0-001) — so the guard that exists because a false success
    shipped has no test. **This gap PRE-DATES the retrofit; it is not a hole this change opened and
    therefore NOT an EHT of this card. It needs its own TRDD.**
+
+**⚠ COMMIT 3'S TWO MECHANICAL QUESTIONS ARE MEASURED — 2026-07-31.** Both were open, both looked
+like they could widen the edit, and both turned out contained. Read the landed sibling
+(`ChangePlugin`'s EXE-a/EXE-b block, `:3998-4024`) — it is the precedent for BOTH:
+
+```ts
+const txn = await runGateSequence([...], ctx, opts)
+if (!txn.ok) { ops.push(...txn.ops); result.error = txn.message; return result }
+ops.push(...txn.ops)
+```
+
+1. **The ops array.** `runGateSequence` keeps its OWN `ops` (`:122`) and pushes one
+   `${gate.id}: ${gate.what}` per gate, plus `reverted` / `ROLLBACK FAILED` lines. ChangeTitle's
+   gates ALSO push their detailed lines into the OUTER `ops` (lexical closure), so the merge is
+   just `ops.push(...txn.ops)` — the runner's summary lines land AFTER the detailed ones. Op
+   ORDER changes; every existing assertion uses `.some(op => /…/.test(op))`, so none depends on it.
+2. **The error message — the one that looked expensive, and is not.** On failure the runner returns
+   `message`, which R51.3 fixes as *"THE COMMAND FAILED … SO NO CHANGES WERE MADE TO THE SYSTEM.
+   **Cause: ${cause}**"*, and `cause` **IS the gate's own error string** — so the specific message
+   is EMBEDDED, not replaced. Measured against the three files that assert ChangeTitle's `error`
+   (`r19-maintainer-title`, `r3-r9-team-governance`, `change-title-window`): every assertion is
+   `toMatch(/…/)` or `toContain('…')`, and **none asserts by exact equality**, so all of them
+   survive the swap. Two more reasons the radius is small: most of those errors come from gates
+   BEFORE the window (G1-G9 validation), which commit 2 deliberately left as plain early returns
+   with their exact strings; and `/G10 cascade broken/` is the TERMINAL check, which runs after the
+   array. **Do not take this as "no test will move"** — re-run and read the count; it is a
+   prediction from the message shape, not a suite run.
 
 **Also landed in commit 2, and load-bearing for commit 3:** the const-snapshot idiom. A `let`
 assigned inside one gate's closure loses TypeScript narrowing inside EVERY other nested function,

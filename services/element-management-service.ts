@@ -3821,6 +3821,18 @@ export async function ChangeTitle(
         // undoing one with the other's verb leaves the install half-standing. Nothing is
         // recorded unless the forward install REPORTED success, so a WARN-and-continue exit
         // (the common case here) leaves this a no-op.
+        //
+        // "THE MECHANISM" MEANS THE PRIMITIVE, NOT A PIPELINE THAT WRAPS IT. The Claude branch
+        // above calls `installPluginLocally` DIRECTLY, so its mirror is `uninstallPluginLocally`
+        // directly. This undo first routed through `ChangePlugin` — a pipeline the forward path
+        // never ran — which imported that pipeline's own gates, and one of them makes the undo
+        // IMPOSSIBLE BY CONSTRUCTION: ChangePlugin's G08 refuses to uninstall the plugin the
+        // agent's CURRENT title requires ("Change the title first."), and on a reverse-order
+        // unwind the title is still the NEW one, because G14's undo — the one that puts the old
+        // title back — is EARLIER in the array and therefore runs LATER. Every rollback that got
+        // past G16 therefore reported R51.5 CRITICAL over a system that was fully recoverable.
+        // Same shape as ChangeTitle's Gate 9 (join-then-title): a constraint whose reverse order
+        // is not the mirror of its forward order.
         undo: async () => {
           const led = ctx.g16Installed
           if (!led || !agentDir) return
@@ -3832,15 +3844,20 @@ export async function ChangeTitle(
               const res = await inAdapterContext('ChangeTitle', () => adapter.uninstall(led.plugin, agentDir, { scope: 'local' }))
               if (!res.success) throw new Error(res.error || 'adapter uninstall reported failure')
             } else {
-              const back = await ChangePlugin(agentId, {
-                name: led.name,
-                marketplace: led.marketplace,
-                action: 'uninstall',
-                scope: 'local',
-                agentDir,
-                rolePluginSwap: true,
-              }, options.authContext)
-              if (!back.success) throw new Error(back.error || 'unknown')
+              await uninstallPluginLocally(led.name, agentDir, led.marketplace)
+              // VERIFY BY EFFECT. `uninstallPluginLocally` best-efforts the CLI and then removes
+              // the key itself, so it does not throw when the CLI fails — trusting the call to
+              // signal failure would make this undo unable to report one at all.
+              const settingsFile = join(
+                agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir,
+                '.claude', 'settings.local.json',
+              )
+              if (existsSync(settingsFile)) {
+                const after = await loadJsonSafe(settingsFile) as Record<string, Record<string, unknown>>
+                const stillThere = (after.enabledPlugins || {}) as Record<string, boolean>
+                const key = `${led.name}@${led.marketplace}`
+                if (key in stillThere) throw new Error(`${key} is still enabled in settings.local.json`)
+              }
             }
           } catch (err) {
             throw new Error(`G16 rollback incomplete: could not uninstall the newly installed role-plugin (${err instanceof Error ? err.message : err})`)

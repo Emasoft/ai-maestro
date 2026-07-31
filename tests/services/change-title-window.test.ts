@@ -25,7 +25,7 @@
  *     only couples two files that were meant to fail independently.
  */
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
-import { existsSync, readFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 const H = vi.hoisted(() => {
@@ -405,6 +405,105 @@ describe('ChangeTitle window — what a mid-pipeline failure actually leaves beh
 
     // The op is no longer a WARN nobody reads — it names the broken invariant.
     expect((result.operations ?? []).some((op: string) => /G10: CASCADE BROKEN/.test(op))).toBe(true)
+  })
+})
+
+/**
+ * G16b — THE `--agent` FLAG, ON THE WAY OUT AND ON THE WAY BACK.
+ *
+ * Measured during slice 4c (2026-07-31, two-run attributed neuter): breaking G16b's rewrite left
+ * the FULL suite green — 310 files, ZERO red. So the gate whose regression IS the 2026-05-06
+ * jack-bot bug (an agent waking with a `--agent` flag naming a plugin it no longer has, and so
+ * loading no persona at all) was enforced by nothing. This block pins BOTH halves.
+ *
+ * WHY BOTH, and why in one place. The forward write and its undo share exactly one fact — the
+ * string that was there before — and they fail in opposite directions from it: forward, the flag
+ * keeps naming the OLD persona; on rollback, it keeps naming the NEW one after the title has gone
+ * back. The second is the worse of the two, because the agent then wakes as a MANAGER loading the
+ * AUTONOMOUS main-agent, which is why G16b's undo THROWS (R51.5 INVALID STATE) rather than warning.
+ *
+ * THE FIXTURE MUST SEED `programArgs`. The shared `beforeEach` seeds none, so `setClaudeAgentFlag`
+ * takes its INSERT branch (`'' → '--agent …'`) and a test could not tell "replaced the old flag"
+ * from "appended one to an empty string" — nor prove the unrelated flags beside it survive.
+ *
+ * AND IT MUST CONTROL THE INSTALLED PLUGIN, for a reason measured here rather than assumed: G16b
+ * is gated on `currentPluginName !== targetPluginName`, and this file's WORKDIR IS SHARED —
+ * `seedAgent` only `mkdir -p`s it, so the AUTONOMOUS plugin an earlier happy-path test installed
+ * into `settings.local.json` SURVIVES into every later test. G15 then reports *"Current plugin
+ * ai-maestro-autonomous-agent is compatible with AUTONOMOUS — keeping"*, G16b prints
+ * `Skipped (plugin unchanged)`, and a test passes VACUOUSLY over a gate that never ran.
+ *
+ * THE TWO TESTS THEREFORE SEED DIFFERENT PLUGIN STATES, and the reason is a MASKING that a single
+ * fixture hid: G15's undo reinstalls what it removed via `ChangePlugin(action:'install',
+ * rolePluginSwap:true)`, and that pipeline's OWN G11b rewrites `programArgs` to the reinstalled
+ * plugin's main-agent. So on a fixture where G15 removed something, the flag is restored TWICE and
+ * G16b's undo passes with its body deleted — measured: neutering it left this file 13/13 green.
+ * The undo test therefore seeds NO role-plugin, so `ctx.g15Uninstalled` is empty, G15's undo
+ * no-ops, and G16b's undo is the only thing that can put the flag back.
+ */
+describe('ChangeTitle G16b — the --agent flag on the way out and the way back', () => {
+  const MANAGER_PLUGIN = 'ai-maestro-assistant-manager-agent'
+  const MANAGER_ARGS = `--agent ${MANAGER_PLUGIN}-main-agent --dangerously-skip-permissions`
+  const AUTONOMOUS_ARGS = `--agent ${AUTONOMOUS_PLUGIN}-main-agent --dangerously-skip-permissions`
+
+  /**
+   * Re-seed the agent carrying `args`, and set its enabled role-plugin to `plugin` (`null` clears
+   * the set — which is a WRITE, not an omission: the shared workdir carries a leaked install).
+   */
+  async function seedWithArgs(args: string, plugin: string | null): Promise<void> {
+    const h = await import(HELPER)
+    h.seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, {
+      id: AGENT_ID, name: AGENT_ID, governanceTitle: 'manager', program: 'claude', programArgs: args,
+    } as never)
+    const dir = join(workdir, '.claude')
+    mkdirSync(dir, { recursive: true })
+    const enabledPlugins = plugin ? { [`${plugin}@ai-maestro-plugins`]: true } : {}
+    writeFileSync(join(dir, 'settings.local.json'), JSON.stringify({ enabledPlugins }, null, 2), 'utf-8')
+  }
+
+  const argsNow = (): string => String(H.registry.get(AGENT_ID)?.programArgs ?? '')
+  const enabledNow = (): string[] =>
+    Object.keys((settingsOf(workdir).enabledPlugins ?? {}) as Record<string, boolean>).map(k => k.split('@')[0])
+
+  it('rewrites the flag to the new title main-agent, leaving the other args untouched', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    await seedWithArgs(MANAGER_ARGS, MANAGER_PLUGIN)
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(true)
+    // The REPLACE branch of `setClaudeAgentFlag`, and the sibling flag surviving it — the second is
+    // what an "append the new flag" regression would break while still naming the right main-agent.
+    expect(argsNow()).toBe(AUTONOMOUS_ARGS)
+    expect((result.operations ?? []).some((op: string) => /^G16b: Rewrote programArgs/.test(op))).toBe(true)
+  })
+
+  /**
+   * The undo, driven through the ONLY late abort this pipeline has (`failOn` cannot reach G16b —
+   * it catches its own errors and pushes a WARN, so an injected throw there is swallowed and the
+   * pipeline succeeds). The invariants hook fires after every gate has run, so the unwind reaches
+   * G16b with its ledger populated.
+   *
+   * THE PLUGIN ASSERTION IS NOT DECORATION — it is what caught the bug this test found. On its
+   * first run G16b's own undo passed and the VERDICT still said R51.5 CRITICAL, because the
+   * neighbouring G16 undo routed its uninstall through `ChangePlugin`, whose G08 refuses to remove
+   * the plugin the CURRENT title requires — and on a reverse unwind that title is still the new
+   * one. A test that asserted only the flag would have called that rollback clean.
+   */
+  it('restores the previous flag byte-for-byte when the final invariants fail', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    await seedWithArgs(MANAGER_ARGS, null)
+    armLateDriftAbort()
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    expect(argsNow()).toBe(MANAGER_ARGS)
+    // The plugin the flag would have named is gone again (G16's undo) — the flag and the plugin it
+    // points at have to be restored together, or the agent wakes naming a persona it does not have.
+    expect(enabledNow()).not.toContain(AUTONOMOUS_PLUGIN)
+    // A restored flag is a CLEAN rollback, not a reported residue — R51.3, never R51.5.
+    expect(result.error).not.toMatch(/INVALID STATE/)
   })
 })
 

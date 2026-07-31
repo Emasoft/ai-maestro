@@ -232,6 +232,7 @@ hand-edit a seeded copy in a workdir — it will be restored.
 | `dep-rules` | the shipped `aimaestro-*.md` rules: present, unmodified, read-only | create · wake · periodic |
 | `git-exclude` | a git-repo workdir carries the managed git-exclude block | create · wake · periodic |
 | `core-plugin` | `ai-maestro-plugin` (R17) installed + enabled at local scope | **wake only** |
+| `role-plugin` | the agent's title-compatible role-plugin (R9.13) installed + enabled at any scope | **wake only** |
 
 - `enforceAgentInvariants(ctx)` runs the rows matching `ctx.trigger`. A throwing
   invariant becomes a `failed` outcome and the rest still run.

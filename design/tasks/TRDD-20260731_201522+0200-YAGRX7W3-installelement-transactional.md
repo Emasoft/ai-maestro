@@ -1,11 +1,11 @@
 ---
 trdd-id: YAGRX7W3
 title: Make InstallElement transactional — the last AIO-TXN-10 row, and the one with forbidden compensations
-column: planned
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T20:15:22+0200
-updated: 2026-07-31T20:15:22+0200
+updated: 2026-07-31T20:22:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -27,24 +27,40 @@ implementation-commits: []
 Every other one landed under `TRDD-DQ6XN2VP`; this was carved out of that card because it is a
 **different problem**, not a ninth of the same.
 
-**NEXT ACTION:** answer the design question below — *what does an all-or-nothing guarantee mean for
-a pipeline three of whose mutations may not be reversed?* — and record the answer HERE before
-writing a line of code. Do not open the editor first.
+**⚠ THE DESIGN QUESTION IS ANSWERED — see `## ✅ DECIDED 2026-07-31`.** Decision: **(a) narrow the
+window**, opening it after `:912`. Do not re-litigate it; (b)/(c)/(d) are rejected there with
+reasons. And it is **FIVE** excluded mutations, not the three the parent card named.
 
-**DO NOT** start by wrapping the EXE settings write and lowering the ratchet to 0. That is the
-shape the other eight took and it is wrong here: it would move the conformance number while leaving
-the three genuinely-uncompensatable mutations unaddressed, and the ratchet would then read
-"complete" over exactly the pipeline that isn't.
+**NEXT ACTION — build the window, and build the CLOSED-SET TEST WITH IT, not after.** That test is
+the load-bearing half: `MAX_HANDROLLED = 0` while five mutations sit outside every window is a
+false "complete" signal, and a comment is not a guard. Scan the pre-window region, assert its
+mutation set EQUALS the enumerated five, and confirm the scanner sees both mutation forms (direct
+call and via-helper).
+
+**DO NOT** wrap the EXE settings write, lower the ratchet to 0, and stop. That moves the
+conformance number while leaving the five uncompensatable mutations unguarded — the ratchet would
+then read "complete" over exactly the pipeline that isn't.
 
 ## Problem
 
 `services/element-management-service.ts:567-1486` (920 lines). Two things make it unlike the eight
 single-mutation pipelines retrofitted at `2613c907`:
 
-1. **Other retrofitted pipelines CALL it.** Converting it changes *their* failure semantics, not
-   just its own. A caller that today sees `{success: false, error: 'Marketplace registration
-   failed'}` would start seeing the R51.3 `NO CHANGES WERE MADE` message with the cause nested —
-   and some of those callers branch on the error. Enumerate them before changing the shape.
+1. **Other retrofitted pipelines CALL it** — ~~and some of those callers branch on the error~~.
+   **MEASURED 2026-07-31, and this worry is NOT borne out.** Six real call sites:
+   `element-management-service.ts:1379` (PG05, a recursive self-call), `:10013`, `:10100`,
+   `sessions-service.ts:916`, and — structurally the interesting pair —
+   **`lib/agent-invariants.ts:133` and `:223`**, i.e. *the watchdog itself calls the very pipeline
+   whose `mkdir` "fights the watchdog"*. **All six branch only on `result.success` and treat
+   `result.error` as an opaque display string; NONE parses it.** So swapping the error for the
+   R51.3 message is safe — those callers just print a longer `detail`.
+
+   The one real coupling is different and cheaper to miss: **`:10100` filters
+   `result.operations` for entries prefixed `G05`/`G06`** to build a summary line (with a fallback
+   string when empty). That is a coupling to op LABELS, not to the error. `G05`/`G06` here are
+   PRE-EXE validations (`agentDir for local scope`, `path traversal`) that sit ABOVE any candidate
+   window, so a narrowed window leaves them untouched — but any renaming or re-idding of gates in
+   that range silently degrades that caller to its fallback. Check it, do not assume it.
 2. **Three of its pre-EXE mutations are ones a compensation is FORBIDDEN or harmful to reverse**
    (table below). This is the real content of the card. The other eight had *latent* undos —
    correct, unreachable, cheap. Here the honest undo for three gates is "there isn't one", and the
@@ -82,6 +98,31 @@ line is either. And `InstallElement` has **not moved** since — every edit in `
 line 5861 — so those numbers were wrong at the moment they were recorded, not displaced later.
 Re-resolve before citing.
 
+**THE ORDERING FACT THAT DECIDES WHETHER A WINDOW IS EVEN POSSIBLE — measured, not assumed.**
+Every mutation that cannot legally be reversed sits **ABOVE line ~915**, and everything from `:941`
+down is ordinary CLI-install + settings-file writes:
+
+```
+:718  mkdir(agentDir/.claude)          G07   ── unreversible
+:829  claude plugin marketplace add    G11   ── unreversible (SHARED)
+:872  convertAndStorePlugin            G12   ── unreversible (R20.31 Explicit)
+:873  emitForClient                    G12   ── unreversible (R20.31 Explicit)
+:894  mkdir(cwd/.claude)               EXE   ── unreversible (same kind as G07)
+:912  emitForClient                    EXE   ── unreversible (same kind as G12)
+────────────────────────────────────────────  a clean boundary sits here
+:941  execFileAsync (CLI install)      EXE   ── reversible
+:961  saveJsonSafe   :979 write-back   EXE   ── reversible
+:1011 execFileAsync (CLI uninstall)    EXE   ── reversible
+:1031 :1074 :1092 saveJsonSafe         EXE   ── reversible
+:1100 execFileAsync                    EXE   ── reversible
+:1258 saveJsonSafe                     PG03  ── reversible (and a REPAIR — see below)
+:1453 saveJsonSafe                     PG07  ── reversible (and a REPAIR — see below)
+```
+
+**FIVE, not three.** The parent card named three forbidden mutations; there are **five**, because
+`:894`'s `mkdir` and `:912`'s `emitForClient` are the same two kinds repeated inside EXE. Any answer
+that excludes "the three" and forgets these two excludes nothing.
+
 **What the parent card got RIGHT, re-verified here rather than inherited:**
 
 | mutation | why a compensation may not reverse it | verified |
@@ -90,8 +131,12 @@ Re-resolve before citing.
 | `claude plugin marketplace add` — G11 `:829` | a SHARED, idempotent registration in the user's Claude config. Deregistering it on rollback breaks every OTHER agent installing from that marketplace. | read at `:829` ✓ |
 | `convertAndStorePlugin` + `emitForClient` — G12 `:872-873` (and a second `emitForClient` at `:912`) | writes into `~/agents/custom-plugins/`. **R20.31, verdict Explicit**: *"AI Maestro NEVER DELETES a plugin folder from them … Removing a source folder is explicitly the user's responsibility."* A compensation deleting it violates a rule marked Explicit. | `docs/GOVERNANCE-RULES.md:883` ✓ |
 
-Note the parent card labels the conversion gate `G13`; the op label emitted around `:861-873` is
-**`G12`**. Use the emitted label.
+**⚠ MY OWN CORRECTION, RETRACTED 2026-07-31.** This card first said *"the parent card labels the
+conversion gate `G13`; the emitted label is `G12` — use the emitted label."* **That was wrong, and
+the parent card was right.** `G12` (`:861`, `:863`) is the conversion *decision* (does this client
+need one); **`G13` (`:866-884`) is the conversion *mutation***. I read only `:861-873`, saw `G12`,
+and corrected a label that did not need correcting — the exact failure this repo records about
+second-hand claims, committed while correcting someone else's. The gate is **G13**.
 
 **Also still true:** the two USER-scope writes (`PG03` `:1258`, `PG07` `:1453`) are **REPAIRS, not
 creators of a disagreement** — each fires only after a *local* install succeeded and each *turns
@@ -99,7 +144,63 @@ OFF* an already-enabled user-scope copy. When either fails, user scope is left e
 found it, so R51's "return to exactly the state it was in" is satisfied by doing nothing. The
 disagreement they address PRE-DATES the call.
 
-## The design question this card exists to answer
+## ✅ DECIDED 2026-07-31 — (a) NARROW THE WINDOW, and the exclusion set must be CLOSED BY A TEST
+
+Advisor-reviewed (Fable 5), every claim re-verified in source before adoption. **The decision is
+(a).** The reason is not "the others are expensive" — it is that **leaving the excluded mutations
+behind produces no invalid state**, which is what R51 actually forbids
+(`lib/gate-transaction.ts:3-6`: *"NEVER LEAVES ONE"*). A watchdog-guaranteed `.claude/`, a shared
+marketplace registration, and a converted source dir are each valid with or without the install.
+The settings/registry writes from `:941` down are the only state that must AGREE WITH THE VERDICT.
+So the boundary at `~:915` is the **semantic** boundary, not a conformance-shaped dodge.
+
+**THE MEASUREMENT THAT SETTLES IT — two of the five cannot abort AT ALL:**
+
+| mutation | can it abort the pipeline? | evidence |
+|---|---|---|
+| G07 `mkdir` `:718` | **yes** — bare `await`, uncaught → outer catch | `:718` |
+| G11 `marketplace add` `:829` | **NO** | `.catch(() => {})` at `:832`, *and* the gate body is wrapped to a `G11: WARN` |
+| G13 `convertAndStorePlugin`/`emitForClient` `:872-873` | **NO** | its `catch` swallows to an op line and never rethrows |
+| EXE `mkdir` `:894` | **yes** — bare `await`, outside the `try` that opens at `:897` | `:894` |
+| EXE `emitForClient` `:912` | **yes** — sets `result.error` and returns | `:912-917` |
+
+A gate that can neither fail nor be reversed contributes **nothing** inside a transaction. Wrapping
+G11 and G13 would be theatre — *"wrapping a whole pipeline to look thorough manufactures fake
+guarantees"* (`lessons-verification.md`). And G07's `mkdir` is the FIRST mutation, so even though it
+can throw there is nothing before it to compensate.
+
+**(d) REJECTED, and it is the real dodge.** An `idempotentEnsure: true` flag is exactly as
+assertable-without-proof as `readOnly: true`: it hands every future author a third
+legitimate-looking spelling of *"I'll add the undo later"* and weakens the pre-flight check for all
+18 other pipelines to serve this one. **(c) rejected** for the same reason in a cheaper disguise.
+**(b) rejected**: an undo that throws turns a watchdog-guaranteed directory into a permanent false
+R51.5 CRITICAL.
+
+**Q2 — is the converted dir left behind a hole? NO, and the "user must clean up" framing was
+wrong.** It is a warm cache the next attempt REUSES (sources are preserved across
+uninstall/reinstall cycles by design). The genuine subtlety is different: `convertAndStorePlugin`
+**overwrites in place** (R20.26), so a failed install may have *advanced* the cached emission
+irreversibly. That is forward-convergence by design — **name it in the boundary comment** rather
+than pretend the dir is untouched.
+
+**Q3 — YES, `MAX_HANDROLLED = 0` while five mutations sit outside every window IS a false
+"complete" signal, and a comment is not the guard.** The minimum honest guard, and the load-bearing
+deliverable of this card:
+
+> **A test that scans the pre-window region and asserts its mutation set EQUALS the enumerated
+> five.** A sixth mutation added above the boundary must RED it. A comment alone is a blind spot
+> that grows unnoticed.
+
+Plus: the ratchet's claim is renamed from *"transactional"* to **"windowed per the R51 boundary
+rule"**, so the number stops overclaiming.
+
+**Early-warning property (why the pin is not busywork):** if a future edit makes G13's conversion
+*required* — aborting on failure instead of swallowing — the pre-window gains an abortable gate and
+the window MUST move up. That test is the signal. **If it never reds, re-check that the scanner
+matches both mutation forms** (direct call and via-helper), because a scanner that cannot see a
+mutation reports a closed set it never measured.
+
+## The design question this card exists to answer (ANSWERED ABOVE — kept for the reasoning)
 
 R51 says an all-in-one never leaves an invalid state. Three gates here cannot be reversed. Those are
 not in conflict yet — they become a conflict only if those gates sit INSIDE the transaction. The
@@ -142,14 +243,30 @@ mechanical "wrap it like the others" pass actively wrong.
 
 ## Acceptance
 
-- [ ] The design question answered and the choice + its uncovered surface recorded in this card AND
-      in the code comment at the window boundary
-- [ ] `InstallElement`'s callers enumerated, and each checked against the new error shape
+- [x] The design question **ANSWERED** — (a) narrow the window, advisor-reviewed, every claim
+      re-verified in source. `## ✅ DECIDED 2026-07-31` records the choice, the abort-capability
+      measurement that settles it, and why (b)/(c)/(d) are rejected
+- [ ] The choice + its uncovered surface written into the **code comment at the window boundary** —
+      naming all five excluded mutations, the rule excluding each (invariant registry / shared
+      registration / R20.31), and the **R20.26 forward-advance** note (`convertAndStorePlugin`
+      overwrites in place, so a failed install may have advanced the cached emission)
+- [ ] **THE CLOSED-SET TEST** (the load-bearing deliverable): scan the pre-window region and assert
+      its mutation set EQUALS the enumerated five, so a sixth mutation added above the boundary
+      REDS. Verify the scanner sees both mutation forms (direct call and via-helper) — a scanner
+      blind to a form reports a closed set it never measured
+- [x] Drive-by defect fixed: `:880` pushed `G08: WARN` from inside **G13's** catch, attributing a
+      conversion failure to the R17 core-plugin gate 100 lines above. Nothing asserted on the old
+      string (grepped)
+- [x] `InstallElement`'s callers enumerated, and each checked against the new error shape — **6
+      sites, none parses `result.error`; the only coupling is `:10100`'s `G05`/`G06` op-label
+      filter** (see Problem §1). The "callers branch on the error" worry this card was authored
+      with is retracted there.
 - [ ] The window implemented, with every compensation either neutered-and-pinned or explicitly
       recorded as latent/unreachable
 - [ ] `MAX_HANDROLLED` 1 → 0, `MIN_TRANSACTIONAL` 18 → 19, `InstallElement` added to
-      `MUST_BE_TRANSACTIONAL` — and the ratchet's comment updated to say what the number now means
-      given the mutations outside the window
+      `MUST_BE_TRANSACTIONAL` — and the ratchet's claim RENAMED from *"transactional"* to
+      **"windowed per the R51 boundary rule"**, so `0` stops overclaiming while five mutations sit
+      outside every window
 - [ ] tsc clean · suite at/above baseline · `trddgrep validate` exit 1 with only the two known cards
 
 ## Approval log

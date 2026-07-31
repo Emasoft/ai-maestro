@@ -877,7 +877,10 @@ export async function InstallElement(
           ops.push(`G13: WARN — Conversion returned no output directory`)
         }
       } catch (convErr) {
-        ops.push(`G08: WARN — Cross-client conversion failed: ${convErr instanceof Error ? convErr.message : convErr}`)
+        // Was `G08:` — a mislabel: this is G13's catch, and G08 is the R17 core-plugin gate 100
+        // lines above. An audit log that attributes a conversion failure to the wrong gate sends
+        // the next reader to the wrong code (TRDD-YAGRX7W3).
+        ops.push(`G13: WARN — Cross-client conversion failed: ${convErr instanceof Error ? convErr.message : convErr}`)
       }
     } else {
       ops.push(`G13: No conversion needed`)

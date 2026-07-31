@@ -119,13 +119,28 @@ function matchesAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(text))
 }
 
-/** Find the `[eN]` ref of the authorize control in a snapshot. The AX tree is rendered as lines
- *  carrying a ref and an accessible name; we want the ref on the line whose NAME matches. */
+/** AX-tree line shape: `[eN] <role> "<accessible name>"`. Parsed rather than substring-matched
+ *  because matching the whole LINE hits the page ROOT first — the consent page's own title is
+ *  "Authorize Claude Code", so `[e0] RootWebArea "Authorize Claude Code"` matched before the
+ *  button and this function returned the document. Clicking the document does nothing, the code
+ *  never appears, and the drive reports `code_not_found` — a wrong diagnosis pointing at the
+ *  callback page when the real fault was the selector. Caught by its own test, not in production. */
+const AX_LINE = /\[(e\d+)\]\s+(\S+)\s+"([^"]*)"/
+
+/** Roles that can actually be clicked to give consent. A `RootWebArea` or `StaticText` carrying
+ *  the same word is never the control. */
+const CONTROL_ROLES = /^(button|link|menuitem)$/i
+
+/** Find the `[eN]` ref of the authorize control. Matches the accessible NAME of a CONTROL node —
+ *  never the surrounding document, and never free text that merely mentions the word. */
 export function findAuthorizeRef(snapshot: string): string | null {
   for (const line of snapshot.split('\n')) {
-    if (!AUTHORIZE_NAME.test(line)) continue
-    const ref = /\[(e\d+)\]/.exec(line)
-    if (ref) return `[${ref[1]}]`
+    const m = AX_LINE.exec(line)
+    if (!m) continue
+    const [, ref, role, name] = m
+    if (!CONTROL_ROLES.test(role)) continue
+    if (!AUTHORIZE_NAME.test(name)) continue
+    return `[${ref}]`
   }
   return null
 }

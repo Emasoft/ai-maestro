@@ -2672,6 +2672,11 @@ export async function ChangeTitle(
     // those four hoist to just above this array on the move that wraps their declaring gate — not
     // before, or they collide with the declarations still standing in the imperative tail.
 
+    // Declared by G10, read by the TERMINAL — so it hoists here on the slice that wraps G10, and
+    // not one slice earlier: while G10 still stood in the imperative tail, a hoist here collided
+    // with its own `let` (TS2451 "Cannot redeclare block-scoped variable").
+    let g10CascadeFailed: string | null = null
+
     const gates: Array<{ id: string; what: string; run: () => Promise<void> }> = [
       {
         id: 'G9a',
@@ -2784,6 +2789,39 @@ export async function ChangeTitle(
           ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in registry (verified on disk)`)
         },
       },
+      // ── GATE 10: Clear old MANAGER from governance.json ──────
+      // G10 is a CASCADE, not two independent writes: remove the manager, THEN block every team,
+      // because a team must not operate without one. Only the second half used to be try-wrapped, so
+      // a blockAllTeams failure let the pipeline continue and return success:true over a host with NO
+      // MANAGER and UNBLOCKED TEAMS — precisely the state the cascade exists to prevent, reported as
+      // a clean success with the only trace an op nobody reads. That is R51.3's forbidden lie.
+      // The verdict is now withheld at the terminal; see the `g10CascadeFailed` check there for WHY
+      // this is a DEFERRED fail rather than an abort right here.
+      //
+      // COMMIT 3 FUSES THIS INTO ONE GATE WHOSE UNDO RESTORES BOTH HALVES, and at that point the
+      // deferred fail is deleted: abort-at-G10 becomes correct only once G14's write is compensable.
+      {
+        id: 'G10',
+        what: 'Old MANAGER cleared from governance.json, teams blocked',
+        run: async () => {
+          if (oldTitle === 'manager') {
+            const { removeManager } = await import('@/lib/governance')
+            await removeManager()
+            ops.push(`G10: Removed manager from governance.json`)
+            // MANAGER removed → block all teams + hibernate team agents
+            try {
+              const { blockAllTeams } = await import('@/lib/team-registry')
+              const hibernated = await blockAllTeams()
+              ops.push(`G10: Blocked all teams, hibernated ${hibernated.length} team agent(s)`)
+            } catch (err) {
+              g10CascadeFailed = err instanceof Error ? err.message : String(err)
+              ops.push(`G10: CASCADE BROKEN — manager removed but blockAllTeams failed: ${g10CascadeFailed}`)
+            }
+          } else {
+            ops.push(`G10: Old title not MANAGER — governance.json unchanged`)
+          }
+        },
+      },
     ]
 
     // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
@@ -2799,32 +2837,6 @@ export async function ChangeTitle(
         result.error = err.message
         return result
       }
-    }
-
-    // ── GATE 10: Clear old MANAGER from governance.json ──────
-    // G10 is a CASCADE, not two independent writes: remove the manager, THEN block every team,
-    // because a team must not operate without one. Only the second half used to be try-wrapped, so
-    // a blockAllTeams failure let the pipeline continue and return success:true over a host with NO
-    // MANAGER and UNBLOCKED TEAMS — precisely the state the cascade exists to prevent, reported as
-    // a clean success with the only trace an op nobody reads. That is R51.3's forbidden lie.
-    // The verdict is now withheld at the terminal; see the `g10CascadeFailed` check there for WHY
-    // this is a DEFERRED fail rather than an abort right here.
-    let g10CascadeFailed: string | null = null
-    if (oldTitle === 'manager') {
-      const { removeManager } = await import('@/lib/governance')
-      await removeManager()
-      ops.push(`G10: Removed manager from governance.json`)
-      // MANAGER removed → block all teams + hibernate team agents
-      try {
-        const { blockAllTeams } = await import('@/lib/team-registry')
-        const hibernated = await blockAllTeams()
-        ops.push(`G10: Blocked all teams, hibernated ${hibernated.length} team agent(s)`)
-      } catch (err) {
-        g10CascadeFailed = err instanceof Error ? err.message : String(err)
-        ops.push(`G10: CASCADE BROKEN — manager removed but blockAllTeams failed: ${g10CascadeFailed}`)
-      }
-    } else {
-      ops.push(`G10: Old title not MANAGER — governance.json unchanged`)
     }
 
     // ── GATE 11: Clear old COS — clear team + reject pending requests ─

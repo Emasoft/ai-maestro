@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-07-31T19:11:36+0200
+updated: 2026-07-31T19:12:24+0200
 implementation-commits: [994be6d6, 041a87f8, fde71e17, 511de445, d45e050b, dfa2cf06]
 created-by: ai-maestro
 current-owner: ai-maestro
@@ -58,10 +58,21 @@ windows).
 `unreadable` slots are deliberately NOT repaired: that is a credential-ACCESS fault, and a re-login
 would spend a human-visible window then file the result somewhere still unreadable.
 
-**NEXT ACTION — box 1 FIRST (unbrowse `auto-publish off` + auth-domain blacklist), then the LIVE
-run with the owner present.** Everything below box 1 is now built; what remains is the one thing
-fixtures cannot establish. Do NOT create the flag file to "test it" — arming it is the human's act,
-and `driveConsent` has still never been run end-to-end against the live consent page.
+**NEXT ACTION — box 1, and it needs the OWNER, not more code (re-specified 19:20; see the box for
+the measurements).** Do NOT go run `unbrowse settings --auto-publish off`: **there is no `settings`
+verb** in 11.1.9 — the CLI is three verbs and `eval` is read-only. And the hazard the box guards is
+REAL and DEFAULT-ON: `auto_publish_checkpoints` defaults true (`cli.js:76008`) and fires **on
+close/sync** (`cli.js:76106`, `:248301`), while the drive must call `act close`. Our half is pinned
+(the drive emits neither `act sync` nor `build publish`, 2 tests + neuter, `66398d58`); the other
+half is a change to the OWNER's unbrowse config — outside this project — or a redesign of the
+drive's teardown. **That is the owner's call and it gates everything after it.**
+
+Then, and only with the owner present: the LIVE end-to-end run. `driveConsent` has still **never**
+been run against the real consent page — the one thing fixtures cannot establish. Still open after
+that: surface `reauth-needed` to the owner as a push/banner.
+
+**Do NOT create the repair flag file to "test it".** Arming it opens a visible browser window
+unattended, and that is the human's act.
 
 ### WHERE the repair leg goes — read this BEFORE writing the wiring (measured 18:40)
 

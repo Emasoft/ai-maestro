@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T21:18:11+0200
+updated: 2026-07-31T21:25:05+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -49,13 +49,27 @@ otherwise ship its violation and fail at PRECHECK on a user's machine, mid-opera
 the COMPILER was measured, not argued: `Gate.undo` is optional, so deleting one leaves `tsc` silent
 while this test names the gate.
 
-**ONE BOX LEFT: the R51.7 INVARIANTS.** *"Each pipeline declares its INVARIANTS (not only its
-gates) — leftovers and contradictions are two different ways to be invalid."* Measured: **exactly
-one** `invariants:` callback is passed to a runner in the whole service — `ChangeTitle`'s, at
-`:4404`, where G22's drift check moved out of the gate array. (`CreateAgent`'s G05 runs
-`enforceAgentInvariants` as a GATE; that is the agent-invariant REGISTRY, not the runner's
-success-path hook — a distinction worth keeping, since the two are one grep apart.) That box is what
-keeps this card open.
+**ONE BOX LEFT: the R51.7 INVARIANTS — now RATCHETED at 2, not open-ended.** *"Each pipeline
+declares its INVARIANTS (not only its gates) — leftovers and contradictions are two different ways
+to be invalid."* It was **exactly one** (`ChangeTitle`'s, at `:4404`, where G22 moved out of the
+gate array); `ChangeName`'s G06 is the second (`2fd30172`).
+
+**THE FAMILY THIS COMES FROM, measured — a trailing `// Verify final state` that only WARNs:**
+
+| pipeline | state |
+|---|---|
+| `ChangeTitle` G22 | promoted to the `invariants` hook (first) |
+| `ChangeName` G06 | **promoted 2026-07-31** — and it was a CONTRADICTION, not a leftover: `updateAgent` renames every live tmux session, so a registry write that did not land left the sessions on the NEW name and the registry on the old |
+| `ChangeSkill` G05 · `changeSimpleElement` G05 | already promoted earlier — they DENY and return, rather than warn |
+| `ChangePlugin` G11 (`:4888`) | **NOT promoted, and the reason is a measurement:** it reads settings via `loadJsonSafe`, which returns `{}` on a PARSE FAILURE (`:362-370`), so it cannot tell "key absent" from "file unreadable". Promoted, a corrupt `settings.local.json` would roll back a correct plugin change — the same blind spot that kept `InstallElement`'s PG01 outside its window |
+
+(`CreateAgent`'s G05 runs `enforceAgentInvariants` as a GATE; that is the agent-invariant REGISTRY,
+not the runner's success-path hook — a distinction worth keeping, since the two are one grep apart.)
+
+**THE SECOND INDEPENDENT `loadJsonSafe` INSTANCE.** Two different pipelines now have a verification
+that cannot distinguish *unreadable* from *absent*, and in both the honest move was to leave the
+check un-promoted. That makes `loadJsonSafe`'s swallowing catch a task of its own rather than a
+drive-by on either card.
 
 ## ⏵ EIGHT OF THE NINE LANDED 2026-07-31 (`2613c907`) — ONE left, and it is not more of the same
 
@@ -1692,7 +1706,16 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       fraction of the corpus
 - [ ] Each pipeline declares its R51.7 INVARIANTS (not only its gates) — leftovers and
       contradictions are two different ways to be invalid, and the KERM18NX residue check only
-      catches the first
+      catches the first. **STARTED, ratcheted, deliberately not finished in one pass**
+      (`2fd30172`): `tests/governance/r51-7-invariants.test.ts` pins `MIN_WITH_INVARIANTS = 2` by
+      name (`ChangeTitle`, `ChangeName`) and rises as pipelines are promoted. `ChangeName`'s G06 was
+      the second: a trailing `WARN` the pipeline reported SUCCESS through, while `updateAgent` had
+      already renamed every live tmux session — a CONTRADICTION, not a leftover. It now REVERTS and
+      writes no ledger entry, pinned behaviourally (neuter **N9** reds the drift test alone; both
+      ratchet assertions stay green, which is exactly why a ratchet cannot replace a behavioural
+      test). **`ChangePlugin`'s G11 did NOT qualify** — it reads settings via `loadJsonSafe`, which
+      returns `{}` on a parse failure, so a corrupt `settings.local.json` would roll back a correct
+      change. One at a time, each with the evidence that its check cannot false-positive
 - [x] The tmux-kill compensation question decided and recorded here (R51.10 — re-launch is valid;
       a pid is not part of "the exact state")
 - [x] tsc clean, full suite green — **measured at `790cd8cb`**: `bash scripts/with-node.sh npx tsc

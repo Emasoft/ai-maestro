@@ -5,7 +5,8 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-07-31T18:40:16+0200
+updated: 2026-07-31T19:05:40+0200
+implementation-commits: [994be6d6, 041a87f8, fde71e17, 511de445, d45e050b, dfa2cf06]
 created-by: ai-maestro
 current-owner: ai-maestro
 assignee: ai-maestro
@@ -35,12 +36,32 @@ external-refs: []
 **The incident:** 2026-07-31 ~17:20 the owner was rate-limited and had to log in by hand. The
 rotator was NOT asleep — it detected the exhaustion every 60 s and had nowhere to go.
 
-**NEXT ACTION:** build `reauth-repair.ts` per "WHERE the repair leg goes" below (NOT inside runTick — its docstring forbids browser tiers), called from `server-tick.ts` behind its OWN default-off flag (`reauth-needed` → `startReauth` →
-`driveConsent` → `completeReauth`) and surface `reauth-needed` to the owner. The drive itself is
-BUILT and pinned — `lib/oauth-rotator/{reauth-drive,page-classify}.ts`, commits `994be6d6`
-`041a87f8` `fde71e17`, 44 tests, 7 recorded neuters — but it has **no production caller yet**, so
-nothing calls it and nothing can regress from it. Do box 1 FIRST; it is the only
-irreversible-by-omission step.
+**THE REPAIR LEG IS BUILT AND WIRED — 19:05 (`511de445` `d45e050b` `dfa2cf06`).** It is NOT armed
+and must not be armed casually; see NEXT ACTION.
+
+- `surveyAlternates()` (extracted from runTick, `511de445`) returns `{unreadable, refreshDead}` as
+  EMAILS. The tick had counted them and thrown the identities away — right for its counts-only log
+  line, and exactly what made the fault unrepairable. ONE definition now, so the beat that REPORTS
+  a fault and the leg that FIXES it cannot disagree about what "dead" means.
+- `lib/oauth-rotator/reauth-repair.ts` (`d45e050b`) — `repairOneDeadSlot()` composes
+  survey → `startReauth` → `driveConsent` → `completeReauth`. **19 tests, 6 neuters.**
+- Wired into `runOneTick` (`dfa2cf06`) — **7 tests, 4 neuters.**
+
+**Three gates, each pinned by a test that fails when it is removed:** (1) its OWN flag file, absent
+by default, checked BEFORE the survey so an unarmed server pays nothing — not even a keychain read;
+(2) ONE repair per beat, so three dead slots do not open three windows; (3) a per-email cooldown
+STAMPED BEFORE THE ATTEMPT — the only thing between "armed" and a browser window every 60 s, since
+stamping after lets a reliably-throwing slot re-open one on every beat forever. Plus the beat's own
+gates: tick-flag, live-client, and skip-when-the-lock-was-held (two processes repairing = two
+windows).
+
+`unreadable` slots are deliberately NOT repaired: that is a credential-ACCESS fault, and a re-login
+would spend a human-visible window then file the result somewhere still unreadable.
+
+**NEXT ACTION — box 1 FIRST (unbrowse `auto-publish off` + auth-domain blacklist), then the LIVE
+run with the owner present.** Everything below box 1 is now built; what remains is the one thing
+fixtures cannot establish. Do NOT create the flag file to "test it" — arming it is the human's act,
+and `driveConsent` has still never been run end-to-end against the live consent page.
 
 ### WHERE the repair leg goes — read this BEFORE writing the wiring (measured 18:40)
 
@@ -401,8 +422,10 @@ trust the rendered identity, not the extraction count, when checking which accou
 - [x] The consent drive is language-independent and browser-agnostic — decided by AX role shape,
       not by copy; no `--browser` on the autodetect path. 44 tests, 7 neuters incl. the one that
       re-creates the `\b` non-Latin bug and reds the Japanese case (`fde71e17`).
-- [ ] Server tick re-captures a dead slot on `reauth-needed`, targeting the named account
-      — **the drive is built but has NO production caller; this box is the wiring**
+- [x] Server tick re-captures a dead slot on `reauth-needed`, targeting the named account —
+      `511de445` (the survey now names the emails) + `d45e050b` (`repairOneDeadSlot`, 3 gates,
+      19 tests / 6 neuters) + `dfa2cf06` (wired into `runOneTick`, 7 tests / 4 neuters). Built and
+      called; NOT armed — the flag file is absent by default and creating it is the human's act.
 - [ ] `driveConsent` proven against the LIVE consent page, with the owner present (never run
       end-to-end; the one thing the fixtures cannot establish)
 - [x] ~~Wrong-account refusal pinned by a test + a recorded neuter~~ — **already true**, by
@@ -410,7 +433,11 @@ trust the rendered identity, not the extraction count, when checking which accou
       deleted: the box was aimed at the janitor's Python failure mode, and knowing our path never
       shared it is the reason step (c) is the only new work.
 - [ ] `reauth-needed` reaches the owner as a push/banner when it still cannot self-repair
-- [ ] `tsc` clean + full suite green, both DATED in this card
+- [x] `tsc` clean + full suite green, both DATED in this card — **2026-07-31 19:05**: `tsc
+      --noEmit` exit 0 / 0 lines; `yarn test` 313 files, 4524 passed, 2 skipped. ONE failure,
+      `pillar-graph-cli` → `board is byte-identical`, a 5 s subprocess timeout under parallel load:
+      no import path exists from `lib/oauth-rotator` to that CLI (grepped) and it is 20/20 twice in
+      isolation, so it is the known flake and not this work.
 
 ## Approval log
 

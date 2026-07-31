@@ -62,8 +62,25 @@ export interface UserSenderContext {
 export interface AssistantSenderContext {
   /** Recipient is THIS assistant's own user. */
   recipientIsOwnUser: boolean
-  /** Recipient is the currently-acting MAESTRO (R37.2). */
-  recipientIsActiveMaestro: boolean
+  /**
+   * Recipient is the MANAGER — the ONE agent an ASSISTANT may exchange messages with (R39.9).
+   *
+   * REPLACES `recipientIsActiveMaestro` (TRDD-HW72YBZW). That field was a SEPARATE disjunct from
+   * `recipientIsOwnUser`, so it granted the ASSISTANT a channel to the MAESTRO *user* even when
+   * that user was not its own — code strictly LOOSER than R39.5, which says it obeys and messages
+   * "no one else — not the MAESTRO *user*". The own-user case was already covered by
+   * `recipientIsOwnUser`, so nothing legitimate is lost by dropping it.
+   */
+  recipientIsManager: boolean
+  /**
+   * The bound USER has approved MANAGER collaboration for this assistant (R39.9).
+   *
+   * The gate is a STANDING per-assistant permission, not a per-message flag: R39.9 reads "accepts a
+   * MANAGER-assigned task only if its bound USER has approved this KIND of collaboration". Without
+   * it the MANAGER channel does not exist at all — R39.5 grants that channel only as a refusable,
+   * USER-gated task assignment, "never a command, never a mandate (R41 holds)".
+   */
+  userPermitsManagerCollaboration: boolean
 }
 
 /** Edge type between two graph nodes. */
@@ -359,15 +376,36 @@ export function validateMessageRoute(
   }
 
   // ── R39.5 ASSISTANT-sender branch ────────────────────────────────────────
-  // An ASSISTANT may message ONLY its own user and the active MAESTRO.
+  // Post-2026-07-22 shape (TRDD-SPS63XHA ruled the TEXT authoritative; TRDD-HW72YBZW built it):
+  // an ASSISTANT may message its own user unconditionally, and the MANAGER — "the single agent it
+  // may exchange messages with (R39.9)" — but ONLY while its bound user permits that collaboration.
+  // The old `recipientIsActiveMaestro` disjunct is GONE: it reached the MAESTRO *user*, whom R39.5
+  // names explicitly as someone the ASSISTANT does NOT answer to.
   if (senderRole === 'assistant') {
     const as = options.assistantSender
-    if (as && (as.recipientIsOwnUser || as.recipientIsActiveMaestro)) {
+    if (as?.recipientIsOwnUser) {
       return { allowed: true, edgeType: 'allow' }
+    }
+    // The two denials are kept DISTINCT on purpose. "you may not reach that node at all" and "the
+    // node is reachable but your user has not opened the channel" are different facts, and a
+    // single merged reason would make the USER-gate untestable from the outside — any neuter of
+    // the gate would produce a message identical to the no-edge case.
+    if (as?.recipientIsManager) {
+      if (as.userPermitsManagerCollaboration) {
+        return { allowed: true, edgeType: 'allow' }
+      }
+      return {
+        allowed: false,
+        reason:
+          'An ASSISTANT may message the MANAGER only while its bound user permits that ' +
+          'collaboration (R39.9) — the channel carries a refusable task assignment, never a command',
+        suggestion: ROUTING_SUGGESTIONS['assistant->*'],
+        edgeType: 'deny',
+      }
     }
     return {
       allowed: false,
-      reason: 'An ASSISTANT may only message its own user and the MAESTRO (R39.5)',
+      reason: 'An ASSISTANT may only message its own user and the MANAGER (R39.5)',
       suggestion: ROUTING_SUGGESTIONS['assistant->*'],
       edgeType: 'deny',
     }

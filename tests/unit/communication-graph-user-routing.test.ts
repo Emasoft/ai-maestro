@@ -135,45 +135,72 @@ describe('communication-graph — FLAG ON: MAESTRO / acting delegate (R37)', () 
 })
 
 describe('communication-graph — FLAG ON: ASSISTANT outbound (R39.5)', () => {
-  const own: AssistantSenderContext = { recipientIsOwnUser: true, recipientIsActiveMaestro: false }
-  const toMaestro: AssistantSenderContext = { recipientIsOwnUser: false, recipientIsActiveMaestro: true }
-  const toOther: AssistantSenderContext = { recipientIsOwnUser: false, recipientIsActiveMaestro: false }
+  const own: AssistantSenderContext = {
+    recipientIsOwnUser: true,
+    recipientIsManager: false,
+    userPermitsManagerCollaboration: false,
+  }
+  /** The MANAGER, with the bound user's standing approval — the one agent channel R39.9 grants. */
+  const toManagerPermitted: AssistantSenderContext = {
+    recipientIsOwnUser: false,
+    recipientIsManager: true,
+    userPermitsManagerCollaboration: true,
+  }
+  /** The same recipient with the gate CLOSED. Reachable node, unopened channel — a different fact
+   *  from "no edge", and the pair is what makes the gate observable from outside. */
+  const toManagerUngated: AssistantSenderContext = {
+    recipientIsOwnUser: false,
+    recipientIsManager: true,
+    userPermitsManagerCollaboration: false,
+  }
+  const toOther: AssistantSenderContext = {
+    recipientIsOwnUser: false,
+    recipientIsManager: false,
+    userPermitsManagerCollaboration: false,
+  }
 
   it('ASSISTANT → own user = allow', () => {
     const r = validateMessageRoute('assistant', 'human', { assistantSender: own })
     expect(r.allowed).toBe(true)
   })
 
-  it('ASSISTANT → active MAESTRO = allow — the SUPERSEDED shape, pinned as DRIFT not as the rule', () => {
-    // READ THIS BEFORE "FIXING" EITHER SIDE (TRDD-SPS63XHA ruling, 2026-07-30).
+  it('ASSISTANT → a MAESTRO user who is NOT its own user = DENY (the superseded grant is gone)', () => {
+    // THE INVERSION THIS TEST EXISTS TO RECORD (TRDD-SPS63XHA ruled the text authoritative;
+    // TRDD-HW72YBZW built it). Until 2026-07-30 this same call asserted ALLOW, because the code
+    // carried a `recipientIsActiveMaestro` disjunct — a SEPARATE grant from `recipientIsOwnUser`,
+    // so it opened a channel to the MAESTRO *user* even when that user was not the assistant's own.
+    // R39.5 names that person explicitly as someone the ASSISTANT does NOT answer to, making the
+    // code LOOSER than the rule — the one direction the ruling forbids.
     //
-    // This assertion describes the CODE, and the code encodes the PRE-2026-07-22 R39.5. The
-    // current text grants the ASSISTANT its own user plus — user-permitting — **the MANAGER**, and
-    // says outright that it obeys "no one else — not the MAESTRO *user*, no other agent". So the
-    // `recipientIsActiveMaestro` disjunct is code LOOSER than the rule, which is the one direction
-    // the ruling's principle forbids (code may be STRICTER than the text, never looser).
-    //
-    // It is left in place, and this test left green, for one measured reason: the branch is
-    // UNREACHABLE (see the no-producer test below), so removing the disjunct is an implementation
-    // change with no live behaviour to preserve — and deleting a channel a rule requires is worse
-    // than leaving one a rule merely fails to mention. The map rows for R39.5/R39.7 are
-    // CONTRADICTED, so no instrument reports this as enforced any more.
-    const r = validateMessageRoute('assistant', 'human', { assistantSender: toMaestro })
+    // The own-user case was already covered by `recipientIsOwnUser`, so dropping the disjunct
+    // removed no legitimate channel. A non-own MAESTRO is now an ordinary denied recipient.
+    const r = validateMessageRoute('assistant', 'human', { assistantSender: toOther })
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/ASSISTANT/i)
+  })
+
+  it('R39.9: ASSISTANT → MANAGER = allow, but ONLY while the bound user permits it', () => {
+    // The channel the text requires and the code did not have. It is the single agent-to-agent
+    // edge an ASSISTANT gets, and it carries a refusable task assignment — never a command.
+    const r = validateMessageRoute('assistant', 'manager', { assistantSender: toManagerPermitted })
     expect(r.allowed).toBe(true)
   })
 
-  it('R39.9 DRIFT: the ASSISTANT→MANAGER channel the text requires does NOT exist yet', () => {
-    // R39.5/R39.9 (2026-07-22): the MANAGER is "the single agent it may exchange messages with",
-    // carrying only a refusable, USER-gated task assignment. `AssistantSenderContext` has no
-    // `recipientIsManager` field at all, so there is no way to express it — an ASSISTANT sender
-    // aimed at a MANAGER is denied like any other agent.
-    //
-    // Asserted so the gap is a FAILING EXPECTATION the day someone adds the field rather than a
-    // paragraph in a card: this test reddens when the channel is built, which is the reminder to
-    // re-upgrade the map rows in the same commit.
-    const r = validateMessageRoute('assistant', 'manager', { assistantSender: toOther })
+  it('R39.9: the same MANAGER is DENIED when the user has not approved the collaboration', () => {
+    // The gate is a STANDING per-assistant permission, not a per-message flag: without it the
+    // channel does not exist at all.
+    const r = validateMessageRoute('assistant', 'manager', { assistantSender: toManagerUngated })
     expect(r.allowed).toBe(false)
-    expect(r.reason).toMatch(/ASSISTANT/i)
+  })
+
+  it('and the two denials stay DISTINCT — "no edge" and "channel not opened" are different facts', () => {
+    // If both produced one merged reason the USER-gate would be untestable from outside: any
+    // neuter of the gate would yield a message identical to the no-edge case, so a broken gate and
+    // a working one would be indistinguishable to every caller AND to this suite.
+    const ungated = validateMessageRoute('assistant', 'manager', { assistantSender: toManagerUngated })
+    const noEdge = validateMessageRoute('assistant', 'member', { assistantSender: toOther })
+    expect(ungated.reason).toMatch(/permits|collaboration/i)
+    expect(ungated.reason).not.toBe(noEdge.reason)
   })
 
   it('ASSISTANT → any other agent = deny (R39.5)', () => {
@@ -194,10 +221,13 @@ describe('communication-graph — FLAG ON: ASSISTANT outbound (R39.5)', () => {
     // — no route, service, or handler supplies it, so at runtime an ASSISTANT sender always falls
     // through to the fail-closed deny.
     //
-    // The moment a producer is wired, the over-broad `recipientIsActiveMaestro` grant goes LIVE.
-    // This test reddens at that moment, which is the point: it converts a latent hole into a build
-    // step that cannot be skipped. Verified by reading the call graph, not by grep alone — the
-    // TITLE_PLUGIN_MAP episode is what a confident grep-only reading costs.
+    // WHAT THIS NOW GUARDS, since the over-broad grant it originally watched for is gone: the
+    // branch is CORRECT but still DEAD, so every assertion above describes code no caller reaches.
+    // That is a weaker claim than it looks, and the honest place to say so is here. This test
+    // reddens the moment a producer appears — the reminder to re-upgrade the CONTRADICTED
+    // R39.5/R39.7 map rows in the same commit, since only then is the rule genuinely enforced.
+    // Verified by reading the call graph, not by grep alone — the TITLE_PLUGIN_MAP episode is what
+    // a confident grep-only reading costs.
     const roots = ['app', 'services', 'lib']
     const producers: string[] = []
     const walk = (dir: string): void => {
@@ -214,9 +244,11 @@ describe('communication-graph — FLAG ON: ASSISTANT outbound (R39.5)', () => {
     for (const r of roots) walk(join(process.cwd(), r))
     expect(
       producers,
-      'A production caller now builds an assistantSender block. The R39.5 branch is LIVE, and it ' +
-        'still encodes the pre-2026-07-22 shape (own user + MAESTRO, missing the MANAGER). Fix the ' +
-        'branch to the current text and re-upgrade the R39.5/R39.7 map rows in the same commit.',
+      'A production caller now builds an assistantSender block, so the R39.5 branch is LIVE. It ' +
+        'encodes the post-2026-07-22 text (own user, plus the MANAGER while the bound user permits ' +
+        'it) — so this is not a hole to plug but a promotion to make: re-upgrade the CONTRADICTED ' +
+        'R39.5/R39.7 rows in docs/GOVERNANCE-ENFORCEMENT-MAP.md in the SAME commit, and delete ' +
+        'this test, whose whole subject was the absence of a caller.',
     ).toEqual([])
   })
 })

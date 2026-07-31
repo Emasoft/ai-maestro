@@ -105,12 +105,17 @@ describe('communication-graph — ASSISTANT static node (R39.5/R39.7)', () => {
 
   it('validateMessageRoute: assistant→agent is denied (R39.5) absent a relational block', () => {
     // An ASSISTANT sender with NO assistantSender block can reach nothing —
-    // fail-closed. Its only reach (own user + MAESTRO) requires the relational
-    // block, which is asserted in communication-graph-user-routing.test.ts.
+    // fail-closed. Its only reach (own user, plus the MANAGER while its bound user permits that
+    // collaboration — R39.9) requires the relational block, which is asserted in
+    // communication-graph-user-routing.test.ts.
+    //
+    // The recipient here was "the MAESTRO" until 2026-07-30. That grant was code LOOSER than
+    // R39.5, which names the MAESTRO *user* as someone the ASSISTANT does not answer to
+    // (TRDD-HW72YBZW); the own-user case it appeared to serve is covered by `recipientIsOwnUser`.
     for (const recipient of OTHER_AGENT_TITLES) {
       const r = validateMessageRoute('assistant', recipient, {})
       expect(r.allowed).toBe(false)
-      expect(r.reason).toMatch(/only message its own user and the MAESTRO/i)
+      expect(r.reason).toMatch(/only message its own user and the MANAGER/i)
       expect(r.edgeType).toBe('deny')
     }
   })

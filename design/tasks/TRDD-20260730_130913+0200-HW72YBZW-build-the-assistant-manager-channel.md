@@ -4,16 +4,17 @@ title: Build the ASSISTANT-MANAGER channel and drop the superseded MAESTRO grant
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: todo
+column: dev
 created: 2026-07-30T13:09:14+0200
-updated: 2026-07-30T13:09:14+0200
+updated: 2026-07-31T18:47:26+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: security
 min-approval-requirement: manager
-mandate: false
-approved: false
+mandate: true
+mandated-by: user
+approved: true
 derived: true
 derived-kind: eht
 parent-trdd: SPS63XHA
@@ -90,3 +91,7 @@ the change starts from deny-all rather than from a live edge.
   the comm-graph's shape on a security boundary, which the parent ruling was careful to keep out of
   the agent's own hands. The ruling's open question is answered IN THIS CARD (above) rather than by
   editing code, so the answer is reviewable before anything is built.
+- 2026-07-31T17:08:43+0200 — APPROVED by USER (min-approval-requirement: manager; USER is above it). Asked explicitly
+  because the card's own log reserved this decision — a comm-graph security edge whose failure mode
+  is an agent commanding a user's ASSISTANT — and because a USER's impatience at the pace is not an
+  approval. Scope approved: the FULL card, both halves in one commit. `column: todo` -> `dev`.

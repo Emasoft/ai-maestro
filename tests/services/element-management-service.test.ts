@@ -1506,6 +1506,44 @@ describe('element-management-service', () => {
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })
+
+    it('restores the prior .lsp.json when the write dies part-way (R51 G04 compensation)', async () => {
+      /** Pins ChangeLSP's G04 undo: a torn writeFile must put the original bytes back, not leave a truncated file */
+      const prior = JSON.stringify(
+        { 'py-lsp': { command: 'pylsp' }, 'ts-lsp': { command: 'tsserver' } },
+        null,
+        2,
+      )
+      mockFsExistsSync.mockReturnValue(true)
+      mockFsReadFile.mockResolvedValue(prior)
+      // The default implementation is set EXPLICITLY, not inherited: `vi.clearAllMocks()` clears
+      // calls but NOT implementations, and the withSettingsLock test below installs a persistent
+      // one. Only the FIRST write (the mutation) fails; the compensation's write must succeed.
+      mockFsWriteFile.mockResolvedValue(undefined)
+      mockFsWriteFile.mockRejectedValueOnce(new Error('ENOSPC: no space left on device'))
+
+      const { ChangeLSP } = await import('@/services/element-management-service')
+      const result = await ChangeLSP(
+        null,
+        { name: 'new-lsp', action: 'add', config: { command: 'x' }, agentDir: '/tmp/project' },
+        _tAuth,
+      )
+
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/NO CHANGES WERE MADE TO THE SYSTEM/)
+      expect(result.error).toMatch(/ENOSPC/)
+
+      const writes = mockFsWriteFile.mock.calls.filter(c => String(c[0]).endsWith('.lsp.json'))
+      expect(writes).toHaveLength(2)
+      // POSITIVE CONTROL — without it both assertions below are satisfied by a mutation that never
+      // mutated, i.e. by two identical writes of the prior content.
+      expect(String(writes[0][1])).toContain('new-lsp')
+      // THE claim: the compensation restored the ORIGINAL bytes, not the post-mutation ones. An
+      // undo that writes `lspConfig` back would still produce a second write and still pass a
+      // length check — this is the assertion that tells the two apart.
+      expect(String(writes[1][1])).toBe(prior)
+      expect(String(writes[1][1])).not.toContain('new-lsp')
+    })
   })
 
   describe('ChangeHook', () => {

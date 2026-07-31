@@ -155,24 +155,34 @@ function analyze(): PipelineInfo[] {
  * `DeleteTeam`, 9 and 10 with `ChangeMarketplace`, now 10 and 9 with `ChangeTitle`.
  *
  * NOTE FOR WHOEVER LOWERS IT NEXT: the count is a conformance measure, NOT a safety measure,
- * and as of `ChangeMarketplace` the two have fully diverged. Every one of the remaining 9 is
- * either a single-mutation pipeline with nothing abortable after it — `ChangeAvatar` (G03),
- * `ChangeName` (G04), `ChangeFolder` (G05), and, MEASURED 2026-07-31, `ChangeMCP` (G04),
- * `ChangeLSP` (G04), `ChangeHook` (G04), `ChangeMetadata` (EXE), `ChangeCLIArgs` (G04) — so it has
- * no partial-state window at all; or `InstallElement` (101 ops), the one remaining large pipeline
- * that retrofitted pipelines CALL, where converting it changes its callers' failure semantics and
- * wants its own card. Lowering this number further therefore buys conformance, not safety. Pick by
- * whether the pipeline can leave two stores disagreeing.
+ * and as of `ChangeMarketplace` the two have fully diverged.
  *
- * `ChangeTitle` (131 ops) was the other one, and it is DONE (TRDD-DQ6XN2VP): 15 mutating gates with
- * compensations, the four non-mutating ones declared `readOnly`, G22 routed to the runner's
- * `invariants` hook, and the three append-only tails (the `change_title` ledger entry, G14e's
- * portfolio entry, G18's mesh broadcast) moved out of the array to fire only on `txn.ok`.
+ * The eight single-mutation pipelines — `ChangeAvatar` (G03), `ChangeName` (G04), `ChangeFolder`
+ * (G05), `ChangeMCP` (G04), `ChangeLSP` (G04), `ChangeHook` (G04), `ChangeMetadata` (EXE),
+ * `ChangeCLIArgs` (G04) — LANDED 2026-07-31, and the honest description of what that bought is:
+ * conformance, plus ONE real compensation. Seven of the eight have nothing abortable after their
+ * write, so their `undo` is LATENT BY CONSTRUCTION: no failure path reaches it, and no neuter can
+ * redden a test for it. That is recorded in each one's comment rather than counted as coverage.
+ * The exception is `ChangeLSP`, whose write is a bare `writeFile` (not the atomic tmp+rename of
+ * `saveJsonSafe`), so a torn write really can leave a truncated `.lsp.json` that later loads read
+ * as `{}` — its undo is reachable and restores the bytes read before the write.
+ *
+ * `InstallElement` (101 ops) is the ONE still hand-rolling. It is not more of the same: it is the
+ * large pipeline that retrofitted pipelines CALL, so converting it changes its callers' failure
+ * semantics, and three of its pre-EXE mutations are ones a compensation is FORBIDDEN to reverse
+ * (R20.31, verdict Explicit: ai-maestro NEVER deletes a plugin source folder) or harmful to
+ * (deleting `.claude/` fights the agent-invariant watchdog; deregistering a marketplace breaks
+ * every other agent). It wants its own card — see TRDD-DQ6XN2VP's `## ⏵ MEASURED 2026-07-31`.
+ *
+ * `ChangeTitle` (131 ops) was the other large one, and it is DONE (TRDD-DQ6XN2VP): 15 mutating
+ * gates with compensations, the four non-mutating ones declared `readOnly`, G22 routed to the
+ * runner's `invariants` hook, and the three append-only tails (the `change_title` ledger entry,
+ * G14e's portfolio entry, G18's mesh broadcast) moved out of the array to fire only on `txn.ok`.
  */
-const MAX_HANDROLLED = 9
+const MAX_HANDROLLED = 1
 
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */
-const MIN_TRANSACTIONAL = 10
+const MIN_TRANSACTIONAL = 18
 
 /**
  * The pipelines already under the runner, pinned BY NAME. A count alone cannot see an
@@ -191,6 +201,14 @@ const MUST_BE_TRANSACTIONAL = [
   'ChangeSkill',
   'changeSimpleElement',
   'ChangeTitle',
+  'ChangeAvatar',
+  'ChangeName',
+  'ChangeFolder',
+  'ChangeMetadata',
+  'ChangeCLIArgs',
+  'ChangeMCP',
+  'ChangeLSP',
+  'ChangeHook',
 ]
 
 describe('AIO-TXN-10 — every pipeline routes through lib/gate-transaction.ts', () => {

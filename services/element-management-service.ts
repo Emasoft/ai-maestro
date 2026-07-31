@@ -5914,17 +5914,56 @@ export async function ChangeMCP(agentId: string | null, desired: {
     ops.push(`G03: Config validated`)
 
     // ── G04: Execute action ───────────────────────────────────
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
+    // Nothing abortable follows it, so no failure path reaches the compensation today — it is
+    // written because `runGateSequence` REFUSES to start a mutating gate that lacks one, and
+    // because the day a gate is appended after this one the compensation must already exist
+    // rather than be remembered.
+    //
+    // The `add` undo is EXACT: `claude mcp remove` is the inverse of `mcp add-json` and this
+    // pipeline knows every argument it needs. The `remove` undo CANNOT be written — restoring a
+    // server means re-adding it with the config it had, and nothing here READ that config before
+    // deleting it. So it THROWS rather than returning quietly: a compensation that returns early
+    // still earns the runner's `G04: reverted` line, which would claim a restore that never
+    // happened. Whoever appends an abortable gate after this one must first capture the prior
+    // config (`claude mcp get`), and this throw is what will tell them.
     const scopeArgs = ['--scope', desired.scope]
     const cwd = resolvedDir || undefined
 
-    if (desired.action === 'add') {
-      const configJson = JSON.stringify(desired.config)
-      await execFileAsync('claude', ['mcp', 'add-json', desired.name, configJson, ...scopeArgs], { timeout: 120000, cwd })
-      ops.push(`G04: Added MCP server "${desired.name}" (scope: ${desired.scope})`)
-    } else if (desired.action === 'remove') {
-      await execFileAsync('claude', ['mcp', 'remove', desired.name, ...scopeArgs], { timeout: 120000, cwd })
-      ops.push(`G04: Removed MCP server "${desired.name}" (scope: ${desired.scope})`)
-    }
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    // `run` records the unit it completed and `undo` reverses only what is recorded — the shape
+    // the Gate docs prescribe, and the only one that is honest when `run` threw part-way.
+    const mcpCtx = { committed: false }
+    const txn = await runGateSequence(
+      [{
+        id: 'G04',
+        what: desired.action === 'add'
+          ? `Added MCP server "${desired.name}" (scope: ${desired.scope})`
+          : `Removed MCP server "${desired.name}" (scope: ${desired.scope})`,
+        run: async (c) => {
+          if (desired.action === 'add') {
+            const configJson = JSON.stringify(desired.config)
+            await execFileAsync('claude', ['mcp', 'add-json', desired.name, configJson, ...scopeArgs], { timeout: 120000, cwd })
+          } else if (desired.action === 'remove') {
+            await execFileAsync('claude', ['mcp', 'remove', desired.name, ...scopeArgs], { timeout: 120000, cwd })
+          }
+          c.committed = true
+        },
+        undo: async (c) => {
+          if (!c.committed) return // the CLI never reported success — nothing known to reverse
+          if (desired.action === 'add') {
+            await execFileAsync('claude', ['mcp', 'remove', desired.name, ...scopeArgs], { timeout: 120000, cwd })
+            return
+          }
+          throw new Error(
+            `cannot restore MCP server "${desired.name}": its configuration was never captured before removal`,
+          )
+        },
+      }],
+      mcpCtx,
+    )
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     {
       const scopePath = agentId ? `/agents/${agentId}/mcp/${desired.name}` : `/user/mcp/${desired.name}`
@@ -5994,29 +6033,57 @@ export async function ChangeLSP(agentId: string | null, desired: {
     ops.push(`G03: LSP config path = ${lspJsonPath}`)
 
     // ── G04: Read/Write .lsp.json ─────────────────────────────
+    const lspExisted = existsSync(lspJsonPath)
     let lspConfig: Record<string, unknown> = {}
-    if (existsSync(lspJsonPath)) {
+    let lspPriorRaw: string | null = null
+    if (lspExisted) {
       try {
-        const raw = await readFile(lspJsonPath, 'utf-8')
-        lspConfig = JSON.parse(raw) as Record<string, unknown>
+        lspPriorRaw = await readFile(lspJsonPath, 'utf-8')
+        lspConfig = JSON.parse(lspPriorRaw) as Record<string, unknown>
       } catch {
         lspConfig = {}
       }
     }
 
-    if (desired.action === 'add') {
-      lspConfig[desired.name] = desired.config
-      await writeFile(lspJsonPath, JSON.stringify(lspConfig, null, 2), 'utf-8')
-      ops.push(`G04: Added LSP "${desired.name}" to ${lspJsonPath}`)
-    } else if (desired.action === 'remove') {
-      if (lspConfig[desired.name] === undefined) {
-        result.error = `LSP "${desired.name}" not found in ${lspJsonPath}`
-        return result
-      }
-      delete lspConfig[desired.name]
-      await writeFile(lspJsonPath, JSON.stringify(lspConfig, null, 2), 'utf-8')
-      ops.push(`G04: Removed LSP "${desired.name}" from ${lspJsonPath}`)
+    // Validation BEFORE the mutating gate, not inside it: a gate that can legitimately do nothing
+    // still earns the runner's `G04: …` op line, which would then record an edit that never
+    // happened.
+    if (desired.action === 'remove' && lspConfig[desired.name] === undefined) {
+      result.error = `LSP "${desired.name}" not found in ${lspJsonPath}`
+      return result
     }
+
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP). Unlike its siblings this compensation is REACHABLE: the
+    // write below is a bare `writeFile`, NOT the atomic tmp+rename of `saveJsonSafe`, so a write
+    // that dies part-way leaves a TRUNCATED .lsp.json — and every later load parses that as `{}`
+    // and silently discards every OTHER language server the file held. Restoring the bytes read
+    // above is the compensation; deleting the file is the restore when there was no file at all.
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(
+      [{
+        id: 'G04',
+        what: desired.action === 'add'
+          ? `Added LSP "${desired.name}" to ${lspJsonPath}`
+          : `Removed LSP "${desired.name}" from ${lspJsonPath}`,
+        run: async () => {
+          if (desired.action === 'add') lspConfig[desired.name] = desired.config
+          else delete lspConfig[desired.name]
+          await writeFile(lspJsonPath, JSON.stringify(lspConfig, null, 2), 'utf-8')
+        },
+        undo: async () => {
+          if (!lspExisted) { await rm(lspJsonPath, { force: true }); return }
+          if (lspPriorRaw === null) {
+            // The file was there and unreadable, so there are no bytes to put back. Deleting it
+            // would destroy content this pipeline never saw — say so instead (R51.5).
+            throw new Error(`cannot restore ${lspJsonPath}: its prior contents were unreadable`)
+          }
+          await writeFile(lspJsonPath, lspPriorRaw, 'utf-8')
+        },
+      }],
+      {},
+    )
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     {
       const scopePath = agentId ? `/agents/${agentId}/lsp/${desired.name}` : `/user/lsp/${desired.name}`
@@ -6101,45 +6168,84 @@ export async function ChangeHook(agentId: string | null, desired: {
     }
     ops.push(`G03: Settings path = ${settingsPath}`)
 
-    // ── G04: Read/Write hooks in settings ─────────────────────
-    await withSettingsLock(settingsPath, async () => {
-      const settings = await loadJsonSafe(settingsPath) as Record<string, unknown>
-      const hooks = (settings.hooks || {}) as Record<string, Array<Record<string, unknown>>>
-      const eventHooks = hooks[desired.event] || []
-
-      if (desired.action === 'add') {
-        const hookEntry: Record<string, unknown> = { command: desired.hookConfig!.command }
-        if (desired.hookConfig!.matcher) hookEntry.matcher = desired.hookConfig!.matcher
-        if (desired.hookConfig!.timeout) hookEntry.timeout = desired.hookConfig!.timeout
-        eventHooks.push(hookEntry)
-        hooks[desired.event] = eventHooks
-        settings.hooks = hooks
-        await saveJsonSafe(settingsPath, settings as Record<string, unknown>)
-        ops.push(`G04: Added hook for ${desired.event}`)
-      } else if (desired.action === 'remove') {
-        if (!desired.hookConfig) {
-          result.error = `hookConfig is required for remove action (to identify which hook to remove)`
-          return
-        }
-        const idx = eventHooks.findIndex(h => h.command === desired.hookConfig!.command)
-        if (idx === -1) {
-          result.error = `Hook with command "${desired.hookConfig.command}" not found for event ${desired.event}`
-          return
-        }
-        eventHooks.splice(idx, 1)
-        if (eventHooks.length === 0) {
-          delete hooks[desired.event]
-        } else {
-          hooks[desired.event] = eventHooks
-        }
-        settings.hooks = hooks
-        await saveJsonSafe(settingsPath, settings as Record<string, unknown>)
-        ops.push(`G04: Removed hook for ${desired.event}`)
+    // ── G03b: Validate the remove target (PRE — read-only) ────
+    // Hoisted out of the write closure so the mutating gate does nothing but mutate. Under the
+    // runner a gate that legitimately does nothing still earns a `G04: Removed hook …` op line,
+    // which would record an edit that never happened.
+    if (desired.action === 'remove') {
+      if (!desired.hookConfig) {
+        result.error = `hookConfig is required for remove action (to identify which hook to remove)`
+        return result
       }
-    })
+      const preview = await loadJsonSafe(settingsPath) as Record<string, unknown>
+      const previewHooks = (preview.hooks || {}) as Record<string, Array<Record<string, unknown>>>
+      const previewEvent = previewHooks[desired.event] || []
+      if (!previewEvent.some(h => h.command === desired.hookConfig!.command)) {
+        result.error = `Hook with command "${desired.hookConfig.command}" not found for event ${desired.event}`
+        return result
+      }
+      ops.push(`G03b: Hook to remove found for ${desired.event}`)
+    }
 
-    // If an error was set inside withSettingsLock, return it
-    if (result.error) return result
+    // ── G04: Read/Write hooks in settings ─────────────────────
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
+    // `saveJsonSafe` is atomic (tmp + rename), so no failure path reaches this compensation today
+    // — it is LATENT BY CONSTRUCTION, written because the runner refuses a mutating gate without
+    // one and because an abortable gate appended after this one must find it already here.
+    //
+    // It restores the WHOLE settings object read under the lock, and RE-ACQUIRES that lock to do
+    // it: a hook edit is a read-modify-write over a file other writers share, so putting back one
+    // key would clobber whatever landed in between.
+    const hookCtx: { prior: Record<string, unknown> | null } = { prior: null }
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(
+      [{
+        id: 'G04',
+        what: `${desired.action === 'add' ? 'Added' : 'Removed'} hook for ${desired.event}`,
+        run: async (c) => {
+          await withSettingsLock(settingsPath, async () => {
+            const settings = await loadJsonSafe(settingsPath) as Record<string, unknown>
+            // Deep-clone BEFORE mutating: `hooks` and `eventHooks` below are references into
+            // `settings`, so a shallow copy would be mutated along with it and the "prior" state
+            // would be the post-change one.
+            c.prior = structuredClone(settings)
+            const hooks = (settings.hooks || {}) as Record<string, Array<Record<string, unknown>>>
+            const eventHooks = hooks[desired.event] || []
+
+            if (desired.action === 'add') {
+              const hookEntry: Record<string, unknown> = { command: desired.hookConfig!.command }
+              if (desired.hookConfig!.matcher) hookEntry.matcher = desired.hookConfig!.matcher
+              if (desired.hookConfig!.timeout) hookEntry.timeout = desired.hookConfig!.timeout
+              eventHooks.push(hookEntry)
+              hooks[desired.event] = eventHooks
+            } else {
+              const idx = eventHooks.findIndex(h => h.command === desired.hookConfig!.command)
+              if (idx === -1) {
+                // G03b saw it; it is gone now, so another writer took it between the check and
+                // this lock. Aborting is the honest outcome — the alternative is a success that
+                // removed nothing.
+                throw new Error(`Hook with command "${desired.hookConfig!.command}" disappeared from event ${desired.event} before the write`)
+              }
+              eventHooks.splice(idx, 1)
+              if (eventHooks.length === 0) delete hooks[desired.event]
+              else hooks[desired.event] = eventHooks
+            }
+            settings.hooks = hooks
+            await saveJsonSafe(settingsPath, settings as Record<string, unknown>)
+          })
+        },
+        undo: async (c) => {
+          if (!c.prior) return // the load never completed — nothing was written
+          const prior = c.prior
+          await withSettingsLock(settingsPath, async () => {
+            await saveJsonSafe(settingsPath, prior)
+          })
+        },
+      }],
+      hookCtx,
+    )
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     {
       const scopePath = agentId ? `/agents/${agentId}/hooks/${desired.event}` : `/user/hooks/${desired.event}`
@@ -6555,12 +6661,36 @@ export async function ChangeName(
     ops.push(`G03: Name change needed: "${agent.name}" → "${normalized}"`)
 
     // ── G04: Write to registry (uniqueness + tmux rename handled by updateAgent) ──
-    const updated = await updateAgent(agentId, { name: normalized })
-    if (!updated) {
-      result.error = `Failed to update agent name in registry`
-      return result
-    }
-    ops.push(`G04: Updated name in registry`)
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
+    // Nothing abortable follows it, so this compensation is LATENT — written because the runner
+    // refuses a mutating gate without one, and so an abortable gate appended later finds it here.
+    //
+    // The undo goes back through `updateAgent`, NOT through a direct field write, because the
+    // rename is not only a registry field: `updateAgent` also renames every live tmux session
+    // (`computeSessionName(name, index)`). Restoring the field by hand would leave the sessions
+    // carrying the NEW name while the registry carried the old one — undo through the mechanism
+    // that performed it.
+    const priorName = agent.name || agent.alias
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(
+      [{
+        id: 'G04',
+        what: 'Updated name in registry',
+        run: async () => {
+          const updated = await updateAgent(agentId, { name: normalized })
+          if (!updated) throw new Error('Failed to update agent name in registry')
+        },
+        undo: async () => {
+          if (!priorName) {
+            throw new Error(`cannot restore the name of agent ${agentId}: it had none before the change`)
+          }
+          await updateAgent(agentId, { name: priorName })
+        },
+      }],
+      {},
+    )
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     // ── G05: Determine restart needed ─────────────────────────
     const sessions = agent.sessions || []
@@ -6675,12 +6805,35 @@ export async function ChangeFolder(
     ops.push(`G04: Folder change needed: "${currentResolved}" → "${resolved}"`)
 
     // ── G05: Write to registry ────────────────────────────────
-    const updated = await updateAgent(agentId, { workingDirectory: resolved })
-    if (!updated) {
-      result.error = `Failed to update working directory in registry`
-      return result
-    }
-    ops.push(`G05: Updated workingDirectory in registry`)
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
+    // Nothing abortable follows it, so this compensation is LATENT — written because the runner
+    // refuses a mutating gate without one, and so an abortable gate appended later finds it here.
+    //
+    // NAMED RATHER THAN LEFT TO BE DISCOVERED: restoring the prior workdir can itself THROW.
+    // `updateAgent` runs `checkWorkdirPathPolicy` on any workingDirectory it is given, and the
+    // registry still holds legacy violators (the `default` agent's workdir is "/"), which the
+    // policy exists to refuse. On such an agent the undo produces an honest R51.5 CRITICAL rather
+    // than quietly re-writing a forbidden path — the right outcome, and one to expect.
+    const priorWorkdir = agent.workingDirectory
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(
+      [{
+        id: 'G05',
+        what: 'Updated workingDirectory in registry',
+        run: async () => {
+          const updated = await updateAgent(agentId, { workingDirectory: resolved })
+          if (!updated) throw new Error('Failed to update working directory in registry')
+        },
+        undo: async () => {
+          // An absent prior workdir is restored by writing `undefined`: `updateAgent` spreads its
+          // updates over the record, so the key goes back to absent rather than to "".
+          await updateAgent(agentId, { workingDirectory: priorWorkdir })
+        },
+      }],
+      {},
+    )
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     // ── G06: Note about local-scope plugins ───────────────────
     console.log(`[ChangeFolder] Agent ${agentId} "${agent.name}": local-scope plugins may need re-linking after folder change`)
@@ -6752,12 +6905,25 @@ export async function ChangeAvatar(
     ops.push(`G02: Agent "${agent.name}" found`)
 
     // ── G03: Write to registry ────────────────────────────────
-    const updated = await updateAgent(agentId, { avatar: avatarPath })
-    if (!updated) {
-      result.error = `Failed to update avatar in registry`
-      return result
-    }
-    ops.push(`G03: Updated avatar in registry`)
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
+    // Nothing abortable follows it, so this compensation is LATENT — written because the runner
+    // refuses a mutating gate without one, and so an abortable gate appended later finds it here.
+    const priorAvatar = agent.avatar
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(
+      [{
+        id: 'G03',
+        what: 'Updated avatar in registry',
+        run: async () => {
+          const updated = await updateAgent(agentId, { avatar: avatarPath })
+          if (!updated) throw new Error('Failed to update avatar in registry')
+        },
+        undo: async () => { await updateAgent(agentId, { avatar: priorAvatar }) },
+      }],
+      {},
+    )
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     await tryEmitLedgerOp(
       'change_avatar',
@@ -6873,12 +7039,35 @@ export async function ChangeMetadata(
     } else {
       payload = metadata
     }
-    const updated = await updateAgent(agentId, { metadata: payload })
-    if (!updated) {
-      result.error = 'Failed to update metadata in registry'
-      return result
-    }
-    ops.push(`EXE: metadata ${mode === 'clear' ? 'cleared' : 'merged'} via updateAgent`)
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
+    // Nothing abortable follows it, so this compensation is LATENT — written because the runner
+    // refuses a mutating gate without one, and so an abortable gate appended later finds it here.
+    //
+    // The restore is a UNION, not a copy of the prior map, because `updateAgent` spread-MERGES
+    // metadata (MF-001 in agent-registry.ts): writing back only the old keys would leave every key
+    // this call ADDED still present. So the undo sets each key the payload touched to `undefined`
+    // and then re-asserts every key that was there before.
+    const priorMetadata = agent.metadata
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(
+      [{
+        id: 'EXE',
+        what: `metadata ${mode === 'clear' ? 'cleared' : 'merged'} via updateAgent`,
+        run: async () => {
+          const updated = await updateAgent(agentId, { metadata: payload })
+          if (!updated) throw new Error('Failed to update metadata in registry')
+        },
+        undo: async () => {
+          const restore: Record<string, unknown> = {}
+          for (const key of Object.keys(payload)) restore[key] = undefined
+          for (const [key, value] of Object.entries(priorMetadata ?? {})) restore[key] = value
+          await updateAgent(agentId, { metadata: restore })
+        },
+      }],
+      {},
+    )
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     // ── PG01: Ledger op ──────────────────────────────────────
     await tryEmitLedgerOp(
@@ -6942,12 +7131,25 @@ export async function ChangeCLIArgs(
     ops.push(`G03: CLI args change needed: "${agent.programArgs || ''}" → "${newArgs}"`)
 
     // ── G04: Write to registry ────────────────────────────────
-    const updated = await updateAgent(agentId, { programArgs: newArgs })
-    if (!updated) {
-      result.error = `Failed to update programArgs in registry`
-      return result
-    }
-    ops.push(`G04: Updated programArgs in registry`)
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
+    // Nothing abortable follows it, so this compensation is LATENT — written because the runner
+    // refuses a mutating gate without one, and so an abortable gate appended later finds it here.
+    const priorArgs = agent.programArgs
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(
+      [{
+        id: 'G04',
+        what: 'Updated programArgs in registry',
+        run: async () => {
+          const updated = await updateAgent(agentId, { programArgs: newArgs })
+          if (!updated) throw new Error('Failed to update programArgs in registry')
+        },
+        undo: async () => { await updateAgent(agentId, { programArgs: priorArgs }) },
+      }],
+      {},
+    )
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     // ── G05: Restart needed ───────────────────────────────────
     result.restartNeeded = true

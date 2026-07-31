@@ -2663,19 +2663,24 @@ export async function ChangeTitle(
     // mutating gate the `undo` and the ctx field it reverses, and routes G22 to the `invariants`
     // hook so a failed final verification REVERTS instead of merely reporting.
     //
-    // THE ARRAY IS BEING FILLED IN SLICES, and today it holds G9a and G14 — the two gates whose
-    // aborts matter most, G14 being the title write itself. The remaining gates of the window
-    // (G10-G13b, G14b-G14e, G14d, G15-G17, G22) still run imperatively BELOW this loop, in their
-    // original order, and move up one at a time. Each move is behaviour-neutral on its own, and a
-    // gate must bring the locals it declares with it: G10's `g10CascadeFailed` and G15's
-    // `currentPluginName`/`targetPluginName`/`targetMarketplace` are read by gates AFTER them, so
-    // those four hoist to just above this array on the move that wraps their declaring gate — not
-    // before, or they collide with the declarations still standing in the imperative tail.
+    // THE ARRAY IS BEING FILLED IN SLICES, and today it holds G9a through G15. The rest of the
+    // window (G16, G16b, G17, G22) still runs imperatively BELOW this loop, in its original
+    // order, and moves up one gate at a time. Each move is behaviour-neutral on its own, and a
+    // gate must bring the locals it declares with it — they hoist to just above this array on the
+    // move that wraps their declaring gate, NOT before: while the declaration still stands in the
+    // imperative tail, an early hoist collides with it (TS2451 "Cannot redeclare block-scoped
+    // variable"), which is exactly how the first attempt at this restructure failed.
 
-    // Declared by G10, read by the TERMINAL — so it hoists here on the slice that wraps G10, and
-    // not one slice earlier: while G10 still stood in the imperative tail, a hoist here collided
-    // with its own `let` (TS2451 "Cannot redeclare block-scoped variable").
+    // Declared by G10, read by the TERMINAL.
     let g10CascadeFailed: string | null = null
+
+    // Declared by G15, read by G16 / G16b / G17 / G19 — every one of which is still imperative
+    // below the loop, so these three are what make the G15 slice different from the ten before
+    // it. `targetMarketplace` keeps its default here rather than inside the gate, because G16
+    // reads it whether or not G15's compatible-plugin branch ever assigned one.
+    let currentPluginName: string | null = null
+    let targetPluginName: string | null = null
+    let targetMarketplace: string = GITHUB_MARKETPLACE_NAME
 
     const gates: Array<{ id: string; what: string; run: () => Promise<void> }> = [
       {
@@ -3202,6 +3207,87 @@ export async function ChangeTitle(
           }
         },
       },
+
+      // ── GATE 15: Determine plugin swap (N:1 compatible-plugins model) ──
+      // Find what plugin the agent currently has installed, and what plugin
+      // is compatible with the NEW title + client combo.
+      //
+      // Its three results (currentPluginName / targetPluginName / targetMarketplace) are
+      // declared ABOVE the array, not here, because G16/G16b/G17/G19 read them from the
+      // imperative tail. That hoist is the whole reason this slice is not a pure move.
+      {
+        id: 'G15',
+        what: 'plugin swap resolved (current vs target for the new title)',
+        run: async () => {
+          if (!options?.skipPluginSync && agentDir && clientSupportsRolePlugins) {
+            // Detect currently installed role-plugin from settings.local.json
+            try {
+              const localSettingsPath = join(agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir, '.claude', 'settings.local.json')
+              if (existsSync(localSettingsPath)) {
+                const settings = await loadJsonSafe(localSettingsPath) as Record<string, Record<string, unknown>>
+                const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+                // Find the first enabled role-plugin
+                for (const key of Object.keys(ep)) {
+                  if (ep[key]) {
+                    const plugName = key.split('@')[0]
+                    // Check if this is a role-plugin (has .agent.toml or is in predefined list)
+                    if (Object.values(TITLE_PLUGIN_MAP).includes(plugName) || (PREDEFINED_ROLE_PLUGIN_NAMES as readonly string[]).includes(plugName)) {
+                      currentPluginName = plugName
+                      break
+                    }
+                  }
+                }
+              }
+            } catch { /* best effort */ }
+            // NOTE the `try` above CLOSES here, before the abort below. That is deliberate and
+            // must stay: G15's only abort sits OUTSIDE it, so converting the abort to a throw
+            // cannot be swallowed by this detection catch and re-reported as "best effort".
+
+            if (effectiveTitle) {
+              // Find compatible plugins for new title + agent client
+              const compatibles = await getCompatiblePluginsForTitle(effectiveTitle, agentClientType)
+              if (compatibles.length > 0) {
+                // If current plugin is already compatible with new title → keep it
+                if (currentPluginName && compatibles.some(p => p.name === currentPluginName)) {
+                  targetPluginName = currentPluginName
+                  ops.push(`G15: Current plugin "${currentPluginName}" is compatible with ${effectiveTitle.toUpperCase()} — keeping`)
+                } else {
+                  // Pick the first compatible plugin
+                  targetPluginName = compatibles[0].name
+                  targetMarketplace = compatibles[0].marketplace || GITHUB_MARKETPLACE_NAME
+                  ops.push(`G15: Selected compatible plugin "${targetPluginName}" for ${effectiveTitle.toUpperCase()}+${agentClientType}`)
+                }
+              } else if (needsPluginConversion) {
+                // No native plugin for this client — use default and mark for conversion
+                const defaultPlugin = getRequiredPluginForTitle(effectiveTitle)
+                if (defaultPlugin) {
+                  targetPluginName = defaultPlugin
+                  ops.push(`G15: No native ${agentClientType} plugin — will install "${defaultPlugin}" (needs conversion)`)
+                }
+              } else {
+                // R9.13 defence in depth: Gate 3 should already have rejected this
+                // path (unreachable for valid titles), but if somehow we reach here,
+                // HARD REJECT rather than proceed to Gate 16 with no plugin.
+                ops.push(`G15: DENIED — no compatible role-plugin for ${effectiveTitle.toUpperCase()} (R9.13: role-plugin is mandatory)`)
+                throw new GateAbort(`role-plugin is mandatory — no compatible plugin for title "${effectiveTitle}" (R9.13 / Gate 15)`)
+              }
+            }
+
+            // Uninstall old if swapping
+            if (currentPluginName && currentPluginName !== targetPluginName) {
+              await uninstallAllRolePlugins(agentDir)
+              result.uninstalledPlugin = currentPluginName
+              ops.push(`G15: Uninstalled old role-plugin "${currentPluginName}"`)
+            } else if (!currentPluginName && agentDir) {
+              // Clean stale role-plugins just in case
+              await uninstallAllRolePlugins(agentDir).catch(() => {})
+              ops.push(`G15: Cleaned stale role-plugins`)
+            }
+          } else {
+            ops.push(`G15: Plugin sync skipped`)
+          }
+        },
+      },
     ]
 
     // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
@@ -3224,81 +3310,15 @@ export async function ChangeTitle(
     // the host with no MANAGER and every team blocked. Nothing between here and there depends on
     // it having run last.
 
-    // ── GATE 15: Determine plugin swap (N:1 compatible-plugins model) ──
-    // Find what plugin the agent currently has installed, and what plugin
-    // is compatible with the NEW title + client combo.
-    let currentPluginName: string | null = null
-    let targetPluginName: string | null = null
-    let targetMarketplace: string = GITHUB_MARKETPLACE_NAME
-
-    if (!options?.skipPluginSync && agentDir && clientSupportsRolePlugins) {
-      // Detect currently installed role-plugin from settings.local.json
-      try {
-        const localSettingsPath = join(agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir, '.claude', 'settings.local.json')
-        if (existsSync(localSettingsPath)) {
-          const settings = await loadJsonSafe(localSettingsPath) as Record<string, Record<string, unknown>>
-          const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-          // Find the first enabled role-plugin
-          for (const key of Object.keys(ep)) {
-            if (ep[key]) {
-              const plugName = key.split('@')[0]
-              // Check if this is a role-plugin (has .agent.toml or is in predefined list)
-              if (Object.values(TITLE_PLUGIN_MAP).includes(plugName) || (PREDEFINED_ROLE_PLUGIN_NAMES as readonly string[]).includes(plugName)) {
-                currentPluginName = plugName
-                break
-              }
-            }
-          }
-        }
-      } catch { /* best effort */ }
-
-      if (effectiveTitle) {
-        // Find compatible plugins for new title + agent client
-        const compatibles = await getCompatiblePluginsForTitle(effectiveTitle, agentClientType)
-        if (compatibles.length > 0) {
-          // If current plugin is already compatible with new title → keep it
-          if (currentPluginName && compatibles.some(p => p.name === currentPluginName)) {
-            targetPluginName = currentPluginName
-            ops.push(`G15: Current plugin "${currentPluginName}" is compatible with ${effectiveTitle.toUpperCase()} — keeping`)
-          } else {
-            // Pick the first compatible plugin
-            targetPluginName = compatibles[0].name
-            targetMarketplace = compatibles[0].marketplace || GITHUB_MARKETPLACE_NAME
-            ops.push(`G15: Selected compatible plugin "${targetPluginName}" for ${effectiveTitle.toUpperCase()}+${agentClientType}`)
-          }
-        } else if (needsPluginConversion) {
-          // No native plugin for this client — use default and mark for conversion
-          const defaultPlugin = getRequiredPluginForTitle(effectiveTitle)
-          if (defaultPlugin) {
-            targetPluginName = defaultPlugin
-            ops.push(`G15: No native ${agentClientType} plugin — will install "${defaultPlugin}" (needs conversion)`)
-          }
-        } else {
-          // R9.13 defence in depth: Gate 3 should already have rejected this
-          // path (unreachable for valid titles), but if somehow we reach here,
-          // HARD REJECT rather than proceed to Gate 16 with no plugin.
-          ops.push(`G15: DENIED — no compatible role-plugin for ${effectiveTitle.toUpperCase()} (R9.13: role-plugin is mandatory)`)
-          result.error = `role-plugin is mandatory — no compatible plugin for title "${effectiveTitle}" (R9.13 / Gate 15)`
-          return result
-        }
-      }
-
-      // Uninstall old if swapping
-      if (currentPluginName && currentPluginName !== targetPluginName) {
-        await uninstallAllRolePlugins(agentDir)
-        result.uninstalledPlugin = currentPluginName
-        ops.push(`G15: Uninstalled old role-plugin "${currentPluginName}"`)
-      } else if (!currentPluginName && agentDir) {
-        // Clean stale role-plugins just in case
-        await uninstallAllRolePlugins(agentDir).catch(() => {})
-        ops.push(`G15: Cleaned stale role-plugins`)
-      }
-    } else {
-      ops.push(`G15: Plugin sync skipped`)
-    }
-
     // ── GATE 16: Install new role-plugin ─────────────────────
     if (!options?.skipPluginSync && clientSupportsRolePlugins && targetPluginName && agentDir && targetPluginName !== currentPluginName) {
+      // The guard above proves `targetPluginName` is non-null, but G15 now assigns it from INSIDE
+      // its gate closure, and TypeScript drops the narrowing of any `let` that a nested function
+      // writes — so the proof is lost again inside the `() => adapter.install(...)` thunk below.
+      // Bind it once here: a const carries the guard's proof into every callback, where a `!`
+      // would only silence the checker and would stop protecting this call site the day the
+      // guard changes.
+      const resolvedPluginName: string = targetPluginName
       try {
         if (needsPluginConversion) {
           // Non-Claude client: convert plugin to target format and install via adapter
@@ -3313,7 +3333,7 @@ export async function ChangeTitle(
             const adapter = await getAdapter(targetClientType)
             if (adapter) {
               const installResult = await inAdapterContext('ChangeTitle', () => adapter.install(
-                { name: targetPluginName, clientType: targetClientType, storageDir: emittedDir, providerId: targetPid },
+                { name: resolvedPluginName, clientType: targetClientType, storageDir: emittedDir, providerId: targetPid },
                 agentDir,
                 { scope: 'local' }
               ))

@@ -283,20 +283,50 @@ export async function revokeTokensForSubject(agentId: string): Promise<number> {
 }
 
 /**
+ * Handle returned by `revokeTokensFromIssuerCompensable` so an all-in-one pipeline can undo an
+ * issuer-wide revocation without carrying token rows in its own ctx (R51.4 — "unrevertable" is
+ * almost always a MISSING SNAPSHOT). The compensation lives HERE rather than in the caller because
+ * `loadPortfolio`/`savePortfolio` mutate under `withLock('portfolios')`; exporting the writer so a
+ * pipeline could snapshot-and-restore from outside would bypass that serialization.
+ *
+ * Unlike the AID token store this mutation FLIPS a field rather than removing rows, so the undo
+ * needs only the identities it touched — not the rows themselves.
+ */
+export interface PortfolioIssuerRevocation {
+  /** How many tokens this call flipped active → revoked. */
+  count: number
+  /**
+   * Flip exactly the tokens this call revoked back to `active`. Idempotent: a row already back
+   * (undo ran twice) or deleted meanwhile is skipped, so only a row THIS call moved is moved back.
+   *
+   * An EXPIRED token IS restored here, deliberately unlike `revokeTokensForAgentCompensable`.
+   * BOTH stores prune on load, so "this one doesn't prune" is NOT the reason and would be false —
+   * the reason is that they prune by different means. `loadTokens` prunes by REMOVING rows and
+   * `saveTokens` persists that, so re-inserting an expired row there writes a row the next read
+   * drops. `pruneStatuses` (:78) only DERIVES a status: it flips `active` → `expired` in memory and
+   * never touches a `revoked` row or removes anything. So flipping this row back to `active`
+   * reproduces the exact bytes that would be on disk had the revoke never happened, and the very
+   * next read still reports it expired. Leaving it `revoked` is the state that would be WRONG.
+   * Returns how many it restored.
+   */
+  restore: () => Promise<number>
+}
+
+/**
  * Revoke every active token an issuer ever minted, across ALL subjects (e.g.
- * the issuer was demoted out of manager/COS, or deleted). Walks every
- * portfolio file on disk because an issuer's grants live in its SUBJECTS'
+ * the issuer was demoted out of manager/COS, or deleted), returning a handle that can undo it.
+ * Walks every portfolio file on disk because an issuer's grants live in its SUBJECTS'
  * files, not its own.
  */
-export async function revokeTokensFromIssuer(issuerId: string): Promise<number> {
-  let count = 0
+export async function revokeTokensFromIssuerCompensable(issuerId: string): Promise<PortfolioIssuerRevocation> {
+  const flipped: Array<{ subjectId: string; tokenId: string }> = []
   await withLock('portfolios', () => {
     for (const subjectId of listSubjectIds()) {
       const tokens = loadPortfolio(subjectId)
       let touched = false
       const next = tokens.map(t => {
         if (t.issuer_agent_id === issuerId && t.status === 'active') {
-          count++
+          flipped.push({ subjectId, tokenId: t.token_id })
           touched = true
           return { ...t, status: 'revoked' as const }
         }
@@ -305,7 +335,49 @@ export async function revokeTokensFromIssuer(issuerId: string): Promise<number> 
       if (touched) savePortfolio(subjectId, next)
     }
   })
-  return count
+  return { count: flipped.length, restore: () => restoreIssuerTokens(flipped) }
+}
+
+/** Flip the named rows back to `active`. Module-private: the identities never leave this file. */
+async function restoreIssuerTokens(flipped: Array<{ subjectId: string; tokenId: string }>): Promise<number> {
+  if (flipped.length === 0) return 0
+
+  // Group by subject so each portfolio file is read and written ONCE. Flipping row-by-row would
+  // re-read and re-save the same file per token — N writes where one will do, under a held lock.
+  const bySubject = new Map<string, Set<string>>()
+  for (const { subjectId, tokenId } of flipped) {
+    const ids = bySubject.get(subjectId) ?? new Set<string>()
+    ids.add(tokenId)
+    bySubject.set(subjectId, ids)
+  }
+
+  let restored = 0
+  await withLock('portfolios', () => {
+    for (const [subjectId, ids] of bySubject) {
+      const tokens = loadPortfolio(subjectId)
+      let touched = false
+      const next = tokens.map(t => {
+        // `status === 'revoked'` is the idempotency guard: a second undo finds them already active
+        // and moves nothing, so a partial run is safe to repeat.
+        if (ids.has(t.token_id) && t.status === 'revoked') {
+          restored++
+          touched = true
+          return { ...t, status: 'active' as const }
+        }
+        return t
+      })
+      if (touched) savePortfolio(subjectId, next)
+    }
+  })
+  return restored
+}
+
+/**
+ * Revoke every active token an issuer ever minted.
+ * Delegates to the compensable form so there is ONE implementation of the revocation.
+ */
+export async function revokeTokensFromIssuer(issuerId: string): Promise<number> {
+  return (await revokeTokensFromIssuerCompensable(issuerId)).count
 }
 
 /**

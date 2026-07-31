@@ -18,11 +18,12 @@
  * containment positively rather than trusting it.
  */
 import { describe, it, expect, vi, afterAll } from 'vitest'
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'fs'
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { AMPApiKeyRecord } from '@/lib/types/amp'
 import type { AIDTokenRecord } from '@/lib/aid-token'
+import type { PortfolioToken } from '@/types/portfolio'
 
 const { FAKE_HOME, FAKE_STATE } = vi.hoisted(() => {
   const os = require('os') as typeof import('os')
@@ -40,6 +41,7 @@ vi.mock('@/lib/ecosystem-constants', async (importOriginal) => {
 
 const API_KEYS_FILE = join(FAKE_STATE, 'amp-api-keys.json')
 const TOKENS_FILE = join(FAKE_STATE, 'governance-tokens', 'active-tokens.json')
+const PORTFOLIOS_DIR = join(FAKE_STATE, 'agents', 'portfolios')
 
 afterAll(() => {
   rmSync(FAKE_STATE, { recursive: true, force: true })
@@ -99,9 +101,57 @@ async function loadAid(seed: AIDTokenRecord[]) {
   return import('@/lib/aid-token')
 }
 
+function pToken(
+  subjectId: string,
+  issuerId: string,
+  suffix: string,
+  status: PortfolioToken['status'] = 'active',
+  expiresAt: string | null = null,
+): PortfolioToken {
+  return {
+    token_id: `tok-${suffix}`,
+    kind: 'mandate',
+    subject_agent_id: subjectId,
+    scope: 'agent:create',
+    issuer_agent_id: issuerId,
+    issuer_title: 'manager',
+    uses_remaining: null,
+    issued_at: '2026-07-01T00:00:00.000Z',
+    expires_at: expiresAt,
+    issuer_sig: 'sig',
+    ledger_seq: null,
+    status,
+  }
+}
+
+/**
+ * Seed one file per subject and import the module FRESH (5 s in-memory cache, same reason as above).
+ *
+ * The WIPE is load-bearing, not hygiene: `listSubjectIds()` walks the directory, so a subject file
+ * left by the previous test would be picked up as a live portfolio and counted — a cross-test
+ * contamination the other two loaders cannot have, because they each own a single fixed file.
+ */
+async function loadPortfolios(seed: Record<string, PortfolioToken[]>) {
+  vi.resetModules()
+  mkdirSync(PORTFOLIOS_DIR, { recursive: true })
+  for (const f of readdirSync(PORTFOLIOS_DIR)) rmSync(join(PORTFOLIOS_DIR, f), { force: true })
+  for (const [subjectId, tokens] of Object.entries(seed)) {
+    writeFileSync(
+      join(PORTFOLIOS_DIR, `${subjectId}.json`),
+      JSON.stringify({ agent_id: subjectId, tokens, updated_at: '2026-07-01T00:00:00.000Z' }, null, 2),
+    )
+  }
+  return import('@/lib/portfolio-store')
+}
+
 /** Read the store back from DISK, not from the module — the assertion must not trust the cache. */
 const keysOnDisk = (): AMPApiKeyRecord[] => JSON.parse(readFileSync(API_KEYS_FILE, 'utf-8'))
 const tokensOnDisk = (): AIDTokenRecord[] => JSON.parse(readFileSync(TOKENS_FILE, 'utf-8'))
+
+/** Status of the seeded portfolio token with this suffix, read from that subject's file on disk. */
+const statusById = (subjectId: string, suffix: string): PortfolioToken['status'] | undefined =>
+  (JSON.parse(readFileSync(join(PORTFOLIOS_DIR, `${subjectId}.json`), 'utf-8')).tokens as PortfolioToken[])
+    .find(t => t.token_id === `tok-${suffix}`)?.status
 
 /** Status of the seeded key with this suffix, read from disk. */
 const statusOf = (suffix: string): AMPApiKeyRecord['status'] | undefined =>
@@ -308,18 +358,138 @@ describe('revokeTokensForAgent (delegating form)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// lib/portfolio-store.ts — status flip across MANY subject files (TRDD-DQ6XN2VP)
+//
+// The third store, and a third shape. amp-auth flips one file; aid-token removes rows from one
+// file; this one flips rows across EVERY subject's file, because an issuer's grants live in its
+// SUBJECTS' portfolios, not its own. ChangeTitle G14e (:2929) calls it when an agent loses issuer
+// authority, and until now it returned only a count — so the pipeline had nothing to undo with.
+// ---------------------------------------------------------------------------
+
+describe('revokeTokensFromIssuerCompensable', () => {
+  it('flips only the named issuer\'s ACTIVE tokens, across every subject, and reports how many', async () => {
+    const pf = await loadPortfolios({
+      'subject-1': [pToken('subject-1', 'boss', 'a'), pToken('subject-1', 'other-boss', 'b')],
+      'subject-2': [pToken('subject-2', 'boss', 'c')],
+    })
+
+    expect((await pf.revokeTokensFromIssuerCompensable('boss')).count).toBe(2)
+
+    expect(statusById('subject-1', 'a')).toBe('revoked')
+    expect(statusById('subject-1', 'b')).toBe('active')   // different issuer — untouched
+    expect(statusById('subject-2', 'c')).toBe('revoked')  // the cross-file half
+  })
+
+  it('restores exactly what it flipped, and nothing else', async () => {
+    const pf = await loadPortfolios({
+      'subject-1': [pToken('subject-1', 'boss', 'a'), pToken('subject-1', 'other-boss', 'b')],
+      'subject-2': [pToken('subject-2', 'boss', 'c')],
+    })
+
+    const revocation = await pf.revokeTokensFromIssuerCompensable('boss')
+    expect(await revocation.restore()).toBe(2)
+
+    expect(statusById('subject-1', 'a')).toBe('active')
+    expect(statusById('subject-1', 'b')).toBe('active')
+    expect(statusById('subject-2', 'c')).toBe('active')
+  })
+
+  it('leaves a token that was ALREADY revoked before the call still revoked', async () => {
+    const pf = await loadPortfolios({
+      'subject-1': [pToken('subject-1', 'boss', 'a', 'revoked'), pToken('subject-1', 'boss', 'b')],
+    })
+
+    const revocation = await pf.revokeTokensFromIssuerCompensable('boss')
+    expect(revocation.count).toBe(1)          // only the ACTIVE one was this call's to flip
+    expect(await revocation.restore()).toBe(1)
+
+    // The pre-revoked row must NOT be resurrected: restoring it would GRANT authority the caller
+    // never held, which is a rollback that hands out more than it took away.
+    expect(statusById('subject-1', 'a')).toBe('revoked')
+    expect(statusById('subject-1', 'b')).toBe('active')
+  })
+
+  /**
+   * The deliberate DIVERGENCE from `revokeTokensForAgentCompensable`, pinned so nobody "fixes" this
+   * into agreement with its sibling. BOTH stores prune on load — the difference is HOW. `loadTokens`
+   * REMOVES expired rows and `saveTokens` persists that, so re-inserting one writes a row the next
+   * read drops. `pruneStatuses` only DERIVES a status in memory (`active` → `expired`), never
+   * touching a `revoked` row and never removing one — so restoring to `active` reproduces the exact
+   * bytes that would be on disk had the revoke never happened, and the next read still reports it
+   * expired.
+   *
+   * The assertion reads RAW JSON deliberately: the stored byte is the thing being restored, and
+   * reading it back through `loadPortfolio` would show the derived `expired` and hide the bug this
+   * pins in either direction.
+   */
+  it('DOES restore a token that expired between the revoke and the restore', async () => {
+    vi.useFakeTimers()
+    try {
+      const start = new Date('2026-07-30T12:00:00.000Z')
+      vi.setSystemTime(start)
+
+      const pf = await loadPortfolios({
+        'subject-1': [pToken('subject-1', 'boss', 'a', 'active', new Date(start.getTime() + 3_600_000).toISOString())],
+      })
+
+      const revocation = await pf.revokeTokensFromIssuerCompensable('boss')
+      expect(revocation.count).toBe(1)
+
+      vi.setSystemTime(new Date(start.getTime() + 5_400_000)) // +1h30 — the token has now expired
+
+      expect(await revocation.restore()).toBe(1)
+      expect(statusById('subject-1', 'a')).toBe('active')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('is idempotent — a second restore changes nothing', async () => {
+    const pf = await loadPortfolios({ 'subject-1': [pToken('subject-1', 'boss', 'a')] })
+
+    const revocation = await pf.revokeTokensFromIssuerCompensable('boss')
+    expect(await revocation.restore()).toBe(1)
+    expect(await revocation.restore()).toBe(0)
+    expect(statusById('subject-1', 'a')).toBe('active')
+  })
+
+  it('reports 0 and restores 0 when the issuer minted nothing', async () => {
+    const pf = await loadPortfolios({ 'subject-1': [pToken('subject-1', 'other-boss', 'a')] })
+
+    const revocation = await pf.revokeTokensFromIssuerCompensable('boss')
+    expect(revocation.count).toBe(0)
+    expect(await revocation.restore()).toBe(0)
+    expect(statusById('subject-1', 'a')).toBe('active')
+  })
+})
+
+describe('revokeTokensFromIssuer (delegating form)', () => {
+  it('keeps its count-returning contract for its existing callers', async () => {
+    const pf = await loadPortfolios({
+      'subject-1': [pToken('subject-1', 'boss', 'a'), pToken('subject-1', 'boss', 'b')],
+      'subject-2': [pToken('subject-2', 'other-boss', 'c')],
+    })
+
+    expect(await pf.revokeTokensFromIssuer('boss')).toBe(2)
+    expect(statusById('subject-2', 'c')).toBe('active')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Containment, proved rather than assumed
 // ---------------------------------------------------------------------------
 
 describe('0-IMPACT containment', () => {
-  it('wrote both stores under the fake state dir, which is under the OS temp dir', async () => {
+  it('wrote all three stores under the fake state dir, which is under the OS temp dir', async () => {
     await loadAmp([apiKey('agent-a', 'a', 'active')])
     await loadAid([token('agent-a', 'a', FUTURE())])
+    await loadPortfolios({ 'subject-1': [pToken('subject-1', 'boss', 'a')] })
 
     // POSITIVE proof: the artifacts are HERE. An "the real home is untouched" assertion alone
     // passes just as happily when the mock silently failed and the test wrote nothing at all.
     expect(existsSync(API_KEYS_FILE)).toBe(true)
     expect(existsSync(TOKENS_FILE)).toBe(true)
+    expect(existsSync(join(PORTFOLIOS_DIR, 'subject-1.json'))).toBe(true)
     expect(FAKE_STATE.startsWith(tmpdir()) || FAKE_STATE.startsWith('/private')).toBe(true)
   })
 })

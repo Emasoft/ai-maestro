@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T08:10:36+0200
+updated: 2026-07-31T08:20:03+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -78,6 +78,68 @@ necessary and not sufficient: it finds a window that a rule may then FORBID you 
 `InstallElement`'s mutations pass the first test and fail the second, one of them against a rule
 marked **Explicit**. Had I retrofitted by op count I would have written a compensation that deletes
 a user-owned source folder and called it R51 compliance.
+
+### THE `ChangeTitle` WINDOW MAP — measured 2026-07-31, before touching a line of it
+
+`services/element-management-service.ts:2286-3505` (1219 lines, 131 gate ops). The mutation sites
+are measured from the call sites; the **undo column is the DESIGN, not yet implemented**.
+
+**⚠ THE LABEL ORDER IS NOT THE EXECUTION ORDER, and building the gate array from the labels would
+destroy a tested safety property.** `G14` — the `updateAgent({governanceTitle})` write — is at
+**:2685**, which executes **BEFORE** `G10`-`G13b` at **:2736-2847**. This is deliberate, commented at
+length (:2651-2671), and pinned by a test (`2e099953`, TRDD-EE5YX5LF — *"the G14-before-G10 ordering
+that keeps a failed demotion harmless"*). Its own words:
+
+> Running it FIRST makes such a failure a clean no-op instead. … the residual failure mode inverts to
+> the strictly milder one — if the title lands and a later governance write throws, the result is a
+> STALE manager pointer (visible, non-blocking, one call to repair) rather than NO manager (invisible
+> until the next team operation, and blocking everything).
+
+**And this ordering SURVIVES the retrofit — it is not replaced by rollback.** It defends against
+*process death* mid-pipeline, and rollback machinery does not survive a crash. Same argument the card
+already recorded for `DeleteAgent`'s G06 (*"moving revocation after the registry write is a security
+regression"*): a compensation covers a THROW, never a `kill -9`, so a crash-safe ordering and a
+compensation are orthogonal defences and the retrofit must keep both.
+
+| # | gate | line | mutates | undo (design) |
+|---|---|---|---|---|
+| 1 | G03 | :2402 | `updateAgent({program})` — auto-fix an empty program | restore prior `program` |
+| 2 | G06b / G9a | :2494, :2645 | `updateAgent({githubRepo})` | restore prior `githubRepo` |
+| 3 | **G14** | **:2685** | **`updateAgent({governanceTitle})` — THE title write** | restore `oldTitle` |
+| 4 | G10 | :2736-2741 | `removeManager()` + **`blockAllTeams()` — hibernates every team agent** | `unblockAllTeams()` + re-wake each. **`blockAllTeams()` RETURNS the hibernated list**, so the snapshot R51.4 asks for already exists. Each wake can fail ⇒ the honest R51.5 CRITICAL path. |
+| 5 | G11 | :2758, :2774 | `updateTeam({chiefOfStaffId: null})` + `rejectGovernanceRequest` | restore the pointer; un-reject is a 3-field row restore (same shape verified for `DeleteAgent` G07) |
+| 6 | G12 | :2796 | `updateTeam({orchestratorId: null})` | restore the pointer |
+| 7 | G13 / G13b | :2814, :2846-2849 | set manager in `governance.json`, `unblockAllTeams`, re-point team COS/ORCH | restore prior manager + prior pointers |
+| 8 | G14b | :2905 | `revokeTokensForAgent` (AID) | **the compensable twin ALREADY EXISTS** — `lib/aid-token.ts:542 revokeTokensForAgentCompensable` returns the removed `AIDTokenRecord[]`; `:587 revokeTokensForAgent` is a count-only wrapper. Built for `DeleteAgent`; ChangeTitle just calls the wrong one. Free win. |
+| 9 | G14e | :2929 | `revokeTokensFromIssuer` (portfolio) | **BUILT 2026-07-31** — `revokeTokensFromIssuerCompensable` + a delegating count-only `revokeTokensFromIssuer`, mirroring the aid-token seam. Lossless `active → revoked` flip, undone from the touched `(subjectId, token_id)` list; 7 tests, 4 neuters. |
+| 10 | G16 / G17 | :3193, :3272, :3317, :3327 | `installPluginLocally` ×4 | uninstall the installed plugin (shape D2 already ruled: CLI-uninstall with a CLI-reinstall undo) |
+| 11 | G16b | :3231 | `updateAgent({programArgs})` — rewrites the `--agent` flag | restore prior `programArgs` |
+| 12 | G17 | :3282-3285 | `updateAgent({roleMissing})` + `hibernateAgent` + ledger | restore the flag + re-wake |
+
+**The two entries that make this pipeline the one worth doing** are #4 and #10: a failure anywhere
+after G10 leaves the host with teams blocked and the fleet hibernated, and a failure after G16 leaves
+a titled agent with the wrong role-plugin — R9.13 violated by the very pipeline that enforces it.
+Nothing in the eight conformance-only pipelines is remotely this wide.
+
+**The one missing primitive is now BUILT** (2026-07-31): `lib/portfolio-store.ts` grew
+`revokeTokensFromIssuerCompensable`, so both token stores G14b/G14e touch can be undone. It landed
+standalone, under the current hand-rolled structure, which is the point — a compensable primitive is
+useful and testable before any restructuring, and it is the half of the retrofit that carries real
+risk if rushed.
+
+**Its expiry rule DIVERGES from the aid-token twin, deliberately, and the reason is not the obvious
+one.** I first wrote *"`loadPortfolio` prunes nothing"*; it prunes, and the module header says so.
+Both stores prune — the difference is HOW. `loadTokens` prunes by REMOVING rows and `saveTokens`
+persists that, so re-inserting an expired row writes a row the next read drops. `pruneStatuses`
+(`lib/portfolio-store.ts:78`) only DERIVES a status in memory (`active → expired`), never touching a
+`revoked` row and never removing one — so restoring to `active` reproduces the exact bytes that would
+be on disk had the revoke never happened. Skipping it is what would be inexact. A neuter that
+"fixes" this into agreement with the sibling reds exactly one named test.
+
+**NEXT ACTION:** the retrofit proper — restructure into `runAioPipeline` PRE/EXE/POST, preserving the
+G14-first ordering above. **Do NOT switch G14b/G14e to the compensable forms yet:** without a `ctx` to
+hold the returned handle there is nowhere to register the undo, so the switch would be churn that
+LOOKS like progress. It belongs in the same change that introduces the gate array.
 
 **NUMBERS IN THE 2026-07-30 BLOCK BELOW ARE STALE — do NOT carry them forward.** It says 14 to go and
 `MAX_HANDROLLED = 14`; both are now **10**, and `CreateAgent`, `ChangeTeam`, `DeleteTeam` have since

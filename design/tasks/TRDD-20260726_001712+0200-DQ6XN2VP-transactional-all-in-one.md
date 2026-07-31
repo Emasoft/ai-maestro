@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T20:09:49+0200
+updated: 2026-07-31T20:16:48+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -1628,7 +1628,13 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       reachable and is pinned by a neuter. **The box stays open on `InstallElement` alone, and it is
       not a ninth of the same:** it is the pipeline other retrofitted pipelines CALL, and three of
       its pre-EXE mutations are ones a compensation is FORBIDDEN (R20.31, Explicit) or harmful to
-      reverse. It wants its own card — do not fold it into a "finish the last one" session
+      reverse. **Its card now exists: `TRDD-YAGRX7W3`** (`design/tasks/`, `column: planned`), which
+      also CORRECTS two things measured wrong here — the `rm ×1` in the table below is a phantom
+      (`InstallElement` calls no `rm`/`rmSync`/`unlink` at all, so the itemisation summed to 14
+      against its own total of 13), and the `PG03 (:1253)` / `PG07 (:1448)` cites point at neither
+      the lock nor the write (actual: 1244/1258 and 1441/1453) and were already wrong when written,
+      since `InstallElement` has not moved since. Do not fold it into a "finish the last one"
+      session
 - [x] An enforceable ratchet for `AIO-TXN-10` — `tests/governance/aio-txn-10-runner-coverage.test.ts`
       discovers the inventory from the AST and fails when a pipeline hand-rolls beyond
       `MAX_HANDROLLED`. NOT the parity box below: this asks "is it under the runner", which is

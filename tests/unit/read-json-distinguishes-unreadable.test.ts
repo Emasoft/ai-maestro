@@ -35,14 +35,14 @@ afterAll(async () => {
 
 describe('readJson — "not there" and "does not parse" are different answers', () => {
   it('a MISSING file reports `missing` — the case whose {} default the write paths depend on', async () => {
-    const { readJson } = await import('@/services/element-management-service')
+    const { readJson } = await import('@/lib/json-io')
     const read = await readJson(join(dir, 'nope.json'))
     expect(read.ok).toBe(false)
     expect(read.ok === false && read.reason).toBe('missing')
   })
 
   it('an UNREADABLE file reports `unreadable`, carrying the parse error', async () => {
-    const { readJson } = await import('@/services/element-management-service')
+    const { readJson } = await import('@/lib/json-io')
     const read = await readJson(join(dir, 'corrupt.json'))
     expect(read.ok).toBe(false)
     expect(read.ok === false && read.reason).toBe('unreadable')
@@ -50,7 +50,7 @@ describe('readJson — "not there" and "does not parse" are different answers', 
   })
 
   it('THE DISTINCTION — the two failures do not answer the same thing', async () => {
-    const { readJson } = await import('@/services/element-management-service')
+    const { readJson } = await import('@/lib/json-io')
     const missing = await readJson(join(dir, 'nope.json'))
     const corrupt = await readJson(join(dir, 'corrupt.json'))
     // A reader that collapses them (or that fails for everything) makes this equal.
@@ -58,24 +58,22 @@ describe('readJson — "not there" and "does not parse" are different answers', 
   })
 
   it('POSITIVE CONTROL — a valid file still parses, so the failures above are not universal', async () => {
-    const { readJson } = await import('@/services/element-management-service')
+    const { readJson } = await import('@/lib/json-io')
     const read = await readJson(join(dir, 'valid.json'))
     expect(read.ok).toBe(true)
     expect(read.ok === true && read.data.enabledPlugins).toEqual({ 'a@b': true })
   })
 
-  it('loadJsonSafe keeps its lenient contract for BOTH failures — 36 call sites depend on it', async () => {
-    const mod = await import('@/services/element-management-service') as unknown as {
-      loadJsonSafe?: (p: string) => Promise<Record<string, unknown>>
-    }
-    // Not exported (deliberately — only the strict reader is). Assert the contract through the one
-    // consumer shape that is observable: the lenient default is what `readJson`'s failure maps to.
-    expect(mod.loadJsonSafe).toBeUndefined()
-    const { readJson } = await import('@/services/element-management-service')
+  it('loadJsonSafe keeps its lenient contract for BOTH failures — every write path depends on it', async () => {
+    // Asserted on the REAL function now that `lib/json-io` owns it (TRDD-CS25TA6W). The earlier
+    // version could only assert the contract indirectly, because the lenient reader was private to
+    // the service — so it checked that the symbol was absent, which is a claim about MODULE SHAPE
+    // and would have stayed green through any change to what the function actually returns.
+    const { loadJsonSafe } = await import('@/lib/json-io')
     for (const f of ['nope.json', 'corrupt.json']) {
-      const read = await readJson(join(dir, f))
-      const lenient = read.ok ? read.data : {}
-      expect(lenient).toEqual({})
+      expect(await loadJsonSafe(join(dir, f))).toEqual({})
     }
+    // …and it is DERIVED, not parallel: the valid file's data comes back unchanged.
+    expect(await loadJsonSafe(join(dir, 'valid.json'))).toEqual({ enabledPlugins: { 'a@b': true } })
   })
 })

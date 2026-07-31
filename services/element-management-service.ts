@@ -358,142 +358,15 @@ function logDegradedOps(pipeline: string, subject: string, ops: string[]): void 
 }
 
 // ── JSON helpers ──────────────────────────────────────────────
-
-/**
- * A JSON read that says WHY it has no data (TRDD-K71FV649).
- *
- * `loadJsonSafe` answers `{}` to two different questions — "the file is not there" and "the file is
- * there and does not parse" — and every verification built on it therefore reads UNREADABLE as
- * ABSENT. That is not hypothetical: it is what kept `InstallElement`'s PG01 outside its R51 window
- * and `ChangePlugin`'s G11 un-promoted, because in both an aborting check would have destroyed
- * correct state on the strength of a file it could not read.
- *
- * A missing settings file legitimately means "nothing enabled", so the lenient default is CORRECT
- * for the write paths and is kept exactly as it was. What was missing is a way to ask the sharper
- * question.
- */
-export type JsonRead =
-  | { ok: true; data: Record<string, unknown> }
-  | { ok: false; reason: 'missing' | 'unreadable'; error?: string }
-
-/** Exported for `tests/unit/read-json-distinguishes-unreadable.test.ts` — the distinction it makes
- *  is the whole point of the helper, and a distinction nothing asserts is one that can vanish. */
-export async function readJson(path: string): Promise<JsonRead> {
-  if (!existsSync(path)) return { ok: false, reason: 'missing' }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(await readFile(path, 'utf-8'))
-  } catch (err) {
-    return { ok: false, reason: 'unreadable', error: err instanceof Error ? err.message : String(err) }
-  }
-  // A PARSE that succeeds is not yet a USABLE settings object: `[]`, `null`, `42` and `"str"` all
-  // parse, and the `data: Record<string, unknown>` above would be a type LIE for every one of them.
-  // Every caller then does `settings.enabledPlugins = ep` — which silently attaches a key to an
-  // array, or throws a TypeError on null, and in both cases the read-modify-write goes on to
-  // OVERWRITE the file with the result. `lib/claude-settings-enforcer.ts:121-128` already refuses
-  // exactly this shape ("settings.json is not a JSON object; refusing to write"); this is the same
-  // ruling, applied at the reader so every consumer inherits it.
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {
-      ok: false,
-      reason: 'unreadable',
-      error: `parses as ${Array.isArray(parsed) ? 'an array' : parsed === null ? 'null' : typeof parsed}, not a JSON object`,
-    }
-  }
-  return { ok: true, data: parsed as Record<string, unknown> }
-}
-
-/**
- * The lenient reader, now DERIVED from `readJson` rather than parallel to it.
- *
- * Its contract is unchanged — 36 call sites in this file depend on the `{}` default and none of
- * them is touched — but there is now exactly ONE parse in one place, so the strict and lenient
- * answers cannot drift apart. That is the whole reason this shape was chosen over a second
- * hand-written strict reader.
- */
-async function loadJsonSafe(path: string): Promise<Record<string, unknown>> {
-  const read = await readJson(path)
-  return read.ok ? read.data : {}
-}
-
-/** Thrown by `saveJsonSafe` when the target exists and cannot be read. Its own class so a caller can
- *  tell "I refused to clobber an unreadable file" from any other write failure. */
-export class UnreadableTargetError extends Error {
-  constructor(public readonly path: string, public readonly cause: string) {
-    super(`${path} exists but does not parse (${cause}); refusing to overwrite it — the state is UNKNOWN, not absent`)
-    this.name = 'UnreadableTargetError'
-  }
-}
-
-/**
- * EXPORTED FOR ITS TEST ONLY — not an API. `tests/unit/save-json-safe-refuses-clobber.test.ts`
- * asserts the refusal against a REAL corrupt file on disk, and the assertion that matters is that
- * the bytes are UNCHANGED afterward — which a mocked `fs` cannot see (the advisor named exactly that
- * shape as the vacuous one). This mirrors `lib/claude-settings-enforcer.ts`, whose identical ruling
- * is pinned the same way. `tests/governance/save-json-safe-not-an-api.test.ts` fails if any other
- * source file imports it, so "exported for the test" cannot quietly become "exported for use".
- */
-export async function saveJsonSafe(path: string, data: Record<string, unknown>): Promise<void> {
-  // ── TRDD-K71FV649: NEVER overwrite a file we could not read ──
-  //
-  // MEASURED 2026-07-31: **21 of 21** `saveJsonSafe` calls in this file are read-modify-write fed by
-  // `loadJsonSafe` of the SAME path, and 4 of them target `~/.claude/settings.json` — the human
-  // user's own global Claude Code config. `loadJsonSafe` answers `{}` to "does not parse", so on a
-  // corrupt file every one of those sites builds a minimal object out of nothing and this atomic
-  // write REPLACES the file — destroying every other key it held. G10 (:4888) is the worst shape:
-  // it reads `{}`, concludes "plugin missing after install", logs `writing safeguard`, and truncates
-  // the file. The ops line reads like a REPAIR.
-  //
-  // The guard lives HERE, not at the 21 call sites, for one decisive reason: the R51 compensations
-  // call `saveJsonSafe` DIRECTLY with a snapshot (ChangeHook's undo at :6467 writes `c.prior`, which
-  // is `structuredClone`d from the same blind read — so on a corrupt file the ROLLBACK restores `{}`
-  // and destroys the file it was meant to protect). A per-call-site read guard cannot see that path;
-  // the write primitive is the only choke point both the forward and the undo paths traverse. It
-  // also covers every FUTURE call site, which is the property a call-site fix can never have.
-  //
-  // This is not a new policy — it is the ruling `lib/claude-settings-enforcer.ts:112-119` already
-  // made ("Corrupt JSON — NEVER overwrite. A blind merge-and-write here would destroy whatever the
-  // user actually has"), pinned by its own test, and never extended to this family.
-  //
-  // `missing` stays the normal create path: a first-run settings file must still be creatable.
-  //
-  // KNOWN over-report (accepted): when a forward gate throws here, its undo throws here too — the
-  // file is still corrupt on disk — so the runner reports a FAILED compensation (R51.5 CRITICAL)
-  // over a disk that is byte-identical to where it started. Alarming and true; the alternative is
-  // the undo writing `{}` over the user's file, which is the bug.
-  const existing = await readJson(path)
-  if (!existing.ok && existing.reason === 'unreadable') {
-    throw new UnreadableTargetError(path, existing.error ?? 'unknown parse error')
-  }
-
-  // MAJ-01 fix (2026-05-04) — atomic write via tmp + rename.
-  // Previous version wrote directly to `path`. A crash mid-write
-  // (OOM kill, SIGKILL, power cut) left the JSON file partially
-  // written, which is unrecoverable for downstream loaders that
-  // strict-parse it (registry.json, teams.json, settings.local.json).
-  // The write-tmp + rename pattern is atomic on POSIX same-filesystem
-  // moves: a reader either sees the old content or the new content,
-  // never a torn file. The tmp filename embeds pid + a counter so
-  // two saveJsonSafe calls for different files (or the same file
-  // serialised by withSettingsLock) cannot collide on the tmp slot.
-  const dir = join(path, '..')
-  await mkdir(dir, { recursive: true })
-  const tmpPath = `${path}.tmp.${process.pid}.${++_atomicWriteCounter}`
-  const payload = JSON.stringify(data, null, 2) + '\n'
-  try {
-    await writeFile(tmpPath, payload, 'utf-8')
-    await rename(tmpPath, path)
-  } catch (err) {
-    // Best-effort cleanup of the orphan tmp file; ignore errors here
-    // because the caller already knows the rename failed.
-    try { await rm(tmpPath, { force: true }) } catch {}
-    throw err
-  }
-}
-
-// Module-local counter for atomic-write tmp filenames. Combined with
-// process.pid this is unique per write within a single process.
-let _atomicWriteCounter = 0
+//
+// MOVED to `lib/json-io.ts` (TRDD-CS25TA6W). Four modules carried a hand-copied pair of these and
+// measuring them found four DIFFERENT correctness levels — two of them writing the user's global
+// ~/.claude/settings.json non-atomically, which is how the corrupt file the guard refuses gets
+// created in the first place. Re-exported here because this module's own tests and callers name
+// them, and because a `saveJsonSafe` reachable from two import paths is the drift starting over.
+export type { JsonRead } from '@/lib/json-io'
+export { readJson, saveJsonSafe, UnreadableTargetError } from '@/lib/json-io'
+import { readJson, loadJsonSafe, saveJsonSafe } from '@/lib/json-io'
 
 // ── Settings mutex ────────────────────────────────────────────
 //

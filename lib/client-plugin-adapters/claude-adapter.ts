@@ -10,7 +10,7 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { mkdir, readFile, writeFile, rename, unlink } from 'fs/promises'
+import { mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -25,32 +25,12 @@ function resolveDir(dir: string): string {
   return dir.startsWith('~') ? dir.replace('~', HOME) : dir
 }
 
-async function loadJsonSafe(filePath: string): Promise<Record<string, unknown>> {
-  try {
-    return JSON.parse(await readFile(filePath, 'utf-8'))
-  } catch {
-    return {}
-  }
-}
+// FROM `lib/json-io.ts` (TRDD-CS25TA6W). The copy that used to live here had no `existsSync`, so
+// ENOENT and a parse failure were the same answer by construction. This module is in
+// `ChangePlugin`'s OWN call path, so its unguarded copy bypassed the service's guard one layer down
+// on every adapter install — the urgent one of the three.
+import { loadJsonSafe, saveJsonSafe } from '@/lib/json-io'
 
-/**
- * LIB2-MAJ-04: Atomic JSON write — tmp+rename to prevent half-written
- * settings.local.json files. Mirrors the pattern in element-management-service.ts
- * and host-keys.ts. The caller MUST wrap read-modify-write sequences in withLock
- * to prevent two parallel enable/disable callers race-clobbering each other.
- */
-async function saveJsonSafe(filePath: string, data: unknown): Promise<void> {
-  // SF-033: include process.pid in temp file name to prevent collisions between
-  // concurrent processes (the in-process file-lock can't coordinate across processes)
-  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`
-  try {
-    await writeFile(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf-8')
-    await rename(tmpPath, filePath)
-  } catch (error) {
-    try { await unlink(tmpPath) } catch { /* ignore */ }
-    throw error
-  }
-}
 
 /**
  * LIB2-MAJ-04: Lock key for settings.local.json mutations. The same key MUST be

@@ -822,13 +822,10 @@ async function ensureFourfoldIdentity(pluginDir: string, pluginName: string): Pr
 // the user-home level. Writing there is silent pollution (see BUG-POLLUTION-001).
 const USER_GLOBAL_SETTINGS = path.join(homedir(), '.claude', 'settings.json')
 
-async function loadJsonSafe(filePath: string): Promise<Record<string, unknown>> {
-  try { return JSON.parse(await readFile(filePath, 'utf-8')) } catch { return {} }
-}
-
-async function saveJsonSafe(filePath: string, data: unknown): Promise<void> {
-  await writeFile(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8')
-}
+// FROM `lib/json-io.ts` (TRDD-CS25TA6W). The copy that used to live here was the weakest of the
+// four: no `existsSync` (so ENOENT and a parse failure were collapsed by construction) and a DIRECT
+// `writeFile` — non-atomic, on the user's global `~/.claude/settings.json`.
+import { loadJsonSafe, saveJsonSafe } from '@/lib/json-io'
 
 /**
  * Load the current set of plugin entries from a per-client marketplace

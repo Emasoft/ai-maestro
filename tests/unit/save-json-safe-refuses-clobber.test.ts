@@ -15,8 +15,13 @@
  * assertion that can only pass if nothing was written — so it is the one the neuter must red.
  *
  * ⚠ REAL FILES, NO `fs` MOCK. The property under test is what is on disk afterward; a mocked `fs`
- * has no disk, so it would assert the mock. This is why `saveJsonSafe` is exported (see its comment)
- * and it is the same way `lib/claude-settings-enforcer.ts` pins its identical ruling.
+ * has no disk, so it would assert the mock — the same way `lib/claude-settings-enforcer.ts` pins its
+ * identical ruling.
+ *
+ * The subject moved to `lib/json-io.ts` with TRDD-CS25TA6W: three sibling modules carried their own
+ * unguarded copy of this writer, two of them writing `~/.claude/settings.json` NON-ATOMICALLY — the
+ * very way the corrupt target this guard refuses gets created. `one-json-io-implementation.test.ts`
+ * is what now forbids a fifth copy.
  */
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'fs'
@@ -41,7 +46,7 @@ describe('saveJsonSafe — refuses to overwrite a target it cannot read', () => 
   let saveJsonSafe: (p: string, d: Record<string, unknown>) => Promise<void>
 
   beforeEach(async () => {
-    ;({ saveJsonSafe } = await import('@/services/element-management-service'))
+    ;({ saveJsonSafe } = await import('@/lib/json-io'))
   })
 
   it('LEAVES THE BYTES UNTOUCHED — the assertion the whole guard exists for', async () => {

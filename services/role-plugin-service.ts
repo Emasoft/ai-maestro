@@ -319,22 +319,12 @@ export interface RolePlugin {
 }
 
 // ── JSON helpers ───────────────────────────────────────────
-
-async function loadJsonSafe(path: string): Promise<Record<string, unknown>> {
-  if (!existsSync(path)) return {}
-  try {
-    const raw = await readFile(path, 'utf-8')
-    return JSON.parse(raw)
-  } catch {
-    return {}
-  }
-}
-
-async function saveJsonSafe(path: string, data: Record<string, unknown>): Promise<void> {
-  const dir = join(path, '..')
-  await mkdir(dir, { recursive: true })
-  await writeFile(path, JSON.stringify(data, null, 2) + '\n', 'utf-8')
-}
+//
+// FROM `lib/json-io.ts` (TRDD-CS25TA6W). The copy that used to live here wrote with a DIRECT
+// `writeFile` — non-atomic, so a crash mid-write left a torn `~/.claude/settings.json` (this module
+// writes the user's global config twice). That is how the corrupt file the shared guard refuses got
+// created; the two halves composed into a loop, one producing the damage the other completed.
+import { loadJsonSafe, saveJsonSafe } from '@/lib/json-io'
 
 // ── TOML parsing ───────────────────────────────────────────
 

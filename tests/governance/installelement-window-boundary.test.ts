@@ -15,6 +15,19 @@
  * a single session — twice by ordinary edits, once by the very commit that moved a call. A guard
  * anchored to `:915` would have rotted the same day it was written. The boundary is located by a
  * MARKER STRING, and the mutations by CALLEE NAME through a TypeScript AST walk.
+ *
+ * ⚠ AND THE CALLEE NAME IS NOT THE IMPORTED NAME. The first version of this scanner matched the
+ * identifier at the call site, so a RENAMING destructure hid the call completely:
+ *
+ *     const { rm: rmCache } = await import('fs/promises')
+ *     await rmCache(cacheDir, { recursive: true, force: true })   // ← invisible to `'rm'`
+ *
+ * That is not hypothetical — it is live at `element-management-service.ts:1100/:1106`, and
+ * `updateAgent` is aliased the same way twice more (`updateAgentAIO`, `updateAgentPG04`). The
+ * card's "InstallElement calls NO rm anywhere" was measured with the same blind walk and is
+ * RETRACTED. So the aliases are resolved back to the imported name below, and the positive
+ * control asserts the alias form is seen — `rm` and `updateAgent` appear ONLY in aliased form in
+ * this function, so those two assertions cannot pass unless the resolution works.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
@@ -64,19 +77,51 @@ function parseInstallElement() {
   return { text, src, fn, markerIndex }
 }
 
+/**
+ * Local alias -> the name it was destructured FROM (`rmCache` -> `rm`).
+ *
+ * Only renaming elements carry a `propertyName`; a plain `const { mkdir } = …` has none and needs
+ * no entry. Scoping is deliberately ignored: this is a needle resolver, not a type checker, and a
+ * false MATCH merely over-reports a mutation (loud, and someone looks) while a false MISS is the
+ * failure this whole file exists to prevent.
+ */
+function aliasMap(fn: ts.FunctionDeclaration): Map<string, string> {
+  const aliases = new Map<string, string>()
+  const visit = (n: ts.Node): void => {
+    if (ts.isVariableDeclaration(n) && ts.isObjectBindingPattern(n.name)) {
+      for (const el of n.name.elements) {
+        if (el.propertyName && ts.isIdentifier(el.propertyName) && ts.isIdentifier(el.name)) {
+          aliases.set(el.name.text, el.propertyName.text)
+        }
+      }
+    }
+    ts.forEachChild(n, visit)
+  }
+  visit(fn.body!)
+  return aliases
+}
+
 /** Collect every mutation call site inside `fn` that starts before `limit` (a character offset). */
 function mutationsBefore(fn: ts.FunctionDeclaration, limit: number): Record<string, number> {
+  const aliases = aliasMap(fn)
   const found: Record<string, number> = {}
   const visit = (n: ts.Node): void => {
     if (ts.isCallExpression(n)) {
       const e = n.expression
       // Both shapes: a direct call `mkdir(...)` and a member call `fs.mkdir(...)` / `adapter.install(...)`.
-      const name = ts.isIdentifier(e)
+      const called = ts.isIdentifier(e)
         ? e.text
         : ts.isPropertyAccessExpression(e)
           ? e.name.text
           : null
-      if (name && (MUTATION_NEEDLES as readonly string[]).includes(name) && n.getStart() < limit) {
+      // Count under the IMPORTED name when the call site used an alias. Both spellings are
+      // checked so an alias POINTING AT a needle (`rm` -> `rmCache`) and one NAMED like a needle
+      // (`somethingElse` -> `mkdir`) are each caught; neither direction may fall through.
+      const resolved = called ? aliases.get(called) : null
+      const name = [resolved, called].find(
+        (c): c is string => !!c && (MUTATION_NEEDLES as readonly string[]).includes(c),
+      )
+      if (name && n.getStart() < limit) {
         found[name] = (found[name] ?? 0) + 1
       }
     }
@@ -121,9 +166,9 @@ describe('InstallElement — the R51 window boundary is a CLOSED SET (TRDD-YAGRX
     }
   })
 
-  it('POSITIVE CONTROL — the scanner really does see both call shapes', () => {
+  it('POSITIVE CONTROL — the scanner really does see all three call shapes', () => {
     const { fn } = parseInstallElement()
-    // Scanned over the WHOLE function, the needles must find both a direct call and a member call.
+    // Scanned over the WHOLE function, the needles must find each shape the source actually uses.
     // Without this, a scanner that silently matches nothing would report an empty, "clean" set.
     const all = mutationsBefore(fn, fn.getEnd())
 
@@ -133,5 +178,11 @@ describe('InstallElement — the R51 window boundary is a CLOSED SET (TRDD-YAGRX
     // execFileAsync both appear below the boundary, so a non-zero count here proves the walk
     // descends past the marker and into nested blocks (switch > case > try).
     expect(all.saveJsonSafe, 'the scanner never descends below the boundary — it is not measuring the function').toBeGreaterThan(0)
+
+    // ALIASED shape — the blind spot that made the card claim InstallElement calls no `rm`.
+    // NON-VACUOUS BY CONSTRUCTION: neither name is ever called unaliased in this function, so
+    // these two assertions fail the moment alias resolution is removed. (Verified by neuter.)
+    expect(all.rm, '`rm` is only ever called as `rmCache` here — the alias resolution is gone').toBeGreaterThan(0)
+    expect(all.updateAgent, '`updateAgent` is only ever called as `updateAgentAIO`/`updateAgentPG04` — alias resolution is gone').toBeGreaterThan(0)
   })
 })

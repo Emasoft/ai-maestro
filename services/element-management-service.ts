@@ -50,6 +50,11 @@ import type { AuthContext } from '@/lib/agent-auth'
 // be wrapped in inAdapterContext('<AIO name>', () => adapter.X(...))
 // so the adapter's runtime guard recognises it as a legitimate caller.
 import { inAdapterContext } from '@/lib/client-plugin-adapters/adapter-context'
+// Type-only (zero runtime cost, no adapter graph pulled in): ChangeTitle's G16 records the
+// EXACT StoredPlugin it handed the adapter so its undo can hand the same object back to
+// `adapter.uninstall`. `providerId` is a narrow `ProviderId`, not `string`, so a structurally
+// re-declared shape would not type-check at the uninstall call.
+import type { StoredPlugin } from '@/lib/client-plugin-adapters/types'
 
 // ── Per-op ledger emit helper (TRDD-eac02238) ───────────────────
 // Every Change* pipeline calls this right before returning success.
@@ -2736,6 +2741,17 @@ export async function ChangeTitle(
       g14dUninstalled?: Array<{ name: string; marketplace: string }>
       /** G15: the role-plugin set present BEFORE its swap-branch `uninstallAllRolePlugins`. */
       g15Uninstalled?: Array<{ name: string; marketplace: string }>
+      /**
+       * G16: the install it performed, and by WHICH mechanism. The undo must mirror the mechanism —
+       * an adapter install writes per-client manifest files that a CLI uninstall knows nothing about.
+       */
+      g16Installed?:
+        | { via: 'claude'; name: string; marketplace: string }
+        | { via: 'adapter'; plugin: StoredPlugin; clientType: 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' }
+      /** G16b: the `programArgs` string as it was BEFORE the `--agent` rewrite. */
+      g16bPriorProgramArgs?: string
+      /** G17: its OWN quarantine — NOT its plugin repairs, which G15/G16's undos already cover. */
+      g17Quarantine?: { priorRoleMissing: boolean; hibernated: boolean }
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -3786,12 +3802,18 @@ export async function ChangeTitle(
                 if (emittedDir && targetPid) {
                   const adapter = await getAdapter(targetClientType)
                   if (adapter) {
+                    // Bind the StoredPlugin ONCE so the undo hands `adapter.uninstall` the
+                    // byte-identical object this install was given — an adapter writes
+                    // per-client manifest entries keyed on these fields, so a re-derived
+                    // shape is not guaranteed to address the same entry.
+                    const stored: StoredPlugin = { name: target, clientType: targetClientType, storageDir: emittedDir, providerId: targetPid }
                     const installResult = await inAdapterContext('ChangeTitle', () => adapter.install(
-                      { name: target, clientType: targetClientType, storageDir: emittedDir, providerId: targetPid },
+                      stored,
                       agentDir,
                       { scope: 'local' }
                     ))
                     if (installResult.success) {
+                      ctx.g16Installed = { via: 'adapter', plugin: stored, clientType: targetClientType }
                       result.installedPlugin = target
                       ops.push(`G16: Converted + installed role-plugin "${target}" for ${agentClientType} via adapter`)
                     } else {
@@ -3806,6 +3828,7 @@ export async function ChangeTitle(
               } else {
                 // Claude client: install directly (existing behavior)
                 await installPluginLocally(target, agentDir, targetMarketplace)
+                ctx.g16Installed = { via: 'claude', name: target, marketplace: targetMarketplace }
                 result.installedPlugin = target
                 ops.push(`G16: Installed role-plugin "${target}"`)
               }
@@ -3820,6 +3843,38 @@ export async function ChangeTitle(
           } else {
             ops.push(`G16: Plugin "${target}" already installed — no change`)
           }
+        },
+        // Undo the install THROUGH THE MECHANISM THAT PERFORMED IT. The two paths are not
+        // interchangeable: the Claude path writes `.claude/settings.local.json` via the CLI,
+        // the adapter path writes per-client manifest files the CLI knows nothing about, so
+        // undoing one with the other's verb leaves the install half-standing. Nothing is
+        // recorded unless the forward install REPORTED success, so a WARN-and-continue exit
+        // (the common case here) leaves this a no-op.
+        undo: async () => {
+          const led = ctx.g16Installed
+          if (!led || !agentDir) return
+          try {
+            if (led.via === 'adapter') {
+              const { getAdapter } = await import('@/lib/client-plugin-adapters')
+              const adapter = await getAdapter(led.clientType)
+              if (!adapter) throw new Error(`no adapter for ${led.clientType}`)
+              const res = await inAdapterContext('ChangeTitle', () => adapter.uninstall(led.plugin, agentDir, { scope: 'local' }))
+              if (!res.success) throw new Error(res.error || 'adapter uninstall reported failure')
+            } else {
+              const back = await ChangePlugin(agentId, {
+                name: led.name,
+                marketplace: led.marketplace,
+                action: 'uninstall',
+                scope: 'local',
+                agentDir,
+                rolePluginSwap: true,
+              }, options.authContext)
+              if (!back.success) throw new Error(back.error || 'unknown')
+            }
+          } catch (err) {
+            throw new Error(`G16 rollback incomplete: could not uninstall the newly installed role-plugin (${err instanceof Error ? err.message : err})`)
+          }
+          ctx.g16Installed = undefined
         },
       },
 
@@ -3856,6 +3911,7 @@ export async function ChangeTitle(
               if (newArgs !== oldArgs) {
                 const updated = await updateAgent(agentId, { programArgs: newArgs })
                 if (updated) {
+                  ctx.g16bPriorProgramArgs = oldArgs
                   ops.push(`G16b: Rewrote programArgs --agent flag: "${oldArgs}" → "${newArgs}"`)
                   agent.programArgs = newArgs
                 } else {
@@ -3873,6 +3929,18 @@ export async function ChangeTitle(
           } else {
             ops.push(`G16b: Skipped (plugin unchanged or skipPluginSync)`)
           }
+        },
+        // A stale `--agent` flag is not cosmetic: on the RESTORED title the agent would wake
+        // loading the wrong persona (or none), which is the exact jack-bot symptom the forward
+        // gate exists to prevent — so a failure to restore it is an INVALID state (R51.5),
+        // not a warning. Recorded only when the forward write returned a persisted agent.
+        undo: async () => {
+          const prior = ctx.g16bPriorProgramArgs
+          if (prior === undefined) return
+          const restored = await updateAgent(agentId, { programArgs: prior })
+          if (!restored) throw new Error(`G16b rollback incomplete: could not restore programArgs to "${prior}"`)
+          agent.programArgs = prior
+          ctx.g16bPriorProgramArgs = undefined
         },
       },
 
@@ -3912,10 +3980,15 @@ export async function ChangeTitle(
                 }
                 const g17AuthContext: AuthContext = { isSystemOwner: true as const }
                 try {
+                  // Write-ahead: open the ledger BEFORE the flag write, so a throw mid-way
+                  // still leaves the undo able to restore the prior value (restoring it to
+                  // what it already is, is a harmless no-op — the reverse is not).
+                  ctx.g17Quarantine = { priorRoleMissing: getAgent(agentId)?.roleMissing === true, hibernated: false }
                   await updateAgent(agentId, { roleMissing: true })
                   ops.push(`G17: R9.13 VIOLATION — agent titled "${effectiveTitle}" with 0 role-plugins after retry. set roleMissing=true`)
                   const { hibernateAgent } = await import('@/services/agents-core-service')
                   const hibResult = await hibernateAgent(agentId, { sessionIndex: 0, authContext: g17AuthContext })
+                  if (hibResult?.data?.success) ctx.g17Quarantine.hibernated = true
                   ops.push(hibResult?.data?.success
                     ? `G17: auto-hibernated agent (reason: role_plugin_missing)`
                     : `G17: WARN — hibernate after roleMissing set: ${hibResult?.error ?? 'unknown'}`)
@@ -3997,6 +4070,49 @@ export async function ChangeTitle(
           } else {
             ops.push(`G17: Plugin verification skipped`)
           }
+        },
+        // Compensates ONLY G17's own R9.13 QUARANTINE (the roleMissing flag + the hibernate).
+        // Its plugin repairs — `uninstallAllRolePlugins` and the retry `installPluginLocally`
+        // — are deliberately NOT compensated here: G15's and G16's undos already restore the
+        // whole role-plugin set, so reversing them again would DOUBLE-undo and leave the
+        // agent with no plugin at all.
+        //
+        // Order matters and is not the obvious one: the flag is cleared BEFORE the wake,
+        // because `wakeAgent` refuses while `roleMissing` is true — that refusal IS the
+        // quarantine. Waking first would fail every time. (Same shape as G10's undo, where
+        // the manager pointer must be restored before a team agent can be re-woken.)
+        undo: async () => {
+          const led = ctx.g17Quarantine
+          if (!led) return
+          const problems: string[] = []
+          try {
+            const restored = await updateAgent(agentId, { roleMissing: led.priorRoleMissing })
+            if (!restored) problems.push(`roleMissing flag (updateAgent returned null)`)
+          } catch (err) {
+            problems.push(`roleMissing flag (${err instanceof Error ? err.message : err})`)
+          }
+          if (led.hibernated) {
+            const sleeper = getAgent(agentId)
+            let alreadyLive = false
+            try {
+              const { getRuntime } = await import('@/lib/agent-runtime')
+              const live = await getRuntime().listSessions()
+              alreadyLive = !!sleeper && live.some((s) => s.name === sleeper.name)
+            } catch { /* an unreadable runtime is not proof the agent is awake — try the wake */ }
+            if (!alreadyLive) {
+              try {
+                const { wakeAgent } = await import('@/services/agents-core-service')
+                const woke = await wakeAgent(agentId, { authContext: options.authContext })
+                if (woke.error || !(woke.data?.woken || woke.data?.alreadyRunning)) {
+                  problems.push(`re-wake (${woke.error ?? 'wake reported not woken'})`)
+                }
+              } catch (err) {
+                problems.push(`re-wake (${err instanceof Error ? err.message : err})`)
+              }
+            }
+          }
+          ctx.g17Quarantine = undefined
+          if (problems.length) throw new Error(`G17 rollback incomplete: ${problems.join('; ')}`)
         },
       },
 

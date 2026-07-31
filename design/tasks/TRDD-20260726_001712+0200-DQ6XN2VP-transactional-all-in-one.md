@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T13:33:00+0200
+updated: 2026-07-31T13:44:09+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -112,9 +112,9 @@ compensation are orthogonal defences and the retrofit must keep both.
 | 7 | G13 / G13b | :2814, :2846-2849 | set manager in `governance.json`, `unblockAllTeams`, re-point team COS/ORCH | **LANDED `0db3f598`** — re-block FIRST then restore the pointer (G10's rule read backwards). `priorManagerId` is NOT always null: replacing an existing MANAGER is the same write, and "restore no manager" would block every team as a rollback side effect. G13b restores the slot's PRIOR occupant for the same reason, and records nothing on the already-correct branch. |
 | 8 | G14b | :2905 | `revokeTokensForAgent` (AID) | **the compensable twin ALREADY EXISTS** — `lib/aid-token.ts:542 revokeTokensForAgentCompensable` returns the removed `AIDTokenRecord[]`; `:587 revokeTokensForAgent` is a count-only wrapper. Built for `DeleteAgent`; ChangeTitle just calls the wrong one. **LANDED `4cd3d148`** — and it was NOT free: see the harness note under the NEXT ACTION. |
 | 9 | G14e | :2929 | `revokeTokensFromIssuer` (portfolio) | **BUILT 2026-07-31** — `revokeTokensFromIssuerCompensable` + a delegating count-only `revokeTokensFromIssuer`, mirroring the aid-token seam. Lossless `active → revoked` flip, undone from the touched `(subjectId, token_id)` list; 7 tests, 4 neuters. **LANDED `4cd3d148`** — its `emitPortfolioOp` is the SAME append-only problem as G14c and moves out on the same terms, in the same final slice. |
-| 10 | G16 / G17 | :3193, :3272, :3317, :3327 | `installPluginLocally` ×4 | uninstall the installed plugin (shape D2 already ruled: CLI-uninstall with a CLI-reinstall undo) |
-| 11 | G16b | :3231 | `updateAgent({programArgs})` — rewrites the `--agent` flag | restore prior `programArgs` |
-| 12 | G17 | :3282-3285 | `updateAgent({roleMissing})` + `hibernateAgent` + ledger | restore the flag + re-wake |
+| 10 | G16 | the Claude `installPluginLocally` path and the non-Claude `adapter.install` path | installs the NEW role-plugin | **LANDED (slice 4c)** — records WHICH mechanism ran and undoes through that same one; G17's own `installPluginLocally` retries are covered by G15/G16 and are deliberately NOT compensated again |
+| 11 | G16b | the `--agent` flag rewrite | `updateAgent({programArgs})` | **LANDED (slice 4c)** — restores the prior string and THROWS on failure (a stale `--agent` wakes the wrong persona = invalid state, not a warning) |
+| 12 | G17 | `enforceRoleOrHibernate` | `updateAgent({roleMissing})` + `hibernateAgent` + ledger | **LANDED (slice 4c)** — restores the flag BEFORE re-waking (`wakeAgent` refuses while it is set); compensates ONLY the quarantine, never G17's plugin repairs |
 
 **⚠ THREE ROWS WERE MISSING — added 2026-07-31, after commit 2 put every gate in the array.** The
 table above was written from the pre-restructure reading and skipped three mutating gates. A
@@ -166,26 +166,48 @@ undo ledger is introduced as a plain `const ctx` declared above the array that r
 READ. That works identically under both drivers — when the driver swaps, the same object is passed
 as the runner's ctx and no undo is rewritten. (Plan, not yet measured.)
 
-**NEXT ACTION for commit 3, runnable as written** *(rows 1-9, 14 and 15 are LANDED — see below;
-this is now slice 4c)*: attach undos for the three REMAINING plugin rows — **10** (`G16`/`G17`'s
-four `installPluginLocally` calls → uninstall what was installed), **11** (`G16b`'s
-`updateAgent({programArgs})` → restore prior), **12** (`G17`'s quarantine: `updateAgent({roleMissing})`
-+ `hibernateAgent` → restore the flag + re-wake, and **ONLY** its own quarantine, or it double-undoes
-G15/G16). These are the widest remaining window: a failure after G16
-leaves a titled agent with the wrong role-plugin, i.e. R9.13 violated by the very pipeline that
-enforces it. Then the FINAL slice: swap the driver to `runGateSequence`, route G22 to `invariants`,
-move G14c **and G14e's `emitPortfolioOp`** out of the array (gated on `txn.ok`), lower
-`MAX_HANDROLLED` 10 → 9. Verify per slice: `tsc` 0 lines + the suite at **310/4441/2** +
-`trddgrep validate` exit 1 with only `7123D51A` and `C7A81642`.
+**NEXT ACTION for commit 3, runnable as written** *(EVERY undo row — 1-15 — is now LANDED; this is
+the FINAL slice)*: swap the driver from the hand-rolled `for (const gate of gates) { await gate.run() }`
+to `runGateSequence`, route G22 to `invariants`, move G14c **and G14e's `emitPortfolioOp`** out of the
+array (gated on **`txn.ok`**, NOT `result.success`), and lower `MAX_HANDROLLED` 10 → 9. The driver
+swap is what makes all fifteen undos LIVE at once, so it is also the slice that owes the rollback
+tests — the larger half of the work, and the reason it was left last. Verify per slice: `tsc` 0 lines
++ the suite at **310/4441/2** + `trddgrep validate` exit 1 with only `7123D51A` and `C7A81642`.
 
 **Slices landed so far:** slice 1 `61858167` (ctx + widened annotation + rows 2-3: G9a, G14) ·
 slice 2a `40cefbb8` (rows 4-6: the OLD-title teardown — G10, G11, G12) · slice 2b `0db3f598`
 (row 7: the NEW-title setup — G13, G13b) · slice 3 `4cd3d148` (rows 8-9: the two revocations) ·
 slice 4a `353b9089` (row 14: G14d's per-entry uninstall loop) · slice 4b `1fa48129` (row 15: G15's
-role-plugin sweep). Every undo ships INERT and is proven so by the same neuter: make the new ones throw
-unconditionally, and the two files that force mid-pipeline aborts stay green (29/29). The neuter is
-not vacuous — `change-title-window` drives a `governanceTitle: 'manager'` agent, so G10's branch
-really does run and record.
+role-plugin sweep) · slice 4c (rows 10-12: G16, G16b, G17 — the last plugin rows). Every undo ships
+INERT and is proven so by the same neuter: make the new ones throw unconditionally, and the two files
+that force mid-pipeline aborts stay green (29/29). The neuter is not vacuous — `change-title-window`
+drives a `governanceTitle: 'manager'` agent, so G10's branch really does run and record.
+
+**Slice 4c's three shapes, and the one ordering that is not obvious.** G16 records WHICH MECHANISM
+installed — the Claude `installPluginLocally` path or the non-Claude `adapter.install` path — and
+undoes through that same mechanism, because the two write different stores (the CLI writes
+`.claude/settings.local.json`; an adapter writes per-client manifest files the CLI cannot see), so
+undoing one with the other's verb leaves the install half-standing. The adapter's `StoredPlugin` is
+bound ONCE as a `const` and handed back verbatim to `adapter.uninstall` — its `providerId` is a
+narrow `ProviderId`, not `string`, so a re-derived shape does not even type-check. G16b restores the
+prior `programArgs` and THROWS on failure: a stale `--agent` flag on the restored title wakes the
+agent with the wrong persona, which is the jack-bot symptom the gate exists to prevent, i.e. an
+invalid state (R51.5), not a warning. G17 compensates **only its own R9.13 quarantine** — the flag
+and the hibernate — and deliberately not its plugin repairs, which G15's and G16's undos already
+cover; compensating them twice would leave the agent with no plugin at all. **The ordering inside
+G17's undo is the mirror of G10's:** clear `roleMissing` BEFORE waking, because `wakeAgent` refuses
+while the flag is set — that refusal IS the quarantine, so waking first fails every time.
+
+**A COVERAGE GAP FOUND BY SLICE 4c, not caused by it: G16 AND G16b ARE ENTIRELY UNPINNED.** Measured
+by a two-run attributed neuter. Run 1 broke all three forward writes (G16's adapter-success branch,
+G16's Claude `installPluginLocally`, G16b's `updateAgent`, G17's `roleMissing`) → **3 named tests
+red, all of them G17's**: `r3-r9-team-governance.test.ts:1777` (TRDD-C9LXXT76) and
+`element-management-assistant-title.test.ts:350, :383`. Run 2 restored ONLY G17 and left G16 + G16b
+broken → **310 files, ZERO red.** So the 3 failures are attributable to the G17 break alone, and the
+suite never observes whether the new role-plugin was installed or whether the `--agent` flag was
+rewritten. The complement run is the whole point: with a single combined neuter there would have been
+one failure and two candidate causes. Worth a test — G16b's regression is precisely the 2026-05-06
+jack-bot bug — but pre-existing, so it does not block this card.
 
 **Slice 3 was NOT the free win the map promised, and the reason is worth keeping.** Switching to the
 compensable forms reddened 5 tests, and none of them was wrong. `tests/helpers/drive-change-title.ts`

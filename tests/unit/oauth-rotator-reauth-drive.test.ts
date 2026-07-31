@@ -1,234 +1,289 @@
 /**
- * Tests for the consent-drive leg (TRDD-CVQJNW3A) — `lib/oauth-rotator/reauth-drive.ts`.
+ * The consent drive, over the injected `run` seam (TRDD-CVQJNW3A).
  *
- * The `run` seam is injected, so the whole state machine is exercised with NO browser: these pin
- * the ordering, the parsing and the cleanup, which is everything that can be wrong without a live
- * site. What they deliberately do NOT prove is that a real taught route replays past Cloudflare —
- * that is a live-run question and is recorded as open on the card rather than faked here.
- *
- * The page fixtures are VERBATIM fragments of what the live site actually rendered on 2026-07-31
- * (Italian, because that is what it served), so a regex tuned to an imagined English-only page
- * would fail here rather than in production.
+ * Everything here runs without a browser, which is the only way this state machine gets tested at
+ * all — `driveConsent` has never been run end to end, and the live page needs the owner present.
+ * The seam records the exact argv, so the claims that matter are checkable as facts about the
+ * command line rather than as prose in a comment: that no browser is NAMED on the autodetect path,
+ * that `--headed` is never omitted, and that the session is closed however the attempt ends.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { driveConsent, type BrowserProfile, type RunResult } from '@/lib/oauth-rotator/reauth-drive'
 
-import { driveConsent, findAuthorizeRef, extractCode, type RunResult } from '@/lib/oauth-rotator/reauth-drive'
+const STATE = 'q7Fh2LmXzR4tN8vB1cD6eG0jK5pS9wY3'
+const AUTHORIZE = `https://claude.ai/oauth/authorize?client_id=abc&code_challenge=xyz&state=${STATE}`
+const CODE = 'aBcDeF0123456789xyz'
 
-/** What `act go` prints: human `[auth]` lines, THEN the JSON. Reproduced because the parser has to
- *  skip the preamble — taking the first `{` of the whole stream is what makes that work. */
-function goOutput(sessionId: string): string {
-  return [
-    '[auth] act go: using isolated Chrome profile clone (Default)',
-    '[auth] act go: injected 24 cookie(s) for claude.ai, re-navigated authenticated',
-    JSON.stringify({ ok: true, subcommand: 'act go', session_id: sessionId, url: 'https://claude.ai/' }),
-  ].join('\n')
+const CONSENT = `[e0] RootWebArea "Authorize"
+  [e1] main
+    [e2] heading "Claude Code wants access"
+    [e3] button "Authorize"
+    [e4] button "Deny"`
+
+const SIGNIN = `[e0] RootWebArea "Sign in"
+  [e1] main
+    [e2] textbox "Email"
+    [e3] button "Continue"`
+
+const CHALLENGE = `[e0] RootWebArea "Just a moment..."
+  [e1] generic`
+
+const UNRANKABLE = `[e0] RootWebArea "Idhinisha"
+  [e1] button "Ruhusu ombi"
+  [e2] button "Kataa ombi"`
+
+/** What one navigation attempt should pretend to find. */
+interface PageSpec {
+  snap: string
+  /** Text `act go` returns WITH the navigation — measured to come free, so the drive must not pay
+   *  for a separate `eval text` before the click. */
+  goText?: string
+  /** Text `eval text` returns AFTER the click. */
+  afterClick?: string
+  cookies?: number
+  /** Omit a session id to simulate a launch that never opened one. */
+  noSession?: boolean
 }
 
-/** The live Cloudflare interstitial, as served (Italian) — with the Ray ID line that made it
- *  identifiable as a WALL rather than a check in progress. */
-const CLOUDFLARE_PAGE = `claude.ai
-Esecuzione della verifica di sicurezza
-
-Questo sito web utilizza un servizio di sicurezza per la protezione dai bot dannosi.
-
-Ray ID: a23dc4655d41ee61
-Prestazioni e sicurezza di Cloudflare`
-
-/** The live logged-OUT landing page, as served. */
-const LOGGED_OUT_PAGE = `Interrogati su
-cosa viene dopo
-Il tuo partner di pensiero per grandi ambizioni
-Continua con Google
-
-OPPURE
-
-Continua con email
-Continua con SSO`
-
-const CONSENT_SNAPSHOT = `[e0] RootWebArea "Authorize Claude Code"
-  [e3] button "Autorizza"
-  [e4] button "Annulla"`
-
-const CALLBACK_PAGE = `Authorization code
-
-abc123DEF456ghi789JKL#state-token-xyz
-
-Copy this code and paste it into Claude Code.`
-
-interface Recorder {
-  calls: string[][]
-  run: (args: string[], timeoutMs: number) => Promise<RunResult>
-}
-
-/**
- * A fake `unbrowse` that dispatches on the subcommand. `pages` is consumed in order by successive
- * `eval text` calls, so a test can make the page BEFORE and AFTER the click differ — which is the
- * only way to exercise the happy path and `code_not_found` with the same harness.
- */
-function recorder(opts: { sessionId?: string | null; pages?: string[]; snapshot?: string }): Recorder {
+function makeRun(pages: PageSpec[]) {
   const calls: string[][] = []
-  const pages = [...(opts.pages ?? [])]
-  return {
-    calls,
-    run: async (args: string[]): Promise<RunResult> => {
-      calls.push(args)
-      const verb = `${args[0]} ${args[1]}`
-      if (verb === 'act go') {
-        const sid = opts.sessionId === undefined ? 'sess-1' : opts.sessionId
-        return { stdout: sid === null ? 'boom: no session' : goOutput(sid), stderr: '', code: sid === null ? 1 : 0 }
+  let attempt = -1
+  const run = vi.fn(async (args: string[]): Promise<RunResult> => {
+    calls.push(args)
+    const at = () => pages[Math.min(attempt, pages.length - 1)]
+    const verb = `${args[0]} ${args[1]}`
+    if (verb === 'act go') {
+      attempt += 1
+      const p = at()
+      if (p.noSession) return { stdout: '', stderr: 'chrome failed to start', code: 1 }
+      return {
+        // The real CLI prints human `[auth] …` lines before its JSON, so the parser has to skip a
+        // preamble — reproduced here because taking the first `{` of the stream is what makes it work.
+        stdout: `[auth] extracted 6 cookies for claude.ai from Chrome user data\n${JSON.stringify({
+          ok: true,
+          session_id: `sess-${attempt}`,
+          cookies_injected: p.cookies ?? 6,
+          page: { text: p.goText ?? '' },
+        })}`,
+        stderr: '',
+        code: 0,
       }
-      if (verb === 'eval text') return { stdout: pages.shift() ?? '', stderr: '', code: 0 }
-      if (verb === 'eval snap') return { stdout: opts.snapshot ?? '', stderr: '', code: 0 }
-      return { stdout: '', stderr: '', code: 0 }
-    },
-  }
+    }
+    if (verb === 'eval snap') return { stdout: at().snap, stderr: '', code: 0 }
+    if (verb === 'eval text') return { stdout: at().afterClick ?? '', stderr: '', code: 0 }
+    return { stdout: '{"ok":true}', stderr: '', code: 0 }
+  })
+  return { run, calls }
 }
 
-const OPTS = { authorizeUrl: 'https://claude.ai/oauth/authorize?x=1', chromeProfile: 'Profile 2' }
+const noProfiles = () => [] as BrowserProfile[]
+const goArgs = (calls: string[][]) => calls.filter((c) => c[0] === 'act' && c[1] === 'go')
+const closes = (calls: string[][]) => calls.filter((c) => c[0] === 'act' && c[1] === 'close')
+const detailOf = (r: unknown) => (r as { detail: string }).detail
 
-function closes(calls: string[][]): string[][] {
-  return calls.filter((c) => c[0] === 'act' && c[1] === 'close')
-}
-
-describe('reauth-drive — the measured browser constraints are encoded, not left to the caller', () => {
-  it('always passes --headed: headless is served a STUCK Cloudflare interstitial (same Ray ID x3)', async () => {
-    const r = recorder({ pages: [CALLBACK_PAGE, CALLBACK_PAGE], snapshot: CONSENT_SNAPSHOT })
-    await driveConsent(OPTS, { run: r.run })
-    const go = r.calls.find((c) => c[1] === 'go')!
-    expect(go).toContain('--headed')
-  })
-
-  it('selects the account by CHROME PROFILE — unbrowse own store is per-DOMAIN and cannot hold 3 identities', async () => {
-    const r = recorder({ pages: [CALLBACK_PAGE, CALLBACK_PAGE], snapshot: CONSENT_SNAPSHOT })
-    await driveConsent(OPTS, { run: r.run })
-    const go = r.calls.find((c) => c[1] === 'go')!
-    expect(go).toContain('--browser-profile')
-    expect(go[go.indexOf('--browser-profile') + 1]).toBe('Profile 2')
-  })
-
-  it('always clones the profile, so the owner live browser session is never driven or locked', async () => {
-    const r = recorder({ pages: [CALLBACK_PAGE, CALLBACK_PAGE], snapshot: CONSENT_SNAPSHOT })
-    await driveConsent(OPTS, { run: r.run })
-    expect(r.calls.find((c) => c[1] === 'go')!).toContain('--share-accounts')
+describe('driveConsent — refuses before opening anything when the request is unusable', () => {
+  it('rejects an authorize URL with no state, and NEVER launches a browser', async () => {
+    const { run } = makeRun([{ snap: CONSENT }])
+    const res = await driveConsent(
+      { authorizeUrl: 'https://claude.ai/oauth/authorize?client_id=abc' },
+      { run, discoverProfiles: noProfiles },
+    )
+    expect(res).toEqual({
+      ok: false,
+      reason: 'bad_authorize_url',
+      detail: 'authorize URL carries no state parameter',
+    })
+    expect(run).not.toHaveBeenCalled()
   })
 })
 
-describe('reauth-drive — one failure value per CAUSE, and the ORDER is what keeps them distinct', () => {
-  it('reports cloudflare_challenge, NOT consent_not_found, on the interstitial', async () => {
-    // THE ORDERING TEST. A Cloudflare wall has no authorize control either, so a version that
-    // looked for the control first would call this consent_not_found and send the operator to
-    // hunt a moved selector instead of a bot block. Neuter: move the CLOUDFLARE_MARKERS check
-    // below the snap → this test reds and the next one does not.
-    const r = recorder({ pages: [CLOUDFLARE_PAGE], snapshot: '' })
-    const res = await driveConsent(OPTS, { run: r.run })
-    expect(res).toEqual(expect.objectContaining({ ok: false, reason: 'cloudflare_challenge' }))
+describe('driveConsent — the browser is AUTODETECTED, never named', () => {
+  it('passes no --browser and no --browser-profile on the autodetect attempt', async () => {
+    const { run, calls } = makeRun([{ snap: CONSENT, afterClick: `${CODE}#${STATE}` }])
+    const res = await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+
+    expect(res).toEqual({ ok: true, code: CODE, via: null })
+    // Naming a browser NARROWS unbrowse's own sweep, which already covers every installed one.
+    expect(goArgs(calls)[0]).not.toContain('--browser')
+    expect(goArgs(calls)[0]).not.toContain('--browser-profile')
   })
 
-  it('reports not_logged_in on the landing page, and does NOT claim the profile has no session', async () => {
-    // The claim would be an inference: an ABSENT cookie and an UNDECRYPTABLE one render the same
-    // page (Playwright --use-mock-keychain → macOS OSCrypt mock key), and they need opposite
-    // repairs. So the detail must name the symptom, never the cause.
-    const r = recorder({ pages: [LOGGED_OUT_PAGE], snapshot: '' })
-    const res = await driveConsent(OPTS, { run: r.run })
-    expect(res).toEqual(expect.objectContaining({ ok: false, reason: 'not_logged_in' }))
-    if (res.ok) throw new Error('unreachable')
-    // Assert NON-COMMITTAL-ness, which is the actual requirement — both causes offered, neither
-    // asserted. The first version of this banned the substring "has no claude.ai session", which
-    // the honest message legitimately contains inside its "either … or …"; that assertion would
-    // have forced the message to DROP a real possibility in order to pass.
-    expect(res.detail).toMatch(/either/i)
-    expect(res.detail).toMatch(/no claude\.ai session/i)
-    expect(res.detail).toMatch(/could not be decrypted/i)
+  it('always passes --headed, because headless is served a stuck interstitial', async () => {
+    const { run, calls } = makeRun([{ snap: CONSENT, afterClick: `${CODE}#${STATE}` }])
+    await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+    expect(goArgs(calls)[0]).toContain('--headed')
   })
 
-  it('names a control only when a CONTROL carries the name — the page TITLE must not win', () => {
-    // The consent page is titled "Authorize Claude Code", so a whole-line match returns the
-    // document `[e0]`. Clicking the document does nothing and the drive then blames the callback
-    // page for a missing code. Neuter: match the whole line instead of the parsed name → reds.
-    expect(findAuthorizeRef('[e0] RootWebArea "Authorize Claude Code"\n  [e3] button "Autorizza"')).toBe('[e3]')
-    expect(findAuthorizeRef('[e0] RootWebArea "Authorize Claude Code"')).toBeNull()
-    expect(findAuthorizeRef('[e2] StaticText "Click Authorize to continue"')).toBeNull()
-  })
+  it('uses the page text `act go` already returned — no `eval text` before the click', async () => {
+    const { run, calls } = makeRun([{ snap: CONSENT, afterClick: `${CODE}#${STATE}` }])
+    await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
 
-  it('reports consent_not_found when the page IS the consent page but the control moved', async () => {
-    const r = recorder({ pages: ['Authorize Claude Code'], snapshot: '[e0] RootWebArea "x"\n  [e9] button "Annulla"' })
-    const res = await driveConsent(OPTS, { run: r.run })
-    expect(res).toEqual(expect.objectContaining({ ok: false, reason: 'consent_not_found' }))
-  })
-
-  it('reports code_not_found when consent was clicked but the callback rendered no code', async () => {
-    const r = recorder({ pages: ['Authorize Claude Code', 'Something went wrong.'], snapshot: CONSENT_SNAPSHOT })
-    const res = await driveConsent(OPTS, { run: r.run })
-    expect(res).toEqual(expect.objectContaining({ ok: false, reason: 'code_not_found' }))
-  })
-
-  it('reports launch_failed when no session id came back — never proceeds against "most-recent"', async () => {
-    // Proceeding with an undefined --session would drive whatever session happens to be newest,
-    // which could belong to another account entirely.
-    const r = recorder({ sessionId: null })
-    const res = await driveConsent(OPTS, { run: r.run })
-    expect(res).toEqual(expect.objectContaining({ ok: false, reason: 'launch_failed' }))
-    expect(r.calls.filter((c) => c[1] === 'text')).toHaveLength(0)
+    const order = calls.map((c) => `${c[0]} ${c[1]}`)
+    const firstClick = order.indexOf('act click')
+    const firstText = order.indexOf('eval text')
+    expect(firstClick).toBeGreaterThan(-1)
+    // The only `eval text` is the one AFTER the click; a read before it would be a wasted trip.
+    expect(firstText).toBeGreaterThan(firstClick)
   })
 })
 
-describe('reauth-drive — the session is closed on EVERY path', () => {
-  // A leaked session holds a cloned profile dir AND a Chrome process. This runs unattended on a
-  // loop, so one leak per failed repair accumulates silently until the host runs out of something.
-  // Neuter: delete the `finally` → every case below reds at once.
-  it.each([
-    ['happy path', { pages: ['Authorize', CALLBACK_PAGE], snapshot: CONSENT_SNAPSHOT }],
-    ['cloudflare', { pages: [CLOUDFLARE_PAGE], snapshot: '' }],
-    ['logged out', { pages: [LOGGED_OUT_PAGE], snapshot: '' }],
-    ['consent missing', { pages: ['Authorize'], snapshot: 'nothing here' }],
-    ['code missing', { pages: ['Authorize', 'no code'], snapshot: CONSENT_SNAPSHOT }],
-  ])('closes the session — %s', async (_name, cfg) => {
-    const r = recorder(cfg)
-    await driveConsent(OPTS, { run: r.run })
-    expect(closes(r.calls)).toHaveLength(1)
-    expect(closes(r.calls)[0]).toEqual(['act', 'close', '--session', 'sess-1'])
+describe('driveConsent — one cause per failure', () => {
+  it('reports launch_failed when no session id comes back', async () => {
+    // Proceeding with an undefined --session would drive whatever session is newest, which could
+    // belong to another account entirely.
+    const { run, calls } = makeRun([{ snap: CONSENT, noSession: true }])
+    const res = await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+    expect(res).toMatchObject({ ok: false, reason: 'launch_failed' })
+    expect(calls.some((c) => c[1] === 'snap')).toBe(false)
+  })
+
+  it('reports cloudflare_challenge and does NOT try other profiles', async () => {
+    const { run, calls } = makeRun([{ snap: CHALLENGE }])
+    const res = await driveConsent(
+      { authorizeUrl: AUTHORIZE },
+      { run, discoverProfiles: () => [{ browser: 'brave', profile: 'Default' }] },
+    )
+    expect(res).toMatchObject({ ok: false, reason: 'cloudflare_challenge' })
+    // Retrying a bot wall on another profile only opens another window to be walled.
+    expect(goArgs(calls)).toHaveLength(1)
+  })
+
+  it('REFUSES rather than guessing when several controls cannot be ranked', async () => {
+    const { run } = makeRun([{ snap: UNRANKABLE }])
+    const res = await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+
+    expect(res).toMatchObject({ ok: false, reason: 'consent_ambiguous' })
+    // The names go in the detail so the operator can extend the hint list rather than re-derive
+    // the page from scratch.
+    expect(detailOf(res)).toContain('Ruhusu ombi')
+    expect(detailOf(res)).toContain('Kataa ombi')
+  })
+
+  it('never clicks anything on an unrankable page — a wrong click here is "deny"', async () => {
+    const { run, calls } = makeRun([{ snap: UNRANKABLE }])
+    await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+    expect(calls.some((c) => c[1] === 'click')).toBe(false)
+  })
+
+  it('reports consent_not_found when the page has structure but nothing activatable', async () => {
+    const inert = ['[e0] RootWebArea "x"', ...Array.from({ length: 60 }, (_, i) => `  [e${i + 1}] StaticText "t"`)].join('\n')
+    const { run } = makeRun([{ snap: inert }])
+    const res = await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+    expect(res).toMatchObject({ ok: false, reason: 'consent_not_found' })
+  })
+
+  it('takes the code straight off the landing page when consent was already granted', async () => {
+    const { run, calls } = makeRun([{ snap: CHALLENGE, goText: `${CODE}#${STATE}` }])
+    const res = await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+
+    expect(res).toEqual({ ok: true, code: CODE, via: null })
+    // Nothing was clicked: the code was already there. And note the snapshot is the SPARSE one —
+    // a callback page looks structurally like an interstitial, so the code check has to come first.
+    expect(calls.some((c) => c[1] === 'click')).toBe(false)
+  })
+})
+
+describe('driveConsent — a dead session escalates to real profiles, and only that', () => {
+  it('tries discovered profiles after the default sweep lands on a sign-in page', async () => {
+    const { run, calls } = makeRun([
+      { snap: SIGNIN }, // auto sweep: the default profile is logged out
+      { snap: CONSENT, afterClick: `${CODE}#${STATE}` }, // the first real profile holds the session
+    ])
+    const res = await driveConsent(
+      { authorizeUrl: AUTHORIZE },
+      { run, discoverProfiles: () => [{ browser: 'chrome', profile: 'Profile 2' }] },
+    )
+
+    expect(res).toEqual({ ok: true, code: CODE, via: { browser: 'chrome', profile: 'Profile 2' } })
+    const go = goArgs(calls)
+    expect(go).toHaveLength(2)
+    expect(go[1]).toEqual(expect.arrayContaining(['--browser', 'chrome', '--browser-profile', 'Profile 2']))
+  })
+
+  it('escalates when a click produced no code — the sign-in page structure cannot be told apart', async () => {
+    // page-classify is explicit that a buttons-only consent screen and a buttons-only
+    // "continue with Google" screen have the same shape. So the click is a hypothesis, and its
+    // OUTCOME is what decides — not a guess made beforehand.
+    const { run, calls } = makeRun([
+      { snap: CONSENT, afterClick: 'took us to a provider login' },
+      { snap: CONSENT, afterClick: `${CODE}#${STATE}` },
+    ])
+    const res = await driveConsent(
+      { authorizeUrl: AUTHORIZE },
+      { run, discoverProfiles: () => [{ browser: 'arc', profile: 'Default' }] },
+    )
+    expect(res).toEqual({ ok: true, code: CODE, via: { browser: 'arc', profile: 'Default' } })
+    expect(goArgs(calls)).toHaveLength(2)
+  })
+
+  it('bounds the sweep, so seven browsers do not carpet the screen with windows', async () => {
+    const { run, calls } = makeRun([{ snap: SIGNIN }])
+    const many: BrowserProfile[] = Array.from({ length: 7 }, (_, i) => ({
+      browser: 'chrome',
+      profile: `Profile ${i + 1}`,
+    }))
+    const res = await driveConsent(
+      { authorizeUrl: AUTHORIZE, maxProfileAttempts: 2 },
+      { run, discoverProfiles: () => many },
+    )
+
+    expect(res).toMatchObject({ ok: false, reason: 'not_logged_in' })
+    expect(goArgs(calls)).toHaveLength(3) // the auto sweep + exactly 2 profiles
+  })
+
+  it('names every profile it tried, so the operator knows where to log in', async () => {
+    const { run } = makeRun([{ snap: SIGNIN }])
+    const res = await driveConsent(
+      { authorizeUrl: AUTHORIZE },
+      { run, discoverProfiles: () => [{ browser: 'brave', profile: 'Default' }] },
+    )
+    expect(detailOf(res)).toContain('auto')
+    expect(detailOf(res)).toContain('brave/Default')
+  })
+
+  it('a caller that PINNED a profile gets exactly that, with no sweep behind its back', async () => {
+    const { run, calls } = makeRun([{ snap: SIGNIN }])
+    const res = await driveConsent(
+      { authorizeUrl: AUTHORIZE, via: { browser: 'edge', profile: 'Profile 1' } },
+      { run, discoverProfiles: () => [{ browser: 'chrome', profile: 'Default' }] },
+    )
+
+    expect(res).toMatchObject({ ok: false, reason: 'not_logged_in' })
+    expect(goArgs(calls)).toHaveLength(1)
+    expect(goArgs(calls)[0]).toEqual(expect.arrayContaining(['--browser', 'edge', '--browser-profile', 'Profile 1']))
+  })
+})
+
+describe('driveConsent — the session is closed on EVERY path', () => {
+  const paths: Array<[name: string, pages: PageSpec[]]> = [
+    ['happy path', [{ snap: CONSENT, afterClick: `${CODE}#${STATE}` }]],
+    ['cloudflare', [{ snap: CHALLENGE }]],
+    ['sign-in page', [{ snap: SIGNIN }]],
+    ['ambiguous controls', [{ snap: UNRANKABLE }]],
+    ['clicked, but no code came back', [{ snap: CONSENT, afterClick: 'still nothing' }]],
+  ]
+
+  it.each(paths)('closes the session — %s', async (_name, pages) => {
+    const { run, calls } = makeRun(pages)
+    await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+    // A leaked session holds a cloned profile directory AND a browser process, and this runs
+    // unattended on a loop — one leak per failed repair accumulates until the host runs out.
+    expect(closes(calls)).toHaveLength(goArgs(calls).length)
+  })
+
+  it('closes EACH session when the sweep opens several', async () => {
+    const { run, calls } = makeRun([{ snap: SIGNIN }, { snap: SIGNIN }])
+    await driveConsent(
+      { authorizeUrl: AUTHORIZE },
+      { run, discoverProfiles: () => [{ browser: 'chrome', profile: 'Default' }] },
+    )
+    expect(goArgs(calls)).toHaveLength(2)
+    expect(closes(calls).map((c) => c[3])).toEqual(['sess-0', 'sess-1'])
   })
 
   it('does not attempt a close when there was never a session to close', async () => {
-    const r = recorder({ sessionId: null })
-    await driveConsent(OPTS, { run: r.run })
-    expect(closes(r.calls)).toHaveLength(0)
-  })
-})
-
-describe('reauth-drive — parsing, against what the live pages actually render', () => {
-  it('finds the authorize control by ACCESSIBLE NAME, in Italian as served', () => {
-    // CSS has no text predicate (the janitor used Playwright `button:has-text`), so the AX name is
-    // what we match — and that is also what makes the Italian rendering work with one selector.
-    expect(findAuthorizeRef(CONSENT_SNAPSHOT)).toBe('[e3]')
-  })
-
-  it('finds it in English too', () => {
-    expect(findAuthorizeRef('[e0] RootWebArea "x"\n  [e7] button "Authorize"')).toBe('[e7]')
-  })
-
-  it('returns null rather than guessing when no control matches', () => {
-    expect(findAuthorizeRef('[e0] RootWebArea "x"\n  [e1] button "Annulla"')).toBeNull()
-  })
-
-  it('extracts code#state off the callback page', () => {
-    expect(extractCode(CALLBACK_PAGE)).toBe('abc123DEF456ghi789JKL#state-token-xyz')
-  })
-
-  it('accepts a bare code — that page rendering has varied and refusing would kill the repair path', () => {
-    expect(extractCode('Authorization code\n\nabc123DEF456ghi789JKL\n')).toBe('abc123DEF456ghi789JKL')
-  })
-
-  it('does NOT mistake ordinary prose for a code', () => {
-    // A wrong match here is the silent failure that matters: it files a garbage code AND burns the
-    // flow, so the operator sees an exchange error rather than "the page had no code".
-    expect(extractCode(LOGGED_OUT_PAGE)).toBeNull()
-    expect(extractCode('Copy this code and paste it into Claude Code.')).toBeNull()
-  })
-
-  it('returns the code on the happy path', async () => {
-    const r = recorder({ pages: ['Authorize Claude Code', CALLBACK_PAGE], snapshot: CONSENT_SNAPSHOT })
-    const res = await driveConsent(OPTS, { run: r.run })
-    expect(res).toEqual({ ok: true, pastedCode: 'abc123DEF456ghi789JKL#state-token-xyz' })
+    const { run, calls } = makeRun([{ snap: CONSENT, noSession: true }])
+    await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+    expect(closes(calls)).toHaveLength(0)
   })
 })

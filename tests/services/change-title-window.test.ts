@@ -178,3 +178,66 @@ describe('ChangeTitle happy path (the harness drives the real pipeline)', () => 
     expect(H.registry.get(AGENT_ID)?.roleMissing ?? false).toBe(false)
   })
 })
+
+/**
+ * CHARACTERIZATION — these pin what the pipeline does TODAY, not what it should do.
+ *
+ * Read them as a description of the window, not as a specification. The R51 retrofit is expected to
+ * CHANGE the second one, and this file is where that change becomes visible instead of silent.
+ *
+ * The injection point was MEASURED, not assumed: the plan called for a failure at G11's
+ * `updateTeam`, and G11/G12/G13b are all gated on `oldTitle === 'chief-of-staff' | 'orchestrator'`
+ * or `newTitle === 'orchestrator' | 'chief-of-staff'`, so `updateTeam` is NEVER CALLED on a
+ * manager→autonomous demotion. Probing all four post-G10 collaborators is what found the two that
+ * are reachable — and the one that matters is not the one that fails.
+ */
+describe('ChangeTitle window — CHARACTERIZATION of pre-retrofit behaviour', () => {
+  /**
+   * The G14-first ordering paying off, OBSERVED rather than argued. `removeManager()` is the first
+   * thing G10 does and it is NOT individually wrapped, so its failure aborts the whole pipeline —
+   * and because the title write already landed at G14, the residue is exactly the mild one the
+   * ordering comment promises: a STALE MANAGER POINTER (visible, non-blocking, one call to repair),
+   * never a host with no manager and every team blocked.
+   */
+  it('a failure at removeManager leaves the mild residue the G14-first ordering promises', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    H.world.failOn = { removeManager: 1 }
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    // The title DID land (G14 runs first) — that is the deliberate part.
+    expect(H.registry.get(AGENT_ID)?.governanceTitle).toBe('autonomous')
+    // …and governance is untouched: a stale pointer, not a decapitated host.
+    expect(H.world.managerId).toBe(AGENT_ID)
+    expect(H.world.teams[0].blocked).toBe(false)
+  })
+
+  /**
+   * THE FINDING, and the reason this file exists.
+   *
+   * G10 is a CASCADE: remove the manager, then block every team, because a team must not operate
+   * without one. Only the second half is wrapped (`catch { ops.push('G10: WARN — blockAllTeams
+   * failed') }`), so when it fails the pipeline CONTINUES and returns `success: true` over a host
+   * that now has NO manager and UNBLOCKED teams — the exact state the cascade exists to prevent,
+   * reported to the caller as a clean success. Nothing downstream can detect it: the ops array
+   * carries the WARN, and no caller reads ops.
+   *
+   * This is R51's "swallowing a per-item failure into console.warn converts one bad item into an
+   * invalid system", in production, on the governance-critical pipeline. The retrofit must make
+   * G10 atomic — either both halves land or neither does — at which point THIS TEST MUST BE
+   * UPDATED, and its failure is the signal that the retrofit did its job.
+   */
+  it('reports SUCCESS over a half-executed G10 — manager gone, teams left unblocked', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    H.world.failOn = { blockAllTeams: 1 }
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(true)              // ← the problem, not the assertion's fault
+    expect(H.world.managerId).toBeNull()           // first half of the cascade LANDED
+    expect(H.world.teams[0].blocked).toBe(false)   // second half did NOT
+    // The only trace is an op nobody reads.
+    expect((result.operations ?? []).some((op: string) => /G10: WARN — blockAllTeams failed/.test(op))).toBe(true)
+  })
+})

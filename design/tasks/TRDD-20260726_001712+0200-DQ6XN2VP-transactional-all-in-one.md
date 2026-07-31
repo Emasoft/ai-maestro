@@ -221,8 +221,10 @@ The latter takes `pre[] + ONE exe + post[]` (`lib/gate-transaction.ts:256-287`) 
 13 mutations; all 9 landed retrofits call `runGateSequence` directly. Measured, not assumed.
 
 **The window is G03 (`:2402`, first mutation) → G22 (`:3438-3457`, the final on-disk verification,
-which aborts)** — essentially the whole function. The read-only validation gates G0b..G9a stay
-OUTSIDE the array as early returns with their exact strings, matching the landed pattern.
+which aborts)** — essentially the whole function. Validation that runs BEFORE the first mutation
+stays OUTSIDE the array as early returns with their exact strings; validation INTERLEAVED after a
+mutation cannot be hoisted and becomes a `readOnly` gate INSIDE it — see the measured section below,
+which supersedes the simpler "all validation stays outside" reading of the landed pattern.
 
 | commit | contents | why it is safe to stop here |
 |---|---|---|

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T10:15:40+0200
+updated: 2026-07-31T10:25:15+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226]
 ---
 
 ## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
@@ -258,7 +258,7 @@ which supersedes the simpler "all validation stays outside" reading of the lande
 | commit | contents | why it is safe to stop here |
 |---|---|---|
 | **1 ✅ `47feb243`** | the G10 deferred fail + its test | pipeline working, defect closed, zero structural change |
-| **2** | restructure **G9a→G22** into a `const gates = [ … ]` array driven by a small imperative loop, converting each abort from `return result` to `throw`; the ctx stays EMPTY | **zero behaviour change**; suite green; the ratchet still counts ChangeTitle as hand-rolled, so nothing is claimed that is not true |
+| **2 — IN PROGRESS, lands in SLICES** (first slice ✅ `bfc1f226`: G9a + G14) | restructure **G9a→G22** into a `const gates = [ … ]` array driven by a small imperative loop, converting each abort from `return result` to `throw`; the ctx stays EMPTY | **zero behaviour change**; suite at the exact baseline; the ratchet still counts ChangeTitle as hand-rolled, so nothing is claimed that is not true |
 | **3** | swap the driver for `runGateSequence`; undos per the window map; G10 fused into ONE gate (run + undo restore both halves); G14b/G14e → the compensable forms; G22 → the `invariants` hook; lower `MAX_HANDROLLED` 10 → 9 | the ratchet moves only when the guarantee is real |
 
 **⚠ THE CTX IS AN UNDO LEDGER, NOT A REIFICATION OF THE FUNCTION'S LOCALS — corrected 2026-07-31.**
@@ -352,8 +352,26 @@ containing a mutating gate with no `undo`, so this cannot be left to be discover
 commit 3 must either give G17 a defensible `undo` or move it out of the array, and marking it
 `readOnly: true` would be exactly the lie that check exists to catch. This is distinct from the
 RULING above (keep the R9.13 quarantine as in-gate self-heal): the ruling fixes G17's BEHAVIOUR; this
-is the separate question of what a ROLLBACK does to that behaviour. **It is the one open design
-decision in commit 3 — everything else in the table above is wiring.**
+is the separate question of what a ROLLBACK does to that behaviour.
+
+**RESOLVED IN DESIGN 2026-07-31 (not yet implemented, not yet tested) — G17 STAYS IN, and its `undo`
+covers ONLY the quarantine it set.** Split its mutations by who already compensates them:
+
+- **The plugin repairs** (`uninstallAllRolePlugins` + `installPluginLocally` in the `>1` and
+  MISMATCH branches, and the retry inside `enforceRoleOrHibernate`) need NO undo of their own,
+  because G15's and G16's compensations are **state-restoring, not delta-based**: G16's undo removes
+  what G16 installed and G15's reinstalls what G15 removed, which lands on the pre-transaction
+  plugin set regardless of what G17 did on top. G17 only ever installs `targetPluginName` — the same
+  plugin G16 targets — so it cannot introduce a plugin those two undos do not cover. Compensating it
+  separately would DOUBLE-undo.
+- **The quarantine** (`updateAgent({roleMissing: true})` + `hibernateAgent`) is the part that does
+  need reversing, because a rollback returns the agent to its OLD title with its OLD plugin, at
+  which point the quarantine is no longer warranted. It must be **ledger-driven** — `undo` clears
+  `roleMissing` and wakes the agent ONLY if `run` recorded that IT set them. Un-hibernating an agent
+  that was already hibernated before the call would be a new action masquerading as a compensation.
+
+So commit 3 has no open design question left; the remaining risk is in the WIRING and in proving each
+`undo` with a neuter.
 
 **Do NOT re-assert the G14-before-G10 ordering in the new file.**
 `tests/governance/r3-r9-team-governance.test.ts` already pins it, and by the stronger route (inject a

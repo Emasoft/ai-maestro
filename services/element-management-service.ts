@@ -2283,6 +2283,18 @@ function checkMaintainerRepo(
   return { repo: githubRepo }
 }
 
+/**
+ * A DELIBERATE gate abort inside ChangeTitle's transaction window, as opposed to an unexpected
+ * exception (TRDD-DQ6XN2VP).
+ *
+ * The distinction is the whole reason the gate restructure is behaviour-neutral. Today an abort is
+ * a quiet `return result`, while a BUG is a throw that reaches ChangeTitle's outer catch and logs
+ * `[ChangeTitle] FAILED`. Converting every abort into a bare `throw` would have collapsed those two
+ * into one and silently reclassified every unexpected exception as a clean gate refusal — the loop
+ * rethrows anything that is not a GateAbort so a bug still surfaces exactly as it does now.
+ */
+class GateAbort extends Error {}
+
 export async function ChangeTitle(
   agentId: string,
   newTitle: string | null,
@@ -2631,22 +2643,58 @@ export async function ChangeTitle(
       ops.push(`EXE: Title "${effectiveTitle}" — team check N/A`)
     }
 
-    // ── GATE 9a: MAINTAINER validation (R19.2, R19.3) ────────
-    // When assigning MAINTAINER: require githubRepo, check repo uniqueness.
-    // Polling-based design (no webhook, no port, no secret).
-    if (newTitle === 'maintainer') {
-      // R19.2 (format + required) and R19.3 (per-repo uniqueness) both live in
-      // checkMaintainerRepo — the SAME predicate Gate 6's repo-only branch calls,
-      // so the two paths cannot diverge on what a valid repo is.
-      const { loadAgents } = await import('@/lib/agent-registry')
-      const check = checkMaintainerRepo(agentId, options?.githubRepo, loadAgents() as MaintainerCandidate[])
-      if (check.error) { result.error = check.error; return result }
-      // Store githubRepo on agent
-      await updateAgent(agentId, { githubRepo: check.repo } as Record<string, unknown>)
-      ops.push(`G9a: MAINTAINER validated — repo="${check.repo}"`)
-    } else {
-      ops.push(`G9a: Not MAINTAINER — maintainer validation skipped`)
-    }
+    // ══ THE TRANSACTION WINDOW: G9a → G22 (TRDD-DQ6XN2VP, commit 2 of 3) ═══════════════════
+    //
+    // WHY IT STARTS HERE AND NOT AT THE FIRST MUTATION. G03's `updateAgent({program})` mutates
+    // earlier, but it HEALS a corrupt empty field — its undo would restore `program: ''` and
+    // re-break the repair, so it fails the SECOND question a window must ask (is reversing it
+    // legal and harmless?) exactly like InstallElement's three excluded mutations. It comes back
+    // in only if an empty `program` ever becomes legitimate. And G06/G06b early-return SUCCESS,
+    // which a gate cannot express at all: the runner gives a gate two outcomes — return, or throw
+    // and unwind — with no "stop here and report success". Starting at G9a leaves every
+    // early-SUCCESS return and every read-only validation before the array as a plain early
+    // return, which is the shape ChangeClient already ships.
+    //
+    // ARRAY ORDER IS LOAD-BEARING: G14 runs BEFORE G10 deliberately (crash-safety,
+    // TRDD-EE5YX5LF — a compensation covers a throw, never a `kill -9`). Never sort by label.
+    //
+    // Commit 2 (this one) drives the gates with the small loop below and an EMPTY ctx, so nothing
+    // is claimed that is not yet true. Commit 3 swaps the driver for `runGateSequence`, gives each
+    // mutating gate the `undo` and the ctx field it reverses, and routes G22 to the `invariants`
+    // hook so a failed final verification REVERTS instead of merely reporting.
+    //
+    // THE ARRAY IS BEING FILLED IN SLICES, and today it holds G9a and G14 — the two gates whose
+    // aborts matter most, G14 being the title write itself. The remaining gates of the window
+    // (G10-G13b, G14b-G14e, G14d, G15-G17, G22) still run imperatively BELOW this loop, in their
+    // original order, and move up one at a time. Each move is behaviour-neutral on its own, and a
+    // gate must bring the locals it declares with it: G10's `g10CascadeFailed` and G15's
+    // `currentPluginName`/`targetPluginName`/`targetMarketplace` are read by gates AFTER them, so
+    // those four hoist to just above this array on the move that wraps their declaring gate — not
+    // before, or they collide with the declarations still standing in the imperative tail.
+
+    const gates: Array<{ id: string; what: string; run: () => Promise<void> }> = [
+      {
+        id: 'G9a',
+        what: 'MAINTAINER repo validated and stored',
+        run: async () => {
+          // ── GATE 9a: MAINTAINER validation (R19.2, R19.3) ────────
+          // When assigning MAINTAINER: require githubRepo, check repo uniqueness.
+          // Polling-based design (no webhook, no port, no secret).
+          if (newTitle === 'maintainer') {
+            // R19.2 (format + required) and R19.3 (per-repo uniqueness) both live in
+            // checkMaintainerRepo — the SAME predicate Gate 6's repo-only branch calls,
+            // so the two paths cannot diverge on what a valid repo is.
+            const { loadAgents } = await import('@/lib/agent-registry')
+            const check = checkMaintainerRepo(agentId, options?.githubRepo, loadAgents() as MaintainerCandidate[])
+            if (check.error) throw new GateAbort(check.error)
+            // Store githubRepo on agent
+            await updateAgent(agentId, { githubRepo: check.repo } as Record<string, unknown>)
+            ops.push(`G9a: MAINTAINER validated — repo="${check.repo}"`)
+          } else {
+            ops.push(`G9a: Not MAINTAINER — maintainer validation skipped`)
+          }
+        },
+      },
 
     // ── GATE 14: Write governanceTitle to agent registry ─────
     //
@@ -2682,51 +2730,75 @@ export async function ChangeTitle(
     //      does not match — callers (DeleteTeam, TitleAssignmentDialog)
     //      then know the registry is in an inconsistent state and can
     //      surface the error rather than silently succeed.
-    const g14Updated = await updateAgent(agentId, { governanceTitle: effectiveTitle as any })
-    if (!g14Updated) {
-      result.error = `G14: updateAgent returned null for ${agentId} — registry not written`
-      ops.push(`G14: DENIED — updateAgent returned null`)
-      return result
-    }
-    if ((g14Updated.governanceTitle || null) !== (effectiveTitle || null)) {
-      result.error = `G14: in-memory post-write mismatch — expected "${effectiveTitle || 'null'}", got "${g14Updated.governanceTitle || 'null'}"`
-      ops.push(`G14: DENIED — in-memory post-write mismatch`)
-      return result
-    }
-    // Re-verify by re-reading from disk. The file must reflect the new
-    // title; any drift means saveAgents() silently dropped the field or
-    // a concurrent writer clobbered it.
-    try {
-      const { readFileSync } = await import('fs')
-      // statePath() instead of join(HOME, '.aimaestro', ...): identical in production (getStateDir()
-      // IS ~/.aimaestro) but resolved through the ONE seam every fixture already redirects. Built
-      // from the module-scope `const HOME = homedir()`, this read reached the developer's REAL
-      // registry, so no test could ever make a title change verify for a synthetic agent — every
-      // ChangeTitle failed here, which silently made anything downstream of a SUCCESSFUL title
-      // change untestable too (it is why DeleteTeam::G03's title-restore branch was unreachable,
-      // and why its first test passed with the compensation neutered). TRDD-N7X4KDQ2.
-      const REGISTRY_PATH = statePath('agents', 'registry.json')
-      const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
-      const diskAgent = diskAgents.find((a) => a.id === agentId)
-      if (!diskAgent) {
-        result.error = `G14: registry.json does not contain agent ${agentId} after write`
-        ops.push(`G14: DENIED — agent missing from registry.json after write`)
+      {
+        id: 'G14',
+        what: 'governanceTitle written to registry (verified on disk)',
+        run: async () => {
+          const g14Updated = await updateAgent(agentId, { governanceTitle: effectiveTitle as any })
+          if (!g14Updated) {
+            ops.push(`G14: DENIED — updateAgent returned null`)
+            throw new GateAbort(`G14: updateAgent returned null for ${agentId} — registry not written`)
+          }
+          if ((g14Updated.governanceTitle || null) !== (effectiveTitle || null)) {
+            ops.push(`G14: DENIED — in-memory post-write mismatch`)
+            throw new GateAbort(`G14: in-memory post-write mismatch — expected "${effectiveTitle || 'null'}", got "${g14Updated.governanceTitle || 'null'}"`)
+          }
+          // Re-verify by re-reading from disk. The file must reflect the new
+          // title; any drift means saveAgents() silently dropped the field or
+          // a concurrent writer clobbered it.
+          //
+          // THE TRY WRAPS ONLY THE READ. The two checks below used to sit INSIDE it, which was
+          // harmless while they were `return result` — but once they became a `throw`, the catch
+          // would have swallowed them and reported the generic "verification failed" in place of
+          // the specific drift message. Narrowing the try to the I/O it was written for keeps
+          // each abort's exact wording.
+          let diskAgent: Record<string, unknown> | undefined
+          try {
+            const { readFileSync } = await import('fs')
+            // statePath() instead of join(HOME, '.aimaestro', ...): identical in production (getStateDir()
+            // IS ~/.aimaestro) but resolved through the ONE seam every fixture already redirects. Built
+            // from the module-scope `const HOME = homedir()`, this read reached the developer's REAL
+            // registry, so no test could ever make a title change verify for a synthetic agent — every
+            // ChangeTitle failed here, which silently made anything downstream of a SUCCESSFUL title
+            // change untestable too (it is why DeleteTeam::G03's title-restore branch was unreachable,
+            // and why its first test passed with the compensation neutered). TRDD-N7X4KDQ2.
+            const REGISTRY_PATH = statePath('agents', 'registry.json')
+            const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
+            diskAgent = diskAgents.find((a) => a.id === agentId)
+          } catch (verifyErr) {
+            // If we cannot even read the registry file, the write is unverifiable
+            // and the pipeline must NOT continue as if it succeeded.
+            ops.push(`G14: DENIED — registry verification failed`)
+            throw new GateAbort(`G14: registry verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`)
+          }
+          if (!diskAgent) {
+            ops.push(`G14: DENIED — agent missing from registry.json after write`)
+            throw new GateAbort(`G14: registry.json does not contain agent ${agentId} after write`)
+          }
+          const diskTitle = (diskAgent.governanceTitle as string | null | undefined) ?? null
+          const expectedTitle = effectiveTitle ?? null
+          if (diskTitle !== expectedTitle) {
+            ops.push(`G14: DENIED — registry.json shows "${diskTitle ?? 'null'}" after write, expected "${expectedTitle ?? 'null'}"`)
+            throw new GateAbort(`G14: registry.json title drift — disk="${diskTitle ?? 'null'}", expected="${expectedTitle ?? 'null'}"`)
+          }
+          ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in registry (verified on disk)`)
+        },
+      },
+    ]
+
+    // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
+    // runner would refuse to start (findUncompensatedGates), and a loop that merely LOOKED like a
+    // transaction while compensating nothing would be the exact lie R51.3 forbids. So this loop
+    // reproduces today's behaviour exactly — a deliberate abort returns what the early
+    // `return result` used to return, and anything else stays a bug that reaches the outer catch.
+    for (const gate of gates) {
+      try {
+        await gate.run()
+      } catch (err) {
+        if (!(err instanceof GateAbort)) throw err
+        result.error = err.message
         return result
       }
-      const diskTitle = (diskAgent.governanceTitle as string | null | undefined) ?? null
-      const expectedTitle = effectiveTitle ?? null
-      if (diskTitle !== expectedTitle) {
-        result.error = `G14: registry.json title drift — disk="${diskTitle ?? 'null'}", expected="${expectedTitle ?? 'null'}"`
-        ops.push(`G14: DENIED — registry.json shows "${diskTitle ?? 'null'}" after write, expected "${expectedTitle ?? 'null'}"`)
-        return result
-      }
-      ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in registry (verified on disk)`)
-    } catch (verifyErr) {
-      // If we cannot even read the registry file, the write is unverifiable
-      // and the pipeline must NOT continue as if it succeeded.
-      result.error = `G14: registry verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
-      ops.push(`G14: DENIED — registry verification failed`)
-      return result
     }
 
     // ── GATE 10: Clear old MANAGER from governance.json ──────

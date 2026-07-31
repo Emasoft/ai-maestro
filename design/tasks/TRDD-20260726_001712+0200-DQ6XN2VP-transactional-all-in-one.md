@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T14:16:40+0200
+updated: 2026-07-31T14:24:49+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -173,16 +173,35 @@ entry (G14c), G14e's portfolio entry, and G18's mesh broadcast — left the arra
 `txn.ok`. `MAX_HANDROLLED` 10 → **9**, `MIN_TRANSACTIONAL` 9 → **10**, `ChangeTitle` added to
 `MUST_BE_TRANSACTIONAL` (the membership guard that a bare count cannot make).
 
-**NEXT ACTION — rollback-test coverage for the remaining undos.** THREE are pinned now, by
-`tests/services/change-title-window.test.ts`: **G14's** (*"reverts the title write when removeManager
-fails"*, two neuters that fail DIFFERENTLY — `throw` ⇒ R51.5 INVALID STATE, silent `return` ⇒
-`expected 'autonomous' to be 'manager'`, so the assertion discriminates a no-op compensation from a
-failed one), **G10's** (`8f2c9d71` — the pointer restored BEFORE the fleet is woken, plus the
-`nowLive` skip-check), and **G16b's** (`63e56bfa`). The other twelve are live and unobserved. Build
-on `tests/helpers/drive-change-title.ts`: it has `failOn`, an observation ledger where every
-collaborator variant records under its OWN name, a live `awake` set, and `armLateDriftAbort()`.
-Verify: `tsc` 0 lines + the suite at **310/4445/2** + `trddgrep validate` exit 1 with only
+**NEXT ACTION — rollback-test coverage for the remaining undos.** **EIGHT are pinned now**, all in
+`tests/services/change-title-window.test.ts`, each by a named neuter:
+
+| undo | pinned by | commit |
+|---|---|---|
+| **G14** | *"reverts the title write when removeManager fails"* — two neuters that fail DIFFERENTLY (`throw` ⇒ R51.5 INVALID STATE, silent `return` ⇒ `expected 'autonomous' to be 'manager'`), so the assertion discriminates a no-op compensation from a failed one | earlier |
+| **G10** | the pointer restored BEFORE the fleet is woken (`['setManager','unblockAllTeams','wakeAgent']`) + the `nowLive` skip-check | `8f2c9d71` |
+| **G16b** · **G16** | the `--agent` flag restored byte-for-byte; the plugin assertion + `not.toMatch(/INVALID STATE/)` is what caught G16's broken undo | `63e56bfa` |
+| **G14b** · **G14e** | both token stores back at their seeded counts — INDEPENDENTLY (`+0 to be 3` / `+0 to be 2`) | `aca4c858` |
+| **G14d** | the old title's role-plugin reinstalled; attributed by measurement, NOT by array order | `be35ec55` |
+| **G9a** | `githubRepo` restored on a rolled-back MAINTAINER assignment | this slice |
+
+**Still live and unobserved: G11, G12, G13, G13b, G17** — and **G15, whose undo is UNREACHABLE on
+this path** (see below). G11/G12/G13/G13b need a COS/ORCH fixture (this file's agent is
+manager→autonomous); G17's quarantine undo needs an install that FAILS, so the `claude` shim has to
+be made to fail for the target plugin. The harness now has `failOn`, an observation ledger where
+every collaborator variant records under its OWN name, a live `awake` set, token stores modelled as
+STATE, `armLateDriftAbort()`, and a `driveChangeTitle(id, title, extra)` options bag.
+Verify: `tsc` 0 lines + the suite at **310/4448/2** + `trddgrep validate` exit 1 with only
 `7123D51A` and `C7A81642`.
+
+**G15's UNDO IS UNREACHABLE ON ANY COMPATIBILITY-ALTERING TITLE CHANGE — measured, not read.**
+G14d runs FIRST and uninstalls every role-plugin incompatible with the new title, so by the time
+G15's detection reads `settings.local.json` there is nothing left: `currentPluginName` is null, G15
+takes its *"Cleaned stale role-plugins"* branch, and `ctx.g15Uninstalled` is never set. Neutering
+G15's undo left the file **15/15 GREEN**; neutering G14d's reddened the test with `expected [] to
+include 'ai-maestro-assistant-manager-agent'`. The gate is not wrong — its reachability is narrower
+than the array order suggests (it is live only where a plugin survives G14d and G15 still swaps
+it). **Two gates that produce the same observable are indistinguishable without the neuter.**
 
 **THE G16b TESTS FOUND A REAL BUG IN SLICE 4c — G16's UNDO WAS IMPOSSIBLE BY CONSTRUCTION**
 (fixed in `63e56bfa`). Its Claude branch installs with `installPluginLocally` DIRECTLY; the undo

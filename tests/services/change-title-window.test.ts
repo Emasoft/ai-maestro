@@ -413,6 +413,33 @@ describe('ChangeTitle window — what a mid-pipeline failure actually leaves beh
   })
 
   /**
+   * G9a — the ONE gate on this pipeline that writes a field nothing else touches.
+   *
+   * It fires only for `newTitle === 'maintainer'` (R19.2/R19.3), so it is invisible to every other
+   * test in this file: the shared demotion never reaches it. Its write is `githubRepo`, and its
+   * residue is the quiet kind — a MANAGER carrying a repo binding from a MAINTAINER assignment
+   * that was rolled back. Nothing refuses because of it; R19.3's per-repo uniqueness check just
+   * starts counting an agent that is not a maintainer, so the NEXT genuine MAINTAINER assignment
+   * for that repo is refused as a duplicate. A rollback residue that only surfaces as a wrong
+   * refusal, later, to somebody else.
+   *
+   * The seeded agent has no `githubRepo`, so the correct restore is back to `undefined` — which is
+   * why the assertion is `toBeFalsy()` rather than a value comparison, and why the ops line is
+   * asserted too: without it, "the field is empty" is equally true of a gate that never ran.
+   */
+  it('restores githubRepo when a MAINTAINER assignment is rolled back (G9a)', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    armLateDriftAbort()
+
+    const result = await driveChangeTitle(AGENT_ID, 'maintainer', { githubRepo: 'Emasoft/some-repo' })
+
+    expect(result.success).toBe(false)
+    expect((result.operations ?? []).some((op: string) => /^G9a: MAINTAINER validated/.test(op))).toBe(true)
+    expect(H.registry.get(AGENT_ID)?.githubRepo).toBeFalsy()
+    expect(result.error).not.toMatch(/INVALID STATE/)
+  })
+
+  /**
    * G14b + G14e — THE MIRROR OF THE HAZARD THE TEST ABOVE IS ABOUT.
    *
    * That one exists because an abort at G10 would leave a demoted MANAGER still HOLDING tokens that

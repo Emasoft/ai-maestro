@@ -365,7 +365,12 @@ PY
  * Call the real pipeline as the system owner (`isSystemOwner` short-circuits the auth gate — the
  * same seam every internal caller uses). Imported dynamically so the mocks are all in place first.
  */
-export async function driveChangeTitle(agentId: string, newTitle: string | null) {
+export async function driveChangeTitle(
+  agentId: string,
+  newTitle: string | null,
+  /** Extra ChangeTitle options — `githubRepo` is what makes the MAINTAINER path (G9a) reachable. */
+  extra: Record<string, unknown> = {},
+) {
   const { ChangeTitle } = await import('@/services/element-management-service')
-  return ChangeTitle(agentId, newTitle, { authContext: { isSystemOwner: true } })
+  return ChangeTitle(agentId, newTitle, { authContext: { isSystemOwner: true }, ...extra })
 }

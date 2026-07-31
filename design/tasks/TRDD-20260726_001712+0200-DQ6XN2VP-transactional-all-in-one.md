@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T08:20:03+0200
+updated: 2026-07-31T08:48:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -136,10 +136,41 @@ persists that, so re-inserting an expired row writes a row the next read drops. 
 be on disk had the revoke never happened. Skipping it is what would be inexact. A neuter that
 "fixes" this into agreement with the sibling reds exactly one named test.
 
-**NEXT ACTION:** the retrofit proper — restructure into `runAioPipeline` PRE/EXE/POST, preserving the
+**The DRIVER now has a caller, and writing it falsified two things reading had not** (`4529c77e`).
+`tests/services/change-title-window.test.ts` drives the real 1219-line pipeline end to end — a
+MANAGER on no team demoted to AUTONOMOUS while one team exists, which is the exact shape that makes
+G10 fire (`removeManager()` then `blockAllTeams()`). Three tests, 0-IMPACT clean, two neuters with
+disjoint red sets. What the caller found, and neither would have surfaced from a `success` assertion:
+
+- **`stubs.ibctScopeCheck` returned `{allowed: true}`; the real `checkIbctScope` returns
+  `string | null`.** G0b does `if (scopeErr) { result.error = scopeErr; return result }`, so a
+  SUCCESS verdict became the failure reason and EVERY ChangeTitle in the harness died at gate 0b.
+  Only asserting `result.error` caught it — `expect(success).toBe(false)` would have passed forever.
+- **`installClaudeShim` was a pure no-op.** Since TRDD-0GCIMQ9F the CLI is the ONLY writer of
+  `<agentDir>/.claude/settings.local.json`, and G17 reads it back to enforce R9.13 — so a shim that
+  exits 0 makes G16 look successful, leaves G17 nothing to find, and gets a healthy agent "recovered"
+  into `roleMissing: true` + hibernated on every run, which the test would then call the happy path.
+  The shim now models that one write.
+
+Plus a test-side trap worth carrying forward: **`H.world` must be created once and reset IN PLACE.**
+A `vi.mock` factory closes over the object it was handed at first import and that capture survives
+`vi.resetModules()`, so reassigning it per test left the mocks writing to the PREVIOUS world — the
+pipeline really did call `removeManager()` and the assertion read an untouched object.
+
+**NEXT ACTION:** the characterization test of the window — `world.failOn = { updateTeam: 1 }` (G11),
+asserting what is LEFT BEHIND: teams still `blocked`, `managerId` still null, the title already
+changed. That is the state the retrofit must later invert, and pinning it BEFORE the restructure is
+what makes the restructure checkable rather than merely plausible.
+
+**THEN** the retrofit proper — restructure into `runAioPipeline` PRE/EXE/POST, preserving the
 G14-first ordering above. **Do NOT switch G14b/G14e to the compensable forms yet:** without a `ctx` to
 hold the returned handle there is nowhere to register the undo, so the switch would be churn that
 LOOKS like progress. It belongs in the same change that introduces the gate array.
+
+**Do NOT re-assert the G14-before-G10 ordering in the new file.**
+`tests/governance/r3-r9-team-governance.test.ts` already pins it, and by the stronger route (inject a
+G14 failure, assert governance untouched). A weaker happy-path copy only couples two files that were
+meant to fail independently.
 
 **NUMBERS IN THE 2026-07-30 BLOCK BELOW ARE STALE — do NOT carry them forward.** It says 14 to go and
 `MAX_HANDROLLED = 14`; both are now **10**, and `CreateAgent`, `ChangeTeam`, `DeleteTeam` have since
@@ -944,6 +975,15 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       sequence (id in on the join, out on the undo); the neuter reds that test and only it
 - [ ] `ChangeTitle` transactional — **`ChangeClient` and `ChangePlugin` are DONE**; this box is
       split because they were, and `ChangeTitle` (131 gate ops, the largest) is not
+- [x] A DRIVER for `ChangeTitle`, with a caller (`d3694d48` + `4529c77e`) —
+      `tests/helpers/drive-change-title.ts` and `tests/services/change-title-window.test.ts`.
+      Three layers of containment + a `claude` PATH shim that MODELS the CLI's one settings write;
+      3 tests, 0-IMPACT clean, two neuters with disjoint red sets. Writing the caller falsified two
+      stubs a read had passed over: an inverted `checkIbctScope` shape (killed every call at G0b)
+      and a no-op shim (made G17 "recover" a healthy agent on every run)
+- [ ] CHARACTERIZE the window before restructuring — inject at G11 (`failOn: {updateTeam: 1}`) and
+      assert what is left behind (teams blocked, no manager, title already written). The retrofit's
+      acceptance criterion is that it INVERTS exactly this
 - [x] `ChangeTeam` / `DeleteTeam` transactional — both verified 2026-07-31 at their runner call
       sites (`ChangeTeam` runs TWO sequences, `runGateSequence(removeGates, tc)` and
       `(addGates, tc)`; `DeleteTeam` one). They had already left the hand-rolled list; this box was

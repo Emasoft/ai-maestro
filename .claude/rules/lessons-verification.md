@@ -172,6 +172,8 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 ## Mocked modules
 
 - Destructuring an export a module-mock does not define THROWS, even if the function is never called — import lazily, on the branch that needs it.
+- A `vi.mock` FACTORY CLOSES OVER THE OBJECT IT WAS HANDED AT FIRST IMPORT, and that capture SURVIVES `vi.resetModules()` — so REASSIGNING a shared fixture per test leaves every mock writing to the PREVIOUS one: my pipeline really did call `removeManager()` and the assertion read a world nothing had touched, which is indistinguishable from a gate that never ran. Create the fixture ONCE and reset it IN PLACE (`Object.assign`), the way the sibling harness already mutates its `state`.
+- A STUB WHOSE RETURN *SHAPE* IS INVERTED FAILS SILENTLY AND LOOKS LIKE THE FEATURE: `checkIbctScope` returns `string | null` (an ERROR, or null when authorized) and my stub returned `{allowed: true}`, so `if (scopeErr) { result.error = scopeErr; return }` made a SUCCESS verdict the failure reason and every call died at gate 0b. Only an assertion on the ERROR VALUE caught it — `expect(success).toBe(false)` would have called it a pass forever. Read the real signature, not the name.
 
 ## All-in-one functions (R50/R51)
 

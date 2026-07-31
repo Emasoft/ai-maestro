@@ -2696,6 +2696,27 @@ export async function ChangeTitle(
       g9aPriorGithubRepo?: { value: unknown }
       /** G14: set once `updateAgent` returned non-null — i.e. the title really moved in memory. */
       g14Wrote?: boolean
+      /** G10: the cascade's ledger — what it removed, what it blocked, whom it hibernated. */
+      g10?: {
+        /** What governance.json held BEFORE removeManager() nulled it. */
+        priorManagerId: string | null
+        /** Set once removeManager() returned — the pointer really is gone. */
+        removedManager: boolean
+        /** Teams this call FLIPPED to blocked (they were unblocked on the way in). */
+        newlyBlockedTeamIds: string[]
+        /** Teams already blocked on the way in — NOT ours to unblock. */
+        alreadyBlockedTeamIds: string[]
+        /** Agent ids blockAllTeams() hibernated — its own return value (R51.4's snapshot). */
+        hibernated: string[]
+      }
+      /** G11: the COS pointers cleared and the requests auto-rejected. */
+      g11?: {
+        clearedCosTeamIds: string[]
+        /** Only the three fields rejectGovernanceRequest writes, per request it rejected. */
+        rejectedRequests: { id: string; status: string; updatedAt: string; rejectReason?: string }[]
+      }
+      /** G12: the teams whose orchestratorId pointed at this agent before the gate nulled it. */
+      g12?: { clearedOrchTeamIds: string[] }
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -2857,12 +2878,37 @@ export async function ChangeTitle(
         run: async () => {
           if (oldTitle === 'manager') {
             const { removeManager } = await import('@/lib/governance')
+            // WRITE-AHEAD: the ledger is opened BEFORE the first mutation. The two halves of this
+            // cascade fail independently, and `undo` is called even when `run` threw part-way, so
+            // recording after the fact would leave exactly the failing window uncompensated.
+            const led: NonNullable<typeof ctx.g10> = {
+              priorManagerId: getManagerId(),
+              removedManager: false,
+              newlyBlockedTeamIds: [],
+              alreadyBlockedTeamIds: [],
+              hibernated: [],
+            }
+            ctx.g10 = led
             await removeManager()
+            led.removedManager = true
             ops.push(`G10: Removed manager from governance.json`)
             // MANAGER removed → block all teams + hibernate team agents
             try {
-              const { blockAllTeams } = await import('@/lib/team-registry')
+              const { blockAllTeams, loadTeams: loadTeamsG10 } = await import('@/lib/team-registry')
+              // WHICH teams this call will actually FLIP. `blocked` is written nowhere but
+              // blockAllTeams/unblockAllTeams and both are all-or-nothing, so in practice the teams
+              // are either all blocked or none are — but recording the split is what lets `undo`
+              // tell "I blocked these" from "these were already blocked", instead of unblocking
+              // teams this pipeline never touched.
+              for (const t of loadTeamsG10()) {
+                (t.blocked ? led.alreadyBlockedTeamIds : led.newlyBlockedTeamIds).push(t.id)
+              }
+              // The hibernated list arrives only on a clean return, and that is sufficient: the
+              // flag write happens FIRST, inside withLock, and the hibernate loop that follows
+              // catches per agent — so a throw here comes from the save and means nothing was
+              // hibernated yet. "Some agents down, no list" is not a reachable partial state.
               const hibernated = await blockAllTeams()
+              led.hibernated = hibernated
               ops.push(`G10: Blocked all teams, hibernated ${hibernated.length} team agent(s)`)
             } catch (err) {
               g10CascadeFailed = err instanceof Error ? err.message : String(err)
@@ -2872,6 +2918,83 @@ export async function ChangeTitle(
             ops.push(`G10: Old title not MANAGER — governance.json unchanged`)
           }
         },
+        // Reverse the cascade's BOTH halves, in the reverse of the forward order — the manager
+        // pointer FIRST, because everything after it depends on the pointer being back: a blocked
+        // team is only legal without a manager, and the wake guard in agents-core-service REFUSES
+        // to wake a team agent while getManagerId() is null.
+        //
+        // Nothing recorded ⇒ the non-manager branch ran and this gate mutated nothing.
+        undo: async () => {
+          const led = ctx.g10
+          if (!led) return
+          // Each half is attempted independently and its failure recorded, rather than aborting on
+          // the first: reverting three of four things beats reverting one and giving up, and the
+          // throw at the end still reports every piece that survived.
+          const problems: string[] = []
+
+          if (led.removedManager && led.priorManagerId) {
+            try {
+              const { setManager } = await import('@/lib/governance')
+              await setManager(led.priorManagerId)
+            } catch (err) {
+              problems.push(`manager pointer (${err instanceof Error ? err.message : err})`)
+            }
+          }
+
+          if (led.newlyBlockedTeamIds.length) {
+            if (led.alreadyBlockedTeamIds.length) {
+              // unblockAllTeams() is all-or-nothing, so in a MIXED corpus it would also unblock
+              // teams this pipeline never blocked. Over-restoring is a silent lie about what was
+              // reverted (R51.3), so the honest outcome is to name what a human must unblock.
+              problems.push(
+                `teams still blocked (${led.newlyBlockedTeamIds.join(', ')}) — unblocking them would ` +
+                `also unblock ${led.alreadyBlockedTeamIds.join(', ')}, which this pipeline did not block`,
+              )
+            } else {
+              try {
+                const { unblockAllTeams } = await import('@/lib/team-registry')
+                await unblockAllTeams()
+              } catch (err) {
+                problems.push(`team unblock (${err instanceof Error ? err.message : err})`)
+              }
+            }
+          }
+
+          if (led.hibernated.length) {
+            // Only wake what is actually down. An agent already back up would report woken:false,
+            // which would read as a rollback failure when in fact there is nothing left to do.
+            let nowLive = new Set<string>()
+            try {
+              const { getRuntime } = await import('@/lib/agent-runtime')
+              nowLive = new Set((await getRuntime().listSessions()).map((s) => s.name))
+            } catch {
+              // Cannot enumerate sessions — attempt every wake and let alreadyRunning absorb the
+              // ones that did not need it.
+            }
+            const { wakeAgent } = await import('@/services/agents-core-service')
+            for (const sleeperId of led.hibernated) {
+              const sleeper = getAgent(sleeperId)
+              if (!sleeper) { problems.push(`${sleeperId} (no registry entry)`); continue }
+              if (nowLive.has(sleeper.name)) continue
+              try {
+                // wakeAgent returns a ServiceResult: success is `data` present, not a `success` field.
+                const woke = await wakeAgent(sleeperId, { authContext: options.authContext })
+                if (woke.error || !(woke.data?.woken || woke.data?.alreadyRunning)) {
+                  problems.push(`${sleeper.name} (${woke.error ?? 'wake reported not woken'})`)
+                }
+              } catch (err) {
+                problems.push(`${sleeper.name} (${err instanceof Error ? err.message : err})`)
+              }
+            }
+          }
+
+          // R51.5 — a compensation that could not finish must SAY SO. Throwing is what lands this
+          // gate in `unrevertable`, turning the caller's message into CRITICAL/INVALID STATE
+          // instead of the false "no changes were made". The fleet really is still asleep.
+          if (problems.length) {
+            throw new Error(`G10 rollback incomplete: ${problems.join('; ')}`)
+          }
+        },
       },
       // ── GATE 11: Clear old COS — clear team + reject pending requests ─
       {
@@ -2879,6 +3002,10 @@ export async function ChangeTitle(
         what: 'Old COS cleared from teams, pending requests rejected',
         run: async () => {
           if (oldTitle === 'chief-of-staff' && newTitle !== 'chief-of-staff') {
+            // WRITE-AHEAD, same reason as G10: two independent halves, and `undo` runs even when
+            // `run` threw between them.
+            const led: NonNullable<typeof ctx.g11> = { clearedCosTeamIds: [], rejectedRequests: [] }
+            ctx.g11 = led
             // Clear chiefOfStaffId from all teams where this agent is COS
             try {
               const { loadTeams, updateTeam } = await import('@/lib/team-registry')
@@ -2887,6 +3014,7 @@ export async function ChangeTitle(
                 if (team.chiefOfStaffId === agentId) {
                   const managerId = getManagerId()
                   await updateTeam(team.id, { chiefOfStaffId: null }, managerId)
+                  led.clearedCosTeamIds.push(team.id)
                   ops.push(`G11: Cleared chiefOfStaffId on team "${team.name}"`)
                 }
               }
@@ -2902,6 +3030,16 @@ export async function ChangeTitle(
               )
               for (const req of pendingFromCOS) {
                 const managerId = getManagerId()
+                // Recorded BEFORE the reject, and per request: these are the exact three fields
+                // rejectGovernanceRequest writes, so the restore is a row patch rather than a
+                // whole-file snapshot — a ChangeTitle rollback must not clobber approvals another
+                // writer made in the meantime.
+                led.rejectedRequests.push({
+                  id: req.id,
+                  status: req.status,
+                  updatedAt: req.updatedAt,
+                  rejectReason: req.rejectReason,
+                })
                 await rejectGovernanceRequest(req.id, managerId || 'system', `COS role revoked`)
               }
               if (pendingFromCOS.length > 0) {
@@ -2916,6 +3054,56 @@ export async function ChangeTitle(
             ops.push(`G11: Old title not COS — skipped`)
           }
         },
+        // Put the agent back as COS on exactly the teams this gate cleared, and un-reject exactly
+        // the requests it rejected.
+        //
+        // `getManagerId()` here returns what the forward run saw, NOT something a sibling gate
+        // moved: G10 (old MANAGER) and G11 (old COS) branch on the SAME `oldTitle` and are
+        // mutually exclusive, and when G13 (new MANAGER) also ran, reverse order already restored
+        // the pointer before this undo is reached.
+        undo: async () => {
+          const led = ctx.g11
+          if (!led) return
+          const problems: string[] = []
+
+          if (led.clearedCosTeamIds.length) {
+            try {
+              const { updateTeam } = await import('@/lib/team-registry')
+              const managerId = getManagerId()
+              for (const teamId of led.clearedCosTeamIds) {
+                await updateTeam(teamId, { chiefOfStaffId: agentId }, managerId)
+              }
+            } catch (err) {
+              problems.push(`chiefOfStaffId (${err instanceof Error ? err.message : err})`)
+            }
+          }
+
+          if (led.rejectedRequests.length) {
+            try {
+              const { loadGovernanceRequests, saveGovernanceRequests } = await import('@/lib/governance-request-registry')
+              const file = loadGovernanceRequests()
+              let changed = false
+              for (const before of led.rejectedRequests) {
+                const row = file.requests.find((r) => r.id === before.id)
+                if (!row) continue
+                row.status = before.status as typeof row.status
+                row.updatedAt = before.updatedAt
+                if (before.rejectReason === undefined) delete row.rejectReason
+                else row.rejectReason = before.rejectReason
+                changed = true
+              }
+              // ONE save after the whole patch: a per-row save would turn a mid-loop failure into
+              // a half-restored file, which is worse than the state we started the undo from.
+              if (changed) saveGovernanceRequests(file)
+            } catch (err) {
+              problems.push(`pending requests (${err instanceof Error ? err.message : err})`)
+            }
+          }
+
+          if (problems.length) {
+            throw new Error(`G11 rollback incomplete: ${problems.join('; ')}`)
+          }
+        },
       },
       // ── GATE 12: Clear old ORCHESTRATOR from team ────────────
       {
@@ -2923,6 +3111,8 @@ export async function ChangeTitle(
         what: 'Old ORCHESTRATOR cleared from team',
         run: async () => {
           if (oldTitle === 'orchestrator' && newTitle !== 'orchestrator') {
+            const led: NonNullable<typeof ctx.g12> = { clearedOrchTeamIds: [] }
+            ctx.g12 = led
             try {
               const { loadTeams, updateTeam } = await import('@/lib/team-registry')
               const teams = loadTeams()
@@ -2930,6 +3120,7 @@ export async function ChangeTitle(
                 if (team.orchestratorId === agentId) {
                   const managerId = getManagerId()
                   await updateTeam(team.id, { orchestratorId: null }, managerId)
+                  led.clearedOrchTeamIds.push(team.id)
                   ops.push(`G12: Cleared orchestratorId on team "${team.name}"`)
                 }
               }
@@ -2941,6 +3132,22 @@ export async function ChangeTitle(
             }
           } else {
             ops.push(`G12: Old title not ORCHESTRATOR — team.orchestratorId unchanged`)
+          }
+        },
+        // Point each cleared team back at this agent. Recorded per team rather than re-derived,
+        // because "which teams had this agent as orchestrator" is no longer answerable once the
+        // pointers are null — that is the snapshot R51.4 asks for.
+        undo: async () => {
+          const led = ctx.g12
+          if (!led || !led.clearedOrchTeamIds.length) return
+          try {
+            const { updateTeam } = await import('@/lib/team-registry')
+            const managerId = getManagerId()
+            for (const teamId of led.clearedOrchTeamIds) {
+              await updateTeam(teamId, { orchestratorId: agentId }, managerId)
+            }
+          } catch (err) {
+            throw new Error(`G12 rollback incomplete: orchestratorId (${err instanceof Error ? err.message : err})`)
           }
         },
       },

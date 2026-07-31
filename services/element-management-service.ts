@@ -6883,6 +6883,29 @@ export async function ChangeName(
         },
       }],
       {},
+      {
+        // ── G06 LEFT THE TAIL — it is now the runner's `invariants` hook (R51.7, TRDD-DQ6XN2VP) ──
+        //
+        // It was always the SUCCESS-PATH check, and as a trailing `WARN` it was a log line dressed
+        // as a verification: the pipeline reported SUCCESS through it and then emitted a
+        // `change_name` ledger entry for a rename that had not stuck. That is the "detect and
+        // report the residue" contract R51 supersedes, and here it produces a CONTRADICTION rather
+        // than a leftover — `updateAgent` also renames every live tmux session, so a registry write
+        // that did not land leaves the sessions on the NEW name and the registry on the old.
+        //
+        // As the `invariants` hook the drift now REVERTS (through `updateAgent`, so the sessions
+        // come back with it) and no ledger entry is written. Same promotion, same reasoning, as
+        // ChangeTitle's G22.
+        invariants: async (): Promise<string[]> => {
+          const verified = getAgent(agentId)
+          if (verified?.name !== normalized) {
+            ops.push(`G06: DENIED — final name drift`)
+            return [`G06: Final name "${verified?.name ?? 'null'}" != expected "${normalized}"`]
+          }
+          ops.push(`G06: Final name verified: "${normalized}"`)
+          return []
+        },
+      },
     )
     ops.push(...txn.ops)
     if (!txn.ok) { result.error = txn.message; return result }
@@ -6896,13 +6919,9 @@ export async function ChangeName(
       ops.push(`G05: No active sessions — no restart needed`)
     }
 
-    // ── G06: Verify final state ───────────────────────────────
-    const verified = getAgent(agentId)
-    if (verified?.name !== normalized) {
-      ops.push(`G06: WARN — Final name "${verified?.name}" != expected "${normalized}"`)
-    } else {
-      ops.push(`G06: Final name verified: "${normalized}"`)
-    }
+    // (G06 is the runner's `invariants` hook above — a post-condition that does not gate the
+    // result is not a verification. The ledger entry below is therefore only ever written for a
+    // rename that verifiably landed.)
 
     await tryEmitLedgerOp(
       'change_name',

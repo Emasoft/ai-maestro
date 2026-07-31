@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T20:15:22+0200
-updated: 2026-07-31T20:27:34+0200
+updated: 2026-07-31T20:37:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -31,11 +31,18 @@ Every other one landed under `TRDD-DQ6XN2VP`; this was carved out of that card b
 window**, opening it after `:912`. Do not re-litigate it; (b)/(c)/(d) are rejected there with
 reasons. And it is **FIVE** excluded mutations, not the three the parent card named.
 
-**NEXT ACTION — pick one of the three ways out in `⚠ FOUND WHILE STARTING THE BUILD` FIRST.**
-"Open the window after the last unreversible mutation" is not a line split: that mutation
-(`emitForClient`) is nested four levels deep, immediately before the `adapter.install` it feeds.
-Current preference is **option 3** (resolve `storageDir` in a step before the window, scoped to the
-adapter branch) — verify it type-checks against `convertedDir`'s flow before committing.
+**⚠ THE BLOCKER IS RESOLVED — see `## ✅ RESOLVED 2026-07-31 — option 3, and it was a
+SIMPLIFICATION`.** Option 3 landed, and it turned out to REMOVE code rather than add a step: the
+"lazy emit" was a **retry-after-swallow of G13's own emit**, because `useClientAdapter` (`:820`)
+and `needsConversion` (`:859`) are the same predicate written twice. Both `emitForClient` calls now
+sit in G13 (`:873`, `:901`); EXE is a pure read. Do not re-litigate the three options.
+
+**NEXT ACTION — build the window AND the CLOSED-SET TEST together.** There is now a horizontal line
+to cut on: the last unreversible mutation is the EXE `mkdir` at `:919`, at TOP LEVEL of the
+function, and the `try {` opens at `:922`. The test is the load-bearing half: `MAX_HANDROLLED = 0`
+while five mutations sit outside every window is a false "complete", and a comment is not a guard.
+**Key it on call SHAPE, never on line numbers** — this card's citations drifted +3 within one
+session, then again on this hoist.
 
 Then build the window **and the CLOSED-SET TEST together**. That test is the load-bearing half:
 `MAX_HANDROLLED = 0` while five mutations sit outside every window is a false "complete" signal,
@@ -201,6 +208,7 @@ Plus: the ratchet's claim is renamed from *"transactional"* to **"windowed per t
 rule"**, so the number stops overclaiming.
 
 ### ⚠ FOUND WHILE STARTING THE BUILD — "open the window after `:915`" IS NOT A LINE SPLIT
+### — ✅ RESOLVED, see `## ✅ RESOLVED 2026-07-31` below. Kept for the reasoning.
 
 The decision above says *open the window after the last unreversible mutation*. Going to write it
 shows that mutation is **nested four levels deep, immediately before the install it feeds**:
@@ -242,6 +250,66 @@ line number here as a hint and re-resolve it — which is also why the closed-se
 the window MUST move up. That test is the signal. **If it never reds, re-check that the scanner
 matches both mutation forms** (direct call and via-helper), because a scanner that cannot see a
 mutation reports a closed set it never measured.
+
+## ✅ RESOLVED 2026-07-31 — option 3, and it was a SIMPLIFICATION, not an added step
+
+Option 3 was written expecting to ADD a resolve-step before the window. It removed one instead,
+because the premise of the whole three-way choice was wrong in a way none of the three options named.
+
+**THE MEASUREMENT THAT COLLAPSED IT.** The lazy emit's enclosing branch is `if (useClientAdapter)`
+(`:820`); G13's own guard is `if (needsConversion && …)` (`:859`). Reading both: **they are the same
+predicate written twice.** So on every path that reaches the lazy emit, **G13 has already run and
+already called `emitForClient`**. The `:915` call was never a separate resolution — it is a
+**retry-after-swallow**, reachable in exactly one case: `convertAndStorePlugin` threw, G13's catch
+swallowed it into a WARN, so `convertedDir` stayed null while a PREVIOUS emission may still be on
+disk. EXE's own error string had been saying so all along (*"conversion (G13) must have failed"*).
+The code knew where that call belonged; it was just written in the wrong place.
+
+**SO THE HOIST IS BEHAVIOUR-PRESERVING**, which is what made option 1's objection evaporate. Moving
+the retry into G13 does not fire it for CLI installs — G13's guard is what gates it, and that guard
+is false on the CLI path. Option 1 was rejected for speculative emission that the *hoisted* form
+cannot do.
+
+**WHAT LANDED** (`services/element-management-service.ts`):
+
+- the retry moved from the EXE adapter branch up into G13, immediately after G13's own emit, under
+  `if (!convertedDir)`, with a comment naming the one case it earns its keep in;
+- EXE reduced to `const storageDir = convertedDir` — a **pure read**, with a comment recording that
+  the mutation R20.31 forbids reversing no longer happens inside the future window;
+- the error message that already blamed G13 is now literally true.
+
+**RE-MEASURED (AST, not grep) — and this is the point of the exercise:**
+
+| call | before | after |
+|---|---|---|
+| `emitForClient` | `:873`, **`:915`** (nested 4 deep, AFTER the EXE mkdir) | `:873`, **`:901`** — both inside G13 |
+| `mkdir` | `:718`, `:919` | unchanged |
+
+**There is now a horizontal line to cut on.** The last unreversible mutation is the EXE `mkdir` at
+`:919`, sitting at TOP LEVEL of the function inside `if (scope === 'local')`, and the `try {` opens
+at `:922`. That is the window boundary the decision asked for and could not previously have.
+
+**Verification:** `tsc --noEmit` exit 0, zero lines. `element-management-service.test.ts` +
+`aio-txn-10-runner-coverage.test.ts`: 2 files / **106 tests** passed. Full suite: **313 files /
+4527 passed / 2 skipped**, one failure — which was a real finding, below.
+
+**AND IT MOVED A GOVERNANCE ROW — the enforcement ratchet caught it, which is the ratchet working.**
+`tests/governance/enforcement-coverage.test.ts` failed with *"R20: map says ENFORCED, code says
+GATED; tally (22,15,15,0,52) → (23,14,15,0,52)"*. Not a break: **`GATED` is the STRONGER verdict**
+(the map's own legend, `:522` — *"cited inside a pipeline, in a gate's neighbourhood — the strongest
+evidence a script can give"*; `ENFORCED` is *"real enforcement, wrong shape for R51.9"*). The
+R20.26/R20.31-governed mutation moved out of ungated EXE code and INTO gate G13, so the classifier
+is reporting the change accurately. `docs/GOVERNANCE-ENFORCEMENT-MAP.md` Part II updated by hand
+(the script prints, it does not write); `aio-gate-coverage.py` now reports *"OK — Part II matches
+the code (52 rules)"* and the ratchet is 10/10 green.
+
+That is worth noticing for its own sake: **the boundary work is not only an R51 concern.** Pulling a
+mutation inside a gate is what makes a rule mechanically attributable to a guard, so the same edit
+that opens the window also upgrades what the coverage script can prove.
+
+**⚠ AND THE CITATIONS DRIFTED AGAIN, in this very edit** — third instance on this card. `:915` is
+now `:901`. This is no longer an anecdote; it is the specification for the closed-set test: **key on
+call shape, never on line numbers.**
 
 ## The design question this card exists to answer (ANSWERED ABOVE — kept for the reasoning)
 

@@ -866,9 +866,9 @@ export async function InstallElement(
     // ── G13: Convert via Universal Plugin IR (if needed) ──────
     let convertedDir: string | null = null
     if (needsConversion && (action === 'install' || action === 'update')) {
+      const targetClient = clientType as 'codex' | 'gemini' | 'opencode' | 'kiro'
       try {
         const { convertAndStorePlugin, emitForClient } = await import('@/services/plugin-storage-service')
-        const targetClient = clientType as 'codex' | 'gemini' | 'opencode' | 'kiro'
         await convertAndStorePlugin(name, 'claude', [targetClient])
         convertedDir = await emitForClient(name, targetClient)
         if (convertedDir) {
@@ -881,6 +881,28 @@ export async function InstallElement(
         // lines above. An audit log that attributes a conversion failure to the wrong gate sends
         // the next reader to the wrong code (TRDD-YAGRX7W3).
         ops.push(`G13: WARN — Cross-client conversion failed: ${convErr instanceof Error ? convErr.message : convErr}`)
+      }
+      // RETRY, MOVED UP FROM EXE (TRDD-YAGRX7W3). This used to live inside the EXE adapter branch
+      // as `if (!storageDir) { emitForClient(...) }`, and it was never a separate "resolve the
+      // storage dir" step: `useClientAdapter` and `needsConversion` are the SAME predicate
+      // (`clientType !== 'claude' && !== 'unknown'`), so G13 has ALWAYS already run by the time
+      // that branch is reached. It is a retry of G13's own emit, and it earns its keep in exactly
+      // one case — `convertAndStorePlugin` threw, so `emitForClient` never ran at all and a
+      // PREVIOUS emission may still be on disk. (When the emit itself returned null, retrying
+      // returns null again; harmless.)
+      //
+      // It moves here because the emit is a mutation R20.31 (verdict Explicit) forbids reversing,
+      // and it must therefore sit ABOVE the R51 transaction window rather than nested inside it,
+      // immediately before the install it feeds. Keeping the whole emit in the gate that owns it
+      // is what makes the boundary a line the window can actually start on.
+      if (!convertedDir) {
+        try {
+          const { emitForClient } = await import('@/services/plugin-storage-service')
+          convertedDir = await emitForClient(name, targetClient)
+          if (convertedDir) ops.push(`G13: Recovered — emitted ${convertedDir} on retry`)
+        } catch {
+          // Stays null. EXE reports it with the message that already names this gate.
+        }
       }
     } else {
       ops.push(`G13: No conversion needed`)
@@ -909,11 +931,10 @@ export async function InstallElement(
               ops.push(result.error)
               return result
             }
-            let storageDir = convertedDir
-            if (!storageDir) {
-              const { emitForClient } = await import('@/services/plugin-storage-service')
-              storageDir = await emitForClient(name, clientType as 'codex' | 'gemini' | 'opencode' | 'kiro')
-            }
+            // Pure READ of what G13 resolved — the fallback emit that used to sit here moved up
+            // into G13 (TRDD-YAGRX7W3), so no mutation R20.31 forbids reversing happens inside the
+            // future R51 window. The error below already named G13 as the culprit; now it is true.
+            const storageDir = convertedDir
             if (!storageDir) {
               result.error = `EXE: No converted plugin dir for ${name}@${clientType} — conversion (G13) must have failed`
               ops.push(result.error)

@@ -530,7 +530,7 @@ rule says* — only that one plausibly exists. Every non-`GATED` row is a candid
 
 ## Coverage as of 2026-07-26
 
-**GATED 22 · ENFORCED 15 · DOC-ONLY 15 · UNMAPPED 0 · total 52.**
+**GATED 23 · ENFORCED 14 · DOC-ONLY 15 · UNMAPPED 0 · total 52.**
 
 | Rule | Verdict | Where |
 |---|---|---|
@@ -553,7 +553,7 @@ rule says* — only that one plausibly exists. Every non-`GATED` row is a candid
 | R17 Mandatory Core Plugin | **GATED** | `element-management-service.ts` |
 | R18 Plugin Continuity on Client Change | **GATED** | `element-management-service.ts` |
 | R19 MAINTAINER Title | **GATED** | `element-management-service.ts` |
-| R20 Marketplace Governance | ENFORCED | groups/marketplace routes |
+| R20 Marketplace Governance | **GATED** | `element-management-service.ts` |
 | R21 All-In-One Pipeline Architecture | **GATED** | `element-management-service.ts` |
 | R22 GitHub Authorship | DOC-ONLY | — (behavioural) |
 | R23 Plugin↔Server Decoupling | DOC-ONLY | — (guard lives in an external plugin repo; see Part I) |

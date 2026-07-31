@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-07-31T18:36:17+0200
+updated: 2026-07-31T18:40:16+0200
 created-by: ai-maestro
 current-owner: ai-maestro
 assignee: ai-maestro
@@ -35,12 +35,41 @@ external-refs: []
 **The incident:** 2026-07-31 ~17:20 the owner was rate-limited and had to log in by hand. The
 rotator was NOT asleep — it detected the exhaustion every 60 s and had nowhere to go.
 
-**NEXT ACTION:** wire Leg 3's drive into the tick (`reauth-needed` → `startReauth` →
+**NEXT ACTION:** build `reauth-repair.ts` per "WHERE the repair leg goes" below (NOT inside runTick — its docstring forbids browser tiers), called from `server-tick.ts` behind its OWN default-off flag (`reauth-needed` → `startReauth` →
 `driveConsent` → `completeReauth`) and surface `reauth-needed` to the owner. The drive itself is
 BUILT and pinned — `lib/oauth-rotator/{reauth-drive,page-classify}.ts`, commits `994be6d6`
 `041a87f8` `fde71e17`, 44 tests, 7 recorded neuters — but it has **no production caller yet**, so
 nothing calls it and nothing can regress from it. Do box 1 FIRST; it is the only
 irreversible-by-omission step.
+
+### WHERE the repair leg goes — read this BEFORE writing the wiring (measured 18:40)
+
+"Wire it into the tick" is the obvious phrasing and it is **wrong as written**: two of the three
+candidate homes carry docstrings that forbid exactly this, so jamming `driveConsent` into either
+would violate a stated design decision rather than implement one.
+
+| Candidate | Its own contract | Verdict |
+|---|---|---|
+| `tick.ts::runTick` | *"The Phase-F browser tiers (cookie capture, seeded-slot bootstrap, the REAUTH 'only human step') are **deliberately NOT invoked here** — this tick is the autonomous continuity core"* (`:527-529`) | **NO** — browser-free by design |
+| `supervisor.ts` | *"It heals **NOTHING** — the tick actuates"* (`:5`) | **NO** — detect/report only |
+| `server-tick.ts` | the R16 flag gate itself (`OAUTH_TICK_FLAG`, `oauthTickEnabled()`) | the **call site**, not the logic |
+
+**So the leg needs its own module** (`reauth-repair.ts`), invoked from `server-tick.ts` AFTER
+`runTick` returns, behind its **own** flag defaulting OFF — separate from `OAUTH_TICK_FLAG`,
+because opening a headed browser unattended is a strictly bigger promise than rotating a
+already-captured slot, and the two should not be armed by one switch.
+
+**A concrete prerequisite the card missed:** the tick **counts** dead-refresh alternates
+(`deadRefresh++`, `tick.ts:567`) and never records WHICH. A repair needs the email. Note the
+neighbouring constraint before "fixing" that by logging it: the decision line is deliberately
+*"counts only; never an email, never a token"* (`:575`) — so the identities may travel in the
+RESULT, never in the log.
+
+**And it fires on ONE of the two reasons only.** `slot-unreadable` is a credential-ACCESS fault
+(the process cannot reach the keychain) — driving a consent cannot fix it, and attempting one
+would open a browser to repair something a browser has no bearing on. Only `refresh-dead` is
+repairable here. When the drive is armed, `tick.ts:581`'s message *"a human must re-login"* also
+becomes stale for that branch and must change with it.
 
 ### The drive is UNIVERSAL now (owner directive, 2026-07-31): structure, not words
 

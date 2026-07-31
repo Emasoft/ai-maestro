@@ -43,11 +43,8 @@ merely RETURNS; one gate's compensation can MASK another's on a shared field; an
 first line short-circuits reddens nothing unless the fixture drives real partial work (delete, then
 throw). [^1] [^4]
 
-**Where the work stands (2026-07-31):** 9 of 19 pipelines transactional. The 10 remaining are
-either single-mutation with nothing abortable after them — so retrofitting buys conformance, not
-safety — or `ChangeTitle` / `InstallElement`, which retrofitted pipelines now CALL from inside
-their own gates, so converting either changes its callers' failure semantics. Governing card:
-`TRDD-DQ6XN2VP`. [^5]
+**Where the work stands:** see the status atom below — 9 of 19 transactional, and `ChangeTitle` is
+the only pipeline left with a real window. [^5] [^6] [^7]
 
 ## Applies to
 
@@ -57,6 +54,18 @@ their own gates, so converting either changes its callers' failure semantics. Go
 ## See also
 
 - [[governance-enforcement-ratchet]] — the same ratchet pattern applied to rule enforcement.
+
+
+^ATOM-2U3W-0C2K [desc:"Where the R51 retrofit stands: ChangeTitle is the ONLY pipeline left with a real window, and its window is now characterized (2026-07-31)", keywords: which_pipeline_still_needs_the_runner ChangeTitle_is_the_last_window InstallElement_conformance_only compensation_is_forbidden_here characterize_before_retrofitting, ocd: 2026-07-31, lmd: 2026-07-31]
+
+**Status (2026-07-31): 9 of 19 pipelines transactional, and `ChangeTitle` is the ONLY one left with
+a real partial-state window.** The other nine are single-mutation with nothing abortable after them,
+or `InstallElement` — measured PERMANENTLY conformance-only, because its three pre-EXE mutations are
+ones a compensation is FORBIDDEN or harmful to reverse (R20.31 verdict *Explicit* protects the local
+plugin source; `.claude/` is a guaranteed agent invariant a watchdog re-creates; the marketplace
+registration is SHARED across agents). `ChangeTitle`'s window is now CHARACTERIZED rather than
+argued: `tests/services/change-title-window.test.ts` drives the real 1219-line pipeline against a
+temp home and pins what a mid-pipeline failure leaves behind. Governing card: `TRDD-DQ6XN2VP`. [^6] [^7]
 
 ## Notes and lessons learned
 
@@ -98,3 +107,5 @@ their own gates, so converting either changes its callers' failure semantics. Go
   `ChangeCLIArgs`) turned out to be ONE mutating gate with nothing abortable after, so each would
   move the ratchet and buy zero safety. DO measure the WINDOW first — five scoped greps for
   mutations vs abort points settled it — and say plainly when a retrofit is for conformance.
+[^6]: [id:ATOM-MUOZ-V2O8, status:valid, keywords:"mutation_without_a_legal_undo retrofit_buys_zero_safety deleting_the_users_source_folder shared_registration_cannot_be_reversed is_this_really_a_window", ocd:2026-07-31, lmd:2026-07-31] DO NOT treat every mutation before an abort point as a partial-state window, BECAUSE reversing it must also be LEGAL and HARMLESS: three of `InstallElement`'s passed the "is there abortable work after it?" test and failed the second one — R20.31 (verdict *Explicit*) forbids deleting from the local plugin source, `.claude/` is an agent invariant the watchdog re-creates, and the marketplace registration is SHARED, so deregistering it breaks every other agent. Retrofitting by op count would have written a compensation that deletes a user-owned folder and called it R51 compliance. DO ask BOTH questions before scoping a sequence.
+[^7]: [id:ATOM-FTR8-IT18, status:valid, keywords:"gate_reported_success_but_state_is_inconsistent half_of_a_cascade_landed warn_and_continue_swallowed_it only_the_second_half_is_try_wrapped cascade_not_atomic", ocd:2026-07-31, lmd:2026-07-31] DO NOT wrap only the SECOND half of a cascade, BECAUSE the operation then returns success over the exact state the cascade exists to prevent: ChangeTitle's G10 removes the manager and THEN blocks every team (a team must not run without one), only the block is try/caught, so a failure there yields `success: true` on a host with no manager and unblocked teams — traced solely by an op nobody reads. DO make the cascade ONE gate whose undo restores both halves, and CHARACTERIZE the current residue first so the retrofit has a state to invert.

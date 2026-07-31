@@ -90,6 +90,23 @@ export async function POST(
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
+    // G11 READ THE SETTINGS FILE BACK AND IT DISAGREES (TRDD-RO90UCKQ). This is a USER-initiated
+    // route, so the truthful answer is that the change did not land — previously it returned 200 and
+    // the UI updated over a plugin that was not actually enabled.
+    //
+    // `ChangePlugin` reports this separately from `success` on purpose: it is also called as an R51
+    // COMPENSATION, and folding a failed read-back into `success` there makes a successful rollback
+    // report "the system is in an invalid state". The caller decides, and this caller is a user.
+    //
+    // `'unknown'` (the settings file exists and does not parse) deliberately does NOT 400: an
+    // invariant may act on a positive VIOLATION and never on an UNKNOWN (TRDD-K71FV649).
+    if (result.verified === 'mismatch') {
+      return NextResponse.json(
+        { error: `The change did not take effect — ${result.pluginKey} is not in the expected state after ${result.action}.`, operations: result.operations },
+        { status: 409 },
+      )
+    }
+
     // Forward restartNeeded so the UI can re-queue the agent's session
     // for restart. ChangePlugin always sets it true for state mutations,
     // but we propagate the actual value rather than hard-coding it —

@@ -4594,6 +4594,28 @@ export interface ChangePluginResult {
   operations: string[]
   restartNeeded: boolean
   error?: string
+  /**
+   * G11's read-back verdict, REPORTED SEPARATELY FROM `success` (TRDD-RO90UCKQ).
+   *
+   * `ChangePlugin` is called both as an OPERATION and as an R51 COMPENSATION (`ChangeMarketplace`'s
+   * G02b undo reinstalls through `InstallPlugin` → here; the `undo:` bodies at G07/G08 call it
+   * directly). Folding a failed read-back into `success` was tried and reverted: on the compensation
+   * path it does not report "the reinstall did not verify", it escalates to R51.5 and tells the user
+   * "THE SYSTEM IS IN AN INVALID STATE … manual repair is required" about a system that was in fact
+   * restored. So the verdict is REPORTED and the CALLER decides — which is where the audit found the
+   * decision belongs.
+   *
+   * FAIL-SAFE BY CONSTRUCTION: a caller that ignores this field behaves exactly as before. The
+   * rejected alternative — an `isCompensation` flag on the input — has the inverse property, because
+   * a compensation that FORGETS to set it gets the catastrophic behaviour. That is the same
+   * "forgot to declare" failure mode this codebase keeps paying for.
+   *
+   * THREE VALUES, NOT A BOOLEAN, and that is load-bearing: `mismatch` (the file read cleanly and
+   * says the change did not land — a positive violation) and `unknown` (the file could not be read)
+   * are exactly the two things `TRDD-K71FV649` spent a card separating. A boolean would collapse
+   * them again, and an invariant may act on a VIOLATION and never on an UNKNOWN.
+   */
+  verified?: 'ok' | 'mismatch' | 'unknown'
 }
 
 const SETTINGS_JSON = join(HOME, '.claude', 'settings.json')
@@ -4931,10 +4953,13 @@ export async function ChangePlugin(
       : desired.action === 'disable' ? false
       : true
     if (!settingsRead.ok && settingsRead.reason === 'unreadable') {
+      result.verified = 'unknown'
       ops.push(`G11: WARN — cannot verify: ${settingsFile} exists but does not parse (${settingsRead.error}). State is UNKNOWN, not absent.`)
     } else if (finalState !== expectedState) {
+      result.verified = 'mismatch'
       ops.push(`G11: WARN — Final state ${finalState} != expected ${expectedState}`)
     } else {
+      result.verified = 'ok'
       ops.push(`G11: Final state verified`)
     }
 

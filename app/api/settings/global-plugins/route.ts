@@ -242,6 +242,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
+    // G11's read-back disagrees — see app/api/agents/[id]/local-plugins/route.ts for the full
+    // reasoning (TRDD-RO90UCKQ). User-initiated route, so the honest answer is that the change did
+    // not land; `'unknown'` deliberately does not gate (TRDD-K71FV649).
+    if (result.verified === 'mismatch') {
+      return NextResponse.json(
+        { error: `The change did not take effect — ${result.pluginKey} is not in the expected state after ${result.action}.`, operations: result.operations },
+        { status: 409 },
+      )
+    }
+
     return NextResponse.json({ success: true, key, enabled })
   } catch (error) {
     console.error('[global-plugins] POST failed:', error)

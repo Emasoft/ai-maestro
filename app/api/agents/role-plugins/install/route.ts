@@ -76,6 +76,16 @@ export async function POST(req: NextRequest) {
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
+
+    // G11's read-back disagrees — see app/api/agents/[id]/local-plugins/route.ts for the full
+    // reasoning (TRDD-RO90UCKQ). User-initiated route, so the honest answer is that the change did
+    // not land; `'unknown'` deliberately does not gate (TRDD-K71FV649).
+    if (result.verified === 'mismatch') {
+      return NextResponse.json(
+        { error: `The change did not take effect — ${result.pluginKey} is not in the expected state after ${result.action}.`, operations: result.operations },
+        { status: 409 },
+      )
+    }
     // Forward restartNeeded so the caller can queue the agent for restart.
     // ChangePlugin sets it true for any state mutation; we trust its value.
     return NextResponse.json({ success: true, restartNeeded: result.restartNeeded })
@@ -128,6 +138,16 @@ export async function DELETE(req: NextRequest) {
     }, auth.context)
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+
+    // G11's read-back disagrees — see app/api/agents/[id]/local-plugins/route.ts for the full
+    // reasoning (TRDD-RO90UCKQ). User-initiated route, so the honest answer is that the change did
+    // not land; `'unknown'` deliberately does not gate (TRDD-K71FV649).
+    if (result.verified === 'mismatch') {
+      return NextResponse.json(
+        { error: `The change did not take effect — ${result.pluginKey} is not in the expected state after ${result.action}.`, operations: result.operations },
+        { status: 409 },
+      )
     }
     // Forward restartNeeded — same rationale as POST: an uninstall always
     // changes claude's loaded element set, so a restart is mandatory.

@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: dev
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-07-30T19:29:14+0200
+updated: 2026-07-31T07:27:54+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -267,8 +267,23 @@ neuter then reddened exactly that one test.
       `tests/unit/deleteagent-g09b-plugin-records.test.ts` over the shared harness
       `tests/helpers/drive-delete-agent.ts`, with the complementary neuters N1/N2 recorded in
       `34849d8d`; PROBE: 7 tests / 3 neuters (`6c11bd7f`)
-- [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged — **SEQUENCE THIS
-      AFTER TRDD-DQ6XN2VP's DeleteAgent retrofit, not before.** G09b's placement is one of the gates
+- [ ] Live: a create/hard-delete cycle leaves the local-record count unchanged — **THE SEQUENCING
+      BLOCKER IS LIFTED as of 2026-07-31; the box is now READY TO RUN, and what it waits on is an
+      operator, not a dependency.** Verified first-hand: TRDD-OWO449MR is `completed` (archived), so
+      the A2 relocation has landed, and DeleteAgent is one of the pipelines DQ6XN2VP's STATE lists as
+      ALREADY transactional — so both named changes are in. DQ6XN2VP itself is still `column: dev`
+      with 13 hand-rolled pipelines to go, and that is NOT a blocker here: this box names the
+      DeleteAgent retrofit, not the whole card. (Do not read the todo list for this — it recorded
+      DQ6XN2VP as completed while the card said `dev`, and the card governs.)
+
+      NOT RUN FROM THE MAIN CONTEXT, deliberately. It is a real create + hard delete on this host
+      against a sudo-gated route, which makes it a UI-driven scenario run (the scenario rules put
+      those in a forked runner, never in the orchestrator's context) and a destructive op on an
+      untracked directory. Both of those are the operator's call to schedule, not something to
+      improvise unattended at the tail of another card.
+
+      The original sequencing note, kept because it is why the box was deferred at all:
+      G09b's placement is one of the gates
       that retrofit MOVES: TRDD-OWO449MR's shape A2 relocates the local-plugin cleanup to BEFORE the
       `rm -rf` (the `claude plugin uninstall --scope local --cwd` it replaces the hand-edit with
       needs the workdir to still exist), and DQ6XN2VP re-orders the whole pipeline around a commit

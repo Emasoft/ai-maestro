@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T11:34:17+0200
+updated: 2026-07-31T11:37:45+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -338,6 +338,16 @@ persist — a silent audit gap in precisely the failure case an auditor cares mo
 3's end state the two predicates coincide, because fusing G10 deletes the deferred fail; they are
 still not the same predicate, and only `txn.ok` stays correct if any deferred-fail construct
 survives the fuse.
+
+**DO NOT LAND THE MOVE AHEAD OF THE UNDOS — it is COUPLED to rollback existing, and landing it early
+would CREATE the audit gap this decision exists to prevent.** The move LOOKS independent of the
+driver swap (it only relocates one emit) and it is not. TODAY an abort at a LATER gate — G15's R9.13
+denial, G22's drift — returns early with the title write already landed and **NOT reverted**, because
+there is no rollback yet. So today's mid-array position is CORRECT: the per-op entry records a change
+that genuinely persisted. Relocate the emit before the undos exist and those same aborts would skip
+it, leaving a persisted title change with no per-op entry. Once the undos land, an abort reverts the
+write and skipping the emit becomes the correct behaviour. **Same edit, opposite correctness, either
+side of the undos** — so it ships INSIDE commit 3 or not at all.
 
 **⚠ COMMIT 3'S TWO MECHANICAL QUESTIONS ARE MEASURED — 2026-07-31.** Both were open, both looked
 like they could widen the edit, and both turned out contained. Read the landed sibling

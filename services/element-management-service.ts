@@ -2732,6 +2732,8 @@ export async function ChangeTitle(
       g14bRevocation?: { count: number; restore: () => Promise<number> }
       /** G14e: the portfolio issuer handle — `restore()` flips the touched rows back to active. */
       g14eRevocation?: { count: number; restore: () => Promise<number> }
+      /** G14d: one entry per role-plugin it SUCCESSFULLY uninstalled, in the order it removed them. */
+      g14dUninstalled?: Array<{ name: string; marketplace: string }>
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -3540,6 +3542,11 @@ export async function ChangeTitle(
                         options.authContext,
                       )
                       if (cpResult.success) {
+                        // Recorded per SUCCESSFUL uninstall, inside the loop — the exact shape the
+                        // Gate contract prescribes for a looping run. A failed entry is NOT
+                        // recorded: reinstalling a plugin the uninstall never removed would be an
+                        // undo inventing work, and the WARN below already reports it.
+                        ;(ctx.g14dUninstalled ??= []).push({ name: entry.name, marketplace: entry.marketplace })
                         ops.push(`G14d: Uninstalled "${entry.name}@${entry.marketplace}" (bound to old title "${oldTitle}")`)
                         // Propagate ChangePlugin's restartNeeded into the outer ChangeTitle result.
                         // G19 below compares currentPluginName vs targetPluginName to decide whether
@@ -3576,6 +3583,43 @@ export async function ChangeTitle(
             ops.push(`G14d: Skipped (no old title change to revert)`)
           } else {
             ops.push(`G14d: Skipped (no agentDir or client has no role-plugin support)`)
+          }
+        },
+        // Reinstall exactly what was removed, newest first — the same reverse-order rule the runner
+        // applies across gates, applied WITHIN this one because its run is a loop.
+        //
+        // `rolePluginSwap: true` on the way back for the same reason it is set on the way out: this
+        // IS the governance pipeline, so the role-plugin guard that protects an agent from losing
+        // its plugin must not block the restoration of the one this pipeline itself removed.
+        undo: async () => {
+          const removed = ctx.g14dUninstalled
+          if (!removed?.length || !agentDir) return
+          const problems: string[] = []
+          while (removed.length) {
+            const entry = removed.pop()!
+            try {
+              const back = await ChangePlugin(
+                agentId,
+                {
+                  name: entry.name,
+                  marketplace: entry.marketplace,
+                  action: 'install',
+                  scope: 'local',
+                  agentDir,
+                  rolePluginSwap: true,
+                },
+                options.authContext,
+              )
+              if (!back.success) problems.push(`${entry.name}@${entry.marketplace} (${back.error || 'unknown'})`)
+            } catch (err) {
+              problems.push(`${entry.name}@${entry.marketplace} (${err instanceof Error ? err.message : err})`)
+            }
+          }
+          // R51.5 — an agent left without the role-plugin its (restored) title requires violates
+          // R9.13, so a silent partial restore here would leave the system invalid while the caller
+          // was told nothing changed.
+          if (problems.length) {
+            throw new Error(`G14d rollback incomplete: could not reinstall ${problems.join('; ')}`)
           }
         },
       },

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T21:26:06+0200
-updated: 2026-07-31T21:34:48+0200
+updated: 2026-07-31T21:49:55+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -17,8 +17,10 @@ approved: true
 approval-judge: ai-maestro
 approval-datetime: 2026-07-31T21:26:06+0200
 relevant-rules: [R51]
+npt: []
+eht: [CS25TA6W]
 blocked-by: []
-implementation-commits: [69e801a9]
+implementation-commits: [69e801a9, 6c175813]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body)
@@ -42,13 +44,51 @@ a shape that changes the lenient contract. Deriving it changes nothing for them,
 per-verification: *which checks should ask the sharper question* — one decision per promotion, each
 needing its own evidence, not a sweep.
 
-**NEXT ACTION.** `ChangePlugin`'s G11 is the first consumer and now reports *"exists but does not
-parse — state is UNKNOWN, not absent"* as its own case; it is deliberately still a WARN. Decide
-whether that case should now GATE (and whether G11 can become an R51.7 invariant given it), then
-`InstallElement`'s PG01 on the same terms. **The 4 copy-pasted twins are untouched** —
-`lib/client-plugin-adapters/claude-adapter.ts`, `services/plugin-storage-service.ts`,
-`services/role-plugin-service.ts` — and each needs the same treatment or an explicit "lenient by
-design" note.
+**THE WRITE SIDE WAS WORSE THAN THE BLINDNESS — `6c175813`.** This card was filed about
+verifications reading *unreadable* as *absent*. Auditing the WRITE side found the same reader doing
+something the card had not imagined: **21 of 21** `saveJsonSafe` calls in the service are
+read-modify-write fed by `loadJsonSafe` of the SAME path, and **4 target `~/.claude/settings.json`**
+— the human user's own global Claude Code config. On a corrupt file the read answers `{}`, the
+caller builds a minimal object out of nothing, and the atomic write REPLACES the file. `G10` is the
+worst shape: reads `{}`, concludes *"plugin missing after install"*, logs `writing safeguard`, and
+truncates the file. **The ops line reads like a repair.**
+
+The guard went into `saveJsonSafe`, not the 21 call sites, for one decisive reason (the advisor's,
+and it is the argument that settles it): **the R51 compensations call the writer DIRECTLY with a
+snapshot.** `ChangeHook`'s undo writes `c.prior`, `structuredClone`d from the same blind read — so on
+a corrupt file the ROLLBACK restores `{}` and destroys the file it exists to protect. A per-call-site
+read guard cannot see that path. The write primitive is the only choke point both the forward and
+undo paths traverse, and it covers every FUTURE call site.
+
+**And it is not new policy.** `lib/claude-settings-enforcer.ts:112-119` already ruled exactly this
+(*"Corrupt JSON — NEVER overwrite … would destroy whatever the user actually has"*), with its own
+test. The ruling simply was never extended to this family. Finding the project's own ratified answer
+beat both my reasoning and the advisor's.
+
+**Two more holes closed in the same slice:**
+- `readJson`'s `data: Record<string, unknown>` was a **type LIE I shipped at `69e801a9`** — `[]`,
+  `null`, `42` and `"str"` all PARSE, and the caller's `settings.enabledPlugins = ep` then attaches
+  a key to an array (or throws on null) and writes the result. Now `unreadable`, per the enforcer's
+  `:121-128`.
+- `PG03` / `PG07` both already CONTAIN the honest message (*"Could not check user scope"*) in a
+  `catch` that could never fire, because `loadJsonSafe` does not throw. A corrupt
+  `~/.claude/settings.json` therefore reported *"User scope clean"* about a file it never read.
+  Reading strictly makes the branch that was always meant for this case **reachable**. That is the
+  vacuous half of the defect — nothing destroyed, a clean verdict asserted on no evidence.
+
+**NEXT ACTION.** `ChangePlugin`'s G11 and `InstallElement`'s PG01 are still WARNs, and their
+re-examination is the one box left. The write-side guard **changes the argument for them**: the
+reason both were left un-promoted was *"an aborting check would destroy correct state on the strength
+of a file it could not read"* — and destroying state through a settings write is now impossible.
+What remains is the narrower question of whether an UNREADABLE file should abort a pipeline whose
+change already landed. Decide each with its own evidence.
+
+**The 3 copy-pasted twins are now `TRDD-CS25TA6W` (an EHT of this card), not a bullet here.** They
+carry 6 more read-modify-writes, 3 of them on `~/.claude/settings.json`, and two of the three readers
+do not even check `existsSync` — so ENOENT and a parse failure are collapsed by construction.
+`claude-adapter.ts` is the urgent one: it is in `ChangePlugin`'s OWN call path, so this card's guard
+is bypassed one layer down on every adapter install. **This card cannot reach `complete` until
+CS25TA6W is terminal.**
 
 ## Problem
 
@@ -129,11 +169,22 @@ audit, not the edit, is the deliverable.
 - [x] The reader distinguishes ENOENT from a parse failure, pinned by a test that seeds both and
       asserts the answers differ (`tests/unit/read-json-distinguishes-unreadable.test.ts`, neuter
       **N10** collapses them back and reds exactly the unreadable case + the distinction)
-- [ ] All call sites audited — **the service's 36 need no change** (the lenient contract is
-      byte-identical, which is why this shape was chosen); what remains is the **4 copy-pasted
-      twins**, each either derived the same way or named as deliberately lenient
-- [ ] `InstallElement` PG01 and `ChangePlugin` G11 re-examined and their verdicts recorded
-- [ ] tsc clean · suite at/above baseline · `trddgrep validate` exit 1 with only the two known cards
+- [x] All call sites audited — and the audit found what the card had not: the **READ** sites need no
+      change (the lenient contract is byte-identical), while **21/21 WRITE** sites were destructive
+      on an unreadable file and are now guarded at the primitive (`6c175813`). The 3 copy-pasted
+      twins are `TRDD-CS25TA6W`, an EHT of this card
+- [x] The write path can no longer destroy a file it could not read — pinned by
+      `tests/unit/save-json-safe-refuses-clobber.test.ts` on REAL files (the byte-identical
+      assertion is the load-bearing one; a mocked `fs` has no disk). Neuters: **N11** delete the
+      guard → 7 red, BOTH positive controls green · **N12** collapse the non-object check → exactly
+      4 red · **N13** add the forbidden import → the absence test reds, naming the offender
+- [ ] `InstallElement` PG01 and `ChangePlugin` G11 re-examined and their verdicts recorded — the
+      write guard changes the argument for both (see the STATE block), so this is a fresh decision,
+      not a re-read of the old one
+- [x] tsc clean (0 lines) · suite **319 files / 4560 passed / 2 skipped** at `6c175813`, up from
+      317/4547/2 with zero regressions — the advisor's named risk (a site depending on lenient
+      overwrite) did not materialise
+- [ ] `trddgrep validate` exit 1 with only the known cards
 
 ## Approval log
 

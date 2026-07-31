@@ -3610,6 +3610,56 @@ export async function ChangeTitle(
           }
         },
       },
+
+      // ── GATE 22: Verify final state in registry ──────────────
+      // CRITICAL (SCEN-007 P0-003, SCEN-020 BUG-001, SCEN-002 P0-001):
+      // This gate MUST hard-fail if the registry write did not persist.
+      // Previously this was a silent WARN, which let callers claim success
+      // while governanceTitle stayed null in ~/.aimaestro/agents/registry.json.
+      // The UI masked the bug via a fallback `governanceTitle ?? (team ?
+      // 'member' : 'autonomous')` — users only noticed when hitting the API
+      // directly. Fail fast instead. Additionally, re-read from disk so any
+      // late clobber (G15–G21 side effects, concurrent writer) is caught
+      // before declaring success.
+      //
+      // THE LAST GATE OF THE WINDOW, and the reason the window ends here: it is the last gate that
+      // can abort. In commit 3 it becomes the runner's `invariants` hook, so a failed final
+      // verification REVERTS the transaction instead of merely reporting it (R51.7).
+      {
+        id: 'G22',
+        what: 'final title verified in the in-memory cache AND on disk',
+        run: async () => {
+          const verifyAgent = getAgent(agentId)
+          const finalTitle = verifyAgent?.governanceTitle || null
+          if (finalTitle !== (effectiveTitle || null)) {
+            ops.push(`G22: DENIED — in-memory registry title drift`)
+            throw new GateAbort(`G22: Final in-memory title drift — registry shows "${finalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`)
+          }
+          // THE `try` WRAPS ONLY THE DISK READ, exactly as G14's does and for the same reason:
+          // the drift check below used to sit INSIDE it, which was harmless while it was a
+          // `return` and would be a bug as a `throw` — this very `catch` would swallow it and
+          // re-report the specific "on-disk title drift" under the generic "verification failed".
+          // `.find` stays inside deliberately: a registry.json holding a non-array parses fine and
+          // then throws on `.find`, and that has always been reported as a verification failure.
+          let diskAgent: Record<string, unknown> | undefined
+          try {
+            const { readFileSync } = await import('fs')
+            // Same seam as ChangeTitle's G14 — see the note there (TRDD-N7X4KDQ2).
+            const REGISTRY_PATH = statePath('agents', 'registry.json')
+            const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
+            diskAgent = diskAgents.find((a) => a.id === agentId)
+          } catch (verifyErr) {
+            ops.push(`G22: DENIED — final verification failed`)
+            throw new GateAbort(`G22: Final verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`)
+          }
+          const diskFinalTitle = (diskAgent?.governanceTitle as string | null | undefined) ?? null
+          if (diskFinalTitle !== (effectiveTitle || null)) {
+            ops.push(`G22: DENIED — on-disk registry title drift`)
+            throw new GateAbort(`G22: Final on-disk title drift — registry.json shows "${diskFinalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`)
+          }
+          ops.push(`G22: Final title verified in cache + registry.json: "${effectiveTitle || 'null'}"`)
+        },
+      },
     ]
 
     // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
@@ -3631,42 +3681,6 @@ export async function ChangeTitle(
     // Its position here, AFTER the governance mutations, was the bug: a failed title write left
     // the host with no MANAGER and every team blocked. Nothing between here and there depends on
     // it having run last.
-
-    // ── GATE 22: Verify final state in registry ──────────────
-    // CRITICAL (SCEN-007 P0-003, SCEN-020 BUG-001, SCEN-002 P0-001):
-    // This gate MUST hard-fail if the registry write did not persist.
-    // Previously this was a silent WARN, which let callers claim success
-    // while governanceTitle stayed null in ~/.aimaestro/agents/registry.json.
-    // The UI masked the bug via a fallback `governanceTitle ?? (team ?
-    // 'member' : 'autonomous')` — users only noticed when hitting the API
-    // directly. Fail fast instead. Additionally, re-read from disk so any
-    // late clobber (G15–G21 side effects, concurrent writer) is caught
-    // before declaring success.
-    const verifyAgent = getAgent(agentId)
-    const finalTitle = verifyAgent?.governanceTitle || null
-    if (finalTitle !== (effectiveTitle || null)) {
-      result.error = `G22: Final in-memory title drift — registry shows "${finalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`
-      ops.push(`G22: DENIED — in-memory registry title drift`)
-      return result
-    }
-    try {
-      const { readFileSync } = await import('fs')
-      // Same seam as ChangeTitle's G14 — see the note there (TRDD-N7X4KDQ2).
-      const REGISTRY_PATH = statePath('agents', 'registry.json')
-      const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
-      const diskAgent = diskAgents.find((a) => a.id === agentId)
-      const diskFinalTitle = (diskAgent?.governanceTitle as string | null | undefined) ?? null
-      if (diskFinalTitle !== (effectiveTitle || null)) {
-        result.error = `G22: Final on-disk title drift — registry.json shows "${diskFinalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`
-        ops.push(`G22: DENIED — on-disk registry title drift`)
-        return result
-      }
-      ops.push(`G22: Final title verified in cache + registry.json: "${effectiveTitle || 'null'}"`)
-    } catch (verifyErr) {
-      result.error = `G22: Final verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
-      ops.push(`G22: DENIED — final verification failed`)
-      return result
-    }
 
     // ── GATE 23: Verify governance.json consistency ──────────
     if (newTitle === 'manager') {

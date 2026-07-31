@@ -230,6 +230,11 @@ describe('ChangeTitle happy path (the harness drives the real pipeline)', () => 
     // wrapper — which is what ChangeTitle used to call — reds this assertion.
     expect(H.world.calls).toContain('revokeTokensForAgentCompensable')      // G14b
     expect(H.world.calls).toContain('revokeTokensFromIssuerCompensable')    // G14e
+    // …and the stores are actually DRAINED. This is the positive control for the restore test
+    // below: with a `restore()` that only returns a number, "the tokens came back" is true before
+    // the pipeline runs and stays true whatever the undo does.
+    expect(H.world.aidTokens).toBe(0)
+    expect(H.world.portfolioTokens).toBe(0)
   })
 
   /**
@@ -405,6 +410,34 @@ describe('ChangeTitle window — what a mid-pipeline failure actually leaves beh
 
     // The op is no longer a WARN nobody reads — it names the broken invariant.
     expect((result.operations ?? []).some((op: string) => /G10: CASCADE BROKEN/.test(op))).toBe(true)
+  })
+
+  /**
+   * G14b + G14e — THE MIRROR OF THE HAZARD THE TEST ABOVE IS ABOUT.
+   *
+   * That one exists because an abort at G10 would leave a demoted MANAGER still HOLDING tokens that
+   * embed "manager". This is the same asymmetry pointed the other way: a rollback that revoked and
+   * never restored puts the MANAGER title back while both token stores stay drained — and the
+   * retry cannot repair it either, because Gate 6 sees the title unchanged and returns success
+   * before reaching any minting. Silent authority LOSS instead of silent authority RETENTION, and
+   * neither is visible in the return value.
+   *
+   * Both undos are one line (`await ctx.g14bRevocation.restore()`), which is exactly why they are
+   * easy to leave inert: `restore()` is a handle from a store, so a compensation that never calls
+   * it looks identical to one that does — until the store is modelled as STATE.
+   */
+  it('gives the demoted manager BOTH token stores back when the final invariants fail', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    armLateDriftAbort()
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    // The seeded counts, exactly — a restore that re-inserted a different number would be a
+    // different bug wearing the same shape, and `toBe` is what separates them.
+    expect(H.world.aidTokens).toBe(3)
+    expect(H.world.portfolioTokens).toBe(2)
+    expect(result.error).not.toMatch(/INVALID STATE/)
   })
 })
 

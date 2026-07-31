@@ -201,13 +201,26 @@ export function teamRegistryMock(world: ChangeTitleWorld) {
  *  ChangeTitle switched to them for R51, the parity assertions saw no revocation at all and the
  *  `after` hook keyed on the count-only name never fired, so three post-condition tests passed for
  *  the wrong reason. Recording the SPECIFIC name (not a shared operation label) is also what lets a
- *  test pin WHICH form the pipeline calls: reverting to the count-only wrapper reds a named test. */
+ *  test pin WHICH form the pipeline calls: reverting to the count-only wrapper reds a named test.
+ *
+ *  THE COUNTERS ARE STATE, NOT A RETURN VALUE — the same trap one level down. `restore()` used to
+ *  be `async () => world.aidTokens`: it handed back a number and MUTATED NOTHING, so the world was
+ *  identical whether the undo ran or not and no assertion about restoration could ever be
+ *  non-vacuous. Revoking now DRAINS the counter and `restore()` puts the exact drained count back,
+ *  which is what makes "the demoted manager's tokens came back" an observation. */
 export function aidTokenMock(world: ChangeTitleWorld) {
   return {
-    revokeTokensForAgent: async () => { step(world, 'revokeTokensForAgent'); return world.aidTokens },
+    revokeTokensForAgent: async () => {
+      step(world, 'revokeTokensForAgent')
+      const taken = world.aidTokens
+      world.aidTokens = 0
+      return taken
+    },
     revokeTokensForAgentCompensable: async () => {
       step(world, 'revokeTokensForAgentCompensable')
-      return { count: world.aidTokens, restore: async () => world.aidTokens }
+      const taken = world.aidTokens
+      world.aidTokens = 0
+      return { count: taken, restore: async () => { world.aidTokens = taken; return taken } }
     },
     countTokensForAgent: () => world.aidTokens,
   }
@@ -215,10 +228,17 @@ export function aidTokenMock(world: ChangeTitleWorld) {
 
 export function portfolioStoreMock(world: ChangeTitleWorld) {
   return {
-    revokeTokensFromIssuer: async () => { step(world, 'revokeTokensFromIssuer'); return world.portfolioTokens },
+    revokeTokensFromIssuer: async () => {
+      step(world, 'revokeTokensFromIssuer')
+      const taken = world.portfolioTokens
+      world.portfolioTokens = 0
+      return taken
+    },
     revokeTokensFromIssuerCompensable: async () => {
       step(world, 'revokeTokensFromIssuerCompensable')
-      return { count: world.portfolioTokens, restore: async () => world.portfolioTokens }
+      const taken = world.portfolioTokens
+      world.portfolioTokens = 0
+      return { count: taken, restore: async () => { world.portfolioTokens = taken; return taken } }
     },
   }
 }

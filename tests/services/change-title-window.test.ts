@@ -583,6 +583,63 @@ describe('ChangeTitle plugin window — G15 removes, G16 installs, G16b renames 
   })
 
   /**
+   * G17's R9.13 QUARANTINE, AND THE UNDO THAT LIFTS IT — the last unpinned undo on this pipeline.
+   *
+   * It is reachable ONLY when the install leaves the agent with zero role-plugins: G16 WARNs on a
+   * failed install, G17 retries once, and if the agent is STILL role-less it is in R9.13 violation
+   * → `roleMissing: true` + hibernate, so `/wake` refuses until a plugin is assigned. Every other
+   * test in this file installs successfully, which is why this gate had no coverage: the happy path
+   * cannot reach it. Hence the shim's `AIM_SHIM_FAIL_INSTALL` — a nominated install that fails.
+   *
+   * THE ORDER ASSERTION IS THE POINT. `wakeAgent` REFUSES while `roleMissing` is true — that
+   * refusal IS the quarantine — so an undo that wakes before clearing the flag fails every time.
+   * Reading the flag from inside the `wakeAgent` hook (which `step()` fires from the TOP of the
+   * mock, before its body) is what turns "the flag was cleared BEFORE the wake" into an
+   * observation; asserting only the end state would pass on either order. Same shape as G10's undo,
+   * where the manager pointer must be back before a team agent can be re-woken.
+   */
+  it('lifts the R9.13 quarantine flag BEFORE re-waking the agent it hibernated (G17)', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    await seedWithArgs(MANAGER_ARGS, MANAGER_PLUGIN)
+    // Read at MODULE LOAD by the service, so both must be set before the dynamic import below.
+    process.env.AIM_SHIM_FAIL_INSTALL = AUTONOMOUS_PLUGIN
+    process.env.AIM_PLUGIN_INSTALL_ATTEMPTS = '1'   // 4 attempts with ~2s/6s/18s backoff otherwise
+    // Record the FIRST wake only. G10's undo re-wakes too, LATER in the unwind and after G17 has
+    // already restored the flag — so a last-write-wins probe reads G10's `false` and would stay
+    // green even if G17 woke the agent BEFORE lifting the quarantine, which is the one order that
+    // cannot work.
+    let roleMissingAtWake: unknown = 'wakeAgent was never called'
+    armLateDriftAbort({
+      wakeAgent: () => {
+        if (roleMissingAtWake === 'wakeAgent was never called') {
+          roleMissingAtWake = H.registry.get(AGENT_ID)?.roleMissing
+        }
+      },
+    })
+
+    try {
+      const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+      expect(result.success).toBe(false)
+      // The quarantine really happened — otherwise the undo below has nothing to lift and every
+      // assertion after it is true of a gate that never ran.
+      expect((result.operations ?? []).some((op: string) => /^G17: R9\.13 VIOLATION/.test(op))).toBe(true)
+      expect(H.world.calls).toContain('hibernateAgent')
+      // …and it was lifted, in the only order that can work. THE ORDER ASSERTION COMES FIRST and it
+      // is the ONLY one that catches a swapped undo: measured — with the wake moved ahead of the
+      // flag restore, the end-state below still reads `false` (the flag IS restored, just too late)
+      // and the file goes GREEN once this line is commented out. An end-state assertion cannot see
+      // an ordering bug, because the end state is the same either way.
+      expect(roleMissingAtWake).toBe(false)
+      expect(H.registry.get(AGENT_ID)?.roleMissing).toBe(false)
+      expect(result.error).not.toMatch(/INVALID STATE/)
+    } finally {
+      delete process.env.AIM_SHIM_FAIL_INSTALL
+      delete process.env.AIM_PLUGIN_INSTALL_ATTEMPTS
+    }
+  })
+
+  /**
    * THE OLD TITLE'S PLUGIN COMES BACK — and the gate that brings it back is **G14d**, not G15.
    *
    * That attribution was measured, and the measurement is the only thing that could have produced

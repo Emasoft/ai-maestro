@@ -335,6 +335,14 @@ export function installClaudeShim(dir: string): () => void {
 printf '%s\\n' "$*" >> ${JSON.stringify(join(dir, 'claude-calls.log'))}
 [ "$1" = "plugin" ] || exit 0
 case "$2" in install|uninstall) ;; *) exit 0 ;; esac
+# A NOMINATED INSTALL CAN BE MADE TO FAIL. G17's R9.13 quarantine — the only branch that sets
+# roleMissing and hibernates — is reachable ONLY when the install leaves zero role-plugins active,
+# so without this the gate's undo is unreachable and untestable. Uninstall is deliberately never
+# failed: a rollback has to be able to put the old plugin back.
+if [ "$2" = "install" ] && [ -n "$AIM_SHIM_FAIL_INSTALL" ] && [ "$3" = "$AIM_SHIM_FAIL_INSTALL" ]; then
+  echo "shim: refusing to install $3" >&2
+  exit 1
+fi
 exec python3 - "$2" "$3" "$4" <<'PY'
 import json, os, sys
 verb, name, marketplace = sys.argv[1], sys.argv[2], sys.argv[3]

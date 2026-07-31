@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T13:46:12+0200
+updated: 2026-07-31T13:55:38+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -166,22 +166,48 @@ undo ledger is introduced as a plain `const ctx` declared above the array that r
 READ. That works identically under both drivers — when the driver swaps, the same object is passed
 as the runner's ctx and no undo is rewritten. (Plan, not yet measured.)
 
-**NEXT ACTION for commit 3, runnable as written** *(EVERY undo row — 1-15 — is now LANDED; this is
-the FINAL slice)*: swap the driver from the hand-rolled `for (const gate of gates) { await gate.run() }`
-to `runGateSequence`, route G22 to `invariants`, move G14c **and G14e's `emitPortfolioOp`** out of the
-array (gated on **`txn.ok`**, NOT `result.success`), and lower `MAX_HANDROLLED` 10 → 9. The driver
-swap is what makes all fifteen undos LIVE at once, so it is also the slice that owes the rollback
-tests — the larger half of the work, and the reason it was left last. Verify per slice: `tsc` 0 lines
-+ the suite at **310/4441/2** + `trddgrep validate` exit 1 with only `7123D51A` and `C7A81642`.
+**⚠ COMMIT 3 IS COMPLETE — `ChangeTitle` IS TRANSACTIONAL.** Eight slices. The driver is
+`runGateSequence`; all 15 mutating gates carry compensations; G19/G20/G21 are declared `readOnly`;
+G22 is the runner's `invariants` hook; and the three append-only tails — the `change_title` ledger
+entry (G14c), G14e's portfolio entry, and G18's mesh broadcast — left the array and fire only on
+`txn.ok`. `MAX_HANDROLLED` 10 → **9**, `MIN_TRANSACTIONAL` 9 → **10**, `ChangeTitle` added to
+`MUST_BE_TRANSACTIONAL` (the membership guard that a bare count cannot make).
+
+**NEXT ACTION — rollback-test coverage for the other 14 undos.** Exactly ONE undo is pinned today:
+G14's, by `tests/services/change-title-window.test.ts` → *"reverts the title write when
+removeManager fails"*, with two neuters that fail DIFFERENTLY (`throw` ⇒ R51.5 INVALID STATE;
+silent `return` ⇒ `expected 'autonomous' to be 'manager'`) — so the assertion discriminates a
+no-op compensation from a failed one. The other fourteen are live and unobserved. Build on
+`tests/helpers/drive-change-title.ts`: it already has `failOn` and an observation ledger where every
+collaborator variant records under its OWN name. Verify: `tsc` 0 lines + the suite at **310/4441/2**
++ `trddgrep validate` exit 1 with only `7123D51A` and `C7A81642`.
 
 **Slices landed so far:** slice 1 `61858167` (ctx + widened annotation + rows 2-3: G9a, G14) ·
 slice 2a `40cefbb8` (rows 4-6: the OLD-title teardown — G10, G11, G12) · slice 2b `0db3f598`
 (row 7: the NEW-title setup — G13, G13b) · slice 3 `4cd3d148` (rows 8-9: the two revocations) ·
 slice 4a `353b9089` (row 14: G14d's per-entry uninstall loop) · slice 4b `1fa48129` (row 15: G15's
-role-plugin sweep) · slice 4c (rows 10-12: G16, G16b, G17 — the last plugin rows). Every undo ships
-INERT and is proven so by the same neuter: make the new ones throw unconditionally, and the two files
-that force mid-pipeline aborts stay green (29/29). The neuter is not vacuous — `change-title-window`
-drives a `governanceTitle: 'manager'` agent, so G10's branch really does run and record.
+role-plugin sweep) · slice 4c `6baa7c8b` (rows 10-12: G16, G16b, G17 — the last plugin rows) ·
+**FINAL slice (the driver swap)**. Through slice 4c every undo shipped INERT and was proven so by
+the same neuter: make the new ones throw unconditionally, and the two files that force mid-pipeline
+aborts stay green (29/29). The neuter was not vacuous — `change-title-window` drives a
+`governanceTitle: 'manager'` agent, so G10's branch really does run and record.
+
+**THE FINAL SLICE'S NEUTER IS THAT SAME ONE, INVERTED — and that is the proof the swap took.** Make
+G14's undo `throw` and `change-title-window` now REDS, where for seven slices it stayed green.
+Running both mutations distinguishes what the assertion actually pins: `throw` gives R51.5's
+CRITICAL INVALID STATE, a silent `return` gives `expected 'autonomous' to be 'manager'`.
+
+**Two tests changed, both for the right reason, and neither was wrong before.**
+`change-title-window`'s *"a failure at removeManager leaves the mild residue the G14-first ordering
+promises"* was a CHARACTERIZATION test whose own header predicted this retrofit would change it. Its
+subject no longer exists: G14's undo restores the title, so there is no residue to grade, and it now
+asserts the restoration plus R51.3's wording (and the ABSENCE of R51.5's). The second is subtler —
+`createagent-g06-g07-ordering`'s R51.5 test asserted `not.toMatch(/no changes were made/i)` on
+CreateAgent's message. ChangeTitle is now itself a transaction, so when ITS gates roll back cleanly
+it returns R51.3's "…NO CHANGES WERE MADE…" and CreateAgent quotes that verbatim as the `Cause:` of
+its own CRITICAL. **Both claims are true and they are about different systems** — the inner one made
+no changes, the outer one did and could not undo them. A bare substring cannot tell them apart, so
+the assertion is now anchored to the START of the message, which is where the VERDICT lives.
 
 **Slice 4c's three shapes, and the one ordering that is not obvious.** G16 records WHICH MECHANISM
 installed — the Claude `installPluginLocally` path or the non-Claude `adapter.install` path — and

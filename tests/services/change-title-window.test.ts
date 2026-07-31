@@ -211,10 +211,9 @@ describe('ChangeTitle happy path (the harness drives the real pipeline)', () => 
 })
 
 /**
- * CHARACTERIZATION — these pin what the pipeline does TODAY, not what it should do.
- *
- * Read them as a description of the window, not as a specification. The R51 retrofit is expected to
- * CHANGE the second one, and this file is where that change becomes visible instead of silent.
+ * These pinned what the pipeline did BEFORE the R51 retrofit — and the file said so, predicting
+ * that the retrofit would change one of them. It did, and the change landed HERE rather than
+ * silently: the first test's whole subject, "the mild residue", NO LONGER EXISTS.
  *
  * The injection point was MEASURED, not assumed: the plan called for a failure at G11's
  * `updateTeam`, and G11/G12/G13b are all gated on `oldTitle === 'chief-of-staff' | 'orchestrator'`
@@ -224,24 +223,32 @@ describe('ChangeTitle happy path (the harness drives the real pipeline)', () => 
  */
 describe('ChangeTitle window — what a mid-pipeline failure actually leaves behind', () => {
   /**
-   * The G14-first ordering paying off, OBSERVED rather than argued. `removeManager()` is the first
-   * thing G10 does and it is NOT individually wrapped, so its failure aborts the whole pipeline —
-   * and because the title write already landed at G14, the residue is exactly the mild one the
-   * ordering comment promises: a STALE MANAGER POINTER (visible, non-blocking, one call to repair),
-   * never a host with no manager and every team blocked.
+   * THE RETROFIT'S PAYOFF, OBSERVED. `removeManager()` is the first thing G10 does and it is NOT
+   * individually wrapped, so its failure aborts the pipeline. Under the old hand-rolled driver the
+   * title write from G14 SURVIVED that abort — a real residue (a stale manager pointer beside an
+   * already-demoted title), documented here as "mild" because the alternative ordering left the
+   * host with no manager and every team blocked.
+   *
+   * With `runGateSequence` driving, there is no residue to grade: G14's undo restores the title, so
+   * the system is byte-for-byte what it was before the call and the caller is told exactly that
+   * (R51.3). "Mild residue" was the best available answer to a question that no longer has to be
+   * asked.
    */
-  it('a failure at removeManager leaves the mild residue the G14-first ordering promises', async () => {
+  it('reverts the title write when removeManager fails — the residue the old driver left is gone', async () => {
     const { driveChangeTitle } = await import(HELPER)
     H.world.failOn = { removeManager: 1 }
 
     const result = await driveChangeTitle(AGENT_ID, 'autonomous')
 
     expect(result.success).toBe(false)
-    // The title DID land (G14 runs first) — that is the deliberate part.
-    expect(H.registry.get(AGENT_ID)?.governanceTitle).toBe('autonomous')
-    // …and governance is untouched: a stale pointer, not a decapitated host.
+    // G14's write is REVERTED — this is the assertion the old driver could not make.
+    expect(H.registry.get(AGENT_ID)?.governanceTitle).toBe('manager')
+    // …and governance is untouched, as it always was under the G14-first ordering.
     expect(H.world.managerId).toBe(AGENT_ID)
     expect(H.world.teams[0].blocked).toBe(false)
+    // The rollback COMPLETED, so the caller gets R51.3's claim and not R51.5's CRITICAL.
+    expect(result.error).toMatch(/NO CHANGES WERE MADE TO THE SYSTEM/)
+    expect(result.error).not.toMatch(/INVALID STATE/)
   })
 
   /**

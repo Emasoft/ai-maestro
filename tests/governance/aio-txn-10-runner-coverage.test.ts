@@ -152,22 +152,27 @@ function analyze(): PipelineInfo[] {
  * `changeSimpleElement`) while omitting `changeSimpleElement` itself, which IS one and is
  * already transactional. Real inventory when this landed: 19 pipelines, 5 transactional,
  * 14 to go — then 6 and 13 with `CreateAgent`, 7 and 12 with `ChangeTeam`, 8 and 11 with
- * `DeleteTeam`, now 9 and 10 with `ChangeMarketplace`.
+ * `DeleteTeam`, 9 and 10 with `ChangeMarketplace`, now 10 and 9 with `ChangeTitle`.
  *
  * NOTE FOR WHOEVER LOWERS IT NEXT: the count is a conformance measure, NOT a safety measure,
- * and as of `ChangeMarketplace` the two have fully diverged. Every one of the remaining 10 is
+ * and as of `ChangeMarketplace` the two have fully diverged. Every one of the remaining 9 is
  * either a single-mutation pipeline with nothing abortable after it — `ChangeAvatar` (G03),
  * `ChangeName` (G04), `ChangeFolder` (G05), and, MEASURED 2026-07-31, `ChangeMCP` (G04),
  * `ChangeLSP` (G04), `ChangeHook` (G04), `ChangeMetadata` (EXE), `ChangeCLIArgs` (G04) — so it has
- * no partial-state window at all; or one of the two large pipelines that retrofitted pipelines now
- * CALL (`ChangeTitle` 131 ops, `InstallElement` 101), where converting one changes its callers'
- * failure semantics and wants its own card. Lowering this number further therefore buys
- * conformance, not safety. Pick by whether the pipeline can leave two stores disagreeing.
+ * no partial-state window at all; or `InstallElement` (101 ops), the one remaining large pipeline
+ * that retrofitted pipelines CALL, where converting it changes its callers' failure semantics and
+ * wants its own card. Lowering this number further therefore buys conformance, not safety. Pick by
+ * whether the pipeline can leave two stores disagreeing.
+ *
+ * `ChangeTitle` (131 ops) was the other one, and it is DONE (TRDD-DQ6XN2VP): 15 mutating gates with
+ * compensations, the four non-mutating ones declared `readOnly`, G22 routed to the runner's
+ * `invariants` hook, and the three append-only tails (the `change_title` ledger entry, G14e's
+ * portfolio entry, G18's mesh broadcast) moved out of the array to fire only on `txn.ok`.
  */
-const MAX_HANDROLLED = 10
+const MAX_HANDROLLED = 9
 
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */
-const MIN_TRANSACTIONAL = 9
+const MIN_TRANSACTIONAL = 10
 
 /**
  * The pipelines already under the runner, pinned BY NAME. A count alone cannot see an
@@ -185,6 +190,7 @@ const MUST_BE_TRANSACTIONAL = [
   'ChangePlugin',
   'ChangeSkill',
   'changeSimpleElement',
+  'ChangeTitle',
 ]
 
 describe('AIO-TXN-10 — every pipeline routes through lib/gate-transaction.ts', () => {

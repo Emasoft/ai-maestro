@@ -449,8 +449,15 @@ describe('CreateAgent — G06/G07 ordering (ops-log regression)', () => {
     // would not say WHICH agent survived. G04's undo re-throws with the record in the message —
     // that is what keeps R51.5's promise that the orphan stays findable.
     expect(result.error).toMatch(/orphan-alpha/)
-    // And it must NOT claim nothing happened.
-    expect(result.error).not.toMatch(/no changes were made/i)
+    // And it must NOT claim nothing happened — asserted on the VERDICT, which is the head of the
+    // message, not on a substring anywhere in it.
+    //
+    // ChangeTitle is itself an R51 transaction now (TRDD-DQ6XN2VP), so when its own gates roll back
+    // cleanly it returns R51.3's "…SO NO CHANGES WERE MADE TO THE SYSTEM" — and CreateAgent quotes
+    // that verbatim as the `Cause:` of its own R51.5 CRITICAL. Both claims are true and they are
+    // about different systems: the inner one made no changes, the outer one did and could not undo
+    // them. A bare substring check cannot tell them apart, so anchor to the start.
+    expect(result.error).not.toMatch(/^THE COMMAND FAILED TO ACCOMPLISH/)
   })
 
   /**

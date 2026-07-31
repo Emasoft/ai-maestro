@@ -2752,6 +2752,12 @@ export async function ChangeTitle(
       g16bPriorProgramArgs?: string
       /** G17: its OWN quarantine — NOT its plugin repairs, which G15/G16's undos already cover. */
       g17Quarantine?: { priorRoleMissing: boolean; hibernated: boolean }
+      /**
+       * G14e revoked something and therefore OWES an append-only portfolio-ledger entry. The emit
+       * itself lives after the transaction (gated on `txn.ok`) because a ledger cannot be un-written
+       * — so the only way not to record a reverted revocation is not to record it until it sticks.
+       */
+      g14eEmitDue?: boolean
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -2759,7 +2765,7 @@ export async function ChangeTitle(
     // `findUncompensatedGates`, which runs INSIDE `runGateSequence` — a function ChangeTitle does
     // not call yet. That is what lets commit 3 land the undos in reviewable slices instead of one
     // all-or-nothing rewrite: an undo attached today ships dead until the driver swaps.
-    const gates: Array<{ id: string; what: string; run: () => Promise<void>; undo?: () => Promise<void> }> = [
+    const gates: Array<{ id: string; what: string; readOnly?: boolean; run: () => Promise<void>; undo?: () => Promise<void> }> = [
       {
         id: 'G9a',
         what: 'MAINTAINER repo validated and stored',
@@ -3340,39 +3346,11 @@ export async function ChangeTitle(
       // safety net; the per-op entry here gives state-restore tooling
       // the operation granularity it needs.
       //
-      // COMMIT 3 MUST DECIDE WHERE THIS BELONGS. A ledger is append-only, so an `undo` that
-      // deleted the entry would falsify history — and leaving it here means a rollback leaves a
-      // recorded `change_title` for a change that got reverted. Moving it AFTER the array (emit on
-      // success only) fixes that, and is a behaviour change, so it is not done in commit 2.
-      {
-        id: 'G14c',
-        what: 'Per-op change_title ledger entry emitted',
-        run: async () => {
-          try {
-            const { emitAgentOp } = await import('@/lib/ledger-emit')
-            emitAgentOp(
-              'change_title',
-              [
-                {
-                  op: 'replace',
-                  path: `/agents/${agentId}/governanceTitle`,
-                  value: effectiveTitle ?? null,
-                },
-              ],
-              {
-                action: 'change-title',
-                agentId: options.authContext.agentId ?? null,
-                actor: options.authContext.agentId ? 'agent' : 'user',
-              },
-            )
-            ops.push(`G14c: Per-op ledger entry emitted (change_title: "${oldTitle || 'null'}" → "${effectiveTitle || 'null'}")`)
-          } catch (emitErr) {
-            // Fire-and-forget: an emit failure does NOT fail ChangeTitle
-            // because the save-level ledger entry still captured the mutation.
-            console.error('[ChangeTitle] G14c ledger-emit threw (non-fatal):', emitErr instanceof Error ? emitErr.message : emitErr)
-          }
-        },
-      },
+      // COMMIT 3 DECIDED: **G14c LEFT THE ARRAY.** It now runs AFTER the transaction, gated on
+      // `txn.ok` — see the post-array emit block below. A ledger is hash-chained and signed, so an
+      // `undo` that deleted the entry would falsify history; and leaving it inside meant a rollback
+      // left a recorded `change_title` for a change that was reverted. The only honest fix for an
+      // append-only record is to not write it until the change is real.
       // ── GATE 14b: Revoke existing AID governance tokens ─────
       // Title changed → existing tokens embed the old title → revoke them.
       // Agent must re-authenticate to get a token with the new title.
@@ -3425,17 +3403,10 @@ export async function ChangeTitle(
               ctx.g14eRevocation = await revokeTokensFromIssuerCompensable(agentId)
               const revoked = ctx.g14eRevocation.count
               if (revoked > 0) {
-                const { emitPortfolioOp } = await import('@/lib/portfolio-ledger')
-                void emitPortfolioOp(
-                  'revoke_portfolio_token',
-                  agentId,
-                  [{ op: 'replace', path: `/portfolios/_issuer/${agentId}/status`, value: 'revoked' }],
-                  {
-                    action: 'revoke-issuer-portfolio-tokens',
-                    agentId: options.authContext.agentId ?? null,
-                    actor: options.authContext.agentId ? 'agent' : 'user',
-                  },
-                )
+                // The emit MOVED OUT with G14c and on the same terms — it is the same append-only
+                // shape. All that happens here is recording that one is DUE; the post-array block
+                // emits it only when `txn.ok`.
+                ctx.g14eEmitDue = true
                 ops.push(`G14e: Revoked ${revoked} portfolio token(s) minted by this agent (lost issuer authority)`)
               } else {
                 ops.push(`G14e: No portfolio tokens minted by this agent to revoke`)
@@ -3445,12 +3416,12 @@ export async function ChangeTitle(
             }
           }
         },
-        // Flips the recorded rows back to `active`. What this does NOT undo is the
-        // `emitPortfolioOp` above: a ledger is append-only, so a rollback leaves a
-        // `revoke_portfolio_token` entry for a revocation that was reverted — EXACTLY the shape
-        // already decided for G14c, and it moves out of the array on the same terms, in the same
-        // final slice. Leaving it here now is today's behaviour unchanged, not a new residue.
+        // Flips the recorded rows back to `active`. It has nothing to say about the ledger entry
+        // any more: the `emitPortfolioOp` LEFT this gate with G14c and now runs only when the
+        // transaction commits, so a rollback can no longer leave a `revoke_portfolio_token` entry
+        // for a revocation that was reverted. Clearing the flag is what makes that true.
         undo: async () => {
+          ctx.g14eEmitDue = false
           if (!ctx.g14eRevocation) return
           await ctx.g14eRevocation.restore()
         },
@@ -4116,31 +4087,12 @@ export async function ChangeTitle(
         },
       },
 
-      // ── GATE 18: Broadcast governance sync to mesh ───────────
-      // setManager/removeManager already broadcast for MANAGER changes.
-      // For other titles, broadcast a team-updated event.
-      {
-        id: 'G18',
-        what: 'governance sync broadcast to mesh peers',
-        run: async () => {
-          if (newTitle !== 'manager' && oldTitle !== 'manager') {
-            try {
-              const { broadcastGovernanceSync } = await import('@/lib/governance-sync')
-              await broadcastGovernanceSync('team-updated', {
-                agentId,
-                oldTitle,
-                newTitle: effectiveTitle,
-                timestamp: new Date().toISOString(),
-              }).catch(() => {})
-              ops.push(`G18: Broadcast governance sync to mesh peers`)
-            } catch {
-              ops.push(`G18: Governance sync broadcast skipped (module unavailable)`)
-            }
-          } else {
-            ops.push(`G18: MANAGER change — broadcast already sent by governance.ts`)
-          }
-        },
-      },
+      // ── GATE 18 LEFT THE ARRAY with G14c and G14e's emit ─────
+      // It ANNOUNCES the change to mesh peers, and an announcement cannot be un-sent. Telling the
+      // fleet "this agent is now X" and then rolling back to "not X" is the same lie an append-only
+      // ledger entry would be, one hop further out — so it runs after the transaction, gated on
+      // `txn.ok`. Under the old driver a G22 drift returned an error with the broadcast already
+      // gone; that is the small inconsistency this move closes.
 
       // ── GATE 19: Determine if restart needed ─────────────────
       // Restart is needed if the role-plugin changed (agent needs to reload).
@@ -4148,6 +4100,9 @@ export async function ChangeTitle(
       // have set it after stripping the old plugin, and this must not undo that.
       {
         id: 'G19',
+        // Writes `result.restartNeeded` — a field of the object this call RETURNS, which is
+        // discarded whole on failure. No store, nothing to compensate.
+        readOnly: true,
         what: 'restart-needed decided from the plugin delta',
         run: async () => {
           if (currentPluginName !== targetPluginName) {
@@ -4162,6 +4117,8 @@ export async function ChangeTitle(
       // ── GATE 20: Queue restart if session is active ──────────
       {
         id: 'G20',
+        // Pure reporting: the actual restart is triggered by the UI from `restartNeeded`.
+        readOnly: true,
         what: 'restart queued for the caller when a session is live',
         run: async () => {
           if (result.restartNeeded && !options?.skipRestart) {
@@ -4188,6 +4145,8 @@ export async function ChangeTitle(
       // This gate is informational — the protection is in the team PUT handler.
       {
         id: 'G21',
+        // Informational only — its own header says the protection lives in the team PUT handler.
+        readOnly: true,
         what: 'auto-title precedence recorded (protection lives in the team PUT handler)',
         run: async () => {
           if (newTitle === 'manager' || newTitle === 'chief-of-staff') {
@@ -4209,59 +4168,125 @@ export async function ChangeTitle(
       // late clobber (G15–G21 side effects, concurrent writer) is caught
       // before declaring success.
       //
-      // THE LAST GATE OF THE WINDOW, and the reason the window ends here: it is the last gate that
-      // can abort. In commit 3 it becomes the runner's `invariants` hook, so a failed final
-      // verification REVERTS the transaction instead of merely reporting it (R51.7).
-      {
-        id: 'G22',
-        what: 'final title verified in the in-memory cache AND on disk',
-        run: async () => {
-          const verifyAgent = getAgent(agentId)
-          const finalTitle = verifyAgent?.governanceTitle || null
-          if (finalTitle !== (effectiveTitle || null)) {
-            ops.push(`G22: DENIED — in-memory registry title drift`)
-            throw new GateAbort(`G22: Final in-memory title drift — registry shows "${finalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`)
-          }
-          // THE `try` WRAPS ONLY THE DISK READ, exactly as G14's does and for the same reason:
-          // the drift check below used to sit INSIDE it, which was harmless while it was a
-          // `return` and would be a bug as a `throw` — this very `catch` would swallow it and
-          // re-report the specific "on-disk title drift" under the generic "verification failed".
-          // `.find` stays inside deliberately: a registry.json holding a non-array parses fine and
-          // then throws on `.find`, and that has always been reported as a verification failure.
-          let diskAgent: Record<string, unknown> | undefined
-          try {
-            const { readFileSync } = await import('fs')
-            // Same seam as ChangeTitle's G14 — see the note there (TRDD-N7X4KDQ2).
-            const REGISTRY_PATH = statePath('agents', 'registry.json')
-            const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
-            diskAgent = diskAgents.find((a) => a.id === agentId)
-          } catch (verifyErr) {
-            ops.push(`G22: DENIED — final verification failed`)
-            throw new GateAbort(`G22: Final verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`)
-          }
-          const diskFinalTitle = (diskAgent?.governanceTitle as string | null | undefined) ?? null
-          if (diskFinalTitle !== (effectiveTitle || null)) {
-            ops.push(`G22: DENIED — on-disk registry title drift`)
-            throw new GateAbort(`G22: Final on-disk title drift — registry.json shows "${diskFinalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`)
-          }
-          ops.push(`G22: Final title verified in cache + registry.json: "${effectiveTitle || 'null'}"`)
-        },
-      },
+      // ── GATE 22 LEFT THE ARRAY — it is now the runner's `invariants` hook ─────
+      // It was always the SUCCESS-PATH check, not a step: "every gate ran" and "the system is
+      // valid" are different claims, and G22 asserts the second. As the `invariants` hook a final
+      // drift now REVERTS the transaction instead of merely reporting it (R51.7) — which is the
+      // whole point, since a drift means the title write did not stick and every governance
+      // mutation made on its behalf is standing on a lie.
     ]
 
-    // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
-    // runner would refuse to start (findUncompensatedGates), and a loop that merely LOOKED like a
-    // transaction while compensating nothing would be the exact lie R51.3 forbids. So this loop
-    // reproduces today's behaviour exactly — a deliberate abort returns what the early
-    // `return result` used to return, and anything else stays a bug that reaches the outer catch.
-    for (const gate of gates) {
+    // R51 (AIO-TXN-10). Every mutating gate above carries an `undo`; every non-mutating one is
+    // declared `readOnly`, so `findUncompensatedGates` lets the sequence start. On any failure the
+    // runner unwinds in reverse order and returns either R51.3's "no changes were made" or, when a
+    // compensation itself failed, R51.5's CRITICAL invalid-state message naming what survived.
+    //
+    // The gates take no argument and close over lexical state; `ctx` is threaded purely as the undo
+    // ledger. That is why the swap needed no gate rewritten — `() => Promise<void>` is assignable
+    // to `(ctx) => Promise<void>`.
+    const { runGateSequence } = await import('@/lib/gate-transaction')
+    const txn = await runGateSequence(gates, ctx, {
+      // Former G22. Returns violations instead of throwing; the short-circuit after the in-memory
+      // check is preserved, because when the cache already disagrees the disk read tells us nothing
+      // new and its own failure mode would mask the real finding.
+      invariants: async (): Promise<string[]> => {
+        const verifyAgent = getAgent(agentId)
+        const finalTitle = verifyAgent?.governanceTitle || null
+        if (finalTitle !== (effectiveTitle || null)) {
+          ops.push(`G22: DENIED — in-memory registry title drift`)
+          return [`G22: Final in-memory title drift — registry shows "${finalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`]
+        }
+        // THE `try` WRAPS ONLY THE DISK READ, exactly as G14's does and for the same reason: the
+        // drift check below must not be reported under the generic "verification failed".
+        // `.find` stays inside deliberately: a registry.json holding a non-array parses fine and
+        // then throws on `.find`, and that has always been reported as a verification failure.
+        let diskAgent: Record<string, unknown> | undefined
+        try {
+          const { readFileSync } = await import('fs')
+          // Same seam as ChangeTitle's G14 — see the note there (TRDD-N7X4KDQ2).
+          const REGISTRY_PATH = statePath('agents', 'registry.json')
+          const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
+          diskAgent = diskAgents.find((a) => a.id === agentId)
+        } catch (verifyErr) {
+          ops.push(`G22: DENIED — final verification failed`)
+          return [`G22: Final verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`]
+        }
+        const diskFinalTitle = (diskAgent?.governanceTitle as string | null | undefined) ?? null
+        if (diskFinalTitle !== (effectiveTitle || null)) {
+          ops.push(`G22: DENIED — on-disk registry title drift`)
+          return [`G22: Final on-disk title drift — registry.json shows "${diskFinalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`]
+        }
+        ops.push(`G22: Final title verified in cache + registry.json: "${effectiveTitle || 'null'}"`)
+        return []
+      },
+    })
+
+    // The runner keeps its own ops list, and the gates already push their (richer) lines into
+    // `ops`. Carry over only what ONLY the runner knows: the rollback trace and the pre-flight /
+    // invariant verdicts. Without this a rollback would be invisible in the returned operations.
+    for (const line of txn.ops) {
+      if (/: reverted$|ROLLBACK FAILED|^INVARIANTS:|^PRECHECK:/.test(line)) ops.push(line)
+    }
+
+    if (!txn.ok) {
+      result.error = txn.message
+      return result
+    }
+
+    // ── The append-only tail: emitted ONLY now that the transaction committed ─────
+    // G14c, G14e's portfolio entry and G18's mesh broadcast all record or announce a change that
+    // has happened. None can be un-written, so none may run before the change is final. They are
+    // deliberately fire-and-forget: a failure here does NOT fail a committed ChangeTitle, because
+    // reverting a successful title change to fix a missing audit line would be the larger harm.
+    try {
+      const { emitAgentOp } = await import('@/lib/ledger-emit')
+      emitAgentOp(
+        'change_title',
+        [{ op: 'replace', path: `/agents/${agentId}/governanceTitle`, value: effectiveTitle ?? null }],
+        {
+          action: 'change-title',
+          agentId: options.authContext.agentId ?? null,
+          actor: options.authContext.agentId ? 'agent' : 'user',
+        },
+      )
+      ops.push(`G14c: Per-op ledger entry emitted (change_title: "${oldTitle || 'null'}" → "${effectiveTitle || 'null'}")`)
+    } catch (emitErr) {
+      console.error('[ChangeTitle] G14c ledger-emit threw (non-fatal):', emitErr instanceof Error ? emitErr.message : emitErr)
+    }
+
+    if (ctx.g14eEmitDue) {
       try {
-        await gate.run()
-      } catch (err) {
-        if (!(err instanceof GateAbort)) throw err
-        result.error = err.message
-        return result
+        const { emitPortfolioOp } = await import('@/lib/portfolio-ledger')
+        void emitPortfolioOp(
+          'revoke_portfolio_token',
+          agentId,
+          [{ op: 'replace', path: `/portfolios/_issuer/${agentId}/status`, value: 'revoked' }],
+          {
+            action: 'revoke-issuer-portfolio-tokens',
+            agentId: options.authContext.agentId ?? null,
+            actor: options.authContext.agentId ? 'agent' : 'user',
+          },
+        )
+      } catch (pErr) {
+        console.error('[ChangeTitle] G14e portfolio-emit threw (non-fatal):', pErr instanceof Error ? pErr.message : pErr)
       }
+    }
+
+    if (newTitle !== 'manager' && oldTitle !== 'manager') {
+      try {
+        const { broadcastGovernanceSync } = await import('@/lib/governance-sync')
+        await broadcastGovernanceSync('team-updated', {
+          agentId,
+          oldTitle,
+          newTitle: effectiveTitle,
+          timestamp: new Date().toISOString(),
+        }).catch(() => {})
+        ops.push(`G18: Broadcast governance sync to mesh peers`)
+      } catch {
+        ops.push(`G18: Governance sync broadcast skipped (module unavailable)`)
+      }
+    } else {
+      ops.push(`G18: MANAGER change — broadcast already sent by governance.ts`)
     }
 
     // ── GATE 14 ran EARLIER (just before G10) — see TRDD-EE5YX5LF ────

@@ -216,10 +216,25 @@ R16 is **not** weakened: an agent still never *decides* to rotate a credential a
 the governance password. What changes is that re-seeding a decayed session stops requiring a
 human at 3 a.m.
 
+## Already satisfied — do NOT build these (measured 2026-07-31, after the card was written)
+
+The Jul 11 mis-attribution is a defect of the **janitor's Python** capture. Our TypeScript path
+never had it, solves it **by construction rather than by check**, and is already pinned —
+`reauth-flow.ts:101`: *"`emailHint` is display-only. Which account gets filed is decided at the
+END of the flow by /roles, because the human might log in as somebody else and the token is
+authoritative about whose it is."* `tests/unit/oauth-rotator-reauth-flow.test.ts` pins:
+
+- `:211` — *files under the account /roles resolves, NOT the hint, and reports the runway*
+- `:228` — *lifts the DEAD-token retry ban: the replaced index entry carries no
+  `refresh_failures` / `refresh_dead_fp`* — so fmuaddib's **69** failures and its dead flag clear
+  on the next beat with no separate un-gating step
+- `:270` — *refuses to file anything when /roles cannot say whose token it is*
+
+This is why the wrong-account box below is struck: building a check for it would have duplicated
+a stronger guarantee. **The remaining new work is step (c) and nothing else.**
+
 ## Verification
 
-- The Jul 11 failure mode is the regression test: capture requested for account A while the
-  profile holds account B must **refuse**, not file under B.
 - A slot whose refresh is dead is repaired without a human, and `reauth-needed` clears.
 - `bash scripts/with-node.sh npx tsc --noEmit` → 0 · `… yarn test` → full suite green.
 - Every new guard carries a recorded **neuter run** (break it → the named test fails; read the
@@ -231,7 +246,10 @@ human at 3 a.m.
       setting back (not by having run the command)
 - [ ] One login route taught per rotator account; replay re-seeds `chrome-profile-<email>`
 - [ ] Server tick re-captures a dead slot on `reauth-needed`, targeting the named account
-- [ ] Wrong-account refusal pinned by a test + a recorded neuter
+- [x] ~~Wrong-account refusal pinned by a test + a recorded neuter~~ — **already true**, by
+      construction and tested (`reauth-flow.ts:101`; test `:211`, `:270`). Struck rather than
+      deleted: the box was aimed at the janitor's Python failure mode, and knowing our path never
+      shared it is the reason step (c) is the only new work.
 - [ ] `reauth-needed` reaches the owner as a push/banner when it still cannot self-repair
 - [ ] `tsc` clean + full suite green, both DATED in this card
 

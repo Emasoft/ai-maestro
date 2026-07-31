@@ -141,17 +141,33 @@ function rowsWithTitle(title: string | null): Record<string, unknown>[] {
  * invariants are driven the way a post-condition must be — let the write land, then corrupt the
  * disk behind the pipeline's back, keeping the corruption armed across later flushes.
  *
- * Anchored to `revokeTokensFromIssuerCompensable` (G14e), a call the happy-path parity test
- * independently asserts, so "the hook fired" proves the gate ran rather than assuming it.
+ * ANCHORED TO BOTH REVOCATIONS, and that is not belt-and-braces. G14e runs only when the OLD title
+ * was an issuer and the new one is not (`manager`/`chief-of-staff` → anything else), so on a
+ * PROMOTION — `autonomous → manager`, `member → chief-of-staff` — it never fires and an abort armed
+ * on it alone would never arm at all: the pipeline would succeed and the test would assert a
+ * rollback that never happened. G14b has no title condition and sits at the same place in the array
+ * (…G13b, **G14b**, G14e, G14d…), so it is the anchor that works on every fixture. Both are calls
+ * the happy-path parity test independently asserts, so "the hook fired" proves the gate ran.
+ *
+ * `driftTitle` is what gets written to disk; it must DIFFER from the title being assigned or there
+ * is no drift and no abort — `'manager'` is right for every demotion, wrong for a promotion TO
+ * manager.
+ *
+ * An `extra` hook on either anchor is COMPOSED with the corruption, never replaced: one test arms
+ * its own race on `revokeTokensForAgentCompensable`, and silently dropping it would leave that test
+ * asserting over a world nothing had perturbed.
  */
-function armLateDriftAbort(extra: Record<string, () => void> = {}): void {
+function armLateDriftAbort(extra: Record<string, () => void> = {}, driftTitle = 'manager'): void {
+  const corrupt = () => {
+    const write = () => H.writeDisk(rowsWithTitle(driftTitle))
+    H.perturb.run = write
+    write()
+  }
+  const compose = (name: string) => () => { extra[name]?.(); corrupt() }
   H.world.after = {
     ...extra,
-    revokeTokensFromIssuerCompensable: () => {
-      const corrupt = () => H.writeDisk(rowsWithTitle('manager'))
-      H.perturb.run = corrupt
-      corrupt()
-    },
+    revokeTokensForAgentCompensable: compose('revokeTokensForAgentCompensable'),
+    revokeTokensFromIssuerCompensable: compose('revokeTokensFromIssuerCompensable'),
   }
 }
 
@@ -719,5 +735,127 @@ describe('ChangeTitle G22 — the final verification gate', () => {
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/G22: Final verification failed/)
     expect(result.error).toMatch(/is not a function/)
+  })
+})
+
+/**
+ * THE GOVERNANCE-POINTER GATES — G11, G12, G13, G13b — each on the ONE transition that reaches it.
+ *
+ * These four are invisible to every test above, and not by oversight: they are gated on the OLD or
+ * the NEW title being a specific one, and this file's shared fixture is `manager → autonomous`, so
+ * each of them takes its `else` branch and pushes a *"not MANAGER / not COS"* op. Four undos live
+ * and unobservable because one fixture cannot reach them.
+ *
+ * WHAT THEY GUARD IS A POINTER, WHICH IS WHY THE RESIDUE IS QUIET. A `chiefOfStaffId` left null
+ * after a rolled-back demotion does not fail anything loudly: the team simply has no COS, so R6's
+ * sole-gateway routing has nowhere to deliver, and every inbound message to that team is refused
+ * for a reason no one connects to a title change that reported itself reverted. The manager pointer
+ * is worse still — with it left set to an agent whose promotion was rolled back, the host believes
+ * it has a MANAGER that does not hold the title.
+ *
+ * THE ABORT ANCHOR IS WHY `armLateDriftAbort` TAKES A `driftTitle`. Two of these are PROMOTIONS, so
+ * the disk must be corrupted to something OTHER than the title being assigned or there is no drift,
+ * no abort, and the test asserts a rollback that never ran. G13's fixture drifts to `autonomous`
+ * precisely because the title under assignment is `manager`.
+ */
+describe('ChangeTitle governance pointers — G11, G12, G13, G13b', () => {
+  const TEAM = 'team-1'
+  /** A manager that is NOT the agent under test: the team gates read `getManagerId()` for authority,
+   *  and a fixture whose manager IS the agent being demoted cannot separate the two roles. */
+  const OTHER_MANAGER = 'the-other-manager'
+
+  /** Re-point the world at a different transition, and re-seed the agent's row to match it. */
+  async function reseed(agentTitle: string, over: Record<string, unknown>): Promise<void> {
+    const h = await import(HELPER)
+    Object.assign(H.world, h.newWorld({ aidTokens: 3, portfolioTokens: 2, ...over } as never))
+    for (const [id, title] of [[AGENT_ID, agentTitle], [OTHER_MANAGER, 'manager']] as const) {
+      h.seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, {
+        id, name: id, governanceTitle: title, program: 'claude',
+      })
+    }
+  }
+
+  const team = () => H.world.teams[0]
+
+  it('restores the manager pointer AND the team block when a promotion to MANAGER is rolled back (G13)', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    // No manager on the host and every team blocked — the state G13 exists to lift. The agent is on
+    // NO team, which R3 requires of a standalone title.
+    await reseed('autonomous', {
+      managerId: null,
+      teams: [{ id: TEAM, name: 'Team One', agentIds: [TEAMMATE], chiefOfStaffId: TEAMMATE, blocked: true }],
+    })
+    armLateDriftAbort({}, 'autonomous')
+
+    const result = await driveChangeTitle(AGENT_ID, 'manager')
+
+    expect(result.success).toBe(false)
+    expect((result.operations ?? []).some((op: string) => /^G13: Set manager/.test(op))).toBe(true)
+    // Both halves of the cascade, and the second is the one a naive undo forgets: G13 UNBLOCKED the
+    // fleet, so leaving it unblocked hands teams a green light no manager is behind.
+    expect(H.world.managerId).toBeNull()
+    expect(team().blocked).toBe(true)
+    expect(result.error).not.toMatch(/INVALID STATE/)
+  })
+
+  it('restores chiefOfStaffId when a promotion to CHIEF-OF-STAFF is rolled back (G13b)', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    await reseed('member', {
+      managerId: OTHER_MANAGER,
+      teams: [{ id: TEAM, name: 'Team One', agentIds: [AGENT_ID], chiefOfStaffId: null, blocked: false }],
+    })
+    armLateDriftAbort()
+
+    const result = await driveChangeTitle(AGENT_ID, 'chief-of-staff')
+
+    expect(result.success).toBe(false)
+    expect((result.operations ?? []).some((op: string) => /^G13b: Set chiefOfStaffId/.test(op))).toBe(true)
+    expect(team().chiefOfStaffId).toBeNull()
+    expect(result.error).not.toMatch(/INVALID STATE/)
+  })
+
+  /**
+   * G11's FIXTURE IS THE DANGLING-POINTER STATE, and it took a refusal to find out why it must be.
+   *
+   * The obvious shape — a COS of the team it belongs to, demoted — is REFUSED before G11 by **G08b**
+   * (R4.7): *"Cannot change title away from Chief-of-Staff while holding it — the team would be left
+   * without a COS."* So a demotion that reaches G11 is one where G08b's `memberTeamG8` lookup finds
+   * nothing, i.e. the agent is no longer in any team's `agentIds` while a team still lists them as
+   * `chiefOfStaffId`. That is not a contrived shape: G08b's own comment names it as the state the
+   * legitimate transfer/removal flow produces (it clears `chiefOfStaffId` OR removes the agent from
+   * `agentIds` before calling ChangeTitle), and **G11 is what cleans up the dangling pointer** when
+   * only the second happened. With no team membership the target must be a standalone title, so
+   * this is COS → AUTONOMOUS.
+   */
+  it('puts the demoted COS back on the team when the rollback runs (G11)', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    await reseed('chief-of-staff', {
+      managerId: OTHER_MANAGER,
+      teams: [{ id: TEAM, name: 'Team One', agentIds: [TEAMMATE], chiefOfStaffId: AGENT_ID, blocked: false }],
+    })
+    armLateDriftAbort()
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    expect((result.operations ?? []).some((op: string) => /^G11: Cleared chiefOfStaffId/.test(op))).toBe(true)
+    expect(team().chiefOfStaffId).toBe(AGENT_ID)
+    expect(result.error).not.toMatch(/INVALID STATE/)
+  })
+
+  it('puts the demoted ORCHESTRATOR back on the team when the rollback runs (G12)', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    await reseed('orchestrator', {
+      managerId: OTHER_MANAGER,
+      teams: [{ id: TEAM, name: 'Team One', agentIds: [AGENT_ID], orchestratorId: AGENT_ID, chiefOfStaffId: TEAMMATE, blocked: false }],
+    })
+    armLateDriftAbort()
+
+    const result = await driveChangeTitle(AGENT_ID, 'member')
+
+    expect(result.success).toBe(false)
+    expect((result.operations ?? []).some((op: string) => /^G12: Cleared orchestratorId/.test(op))).toBe(true)
+    expect(team().orchestratorId).toBe(AGENT_ID)
+    expect(result.error).not.toMatch(/INVALID STATE/)
   })
 })

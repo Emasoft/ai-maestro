@@ -320,6 +320,69 @@ describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
   })
 
   /**
+   * TRDD-YAGRX7W3 — the R51 window's ONE reachable compensation.
+   *
+   * `adapter.install` copies N files and THEN reports failure (line ~984). Before the window
+   * existed, EXE did `result.error = …; return result` and those copies stayed on disk forever:
+   * the caller was told the install failed while a partial plugin sat in the agent's client dir.
+   * Under `runGateSequence` the gate is registered write-ahead, so its own partial work is
+   * compensated — the adapter is asked to remove what it copied.
+   */
+  it('R51 window: a failed adapter install is ROLLED BACK — the partial copy is removed', async () => {
+    mockAdapterInstall.mockResolvedValue({
+      success: false,
+      error: 'copied 2 of 5 files then EIO',
+      installedPaths: ['/tmp/test-codex-agent/.codex-plugin/plugin.json'],
+    })
+
+    const { InstallElement } = await import('@/services/element-management-service')
+    const result = await InstallElement({
+      name: 'ai-maestro-plugin',
+      marketplace: 'ai-maestro-plugins',
+      action: 'install',
+      scope: 'local',
+      agentDir: '/tmp/test-codex-agent',
+      clientType: 'codex',
+    }, TEST_AUTH)
+
+    expect(result.success).toBe(false)
+    // THE COMPENSATION: the partial copy is removed via the adapter that made it.
+    expect(mockAdapterUninstall).toHaveBeenCalledTimes(1)
+    // …and the runner said so, rather than leaving the revert implicit.
+    expect(result.operations).toContain('EXE: reverted')
+  })
+
+  /**
+   * TRDD-YAGRX7W3 — the SENTINEL. The four `result.error = …; return result` aborts inside EXE
+   * became throws, and EXE is wrapped in a `try/catch` that re-reports failures under one generic
+   * message. Without `ExeAbort` passing through untouched, every deliberate refusal would arrive
+   * as `EXE: Action "install" failed: …` and the specific reason would be gone.
+   */
+  it('R51 window: a deliberate EXE abort keeps its SPECIFIC reason (not the generic wrapper)', async () => {
+    mockAdapterInstall.mockResolvedValue({
+      success: false,
+      error: 'copied 2 of 5 files then EIO',
+      installedPaths: [],
+    })
+
+    const { InstallElement } = await import('@/services/element-management-service')
+    const result = await InstallElement({
+      name: 'ai-maestro-plugin',
+      marketplace: 'ai-maestro-plugins',
+      action: 'install',
+      scope: 'local',
+      agentDir: '/tmp/test-codex-agent',
+      clientType: 'codex',
+    }, TEST_AUTH)
+
+    expect(result.error).toContain('codex-adapter install failed: copied 2 of 5 files then EIO')
+    expect(result.error).not.toContain('EXE: Action "install" failed')
+    // R51.3 wording — the caller is told the system was left alone, in the one sentence every
+    // pipeline uses for it.
+    expect(result.error).toContain('NO CHANGES WERE MADE TO THE SYSTEM')
+  })
+
+  /**
    * Uninstall on codex also routes through the adapter — symmetric with
    * install. Legacy path would have called `claude plugin uninstall` which
    * the codex CLI doesn't understand.

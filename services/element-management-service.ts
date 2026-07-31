@@ -500,6 +500,24 @@ async function withSettingsLock<T>(
   }
 }
 
+/**
+ * A DELIBERATE abort raised inside InstallElement's EXE gate (TRDD-YAGRX7W3).
+ *
+ * The EXE body is one `try { switch } catch`, and four of its branches used to abort by
+ * `result.error = …; return result`. Under the R51 runner a gate aborts by THROWING — but a bare
+ * `throw` inside that try is caught by its own `catch`, which re-reports every failure under one
+ * generic message and LOSES the specific one ("no plugin adapter for X" becomes "action failed").
+ * That is the trap `.claude/rules/lessons-verification.md` records verbatim. The sentinel is the
+ * fix it names: the catch re-throws an ExeAbort untouched and keeps wrapping everything else, so a
+ * deliberate refusal stays distinguishable from a bug.
+ */
+class ExeAbort extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ExeAbort'
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // InstallElement — All-in-one plugin/marketplace/element installer
 // ══════════════════════════════════════════════════════════════
@@ -949,231 +967,354 @@ export async function InstallElement(
     // A gate that can neither fail nor be reversed contributes nothing inside a transaction;
     // wrapping G11/G13 would be theatre, not safety.
     // ═════════════════════════════════════════════════════════════════════════════════
-    try {
-      switch (action) {
-        case 'install': {
-          if (useClientAdapter) {
-            const { getAdapter } = await import('@/lib/client-plugin-adapters')
-            const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
-            const adapter = await getAdapter(clientType)
-            if (!adapter) {
-              result.error = `EXE: No plugin adapter for client "${clientType}"`
-              ops.push(result.error)
-              return result
-            }
-            // Pure READ of what G13 resolved — the fallback emit that used to sit here moved up
-            // into G13 (TRDD-YAGRX7W3), so no mutation R20.31 forbids reversing happens inside the
-            // future R51 window. The error below already named G13 as the culprit; now it is true.
-            const storageDir = convertedDir
-            if (!storageDir) {
-              result.error = `EXE: No converted plugin dir for ${name}@${clientType} — conversion (G13) must have failed`
-              ops.push(result.error)
-              return result
-            }
-            const providerId = clientTypeToProviderId(clientType)
-            if (!providerId) {
-              result.error = `EXE: No provider ID for client "${clientType}"`
-              ops.push(result.error)
-              return result
-            }
-            const adapterRes = await inAdapterContext('ChangePlugin', () => adapter.install(
-              { name, clientType, storageDir, providerId },
-              cwd,
-              { scope: 'local' }
-            ))
-            if (!adapterRes.success) {
-              result.error = `EXE: ${clientType}-adapter install failed: ${adapterRes.error || 'unknown'}`
-              ops.push(result.error)
-              return result
-            }
-            ops.push(`EXE: Installed via ${clientType}-adapter (${adapterRes.installedPaths.length} files copied from ${storageDir})`)
-            break
-          }
+    // THE WINDOW ITSELF (AIO-TXN-10 / R51, TRDD-YAGRX7W3). One gate, and that is not a shortcut:
+    // the anti-pattern this repo records is wrapping a SINGLE ATOMIC write with nothing abortable
+    // after it. EXE is neither atomic nor single — a CLI call, N adapter file copies and a settings
+    // write happen inside one `run` — so the runner's write-ahead registration is what makes the
+    // gate's OWN partial work compensatable. Today that partial work is the residue: the adapter
+    // copies its files, returns `success: false`, and the copies stay on disk forever.
+    //
+    // REACHABLE vs LATENT, stated rather than counted (the eight sibling retrofits taught this):
+    //   • install + adapter — REACHABLE. `adapterRes.success === false` aborts AFTER the copy.
+    //   • install + CLI     — reachable only if the direct settings write throws; the write-back
+    //                         path swallows its own errors, so it cannot abort.
+    //   • enable / disable  — LATENT. One `saveJsonSafe` (atomic tmp+rename) and nothing after it.
+    //   • update            — INERT. Its own catch swallows every failure; the gate cannot abort.
+    //   • uninstall         — FORWARD-ONLY for everything but the settings entries. Removed files
+    //                         (adapter) and the deleted plugin CACHE dir have no snapshot to
+    //                         restore from — `convertedDir` is null on this path, so there is not
+    //                         even a source to re-emit. The entries removed from the settings file
+    //                         ARE recorded and restorable; the rest is stated, never pretended.
+    //
+    // PG01..PG08 stay OUTSIDE, deliberately. PG01 is a VERIFICATION, and `loadJsonSafe` returns
+    // `{}` on a parse failure (:362-370) — so its "not found" branch CANNOT distinguish an absent
+    // key from an unreadable file, and wiring it to abort would let a corrupt settings.local.json
+    // uninstall a working plugin. And when it does deny truthfully the key really is absent, so
+    // the only residue left to reverse is the SHARED plugin cache the CLI downloaded — deleting
+    // shared state to tidy one agent's failed verify is what this boundary excludes G11/G13 for.
+    // PG02 must run on BOTH verdicts (the wake route refuses an agent whose `corePluginMissing`
+    // it sets — app/api/agents/[id]/wake/route.ts), and a gate that runs either way cannot be part
+    // of an all-or-nothing set.
+    const { runGateSequence } = await import('@/lib/gate-transaction')
 
-          let cliSuccess = false
-          try {
-            const cliResult = await execFileAsync('claude', [
-              'plugin', 'install', `${name}@${resolvedMarketplace}`, '--scope', scope,
-            ], { timeout: 30000, cwd })
-            result.stdout = cliResult.stdout
-            result.stderr = cliResult.stderr
-            cliSuccess = true
-            ops.push(`EXE: Installed via CLI — ${name}@${resolvedMarketplace} --scope ${scope}`)
-          } catch (cliErr: unknown) {
-            const err = cliErr as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string }
-            result.stdout = String(err.stdout || '')
-            result.stderr = String(err.stderr || '')
-            ops.push(`EXE: CLI install failed (${err.message?.slice(0, 80) || 'unknown'}) — falling back to direct write`)
-          }
+    /**
+     * The undo LEDGER — only what `undo` must reverse. Every other value stays lexical.
+     *
+     * `undo` MUST tolerate `run` having done none, some, or all of its work, so each unit is
+     * recorded as it happens (and the adapter install is recorded BEFORE the call: a throw
+     * mid-copy would otherwise leave the attempt unrecorded and the partial copy uncompensated).
+     */
+    const exeUndo = {
+      /** Settings entries this run touched — key-level, so a restore cannot clobber another writer. */
+      settingsKeys: [] as { key: string; had: boolean; prev: boolean | undefined }[],
+      adapterInstallAttempted: false,
+      cliInstalled: false,
+    }
 
-          if (!cliSuccess) {
-            await withSettingsLock(settingsPath, async () => {
-              const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
-              const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-              ep[pluginKey] = true
-              settings.enabledPlugins = ep
-              await saveJsonSafe(settingsPath, settings)
-            })
-            ops.push(`EXE: Installed via direct settings write — ${pluginKey} → true`)
-          } else if (scope === 'local' && clientType === 'claude') {
-            // SCEN-012 FIX: Belt-and-braces write-back for local Claude installs.
-            // The `claude plugin install` CLI can fail silently when invoked from
-            // a server child process due to PATH / env differences (same root
-            // cause fixed in ChangeClient G08b). Verify the key is actually in
-            // settings.local.json and write it back if not. Without this, G11
-            // (install ai-maestro-plugin during CreateAgent) can return success
-            // while the plugin is not actually enabled, violating R17.1/R17.6.
-            try {
-              await withSettingsLock(settingsPath, async () => {
-                const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
-                const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-                if (ep[pluginKey] !== true) {
+    const txn = await runGateSequence([{
+      id: 'EXE',
+      what: `Executed "${action}" for ${name}`,
+      run: async () => {
+        try {
+          switch (action) {
+            case 'install': {
+              if (useClientAdapter) {
+                const { getAdapter } = await import('@/lib/client-plugin-adapters')
+                const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+                const adapter = await getAdapter(clientType)
+                if (!adapter) {
+                  const msg = `EXE: No plugin adapter for client "${clientType}"`
+                  ops.push(msg)
+                  throw new ExeAbort(msg)
+                }
+                // Pure READ of what G13 resolved — the fallback emit that used to sit here moved up
+                // into G13 (TRDD-YAGRX7W3), so no mutation R20.31 forbids reversing happens inside the
+                // R51 window. The error below already named G13 as the culprit; now it is true.
+                const storageDir = convertedDir
+                if (!storageDir) {
+                  const msg = `EXE: No converted plugin dir for ${name}@${clientType} — conversion (G13) must have failed`
+                  ops.push(msg)
+                  throw new ExeAbort(msg)
+                }
+                const providerId = clientTypeToProviderId(clientType)
+                if (!providerId) {
+                  const msg = `EXE: No provider ID for client "${clientType}"`
+                  ops.push(msg)
+                  throw new ExeAbort(msg)
+                }
+                // Recorded BEFORE the call: a failure part-way through the copy is exactly the
+                // work that would otherwise go uncompensated.
+                exeUndo.adapterInstallAttempted = true
+                const adapterRes = await inAdapterContext('ChangePlugin', () => adapter.install(
+                  { name, clientType, storageDir, providerId },
+                  cwd,
+                  { scope: 'local' }
+                ))
+                if (!adapterRes.success) {
+                  const msg = `EXE: ${clientType}-adapter install failed: ${adapterRes.error || 'unknown'}`
+                  ops.push(msg)
+                  throw new ExeAbort(msg)
+                }
+                ops.push(`EXE: Installed via ${clientType}-adapter (${adapterRes.installedPaths.length} files copied from ${storageDir})`)
+                break
+              }
+
+              let cliSuccess = false
+              try {
+                const cliResult = await execFileAsync('claude', [
+                  'plugin', 'install', `${name}@${resolvedMarketplace}`, '--scope', scope,
+                ], { timeout: 30000, cwd })
+                result.stdout = cliResult.stdout
+                result.stderr = cliResult.stderr
+                cliSuccess = true
+                exeUndo.cliInstalled = true
+                ops.push(`EXE: Installed via CLI — ${name}@${resolvedMarketplace} --scope ${scope}`)
+              } catch (cliErr: unknown) {
+                const err = cliErr as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string }
+                result.stdout = String(err.stdout || '')
+                result.stderr = String(err.stderr || '')
+                ops.push(`EXE: CLI install failed (${err.message?.slice(0, 80) || 'unknown'}) — falling back to direct write`)
+              }
+
+              if (!cliSuccess) {
+                await withSettingsLock(settingsPath, async () => {
+                  const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                  const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+                  exeUndo.settingsKeys.push({ key: pluginKey, had: pluginKey in ep, prev: ep[pluginKey] })
                   ep[pluginKey] = true
                   settings.enabledPlugins = ep
                   await saveJsonSafe(settingsPath, settings)
-                  ops.push(`EXE: Write-back — CLI claimed success but ${pluginKey} missing; force-wrote ${pluginKey} → true`)
+                })
+                ops.push(`EXE: Installed via direct settings write — ${pluginKey} → true`)
+              } else if (scope === 'local' && clientType === 'claude') {
+                // SCEN-012 FIX: Belt-and-braces write-back for local Claude installs.
+                // The `claude plugin install` CLI can fail silently when invoked from
+                // a server child process due to PATH / env differences (same root
+                // cause fixed in ChangeClient G08b). Verify the key is actually in
+                // settings.local.json and write it back if not. Without this, G11
+                // (install ai-maestro-plugin during CreateAgent) can return success
+                // while the plugin is not actually enabled, violating R17.1/R17.6.
+                try {
+                  await withSettingsLock(settingsPath, async () => {
+                    const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                    const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+                    if (ep[pluginKey] !== true) {
+                      exeUndo.settingsKeys.push({ key: pluginKey, had: pluginKey in ep, prev: ep[pluginKey] })
+                      ep[pluginKey] = true
+                      settings.enabledPlugins = ep
+                      await saveJsonSafe(settingsPath, settings)
+                      ops.push(`EXE: Write-back — CLI claimed success but ${pluginKey} missing; force-wrote ${pluginKey} → true`)
+                    }
+                  })
+                } catch (wbErr) {
+                  ops.push(`EXE: WARN — Write-back fallback failed: ${wbErr instanceof Error ? wbErr.message : wbErr}`)
                 }
+              }
+              break
+            }
+
+            case 'uninstall': {
+              if (useClientAdapter) {
+                const { getAdapter } = await import('@/lib/client-plugin-adapters')
+                const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+                const adapter = await getAdapter(clientType)
+                const providerId = clientTypeToProviderId(clientType)
+                if (adapter && providerId) {
+                  // FORWARD-ONLY (recorded in the window comment above): a removal has no
+                  // snapshot to restore from, and `convertedDir` is null on the uninstall path
+                  // so there is not even a source to re-emit. Nothing is recorded here because
+                  // nothing here can be reversed — saying so beats a compensation that lies.
+                  const adapterRes = await inAdapterContext('ChangePlugin', () => adapter.uninstall(
+                    { name, clientType, storageDir: convertedDir || '', providerId },
+                    cwd,
+                    { scope: 'local' }
+                  ))
+                  if (adapterRes.success) {
+                    ops.push(`EXE: Uninstalled via ${clientType}-adapter`)
+                    break
+                  }
+                  ops.push(`EXE: ${clientType}-adapter uninstall failed: ${adapterRes.error || 'unknown'} — falling back`)
+                }
+              }
+
+              try {
+                const cliResult = await execFileAsync('claude', [
+                  'plugin', 'uninstall', `${name}@${resolvedMarketplace}`, '--scope', scope,
+                ], { timeout: 30000, cwd })
+                result.stdout = cliResult.stdout
+                result.stderr = cliResult.stderr
+                ops.push(`EXE: Uninstalled via CLI`)
+              } catch {
+                await withSettingsLock(settingsPath, async () => {
+                  const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                  const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+                  // SCEN-012 FIX: Boundary-aware match. Old `k.includes(name)` deleted
+                  // ai-maestro-autonomous-agent@ai-maestro-plugins when uninstalling
+                  // ai-maestro-plugin, because "ai-maestro-plugins" contains "ai-maestro-plugin"
+                  // as substring. Require exact name match before "@".
+                  for (const k of Object.keys(ep)) {
+                    const at = k.indexOf('@')
+                    const pluginPart = at >= 0 ? k.substring(0, at) : k
+                    if (pluginPart === name) {
+                      exeUndo.settingsKeys.push({ key: k, had: true, prev: ep[k] })
+                      delete ep[k]
+                    }
+                  }
+                  settings.enabledPlugins = ep
+                  await saveJsonSafe(settingsPath, settings)
+                })
+                ops.push(`EXE: Uninstalled via direct settings removal`)
+              }
+
+              // SCEN-019 P0-001: Always clean up plugin cache dir on user-scope
+              // uninstall. When the CLI fails and we fall through to direct
+              // settings removal, the cache dir `~/.claude/plugins/cache/
+              // <marketplace>/<plugin>/` is left behind. Next time `claude` reads
+              // the cache, it still sees the plugin files and may silently
+              // "re-enable" via orphaned marketplace manifests. Only applies to
+              // user scope — local scope doesn't own the shared cache, and
+              // other agents may still depend on the cached plugin.
+              //
+              // FORWARD-ONLY, and it cannot be reached by a rollback anyway: nothing after this
+              // can abort the gate (its own failure is swallowed to a WARN), so a run that gets
+              // here completes. A reinstall regenerates the cache; these bytes are not restored.
+              if (scope === 'user' && clientType === 'claude') {
+                try {
+                  const { rm: rmCache } = await import('fs/promises')
+                  const { resolve: resolveCache } = await import('path')
+                  const cacheDir = resolveCache(HOME, '.claude', 'plugins', 'cache', resolvedMarketplace, name)
+                  const claudeCacheRoot = resolveCache(HOME, '.claude', 'plugins', 'cache')
+                  // Safety: refuse to rm anything outside ~/.claude/plugins/cache/
+                  if (cacheDir.startsWith(claudeCacheRoot + '/') && cacheDir !== claudeCacheRoot) {
+                    await rmCache(cacheDir, { recursive: true, force: true })
+                    ops.push(`EXE: Removed plugin cache dir ${cacheDir}`)
+                  }
+                } catch (cacheErr) {
+                  ops.push(`EXE: WARN — cache dir cleanup failed: ${cacheErr instanceof Error ? cacheErr.message : cacheErr}`)
+                }
+              }
+              break
+            }
+
+            case 'enable': {
+              await withSettingsLock(settingsPath, async () => {
+                const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+                // SCEN-012 FIX: Boundary-aware match (see PG01 comment).
+                const existingKey = Object.keys(ep).find(k => {
+                  const at = k.indexOf('@')
+                  const pluginPart = at >= 0 ? k.substring(0, at) : k
+                  return pluginPart === name
+                }) || pluginKey
+                exeUndo.settingsKeys.push({ key: existingKey, had: existingKey in ep, prev: ep[existingKey] })
+                ep[existingKey] = true
+                settings.enabledPlugins = ep
+                await saveJsonSafe(settingsPath, settings)
               })
-            } catch (wbErr) {
-              ops.push(`EXE: WARN — Write-back fallback failed: ${wbErr instanceof Error ? wbErr.message : wbErr}`)
+              ops.push(`EXE: Enabled — ${name} → true`)
+              break
+            }
+
+            case 'disable': {
+              await withSettingsLock(settingsPath, async () => {
+                const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+                // SCEN-012 FIX: Boundary-aware match (see PG01 comment).
+                const existingKey = Object.keys(ep).find(k => {
+                  const at = k.indexOf('@')
+                  const pluginPart = at >= 0 ? k.substring(0, at) : k
+                  return pluginPart === name
+                }) || pluginKey
+                exeUndo.settingsKeys.push({ key: existingKey, had: existingKey in ep, prev: ep[existingKey] })
+                ep[existingKey] = false
+                settings.enabledPlugins = ep
+                await saveJsonSafe(settingsPath, settings)
+              })
+              ops.push(`EXE: Disabled — ${name} → false`)
+              break
+            }
+
+            case 'update': {
+              try {
+                const cliResult = await execFileAsync('claude', [
+                  'plugin', 'update', `${name}@${resolvedMarketplace}`,
+                ], { timeout: 60000, cwd })
+                result.stdout = cliResult.stdout
+                result.stderr = cliResult.stderr
+                ops.push(`EXE: Updated via CLI`)
+              } catch (updateErr: unknown) {
+                const err = updateErr as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string }
+                result.stdout = String(err.stdout || '')
+                result.stderr = String(err.stderr || '')
+                ops.push(`EXE: WARN — Update failed: ${err.message || 'unknown'}`)
+              }
+              break
             }
           }
-          break
+        } catch (execErr) {
+          // EMS-MIN-01 fix: this catch belongs to the EXE (execution) section,
+          // not Gate 9. The "G09:" prefix collides with the actual Gate 9 label
+          // (R9.13 role-plugin enforcement) and confuses pipeline log readers.
+          //
+          // AN ExeAbort PASSES THROUGH UNTOUCHED. It is a DELIBERATE refusal that already carries
+          // the specific reason ("no plugin adapter for codex"); re-wrapping it here would flatten
+          // every abort into one generic string — the trap this catch used to set for the four
+          // `return result`s that became throws (TRDD-YAGRX7W3).
+          if (execErr instanceof ExeAbort) throw execErr
+          const msg = `EXE: Action "${action}" failed: ${execErr instanceof Error ? execErr.message : execErr}`
+          ops.push(msg)
+          throw new Error(msg)
         }
-
-        case 'uninstall': {
-          if (useClientAdapter) {
-            const { getAdapter } = await import('@/lib/client-plugin-adapters')
-            const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
-            const adapter = await getAdapter(clientType)
-            const providerId = clientTypeToProviderId(clientType)
-            if (adapter && providerId) {
-              const adapterRes = await inAdapterContext('ChangePlugin', () => adapter.uninstall(
-                { name, clientType, storageDir: convertedDir || '', providerId },
-                cwd,
-                { scope: 'local' }
-              ))
-              if (adapterRes.success) {
-                ops.push(`EXE: Uninstalled via ${clientType}-adapter`)
-                break
-              }
-              ops.push(`EXE: ${clientType}-adapter uninstall failed: ${adapterRes.error || 'unknown'} — falling back`)
-            }
-          }
-
-          try {
-            const cliResult = await execFileAsync('claude', [
-              'plugin', 'uninstall', `${name}@${resolvedMarketplace}`, '--scope', scope,
-            ], { timeout: 30000, cwd })
-            result.stdout = cliResult.stdout
-            result.stderr = cliResult.stderr
-            ops.push(`EXE: Uninstalled via CLI`)
-          } catch {
-            await withSettingsLock(settingsPath, async () => {
-              const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
-              const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-              // SCEN-012 FIX: Boundary-aware match. Old `k.includes(name)` deleted
-              // ai-maestro-autonomous-agent@ai-maestro-plugins when uninstalling
-              // ai-maestro-plugin, because "ai-maestro-plugins" contains "ai-maestro-plugin"
-              // as substring. Require exact name match before "@".
-              for (const k of Object.keys(ep)) {
-                const at = k.indexOf('@')
-                const pluginPart = at >= 0 ? k.substring(0, at) : k
-                if (pluginPart === name) delete ep[k]
-              }
-              settings.enabledPlugins = ep
-              await saveJsonSafe(settingsPath, settings)
-            })
-            ops.push(`EXE: Uninstalled via direct settings removal`)
-          }
-
-          // SCEN-019 P0-001: Always clean up plugin cache dir on user-scope
-          // uninstall. When the CLI fails and we fall through to direct
-          // settings removal, the cache dir `~/.claude/plugins/cache/
-          // <marketplace>/<plugin>/` is left behind. Next time `claude` reads
-          // the cache, it still sees the plugin files and may silently
-          // "re-enable" via orphaned marketplace manifests. Only applies to
-          // user scope — local scope doesn't own the shared cache, and
-          // other agents may still depend on the cached plugin.
-          if (scope === 'user' && clientType === 'claude') {
-            try {
-              const { rm: rmCache } = await import('fs/promises')
-              const { resolve: resolveCache } = await import('path')
-              const cacheDir = resolveCache(HOME, '.claude', 'plugins', 'cache', resolvedMarketplace, name)
-              const claudeCacheRoot = resolveCache(HOME, '.claude', 'plugins', 'cache')
-              // Safety: refuse to rm anything outside ~/.claude/plugins/cache/
-              if (cacheDir.startsWith(claudeCacheRoot + '/') && cacheDir !== claudeCacheRoot) {
-                await rmCache(cacheDir, { recursive: true, force: true })
-                ops.push(`EXE: Removed plugin cache dir ${cacheDir}`)
-              }
-            } catch (cacheErr) {
-              ops.push(`EXE: WARN — cache dir cleanup failed: ${cacheErr instanceof Error ? cacheErr.message : cacheErr}`)
-            }
-          }
-          break
-        }
-
-        case 'enable': {
+      },
+      undo: async () => {
+        // Reverse order of the units as `run` performed them: the settings write is the most
+        // recent, and restoring it before undoing the CLI install would let the CLI's own
+        // settings edit survive the restore.
+        if (exeUndo.settingsKeys.length) {
           await withSettingsLock(settingsPath, async () => {
             const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
             const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-            // SCEN-012 FIX: Boundary-aware match (see PG01 comment).
-            const existingKey = Object.keys(ep).find(k => {
-              const at = k.indexOf('@')
-              const pluginPart = at >= 0 ? k.substring(0, at) : k
-              return pluginPart === name
-            }) || pluginKey
-            ep[existingKey] = true
+            // KEY-LEVEL, never a whole-file byte restore: this file is shared with every other
+            // plugin of this agent, and putting back a snapshot of it would silently revert an
+            // edit some concurrent writer made between the write and the rollback.
+            while (exeUndo.settingsKeys.length) {
+              const entry = exeUndo.settingsKeys.pop()!
+              if (entry.had) ep[entry.key] = entry.prev as boolean
+              else delete ep[entry.key]
+            }
             settings.enabledPlugins = ep
             await saveJsonSafe(settingsPath, settings)
           })
-          ops.push(`EXE: Enabled — ${name} → true`)
-          break
         }
-
-        case 'disable': {
-          await withSettingsLock(settingsPath, async () => {
-            const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
-            const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-            // SCEN-012 FIX: Boundary-aware match (see PG01 comment).
-            const existingKey = Object.keys(ep).find(k => {
-              const at = k.indexOf('@')
-              const pluginPart = at >= 0 ? k.substring(0, at) : k
-              return pluginPart === name
-            }) || pluginKey
-            ep[existingKey] = false
-            settings.enabledPlugins = ep
-            await saveJsonSafe(settingsPath, settings)
-          })
-          ops.push(`EXE: Disabled — ${name} → false`)
-          break
+        if (exeUndo.cliInstalled) {
+          exeUndo.cliInstalled = false
+          await execFileAsync('claude', [
+            'plugin', 'uninstall', `${name}@${resolvedMarketplace}`, '--scope', scope,
+          ], { timeout: 30000, cwd })
         }
-
-        case 'update': {
-          try {
-            const cliResult = await execFileAsync('claude', [
-              'plugin', 'update', `${name}@${resolvedMarketplace}`,
-            ], { timeout: 60000, cwd })
-            result.stdout = cliResult.stdout
-            result.stderr = cliResult.stderr
-            ops.push(`EXE: Updated via CLI`)
-          } catch (updateErr: unknown) {
-            const err = updateErr as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string }
-            result.stdout = String(err.stdout || '')
-            result.stderr = String(err.stderr || '')
-            ops.push(`EXE: WARN — Update failed: ${err.message || 'unknown'}`)
+        if (exeUndo.adapterInstallAttempted) {
+          exeUndo.adapterInstallAttempted = false
+          const { getAdapter } = await import('@/lib/client-plugin-adapters')
+          const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+          const adapter = await getAdapter(clientType)
+          const providerId = clientTypeToProviderId(clientType)
+          if (!adapter || !providerId) {
+            throw new Error(`cannot remove the partial ${clientType} install: no adapter/providerId`)
           }
-          break
+          const rev = await inAdapterContext('ChangePlugin', () => adapter.uninstall(
+            { name, clientType, storageDir: convertedDir || '', providerId },
+            cwd,
+            { scope: 'local' }
+          ))
+          // A compensation that swallows its own failure is how a CRITICAL becomes a clean
+          // "no changes were made" (R51.5) — say it failed and let the runner report it.
+          if (!rev.success) throw new Error(`${clientType}-adapter uninstall failed: ${rev.error || 'unknown'}`)
         }
-      }
-    } catch (execErr) {
-      // EMS-MIN-01 fix: this catch belongs to the EXE (execution) section,
-      // not Gate 9. The "G09:" prefix collides with the actual Gate 9 label
-      // (R9.13 role-plugin enforcement) and confuses pipeline log readers.
-      result.error = `EXE: Action "${action}" failed: ${execErr instanceof Error ? execErr.message : execErr}`
-      ops.push(result.error)
-      return result
-    }
+      },
+    }], {})
+
+    ops.push(...txn.ops)
+    if (!txn.ok) { result.error = txn.message; return result }
 
     result.success = true
 

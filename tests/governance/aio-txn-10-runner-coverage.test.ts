@@ -167,22 +167,30 @@ function analyze(): PipelineInfo[] {
  * `saveJsonSafe`), so a torn write really can leave a truncated `.lsp.json` that later loads read
  * as `{}` — its undo is reachable and restores the bytes read before the write.
  *
- * `InstallElement` (101 ops) is the ONE still hand-rolling. It is not more of the same: it is the
- * large pipeline that retrofitted pipelines CALL, so converting it changes its callers' failure
- * semantics, and three of its pre-EXE mutations are ones a compensation is FORBIDDEN to reverse
- * (R20.31, verdict Explicit: ai-maestro NEVER deletes a plugin source folder) or harmful to
- * (deleting `.claude/` fights the agent-invariant watchdog; deregistering a marketplace breaks
- * every other agent). It wants its own card — see TRDD-DQ6XN2VP's `## ⏵ MEASURED 2026-07-31`.
+ * `InstallElement` (101 ops) LANDED 2026-07-31 (TRDD-YAGRX7W3) and is the reason this ratchet's
+ * claim is now "WINDOWED per the R51 boundary rule" rather than "transactional". Its window opens
+ * at a marker comment, not at the top of the function: FIVE mutations sit deliberately above it
+ * (two `mkdir`s the agent-invariant watchdog re-creates anyway, a SHARED `claude plugin
+ * marketplace add`, and G13's convert+emit pair that R20.31 — verdict Explicit — forbids deleting).
+ * Leaving each behind produces no invalid state, which is what R51 actually forbids. That
+ * exclusion set is CLOSED BY A TEST (`installelement-window-boundary.test.ts`), so `0` here cannot
+ * quietly come to mean "the whole function is covered".
+ *
+ * What the window buys, stated rather than counted: ONE reachable compensation — a
+ * `adapter.install` that copies files and THEN reports failure is now rolled back instead of
+ * leaving the partial copy on disk. `enable`/`disable` are latent (one atomic `saveJsonSafe`,
+ * nothing abortable after), `update` is inert (its own catch swallows), and `uninstall` is
+ * forward-only except for the settings entries it records.
  *
  * `ChangeTitle` (131 ops) was the other large one, and it is DONE (TRDD-DQ6XN2VP): 15 mutating
  * gates with compensations, the four non-mutating ones declared `readOnly`, G22 routed to the
  * runner's `invariants` hook, and the three append-only tails (the `change_title` ledger entry,
  * G14e's portfolio entry, G18's mesh broadcast) moved out of the array to fire only on `txn.ok`.
  */
-const MAX_HANDROLLED = 1
+const MAX_HANDROLLED = 0
 
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */
-const MIN_TRANSACTIONAL = 18
+const MIN_TRANSACTIONAL = 19
 
 /**
  * The pipelines already under the runner, pinned BY NAME. A count alone cannot see an
@@ -209,6 +217,9 @@ const MUST_BE_TRANSACTIONAL = [
   'ChangeMCP',
   'ChangeLSP',
   'ChangeHook',
+  // WINDOWED, not whole-function — five mutations sit above its boundary marker by design, and
+  // `installelement-window-boundary.test.ts` is what keeps that set closed (TRDD-YAGRX7W3).
+  'InstallElement',
 ]
 
 describe('AIO-TXN-10 — every pipeline routes through lib/gate-transaction.ts', () => {

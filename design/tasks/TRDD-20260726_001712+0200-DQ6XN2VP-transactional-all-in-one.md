@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T09:56:44+0200
+updated: 2026-07-31T10:15:40+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -103,7 +103,7 @@ compensation are orthogonal defences and the retrofit must keep both.
 
 | # | gate | line | mutates | undo (design) |
 |---|---|---|---|---|
-| 1 | G03 | :2402 | `updateAgent({program})` — auto-fix an empty program | restore prior `program` |
+| 1 | G03 | :2402 | `updateAgent({program})` — auto-fix an empty program | **EXCLUDED — see the window-start correction below.** Its undo would restore `program: ''`, re-breaking a self-heal. |
 | 2 | G06b / G9a | :2494, :2645 | `updateAgent({githubRepo})` | restore prior `githubRepo` |
 | 3 | **G14** | **:2685** | **`updateAgent({governanceTitle})` — THE title write** | restore `oldTitle` |
 | 4 | G10 | :2736-2741 | `removeManager()` + **`blockAllTeams()` — hibernates every team agent** | `unblockAllTeams()` + re-wake each. **`blockAllTeams()` RETURNS the hibernated list**, so the snapshot R51.4 asks for already exists. Each wake can fail ⇒ the honest R51.5 CRITICAL path. |
@@ -120,6 +120,35 @@ compensation are orthogonal defences and the retrofit must keep both.
 after G10 leaves the host with teams blocked and the fleet hibernated, and a failure after G16 leaves
 a titled agent with the wrong role-plugin — R9.13 violated by the very pipeline that enforces it.
 Nothing in the eight conformance-only pipelines is remotely this wide.
+
+### ⚠ CORRECTED 2026-07-31 — the window starts at **G9a**, not G03
+
+Two claims above were measured one question short. Both were caught by reading the landed precedent
+and `lib/gate-transaction.ts` before converting a line, and both change what commit 2 IS.
+
+**1. The window starts at G9a (`:2645`), not G03 (`:2402`).** G03 *is* the first mutation — that part
+was right — but "first mutation" is only the first of the TWO questions this card already answers for
+`InstallElement`: reversing it must also be **legal and harmless**. G03's write heals a corrupt empty
+`program` field (`'' → 'claude'`, inferred from filesystem evidence); its undo would restore
+`program: ''`, deliberately re-breaking a repair the system wants whether or not the title change
+succeeds. Same shape as `.claude/` being an agent invariant a watchdog re-creates — so EXCLUDE, and
+name what would change the answer: if `program` ever gains a meaning where empty is legitimate, it
+comes back in.
+
+**2. `G06`/`G06b` early-return `success: true` (`:2481-2483`, `:2495-2497`), which the runner cannot
+express at all.** `runGateSequence` gives a gate exactly two outcomes — return, or throw and unwind;
+there is no "stop here and report SUCCESS". Had the array started at G03, those two branches would
+sit inside it with nowhere to go, and the conversion would have died on them mid-edit. Starting at
+G9a puts every early-SUCCESS return and every read-only validation before the array as a plain early
+return — exactly the landed shape.
+
+Between G03's self-heal and G9a the only mutation is G06b's `githubRepo` write, and it is followed
+immediately by `return result`: a terminal branch with nothing abortable after it, i.e. its own
+single-mutation mini-pipeline with no window — the same verdict this card already reached for the ten
+conformance-only pipelines.
+
+**So the window is G9a (`:2645`) → G22 (`:3467`).** G22 is still the last abortable gate (G23 only
+WARNs; the terminal only chooses a verdict), so that half of the earlier measurement stands.
 
 **The one missing primitive is now BUILT** (2026-07-31): `lib/portfolio-store.ts` grew
 `revokeTokensFromIssuerCompensable`, so both token stores G14b/G14e touch can be undone. It landed
@@ -229,12 +258,27 @@ which supersedes the simpler "all validation stays outside" reading of the lande
 | commit | contents | why it is safe to stop here |
 |---|---|---|
 | **1 ✅ `47feb243`** | the G10 deferred fail + its test | pipeline working, defect closed, zero structural change |
-| **2** | reify `ChangeTitleCtx` (the ~10 threaded locals) + express the gates in runner shape (`run` throws instead of early-returning), still driven by a small imperative loop | **zero behaviour change**; suite green; the ratchet still counts ChangeTitle as hand-rolled, so nothing is claimed that is not true |
+| **2** | restructure **G9a→G22** into a `const gates = [ … ]` array driven by a small imperative loop, converting each abort from `return result` to `throw`; the ctx stays EMPTY | **zero behaviour change**; suite green; the ratchet still counts ChangeTitle as hand-rolled, so nothing is claimed that is not true |
 | **3** | swap the driver for `runGateSequence`; undos per the window map; G10 fused into ONE gate (run + undo restore both halves); G14b/G14e → the compensable forms; G22 → the `invariants` hook; lower `MAX_HANDROLLED` 10 → 9 | the ratchet moves only when the guarantee is real |
 
+**⚠ THE CTX IS AN UNDO LEDGER, NOT A REIFICATION OF THE FUNCTION'S LOCALS — corrected 2026-07-31.**
+This card said commit 2 should "reify `ChangeTitleCtx` (the ~10 threaded locals)", and a later
+measurement inflated that to *117 declarations, ~12-15 genuine cross-gate carriers* — i.e. a
+whole-function edit threading a dozen locals through an object, which is what made the previous
+session defer commit 2 as too large to finish. **The landed precedent says otherwise.**
+`ChangeClient`'s `MigrationCtx` (`:6441-6446`) has **FOUR fields, every one of them something `run`
+RECORDS so `undo` can reverse it** (`uninstalledOld`, `installedNew`, two settings snapshots).
+`plans`, both adapters, `agentDir`, `agentId`, `oldProgram`, `normalized` and the helper closures
+appear in no ctx at all — a gate defined inside the pipeline body already sees them lexically.
+
+So the ctx's CONTENT is decided by the undos, which are commit 3's work: there is nothing coherent to
+"reify" in commit 2. Commit 2 is therefore the RESTRUCTURE alone (gates + loop, empty ctx), and
+commit 3 adds each `undo` together with the ledger field it reverses. That also shrinks commit 2 from
+a whole-function rewrite to a mechanical wrap.
+
 **The card's earlier objection to touching G14b/G14e early was about ORDERING, not about staging** —
-"no compensable forms before a `ctx` exists" dissolves once commit 2 creates the ctx. It does not
-rule out this decomposition.
+"no compensable forms before a `ctx` exists" dissolves once commit 3 introduces the ledger. It does
+not rule out this decomposition.
 
 **G22 → `invariants` is an upgrade, not a translation.** `runGateSequence`'s invariant hook
 (`lib/gate-transaction.ts:204-218`) routes a violation through `abort()`, so a failed final
@@ -298,6 +342,18 @@ The biggest unknown left was whether the retrofit first has to BUILD compensable
 **So commit 3 writes no new library code** — it is restructuring plus wiring, which is exactly the
 risk profile the decomposition assumed. (`lib/amp-auth.ts:398 revokeAllKeysForAgentCompensable` is
 the third built twin; `ChangeTitle` does not touch AMP keys, so it is not in this table.)
+
+**⚠ BUT ONE GATE HAS NO HONEST UNDO, AND THE RUNNER WILL NOT LET IT PASS — G17.** It mutates
+(`uninstallAllRolePlugins`, `installPluginLocally`, `updateAgent({roleMissing})`, `hibernateAgent`),
+it sits INSIDE the window (G22 aborts after it), and every one of those mutations is a **RECOVERY** —
+so reversing them re-breaks what the gate just repaired, the identical objection that excludes G03's
+self-heal above. `findUncompensatedGates` (`lib/gate-transaction.ts:97`) REFUSES TO START a sequence
+containing a mutating gate with no `undo`, so this cannot be left to be discovered mid-conversion:
+commit 3 must either give G17 a defensible `undo` or move it out of the array, and marking it
+`readOnly: true` would be exactly the lie that check exists to catch. This is distinct from the
+RULING above (keep the R9.13 quarantine as in-gate self-heal): the ruling fixes G17's BEHAVIOUR; this
+is the separate question of what a ROLLBACK does to that behaviour. **It is the one open design
+decision in commit 3 — everything else in the table above is wiring.**
 
 **Do NOT re-assert the G14-before-G10 ordering in the new file.**
 `tests/governance/r3-r9-team-governance.test.ts` already pins it, and by the stronger route (inject a

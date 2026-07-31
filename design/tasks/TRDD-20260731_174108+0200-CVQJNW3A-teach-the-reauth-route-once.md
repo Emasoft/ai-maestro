@@ -264,6 +264,41 @@ session decayed — which is the hole this card closes.
 `--share-accounts` was used throughout: unbrowse clones the profile
 (`isolated_clone: true`) so the owner's live Chrome session is never driven or locked.
 
+### Multi-account: the lever is `--browser-profile`, NOT unbrowse's own profile store
+
+The obvious reading — "unbrowse keeps profiles, so it keeps one per account" — is **wrong**, and
+the design would have failed on it. Its own store is keyed by **DOMAIN**
+(`~/.unbrowse/profiles/krea.ai`), i.e. one session per site. Three simultaneous claude.ai
+identities are impossible that way.
+
+What *does* work is addressing the owner's **real Chrome profiles**, which are keyed by account:
+
+| Chrome profile | account | rotator slot? | claude.ai session (measured headed) |
+|---|---|---|---|
+| `Default` | fmuaddib@gmail.com | **yes — the dead slot**, currently live | **logged OUT** |
+| `Profile 1` | emasoftfloss@gmail.com | no | not tested |
+| `Profile 2` | emanuele.sabetta@gmail.com | yes | **LOGGED IN** — full app UI rendered |
+| `Profile 3` | gaetano.sabetta@gmail.com | no | not tested |
+
+`--browser chrome --browser-profile "Profile 2"` returned the authenticated app (Home / Code /
+Chats and tasks / Projects / Recents) where `Default` returned the logged-out landing page. Same
+domain, same command, different identity — so the per-account capture the janitor's script wanted
+(`chrome-profile-<email>`) is available here using profiles that are already logged in and are
+the owner's real, undetectable Chrome.
+
+**Two gaps this exposes, both concrete:**
+
+1. **`ipazia.emasoft@gmail.com` has NO Chrome profile at all.** One must be created and logged in
+   before its slot can ever be re-captured.
+2. **`Default` (fmuaddib) is not logged into claude.ai** even though fmuaddib is the *live Claude
+   Code* account — the OAuth token and the browser session are separate things. So repairing the
+   dead fmuaddib slot needs a browser login first; it is not merely a matter of pointing at the
+   right profile.
+
+Note also that the cookie-extraction log line is profile-agnostic (`extracted 24 cookies … from
+Chrome user data`, same count for both profiles) while the *profile clone* is per-profile — so
+trust the rendered identity, not the extraction count, when checking which account a session is.
+
 ## Verification
 
 - A slot whose refresh is dead is repaired without a human, and `reauth-needed` clears.

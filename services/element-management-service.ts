@@ -2734,6 +2734,8 @@ export async function ChangeTitle(
       g14eRevocation?: { count: number; restore: () => Promise<number> }
       /** G14d: one entry per role-plugin it SUCCESSFULLY uninstalled, in the order it removed them. */
       g14dUninstalled?: Array<{ name: string; marketplace: string }>
+      /** G15: the role-plugin set present BEFORE its swap-branch `uninstallAllRolePlugins`. */
+      g15Uninstalled?: Array<{ name: string; marketplace: string }>
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -3635,6 +3637,10 @@ export async function ChangeTitle(
         id: 'G15',
         what: 'plugin swap resolved (current vs target for the new title)',
         run: async () => {
+          // The role-plugins found on disk by the detection block below. Declared here rather than
+          // in ctx because it is only a CANDIDATE list — it becomes the undo ledger further down,
+          // and only on the branch that actually uninstalls.
+          let g15Present: Array<{ name: string; marketplace: string }> = []
           if (!options?.skipPluginSync && agentDir && clientSupportsRolePlugins) {
             // Detect currently installed role-plugin from settings.local.json
             try {
@@ -3642,17 +3648,28 @@ export async function ChangeTitle(
               if (existsSync(localSettingsPath)) {
                 const settings = await loadJsonSafe(localSettingsPath) as Record<string, Record<string, unknown>>
                 const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-                // Find the first enabled role-plugin
+                // Find the first enabled role-plugin — and collect them ALL, because the
+                // `uninstallAllRolePlugins` below removes every one, not just the first. The loop no
+                // longer `break`s: `currentPluginName` still takes the FIRST match in key order
+                // (unchanged), while `present` carries the full set so a rollback can put back
+                // exactly what was there. An agent should only ever carry one, but this gate exists
+                // partly because two can sneak in, and an undo that restores one of two is a
+                // partial restore reported as a complete one.
+                const present: Array<{ name: string; marketplace: string }> = []
                 for (const key of Object.keys(ep)) {
                   if (ep[key]) {
                     const plugName = key.split('@')[0]
                     // Check if this is a role-plugin (has .agent.toml or is in predefined list)
                     if (Object.values(TITLE_PLUGIN_MAP).includes(plugName) || (PREDEFINED_ROLE_PLUGIN_NAMES as readonly string[]).includes(plugName)) {
-                      currentPluginName = plugName
-                      break
+                      if (!currentPluginName) currentPluginName = plugName
+                      const atIdx = key.indexOf('@')
+                      // No '@' ⇒ not a `name@marketplace` key, so there is nothing to reinstall it
+                      // FROM. Recording a half-address would make the undo guess.
+                      if (atIdx >= 0) present.push({ name: plugName, marketplace: key.substring(atIdx + 1) })
                     }
                   }
                 }
+                g15Present = present
               }
             } catch { /* best effort */ }
             // NOTE the `try` above CLOSES here, before the abort below. That is deliberate and
@@ -3691,16 +3708,54 @@ export async function ChangeTitle(
 
             // Uninstall old if swapping
             if (currentPluginName && currentPluginName !== targetPluginName) {
+              // WRITE-AHEAD: the ledger is the set the detection block just read off disk, recorded
+              // BEFORE the removal, because after it there is nothing left to read it from.
+              ctx.g15Uninstalled = g15Present
               await uninstallAllRolePlugins(agentDir)
               result.uninstalledPlugin = currentPluginName
               ops.push(`G15: Uninstalled old role-plugin "${currentPluginName}"`)
             } else if (!currentPluginName && agentDir) {
-              // Clean stale role-plugins just in case
+              // Clean stale role-plugins just in case.
+              //
+              // NOTHING IS RECORDED HERE, deliberately. This branch runs precisely when the
+              // detection found NO role-plugin, so the sweep removes nothing this pipeline knows
+              // about — and its `.catch(() => {})` means it cannot even report what it touched. An
+              // undo built on that would be reinstalling a guess.
               await uninstallAllRolePlugins(agentDir).catch(() => {})
               ops.push(`G15: Cleaned stale role-plugins`)
             }
           } else {
             ops.push(`G15: Plugin sync skipped`)
+          }
+        },
+        // Reinstall the set the swap branch removed, newest first. Same mechanism and same
+        // `rolePluginSwap: true` as G14d's undo, for the same reason.
+        undo: async () => {
+          const removed = ctx.g15Uninstalled
+          if (!removed?.length || !agentDir) return
+          const problems: string[] = []
+          while (removed.length) {
+            const entry = removed.pop()!
+            try {
+              const back = await ChangePlugin(
+                agentId,
+                {
+                  name: entry.name,
+                  marketplace: entry.marketplace,
+                  action: 'install',
+                  scope: 'local',
+                  agentDir,
+                  rolePluginSwap: true,
+                },
+                options.authContext,
+              )
+              if (!back.success) problems.push(`${entry.name}@${entry.marketplace} (${back.error || 'unknown'})`)
+            } catch (err) {
+              problems.push(`${entry.name}@${entry.marketplace} (${err instanceof Error ? err.message : err})`)
+            }
+          }
+          if (problems.length) {
+            throw new Error(`G15 rollback incomplete: could not reinstall ${problems.join('; ')}`)
           }
         },
       },

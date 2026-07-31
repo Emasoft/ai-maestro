@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T10:25:15+0200
+updated: 2026-07-31T10:55:26+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582]
 ---
 
 ## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
@@ -242,7 +242,35 @@ regexes, both residue assertions AND the ops assertion, and fails ONLY on `calls
 ['removeManager','blockAllTeams']`. NEUTER B (disable the verdict guard) reds on `expected true to
 be false` — a disjoint cause.
 
-**NEXT ACTION — commit 2 of the 3-commit decomposition below.** The retrofit is NOT irreducibly
+**⚠ COMMIT 2 IS COMPLETE — 2026-07-31, eight slices, `bfc1f226 … 4ee79582`. NEXT ACTION is COMMIT
+3.** ChangeTitle's array now holds all 20 gates in execution order:
+`G9a G14 G10 G11 G12 G13 G13b G14c G14b G14e G14d G15 G16 G16b G17 G18 G19 G20 G21 G22`.
+`tsc` 0 lines and the suite at the exact baseline (310 files / 4437 passed / 2 skipped) on every
+slice; the driver is still the hand-rolled loop, so the ratchet still counts ChangeTitle as
+hand-rolled and nothing is claimed that is not yet true.
+
+**Two corrections the slices produced, both measured:**
+
+1. **The window's tail is G17→G22, not "G17 and G22".** Earlier text here listed only those two as
+   remaining. **G18-G21 must move as well**, because gates are appended in EXECUTION order and G22
+   cannot precede them without reordering — and array order IS the G14-before-G10 crash-safety
+   property. Verified before moving: G18 is a best-effort mesh broadcast, G19/G20/G21 are pure
+   decisions writing `result` fields + ops. **None writes a persistent store, so none owes an undo
+   in commit 3.**
+2. **G22 IS ENTIRELY UNPINNED.** Disabling BOTH of its drift aborts leaves the full suite GREEN
+   (310/4437/2, zero red). Its own comment records that it was promoted from a silent WARN
+   precisely because callers claimed success while `governanceTitle` stayed null on disk (SCEN-007
+   P0-003, SCEN-020 BUG-001, SCEN-002 P0-001) — so the guard that exists because a false success
+   shipped has no test. **This gap PRE-DATES the retrofit; it is not a hole this change opened and
+   therefore NOT an EHT of this card. It needs its own TRDD.**
+
+**Also landed in commit 2, and load-bearing for commit 3:** the const-snapshot idiom. A `let`
+assigned inside one gate's closure loses TypeScript narrowing inside EVERY other nested function,
+so G16/G16b/G17 each open with `const target = targetPluginName`. Never `!` — an assertion silences
+the checker and stops protecting the site the day the guard changes. Expect one such site per `let`
+a future slice moves.
+
+*(Historical, kept for the reasoning:)* The retrofit is NOT irreducibly
 big-bang, which was the open question this card had been stalling on.
 
 **Correction to the shape:** it is **`runGateSequence` with a gate array**, NOT `runAioPipeline`.
@@ -258,7 +286,7 @@ which supersedes the simpler "all validation stays outside" reading of the lande
 | commit | contents | why it is safe to stop here |
 |---|---|---|
 | **1 ✅ `47feb243`** | the G10 deferred fail + its test | pipeline working, defect closed, zero structural change |
-| **2 — IN PROGRESS, lands in SLICES** (first slice ✅ `bfc1f226`: G9a + G14) | restructure **G9a→G22** into a `const gates = [ … ]` array driven by a small imperative loop, converting each abort from `return result` to `throw`; the ctx stays EMPTY | **zero behaviour change**; suite at the exact baseline; the ratchet still counts ChangeTitle as hand-rolled, so nothing is claimed that is not true |
+| **2 ✅ COMPLETE — 8 slices** (`bfc1f226` G9a+G14 · `c1681c9d` G10 · `9d3c08d6` G11-G13b · `2c5d2fcf` G14c/G14b/G14e · `653b894f` G14d · `dd9ce737` G15+hoists · `7fd5044c` G16/G16b · `da3ed3e5` G17-G21 · `4ee79582` G22) | restructured **G9a→G22** into a `const gates = [ … ]` array driven by a small imperative loop, converting each abort from `return result` to `throw new GateAbort`; the ctx stays EMPTY | **zero behaviour change**; suite at the exact baseline on every slice; the ratchet still counts ChangeTitle as hand-rolled, so nothing is claimed that is not true |
 | **3** | swap the driver for `runGateSequence`; undos per the window map; G10 fused into ONE gate (run + undo restore both halves); G14b/G14e → the compensable forms; G22 → the `invariants` hook; lower `MAX_HANDROLLED` 10 → 9 | the ratchet moves only when the guarantee is real |
 
 **⚠ THE CTX IS AN UNDO LEDGER, NOT A REIFICATION OF THE FUNCTION'S LOCALS — corrected 2026-07-31.**

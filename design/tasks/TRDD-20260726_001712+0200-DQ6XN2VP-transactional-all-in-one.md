@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T20:16:48+0200
+updated: 2026-07-31T21:11:14+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,6 +20,32 @@ relevant-rules: [R50, R51]
 blocked-by: []
 implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa, aca4c858, be35ec55, 4d81aa69, 75a7d9e7, 73fa3db0, 790cd8cb, 2613c907]
 ---
+
+## ⏵ THE LAST ROW LANDED 2026-07-31 (`92c61ca5`, card `TRDD-YAGRX7W3`) — and it UNBLOCKED the parity box
+
+**⚠ SUPERSEDES the section below on one point: there is no pipeline left hand-rolling.**
+`InstallElement`'s R51 window is open at its boundary marker, `MAX_HANDROLLED` is **0**,
+`MIN_TRANSACTIONAL` **19**, and the ratchet's claim is renamed to **"windowed per the R51 boundary
+rule"** — because five mutations sit ABOVE that marker by design and a bare `0` would otherwise read
+as "the whole function is covered". Its exclusion set is closed by
+`tests/governance/installelement-window-boundary.test.ts`. What the window bought: ONE reachable
+compensation (an `adapter.install` that copies files and then reports failure is rolled back instead
+of leaving the copies on disk); `enable`/`disable` latent, `update` inert, `uninstall` forward-only
+except the settings entries — each named on that card rather than counted.
+
+**⚠ AND IT RETRACTED A CORRECTION THIS CARD WAS TOLD TO CARRY.** The acceptance box below says the
+`rm ×1` in the table further down is *"a phantom"*. **It is not — this card's itemisation was RIGHT**
+and only its total was off by one. The call is `element-management-service.ts:1106`, behind
+`const { rm: rmCache } = await import('fs/promises')`; the AST walk that "disproved" it keyed on the
+callee identifier and a renaming destructure defeats that. Fixed in the scanner (`01e199dd`), with a
+positive control that is non-vacuous by construction. **The `PG03`/`PG07` line-cite correction still
+stands.**
+
+**THE PARITY BOX IS NOW REACHABLE.** It reads *"unreachable until all 19 are retrofitted"* — all 19
+now are, so *zero uncompensated mutating gates across all 19 pipelines* is a test someone can
+actually write. `findUncompensatedGates` already enforces it at RUNTIME for every pipeline under the
+runner, so the remaining value is a STATIC assertion that no pipeline drifts back out. That, and the
+R51.7-invariants box, are what keep this card open.
 
 ## ⏵ EIGHT OF THE NINE LANDED 2026-07-31 (`2613c907`) — ONE left, and it is not more of the same
 
@@ -1618,23 +1644,25 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       sites (`ChangeTeam` runs TWO sequences, `runGateSequence(removeGates, tc)` and
       `(addGates, tc)`; `DeleteTeam` one). They had already left the hand-rolled list; this box was
       simply never ticked
-- [ ] The remaining `Change*` / marketplace / element pipelines transactional — **8 of the 9 LANDED
-      2026-07-31 (`2613c907`); `InstallElement` is the one left.** `ChangeAvatar`, `ChangeName`,
+- [x] The remaining `Change*` / marketplace / element pipelines transactional — **ALL NINE LANDED.
+      The last, `InstallElement`, is windowed at `92c61ca5` (card `TRDD-YAGRX7W3`), taking
+      `MAX_HANDROLLED` to 0 and `MIN_TRANSACTIONAL` to 19.** The eight before it landed
+      2026-07-31 (`2613c907`). `ChangeAvatar`, `ChangeName`,
       `ChangeFolder`, `ChangeMetadata`, `ChangeCLIArgs`, `ChangeMCP`, `ChangeLSP` and `ChangeHook`
       are under `runGateSequence`; `MAX_HANDROLLED` 9 → 1, `MIN_TRANSACTIONAL` 10 → 18, all eight
       pinned by name. The MEASUREMENT that said they buy zero safety was RIGHT for seven of them —
       their undos are latent by construction and are named as such rather than counted — and WRONG
       for `ChangeLSP`, whose bare `writeFile` really can leave a truncated `.lsp.json`; that undo is
-      reachable and is pinned by a neuter. **The box stays open on `InstallElement` alone, and it is
-      not a ninth of the same:** it is the pipeline other retrofitted pipelines CALL, and three of
-      its pre-EXE mutations are ones a compensation is FORBIDDEN (R20.31, Explicit) or harmful to
-      reverse. **Its card now exists: `TRDD-YAGRX7W3`** (`design/tasks/`, `column: planned`), which
-      also CORRECTS two things measured wrong here — the `rm ×1` in the table below is a phantom
-      (`InstallElement` calls no `rm`/`rmSync`/`unlink` at all, so the itemisation summed to 14
-      against its own total of 13), and the `PG03 (:1253)` / `PG07 (:1448)` cites point at neither
-      the lock nor the write (actual: 1244/1258 and 1441/1453) and were already wrong when written,
-      since `InstallElement` has not moved since. Do not fold it into a "finish the last one"
-      session
+      reachable and is pinned by a neuter. `InstallElement` was NOT a ninth of the same — it is the
+      pipeline other retrofitted pipelines CALL, and five (not three) of its pre-EXE mutations are
+      ones a compensation is FORBIDDEN (R20.31, Explicit) or harmful to reverse, so its window opens
+      at a marker with that set closed by a test. Card: **`TRDD-YAGRX7W3`** (`design/archived/`,
+      `column: complete`). Of the two corrections it was said to carry, **one is RETRACTED**: the
+      `rm ×1` in the table below is REAL (`:1106`, behind `const { rm: rmCache }` — a renaming
+      destructure the AST walk could not see), so this card's itemisation was right and only its
+      total of 13 was wrong. The `PG03 (:1253)` / `PG07 (:1448)` correction STANDS — they point at
+      neither the lock nor the write (actual: 1244/1258 and 1441/1453) and were already wrong when
+      written, since `InstallElement` had not moved since
 - [x] An enforceable ratchet for `AIO-TXN-10` — `tests/governance/aio-txn-10-runner-coverage.test.ts`
       discovers the inventory from the AST and fails when a pipeline hand-rolls beyond
       `MAX_HANDROLLED`. NOT the parity box below: this asks "is it under the runner", which is

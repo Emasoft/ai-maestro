@@ -359,14 +359,45 @@ function logDegradedOps(pipeline: string, subject: string, ops: string[]): void 
 
 // ── JSON helpers ──────────────────────────────────────────────
 
-async function loadJsonSafe(path: string): Promise<Record<string, unknown>> {
-  if (!existsSync(path)) return {}
+/**
+ * A JSON read that says WHY it has no data (TRDD-K71FV649).
+ *
+ * `loadJsonSafe` answers `{}` to two different questions — "the file is not there" and "the file is
+ * there and does not parse" — and every verification built on it therefore reads UNREADABLE as
+ * ABSENT. That is not hypothetical: it is what kept `InstallElement`'s PG01 outside its R51 window
+ * and `ChangePlugin`'s G11 un-promoted, because in both an aborting check would have destroyed
+ * correct state on the strength of a file it could not read.
+ *
+ * A missing settings file legitimately means "nothing enabled", so the lenient default is CORRECT
+ * for the write paths and is kept exactly as it was. What was missing is a way to ask the sharper
+ * question.
+ */
+export type JsonRead =
+  | { ok: true; data: Record<string, unknown> }
+  | { ok: false; reason: 'missing' | 'unreadable'; error?: string }
+
+/** Exported for `tests/unit/read-json-distinguishes-unreadable.test.ts` — the distinction it makes
+ *  is the whole point of the helper, and a distinction nothing asserts is one that can vanish. */
+export async function readJson(path: string): Promise<JsonRead> {
+  if (!existsSync(path)) return { ok: false, reason: 'missing' }
   try {
-    const raw = await readFile(path, 'utf-8')
-    return JSON.parse(raw)
-  } catch {
-    return {}
+    return { ok: true, data: JSON.parse(await readFile(path, 'utf-8')) }
+  } catch (err) {
+    return { ok: false, reason: 'unreadable', error: err instanceof Error ? err.message : String(err) }
   }
+}
+
+/**
+ * The lenient reader, now DERIVED from `readJson` rather than parallel to it.
+ *
+ * Its contract is unchanged — 36 call sites in this file depend on the `{}` default and none of
+ * them is touched — but there is now exactly ONE parse in one place, so the strict and lenient
+ * answers cannot drift apart. That is the whole reason this shape was chosen over a second
+ * hand-written strict reader.
+ */
+async function loadJsonSafe(path: string): Promise<Record<string, unknown>> {
+  const read = await readJson(path)
+  return read.ok ? read.data : {}
 }
 
 async function saveJsonSafe(path: string, data: Record<string, unknown>): Promise<void> {
@@ -4886,27 +4917,27 @@ export async function ChangePlugin(
     }
 
     // ── G11: Verify final state ───────────────────────────────
-    let finalState: boolean | undefined = undefined
-    if (desired.scope === 'user') {
-      const settingsData = await withSettingsLock(SETTINGS_JSON, async () => {
-        return await loadJsonSafe(SETTINGS_JSON) as Record<string, Record<string, unknown>>
-      })
-      const ep = (settingsData.enabledPlugins || {}) as Record<string, boolean>
-      finalState = ep[pluginKey] !== undefined ? ep[pluginKey] : undefined
-    } else {
-      const resolvedDir = agentDir!.startsWith('~') ? agentDir!.replace('~', HOME) : agentDir!
-      const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
-      const settingsData = await withSettingsLock(localSettings, async () => {
-        return await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-      })
-      const ep = (settingsData.enabledPlugins || {}) as Record<string, boolean>
-      finalState = ep[pluginKey] !== undefined ? ep[pluginKey] : undefined
-    }
+    // READS THROUGH `readJson`, NOT `loadJsonSafe` (TRDD-K71FV649). The lenient reader answers `{}`
+    // to both "no settings file" and "the settings file does not parse", so this check used to
+    // report a CORRUPT file as `finalState: undefined` — indistinguishable from the plugin
+    // genuinely being absent. That ambiguity is the reason G11 is still a WARN and not an R51.7
+    // invariant: promoted, an unreadable file would roll back a correct plugin change. Naming the
+    // unreadable case does not promote it, and it is the missing evidence any promotion needs.
+    const settingsFile = desired.scope === 'user'
+      ? SETTINGS_JSON
+      : join(agentDir!.startsWith('~') ? agentDir!.replace('~', HOME) : agentDir!, '.claude', 'settings.local.json')
+    const settingsRead = await withSettingsLock(settingsFile, async () => readJson(settingsFile))
+    const ep = settingsRead.ok
+      ? ((settingsRead.data.enabledPlugins || {}) as Record<string, boolean>)
+      : ({} as Record<string, boolean>)
+    const finalState: boolean | undefined = ep[pluginKey] !== undefined ? ep[pluginKey] : undefined
 
     const expectedState = desired.action === 'uninstall' ? undefined
       : desired.action === 'disable' ? false
       : true
-    if (finalState !== expectedState) {
+    if (!settingsRead.ok && settingsRead.reason === 'unreadable') {
+      ops.push(`G11: WARN — cannot verify: ${settingsFile} exists but does not parse (${settingsRead.error}). State is UNKNOWN, not absent.`)
+    } else if (finalState !== expectedState) {
       ops.push(`G11: WARN — Final state ${finalState} != expected ${expectedState}`)
     } else {
       ops.push(`G11: Final state verified`)

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T09:52:52+0200
+updated: 2026-07-31T09:56:44+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -278,6 +278,26 @@ the mutations that precede it. The rule for commit 3 is therefore:
 
 This is why the array is not "only the mutating gates", and it is the detail that would have been
 discovered mid-conversion rather than before it.
+
+### ✅ MEASURED — commit 3 needs NO new primitive; it is pure restructuring
+
+The biggest unknown left was whether the retrofit first has to BUILD compensable machinery, the way
+`revokeTokensFromIssuerCompensable` had to be built. Checked every mutating gate's undo mechanism:
+
+| gate mutation | its undo | status |
+|---|---|---|
+| `updateAgent` ×6 | write the prior value back | plain, no primitive needed |
+| `removeManager` + `blockAllTeams` | `setManager(old)` + `unblockAllTeams` + re-wake — and `blockAllTeams` RETURNS the hibernated list, so the R51.4 snapshot already exists | available |
+| `updateTeam` ×4 | restore the pointer | plain |
+| `rejectGovernanceRequest` | 3-field row restore — the shape already verified for `DeleteAgent` G07 | ruled |
+| `revokeTokensForAgent` | **`revokeTokensForAgentCompensable`** (`lib/aid-token.ts:542`) | ✅ built |
+| `revokeTokensFromIssuer` | **`revokeTokensFromIssuerCompensable`** (`lib/portfolio-store.ts:321`) | ✅ built |
+| `installPluginLocally` ×4 | **`uninstallPluginLocally`** (`services/element-management-service.ts:1747`) — signature is IDENTICAL to install's `(pluginName, agentDir, marketplaceName = MARKETPLACE_NAME): Promise<void>`, so the undo is the same three args recorded in ctx | ✅ exists, symmetric |
+| `hibernateAgent` | wake | available |
+
+**So commit 3 writes no new library code** — it is restructuring plus wiring, which is exactly the
+risk profile the decomposition assumed. (`lib/amp-auth.ts:398 revokeAllKeysForAgentCompensable` is
+the third built twin; `ChangeTitle` does not touch AMP keys, so it is not in this table.)
 
 **Do NOT re-assert the G14-before-G10 ordering in the new file.**
 `tests/governance/r3-r9-team-governance.test.ts` already pins it, and by the stronger route (inject a

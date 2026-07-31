@@ -2300,8 +2300,13 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         //
         // Two guards, both fail-toward-a-normal-launch, because a launch that DIES is far worse
         // than one that merely starts cold:
-        //   1. `hasPriorConversation` — `--continue` with nothing to continue makes the client
+        //   1. The transcript probe — `--continue` with nothing to continue makes the client
         //      exit, which would turn boot-restore into boot-destroy on a first-ever launch.
+        //      `resolveAgentResumeProbe` binds it to the AGENT (TRDD-KO4TQCJ0), not to the bare
+        //      workdir, because transcripts are keyed by PATH: a persona created at a recycled
+        //      workdir would otherwise resume the DELETED persona's conversation and look healthy
+        //      doing it. A null probe still means "resume anyway" (USER 2026-07-25) — the caller,
+        //      not a filesystem guess, is what knows this is a first launch.
         //   2. SUBCOMMAND ORDERING, handled by COMPOSITION rather than by skipping. Per-client
         //      resume verbs are not interchangeable: claude `--continue` and gemini `-r latest`
         //      are flags that append safely, but codex `resume --last` and kiro `chat --resume`
@@ -2316,11 +2321,10 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         if (continueConversation) {
           try {
             const { getClientCapabilities, composeLaunchWithResume } = await import('@/lib/client-capabilities')
-            const { resolveConversationProbe, decideResume } = await import('@/lib/claude-conversation')
-            const probe = resolveConversationProbe(program)
+            const { resolveAgentResumeProbe, decideResume } = await import('@/lib/claude-conversation')
             const decision = await decideResume(
               getClientCapabilities(program)?.cli?.resume,
-              probe ? () => probe(workingDirectory) : null,
+              resolveAgentResumeProbe(agent, { program, workdir: workingDirectory }),
             )
             if (decision.resume) {
               // Re-compose rather than append: the verb has to sit right after the binary for the

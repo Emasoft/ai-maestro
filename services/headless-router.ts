@@ -233,7 +233,7 @@ import {
   runRestartSequence,
 } from '@/lib/session-restart'
 import { resolveLaunchArgs } from '@/services/agent-launch-args'
-import { hasPriorConversation } from '@/lib/claude-conversation'
+import { agentMayResumeConversation } from '@/lib/claude-conversation'
 import { runStopSequence } from '@/lib/session-stop'
 // SF2 drift-fix: the role-plugins install/delete headless handlers must mirror the
 // Next.js routes' agent-path RBAC. Those routes gate agents via requireSudoToken →
@@ -980,8 +980,9 @@ const routes: Route[] = [
     // TRDD-6AMXSG3S parity with the Next.js route: a restart picks up new config, it does not
     // discard the turn in flight. Headless omitted this, so the same agent restarted through the
     // headless surface came back on a blank session — the two surfaces MUST build the same command.
-    const restartWorkdir = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory
-    const continueConversation = bin === 'claude' && !!restartWorkdir && (await hasPriorConversation(restartWorkdir))
+    // TRDD-KO4TQCJ0: the agent, not its workdir — a transcript older than the agent belongs to
+    // whoever held this path before it, and resuming that is inheriting a stranger's conversation.
+    const continueConversation = bin === 'claude' && (await agentMayResumeConversation(agent, { program }))
     const command = buildRelaunchCommand(bin, enforced.args, personaName, { continueConversation })
     const outcome = await runRestartSequence(sessionName, command)
     if (outcome.status === 'timeout') {
@@ -1069,8 +1070,8 @@ const routes: Route[] = [
     const personaName = sanitizePersonaName(agent?.label || agent?.name || sessionName, sessionName)
     // TRDD-6AMXSG3S parity with the Next.js route (see the comment above): without it the headless
     // surface cold-starts the agent and silently throws away whatever it was doing.
-    const restartWorkdir = agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory
-    const continueConversation = bin === 'claude' && !!restartWorkdir && (await hasPriorConversation(restartWorkdir))
+    // TRDD-KO4TQCJ0: gated on the agent's own creation time — see the [id]/restart twin above.
+    const continueConversation = bin === 'claude' && (await agentMayResumeConversation(agent, { program }))
     const command = buildRelaunchCommand(bin, enforced.args, personaName, { continueConversation })
     const outcome = await runRestartSequence(sessionName, command)
     if (outcome.status === 'timeout') {

@@ -41,7 +41,7 @@ import {
   runRestartSequence,
 } from '@/lib/session-restart'
 import { resolveLaunchArgs } from '@/services/agent-launch-args'
-import { hasPriorConversation } from '@/lib/claude-conversation'
+import { agentMayResumeConversation } from '@/lib/claude-conversation'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,9 +150,9 @@ export async function POST(request: NextRequest) {
   // TRDD-6AMXSG3S: same continuity guarantee as [id]/restart — an agent that
   // restarts ITSELF to pick up new config must come back on its own transcript,
   // not on a blank session that has forgotten why it restarted.
-  const restartWorkdir = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory
-  const continueConversation =
-    bin === 'claude' && !!restartWorkdir && (await hasPriorConversation(restartWorkdir))
+  // TRDD-KO4TQCJ0: "its own" is enforced, not assumed — the probe is gated on the agent's creation
+  // time, so a persona created at a recycled workdir starts fresh instead of inheriting.
+  const continueConversation = bin === 'claude' && (await agentMayResumeConversation(agent, { program }))
 
   const command = buildRelaunchCommand(bin, enforced.args, personaName, { continueConversation })
 

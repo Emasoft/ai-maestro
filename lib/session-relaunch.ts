@@ -37,6 +37,8 @@ export interface RelaunchAgentLike {
   programArgs?: string
   workingDirectory?: string | null
   sessions?: Array<{ workingDirectory?: string | null }>
+  /** Creation time — the resume-entitlement epoch of TRDD-KO4TQCJ0. */
+  createdAt?: string | null
 }
 
 export type RelaunchPrep =
@@ -55,7 +57,8 @@ export interface RelaunchPrepDeps {
     program: string,
     programArgs: string,
   ) => Promise<{ kind: 'refuse'; reason: string } | { kind: 'ok'; args: string }>
-  hasPriorConversation?: (workdir: string) => Promise<boolean>
+  /** Takes the AGENT, not a workdir: the entitlement epoch travels with it (TRDD-KO4TQCJ0). */
+  mayResumeConversation?: (agent: RelaunchAgentLike | null | undefined) => Promise<boolean>
 }
 
 /**
@@ -89,11 +92,14 @@ export async function prepareRelaunchCommand(
   // TRDD-6AMXSG3S: resume the agent's own transcript rather than cold-starting it.
   // A restart exists to pick up new config, NOT to discard the task in flight.
   // `--continue` is Claude-only and fails with no prior transcript, hence both guards.
-  const workdir = agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory
-  const priorConversation =
-    deps.hasPriorConversation ??
-    (async (w: string) => (await import('@/lib/claude-conversation')).hasPriorConversation(w))
-  const continueConversation = bin === 'claude' && !!workdir && (await priorConversation(workdir))
+  // TRDD-KO4TQCJ0: "its own" is load-bearing — transcripts are keyed by workdir PATH, so an agent
+  // created at a REUSED workdir would otherwise resume its DELETED predecessor's conversation.
+  // `agentMayResumeConversation` takes the agent so the entitlement epoch cannot be left behind.
+  const mayResume =
+    deps.mayResumeConversation ??
+    (async (a: RelaunchAgentLike | null | undefined) =>
+      (await import('@/lib/claude-conversation')).agentMayResumeConversation(a, { program }))
+  const continueConversation = bin === 'claude' && (await mayResume(agent))
 
   return {
     kind: 'ready',

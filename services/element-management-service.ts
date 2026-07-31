@@ -7910,12 +7910,19 @@ export async function DeleteAgent(
           //
           // WHAT WE GIVE UP, STATED PLAINLY rather than quietly: the two consequences the old
           // comment listed are now real on a hard delete. (1) A NEW agent created at the SAME
-          // workingDirectory can resume the previous agent's conversation, because Claude keys
-          // transcripts by workdir path and `hasPriorConversation` is what the restart routes and
-          // boot-restore consult. (2) Transcripts outlive the agent on disk. Note (1) was ALREADY
-          // true for every SOFT delete — the default, and the only one that keeps a cemetery
-          // archive — so this widens an existing hole rather than opening a new one, and the fix
-          // is per-agent transcript identity, not a delete. Tracked as TRDD-KO4TQCJ0.
+          // workingDirectory could resume the previous agent's conversation, because Claude keys
+          // transcripts by workdir path — and that was ALREADY true for every SOFT delete, the
+          // default and the only kind that keeps a cemetery archive, so removing the purge widened
+          // an existing hole rather than opening a new one. (2) Transcripts outlive the agent on
+          // disk — which is the point: they are the USER's data and Claude Code owns their
+          // retention.
+          //
+          // (1) IS CLOSED (TRDD-KO4TQCJ0, 2026-07-31), by a FILTER rather than a delete: every
+          // resume decision now runs through `agentMayResumeConversation` /
+          // `resolveAgentResumeProbe` in `lib/claude-conversation.ts`, which count only a
+          // transcript last written at or after the agent's own `createdAt`. A persona created at
+          // a recycled workdir therefore finds nothing it is entitled to and starts fresh. Shape 2
+          // (per-agent transcript identity) stays out of our hands — Claude Code keys by path.
         } else {
           ops.push(`EXE: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
         }

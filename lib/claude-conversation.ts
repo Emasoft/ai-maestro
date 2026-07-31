@@ -43,9 +43,21 @@ import path from 'path'
  * with no probe whose caller wrongly passes `continueConversation: true` on a virgin workdir emits
  * its resume verb with nothing to resume. Closing it means adding that client's probe above.
  */
-const CONVERSATION_PROBES: Record<string, (workdir: string) => Promise<boolean>> = {
+export interface ConversationProbeOpts {
+  /**
+   * Only count a transcript last written at or after this epoch (ms). This is the AGENT-IDENTITY
+   * gate of TRDD-KO4TQCJ0 — see `resumeEntitlementEpoch`. Undefined = count any transcript.
+   */
+  sinceEpochMs?: number
+  /** Injectable for tests; defaults to the real home. */
+  homedir?: string
+}
+
+export type ConversationProbe = (workdir: string, opts?: ConversationProbeOpts) => Promise<boolean>
+
+const CONVERSATION_PROBES: Record<string, ConversationProbe> = {
   // Verified: `claude --continue` resolves ~/.claude/projects/<slug>/*.jsonl by the same slug.
-  claude: hasPriorConversation,
+  claude: (workdir, opts) => hasPriorConversation(workdir, opts?.homedir, opts?.sinceEpochMs),
 }
 
 /**
@@ -53,7 +65,7 @@ const CONVERSATION_PROBES: Record<string, (workdir: string) => Promise<boolean>>
  * its conversations. `program` is matched loosely because the registry stores free-form values
  * ("claude", "claude code", "claude-code").
  */
-export function resolveConversationProbe(program: string): ((workdir: string) => Promise<boolean>) | null {
+export function resolveConversationProbe(program: string): ConversationProbe | null {
   const p = (program || '').toLowerCase()
   for (const [key, probe] of Object.entries(CONVERSATION_PROBES)) {
     if (p.includes(key)) return probe
@@ -121,12 +133,105 @@ export function conversationSlug(absDir: string): string {
 export async function hasPriorConversation(
   absDir: string,
   homedir: string = os.homedir(),
+  sinceEpochMs?: number,
 ): Promise<boolean> {
   const dir = path.join(homedir, '.claude', 'projects', conversationSlug(absDir))
   try {
     const entries = await fsp.readdir(dir)
-    return entries.some((e) => e.endsWith('.jsonl'))
+    const transcripts = entries.filter((e) => e.endsWith('.jsonl'))
+    if (sinceEpochMs === undefined) return transcripts.length > 0
+    // The entitlement gate (TRDD-KO4TQCJ0). `stat` per transcript, early-returning on the first
+    // match, because the answer is "does ANY transcript belong to this agent's lifetime?" — a
+    // workdir with one fresh file must not pay for a hundred stale ones.
+    for (const name of transcripts) {
+      try {
+        const st = await fsp.stat(path.join(dir, name))
+        if (st.mtimeMs >= sinceEpochMs) return true
+      } catch {
+        // A transcript that vanished between readdir and stat is simply not evidence.
+      }
+    }
+    return false
   } catch {
     return false
   }
+}
+
+/**
+ * The registry fields this module reads off an agent. Structural, not `Agent`, so the pure helpers
+ * below stay importable from tests and from `lib/` without dragging the registry in.
+ */
+export interface ConversationOwnerLike {
+  program?: string | null
+  workingDirectory?: string | null
+  sessions?: Array<{ workingDirectory?: string | null } | null | undefined> | null
+  createdAt?: string | null
+}
+
+/** The workdir whose transcripts this agent would resume — the same fallback every caller used. */
+export function conversationWorkdir(agent: ConversationOwnerLike | null | undefined): string | undefined {
+  return agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory || undefined
+}
+
+/**
+ * The instant this agent became entitled to a transcript at its workdir: its creation time.
+ *
+ * WHY THIS EXISTS (TRDD-KO4TQCJ0). Claude Code keys transcripts by workdir PATH, not by agent, so a
+ * NEW agent created at a REUSED workdir inherits the DELETED agent's slug — and, before this gate,
+ * resumed its conversation. Agent identity never appeared in the probe at all. Comparing the
+ * transcript's mtime against the agent's own creation time is the cheapest thing that distinguishes
+ * "my conversation" from "my predecessor's": a restarted agent's transcript is younger than the
+ * agent; an inherited one is older.
+ *
+ * DEGRADES OPEN, DELIBERATELY. A registry row with no parseable `createdAt` yields no epoch, and the
+ * probe then answers exactly as it did before this card — any transcript counts. Blocking a resume
+ * on a missing field would trade a rare wrong resume for a routine lost one, and losing the turn in
+ * flight is the more expensive failure (TRDD-NIU5RQ1S is the whole reason the resume exists).
+ */
+export function resumeEntitlementEpoch(agent: ConversationOwnerLike | null | undefined): number | undefined {
+  const raw = agent?.createdAt
+  if (!raw) return undefined
+  const t = new Date(raw).getTime()
+  return Number.isFinite(t) ? t : undefined
+}
+
+/**
+ * Does a transcript exist that THIS agent is entitled to resume?
+ *
+ * The `--continue`-flag shape, for the three restart surfaces. Takes the AGENT — never a bare
+ * workdir — so a call site cannot silently omit the entitlement epoch: that is precisely the
+ * N-1-of-N failure this card was written to avoid, and `tests/unit/agent-resume-entitlement.test.ts`
+ * pins it structurally by forbidding any production import of `hasPriorConversation` outside here.
+ *
+ * A client with no verified probe answers FALSE — we cannot see its transcripts, so we cannot claim
+ * one exists. That is the correct answer for a caller building a flag; the BOOT path, which must
+ * treat an unverified client as "resume anyway" per the USER ruling of 2026-07-25, uses
+ * `resolveAgentResumeProbe` instead. The two shapes differ because that ruling makes them differ.
+ */
+export async function agentMayResumeConversation(
+  agent: ConversationOwnerLike | null | undefined,
+  opts: { program?: string; workdir?: string; homedir?: string } = {},
+): Promise<boolean> {
+  const workdir = opts.workdir || conversationWorkdir(agent)
+  if (!workdir) return false
+  const probe = resolveConversationProbe(opts.program || agent?.program || '')
+  if (!probe) return false
+  return probe(workdir, { sinceEpochMs: resumeEntitlementEpoch(agent), homedir: opts.homedir })
+}
+
+/**
+ * The `decideResume` shape: a thunk bound to this agent's workdir AND entitlement epoch, or null
+ * when the client has no verified probe — preserving `decideResume`'s null-means-resume-anyway
+ * contract while still gating the clients we CAN see.
+ */
+export function resolveAgentResumeProbe(
+  agent: ConversationOwnerLike | null | undefined,
+  opts: { program?: string; workdir?: string; homedir?: string } = {},
+): (() => Promise<boolean>) | null {
+  const probe = resolveConversationProbe(opts.program || agent?.program || '')
+  if (!probe) return null
+  const workdir = opts.workdir || conversationWorkdir(agent)
+  if (!workdir) return null
+  const sinceEpochMs = resumeEntitlementEpoch(agent)
+  return () => probe(workdir, { sinceEpochMs, homedir: opts.homedir })
 }

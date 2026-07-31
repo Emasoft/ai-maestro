@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T13:27:14+0200
+updated: 2026-07-31T13:33:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129]
 ---
 
 ## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
@@ -166,10 +166,12 @@ undo ledger is introduced as a plain `const ctx` declared above the array that r
 READ. That works identically under both drivers — when the driver swaps, the same object is passed
 as the runner's ctx and no undo is rewritten. (Plan, not yet measured.)
 
-**NEXT ACTION for commit 3, runnable as written** *(rows 1-9 are LANDED — see below; this is now
-slice 4)*: attach undos for the PLUGIN rows — **10, 11, 12** (`G16`/`G17` installs, `G16b`'s
-`programArgs` rewrite, `G17`'s quarantine) and **14, 15** (`G14d`'s per-entry uninstall loop,
-`G15`'s `uninstallAllRolePlugins`). These are the widest remaining window: a failure after G16
+**NEXT ACTION for commit 3, runnable as written** *(rows 1-9, 14 and 15 are LANDED — see below;
+this is now slice 4c)*: attach undos for the three REMAINING plugin rows — **10** (`G16`/`G17`'s
+four `installPluginLocally` calls → uninstall what was installed), **11** (`G16b`'s
+`updateAgent({programArgs})` → restore prior), **12** (`G17`'s quarantine: `updateAgent({roleMissing})`
++ `hibernateAgent` → restore the flag + re-wake, and **ONLY** its own quarantine, or it double-undoes
+G15/G16). These are the widest remaining window: a failure after G16
 leaves a titled agent with the wrong role-plugin, i.e. R9.13 violated by the very pipeline that
 enforces it. Then the FINAL slice: swap the driver to `runGateSequence`, route G22 to `invariants`,
 move G14c **and G14e's `emitPortfolioOp`** out of the array (gated on `txn.ok`), lower
@@ -178,8 +180,9 @@ move G14c **and G14e's `emitPortfolioOp`** out of the array (gated on `txn.ok`),
 
 **Slices landed so far:** slice 1 `61858167` (ctx + widened annotation + rows 2-3: G9a, G14) ·
 slice 2a `40cefbb8` (rows 4-6: the OLD-title teardown — G10, G11, G12) · slice 2b `0db3f598`
-(row 7: the NEW-title setup — G13, G13b) · slice 3 `4cd3d148` (rows 8-9: the two revocations).
-Every undo ships INERT and is proven so by the same neuter: make the new ones throw
+(row 7: the NEW-title setup — G13, G13b) · slice 3 `4cd3d148` (rows 8-9: the two revocations) ·
+slice 4a `353b9089` (row 14: G14d's per-entry uninstall loop) · slice 4b `1fa48129` (row 15: G15's
+role-plugin sweep). Every undo ships INERT and is proven so by the same neuter: make the new ones throw
 unconditionally, and the two files that force mid-pipeline aborts stay green (29/29). The neuter is
 not vacuous — `change-title-window` drives a `governanceTitle: 'manager'` agent, so G10's branch
 really does run and record.
@@ -194,6 +197,13 @@ nothing perturbed. Every variant now records its OWN name, which additionally ma
 the pipeline call" a pinnable claim — **NEUTER: revert both gates to the count-only wrapper ⇒ 5 NAMED
 tests red.** That makes slice 3 the first slice of commit 3 whose behaviour is pinned rather than
 inert.
+
+**A COVERAGE GAP FOUND BY SLICE 4b, not caused by it.** G15's detection loop lost its `break` so the
+whole role-plugin set could be recorded before the sweep removes it; `currentPluginName` still takes
+the FIRST match, and that was verified by neuter — making the loop LAST-wins left the full suite
+green at **310/4441/2**. So first-vs-last is UNPINNED, and always was (the old `break` was equally
+unpinned). It only differs on an agent carrying TWO role-plugins, which is exactly the state
+G14d/G15 exist to clean up. Worth a test; not worth blocking this card.
 
 **Three facts measured while writing slice 2, worth not re-deriving:**
 1. **G10 / G11 / G12 are mutually exclusive** — all three branch on the SAME `oldTitle` — and G10 /

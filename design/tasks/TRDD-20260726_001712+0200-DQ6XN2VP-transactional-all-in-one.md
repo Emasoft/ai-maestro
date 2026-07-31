@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T11:43:01+0200
+updated: 2026-07-31T13:20:46+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598]
 ---
 
 ## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
@@ -104,12 +104,12 @@ compensation are orthogonal defences and the retrofit must keep both.
 | # | gate | line | mutates | undo (design) |
 |---|---|---|---|---|
 | 1 | G03 | :2402 | `updateAgent({program})` — auto-fix an empty program | **EXCLUDED — see the window-start correction below.** Its undo would restore `program: ''`, re-breaking a self-heal. |
-| 2 | G06b / G9a | :2494, :2645 | `updateAgent({githubRepo})` | restore prior `githubRepo` |
-| 3 | **G14** | **:2685** | **`updateAgent({governanceTitle})` — THE title write** | restore `oldTitle` |
-| 4 | G10 | :2736-2741 | `removeManager()` + **`blockAllTeams()` — hibernates every team agent** | `unblockAllTeams()` + re-wake each. **`blockAllTeams()` RETURNS the hibernated list**, so the snapshot R51.4 asks for already exists. Each wake can fail ⇒ the honest R51.5 CRITICAL path. |
-| 5 | G11 | :2758, :2774 | `updateTeam({chiefOfStaffId: null})` + `rejectGovernanceRequest` | restore the pointer; un-reject is a 3-field row restore (same shape verified for `DeleteAgent` G07) |
-| 6 | G12 | :2796 | `updateTeam({orchestratorId: null})` | restore the pointer |
-| 7 | G13 / G13b | :2814, :2846-2849 | set manager in `governance.json`, `unblockAllTeams`, re-point team COS/ORCH | restore prior manager + prior pointers |
+| 2 | G06b / G9a | :2494, :2645 | `updateAgent({githubRepo})` | **LANDED `61858167`** — restore prior `githubRepo`, captured write-ahead |
+| 3 | **G14** | **:2685** | **`updateAgent({governanceTitle})` — THE title write** | **LANDED `61858167`** — restore `oldTitle`; the flag is set BEFORE the verification, because every abort below it is a case where the write LANDED |
+| 4 | G10 | :2736-2741 | `removeManager()` + **`blockAllTeams()` — hibernates every team agent** | **LANDED `40cefbb8`** — pointer FIRST (the wake guard refuses a team agent while `getManagerId()` is null), then `unblockAllTeams()`, then re-wake each from the list `blockAllTeams()` returned. Failures are collected and THROWN at the end ⇒ the honest R51.5 CRITICAL path. A mixed-blocked corpus REPORTS rather than over-restoring. |
+| 5 | G11 | :2758, :2774 | `updateTeam({chiefOfStaffId: null})` + `rejectGovernanceRequest` | **LANDED `40cefbb8`** — restore the pointer; un-reject patches only the 3 fields `rejectGovernanceRequest` writes, per recorded id. Deliberately NARROWER than `DeleteAgent` G07's whole-file snapshot: a ChangeTitle rollback must not clobber approvals another writer made meanwhile. |
+| 6 | G12 | :2796 | `updateTeam({orchestratorId: null})` | **LANDED `40cefbb8`** — restore the pointer, per team id recorded (once nulled, "which teams had this agent" is no longer answerable) |
+| 7 | G13 / G13b | :2814, :2846-2849 | set manager in `governance.json`, `unblockAllTeams`, re-point team COS/ORCH | **LANDED `0db3f598`** — re-block FIRST then restore the pointer (G10's rule read backwards). `priorManagerId` is NOT always null: replacing an existing MANAGER is the same write, and "restore no manager" would block every team as a rollback side effect. G13b restores the slot's PRIOR occupant for the same reason, and records nothing on the already-correct branch. |
 | 8 | G14b | :2905 | `revokeTokensForAgent` (AID) | **the compensable twin ALREADY EXISTS** — `lib/aid-token.ts:542 revokeTokensForAgentCompensable` returns the removed `AIDTokenRecord[]`; `:587 revokeTokensForAgent` is a count-only wrapper. Built for `DeleteAgent`; ChangeTitle just calls the wrong one. Free win. |
 | 9 | G14e | :2929 | `revokeTokensFromIssuer` (portfolio) | **BUILT 2026-07-31** — `revokeTokensFromIssuerCompensable` + a delegating count-only `revokeTokensFromIssuer`, mirroring the aid-token seam. Lossless `active → revoked` flip, undone from the touched `(subjectId, token_id)` list; 7 tests, 4 neuters. |
 | 10 | G16 / G17 | :3193, :3272, :3317, :3327 | `installPluginLocally` ×4 | uninstall the installed plugin (shape D2 already ruled: CLI-uninstall with a CLI-reinstall undo) |
@@ -166,10 +166,35 @@ undo ledger is introduced as a plain `const ctx` declared above the array that r
 READ. That works identically under both drivers — when the driver swaps, the same object is passed
 as the runner's ctx and no undo is rewritten. (Plan, not yet measured.)
 
-**NEXT ACTION for commit 3, runnable as written:** widen the annotation at `:2685`, declare the
-ctx, and attach undos for the first slice's gates; verify `tsc` 0 lines + the suite at
-**310/4441/2**; commit. Repeat until all 15 rows of the map above are attached. The driver swap is
-LAST, and the ratchet moves only after each undo has a neuter that reds a NAMED test.
+**NEXT ACTION for commit 3, runnable as written** *(rows 1-7 are LANDED — see below; this is now
+slice 3)*: attach undos for rows **8 and 9** (`G14b`, `G14e`), which the map already records as the
+cheapest pair on the board — both compensable twins are BUILT
+(`revokeTokensForAgentCompensable`, `revokeTokensFromIssuerCompensable`) and ChangeTitle simply
+calls the count-only wrapper. Then rows 10-12 and 14-15 (the plugin gates). Verify per slice:
+`tsc` 0 lines + the suite at **310/4441/2** + `trddgrep validate` exit 1 with only `7123D51A` and
+`C7A81642`. The driver swap is LAST, and the ratchet moves only after each undo has a neuter that
+reds a NAMED test.
+
+**Slices landed so far:** slice 1 `61858167` (ctx + widened annotation + rows 2-3: G9a, G14) ·
+slice 2a `40cefbb8` (rows 4-6: the OLD-title teardown — G10, G11, G12) · slice 2b `0db3f598`
+(row 7: the NEW-title setup — G13, G13b). Every one of them ships INERT and is proven so by the
+same neuter: make the new undos throw unconditionally, and the two files that force mid-pipeline
+aborts stay green (29/29). The neuter is not vacuous — `change-title-window` drives a
+`governanceTitle: 'manager'` agent, so G10's branch really does run and record.
+
+**Three facts measured while writing slice 2, worth not re-deriving:**
+1. **G10 / G11 / G12 are mutually exclusive** — all three branch on the SAME `oldTitle` — and G10 /
+   G13 are too, because `manager → manager` short-circuits at Gate 6 as unchanged. So the
+   `getManagerId()` each undo reads is the value its own forward run saw; there is no sibling gate
+   moving the pointer underneath them.
+2. **`validateTeamMutation` carries NO blocked-team refusal.** That is what makes reverse order the
+   mirror here: G13's undo re-blocks, and the G12/G11 undos that unwind after it can still write
+   their team pointers. Had it refused, the rollback would have been designed-in to fail.
+3. **`blocked` is all-or-nothing by construction** — written nowhere but `blockAllTeams` /
+   `unblockAllTeams`. Both undos still record the split (which teams they FLIPPED vs which were
+   already in that state) and REPORT rather than over-restore in a mixed corpus, because
+   unblock/block-all would touch teams the pipeline never touched, and calling that a revert is the
+   lie R51.3 forbids.
 
 **The two entries that make this pipeline the one worth doing** are #4 and #10: a failure anywhere
 after G10 leaves the host with teams blocked and the fleet hibernated, and a failure after G16 leaves

@@ -233,6 +233,37 @@ authoritative about whose it is."* `tests/unit/oauth-rotator-reauth-flow.test.ts
 This is why the wrong-account box below is struck: building a check for it would have duplicated
 a stronger guarantee. **The remaining new work is step (c) and nothing else.**
 
+## MEASURED 2026-07-31 — headed real-Chrome clears Cloudflare; headless does not
+
+Run against the live site before writing step (c), because the whole design rests on whether the
+browser leg is reachable at all. `unbrowse` v11.1.9 drives the **owner's real installed Chrome**
+(`--browser chrome|arc|brave|edge|vivaldi|opera|dia|chromium` + `--browser-profile`), not
+Playwright's bundled Chromium — so the Chrome-for-Testing detection that blocks the janitor's
+script does not apply. **No Firefox in this build's flag set**, contrary to the recommendation the
+owner had heard; that is a different generation of the tool.
+
+| run | result |
+|---|---|
+| headless, real Chrome, `--share-accounts` | `[auth] extracted 24 cookies for claude.ai … injected 24 cookie(s), re-navigated authenticated` — then the page is Cloudflare's *"Esecuzione della verifica di sicurezza"*, **`Ray ID: a23dc4655d41ee61` identical across three consecutive reads** — a stuck interstitial, not a check in progress |
+| **`--headed`**, same profile clone | **PASSES** — the real page renders |
+
+Two consequences, both load-bearing:
+
+1. **Step (c) MUST run headed.** This is a real constraint, not a preference: an unattended
+   re-capture will put a visible Chrome window on the owner's desktop. Acceptable on his own
+   machine; record it rather than discover it.
+2. **Cookie injection alone did NOT yield a logged-in claude.ai** — the headed page rendered the
+   logged-OUT landing (*"Continua con Google / Continua con email / Continua con SSO"*). So the
+   taught route is not decoration: an actual login in a headed window is what seeds the session,
+   which is exactly what `unbrowse act auth` is for and exactly the owner's "learn it once".
+
+This half-vindicates the janitor's script: its `audit §3-D` claim was correct, and its choice of a
+real persistent profile was correct. What it lacked was a way to RE-SEED that profile once the
+session decayed — which is the hole this card closes.
+
+`--share-accounts` was used throughout: unbrowse clones the profile
+(`isolated_clone: true`) so the owner's live Chrome session is never driven or locked.
+
 ## Verification
 
 - A slot whose refresh is dead is repaired without a human, and `reauth-needed` clears.

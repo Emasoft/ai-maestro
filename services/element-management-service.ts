@@ -2822,6 +2822,141 @@ export async function ChangeTitle(
           }
         },
       },
+      // ── GATE 11: Clear old COS — clear team + reject pending requests ─
+      {
+        id: 'G11',
+        what: 'Old COS cleared from teams, pending requests rejected',
+        run: async () => {
+          if (oldTitle === 'chief-of-staff' && newTitle !== 'chief-of-staff') {
+            // Clear chiefOfStaffId from all teams where this agent is COS
+            try {
+              const { loadTeams, updateTeam } = await import('@/lib/team-registry')
+              const teams = loadTeams()
+              for (const team of teams) {
+                if (team.chiefOfStaffId === agentId) {
+                  const managerId = getManagerId()
+                  await updateTeam(team.id, { chiefOfStaffId: null }, managerId)
+                  ops.push(`G11: Cleared chiefOfStaffId on team "${team.name}"`)
+                }
+              }
+            } catch (err) {
+              ops.push(`G11: WARN — Failed to clear chiefOfStaffId: ${err instanceof Error ? err.message : err}`)
+            }
+            // Auto-reject pending configure-agent requests from this COS
+            try {
+              const { loadGovernanceRequests, rejectGovernanceRequest } = await import('@/lib/governance-request-registry')
+              const file = loadGovernanceRequests()
+              const pendingFromCOS = file.requests.filter((r: { type: string; status: string; requestedBy: string }) =>
+                r.type === 'configure-agent' && r.status === 'pending' && r.requestedBy === agentId
+              )
+              for (const req of pendingFromCOS) {
+                const managerId = getManagerId()
+                await rejectGovernanceRequest(req.id, managerId || 'system', `COS role revoked`)
+              }
+              if (pendingFromCOS.length > 0) {
+                ops.push(`G11: Auto-rejected ${pendingFromCOS.length} pending config request(s) from old COS`)
+              } else {
+                ops.push(`G11: No pending requests to reject`)
+              }
+            } catch {
+              ops.push(`G11: Pending request rejection skipped (registry unavailable)`)
+            }
+          } else {
+            ops.push(`G11: Old title not COS — skipped`)
+          }
+        },
+      },
+      // ── GATE 12: Clear old ORCHESTRATOR from team ────────────
+      {
+        id: 'G12',
+        what: 'Old ORCHESTRATOR cleared from team',
+        run: async () => {
+          if (oldTitle === 'orchestrator' && newTitle !== 'orchestrator') {
+            try {
+              const { loadTeams, updateTeam } = await import('@/lib/team-registry')
+              const teams = loadTeams()
+              for (const team of teams) {
+                if (team.orchestratorId === agentId) {
+                  const managerId = getManagerId()
+                  await updateTeam(team.id, { orchestratorId: null }, managerId)
+                  ops.push(`G12: Cleared orchestratorId on team "${team.name}"`)
+                }
+              }
+              if (!teams.some(t => t.orchestratorId === agentId)) {
+                ops.push(`G12: No team had this agent as orchestrator`)
+              }
+            } catch (err) {
+              ops.push(`G12: WARN — Failed to clear orchestratorId: ${err instanceof Error ? err.message : err}`)
+            }
+          } else {
+            ops.push(`G12: Old title not ORCHESTRATOR — team.orchestratorId unchanged`)
+          }
+        },
+      },
+      // ── GATE 13: Set new MANAGER in governance.json ──────────
+      {
+        id: 'G13',
+        what: 'New MANAGER set in governance.json, teams unblocked',
+        run: async () => {
+          if (newTitle === 'manager') {
+            const { setManager } = await import('@/lib/governance')
+            await setManager(agentId)
+            ops.push(`G13: Set manager in governance.json + broadcast to mesh`)
+            // MANAGER assigned → unblock all teams (agents stay hibernated, manual wake required)
+            try {
+              const { unblockAllTeams } = await import('@/lib/team-registry')
+              // REG-MAJ-03 fix (2026-05-04): unblockAllTeams is now async +
+              // takes the 'teams' lock. Await it so a racing createTeam can't
+              // interleave with the unblock save.
+              await unblockAllTeams()
+              ops.push(`G13: Unblocked all teams — agents remain hibernated until manually woken`)
+            } catch (err) {
+              ops.push(`G13: WARN — unblockAllTeams failed: ${err instanceof Error ? err.message : err}`)
+            }
+          } else {
+            ops.push(`G13: New title not MANAGER — governance.json unchanged`)
+          }
+        },
+      },
+      // ── GATE 13b: Set orchestratorId/chiefOfStaffId on the team ─
+      // SCEN-001 BUG-001 fix: when an agent becomes ORCHESTRATOR or
+      // CHIEF-OF-STAFF of a team, record the agent's id on the team so
+      // the UI dialog, the per-team singleton check, and the DeleteTeam
+      // revert path can find it. Without this, the team keeps
+      // orchestratorId=null even though the agent is the orchestrator,
+      // and a second agent can be assigned orchestrator in the same
+      // team.
+      {
+        id: 'G13b',
+        what: 'orchestratorId/chiefOfStaffId recorded on the team',
+        run: async () => {
+          if (newTitle === 'orchestrator' || newTitle === 'chief-of-staff') {
+            try {
+              const { loadTeams: loadTeamsG13b, updateTeam: updateTeamG13b } = await import('@/lib/team-registry')
+              const allTeamsG13b = loadTeamsG13b()
+              const memberTeamG13b = allTeamsG13b.find(t => t.agentIds.includes(agentId))
+              if (memberTeamG13b) {
+                const managerIdG13b = getManagerId()
+                if (newTitle === 'orchestrator' && memberTeamG13b.orchestratorId !== agentId) {
+                  await updateTeamG13b(memberTeamG13b.id, { orchestratorId: agentId }, managerIdG13b)
+                  ops.push(`G13b: Set orchestratorId=${agentId} on team "${memberTeamG13b.name}"`)
+                } else if (newTitle === 'chief-of-staff' && memberTeamG13b.chiefOfStaffId !== agentId) {
+                  await updateTeamG13b(memberTeamG13b.id, { chiefOfStaffId: agentId }, managerIdG13b)
+                  ops.push(`G13b: Set chiefOfStaffId=${agentId} on team "${memberTeamG13b.name}"`)
+                } else {
+                  ops.push(`G13b: ${newTitle} id already set on team "${memberTeamG13b.name}"`)
+                }
+              } else {
+                ops.push(`G13b: WARN — agent ${agentId} is ${newTitle} but not in any team (Gate 9 should have caught this)`)
+              }
+            } catch (err) {
+              ops.push(`G13b: WARN — Failed to set ${newTitle}Id on team: ${err instanceof Error ? err.message : err}`)
+            }
+          } else {
+            ops.push(`G13b: New title not ORCHESTRATOR/CHIEF-OF-STAFF — team ids unchanged`)
+          }
+        },
+      },
     ]
 
     // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
@@ -2837,121 +2972,6 @@ export async function ChangeTitle(
         result.error = err.message
         return result
       }
-    }
-
-    // ── GATE 11: Clear old COS — clear team + reject pending requests ─
-    if (oldTitle === 'chief-of-staff' && newTitle !== 'chief-of-staff') {
-      // Clear chiefOfStaffId from all teams where this agent is COS
-      try {
-        const { loadTeams, updateTeam } = await import('@/lib/team-registry')
-        const teams = loadTeams()
-        for (const team of teams) {
-          if (team.chiefOfStaffId === agentId) {
-            const managerId = getManagerId()
-            await updateTeam(team.id, { chiefOfStaffId: null }, managerId)
-            ops.push(`G11: Cleared chiefOfStaffId on team "${team.name}"`)
-          }
-        }
-      } catch (err) {
-        ops.push(`G11: WARN — Failed to clear chiefOfStaffId: ${err instanceof Error ? err.message : err}`)
-      }
-      // Auto-reject pending configure-agent requests from this COS
-      try {
-        const { loadGovernanceRequests, rejectGovernanceRequest } = await import('@/lib/governance-request-registry')
-        const file = loadGovernanceRequests()
-        const pendingFromCOS = file.requests.filter((r: { type: string; status: string; requestedBy: string }) =>
-          r.type === 'configure-agent' && r.status === 'pending' && r.requestedBy === agentId
-        )
-        for (const req of pendingFromCOS) {
-          const managerId = getManagerId()
-          await rejectGovernanceRequest(req.id, managerId || 'system', `COS role revoked`)
-        }
-        if (pendingFromCOS.length > 0) {
-          ops.push(`G11: Auto-rejected ${pendingFromCOS.length} pending config request(s) from old COS`)
-        } else {
-          ops.push(`G11: No pending requests to reject`)
-        }
-      } catch {
-        ops.push(`G11: Pending request rejection skipped (registry unavailable)`)
-      }
-    } else {
-      ops.push(`G11: Old title not COS — skipped`)
-    }
-
-    // ── GATE 12: Clear old ORCHESTRATOR from team ────────────
-    if (oldTitle === 'orchestrator' && newTitle !== 'orchestrator') {
-      try {
-        const { loadTeams, updateTeam } = await import('@/lib/team-registry')
-        const teams = loadTeams()
-        for (const team of teams) {
-          if (team.orchestratorId === agentId) {
-            const managerId = getManagerId()
-            await updateTeam(team.id, { orchestratorId: null }, managerId)
-            ops.push(`G12: Cleared orchestratorId on team "${team.name}"`)
-          }
-        }
-        if (!teams.some(t => t.orchestratorId === agentId)) {
-          ops.push(`G12: No team had this agent as orchestrator`)
-        }
-      } catch (err) {
-        ops.push(`G12: WARN — Failed to clear orchestratorId: ${err instanceof Error ? err.message : err}`)
-      }
-    } else {
-      ops.push(`G12: Old title not ORCHESTRATOR — team.orchestratorId unchanged`)
-    }
-
-    // ── GATE 13: Set new MANAGER in governance.json ──────────
-    if (newTitle === 'manager') {
-      const { setManager } = await import('@/lib/governance')
-      await setManager(agentId)
-      ops.push(`G13: Set manager in governance.json + broadcast to mesh`)
-      // MANAGER assigned → unblock all teams (agents stay hibernated, manual wake required)
-      try {
-        const { unblockAllTeams } = await import('@/lib/team-registry')
-        // REG-MAJ-03 fix (2026-05-04): unblockAllTeams is now async +
-        // takes the 'teams' lock. Await it so a racing createTeam can't
-        // interleave with the unblock save.
-        await unblockAllTeams()
-        ops.push(`G13: Unblocked all teams — agents remain hibernated until manually woken`)
-      } catch (err) {
-        ops.push(`G13: WARN — unblockAllTeams failed: ${err instanceof Error ? err.message : err}`)
-      }
-    } else {
-      ops.push(`G13: New title not MANAGER — governance.json unchanged`)
-    }
-
-    // ── GATE 13b: Set orchestratorId/chiefOfStaffId on the team ─
-    // SCEN-001 BUG-001 fix: when an agent becomes ORCHESTRATOR or
-    // CHIEF-OF-STAFF of a team, record the agent's id on the team so
-    // the UI dialog, the per-team singleton check, and the DeleteTeam
-    // revert path can find it. Without this, the team keeps
-    // orchestratorId=null even though the agent is the orchestrator,
-    // and a second agent can be assigned orchestrator in the same
-    // team.
-    if (newTitle === 'orchestrator' || newTitle === 'chief-of-staff') {
-      try {
-        const { loadTeams: loadTeamsG13b, updateTeam: updateTeamG13b } = await import('@/lib/team-registry')
-        const allTeamsG13b = loadTeamsG13b()
-        const memberTeamG13b = allTeamsG13b.find(t => t.agentIds.includes(agentId))
-        if (memberTeamG13b) {
-          const managerIdG13b = getManagerId()
-          if (newTitle === 'orchestrator' && memberTeamG13b.orchestratorId !== agentId) {
-            await updateTeamG13b(memberTeamG13b.id, { orchestratorId: agentId }, managerIdG13b)
-            ops.push(`G13b: Set orchestratorId=${agentId} on team "${memberTeamG13b.name}"`)
-          } else if (newTitle === 'chief-of-staff' && memberTeamG13b.chiefOfStaffId !== agentId) {
-            await updateTeamG13b(memberTeamG13b.id, { chiefOfStaffId: agentId }, managerIdG13b)
-            ops.push(`G13b: Set chiefOfStaffId=${agentId} on team "${memberTeamG13b.name}"`)
-          } else {
-            ops.push(`G13b: ${newTitle} id already set on team "${memberTeamG13b.name}"`)
-          }
-        } else {
-          ops.push(`G13b: WARN — agent ${agentId} is ${newTitle} but not in any team (Gate 9 should have caught this)`)
-        }
-      } catch (err) {
-        ops.push(`G13b: WARN — Failed to set ${newTitle}Id on team: ${err instanceof Error ? err.message : err}`)
-      }
-    } else {
-      ops.push(`G13b: New title not ORCHESTRATOR/CHIEF-OF-STAFF — team ids unchanged`)
     }
 
     // ── GATE 14 ran EARLIER (just before G10) — see TRDD-EE5YX5LF ────

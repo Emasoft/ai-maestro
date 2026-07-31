@@ -6,7 +6,7 @@ project-id: ai-maestro
 repo: Emasoft/ai-maestro
 column: dev
 created: 2026-07-30T13:09:14+0200
-updated: 2026-07-31T18:47:26+0200
+updated: 2026-07-31T19:15:02+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,13 +22,18 @@ relevant-rules: [R39, R41]
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [bb910a7f]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30
 
 The implementation half of the TRDD-SPS63XHA ruling, which decided *which side is authoritative*
 (the TEXT) and explicitly deferred the code change to a separate card.
+
+> ⚠ **THE NEXT THREE PARAGRAPHS ARE THE PRE-FIX DIAGNOSIS (2026-07-30) — SUPERSEDED by the
+> `bb910a7f` section below.** They are kept because they carry the REASONING that justified the
+> change, but they describe `recipientIsActiveMaestro` in the PRESENT tense and it no longer
+> exists. Do not act on them; read the ✅ section for what is true now.
 
 **The ruling's one OPEN question is now ANSWERED, by reading R39.5's messaging clause in full as it
 instructed.** R39.5 says the ASSISTANT *"may message **only its own user and the MANAGER** — the
@@ -51,10 +56,44 @@ through to the fail-closed deny. Pinned by `tests/unit/communication-graph-user-
 ("NO PRODUCTION CALLER builds an assistantSender block"), which reddens the moment a producer is
 wired. Neuter recorded: adding a real producer to a `lib/` file reddens exactly that test.
 
-NEXT ACTION: do BOTH halves in ONE commit, because doing either alone is a regression. Adding the
-producer without fixing the grant activates the over-broad edge; removing the grant without adding
-the MANAGER channel leaves the ASSISTANT with no agent channel at all, which the text requires it to
-have.
+## ✅ HALF 1 IS DONE (`bb910a7f`) — and the old NEXT ACTION is SUPERSEDED, 2026-07-31 19:15
+
+It said *"do BOTH halves in ONE commit, because doing either alone is a regression"*. That was
+right when the grant was still over-broad; it is now **impossible as written and wrong twice over**.
+
+**What landed** (`bb910a7f`): `recipientIsActiveMaestro` is GONE — it was a separate disjunct from
+`recipientIsOwnUser`, i.e. a genuinely broader grant reaching the MAESTRO *user*, whom R39.5 names
+as someone the ASSISTANT does not answer to. Replaced by `recipientIsManager` gated on
+`userPermitsManagerCollaboration` (R39.9), with the two denials kept DISTINCT (merged, any neuter of
+the gate reads identically to the no-edge case). A test had ASSERTED the defect; it is inverted, with
+the history in its comment. Neuters: gate-always-open → 2 red; over-broad human grant → 1 red. 151/151.
+
+**HALF 2 IS NOT A WIRING COMMIT — it is a FEATURE, and this is measured, not estimated.** Three
+things the producer needs do not exist ANYWHERE in production:
+
+| Needed | Present in production? |
+|---|---|
+| which USER an assistant is bound to | **no** — `recipientIsOwnUser` / `boundUser` / `ownAssistant` have **zero** non-test references |
+| `userPermitsManagerCollaboration` storage | **no** — the symbol lives ONLY in `lib/communication-graph.ts` (the type + the read) and in the test |
+| a surface for the user to GRANT it | **no** — no route, no setting, no UI |
+
+`assistant` IS a real title (`types/agent.ts:486`), so the title half is fine; it is the RELATIONAL
+half that is absent. Wiring a producer therefore means designing a persistence model for an
+assistant→user binding AND a standing per-assistant permission — whose storage, default, and
+revocation are a **governance decision under R39.9**, not an implementation detail. Defaulting it
+wrong in either direction is a real error: default-on grants a channel the user never approved;
+default-off with no UI makes R39.9 permanently dead letter.
+
+**So the honest state: there is NO live hole.** The branch is still unreachable at runtime (the
+ASSISTANT sender falls through to the fail-closed deny), and
+`tests/unit/communication-graph-user-routing.test.ts` pins that with the "NO PRODUCTION CALLER
+builds an assistantSender block" lock, which reddens the moment a producer appears.
+
+**NEXT ACTION — a DECISION, then a separate card.** Ask the USER how the standing permission is
+stored and what it defaults to; that answer is the card. Until then this one stays in `dev` with
+half 1 landed. Do NOT "just wire it" with an invented default — and when the producer does land, the
+SAME commit must delete the lock test and re-upgrade the CONTRADICTED R39.5/R39.7 rows in
+`docs/GOVERNANCE-ENFORCEMENT-MAP.md`, which the lock test names.
 
 ## Proposed fix
 

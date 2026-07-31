@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T08:53:30+0200
+updated: 2026-07-31T09:45:17+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243]
 ---
 
 ## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
@@ -182,17 +182,70 @@ precise state the cascade exists to prevent, reported to the caller as a clean s
 trace is an op nobody reads. That is R51's *"swallowing a per-item failure into a warn converts one
 bad item into an invalid system"*, in production, on the governance-critical pipeline.
 
-**Deliberately NOT hot-fixed here.** Wrapping the two halves by hand is a hand-rolled compensation —
-the exact thing R51 says to replace with the runner — and it would be superseded by the retrofit
-that is this card's next step. It is pinned instead, so the fix is checkable: the neuter that reds
-that test IS the fix's own shape (un-wrap `blockAllTeams` so its failure aborts). **When the
-retrofit lands, that characterization test MUST be updated — its failure is the signal the retrofit
-worked.**
+### ✅ FIXED 2026-07-31 (`47feb243`) — and the shape this card recorded for the fix was WRONG
 
-**NEXT ACTION:** the retrofit proper — restructure into `runAioPipeline` PRE/EXE/POST, preserving the
-G14-first ordering above. **Do NOT switch G14b/G14e to the compensable forms yet:** without a `ctx` to
-hold the returned handle there is nowhere to register the undo, so the switch would be churn that
-LOOKS like progress. It belongs in the same change that introduces the gate array.
+The line above used to end: *"the neuter that reds that test IS the fix's own shape (un-wrap
+`blockAllTeams` so its failure aborts)"*. **That shape is a SECURITY REGRESSION as a standalone
+change**, and it was one session away from being implemented on the strength of this card.
+
+G14 writes the title **before** G10 (deliberately — crash-safety). So an abort at G10 skips
+G14b/G14e and leaves a demoted MANAGER holding AID governance tokens that **embed `manager`**
+(`element-management-service.ts:2901` says so outright: *"existing tokens embed the old title →
+revoke them"*). And the retry cannot repair it: Gate 6 sees the title already changed and
+**returns `success: true` at `:2483`** before ever reaching revocation. The tokens are stranded
+permanently. Every step of that was verified first-hand before acting on it.
+
+**The landed fix withholds the VERDICT, not the WORK — a DEFERRED fail.** `g10CascadeFailed` is
+recorded at Gate 10; every alignment gate still runs (they align the agent with the title G14 wrote:
+drain both token stores, swap the role-plugin); the terminal converts success into a failure NAMING
+the residue. The residue is real and is deliberately NOT repaired — this is a report, not a
+compensation, so it is **not** the hand-rolled undo R51 exists to replace. It is ~10 lines that
+disappear in commit 3 below, and until then a live governance API stops lying.
+
+**Why the original "defer it, the retrofit supersedes it" no longer held:** the deferral assumed the
+recorded fix shape was correct and merely premature. It was not correct. Correcting the card was
+mandatory regardless of whether anything shipped, because the next reader would have implemented it.
+
+`tests/services/change-title-window.test.ts` now pins the fix, and **its load-bearing assertion is
+`world.calls` containing both revocations** — that is what discriminates the deferred fail from the
+abort. Proven, not asserted: NEUTER A (implement abort-at-G10) passes `success:false`, both error
+regexes, both residue assertions AND the ops assertion, and fails ONLY on `calls ==
+['removeManager','blockAllTeams']`. NEUTER B (disable the verdict guard) reds on `expected true to
+be false` — a disjoint cause.
+
+**NEXT ACTION — commit 2 of the 3-commit decomposition below.** The retrofit is NOT irreducibly
+big-bang, which was the open question this card had been stalling on.
+
+**Correction to the shape:** it is **`runGateSequence` with a gate array**, NOT `runAioPipeline`.
+The latter takes `pre[] + ONE exe + post[]` (`lib/gate-transaction.ts:256-287`) and cannot express
+13 mutations; all 9 landed retrofits call `runGateSequence` directly. Measured, not assumed.
+
+**The window is G03 (`:2402`, first mutation) → G22 (`:3438-3457`, the final on-disk verification,
+which aborts)** — essentially the whole function. The read-only validation gates G0b..G9a stay
+OUTSIDE the array as early returns with their exact strings, matching the landed pattern.
+
+| commit | contents | why it is safe to stop here |
+|---|---|---|
+| **1 ✅ `47feb243`** | the G10 deferred fail + its test | pipeline working, defect closed, zero structural change |
+| **2** | reify `ChangeTitleCtx` (the ~10 threaded locals) + express the gates in runner shape (`run` throws instead of early-returning), still driven by a small imperative loop | **zero behaviour change**; suite green; the ratchet still counts ChangeTitle as hand-rolled, so nothing is claimed that is not true |
+| **3** | swap the driver for `runGateSequence`; undos per the window map; G10 fused into ONE gate (run + undo restore both halves); G14b/G14e → the compensable forms; G22 → the `invariants` hook; lower `MAX_HANDROLLED` 10 → 9 | the ratchet moves only when the guarantee is real |
+
+**The card's earlier objection to touching G14b/G14e early was about ORDERING, not about staging** —
+"no compensable forms before a `ctx` exists" dissolves once commit 2 creates the ctx. It does not
+rule out this decomposition.
+
+**G22 → `invariants` is an upgrade, not a translation.** `runGateSequence`'s invariant hook
+(`lib/gate-transaction.ts:204-218`) routes a violation through `abort()`, so a failed final
+verification **reverts** instead of merely reporting — strictly better than today's G22.
+
+**RULING for commit 3 — keep G17's R9.13 quarantine as in-gate self-heal.** `enforceRoleOrHibernate`
+(`:3269-3299`) retries the install, then sets `roleMissing: true` + hibernates, and never throws.
+Replacing that with a title-rollback would rewrite behaviour that R9.13 documents — a
+governance-corpus edit outside this card's authority. Commit 3 throws only if the **quarantine
+itself** fails.
+
+**Preserve G14-before-G10** (crash-safety, orthogonal to rollback) by ARRAY ORDER — never sort the
+gates by label.
 
 **Do NOT re-assert the G14-before-G10 ordering in the new file.**
 `tests/governance/r3-r9-team-governance.test.ts` already pins it, and by the stronger route (inject a
@@ -1012,8 +1065,13 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       (G11 `updateTeam`) turned out UNREACHABLE on a manager→autonomous demotion; probing all four
       post-G10 collaborators found the two that are, and with them a LIVE DEFECT: a failure in
       `blockAllTeams` leaves the host with no manager and unblocked teams **and returns
-      `success: true`**. Pinned, not hot-fixed — the retrofit is the fix, and the neuter that reds
-      that test is the fix's own shape
+      `success: true`**
+- [x] The LIVE G10 DEFECT FIXED (`47feb243`) — a DEFERRED fail: the verdict is withheld at the
+      terminal while every alignment gate still runs. **This box supersedes the claim this checklist
+      used to make**, that the fix's shape was "the neuter that reds that test" (un-wrap
+      `blockAllTeams` so it aborts). That shape strands AID tokens embedding the old title, because
+      G14 writes the title first and Gate 6 short-circuits the retry — see the STATE block. Two
+      neuters with disjoint red causes; the discriminating assertion is `world.calls`
 - [x] `ChangeTeam` / `DeleteTeam` transactional — both verified 2026-07-31 at their runner call
       sites (`ChangeTeam` runs TWO sequences, `runGateSequence(removeGates, tc)` and
       `(addGates, tc)`; `DeleteTeam` one). They had already left the hand-rolled list; this box was

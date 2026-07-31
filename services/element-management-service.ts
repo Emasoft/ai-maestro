@@ -2717,6 +2717,17 @@ export async function ChangeTitle(
       }
       /** G12: the teams whose orchestratorId pointed at this agent before the gate nulled it. */
       g12?: { clearedOrchTeamIds: string[] }
+      /** G13: the manager pointer this gate overwrote and the teams its unblock flipped. */
+      g13?: {
+        priorManagerId: string | null
+        setManager: boolean
+        /** Teams blocked on the way in — the ones this unblock FLIPPED. */
+        unblockedTeamIds: string[]
+        /** Teams already unblocked on the way in — NOT ours to re-block. */
+        alreadyUnblockedTeamIds: string[]
+      }
+      /** G13b: the ONE team slot this gate re-pointed, and what it held before. */
+      g13b?: { teamId: string; field: 'orchestratorId' | 'chiefOfStaffId'; priorValue: string | null }
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -3158,11 +3169,26 @@ export async function ChangeTitle(
         run: async () => {
           if (newTitle === 'manager') {
             const { setManager } = await import('@/lib/governance')
+            // WRITE-AHEAD. `priorManagerId` is what governance.json held BEFORE this overwrite —
+            // NOT necessarily null: an existing MANAGER is replaced here, and restoring "no
+            // manager" in that case would block every team on the host as a rollback side effect.
+            const led: NonNullable<typeof ctx.g13> = {
+              priorManagerId: getManagerId(),
+              setManager: false,
+              unblockedTeamIds: [],
+              alreadyUnblockedTeamIds: [],
+            }
+            ctx.g13 = led
             await setManager(agentId)
+            led.setManager = true
             ops.push(`G13: Set manager in governance.json + broadcast to mesh`)
             // MANAGER assigned → unblock all teams (agents stay hibernated, manual wake required)
             try {
-              const { unblockAllTeams } = await import('@/lib/team-registry')
+              const { unblockAllTeams, loadTeams: loadTeamsG13 } = await import('@/lib/team-registry')
+              // Same split G10 records, mirrored: which teams this unblock actually FLIPS.
+              for (const t of loadTeamsG13()) {
+                (t.blocked ? led.unblockedTeamIds : led.alreadyUnblockedTeamIds).push(t.id)
+              }
               // REG-MAJ-03 fix (2026-05-04): unblockAllTeams is now async +
               // takes the 'teams' lock. Await it so a racing createTeam can't
               // interleave with the unblock save.
@@ -3173,6 +3199,49 @@ export async function ChangeTitle(
             }
           } else {
             ops.push(`G13: New title not MANAGER — governance.json unchanged`)
+          }
+        },
+        // Reverse of the forward run: re-block FIRST, then put the pointer back — the same
+        // ordering rule as G10's undo, read the other way round.
+        undo: async () => {
+          const led = ctx.g13
+          if (!led) return
+          const problems: string[] = []
+
+          if (led.unblockedTeamIds.length) {
+            if (led.alreadyUnblockedTeamIds.length) {
+              problems.push(
+                `teams still unblocked (${led.unblockedTeamIds.join(', ')}) — re-blocking them would ` +
+                `also block ${led.alreadyUnblockedTeamIds.join(', ')}, which this pipeline did not unblock`,
+              )
+            } else {
+              try {
+                // blockAllTeams also HIBERNATES every team agent, and that is not an extra side
+                // effect here: this branch is only reached when there was no prior manager, which
+                // means the teams were blocked on the way in and their agents were hibernated by
+                // that earlier block. G13 woke nobody, so the loop finds dead sessions and does
+                // nothing. Where a concurrent wake did revive one, killing it restores the state
+                // at call time — which is exactly what the guarantee asks for.
+                const { blockAllTeams } = await import('@/lib/team-registry')
+                await blockAllTeams()
+              } catch (err) {
+                problems.push(`team re-block (${err instanceof Error ? err.message : err})`)
+              }
+            }
+          }
+
+          if (led.setManager) {
+            try {
+              const { setManager, removeManager } = await import('@/lib/governance')
+              if (led.priorManagerId) await setManager(led.priorManagerId)
+              else await removeManager()
+            } catch (err) {
+              problems.push(`manager pointer (${err instanceof Error ? err.message : err})`)
+            }
+          }
+
+          if (problems.length) {
+            throw new Error(`G13 rollback incomplete: ${problems.join('; ')}`)
           }
         },
       },
@@ -3196,9 +3265,14 @@ export async function ChangeTitle(
               if (memberTeamG13b) {
                 const managerIdG13b = getManagerId()
                 if (newTitle === 'orchestrator' && memberTeamG13b.orchestratorId !== agentId) {
+                  // Recorded BEFORE the write, and only on the branches that WRITE: the else
+                  // branch below found the slot already correct, so it has nothing to restore and
+                  // an undo that ran there would clobber a value this gate never touched.
+                  ctx.g13b = { teamId: memberTeamG13b.id, field: 'orchestratorId', priorValue: memberTeamG13b.orchestratorId ?? null }
                   await updateTeamG13b(memberTeamG13b.id, { orchestratorId: agentId }, managerIdG13b)
                   ops.push(`G13b: Set orchestratorId=${agentId} on team "${memberTeamG13b.name}"`)
                 } else if (newTitle === 'chief-of-staff' && memberTeamG13b.chiefOfStaffId !== agentId) {
+                  ctx.g13b = { teamId: memberTeamG13b.id, field: 'chiefOfStaffId', priorValue: memberTeamG13b.chiefOfStaffId ?? null }
                   await updateTeamG13b(memberTeamG13b.id, { chiefOfStaffId: agentId }, managerIdG13b)
                   ops.push(`G13b: Set chiefOfStaffId=${agentId} on team "${memberTeamG13b.name}"`)
                 } else {
@@ -3212,6 +3286,25 @@ export async function ChangeTitle(
             }
           } else {
             ops.push(`G13b: New title not ORCHESTRATOR/CHIEF-OF-STAFF — team ids unchanged`)
+          }
+        },
+        // Put back whatever the slot held, which is usually null but is NOT always: re-pointing a
+        // team from one orchestrator to another is the same write, and restoring null there would
+        // leave the team with no orchestrator instead of the one it had.
+        //
+        // `getManagerId()` here is the value the forward run passed: G13b runs after G13 in the
+        // array, so reverse-order unwinding reaches this undo BEFORE G13's restores the pointer.
+        undo: async () => {
+          const led = ctx.g13b
+          if (!led) return
+          try {
+            const { updateTeam } = await import('@/lib/team-registry')
+            const patch = led.field === 'orchestratorId'
+              ? { orchestratorId: led.priorValue }
+              : { chiefOfStaffId: led.priorValue }
+            await updateTeam(led.teamId, patch, getManagerId())
+          } catch (err) {
+            throw new Error(`G13b rollback incomplete: ${led.field} on team ${led.teamId} (${err instanceof Error ? err.message : err})`)
           }
         },
       },

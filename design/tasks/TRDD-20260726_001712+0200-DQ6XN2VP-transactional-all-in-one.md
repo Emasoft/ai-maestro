@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T07:37:16+0200
+updated: 2026-07-31T08:10:36+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,15 +21,17 @@ blocked-by: []
 implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8]
 ---
 
-## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only TWO of the ten are worth doing
+## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
 
-**The remaining work is not "10 pipelines". It is TWO.** Every candidate's partial-state window was
-measured this morning, per the standing rule that you measure the window before picking by op count:
+**The remaining work is not "10 pipelines". It is ONE** — `ChangeTitle`. Every candidate's
+partial-state window was measured, per the standing rule that you measure the window before picking
+by op count. The `InstallElement` row below was measured WRONG the first time and corrected the same
+morning by reading the function; the correction is the finding, and it is recorded under the table.
 
 | pipeline | gate ops | mutating calls | window | verdict |
 |---|---|---|---|---|
-| `InstallElement` | 101 | **18** — `mkdir` ×3, `saveJsonSafe` ×13 across LOCAL *and* USER settings, `installPluginLocally` | **REAL, and the widest left** | retrofit |
-| `ChangeTitle` | 131 | many | **REAL** | retrofit |
+| `ChangeTitle` | 131 | **~15** — `updateAgent` ×6, `blockAllTeams`/`unblockAllTeams`, `updateTeam` ×4, `revokeTokensForAgent`, `revokeTokensFromIssuer`, `installPluginLocally` ×4, `hibernateAgent` | **REAL, and the only one left** | retrofit |
+| `InstallElement` | 101 | 13 — `mkdir` ×2, `saveJsonSafe` ×7 (5 local, 2 user), `execFileAsync` ×4, `rm` ×1 | **NONE that may legally be compensated** — see below | conformance only |
 | `ChangeFolder` | 10 | 1 (`updateAgent`) | none | conformance only |
 | `ChangeName` | 9 | 1 (`updateAgent`) | none | conformance only |
 | `ChangeMetadata` | 7 | 1 | none | conformance only |
@@ -40,10 +42,42 @@ measured this morning, per the standing rule that you measure the window before 
 six: one `updateAgent`, then only notes, a read-only verify, and the ledger emit — nothing abortable
 after the mutation, so there is no state a compensation could restore. **8 of 10 are paperwork.**
 
-`InstallElement` is the one to do first, and not because it is large: 13 `saveJsonSafe` writes span
-BOTH the agent-local settings and the USER-scope `settings.json`, so a mid-pipeline failure leaves
-two scopes disagreeing about what is installed — the exact class of defect R20.30's scope split
-exists to prevent.
+### ⚠ CORRECTED 2026-07-31 — `InstallElement` was picked on two wrong numbers and one wrong claim
+
+I first wrote *"`InstallElement` is the one to do first … 13 `saveJsonSafe` writes span BOTH the
+agent-local settings and the USER-scope `settings.json`, so a mid-pipeline failure leaves two scopes
+disagreeing about what is installed."* Reading `services/element-management-service.ts:562-1481`
+refutes every part of it:
+
+- **7 `saveJsonSafe`, not 13**, and `installPluginLocally` is **not called from this pipeline at all**
+  (it is `ChangeTitle`'s). Both numbers came from a mis-scoped grep, not from the function.
+- **The two USER-scope writes are REPAIRS, not creators of a disagreement.** `PG03` (:1253) and
+  `PG07` (:1448) fire only after a *local* install succeeds, and each one *turns OFF* an
+  already-enabled user-scope copy. When either fails, user scope is left exactly as the caller found
+  it — so R51's "return to exactly the state it was in" is satisfied by doing nothing. The
+  disagreement they address PRE-DATES the call.
+
+**And the deeper reason the retrofit would have been wrong: every pre-EXE mutation here is one a
+compensation is FORBIDDEN or harmful to reverse.**
+
+| mutation | why it cannot be undone |
+|---|---|
+| `G07`/`EXE` `mkdir(<agentDir>/.claude)` (:713, :889) | `.claude/` is the `claude-dir` row of the agent-invariant registry (`lib/agent-invariants.ts:69`) — guaranteed to exist. A compensation deleting it fights the watchdog that re-creates it. |
+| `G11` `claude plugin marketplace add` (:824) | a SHARED, idempotent registration in the user's Claude config. Deregistering it on rollback breaks every other agent installing from that marketplace. |
+| `G13` `convertAndStorePlugin` + `emitForClient` (:867-868) | writes into `~/agents/custom-plugins/` — **R20.31, verdict Explicit**: *"AI Maestro NEVER DELETES a plugin folder from them … Removing a source folder is explicitly the user's responsibility."* A compensation deleting it VIOLATES a governance rule. |
+
+What is left is a single `withSettingsLock` + `saveJsonSafe` on ONE settings file, with a CLI→direct
+fallback and a write-back that self-heal. There is no window a legal compensation could close, so
+retrofitting `InstallElement` would move the ratchet and buy **zero** safety — the same verdict the
+other eight got, reached for a different reason.
+
+**THE GENERALIZABLE LESSON — a mutation is not a WINDOW just because it is a mutation.** Every prior
+measurement on this card asked "does anything abortable follow the write?". That question is
+necessary and not sufficient: it finds a window that a rule may then FORBID you to close. Ask both —
+*is there abortable work after the mutation*, **and** *is reversing it legal and harmless?* Three of
+`InstallElement`'s mutations pass the first test and fail the second, one of them against a rule
+marked **Explicit**. Had I retrofitted by op count I would have written a compensation that deletes
+a user-owned source folder and called it R51 compliance.
 
 **NUMBERS IN THE 2026-07-30 BLOCK BELOW ARE STALE — do NOT carry them forward.** It says 14 to go and
 `MAX_HANDROLLED = 14`; both are now **10**, and `CreateAgent`, `ChangeTeam`, `DeleteTeam` have since
@@ -852,11 +886,13 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       sites (`ChangeTeam` runs TWO sequences, `runGateSequence(removeGates, tc)` and
       `(addGates, tc)`; `DeleteTeam` one). They had already left the hand-rolled list; this box was
       simply never ticked
-- [ ] The remaining `Change*` / marketplace / element pipelines transactional — **8 of them, and
-      MEASURED 2026-07-31 to buy ZERO safety.** See `## ⏵ MEASURED 2026-07-31` — every one is a
-      single mutating call with nothing abortable after it, so retrofitting them moves the
-      conformance ratchet and closes no window. Keep the box open (AIO-TXN-10 is still violated),
-      but do NOT spend a session on them ahead of the two that matter
+- [ ] The remaining `Change*` / marketplace / element pipelines transactional — **9 of them, and
+      MEASURED 2026-07-31 to buy ZERO safety.** See `## ⏵ MEASURED 2026-07-31` — eight are a single
+      mutating call with nothing abortable after it, and the ninth is `InstallElement`, whose three
+      pre-EXE mutations are ones a compensation is FORBIDDEN (R20.31, Explicit) or harmful to
+      reverse. Retrofitting any of them moves the conformance ratchet and closes no window. Keep the
+      box open (AIO-TXN-10 is still violated), but do NOT spend a session on them ahead of
+      `ChangeTitle`
 - [x] An enforceable ratchet for `AIO-TXN-10` — `tests/governance/aio-txn-10-runner-coverage.test.ts`
       discovers the inventory from the AST and fails when a pipeline hand-rolls beyond
       `MAX_HANDROLLED`. NOT the parity box below: this asks "is it under the runner", which is

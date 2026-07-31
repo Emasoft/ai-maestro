@@ -380,11 +380,27 @@ export type JsonRead =
  *  is the whole point of the helper, and a distinction nothing asserts is one that can vanish. */
 export async function readJson(path: string): Promise<JsonRead> {
   if (!existsSync(path)) return { ok: false, reason: 'missing' }
+  let parsed: unknown
   try {
-    return { ok: true, data: JSON.parse(await readFile(path, 'utf-8')) }
+    parsed = JSON.parse(await readFile(path, 'utf-8'))
   } catch (err) {
     return { ok: false, reason: 'unreadable', error: err instanceof Error ? err.message : String(err) }
   }
+  // A PARSE that succeeds is not yet a USABLE settings object: `[]`, `null`, `42` and `"str"` all
+  // parse, and the `data: Record<string, unknown>` above would be a type LIE for every one of them.
+  // Every caller then does `settings.enabledPlugins = ep` — which silently attaches a key to an
+  // array, or throws a TypeError on null, and in both cases the read-modify-write goes on to
+  // OVERWRITE the file with the result. `lib/claude-settings-enforcer.ts:121-128` already refuses
+  // exactly this shape ("settings.json is not a JSON object; refusing to write"); this is the same
+  // ruling, applied at the reader so every consumer inherits it.
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      ok: false,
+      reason: 'unreadable',
+      error: `parses as ${Array.isArray(parsed) ? 'an array' : parsed === null ? 'null' : typeof parsed}, not a JSON object`,
+    }
+  }
+  return { ok: true, data: parsed as Record<string, unknown> }
 }
 
 /**
@@ -400,7 +416,56 @@ async function loadJsonSafe(path: string): Promise<Record<string, unknown>> {
   return read.ok ? read.data : {}
 }
 
-async function saveJsonSafe(path: string, data: Record<string, unknown>): Promise<void> {
+/** Thrown by `saveJsonSafe` when the target exists and cannot be read. Its own class so a caller can
+ *  tell "I refused to clobber an unreadable file" from any other write failure. */
+export class UnreadableTargetError extends Error {
+  constructor(public readonly path: string, public readonly cause: string) {
+    super(`${path} exists but does not parse (${cause}); refusing to overwrite it — the state is UNKNOWN, not absent`)
+    this.name = 'UnreadableTargetError'
+  }
+}
+
+/**
+ * EXPORTED FOR ITS TEST ONLY — not an API. `tests/unit/save-json-safe-refuses-clobber.test.ts`
+ * asserts the refusal against a REAL corrupt file on disk, and the assertion that matters is that
+ * the bytes are UNCHANGED afterward — which a mocked `fs` cannot see (the advisor named exactly that
+ * shape as the vacuous one). This mirrors `lib/claude-settings-enforcer.ts`, whose identical ruling
+ * is pinned the same way. `tests/governance/save-json-safe-not-an-api.test.ts` fails if any other
+ * source file imports it, so "exported for the test" cannot quietly become "exported for use".
+ */
+export async function saveJsonSafe(path: string, data: Record<string, unknown>): Promise<void> {
+  // ── TRDD-K71FV649: NEVER overwrite a file we could not read ──
+  //
+  // MEASURED 2026-07-31: **21 of 21** `saveJsonSafe` calls in this file are read-modify-write fed by
+  // `loadJsonSafe` of the SAME path, and 4 of them target `~/.claude/settings.json` — the human
+  // user's own global Claude Code config. `loadJsonSafe` answers `{}` to "does not parse", so on a
+  // corrupt file every one of those sites builds a minimal object out of nothing and this atomic
+  // write REPLACES the file — destroying every other key it held. G10 (:4888) is the worst shape:
+  // it reads `{}`, concludes "plugin missing after install", logs `writing safeguard`, and truncates
+  // the file. The ops line reads like a REPAIR.
+  //
+  // The guard lives HERE, not at the 21 call sites, for one decisive reason: the R51 compensations
+  // call `saveJsonSafe` DIRECTLY with a snapshot (ChangeHook's undo at :6467 writes `c.prior`, which
+  // is `structuredClone`d from the same blind read — so on a corrupt file the ROLLBACK restores `{}`
+  // and destroys the file it was meant to protect). A per-call-site read guard cannot see that path;
+  // the write primitive is the only choke point both the forward and the undo paths traverse. It
+  // also covers every FUTURE call site, which is the property a call-site fix can never have.
+  //
+  // This is not a new policy — it is the ruling `lib/claude-settings-enforcer.ts:112-119` already
+  // made ("Corrupt JSON — NEVER overwrite. A blind merge-and-write here would destroy whatever the
+  // user actually has"), pinned by its own test, and never extended to this family.
+  //
+  // `missing` stays the normal create path: a first-run settings file must still be creatable.
+  //
+  // KNOWN over-report (accepted): when a forward gate throws here, its undo throws here too — the
+  // file is still corrupt on disk — so the runner reports a FAILED compensation (R51.5 CRITICAL)
+  // over a disk that is byte-identical to where it started. Alarming and true; the alternative is
+  // the undo writing `{}` over the user's file, which is the bug.
+  const existing = await readJson(path)
+  if (!existing.ok && existing.reason === 'unreadable') {
+    throw new UnreadableTargetError(path, existing.error ?? 'unknown parse error')
+  }
+
   // MAJ-01 fix (2026-05-04) — atomic write via tmp + rename.
   // Previous version wrote directly to `path`. A crash mid-write
   // (OOM kill, SIGKILL, power cut) left the JSON file partially
@@ -1468,7 +1533,18 @@ export async function InstallElement(
       if (existsSync(userSettingsPath)) {
         try {
           await withSettingsLock(userSettingsPath, async () => {
-            const us = await loadJsonSafe(userSettingsPath) as Record<string, Record<string, unknown>>
+            // READS STRICTLY (TRDD-K71FV649). This gate's honest branch was already written — the
+            // `catch` below says "Could not check user scope settings" — and was UNREACHABLE,
+            // because `loadJsonSafe` answers `{}` instead of throwing. So a corrupt
+            // ~/.claude/settings.json found no `userKey`, fell to the `else`, and reported
+            // "User scope clean" about a file it could not read. That is the vacuous half of this
+            // card's defect: nothing is destroyed here, but a clean verdict is asserted on no
+            // evidence. Reading strictly makes the message that was always meant for this case fire.
+            const read = await readJson(userSettingsPath)
+            if (!read.ok && read.reason === 'unreadable') {
+              throw new Error(`${userSettingsPath} does not parse (${read.error})`)
+            }
+            const us = (read.ok ? read.data : {}) as Record<string, Record<string, unknown>>
             const uep = (us.enabledPlugins || {}) as Record<string, boolean>
             // SCEN-012 FIX: Boundary-aware match. Old `k.includes('ai-maestro-plugin')`
             // also matched role-plugin names like ai-maestro-autonomous-agent@ai-maestro-plugins
@@ -1487,8 +1563,8 @@ export async function InstallElement(
               ops.push(`PG03: User scope clean — no ai-maestro-plugin enabled`)
             }
           })
-        } catch {
-          ops.push(`PG03: WARN — Could not check user scope settings`)
+        } catch (err) {
+          ops.push(`PG03: WARN — Could not check user scope settings: ${err instanceof Error ? err.message : err}`)
         }
       } else {
         ops.push(`PG03: No user settings file — clean`)
@@ -1665,7 +1741,14 @@ export async function InstallElement(
       if (existsSync(userSettingsPath)) {
         try {
           await withSettingsLock(userSettingsPath, async () => {
-            const us = await loadJsonSafe(userSettingsPath) as Record<string, Record<string, unknown>>
+            // READS STRICTLY (TRDD-K71FV649) — see PG03 above for the full reasoning. Same shape,
+            // same already-written-but-unreachable honest branch in the `catch`: a corrupt
+            // ~/.claude/settings.json used to report "No duplicate at user scope".
+            const read = await readJson(userSettingsPath)
+            if (!read.ok && read.reason === 'unreadable') {
+              throw new Error(`${userSettingsPath} does not parse (${read.error})`)
+            }
+            const us = (read.ok ? read.data : {}) as Record<string, Record<string, unknown>>
             const uep = (us.enabledPlugins || {}) as Record<string, boolean>
             // SCEN-012 FIX: Boundary-aware match.
             const userKey = Object.keys(uep).find(k => {
@@ -1682,8 +1765,8 @@ export async function InstallElement(
               ops.push(`PG07: No duplicate at user scope`)
             }
           })
-        } catch {
-          ops.push(`PG07: WARN — Could not check user scope for duplicates`)
+        } catch (err) {
+          ops.push(`PG07: WARN — Could not check user scope for duplicates: ${err instanceof Error ? err.message : err}`)
         }
       } else {
         ops.push(`PG07: No user settings file — no duplicate possible`)

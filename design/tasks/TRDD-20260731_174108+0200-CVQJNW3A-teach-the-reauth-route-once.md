@@ -179,9 +179,29 @@ is logged in.
    that the knob could not be found.
 2. **Teach one login route per account** (owner-run, once). Then the profile is re-seedable
    without a human.
-3. **Server tick acts on `reauth-needed`** instead of logging it: re-seed the profile, run the
-   capture for the named account, file the slot. Keep every existing refusal — never write a
-   plaintext token, never file under the wrong account (the Jul 11 log is the regression test).
+3. **Server tick acts on `reauth-needed`** instead of logging it. Concrete pipeline — note that
+   **only step (c) is new**; every other step is code we already run today:
+
+   ```
+   a. tick detects reauth-needed for account X          ← lib/oauth-rotator/tick.ts (exists)
+   b. mint the PKCE challenge + authorize URL for X     ← reauth-flow.ts::startReauth (exists)
+   c. unbrowse replays X's taught login route, drives   ← THE ONLY NEW PIECE
+      the consent, returns the callback code
+   d. exchange the code, file the slot                  ← network.ts + the slot writer (exists)
+   ```
+
+   Keep every existing refusal — never write a plaintext token, never file under the wrong
+   account (the Jul 11 log is the regression test).
+
+   **Why route (c) through unbrowse rather than the janitor's `slot_capture_browser.py`:** the
+   script is present and current (0.66.1 ships it, as does every cached version back to 0.41.0),
+   so this is a choice, not a necessity. It fights the hard part with heuristics — a per-account
+   Playwright profile plus its own note that *"pure headless is Cloudflare-blocked regardless of
+   flags"* — and its failure mode is silent mis-attribution (Jul 11: asked for fmuaddib, filed
+   ipazia). unbrowse already maintains persistent per-profile sessions (`~/.unbrowse/profiles/`)
+   and a *taught* route is addressed by account rather than by whoever the ambient profile
+   happens to be, which removes that failure mode by construction instead of by check. Invoking
+   the janitor's script would also couple our server to a versioned plugin-cache path.
 4. **Surface it either way** (closes H2): when the tick cannot repair, `reauth-needed` reaches
    the owner as a push + dashboard banner, not a log line.
 

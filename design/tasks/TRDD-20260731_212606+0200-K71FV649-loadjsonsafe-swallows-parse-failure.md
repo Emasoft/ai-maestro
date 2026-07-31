@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T21:26:06+0200
-updated: 2026-07-31T21:49:55+0200
+updated: 2026-07-31T21:57:34+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 npt: []
 eht: [CS25TA6W]
 blocked-by: []
-implementation-commits: [69e801a9, 6c175813]
+implementation-commits: [69e801a9, 6c175813, a044f390]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body)
@@ -76,19 +76,23 @@ beat both my reasoning and the advisor's.
   Reading strictly makes the branch that was always meant for this case **reachable**. That is the
   vacuous half of the defect — nothing destroyed, a clean verdict asserted on no evidence.
 
-**NEXT ACTION.** `ChangePlugin`'s G11 and `InstallElement`'s PG01 are still WARNs, and their
-re-examination is the one box left. The write-side guard **changes the argument for them**: the
-reason both were left un-promoted was *"an aborting check would destroy correct state on the strength
-of a file it could not read"* — and destroying state through a settings write is now impossible.
-What remains is the narrower question of whether an UNREADABLE file should abort a pipeline whose
-change already landed. Decide each with its own evidence.
+**PG01 AND G11 ARE DECIDED — `a044f390`, and PG01 turned out to be a LIVE BUG, not a blocked
+promotion.** It was never a mere WARN: every arm sets `result.success = false`, PG02 turns that into
+`corePluginMissing: true` in the registry, and the wake route refuses to start the agent on it. So a
+corrupt `settings.local.json` made a correct install report FAILURE and brick the agent's wake. The
+rule the fix encodes — **an invariant may abort on a positive VIOLATION and never on an UNKNOWN** —
+is the one this card had been circling from the start. Full verdicts, including why PG01 still stays
+OUTSIDE the R51 window and why G11's sibling defect became `TRDD-RO90UCKQ`, are in the Acceptance
+section rather than repeated here.
 
-**The 3 copy-pasted twins are now `TRDD-CS25TA6W` (an EHT of this card), not a bullet here.** They
-carry 6 more read-modify-writes, 3 of them on `~/.claude/settings.json`, and two of the three readers
-do not even check `existsSync` — so ENOENT and a parse failure are collapsed by construction.
-`claude-adapter.ts` is the urgent one: it is in `ChangePlugin`'s OWN call path, so this card's guard
-is bypassed one layer down on every adapter install. **This card cannot reach `complete` until
-CS25TA6W is terminal.**
+**NEXT ACTION — none on this card's own work; every box but one is closed.** What remains is its EHT
+`TRDD-CS25TA6W`: the 3 copy-pasted twins, carrying 6 more read-modify-writes, 3 of them on
+`~/.claude/settings.json`, and two of the three readers do not even check `existsSync` — so ENOENT
+and a parse failure are collapsed there by construction. `claude-adapter.ts` is the urgent one: it
+sits in `ChangePlugin`'s OWN call path, so the guard this card landed is bypassed one layer down on
+every adapter install. **Per the completion gate a parent whose flock is open is `blocked`, never
+`complete`** — so this card moves to `blocked` (`blocked-by: [CS25TA6W]`) the moment someone would
+otherwise close it, and its own work is finished now.
 
 ## Problem
 
@@ -178,13 +182,30 @@ audit, not the edit, is the deliverable.
       assertion is the load-bearing one; a mocked `fs` has no disk). Neuters: **N11** delete the
       guard → 7 red, BOTH positive controls green · **N12** collapse the non-object check → exactly
       4 red · **N13** add the forbidden import → the absence test reds, naming the offender
-- [ ] `InstallElement` PG01 and `ChangePlugin` G11 re-examined and their verdicts recorded — the
-      write guard changes the argument for both (see the STATE block), so this is a fresh decision,
-      not a re-read of the old one
+- [x] `InstallElement` PG01 and `ChangePlugin` G11 re-examined and their verdicts recorded:
+      **PG01 — did not need PROMOTING, it needed FIXING** (`a044f390`). It was never a mere WARN:
+      every arm sets `result.success = false`, PG02 turns that into `corePluginMissing: true` in the
+      registry, and the wake route refuses to start the agent on it — so a corrupt
+      `settings.local.json` made a CORRECT install report failure and brick the agent's wake. Live,
+      not blocked. Fixed by the general rule the card was circling: *an invariant may abort on a
+      positive VIOLATION and never on an UNKNOWN.* Neuter **N14** reds exactly the two behavioural
+      tests, both positive controls green.
+      **PG01 stays OUTSIDE the R51 window, for a sharper reason than before.** The write guard does
+      NOT clear the way: on a corrupt file an aborting PG01 runs the window's undo, which uninstalls
+      the plugin via CLI/adapter — real destruction no settings guard prevents — and its settings
+      restore would now additionally REFUSE, producing an R51.5 CRITICAL over a byte-untouched disk.
+      **G11 — the unreadable case correctly stays a WARN**, and is now principled rather than forced
+      by a blind reader (same rule as PG01). Auditing it found something else: measured across
+      `ChangePlugin`'s whole span, `result.success` is assigned twice and **both times to `true`** —
+      so a genuine "final state != expected" on a perfectly readable file also reports success.
+      Independent of the reader (it would be equally true with a perfect one), so filed as
+      **`TRDD-RO90UCKQ`** rather than folded in — hiding a false-success behind a reader fix is
+      exactly the conflation this card exists to avoid.
 - [x] tsc clean (0 lines) · suite **319 files / 4560 passed / 2 skipped** at `6c175813`, up from
       317/4547/2 with zero regressions — the advisor's named risk (a site depending on lenient
       overwrite) did not materialise
-- [ ] `trddgrep validate` exit 1 with only the known cards
+- [x] `trddgrep validate` exit 1 with only the 2 known pre-existing BODY-STATE-CLAIM ERRORs on
+      archived cards frozen by rule 12 — neither this card nor its EHT appears in any finding
 
 ## Approval log
 

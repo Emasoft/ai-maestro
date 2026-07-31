@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T14:24:49+0200
+updated: 2026-07-31T14:31:29+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa, aca4c858, be35ec55, 4d81aa69, 75a7d9e7]
 ---
 
 ## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
@@ -173,8 +173,11 @@ entry (G14c), G14e's portfolio entry, and G18's mesh broadcast — left the arra
 `txn.ok`. `MAX_HANDROLLED` 10 → **9**, `MIN_TRANSACTIONAL` 9 → **10**, `ChangeTitle` added to
 `MUST_BE_TRANSACTIONAL` (the membership guard that a bare count cannot make).
 
-**NEXT ACTION — rollback-test coverage for the remaining undos.** **EIGHT are pinned now**, all in
-`tests/services/change-title-window.test.ts`, each by a named neuter:
+**NEXT ACTION — G17 is the ONLY undo left to pin.** **TWELVE of the fourteen mutating gates are
+pinned**, all in `tests/services/change-title-window.test.ts`, each by a named neuter; **G15's undo
+is UNREACHABLE** on this path (below); **G17's** needs an install that FAILS, so the `claude` shim
+in `installClaudeShim` has to be made to fail for the target plugin — that is the whole remaining
+job. Then the card can move off `dev`.
 
 | undo | pinned by | commit |
 |---|---|---|
@@ -183,16 +186,25 @@ entry (G14c), G14e's portfolio entry, and G18's mesh broadcast — left the arra
 | **G16b** · **G16** | the `--agent` flag restored byte-for-byte; the plugin assertion + `not.toMatch(/INVALID STATE/)` is what caught G16's broken undo | `63e56bfa` |
 | **G14b** · **G14e** | both token stores back at their seeded counts — INDEPENDENTLY (`+0 to be 3` / `+0 to be 2`) | `aca4c858` |
 | **G14d** | the old title's role-plugin reinstalled; attributed by measurement, NOT by array order | `be35ec55` |
-| **G9a** | `githubRepo` restored on a rolled-back MAINTAINER assignment | this slice |
+| **G9a** | `githubRepo` restored on a rolled-back MAINTAINER assignment | `4d81aa69` |
+| **G11** · **G12** · **G13** · **G13b** | the governance pointers, each on the ONE transition that reaches it; G13 asserts BOTH halves of its cascade (pointer AND team block) | `75a7d9e7` |
 
-**Still live and unobserved: G11, G12, G13, G13b, G17** — and **G15, whose undo is UNREACHABLE on
-this path** (see below). G11/G12/G13/G13b need a COS/ORCH fixture (this file's agent is
-manager→autonomous); G17's quarantine undo needs an install that FAILS, so the `claude` shim has to
-be made to fail for the target plugin. The harness now has `failOn`, an observation ledger where
-every collaborator variant records under its OWN name, a live `awake` set, token stores modelled as
-STATE, `armLateDriftAbort()`, and a `driveChangeTitle(id, title, extra)` options bag.
-Verify: `tsc` 0 lines + the suite at **310/4448/2** + `trddgrep validate` exit 1 with only
+The harness now has `failOn`, an observation ledger where every collaborator variant records under
+its OWN name, a live `awake` set, token stores modelled as STATE, `armLateDriftAbort(extra,
+driftTitle)` armed on BOTH revocations, and a `driveChangeTitle(id, title, extra)` options bag.
+Verify: `tsc` 0 lines + the suite at **310/4452/2** + `trddgrep validate` exit 1 with only
 `7123D51A` and `C7A81642`.
+
+**TWO FIXTURE FACTS THE POINTER GATES MEASURED.** (a) **The abort anchor had to move**: G14e runs
+only when the OLD title was an issuer and the new one is not, so on a PROMOTION it never fires and
+an abort armed on it alone never arms — the pipeline succeeds and the test asserts a rollback that
+never happened. G14b has no title condition and sits beside it in the array (…G13b, **G14b**, G14e,
+G14d…). Both are armed now, `extra` hooks COMPOSED rather than replaced, and `driftTitle` is a
+parameter because writing `'manager'` is not a drift when the title being assigned IS manager.
+(b) **G11 is reachable only in the dangling-pointer state**: the obvious COS-of-my-own-team demotion
+is refused earlier by **G08b** (R4.7), so a demotion that reaches G11 is one where the agent is out
+of every team's `agentIds` while a team still lists them as `chiefOfStaffId` — the state G08b's own
+comment says the legitimate transfer flow produces, and **G11 is what cleans it up**.
 
 **G15's UNDO IS UNREACHABLE ON ANY COMPATIBILITY-ALTERING TITLE CHANGE — measured, not read.**
 G14d runs FIRST and uninstalls every role-plugin incompatible with the new title, so by the time

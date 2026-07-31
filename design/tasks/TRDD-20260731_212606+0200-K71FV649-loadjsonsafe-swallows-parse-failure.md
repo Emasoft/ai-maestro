@@ -1,11 +1,11 @@
 ---
 trdd-id: K71FV649
 title: loadJsonSafe returns an empty object on a PARSE failure, so every verification built on it reads unreadable as absent
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T21:26:06+0200
-updated: 2026-07-31T21:26:06+0200
+updated: 2026-07-31T21:34:48+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,20 +18,37 @@ approval-judge: ai-maestro
 approval-datetime: 2026-07-31T21:26:06+0200
 relevant-rules: [R51]
 blocked-by: []
-implementation-commits: []
+implementation-commits: [69e801a9]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body)
 
-**NOT STARTED.** Filed 2026-07-31 because the same defect blocked TWO separate promotions in one
-session, an hour apart, on two different pipelines. It was not filed speculatively — each instance
-was measured while doing other work, and in each the honest move was to leave a verification
-*un-promoted* rather than build on a reader that cannot fail.
+**THE DECISION IS MADE AND THE READER LANDED — `69e801a9`.** Filed 2026-07-31 because the same
+defect blocked TWO separate promotions in one session, an hour apart, on two different pipelines.
+Each instance was measured while doing other work, and in each the honest move was to leave a
+verification *un-promoted* rather than build on a reader that cannot fail.
 
-**NEXT ACTION:** decide the failure mode (below), then audit the callers — **36** call sites in
-`services/element-management-service.ts` alone, and the helper is COPY-PASTED in **4** more places
-(`lib/client-plugin-adapters/claude-adapter.ts`, `services/plugin-storage-service.ts`,
-`services/role-plugin-service.ts`, and the service itself). The fix is not one function.
+**SHAPE CHOSEN: a fourth one the card did not list — derive the LENIENT reader from a STRICT one.**
+`readJson()` returns `{ok:true,data} | {ok:false,reason:'missing'|'unreadable',error}`, and
+`loadJsonSafe` is now `read.ok ? read.data : {}`. This has neither cost the listed options carried:
+the `{}` default is byte-identical for all **36** callers so **none is touched** (option 1's problem
+— several sit inside `withSettingsLock` callbacks where a throw aborts a write path that used to
+proceed), and there is exactly ONE parse in one place so the strict and lenient answers **cannot
+drift** (option 3's problem). Options 1 and 2 are REJECTED on those grounds; option 3 is superseded
+by this stronger form of itself.
+
+**SO THE AUDIT SHRANK, and that is the real finding.** "Audit 36 call sites" was the right worry for
+a shape that changes the lenient contract. Deriving it changes nothing for them, so what remains is
+per-verification: *which checks should ask the sharper question* — one decision per promotion, each
+needing its own evidence, not a sweep.
+
+**NEXT ACTION.** `ChangePlugin`'s G11 is the first consumer and now reports *"exists but does not
+parse — state is UNKNOWN, not absent"* as its own case; it is deliberately still a WARN. Decide
+whether that case should now GATE (and whether G11 can become an R51.7 invariant given it), then
+`InstallElement`'s PG01 on the same terms. **The 4 copy-pasted twins are untouched** —
+`lib/client-plugin-adapters/claude-adapter.ts`, `services/plugin-storage-service.ts`,
+`services/role-plugin-service.ts` — and each needs the same treatment or an explicit "lenient by
+design" note.
 
 ## Problem
 
@@ -107,11 +124,14 @@ audit, not the edit, is the deliverable.
 
 ## Acceptance
 
-- [ ] The failure mode DECIDED and recorded here, with the rejected shapes and why
-- [ ] The reader distinguishes ENOENT from a parse failure, pinned by a test that seeds both and
-      asserts the answers differ
-- [ ] All call sites audited (36 in the service + the 4 copy-pasted twins), each either updated or
-      named as deliberately lenient
+- [x] The failure mode DECIDED and recorded here, with the rejected shapes and why — `69e801a9`,
+      and the shape that won was a fourth one this card did not list
+- [x] The reader distinguishes ENOENT from a parse failure, pinned by a test that seeds both and
+      asserts the answers differ (`tests/unit/read-json-distinguishes-unreadable.test.ts`, neuter
+      **N10** collapses them back and reds exactly the unreadable case + the distinction)
+- [ ] All call sites audited — **the service's 36 need no change** (the lenient contract is
+      byte-identical, which is why this shape was chosen); what remains is the **4 copy-pasted
+      twins**, each either derived the same way or named as deliberately lenient
 - [ ] `InstallElement` PG01 and `ChangePlugin` G11 re-examined and their verdicts recorded
 - [ ] tsc clean · suite at/above baseline · `trddgrep validate` exit 1 with only the two known cards
 

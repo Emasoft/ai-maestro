@@ -28,6 +28,7 @@ import { statePath } from '../ecosystem-constants'
 import { withTickLock } from './tick-lock'
 import { runTick } from './tick'
 import { writeTickStatus } from './tick-status'
+import { repairOneDeadSlot, type RepairResult } from './reauth-repair'
 
 /** The opt-in flag FILE (not an env var, per TRDD-CC9PY337). Its ABSENCE is the R16 default. */
 export const OAUTH_TICK_FLAG = statePath('oauth-rotator-tick.enabled')
@@ -67,6 +68,8 @@ export interface RunOneTickDeps {
   claudeRunningCheck?: () => Promise<boolean>
   /** Default `() => runTick()` — the actual rotation beat (stubbed in tests so zero I/O happens). */
   runTickImpl?: () => Promise<unknown>
+  /** Default `repairOneDeadSlot` — the re-capture leg, behind its OWN flag (TRDD-CVQJNW3A). */
+  repairImpl?: () => Promise<RepairResult>
 }
 
 /**
@@ -88,6 +91,37 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
     // `status` verb can READ it without ever running the tick (R16). A null (lock held) / undefined
     // (stub) / shapeless result is a silent no-op inside writeTickStatus — the last good value stays.
     writeTickStatus(result)
+    // REPAIR (TRDD-CVQJNW3A). The beat above can DETECT a dead slot and has nowhere to go —
+    // re-capture is the one repair it cannot perform, and on 2026-07-31 that gap cost the owner a
+    // manual login while the rotator watched it happen every 60 s. This is that leg.
+    //
+    // It carries its OWN flag, absent by default: the beat writes a keychain entry silently,
+    // whereas this OPENS A VISIBLE BROWSER WINDOW, so one switch must never arm both. With that
+    // flag absent the call returns 'disabled' before doing any work at all — not even the keychain
+    // reads a survey costs — so an unarmed server pays nothing for this being here.
+    //
+    // Skipped when the lock was held (`result === null`): another process is mid-beat, and two
+    // processes repairing at once is two browser windows. Re-using the tick's existing
+    // serialisation is free; inventing a second lock for the same invariant would not be.
+    if (result !== null) {
+      try {
+        const repair = await (deps.repairImpl ?? repairOneDeadSlot)()
+        // Outcomes only on the log surface, never the email — the same rule the beat's decision
+        // line follows. 'disabled' and 'nothing-to-do' are the overwhelmingly common answers and
+        // say nothing an operator needs, so they stay SILENT rather than training everyone to
+        // scroll past this line on the day it finally says something.
+        if (repair.outcome !== 'disabled' && repair.outcome !== 'nothing-to-do') {
+          console.warn(
+            `[oauth-rotator] reauth-repair: ${repair.outcome}${repair.detail ? ` (${repair.detail})` : ''}`,
+          )
+        }
+      } catch (err) {
+        // Its OWN catch. The outer one reports "server tick failed", which would be a FALSE report
+        // when the tick succeeded and only the repair leg threw — and a false attribution on a
+        // credential subsystem sends the next reader to the wrong file.
+        console.warn(`[oauth-rotator] reauth-repair failed (non-fatal): ${(err as Error)?.message ?? err}`)
+      }
+    }
   } catch (err) {
     console.warn(`[oauth-rotator] server tick failed (non-fatal): ${(err as Error)?.message ?? err}`)
   }

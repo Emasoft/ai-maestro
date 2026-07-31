@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T21:56:29+0200
-updated: 2026-07-31T23:04:08+0200
+updated: 2026-08-01T00:44:35+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -295,6 +295,51 @@ commit message that describes it by its current scope, buys coverage with a lie 
 **After the commit: `git mv` the file, then add the 2 assertions × 3 sites (mismatch → 409, genuine
 failure → 400).**
 
+## THE 13 ARE FIXED — and the fix was ONE harness change, not 13 test edits
+
+Named by running **N17** and reading the red names: all 13 in
+`tests/services/element-management-service.test.ts`, all under `ChangePlugin`. The cause was ONE
+thing, so the fix was one thing.
+
+**The overlay modelled EXISTENCE but not CONTENT.** The file already had an in-memory fs overlay
+whose own comment says why it exists — *"a mocked write is a no-op, so no post-install assertion in
+this file could ever discriminate"*. It tracked which paths exist and never what they contain, so a
+write still never fed back into a read. The same defect its author fixed one layer down.
+
+Three layers had to model the write, and each was found by the tests, not by reading:
+
+| layer | why it was needed |
+|---|---|
+| `writeFile` records the body; `readFile` consults it before the per-test baseline; `rename` MOVES it | `saveJsonSafe` writes `<path>.tmp.N` then renames — content must travel, or the atomic write lands an existing-but-empty file |
+| a successful `claude plugin <verb>` applies the CLI's OWN settings effect | **13 → 11 → 6**: user-scope writes are done BY THE CLI, so modelling `writeFile` cannot help — nothing calls it on that path |
+| …for LOCAL scope too, keyed on the **spawn cwd** | `claude` has no `--cwd` flag; the agent dir arrives as the cwd, and local install goes through the CLI as well |
+
+**Result: 103/103 green WITH N17 still applied** — the fixtures now model the write, so G11 finds
+nothing to mismatch even while it is wired to fail. Then N17 reverted.
+
+**A test I broke, and a requirement I invented.** The accurate CLI model broke
+`should clean up settings.local.json`, which asserted that a `writeFile` HAPPENED — true only
+because the CLI mock was a no-op, so the service's safeguard sweep was the only thing that could
+remove the key. It now asserts the OUTCOME, and the safeguard got its own test. My first draft of
+that test asserted the sweep removes a DIFFERENTLY-SPELLED key; it failed, correctly — the code says
+it *"only removes a key the CLI was already asked to remove"*. **The requirement was mine, not the
+service's.** Rewritten as the real fallback case (the CLI THROWS, the key must still go), and
+neutering the sweep reds that test and only that test — so the safeguard block, which nothing pinned
+before, is now pinned.
+
+## THE 409 IS PINNED AT ALL FOUR SITES
+
+`tests/api/local-plugins-verified-mismatch.test.ts` → **`plugin-routes-verified-mismatch.test.ts`**
+(`git mv`), plus 3 tests × the 3 unpinned sites. The tests immediately found that **the four routes
+do not share one guard** — `local-plugins` uses `requireAuth`, `role-plugins/install` gates on a
+SUDO TOKEN first (both verbs), `global-plugins` is system-owner-only. Mocking only `requireAuth`
+produced a 401 and a missing-export error: each route naming its own door.
+
+**The neuter is the point.** Reversing the two early-returns at all three sites (so `mismatch` is
+checked before `!success`) reds **exactly the 3 ORDER tests, one per site**, and nothing else. That
+ordering is invisible to `tsc` — both branches type-check and both return a Response — and reversed
+it reports a gate denial as "the change did not take effect".
+
 ## Acceptance
 
 - [x] Every caller of `ChangePlugin` enumerated with what it does on `success === false` — **15
@@ -309,11 +354,10 @@ failure → 400).**
       anything. `verified` is reported, `success` is untouched, and the compensation path is
       unaffected because it does not read the field — fail-safe rather than declare-or-else.
       Pinned by **N17**, which reds both R51 rollback tests
-- [ ] The 13 fixture tests that assert "install succeeded with the plugin absent from settings" have
-      mocks that MODEL the write — they currently encode the bug. **NARROWED, not yet named**: they
-      concentrate in `tests/services/element-management-service.test.ts` (102 tests / 31 readFile
-      mocks / 39 `success).toBe(true)`); the exact method is "apply N17, read the red names, revert",
-      deliberately NOT run while the index lock denies any git safety net. Section above
+- [x] The 13 fixture tests now MODEL the write — **all 13 named** (N17 → red names → revert), all in
+      `tests/services/element-management-service.test.ts` under `ChangePlugin`, and all fixed by ONE
+      harness change: the fs overlay tracked existence but not CONTENT, and the CLI's own settings
+      effect was unmodelled for both scopes. **103/103 green with N17 still applied.** Section above
 - [x] The `unreadable` case still does NOT gate — pinned twice: `verified === 'unknown'` at the
       service, and a route case asserting 200 on `unknown`
 - [x] Abort-vs-report (the R51 window question) — DECIDED: **REPORT**, on a structural fact rather
@@ -332,12 +376,13 @@ failure → 400).**
       stale-cleanup retry is gated on `!r.ok`, and a mismatch is exactly the dangling-entry symptom
       that path repairs. So the wiring SPLITS — 409 for enable/disable/update, stale-cleanup for
       install — and the install half is its own work with its own tests. Section above
-- [ ] The 409 wiring is pinned at ALL FOUR sites, not one — found by re-reading post-compaction:
-      wired at `local-plugins` + `install` POST + `install` DELETE + `global-plugins`, pinned only at
-      the first. Precedence (400 before 409) is CORRECT everywhere and is what `tsc` cannot see.
-      Needs a `git mv` to a route-neutral filename first, so it waits on the lock. Section above
-- [ ] COMMIT THE WORK — blocked 22:21 by `.git/index.lock`. Run `.janitor/state/PENDING-COMMIT.sh`
-      once the four difftool sessions are closed
+- [x] The 409 wiring is pinned at ALL FOUR sites — `git mv`'d to `plugin-routes-verified-mismatch`
+      and 3 tests added per unpinned site. The ORDER neuter (reverse the two early-returns) reds
+      exactly the 3 ORDER tests, one per site. Section above
+- [x] COMMIT THE WORK — the 22:21 `.git/index.lock` was STALE AND MINE (an interrupted `git commit`;
+      0 bytes, no holder). I misattributed it to the user's `git difftool` sessions for 1h44m without
+      ever checking their `cwd` — **three of the four were in other repositories**. Landed as
+      `886a8a36` + `3d478407` + `6f0460a5`
 
 ## Approval log
 

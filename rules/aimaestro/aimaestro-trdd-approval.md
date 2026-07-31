@@ -799,13 +799,29 @@ heartbeat cadence / MANAGER idle sweep) — **never** on every creation:
      A `column: blocked` with empty `blocked-by`, or a non-empty `blocked-by`
      with `column ≠ blocked`, is drift → flag.
    - **Checklist-gated completion (the hard gate):** a TRDD may sit in a
-     terminal column `column ∈ {complete, published, live}` ONLY when every
-     `- [ ]` box in its bottom checklist is `- [x]`. A terminal column with
-     ANY unchecked box is a **false completion** → move it back to its
-     `pre-block-column:` (or `dev`) and flag. A fully-checked checklist in a
-     non-terminal column is simply not-yet-advanced (not a violation).
+     terminal column `column ∈ {complete, published, live}` ONLY when its
+     bottom checklist **EXISTS (≥1 box)** *and* every `- [ ]` box in it is
+     `- [x]`. A terminal column with ANY unchecked box is a **false
+     completion**, and so is a terminal column with **NO checklist at all** →
+     move it back to its `pre-block-column:` (or `dev`) and flag. A
+     fully-checked checklist in a non-terminal column is simply
+     not-yet-advanced (not a violation), and so is an OPEN card with no
+     checklist — the gate binds the TRANSITION INTO a terminal column, never
+     the card's whole life.
      This gate is INDEPENDENT of, and additional to, the NPT/EHT gate in
      step 5: BOTH must pass for a TRDD to be `complete`/`published`/`live`.
+     **The "≥1 box" half was added 2026-07-31 (TRDD-9QV4ZCYY) because without
+     it the gate was VACUOUS**: stated only in terms of boxes that are
+     *unchecked*, it passes on a card with no boxes at all — a gate that
+     passes because it read nothing. Measured on ai-maestro that day: **87 of
+     108** open cards and **46** archived `completed` cards carried no
+     checklist, so the "hard gate" was inert on the majority of the corpus it
+     governs. **GRANDFATHER BOUNDARY:** a card already in a terminal column is
+     FROZEN (IND base step 12), so those 46 cannot be repaired and are not
+     flagged; 43 of them predate the rule, and the 3 that do not
+     (`E9BZ5P7S`, `OWO449MR`, `RCL2HC9Y`, all closed 2026-07-30) are named
+     here so the boundary is auditable rather than asserted. What the fix
+     changes is every terminal transition FROM 2026-07-31 ON.
 6. **Check the approval record:** `approved:` agrees with `column:` per the
    invariant above; `approval-judge`/`approval-datetime` are present exactly
    when `approved ∈ {true, rejected}`; and the judge's authority is at or

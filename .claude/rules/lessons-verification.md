@@ -16,6 +16,7 @@ injected into every turn; keep them that way. Add a line only when a defect actu
 - Encode a guard at the granularity the BUG had — janitor#123 was COLUMN-granular and my per-table `since` could not express it, making the branch unreachable by construction, not merely untested.
 - When one ladder step is all that ships, a version-skew guard cannot be exercised end-to-end — export the pure check and inject a synthetic spec, or it stays unverified until the bug recurs.
 - A test that passes for an unknown reason is a failure: isolate it (`-t "<full name>"`) before believing it.
+- A PLAN'S NAMED INJECTION POINT CAN BE UNREACHABLE IN THE SCENARIO THAT REACHES THE GATE YOU CARE ABOUT — and the informative candidate may be the one that does NOT abort: my card said "fail G11's `updateTeam`", but G11/G12/G13b are gated on a title the manager→autonomous path never holds, so `updateTeam` is never called. Probing all four post-gate collaborators found two reachable ones, and the finding was the one that returned `success: TRUE` over a half-executed cascade — invisible to any assertion on the return value. Probe every candidate and read the STORE, not the verdict.
 - `vi.clearAllMocks()` clears CALLS, not IMPLEMENTATIONS — a mock overridden in one test leaks into every test after it.
 - Route every mock through `(...a) => mockX(...a)` and restore it in `beforeEach`; an inline `vi.fn(async () => …)` in the factory cannot be restored.
 - Pinning only the SUCCESS path reads as coverage — assert what happens when the operation fails, or the suite is decorative.

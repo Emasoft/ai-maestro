@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T08:48:53+0200
+updated: 2026-07-31T08:53:30+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -157,12 +157,39 @@ A `vi.mock` factory closes over the object it was handed at first import and tha
 `vi.resetModules()`, so reassigning it per test left the mocks writing to the PREVIOUS world — the
 pipeline really did call `removeManager()` and the assertion read an untouched object.
 
-**NEXT ACTION:** the characterization test of the window — `world.failOn = { updateTeam: 1 }` (G11),
-asserting what is LEFT BEHIND: teams still `blocked`, `managerId` still null, the title already
-changed. That is the state the retrofit must later invert, and pinning it BEFORE the restructure is
-what makes the restructure checkable rather than merely plausible.
+**THE WINDOW IS NOW CHARACTERIZED** (`74de88d7`), and the exercise found a live defect.
 
-**THEN** the retrofit proper — restructure into `runAioPipeline` PRE/EXE/POST, preserving the
+*The injection point this card named did not exist.* It said `failOn = { updateTeam: 1 }` at G11 —
+but G11/G12/G13b are gated on `oldTitle` being chief-of-staff/orchestrator or `newTitle` being one
+of those, so **`updateTeam` is NEVER CALLED on a manager→autonomous demotion**. Probing all four
+post-G10 collaborators is what found the two that are reachable:
+
+| injected failure | `success` | manager | teams |
+|---|---|---|---|
+| `removeManager` | **false** | INTACT | unblocked |
+| `blockAllTeams` | **TRUE** | **GONE** | **unblocked** |
+| `revokeTokensForAgent` / `revokeTokensFromIssuer` | true | gone | blocked |
+
+Row 1 is the G14-first ordering paying off, observed rather than argued: `removeManager()` is
+unwrapped so its failure aborts, and because G14 already wrote the title the residue is exactly the
+mild one the ordering comment promises — a stale manager pointer, not a decapitated host.
+
+**Row 2 is a LIVE DEFECT, not merely a missing rollback.** G10 is a CASCADE — remove the manager,
+*then* block every team, because a team must not operate without one. Only the second half is
+wrapped (`catch { ops.push('G10: WARN — blockAllTeams failed') }`), so when it fails the pipeline
+CONTINUES and returns `success: true` over a host with **no manager and unblocked teams** — the
+precise state the cascade exists to prevent, reported to the caller as a clean success. The only
+trace is an op nobody reads. That is R51's *"swallowing a per-item failure into a warn converts one
+bad item into an invalid system"*, in production, on the governance-critical pipeline.
+
+**Deliberately NOT hot-fixed here.** Wrapping the two halves by hand is a hand-rolled compensation —
+the exact thing R51 says to replace with the runner — and it would be superseded by the retrofit
+that is this card's next step. It is pinned instead, so the fix is checkable: the neuter that reds
+that test IS the fix's own shape (un-wrap `blockAllTeams` so its failure aborts). **When the
+retrofit lands, that characterization test MUST be updated — its failure is the signal the retrofit
+worked.**
+
+**NEXT ACTION:** the retrofit proper — restructure into `runAioPipeline` PRE/EXE/POST, preserving the
 G14-first ordering above. **Do NOT switch G14b/G14e to the compensable forms yet:** without a `ctx` to
 hold the returned handle there is nowhere to register the undo, so the switch would be churn that
 LOOKS like progress. It belongs in the same change that introduces the gate array.
@@ -981,9 +1008,12 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       3 tests, 0-IMPACT clean, two neuters with disjoint red sets. Writing the caller falsified two
       stubs a read had passed over: an inverted `checkIbctScope` shape (killed every call at G0b)
       and a no-op shim (made G17 "recover" a healthy agent on every run)
-- [ ] CHARACTERIZE the window before restructuring — inject at G11 (`failOn: {updateTeam: 1}`) and
-      assert what is left behind (teams blocked, no manager, title already written). The retrofit's
-      acceptance criterion is that it INVERTS exactly this
+- [x] CHARACTERIZE the window before restructuring (`74de88d7`) — the card's own injection point
+      (G11 `updateTeam`) turned out UNREACHABLE on a manager→autonomous demotion; probing all four
+      post-G10 collaborators found the two that are, and with them a LIVE DEFECT: a failure in
+      `blockAllTeams` leaves the host with no manager and unblocked teams **and returns
+      `success: true`**. Pinned, not hot-fixed — the retrofit is the fix, and the neuter that reds
+      that test is the fix's own shape
 - [x] `ChangeTeam` / `DeleteTeam` transactional — both verified 2026-07-31 at their runner call
       sites (`ChangeTeam` runs TWO sequences, `runGateSequence(removeGates, tc)` and
       `(addGates, tc)`; `DeleteTeam` one). They had already left the hand-rolled list; this box was

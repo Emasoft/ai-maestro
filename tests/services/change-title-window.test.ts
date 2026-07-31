@@ -186,8 +186,11 @@ describe('ChangeTitle happy path (the harness drives the real pipeline)', () => 
 
     expect(H.world.managerId).toBeNull()              // G10 removeManager
     expect(H.world.teams[0].blocked).toBe(true)       // G10 blockAllTeams — the fleet is asleep
-    expect(H.world.calls).toContain('revokeTokensForAgent')      // G14b
-    expect(H.world.calls).toContain('revokeTokensFromIssuer')    // G14e
+    // The COMPENSABLE forms specifically (R51, TRDD-DQ6XN2VP): both do the identical revocation,
+    // but only these hand back a restore handle, so reverting either gate to the count-only
+    // wrapper — which is what ChangeTitle used to call — reds this assertion.
+    expect(H.world.calls).toContain('revokeTokensForAgentCompensable')      // G14b
+    expect(H.world.calls).toContain('revokeTokensFromIssuerCompensable')    // G14e
   })
 
   /**
@@ -280,8 +283,8 @@ describe('ChangeTitle window — what a mid-pipeline failure actually leaves beh
     // THE LOAD-BEARING ASSERTION — what makes this a DEFERRED fail and not an abort at G10.
     // Both token stores were still drained, so no stale-title credential outlives the demotion.
     // An abort-at-G10 implementation passes every assertion above and FAILS these two.
-    expect(H.world.calls).toContain('revokeTokensForAgent')
-    expect(H.world.calls).toContain('revokeTokensFromIssuer')
+    expect(H.world.calls).toContain('revokeTokensForAgentCompensable')
+    expect(H.world.calls).toContain('revokeTokensFromIssuerCompensable')
 
     // The op is no longer a WARN nobody reads — it names the broken invariant.
     expect((result.operations ?? []).some((op: string) => /G10: CASCADE BROKEN/.test(op))).toBe(true)
@@ -308,20 +311,27 @@ describe('ChangeTitle window — what a mid-pipeline failure actually leaves beh
  * THE INJECTION POINT WAS MEASURED, NOT ASSUMED. G14 checks its write twice — the RETURN VALUE of
  * `updateAgent` for memory, then a fresh `readFileSync` for disk — so a perturbation applied inside
  * `updateAgent` reds G14, never G22, and the test would pin the wrong gate. G14e
- * (`revokeTokensFromIssuer`) is the last mocked collaborator that provably runs after G14 completes,
- * and between it and G22 there are ZERO `getAgent` calls — G22 is the only reader of the cache from
- * that point on, so corrupting it cannot derail an intermediate gate.
+ * (`revokeTokensFromIssuerCompensable`) is the last mocked collaborator that provably runs after G14
+ * completes, and between it and G22 there are ZERO `getAgent` calls — G22 is the only reader of the
+ * cache from that point on, so corrupting it cannot derail an intermediate gate.
+ *
+ * THE ANCHOR IS THE NAME THE PIPELINE ACTUALLY CALLS. When ChangeTitle moved to the compensable
+ * revocation for R51, the count-only stub stopped being invoked — and because the harness recorded
+ * only that one, the hook silently never fired and all three tests below passed over a pipeline
+ * nothing had perturbed. A hook keyed on a call that no longer happens is indistinguishable from a
+ * gate that found no drift, which is exactly the failure these tests exist to catch.
  */
 describe('ChangeTitle G22 — the final verification gate', () => {
   /**
    * Arm `fn` at G14e, and keep it armed for every later registry flush.
    *
-   * Anchoring to a call the happy-path test already asserts (`revokeTokensFromIssuer`) is what makes
-   * "the perturbation ran" an observation rather than an assumption — `after` fires only on success,
-   * so the hook running proves the gate ran.
+   * Anchoring to a call the happy-path test already asserts
+   * (`revokeTokensFromIssuerCompensable`) is what makes "the perturbation ran" an observation
+   * rather than an assumption — `after` fires only on success, so the hook running proves the gate
+   * ran, and the parity test above independently proves that name is the one the pipeline calls.
    */
   function perturbAfterG14e(fn: () => void): void {
-    H.world.after = { revokeTokensFromIssuer: () => { H.perturb.run = fn; fn() } }
+    H.world.after = { revokeTokensFromIssuerCompensable: () => { H.perturb.run = fn; fn() } }
   }
 
   /** Every registry row, with the agent's title forced to `title` — the shape registry.json holds. */

@@ -2728,6 +2728,10 @@ export async function ChangeTitle(
       }
       /** G13b: the ONE team slot this gate re-pointed, and what it held before. */
       g13b?: { teamId: string; field: 'orchestratorId' | 'chiefOfStaffId'; priorValue: string | null }
+      /** G14b: the AID revocation handle — `restore()` re-inserts the exact records removed. */
+      g14bRevocation?: { count: number; restore: () => Promise<number> }
+      /** G14e: the portfolio issuer handle — `restore()` flips the touched rows back to active. */
+      g14eRevocation?: { count: number; restore: () => Promise<number> }
     } = {}
 
     // `undo` is OPTIONAL and, today, INERT: the hand-rolled loop below calls `gate.run()` and
@@ -3357,16 +3361,26 @@ export async function ChangeTitle(
         what: 'AID governance tokens revoked (old title invalidated)',
         run: async () => {
           try {
-            const { revokeTokensForAgent } = await import('@/lib/aid-token')
-            const revoked = await revokeTokensForAgent(agentId)
-            if (revoked > 0) {
-              ops.push(`G14b: Revoked ${revoked} AID governance token(s) (old title invalidated)`)
+            // The COMPENSABLE variant, not the count-only wrapper. Both do the identical
+            // revocation; this one additionally hands back the removed records, so the undo
+            // re-inserts exactly what was taken rather than guessing. It was built for
+            // DeleteAgent G06 — ChangeTitle was simply calling the wrong one.
+            const { revokeTokensForAgentCompensable } = await import('@/lib/aid-token')
+            ctx.g14bRevocation = await revokeTokensForAgentCompensable(agentId)
+            if (ctx.g14bRevocation.count > 0) {
+              ops.push(`G14b: Revoked ${ctx.g14bRevocation.count} AID governance token(s) (old title invalidated)`)
             } else {
               ops.push(`G14b: No active AID tokens to revoke`)
             }
           } catch {
             ops.push(`G14b: WARN — Token revocation skipped (aid-token module error)`)
           }
+        },
+        // Nothing recorded ⇒ the import or the revocation threw and nothing was removed. A handle
+        // with count 0 restores nothing, so this is safe to call unconditionally once set.
+        undo: async () => {
+          if (!ctx.g14bRevocation) return
+          await ctx.g14bRevocation.restore()
         },
       },
       // ── GATE 14e: Revoke portfolio tokens this agent MINTED (R28) ─────
@@ -3385,8 +3399,11 @@ export async function ChangeTitle(
             effectiveTitle === 'manager' || effectiveTitle === 'chief-of-staff'
           if (oldWasIssuer && !newIsIssuer) {
             try {
-              const { revokeTokensFromIssuer } = await import('@/lib/portfolio-store')
-              const revoked = await revokeTokensFromIssuer(agentId)
+              // Compensable variant, same reasoning as G14b: the lossless `active → revoked` flip
+              // is undone from the exact `(subjectId, token_id)` list it touched.
+              const { revokeTokensFromIssuerCompensable } = await import('@/lib/portfolio-store')
+              ctx.g14eRevocation = await revokeTokensFromIssuerCompensable(agentId)
+              const revoked = ctx.g14eRevocation.count
               if (revoked > 0) {
                 const { emitPortfolioOp } = await import('@/lib/portfolio-ledger')
                 void emitPortfolioOp(
@@ -3407,6 +3424,15 @@ export async function ChangeTitle(
               ops.push(`G14e: WARN — portfolio token revocation skipped: ${pErr instanceof Error ? pErr.message : pErr}`)
             }
           }
+        },
+        // Flips the recorded rows back to `active`. What this does NOT undo is the
+        // `emitPortfolioOp` above: a ledger is append-only, so a rollback leaves a
+        // `revoke_portfolio_token` entry for a revocation that was reverted — EXACTLY the shape
+        // already decided for G14c, and it moves out of the array on the same terms, in the same
+        // final slice. Leaving it here now is today's behaviour unchanged, not a new residue.
+        undo: async () => {
+          if (!ctx.g14eRevocation) return
+          await ctx.g14eRevocation.restore()
         },
       },
 

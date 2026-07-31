@@ -180,11 +180,21 @@ export function teamRegistryMock(world: ChangeTitleWorld) {
 }
 
 /** The two token stores G14b/G14e revoke. Both report a non-zero count so the gate is provably
- *  reached — a stub returning 0 makes "did it revoke?" and "was it skipped?" the same observation. */
+ *  reached — a stub returning 0 makes "did it revoke?" and "was it skipped?" the same observation.
+ *
+ *  EVERY variant records its OWN name. The compensable forms used to be silent stubs — present so
+ *  a destructure would not throw, absent from the ledger — which made them decorative: when
+ *  ChangeTitle switched to them for R51, the parity assertions saw no revocation at all and the
+ *  `after` hook keyed on the count-only name never fired, so three post-condition tests passed for
+ *  the wrong reason. Recording the SPECIFIC name (not a shared operation label) is also what lets a
+ *  test pin WHICH form the pipeline calls: reverting to the count-only wrapper reds a named test. */
 export function aidTokenMock(world: ChangeTitleWorld) {
   return {
     revokeTokensForAgent: async () => { step(world, 'revokeTokensForAgent'); return world.aidTokens },
-    revokeTokensForAgentCompensable: async () => ({ count: world.aidTokens, restore: async () => world.aidTokens }),
+    revokeTokensForAgentCompensable: async () => {
+      step(world, 'revokeTokensForAgentCompensable')
+      return { count: world.aidTokens, restore: async () => world.aidTokens }
+    },
     countTokensForAgent: () => world.aidTokens,
   }
 }
@@ -192,10 +202,10 @@ export function aidTokenMock(world: ChangeTitleWorld) {
 export function portfolioStoreMock(world: ChangeTitleWorld) {
   return {
     revokeTokensFromIssuer: async () => { step(world, 'revokeTokensFromIssuer'); return world.portfolioTokens },
-    revokeTokensFromIssuerCompensable: async () => ({
-      count: world.portfolioTokens,
-      restore: async () => world.portfolioTokens,
-    }),
+    revokeTokensFromIssuerCompensable: async () => {
+      step(world, 'revokeTokensFromIssuerCompensable')
+      return { count: world.portfolioTokens, restore: async () => world.portfolioTokens }
+    },
   }
 }
 

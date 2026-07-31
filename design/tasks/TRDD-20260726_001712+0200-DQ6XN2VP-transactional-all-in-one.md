@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T21:11:14+0200
+updated: 2026-07-31T21:18:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -41,11 +41,21 @@ callee identifier and a renaming destructure defeats that. Fixed in the scanner 
 positive control that is non-vacuous by construction. **The `PG03`/`PG07` line-cite correction still
 stands.**
 
-**THE PARITY BOX IS NOW REACHABLE.** It reads *"unreachable until all 19 are retrofitted"* — all 19
-now are, so *zero uncompensated mutating gates across all 19 pipelines* is a test someone can
-actually write. `findUncompensatedGates` already enforces it at RUNTIME for every pipeline under the
-runner, so the remaining value is a STATIC assertion that no pipeline drifts back out. That, and the
-R51.7-invariants box, are what keep this card open.
+**THE PARITY BOX WAS REACHABLE, AND IS NOW DONE** (`5ac15046`). It read *"unreachable until all 19
+are retrofitted"*; all 19 now are, so the static assertion exists:
+`tests/governance/aio-txn-10-gate-compensation-parity.test.ts` — **61 gates, 56 with an `undo`, 5
+`readOnly`, 0 naked**. Its value over the runtime pre-flight is that a pipeline no test DRIVES would
+otherwise ship its violation and fail at PRECHECK on a user's machine, mid-operation. Its value over
+the COMPILER was measured, not argued: `Gate.undo` is optional, so deleting one leaves `tsc` silent
+while this test names the gate.
+
+**ONE BOX LEFT: the R51.7 INVARIANTS.** *"Each pipeline declares its INVARIANTS (not only its
+gates) — leftovers and contradictions are two different ways to be invalid."* Measured: **exactly
+one** `invariants:` callback is passed to a runner in the whole service — `ChangeTitle`'s, at
+`:4404`, where G22's drift check moved out of the gate array. (`CreateAgent`'s G05 runs
+`enforceAgentInvariants` as a GATE; that is the agent-invariant REGISTRY, not the runner's
+success-path hook — a distinction worth keeping, since the two are one grep apart.) That box is what
+keeps this card open.
 
 ## ⏵ EIGHT OF THE NINE LANDED 2026-07-31 (`2613c907`) — ONE left, and it is not more of the same
 
@@ -1668,8 +1678,18 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       `MAX_HANDROLLED`. NOT the parity box below: this asks "is it under the runner", which is
       answerable today; that one asks "are its gates compensated", which `findUncompensatedGates`
       already guarantees at runtime for every pipeline that IS under the runner
-- [ ] Parity test: zero uncompensated mutating gates across all 19 pipelines — unreachable until
-      all 19 are retrofitted, since the runtime pre-flight only sees pipelines that use the runner
+- [x] Parity test: zero uncompensated mutating gates across all 19 pipelines — **LANDED
+      `5ac15046`** (`tests/governance/aio-txn-10-gate-compensation-parity.test.ts`), the moment
+      `InstallElement` made it reachable. 61 gates over 20 call sites; 56 carry an `undo`, 5 are
+      `readOnly: true`, **0 naked**. It is NOT redundant with the compiler, and that was measured
+      rather than argued: `Gate.undo` is OPTIONAL, so neuter **N7b** (DELETE ChangeMetadata's EXE
+      undo) leaves `tsc --noEmit` at **0 lines** while this test reds naming `ChangeMetadata:EXE`.
+      *An earlier neuter that RENAMED the key was caught by tsc — which would have over-credited
+      the test; the honest neuter is the deletion.* Neuter **N8** (disable identifier resolution)
+      shows why an unresolved shape is a FAILURE and never a skip: the six biggest pipelines
+      (`CreateAgent`, `DeleteAgent`, `ChangeTitle`, `ChangeClient`, `ChangeTeam` ×2) pass their gate
+      array as a const identifier, so without resolution the parity assertion stays GREEN over a
+      fraction of the corpus
 - [ ] Each pipeline declares its R51.7 INVARIANTS (not only its gates) — leftovers and
       contradictions are two different ways to be invalid, and the KERM18NX residue check only
       catches the first

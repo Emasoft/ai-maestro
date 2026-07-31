@@ -3288,6 +3288,122 @@ export async function ChangeTitle(
           }
         },
       },
+
+      // ── GATE 16: Install new role-plugin ─────────────────────
+      // It opens by SNAPSHOTTING G15's `targetPluginName` into a const. That is not style: the
+      // value is a `let` assigned inside ANOTHER gate's closure, and TypeScript drops the
+      // narrowing of any such variable inside every nested function — so the guard below would
+      // not prove it non-null for the `() => adapter.install(...)` thunk. A const the guard
+      // narrows once carries that proof everywhere, without a `!` that would stop protecting
+      // the call site the day the guard changes.
+      {
+        id: 'G16',
+        what: 'new role-plugin installed',
+        run: async () => {
+          const target = targetPluginName
+          if (!options?.skipPluginSync && clientSupportsRolePlugins && target && agentDir && target !== currentPluginName) {
+            try {
+              if (needsPluginConversion) {
+                // Non-Claude client: convert plugin to target format and install via adapter
+                const { convertAndStorePlugin, emitForClient } = await import('@/services/plugin-storage-service')
+                const { getAdapter } = await import('@/lib/client-plugin-adapters')
+                const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+                const targetClientType = agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro'
+                const targetPid = clientTypeToProviderId(targetClientType)
+                await convertAndStorePlugin(target, 'claude', [targetClientType])
+                const emittedDir = await emitForClient(target, targetClientType)
+                if (emittedDir && targetPid) {
+                  const adapter = await getAdapter(targetClientType)
+                  if (adapter) {
+                    const installResult = await inAdapterContext('ChangeTitle', () => adapter.install(
+                      { name: target, clientType: targetClientType, storageDir: emittedDir, providerId: targetPid },
+                      agentDir,
+                      { scope: 'local' }
+                    ))
+                    if (installResult.success) {
+                      result.installedPlugin = target
+                      ops.push(`G16: Converted + installed role-plugin "${target}" for ${agentClientType} via adapter`)
+                    } else {
+                      ops.push(`G16: WARN — Adapter install failed: ${installResult.error}`)
+                    }
+                  } else {
+                    ops.push(`G16: WARN — No adapter for ${agentClientType}`)
+                  }
+                } else {
+                  ops.push(`G16: WARN — Failed to emit plugin "${target}" for ${agentClientType}`)
+                }
+              } else {
+                // Claude client: install directly (existing behavior)
+                await installPluginLocally(target, agentDir, targetMarketplace)
+                result.installedPlugin = target
+                ops.push(`G16: Installed role-plugin "${target}"`)
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              ops.push(`G16: WARN — Failed to install "${target}": ${msg}`)
+            }
+          } else if (options?.skipPluginSync) {
+            ops.push(`G16: Plugin install skipped (skipPluginSync=true)`)
+          } else if (!target) {
+            ops.push(`G16: No plugin to install for ${effectiveTitle || 'none'}`)
+          } else {
+            ops.push(`G16: Plugin "${target}" already installed — no change`)
+          }
+        },
+      },
+
+      // ── GATE 16b: Sync programArgs `--agent` flag to the new main-agent ──
+      // Without this rewrite, the agent's wake command keeps pointing at
+      // the OLD plugin's main-agent (or at no plugin at all), so Claude
+      // either loads a stale persona or falls back to the default Claude
+      // assistant — exactly the symptom witnessed 2026-05-06 with jack-bot
+      // (MANAGER plugin installed but `--agent` still
+      // `backend-infrastructure-engineer-main-agent`).
+      //
+      // Only Claude uses `--agent <name>` to load personas; for non-Claude
+      // clients the persona is loaded via per-client manifest files written
+      // by the adapter system, so we MUST NOT touch their programArgs here.
+      //
+      // It WRITES the registry (programArgs), so commit 3 owes it an undo that restores the
+      // previous `--agent` flag — it is not the pure read that its WARN-and-continue shape
+      // makes it look like.
+      {
+        id: 'G16b',
+        what: 'programArgs --agent flag synced to the new main-agent',
+        run: async () => {
+          const target = targetPluginName
+          if (
+            agentClientType === 'claude' &&
+            currentPluginName !== target &&
+            !options?.skipPluginSync
+          ) {
+            try {
+              const { setClaudeAgentFlag, mainAgentNameForPlugin } = await import('@/lib/program-args')
+              const desiredMainAgent = target ? mainAgentNameForPlugin(target) : null
+              const oldArgs = agent.programArgs || ''
+              const newArgs = setClaudeAgentFlag(oldArgs, desiredMainAgent)
+              if (newArgs !== oldArgs) {
+                const updated = await updateAgent(agentId, { programArgs: newArgs })
+                if (updated) {
+                  ops.push(`G16b: Rewrote programArgs --agent flag: "${oldArgs}" → "${newArgs}"`)
+                  agent.programArgs = newArgs
+                } else {
+                  ops.push(`G16b: WARN — updateAgent returned null when rewriting programArgs`)
+                }
+              } else {
+                ops.push(`G16b: programArgs --agent flag already in sync`)
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              ops.push(`G16b: WARN — Failed to rewrite programArgs: ${msg}`)
+            }
+          } else if (agentClientType !== 'claude') {
+            ops.push(`G16b: Skipped (client="${agentClientType}" — persona not loaded via --agent)`)
+          } else {
+            ops.push(`G16b: Skipped (plugin unchanged or skipPluginSync)`)
+          }
+        },
+      },
     ]
 
     // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
@@ -3309,105 +3425,6 @@ export async function ChangeTitle(
     // Its position here, AFTER the governance mutations, was the bug: a failed title write left
     // the host with no MANAGER and every team blocked. Nothing between here and there depends on
     // it having run last.
-
-    // ── GATE 16: Install new role-plugin ─────────────────────
-    if (!options?.skipPluginSync && clientSupportsRolePlugins && targetPluginName && agentDir && targetPluginName !== currentPluginName) {
-      // The guard above proves `targetPluginName` is non-null, but G15 now assigns it from INSIDE
-      // its gate closure, and TypeScript drops the narrowing of any `let` that a nested function
-      // writes — so the proof is lost again inside the `() => adapter.install(...)` thunk below.
-      // Bind it once here: a const carries the guard's proof into every callback, where a `!`
-      // would only silence the checker and would stop protecting this call site the day the
-      // guard changes.
-      const resolvedPluginName: string = targetPluginName
-      try {
-        if (needsPluginConversion) {
-          // Non-Claude client: convert plugin to target format and install via adapter
-          const { convertAndStorePlugin, emitForClient } = await import('@/services/plugin-storage-service')
-          const { getAdapter } = await import('@/lib/client-plugin-adapters')
-          const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
-          const targetClientType = agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro'
-          const targetPid = clientTypeToProviderId(targetClientType)
-          await convertAndStorePlugin(targetPluginName, 'claude', [targetClientType])
-          const emittedDir = await emitForClient(targetPluginName, targetClientType)
-          if (emittedDir && targetPid) {
-            const adapter = await getAdapter(targetClientType)
-            if (adapter) {
-              const installResult = await inAdapterContext('ChangeTitle', () => adapter.install(
-                { name: resolvedPluginName, clientType: targetClientType, storageDir: emittedDir, providerId: targetPid },
-                agentDir,
-                { scope: 'local' }
-              ))
-              if (installResult.success) {
-                result.installedPlugin = targetPluginName
-                ops.push(`G16: Converted + installed role-plugin "${targetPluginName}" for ${agentClientType} via adapter`)
-              } else {
-                ops.push(`G16: WARN — Adapter install failed: ${installResult.error}`)
-              }
-            } else {
-              ops.push(`G16: WARN — No adapter for ${agentClientType}`)
-            }
-          } else {
-            ops.push(`G16: WARN — Failed to emit plugin "${targetPluginName}" for ${agentClientType}`)
-          }
-        } else {
-          // Claude client: install directly (existing behavior)
-          await installPluginLocally(targetPluginName, agentDir, targetMarketplace)
-          result.installedPlugin = targetPluginName
-          ops.push(`G16: Installed role-plugin "${targetPluginName}"`)
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        ops.push(`G16: WARN — Failed to install "${targetPluginName}": ${msg}`)
-      }
-    } else if (options?.skipPluginSync) {
-      ops.push(`G16: Plugin install skipped (skipPluginSync=true)`)
-    } else if (!targetPluginName) {
-      ops.push(`G16: No plugin to install for ${effectiveTitle || 'none'}`)
-    } else {
-      ops.push(`G16: Plugin "${targetPluginName}" already installed — no change`)
-    }
-
-    // ── GATE 16b: Sync programArgs `--agent` flag to the new main-agent ──
-    // Without this rewrite, the agent's wake command keeps pointing at
-    // the OLD plugin's main-agent (or at no plugin at all), so Claude
-    // either loads a stale persona or falls back to the default Claude
-    // assistant — exactly the symptom witnessed 2026-05-06 with jack-bot
-    // (MANAGER plugin installed but `--agent` still
-    // `backend-infrastructure-engineer-main-agent`).
-    //
-    // Only Claude uses `--agent <name>` to load personas; for non-Claude
-    // clients the persona is loaded via per-client manifest files written
-    // by the adapter system, so we MUST NOT touch their programArgs here.
-    if (
-      agentClientType === 'claude' &&
-      currentPluginName !== targetPluginName &&
-      !options?.skipPluginSync
-    ) {
-      try {
-        const { setClaudeAgentFlag, mainAgentNameForPlugin } = await import('@/lib/program-args')
-        const desiredMainAgent = targetPluginName ? mainAgentNameForPlugin(targetPluginName) : null
-        const oldArgs = agent.programArgs || ''
-        const newArgs = setClaudeAgentFlag(oldArgs, desiredMainAgent)
-        if (newArgs !== oldArgs) {
-          const updated = await updateAgent(agentId, { programArgs: newArgs })
-          if (updated) {
-            ops.push(`G16b: Rewrote programArgs --agent flag: "${oldArgs}" → "${newArgs}"`)
-            agent.programArgs = newArgs
-          } else {
-            ops.push(`G16b: WARN — updateAgent returned null when rewriting programArgs`)
-          }
-        } else {
-          ops.push(`G16b: programArgs --agent flag already in sync`)
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        ops.push(`G16b: WARN — Failed to rewrite programArgs: ${msg}`)
-      }
-    } else if (agentClientType !== 'claude') {
-      ops.push(`G16b: Skipped (client="${agentClientType}" — persona not loaded via --agent)`)
-    } else {
-      ops.push(`G16b: Skipped (plugin unchanged or skipPluginSync)`)
-    }
 
     // ── GATE 17: Verify plugin state consistency ─────────────
     if (!options?.skipPluginSync && clientSupportsRolePlugins && agentDir) {

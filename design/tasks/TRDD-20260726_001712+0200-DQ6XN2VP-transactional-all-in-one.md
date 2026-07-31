@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T00:28:13+0200
+updated: 2026-07-31T07:37:16+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,6 +20,43 @@ relevant-rules: [R50, R51]
 blocked-by: []
 implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8]
 ---
+
+## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only TWO of the ten are worth doing
+
+**The remaining work is not "10 pipelines". It is TWO.** Every candidate's partial-state window was
+measured this morning, per the standing rule that you measure the window before picking by op count:
+
+| pipeline | gate ops | mutating calls | window | verdict |
+|---|---|---|---|---|
+| `InstallElement` | 101 | **18** — `mkdir` ×3, `saveJsonSafe` ×13 across LOCAL *and* USER settings, `installPluginLocally` | **REAL, and the widest left** | retrofit |
+| `ChangeTitle` | 131 | many | **REAL** | retrofit |
+| `ChangeFolder` | 10 | 1 (`updateAgent`) | none | conformance only |
+| `ChangeName` | 9 | 1 (`updateAgent`) | none | conformance only |
+| `ChangeMetadata` | 7 | 1 | none | conformance only |
+| `ChangeCLIArgs` · `ChangeHook` · `ChangeLSP` · `ChangeMCP` | 6 each | 1 each | none | conformance only |
+| `ChangeAvatar` | 3 | 1 (`updateAgent`) | none | conformance only |
+
+`ChangeFolder` and `ChangeName` were the two never previously measured, and they land with the other
+six: one `updateAgent`, then only notes, a read-only verify, and the ledger emit — nothing abortable
+after the mutation, so there is no state a compensation could restore. **8 of 10 are paperwork.**
+
+`InstallElement` is the one to do first, and not because it is large: 13 `saveJsonSafe` writes span
+BOTH the agent-local settings and the USER-scope `settings.json`, so a mid-pipeline failure leaves
+two scopes disagreeing about what is installed — the exact class of defect R20.30's scope split
+exists to prevent.
+
+**NUMBERS IN THE 2026-07-30 BLOCK BELOW ARE STALE — do NOT carry them forward.** It says 14 to go and
+`MAX_HANDROLLED = 14`; both are now **10**, and `CreateAgent`, `ChangeTeam`, `DeleteTeam` have since
+landed. The ratchet already reads 10, so the CODE was ahead of the CARD.
+
+**Two instrument notes, because each nearly produced a false finding:**
+- The runner is reached by **`await import('@/lib/gate-transaction')`**, never a static import, so
+  `grep "from '@/lib/gate-transaction'"` returns NOTHING across `services/` and `lib/` and reads as
+  "no pipeline uses the runner at all".
+- An `awk` brace-COUNTER bounding each function reported **0 runner calls for `CreateAgent`,
+  `ChangeTeam` and `DeleteTeam`** — all three demonstrably have them. Mapping each
+  `runGateSequence` line to its nearest preceding `export async function` is what got it right.
+  Had I trusted the counter I would have "discovered" three completed retrofits were never done.
 
 ## ⏵ MEASURED 2026-07-30 — the count was wrong, and there is now a ratchet that keeps it honest
 
@@ -811,10 +848,15 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       sequence (id in on the join, out on the undo); the neuter reds that test and only it
 - [ ] `ChangeTitle` transactional — **`ChangeClient` and `ChangePlugin` are DONE**; this box is
       split because they were, and `ChangeTitle` (131 gate ops, the largest) is not
-- [ ] `ChangeTeam` / `DeleteTeam` transactional
-- [ ] The remaining `Change*` / marketplace / element pipelines transactional — **9 of them**, not
-      18: `ChangeSkill` + `changeSimpleElement` (which serves 4 of the named Change*) are done, and
-      3 marketplace names are delegators to `ChangeMarketplace`
+- [x] `ChangeTeam` / `DeleteTeam` transactional — both verified 2026-07-31 at their runner call
+      sites (`ChangeTeam` runs TWO sequences, `runGateSequence(removeGates, tc)` and
+      `(addGates, tc)`; `DeleteTeam` one). They had already left the hand-rolled list; this box was
+      simply never ticked
+- [ ] The remaining `Change*` / marketplace / element pipelines transactional — **8 of them, and
+      MEASURED 2026-07-31 to buy ZERO safety.** See `## ⏵ MEASURED 2026-07-31` — every one is a
+      single mutating call with nothing abortable after it, so retrofitting them moves the
+      conformance ratchet and closes no window. Keep the box open (AIO-TXN-10 is still violated),
+      but do NOT spend a session on them ahead of the two that matter
 - [x] An enforceable ratchet for `AIO-TXN-10` — `tests/governance/aio-txn-10-runner-coverage.test.ts`
       discovers the inventory from the AST and fails when a pipeline hand-rolls beyond
       `MAX_HANDROLLED`. NOT the parity box below: this asks "is it under the runner", which is

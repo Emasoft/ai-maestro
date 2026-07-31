@@ -10,6 +10,15 @@
  *   2. WIRING — `editTrdd` (the real write funnel in `lib/trdd-store.ts`) is
  *      proven to call the gate BEFORE its first `fs.writeFileSync`: a refused
  *      write leaves the file on disk byte-identical.
+ *
+ * This file is the conformance proof for `3P-TRDD-12` (validate-before-write,
+ * 3-pillars spec 1.4.0). The clause's three MUSTs map onto the WIRING half: the
+ * check runs before the write lands, it refuses rather than warns, and the file
+ * is byte-identical after a refusal. The clause's "same vocabulary as the linter"
+ * MUST is proven one level up, in `lib/trdd-vocabulary.ts` — a single edit to
+ * `types/task.ts::DEFAULT_STATUSES` reddens BOTH this file's ratified-column
+ * positive control AND the doctor's live-corpus gate, which is what "one
+ * definition, not two that drift" means operationally.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'

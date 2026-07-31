@@ -41,14 +41,15 @@ describe('SPEC — N clauses per document, id in the body', () => {
   it('finds every clause the live 3-pillars spec declares (positive control on real data)', () => {
     const recs = [...walkRecords(path.join(REPO, 'design/specs'), SPEC_KIND)]
     const threeP = recs.filter((r) => r.filePath.endsWith('3-pillars-spec.md'))
-    // 59 line-anchored declarations, counted independently with grep (NOT copied from
+    // 60 line-anchored declarations, counted independently with grep (NOT copied from
     // this test's own failure output) each time the spec gains a family. A fixture of my
     // own making could not have caught a wrong regex; the live corpus can. Was 38 until
     // spec 1.2.0 added 3P-DAG (+3) and 3P-IDX (+14) — TRDD-LXLK7XGX / EHT MUYRIKN3; then
     // 1.3.0 added 3P-TRDD-09/10/11 (+3) for the `status:`-is-not-`column:` ruling and
-    // 3P-IDX-15 (+1) for TRDD-C4YJAUD9's unwired-pass clause, batched into the SAME bump
-    // (`grep -cE '^\`3P-[A-Z]+-[0-9]{2}\`' design/specs/3-pillars-spec.md` → 59).
-    expect(threeP.length).toBe(59)
+    // 3P-IDX-15 (+1) for TRDD-C4YJAUD9's unwired-pass clause, batched into the SAME bump;
+    // then 1.4.0 added 3P-TRDD-12 (+1), the validate-before-write mandate (TRDD-SCMPWF6R)
+    // (`grep -cE '^\`3P-[A-Z]+-[0-9]{2}\`' design/specs/3-pillars-spec.md` → 60).
+    expect(threeP.length).toBe(60)
     expect(threeP.every((r) => /^3P-[A-Z]+-\d{2}$/.test(r.id))).toBe(true)
     // Every record carries the line it was declared on — that is what a lint reports.
     expect(threeP.every((r) => typeof r.line === 'number' && r.line! > 0)).toBe(true)
@@ -59,9 +60,16 @@ describe('SPEC — N clauses per document, id in the body', () => {
     const files = new Set(recs.map((r) => path.basename(r.filePath)))
     expect(files.size).toBeGreaterThan(1)
     // Floor = the ONE biggest file's own clause count, so the corpus total must exceed
-    // what a single-file read could return. Track it with that count (55), or the
-    // assertion quietly stops meaning "more than one file's worth".
-    expect(recs.length).toBeGreaterThan(55)
+    // what a single-file read could return. Track it with that count, or the assertion
+    // quietly stops meaning "more than one file's worth" — which is exactly what had
+    // happened: the floor still read 55 while the biggest file had grown past it, so a
+    // single-file read would have satisfied it. Re-derive it through THIS extractor, not
+    // by grepping the specs: a hand regex counts a different set (it read governance-spec
+    // as 49 and role-plugins as 29, where walkRecords sees 36 and 27), so a floor taken
+    // from grep would be a number about a different population. Per file, biggest-first:
+    //   3-pillars 60, all-in-one 60, governance 36, role-plugins 27, scenario-tests 14
+    //   (total 197). Biggest = 60.
+    expect(recs.length).toBeGreaterThan(60)
   })
 
   it('DECLARATION is line-anchored — a citation inside prose is NOT a record', () => {

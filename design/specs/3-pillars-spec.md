@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.3.0
+spec-version: 1.4.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-30T06:41:55+0200
+updated: 2026-07-31T07:03:39+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -174,6 +174,16 @@ insert `column: todo`, deliberately, so the next agent must evaluate the task be
 This fallback applies `ONLY` to a genuinely missing field. It is `NOT` licence to repurpose
 another field: any other frontmatter field, `status:` included, `MUST` survive the repair with
 its value intact.
+
+`3P-TRDD-12` **validate-before-write** — a tool that WRITES a TRDD `MUST` validate the
+RESULTING frontmatter (the edit merged over the card's current fields, never the edit alone)
+against this spec's grammar BEFORE the write lands, and `MUST` refuse rather than warn: after
+a refusal the file `MUST` be byte-identical, because a refusal that half-writes is worse than
+no gate. The check `MUST` read the SAME vocabulary the linter reads, so a value the linter
+would ERROR on cannot be written in the first place — one definition, not two that drift. A
+post-hoc linter is `NOT` a substitute: it reports corruption that already happened, and the
+158 column-less cards this clause exists to prevent were every one of them written by a seam
+that checked only that each value was a string (TRDD-SCMPWF6R).
 
 ## 3P-PRRD — Pillar 3: the PRRD contract
 

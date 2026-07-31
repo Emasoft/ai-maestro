@@ -3404,6 +3404,212 @@ export async function ChangeTitle(
           }
         },
       },
+
+      // ── GATE 17: Verify plugin state consistency ─────────────
+      {
+        id: 'G17',
+        what: 'plugin state consistent with the new title (R9.13 enforced)',
+        run: async () => {
+          const target = targetPluginName
+          if (!options?.skipPluginSync && clientSupportsRolePlugins && agentDir) {
+            try {
+              const g17Dir = agentDir
+              const localSettings = join(g17Dir.startsWith('~') ? g17Dir.replace('~', HOME) : g17Dir, '.claude', 'settings.local.json')
+              // R9.13 recovery — invoked when a role-plugin was REQUIRED for this title
+              // (targetPluginName set) but the post-G16 scan shows ZERO active. G16 only
+              // WARNs on a failed install, so a failure silently slips past here and the
+              // agent is left titled-but-role-less (the gate previously reported "Plugin
+              // state consistent (0 role-plugin(s))" — a false positive). This retries the
+              // install once; if the agent is STILL role-less it is in R9.13 violation →
+              // set roleMissing=true + hibernate so /wake refuses until the Config tab
+              // assigns a plugin. Mirrors ChangePlugin's PG04 recovery (TRDD-c7a81642);
+              // calls installPluginLocally DIRECTLY (never ChangeTitle), so a
+              // PG04→ChangeTitle→here chain cannot recurse. (Consolidating this with PG04
+              // into one shared helper is deferred until PG04 has characterization tests —
+              // duplicating ~20 lines here avoids refactoring PG04's working,
+              // ledger-only-covered path inside this bug fix.)
+              const enforceRoleOrHibernate = async (): Promise<void> => {
+                if (!target) return
+                ops.push(`G17: R9.13 — role-plugin "${target}" required for "${effectiveTitle}" but 0 active after G16. Retrying install once.`)
+                await installPluginLocally(target, g17Dir, targetMarketplace).catch(() => {})
+                const reSettings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+                const reEp = (reSettings.enabledPlugins || {}) as Record<string, boolean>
+                const reActive = Object.keys(reEp).filter(k => Object.values(TITLE_PLUGIN_MAP).includes(k.split('@')[0]))
+                if (reActive.length > 0) {
+                  ops.push(`G17: R9.13 recovered — reinstall restored "${reActive[0].split('@')[0]}" for ${effectiveTitle}`)
+                  return
+                }
+                const g17AuthContext: AuthContext = { isSystemOwner: true as const }
+                try {
+                  await updateAgent(agentId, { roleMissing: true })
+                  ops.push(`G17: R9.13 VIOLATION — agent titled "${effectiveTitle}" with 0 role-plugins after retry. set roleMissing=true`)
+                  const { hibernateAgent } = await import('@/services/agents-core-service')
+                  const hibResult = await hibernateAgent(agentId, { sessionIndex: 0, authContext: g17AuthContext })
+                  ops.push(hibResult?.data?.success
+                    ? `G17: auto-hibernated agent (reason: role_plugin_missing)`
+                    : `G17: WARN — hibernate after roleMissing set: ${hibResult?.error ?? 'unknown'}`)
+                  await tryEmitLedgerOp(
+                    'hibernate_role_missing',
+                    [{ op: 'replace', path: `/agents/${agentId}/roleMissing`, value: true }],
+                    g17AuthContext,
+                    'g17-hibernate-role-missing',
+                    ops,
+                  )
+                } catch (hibErr) {
+                  ops.push(`G17: WARN — roleMissing/hibernate path failed: ${hibErr instanceof Error ? hibErr.message : hibErr}`)
+                }
+              }
+              if (existsSync(localSettings)) {
+                const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+                const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+                const activeRolePlugins = Object.keys(ep).filter(k => {
+                  const name = k.split('@')[0]
+                  return Object.values(TITLE_PLUGIN_MAP).includes(name)
+                })
+                if (activeRolePlugins.length > 1) {
+                  ops.push(`G17: WARN — ${activeRolePlugins.length} role-plugins active (expected 0 or 1). Cleaning.`)
+                  // SF5 (TRDD-47a35ba2): catch+log — never let a throwing uninstall escape
+                  // here. An uncaught throw would jump to the G17 `catch` below and SKIP the
+                  // post-block R9.13 re-scan recovery, leaving a titled agent with 0
+                  // role-plugins (worse than a no-op — the prior plugin is already gone). We
+                  // log to `ops` (NOT a silent swallow), so flow continues to the reinstall
+                  // AND the post-block re-scan, which is what actually enforces R9.13.
+                  await uninstallAllRolePlugins(g17Dir).catch((e) => ops.push(`G17: WARN — cleanup uninstall failed; R9.13 post-scan recovers: ${e instanceof Error ? e.message : String(e)}`))
+                  if (target) {
+                    await installPluginLocally(target, g17Dir, targetMarketplace).catch(() => {})
+                  }
+                } else if (target && activeRolePlugins.length === 1) {
+                  // Verify the active plugin matches the expected one for this title
+                  const activeName = activeRolePlugins[0].split('@')[0]
+                  if (activeName !== target) {
+                    ops.push(`G17: MISMATCH — active "${activeName}" != expected "${target}" for ${effectiveTitle}. Fixing.`)
+                    // SF5: same as the >1 branch — catch+log so a throwing uninstall can't
+                    // bypass the post-block R9.13 re-scan recovery (see comment above).
+                    await uninstallAllRolePlugins(g17Dir).catch((e) => ops.push(`G17: WARN — cleanup uninstall failed; R9.13 post-scan recovers: ${e instanceof Error ? e.message : String(e)}`))
+                    await installPluginLocally(target, g17Dir, targetMarketplace).catch(() => {})
+                  } else {
+                    ops.push(`G17: Plugin state consistent (${activeName} matches ${effectiveTitle})`)
+                  }
+                } else if (target && activeRolePlugins.length === 0) {
+                  // R9.13: a role-plugin was required but the install left none active.
+                  // (Recovery runs in the single post-block re-scan below, which covers
+                  // this exit AND the >1 / MISMATCH reinstall-fail exits uniformly.)
+                  ops.push(`G17: 0 role-plugins active but "${target}" required — R9.13 recovery runs below.`)
+                } else {
+                  ops.push(`G17: Plugin state consistent (${activeRolePlugins.length} role-plugin(s))`)
+                }
+              } else if (target) {
+                // settings.local.json absent but a role-plugin was required → 0 active.
+                // (Recovery runs in the single post-block re-scan below.)
+                ops.push(`G17: no settings.local.json but "${target}" required — R9.13 recovery runs below.`)
+              } else {
+                ops.push(`G17: No settings.local.json — plugin state clean`)
+              }
+              // R9.13 post-block enforcement — a SINGLE re-scan covering EVERY G17 exit
+              // above. The >1 and MISMATCH branches uninstall-then-reinstall with a
+              // swallowed .catch(); a transient reinstall failure there would otherwise
+              // leave a titled agent with 0 role-plugins — WORSE than a no-op, since the
+              // prior plugin was already uninstalled. The 0-active and no-settings exits
+              // start at 0. Re-scanning once here and running the shared recovery means NO
+              // G17 exit can leave a titled agent role-less (R9.13). The per-branch recovery
+              // this replaces covered only 2 of the 4 zero-active exits — gap found by
+              // adversarial verification of TRDD-51ed3b0b.
+              if (target) {
+                const finalSettings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+                const finalEp = (finalSettings.enabledPlugins || {}) as Record<string, boolean>
+                const finalActive = Object.keys(finalEp).filter(k => Object.values(TITLE_PLUGIN_MAP).includes(k.split('@')[0]))
+                if (finalActive.length === 0) await enforceRoleOrHibernate()
+              }
+            } catch {
+              ops.push(`G17: Plugin verification skipped (read error)`)
+            }
+          } else {
+            ops.push(`G17: Plugin verification skipped`)
+          }
+        },
+      },
+
+      // ── GATE 18: Broadcast governance sync to mesh ───────────
+      // setManager/removeManager already broadcast for MANAGER changes.
+      // For other titles, broadcast a team-updated event.
+      {
+        id: 'G18',
+        what: 'governance sync broadcast to mesh peers',
+        run: async () => {
+          if (newTitle !== 'manager' && oldTitle !== 'manager') {
+            try {
+              const { broadcastGovernanceSync } = await import('@/lib/governance-sync')
+              await broadcastGovernanceSync('team-updated', {
+                agentId,
+                oldTitle,
+                newTitle: effectiveTitle,
+                timestamp: new Date().toISOString(),
+              }).catch(() => {})
+              ops.push(`G18: Broadcast governance sync to mesh peers`)
+            } catch {
+              ops.push(`G18: Governance sync broadcast skipped (module unavailable)`)
+            }
+          } else {
+            ops.push(`G18: MANAGER change — broadcast already sent by governance.ts`)
+          }
+        },
+      },
+
+      // ── GATE 19: Determine if restart needed ─────────────────
+      // Restart is needed if the role-plugin changed (agent needs to reload).
+      // It only ever RAISES restartNeeded, never lowers it — G14d may already
+      // have set it after stripping the old plugin, and this must not undo that.
+      {
+        id: 'G19',
+        what: 'restart-needed decided from the plugin delta',
+        run: async () => {
+          if (currentPluginName !== targetPluginName) {
+            result.restartNeeded = true
+            ops.push(`G19: Restart needed (plugin changed: ${currentPluginName || 'none'} → ${targetPluginName || 'none'})`)
+          } else {
+            ops.push(`G19: No restart needed (plugin unchanged)`)
+          }
+        },
+      },
+
+      // ── GATE 20: Queue restart if session is active ──────────
+      {
+        id: 'G20',
+        what: 'restart queued for the caller when a session is live',
+        run: async () => {
+          if (result.restartNeeded && !options?.skipRestart) {
+            // Check if agent has an active session
+            const sessions = agent.sessions || []
+            const hasActiveSession = sessions.length > 0
+            if (hasActiveSession) {
+              ops.push(`G20: Agent has active session(s) — restart queued for caller`)
+              // Note: actual restart is triggered by the UI via useRestartQueue hook
+              // The API returns restartNeeded=true, the UI handles the rest
+            } else {
+              ops.push(`G20: No active session — restart not applicable`)
+            }
+          } else {
+            ops.push(`G20: Restart ${options?.skipRestart ? 'skipped (skipRestart)' : 'not needed'}`)
+          }
+        },
+      },
+
+      // ── GATE 21: Auto-title transition protection ────────────
+      // Protect against team PUT route overwriting title with 'member'
+      // when adding MANAGER to a team. MANAGER/COS/ORCHESTRATOR/ARCHITECT/INTEGRATOR
+      // take precedence over 'member'.
+      // This gate is informational — the protection is in the team PUT handler.
+      {
+        id: 'G21',
+        what: 'auto-title precedence recorded (protection lives in the team PUT handler)',
+        run: async () => {
+          if (newTitle === 'manager' || newTitle === 'chief-of-staff') {
+            ops.push(`G21: ${(newTitle || '').toUpperCase()} takes precedence over team auto-title`)
+          } else {
+            ops.push(`G21: Auto-title protection N/A`)
+          }
+        },
+      },
     ]
 
     // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
@@ -3425,179 +3631,6 @@ export async function ChangeTitle(
     // Its position here, AFTER the governance mutations, was the bug: a failed title write left
     // the host with no MANAGER and every team blocked. Nothing between here and there depends on
     // it having run last.
-
-    // ── GATE 17: Verify plugin state consistency ─────────────
-    if (!options?.skipPluginSync && clientSupportsRolePlugins && agentDir) {
-      try {
-        const g17Dir = agentDir
-        const localSettings = join(g17Dir.startsWith('~') ? g17Dir.replace('~', HOME) : g17Dir, '.claude', 'settings.local.json')
-        // R9.13 recovery — invoked when a role-plugin was REQUIRED for this title
-        // (targetPluginName set) but the post-G16 scan shows ZERO active. G16 only
-        // WARNs on a failed install, so a failure silently slips past here and the
-        // agent is left titled-but-role-less (the gate previously reported "Plugin
-        // state consistent (0 role-plugin(s))" — a false positive). This retries the
-        // install once; if the agent is STILL role-less it is in R9.13 violation →
-        // set roleMissing=true + hibernate so /wake refuses until the Config tab
-        // assigns a plugin. Mirrors ChangePlugin's PG04 recovery (TRDD-c7a81642);
-        // calls installPluginLocally DIRECTLY (never ChangeTitle), so a
-        // PG04→ChangeTitle→here chain cannot recurse. (Consolidating this with PG04
-        // into one shared helper is deferred until PG04 has characterization tests —
-        // duplicating ~20 lines here avoids refactoring PG04's working,
-        // ledger-only-covered path inside this bug fix.)
-        const enforceRoleOrHibernate = async (): Promise<void> => {
-          if (!targetPluginName) return
-          ops.push(`G17: R9.13 — role-plugin "${targetPluginName}" required for "${effectiveTitle}" but 0 active after G16. Retrying install once.`)
-          await installPluginLocally(targetPluginName, g17Dir, targetMarketplace).catch(() => {})
-          const reSettings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-          const reEp = (reSettings.enabledPlugins || {}) as Record<string, boolean>
-          const reActive = Object.keys(reEp).filter(k => Object.values(TITLE_PLUGIN_MAP).includes(k.split('@')[0]))
-          if (reActive.length > 0) {
-            ops.push(`G17: R9.13 recovered — reinstall restored "${reActive[0].split('@')[0]}" for ${effectiveTitle}`)
-            return
-          }
-          const g17AuthContext: AuthContext = { isSystemOwner: true as const }
-          try {
-            await updateAgent(agentId, { roleMissing: true })
-            ops.push(`G17: R9.13 VIOLATION — agent titled "${effectiveTitle}" with 0 role-plugins after retry. set roleMissing=true`)
-            const { hibernateAgent } = await import('@/services/agents-core-service')
-            const hibResult = await hibernateAgent(agentId, { sessionIndex: 0, authContext: g17AuthContext })
-            ops.push(hibResult?.data?.success
-              ? `G17: auto-hibernated agent (reason: role_plugin_missing)`
-              : `G17: WARN — hibernate after roleMissing set: ${hibResult?.error ?? 'unknown'}`)
-            await tryEmitLedgerOp(
-              'hibernate_role_missing',
-              [{ op: 'replace', path: `/agents/${agentId}/roleMissing`, value: true }],
-              g17AuthContext,
-              'g17-hibernate-role-missing',
-              ops,
-            )
-          } catch (hibErr) {
-            ops.push(`G17: WARN — roleMissing/hibernate path failed: ${hibErr instanceof Error ? hibErr.message : hibErr}`)
-          }
-        }
-        if (existsSync(localSettings)) {
-          const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-          const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-          const activeRolePlugins = Object.keys(ep).filter(k => {
-            const name = k.split('@')[0]
-            return Object.values(TITLE_PLUGIN_MAP).includes(name)
-          })
-          if (activeRolePlugins.length > 1) {
-            ops.push(`G17: WARN — ${activeRolePlugins.length} role-plugins active (expected 0 or 1). Cleaning.`)
-            // SF5 (TRDD-47a35ba2): catch+log — never let a throwing uninstall escape
-            // here. An uncaught throw would jump to the G17 `catch` below and SKIP the
-            // post-block R9.13 re-scan recovery (~2865+), leaving a titled agent with 0
-            // role-plugins (worse than a no-op — the prior plugin is already gone). We
-            // log to `ops` (NOT a silent swallow), so flow continues to the reinstall
-            // AND the post-block re-scan, which is what actually enforces R9.13.
-            await uninstallAllRolePlugins(g17Dir).catch((e) => ops.push(`G17: WARN — cleanup uninstall failed; R9.13 post-scan recovers: ${e instanceof Error ? e.message : String(e)}`))
-            if (targetPluginName) {
-              await installPluginLocally(targetPluginName, g17Dir, targetMarketplace).catch(() => {})
-            }
-          } else if (targetPluginName && activeRolePlugins.length === 1) {
-            // Verify the active plugin matches the expected one for this title
-            const activeName = activeRolePlugins[0].split('@')[0]
-            if (activeName !== targetPluginName) {
-              ops.push(`G17: MISMATCH — active "${activeName}" != expected "${targetPluginName}" for ${effectiveTitle}. Fixing.`)
-              // SF5: same as the >1 branch — catch+log so a throwing uninstall can't
-              // bypass the post-block R9.13 re-scan recovery (see comment above).
-              await uninstallAllRolePlugins(g17Dir).catch((e) => ops.push(`G17: WARN — cleanup uninstall failed; R9.13 post-scan recovers: ${e instanceof Error ? e.message : String(e)}`))
-              await installPluginLocally(targetPluginName, g17Dir, targetMarketplace).catch(() => {})
-            } else {
-              ops.push(`G17: Plugin state consistent (${activeName} matches ${effectiveTitle})`)
-            }
-          } else if (targetPluginName && activeRolePlugins.length === 0) {
-            // R9.13: a role-plugin was required but the install left none active.
-            // (Recovery runs in the single post-block re-scan below, which covers
-            // this exit AND the >1 / MISMATCH reinstall-fail exits uniformly.)
-            ops.push(`G17: 0 role-plugins active but "${targetPluginName}" required — R9.13 recovery runs below.`)
-          } else {
-            ops.push(`G17: Plugin state consistent (${activeRolePlugins.length} role-plugin(s))`)
-          }
-        } else if (targetPluginName) {
-          // settings.local.json absent but a role-plugin was required → 0 active.
-          // (Recovery runs in the single post-block re-scan below.)
-          ops.push(`G17: no settings.local.json but "${targetPluginName}" required — R9.13 recovery runs below.`)
-        } else {
-          ops.push(`G17: No settings.local.json — plugin state clean`)
-        }
-        // R9.13 post-block enforcement — a SINGLE re-scan covering EVERY G17 exit
-        // above. The >1 and MISMATCH branches uninstall-then-reinstall with a
-        // swallowed .catch(); a transient reinstall failure there would otherwise
-        // leave a titled agent with 0 role-plugins — WORSE than a no-op, since the
-        // prior plugin was already uninstalled. The 0-active and no-settings exits
-        // start at 0. Re-scanning once here and running the shared recovery means NO
-        // G17 exit can leave a titled agent role-less (R9.13). The per-branch recovery
-        // this replaces covered only 2 of the 4 zero-active exits — gap found by
-        // adversarial verification of TRDD-51ed3b0b.
-        if (targetPluginName) {
-          const finalSettings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-          const finalEp = (finalSettings.enabledPlugins || {}) as Record<string, boolean>
-          const finalActive = Object.keys(finalEp).filter(k => Object.values(TITLE_PLUGIN_MAP).includes(k.split('@')[0]))
-          if (finalActive.length === 0) await enforceRoleOrHibernate()
-        }
-      } catch {
-        ops.push(`G17: Plugin verification skipped (read error)`)
-      }
-    } else {
-      ops.push(`G17: Plugin verification skipped`)
-    }
-
-    // ── GATE 18: Broadcast governance sync to mesh ───────────
-    // setManager/removeManager already broadcast for MANAGER changes.
-    // For other titles, broadcast a team-updated event.
-    if (newTitle !== 'manager' && oldTitle !== 'manager') {
-      try {
-        const { broadcastGovernanceSync } = await import('@/lib/governance-sync')
-        await broadcastGovernanceSync('team-updated', {
-          agentId,
-          oldTitle,
-          newTitle: effectiveTitle,
-          timestamp: new Date().toISOString(),
-        }).catch(() => {})
-        ops.push(`G18: Broadcast governance sync to mesh peers`)
-      } catch {
-        ops.push(`G18: Governance sync broadcast skipped (module unavailable)`)
-      }
-    } else {
-      ops.push(`G18: MANAGER change — broadcast already sent by governance.ts`)
-    }
-
-    // ── GATE 19: Determine if restart needed ─────────────────
-    // Restart is needed if the role-plugin changed (agent needs to reload)
-    if (currentPluginName !== targetPluginName) {
-      result.restartNeeded = true
-      ops.push(`G19: Restart needed (plugin changed: ${currentPluginName || 'none'} → ${targetPluginName || 'none'})`)
-    } else {
-      ops.push(`G19: No restart needed (plugin unchanged)`)
-    }
-
-    // ── GATE 20: Queue restart if session is active ──────────
-    if (result.restartNeeded && !options?.skipRestart) {
-      // Check if agent has an active session
-      const sessions = agent.sessions || []
-      const hasActiveSession = sessions.length > 0
-      if (hasActiveSession) {
-        ops.push(`G20: Agent has active session(s) — restart queued for caller`)
-        // Note: actual restart is triggered by the UI via useRestartQueue hook
-        // The API returns restartNeeded=true, the UI handles the rest
-      } else {
-        ops.push(`G20: No active session — restart not applicable`)
-      }
-    } else {
-      ops.push(`G20: Restart ${options?.skipRestart ? 'skipped (skipRestart)' : 'not needed'}`)
-    }
-
-    // ── GATE 21: Auto-title transition protection ────────────
-    // Protect against team PUT route overwriting title with 'member'
-    // when adding MANAGER to a team. MANAGER/COS/ORCHESTRATOR/ARCHITECT/INTEGRATOR
-    // take precedence over 'member'.
-    // This gate is informational — the protection is in the team PUT handler.
-    if (newTitle === 'manager' || newTitle === 'chief-of-staff') {
-      ops.push(`G21: ${(newTitle || '').toUpperCase()} takes precedence over team auto-title`)
-    } else {
-      ops.push(`G21: Auto-title protection N/A`)
-    }
 
     // ── GATE 22: Verify final state in registry ──────────────
     // CRITICAL (SCEN-007 P0-003, SCEN-020 BUG-001, SCEN-002 P0-001):

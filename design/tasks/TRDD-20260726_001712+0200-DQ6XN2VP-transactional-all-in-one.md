@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T11:37:45+0200
+updated: 2026-07-31T11:43:01+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -138,6 +138,38 @@ a NAMED test reds. With ~14 undos and essentially no rollback coverage today, **
 characterization tests is the larger half of commit 3, not a follow-up.** Lowering
 `MAX_HANDROLLED` 10 → 9 on undos nobody neutered would move the ratchet on a guarantee that was
 never verified — the exact failure this card exists to prevent.
+
+**⚠ COMMIT 3 IS NOT ONE ATOMIC COMMIT — CORRECTED 2026-07-31, and this is what has been making it
+look too big to start.** This card said *"swapping the driver and writing the undos is ONE commit,
+not two"*. That is TRUE as a constraint on ORDER and FALSE as a constraint on COMMIT COUNT, and the
+difference is the whole risk profile. Measured:
+
+- `undo` is **OPTIONAL** on `Gate<Ctx>` (`lib/gate-transaction.ts:19-45`).
+- The refusal — `findUncompensatedGates` — is called at **`:126`, INSIDE `runGateSequence`**. Nothing
+  else invokes it.
+- ChangeTitle does **not call `runGateSequence` yet**; its hand-rolled loop does `await gate.run()`
+  and nothing else.
+
+So **an `undo` added today is INERT** — it type-checks, ships, and never executes until the driver
+swaps. Commit 3 therefore slices exactly the way commit 2 did (8 slices, zero behaviour change
+each): N slices adding undos a few gates at a time, each `tsc`-clean with the suite at the exact
+baseline, then **ONE final small slice** that swaps the driver, routes G22 to `invariants`, moves
+G14c out, and lowers `MAX_HANDROLLED` 10 → 9. A slice that runs out of room is a slice not written,
+never a half-converted pipeline.
+
+**The one prerequisite, and it is one line:** the array is annotated
+`const gates: Array<{ id: string; what: string; run: () => Promise<void> }>` (`:2685`), so it must
+be widened with `undo?: () => Promise<void>` before any undo can be attached.
+
+**The ctx:** today's `run: async () => {…}` takes no argument and closes over lexical state, so the
+undo ledger is introduced as a plain `const ctx` declared above the array that runs WRITE and undos
+READ. That works identically under both drivers — when the driver swaps, the same object is passed
+as the runner's ctx and no undo is rewritten. (Plan, not yet measured.)
+
+**NEXT ACTION for commit 3, runnable as written:** widen the annotation at `:2685`, declare the
+ctx, and attach undos for the first slice's gates; verify `tsc` 0 lines + the suite at
+**310/4441/2**; commit. Repeat until all 15 rows of the map above are attached. The driver swap is
+LAST, and the ratchet moves only after each undo has a neuter that reds a NAMED test.
 
 **The two entries that make this pipeline the one worth doing** are #4 and #10: a failure anywhere
 after G10 leaves the host with teams blocked and the fleet hibernated, and a failure after G16 leaves

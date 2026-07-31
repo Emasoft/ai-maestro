@@ -26,7 +26,7 @@ import type { Residue, TeardownVerification } from '@/lib/agent-teardown'
 import { join } from 'path'
 import { homedir } from 'os'
 import { statePath } from '@/lib/ecosystem-constants'
-import { mkdir, writeFile, readFile, rm, copyFile, readdir, stat, rename } from 'fs/promises'
+import { mkdir, writeFile, readFile, rm, copyFile, readdir, stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -4899,9 +4899,25 @@ export async function ChangePlugin(
     // READS THROUGH `readJson`, NOT `loadJsonSafe` (TRDD-K71FV649). The lenient reader answers `{}`
     // to both "no settings file" and "the settings file does not parse", so this check used to
     // report a CORRUPT file as `finalState: undefined` — indistinguishable from the plugin
-    // genuinely being absent. That ambiguity is the reason G11 is still a WARN and not an R51.7
-    // invariant: promoted, an unreadable file would roll back a correct plugin change. Naming the
-    // unreadable case does not promote it, and it is the missing evidence any promotion needs.
+    // genuinely being absent. That ambiguity is why the UNREADABLE case stays a WARN: an invariant
+    // may abort on a positive VIOLATION and never on an UNKNOWN.
+    //
+    // THE GENUINE-MISMATCH CASE IS ALSO STILL A WARN, AND THAT IS NOW A MEASURED DECISION, NOT AN
+    // OVERSIGHT (TRDD-RO90UCKQ). Wiring it to fail was TRIED on 2026-07-31 and REVERTED: this
+    // function is called BOTH as an operation and as a COMPENSATION — `ChangeMarketplace::remove`'s
+    // R51 rollback reinstalls plugins through it — so a G11 failure there does not report "the
+    // reinstall did not verify", it escalates to R51.5 and tells the user
+    // "THE SYSTEM IS IN AN INVALID STATE … manual repair is required" about a system that was in
+    // fact restored. `tests/integration/change-marketplace-rollback.test.ts` caught it.
+    //
+    // So the honest answer differs by CALLER, not by action: a failure is right for the four
+    // user-initiated HTTP-400 callers and wrong for the compensation path — and telling those apart
+    // is a signature change across 15 call sites. Until that is designed, a WARN that under-reports
+    // is strictly better than a failure that declares a recovered system unrecoverable.
+    //
+    // What IS settled, and cost the audit: `result` initializes `success: false` (:4617), so this
+    // pipeline fails on most of its exits and all 15 callers already branch on it — the risk that
+    // once blocked this ("callers may assume it cannot fail") does not exist.
     const settingsFile = desired.scope === 'user'
       ? SETTINGS_JSON
       : join(agentDir!.startsWith('~') ? agentDir!.replace('~', HOME) : agentDir!, '.claude', 'settings.local.json')

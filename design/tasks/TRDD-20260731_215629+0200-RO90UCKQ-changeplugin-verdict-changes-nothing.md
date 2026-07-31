@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T21:56:29+0200
-updated: 2026-07-31T22:12:57+0200
+updated: 2026-07-31T22:19:32+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -72,14 +72,57 @@ Note G10 runs immediately before and force-writes the missing key, so reaching a
 **both** the CLI/adapter and the G10 safeguard failed. That is a genuinely broken state, not a
 routine one — which is an argument for wiring it, and also why nobody has hit it.
 
+## THE FLIP WAS TRIED AND REVERTED — and the reason is the finding
+
+Wiring G11 to fail on a genuine mismatch was implemented, run, and **reverted the same session**.
+It reddened **15 tests**, and 13 of those were fixture artifacts worth fixing (their mocked `fs`
+never persists the write, so G11 legitimately mismatched and the old WARN hid it — those tests
+literally assert that an install whose settings file lacks the plugin afterward is a SUCCESS).
+
+**The other 2 were not artifacts, and they settle the question:**
+
+```
+tests/integration/change-marketplace-rollback.test.ts
+  × reinstalls every plugin the cascade uninstalled when the CLI refuses to deregister
+  AssertionError: expected 'CRITICAL — THE COMMAND FAILED AT GATE…' to contain 'NO CHANGES WERE MADE'
+```
+
+`ChangeMarketplace::remove`'s **R51 compensation reinstalls plugins by calling `ChangePlugin`**. With
+G11 failing, the ROLLBACK reports failure — which does not surface as "the reinstall did not verify",
+it escalates to R51.5: *"THE SYSTEM IS IN AN INVALID STATE … Manual repair is required — do NOT retry
+the command"* — about a system that was in fact restored.
+
+**That is the same failure mode `TRDD-K71FV649` established one card earlier**: a verification wired
+to abort turns a recoverable situation into a reported catastrophe. I argued PG01 must not do it and
+then did it to G11.
+
+**So the answer differs by CALLER, not by action** — which is not what this card assumed:
+
+| caller kind | a G11 failure is |
+|---|---|
+| the four user-initiated HTTP-400 routes | **right** — the user asked for a change that did not land, and 400 is the truthful answer |
+| the R51 compensation path (`ChangeMarketplace::remove` → reinstall) | **wrong** — it converts a successful rollback into a CRITICAL "unrecoverable" verdict |
+
+Telling those apart is a **signature change across 15 call sites** (an explicit "this call is a
+compensation" flag, or a separate verify-and-report entry point). Until that is designed, **a WARN
+that under-reports is strictly better than a failure that declares a recovered system unrecoverable**
+— and that is now recorded in the code at G11, so the next reader does not re-try it blind.
+
 ## What remains to decide
 
-1. Per action (`install` / `uninstall` / `enable` / `disable` / `update`), is a G11 mismatch a
-   FAILURE or a warning? PG01 concluded both directions of a lifecycle must fail by the same rule;
-   the same argument likely applies.
-2. Should it ABORT (roll back) rather than merely report? That is an R51 question about
-   `ChangePlugin`'s window and is a larger decision — record the verdict either way, and do not let
-   its size block step 1.
+1. **How a caller declares itself a COMPENSATION** — the blocker the flip found. Options: an
+   explicit `isCompensation` flag on the `desired` object (15 call sites to audit, but only one to
+   set); a separate `verifyOnly`/`skipVerify` entry point; or moving the verdict out of `ChangePlugin`
+   into the callers that want it. Whichever wins, the compensation path must NOT be able to report
+   R51.5 CRITICAL because a read-back disagreed.
+2. Only then, per action (`install` / `uninstall` / `enable` / `disable` / `update`): is a G11
+   mismatch a FAILURE? The evidence says yes for user-initiated calls — PG01 concluded both
+   directions of a lifecycle must fail by the same rule.
+3. The 13 fixture tests that assert "install succeeded with the plugin absent from settings" need
+   their mocks to MODEL the write. They currently encode the bug, which is the shape
+   `.claude/rules/lessons-verification.md` records as "a test propped up by the very bug you are
+   fixing" — fix the fixture, never weaken the guard.
+4. Should it ABORT (roll back) rather than merely report? Still open, still larger; unchanged.
 
 **The `unreadable` case must NOT gate**, whatever is decided. `TRDD-K71FV649` settled that — an
 invariant may abort on a positive VIOLATION and never on an UNKNOWN — and G11 already reports the
@@ -102,6 +145,25 @@ that card closed.
 **LOW-MED, downgraded from MED-HIGH by the audit.** The feared blast radius — callers assuming this
 pipeline cannot fail — does not exist: all 15 already branch on it, and 12 tests already exercise the
 failure path. What is left is the semantic call in step 1, plus whatever step 2 decides.
+
+## Acceptance
+
+- [x] Every caller of `ChangePlugin` enumerated with what it does on `success === false` — **15
+      production sites, all handling it deliberately** (table in the STATE block). This is what
+      refuted the card's own premise and its MED-HIGH risk rating
+- [x] Per-action verdict recorded — and the audit found the axis is **not per-action but
+      PER-CALLER**: a failure is right for the four user-initiated routes and wrong for the R51
+      compensation path, where it escalates to "the system is unrecoverable". Measured by
+      implementing the flip and reading what broke; reverted, with the reasoning left at G11 in the
+      code so the next reader does not re-try it blind
+- [ ] A caller can declare itself a COMPENSATION (the blocker the flip found) — flag, separate entry
+      point, or move the verdict to the callers. Whichever wins, the compensation path must not be
+      able to report R51.5 CRITICAL because a read-back disagreed
+- [ ] The 13 fixture tests that assert "install succeeded with the plugin absent from settings" have
+      mocks that MODEL the write — they currently encode the bug
+- [ ] The `unreadable` case verified to still NOT gate, with the test that proves it
+- [ ] Abort-vs-report (the R51 window question) decided and recorded, even if the answer is "not now"
+- [ ] Tests + neuter recorded by name · tsc clean · suite at/above baseline
 
 ## Approval log
 

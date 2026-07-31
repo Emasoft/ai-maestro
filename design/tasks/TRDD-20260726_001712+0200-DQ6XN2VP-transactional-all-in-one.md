@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T10:59:32+0200
+updated: 2026-07-31T11:02:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -115,6 +115,27 @@ compensation are orthogonal defences and the retrofit must keep both.
 | 10 | G16 / G17 | :3193, :3272, :3317, :3327 | `installPluginLocally` ×4 | uninstall the installed plugin (shape D2 already ruled: CLI-uninstall with a CLI-reinstall undo) |
 | 11 | G16b | :3231 | `updateAgent({programArgs})` — rewrites the `--agent` flag | restore prior `programArgs` |
 | 12 | G17 | :3282-3285 | `updateAgent({roleMissing})` + `hibernateAgent` + ledger | restore the flag + re-wake |
+
+**⚠ THREE ROWS WERE MISSING — added 2026-07-31, after commit 2 put every gate in the array.** The
+table above was written from the pre-restructure reading and skipped three mutating gates. A
+mutating gate absent from this map is one the runner will REFUSE TO START on, so the gap would have
+surfaced as a dead pipeline mid-edit rather than as a design question:
+
+| # | gate | mutates | undo (design) |
+|---|---|---|---|
+| 13 | **G14c** | **ledger emit** (`change_title`) | **THE ONE OPEN QUESTION — do NOT write an undo.** A ledger is append-only; deleting the entry would falsify history, and leaving it fires mid-window so a rollback leaves a recorded `change_title` for a change that got reverted. **The fix is to MOVE it after the array (emit on success only), which is a BEHAVIOUR CHANGE** — deliberately not done in commit 2. Decide before writing the ctx. |
+| 14 | **G14d** | `ChangePlugin(action:'uninstall', rolePluginSwap:true)` per stale role-plugin | reinstall each entry it recorded — `run` must push `{name, marketplace}` per SUCCESSFUL uninstall into ctx, and `undo` reinstalls from that list. It already loops over `roleEntries`, so this is the loop shape the Gate docs prescribe. |
+| 15 | **G15** | `uninstallAllRolePlugins(agentDir)` on BOTH branches (swap, and the stale-clean branch) | reinstall `ctx.g15Uninstalled` (the `currentPluginName` it removed). **Note the second branch uninstalls with `.catch(() => {})` when there is no current plugin** — record nothing there, since nothing known was removed. |
+
+**AND COMMIT 3 IS NOT ONLY UNDOS — IT OWES THE TESTS THAT PIN THEM.** This card already records that
+*"no test anywhere in the repo forces a mid-pipeline failure and asserts the system was left
+unchanged"* for `DeleteAgent`; the same is true here, and commit 2 measured two instances of it
+directly (G22's aborts and G15's R9.13 abort are each unpinned — disabling them leaves the suite
+green). The memory page's rule is **verify by neuter, PER UNDO** — break each compensation, confirm
+a NAMED test reds. With ~14 undos and essentially no rollback coverage today, **writing the
+characterization tests is the larger half of commit 3, not a follow-up.** Lowering
+`MAX_HANDROLLED` 10 → 9 on undos nobody neutered would move the ratchet on a guarantee that was
+never verified — the exact failure this card exists to prevent.
 
 **The two entries that make this pipeline the one worth doing** are #4 and #10: a failure anywhere
 after G10 leaves the host with teams blocked and the fleet hibernated, and a failure after G16 leaves

@@ -1,11 +1,11 @@
 ---
 trdd-id: YAGRX7W3
 title: Make InstallElement transactional — the last AIO-TXN-10 row, and the one with forbidden compensations
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T20:15:22+0200
-updated: 2026-07-31T20:44:13+0200
+updated: 2026-07-31T21:09:58+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: ai-maestro
 approval-datetime: 2026-07-31T20:15:22+0200
 relevant-rules: [R51, R20.31, R17]
 blocked-by: []
-implementation-commits: []
+implementation-commits: [aa3e3d73, e5582aaa, 01e199dd, 92c61ca5]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body)
@@ -44,16 +44,16 @@ now closes the exclusion set: a sixth mutation added above the line REDS it. Thr
 one of which found a **vacuous assertion in the test itself**. The ratchet is deliberately
 UNTOUCHED (`MAX_HANDROLLED` still 1) — the guard lands before the number moves, never after.
 
-**NEXT ACTION — the WINDOW REFACTOR itself, and it needs a fresh context.** Wrap EXE + the
-verdict-dependent post-gates in `runGateSequence`, opening at the marker. **Read this before
-starting:** EXE is a single ~600-line `try { switch (action) … } catch`, and its `case` bodies abort
-by `result.error = …; return result` — **eight such returns inside the try**. Converting them to
-throws hands every abort to that same `catch`, which re-reports them under its own generic message
-and LOSES the specific error string. That is the exact trap `lessons-verification.md` records
-("CONVERTING `return` TO `throw` INSIDE AN EXISTING `try` HANDS YOUR ABORTS TO ITS `catch`"). The
-fix it names: narrow the `try` to the I/O it was written for, and use a sentinel error class so a
-deliberate abort stays distinguishable from a bug. Only after that does `MAX_HANDROLLED` 1 → 0,
-`MIN_TRANSACTIONAL` 18 → 19, and the ratchet's claim rename to "windowed per the R51 boundary rule".
+**⚠ THE WINDOW LANDED — THE CARD IS DONE.** See `## ✅ LANDED 2026-07-31 (third pass) — the window`.
+`MAX_HANDROLLED` is **0**, `MIN_TRANSACTIONAL` **19**, `InstallElement` is in
+`MUST_BE_TRANSACTIONAL`, and the ratchet's claim now reads **"windowed per the R51 boundary rule"**
+so the `0` cannot be read as "the whole function is covered". Full suite **314 files / 4534 passed /
+2 skipped**, `tsc --noEmit` 0 lines, `trddgrep validate` exit **1** with only the two known
+`BODY-STATE-CLAIM` cards.
+
+*The trap this section warned about was real at FOUR returns, not eight (`:962`, `:971`, `:977`,
+`:987`, all in the adapter-install branch; the fifth `return result` at `:1175` was the catch's own).
+`awk 'NR>=952 && NR<=1180 && /return result/'` says four. The trap held; the number did not.*
 
 **SUPERSEDED — do NOT carry forward:** *"Then build the window and the CLOSED-SET TEST together …
 assert the pre-window mutation set EQUALS the enumerated five."* That test EXISTS as of the second
@@ -106,13 +106,35 @@ it rather than looking for it. The numbers below are what matters.)*
 | `execFileAsync` | 4 | 829, 941, 1011, 1100 |
 | `convertAndStorePlugin` | 1 | 872 |
 | `emitForClient` | 2 | 873, 912 |
-| `rm` / `rmSync` / `unlink` | **0** | — |
+| `rm` / `rmSync` / `unlink` | ~~**0**~~ **1** | ~~—~~ **1106** (see the retraction) |
 
-**CORRECTION 1 — the phantom `rm`.** `TRDD-DQ6XN2VP`'s table reads *"13 — `mkdir` ×2,
-`saveJsonSafe` ×7 (5 local, 2 user), `execFileAsync` ×4, `rm` ×1"*. That list sums to **14** while
-its own total says 13, and the discrepancy is the `rm`: this pipeline calls **no** `rm`, `rmSync` or
-`unlink` anywhere in its 920 lines. The total (13) was right; the itemisation was not. Do not carry
-an "InstallElement deletes something" premise forward — it deletes nothing.
+**~~CORRECTION 1 — the phantom `rm`.~~ RETRACTED 2026-07-31 — THE `rm` IS REAL AND MY WALK WAS
+BLIND.** This card claimed *"this pipeline calls **no** `rm`, `rmSync` or `unlink` anywhere in its
+920 lines"* and told the next reader not to carry an "InstallElement deletes something" premise
+forward. It deletes something:
+
+```
+:1100  const { rm: rmCache } = await import('fs/promises')
+:1106  await rmCache(cacheDir, { recursive: true, force: true })   // ~/.claude/plugins/cache/<mkt>/<name>
+```
+
+**`TRDD-DQ6XN2VP`'s itemisation was RIGHT** (`rm ×1`); only its TOTAL was off by one — the six
+kinds sum to 14, not the 13 it printed. My "correction" inverted that: it kept the wrong number and
+threw away the right item.
+
+**HOW.** The AST walk keyed on the CALLEE IDENTIFIER, and a renaming destructure changes it —
+`rmCache(...)` is not `rm(...)`. The same form hides `updateAgent` twice more (`updateAgentAIO`
+`:1282`, `updateAgentPG04` `:1395`). This card had already written the warning it then walked into:
+*"verify the scanner sees both mutation forms … a scanner blind to a form reports a closed set it
+never measured."* Two forms were checked; the third was not enumerated.
+
+**AND THE CLOSED-SET TEST INHERITED THE BLIND SPOT** — it was built from this same walk. Fixed
+2026-07-31: `tests/governance/installelement-window-boundary.test.ts` now resolves destructuring
+aliases to the imported name, and its positive control asserts `rm` and `updateAgent` are seen —
+**non-vacuous by construction**, because neither is ever called unaliased in this function. Neuter
+**N4** (drop the resolution) reds exactly that test and leaves the other three green, which is also
+the measurement that `EXPECTED_ABOVE_BOUNDARY` needed no change: every aliased call sits BELOW the
+boundary. The exclusion set was correct; the instrument that certified it was not.
 
 **CORRECTION 2 — the `PG03`/`PG07` line cites had already rotted when they were written.** The
 parent card cites `PG03 (:1253)` and `PG07 (:1448)`. Measured now: `PG03`'s `withSettingsLock` is at
@@ -358,6 +380,52 @@ neuter is what found it — the test was green and wrong before I ran it.**
 **Verification:** `tsc --noEmit` 0 lines · `tests/governance/` + `element-management-service.test.ts`
 = **35 files / 533 tests** passed.
 
+## ✅ LANDED 2026-07-31 (third pass) — the window
+
+**ONE gate, `EXE`, and the honesty is in saying which paths it can actually save.** The
+anti-pattern this repo records is wrapping a SINGLE ATOMIC write with nothing abortable after it.
+EXE is neither atomic nor single — a CLI call, N adapter file copies and a settings write inside
+one `run` — so the runner's write-ahead registration is what makes the gate's OWN partial work
+compensatable. Per path:
+
+| path | undo | why |
+|---|---|---|
+| install + adapter | **REACHABLE** | `adapterRes.success === false` aborts AFTER the copy; the partial copy used to stay on disk forever |
+| install + CLI | reachable only if the direct settings write throws | the write-back swallows its own errors, so it cannot abort |
+| enable / disable | LATENT | one `saveJsonSafe` (atomic tmp+rename), nothing after it |
+| update | INERT | its own catch swallows every failure — the gate cannot abort |
+| uninstall | FORWARD-ONLY except the settings entries | removed files and the deleted plugin CACHE dir have no snapshot, and `convertedDir` is null here so there is not even a source to re-emit |
+
+**The 4 aborts became `ExeAbort` throws**, and EXE's catch re-throws that sentinel untouched while
+still wrapping unexpected errors — otherwise every deliberate refusal would arrive as the generic
+`EXE: Action "install" failed: …`. **The settings undo is KEY-LEVEL, never a whole-file byte
+restore**: that file is shared with every other plugin of the agent, so putting back a snapshot
+would silently revert a concurrent writer's edit.
+
+**TWO NEUTERS, each pinning its own claim and neither reddening the other's test:**
+
+| neuter | reds | stays green |
+|---|---|---|
+| N5 — drop `exeUndo.adapterInstallAttempted = true` | *a failed adapter install is ROLLED BACK* | the sentinel test (the message is unchanged) |
+| N6 — drop `if (execErr instanceof ExeAbort) throw execErr` | *a deliberate EXE abort keeps its SPECIFIC reason* | the rollback test (the uninstall still runs) |
+
+**ADVISOR (Fable 5) CONSULTED, AND ONE RECOMMENDATION DECLINED ON A MEASUREMENT.** It agreed the
+one-gate window is honest (naming the inert paths above, which is why they are now written down),
+confirmed PG02 must stay out, and asked for the write-ahead recording and the LIFO undo order —
+all adopted. It also recommended wiring PG01's **Claude** branch into `runGateSequence`'s
+`invariants` hook, on the premise that *"the read-failure case is already a separate WARN, so a
+DENIED there means the key is deterministically absent."* **That premise is false in this code:**
+`loadJsonSafe` (`:362-370`) returns `{}` on a parse failure, so PG01's catch fires only if the
+helper itself throws — which it never does. A corrupt `settings.local.json` therefore reads as
+"key absent", and an aborting PG01 would uninstall a working plugin because a file was unreadable.
+Second reason: when PG01 denies truthfully the key really is absent, so the only residue left to
+reverse is the **SHARED** plugin cache the CLI downloaded — deleting shared state to tidy up one
+agent's failed verify is exactly what this boundary excludes G11's marketplace registration for.
+
+**FINDING, pre-existing, NOT fixed here:** PG01 cannot distinguish *unreadable* from *absent*
+(above). It is a real defect of the verification, it predates this card, and `loadJsonSafe`'s
+swallowing catch is used by every pipeline in the file — so it is its own task, not a drive-by.
+
 ## The design question this card exists to answer (ANSWERED ABOVE — kept for the reasoning)
 
 R51 says an all-in-one never leaves an invalid state. Three gates here cannot be reversed. Those are
@@ -404,14 +472,18 @@ mechanical "wrap it like the others" pass actively wrong.
 - [x] The design question **ANSWERED** — (a) narrow the window, advisor-reviewed, every claim
       re-verified in source. `## ✅ DECIDED 2026-07-31` records the choice, the abort-capability
       measurement that settles it, and why (b)/(c)/(d) are rejected
-- [ ] The choice + its uncovered surface written into the **code comment at the window boundary** —
+- [x] The choice + its uncovered surface written into the **code comment at the window boundary** —
       naming all five excluded mutations, the rule excluding each (invariant registry / shared
       registration / R20.31), and the **R20.26 forward-advance** note (`convertAndStorePlugin`
       overwrites in place, so a failed install may have advanced the cached emission)
-- [ ] **THE CLOSED-SET TEST** (the load-bearing deliverable): scan the pre-window region and assert
+- [x] **THE CLOSED-SET TEST** (the load-bearing deliverable): scan the pre-window region and assert
       its mutation set EQUALS the enumerated five, so a sixth mutation added above the boundary
       REDS. Verify the scanner sees both mutation forms (direct call and via-helper) — a scanner
-      blind to a form reports a closed set it never measured
+      blind to a form reports a closed set it never measured. **The third form was the one that
+      mattered:** a RENAMING destructure (`const { rm: rmCache }`) was invisible, which is how this
+      card came to claim InstallElement calls no `rm`. Aliases are now resolved to the imported
+      name and the positive control asserts `rm`/`updateAgent` are seen — non-vacuous by
+      construction (neither is ever called unaliased here), pinned by neuter **N4**
 - [x] Drive-by defect fixed: `:880` pushed `G08: WARN` from inside **G13's** catch, attributing a
       conversion failure to the R17 core-plugin gate 100 lines above. Nothing asserted on the old
       string (grepped)
@@ -419,16 +491,24 @@ mechanical "wrap it like the others" pass actively wrong.
       sites, none parses `result.error`; the only coupling is `:10100`'s `G05`/`G06` op-label
       filter** (see Problem §1). The "callers branch on the error" worry this card was authored
       with is retracted there.
-- [ ] The window implemented, with every compensation either neutered-and-pinned or explicitly
-      recorded as latent/unreachable
-- [ ] `MAX_HANDROLLED` 1 → 0, `MIN_TRANSACTIONAL` 18 → 19, `InstallElement` added to
+- [x] The window implemented, with every compensation either neutered-and-pinned or explicitly
+      recorded as latent/unreachable — ONE reachable (the adapter partial install, neuter **N5**),
+      the sentinel pinned by **N6**, and enable/disable/update/uninstall each named in the table
+      above rather than counted as coverage
+- [x] `MAX_HANDROLLED` 1 → 0, `MIN_TRANSACTIONAL` 18 → 19, `InstallElement` added to
       `MUST_BE_TRANSACTIONAL` — and the ratchet's claim RENAMED from *"transactional"* to
       **"windowed per the R51 boundary rule"**, so `0` stops overclaiming while five mutations sit
       outside every window
-- [ ] tsc clean · suite at/above baseline · `trddgrep validate` exit 1 with only the two known cards
+- [x] tsc clean · suite at/above baseline (**314 files / 4534 passed / 2 skipped**, up from 313 /
+      4527 at `facc65b5` + the 4 boundary tests + the 2 new ones) · `trddgrep validate` exit **1**
+      with only `7123D51A` and `C7A81642`
 
 ## Approval log
 
 - 2026-07-31T20:15:22+0200 — SELF-MANDATE (min-approval-requirement: none). Tier 0: a refactor
   inside this agent's own assignment scope, carved out of the mandated TRDD-DQ6XN2VP because it is a
   distinct problem. Pre-approved: issuer authority >= required approver. No approval request sent.
+- 2026-07-31T21:09:58+0200 — COMPLETED by ai-maestro. The window landed (`92c61ca5`) after the
+  scanner that closes its exclusion set was fixed (`01e199dd`); every acceptance box is checked,
+  `MAX_HANDROLLED` is 0, and AIO-TXN-10 has no hand-rolled pipeline left. `npt: []` / `eht: []`, so
+  the completion gate is satisfied with no open flock.

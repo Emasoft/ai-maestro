@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T20:15:22+0200
-updated: 2026-07-31T20:37:25+0200
+updated: 2026-07-31T20:44:13+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -28,7 +28,8 @@ Every other one landed under `TRDD-DQ6XN2VP`; this was carved out of that card b
 **different problem**, not a ninth of the same.
 
 **⚠ THE DESIGN QUESTION IS ANSWERED — see `## ✅ DECIDED 2026-07-31`.** Decision: **(a) narrow the
-window**, opening it after `:912`. Do not re-litigate it; (b)/(c)/(d) are rejected there with
+window**, opening it at the boundary marker (the source is authoritative; every bare line number in
+this card has drifted at least once). Do not re-litigate it; (b)/(c)/(d) are rejected there with
 reasons. And it is **FIVE** excluded mutations, not the three the parent card named.
 
 **⚠ THE BLOCKER IS RESOLVED — see `## ✅ RESOLVED 2026-07-31 — option 3, and it was a
@@ -37,22 +38,31 @@ SIMPLIFICATION`.** Option 3 landed, and it turned out to REMOVE code rather than
 and `needsConversion` (`:859`) are the same predicate written twice. Both `emitForClient` calls now
 sit in G13 (`:873`, `:901`); EXE is a pure read. Do not re-litigate the three options.
 
-**NEXT ACTION — build the window AND the CLOSED-SET TEST together.** There is now a horizontal line
-to cut on: the last unreversible mutation is the EXE `mkdir` at `:919`, at TOP LEVEL of the
-function, and the `try {` opens at `:922`. The test is the load-bearing half: `MAX_HANDROLLED = 0`
-while five mutations sit outside every window is a false "complete", and a comment is not a guard.
-**Key it on call SHAPE, never on line numbers** — this card's citations drifted +3 within one
-session, then again on this hoist.
+**⚠ THE LOAD-BEARING HALF IS DONE — the boundary marker and the CLOSED-SET TEST landed.** See
+`## ✅ LANDED 2026-07-31 (second pass)`. `tests/governance/installelement-window-boundary.test.ts`
+now closes the exclusion set: a sixth mutation added above the line REDS it. Three neuters recorded,
+one of which found a **vacuous assertion in the test itself**. The ratchet is deliberately
+UNTOUCHED (`MAX_HANDROLLED` still 1) — the guard lands before the number moves, never after.
 
-Then build the window **and the CLOSED-SET TEST together**. That test is the load-bearing half:
-`MAX_HANDROLLED = 0` while five mutations sit outside every window is a false "complete" signal,
-and a comment is not a guard. Assert the pre-window mutation set EQUALS the enumerated five, and
-confirm the scanner sees both mutation forms (direct call and via-helper). **Key it on call SHAPE,
-never on line numbers** — this card's own citations drifted +3 within one session.
+**NEXT ACTION — the WINDOW REFACTOR itself, and it needs a fresh context.** Wrap EXE + the
+verdict-dependent post-gates in `runGateSequence`, opening at the marker. **Read this before
+starting:** EXE is a single ~600-line `try { switch (action) … } catch`, and its `case` bodies abort
+by `result.error = …; return result` — **eight such returns inside the try**. Converting them to
+throws hands every abort to that same `catch`, which re-reports them under its own generic message
+and LOSES the specific error string. That is the exact trap `lessons-verification.md` records
+("CONVERTING `return` TO `throw` INSIDE AN EXISTING `try` HANDS YOUR ABORTS TO ITS `catch`"). The
+fix it names: narrow the `try` to the I/O it was written for, and use a sentinel error class so a
+deliberate abort stays distinguishable from a bug. Only after that does `MAX_HANDROLLED` 1 → 0,
+`MIN_TRANSACTIONAL` 18 → 19, and the ratchet's claim rename to "windowed per the R51 boundary rule".
 
-**DO NOT** wrap the EXE settings write, lower the ratchet to 0, and stop. That moves the
-conformance number while leaving the five uncompensatable mutations unguarded — the ratchet would
-then read "complete" over exactly the pipeline that isn't.
+**SUPERSEDED — do NOT carry forward:** *"Then build the window and the CLOSED-SET TEST together …
+assert the pre-window mutation set EQUALS the enumerated five."* That test EXISTS as of the second
+pass and is green with three neuters. What is left is the window alone.
+
+**STILL BINDING:** **DO NOT** wrap the EXE settings write, lower the ratchet to 0, and stop. That
+moves the conformance number while leaving the five uncompensatable mutations unguarded — the
+ratchet would then read "complete" over exactly the pipeline that isn't. (The closed-set test now
+makes that failure *detectable*; it does not make it *acceptable*.)
 
 ## Problem
 
@@ -310,6 +320,43 @@ that opens the window also upgrades what the coverage script can prove.
 **⚠ AND THE CITATIONS DRIFTED AGAIN, in this very edit** — third instance on this card. `:915` is
 now `:901`. This is no longer an anecdote; it is the specification for the closed-set test: **key on
 call shape, never on line numbers.**
+
+## ✅ LANDED 2026-07-31 (second pass) — the boundary marker + the CLOSED-SET TEST
+
+**The ratchet is deliberately UNTOUCHED.** `MAX_HANDROLLED` stays 1. The card's own warning is that
+moving it to 0 without the guard is a false "complete"; the inverse — landing the guard first, while
+the number still tells the truth — has no such failure mode, and it means the exclusion set is
+closed from now on even though the window refactor is still ahead.
+
+**What landed.** A `R51 WINDOW BOUNDARY (TRDD-YAGRX7W3)` marker immediately after the last
+un-compensated mutation, carrying the per-mutation exclusion reasoning and the **R20.26
+forward-advance** note; and `tests/governance/installelement-window-boundary.test.ts`, which
+locates the boundary **by marker string** and the mutations **by callee name through a TS AST
+walk** — never by line number, per the three drifts above.
+
+Four assertions: the marker exists inside `InstallElement`; the mutations above it EQUAL the
+enumerated set (`toEqual`, never `toMatchObject` — a subset match would let an ADDED kind pass);
+**no `saveJsonSafe`/`writeFile`/`updateAgent` above the line** (the semantic claim — verdict-
+dependent state must be reversible); and a positive control proving the scanner sees both call
+shapes and descends past the marker.
+
+**THREE NEUTERS — and the second one found a real defect IN THE TEST.**
+
+| neuter | reds | correctly stays green |
+|---|---|---|
+| N1 — add `saveJsonSafe` above the line | closed-set + semantic | marker, positive control |
+| N2 — delete the marker | marker + closed-set + **semantic** | positive control |
+| N3 — blind the scanner (drop `mkdir`/`saveJsonSafe` needles) | closed-set + **positive control** | marker |
+
+**N2 originally left the semantic test GREEN**, and that was the finding. With the marker deleted
+`markerIndex` is `-1`, nothing is "before" it, and a suite of `toBeUndefined()` assertions all pass
+having measured an EMPTY set — *"a condition written only over the BAD items is satisfied by the
+absence of any items at all"* (`lessons-verification.md`, the same shape as the checklist gate that
+was inert on 87 of 108 cards). Fixed by adding an explicit non-vacuity guard; N2 now reds it. **The
+neuter is what found it — the test was green and wrong before I ran it.**
+
+**Verification:** `tsc --noEmit` 0 lines · `tests/governance/` + `element-management-service.test.ts`
+= **35 files / 533 tests** passed.
 
 ## The design question this card exists to answer (ANSWERED ABOVE — kept for the reasoning)
 

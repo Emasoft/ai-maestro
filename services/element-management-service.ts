@@ -919,6 +919,36 @@ export async function InstallElement(
       await mkdir(join(cwd, '.claude'), { recursive: true })
     }
 
+    // ═══ R51 WINDOW BOUNDARY (TRDD-YAGRX7W3) — DO NOT ADD MUTATIONS ABOVE THIS LINE ═══
+    //
+    // Everything BELOW is state that must AGREE WITH THE VERDICT: if the action fails, the
+    // settings/registry writes must not survive it. Everything ABOVE is deliberately OUTSIDE
+    // the transaction, and that is a decision, not an oversight — leaving each behind produces
+    // NO INVALID STATE, which is what R51 actually forbids ("NEVER LEAVES ONE",
+    // lib/gate-transaction.ts). A watchdog-guaranteed `.claude/`, a SHARED marketplace
+    // registration, and a converted source dir are each valid with or without this install.
+    //
+    // The excluded set is CLOSED BY A TEST — tests/governance/installelement-window-boundary.test.ts
+    // asserts the mutations above this marker are EXACTLY these and no others. A sixth kind added
+    // here REDS that test. A comment alone would be a blind spot that grows unnoticed.
+    //
+    //   G07  mkdir                  — the FIRST mutation; nothing before it to compensate, and
+    //                                 `.claude/` is re-created by the agent-invariant watchdog.
+    //   G11  marketplace add        — CANNOT abort (`.catch(() => {})`), and the registration is
+    //                                 SHARED: deregistering it would break every other agent.
+    //   G13  convertAndStorePlugin  — CANNOT abort (its catch swallows to a WARN and never
+    //   G13  emitForClient          rethrows). R20.31 forbids deleting from the source container
+    //   G13  emitForClient (retry)    outright ("the user's responsibility").
+    //   EXE  mkdir                  — same `.claude/` guarantee as G07, on the local-scope path.
+    //
+    // ⚠ R20.26 FORWARD-ADVANCE, the one genuine subtlety: `convertAndStorePlugin` OVERWRITES IN
+    // PLACE, so a failed install may have ADVANCED the cached emission irreversibly. The dir is a
+    // warm cache the next attempt reuses, so this converges forward rather than corrupting — but
+    // it is NOT "untouched", and pretending otherwise is the claim this note exists to prevent.
+    //
+    // A gate that can neither fail nor be reversed contributes nothing inside a transaction;
+    // wrapping G11/G13 would be theatre, not safety.
+    // ═════════════════════════════════════════════════════════════════════════════════
     try {
       switch (action) {
         case 'install': {

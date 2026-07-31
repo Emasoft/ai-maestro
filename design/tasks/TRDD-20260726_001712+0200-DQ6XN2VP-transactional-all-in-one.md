@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T11:02:52+0200
+updated: 2026-07-31T11:28:39+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -130,8 +130,10 @@ surfaced as a dead pipeline mid-edit rather than as a design question:
 **AND COMMIT 3 IS NOT ONLY UNDOS — IT OWES THE TESTS THAT PIN THEM.** This card already records that
 *"no test anywhere in the repo forces a mid-pipeline failure and asserts the system was left
 unchanged"* for `DeleteAgent`; the same is true here, and commit 2 measured two instances of it
-directly (G22's aborts and G15's R9.13 abort are each unpinned — disabling them leaves the suite
-green). The memory page's rule is **verify by neuter, PER UNDO** — break each compensation, confirm
+directly (G22's aborts and G15's R9.13 abort were each unpinned — disabling them left the suite
+green). **G22 has since been pinned — `TRDD-DFP0HWRX`, commit `8ca58c05`; G15's R9.13 abort has
+NOT**, and is unreachable by any test today. The memory page's rule is **verify by neuter, PER
+UNDO** — break each compensation, confirm
 a NAMED test reds. With ~14 undos and essentially no rollback coverage today, **writing the
 characterization tests is the larger half of commit 3, not a follow-up.** Lowering
 `MAX_HANDROLLED` 10 → 9 on undos nobody neutered would move the ratchet on a guarantee that was
@@ -268,7 +270,9 @@ be false` — a disjoint cause.
 `G9a G14 G10 G11 G12 G13 G13b G14c G14b G14e G14d G15 G16 G16b G17 G18 G19 G20 G21 G22`.
 `tsc` 0 lines and the suite at the exact baseline (310 files / 4437 passed / 2 skipped) on every
 slice; the driver is still the hand-rolled loop, so the ratchet still counts ChangeTitle as
-hand-rolled and nothing is claimed that is not yet true.
+hand-rolled and nothing is claimed that is not yet true. **That 4437 is the baseline commit 2's
+slices were verified against — it is NOT the number commit 3 should expect. It is now 4441; see
+correction 2 below.**
 
 **Two corrections the slices produced, both measured:**
 
@@ -278,12 +282,30 @@ hand-rolled and nothing is claimed that is not yet true.
    property. Verified before moving: G18 is a best-effort mesh broadcast, G19/G20/G21 are pure
    decisions writing `result` fields + ops. **None writes a persistent store, so none owes an undo
    in commit 3.**
-2. **G22 IS ENTIRELY UNPINNED.** Disabling BOTH of its drift aborts leaves the full suite GREEN
-   (310/4437/2, zero red). Its own comment records that it was promoted from a silent WARN
-   precisely because callers claimed success while `governanceTitle` stayed null on disk (SCEN-007
-   P0-003, SCEN-020 BUG-001, SCEN-002 P0-001) — so the guard that exists because a false success
-   shipped has no test. **This gap PRE-DATES the retrofit; it is not a hole this change opened and
-   therefore NOT an EHT of this card. It needs its own TRDD.**
+2. **G22 WAS ENTIRELY UNPINNED — now CLOSED by `TRDD-DFP0HWRX` (commit `8ca58c05`).** Disabling BOTH
+   of its drift aborts left the full suite GREEN (310/4437/2, zero red). Its own comment records that
+   it was promoted from a silent WARN precisely because callers claimed success while
+   `governanceTitle` stayed null on disk (SCEN-007 P0-003, SCEN-020 BUG-001, SCEN-002 P0-001) — so
+   the guard that exists because a false success shipped had no test. **The gap PRE-DATED the
+   retrofit; it was not a hole this change opened and therefore NOT an EHT of this card**, which is
+   why it was filed and closed as its own TRDD. That same mutation is now the **N0 neuter** and reds
+   both drift tests by name (2 failed | 7 passed).
+
+   **Two things this changes for commit 3.** (a) **Step 4** (route G22 to the `invariants` hook) now
+   lands on a gate whose abort conditions a named test already holds — rollback-on-invariant-violation
+   is far safer to build on that than on an unpinned gate, which is why DFP0HWRX was done FIRST.
+   (b) **The suite baseline is now 310 files / 4441 passed / 2 skipped.** Verify commit 3's slices
+   against THAT number, not the 4437 recorded above — every slice checks the exact counts, so a
+   reader using the stale figure would read +4 as a regression.
+
+   Three facts DFP0HWRX measured that commit 3's own rollback tests will need, because each one
+   silently produces a VACUOUS test: **(i)** G14 checks its write twice (the return value of
+   `updateAgent` for memory, then a fresh disk read), so a perturbation applied inside `updateAgent`
+   reds G14, never G22; **(ii)** a perturbation must RE-APPLY after every registry flush, because
+   G16b calls `updateAgent` again (programArgs) and mirrors the store to disk; **(iii)** `failOn`
+   cannot reach a post-condition gate at all — it makes a collaborator THROW, aborting before the
+   gate — which is why `tests/helpers/drive-change-title.ts` gained `world.after` (fires only on
+   SUCCESS, so the hook running is itself proof the call it anchors to ran).
 
 **⚠ COMMIT 3'S TWO MECHANICAL QUESTIONS ARE MEASURED — 2026-07-31.** Both were open, both looked
 like they could widen the edit, and both turned out contained. Read the landed sibling

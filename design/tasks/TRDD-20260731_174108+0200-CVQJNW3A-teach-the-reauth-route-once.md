@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-07-31T17:41:08+0200
+updated: 2026-07-31T18:36:17+0200
 created-by: ai-maestro
 current-owner: ai-maestro
 assignee: ai-maestro
@@ -35,10 +35,64 @@ external-refs: []
 **The incident:** 2026-07-31 ~17:20 the owner was rate-limited and had to log in by hand. The
 rotator was NOT asleep — it detected the exhaustion every 60 s and had nowhere to go.
 
-**NEXT ACTION:** implement Leg 3 below (server-side slot re-capture on `reauth-needed`), gated
-behind the guard rail in box 1. Do box 1 FIRST — it is the only irreversible-by-omission step.
+**NEXT ACTION:** wire Leg 3's drive into the tick (`reauth-needed` → `startReauth` →
+`driveConsent` → `completeReauth`) and surface `reauth-needed` to the owner. The drive itself is
+BUILT and pinned — `lib/oauth-rotator/{reauth-drive,page-classify}.ts`, commits `994be6d6`
+`041a87f8` `fde71e17`, 44 tests, 7 recorded neuters — but it has **no production caller yet**, so
+nothing calls it and nothing can regress from it. Do box 1 FIRST; it is the only
+irreversible-by-omission step.
+
+### The drive is UNIVERSAL now (owner directive, 2026-07-31): structure, not words
+
+The first cut matched Italian and English copy and hardcoded `--browser chrome`. Both are gone.
+What the drive reads, and what it measured before trusting any of it:
+
+| Question | Decided by | Language-independent? |
+|---|---|---|
+| is this a bot wall? | no activatable control + a tiny tree (Cloudflare's brand tokens only corroborate) | yes |
+| are we logged out? | an INPUT role in the AX tree, or `cookies_injected == 0` | yes |
+| which control approves? | role-filtered candidate SET; localized names only ORDER it, never filter it | set: yes · order: hints |
+| did it work? | our own OAuth `state` came back | yes — protocol |
+
+**Two measurements killed the obvious design; do not re-derive them:**
+- **`act go`'s `url` field ECHOES THE REQUEST.** Sent `http://wikipedia.org`, got the identical
+  string back while the browser was on `https://www.wikipedia.org/`. So the natural dead-session
+  signal — "did the app redirect us to /login?" — **does not exist**.
+- **No unbrowse verb reports the current URL.** `eval inspect` rejects a session id, `eval status`
+  returns only `{id,createdAt,chromePid,targetAlive}`, `eval resolve` needs an intent. Checked.
+- `act go` **does** return `page.text`, so the old separate `eval text` before the click was a
+  wasted round trip on every drive.
+- **The browser needs no naming.** `act go` with NO `--browser` sweeps every installed browser
+  itself — observed harvesting Chrome, Chromium AND Firefox in one call, and `github.com/login`
+  then rendered the logged-IN dashboard. The old `--browser chrome` was NARROWING a wider sweep.
+  Profile targeting is now an ESCALATION, entered only when the default lands on a sign-in page.
+
+**The honest limit, stated rather than hidden:** a buttons-only consent screen and a buttons-only
+"continue with Google" screen have the SAME structure. Nothing in the AX tree separates them
+without reading words. So the click is a HYPOTHESIS and the OUTCOME decides; and when several
+controls cannot be ranked at all the drive REFUSES (`consent_ambiguous`) rather than gambling —
+on a consent screen the wrong click is "deny", and a silent deny reads exactly like a broken
+selector afterwards.
+
+**Two bugs the tests caught before any production run** (both now fixed + neutered):
+1. **`\b` does not work on non-Latin scripts.** JS word boundaries are defined against
+   `[A-Za-z0-9_]`, so `\b承認\b` and `\bразрешить\b` can NEVER match — the hint list silently
+   disabled every CJK/Cyrillic/Arabic/Devanagari locale while looking like it covered them.
+2. **I out-tightened the downstream contract.** `extractCode` required the OAuth state
+   unconditionally, and I wrote "strictly better" in the comment. It is not: the CSRF check is
+   already enforced against the server-side verifier, we generate the navigation ourselves, and
+   `reauth-flow` records that the callback rendering HAS varied. It now mirrors `completeReauth` —
+   a state that is PRESENT must MATCH; a bare code is accepted.
 
 **SUPERSEDED — do NOT carry forward:**
+- *"the account is selected by CHROME PROFILE, so pass `--browser chrome --browser-profile X`"* —
+  **narrowed too early.** The profile is the escalation, not the entry point; naming a browser
+  disables unbrowse's own multi-browser sweep, which is wider than anything we would hardcode.
+- *"match the authorize control by name (`/authorize|autorizza/`)"* — **replaced by role-shape.**
+  Names now only ORDER an already-complete candidate set.
+- *"read the final URL from the browser's DevTools port"* — **rejected by the owner**, and rightly:
+  it reaches past unbrowse and couples us to how unbrowse manages Chrome today. Measured working
+  (`/json/list` did report the true post-redirect URL) and deliberately NOT used.
 - *"the re-login is irreducibly manual / the human must click 4 buttons"* — **WRONG**, and I said
   it to the owner before measuring. The consent click is ALREADY automated; see the Jul 11 log
   quoted below. What is manual is only re-seeding a stale per-account Chrome profile.
@@ -310,8 +364,18 @@ trust the rendered identity, not the extraction count, when checking which accou
 
 - [ ] Box 1 — unbrowse `auto-publish off` + auth domains blacklisted, verified by reading the
       setting back (not by having run the command)
-- [ ] One login route taught per rotator account; replay re-seeds `chrome-profile-<email>`
+- [x] ~~One login route taught per rotator account; replay re-seeds `chrome-profile-<email>`~~ —
+      **superseded by measurement.** Nothing needs teaching per account: `act go` with no
+      `--browser` already harvests cookies from every installed browser, and the profile is an
+      escalation the drive enumerates itself. The box assumed a per-account capture step that the
+      tool makes unnecessary.
+- [x] The consent drive is language-independent and browser-agnostic — decided by AX role shape,
+      not by copy; no `--browser` on the autodetect path. 44 tests, 7 neuters incl. the one that
+      re-creates the `\b` non-Latin bug and reds the Japanese case (`fde71e17`).
 - [ ] Server tick re-captures a dead slot on `reauth-needed`, targeting the named account
+      — **the drive is built but has NO production caller; this box is the wiring**
+- [ ] `driveConsent` proven against the LIVE consent page, with the owner present (never run
+      end-to-end; the one thing the fixtures cannot establish)
 - [x] ~~Wrong-account refusal pinned by a test + a recorded neuter~~ — **already true**, by
       construction and tested (`reauth-flow.ts:101`; test `:211`, `:270`). Struck rather than
       deleted: the box was aimed at the janitor's Python failure mode, and knowing our path never

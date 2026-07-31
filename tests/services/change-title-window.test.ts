@@ -116,13 +116,44 @@ vi.mock('@/services/shared-state', async () => (await import(HELPER)).stubs.shar
 vi.mock('@/lib/ledger-emit', async () => (await import(HELPER)).stubs.ledgerEmit())
 vi.mock('@/lib/portfolio-ledger', async () => (await import(HELPER)).stubs.portfolioLedger())
 vi.mock('@/lib/ibct-scope-check', async () => (await import(HELPER)).stubs.ibctScopeCheck())
-vi.mock('@/services/agents-core-service', async () => (await import(HELPER)).stubs.agentsCore())
+vi.mock('@/services/agents-core-service', async () => (await import(HELPER)).agentsCoreMock(H.world))
+// G10's undo reads the live-session list before re-waking, so it must not shell out to tmux.
+vi.mock('@/lib/agent-runtime', async () => (await import(HELPER)).agentRuntimeMock(H.world))
 
 const AGENT_ID = 'the-manager'
+/** The team agent G10's `blockAllTeams` puts to sleep — and the one its undo must wake again. */
+const TEAMMATE = 'someone-else'
 let restorePath: () => void
 
 /** The plugin AUTONOMOUS requires — G15/G16 install it, G17 reads it back to enforce R9.13. */
 const AUTONOMOUS_PLUGIN = 'ai-maestro-autonomous-agent'
+
+/** Every registry row, with the agent's title forced to `title` — the shape registry.json holds. */
+function rowsWithTitle(title: string | null): Record<string, unknown>[] {
+  return [...H.registry.values()].map(a => ((a.id as string) === AGENT_ID ? { ...a, governanceTitle: title } : a))
+}
+
+/**
+ * Force an abort at the LAST possible moment — the runner's `invariants` hook (former G22).
+ *
+ * `failOn` cannot reach any gate after G10: G14b, G14e, G16, G16b and G17 all catch their own
+ * errors and push a WARN, so an injected throw there is swallowed and the pipeline succeeds. The
+ * invariants are driven the way a post-condition must be — let the write land, then corrupt the
+ * disk behind the pipeline's back, keeping the corruption armed across later flushes.
+ *
+ * Anchored to `revokeTokensFromIssuerCompensable` (G14e), a call the happy-path parity test
+ * independently asserts, so "the hook fired" proves the gate ran rather than assuming it.
+ */
+function armLateDriftAbort(extra: Record<string, () => void> = {}): void {
+  H.world.after = {
+    ...extra,
+    revokeTokensFromIssuerCompensable: () => {
+      const corrupt = () => H.writeDisk(rowsWithTitle('manager'))
+      H.perturb.run = corrupt
+      corrupt()
+    },
+  }
+}
 
 function settingsOf(workdir: string): Record<string, Record<string, unknown>> {
   const file = join(workdir, '.claude', 'settings.local.json')
@@ -151,13 +182,20 @@ beforeEach(async () => {
   // (R3), while G10's blockAllTeams needs something to block — the exact shape of the window.
   Object.assign(H.world, h.newWorld({
     managerId: AGENT_ID,
-    teams: [{ id: 'team-1', name: 'Team One', agentIds: ['someone-else'], chiefOfStaffId: 'someone-else', blocked: false }],
-    hibernatable: ['someone-else'],
+    teams: [{ id: 'team-1', name: 'Team One', agentIds: [TEAMMATE], chiefOfStaffId: TEAMMATE, blocked: false }],
+    hibernatable: [TEAMMATE],
+    awake: [TEAMMATE],
     aidTokens: 3,
     portfolioTokens: 2,
   }))
   workdir = h.seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, {
     id: AGENT_ID, name: AGENT_ID, governanceTitle: 'manager', program: 'claude',
+  })
+  // The teammate G10 hibernates must EXIST in the registry: the undo resolves each sleeper by id to
+  // get its session name, and an unresolvable id is recorded as a rollback problem — which would
+  // make every G10 rollback report R51.5 CRITICAL for a reason that is purely a fixture gap.
+  h.seedAgent(H.registry as never, H.FAKE_HOME, H.FAKE_STATE, {
+    id: TEAMMATE, name: TEAMMATE, governanceTitle: 'chief-of-staff', program: 'claude',
   })
 })
 
@@ -186,6 +224,7 @@ describe('ChangeTitle happy path (the harness drives the real pipeline)', () => 
 
     expect(H.world.managerId).toBeNull()              // G10 removeManager
     expect(H.world.teams[0].blocked).toBe(true)       // G10 blockAllTeams — the fleet is asleep
+    expect(H.world.awake).not.toContain(TEAMMATE)     // …and asleep means asleep, not merely reported
     // The COMPENSABLE forms specifically (R51, TRDD-DQ6XN2VP): both do the identical revocation,
     // but only these hand back a restore handle, so reverting either gate to the count-only
     // wrapper — which is what ChangeTitle used to call — reds this assertion.
@@ -248,6 +287,77 @@ describe('ChangeTitle window — what a mid-pipeline failure actually leaves beh
     expect(H.world.teams[0].blocked).toBe(false)
     // The rollback COMPLETED, so the caller gets R51.3's claim and not R51.5's CRITICAL.
     expect(result.error).toMatch(/NO CHANGES WERE MADE TO THE SYSTEM/)
+    expect(result.error).not.toMatch(/INVALID STATE/)
+  })
+
+  /**
+   * G10's CASCADE, reverted whole. This is the window the whole retrofit was written for: G10
+   * removes the host's manager, blocks every team, and hibernates the fleet — three host-wide
+   * mutations, none of which the caller asked for individually. A failure at ANY later gate used to
+   * strand all three.
+   *
+   * THE INJECTION POINT WAS MEASURED, and the obvious one does not work: `failOn` on G14b or G14e
+   * is SWALLOWED (both gates catch their own errors and push a WARN), so the pipeline sails on and
+   * `result.success` stays true. The reachable late abort is the INVARIANTS hook — former G22 —
+   * driven the same way the G22 tests below drive it: let the write succeed, then corrupt the disk
+   * behind the pipeline's back. That is also the most valuable one, because it is the failure that
+   * arrives AFTER every gate has run.
+   *
+   * THE ORDER ASSERTION IS THE POINT, not decoration. `wakeAgent` refuses while `getManagerId()` is
+   * null, so an undo that woke the fleet before restoring the pointer would fail EVERY time — and
+   * would still leave `managerId` and `blocked` correct, so a state-only assertion would pass over
+   * a fleet that never came back. Pinning the sequence is what makes "pointer first" enforceable.
+   */
+  it('reverts G10 whole when the final invariants fail — pointer restored BEFORE the fleet is woken', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    armLateDriftAbort()
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    expect(H.world.managerId).toBe(AGENT_ID)        // setManager put the host's manager back
+    expect(H.world.teams[0].blocked).toBe(false)    // unblockAllTeams
+    expect(H.world.awake).toContain(TEAMMATE)       // …and the hibernated teammate is running again
+
+    // Pointer-first WITHIN G10's undo, and the whole undo AFTER the gate that armed the abort.
+    const tail = H.world.calls.slice(H.world.calls.indexOf('setManager'))
+    expect(tail).toEqual(['setManager', 'unblockAllTeams', 'wakeAgent'])
+    expect(H.world.calls.indexOf('setManager'))
+      .toBeGreaterThan(H.world.calls.indexOf('revokeTokensFromIssuerCompensable'))
+
+    expect(result.error).toMatch(/NO CHANGES WERE MADE TO THE SYSTEM/)
+    expect(result.error).not.toMatch(/INVALID STATE/)
+  })
+
+  /**
+   * The skip-check, which exists so a rollback never fights a human. If the teammate was restarted
+   * by hand while the pipeline was running, G10's undo must leave it alone rather than issue a
+   * second wake — re-waking a live agent is a visible side effect of a rollback that is supposed to
+   * be invisible.
+   *
+   * Driven by putting the teammate back into `awake` AFTER `blockAllTeams` took it down, which is
+   * exactly the race the check models. The assertion has to be on the CALL LOG: with the branch
+   * deleted the wake happens and `awake` still contains the teammate, so the STATE is identical
+   * either way and only the log tells the two apart.
+   *
+   * THE HOOK IS ANCHORED TO G14b, NOT to `blockAllTeams`, and that is not a detail: `step()` fires
+   * an `after` hook from the TOP of the mock, so a hook on `blockAllTeams` runs BEFORE that same
+   * function's own body filters `awake` — the push is undone on the next line and the race is never
+   * modelled. Anchor a "the world changed behind our back" hook to a call that happens AFTER the
+   * state you are perturbing has settled.
+   */
+  it('does not re-wake a teammate that came back on its own while the pipeline ran', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    armLateDriftAbort({ revokeTokensForAgentCompensable: () => { H.world.awake.push(TEAMMATE) } })
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    expect(H.world.awake).toContain(TEAMMATE)
+    expect(H.world.calls).not.toContain('wakeAgent')
+    // The rest of the cascade is still reverted — skipping the wake is not skipping the undo.
+    expect(H.world.managerId).toBe(AGENT_ID)
+    expect(H.world.teams[0].blocked).toBe(false)
     expect(result.error).not.toMatch(/INVALID STATE/)
   })
 
@@ -339,11 +449,6 @@ describe('ChangeTitle G22 — the final verification gate', () => {
    */
   function perturbAfterG14e(fn: () => void): void {
     H.world.after = { revokeTokensFromIssuerCompensable: () => { H.perturb.run = fn; fn() } }
-  }
-
-  /** Every registry row, with the agent's title forced to `title` — the shape registry.json holds. */
-  function rowsWithTitle(title: string | null): Record<string, unknown>[] {
-    return [...H.registry.values()].map(a => ((a.id as string) === AGENT_ID ? { ...a, governanceTitle: title } : a))
   }
 
   /**

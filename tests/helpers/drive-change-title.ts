@@ -78,6 +78,15 @@ export interface ChangeTitleWorld {
   teams: FakeTeam[]
   /** Agent ids `blockAllTeams()` reports it hibernated. Seeded by the test. */
   hibernatable: string[]
+  /**
+   * Agent ids currently LIVE. `blockAllTeams` removes the hibernatable ones and `wakeAgent` puts
+   * them back, so "the fleet is asleep" and "the fleet was woken again" are observations rather
+   * than inferences from a spy count.
+   *
+   * Without this, `blockAllTeams` would report ids it never took down and G10's undo would "wake"
+   * an agent that was never asleep — the assertion would pass over a pair of no-ops.
+   */
+  awake: string[]
   /** Every mocked mutation, in call order — `['removeManager', 'blockAllTeams', …]`. */
   calls: string[]
   /** Tokens each revocation reports. Non-zero proves the gate actually ran. */
@@ -109,6 +118,7 @@ export function newWorld(over: Partial<ChangeTitleWorld> = {}): ChangeTitleWorld
     managerId: null,
     teams: [],
     hibernatable: [],
+    awake: [],
     calls: [],
     aidTokens: 0,
     portfolioTokens: 0,
@@ -167,6 +177,10 @@ export function teamRegistryMock(world: ChangeTitleWorld) {
     blockAllTeams: async () => {
       step(world, 'blockAllTeams')
       for (const t of world.teams) t.blocked = true
+      // Actually take them down. The real one hibernates every team agent, and a double that only
+      // REPORTS ids it did not touch makes G10's compensating re-wake unobservable: `awake` would
+      // already contain them, so "the fleet was woken again" would pass with the wake deleted.
+      world.awake = world.awake.filter(id => !world.hibernatable.includes(id))
       return [...world.hibernatable]
     },
     unblockAllTeams: async () => {
@@ -230,10 +244,47 @@ export const stubs = {
    * failure reason. Caught only because the first caller asserted `result.error`, not `success`.
    */
   ibctScopeCheck: () => ({ checkIbctScope: (): string | null => null }),
-  /** G17's last resort. Returns the shape ChangeTitle reads (`?.data?.success`). */
-  agentsCore: () => ({
-    hibernateAgent: async () => ({ data: { success: true } }),
-  }),
+}
+
+/**
+ * `@/services/agents-core-service` — BOTH halves, because two compensations read the second one.
+ *
+ * `hibernateAgent` is G17's last resort; `wakeAgent` is what G10's and G17's undos call to put the
+ * fleet back. A stub carrying only `hibernateAgent` is the DECORATIVE-STUB trap one level up: the
+ * destructure `const { wakeAgent } = await import(...)` throws on a mocked module that does not
+ * export it, the undo catches that as a "problem", and the rollback reports R51.5 CRITICAL — a
+ * harness defect that reads exactly like a production one.
+ *
+ * `wakeAgent` returns the `{ data: { woken } }` shape ChangeTitle checks, and mutates `awake` so
+ * the restoration is a state change rather than a spy call.
+ */
+export function agentsCoreMock(world: ChangeTitleWorld) {
+  return {
+    hibernateAgent: async (id: string) => {
+      step(world, 'hibernateAgent')
+      world.awake = world.awake.filter(a => a !== id)
+      return { data: { success: true } }
+    },
+    wakeAgent: async (id: string) => {
+      step(world, 'wakeAgent')
+      if (!world.awake.includes(id)) world.awake.push(id)
+      return { data: { woken: true } }
+    },
+  }
+}
+
+/**
+ * `@/lib/agent-runtime` — G10's undo asks which sessions are ALREADY live before waking anything,
+ * so it never re-wakes an agent a human restarted in the meantime. Unmocked, that call shells out
+ * to tmux: slow, machine-dependent, and its failure is swallowed (correctly — an unreadable runtime
+ * is not proof an agent is awake), which would silently turn the skip-check into a no-op.
+ */
+export function agentRuntimeMock(world: ChangeTitleWorld) {
+  return {
+    getRuntime: () => ({
+      listSessions: async () => world.awake.map(name => ({ name })),
+    }),
+  }
 }
 
 /**

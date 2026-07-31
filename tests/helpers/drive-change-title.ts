@@ -88,6 +88,20 @@ export interface ChangeTitleWorld {
    * This is how a mid-pipeline failure is forced at a chosen gate.
    */
   failOn: Record<string, number>
+  /**
+   * Side-effect injection: `{ revokeTokensFromIssuer: fn }` runs `fn` AFTER that call succeeds.
+   *
+   * `failOn` forces a gate to FAIL; this makes a gate SUCCEED and then perturbs the world behind
+   * the pipeline's back — which is the only way to reach a POST-CONDITION gate. G22 verifies the
+   * title landed, so it can only be driven by letting the write succeed and corrupting the stores
+   * afterwards; every fixture that fails earlier never reaches it, and its assertions then pass
+   * for the wrong reason.
+   *
+   * It fires only on success (a `failOn` throw happens first), so "the hook ran" also proves the
+   * call it is anchored to ran — which is what makes the injection point an observation rather
+   * than an assumption.
+   */
+  after: Record<string, () => void>
 }
 
 export function newWorld(over: Partial<ChangeTitleWorld> = {}): ChangeTitleWorld {
@@ -99,6 +113,7 @@ export function newWorld(over: Partial<ChangeTitleWorld> = {}): ChangeTitleWorld
     aidTokens: 0,
     portfolioTokens: 0,
     failOn: {},
+    after: {},
     ...over,
   }
 }
@@ -115,6 +130,8 @@ function step(world: ChangeTitleWorld, name: string): void {
   if (world.failOn[name] === nth) {
     throw new Error(`[drive-change-title] injected failure: ${name} call #${nth}`)
   }
+  // AFTER the failOn check, so an injected side effect never runs on a call that threw.
+  world.after?.[name]?.()
 }
 
 /** `@/lib/governance` — ACTIVE, unlike the DeleteAgent harness's inert stub, because G10/G13 are

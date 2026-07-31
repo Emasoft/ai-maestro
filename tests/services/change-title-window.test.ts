@@ -33,11 +33,24 @@ const H = vi.hoisted(() => {
   const fs = require('fs') as typeof import('fs')
   const path = require('path') as typeof import('path')
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-changetitle-'))
+  const FAKE_STATE = path.join(root, 'state')
+  const registry = new Map<string, Record<string, unknown>>()
+  // The SAME path `registryPath(FAKE_STATE)` builds and `statePath('agents','registry.json')`
+  // resolves to — G14 and G22 both re-read it with the real `fs`.
+  const regFile = path.join(FAKE_STATE, 'agents', 'registry.json')
+  // A test-supplied perturbation, re-applied after EVERY registry flush (see the mock wrapper).
+  const perturb: { run: (() => void) | null } = { run: null }
   return {
     FAKE_HOME: path.join(root, 'home'),
-    FAKE_STATE: path.join(root, 'state'),
+    FAKE_STATE,
     BIN: path.join(root, 'bin'),
-    registry: new Map<string, Record<string, unknown>>(),
+    registry,
+    perturb,
+    /** Overwrite registry.json verbatim — the disk half of a G22 drift, including a non-array. */
+    writeDisk: (body: unknown) => {
+      fs.mkdirSync(path.dirname(regFile), { recursive: true })
+      fs.writeFileSync(regFile, JSON.stringify(body, null, 2), 'utf-8')
+    },
     // The governance world, shared by every mock.
     //
     // IT IS CREATED ONCE AND RESET IN PLACE — never reassigned. Each `vi.mock` factory closes over
@@ -75,9 +88,23 @@ vi.mock('@/lib/ecosystem-constants', async (importOriginal) => {
   return fakeEcosystemPaths(actual, H.FAKE_HOME, H.FAKE_STATE)
 })
 
+// The registry mock, wrapped so an armed perturbation is RE-APPLIED after every flush.
+//
+// Applying it once is not enough: `updateAgent` mirrors the whole store to registry.json, and
+// G16b calls it again (programArgs) AFTER the arming point, which would rewrite the file and
+// silently undo a disk corruption — leaving G22 to pass and the test to assert nothing. Re-applying
+// makes the injection independent of how many later gates happen to write.
 vi.mock('@/lib/agent-registry', async () => {
   const h = await import(HELPER)
-  return h.registryMock(H.registry as never, h.registryPath(H.FAKE_STATE))
+  const real = h.registryMock(H.registry as never, h.registryPath(H.FAKE_STATE))
+  return {
+    ...real,
+    updateAgent: async (id: string, patch: Record<string, unknown>) => {
+      const updated = await (real.updateAgent as (i: string, p: unknown) => Promise<unknown>)(id, patch)
+      H.perturb.run?.()
+      return updated
+    },
+  }
 })
 vi.mock('@/lib/governance', async () => (await import(HELPER)).governanceMock(H.world))
 vi.mock('@/lib/team-registry', async () => (await import(HELPER)).teamRegistryMock(H.world))
@@ -119,6 +146,7 @@ beforeEach(async () => {
   vi.resetModules()
   const h = await import(HELPER)
   H.registry.clear()
+  H.perturb.run = null
   // A team EXISTS but does NOT contain the agent: G09 requires a standalone title to be on no team
   // (R3), while G10's blockAllTeams needs something to block — the exact shape of the window.
   Object.assign(H.world, h.newWorld({
@@ -257,5 +285,122 @@ describe('ChangeTitle window — what a mid-pipeline failure actually leaves beh
 
     // The op is no longer a WARN nobody reads — it names the broken invariant.
     expect((result.operations ?? []).some((op: string) => /G10: CASCADE BROKEN/.test(op))).toBe(true)
+  })
+})
+
+/**
+ * G22 — THE FINAL VERIFICATION GATE, WHICH HAD NO TEST AT ALL (TRDD-DFP0HWRX).
+ *
+ * Measured 2026-07-31 at commit `4ee79582`: neutering BOTH of G22's drift checks
+ * (`if (false && …)`) left the FULL suite green — 310 files, 4437 passed, zero red. The gate's own
+ * comment records why it exists: it was promoted from a silent WARN because callers claimed success
+ * while `governanceTitle` stayed null in registry.json (SCEN-007 P0-003, SCEN-020 BUG-001,
+ * SCEN-002 P0-001). So THREE separate scenario runs found the bug, the fix landed — and the test did
+ * not. That is the general trap in its sharpest form: THE GUARD THAT EXISTS BECAUSE A FALSE SUCCESS
+ * SHIPPED IS THE ONE MOST LIKELY TO HAVE NO TEST, because the incident is treated as the evidence.
+ * A scenario run does not execute in `yarn test` and cannot red on a future edit.
+ *
+ * WHY THESE NEED A NEW INJECTION MECHANISM. `failOn` forces a collaborator to THROW, which aborts
+ * before G22; a post-condition gate can only be reached by letting the write SUCCEED and then
+ * perturbing the stores behind the pipeline's back. Hence `world.after` (fire after a call
+ * succeeds) plus the re-applying `updateAgent` wrapper above.
+ *
+ * THE INJECTION POINT WAS MEASURED, NOT ASSUMED. G14 checks its write twice — the RETURN VALUE of
+ * `updateAgent` for memory, then a fresh `readFileSync` for disk — so a perturbation applied inside
+ * `updateAgent` reds G14, never G22, and the test would pin the wrong gate. G14e
+ * (`revokeTokensFromIssuer`) is the last mocked collaborator that provably runs after G14 completes,
+ * and between it and G22 there are ZERO `getAgent` calls — G22 is the only reader of the cache from
+ * that point on, so corrupting it cannot derail an intermediate gate.
+ */
+describe('ChangeTitle G22 — the final verification gate', () => {
+  /**
+   * Arm `fn` at G14e, and keep it armed for every later registry flush.
+   *
+   * Anchoring to a call the happy-path test already asserts (`revokeTokensFromIssuer`) is what makes
+   * "the perturbation ran" an observation rather than an assumption — `after` fires only on success,
+   * so the hook running proves the gate ran.
+   */
+  function perturbAfterG14e(fn: () => void): void {
+    H.world.after = { revokeTokensFromIssuer: () => { H.perturb.run = fn; fn() } }
+  }
+
+  /** Every registry row, with the agent's title forced to `title` — the shape registry.json holds. */
+  function rowsWithTitle(title: string | null): Record<string, unknown>[] {
+    return [...H.registry.values()].map(a => ((a.id as string) === AGENT_ID ? { ...a, governanceTitle: title } : a))
+  }
+
+  /**
+   * THE POSITIVE CONTROL — NOT OPTIONAL, and deliberately first.
+   *
+   * G22 is a POST-CONDITION: any fixture that fails earlier never reaches it, and all three abort
+   * tests below would then pass for the wrong reason. Asserting the gate's own success op is what
+   * proves the pipeline arrives there at all.
+   */
+  it('is REACHED on a clean change and reports the verified title', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.error ?? null).toBeNull()
+    expect((result.operations ?? []).some((op: string) =>
+      /^G22: Final title verified in cache \+ registry\.json: "autonomous"$/.test(op))).toBe(true)
+  })
+
+  /** Half one: the in-memory registry disagrees with what was just written. */
+  it('aborts when the in-memory registry title drifts after the write', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    // Cache goes stale; disk stays CORRECT, so only the first check can fire.
+    perturbAfterG14e(() => {
+      const rec = H.registry.get(AGENT_ID)
+      if (rec) H.registry.set(AGENT_ID, { ...rec, governanceTitle: 'manager' })
+      H.writeDisk(rowsWithTitle('autonomous'))
+    })
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/G22: Final in-memory title drift/)
+    expect(result.error).toMatch(/registry shows "manager", expected "autonomous"/)
+  })
+
+  /**
+   * Half two: the CASE THE THREE SCENARIOS ACTUALLY HIT — the cache agreed and the FILE did not,
+   * which is the entire reason G22 re-reads from disk rather than trusting `getAgent`.
+   *
+   * It also pins the try-narrowing. During the R51 retrofit this check was moved OUT of the `try`
+   * that guards the disk read: harmless while it was a `return`, but as a `throw` that same `catch`
+   * would swallow it and re-report the generic "Final verification failed", losing the specific
+   * message. Asserting the SPECIFIC string is what makes that regression loud.
+   */
+  it('aborts when registry.json on disk drifts, with the specific message the try-narrowing preserves', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    // Cache untouched (so the first check passes); only the file lies.
+    perturbAfterG14e(() => H.writeDisk(rowsWithTitle('manager')))
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    // NOT the generic "verification failed" — that would mean the catch swallowed this check.
+    expect(result.error).toMatch(/G22: Final on-disk title drift/)
+    expect(result.error).toMatch(/registry\.json shows "manager", expected "autonomous"/)
+    // Proof the perturbation landed AFTER G14 and this is G22's abort, not G14's re-read.
+    expect((result.operations ?? []).some((op: string) => /^G14: Set governanceTitle/.test(op))).toBe(true)
+  })
+
+  /**
+   * The third arm: the read itself fails. A registry.json holding a non-array parses fine and then
+   * throws on `.find` — the exact case the gate's comment names, and the reason `.find` is
+   * deliberately left INSIDE the try. (A non-array is used rather than `chmod`, which passes
+   * vacuously when the suite runs as root.)
+   */
+  it('aborts when registry.json is unreadable as an agent array', async () => {
+    const { driveChangeTitle } = await import(HELPER)
+    perturbAfterG14e(() => H.writeDisk({ agents: [...H.registry.values()] }))   // an OBJECT, not an array
+
+    const result = await driveChangeTitle(AGENT_ID, 'autonomous')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/G22: Final verification failed/)
+    expect(result.error).toMatch(/is not a function/)
   })
 })

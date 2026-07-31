@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-07-30T20:39:45+0200
+updated: 2026-07-31T07:26:03+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -270,8 +270,10 @@ either shape — it is what converts "we remember not to do this" into something
 ## Acceptance
 
 - [x] USER picks Shape A (delegate to the CLI) or Shape B (ratified carve-out with enforcer discipline) — SHAPE A, ruled 2026-07-30 under the USER's delegation; see the Approval log for why a second writer over another tool's file is the class of bug the safeguards would only have helped us survive
-- [ ] `installed_plugins.json` mutation matches the chosen shape → **SPLIT OUT as TRDD-OWO449MR
-      (NPT), not done here.** Shape A means "ask the CLI", and local-scope uninstall is
+- [x] `installed_plugins.json` mutation matches the chosen shape → **SPLIT OUT as TRDD-OWO449MR
+      (NPT), not done here — and that NPT is now `completed` (archived), so this box is satisfied by
+      the card it was split into rather than by work done here.** Shape A means "ask the CLI", and
+      local-scope uninstall is
       `claude plugin uninstall … --scope local --cwd <dir>` — it needs the workdir to EXIST, while
       G09b deliberately runs AFTER the folder is deleted precisely so the records are already false
       and the gate needs no compensation (R51). Executing Shape A here is therefore a REORDER of

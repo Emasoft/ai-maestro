@@ -156,10 +156,27 @@ records a replayable login and persists the cookies; replaying it re-seeds
 `chrome-profile-<email>` so the existing capture targets the *right* account instead of whoever
 is logged in.
 
-1. **Guard rail (do FIRST).** `unbrowse` contributes captured routes to a **shared route graph**
-   and auto-publishes by default. A login route for the owner's Google/Anthropic accounts must
-   never enter it: `auto-publish off` + the auth domains on the publish blacklist. This is the
-   only step whose omission is not recoverable after the fact.
+1. **Guard rail (do FIRST).** `unbrowse` contributes captured routes to a **shared route graph**.
+   A login route for the owner's Google/Anthropic accounts must never enter it. Measured on the
+   installed **v11.1.9** rather than assumed, because the shipped skill doc describes a different
+   (flat-command) generation:
+   - The skill doc's `settings --auto-publish off` / `--publish-blacklist` **do not exist here**:
+     `unbrowse settings` on this build is a *pointer-secrets* surface (`--set <key>=<pointer>`),
+     and `act --help` mentions no publish/share/graph verb.
+   - Publishing appears to be **explicit and per-skill**: `unbrowse build publish` refuses with
+     `{"error":"--skill is required"}`.
+   - The sharing pathway is nonetheless **real and already carries auth domains** — of the 221
+     skills visible locally, all are `source: marketplace` and the set includes `google.com`,
+     `www.google.com`, `googleusercontent.com` and a third-party `…-auth.…` domain, contributed
+     by other agents.
+   - **Nothing of the owner's has been shared: 0 non-marketplace skills.** So this is genuinely a
+     before-you-capture-anything step, not a cleanup.
+
+   So the enforceable rule for this build is **never run `build publish` on a skill captured from
+   an auth domain**, and confirm the auto-publish semantics with upstream (the skill ships a
+   `gh issue create` reporting path) before the first login route is taught. Do NOT record this
+   box as done on the strength of having run a command — read the setting back, or state plainly
+   that the knob could not be found.
 2. **Teach one login route per account** (owner-run, once). Then the profile is re-seedable
    without a human.
 3. **Server tick acts on `reauth-needed`** instead of logging it: re-seed the profile, run the

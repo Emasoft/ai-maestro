@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T11:28:39+0200
+updated: 2026-07-31T11:34:17+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -123,7 +123,7 @@ surfaced as a dead pipeline mid-edit rather than as a design question:
 
 | # | gate | mutates | undo (design) |
 |---|---|---|---|
-| 13 | **G14c** | **ledger emit** (`change_title`) | **THE ONE OPEN QUESTION — do NOT write an undo.** A ledger is append-only; deleting the entry would falsify history, and leaving it fires mid-window so a rollback leaves a recorded `change_title` for a change that got reverted. **The fix is to MOVE it after the array (emit on success only), which is a BEHAVIOUR CHANGE** — deliberately not done in commit 2. Decide before writing the ctx. |
+| 13 | **G14c** | **ledger emit** (`change_title`) | **DECIDED 2026-07-31 — MOVE IT OUT OF THE ARRAY; write no undo.** See "⚠ G14c IS DECIDED" below for the three measurements that settle it. Emit AFTER the transaction, gated on **`txn.ok` (the transaction COMMITTED)** — NOT on the function returning success. |
 | 14 | **G14d** | `ChangePlugin(action:'uninstall', rolePluginSwap:true)` per stale role-plugin | reinstall each entry it recorded — `run` must push `{name, marketplace}` per SUCCESSFUL uninstall into ctx, and `undo` reinstalls from that list. It already loops over `roleEntries`, so this is the loop shape the Gate docs prescribe. |
 | 15 | **G15** | `uninstallAllRolePlugins(agentDir)` on BOTH branches (swap, and the stale-clean branch) | reinstall `ctx.g15Uninstalled` (the `currentPluginName` it removed). **Note the second branch uninstalls with `.catch(() => {})` when there is no current plugin** — record nothing there, since nothing known was removed. |
 
@@ -306,6 +306,38 @@ correction 2 below.**
    cannot reach a post-condition gate at all — it makes a collaborator THROW, aborting before the
    gate — which is why `tests/helpers/drive-change-title.ts` gained `world.after` (fires only on
    SUCCESS, so the hook running is itself proof the call it anchors to ran).
+
+**⚠ G14c IS DECIDED — 2026-07-31. MOVE IT OUT OF THE ARRAY; it gets NO undo.** It was the last open
+DESIGN question. Three measurements settle it, and the first two eliminate the alternatives
+outright — so this is a forced move, not a preference:
+
+1. **The ledger is a HASH-CHAINED SIGNED log, not an append-only convention.**
+   `lib/signed-ledger.ts::append` stamps every entry with `seq: this.nextSeq()`,
+   `prevHash: this.lastHash()`, and a `signature` over the canonicalized entry. An `undo` that
+   DELETED the entry would not merely "falsify history" — it would break `prevHash` for every later
+   entry and fail verification. **That option never existed.** (This repo has already corrupted this
+   exact ledger once by renumbering `seq`. Do not go near it.)
+2. **A COMPENSATING entry — the ledger-native reversal, and the obvious second choice — is defeated
+   by the emit being FIRE-AND-FORGET ASYNC.** `lib/ledger-emit.ts::emitAgentOp` returns `void` and
+   calls `registryLedger.append(…).catch(…)`: the append is never awaited and its failure is
+   swallowed into a console `AUDIT GAP` line. G14c's own `try/catch` can therefore only catch a
+   SYNCHRONOUS throw (the dynamic import) — **the gate cannot know whether the entry it would
+   compensate ever landed**, so an undo appending a reversal risks recording the reversal of a
+   non-event. That is a worse lie than the one it fixes.
+3. **Moving it loses NO audit coverage**, which is what makes the move cheap. The per-op entry is
+   granularity ON TOP of the save-level bulk diff emitted by `agent-registry.ts::saveAgents()` — the
+   gate's own comment calls that "a belt-and-braces safety net". A rolled-back ChangeTitle still
+   leaves the bulk diff for the transient write AND for the undo's restore, so the fact that the
+   write briefly landed stays on the record either way.
+
+**THE PREDICATE IS `txn.ok` (the transaction COMMITTED), NOT `result.success` — and this card's
+earlier one-liner ("emit on success only") was WRONG about it.** ChangeTitle has a DEFERRED FAIL: a
+broken G10 cascade returns `success: false` while the title write **STANDS** (deliberately not
+reverted). Emitting on `success` would skip the per-op entry for a title change that really did
+persist — a silent audit gap in precisely the failure case an auditor cares most about. In commit
+3's end state the two predicates coincide, because fusing G10 deletes the deferred fail; they are
+still not the same predicate, and only `txn.ok` stays correct if any deferred-fail construct
+survives the fuse.
 
 **⚠ COMMIT 3'S TWO MECHANICAL QUESTIONS ARE MEASURED — 2026-07-31.** Both were open, both looked
 like they could widen the edit, and both turned out contained. Read the landed sibling

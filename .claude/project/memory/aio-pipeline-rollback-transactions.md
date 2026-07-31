@@ -43,8 +43,9 @@ merely RETURNS; one gate's compensation can MASK another's on a shared field; an
 first line short-circuits reddens nothing unless the fixture drives real partial work (delete, then
 throw). [^1] [^4]
 
-**Where the work stands:** see the status atom below — 9 of 19 transactional, and `ChangeTitle` is
-the only pipeline left with a real window. [^5] [^6] [^7]
+**Where the work stands:** see the status atom below — `ChangeTitle` is DONE and NO pipeline has an
+open window left; the remaining nine are conformance-only and retrofitting them buys zero safety.
+[^5] [^6] [^7] [^10]
 
 ## Applies to
 
@@ -56,25 +57,32 @@ the only pipeline left with a real window. [^5] [^6] [^7]
 - [[governance-enforcement-ratchet]] — the same ratchet pattern applied to rule enforcement.
 
 
-^ATOM-2U3W-0C2K [desc:"Where the R51 retrofit stands: ChangeTitle is the ONLY pipeline left with a real window, and its window is now characterized (2026-07-31)", keywords: which_pipeline_still_needs_the_runner ChangeTitle_is_the_last_window InstallElement_conformance_only compensation_is_forbidden_here characterize_before_retrofitting, ocd: 2026-07-31, lmd: 2026-07-31]
+^ATOM-2U3W-0C2K [desc:"Where the R51 retrofit stands: ChangeTitle is DONE and no pipeline has an open window left — the remaining nine are conformance-only and retrofitting them buys zero safety", keywords: which_pipeline_still_needs_the_runner is_the_R51_retrofit_finished ChangeTitle_window_closed InstallElement_conformance_only compensation_is_forbidden_here retrofit_buys_zero_safety, ocd: 2026-07-31, lmd: 2026-07-31]
 
-**Status (2026-07-31): 9 of 19 pipelines transactional, and `ChangeTitle` is the ONLY one left with
-a real partial-state window.** The other nine are single-mutation with nothing abortable after them,
-or `InstallElement` — measured PERMANENTLY conformance-only, because its three pre-EXE mutations are
-ones a compensation is FORBIDDEN or harmful to reverse (R20.31 verdict *Explicit* protects the local
-plugin source; `.claude/` is a guaranteed agent invariant a watchdog re-creates; the marketplace
-registration is SHARED across agents). `ChangeTitle`'s window is now CHARACTERIZED rather than
-argued: `tests/services/change-title-window.test.ts` drives the real 1219-line pipeline against a
-temp home and pins what a mid-pipeline failure leaves behind. **The live G10 lie it exposed is now
-CLOSED (`47feb243`) by a DEFERRED FAIL — the verdict is withheld at the terminal while every
-alignment gate still runs; an abort at G10 would have been a security regression.** The retrofit
-itself is NOT big-bang: 3 commits, each leaving the pipeline working (1 = the G10 fix, done
-`47feb243`; 2 = the gate-array RESTRUCTURE, landing in SLICES — G9a + G14 done `bfc1f226`;
-3 = swap in `runGateSequence` + the undos). Its window opens at **G9a**, not at the first mutation
-(G03 mutates earlier but HEALS a corrupt field, so its undo would re-break the repair — and starting
-there would also enclose two gates that early-return SUCCESS, which the runner cannot express at
-all). Its shape is a **gate ARRAY**, not `runAioPipeline` — that takes `pre[] + ONE exe + post[]`
-and cannot express 13 mutations. Governing card: `TRDD-DQ6XN2VP`. [^6] [^7] [^8] [^9]
+**Status (end of 2026-07-31): `ChangeTitle` is DONE and NO pipeline has an open partial-state window
+left.** It runs on `runGateSequence` at `element-management-service.ts:4204`, and **13 of its 14
+mutating gates have their `undo` pinned by a named neuter** in
+`tests/services/change-title-window.test.ts`; the 14th (**G15's**) is UNREACHABLE on any
+compatibility-altering title change, because G14d runs FIRST and removes everything incompatible
+with the new title, so G15's detection finds nothing and its ledger stays empty — recorded as
+unreachable, not as a gap. Governing card: `TRDD-DQ6XN2VP`.
+
+**The remaining nine are conformance-only and retrofitting them buys ZERO safety** — eight are a
+single mutating call with nothing abortable after it, and `InstallElement` is measured PERMANENTLY
+conformance-only because its three pre-EXE mutations are ones a compensation is FORBIDDEN or harmful
+to reverse (R20.31 verdict *Explicit* protects the local plugin source; `.claude/` is a guaranteed
+agent invariant a watchdog re-creates; the marketplace registration is SHARED across agents). They
+stay open on the `AIO-TXN-10` **conformance ratchet alone**.
+
+**The durable shape facts** (these outlive the status above): the window opens at **G9a**, not at
+the first mutation — G03 mutates earlier but HEALS a corrupt field, so its undo would re-break the
+repair, and starting there would enclose two gates that early-return SUCCESS, which the runner
+cannot express at all. The shape is a **gate ARRAY**, not `runAioPipeline` (that takes
+`pre[] + ONE exe + post[]` and cannot express 13 mutations). **G14 before G10 is deliberate**
+(TRDD-EE5YX5LF) — the array order IS the crash-safety property, so do not sort it. And the live G10
+lie the characterization exposed is CLOSED (`47feb243`) by a DEFERRED FAIL: the verdict is withheld
+at the terminal while every alignment gate still runs, because an abort at G10 would have been a
+security regression. [^6] [^7] [^8] [^9] [^10]
 
 ## Notes and lessons learned
 
@@ -120,3 +128,4 @@ and cannot express 13 mutations. Governing card: `TRDD-DQ6XN2VP`. [^6] [^7] [^8]
 [^7]: [id:ATOM-FTR8-IT18, status:valid, keywords:"gate_reported_success_but_state_is_inconsistent half_of_a_cascade_landed warn_and_continue_swallowed_it only_the_second_half_is_try_wrapped cascade_not_atomic", ocd:2026-07-31, lmd:2026-07-31] DO NOT wrap only the SECOND half of a cascade, BECAUSE the operation then returns success over the exact state the cascade exists to prevent: ChangeTitle's G10 removes the manager and THEN blocks every team (a team must not run without one), only the block is try/caught, so a failure there yields `success: true` on a host with no manager and unblocked teams — traced solely by an op nobody reads. DO make the cascade ONE gate whose undo restores both halves, and CHARACTERIZE the current residue first so the retrofit has a state to invert.
 [^8]: [id:ATOM-TNAF-2FQD, status:valid, desc:"The interim fix for a half-wrapped cascade is a deferred fail, not an abort", keywords:"obvious_fix_is_a_security_regression abort_strands_what_an_earlier_gate_wrote half_wrapped_cascade retry_short_circuits_before_the_repair withhold_the_verdict_not_the_work", ocd:2026-07-31, lmd:2026-07-31] DO NOT fix a half-wrapped cascade by making it ABORT, BECAUSE the abort strands whatever an EARLIER gate already wrote: ChangeTitle writes the title at G14 BEFORE G10, so aborting at G10 skips the revocation gates and leaves a demoted MANAGER holding AID tokens embedding `manager` — and the retry cannot repair it, because Gate 6 sees the title already changed and returns success first. DO withhold the VERDICT at the terminal while the alignment gates still run; abort is correct only once that earlier write is itself compensable.
 [^9]: [id:ATOM-B1Y7-TS5F, status:valid, keywords:"how_big_is_the_ctx_reify_the_locals_gate_runner_retrofit_size_undo_ledger_not_locals_whole_function_edit_estimate", ocd:2026-07-31, lmd:2026-07-31] DO NOT size a gate-runner retrofit from the function's LOCAL count, BECAUSE the ctx is an UNDO LEDGER — the landed sibling's has 4 fields, all recorded by `run` for `undo`, with adapters and plans closed over lexically; sizing it at "117 declarations, ~12-15 carriers" deferred the work a whole session. DO read a sibling's ctx first.
+[^10]: [id:ATOM-XDZ3-F87P, status:valid, desc:"G16's undo was impossible by construction until it stopped routing through ChangePlugin", keywords:"undo_through_a_wrapping_pipeline rollback_reports_critical_but_state_is_recoverable gate_refuses_during_reverse_unwind undo_must_use_the_primitive verify_by_effect_not_by_return", ocd:2026-07-31, lmd:2026-07-31] DO NOT undo a mutation by calling a higher-level PIPELINE that wraps the primitive, BECAUSE the wrapper imports gates the forward path never ran and one of them can make the undo impossible by construction: ChangeTitle G16 installed with `installPluginLocally` directly but undid through `ChangePlugin`, whose G08 refuses to uninstall the plugin the CURRENT title requires — and on a reverse unwind that title is still the NEW one, so EVERY rollback past G16 reported R51.5 CRITICAL over a fully recoverable system. DO reverse through the same PRIMITIVE that performed it, and VERIFY BY EFFECT when that primitive best-efforts its subprocess and cannot signal failure.

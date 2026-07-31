@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T20:15:22+0200
-updated: 2026-07-31T20:22:52+0200
+updated: 2026-07-31T20:27:34+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -31,11 +31,17 @@ Every other one landed under `TRDD-DQ6XN2VP`; this was carved out of that card b
 window**, opening it after `:912`. Do not re-litigate it; (b)/(c)/(d) are rejected there with
 reasons. And it is **FIVE** excluded mutations, not the three the parent card named.
 
-**NEXT ACTION — build the window, and build the CLOSED-SET TEST WITH IT, not after.** That test is
-the load-bearing half: `MAX_HANDROLLED = 0` while five mutations sit outside every window is a
-false "complete" signal, and a comment is not a guard. Scan the pre-window region, assert its
-mutation set EQUALS the enumerated five, and confirm the scanner sees both mutation forms (direct
-call and via-helper).
+**NEXT ACTION — pick one of the three ways out in `⚠ FOUND WHILE STARTING THE BUILD` FIRST.**
+"Open the window after the last unreversible mutation" is not a line split: that mutation
+(`emitForClient`) is nested four levels deep, immediately before the `adapter.install` it feeds.
+Current preference is **option 3** (resolve `storageDir` in a step before the window, scoped to the
+adapter branch) — verify it type-checks against `convertedDir`'s flow before committing.
+
+Then build the window **and the CLOSED-SET TEST together**. That test is the load-bearing half:
+`MAX_HANDROLLED = 0` while five mutations sit outside every window is a false "complete" signal,
+and a comment is not a guard. Assert the pre-window mutation set EQUALS the enumerated five, and
+confirm the scanner sees both mutation forms (direct call and via-helper). **Key it on call SHAPE,
+never on line numbers** — this card's own citations drifted +3 within one session.
 
 **DO NOT** wrap the EXE settings write, lower the ratchet to 0, and stop. That moves the
 conformance number while leaving the five uncompensatable mutations unguarded — the ratchet would
@@ -193,6 +199,43 @@ deliverable of this card:
 
 Plus: the ratchet's claim is renamed from *"transactional"* to **"windowed per the R51 boundary
 rule"**, so the number stops overclaiming.
+
+### ⚠ FOUND WHILE STARTING THE BUILD — "open the window after `:915`" IS NOT A LINE SPLIT
+
+The decision above says *open the window after the last unreversible mutation*. Going to write it
+shows that mutation is **nested four levels deep, immediately before the install it feeds**:
+
+```
+:900  try {
+:901    switch (action) {
+:902      case 'install': {
+:903        if (useClientAdapter) {
+:913          if (!storageDir) {
+:915            storageDir = await emitForClient(...)   ← LAST UNREVERSIBLE
+:928          adapterRes = await adapter.install(...)   ← FIRST REVERSIBLE
+```
+
+**You cannot draw a horizontal line between `:915` and `:928`.** The lazy emit is inside the
+adapter branch, and it exists precisely to produce the input the install consumes. So the window
+cannot simply "start lower". Three ways out, none free — **decide before writing**:
+
+1. **Hoist the lazy emit above the window.** Clean split, but the CLI path never uses `storageDir`,
+   so this emits for installs that do not need it — doing forbidden-to-reverse work speculatively,
+   which is worse than the problem.
+2. **Let the emit sit INSIDE the window**, in the same gate as the install, with an `undo` that
+   reverses ONLY the install and a comment stating the emit is forward-convergent and deliberately
+   not reversed (R20.26). Honest, and it puts an unreversible mutation inside a window — the exact
+   thing the decision set out to avoid, so it must be argued, not slipped in.
+3. **Split the branch**: a "resolve `storageDir`" step before the window (may emit), then the
+   window covers `adapter.install` onward. Same effect as 1 but scoped to the branch that needs it,
+   so nothing speculative happens on the CLI path. **Current preference — verify it type-checks
+   against `convertedDir`'s flow before committing to it.**
+
+**⚠ AND THE LINE CITATIONS IN THIS CARD ALREADY DRIFTED +3, in this same session, by my own edit.**
+The `G13:` mislabel fix at `:880` added three comment lines, so the two EXE mutations this card
+cites as `:894` and `:912` are now **`:897`** and **`:915`**. Nothing else moved. Treat every bare
+line number here as a hint and re-resolve it — which is also why the closed-set test must key on
+**call shape**, never on line numbers.
 
 **Early-warning property (why the pin is not busywork):** if a future edit makes G13's conversion
 *required* — aborting on failure instead of swallowing — the pre-window gains an abortable gate and

@@ -195,7 +195,14 @@ export const stubs = {
   sharedState: () => ({ broadcastGovernanceUpdate: () => undefined }),
   ledgerEmit: () => ({ emitAgentOp: async () => undefined }),
   portfolioLedger: () => ({ emitPortfolioOp: async () => undefined }),
-  ibctScopeCheck: () => ({ checkIbctScope: () => ({ allowed: true as const }) }),
+  /**
+   * `checkIbctScope` returns `string | null` — an ERROR STRING, or null when authorized. It is NOT
+   * an `{allowed}` verdict, and getting that backwards is silent: G0b does
+   * `if (scopeErr) { result.error = scopeErr; return result }`, so a truthy `{allowed: true}`
+   * became the error and every ChangeTitle died at gate 0b with a *successful* verdict as its
+   * failure reason. Caught only because the first caller asserted `result.error`, not `success`.
+   */
+  ibctScopeCheck: () => ({ checkIbctScope: (): string | null => null }),
   /** G17's last resort. Returns the shape ChangeTitle reads (`?.data?.success`). */
   agentsCore: () => ({
     hibernateAgent: async () => ({ data: { success: true } }),
@@ -203,19 +210,53 @@ export const stubs = {
 }
 
 /**
- * Install a no-op `claude` on PATH and return the restore function.
+ * Install a `claude` shim on PATH and return the restore function.
  *
  * G16's `installPluginLocally` SPAWNS `claude plugin install`. Without this the child either fails
  * (noisy, and the pipeline then takes its G17 repair path for the wrong reason) or — far worse on a
  * developer machine — reaches the REAL CLI and mutates the real
  * `~/.claude/plugins/installed_plugins.json`, which no in-process mock can prevent.
  *
- * Exits 0 and prints nothing, so the pipeline sees a successful install.
+ * IT IS NOT A NO-OP, AND THAT IS THE WHOLE POINT. Since TRDD-0GCIMQ9F the CLI is the ONLY writer
+ * of `<agentDir>/.claude/settings.local.json` — `installPluginLocally` no longer hand-writes the
+ * `enabledPlugins` key afterwards. G17 then READS that file back to enforce R9.13. So a shim that
+ * merely exits 0 makes every install look successful to G16 and leave zero trace for G17, which
+ * dutifully "recovers" a healthy agent into `roleMissing: true` + hibernated. The double must model
+ * the ONE side effect the code reads back, or the test exercises the repair path on every run and
+ * calls it the happy path.
+ *
+ * It also appends its argv to `<dir>/claude-calls.log`, so "did G16 actually shell out?" is an
+ * observation rather than an inference.
  */
 export function installClaudeShim(dir: string): () => void {
   mkdirSync(dir, { recursive: true })
   const shim = join(dir, 'claude')
-  writeFileSync(shim, '#!/bin/sh\nexit 0\n', 'utf-8')
+  // `cwd` is the agent's working directory (installPluginLocally passes it), so the settings file
+  // is resolved relative to it exactly as the real CLI resolves a --scope local install.
+  writeFileSync(shim, `#!/bin/sh
+printf '%s\\n' "$*" >> ${JSON.stringify(join(dir, 'claude-calls.log'))}
+[ "$1" = "plugin" ] || exit 0
+case "$2" in install|uninstall) ;; *) exit 0 ;; esac
+exec python3 - "$2" "$3" "$4" <<'PY'
+import json, os, sys
+verb, name, marketplace = sys.argv[1], sys.argv[2], sys.argv[3]
+path = os.path.join(os.getcwd(), '.claude', 'settings.local.json')
+os.makedirs(os.path.dirname(path), exist_ok=True)
+try:
+    with open(path) as fh:
+        data = json.load(fh)
+except Exception:
+    data = {}
+enabled = data.setdefault('enabledPlugins', {})
+key = '%s@%s' % (name, marketplace)
+if verb == 'install':
+    enabled[key] = True
+else:
+    enabled.pop(key, None)
+with open(path, 'w') as fh:
+    json.dump(data, fh, indent=2)
+PY
+`, 'utf-8')
   chmodSync(shim, 0o755)
   const previous = process.env.PATH
   process.env.PATH = `${dir}:${previous ?? ''}`

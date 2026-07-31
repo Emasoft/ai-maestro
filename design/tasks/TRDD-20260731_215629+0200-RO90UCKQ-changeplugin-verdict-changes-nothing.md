@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T21:56:29+0200
-updated: 2026-07-31T22:19:32+0200
+updated: 2026-07-31T23:04:08+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -146,6 +146,155 @@ that card closed.
 pipeline cannot fail — does not exist: all 15 already branch on it, and 12 tests already exercise the
 failure path. What is left is the semantic call in step 1, plus whatever step 2 decides.
 
+## THE SHAPE THAT WORKED — `verified`, reported not folded (UNCOMMITTED, see below)
+
+`ChangePluginResult.verified?: 'ok' | 'mismatch' | 'unknown'`, set by G11's three arms; `success` is
+untouched. **Fail-safe by construction:** a caller that ignores it behaves exactly as before, so the
+compensation path needs no change and cannot regress. The rejected `isCompensation` INPUT flag has
+the inverse property — a compensation that forgets to set it gets the catastrophic behaviour.
+
+**Three values, not a boolean:** `mismatch` (read cleanly, the change did not land — a positive
+VIOLATION) and `unknown` (unreadable) are the two things `TRDD-K71FV649` separated. A boolean
+collapses them.
+
+Wired at the three user-initiated routes that return a simple result — `local-plugins`,
+`role-plugins/install` (POST + DELETE), `global-plugins` — **409 on `mismatch`, never on `unknown`**.
+Every check is `=== 'mismatch'` and not `!== 'ok'`, so the idempotent no-op path (which returns
+before G11 and leaves the field unset) can never read as a violation.
+
+**Neuters: N17** fold the verdict into `success` → reds the load-bearing test AND both R51 rollback
+tests, printing the exact catastrophe the design avoids. **N18** the route stops reading the field →
+reds only the 409 test. N17 is the one that proves the DESIGN rather than the field.
+
+⚠ **UNCOMMITTED AT 22:21** — `git commit` was blocked by a live `git difftool -y -x vimdiff HEAD`
+(pid 93643, 2h15m old, an iTerm session) holding `.git/index.lock`. The lock is NOT stale, so it was
+left alone. The work is complete and verified on disk (tsc 0 lines; suite **322 files / 4577 passed
+/ 2 skipped**). Run `.janitor/state/PENDING-COMMIT.sh` once that difftool is closed — it re-checks
+the lock, stages the six files BY NAME, and commits the prepared message.
+
+## `settings/marketplaces` — MY OWN HYPOTHESIS IS REFUTED, and the real answer is a third thing
+
+I filed the box saying a `mismatch` there *"plausibly means: this key shape did not take, try the
+next"*. **The control flow refutes it.** `dispatchUserPluginAction` (`:875`-`:905`):
+
+```ts
+for (const mkt of candidateMarkets) {
+  const r = await ChangePlugin(null, { name: pluginName, marketplace: mkt, action, scope: 'user' }, auth)
+  if (r.success) return { ok: true, pluginKey: `${pluginName}@${mkt}` }   // :889
+  lastErr = r.error || 'unknown'                                          // :891 — advance ONLY on failure
+}
+```
+
+**The retry advances only on `success === false`.** A `mismatch` rides on `success: true` (that is the
+whole design), so `:889` returns immediately and **the next candidate is never reached**. A mismatch
+therefore cannot mean "try the next shape" — by the time it exists, the loop has already decided this
+shape was the right one. Its meaning here is identical to the three wired routes: *the operation ran
+and the change did not land*. (Its return type at `:880` has no `verified` field at all, so today the
+verdict is discarded before any handler could see it.)
+
+Nor can a WRONG key shape produce a `mismatch`: it either fails the CLI/gates (`success: false` → the
+loop advances) or takes the write-back path and lands, which reads back as `ok`.
+
+**But wiring a 409 is still the wrong copy — for a different reason, and this is the finding.**
+`handleInstall` (`:945`-`:995`) carries a stale-state recovery that is gated on `!r.ok`: wipe the
+dangling `enabledPlugins` entry + the cache folder, then retry once (`:988`). A `mismatch` — the
+settings file read CLEANLY and the plugin is not in the expected state — is *precisely* the dangling
+-entry symptom that path exists to repair. So on install, a bare 409 would report a condition the
+route already knows how to FIX. `handleEnable`/`handleDisable`/`handleUpdate` have no such recovery,
+so for them the 409 is right.
+
+**Decision: the box is DECIDED, and it splits.** Not one wiring but two — 409 for
+enable/disable/update, and route the mismatch INTO the existing stale-cleanup retry for install.
+That second half is a change to a recovery path with its own failure modes, so it needs its own tests
+and its own neuter; it is NOT this card's shape applied a fourth time. Recorded here rather than
+implemented, because the tree is blocked (below) and `PENDING-COMMIT.sh` stages BY NAME — adding
+files to a blocked tree without updating that script is exactly the silent-drop bug already caught
+once this session.
+
+## ABORT-vs-REPORT — decided: REPORT, and the reason is STRUCTURAL, not a preference
+
+The box asked whether G11 should ABORT (roll back) rather than merely report. **The question
+presupposes a window that does not exist at G11.**
+
+`ChangePlugin` contains exactly ONE `runGateSequence` (`:4855`), and it is narrow: two gates, `EXE-a`
+(uninstall, undo = reinstall) and `EXE-b` (reinstall), wrapping ONLY the `action: 'update'`
+uninstall-then-reinstall pair. It is awaited and **closed at `:4874`**. G11's mismatch is at
+**`:4960`** — 86 lines and several gates AFTER the transaction has already returned. G10, G11, G11b,
+G12 and G13 all sit outside it, and for `install`/`uninstall`/`enable`/`disable` the EXE work is not
+in a transaction at all (the window is inside the update branch).
+
+So there is nothing for G11 to abort INTO. Making it abort means WIDENING the window to span
+EXE→G11 across all five actions, each EXE step gaining a registered compensation. That is a
+different card, and a much larger one.
+
+**Three independent reasons the answer is REPORT even then:**
+
+1. **No window at G11** (above). The cheap-looking change is not the change.
+2. **`ChangePlugin` is itself an R51 COMPENSATION** — `ChangeMarketplace::remove`'s undo reinstalls
+   through it. A pipeline that aborts, called as an undo, is the exact R51.5 catastrophe **already
+   measured and reverted** here (neuter **N17** reproduces it on demand). Widening the window does
+   not fix that; it makes the abort easier to reach.
+3. **The undo would be reasoning from the evidence that just failed.** A mismatch means the settings
+   read-back disagrees with what we did. The only available compensation is to reverse the action —
+   decided from the same file whose contents just proved untrustworthy. And for local
+   install/uninstall, G10 has ALREADY force-written the key, so reaching a G11 mismatch means the
+   CLI **and** the safeguard both failed: a state where "undo it" is a guess, not a repair.
+
+**Decision: REPORT (the shipped `verified` tri-state). NOT NOW for abort — and if anyone picks up
+the widen-the-window alternative, that IS an architectural decision and goes to the advisor first.**
+Recording a no-op needs no advisor; implementing that one does.
+
+## The 13 fixture tests — WHERE they are, and why they are not named yet
+
+The box has never named them, which makes it un-actionable by anyone but the session that measured
+them. Narrowing them WITHOUT re-running the neuter (read-only, safe under the lock):
+
+| candidate file | `it()` | readFile mocks | `success).toBe(true)` |
+|---|---|---|---|
+| `tests/services/element-management-service.test.ts` | **102** | **31** | **39** |
+| `tests/services/element-management-assistant-title.test.ts` | 11 | 2 | 5 |
+| `tests/services/element-management-service.UninstallPlugin.test.ts` | 6 | 0 | 4 |
+| `tests/integration/element-mgmt-user-scope-iron.test.ts` | 10 | 4 | 0 |
+| `tests/integration/element-mgmt-gate0-required.test.ts` | 15 | 4 | 0 |
+| `tests/governance/r17-r11-core-plugin-binding.test.ts` | 21 | 0 | 1 |
+
+They concentrate in the first file. A test reds under **N17** iff it (a) reaches G11, (b) G11 reads
+the settings file CLEANLY and finds the key absent, and (c) it asserts success — so the two
+zero-`success-true` files are out, and the two zero-readFile-mock files cannot satisfy (b).
+
+**THE EXACT METHOD, and why it is not run tonight.** Apply **N17** (fold `verified` into `success`),
+run the suite, read the red NAMES, revert N17. That is how the 13 were counted originally. It
+requires a TEMPORARY mutation of `services/element-management-service.ts` — and while
+`.git/index.lock` is held there is **no git safety net**: `git stash` and `git checkout` both fail on
+the lock, so a turn that dies mid-neuter (rate limit, compaction, heartbeat boundary) leaves the
+neuter in a 10k-line file that is already modified, with no clean way to tell neuter from work. That
+is a shipped bug waiting on an interruption, and the user is away. **Run it as the first thing after
+the commit lands**, when `git checkout -- <file>` is available again.
+
+## ⚠ A GAP IN MY OWN WORK — wired at FOUR sites, pinned at ONE
+
+Found by RE-READING the two route edits I had not laid eyes on since the compaction, while claiming
+"verified" from a pre-compaction measurement. The re-read is what caught it.
+
+All four sites are correct and consistent — `=== 'mismatch'` (never `!== 'ok'`), 409, `unknown` does
+not gate — and the **precedence is right everywhere**: the `!result.success` → 400 check precedes the
+mismatch → 409 check at every one (`local-plugins` 89<103 · `install` POST 76<83 · `install` DELETE
+139<146 · `global-plugins` 241<248). That ordering is the one thing `tsc` cannot see: reversed, a
+genuine failure would 409 instead of 400, and the message would blame the read-back for a gate denial.
+
+**And exactly ONE of the four is pinned.** `tests/api/local-plugins-verified-mismatch.test.ts`
+carries the positive control *"a genuine failure still 400s, so 409 is not swallowing it"* — for
+`local-plugins` only. Reverse the two checks in `install/route.ts` (either verb) or
+`global-plugins/route.ts` and **nothing reds**. This is this file's own recorded shape: *count the
+clauses, then count the cited SITES* — a design wired at N places and pinned at one.
+
+**NOT fixed tonight, deliberately.** The natural home is that test file, but its NAME describes one
+route, and the fix wants a rename (`plugin-routes-verified-mismatch.test.ts`) — a `git mv`, which the
+index lock denies. Writing three routes' tests into a file named for one, staged by a script under a
+commit message that describes it by its current scope, buys coverage with a lie about where it lives.
+**After the commit: `git mv` the file, then add the 2 assertions × 3 sites (mismatch → 409, genuine
+failure → 400).**
+
 ## Acceptance
 
 - [x] Every caller of `ChangePlugin` enumerated with what it does on `success === false` — **15
@@ -156,14 +305,39 @@ failure path. What is left is the semantic call in step 1, plus whatever step 2 
       compensation path, where it escalates to "the system is unrecoverable". Measured by
       implementing the flip and reading what broke; reverted, with the reasoning left at G11 in the
       code so the next reader does not re-try it blind
-- [ ] A caller can declare itself a COMPENSATION (the blocker the flip found) — flag, separate entry
-      point, or move the verdict to the callers. Whichever wins, the compensation path must not be
-      able to report R51.5 CRITICAL because a read-back disagreed
+- [x] The compensation blocker is SOLVED, and by inverting the question: no caller declares
+      anything. `verified` is reported, `success` is untouched, and the compensation path is
+      unaffected because it does not read the field — fail-safe rather than declare-or-else.
+      Pinned by **N17**, which reds both R51 rollback tests
 - [ ] The 13 fixture tests that assert "install succeeded with the plugin absent from settings" have
-      mocks that MODEL the write — they currently encode the bug
-- [ ] The `unreadable` case verified to still NOT gate, with the test that proves it
-- [ ] Abort-vs-report (the R51 window question) decided and recorded, even if the answer is "not now"
-- [ ] Tests + neuter recorded by name · tsc clean · suite at/above baseline
+      mocks that MODEL the write — they currently encode the bug. **NARROWED, not yet named**: they
+      concentrate in `tests/services/element-management-service.test.ts` (102 tests / 31 readFile
+      mocks / 39 `success).toBe(true)`); the exact method is "apply N17, read the red names, revert",
+      deliberately NOT run while the index lock denies any git safety net. Section above
+- [x] The `unreadable` case still does NOT gate — pinned twice: `verified === 'unknown'` at the
+      service, and a route case asserting 200 on `unknown`
+- [x] Abort-vs-report (the R51 window question) — DECIDED: **REPORT**, on a structural fact rather
+      than a preference. `ChangePlugin`'s ONLY `runGateSequence` (`:4855`) wraps the update path's
+      `EXE-a`/`EXE-b` and **closes at `:4874`**; G11's mismatch is at **`:4960`**, outside it — so
+      there is no window for G11 to abort into, and "make it abort" is really "widen the window
+      across five actions", a different card. Plus the two reasons that survive widening: this
+      pipeline is itself an R51 compensation (N17 reproduces the catastrophe), and the undo would be
+      decided from the same read-back that just proved untrustworthy. Section above
+- [x] Tests + neuters recorded by name (**N17**, **N18**) · tsc 0 lines · suite **322 files / 4577
+      passed / 2 skipped**, up from 320/4567/2
+- [x] `settings/marketplaces` — DECIDED on its own evidence, and **my stated hypothesis was wrong**:
+      the retry advances only on `success === false` (`:889`), so a `mismatch` returns immediately and
+      never reaches the next candidate — it cannot mean "try the next key shape". It is still not a
+      copy of the pattern, for a reason the investigation surfaced instead: `handleInstall`'s
+      stale-cleanup retry is gated on `!r.ok`, and a mismatch is exactly the dangling-entry symptom
+      that path repairs. So the wiring SPLITS — 409 for enable/disable/update, stale-cleanup for
+      install — and the install half is its own work with its own tests. Section above
+- [ ] The 409 wiring is pinned at ALL FOUR sites, not one — found by re-reading post-compaction:
+      wired at `local-plugins` + `install` POST + `install` DELETE + `global-plugins`, pinned only at
+      the first. Precedence (400 before 409) is CORRECT everywhere and is what `tsc` cannot see.
+      Needs a `git mv` to a route-neutral filename first, so it waits on the lock. Section above
+- [ ] COMMIT THE WORK — blocked 22:21 by `.git/index.lock`. Run `.janitor/state/PENDING-COMMIT.sh`
+      once the four difftool sessions are closed
 
 ## Approval log
 

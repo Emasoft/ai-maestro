@@ -84,6 +84,30 @@ lie the characterization exposed is CLOSED (`47feb243`) by a DEFERRED FAIL: the 
 at the terminal while every alignment gate still runs, because an abort at G10 would have been a
 security regression. [^6] [^7] [^8] [^9] [^10]
 
+
+^ATOM-LF4Q-1PAS [desc:"A pipeline that is ALSO called as an R51 compensation must report a verification verdict as its own field, never fold it into success", keywords: pipeline_is_also_a_compensation verification_wired_to_abort rollback_reports_INVALID_STATE_but_state_is_fine verified_tri_state_not_a_boolean report_the_verdict_do_not_fold_it isCompensation_flag_is_fail_dangerous, ocd: 2026-07-31, lmd: 2026-07-31]
+
+**`ChangePlugin` reports its G11 read-back verdict as `ChangePluginResult.verified?: 'ok' |
+'mismatch' | 'unknown'`, and leaves `success` untouched.** The obvious alternative — fail the
+operation when the settings read-back disagrees — was implemented and REVERTED the same session
+(neuter **N17** reproduces it): `ChangeMarketplace::remove`'s R51 compensation reinstalls THROUGH
+`ChangePlugin`, so on that path a failed read-back does not report "the reinstall did not verify",
+it escalates to **R51.5** and tells the user the system is in an INVALID STATE requiring manual
+repair — about a system that was restored.
+
+**The shape is FAIL-SAFE by construction:** a caller that ignores the field behaves exactly as
+before, so the compensation path needs no change and cannot regress. The rejected `isCompensation`
+INPUT flag has the inverse property — a compensation that forgets to set it gets the catastrophic
+behaviour.
+
+**THREE values, not a boolean:** `mismatch` (read cleanly, the change did not land — a positive
+VIOLATION) and `unknown` (unreadable) are the two things `TRDD-K71FV649` separated; an invariant may
+act on a violation and never on an unknown. Callers check `=== 'mismatch'`, never `!== 'ok'`, so the
+idempotent no-op path (which returns before G11 and leaves the field unset) can never read as a
+violation.
+
+Cards: `TRDD-RO90UCKQ` (the design) and `TRDD-K71FV649` (the violation-vs-unknown split). [^11]
+
 ## Notes and lessons learned
 
 [^1]: [id:ATOM-7HQ2-N4KD, status:valid, keywords:"rollback_only_covered_one_failure compensation_exists_but_never_runs partial_state_after_error hand_rolled_undo_block looks_like_coverage", ocd:2026-07-31, lmd:2026-07-31]
@@ -129,3 +153,4 @@ security regression. [^6] [^7] [^8] [^9] [^10]
 [^8]: [id:ATOM-TNAF-2FQD, status:valid, desc:"The interim fix for a half-wrapped cascade is a deferred fail, not an abort", keywords:"obvious_fix_is_a_security_regression abort_strands_what_an_earlier_gate_wrote half_wrapped_cascade retry_short_circuits_before_the_repair withhold_the_verdict_not_the_work", ocd:2026-07-31, lmd:2026-07-31] DO NOT fix a half-wrapped cascade by making it ABORT, BECAUSE the abort strands whatever an EARLIER gate already wrote: ChangeTitle writes the title at G14 BEFORE G10, so aborting at G10 skips the revocation gates and leaves a demoted MANAGER holding AID tokens embedding `manager` — and the retry cannot repair it, because Gate 6 sees the title already changed and returns success first. DO withhold the VERDICT at the terminal while the alignment gates still run; abort is correct only once that earlier write is itself compensable.
 [^9]: [id:ATOM-B1Y7-TS5F, status:valid, keywords:"how_big_is_the_ctx_reify_the_locals_gate_runner_retrofit_size_undo_ledger_not_locals_whole_function_edit_estimate", ocd:2026-07-31, lmd:2026-07-31] DO NOT size a gate-runner retrofit from the function's LOCAL count, BECAUSE the ctx is an UNDO LEDGER — the landed sibling's has 4 fields, all recorded by `run` for `undo`, with adapters and plans closed over lexically; sizing it at "117 declarations, ~12-15 carriers" deferred the work a whole session. DO read a sibling's ctx first.
 [^10]: [id:ATOM-XDZ3-F87P, status:valid, desc:"G16's undo was impossible by construction until it stopped routing through ChangePlugin", keywords:"undo_through_a_wrapping_pipeline rollback_reports_critical_but_state_is_recoverable gate_refuses_during_reverse_unwind undo_must_use_the_primitive verify_by_effect_not_by_return", ocd:2026-07-31, lmd:2026-07-31] DO NOT undo a mutation by calling a higher-level PIPELINE that wraps the primitive, BECAUSE the wrapper imports gates the forward path never ran and one of them can make the undo impossible by construction: ChangeTitle G16 installed with `installPluginLocally` directly but undid through `ChangePlugin`, whose G08 refuses to uninstall the plugin the CURRENT title requires — and on a reverse unwind that title is still the NEW one, so EVERY rollback past G16 reported R51.5 CRITICAL over a fully recoverable system. DO reverse through the same PRIMITIVE that performed it, and VERIFY BY EFFECT when that primitive best-efforts its subprocess and cannot signal failure.
+[^11]: [id:ATOM-PJJT-EEXN, status:valid, desc:"A pipeline called as a compensation must not gain a failure mode; and 'should this gate abort?' presupposes a window that may not exist", keywords:"should_this_gate_abort verification_gate_only_warns wire_the_verdict_into_success my_rollback_now_reports_CRITICAL where_does_the_transaction_CLOSE gate_is_outside_the_window", ocd:2026-07-31, lmd:2026-07-31] DO NOT add a failure mode to a pipeline that is ALSO called as an R51 compensation — not even a verification you can prove correct — BECAUSE on the undo path a "the read-back disagrees" failure is not reported as a weak verify, it becomes R51.5 "the system is in an INVALID STATE, manual repair required" about a system that was just restored; wiring `ChangePlugin`'s G11 verdict into `success` reddened both `change-marketplace-rollback` tests with exactly that message. DO report the verdict in its OWN field and let each CALLER decide (user routes 409, the compensation ignores it) — fail-safe, because a caller that never reads it cannot regress. AND before debating abort at all, LOCATE THE TRANSACTION'S CLOSE: `ChangePlugin`'s only `runGateSequence` closes at `:4874` while G11 is at `:4960`, with three of five actions never entering the window — so there was nothing to abort into, and the real question was the much larger "should the window be widened across five actions?".

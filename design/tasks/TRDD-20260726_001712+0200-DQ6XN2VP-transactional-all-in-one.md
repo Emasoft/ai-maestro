@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T14:44:13+0200
+updated: 2026-07-31T19:32:17+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -48,6 +48,25 @@ morning by reading the function; the correction is the finding, and it is record
 `ChangeFolder` and `ChangeName` were the two never previously measured, and they land with the other
 six: one `updateAgent`, then only notes, a read-only verify, and the ledger emit — nothing abortable
 after the mutation, so there is no state a compensation could restore. **8 of 10 are paperwork.**
+
+### Which runner do the nine conformance rows call? `runGateSequence` — measured 2026-07-31 19:5x
+
+All **10** landed retrofits call `runGateSequence` directly, across 9 pipelines (`ChangeSkill` and
+`ChangeTeam` carry two windows each). **`runAioPipeline` has ZERO production callers** — its only
+drivers are 4 tests in `tests/unit/gate-transaction.test.ts`.
+
+That is not a reason to be cautious about it: `runAioPipeline` is **not separate machinery**, it is
+PRE/EXE/POST sugar that flattens to `runGateSequence([...pre, exeGate, ...post], ctx, opts)` — the
+engine underneath is the one with 10 production call sites. But it does decide which name the nine
+conformance rows should use: **prefer `runGateSequence`**, matching every landed retrofit, unless a
+row genuinely has a skippable EXE (`skipIf` is the only thing the sugar adds). A row that reaches
+for `runAioPipeline` merely because the spec's prose names it would be the first production caller
+of an arrangement nothing else uses.
+
+*Correction owed to the record:* an older plan artifact framed this work as *"wrap DeleteAgent —
+`runAioPipeline` still has zero callers"*, which read as risk. `DeleteAgent` was **already
+retrofitted** when that was written (runner at `:8738`, 11 gates, 10 carrying `undo`); the zero-caller
+fact is true of the sugar and irrelevant to the engine.
 
 ### ⚠ CORRECTED 2026-07-31 — `InstallElement` was picked on two wrong numbers and one wrong claim
 

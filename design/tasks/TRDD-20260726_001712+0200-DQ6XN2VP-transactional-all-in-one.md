@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T13:56:03+0200
+updated: 2026-07-31T14:16:40+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-07-26T00:17:12+0200
 relevant-rules: [R50, R51]
 blocked-by: []
-implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d]
+implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa]
 ---
 
 ## ⏵ MEASURED 2026-07-31 — 9 done, 10 left, and only ONE of the ten is worth doing
@@ -173,14 +173,38 @@ entry (G14c), G14e's portfolio entry, and G18's mesh broadcast — left the arra
 `txn.ok`. `MAX_HANDROLLED` 10 → **9**, `MIN_TRANSACTIONAL` 9 → **10**, `ChangeTitle` added to
 `MUST_BE_TRANSACTIONAL` (the membership guard that a bare count cannot make).
 
-**NEXT ACTION — rollback-test coverage for the other 14 undos.** Exactly ONE undo is pinned today:
-G14's, by `tests/services/change-title-window.test.ts` → *"reverts the title write when
-removeManager fails"*, with two neuters that fail DIFFERENTLY (`throw` ⇒ R51.5 INVALID STATE;
-silent `return` ⇒ `expected 'autonomous' to be 'manager'`) — so the assertion discriminates a
-no-op compensation from a failed one. The other fourteen are live and unobserved. Build on
-`tests/helpers/drive-change-title.ts`: it already has `failOn` and an observation ledger where every
-collaborator variant records under its OWN name. Verify: `tsc` 0 lines + the suite at **310/4441/2**
-+ `trddgrep validate` exit 1 with only `7123D51A` and `C7A81642`.
+**NEXT ACTION — rollback-test coverage for the remaining undos.** THREE are pinned now, by
+`tests/services/change-title-window.test.ts`: **G14's** (*"reverts the title write when removeManager
+fails"*, two neuters that fail DIFFERENTLY — `throw` ⇒ R51.5 INVALID STATE, silent `return` ⇒
+`expected 'autonomous' to be 'manager'`, so the assertion discriminates a no-op compensation from a
+failed one), **G10's** (`8f2c9d71` — the pointer restored BEFORE the fleet is woken, plus the
+`nowLive` skip-check), and **G16b's** (`63e56bfa`). The other twelve are live and unobserved. Build
+on `tests/helpers/drive-change-title.ts`: it has `failOn`, an observation ledger where every
+collaborator variant records under its OWN name, a live `awake` set, and `armLateDriftAbort()`.
+Verify: `tsc` 0 lines + the suite at **310/4445/2** + `trddgrep validate` exit 1 with only
+`7123D51A` and `C7A81642`.
+
+**THE G16b TESTS FOUND A REAL BUG IN SLICE 4c — G16's UNDO WAS IMPOSSIBLE BY CONSTRUCTION**
+(fixed in `63e56bfa`). Its Claude branch installs with `installPluginLocally` DIRECTLY; the undo
+routed the uninstall through `ChangePlugin`, importing gates the forward path never ran. One of
+them — ChangePlugin's G08 — refuses to uninstall the plugin the agent's CURRENT title requires, and
+on a reverse unwind that title is still the NEW one (G14's undo is EARLIER in the array, so it runs
+LATER). Every rollback past G16 reported R51.5 CRITICAL over a fully recoverable system. **Same
+shape as Gate 9's join-then-title**: a constraint whose reverse order is not the mirror of its
+forward order. Fixed by symmetry — call `uninstallPluginLocally` (the documented mirror) directly —
+never by widening `rolePluginSwap` to bypass G08, which would change behaviour for four existing
+callers and the RoleTab dropdown. The primitive best-efforts the CLI and does not throw, so the undo
+VERIFIES BY EFFECT (re-reads `settings.local.json`); an undo that cannot detect its own failure
+cannot report R51.5 at all.
+
+**TWO FIXTURE FACTS THE G16b TESTS MEASURED, both of which produced a vacuous pass first.**
+(a) **The workdir is SHARED across this file's tests** — `seedAgent` only `mkdir -p`s it, so a
+plugin an earlier test installed survives; G15 then keeps it, G16b prints `Skipped (plugin
+unchanged)`, and the gate under test never runs. Each test now WRITES its plugin set (`null` is a
+write, not an omission). (b) **G15's undo MASKS G16b's**: it reinstalls via
+`ChangePlugin(action:'install', rolePluginSwap:true)`, and THAT pipeline's G11b rewrites
+`programArgs` to the reinstalled plugin's main-agent — so on a fixture where G15 removed something,
+neutering G16b's undo left the file 13/13 green. The undo test therefore seeds NO role-plugin.
 
 **Slices landed so far:** slice 1 `61858167` (ctx + widened annotation + rows 2-3: G9a, G14) ·
 slice 2a `40cefbb8` (rows 4-6: the OLD-title teardown — G10, G11, G12) · slice 2b `0db3f598`

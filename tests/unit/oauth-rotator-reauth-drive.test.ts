@@ -287,3 +287,42 @@ describe('driveConsent — the session is closed on EVERY path', () => {
     expect(closes(calls)).toHaveLength(0)
   })
 })
+
+describe('driveConsent NEVER emits a verb that contributes a route to the shared graph', () => {
+  // MEASURED in unbrowse 11.1.9, and this is why the guard exists rather than a comment:
+  //   cli.js:76008  `auto_publish_checkpoints: capturePipeline.auto_publish_checkpoints !== false`
+  //                 — DEFAULT TRUE (absent ⇒ on),
+  //   cli.js:76106  `decideCheckpointPublish(domain)`, whose disabled-branch reason reads
+  //                 "Auto-publish after sync/close is disabled in local settings",
+  //   cli.js:248301 "...will not auto-publish on close/sync".
+  // So a checkpoint can queue a publish of the route it just learned, and the route we drive is
+  // the claude.ai OAuth CONSENT page. `act sync` is the documented publish-queueing checkpoint and
+  // `build publish` is the explicit one; this asserts the drive emits NEITHER, on every path.
+  //
+  // What this does NOT cover, stated so nobody mistakes a green test for safety: `act close` is
+  // ALSO a checkpoint, the drive must call it (a session left open is worse), and disabling
+  // auto_publish_checkpoints is a change to the OWNER's unbrowse config — outside this project and
+  // not ours to make. That half is an open box on TRDD-CVQJNW3A, not a solved one.
+  const PUBLISHING_VERBS = ['sync', 'publish']
+
+  it('on the happy path', async () => {
+    const { run, calls } = makeRun([{ snap: CONSENT, afterClick: `thecode#${STATE}` }])
+    await driveConsent({ authorizeUrl: AUTHORIZE }, { run, discoverProfiles: noProfiles })
+    expect(calls.filter((c) => c.some((a) => PUBLISHING_VERBS.includes(a)))).toEqual([])
+  })
+
+  it('and on the escalation path, where MORE sessions are opened and closed', async () => {
+    // The escalation opens a second session against a named profile, so it is the path with the
+    // most checkpoints — and therefore the most chances to contribute the consent route.
+    const { run, calls } = makeRun([
+      { snap: SIGNIN },
+      { snap: CONSENT, afterClick: `thecode#${STATE}` },
+    ])
+    await driveConsent(
+      { authorizeUrl: AUTHORIZE },
+      { run, discoverProfiles: () => [{ browser: 'chrome', profile: 'Default' }] },
+    )
+    expect(closes(calls).length).toBeGreaterThan(1) // the path really did checkpoint more than once
+    expect(calls.filter((c) => c.some((a) => PUBLISHING_VERBS.includes(a)))).toEqual([])
+  })
+})

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-07-31T19:05:40+0200
+updated: 2026-07-31T19:11:36+0200
 implementation-commits: [994be6d6, 041a87f8, fde71e17, 511de445, d45e050b, dfa2cf06]
 created-by: ai-maestro
 current-owner: ai-maestro
@@ -412,8 +412,33 @@ trust the rendered identity, not the extraction count, when checking which accou
 
 ## Acceptance checklist
 
-- [ ] Box 1 — unbrowse `auto-publish off` + auth domains blacklisted, verified by reading the
-      setting back (not by having run the command)
+- [ ] Box 1 — **RE-SPECIFIED 19:20, the command it named DOES NOT EXIST and the hazard is REAL
+      and DEFAULT-ON.** Measured in unbrowse 11.1.9 (`/opt/homebrew/lib/node_modules/unbrowse`):
+      - **There is no `settings` verb.** The CLI is exactly three verbs (build/act/eval);
+        `unbrowse settings --help` falls through to the root help. `eval settings`/`eval config`
+        exist but `eval` is READ-ONLY by the CLI's own stated contract, and `~/.unbrowse/config.json`
+        holds 8 keys, none publish-related. So "run auto-publish off then read it back" is not a
+        thing that can be done, and an earlier note here calling publish "explicit per-skill" was
+        HALF RIGHT — that is true of `build publish`, and misses the checkpoint path entirely.
+      - **`auto_publish_checkpoints` defaults TRUE** — `cli.js:76008`
+        `capturePipeline.auto_publish_checkpoints !== false` (absent ⇒ ON). `cli.js:76106`
+        `decideCheckpointPublish(domain)` gates it, and its disabled-branch reason reads
+        *"Auto-publish after sync/close is disabled in local settings"*; `cli.js:248301` says
+        *"…will not auto-publish on close/sync"*. The root help calls `act sync` *"queues background
+        index + publish"*. **`act close` is also a checkpoint, and the drive must call it.**
+      - **Empirically NOT triggered so far**: after today's live consent-page drives,
+        `~/.unbrowse/profiles/` holds only `krea.ai` (+ a `.bak`) — no claude.ai/anthropic route;
+        `skill-cache` has one unrelated entry; no trace mentions `oauth/authorize`. That is an
+        observation about outcomes, NOT a guarantee, and must not be read as one.
+      - **PINNED, the half that is ours** (`tests/unit/oauth-rotator-reauth-drive.test.ts`): the
+        drive emits neither `act sync` nor `build publish` on the happy path OR the escalation path
+        (which checkpoints more than once). Neuter — insert an `act sync` before the close — reds
+        exactly those 2.
+      - **STILL OPEN, and it is the OWNER's call, not mine:** `act close` remains a checkpoint with
+        auto-publish default-ON. The only real mitigations are (a) turning
+        `auto_publish_checkpoints` off in the owner's unbrowse config — OUTSIDE this project, and
+        a change to their tooling I must not make unilaterally — or (b) a design change to the
+        drive's teardown. **Do not arm the repair flag until this is decided.**
 - [x] ~~One login route taught per rotator account; replay re-seeds `chrome-profile-<email>`~~ —
       **superseded by measurement.** Nothing needs teaching per account: `act go` with no
       `--browser` already harvests cookies from every installed browser, and the profile is an

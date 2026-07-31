@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T09:45:17+0200
+updated: 2026-07-31T09:52:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -246,6 +246,36 @@ itself** fails.
 
 **Preserve G14-before-G10** (crash-safety, orthogonal to rollback) by ARRAY ORDER — never sort the
 gates by label.
+
+### ⚠ MEASURED — the landed pattern does NOT transfer wholesale, because ChangeTitle interleaves
+
+The obvious plan is "keep the read-only validation OUTSIDE the array as early returns, exactly like
+the landed retrofits". Checked against a real one before relying on it:
+
+**`ChangeClient` (`:6471` `const gates = [` … `:6586` `runGateSequence(gates, mig)`) puts THREE gates
+in its array — G07, G08, G09, all mutating — and nothing else.** Every validation precedes it and
+stays an early `return result` (`:6381`), and the array declares no `readOnly` gate at all. Clean
+split, because in that pipeline all validation happens before all mutation.
+
+**ChangeTitle is not that shape.** Its aborts are INTERLEAVED with its mutations:
+
+| abort | line | sits after |
+|---|---|---|
+| G14's own post-write verification (×5 DENIED) | `:2688-2729` | G14's `updateAgent` write |
+| G15 DENIED — no compatible role-plugin | `:3139-3141` | G14 **and** the whole G10-G13b governance cascade |
+| G22 (×3 DENIED) | `:3438-3457` | everything |
+
+So a validation cannot simply be hoisted "before the array": an interleaved abort must still unwind
+the mutations that precede it. The rule for commit 3 is therefore:
+
+- validation **before the first mutation** (G0b, G01, G02) → stays outside as an early return;
+- validation **after any mutation** (G14's verify, G15's DENIED) → becomes a **`readOnly: true` gate
+  INSIDE the array**. `runGateSequence` supports it (`lib/gate-transaction.ts:29`) and
+  `findUncompensatedGates` (`:97`) correctly exempts it from the no-undo refusal;
+- the FINAL verification (G22) → the `invariants` hook, which aborts *and reverts*.
+
+This is why the array is not "only the mutating gates", and it is the detail that would have been
+discovered mid-conversion rather than before it.
 
 **Do NOT re-assert the G14-before-G10 ordering in the new file.**
 `tests/governance/r3-r9-team-governance.test.ts` already pins it, and by the stronger route (inject a

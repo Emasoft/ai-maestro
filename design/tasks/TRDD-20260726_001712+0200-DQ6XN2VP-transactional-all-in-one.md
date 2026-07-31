@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T14:41:28+0200
+updated: 2026-07-31T14:44:13+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -1559,7 +1559,11 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       pre-EXE mutations are ones a compensation is FORBIDDEN (R20.31, Explicit) or harmful to
       reverse. Retrofitting any of them moves the conformance ratchet and closes no window. Keep the
       box open (AIO-TXN-10 is still violated), but do NOT spend a session on them ahead of
-      `ChangeTitle`
+      `ChangeTitle`. **⚠ THAT ORDERING GATE IS NOW DISCHARGED (2026-07-31, `790cd8cb`)** —
+      `ChangeTitle` is retrofitted AND its rollback coverage is closed, so "ahead of `ChangeTitle`"
+      no longer defers anything. What still holds is the MEASUREMENT: these nine buy zero safety,
+      so the box stays open on the CONFORMANCE ratchet alone, and the next session should not read
+      the discharged ordering as permission to start them
 - [x] An enforceable ratchet for `AIO-TXN-10` — `tests/governance/aio-txn-10-runner-coverage.test.ts`
       discovers the inventory from the AST and fails when a pipeline hand-rolls beyond
       `MAX_HANDROLLED`. NOT the parity box below: this asks "is it under the runner", which is
@@ -1572,7 +1576,11 @@ pipeline per commit, suite green in between, existing per-pipeline tests must pa
       catches the first
 - [x] The tmux-kill compensation question decided and recorded here (R51.10 — re-launch is valid;
       a pid is not part of "the exact state")
-- [ ] tsc clean, full suite green
+- [x] tsc clean, full suite green — **measured at `790cd8cb`**: `bash scripts/with-node.sh npx tsc
+      --noEmit` = 0 lines; `bash scripts/with-node.sh yarn test` = **310 files / 4453 passed / 2
+      skipped**; `bash scripts/with-node.sh yarn trddgrep validate` = exit **1** with only the two
+      known `BODY-STATE-CLAIM` cards (`7123D51A`, `C7A81642`). Dated because it is a MEASUREMENT,
+      not a standing property — the three boxes still open above will each need it re-run
 
 ## Approval log
 

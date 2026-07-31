@@ -2957,6 +2957,107 @@ export async function ChangeTitle(
           }
         },
       },
+      // ── G14c: Per-op ledger entry for title change (TRDD-eac02238) ─
+      // Emit a discrete 'change_title' entry AFTER the registry write is
+      // verified on disk. Fire-and-forget — see lib/ledger-emit.ts for
+      // failure semantics. The save-level bulk diff emitted by
+      // lib/agent-registry.ts::saveAgents() is kept as a belt-and-braces
+      // safety net; the per-op entry here gives state-restore tooling
+      // the operation granularity it needs.
+      //
+      // COMMIT 3 MUST DECIDE WHERE THIS BELONGS. A ledger is append-only, so an `undo` that
+      // deleted the entry would falsify history — and leaving it here means a rollback leaves a
+      // recorded `change_title` for a change that got reverted. Moving it AFTER the array (emit on
+      // success only) fixes that, and is a behaviour change, so it is not done in commit 2.
+      {
+        id: 'G14c',
+        what: 'Per-op change_title ledger entry emitted',
+        run: async () => {
+          try {
+            const { emitAgentOp } = await import('@/lib/ledger-emit')
+            emitAgentOp(
+              'change_title',
+              [
+                {
+                  op: 'replace',
+                  path: `/agents/${agentId}/governanceTitle`,
+                  value: effectiveTitle ?? null,
+                },
+              ],
+              {
+                action: 'change-title',
+                agentId: options.authContext.agentId ?? null,
+                actor: options.authContext.agentId ? 'agent' : 'user',
+              },
+            )
+            ops.push(`G14c: Per-op ledger entry emitted (change_title: "${oldTitle || 'null'}" → "${effectiveTitle || 'null'}")`)
+          } catch (emitErr) {
+            // Fire-and-forget: an emit failure does NOT fail ChangeTitle
+            // because the save-level ledger entry still captured the mutation.
+            console.error('[ChangeTitle] G14c ledger-emit threw (non-fatal):', emitErr instanceof Error ? emitErr.message : emitErr)
+          }
+        },
+      },
+      // ── GATE 14b: Revoke existing AID governance tokens ─────
+      // Title changed → existing tokens embed the old title → revoke them.
+      // Agent must re-authenticate to get a token with the new title.
+      {
+        id: 'G14b',
+        what: 'AID governance tokens revoked (old title invalidated)',
+        run: async () => {
+          try {
+            const { revokeTokensForAgent } = await import('@/lib/aid-token')
+            const revoked = await revokeTokensForAgent(agentId)
+            if (revoked > 0) {
+              ops.push(`G14b: Revoked ${revoked} AID governance token(s) (old title invalidated)`)
+            } else {
+              ops.push(`G14b: No active AID tokens to revoke`)
+            }
+          } catch {
+            ops.push(`G14b: WARN — Token revocation skipped (aid-token module error)`)
+          }
+        },
+      },
+      // ── GATE 14e: Revoke portfolio tokens this agent MINTED (R28) ─────
+      // When a title change REMOVES manager/COS authority, every approval/mandate
+      // this agent issued as a delegated authority must die — otherwise a demoted
+      // MANAGER's grants would keep authorizing operations. (The portfolio-check
+      // re-validates the issuer's current title as defence-in-depth, but the
+      // sweep here is the primary, eager revocation.)
+      {
+        id: 'G14e',
+        what: 'Portfolio tokens minted by this agent revoked (lost issuer authority)',
+        run: async () => {
+          const oldWasIssuer =
+            oldTitle === 'manager' || oldTitle === 'chief-of-staff'
+          const newIsIssuer =
+            effectiveTitle === 'manager' || effectiveTitle === 'chief-of-staff'
+          if (oldWasIssuer && !newIsIssuer) {
+            try {
+              const { revokeTokensFromIssuer } = await import('@/lib/portfolio-store')
+              const revoked = await revokeTokensFromIssuer(agentId)
+              if (revoked > 0) {
+                const { emitPortfolioOp } = await import('@/lib/portfolio-ledger')
+                void emitPortfolioOp(
+                  'revoke_portfolio_token',
+                  agentId,
+                  [{ op: 'replace', path: `/portfolios/_issuer/${agentId}/status`, value: 'revoked' }],
+                  {
+                    action: 'revoke-issuer-portfolio-tokens',
+                    agentId: options.authContext.agentId ?? null,
+                    actor: options.authContext.agentId ? 'agent' : 'user',
+                  },
+                )
+                ops.push(`G14e: Revoked ${revoked} portfolio token(s) minted by this agent (lost issuer authority)`)
+              } else {
+                ops.push(`G14e: No portfolio tokens minted by this agent to revoke`)
+              }
+            } catch (pErr) {
+              ops.push(`G14e: WARN — portfolio token revocation skipped: ${pErr instanceof Error ? pErr.message : pErr}`)
+            }
+          }
+        },
+      },
     ]
 
     // Commit 2's driver. It is deliberately NOT `runGateSequence` yet: with no `undo` written, the
@@ -2978,89 +3079,6 @@ export async function ChangeTitle(
     // Its position here, AFTER the governance mutations, was the bug: a failed title write left
     // the host with no MANAGER and every team blocked. Nothing between here and there depends on
     // it having run last.
-
-    // ── G14c: Per-op ledger entry for title change (TRDD-eac02238) ─
-    // Emit a discrete 'change_title' entry AFTER the registry write is
-    // verified on disk. Fire-and-forget — see lib/ledger-emit.ts for
-    // failure semantics. The save-level bulk diff emitted by
-    // lib/agent-registry.ts::saveAgents() is kept as a belt-and-braces
-    // safety net; the per-op entry here gives state-restore tooling
-    // the operation granularity it needs.
-    try {
-      const { emitAgentOp } = await import('@/lib/ledger-emit')
-      emitAgentOp(
-        'change_title',
-        [
-          {
-            op: 'replace',
-            path: `/agents/${agentId}/governanceTitle`,
-            value: effectiveTitle ?? null,
-          },
-        ],
-        {
-          action: 'change-title',
-          agentId: options.authContext.agentId ?? null,
-          actor: options.authContext.agentId ? 'agent' : 'user',
-        },
-      )
-      ops.push(`G14c: Per-op ledger entry emitted (change_title: "${oldTitle || 'null'}" → "${effectiveTitle || 'null'}")`)
-    } catch (emitErr) {
-      // Fire-and-forget: an emit failure does NOT fail ChangeTitle
-      // because the save-level ledger entry still captured the mutation.
-      console.error('[ChangeTitle] G14c ledger-emit threw (non-fatal):', emitErr instanceof Error ? emitErr.message : emitErr)
-    }
-
-    // ── GATE 14b: Revoke existing AID governance tokens ─────
-    // Title changed → existing tokens embed the old title → revoke them.
-    // Agent must re-authenticate to get a token with the new title.
-    try {
-      const { revokeTokensForAgent } = await import('@/lib/aid-token')
-      const revoked = await revokeTokensForAgent(agentId)
-      if (revoked > 0) {
-        ops.push(`G14b: Revoked ${revoked} AID governance token(s) (old title invalidated)`)
-      } else {
-        ops.push(`G14b: No active AID tokens to revoke`)
-      }
-    } catch {
-      ops.push(`G14b: WARN — Token revocation skipped (aid-token module error)`)
-    }
-
-    // ── GATE 14e: Revoke portfolio tokens this agent MINTED (R28) ─────
-    // When a title change REMOVES manager/COS authority, every approval/mandate
-    // this agent issued as a delegated authority must die — otherwise a demoted
-    // MANAGER's grants would keep authorizing operations. (The portfolio-check
-    // re-validates the issuer's current title as defence-in-depth, but the
-    // sweep here is the primary, eager revocation.)
-    {
-      const oldWasIssuer =
-        oldTitle === 'manager' || oldTitle === 'chief-of-staff'
-      const newIsIssuer =
-        effectiveTitle === 'manager' || effectiveTitle === 'chief-of-staff'
-      if (oldWasIssuer && !newIsIssuer) {
-        try {
-          const { revokeTokensFromIssuer } = await import('@/lib/portfolio-store')
-          const revoked = await revokeTokensFromIssuer(agentId)
-          if (revoked > 0) {
-            const { emitPortfolioOp } = await import('@/lib/portfolio-ledger')
-            void emitPortfolioOp(
-              'revoke_portfolio_token',
-              agentId,
-              [{ op: 'replace', path: `/portfolios/_issuer/${agentId}/status`, value: 'revoked' }],
-              {
-                action: 'revoke-issuer-portfolio-tokens',
-                agentId: options.authContext.agentId ?? null,
-                actor: options.authContext.agentId ? 'agent' : 'user',
-              },
-            )
-            ops.push(`G14e: Revoked ${revoked} portfolio token(s) minted by this agent (lost issuer authority)`)
-          } else {
-            ops.push(`G14e: No portfolio tokens minted by this agent to revoke`)
-          }
-        } catch (pErr) {
-          ops.push(`G14e: WARN — portfolio token revocation skipped: ${pErr instanceof Error ? pErr.message : pErr}`)
-        }
-      }
-    }
 
     // ── GATE 14d: Uninstall role-plugin bound to the OLD title ─────────
     // (EMS-MIN-02 fix: this gate was previously labeled G14c, colliding

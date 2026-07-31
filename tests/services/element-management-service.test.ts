@@ -20,6 +20,7 @@ const {
   mockFsExistsSync,
   mockFsCreated,
   mockFsDeleted,
+  mockFsContent,
   mockFsReaddir,
   mockFsBehavior,
   mockAgentRegistry,
@@ -37,6 +38,10 @@ const {
   // writes is what lets a real post-condition be tested at all.
   mockFsCreated: new Set<string>(),
   mockFsDeleted: new Set<string>(),
+  // Path -> last written body. The overlay modelled EXISTENCE but not CONTENT, so a write never fed
+  // back into a read and every read-back verification was unfalsifiable here — the same defect the
+  // existence overlay was added to fix, one layer up (TRDD-RO90UCKQ).
+  mockFsContent: new Map<string, string>(),
   mockFsReaddir: vi.fn().mockResolvedValue([]),
   // `silentWrites` models the failure G05 exists to catch: the write RESOLVES but produces nothing
   // (a dropped write on a network mount, a path race). Without a lever for it, G05 is unfalsifiable
@@ -58,12 +63,53 @@ const {
 }))
 
 // Mock child_process (execFile via promisify)
+//
+// A SUCCESSFUL `claude plugin <verb>` also applies the CLI's own side effect to the overlay. Without
+// this, a user-scope install is a pure no-op here — the CLI does the settings write, and a mocked
+// CLI writes nothing — so the fixture asserted an install "succeeded" while the settings file it
+// was supposed to have updated still lacked the plugin. Modelling `writeFile` alone cannot fix that
+// case, because nothing ever calls `writeFile` on the user-scope path (TRDD-RO90UCKQ).
+const applyClaudeCliEffect = async (file: unknown, argv: unknown, opts: unknown) => {
+  if (String(file) !== 'claude' || !Array.isArray(argv) || argv[0] !== 'plugin') return
+  const a = argv as string[]
+  const [, verb, name, marketplace] = a
+  const scopeIdx = a.indexOf('--scope')
+  const scope = scopeIdx === -1 ? 'local' : a[scopeIdx + 1]
+  const key = marketplace && !marketplace.startsWith('--') ? `${name}@${marketplace}` : name
+
+  // USER scope writes ~/.claude/settings.json; LOCAL scope writes the agent's
+  // .claude/settings.local.json — and the agent dir arrives as the SPAWN CWD, not as a flag
+  // (`claude` has no --cwd option; passing one exits 0 having done nothing).
+  const cwd = (opts as { cwd?: string } | undefined)?.cwd
+  if (scope !== 'user' && !cwd) return
+  const path = scope === 'user'
+    ? `${process.env.HOME}/.claude/settings.json`
+    : `${cwd}/.claude/settings.local.json`
+
+  // Read the CURRENT body the same way the readFile mock does — overlay first, per-test baseline
+  // otherwise. Starting from `{}` would silently drop whatever else the fixture seeded.
+  let raw = mockFsContent.get(path)
+  if (raw === undefined) { try { raw = String(await mockFsReadFile(path, 'utf-8')) } catch { raw = '{}' } }
+  let body: Record<string, unknown>
+  try { body = JSON.parse(raw) as Record<string, unknown> } catch { return }  // unparseable: leave it
+
+  const ep = { ...((body.enabledPlugins || {}) as Record<string, boolean>) }
+  if (verb === 'install' || verb === 'enable') ep[key] = true
+  else if (verb === 'disable') ep[key] = false
+  else if (verb === 'uninstall') delete ep[key]
+  else return
+  fsTrack.create(path, JSON.stringify({ ...body, enabledPlugins: ep }, null, 2))
+}
+
 vi.mock('child_process', () => ({
   execFile: (...args: unknown[]) => {
     // promisify wraps execFile to return a promise via a callback
     const cb = args[args.length - 1] as (err: Error | null, result: { stdout: string; stderr: string }) => void
     mockExecFileAsync(args[0], args[1], args[2])
-      .then((result: { stdout: string; stderr: string }) => cb(null, result))
+      .then(async (result: { stdout: string; stderr: string }) => {
+        await applyClaudeCliEffect(args[0], args[1], args[2])
+        cb(null, result)
+      })
       .catch((err: Error) => cb(err, { stdout: '', stderr: '' }))
   },
 }))
@@ -76,24 +122,41 @@ vi.mock('child_process', () => ({
 // Scope of the model: exact paths, plus subtree removal (deleting a directory removes what is under
 // it). It does NOT synthesise ancestors for `mkdir -p`; no pipeline gate checks a parent's existence.
 const fsTrack = {
-  create: (p: unknown) => {
+  create: (p: unknown, body?: unknown) => {
     if (mockFsBehavior.silentWrites) return
     const s = String(p); mockFsDeleted.delete(s); mockFsCreated.add(s)
+    if (typeof body === 'string') mockFsContent.set(s, body)
   },
   destroy: (p: unknown) => {
     const s = String(p)
-    for (const c of [...mockFsCreated]) if (c === s || c.startsWith(`${s}/`)) mockFsCreated.delete(c)
+    for (const c of [...mockFsCreated]) if (c === s || c.startsWith(`${s}/`)) { mockFsCreated.delete(c); mockFsContent.delete(c) }
+    mockFsContent.delete(s)
     mockFsDeleted.add(s)
+  },
+  // `saveJsonSafe` writes to `<path>.tmp.N` then renames — so the CONTENT has to travel with the
+  // rename, or the atomic-write path lands an existing-but-empty file and every read-back sees the
+  // stale baseline instead of what was just written.
+  move: (from: unknown, to: unknown) => {
+    const body = mockFsContent.get(String(from))
+    fsTrack.create(to, body)
+    fsTrack.destroy(from)
   },
 }
 
 vi.mock('fs/promises', () => ({
-  readFile: mockFsReadFile,
+  // Consult the overlay FIRST so a write feeds back into the next read; fall back to the per-test
+  // baseline for paths nothing has written. Without this a fixture asserts that an install
+  // "succeeded" while the settings file it just wrote still lacks the plugin.
+  readFile: vi.fn(async (p: unknown, ...rest: unknown[]) => {
+    const s = String(p)
+    if (mockFsContent.has(s)) return mockFsContent.get(s)
+    return mockFsReadFile(p, ...rest)
+  }),
   // Call THROUGH to the exported spy first (so `expect(mockFsWriteFile).toHaveBeenCalledWith(...)`
   // and any per-test `mockRejectedValue` still behave), and record the path only once it resolved —
   // a write that threw must NOT mark its target as existing.
   writeFile: vi.fn(async (p: unknown, ...rest: unknown[]) => {
-    const r = await mockFsWriteFile(p, ...rest); fsTrack.create(p); return r
+    const r = await mockFsWriteFile(p, ...rest); fsTrack.create(p, rest[0]); return r
   }),
   mkdir: vi.fn(async (p: unknown, ...rest: unknown[]) => {
     const r = await mockFsMkdir(p, ...rest); fsTrack.create(p); return r
@@ -105,8 +168,8 @@ vi.mock('fs/promises', () => ({
   // (MAJ-01 + MAJ-02 fixes) now use rename + copyFile from fs/promises.
   // The mock must resolve them so the test path doesn't throw
   // "rename is not a function" before the assertion runs.
-  rename: vi.fn(async (from: unknown, to: unknown) => { fsTrack.create(to); fsTrack.destroy(from) }),
-  copyFile: vi.fn(async (_from: unknown, to: unknown) => { fsTrack.create(to) }),
+  rename: vi.fn(async (from: unknown, to: unknown) => { fsTrack.move(from, to) }),
+  copyFile: vi.fn(async (from: unknown, to: unknown) => { fsTrack.create(to, mockFsContent.get(String(from))) }),
 }))
 
 vi.mock('fs', () => ({
@@ -142,6 +205,7 @@ describe('element-management-service', () => {
     // The overlay is per-test state, and vi.clearAllMocks() cannot know about it.
     mockFsCreated.clear()
     mockFsDeleted.clear()
+    mockFsContent.clear()
     mockFsBehavior.silentWrites = false
     mockFsReaddir.mockResolvedValue([])
   })
@@ -226,7 +290,7 @@ describe('element-management-service', () => {
     })
 
     it('should clean up settings.local.json for local/custom plugins', async () => {
-      /** Validates that uninstalling removes the plugin key from settings */
+      /** Validates the OUTCOME of an uninstall: the plugin key is gone, its neighbour survives */
       mockFsExistsSync.mockReturnValue(true)
       mockFsReadFile.mockResolvedValue(JSON.stringify({
         enabledPlugins: { 'my-plugin@local-marketplace': true, 'other-plugin@local-marketplace': true },
@@ -235,13 +299,44 @@ describe('element-management-service', () => {
       const { uninstallPluginLocally } = await import('@/services/element-management-service')
       await uninstallPluginLocally('my-plugin', '/tmp/agent-dir', 'local-marketplace')
 
-      const writeCall = mockFsWriteFile.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
-      )
-      expect(writeCall).toBeTruthy()
-      const writtenData = JSON.parse(writeCall![1] as string)
-      expect(writtenData.enabledPlugins['my-plugin@local-marketplace']).toBeUndefined()
-      expect(writtenData.enabledPlugins['other-plugin@local-marketplace']).toBe(true)
+      // Assert the END STATE, not which layer produced it. This used to assert that a `writeFile`
+      // call happened — true only because the CLI mock was a no-op, so the service's belt-and-braces
+      // fallback was the ONLY thing that could remove the key. Now that the mock models what
+      // `claude plugin uninstall` really does (it DOES drop the settings entry; SCEN-019 BUG-001 is
+      // that it leaves the CACHE FOLDER), the happy path no longer needs the fallback — so the
+      // fallback gets its own test below rather than being smuggled in here.
+      const settings = JSON.parse(mockFsContent.get('/tmp/agent-dir/.claude/settings.local.json')!)
+      expect(settings.enabledPlugins['my-plugin@local-marketplace']).toBeUndefined()
+      expect(settings.enabledPlugins['other-plugin@local-marketplace']).toBe(true)
+    })
+
+    it('belt-and-braces: removes the key even when the CLI uninstall FAILS', async () => {
+      /** Validates the safeguard sweep — the CLI errored, so only the service can remove the key */
+      // The one case the safeguard exists for. `execFileAsync` throwing is caught and swallowed
+      // (the catch only downgrades to a warn), and the sweep then runs anyway — so with the CLI
+      // dead this key can ONLY disappear via the service's own cleanup. Delete that block and this
+      // test is the thing that reds; the happy-path test above would not, because there the CLI
+      // does the removal itself.
+      //
+      // NOT asserted: that the sweep removes a DIFFERENTLY-spelled key. It does not, by design —
+      // it deletes exactly `pluginName@marketplaceName`, "a second writer that can only ever
+      // converge on the CLI's own outcome". An earlier draft of this test asserted that and failed,
+      // correctly: it was a requirement I invented, not one the service ever had.
+      mockFsExistsSync.mockReturnValue(true)
+      mockFsReadFile.mockResolvedValue(JSON.stringify({
+        enabledPlugins: { 'my-plugin@local-marketplace': true, 'other-plugin@local-marketplace': true },
+      }))
+      // ...Once, NOT mockRejectedValue: an implementation override is NOT undone by
+      // `vi.clearAllMocks()` (it clears CALLS, not IMPLEMENTATIONS), so the persistent form leaked a
+      // rejecting `claude` into all 24 later tests that shell out. Scoped to the one call under test.
+      mockExecFileAsync.mockRejectedValueOnce(new Error('claude: command failed'))
+
+      const { uninstallPluginLocally } = await import('@/services/element-management-service')
+      await uninstallPluginLocally('my-plugin', '/tmp/agent-dir', 'local-marketplace')
+
+      const settings = JSON.parse(mockFsContent.get('/tmp/agent-dir/.claude/settings.local.json')!)
+      expect(settings.enabledPlugins['my-plugin@local-marketplace']).toBeUndefined()
+      expect(settings.enabledPlugins['other-plugin@local-marketplace']).toBe(true)
     })
   })
 

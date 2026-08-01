@@ -344,3 +344,97 @@ export function util(usage: unknown, window: string): number | null {
   const u = (w as Record<string, unknown>).utilization
   return typeof u === 'number' ? u : null
 }
+
+/** One MODEL-SCOPED usage window, parsed out of the response's `limits[]` array. */
+export interface ScopedLimit {
+  /** `scope.model.display_name`, e.g. `Fable`. */
+  model: string
+  /** 0-100. ⚠ The field is `percent` here, NOT `utilization` — `limits[]` entries and the
+   *  top-level buckets spell the same quantity differently. */
+  percent: number | null
+  /** ISO 8601, when this window rolls over. May carry fractional seconds, may not. */
+  resetsAt: string | null
+  /** The SERVER's own classification of the window (e.g. `normal`). Read and logged; our
+   *  thresholds still decide. Recorded so a future tuning pass can compare the two. */
+  severity: string | null
+  /** Whether the server considers this the currently-binding window. */
+  isActive: boolean
+}
+
+/**
+ * The model-scoped windows in a usage response — the ONLY place a per-model limit is reachable.
+ *
+ * Why this exists (TRDD-JI7F1236): the rotator used to decide everything from `five_hour` and
+ * `seven_day`, and a model-scoped weekly window (Fable 5 has one) lives in NEITHER. An account
+ * whose scoped window is exhausted while 5h/7d sit low therefore looked healthy in both
+ * directions — we would not rotate away from it, and we would happily rotate ONTO it, after
+ * which every call on that model fails.
+ *
+ * The flat `seven_day_opus` / `_sonnet` / `_cowork` / `_omelette` keys are NOT an alternative:
+ * they still exist in the payload but are NULL (verified against the live API 2026-08-01) —
+ * the API moved model-scoped limits into `limits[]` and left the old keys behind as null.
+ *
+ * Entries are selected by CARRYING A MODEL NAME rather than by `kind === 'weekly_scoped'`: the
+ * un-scoped `session` / `weekly_all` entries are verified duplicates of the two top-level
+ * buckets (60/60 and 62/62 on a live probe), so keying on the model name both excludes them and
+ * survives the server introducing a new `kind`.
+ */
+export function scopedLimits(usage: unknown): ScopedLimit[] {
+  if (!usage || typeof usage !== 'object') return []
+  const raw = (usage as Record<string, unknown>).limits
+  if (!Array.isArray(raw)) return []
+  const out: ScopedLimit[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const e = entry as Record<string, unknown>
+    const scope = e.scope as { model?: { display_name?: unknown } } | undefined
+    const name = scope?.model?.display_name
+    if (typeof name !== 'string' || !name) continue // un-scoped ⇒ duplicates a top-level bucket
+    out.push({
+      model: name,
+      percent: typeof e.percent === 'number' ? e.percent : null,
+      resetsAt: typeof e.resets_at === 'string' ? e.resets_at : null,
+      severity: typeof e.severity === 'string' ? e.severity : null,
+      isActive: e.is_active === true,
+    })
+  }
+  return out
+}
+
+/** The worst (highest) percent across the model-scoped windows, or null when none reports a
+ *  number. Null is NOT zero: an unknown window must never look like an empty one. */
+export function worstScopedPercent(usage: unknown): number | null {
+  let worst: number | null = null
+  for (const l of scopedLimits(usage)) {
+    if (l.percent === null) continue
+    if (worst === null || l.percent > worst) worst = l.percent
+  }
+  return worst
+}
+
+/**
+ * The EARLIEST reset instant across every window in the response (the two top-level buckets and
+ * every scoped one), as epoch ms — or null when the payload carries no parseable timestamp.
+ *
+ * This is what lets "all paid accounts maxed" say WHEN a window returns instead of polling
+ * blindly. `Date.parse` handles both ISO 8601 forms the API is known to emit (with and without
+ * fractional seconds), so no format branch is needed.
+ */
+export function earliestResetMs(usage: unknown): number | null {
+  if (!usage || typeof usage !== 'object') return null
+  const u = usage as Record<string, unknown>
+  const stamps: unknown[] = []
+  for (const w of ['five_hour', 'seven_day']) {
+    const b = u[w]
+    if (b && typeof b === 'object') stamps.push((b as Record<string, unknown>).resets_at)
+  }
+  for (const l of scopedLimits(usage)) stamps.push(l.resetsAt)
+  let earliest: number | null = null
+  for (const s of stamps) {
+    if (typeof s !== 'string' || !s) continue
+    const t = Date.parse(s)
+    if (Number.isNaN(t)) continue
+    if (earliest === null || t < earliest) earliest = t
+  }
+  return earliest
+}

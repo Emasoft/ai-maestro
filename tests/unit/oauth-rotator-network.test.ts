@@ -5,6 +5,9 @@ import {
   accountUsage,
   refreshOauthToken,
   util,
+  scopedLimits,
+  worstScopedPercent,
+  earliestResetMs,
 } from '@/lib/oauth-rotator/network'
 
 // 0-IMPACT: every test injects a stub `fetchImpl` — no real HTTP, the Claude OAuth API is never hit.
@@ -181,5 +184,106 @@ describe('util', () => {
     expect(util({ five_hour: {} }, 'five_hour')).toBeNull()
     expect(util(null, 'five_hour')).toBeNull()
     expect(util({ five_hour: { utilization: 'x' } }, 'five_hour')).toBeNull()
+  })
+})
+
+/**
+ * TRDD-JI7F1236 — model-scoped windows.
+ *
+ * `LIVE_SHAPE` is the REAL response recorded from `/api/oauth/usage` on 2026-08-01 (values only,
+ * no credentials). Using the real shape rather than an invented one is what makes these tests
+ * evidence: it carries the two duplicate un-scoped entries, the `percent` spelling (the buckets
+ * say `utilization` — different field name for the same quantity), and the flat `seven_day_opus`
+ * keys sitting there NULL, which is why the scoped number is reachable ONLY via `limits[]`.
+ */
+const LIVE_SHAPE = {
+  five_hour: { utilization: 60, resets_at: '2026-08-01T13:10:00.517414+00:00' },
+  seven_day: { utilization: 62, resets_at: '2026-08-05T16:00:00.517432+00:00' },
+  seven_day_opus: null,
+  seven_day_sonnet: null,
+  limits: [
+    { kind: 'session', group: 'session', percent: 60, severity: 'normal', is_active: false, resets_at: '2026-08-01T13:10:00.517414+00:00', scope: {} },
+    { kind: 'weekly_all', group: 'weekly', percent: 62, severity: 'normal', is_active: true, resets_at: '2026-08-05T16:00:00.517432+00:00', scope: {} },
+    { kind: 'weekly_scoped', group: 'weekly', percent: 5, severity: 'normal', is_active: false, resets_at: '2026-08-05T15:59:59.517646+00:00', scope: { model: { id: 'fable', display_name: 'Fable' } } },
+  ],
+}
+
+describe('scopedLimits — the model-scoped windows (TRDD-JI7F1236)', () => {
+  it('keeps ONLY the entries carrying a model name, dropping the bucket duplicates', () => {
+    const s = scopedLimits(LIVE_SHAPE)
+    // session (60) and weekly_all (62) duplicate five_hour/seven_day — verified against the live
+    // API — so surfacing them would double-count the same two windows.
+    expect(s).toHaveLength(1)
+    expect(s[0]).toEqual({
+      model: 'Fable',
+      percent: 5,
+      resetsAt: '2026-08-05T15:59:59.517646+00:00',
+      severity: 'normal',
+      isActive: false,
+    })
+  })
+
+  it('selects by MODEL NAME, not by kind — a new kind must not slip through or be dropped', () => {
+    // Keyed on `kind === 'weekly_scoped'` this would break the day the server adds a kind.
+    const s = scopedLimits({
+      limits: [
+        { kind: 'some_future_kind', percent: 42, scope: { model: { display_name: 'Newton' } } },
+        { kind: 'weekly_scoped', percent: 9, scope: { model: { display_name: '' } } }, // empty ⇒ unscoped
+      ],
+    })
+    expect(s.map(l => l.model)).toEqual(['Newton'])
+  })
+
+  it('is total on malformed input — never throws, never invents a number', () => {
+    expect(scopedLimits(null)).toEqual([])
+    expect(scopedLimits({})).toEqual([]) // `limits` absent
+    expect(scopedLimits({ limits: 'nope' })).toEqual([]) // not an array
+    expect(scopedLimits({ limits: [null, 7, {}] })).toEqual([]) // junk entries
+    const noPct = scopedLimits({ limits: [{ percent: 'x', scope: { model: { display_name: 'M' } } }] })
+    expect(noPct[0].percent).toBeNull() // present but unreadable ⇒ null, NOT 0
+  })
+})
+
+describe('worstScopedPercent', () => {
+  it('returns the highest scoped percent, or null when none reports a number', () => {
+    expect(worstScopedPercent(LIVE_SHAPE)).toBe(5)
+    expect(
+      worstScopedPercent({
+        limits: [
+          { percent: 12, scope: { model: { display_name: 'A' } } },
+          { percent: 97, scope: { model: { display_name: 'B' } } },
+        ],
+      }),
+    ).toBe(97)
+    // null is NOT zero: an unknown window must never read as an empty one, or a maxed account
+    // would look freshly available.
+    expect(worstScopedPercent({ limits: [] })).toBeNull()
+    expect(worstScopedPercent(LIVE_SHAPE.five_hour)).toBeNull()
+  })
+})
+
+describe('earliestResetMs', () => {
+  it('takes the soonest reset across the buckets AND the scoped windows', () => {
+    // five_hour resets first here, so that is the answer.
+    expect(earliestResetMs(LIVE_SHAPE)).toBe(Date.parse('2026-08-01T13:10:00.517414+00:00'))
+  })
+
+  it('a SCOPED window can be the earliest — the buckets are not privileged', () => {
+    // Non-vacuity: with only the buckets considered this returns the seven_day stamp, so the
+    // assertion below is exactly what proves scoped windows are in the comparison.
+    const shape = {
+      five_hour: { resets_at: '2026-08-09T00:00:00Z' },
+      seven_day: { resets_at: '2026-08-08T00:00:00Z' },
+      limits: [{ percent: 1, resets_at: '2026-08-02T00:00:00Z', scope: { model: { display_name: 'Fable' } } }],
+    }
+    expect(earliestResetMs(shape)).toBe(Date.parse('2026-08-02T00:00:00Z'))
+  })
+
+  it('parses both ISO forms the API emits, and is null when nothing is parseable', () => {
+    expect(earliestResetMs({ five_hour: { resets_at: '2026-08-01T13:10:00Z' } })) // no fractional seconds
+      .toBe(Date.parse('2026-08-01T13:10:00Z'))
+    expect(earliestResetMs({ five_hour: { resets_at: 'not-a-date' } })).toBeNull()
+    expect(earliestResetMs({})).toBeNull()
+    expect(earliestResetMs(null)).toBeNull()
   })
 })

@@ -102,18 +102,42 @@ describe('tick — pure decision helpers', () => {
   })
 
   it('isNearLimit: EITHER window >= 97 trips; unknown never trips', () => {
-    expect(isNearLimit(98, 10)).toBe(true)
-    expect(isNearLimit(10, 99)).toBe(true)
-    expect(isNearLimit(96, 96)).toBe(false)
-    expect(isNearLimit(null, null)).toBe(false)
-    expect(isNearLimit(null, 99)).toBe(true)
+    expect(isNearLimit(98, 10, null)).toBe(true)
+    expect(isNearLimit(10, 99, null)).toBe(true)
+    expect(isNearLimit(96, 96, null)).toBe(false)
+    expect(isNearLimit(null, null, null)).toBe(false)
+    expect(isNearLimit(null, 99, null)).toBe(true)
   })
 
   it('isSafeAlternate: below 90 on BOTH windows', () => {
-    expect(isSafeAlternate(10, 10)).toBe(true)
-    expect(isSafeAlternate(89, 89)).toBe(true)
-    expect(isSafeAlternate(90, 10)).toBe(false)
-    expect(isSafeAlternate(10, 95)).toBe(false)
+    expect(isSafeAlternate(10, 10, null)).toBe(true)
+    expect(isSafeAlternate(89, 89, null)).toBe(true)
+    expect(isSafeAlternate(90, 10, null)).toBe(false)
+    expect(isSafeAlternate(10, 95, null)).toBe(false)
+  })
+
+  /**
+   * TRDD-JI7F1236 — the MODEL-SCOPED window is a third axis, and it is the one the rotator was
+   * blind to. Fable 5 carries its own weekly limit that appears in NEITHER top-level bucket, so
+   * an account can be fully spent on it while 5h/7d read low.
+   *
+   * ⚠ NON-VACUITY: every case below holds 5h/7d at 10/10 — comfortably safe on both buckets — so
+   * the ONLY thing that can change the verdict is the scoped argument. Reverting either predicate
+   * to its two-bucket form must redden exactly these two tests. If a case let 5h or 7d carry the
+   * decision, it would pass with the fix removed and pin nothing.
+   */
+  it('isNearLimit: a spent MODEL-SCOPED window trips it even when 5h/7d are low', () => {
+    expect(isNearLimit(10, 10, 98)).toBe(true) // the whole point: buckets low, scoped maxed
+    expect(isNearLimit(10, 10, 96)).toBe(false) // below the switch threshold → no rotation
+    expect(isNearLimit(10, 10, null)).toBe(false) // no scoped window reported → nothing to act on
+  })
+
+  it('isSafeAlternate: a candidate with a spent MODEL-SCOPED window is NOT a safe target', () => {
+    expect(isSafeAlternate(10, 10, 95)).toBe(false) // would fail every call on that model
+    expect(isSafeAlternate(10, 10, 89)).toBe(true) // below SAFE on all three → fine
+    // null is "no scoped window exists", NOT "unknown" — it must disqualify nothing. The caller
+    // already rejects an alternate whose 5h/7d are unknown before reaching here.
+    expect(isSafeAlternate(10, 10, null)).toBe(true)
   })
 
   it('selectDrainFirst: picks the highest max-of-windows (drain the fullest first); null when empty', () => {

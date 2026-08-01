@@ -47,7 +47,16 @@ import {
 } from './slots'
 import { readLiveBlobWithSource } from './live'
 import { switchLiveTo } from './rotate'
-import { accountEmail, usageRequest, refreshOauthToken, util, type NetworkDeps } from './network'
+import {
+  accountEmail,
+  usageRequest,
+  refreshOauthToken,
+  util,
+  scopedLimits,
+  worstScopedPercent,
+  earliestResetMs,
+  type NetworkDeps,
+} from './network'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -58,6 +67,11 @@ const SWITCH_AT_7D = 97
 /** Only rotate ONTO an alternate below this % on BOTH windows (never jump onto a maxed one). */
 const SAFE_5H = 90
 const SAFE_7D = 90
+/** Same two thresholds, applied to a MODEL-SCOPED weekly window (Fable 5 has one of its own).
+ * A scoped window IS a weekly window, so it inherits the 7d numbers rather than getting invented
+ * ones — named separately only so the two can diverge the day tuning wants them to. */
+const SWITCH_AT_SCOPED = SWITCH_AT_7D
+const SAFE_SCOPED = SAFE_7D
 /** Anti-thrash: minimum seconds between two auto-switches. */
 const MIN_DWELL_S = 60
 /** A token within this many hours of its LOCAL expiresAt (or past it) counts as dead/dying —
@@ -141,15 +155,32 @@ export function blobLocallyExpired(blob: unknown): boolean {
   return e !== null && e <= EXPIRY_GRACE_H
 }
 
-/** The LIVE account is "near a limit" once EITHER window crosses its switch threshold. Unknown
- * (null) usage never trips it — only a positive over-threshold signal rotates. */
-export function isNearLimit(fh: number | null, sd: number | null): boolean {
-  return (fh !== null && fh >= SWITCH_AT_5H) || (sd !== null && sd >= SWITCH_AT_7D)
+/** The LIVE account is "near a limit" once ANY window crosses its switch threshold. Unknown
+ * (null) usage never trips it — only a positive over-threshold signal rotates.
+ *
+ * `scoped` is the worst MODEL-SCOPED window (`worstScopedPercent`), and it is a REQUIRED
+ * parameter rather than an optional one on purpose: a caller that forgets it would silently get
+ * the old two-bucket blindness back, which is exactly the bug this closes (TRDD-JI7F1236). Fable
+ * 5 has its own weekly window that appears in NEITHER top-level bucket, so an account can be
+ * fully spent on it while 5h/7d read low. */
+export function isNearLimit(fh: number | null, sd: number | null, scoped: number | null): boolean {
+  return (
+    (fh !== null && fh >= SWITCH_AT_5H) ||
+    (sd !== null && sd >= SWITCH_AT_7D) ||
+    (scoped !== null && scoped >= SWITCH_AT_SCOPED)
+  )
 }
 
-/** An alternate is a safe TARGET only if below SAFE on BOTH windows. */
-export function isSafeAlternate(bfh: number, bsd: number): boolean {
-  return bfh < SAFE_5H && bsd < SAFE_7D
+/** An alternate is a safe TARGET only if below SAFE on EVERY window — the two top-level buckets
+ * and every model-scoped one. Without the scoped check we would rotate ONTO an account whose
+ * Fable-5 window is exhausted, and every call on that model would fail (TRDD-JI7F1236).
+ *
+ * A null `scoped` means the response reported no scoped window (or none with a number), which is
+ * NOT the same as an unknown bucket: it disqualifies nothing. That mirrors the null-discipline
+ * above — only a positive over-threshold reading acts. The caller already rejects an alternate
+ * whose 5h/7d are unknown before reaching here. */
+export function isSafeAlternate(bfh: number, bsd: number, scoped: number | null): boolean {
+  return bfh < SAFE_5H && bsd < SAFE_7D && (scoped === null || scoped < SAFE_SCOPED)
 }
 
 /** DRAIN-FIRST: among healthy candidates `[email, blob, util5h, util7d]`, pick the one closest
@@ -391,8 +422,17 @@ export async function autoRotate(deps?: TickDeps): Promise<boolean> {
   const [liveStatus, liveData] = await usageRequest(liveBlob, netDeps(deps))
   const fh = util(liveData, 'five_hour')
   const sd = util(liveData, 'seven_day')
+  // The worst MODEL-SCOPED window (Fable 5 has its own weekly limit, reachable only via
+  // `limits[]` — the flat `seven_day_opus`-style keys are null). Without it an account fully
+  // spent on one model reads as healthy on both buckets. TRDD-JI7F1236.
+  const sc = worstScopedPercent(liveData)
+  const scWorst = scopedLimits(liveData).reduce<{ model: string; percent: number } | null>(
+    (w, l) => (l.percent !== null && (w === null || l.percent > w.percent) ? { model: l.model, percent: l.percent } : w),
+    null,
+  )
   const fhS = fh !== null ? `${Math.round(fh)}%` : '?'
   const sdS = sd !== null ? `${Math.round(sd)}%` : '?'
+  const scS = scWorst !== null ? ` ${scWorst.model}=${Math.round(scWorst.percent)}%` : ''
   const liveExpired = blobLocallyExpired(liveBlob)
   const networkUp = liveStatus !== 0
 
@@ -410,8 +450,8 @@ export async function autoRotate(deps?: TickDeps): Promise<boolean> {
     liveDesc = `RATE-LIMITED (429 x${streak})`
   } else if (liveStatus === 200) {
     if (state.live_429_streak) { state.live_429_streak = 0; saveState(state) }
-    near = isNearLimit(fh, sd) || liveExpired
-    liveDesc = `5h=${fhS} 7d=${sdS}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}`
+    near = isNearLimit(fh, sd, sc) || liveExpired
+    liveDesc = `5h=${fhS} 7d=${sdS}${scS}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}`
   } else if (liveStatus === 401 || liveStatus === 403) {
     near = true
     liveDesc = `token REJECTED (HTTP ${liveStatus}) — expired/invalid`
@@ -480,7 +520,9 @@ export async function autoRotate(deps?: TickDeps): Promise<boolean> {
       const bfh = util(d2, 'five_hour')
       const bsd = util(d2, 'seven_day')
       if (bfh === null || bsd === null) continue // unknown usage → not a safe target
-      if (!isSafeAlternate(bfh, bsd)) continue // itself near a limit → skip
+      // Also reject a candidate whose MODEL-SCOPED window is spent: rotating onto it would look
+      // like a healthy switch and then fail every call on that model. TRDD-JI7F1236.
+      if (!isSafeAlternate(bfh, bsd, worstScopedPercent(d2))) continue // near a limit → skip
       candidates.push([email, b, bfh, bsd])
     } else {
       const eh = expiresInH(b)
@@ -513,7 +555,16 @@ export async function autoRotate(deps?: TickDeps): Promise<boolean> {
   }
   // 3) Genuinely stuck — nothing rotatable in either path.
   if (networkUp) {
-    decide(deps, `auto: live ${liveEmail ?? '(live)'} exhausted (${liveDesc}) but no alternate is healthy + below safe threshold and none is structurally renewable — all paid accounts maxed; waiting for a window to reset`)
+    // Name WHEN the soonest window returns. The instant is already in the payload we fetched
+    // (`resets_at`, on both buckets and every scoped limit); before TRDD-JI7F1236 this line said
+    // "waiting for a window to reset" and could not say when, so the only recourse was to keep
+    // polling blindly. Falls back to the old wording when the response carried no timestamp.
+    const resetMs = earliestResetMs(liveData)
+    const when =
+      resetMs === null
+        ? 'waiting for a window to reset'
+        : `earliest window resets ${new Date(resetMs).toISOString()} (in ~${Math.max(0, (resetMs - Date.now()) / 3_600_000).toFixed(1)}h)`
+    decide(deps, `auto: live ${liveEmail ?? '(live)'} exhausted (${liveDesc}) but no alternate is healthy + below safe threshold and none is structurally renewable — all paid accounts maxed; ${when}`)
   } else {
     decide(deps, `auto: live ${liveEmail ?? '(live)'} is LOCALLY EXPIRED and the API is unreachable, but no alternate with a known future expiry exists — cannot rotate; manual re-auth needed`)
   }

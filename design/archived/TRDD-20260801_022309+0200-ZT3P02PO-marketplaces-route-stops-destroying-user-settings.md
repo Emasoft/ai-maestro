@@ -1,11 +1,11 @@
 ---
 trdd-id: ZT3P02PO
 title: the marketplaces route stops destroying the user's global settings.json
-column: dev
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T02:23:09+0200
-updated: 2026-08-01T02:23:09+0200
+updated: 2026-08-01T02:46:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,7 +23,7 @@ relevant-rules: [R51]
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: []
+implementation-commits: [a7ee3f62, 74cd76ef]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
@@ -97,12 +97,38 @@ direction: a case that previously destroyed data now refuses and says why.
 
 ## Acceptance
 
-- [ ] all five `SETTINGS_PATH` writes go through `saveJsonSafe`; all `SETTINGS_PATH` reads through
-      `loadJsonSafe`
-- [ ] the manifest-chain `readJsonSafe` is KEPT with the null-is-load-bearing reason recorded
-- [ ] `UnreadableTargetError` answers 409 with the real cause, not `Action failed`
-- [ ] a governance ratchet pins the two-writer rule for the user's global settings.json
-- [ ] tests + neuters recorded by name; tsc 0 lines; suite at or above the day's baseline
+- [x] all five `SETTINGS_PATH` writes go through `saveJsonSafe`; all `SETTINGS_PATH` reads through
+      `loadJsonSafe` — verified 0 direct `writeFile` remain, 9 reads + 5 writes via the owner
+- [x] the manifest-chain `readJsonSafe` is KEPT (12 call sites) with the null-is-load-bearing reason
+      recorded on the function itself
+- [x] `UnreadableTargetError` answers 409 with the real cause, not `Action failed`
+- [x] a governance ratchet pins the two-writer rule for the user's global settings.json
+- [x] tests + neuters recorded by name; tsc 0 lines; suite 324 files / 4598 passed / 2 skipped
+
+## Outcome
+
+**Tests** — `tests/governance/user-settings-has-two-writers.test.ts` (6),
+`tests/api/marketplaces-route-refuses-to-clobber-settings.test.ts` (4).
+
+**Neuters, both run, each reddening a DIFFERENT named test:**
+
+| neuter | result |
+|---|---|
+| delete the `instanceof UnreadableTargetError` mapping | `answers 409 and NAMES THE CAUSE …` reds with `expected 500 to be 409` |
+| re-add a direct `writeFile(SETTINGS_PATH, …)` | `no file outside the two owners writes it directly` reds, NAMING the file; all 5 positive controls stay green |
+
+**Both detector bugs in the ratchet were caught by its own positive controls**, which is exactly
+what they are for: `writeFileSync?` parses as "writeFileSyn" + an optional `c` and matched NEITHER
+spelling, and `[^)]*` cannot cross the `)` in `join(os.homedir(), …)` — the inline form
+`claude-settings-enforcer` itself uses, so the detector would have reported its own second owner as
+absent.
+
+**A third finding, fixed in `74cd76ef`:** the 5s default timeout is a coin flip for this route
+(0.8s warm, 3.3-5.0s cold), and a timed-out `post()` stays PENDING — so the next test's
+`mockRejectedValueOnce` is consumed by the LEAKED call and that test sees a 200 where it asserted
+409. The failure is reported against the wrong test, with a status that reads like a regression. It
+briefly made a load-bearing neuter look like it had failed; the isolated re-run showed the true
+signature.
 
 ## Approval log
 
@@ -110,3 +136,6 @@ direction: a case that previously destroyed data now refuses and says why.
   this agent's own assignment scope, and an EHT of TRDD-G2K02VDY — that card made the destructive
   write more reachable, so closing the hole is part of landing it. Pre-approved: issuer authority
   >= required approver.
+- 2026-08-01T02:46:28+0200 — COMPLETED by ai-maestro. 5/5 acceptance boxes; two neuters run, each
+  reddening a different named test; tsc 0 lines; full suite 324 files / 4598 passed / 2 skipped,
+  exit 0. Landed in a7ee3f62 + 74cd76ef.

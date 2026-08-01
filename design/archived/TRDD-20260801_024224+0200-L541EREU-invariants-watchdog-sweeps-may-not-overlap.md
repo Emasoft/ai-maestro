@@ -1,11 +1,11 @@
 ---
 trdd-id: L541EREU
 title: the invariants watchdog may not run two sweeps at once
-column: dev
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T02:42:24+0200
-updated: 2026-08-01T02:42:24+0200
+updated: 2026-08-01T02:46:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: []
+implementation-commits: [aca5af67]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
@@ -94,13 +94,36 @@ interval and a sweep of milliseconds — nothing changes at all.
 
 ## Acceptance
 
-- [ ] the watchdog skips a tick while a sweep is in flight
-- [ ] `inFlightSweep` is cleared only by the sweep that set it
-- [ ] a test pins the guard, with an explicit non-vacuity assertion
-- [ ] neuter recorded by name; tsc 0 lines; the full suite green, agent-invariants included
+- [x] the watchdog skips a tick while a sweep is in flight
+- [x] `inFlightSweep` is cleared only by the sweep that set it
+- [x] a test pins the guard, with an explicit non-vacuity assertion
+- [x] neuter recorded by name; tsc 0 lines; the full suite green, agent-invariants included
+
+## Outcome
+
+**Test** — `tests/unit/agent-invariants.test.ts` :: *"never runs two sweeps at once — a tick
+arriving mid-sweep is SKIPPED"* (the file is now 16/16).
+
+**Neuter** — delete `if (inFlightSweep !== null) return`; that one test reds with
+`ticks joined an in-flight sweep — the re-entrancy guard is gone: expected 96 to be less than 50`.
+96 starts vs a guarded handful is a ~2x margin against the assertion and ~30x against the
+unguarded tick count, so the direction is unmissable.
+
+**Full suite: 324 files / 4598 passed / 2 skipped, exit 0** — up from 322/4587/2 with three files
+failing. The three were being carried as one "pillar-graph-cli timeouts under load" flake; two were
+genuine 5s timeouts and the third was this defect. Naming each failing file individually is what
+separated them.
+
+⚠ **A process note worth more than the fix.** While neutering, `git checkout --
+lib/agent-invariants.ts` discarded the guard ALONG WITH the neuter, because the guard was still
+uncommitted. Commit the work BEFORE neutering it, or revert the neuter with a targeted edit — a
+`checkout --` cannot tell your fix from your sabotage.
 
 ## Approval log
 
 - 2026-08-01T02:42:24+0200 — SELF-MANDATE (min-approval-requirement: none). Tier 0: a bugfix inside
   this agent's own assignment scope, reversible and local. Pre-approved: issuer authority >=
   required approver.
+- 2026-08-01T02:46:28+0200 — COMPLETED by ai-maestro. 4/4 acceptance boxes; the neuter reds exactly
+  one named test; tsc 0 lines; full suite 324 files / 4598 passed / 2 skipped, exit 0 (three files
+  were failing before). Landed in aca5af67.

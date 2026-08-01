@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { readFile, readdir, stat, rm, writeFile } from 'fs/promises'
+import { readFile, readdir, stat, rm } from 'fs/promises'
 import { existsSync, realpathSync } from 'fs'
 import { join, basename, resolve } from 'path'
 import os from 'os'
@@ -25,6 +25,7 @@ import { requireSudoToken } from '@/lib/sudo-guard'
 // fix that.
 import { CreateMarketplace, DeleteMarketplace, UpdateMarketplace, ChangePlugin } from '@/services/element-management-service'
 import { buildSystemAuthContext } from '@/lib/agent-auth'
+import { loadJsonSafe, saveJsonSafe, UnreadableTargetError } from '@/lib/json-io'
 
 /**
  * R17 core plugin guard — rejects destructive actions targeting the
@@ -178,6 +179,22 @@ interface MarketplaceInfo {
   plugins: PluginStatus[]
 }
 
+/**
+ * Lenient MANIFEST reader — for marketplace.json / plugin.json / package.json probes only.
+ *
+ * ⚠ NEVER point this at `SETTINGS_PATH`. The user's global settings.json goes through
+ * `lib/json-io.ts` (`loadJsonSafe` / `saveJsonSafe`), because every settings access here is a
+ * read-modify-write: a lenient reader answers `{}` for a CORRUPT file exactly as it does for a
+ * missing one, and the write then REPLACES the user's whole config with the one key we touched
+ * (TRDD-ZT3P02PO — it had five such sites, and this route is the only file in the tree that wrote
+ * that file directly).
+ *
+ * ⚠ Its `null` return is LOAD-BEARING and is why it is not simply `loadJsonSafe`: the callers are
+ * `readJsonSafe(a) || readJsonSafe(b) || readJsonSafe(c)` fall-through chains, and `loadJsonSafe`
+ * returns a **truthy `{}`**, so swapping it in would silently stop every chain at its first
+ * candidate. Lenient is CORRECT here — a manifest that does not parse genuinely means "no info" —
+ * and nothing downstream writes the file back.
+ */
 async function readJsonSafe(filePath: string): Promise<Record<string, unknown> | null> {
   if (!existsSync(filePath)) return null
   try {
@@ -364,7 +381,7 @@ function repoToUrl(repo: string): string {
 
 export async function GET() {
   try {
-    const settings = await readJsonSafe(SETTINGS_PATH) || {}
+    const settings = await loadJsonSafe(SETTINGS_PATH)
 
     // enabledPlugins from settings.json (user-scope — the only valid user-level source)
     const enabledPlugins = (settings as Record<string, unknown>).enabledPlugins as Record<string, boolean> | undefined || {}
@@ -807,6 +824,14 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error('[marketplaces] POST failed:', error)
+    // `saveJsonSafe` REFUSES to overwrite a settings.json it could not read, and every settings
+    // access in this route is a read-modify-write — so this is the one throw the user can actually
+    // act on. The generic 500 below would answer `Action failed` and leave them with no idea their
+    // global config is corrupt, which is how the destroy-the-file bug stayed invisible for so long
+    // (TRDD-ZT3P02PO). 409, not 500: nothing here is broken — the state on disk is UNKNOWN.
+    if (error instanceof UnreadableTargetError) {
+      return NextResponse.json({ error: error.message, errorType: 'unreadable-settings' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Action failed' }, { status: 500 })
   }
 }
@@ -1003,7 +1028,7 @@ async function handleInstall(pluginName: string, marketplaceName: string, plugin
   // failure mode this recovers from (enabledPlugins entry without a matching
   // cache folder, or vice versa) is server-startup / corrupted-cache territory.
   const staleKeys = [`${pluginName}@${cliMkt}`, `${pluginName}@${marketplaceName}`, pluginKey]
-  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const settings = await loadJsonSafe(SETTINGS_PATH)
   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
   let cleaned = false
   for (const key of new Set(staleKeys)) {
@@ -1018,7 +1043,7 @@ async function handleInstall(pluginName: string, marketplaceName: string, plugin
   }
   if (cleaned) {
     settings.enabledPlugins = ep
-    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+    await saveJsonSafe(SETTINGS_PATH, settings)
     // Retry through ChangePlugin AIO after cleanup
     const r2 = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'install')
     if (r2.ok && r2.verified !== 'mismatch') {
@@ -1076,7 +1101,7 @@ async function handleUninstall(pluginName: string, marketplaceName: string, plug
   // ChangePlugin should have removed the matching one; this catches any
   // stale duplicates (e.g. plugin installed under multiple key formats
   // due to historical marketplace renames).
-  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const settings = await loadJsonSafe(SETTINGS_PATH)
   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
   let dirty = false
   for (const key of uniqueKeys) {
@@ -1084,7 +1109,7 @@ async function handleUninstall(pluginName: string, marketplaceName: string, plug
   }
   if (dirty) {
     settings.enabledPlugins = ep
-    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+    await saveJsonSafe(SETTINGS_PATH, settings)
   }
 
   return NextResponse.json({ success: true, action: 'uninstall', pluginKey, staleCleanup: !cliSucceeded })
@@ -1127,7 +1152,7 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   // (a) the existing extraKnownMarketplaces entry under marketplaceName, or
   // (b) the existing entry under cliName.
   try {
-    const settingsPre = await readJsonSafe(SETTINGS_PATH) || {}
+    const settingsPre = await loadJsonSafe(SETTINGS_PATH)
     const ekmPre = (settingsPre.extraKnownMarketplaces || {}) as Record<string, { source?: { repo?: string } }>
     const repos = new Set<string>()
     for (const k of nameCandidates) {
@@ -1169,7 +1194,7 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   // variants. DeleteMarketplace does not touch enabledPlugins; that's this
   // route's concern because `<plugin>@<marketplace>` key stamping is a
   // marketplaces-route stamping decision, not a marketplace pipeline concern.
-  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const settings = await loadJsonSafe(SETTINGS_PATH)
   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
   for (const key of Object.keys(ep)) {
     for (const name of nameCandidates) {
@@ -1180,7 +1205,7 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
     }
   }
   settings.enabledPlugins = ep
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+  await saveJsonSafe(SETTINGS_PATH, settings)
 
   return NextResponse.json({ success: true, action: 'delete-marketplace', marketplaceName })
 }
@@ -1218,7 +1243,7 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
   }
 
   // Get the source repo for this marketplace
-  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const settings = await loadJsonSafe(SETTINGS_PATH)
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
   const ekmEntry = ekm[marketplaceName] as Record<string, unknown> | undefined
   const srcInfo = ekmEntry?.source as Record<string, string> | undefined
@@ -1448,11 +1473,11 @@ async function handleAddMarketplaceFromPath(localPath: string) {
     return NextResponse.json({ error: `Failed to add marketplace: ${errStr.substring(0, 500)}` }, { status: 500 })
   }
 
-  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const settings = await loadJsonSafe(SETTINGS_PATH)
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
   ekm[marketplaceName] = { source: { source: 'local', path: localPath } }
   settings.extraKnownMarketplaces = ekm
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+  await saveJsonSafe(SETTINGS_PATH, settings)
 
   return NextResponse.json({ success: true, action: 'add-marketplace', marketplaceName, path: localPath })
 }
@@ -1500,11 +1525,11 @@ async function handleAddMarketplace({ url, path: localPath }: { url?: string; pa
   // Add to extraKnownMarketplaces — the pipeline does CLI registration but
   // doesn't populate extraKnownMarketplaces (that's the route's stamping
   // concern, not the pipeline's; the pipeline stays source-agnostic).
-  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const settings = await loadJsonSafe(SETTINGS_PATH)
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
   ekm[marketplaceName] = { source: { source: 'github', repo } }
   settings.extraKnownMarketplaces = ekm
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+  await saveJsonSafe(SETTINGS_PATH, settings)
 
   return NextResponse.json({ success: true, action: 'add-marketplace', marketplaceName, repo })
 }
@@ -1582,7 +1607,7 @@ async function handleUpdateAllMarketplaces() {
   // updates fail, we collect errors but don't abort — partial success
   // is better than rolling back successful updates.
   const auth = buildSystemAuthContext('marketplaces-api-update-all')
-  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const settings = await loadJsonSafe(SETTINGS_PATH)
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
   const names = Object.keys(ekm)
   if (names.length === 0) {

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T02:12:19+0200
-updated: 2026-08-01T02:12:19+0200
+updated: 2026-08-01T02:28:27+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,9 +18,9 @@ approval-judge: ai-maestro
 approval-datetime: 2026-08-01T02:12:19+0200
 relevant-rules: [R51]
 npt: []
-eht: []
+eht: [ZT3P02PO]
 blocked-by: []
-implementation-commits: []
+implementation-commits: [c8f7cb7d]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
@@ -72,14 +72,26 @@ answer**.
 **LOW-MED.** Enable/disable/update mirror a shape already pinned at three sites. The install change
 alters a RECOVERY path, so it carries the real risk and gets the real neuter.
 
+## The EHT this card owes
+
+Routing a `mismatch` into `handleInstall`'s stale-cleanup block put a live path through a
+`writeFile(SETTINGS_PATH, …)` that DESTROYS the user's global `~/.claude/settings.json` when that
+file is corrupt (the read that feeds it is lenient, so unreadable is indistinguishable from
+absent). The write pre-dates this card; making it more reachable is this card's effect, so closing
+it is this card's debt: **TRDD-ZT3P02PO**. Per the derived-TRDD rule, G2K02VDY cannot reach
+`complete` until it is terminal.
+
 ## Acceptance
 
-- [ ] `dispatchUserPluginAction` propagates `verified` instead of discarding it
-- [ ] enable/disable/update 409 on `mismatch`, never on `unknown`, after the `!r.ok` check
-- [ ] install routes a `mismatch` into the existing stale-cleanup retry, and a verified retry
+- [x] `dispatchUserPluginAction` propagates `verified` instead of discarding it
+- [x] enable/disable/update 409 on `mismatch`, never on `unknown`, after the `!r.ok` check
+- [x] install routes a `mismatch` into the existing stale-cleanup retry, and a verified retry
       reports success with `staleCleanup: true`
-- [ ] uninstall MEASURED, and wired or explicitly declined with the evidence
+- [x] uninstall MEASURED, and explicitly DECLINED: it already sweeps every key-format entry
+      unconditionally AFTER the CLI (`:1082`-`:1088`), so a verdict observed before that sweep is
+      stale by the time the handler returns — wiring it would gate on a stale reading
 - [ ] tests + neuters recorded by name; tsc 0 lines; suite at or above the day's baseline
+- [ ] EHT TRDD-ZT3P02PO terminal (the completion gate — see above)
 
 ## Approval log
 

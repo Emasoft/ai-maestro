@@ -1,9 +1,10 @@
 ---
 trdd-id: JI7F1236
 title: Rotator reads limits[] — model-scoped windows, reset times, and server severity
-column: backburner
+column: complete
 created: 2026-08-01T11:57:28+0200
-updated: 2026-08-01T11:57:28+0200
+updated: 2026-08-01T12:14:03+0200
+implementation-commits: [cfdf4ab5]
 current-owner: ai-maestro-dev
 task-type: bugfix
 project-id: ai-maestro
@@ -99,15 +100,26 @@ Dependencies: none. Does not touch TRDD-RYFP030K.
 
 ## Acceptance
 
-- [ ] `limits[]` parsed, `session`/`weekly_all` ignored as duplicates, `percent` (not
-      `utilization`) read
-- [ ] `isNearLimit` / `isSafeAlternate` account for every scoped window
-- [ ] `resets_at` surfaced on the "all accounts maxed" path
-- [ ] tests above land green, and the neuter reddens exactly the named test
-- [ ] `selectDrainFirst` behaviour unchanged
+- [x] `limits[]` parsed, `session`/`weekly_all` ignored as duplicates, `percent` (not
+      `utilization`) read — `scopedLimits()` selects on the model NAME, so a new server-side
+      `kind` neither slips through nor is dropped
+- [x] `isNearLimit` / `isSafeAlternate` account for every scoped window — the new argument is
+      REQUIRED, and `tsc` duly caught both call sites plus all 9 existing assertions
+- [x] `resets_at` surfaced on the "all accounts maxed" path (`earliestResetMs`, spanning the
+      buckets AND the scoped windows)
+- [x] tests green (40 across the two files; full suite 328 files, `tsc` 0 lines) and the neuter
+      reddened **exactly** the two named tests and nothing else
+- [x] `selectDrainFirst` behaviour unchanged — untouched, its tests still green
 
 ## Approval log
 
 - 2026-08-01T11:57:28+0200 — MANDATE (self) at `min-approval-requirement: none`: in-scope bugfix in
   ai-maestro's own rotator; no governance, release, cross-team, or baseline surface. Authored
   directly in `design/tasks/`; no approval request sent.
+- 2026-08-01T12:14:03+0200 — COMPLETE. Landed as `cfdf4ab5`. The USER confirmed mid-flight that
+  "Fable 5 is currently limited with a separate window", which moved this from a hypothetical
+  blind spot to a live one and is why it was implemented immediately rather than left queued.
+  Verification: neuter (revert both predicates to their two-bucket form) reddened exactly
+  `isNearLimit: a spent MODEL-SCOPED window trips it even when 5h/7d are low` and
+  `isSafeAlternate: a candidate with a spent MODEL-SCOPED window is NOT a safe target` — every
+  case in both holds 5h/7d at 10/10, so only the scoped argument can carry the verdict.

@@ -147,6 +147,13 @@ const BACKUP_KEEP = 10
  *  in ONE process all queue on the cross-process lock and thrash. */
 const inProcessQueue = new Map<string, Promise<unknown>>()
 
+/** TEST-ONLY probe. The queue is module-private because nothing outside may schedule on it — but
+ *  "the map is empty once every caller has returned" is a real invariant, not bookkeeping: a leaked
+ *  entry per path is an unbounded map for the life of the process, and it is the ONLY observable
+ *  tell for the identity bug documented in `withJsonLock`. A test that cannot see this asserts only
+ *  behaviour that a leaking implementation satisfies just as well. */
+export function _inProcessQueueSizeForTests(): number { return inProcessQueue.size }
+
 /** Paths whose lock is already held by the CURRENT async call chain.
  *
  *  REENTRANCY IS NOT OPTIONAL: a pipeline that read-modify-writes the same settings file twice
@@ -252,7 +259,12 @@ function parseOrRefuse(path: string, raw: string): Record<string, unknown> {
  *  the same pid within the same second, which would otherwise overwrite each other. */
 async function keepBackup(path: string, raw: string): Promise<string | null> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').slice(0, 15)
-  const backup = `${path}.aim-bak-${stamp}-${process.pid}-${++_atomicWriteCounter}`
+  // ZERO-PADDED, because the prune below sorts these names LEXICOGRAPHICALLY to decide what to keep.
+  // The stamp is second-precision, so a burst inside one second is ordered by the counter alone —
+  // and unpadded, "10" sorts before "2". The retained set then stops being "the newest BACKUP_KEEP":
+  // at 21 backups it keeps 2-9 and 20-21 while deleting 10-19, i.e. it discards the MIDDLE and keeps
+  // the oldest. Padding is what makes "we keep the most recent N" true rather than approximately true.
+  const backup = `${path}.aim-bak-${stamp}-${process.pid}-${String(++_atomicWriteCounter).padStart(6, '0')}`
   try {
     const tmp = `${backup}.tmp`
     await fsyncWrite(tmp, raw)
@@ -317,7 +329,13 @@ export class KeyLossRefused extends Error {
 export async function updateJson(
   path: string,
   mutator: (data: Record<string, unknown>) => void | Promise<void>,
-  opts: { createIfMissing?: boolean; retries?: number; allowKeyLoss?: boolean } = {},
+  // `JsonLockOpts` is part of the surface and is FORWARDED below. Without it the lock windows are
+  // unreachable from the only function anyone is supposed to call, so a caller whose mutator runs
+  // something long (`claude plugin install` clones a repo and is allowed ~120s) could not raise
+  // `staleMs` above it — and a waiter would then declare the live holder stale, which is the
+  // two-holders hazard documented on `acquireLock`. An option that exists only on the primitive
+  // nobody calls directly is not an option.
+  opts: { createIfMissing?: boolean; retries?: number; allowKeyLoss?: boolean } & JsonLockOpts = {},
 ): Promise<UpdateJsonResult> {
   const maxAttempts = Math.max(1, opts.retries ?? 3)
 
@@ -409,7 +427,7 @@ export async function updateJson(
       }
       return { changed: true, backupPath, attempts: attempt, auditOk }
     }
-  })
+  }, opts)
 }
 
 export async function saveJsonSafe(path: string, data: Record<string, unknown>): Promise<void> {

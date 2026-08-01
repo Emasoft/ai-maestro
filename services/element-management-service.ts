@@ -366,7 +366,7 @@ function logDegradedOps(pipeline: string, subject: string, ops: string[]): void 
 // them, and because a `saveJsonSafe` reachable from two import paths is the drift starting over.
 export type { JsonRead } from '@/lib/json-io'
 export { readJson, saveJsonSafe, UnreadableTargetError } from '@/lib/json-io'
-import { readJson, loadJsonSafe, saveJsonSafe } from '@/lib/json-io'
+import { readJson, loadJsonSafe, saveJsonSafe, withJsonLock } from '@/lib/json-io'
 
 // ── Settings mutex ────────────────────────────────────────────
 //
@@ -439,34 +439,25 @@ async function _acquireFileLock(
   }
 }
 
+/**
+ * DELEGATES to `lib/json-io.ts` — this is now a thin alias, and that is load-bearing (TRDD-RYFP030K).
+ *
+ * ⚠ WHY IT MUST NOT KEEP ITS OWN IMPLEMENTATION. Two lock implementations over the SAME lockdir
+ * still exclude each other across processes, but they do not share an IN-PROCESS reentrancy set —
+ * so a holder on this path that nests into `updateJson` (or the reverse) on the same file would
+ * block on a lock its own call chain already holds, wait out `maxWaitMs`, and fail. That deadlock
+ * surface did not exist before the gate merge (json-io had no lock, so the two modules could never
+ * nest), which is exactly the kind of hazard a merge introduces and a reviewer catches.
+ *
+ * `staleMs` / `maxWaitMs` pass straight through: `claude plugin install` legitimately holds this
+ * lock for ~120s, and a caller that knows it must be able to say so.
+ */
 async function withSettingsLock<T>(
   filePath: string,
   fn: () => Promise<T>,
   opts: { staleMs?: number; maxWaitMs?: number } = {},
 ): Promise<T> {
-  // In-process queue keeps the existing within-process serialisation
-  // semantics (so concurrent withSettingsLock calls from the same Node
-  // process don't compete for the cross-process lock).
-  const key = filePath
-  const prev = settingsLocks.get(key) ?? Promise.resolve()
-  let resolve: () => void
-  const next = new Promise<void>(r => { resolve = r })
-  settingsLocks.set(key, next)
-  try {
-    await prev
-    // Also acquire the cross-process file lock so other Node
-    // processes (PM2 cluster, headless + full mode, tests) cannot
-    // interleave with us.
-    const release = await _acquireFileLock(filePath, opts)
-    try {
-      return await fn()
-    } finally {
-      await release()
-    }
-  } finally {
-    resolve!()
-    if (settingsLocks.get(key) === next) settingsLocks.delete(key)
-  }
+  return withJsonLock(filePath, fn, opts)
 }
 
 /**

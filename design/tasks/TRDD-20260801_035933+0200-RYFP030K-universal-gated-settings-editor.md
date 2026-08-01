@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T03:59:33+0200
-updated: 2026-08-01T22:31:44+0200
+updated: 2026-08-02T01:30:27+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,7 +21,7 @@ npt: []
 eht: []
 blocked-by: []
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/105]
-implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a, 420cac1e, 4d94097c, f1680b41, 1ed50bc2, f2be0ebb, ec38b089, 12e2ef97]
+implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a, 420cac1e, 4d94097c, f1680b41, 1ed50bc2, f2be0ebb, ec38b089, 12e2ef97, 2c47ab89, 9b6d4f0e]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
@@ -43,10 +43,50 @@ reddened exactly `REJECTS a filename that is not one of the two known settings b
 Three editor diagnostics (2 unreachable-code, 1 unused `isValidOp`) were all STALE — `isValidOp`
 is called at `route.ts:102`, and `tsc --allowUnreachableCode false` reports nothing.
 
-**Still unowned and still yours:** the 21 already-locked `saveJsonSafe` sites, and the issue-#105
-report. Both were deliberately withheld from the fork — the 21 sites need a per-site judgment
-(*is this an R51 compensation?*) whose grep heuristic has already been wrong once, and the #105
-report is an outward-facing write.
+### ⏩ 2026-08-02T01:30 — THE 21 SITES ARE DONE (`2c47ab89`, `9b6d4f0e`). ONLY #105 REMAINS.
+
+**NEXT ACTION, runnable as written:** report the adopted/declined set on issue #105
+(`gh issue view 105`) — the last open box. It is an OUTWARD-FACING write, so it needs the R22 /
+PRRD G1.1 authorship self-identification line.
+
+**What the 21 turned out to be:** 20 read-modify-writes → `updateJson`; ONE true compensation →
+`restoreRawSnapshot`. The grep heuristic flagged 6 as compensations and **all 6 were wrong** —
+read the enclosing gate, never the neighbourhood. Two undos LOOK like compensations and are not:
+they rebuild the settings key-by-key from a ledger *specifically so a concurrent writer's edit
+survives the rollback*, which is a read-modify-write by construction.
+
+**THE PART THAT WAS NOT MECHANICAL, and the reason this was withheld from the fork.**
+`updateJson` RE-RUNS its mutator when the staleness gate catches a non-participating writer, and
+three sites recorded R51 undo state *inside* the write:
+
+| site | what a retry did to it |
+|---|---|
+| EXE install/uninstall/enable/disable | pushed the undo entry TWICE; the ledger pops LIFO, so the stale second entry restores the value the retry existed to respect |
+| the EXE undo | POPPED the shared ledger from inside the mutator — attempt 1 drained it, attempt 2 restored nothing, produced bytes identical to its base, and reported `changed:false`: an undo that silently did nothing while reporting success |
+| the hooks undo | gated on `c.prior`, which the mutator sets on EVERY attempt including abandoned ones — so exhausting the retries threw having written nothing while `prior` held a discarded base, and replaying it would destroy the concurrent writer that caused the retry |
+
+Fixed by staging into a local that resets per attempt and publishing after the commit; by draining
+the ledger into a local first; and by gating on `committed` (from `updateJson`'s own `changed`).
+**`9b6d4f0e` pins the contract those depend on** — that the mutator can run twice — because nothing
+else stated it and removing the staging would otherwise read as harmless simplification.
+
+`updateJson` can also THROW where `saveJsonSafe` could not, so the two "latent compensation"
+comments that justified themselves with *"saveJsonSafe is atomic, nothing can fail"* were rewritten
+rather than left reading as still-true.
+
+**TWO INSTRUMENTS WENT BLIND ON THE RENAME** — same class, opposite directions, both caught:
+the window-boundary scanner's `MUTATION_NEEDLES` had no `updateJson`, so it could not see a single
+settings write in the file it exists to scan, and its "no settings write above the R51 boundary"
+loop was keyed on `saveJsonSafe` alone — a needle that can now never match, i.e. a guard that would
+have passed forever while checking nothing. In the service test the same thing hit the ABSENCE
+assertion (*"installPluginLocally must not write settings itself"*): `undefined` is exactly what it
+wants, so it would have kept passing. **A needle keyed on a verb NAME goes blind on the rename that
+replaces it — extend the needle list in the SAME commit that introduces a write primitive.**
+
+**A `mkdir` I added to `updateJson` was REVERTED**: its neuter reddened nothing, because
+`acquireLock` already creates the parent to put its lockdir beside the target. Dead code that read
+as a fix. The guarantee is now pinned by a test naming `acquireLock` as its true owner, so nobody
+re-adds it.
 
 ### Where it stands — 2026-08-01T05:00
 
@@ -63,9 +103,9 @@ remains is the 21 sites that were ALREADY locked, plus the transports.
 | the marketplaces route's 5 UNLOCKED writes + the test-hygiene tripwire | **done**, `1ed50bc2` |
 | ratchet widened to `settings.local.json`, neuter verified | **done**, `f2be0ebb` |
 | **ChangeClient's 3 RAW `writeFileSync` sites** + `restoreRawSnapshot` | **done**, `ec38b089` |
-| the 21 ALREADY-LOCKED `saveJsonSafe` sites in `element-management-service.ts` | **NOT STARTED** ← next |
-| API route + `aimaestro-settings.sh` (node entrypoint) | **NOT STARTED** |
-| adopted/declined set reported on issue #105 | **NOT STARTED** |
+| the 21 ALREADY-LOCKED `saveJsonSafe` sites in `element-management-service.ts` | **done**, `2c47ab89` + `9b6d4f0e` |
+| API route + `aimaestro-settings.sh` (node entrypoint) | **done**, `12e2ef97` |
+| adopted/declined set reported on issue #105 | **NOT STARTED** ← the only one left |
 
 ### `lib/json-io.ts` IS NOW THE ONLY PERMITTED WRITER OF `settings.local.json`
 
@@ -261,11 +301,16 @@ primitive. The deadlock risk is real and is why its test comes first.
 ## Acceptance
 
 - [x] `updateJson(path, mutator)` with reentrant lock, snapshot-compare, fsync, backup, retries
-- [ ] the 33 RMW sites migrated; `saveJsonSafe` retained ONLY for R51 compensations, with the reason
-      — **11 of 32 done** (one of the 33 grep hits is a comment). All 11 were the sites with NO
-      cross-process lock, so the lost-update surface is CLOSED; the 21 remaining are already inside
-      the shared lock and gain fsync/backup/staleness. The retention reason is recorded at each
-      migrated import site, not only here.
+- [x] the 33 RMW sites migrated; `saveJsonSafe` retained ONLY for R51 compensations, with the reason
+      — **32 of 32 done** (one of the 33 grep hits is a comment), `2c47ab89` closing the last 21.
+      `saveJsonSafe` is no longer IMPORTED by the service at all: it is re-exported for other
+      modules, and re-adding it to that import is now the signal that a call site has regressed to a
+      two-call read-then-write. **Its retention clause found ZERO takers here** — the one true
+      compensation became `restoreRawSnapshot`, the primitive written for a snapshot replay, which
+      also let it DELETE rather than write `{}` over a path that held no file.
+      Decided per site by reading the enclosing gate: the grep heuristic's 6 flagged sites were 6
+      false positives, and two undos that look like compensations are not (they rebuild key-by-key
+      from a ledger so a concurrent edit survives the rollback, which is a read-modify-write).
 - [x] audit is detect-and-log; auto-rollback explicitly NOT implemented, with the reason recorded
 - [x] API route + `aimaestro-settings.sh` (node entrypoint, not HTTP — installer runs server-down) — `12e2ef97`, both transports over one shared `lib/settings-gate.ts`; CLI carries ZERO HTTP references (verified by grep)
 - [x] governance ratchet forbids any other writer of `settings*.json` incl. `settings.local.json`

@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.4.0
+spec-version: 1.5.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-07-31T07:03:39+0200
+updated: 2026-08-01T19:31:12+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -120,6 +120,50 @@ non-empty; record `pre-block-column:` and restore to it when it clears.
 `3P-KAN-09` **transition-authority-is-DEP** — WHICH title may trigger a given move is a DEP
 concern, not IND; see `aimaestro-trdd-approval.md` Part B2. (This clause is itself a 3P-BND
 worked example.)
+
+### The pipeline invariant (USER-ratified 2026-08-01)
+
+The preceding clauses define the board's SHAPE. These define its PURPOSE, because every one
+of them can be satisfied while nothing is processed. The board is an extended todo QUEUE with
+a direction of flow; it exists to ensure tasks are always being worked.
+
+`3P-KAN-10` **pipeline-not-cabinet** — `MUST`: the board is a PIPELINE. A card in a
+non-resting column that is not progressing is a DEFECT, not a neutral state. The resting
+columns are exactly `backburner` and the terminal set; `todo` through `human_review` are
+WORKING columns and assert motion.
+
+`3P-KAN-11` **blocked-is-the-only-stillness** — `MUST`: a card may sit still ONLY with a
+non-empty `blocked-by:` naming an OPEN card (3P-KAN-06). Stillness without one is a stall.
+Corollary: `blocked-by:` naming a TERMINAL card is not a licence — it is drift, and the card
+must resume.
+
+`3P-KAN-12` **wip-matches-capacity** — `MUST`: a WORK column (`dev`/`testing`/`ai_review`)
+asserts that a worker is progressing that card NOW. The count of such cards `MUST NOT` exceed
+the number of workers able to progress them. **An untrue column is worse than an unstarted
+card**: it hides the stall from the one view anyone consults.
+
+`3P-KAN-13` **drain-by-default** — `MUST`: completing a card obliges PULLING the next
+eligible one. The board is itself the instruction: the absence of a fresh human request
+`MUST NOT` be read as authority to leave the queue idle.
+
+`3P-KAN-14` **queueing-is-a-handoff-not-a-resolution** — filing a card at `todo` discharges
+the obligation to RECORD work, never the obligation to DO it. A queue nothing pulls from is
+where work disappears with a clean conscience.
+
+`3P-KAN-15` **close-in-session** — `MUST`: a card whose work is demonstrably done is closed
+in the SAME session that finished it. An unclosed complete card is indistinguishable from an
+abandoned one and inflates the WORK columns until they mean nothing.
+
+`3P-KAN-16` **repair-per-card-never-scripted** — `MUST NOT`: mass-repair a stalled board with
+a scripted sweep. Each card needs a per-card judgment (done-but-unclosed / superseded /
+abandoned / genuinely pending) that a regex over prose cannot make; a sweep destroys the audit
+trail it was meant to repair. Classify first, decide per card.
+
+> **The measurement this was ratified from** (ai-maestro, 2026-08-01): 113 open cards, **37 in
+> `dev`**, exactly ONE touched that day, 20 of the 37 stale ≥8 days and three 39 days; only 7
+> of all 113 carried a `blocked-by:`. Every card was correctly filed and nothing was flowing —
+> the board's most-populated column was its least honest one. Filing had become a substitute
+> for doing. 3P-KAN-10..16 exist so that state is a spec violation rather than a habit.
 
 ## 3P-TRDD — Pillar 2: the TRDD contract
 

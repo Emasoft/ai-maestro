@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T03:59:33+0200
-updated: 2026-08-01T05:00:49+0200
+updated: 2026-08-01T19:22:41+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -25,6 +25,23 @@ implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a, 420cac1e, 4d940
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
+
+### ⚠ 2026-08-01T19:2x — THIS CARD STALLED, AND THE TRANSPORTS ARE NOW DELEGATED
+
+Between 05:00 and 19:20 this card sat at `column: dev` while nothing touched it: the USER
+redirected to the OAuth rotator and I followed without queueing or delegating this. The board
+asserted `dev` the whole time, so the stall was invisible until the USER asked *"have you
+implemented the safe settings editor?"*. That is the incident behind the new global rule
+`~/.claude/rules/new-directive-never-drops-the-old-work.md` — on a new directive, QUEUE the new
+work or FORK the old, and say which.
+
+Applying it here: **the transports row (API route + `aimaestro-settings.sh`) is delegated to a
+background agent as of 19:2x.** Do NOT start that row yourself — you will collide with it.
+
+**Still unowned and still yours:** the 21 already-locked `saveJsonSafe` sites, and the issue-#105
+report. Both were deliberately withheld from the fork — the 21 sites need a per-site judgment
+(*is this an R51 compensation?*) whose grep heuristic has already been wrong once, and the #105
+report is an outward-facing write.
 
 ### Where it stands — 2026-08-01T05:00
 

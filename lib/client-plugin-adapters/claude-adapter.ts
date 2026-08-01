@@ -10,11 +10,13 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { mkdir } from 'fs/promises'
+// `mkdir` is deliberately NOT imported: the two sites that called it before writing
+// settings.local.json now use `updateJson`, whose lock acquisition already does
+// `mkdir(dirname(path), { recursive: true })` — it has to, because a fresh machine may not have
+// `.claude/` yet and the lockdir could not otherwise be created.
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
-import { withLock } from '@/lib/file-lock'
 import { assertAdapterContext } from './adapter-context'
 import type { ClientPluginAdapter, StoredPlugin, PluginAdapterOptions, PluginInstallResult, PluginUninstallResult, PluginActionResult, PluginInstallState } from './types'
 
@@ -29,18 +31,29 @@ function resolveDir(dir: string): string {
 // ENOENT and a parse failure were the same answer by construction. This module is in
 // `ChangePlugin`'s OWN call path, so its unguarded copy bypassed the service's guard one layer down
 // on every adapter install — the urgent one of the three.
-import { loadJsonSafe, saveJsonSafe } from '@/lib/json-io'
+import { loadJsonSafe, updateJson } from '@/lib/json-io'
 
 
 /**
- * LIB2-MAJ-04: Lock key for settings.local.json mutations. The same key MUST be
- * used by every caller that mutates settings.local.json on the same agent dir to
- * prevent enable/disable race conditions. The lock is keyed on the resolved
- * absolute path so different agents serialize independently.
+ * ⚠ RETIRED — kept only to record WHY it was not enough (TRDD-RYFP030K). Do not reintroduce it.
+ *
+ * LIB2-MAJ-04 serialized this module's `settings.local.json` mutations with
+ * `withLock(settingsLockKey(path))`, and the intent — "the same key MUST be used by every caller
+ * that mutates settings.local.json on the same agent dir" — was exactly right. The problem is that
+ * every caller did NOT use it. `services/element-management-service.ts` builds the identical path
+ * (`join(<agentDir>, '.claude', 'settings.local.json')`, five sites) and guards it with a
+ * `mkdir`-based lock DIRECTORY at `<path>.lock`. A string key in an in-process Map and a lockdir on
+ * disk share nothing, so the two modules excluded each other NOWHERE — not even inside one process.
+ *
+ * And `lib/file-lock.ts` is process-local by construction; its own header says it "provides NO
+ * protection against PM2 cluster mode / headless + full mode / test harnesses". So the module
+ * writing the file that decides which plugins an agent loads had the weakest of the three locks
+ * this codebase had grown.
+ *
+ * Both sites now go through `updateJson`, which takes the SAME lockdir element-management-service
+ * takes. That is what "one lock" has to mean: not one function each module calls, but one physical
+ * object they contend for.
  */
-function settingsLockKey(localSettings: string): string {
-  return `claude-adapter:settings.local:${localSettings}`
-}
 
 function buildPluginKey(name: string, marketplace?: string): string {
   return marketplace ? `${name}@${marketplace}` : name
@@ -116,17 +129,15 @@ const claudeAdapter: ClientPluginAdapter = {
     const localSettings = join(resolved, '.claude', 'settings.local.json')
 
     try {
-      // LIB2-MAJ-04: read-modify-write sequence MUST be serialized; otherwise
-      // two parallel enable/disable callers race-clobber the JSON file.
-      return await withLock(settingsLockKey(localSettings), async () => {
-        await mkdir(join(resolved, '.claude'), { recursive: true })
-        const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+      // LIB2-MAJ-04: this read-modify-write MUST be serialized, or two parallel enable/disable
+      // callers race-clobber the file. It now serializes through `updateJson` — see the note on
+      // `settingsLockKey` for why the old `withLock` was not enough.
+      await updateJson(localSettings, s => {
+        const ep = (s.enabledPlugins || {}) as Record<string, boolean>
         ep[pluginKey] = true
-        settings.enabledPlugins = ep
-        await saveJsonSafe(localSettings, settings)
-        return { success: true } as PluginActionResult
-      })
+        s.enabledPlugins = ep
+      }, { createIfMissing: true })
+      return { success: true } as PluginActionResult
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
@@ -140,15 +151,12 @@ const claudeAdapter: ClientPluginAdapter = {
 
     try {
       // LIB2-MAJ-04: see enable() — same locking + atomic-write requirement.
-      return await withLock(settingsLockKey(localSettings), async () => {
-        await mkdir(join(resolved, '.claude'), { recursive: true })
-        const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+      await updateJson(localSettings, s => {
+        const ep = (s.enabledPlugins || {}) as Record<string, boolean>
         ep[pluginKey] = false
-        settings.enabledPlugins = ep
-        await saveJsonSafe(localSettings, settings)
-        return { success: true } as PluginActionResult
-      })
+        s.enabledPlugins = ep
+      }, { createIfMissing: true })
+      return { success: true } as PluginActionResult
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }

@@ -244,6 +244,38 @@ describe('updateJson — refusals', () => {
     expect(JSON.parse(await readFile(nested, 'utf-8'))).toEqual({ enabledPlugins: { 'a@b': true } })
   })
 
+  it('RE-RUNS the mutator when a non-participating writer lands mid-write', async () => {
+    // THE PREMISE BEHIND `staged` / `committed` IN element-management-service (TRDD-RYFP030K).
+    // Three call sites there record R51 undo state while mutating, and they stage it into a local
+    // that RESETS on each attempt rather than pushing into the shared ledger — which is only
+    // correct, and only necessary, because the mutator can run more than once. Nothing else states
+    // that contract, so removing it there would look like harmless simplification.
+    //
+    // The mutator performs the foreign write itself: it runs inside the lock, and a bare `writeFile`
+    // is precisely a writer that never took that lock (the `claude` CLI is the real one).
+    const attempts: string[] = []
+    let foreignWritten = false
+
+    const r = await updateJson(file, async d => {
+      attempts.push('attempt')
+      if (!foreignWritten) {
+        foreignWritten = true
+        await writeFile(file, JSON.stringify({ seed: 'original', theirs: 1 }, null, 2) + '\n', 'utf-8')
+      }
+      d.mine = true
+    })
+
+    expect(attempts.length, 'the mutator ran once — the staleness gate never fired, so this test proves nothing').toBeGreaterThan(1)
+    expect(r.attempts).toBeGreaterThan(1)
+
+    // AND NO LOST UPDATE: the re-run re-applies our change to THEIR bytes, so both survive. A gate
+    // that retried but re-applied to the stale base would still show `mine` and would have silently
+    // dropped `theirs` — which is the failure the retry exists to prevent, not merely the retry.
+    const final = JSON.parse(await readFile(file, 'utf-8'))
+    expect(final.theirs).toBe(1)
+    expect(final.mine).toBe(true)
+  })
+
   it('a no-op mutation writes nothing and takes no backup', async () => {
     const before = await backupsOf(file)
     const r = await updateJson(file, d => { d.seed = 'original' })

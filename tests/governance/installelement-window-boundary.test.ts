@@ -44,7 +44,13 @@ const MARKER = 'R51 WINDOW BOUNDARY (TRDD-YAGRX7W3)'
  */
 const MUTATION_NEEDLES = [
   'mkdir', 'rm', 'rmdir', 'unlink', 'writeFile', 'copyFile', 'cp', 'rename',
-  'saveJsonSafe', 'execFileAsync', 'execAsync',
+  // `updateJson` / `restoreRawSnapshot` joined `saveJsonSafe` when TRDD-RYFP030K migrated this
+  // service's 21 settings writes. Adding them is not bookkeeping: without them the scanner could
+  // not see a single settings write in the file it exists to scan, so "the mutations above the
+  // boundary are EXACTLY this set" would have been measured against a needle list that no longer
+  // matched the writer. A needle keyed on a verb NAME goes blind on the rename that replaces it —
+  // extend this list in the SAME commit that introduces a new write primitive.
+  'saveJsonSafe', 'updateJson', 'restoreRawSnapshot', 'execFileAsync', 'execAsync',
   'convertAndStorePlugin', 'emitForClient',
   'updateAgent', 'saveAgent', 'addAgent', 'removeAgent',
 ] as const
@@ -161,7 +167,13 @@ describe('InstallElement — the R51 window boundary is a CLOSED SET (TRDD-YAGRX
 
     // The window exists so that state which must AGREE WITH THE VERDICT is reversible. If a
     // settings/registry write ever lands above the line, that property is silently gone.
-    for (const verdictState of ['saveJsonSafe', 'writeFile', 'updateAgent']) {
+    // ⚠ EVERY WRITER THAT CAN REACH A SETTINGS FILE MUST BE NAMED HERE. `saveJsonSafe` alone made
+    // this loop VACUOUS the day TRDD-RYFP030K migrated the service's 21 call sites: the needle
+    // matched nothing, `undefined` is what the assertion wants, and the guard went on reporting
+    // "clean" about a claim it could no longer evaluate. That is the same blind-detector failure
+    // the write-boundary scanner hit from the other direction — a needle keyed on a verb NAME goes
+    // silent on the rename that replaces it. `saveJsonSafe` stays so a regression to it is caught.
+    for (const verdictState of ['saveJsonSafe', 'updateJson', 'restoreRawSnapshot', 'writeFile', 'updateAgent']) {
       expect(above[verdictState], `${verdictState} above the R51 boundary — it would survive a failed action`).toBeUndefined()
     }
   })
@@ -174,10 +186,14 @@ describe('InstallElement — the R51 window boundary is a CLOSED SET (TRDD-YAGRX
 
     // direct-call shape, e.g. `await mkdir(...)`
     expect(all.mkdir, 'the scanner sees no direct calls at all — every assertion above is vacuous').toBeGreaterThan(0)
-    // member-call shape, e.g. `await execFileAsync(...)` / `settings.save(...)`; saveJsonSafe and
+    // member-call shape, e.g. `await execFileAsync(...)` / `settings.save(...)`; updateJson and
     // execFileAsync both appear below the boundary, so a non-zero count here proves the walk
     // descends past the marker and into nested blocks (switch > case > try).
-    expect(all.saveJsonSafe, 'the scanner never descends below the boundary — it is not measuring the function').toBeGreaterThan(0)
+    //
+    // WAS `saveJsonSafe` until TRDD-RYFP030K migrated it out of this file entirely. A positive
+    // control has to name a shape the source ACTUALLY CONTAINS — the moment it names an absent one
+    // it stops proving the walk works and starts proving only that the needle missed.
+    expect(all.updateJson, 'the scanner never descends below the boundary — it is not measuring the function').toBeGreaterThan(0)
 
     // ALIASED shape — the blind spot that made the card claim InstallElement calls no `rm`.
     // NON-VACUOUS BY CONSTRUCTION: neither name is ever called unaliased in this function, so

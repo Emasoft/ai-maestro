@@ -366,7 +366,11 @@ function logDegradedOps(pipeline: string, subject: string, ops: string[]): void 
 // them, and because a `saveJsonSafe` reachable from two import paths is the drift starting over.
 export type { JsonRead } from '@/lib/json-io'
 export { readJson, saveJsonSafe, UnreadableTargetError } from '@/lib/json-io'
-import { readJson, loadJsonSafe, saveJsonSafe, withJsonLock, updateJson, restoreRawSnapshot } from '@/lib/json-io'
+// `saveJsonSafe` is RE-EXPORTED above but no longer IMPORTED: every write in this file now goes
+// through `updateJson` (locked read-modify-write) or, for the one true R51 compensation,
+// `restoreRawSnapshot`. Re-adding it to this import is the signal that a call site has regressed
+// to a two-call read-then-write, which is the lost-update shape this module exists to remove.
+import { readJson, loadJsonSafe, withJsonLock, updateJson, restoreRawSnapshot } from '@/lib/json-io'
 
 // ── Settings mutex ────────────────────────────────────────────
 //
@@ -883,7 +887,11 @@ export async function InstallElement(
     //   • install + adapter — REACHABLE. `adapterRes.success === false` aborts AFTER the copy.
     //   • install + CLI     — reachable only if the direct settings write throws; the write-back
     //                         path swallows its own errors, so it cannot abort.
-    //   • enable / disable  — LATENT. One `saveJsonSafe` (atomic tmp+rename) and nothing after it.
+    //   • enable / disable  — LATENT. One `updateJson` and nothing after it. It CAN now throw where
+    //                         the old `saveJsonSafe` could not (a lost-update refusal, key loss, an
+    //                         unparseable target), but the undo ledger is published only AFTER the
+    //                         commit returns, so a throwing write leaves nothing recorded and the
+    //                         gate's own undo is a correct no-op.
     //   • update            — INERT. Its own catch swallows every failure; the gate cannot abort.
     //   • uninstall         — FORWARD-ONLY for everything but the settings entries. Removed files
     //                         (adapter) and the deleted plugin CACHE dir have no snapshot to
@@ -982,14 +990,23 @@ export async function InstallElement(
               }
 
               if (!cliSuccess) {
-                await withSettingsLock(settingsPath, async () => {
-                  const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                // STAGE-THEN-PUBLISH, because `updateJson` MAY RUN THIS MUTATOR MORE THAN ONCE. A
+                // non-participating writer (the `claude` CLI takes no lock of ours) landing between
+                // our read and our commit makes the gate re-read and re-apply, so pushing straight
+                // into the undo ledger would record the key TWICE — and the undo pops LIFO, so the
+                // second, STALE entry would restore the very value the retry existed to respect.
+                // Staging into a local that RESETS at the top of every attempt means the ledger
+                // only ever sees the attempt that actually committed. Same shape at every site
+                // below that records undo state inside a write.
+                const staged: typeof exeUndo.settingsKeys = []
+                await updateJson(settingsPath, settings => {
+                  staged.length = 0
                   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-                  exeUndo.settingsKeys.push({ key: pluginKey, had: pluginKey in ep, prev: ep[pluginKey] })
+                  staged.push({ key: pluginKey, had: pluginKey in ep, prev: ep[pluginKey] })
                   ep[pluginKey] = true
                   settings.enabledPlugins = ep
-                  await saveJsonSafe(settingsPath, settings)
-                })
+                }, { createIfMissing: true })
+                exeUndo.settingsKeys.push(...staged)
                 ops.push(`EXE: Installed via direct settings write — ${pluginKey} → true`)
               } else if (scope === 'local' && clientType === 'claude') {
                 // SCEN-012 FIX: Belt-and-braces write-back for local Claude installs.
@@ -1000,17 +1017,22 @@ export async function InstallElement(
                 // (install ai-maestro-plugin during CreateAgent) can return success
                 // while the plugin is not actually enabled, violating R17.1/R17.6.
                 try {
-                  await withSettingsLock(settingsPath, async () => {
-                    const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                  const staged: typeof exeUndo.settingsKeys = []
+                  await updateJson(settingsPath, settings => {
+                    staged.length = 0
                     const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
                     if (ep[pluginKey] !== true) {
-                      exeUndo.settingsKeys.push({ key: pluginKey, had: pluginKey in ep, prev: ep[pluginKey] })
+                      staged.push({ key: pluginKey, had: pluginKey in ep, prev: ep[pluginKey] })
                       ep[pluginKey] = true
                       settings.enabledPlugins = ep
-                      await saveJsonSafe(settingsPath, settings)
-                      ops.push(`EXE: Write-back — CLI claimed success but ${pluginKey} missing; force-wrote ${pluginKey} → true`)
                     }
-                  })
+                  }, { createIfMissing: true })
+                  exeUndo.settingsKeys.push(...staged)
+                  // Logged OUT here, not inside the mutator: a retried attempt would otherwise emit
+                  // the ops line once per attempt, describing writes that never committed.
+                  if (staged.length) {
+                    ops.push(`EXE: Write-back — CLI claimed success but ${pluginKey} missing; force-wrote ${pluginKey} → true`)
+                  }
                 } catch (wbErr) {
                   ops.push(`EXE: WARN — Write-back fallback failed: ${wbErr instanceof Error ? wbErr.message : wbErr}`)
                 }
@@ -1050,8 +1072,9 @@ export async function InstallElement(
                 result.stderr = cliResult.stderr
                 ops.push(`EXE: Uninstalled via CLI`)
               } catch {
-                await withSettingsLock(settingsPath, async () => {
-                  const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                const staged: typeof exeUndo.settingsKeys = []
+                await updateJson(settingsPath, settings => {
+                  staged.length = 0
                   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
                   // SCEN-012 FIX: Boundary-aware match. Old `k.includes(name)` deleted
                   // ai-maestro-autonomous-agent@ai-maestro-plugins when uninstalling
@@ -1061,13 +1084,13 @@ export async function InstallElement(
                     const at = k.indexOf('@')
                     const pluginPart = at >= 0 ? k.substring(0, at) : k
                     if (pluginPart === name) {
-                      exeUndo.settingsKeys.push({ key: k, had: true, prev: ep[k] })
+                      staged.push({ key: k, had: true, prev: ep[k] })
                       delete ep[k]
                     }
                   }
                   settings.enabledPlugins = ep
-                  await saveJsonSafe(settingsPath, settings)
-                })
+                }, { createIfMissing: true })
+                exeUndo.settingsKeys.push(...staged)
                 ops.push(`EXE: Uninstalled via direct settings removal`)
               }
 
@@ -1102,8 +1125,9 @@ export async function InstallElement(
             }
 
             case 'enable': {
-              await withSettingsLock(settingsPath, async () => {
-                const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+              const staged: typeof exeUndo.settingsKeys = []
+              await updateJson(settingsPath, settings => {
+                staged.length = 0
                 const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
                 // SCEN-012 FIX: Boundary-aware match (see PG01 comment).
                 const existingKey = Object.keys(ep).find(k => {
@@ -1111,18 +1135,19 @@ export async function InstallElement(
                   const pluginPart = at >= 0 ? k.substring(0, at) : k
                   return pluginPart === name
                 }) || pluginKey
-                exeUndo.settingsKeys.push({ key: existingKey, had: existingKey in ep, prev: ep[existingKey] })
+                staged.push({ key: existingKey, had: existingKey in ep, prev: ep[existingKey] })
                 ep[existingKey] = true
                 settings.enabledPlugins = ep
-                await saveJsonSafe(settingsPath, settings)
-              })
+              }, { createIfMissing: true })
+              exeUndo.settingsKeys.push(...staged)
               ops.push(`EXE: Enabled — ${name} → true`)
               break
             }
 
             case 'disable': {
-              await withSettingsLock(settingsPath, async () => {
-                const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+              const staged: typeof exeUndo.settingsKeys = []
+              await updateJson(settingsPath, settings => {
+                staged.length = 0
                 const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
                 // SCEN-012 FIX: Boundary-aware match (see PG01 comment).
                 const existingKey = Object.keys(ep).find(k => {
@@ -1130,11 +1155,11 @@ export async function InstallElement(
                   const pluginPart = at >= 0 ? k.substring(0, at) : k
                   return pluginPart === name
                 }) || pluginKey
-                exeUndo.settingsKeys.push({ key: existingKey, had: existingKey in ep, prev: ep[existingKey] })
+                staged.push({ key: existingKey, had: existingKey in ep, prev: ep[existingKey] })
                 ep[existingKey] = false
                 settings.enabledPlugins = ep
-                await saveJsonSafe(settingsPath, settings)
-              })
+              }, { createIfMissing: true })
+              exeUndo.settingsKeys.push(...staged)
               ops.push(`EXE: Disabled — ${name} → false`)
               break
             }
@@ -1176,20 +1201,28 @@ export async function InstallElement(
         // recent, and restoring it before undoing the CLI install would let the CLI's own
         // settings edit survive the restore.
         if (exeUndo.settingsKeys.length) {
-          await withSettingsLock(settingsPath, async () => {
-            const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+          // DRAIN INTO A LOCAL FIRST — the old shape popped the SHARED ledger from inside the
+          // write, which is unsafe now that `updateJson` may re-run the mutator: attempt 1 would
+          // empty the ledger, attempt 2 would find nothing left to restore, produce bytes identical
+          // to its base, and report `changed:false` — an undo that silently did nothing while
+          // reporting success. Reading the entries out here makes the mutator a pure function of a
+          // local snapshot, so every attempt applies the SAME restore. LIFO order is preserved
+          // explicitly (`.reverse()`) because it is what made the old `pop()` correct.
+          const entries = exeUndo.settingsKeys.slice().reverse()
+          await updateJson(settingsPath, settings => {
             const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
             // KEY-LEVEL, never a whole-file byte restore: this file is shared with every other
             // plugin of this agent, and putting back a snapshot of it would silently revert an
             // edit some concurrent writer made between the write and the rollback.
-            while (exeUndo.settingsKeys.length) {
-              const entry = exeUndo.settingsKeys.pop()!
+            for (const entry of entries) {
               if (entry.had) ep[entry.key] = entry.prev as boolean
               else delete ep[entry.key]
             }
             settings.enabledPlugins = ep
-            await saveJsonSafe(settingsPath, settings)
-          })
+          }, { createIfMissing: true })
+          // Cleared only AFTER the write commits, so a throwing undo leaves the ledger intact for
+          // the operator (and for any retry) rather than consuming it on the way to failing.
+          exeUndo.settingsKeys.length = 0
         }
         if (exeUndo.cliInstalled) {
           exeUndo.cliInstalled = false
@@ -1364,19 +1397,21 @@ export async function InstallElement(
       const userSettingsPath = USER_GLOBAL_SETTINGS
       if (existsSync(userSettingsPath)) {
         try {
-          await withSettingsLock(userSettingsPath, async () => {
-            // READS STRICTLY (TRDD-K71FV649). This gate's honest branch was already written — the
-            // `catch` below says "Could not check user scope settings" — and was UNREACHABLE,
-            // because `loadJsonSafe` answers `{}` instead of throwing. So a corrupt
-            // ~/.claude/settings.json found no `userKey`, fell to the `else`, and reported
-            // "User scope clean" about a file it could not read. That is the vacuous half of this
-            // card's defect: nothing is destroyed here, but a clean verdict is asserted on no
-            // evidence. Reading strictly makes the message that was always meant for this case fire.
-            const read = await readJson(userSettingsPath)
-            if (!read.ok && read.reason === 'unreadable') {
-              throw new Error(`${userSettingsPath} does not parse (${read.error})`)
-            }
-            const us = (read.ok ? read.data : {}) as Record<string, Record<string, unknown>>
+          // READS STRICTLY (TRDD-K71FV649). This gate's honest branch was already written — the
+          // `catch` below says "Could not check user scope settings" — and was UNREACHABLE,
+          // because `loadJsonSafe` answers `{}` instead of throwing. So a corrupt
+          // ~/.claude/settings.json found no `userKey`, fell to the `else`, and reported
+          // "User scope clean" about a file it could not read. That is the vacuous half of this
+          // card's defect: nothing is destroyed here, but a clean verdict is asserted on no
+          // evidence. `updateJson` refuses an unparseable target (UnreadableTargetError) and that
+          // throw lands in the same catch, so the message keeps firing for the same reason.
+          //
+          // NO `createIfMissing`: the enclosing `existsSync` already proved the file is there, and
+          // this is the human user's own global config — the one file we must never bring into
+          // existence as a side effect of an agent operation.
+          let disabled: string | null = null
+          await updateJson(userSettingsPath, us => {
+            disabled = null
             const uep = (us.enabledPlugins || {}) as Record<string, boolean>
             // SCEN-012 FIX: Boundary-aware match. Old `k.includes('ai-maestro-plugin')`
             // also matched role-plugin names like ai-maestro-autonomous-agent@ai-maestro-plugins
@@ -1389,12 +1424,12 @@ export async function InstallElement(
             if (userKey && uep[userKey] !== false) {
               uep[userKey] = false
               us.enabledPlugins = uep
-              await saveJsonSafe(userSettingsPath, us)
-              ops.push(`PG03: Disabled ai-maestro-plugin at user scope (R17.17 — must be local-only)`)
-            } else {
-              ops.push(`PG03: User scope clean — no ai-maestro-plugin enabled`)
+              disabled = userKey
             }
           })
+          ops.push(disabled
+            ? `PG03: Disabled ai-maestro-plugin at user scope (R17.17 — must be local-only)`
+            : `PG03: User scope clean — no ai-maestro-plugin enabled`)
         } catch (err) {
           ops.push(`PG03: WARN — Could not check user scope settings: ${err instanceof Error ? err.message : err}`)
         }
@@ -1572,15 +1607,11 @@ export async function InstallElement(
       const userSettingsPath = USER_GLOBAL_SETTINGS
       if (existsSync(userSettingsPath)) {
         try {
-          await withSettingsLock(userSettingsPath, async () => {
-            // READS STRICTLY (TRDD-K71FV649) — see PG03 above for the full reasoning. Same shape,
-            // same already-written-but-unreachable honest branch in the `catch`: a corrupt
-            // ~/.claude/settings.json used to report "No duplicate at user scope".
-            const read = await readJson(userSettingsPath)
-            if (!read.ok && read.reason === 'unreadable') {
-              throw new Error(`${userSettingsPath} does not parse (${read.error})`)
-            }
-            const us = (read.ok ? read.data : {}) as Record<string, Record<string, unknown>>
+          // READS STRICTLY (TRDD-K71FV649) — see PG03 above for the full reasoning, including why
+          // there is no `createIfMissing` on the user's own global config.
+          let disabled: string | null = null
+          await updateJson(userSettingsPath, us => {
+            disabled = null
             const uep = (us.enabledPlugins || {}) as Record<string, boolean>
             // SCEN-012 FIX: Boundary-aware match.
             const userKey = Object.keys(uep).find(k => {
@@ -1591,12 +1622,12 @@ export async function InstallElement(
             if (userKey && uep[userKey] !== false) {
               uep[userKey] = false
               us.enabledPlugins = uep
-              await saveJsonSafe(userSettingsPath, us)
-              ops.push(`PG07: Disabled "${name}" at user scope — was duplicate of local install (prevents double-loading)`)
-            } else {
-              ops.push(`PG07: No duplicate at user scope`)
+              disabled = userKey
             }
           })
+          ops.push(disabled
+            ? `PG07: Disabled "${name}" at user scope — was duplicate of local install (prevents double-loading)`
+            : `PG07: No duplicate at user scope`)
         } catch (err) {
           ops.push(`PG07: WARN — Could not check user scope for duplicates: ${err instanceof Error ? err.message : err}`)
         }
@@ -1956,16 +1987,19 @@ export async function uninstallPluginLocally(
   // asked to remove. A second writer that can only ever converge on the CLI's own outcome.
   const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
   if (existsSync(localSettings)) {
-    await withSettingsLock(localSettings, async () => {
-      const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+    let removed = false
+    await updateJson(localSettings, settings => {
+      removed = false
       const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
       if (pluginKey in ep) {
         delete ep[pluginKey]
         settings.enabledPlugins = ep
-        await saveJsonSafe(localSettings, settings)
-        console.log(`[element-mgmt] Removed ${pluginKey} from settings.local.json (safeguard cleanup)`)
+        removed = true
       }
     })
+    // Logged out here: `updateJson` may re-run the mutator against a fresh base, and a log line
+    // inside it would claim a removal once per attempt rather than once per commit.
+    if (removed) console.log(`[element-mgmt] Removed ${pluginKey} from settings.local.json (safeguard cleanup)`)
   }
 
   // NO installed_plugins.json CLEANUP HAPPENS HERE ANY MORE (TRDD-0GCIMQ9F Shape A).
@@ -2183,14 +2217,14 @@ export async function installPlugin(
   const claudeDir = join(resolvedDir, '.claude')
   const localSettings = join(claudeDir, 'settings.local.json')
 
-  await withSettingsLock(localSettings, async () => {
-    await mkdir(claudeDir, { recursive: true })
-    const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+  // NO EXPLICIT mkdir: `updateJson` takes its lockdir BESIDE the target, and `acquireLock` creates
+  // the parent directory to do so — so `<workdir>/.claude/` exists by the time the write happens.
+  // Pinned by "createIfMissing creates the parent directory too" in tests/unit/json-io-update.
+  await updateJson(localSettings, settings => {
     const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
     ep[pluginKey] = true
     settings.enabledPlugins = ep
-    await saveJsonSafe(localSettings, settings)
-  })
+  }, { createIfMissing: true })
 
   console.log(`[element-mgmt] Installed ${pluginName} from ${marketplace} (scope: local, dir: ${resolvedDir})`)
 }
@@ -2234,12 +2268,10 @@ export async function uninstallPlugin(
   const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
 
   if (existsSync(localSettings)) {
-    await withSettingsLock(localSettings, async () => {
-      const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+    await updateJson(localSettings, settings => {
       const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
       delete ep[pluginKey]
       settings.enabledPlugins = ep
-      await saveJsonSafe(localSettings, settings)
     })
   }
 
@@ -2273,14 +2305,11 @@ export async function enablePlugin(
 
   const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
 
-  await withSettingsLock(localSettings, async () => {
-    await mkdir(join(resolvedDir, '.claude'), { recursive: true })
-    const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+  await updateJson(localSettings, settings => {
     const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
     ep[pluginKey] = true
     settings.enabledPlugins = ep
-    await saveJsonSafe(localSettings, settings)
-  })
+  }, { createIfMissing: true })
 
   console.log(`[element-mgmt] Enabled ${pluginKey} (scope: local, dir: ${resolvedDir})`)
 }
@@ -2312,14 +2341,11 @@ export async function disablePlugin(
 
   const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
 
-  await withSettingsLock(localSettings, async () => {
-    await mkdir(join(resolvedDir, '.claude'), { recursive: true })
-    const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+  await updateJson(localSettings, settings => {
     const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
     ep[pluginKey] = false
     settings.enabledPlugins = ep
-    await saveJsonSafe(localSettings, settings)
-  })
+  }, { createIfMissing: true })
 
   console.log(`[element-mgmt] Disabled ${pluginKey} (scope: local, dir: ${resolvedDir})`)
 }
@@ -4746,14 +4772,11 @@ export async function ChangePlugin(
       } else {
         const resolvedDir = agentDir!.startsWith('~') ? agentDir!.replace('~', HOME) : agentDir!
         const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
-        await withSettingsLock(localSettings, async () => {
-          await mkdir(join(resolvedDir, '.claude'), { recursive: true })
-          const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+        await updateJson(localSettings, settings => {
           const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
           ep[pluginKey] = true
           settings.enabledPlugins = ep
-          await saveJsonSafe(localSettings, settings)
-        })
+        }, { createIfMissing: true })
       }
       ops.push(`EXE: Enabled ${pluginKey} (scope: ${desired.scope})`)
 
@@ -4763,14 +4786,11 @@ export async function ChangePlugin(
       } else {
         const resolvedDir = agentDir!.startsWith('~') ? agentDir!.replace('~', HOME) : agentDir!
         const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
-        await withSettingsLock(localSettings, async () => {
-          await mkdir(join(resolvedDir, '.claude'), { recursive: true })
-          const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+        await updateJson(localSettings, settings => {
           const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
           ep[pluginKey] = false
           settings.enabledPlugins = ep
-          await saveJsonSafe(localSettings, settings)
-        })
+        }, { createIfMissing: true })
       }
       ops.push(`EXE: Disabled ${pluginKey} (scope: ${desired.scope})`)
 
@@ -4827,21 +4847,17 @@ export async function ChangePlugin(
         const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
         if (desired.action === 'install' && !ep[pluginKey]) {
           ops.push(`G10: WARN — settings.local.json missing plugin after install, writing safeguard`)
-          await withSettingsLock(localSettings, async () => {
-            const s = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+          await updateJson(localSettings, s => {
             const e = (s.enabledPlugins || {}) as Record<string, boolean>
             e[pluginKey] = true
             s.enabledPlugins = e
-            await saveJsonSafe(localSettings, s)
           })
         } else if (desired.action === 'uninstall' && ep[pluginKey] !== undefined) {
           ops.push(`G10: WARN — settings.local.json still has plugin after uninstall, cleaning safeguard`)
-          await withSettingsLock(localSettings, async () => {
-            const s = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+          await updateJson(localSettings, s => {
             const e = (s.enabledPlugins || {}) as Record<string, boolean>
             delete e[pluginKey]
             s.enabledPlugins = e
-            await saveJsonSafe(localSettings, s)
           })
         } else {
           ops.push(`G10: Settings safeguard passed`)
@@ -5621,27 +5637,40 @@ export async function ChangeMarketplace(desired: {
             what: 'Remove the marketplace from extraKnownMarketplaces in settings.json',
             // Remove from extraKnownMarketplaces in settings.json
             run: async (c) => {
-              await withSettingsLock(SETTINGS_JSON, async () => {
-                const settings = await loadJsonSafe(SETTINGS_JSON) as Record<string, Record<string, unknown>>
+              // The `existsSync` REPLACES what `loadJsonSafe` used to absorb. It answered `{}` for a
+              // missing ~/.claude/settings.json, so this gate quietly found nothing to remove and
+              // succeeded; `updateJson` refuses a missing target instead (and must — passing
+              // `createIfMissing` here would CREATE the human user's global config as a side effect
+              // of removing a marketplace). No file means no registration to remove: nothing to do.
+              if (!existsSync(SETTINGS_JSON)) return
+              let removed = false
+              await updateJson(SETTINGS_JSON, settings => {
+                removed = false
                 const ekm = settings.extraKnownMarketplaces as Record<string, unknown> | undefined
                 if (ekm && ekm[desired.name] !== undefined) {
                   delete ekm[desired.name]
                   settings.extraKnownMarketplaces = ekm
-                  await saveJsonSafe(SETTINGS_JSON, settings)
-                  c.ekmRemoved = true
-                  ops.push(`G05: Removed from extraKnownMarketplaces`)
+                  removed = true
                 }
               })
+              // Flag + log set AFTER the commit: a retried mutator would otherwise arm the undo (and
+              // emit the ops line) on behalf of an attempt that never landed.
+              if (removed) {
+                c.ekmRemoved = true
+                ops.push(`G05: Removed from extraKnownMarketplaces`)
+              }
             },
             undo: async (c) => {
               if (!c.ekmRemoved) return
-              await withSettingsLock(SETTINGS_JSON, async () => {
-                const settings = await loadJsonSafe(SETTINGS_JSON) as Record<string, Record<string, unknown>>
+              // `createIfMissing` HERE and not in `run`: reaching this line means `run` committed,
+              // so the file existed and we edited it. If it has vanished since, re-creating it
+              // carrying the entry we removed is the honest restore — refusing would leave the
+              // marketplace deregistered by a pipeline that reported a clean rollback.
+              await updateJson(SETTINGS_JSON, settings => {
                 const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
                 ekm[desired.name] = ekmEntry
                 settings.extraKnownMarketplaces = ekm
-                await saveJsonSafe(SETTINGS_JSON, settings)
-              })
+              }, { createIfMissing: true })
             },
           },
         ],
@@ -6370,26 +6399,44 @@ export async function ChangeHook(agentId: string | null, desired: {
     }
 
     // ── G04: Read/Write hooks in settings ─────────────────────
-    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner.
-    // `saveJsonSafe` is atomic (tmp + rename), so no failure path reaches this compensation today
-    // — it is LATENT BY CONSTRUCTION, written because the runner refuses a mutating gate without
-    // one and because an abortable gate appended after this one must find it already here.
+    // AIO-TXN-10 (R51, TRDD-DQ6XN2VP): the one mutating gate runs under the transaction runner. The
+    // compensation stays LATENT — nothing abortable follows this gate — but it is no longer latent
+    // BY CONSTRUCTION the way it was when the write was `saveJsonSafe`: `updateJson` can refuse a
+    // lost update, refuse key loss, or refuse an unparseable target, so the gate can now abort of
+    // its own accord. That is why the undo is gated on `committed` rather than on `prior`.
     //
     // It restores the WHOLE settings object read under the lock, and RE-ACQUIRES that lock to do
     // it: a hook edit is a read-modify-write over a file other writers share, so putting back one
     // key would clobber whatever landed in between.
-    const hookCtx: { prior: Record<string, unknown> | null } = { prior: null }
+    // `existedBefore` DISTINGUISHES "the file held `{}`" from "there was no file". Without it the
+    // undo restores an object either way, so a rollback of the very first hook ever added to an
+    // agent leaves behind a settings file containing `{}` that nothing created — residue from an
+    // operation that reported a clean revert. `restoreRawSnapshot(path, null)` is the primitive
+    // that deletes instead, and this flag is what tells the undo which of the two it owes.
+    //
+    // `committed` IS THE UNDO'S GATE, and `prior` is NOT — the distinction became load-bearing the
+    // moment this gate moved to `updateJson`. The mutator sets `prior` on EVERY attempt, including
+    // attempts that are then discarded because the staleness check found a foreign write; if all
+    // retries are exhausted the gate throws having written NOTHING, yet `prior` holds some
+    // abandoned attempt's base. An undo gated on `prior` would then replay that stale object over
+    // a file this gate never touched — destroying the very concurrent writer whose change caused
+    // the retry, from an operation that made no change at all.
+    const hookCtx: { prior: Record<string, unknown> | null; existedBefore: boolean; committed: boolean } =
+      { prior: null, existedBefore: existsSync(settingsPath), committed: false }
     const { runGateSequence } = await import('@/lib/gate-transaction')
     const txn = await runGateSequence(
       [{
         id: 'G04',
         what: `${desired.action === 'add' ? 'Added' : 'Removed'} hook for ${desired.event}`,
         run: async (c) => {
-          await withSettingsLock(settingsPath, async () => {
-            const settings = await loadJsonSafe(settingsPath) as Record<string, unknown>
+          const res = await updateJson(settingsPath, settings => {
             // Deep-clone BEFORE mutating: `hooks` and `eventHooks` below are references into
             // `settings`, so a shallow copy would be mutated along with it and the "prior" state
             // would be the post-change one.
+            //
+            // RE-CAPTURED ON EVERY ATTEMPT, and that is correct rather than merely tolerable: if a
+            // non-participating writer forces `updateJson` to re-read, the snapshot must describe
+            // the state the COMMITTING write replaced, not the one an abandoned attempt saw.
             c.prior = structuredClone(settings)
             const hooks = (settings.hooks || {}) as Record<string, Array<Record<string, unknown>>>
             const eventHooks = hooks[desired.event] || []
@@ -6413,15 +6460,27 @@ export async function ChangeHook(agentId: string | null, desired: {
               else hooks[desired.event] = eventHooks
             }
             settings.hooks = hooks
-            await saveJsonSafe(settingsPath, settings as Record<string, unknown>)
-          })
+          }, { createIfMissing: true })
+          // `changed`, not merely "no throw": a mutation that produced byte-identical output writes
+          // nothing and takes no backup, so there is equally nothing to undo.
+          c.committed = res.changed
         },
         undo: async (c) => {
-          if (!c.prior) return // the load never completed — nothing was written
-          const prior = c.prior
-          await withSettingsLock(settingsPath, async () => {
-            await saveJsonSafe(settingsPath, prior)
-          })
+          if (!c.committed || !c.prior) return // nothing was written — see `committed` above
+          // `restoreRawSnapshot`, NOT `saveJsonSafe`: this is the one true R51 compensation in this
+          // file — it replays a snapshot captured BEFORE the forward write, so `updateJson` is
+          // wrong for it (its staleness gate would see the forward write as a foreign change and
+          // throw at the one caller whose whole job is to overwrite). It restores the WHOLE object
+          // read under the lock, because a hook edit is a read-modify-write over a shared file and
+          // putting back one key would clobber whatever landed in between.
+          //
+          // The `null` arm DELETES rather than writing `{}` over a path that held no file — see
+          // `existedBefore` above. Serialising here matches `saveJsonSafe`'s bytes exactly, and
+          // buys the fsync and the lock that a bare object write did not have.
+          await restoreRawSnapshot(
+            settingsPath,
+            c.existedBefore ? JSON.stringify(c.prior, null, 2) + '\n' : null,
+          )
         },
       }],
       hookCtx,

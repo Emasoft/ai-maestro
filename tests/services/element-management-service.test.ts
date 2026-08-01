@@ -16,6 +16,7 @@ const {
   mockExecFileAsync,
   mockFsReadFile,
   mockFsWriteFile,
+  mockFsOpen,
   mockFsMkdir,
   mockFsExistsSync,
   mockFsCreated,
@@ -29,6 +30,9 @@ const {
   mockExecFileAsync: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
   mockFsReadFile: vi.fn().mockResolvedValue('{}'),
   mockFsWriteFile: vi.fn().mockResolvedValue(undefined),
+  // `updateJson` writes through a handle, so this is the verb that records a SERVICE write now.
+  // Both spellings are kept so "did OUR code write this file?" cannot go blind on the next switch.
+  mockFsOpen: vi.fn(),
   mockFsMkdir: vi.fn().mockResolvedValue(undefined),
   mockFsExistsSync: vi.fn().mockReturnValue(false),
   // The BASELINE above answers "what was on disk before this test ran". These two sets record what
@@ -170,6 +174,24 @@ vi.mock('fs/promises', () => ({
   // "rename is not a function" before the assertion runs.
   rename: vi.fn(async (from: unknown, to: unknown) => { fsTrack.move(from, to) }),
   copyFile: vi.fn(async (from: unknown, to: unknown) => { fsTrack.create(to, mockFsContent.get(String(from))) }),
+  // `updateJson` writes through a FILE HANDLE (open → writeFile → sync → close) rather than a bare
+  // `writeFile`, because it fsyncs the tmp file before the rename. The overlay has to model that or
+  // the tmp path stays empty and the existing `rename` handler carries NOTHING to the target — an
+  // install would then "succeed" over a settings file that never gained the plugin, which is the
+  // exact vacuous-fixture shape this overlay was built to remove. Recording at the tmp path makes
+  // the bytes travel through `fsTrack.move` unchanged, like every other atomic write here.
+  open: vi.fn(async (p: unknown, ...rest: unknown[]) => {
+    // AWAITED, like `writeFile` calls through to its spy: a test that injects a delay or a
+    // rejection here must be able to affect the write, which a fire-and-forget call would swallow.
+    await mockFsOpen(p, ...rest)
+    return {
+      writeFile: async (data: unknown) => { fsTrack.create(p, data) },
+      sync: async () => {},
+      close: async () => {},
+    }
+  }),
+  // Backup pruning past BACKUP_KEEP reaches for it; absent, the mock throws "No unlink export".
+  unlink: vi.fn(async (p: unknown) => { fsTrack.destroy(p) }),
 }))
 
 vi.mock('fs', () => ({
@@ -191,6 +213,44 @@ vi.mock('@/lib/client-capabilities', () => mockClientCapabilities)
 // and pass it explicitly at every call site.
 // ============================================================================
 const _tAuth = { isSystemOwner: true as const }
+
+/**
+ * What actually LANDED at a path, whichever fs verb the writer used.
+ *
+ * Introspecting `mockFsWriteFile.mock.calls` asks WHICH VERB was called, and that question went
+ * stale the moment TRDD-RYFP030K moved these writers to `updateJson` — which writes through a file
+ * HANDLE (open → writeFile → sync) so `writeFile` is never called with `(path, data)` at all. The
+ * truthy assertions failed loudly, which is fine; the danger was the ABSENCE assertion at
+ * `installPluginLocally`, which would have gone on passing while checking nothing, because
+ * `undefined` is exactly what it wants. Asserting on CONTENT is mechanism-independent: it holds for
+ * `saveJsonSafe`, for `updateJson`, and for whatever replaces it next.
+ *
+ * `endsWith`, not `includes`: `updateJson` keeps a backup and writes through a tmp file, so
+ * `<path>.backup.N` and `<path>.tmp.N` both live in the overlay and a substring match would happily
+ * return one of those instead of the target.
+ */
+const writtenSettings = (suffix: string): string | undefined => {
+  for (const [p, body] of mockFsContent) if (p.endsWith(suffix)) return body
+  return undefined
+}
+
+/**
+ * Did OUR OWN CODE write this file — as opposed to the `claude` CLI, whose effect the harness
+ * models via `applyClaudeCliEffect`?
+ *
+ * CONTENT CANNOT ANSWER THIS, and that distinction is the whole claim of the
+ * "…and write no settings itself" tests: `applyClaudeCliEffect` reaches `fsTrack` directly, so the
+ * settings file ends up correct either way and a content check calls both cases identical. Only the
+ * fs VERBS separate them, because the CLI mock touches none of them.
+ *
+ * Both `writeFile` and `open` are consulted: `saveJsonSafe` wrote the tmp file with the former,
+ * `updateJson` opens a handle with the latter, and a check that knows only one of them silently
+ * stops discriminating the day a writer switches — which is exactly how the old version of this
+ * assertion turned into a guard that passed while measuring nothing.
+ */
+const serviceWroteSettings = (needle: string): boolean =>
+  [...mockFsWriteFile.mock.calls, ...mockFsOpen.mock.calls]
+    .some((c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes(needle))
 
 // ============================================================================
 // Tests
@@ -254,10 +314,7 @@ describe('element-management-service', () => {
       )
       // …and we no longer hand-write the agent's settings for it: the CLI owns that file now,
       // exactly as it already did for every other marketplace.
-      const settingsWrite = mockFsWriteFile.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
-      )
-      expect(settingsWrite, 'installPluginLocally must not write settings.local.json itself').toBeUndefined()
+      expect(serviceWroteSettings('settings.local.json'), 'installPluginLocally must not write settings.local.json itself').toBe(false)
     })
 
     it('should resolve ~ in agentDir', async () => {
@@ -475,10 +532,7 @@ describe('element-management-service', () => {
       const { installPlugin } = await import('@/services/element-management-service')
       await installPlugin('my-generic-plugin', 'some-marketplace', { scope: 'local', agentDir: '/tmp/test' })
 
-      const writeCall = mockFsWriteFile.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
-      )
-      expect(writeCall).toBeTruthy()
+      expect(writtenSettings('settings.local.json')).toBeTruthy()
     })
 
     it('should require agentDir for local scope', async () => {
@@ -527,11 +581,9 @@ describe('element-management-service', () => {
       const { enablePlugin } = await import('@/services/element-management-service')
       await enablePlugin('my-plugin@marketplace', { scope: 'local', agentDir: '/tmp/test' })
 
-      const writeCall = mockFsWriteFile.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
-      )
-      expect(writeCall).toBeTruthy()
-      const writtenData = JSON.parse(writeCall![1] as string)
+      const written = writtenSettings('settings.local.json')
+      expect(written).toBeTruthy()
+      const writtenData = JSON.parse(written!)
       expect(writtenData.enabledPlugins['my-plugin@marketplace']).toBe(true)
     })
 
@@ -567,11 +619,9 @@ describe('element-management-service', () => {
       const { disablePlugin } = await import('@/services/element-management-service')
       await disablePlugin('my-plugin@marketplace', { scope: 'local', agentDir: '/tmp/test' })
 
-      const writeCall = mockFsWriteFile.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
-      )
-      expect(writeCall).toBeTruthy()
-      const writtenData = JSON.parse(writeCall![1] as string)
+      const written = writtenSettings('settings.local.json')
+      expect(written).toBeTruthy()
+      const writtenData = JSON.parse(written!)
       expect(writtenData.enabledPlugins['my-plugin@marketplace']).toBe(false)
     })
   })
@@ -581,8 +631,11 @@ describe('element-management-service', () => {
       /** Validates that concurrent settings operations are serialized via mutex */
       const callOrder: string[] = []
 
-      // Override writeFile to track call order with a delay
-      mockFsWriteFile.mockImplementation(async (path: string) => {
+      // Track call order with a delay on the verb that PERFORMS the payload write. That is `open`
+      // since TRDD-RYFP030K moved these writers to `updateJson` — hooking `writeFile` here now
+      // records nothing at all, and `settingsWrites.length` would be 0 rather than interleaved,
+      // i.e. the test would report a serialization failure that never happened.
+      mockFsOpen.mockImplementation(async (path: string) => {
         callOrder.push(`start:${path}`)
         await new Promise(r => setTimeout(r, 10))
         callOrder.push(`end:${path}`)
@@ -601,7 +654,10 @@ describe('element-management-service', () => {
 
       // The writes should be serialized (not interleaved)
       // We should see start1, end1, start2, end2 pattern for the SAME file
-      const settingsWrites = callOrder.filter(c => c.includes('settings.local.json'))
+      // `.json.tmp` isolates the PAYLOAD write. `updateJson` also opens a tmp file for the backup
+      // it keeps (`…settings.local.json.aim-bak-<stamp>.tmp`), so matching the bare filename would
+      // count two opens per operation and the expected 4 would silently become 8.
+      const settingsWrites = callOrder.filter(c => c.includes('settings.local.json.tmp'))
       expect(settingsWrites.length).toBe(4) // 2 starts + 2 ends
       // First operation completes before second starts
       expect(settingsWrites[0]).toMatch(/^start:/)
@@ -885,11 +941,9 @@ describe('element-management-service', () => {
         agentDir: '/tmp/agent-dir',
       }, _tAuth)
       expect(result.success).toBe(true)
-      const writeCall = mockFsWriteFile.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
-      )
-      expect(writeCall).toBeTruthy()
-      const writtenData = JSON.parse(writeCall![1] as string)
+      const written = writtenSettings('settings.local.json')
+      expect(written).toBeTruthy()
+      const writtenData = JSON.parse(written!)
       expect(writtenData.enabledPlugins['my-plugin@some-marketplace']).toBe(true)
     })
 
@@ -909,11 +963,9 @@ describe('element-management-service', () => {
         agentDir: '/tmp/agent-dir',
       }, _tAuth)
       expect(result.success).toBe(true)
-      const writeCall = mockFsWriteFile.mock.calls.find(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
-      )
-      expect(writeCall).toBeTruthy()
-      const writtenData = JSON.parse(writeCall![1] as string)
+      const written = writtenSettings('settings.local.json')
+      expect(written).toBeTruthy()
+      const writtenData = JSON.parse(written!)
       expect(writtenData.enabledPlugins['my-plugin@some-marketplace']).toBe(false)
     })
 
@@ -1675,7 +1727,11 @@ describe('element-management-service', () => {
         hookConfig: { command: 'echo test' },
       }, _tAuth)
       expect(result.success).toBe(true)
-      expect(mockFsWriteFile).toHaveBeenCalled()
+      // Asserts WHAT LANDED, not that some fs verb fired. The old `toHaveBeenCalled()` on
+      // `mockFsWriteFile` was satisfied by any write anywhere — a backup, a lockfile — and went
+      // silent entirely when the writer moved to a file handle. The hook itself is the claim.
+      const settings = JSON.parse(writtenSettings('settings.json')!)
+      expect(settings.hooks.PreToolUse).toContainEqual({ command: 'echo test' })
     })
 
     it('should remove hook entry from settings.json', async () => {
@@ -1692,7 +1748,10 @@ describe('element-management-service', () => {
         hookConfig: { command: 'echo test' },
       }, _tAuth)
       expect(result.success).toBe(true)
-      expect(mockFsWriteFile).toHaveBeenCalled()
+      // The REMOVED entry is gone and the SIBLING survives — "a write happened" could not tell a
+      // correct removal from one that dropped both, or from one that rewrote the file empty.
+      const settings = JSON.parse(writtenSettings('settings.json')!)
+      expect(settings.hooks.PreToolUse).toEqual([{ command: 'echo other' }])
     })
   })
 })

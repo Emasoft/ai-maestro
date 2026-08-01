@@ -224,6 +224,26 @@ describe('updateJson — refusals', () => {
     expect(JSON.parse(await readFile(missing, 'utf-8'))).toEqual({ x: 1 })
   })
 
+  it('createIfMissing creates the parent directory too, not just the file', async () => {
+    // The migration of `element-management-service`'s call sites off `saveJsonSafe` (which always
+    // mkdir'd) depends on this: an agent's `<workdir>/.claude/` does not exist on first run, and a
+    // `createIfMissing` that cannot create the directory is a promise this function only keeps when
+    // someone else happened to make the directory first.
+    //
+    // ⚠ THE MKDIR THAT MAKES THIS WORK IS IN `acquireLock`, NOT in `updateJson` — the lockdir lives
+    // beside the target, so taking the lock necessarily creates the parent first. That is why
+    // `updateJson` has no mkdir of its own and MUST NOT GROW ONE: I added exactly that during this
+    // migration and the neuter reddened nothing, because the lock had already done the work.
+    // Neuter that pins this: delete `mkdir(dirname(filePath))` in `acquireLock` → ONLY this test
+    // reds (the other 11 stay green, so nothing else covers it).
+    const nested = join(dir, 'fresh-agent', '.claude', 'settings.local.json')
+    expect(await exists(join(dir, 'fresh-agent'))).toBe(false)
+
+    const r = await updateJson(nested, d => { d.enabledPlugins = { 'a@b': true } }, { createIfMissing: true })
+    expect(r.changed).toBe(true)
+    expect(JSON.parse(await readFile(nested, 'utf-8'))).toEqual({ enabledPlugins: { 'a@b': true } })
+  })
+
   it('a no-op mutation writes nothing and takes no backup', async () => {
     const before = await backupsOf(file)
     const r = await updateJson(file, d => { d.seed = 'original' })

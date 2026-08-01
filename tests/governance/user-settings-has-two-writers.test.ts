@@ -126,3 +126,93 @@ describe("the user's global settings.json has exactly two writers", () => {
     expect(writesTo('SETTINGS_PATH').test('await writeFile(SETTINGS_PATH_LOCAL, body)')).toBe(false)
   })
 })
+
+/**
+ * THE SECOND HALF (TRDD-RYFP030K): `settings.local.json` gets the same rule.
+ *
+ * The block above deliberately EXCLUDED it — "routes legitimately write an agent's own
+ * settings.local.json; this rule is not about that" — and that reasoning is now obsolete. It decides
+ * which plugins an agent loads, THREE modules write it, and until 2026-08-01 they held three
+ * different locks over it (a lockdir, a string key in an in-process Map, and nothing at all). The
+ * whole point of the gate is that there is ONE writer, and a rule that covers only the human's copy
+ * leaves the agents' copies exactly as unprotected as before.
+ *
+ * ⚠ THIS IS A RATCHET WITH A RECORDED DEBT, not a clean bill of health. `ChangeClient`'s three
+ * direct `writeFileSync` sites are allowlisted BY NAME below because they exist today and this test
+ * has to land green — see the entry for what they are and which is legitimate.
+ */
+const DECLARES_LOCAL =
+  /(?:const|let)\s+(\w+)\s*=\s*(?:path\.)?join\([^;]{0,160}?['"]settings\.local\.json['"]\s*\)/g
+
+/**
+ * Files permitted to write `settings.local.json` directly, and WHY. Anything not here is a new
+ * offender and fails.
+ */
+const LOCAL_WRITERS = new Map<string, string>([
+  [join('lib', 'json-io.ts'), 'THE gate. Writes every settings file, always by parameter.'],
+  [
+    join('services', 'element-management-service.ts'),
+    'KNOWN DEBT, not a ratification (TRDD-RYFP030K, recorded 2026-08-01). ChangeClient has THREE ' +
+    'direct writeFileSync sites on settings.local.json. ONE is legitimate in KIND — `restoreSettings` ' +
+    'is an R51 compensation replaying a raw byte snapshot, which must NOT get a staleness baseline ' +
+    'because the file legitimately changed after the snapshot was taken — though even that one ' +
+    'should become atomic + locked (a torn restore is worse than none). The OTHER TWO are plain ' +
+    'read-modify-writes in G07/G08: `JSON.parse(readFileSync(...))` with no guard, a non-atomic ' +
+    'writeFileSync, and a catch that warns and continues — precisely the shape this card exists to ' +
+    'remove. They are next; this entry is here so the ratchet can hold the line meanwhile.',
+  ],
+])
+
+describe("an agent's settings.local.json has one writer too", () => {
+  const files = SEARCH_DIRS.flatMap(d => sources(join(ROOT, d)))
+  const rel = (f: string) => f.slice(ROOT.length + 1)
+
+  const declaring = files
+    .map(f => {
+      const src = readFileSync(f, 'utf-8')
+      const names = [...src.matchAll(DECLARES_LOCAL)].map(m => m[1])
+      return { file: rel(f), src, names }
+    })
+    .filter(d => d.names.length > 0)
+
+  it('THE DECLARING SET IS NON-EMPTY — the rule is stated over something that exists', () => {
+    // Same companion the offender check above needs: a rule written only over offenders passes on
+    // an empty set, i.e. it would pass if the regex matched nothing at all.
+    expect(declaring.length).toBeGreaterThanOrEqual(5)
+    expect(declaring.map(d => d.file)).toContain(join('services', 'element-management-service.ts'))
+  })
+
+  it('no NEW file writes an agent settings.local.json directly', () => {
+    const offenders = declaring
+      .filter(d => !LOCAL_WRITERS.has(d.file))
+      .filter(d => d.names.some(n => writesTo(n).test(d.src)))
+      .map(d => d.file)
+    expect(offenders).toEqual([])
+  })
+
+  it('the migrated modules are STILL clean — the ratchet would notice a regression', () => {
+    // These three were migrated to `updateJson` on 2026-08-01. Asserting their cleanliness
+    // POSITIVELY is what turns "offenders is empty" into evidence: the set-difference test above
+    // stays green if a file drops out of `declaring` entirely (e.g. someone inlines the path), which
+    // looks identical to the file being fixed.
+    for (const f of [
+      join('lib', 'client-plugin-adapters', 'claude-adapter.ts'),
+      join('services', 'role-plugin-service.ts'),
+    ]) {
+      const d = declaring.find(x => x.file === f)
+      expect(d, `${f} no longer declares a settings.local.json path — did it move, or was it lost?`).toBeDefined()
+      expect(d!.names.some(n => writesTo(n).test(d!.src)), `${f} regressed to a direct write`).toBe(false)
+    }
+  })
+
+  it('POSITIVE CONTROL — DECLARES_LOCAL matches the real forms and not the user-global one', () => {
+    for (const s of [
+      `const localSettings = join(resolved, '.claude', 'settings.local.json')`,
+      `const settingsPath = path.join(agentDir, '.claude', 'settings.local.json')`,
+    ]) expect(new RegExp(DECLARES_LOCAL.source).test(s)).toBe(true)
+    // The two rules must not collapse into one — this half is about the AGENT's file.
+    expect(new RegExp(DECLARES_LOCAL.source).test(
+      `const p = join(HOME, '.claude', 'settings.json')`,
+    )).toBe(false)
+  })
+})

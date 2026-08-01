@@ -15,6 +15,15 @@
  * ChangePlugin is called a SECOND time, and that a retry which verifies reports `staleCleanup: true`.
  * The neuter is "make the mismatch not route into cleanup"; that test must red.
  *
+ * ⚠ ONE CLAIM THIS FILE DELIBERATELY DOES NOT MAKE. `mismatchResponse`'s docstring says callers must
+ * put it AFTER their `!r.ok` branch or a genuine failure would report as "did not take effect". That
+ * hazard is UNREACHABLE through this route: `dispatchUserPluginAction` returns
+ * `{ ok: false, pluginKey, lastError }` on failure and never sets `verified`, so `!r.ok` implies
+ * `verified === undefined` and the check is false on either side of the branch. Reversing the order
+ * reds nothing here (measured). The ordering is still correct defence in depth for a future
+ * dispatcher that returns a verdict on the failure path — but no test at this altitude can
+ * discriminate it, so none of these is named an ORDER guard.
+ *
  * ⚠ `unknown` MUST NOT GATE, at any of the four. An invariant may act on a positive VIOLATION and
  * never on an UNKNOWN (TRDD-K71FV649) — and for install the stakes are concrete: the cleanup DELETES
  * settings entries and re-installs, so running it off a file we could not read would be acting on an
@@ -96,9 +105,18 @@ describe('marketplaces route — the verdict answer splits by handler', () => {
         expect(await res.json()).toMatchObject({ success: true, action })
       })
 
-      it('ORDER — a genuine FAILURE still reports its own cause, not "did not take effect"', async () => {
-        // The precedence claim `tsc` cannot see: the mismatch check sits AFTER the `!r.ok` branch.
-        // Reversed, every real failure would be mislabelled as a verification mismatch.
+      it('a genuine FAILURE reports its own cause, not "did not take effect"', async () => {
+        // ⚠ THIS DOES **NOT** PIN THE PRECEDENCE, and it is named accordingly. Reversing the two
+        // branches in the handler reds NOTHING here — measured, not assumed — because
+        // `dispatchUserPluginAction` returns `{ ok: false, pluginKey, lastError }` on failure and
+        // NEVER sets `verified` at all. So `!r.ok` implies `verified === undefined`, the mismatch
+        // check is false whichever side it sits on, and the ordering hazard `mismatchResponse`'s
+        // docstring warns about is unreachable through this route today. It is real defence in depth
+        // against a future `dispatchUserPluginAction` that returns a verdict on the failure path —
+        // and until that exists, no test at this altitude can discriminate it, so calling this one
+        // an ORDER guard would have shipped a false claim.
+        //
+        // What it DOES pin, and is worth pinning: a real failure surfaces its own cause and a 500.
         mockChangePlugin.mockResolvedValue({ success: false, error: 'the CLI exploded', operations: [] })
         const res = await post({ action, pluginKey: KEY, pluginName: PLUGIN, marketplaceName: MKT })
         expect(res.status).toBe(500)

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T03:59:33+0200
-updated: 2026-08-01T04:25:00+0200
+updated: 2026-08-01T04:48:36+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,31 +21,62 @@ npt: []
 eht: []
 blocked-by: []
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/105]
-implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a]
+implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a, 420cac1e, 4d94097c, f1680b41, 1ed50bc2]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
 
-### Where it stands — 2026-08-01T04:25
+### Where it stands — 2026-08-01T04:48
 
-**The GATE EXISTS, IS REVIEWED, AND IS TESTED. It is not yet the SOLE writer** — that is the
-remaining work and it is the half that actually delivers the mandate.
+**The GATE EXISTS, IS TESTED, AND EVERY PREVIOUSLY-UNLOCKED WRITER NOW GOES THROUGH IT.** What
+remains is the 21 sites that were ALREADY locked, plus the transports.
 
 | | |
 |---|---|
 | `lib/json-io.ts` — `withJsonLock` · `updateJson` · fsync · backup+prune · staleness gate · post-commit audit · reentrancy | **done**, `4fc3f93e` |
 | the second lock implementation deleted, its knowledge relocated | **done**, `34008c2e` |
 | 11 tests on the real filesystem + 5 neuters recorded by name | **done**, `56331de3` `f27b772a` |
-| the 33 `saveJsonSafe` read-modify-write sites migrated to `updateJson` | **NOT STARTED** ← next |
+| **the THIRD lock found and removed** (claude-adapter, 2 sites) + 3 tests | **done**, `420cac1e` `4d94097c` |
+| the 4 UNLOCKED writes of the user's own settings.json (role-plugin ×3, plugin-storage ×1) | **done**, `f1680b41` |
+| the marketplaces route's 5 UNLOCKED writes + the test-hygiene tripwire | **done**, `1ed50bc2` |
+| the 21 ALREADY-LOCKED sites in `element-management-service.ts` | **NOT STARTED** ← next |
 | API route + `aimaestro-settings.sh` (node entrypoint) | **NOT STARTED** |
 | ratchet widened to `settings.local.json` | **NOT STARTED** |
 | adopted/declined set reported on issue #105 | **NOT STARTED** |
 
-**NEXT ACTION, runnable as written:** migrate the read-modify-write call sites to `updateJson`.
-`grep -rn "saveJsonSafe" --include='*.ts' app/ lib/ services/` and, for each, decide by ONE question
-— *is this an R51 COMPENSATION?* A compensation writes `c.prior`, a snapshot taken before the
-forward path ran, and it MUST NOT get a staleness baseline, because the file legitimately changed in
-between; those keep `saveJsonSafe`. Everything else is a read-modify-write and becomes `updateJson`.
+**11 of 32 call sites migrated, and they were the RIGHT 11** — measured, not chosen by convenience.
+Every one of them wrote with NO cross-process lock; the 21 that remain are already inside
+`withSettingsLock`, which now delegates to the same lockdir `updateJson` takes. So the lost-update
+surface is closed; migrating the rest buys them fsync, a kept backup, and the staleness gate.
+
+**NEXT ACTION, runnable as written.** The 21 remaining sites are all in
+`services/element-management-service.ts`. For each, decide by ONE question — *is this an R51
+COMPENSATION?* A compensation writes `c.prior`, a snapshot taken before the forward path ran, and it
+MUST NOT get a staleness baseline because the file legitimately changed in between; those KEEP
+`saveJsonSafe`. Everything else is a read-modify-write and becomes `updateJson`.
+
+A grep heuristic (`undo:|compensat|c\.prior|restore the|rollback` within 30 lines) flags **6** of the
+21: lines 1191, 4835, 5630, 5643, 6416, 6423. **Treat that as a hint, not a verdict** — I verified
+the clearest pair by hand and it was already wrong once: 6423 IS a compensation (`undo: async (c) =>
+… saveJsonSafe(settingsPath, c.prior)`), while 6416 is the FORWARD write in the same gate's `run`
+and merely sits close enough to match. Read each site's enclosing gate before deciding.
+
+### THE INCIDENT WORTH READING BEFORE TOUCHING ANY MORE CALL SITES
+
+Running the suite after migrating the marketplaces route **wrote the developer's own
+`~/.claude/settings.json`.** Both route test files mock `@/lib/json-io` by spreading the real module
+and replacing NAMED exports; they replaced `saveJsonSafe`, the route now calls `updateJson`, so the
+mock faithfully mocked a function nobody called and the REAL writer ran against the REAL global
+config. The suite reported ordinary assertion failures. Nothing said the config had been edited.
+
+Recovered fully — removed through the gate itself, and the file is byte-identical to the backup
+`updateJson` took before its own stray write. That was an unplanned live test of the recovery
+guarantee, and it held.
+
+**`tests/helpers/real-home-untouched.ts` now guards both files** and is verb-agnostic, so it cannot
+go blind the same way. **Add it to any test that touches a settings writer.** This is the same
+failure class as the write-boundary detector going blind (below) — twice in one session, in opposite
+directions, from one cause: a needle that knows one verb.
 
 ### What the neuters proved (a green test pins nothing until something is broken)
 
@@ -75,6 +106,26 @@ between; those keep `saveJsonSafe`. Everything else is a read-modify-write and b
   it to 5 (spanning 6..18, crossing 9 → 10) is what made the neuter red. A shared module-global
   makes a test's discriminating power depend on test ORDER, and that is indistinguishable from
   coverage until something is broken.
+
+### TWO MORE DEFECTS THE MIGRATION SURFACED, both about instruments going blind
+
+- **There were THREE lock implementations, not two.** This card's own measurement said two. A grep
+  for `withSettingsLock|withJsonLock` returned 0 for `lib/client-plugin-adapters/claude-adapter.ts`,
+  which reads as "unlocked" — it was locked by `withLock(settingsLockKey(path))`, a string key in
+  `lib/file-lock.ts`'s in-process Map. It guarded the SAME file (`join(<agentDir>, '.claude',
+  'settings.local.json')`, five sites in the service) so the two modules excluded each other
+  NOWHERE, not even inside one process. And `file-lock.ts` is process-local by construction — its
+  own header says so — meaning the file that decides which plugins an agent loads had the WEAKEST
+  of the three. A grep for the locks you already know about cannot find the one you do not.
+- **The write-boundary detector went blind and reported CLEAN.** Migrating three sites from
+  `saveJsonSafe` to `updateJson` dropped it from 3 out-of-root findings to **ZERO**. The writes had
+  not stopped; `WRITE_VERBS` is a list of verb NAMES and nobody had told it the new one. Its own
+  non-vacuity assertion (`byClass.constant > 0`) is the ONLY reason this was noticed — the exact
+  case that assertion exists for, arriving from a direction nobody predicted. `updateJson` is now in
+  the list, `lib/json-io.ts` is in `KNOWN_INDIRECT_WRITERS` (it is the sanctioned writer and every
+  path it touches is a parameter, so no textual scan can ever see it), and the stale `mkdir`
+  allowlist line was RE-HOMED rather than deleted — dropping it would have made a real write
+  invisible to both lists at once.
 
 ### And one defect in this card's own sibling
 
@@ -172,6 +223,10 @@ primitive. The deadlock risk is real and is why its test comes first.
 
 - [x] `updateJson(path, mutator)` with reentrant lock, snapshot-compare, fsync, backup, retries
 - [ ] the 33 RMW sites migrated; `saveJsonSafe` retained ONLY for R51 compensations, with the reason
+      — **11 of 32 done** (one of the 33 grep hits is a comment). All 11 were the sites with NO
+      cross-process lock, so the lost-update surface is CLOSED; the 21 remaining are already inside
+      the shared lock and gain fsync/backup/staleness. The retention reason is recorded at each
+      migrated import site, not only here.
 - [x] audit is detect-and-log; auto-rollback explicitly NOT implemented, with the reason recorded
 - [ ] API route + `aimaestro-settings.sh` (node entrypoint, not HTTP — installer runs server-down)
 - [ ] governance ratchet forbids any other writer of `settings*.json` incl. `settings.local.json`

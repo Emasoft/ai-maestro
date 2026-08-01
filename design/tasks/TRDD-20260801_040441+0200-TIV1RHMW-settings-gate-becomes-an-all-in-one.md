@@ -1,12 +1,11 @@
 ---
 trdd-id: TIV1RHMW
 title: convert the settings-gate API into a true all-in-one function
-column: blocked
-pre-block-column: backburner
+column: backburner
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T04:04:41+0200
-updated: 2026-08-01T04:24:31+0200
+updated: 2026-08-02T01:40:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +19,7 @@ approval-datetime: 2026-08-01T04:04:41+0200
 relevant-rules: [R50, R51]
 npt: [RYFP030K]
 eht: []
-blocked-by: [RYFP030K]
+blocked-by: []
 implementation-commits: []
 ---
 

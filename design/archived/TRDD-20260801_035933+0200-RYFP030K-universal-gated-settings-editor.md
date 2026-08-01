@@ -1,11 +1,11 @@
 ---
 trdd-id: RYFP030K
 title: one gated universal editor for settings.json and settings.local.json across the whole fleet
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T03:59:33+0200
-updated: 2026-08-02T01:30:27+0200
+updated: 2026-08-02T01:38:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -324,10 +324,22 @@ primitive. The deadlock risk is real and is why its test comes first.
 - [x] tests + neuters recorded by name; tsc 0 lines; suite at or above baseline
       — 11 tests, 5 neuters (above), tsc 0 lines, suite **326 files / 4623 passed / 2 skipped**
       (baseline was 325 / 4614 / 2; the 2 failures this run were the TIV1RHMW card defect, fixed)
-- [ ] report the adopted/declined set back on issue #105
+- [x] report the adopted/declined set back on issue #105 — posted, comment `5153998963`. ADOPTED:
+      refuse-unparseable, fsync, kept backup + prune, cross-process lock, concurrent-modification
+      check, post-commit audit. DECLINED with reasons: auto-rollback on audit mismatch (we do not
+      own the file — the `claude` CLI writes it unlocked, so a mismatch is more likely their
+      legitimate write and restoring our backup would destroy it) and their lock path/mechanism
+      (a FILE + `O_EXCL` vs our DIRECTORY + `mkdir`; two mechanisms exclude each other nowhere, so
+      adopting theirs would have unprotected every un-migrated caller mid-migration).
 
 ## Approval log
 
 - 2026-08-01T03:59:33+0200 — USER MANDATE. The USER directed the universal gated editor explicitly
   ("we need to make settings editing across all ai-maestro and its scripts / plugins gated by a safe
   tool like this one"). Authority: USER >= any required approver.
+- 2026-08-02T01:38:00+0200 — CLOSED at 12/12. Every acceptance box ticked and each one verified
+  first-hand, not taken on report: `tsc` 0 lines, full suite **331 files green** (exit 0), and the
+  decisive measurement — **zero `saveJsonSafe` call sites remain in `app/`, `lib/`, `services/` or
+  `scripts/`**, so `lib/json-io.ts` is now the sole writer of both settings files rather than merely
+  the sanctioned one. Neuters recorded by name in `2c47ab89` and `9b6d4f0e`. `min-approval-
+  requirement: none` and the card is a USER mandate, so no approval round-trip was owed.

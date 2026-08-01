@@ -29,8 +29,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import claudeAdapter from '@/lib/client-plugin-adapters/claude-adapter'
 import { inAdapterContext } from '@/lib/client-plugin-adapters/adapter-context'
-import { updateJson } from '@/lib/json-io'
+import { withJsonLock } from '@/lib/json-io'
 import type { StoredPlugin } from '@/lib/client-plugin-adapters/types'
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 let agentDir: string
 let localSettings: string
@@ -88,25 +90,47 @@ describe('claudeAdapter.enable / disable', () => {
     expect(after.env).toEqual({ FOO: 'bar' })
   })
 
-  it('a concurrent writer on the element-management path does not lose the adapter\'s write', async () => {
-    // THE test. `updateJson` here stands in for element-management-service, which reaches the same
-    // file through `withSettingsLock` → `withJsonLock` → the lockdir at `<path>.lock`. Before the
-    // migration the adapter took a string-keyed in-process lock instead, so these two contended for
-    // nothing and whichever wrote second silently discarded the other's change.
+  it('BLOCKS while the element-management lock is held on the same file', async () => {
+    // THE test — and it asserts MUTUAL EXCLUSION DIRECTLY rather than hoping a race reproduces.
+    //
+    // The first version of this test fired four concurrent writers and asserted that every write
+    // survived. It passed under the neuter: whether the interleaving that loses an update actually
+    // occurs is up to the scheduler, and `updateJson`'s own staleness gate absorbs many of the
+    // orderings that would otherwise lose one. A race test that depends on natural scheduling is a
+    // lottery — it cannot fail reliably, so it cannot pass meaningfully either.
+    //
+    // What IS deterministic: hold the lockdir, then observe whether the adapter can finish. It can
+    // only be blocked if it contends for the same physical lock, which is the entire property the
+    // migration buys.
     await mkdir(join(agentDir, '.claude'), { recursive: true })
     await writeFile(localSettings, JSON.stringify({ seed: 1 }, null, 2) + '\n', 'utf-8')
 
-    await Promise.all([
-      asTest(() => claudeAdapter.enable(plugin, agentDir)),
-      updateJson(localSettings, s => { s.fromElementMgmt = true }),
-      asTest(() => claudeAdapter.enable({ name: 'second', sourcePlugin: 'mkt' } as unknown as StoredPlugin, agentDir)),
-      updateJson(localSettings, s => { s.alsoFromElementMgmt = true }),
-    ])
+    let release!: () => void
+    const held = new Promise<void>(r => { release = r })
+    // `withJsonLock` here stands in for element-management-service, which reaches this same file
+    // through `withSettingsLock` → `withJsonLock` → the lockdir at `<path>.lock`.
+    const holder = withJsonLock(localSettings, async () => { await held })
+    await sleep(50) // let the holder actually acquire before we start the adapter
 
+    // ⚠ STARTED OUTSIDE the holder's callback ON PURPOSE. `withJsonLock` is reentrant via
+    // AsyncLocalStorage, so an adapter call made INSIDE that callback would inherit the held set,
+    // skip the lock entirely, and complete immediately — the test would then pass no matter what
+    // the adapter does. It has to run in a sibling async context to contend for real.
+    let adapterDone = false
+    const adapter = asTest(() => claudeAdapter.enable(plugin, agentDir)).then(r => { adapterDone = r.success })
+
+    await sleep(200)
+    expect(adapterDone).toBe(false) // ← blocked by a lock it must be sharing
+
+    release()
+    await holder
+    await adapter
+
+    // POSITIVE CONTROL, and it is not optional: without it, `adapterDone === false` above is equally
+    // satisfied by an adapter that threw, hung forever, or was never called.
+    expect(adapterDone).toBe(true)
     const after = await readSettings()
     expect(after.seed).toBe(1)
-    expect(after.fromElementMgmt).toBe(true)
-    expect(after.alsoFromElementMgmt).toBe(true)
-    expect(after.enabledPlugins).toEqual({ [KEY]: true, 'second@mkt': true })
+    expect(after.enabledPlugins).toEqual({ [KEY]: true })
   })
 })

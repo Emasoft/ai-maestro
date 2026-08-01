@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T03:59:33+0200
-updated: 2026-08-01T03:59:33+0200
+updated: 2026-08-01T04:25:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,10 +21,69 @@ npt: []
 eht: []
 blocked-by: []
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/105]
-implementation-commits: []
+implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
+
+### Where it stands — 2026-08-01T04:25
+
+**The GATE EXISTS, IS REVIEWED, AND IS TESTED. It is not yet the SOLE writer** — that is the
+remaining work and it is the half that actually delivers the mandate.
+
+| | |
+|---|---|
+| `lib/json-io.ts` — `withJsonLock` · `updateJson` · fsync · backup+prune · staleness gate · post-commit audit · reentrancy | **done**, `4fc3f93e` |
+| the second lock implementation deleted, its knowledge relocated | **done**, `34008c2e` |
+| 11 tests on the real filesystem + 5 neuters recorded by name | **done**, `56331de3` `f27b772a` |
+| the 33 `saveJsonSafe` read-modify-write sites migrated to `updateJson` | **NOT STARTED** ← next |
+| API route + `aimaestro-settings.sh` (node entrypoint) | **NOT STARTED** |
+| ratchet widened to `settings.local.json` | **NOT STARTED** |
+| adopted/declined set reported on issue #105 | **NOT STARTED** |
+
+**NEXT ACTION, runnable as written:** migrate the read-modify-write call sites to `updateJson`.
+`grep -rn "saveJsonSafe" --include='*.ts' app/ lib/ services/` and, for each, decide by ONE question
+— *is this an R51 COMPENSATION?* A compensation writes `c.prior`, a snapshot taken before the
+forward path ran, and it MUST NOT get a staleness baseline, because the file legitimately changed in
+between; those keep `saveJsonSafe`. Everything else is a read-modify-write and becomes `updateJson`.
+
+### What the neuters proved (a green test pins nothing until something is broken)
+
+1. `withJsonLock` made a pass-through → **2 red**: the two concurrency tests. Also informative: the
+   staleness gate turned the unlocked race into a hard `ConcurrentModificationError` rather than a
+   silent lost update, so the lock and the gate are two real layers, not one restated twice.
+2. store `mine.then(...)` instead of `mine` (Fable's bug #3) → **1 red**: the queue-drain test. The
+   other 10 stayed green, which is the proof the `_inProcessQueueSizeForTests` probe was NECESSARY —
+   behaviour alone cannot distinguish a draining queue from a leaking one.
+3. disable the `held?.has(filePath)` early return → **1 red**: the reentrancy test.
+4. delete the `padStart` in `keepBackup` → **1 red** — but **0 red before the fixture was pinned**.
+   See the trap below.
+5. disable the key-loss tripwire → **1 red**: the rebuilt-minimal-object test.
+
+### THREE DEFECTS THE TESTS FORCED OUT — none was visible by reading
+
+- **`updateJson` DROPPED its lock options.** `JsonLockOpts` lived on `withJsonLock` and was never
+  forwarded, so `staleMs`/`maxWaitMs` were unreachable from the only function anyone is supposed to
+  call. An option that exists only on the primitive nobody calls directly is not an option.
+- **`keepBackup` retained the WRONG ten.** The prune sorts lexicographically and the stamp is
+  second-precision, so a burst inside one second is ordered by the counter alone — unpadded, `"10"`
+  sorts before `"2"`. At 21 backups it kept 2-9 and 20-21 while deleting 10-19: it discarded the
+  MIDDLE and retained the oldest. "Recoverable from a kept backup" rests on this.
+- **The prune test was passing under its own neuter.** The counter is module-global, so by the time
+  that test ran it was past 40 — thirteen 2-digit counters that sort correctly either way. The
+  fixture never straddled the digit-width boundary that is the only place padding matters. Pinning
+  it to 5 (spanning 6..18, crossing 9 → 10) is what made the neuter red. A shared module-global
+  makes a test's discriminating power depend on test ORDER, and that is indistinguishable from
+  coverage until something is broken.
+
+### And one defect in this card's own sibling
+
+TIV1RHMW was filed `column: backburner` while carrying `blocked-by: [RYFP030K]` — a rule violation
+(non-empty `blocked-by` ⟺ `column: blocked`). Both corpus linters caught it independently on the
+next full-suite run. Corrected to `blocked` + `pre-block-column: backburner`. Run your own gate on
+your own artifact.
+
+---
 
 USER-mandated (2026-08-01): a **universal editor for BOTH `~/.claude/settings.json` and
 `settings.local.json`**, exposed as an ai-maestro API, with **every writer across ai-maestro, its
@@ -111,13 +170,19 @@ primitive. The deadlock risk is real and is why its test comes first.
 
 ## Acceptance
 
-- [ ] `updateJson(path, mutator)` with reentrant lock, snapshot-compare, fsync, backup, retries
+- [x] `updateJson(path, mutator)` with reentrant lock, snapshot-compare, fsync, backup, retries
 - [ ] the 33 RMW sites migrated; `saveJsonSafe` retained ONLY for R51 compensations, with the reason
-- [ ] audit is detect-and-log; auto-rollback explicitly NOT implemented, with the reason recorded
+- [x] audit is detect-and-log; auto-rollback explicitly NOT implemented, with the reason recorded
 - [ ] API route + `aimaestro-settings.sh` (node entrypoint, not HTTP — installer runs server-down)
 - [ ] governance ratchet forbids any other writer of `settings*.json` incl. `settings.local.json`
-- [ ] the ceiling is documented as the honest one, never "100%"
-- [ ] tests + neuters recorded by name; tsc 0 lines; suite at or above baseline
+      — the `settings.json` half exists (`tests/governance/user-settings-has-two-writers.test.ts`);
+      widening it to `settings.local.json` is what remains
+- [x] the ceiling is documented as the honest one, never "100%" — in `lib/json-io.ts`'s gate header.
+      Re-state it verbatim in the API description when that lands; the box is not closed for the
+      transport layer, only for the core
+- [x] tests + neuters recorded by name; tsc 0 lines; suite at or above baseline
+      — 11 tests, 5 neuters (above), tsc 0 lines, suite **326 files / 4623 passed / 2 skipped**
+      (baseline was 325 / 4614 / 2; the 2 failures this run were the TIV1RHMW card defect, fixed)
 - [ ] report the adopted/declined set back on issue #105
 
 ## Approval log

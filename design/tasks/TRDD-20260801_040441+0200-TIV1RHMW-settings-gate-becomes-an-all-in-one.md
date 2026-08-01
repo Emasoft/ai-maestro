@@ -1,11 +1,12 @@
 ---
 trdd-id: TIV1RHMW
 title: convert the settings-gate API into a true all-in-one function
-column: backburner
+column: blocked
+pre-block-column: backburner
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T04:04:41+0200
-updated: 2026-08-01T04:04:41+0200
+updated: 2026-08-01T04:24:31+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -28,6 +29,15 @@ implementation-commits: []
 **DEFERRED ON PURPOSE by the USER (2026-08-01).** The settings-gate endpoint built in
 TRDD-RYFP030K is a **gate**, not yet an R50/R51 all-in-one. Converting it is this card, and it is
 NOT started.
+
+**`column: blocked`, not `backburner` — corrected 2026-08-01T04:24.** It was filed as `backburner`
+while carrying `blocked-by: [RYFP030K]`, which violates the rule that a non-empty `blocked-by`
+means `column: blocked` (IND `trdd-design-tasks.md` §6; DEP overlay §D4 step 5b). Both corpus
+linters caught it independently on the next full-suite run — `trdd-corpus-invariants` as
+`blockedNotBlocked` and `trdd-doctor` as `GRAPH-BLOCKED-NOT-BLOCKED`. The USER's deferral is
+recorded in `pre-block-column: backburner`, which is where this returns when RYFP030K closes; the
+deferral and the blockage are two separate facts and the frontmatter now carries both instead of
+collapsing them into one.
 
 ## Why it was deferred rather than built with the gate
 

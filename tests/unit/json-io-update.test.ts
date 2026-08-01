@@ -32,6 +32,7 @@ import {
   KeyLossRefused,
   UnreadableTargetError,
   _inProcessQueueSizeForTests,
+  _setAtomicWriteCounterForTests,
 } from '@/lib/json-io'
 
 // A neutered lock does not hang — it waits out `maxWaitMs` and throws — but the default is 20s per
@@ -155,6 +156,13 @@ describe('updateJson — backups', () => {
     // 13 writes inside one second, so the second-precision stamp is identical across them and the
     // ordering rests entirely on the counter. Unpadded, "10" sorts before "2" and the prune discards
     // the middle of the range while retaining the oldest.
+    //
+    // ⚠ THE PIN IS WHAT MAKES THIS TEST DISCRIMINATE. The counter is module-global and shared with
+    // tmp filenames, so by the time this test runs it is already past 40 — thirteen 2-digit counters
+    // that sort correctly whether or not the padding is there. Measured: without this line the test
+    // passed with the padding DELETED. Pinned to 5, the run spans 6..18 and straddles 9 → 10, which
+    // is the only boundary where padding changes anything.
+    _setAtomicWriteCounterForTests(5)
     const taken: string[] = []
     for (let i = 0; i < 13; i++) {
       const r = await updateJson(file, d => { d.n = i })

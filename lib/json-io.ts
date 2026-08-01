@@ -102,6 +102,14 @@ export class UnreadableTargetError extends Error {
 // write within a single process.
 let _atomicWriteCounter = 0
 
+/** TEST-ONLY. Pins the counter so a backup-pruning fixture can STRADDLE a digit-width boundary
+ *  (…9 → …10), which is the ONLY place the zero-padding in `keepBackup` changes the sort order.
+ *  Without this the fixture's discriminating power depends on how many writes happened earlier in
+ *  the same process — i.e. on test ORDER — and a run that starts past 40 produces thirteen 2-digit
+ *  counters that sort correctly with or without the padding. Measured: the un-pinned version of that
+ *  test passed with the padding DELETED. */
+export function _setAtomicWriteCounterForTests(n: number): void { _atomicWriteCounter = n }
+
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // THE GATE (TRDD-RYFP030K) — one lock + one write path for every settings mutation.
 //

@@ -28,6 +28,7 @@ const {
   mockFsReadFileSync,
   mockFsWriteFileSync,
   mockFsMkdirSync,
+  mockUpdateJson,
   mockAgentRegistry,
   mockClientCapabilities,
   mockScanAgentLocalConfig,
@@ -53,6 +54,8 @@ const {
     mockFsExistsSync: vi.fn().mockReturnValue(false),
     mockFsReadFileSync: vi.fn().mockReturnValue('{}'),
     mockFsWriteFileSync: vi.fn(),
+    // Resolves an UpdateJsonResult, not undefined — callers destructure `changed` from it.
+    mockUpdateJson: vi.fn().mockResolvedValue({ changed: true, backupPath: null, attempts: 1, auditOk: true }),
     mockFsMkdirSync: vi.fn(),
     mockAgentRegistry: {
       getAgent: vi.fn(),
@@ -113,6 +116,26 @@ vi.mock('fs/promises', () => ({
   readdir: vi.fn().mockResolvedValue([]),
   rm: vi.fn().mockResolvedValue(undefined),
   stat: vi.fn().mockRejectedValue(new Error('ENOENT')),
+}))
+
+/**
+ * ⚠ THE SETTINGS WRITES GO THROUGH THE GATE, NOT THROUGH `fs` (TRDD-RYFP030K).
+ *
+ * G07's strip fallback and G08's write-back fallback used to be raw
+ * `JSON.parse(readFileSync(...))` + non-atomic `writeFileSync`, so the `fs` mock above caught them.
+ * They are now `updateJson`, and the `fs` mock cannot see it — the gate writes through
+ * `open`/`rename` on `fs/promises`, by parameter.
+ *
+ * MOCKING IT IS NOT OPTIONAL HOUSEKEEPING. An unmocked `updateJson` runs FOR REAL against whatever
+ * path the fixture names. It is only harmless here by accident: `/home` is root-owned and read-only
+ * on macOS, so the gate's `mkdir` fails and ChangeClient's own catch swallows it. On a machine where
+ * that path IS writable — or the day a fixture uses a real home — an un-mocked write lands. The
+ * same shape DID land on 2026-08-01, writing the developer's own ~/.claude/settings.json from the
+ * marketplaces-route tests, so `guardRealUserSettings` is wired in below as the verb-agnostic net.
+ */
+vi.mock('@/lib/json-io', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  updateJson: mockUpdateJson,
 }))
 
 vi.mock('@/lib/agent-registry', () => mockAgentRegistry)
@@ -402,17 +425,28 @@ describe('element-management-service.ChangeClient (R18 pipeline)', () => {
         expect.objectContaining({ program: 'codex' }),
       )
 
-      // Belt-and-braces: the Claude settings-strip fallback writes
-      // settings.local.json back without the old plugin key.
-      const wrote = mockFsWriteFileSync.mock.calls.find(
+      // Belt-and-braces: the Claude settings-strip fallback rewrites settings.local.json without
+      // the old plugin key. It goes through the GATE now (TRDD-RYFP030K), so the assertion moved
+      // from the `fs` mock to `updateJson` — and got stronger in the process: instead of inspecting
+      // a JSON string the service had already built, it RUNS the service's own mutator against a
+      // draft holding the key, and checks the key is gone. A mutator that did nothing would satisfy
+      // "updateJson was called"; it cannot satisfy this.
+      const call = mockUpdateJson.mock.calls.find(
         (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).endsWith('settings.local.json'),
       )
-      expect(wrote).toBeTruthy()
-      const writtenData = JSON.parse(String(wrote![1]))
-      // The old Claude plugin key should have been stripped out.
-      expect(
-        writtenData.enabledPlugins?.['ai-maestro-plugin@ai-maestro-plugins'],
-      ).toBeUndefined()
+      expect(call).toBeTruthy()
+      const mutator = call![1] as (s: Record<string, unknown>) => void
+      const draft: Record<string, unknown> = {
+        enabledPlugins: { 'ai-maestro-plugin@ai-maestro-plugins': true, 'unrelated@other': true },
+        permissions: { allow: ['Bash'] },
+      }
+      mutator(draft)
+      const ep = draft.enabledPlugins as Record<string, boolean>
+      expect(ep['ai-maestro-plugin@ai-maestro-plugins']).toBeUndefined()
+      // …and it strips ONLY what it came for. A mutator that cleared the whole object would pass the
+      // assertion above — which is exactly the minimal-object shape the gate exists to prevent.
+      expect(ep['unrelated@other']).toBe(true)
+      expect(draft.permissions).toEqual({ allow: ['Bash'] })
     })
 
     it('no-op when client already matches', async () => {

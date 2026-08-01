@@ -31,7 +31,8 @@ const WRITE_VERBS = [
   // knowing what a write looks like. A scanner keyed on verb NAMES goes blind the moment a refactor
   // renames the verb, and a blind scanner reports "clean". Any future write primitive belongs here
   // in the SAME commit that introduces it.
-  'writeFile', 'writeFileSync', 'saveJsonSafe', 'updateJson', 'appendFile', 'appendFileSync',
+  'writeFile', 'writeFileSync', 'saveJsonSafe', 'updateJson', 'restoreRawSnapshot',
+  'appendFile', 'appendFileSync',
   'mkdir', 'mkdirSync', 'rm', 'rmSync', 'rmdir', 'rmdirSync',
   'unlink', 'unlinkSync', 'copyFile', 'copyFileSync', 'rename', 'renameSync',
   'chmod', 'chmodSync', 'symlink', 'symlinkSync',

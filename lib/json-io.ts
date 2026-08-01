@@ -438,6 +438,44 @@ export async function updateJson(
   }, opts)
 }
 
+/**
+ * THE COMPENSATION WRITER — for R51 undos ONLY. Replays a RAW byte snapshot, or deletes the file
+ * when the snapshot is `null` (meaning: it did not exist before the forward path ran).
+ *
+ * ⚠ WHY IT IS NOT `updateJson`, and why that is not an oversight. A compensation restores bytes
+ * captured BEFORE the forward path ran, so the file has legitimately changed since — by the very
+ * gate being undone. `updateJson`'s staleness check would see that change, conclude a
+ * non-participating writer was at work, retry, and finally throw `ConcurrentModificationError`
+ * against the one caller whose whole job is to overwrite. The undo must not parse it either: a
+ * snapshot is replayed verbatim, including whatever the file legitimately contained.
+ *
+ * ⚠ WHY IT IS NOT A BARE `writeFileSync`, which is what it replaces. That write was NOT atomic, so a
+ * crash mid-restore left the file torn — and a torn file is worse than the state the undo was
+ * repairing, because it is the artifact recovery depends on. It also took no lock, so it could land
+ * in the middle of another module's read-modify-write on the same path. This keeps the raw
+ * semantics and adds the two properties that were missing.
+ */
+export async function restoreRawSnapshot(
+  path: string,
+  raw: string | null,
+  opts: JsonLockOpts = {},
+): Promise<void> {
+  await withJsonLock(path, async () => {
+    if (raw === null) {
+      await rm(path, { force: true })
+      return
+    }
+    const tmp = `${path}.tmp.${process.pid}.${++_atomicWriteCounter}`
+    try {
+      await fsyncWrite(tmp, raw)
+      await rename(tmp, path)
+    } catch (err) {
+      await rm(tmp, { force: true }).catch(() => { /* best effort */ })
+      throw err
+    }
+  }, opts)
+}
+
 export async function saveJsonSafe(path: string, data: Record<string, unknown>): Promise<void> {
   // ── NEVER overwrite a file we could not read (TRDD-K71FV649) ──
   //

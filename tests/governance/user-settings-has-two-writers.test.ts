@@ -150,17 +150,16 @@ const DECLARES_LOCAL =
  */
 const LOCAL_WRITERS = new Map<string, string>([
   [join('lib', 'json-io.ts'), 'THE gate. Writes every settings file, always by parameter.'],
-  [
-    join('services', 'element-management-service.ts'),
-    'KNOWN DEBT, not a ratification (TRDD-RYFP030K, recorded 2026-08-01). ChangeClient has THREE ' +
-    'direct writeFileSync sites on settings.local.json. ONE is legitimate in KIND — `restoreSettings` ' +
-    'is an R51 compensation replaying a raw byte snapshot, which must NOT get a staleness baseline ' +
-    'because the file legitimately changed after the snapshot was taken — though even that one ' +
-    'should become atomic + locked (a torn restore is worse than none). The OTHER TWO are plain ' +
-    'read-modify-writes in G07/G08: `JSON.parse(readFileSync(...))` with no guard, a non-atomic ' +
-    'writeFileSync, and a catch that warns and continues — precisely the shape this card exists to ' +
-    'remove. They are next; this entry is here so the ratchet can hold the line meanwhile.',
-  ],
+  // ⚠ `services/element-management-service.ts` WAS HERE AS RECORDED DEBT for about twenty minutes
+  // on 2026-08-01, and its removal is the deliverable rather than a tidy-up. It held ChangeClient's
+  // three direct `writeFileSync` sites on settings.local.json: two plain read-modify-writes in
+  // G07/G08 (one of which carried a LIVE instance of the destroy-the-config bug — a lenient
+  // `catch { /* keep empty */ }` read followed by a full file replace), and one R51 compensation
+  // replaying a raw byte snapshot. The two RMWs are now `updateJson`; the compensation is
+  // `restoreRawSnapshot`, which keeps the raw semantics a compensation requires and adds the
+  // atomicity and the lock it was missing. All three writes moved INTO `lib/json-io.ts`, which is
+  // this list's first entry and is also in `KNOWN_INDIRECT_WRITERS` — so the line is deleted with
+  // the write RE-HOMED, never merely dropped.
 ])
 
 describe("an agent's settings.local.json has one writer too", () => {

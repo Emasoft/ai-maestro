@@ -366,7 +366,7 @@ function logDegradedOps(pipeline: string, subject: string, ops: string[]): void 
 // them, and because a `saveJsonSafe` reachable from two import paths is the drift starting over.
 export type { JsonRead } from '@/lib/json-io'
 export { readJson, saveJsonSafe, UnreadableTargetError } from '@/lib/json-io'
-import { readJson, loadJsonSafe, saveJsonSafe, withJsonLock } from '@/lib/json-io'
+import { readJson, loadJsonSafe, saveJsonSafe, withJsonLock, updateJson, restoreRawSnapshot } from '@/lib/json-io'
 
 // ── Settings mutex ────────────────────────────────────────────
 //
@@ -7659,7 +7659,11 @@ export async function ChangeClient(
     // gates in REVERSE order on any failure, and refuses to start at all if a mutating gate has
     // no `undo` — so this cannot silently regress into a half-migration again.
     const { runGateSequence } = await import('@/lib/gate-transaction')
-    const { readFileSync, writeFileSync, mkdirSync } = await import('fs')
+    // `writeFileSync`/`mkdirSync` are gone from this pipeline (TRDD-RYFP030K): the two belt-and-
+    // braces settings writes go through `updateJson`, and the compensation through
+    // `restoreRawSnapshot`. `readFileSync` stays — `snapshotSettings` READS the bytes to snapshot,
+    // and a read needs no gate.
+    const { readFileSync } = await import('fs')
     const settingsPath = join(agentDir, '.claude', 'settings.local.json')
 
     // The settings file is edited by two gates, so each snapshots it and restores its OWN
@@ -7670,14 +7674,17 @@ export async function ChangeClient(
     }
     const restoreSettings = async (snapshot: string | null): Promise<void> => {
       try {
-        if (snapshot !== null) { writeFileSync(settingsPath, snapshot, 'utf-8'); return }
-        if (!existsSync(settingsPath)) return
-        // `unlinkSync` is imported HERE, not with the others above, and only on the branch that
-        // needs it. Destructuring it up front made the entire pipeline depend on it even though
-        // it is reachable only during a rollback — and under a module mock that lacks the export,
-        // the destructure itself throws, so the SUCCESS path died on a function it never calls.
-        const { unlinkSync } = await import('fs')
-        unlinkSync(settingsPath)
+        // `restoreRawSnapshot` is the SANCTIONED compensation writer (TRDD-RYFP030K). It replaces a
+        // bare `writeFileSync` that was neither atomic nor locked — a crash mid-restore left the
+        // file torn, which is worse than the state the undo was repairing, and it could land in the
+        // middle of another module's read-modify-write on the same path. It handles the `null`
+        // branch too (snapshot absent ⇒ the file did not exist ⇒ remove it), which is why the
+        // lazily-imported `unlinkSync` and its `existsSync` guard are gone.
+        //
+        // It is deliberately NOT `updateJson`: a compensation replays bytes captured BEFORE the
+        // forward path ran, so the file has legitimately changed since — by the very gate being
+        // undone — and a staleness check would refuse the one caller whose job is to overwrite.
+        await restoreRawSnapshot(settingsPath, snapshot)
       } catch (err) {
         // A failed settings restore must not abort the rest of the rollback: reverting the other
         // plugins is strictly better than stopping here, and the runner reports what it could not
@@ -7738,18 +7745,21 @@ export async function ChangeClient(
           // offline clients).
           if (oldProgram === 'claude' && existsSync(settingsPath)) {
             try {
-              const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>
-              const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-              let changed = false
-              for (const plan of plans) {
-                const key = plan.marketplace ? `${plan.pluginName}@${plan.marketplace}` : plan.pluginName
-                if (key in ep) { delete ep[key]; changed = true }
-                if (plan.pluginName in ep) { delete ep[plan.pluginName]; changed = true }
-              }
-              if (changed) {
-                settings.enabledPlugins = ep
-                writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
-              }
+              // Through the gate (TRDD-RYFP030K). This was a raw `JSON.parse(readFileSync(…))` +
+              // NON-ATOMIC `writeFileSync` on the file `claudeAdapter` and five other sites in this
+              // module also write — so a crash mid-write left it torn, and nothing serialised it
+              // against them. `updateJson` makes it one locked, atomic, backed-up read-modify-write.
+              // The `catch` behaviour is unchanged: an unparseable file threw at `JSON.parse` before
+              // and throws at the gate's refusal now — warn and continue, WITHOUT writing.
+              await updateJson(settingsPath, s => {
+                const ep = (s.enabledPlugins || {}) as Record<string, boolean>
+                for (const plan of plans) {
+                  const key = plan.marketplace ? `${plan.pluginName}@${plan.marketplace}` : plan.pluginName
+                  delete ep[key]
+                  delete ep[plan.pluginName]
+                }
+                s.enabledPlugins = ep
+              })
             } catch (err) {
               console.warn('[ChangeClient] Settings strip fallback failed:', err)
             }
@@ -7785,24 +7795,37 @@ export async function ChangeClient(
           // server child process due to PATH / env differences, making the install a no-op.
           if (normalized === 'claude') {
             try {
-              mkdirSync(join(agentDir, '.claude'), { recursive: true })
-              let settings: Record<string, unknown> = {}
-              if (existsSync(settingsPath)) {
-                try { settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) } catch { /* keep empty */ }
-              }
-              const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-              let changed = false
-              for (const plan of plans) {
-                const mkt = plan.isRolePlugin
-                  ? LOCAL_MARKETPLACE_NAME
-                  : (plan.strategy === 'native-exists' ? (plan.marketplace || 'ai-maestro-plugins') : CUSTOM_MARKETPLACE_NAME)
-                const key = `${plan.pluginName}@${mkt}`
-                if (ep[key] !== true) { ep[key] = true; changed = true }
-              }
-              if (changed) {
-                settings.enabledPlugins = ep
-                writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
-              }
+              // ⚠ THIS SITE CARRIED A LIVE INSTANCE OF THE BUG THIS WHOLE CARD EXISTS TO PREVENT
+              // (fixed TRDD-RYFP030K). It was:
+              //
+              //     try { settings = JSON.parse(readFileSync(<settingsPath>,'utf-8')) }
+              //     catch { /* keep empty */ }          ← a CORRUPT file became `{}`
+              //     …
+              //     writeFileSync(<settingsPath>, JSON.stringify(settings, …))  ← and then REPLACED it
+              //
+              // (the placeholders are angle-bracketed on purpose: written literally, this comment
+              //  matches the very detector in `tests/governance/user-settings-has-two-writers.test.ts`
+              //  that forbids the shape, and a scanner that reads its own documentation as a
+              //  violation keeps a paid-off debt entry alive forever)
+              //
+              // A lenient read answers `{}` to "missing" and to "unreadable" alike, and the write
+              // that follows rebuilds the file from that `{}` — destroying every key it held. That
+              // is the exact shape that wiped a 57.8 KB config on 2026-07-07, still live here in
+              // ChangeClient. `updateJson` REFUSES an unparseable target instead, so the outer catch
+              // now warns and leaves the file intact rather than overwriting it with a stub.
+              //
+              // `createIfMissing` preserves the old behaviour for a genuinely ABSENT file: the
+              // explicit `mkdirSync` is gone because the gate's lock acquisition creates the parent.
+              await updateJson(settingsPath, s => {
+                const ep = (s.enabledPlugins || {}) as Record<string, boolean>
+                for (const plan of plans) {
+                  const mkt = plan.isRolePlugin
+                    ? LOCAL_MARKETPLACE_NAME
+                    : (plan.strategy === 'native-exists' ? (plan.marketplace || 'ai-maestro-plugins') : CUSTOM_MARKETPLACE_NAME)
+                  ep[`${plan.pluginName}@${mkt}`] = true
+                }
+                s.enabledPlugins = ep
+              }, { createIfMissing: true })
             } catch (err) {
               console.warn('[ChangeClient] Claude settings write-back fallback failed:', err)
             }

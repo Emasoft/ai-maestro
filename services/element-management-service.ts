@@ -370,74 +370,19 @@ import { readJson, loadJsonSafe, saveJsonSafe, withJsonLock } from '@/lib/json-i
 
 // ── Settings mutex ────────────────────────────────────────────
 //
-// MAJ-02 fix (2026-05-04) — cross-process exclusion via a sibling
-// lockfile (`.lock` directory next to the target file). The previous
-// version was a process-local Promise queue, which serialises within
-// a single Node process but cannot prevent two processes (PM2 cluster
-// mode, simultaneous full + headless servers, test harness + dev
-// server) from interleaving writes to the same JSON file. mkdir is
-// atomic on POSIX — only the first concurrent process wins; others
-// poll for release. A stale-lock recovery valve breaks lockdirs older
-// than STALE_LOCK_MS so a crashed process cannot deadlock writers
-// indefinitely.
-
-const settingsLocks = new Map<string, Promise<void>>()
-const STALE_LOCK_MS = 30_000
-const LOCK_POLL_MS = 50
-const LOCK_MAX_WAIT_MS = 10_000
-
-async function _acquireFileLock(
-  filePath: string,
-  // Both windows are overridable because they are sized for a SHORT read-modify-write of a JSON
-  // file. A caller that holds the lock across a long child process (`claude plugin install` clones
-  // a repo and is allowed 120s) breaks both defaults at once: a waiter declares the lock stale at
-  // 30s and rm -rf's it while the holder is still running — which permits the very concurrency the
-  // lock exists to prevent, and leaves the ORIGINAL holder's release() deleting the new holder's
-  // lockdir. The window must always exceed the guarded operation's own timeout.
-  opts: { staleMs?: number; maxWaitMs?: number } = {},
-): Promise<() => Promise<void>> {
-  const staleMs = opts.staleMs ?? STALE_LOCK_MS
-  const maxWaitMs = opts.maxWaitMs ?? LOCK_MAX_WAIT_MS
-  const lockDir = `${filePath}.lock`
-  // Ensure the parent dir exists before mkdir-ing the lockdir. A fresh
-  // machine/CI runner may not have e.g. ~/.claude/ yet (nothing has
-  // written settings.json there before), so `mkdir(lockDir)` throws
-  // ENOENT — which the catch below only handles for EEXIST, so it was
-  // propagating as a hard failure (surfaced as ChangeMarketplace /
-  // ChangePlugin returning {success:false}). recursive:true is a cheap
-  // idempotent no-op once the dir exists, so this is safe on every call.
-  await mkdir(join(filePath, '..'), { recursive: true })
-  const start = Date.now()
-  while (true) {
-    try {
-      // mkdir without `recursive` is atomic — fails with EEXIST if dir
-      // already exists. That's the lock-held signal.
-      await mkdir(lockDir, { recursive: false })
-      // Acquired. Return a releaser that removes the lockdir.
-      return async () => { try { await rm(lockDir, { recursive: true, force: true }) } catch {} }
-    } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException)?.code
-      if (code !== 'EEXIST') throw err
-      // Already held — check if it's stale.
-      try {
-        const st = await stat(lockDir)
-        if (Date.now() - st.mtimeMs > staleMs) {
-          // Break the stale lock; another caller may have done the
-          // same in parallel — that's fine, mkdir below will sort it.
-          try { await rm(lockDir, { recursive: true, force: true }) } catch {}
-          continue
-        }
-      } catch {
-        // stat failed (lock disappeared) — retry mkdir
-        continue
-      }
-      if (Date.now() - start > maxWaitMs) {
-        throw new Error(`withSettingsLock: timeout waiting for ${lockDir}`)
-      }
-      await new Promise(r => setTimeout(r, LOCK_POLL_MS))
-    }
-  }
-}
+// The implementation MOVED WHOLE into `lib/json-io.ts` (TRDD-RYFP030K) and was DELETED here rather
+// than left beside its replacement: an unreachable second implementation of a lock is an invitation
+// to call it again, which is precisely how this codebase ended up with the write guarantees split
+// across two modules — the split TRDD-RYFP030K exists to end.
+//
+// Provenance worth keeping, because it is WHY the lock has the shape it has (MAJ-02, 2026-05-04):
+// the original was a process-local Promise queue, which serialises within one Node process and
+// cannot stop two PROCESSES (PM2 cluster mode, simultaneous full + headless servers, test harness +
+// dev server) interleaving writes to the same JSON file. Hence the sibling `.lock` DIRECTORY and
+// `mkdir(recursive:false)` — atomic on POSIX, so only the first concurrent process wins — plus a
+// stale-break valve so a crashed holder cannot deadlock writers forever. `lib/json-io.ts` keeps
+// all three properties and adds the in-process queue back on top, so neither guarantee was traded
+// for the other.
 
 /**
  * DELEGATES to `lib/json-io.ts` — this is now a thin alias, and that is load-bearing (TRDD-RYFP030K).

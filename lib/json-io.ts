@@ -167,6 +167,12 @@ async function acquireLock(filePath: string, opts: JsonLockOpts = {}): Promise<(
     try {
       // mkdir WITHOUT recursive is atomic: EEXIST is the lock-held signal.
       await mkdir(lockDir, { recursive: false })
+      // ⚠ KNOWN RESIDUAL HAZARD, inherited with this design and worth stating because the code it
+      // was documented beside has been deleted: if a waiter declares this lock stale and takes it
+      // while we are STILL RUNNING, two holders exist at once AND our release below deletes the NEW
+      // holder's lockdir. That is why `staleMs` must always exceed the guarded operation's own
+      // timeout — `claude plugin install` clones a repo and is allowed 120s, so a caller wrapping it
+      // MUST pass a larger `staleMs` rather than accept the default.
       return async () => { try { await rm(lockDir, { recursive: true, force: true }) } catch { /* already gone */ } }
     } catch (err) {
       if ((err as NodeJS.ErrnoException)?.code !== 'EEXIST') throw err

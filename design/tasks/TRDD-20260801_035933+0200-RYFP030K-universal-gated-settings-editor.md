@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T03:59:33+0200
-updated: 2026-08-01T19:22:41+0200
+updated: 2026-08-01T22:31:44+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,7 +21,7 @@ npt: []
 eht: []
 blocked-by: []
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/105]
-implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a, 420cac1e, 4d94097c, f1680b41, 1ed50bc2, f2be0ebb, ec38b089]
+implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a, 420cac1e, 4d94097c, f1680b41, 1ed50bc2, f2be0ebb, ec38b089, 12e2ef97]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
@@ -35,8 +35,13 @@ implemented the safe settings editor?"*. That is the incident behind the new glo
 `~/.claude/rules/new-directive-never-drops-the-old-work.md` — on a new directive, QUEUE the new
 work or FORK the old, and say which.
 
-Applying it here: **the transports row (API route + `aimaestro-settings.sh`) is delegated to a
-background agent as of 19:2x.** Do NOT start that row yourself — you will collide with it.
+**The transports row is DONE** — delegated at 19:2x, landed `12e2ef97`. Verified first-hand, not
+taken on report: `tsc` 0, full suite **331 files** (was 328), the 3 new files carry 43 tests, the
+CLI greps ZERO HTTP references (the installer-runs-server-down constraint), the gate writes only
+via `updateJson`, the governance ratchet is still green, and a neuter of the basename guard
+reddened exactly `REJECTS a filename that is not one of the two known settings basenames`.
+Three editor diagnostics (2 unreachable-code, 1 unused `isValidOp`) were all STALE — `isValidOp`
+is called at `route.ts:102`, and `tsc --allowUnreachableCode false` reports nothing.
 
 **Still unowned and still yours:** the 21 already-locked `saveJsonSafe` sites, and the issue-#105
 report. Both were deliberately withheld from the fork — the 21 sites need a per-site judgment
@@ -262,7 +267,7 @@ primitive. The deadlock risk is real and is why its test comes first.
       the shared lock and gain fsync/backup/staleness. The retention reason is recorded at each
       migrated import site, not only here.
 - [x] audit is detect-and-log; auto-rollback explicitly NOT implemented, with the reason recorded
-- [ ] API route + `aimaestro-settings.sh` (node entrypoint, not HTTP — installer runs server-down)
+- [x] API route + `aimaestro-settings.sh` (node entrypoint, not HTTP — installer runs server-down) — `12e2ef97`, both transports over one shared `lib/settings-gate.ts`; CLI carries ZERO HTTP references (verified by grep)
 - [x] governance ratchet forbids any other writer of `settings*.json` incl. `settings.local.json`
       — both halves land in `tests/governance/user-settings-has-two-writers.test.ts`; the
       `settings.local.json` allowlist is now exactly ONE entry, `lib/json-io.ts`. Neuter verified:

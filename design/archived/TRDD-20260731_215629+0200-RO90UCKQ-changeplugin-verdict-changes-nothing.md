@@ -1,11 +1,11 @@
 ---
 trdd-id: RO90UCKQ
 title: ChangePlugin G11 verifies the final state and its verdict changes nothing
-column: dev
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T21:56:29+0200
-updated: 2026-08-01T00:44:35+0200
+updated: 2026-08-01T02:12:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -390,3 +390,7 @@ it reports a gate denial as "the change did not take effect".
   this agent's own assignment scope, found while auditing TRDD-K71FV649 and deliberately filed
   separately because it is independent of that card's reader. Pre-approved: issuer authority >=
   required approver.
+- 2026-08-01T02:12:53+0200 — COMPLETED by ai-maestro. 10/10 boxes; landed as `886a8a36`,
+  `3d478407`, `6f0460a5`, `e11b7dd1`, `7a091139`. Verified on the committed tree: tsc 0 lines,
+  322 files / 4587 passed / 2 skipped. The `settings/marketplaces` follow-up is NOT dropped — it
+  is `TRDD-G2K02VDY`, split out because its answer differs per handler.

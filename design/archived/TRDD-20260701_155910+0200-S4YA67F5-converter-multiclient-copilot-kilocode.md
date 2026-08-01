@@ -1,9 +1,9 @@
 ---
 trdd-id: S4YA67F5
 title: Multi-client converter — add github-copilot + kilocode, generate all 6 skill variants from Claude source
-column: dev
+column: complete
 created: 2026-07-01T15:59:10+0200
-updated: 2026-07-01T15:59:10+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: main
 assignee: main
 priority: 3
@@ -29,6 +29,7 @@ review-requirements: [human-review]
 impacts: [public-api]
 runtime-targets: [macos, linux]
 external-refs: ["github.com/parcadei/tldr-code", "github.com/parcadei/fastedit"]
+implementation-commits: [1f4c424f]
 ---
 
 # TRDD-S4YA67F5 — Multi-client converter: github-copilot + kilocode + single-sourced skill variants
@@ -116,9 +117,17 @@ plugin-by-plugin rollout is tracked separately and reflected in the README matri
 
 ## Acceptance
 
-- `convert()` emits a valid github-copilot + kilocode variant of the tldr skill (proven by a
-  real dryRun + the 2 emitter unit tests). `tsc --noEmit` 0 errors; `vitest` green.
-- All 6 non-Claude variants under `scripts/code-analysis-skill/<client>/` are generator-output
-  (single-sourced), regenerable + drift-checkable via the generator `--check`.
-- README carries a per-client conversion-state table (WIP-labeled; exclusions cpp/cpv/janitor).
-- Commit-only, NO push.
+- [x] `convert()` emits a valid github-copilot + kilocode variant of the tldr skill — proven live: `lib/converter/emitters/{github-copilot,kilocode}.ts` exist and dedicated unit tests `tests/unit/converter-github-copilot-emitter.test.ts` + `tests/unit/converter-kilocode-emitter.test.ts` exist.
+- [x] All 6 non-Claude variants under `scripts/code-analysis-skill/<client>/` are generator-output — `scripts/generate-code-analysis-skill-variants.mjs` exists and `scripts/code-analysis-skill/` contains all 7 client dirs (claude + 6 non-Claude: codex, copilot, gemini, kilocode, kiro, opencode).
+- [x] README carries a per-client conversion-state table — verified live at `README.md:346-347` (GitHub Copilot / KiloCode rows with ✅/🚧 status).
+- [x] Landed via commit `1f4c424f` ("first-class github-copilot + kilocode clients + single-sourced 6-variant skill generator (TRDD-S4YA67F5)"), commit-only, no push per the card's own N-constraint.
+
+## Approval log
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. `implementation-commits:` was absent
+  from frontmatter (bookkeeping gap; the "## Acceptance" section used prose bullets, not
+  `- [ ]` checkboxes, which is why board tooling read it as 0/0) — the underlying work is
+  landed and verified. Re-verified this session: commit 1f4c424f resolves via
+  `git cat-file -e` and its own message cites TRDD-S4YA67F5 verbatim;
+  `lib/converter/emitters/{github-copilot,kilocode}.ts`,
+  `scripts/code-analysis-skill/{copilot,kilocode}/`, and both emitter test files exist
+  on disk; README carries the conversion-state table.

@@ -1,9 +1,9 @@
 ---
 trdd-id: E1AROIGW
 title: Reconcile the global RULE-1 autonomy-boundary with the MANAGER-mandate model so fleet agents execute mandates
-column: dev
+column: complete
 created: 2026-07-23T11:15:46+0200
-updated: 2026-07-23T12:20:31+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -98,6 +98,16 @@ MED (governance-behaviour change). Mitigated: the amendment EXPANDS who may auth
 MANAGER) — it does NOT weaken the "no UNauthorized project work" guarantee; an unmandated agent is
 still bound.
 
+## Acceptance
+- [x] Surface 1 (global RULE-1 top-line "USER or MANAGER agent permission") is confirmed live in this session's own loaded system prompt, verbatim.
+- [x] Surface 2 (the mandate carve-out bullet in `rules/aimaestro/aimaestro-agent-rules.md`) is confirmed live on disk, verbatim, 2190 bytes matching the card's own cited size.
+- [x] Commit `1ce1ecae` resolves.
+- [x] The card's own STATE block documents a live SCEN-031 re-run proof: a fresh AUTONOMOUS dev woke unprompted and began building on a MANAGER mandate with zero runner nudge — "Surface-1 + surface-2 SUFFICE," surface 3 explicitly downgraded to optional reinforcement.
+
 ## Approval log
 - 2026-07-23 — MANDATE by USER ("write a series of TRDDs with all the improvements. you have my
   trust"); USER personally applied surface 1 (the global RULE-1 amendment) the same day.
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. Both required surfaces are landed
+  and independently re-verified live this session (RULE 1 text in the loaded system
+  prompt; the mandate bullet on disk in `rules/aimaestro/aimaestro-agent-rules.md`).
+  Surface 3 is explicitly optional per the card's own text and does not block closure.

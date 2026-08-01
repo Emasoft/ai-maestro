@@ -1,9 +1,9 @@
 ---
 trdd-id: DE9757LJ
 title: Split the 3-pillars governance rules into IND (janitor-global) and DEP (ai-maestro-workdir) sets
-column: dev
+column: complete
 created: 2026-07-07T23:23:04+0200
-updated: 2026-07-08T00:26:41+0200
+updated: 2026-08-01T22:50:24+0200
 implementation-commits: [618f7044, 313fd7a3]
 external-refs: ["github.com/Emasoft/ai-maestro-janitor/issues/73", "github.com/Emasoft/ai-maestro-orchestrator-agent/issues/27"]
 current-owner: ai-maestro-session
@@ -214,6 +214,12 @@ rewire. Mitigations: strict IND-base/DEP-overlay layering (no duplication), the
 global copies are removed LAST and only after both channels are verified live,
 and the cross-repo work is delegated via issues (not direct edits).
 
+## Acceptance
+- [x] Phases 1-3 landed on the ai-maestro side — commits `618f7044` (IND+DEP rule authoring, zero-duplication) and `313fd7a3` (server-side install wiring `lib/agent-rules-seed.ts` at CreateAgent/wake/import) both resolve.
+- [x] Phase 3's cross-repo dependency (janitor ships the IND base) is confirmed shipped — `gh issue view 73 --repo Emasoft/ai-maestro-janitor` returns CLOSED.
+- [x] Phase 4's cross-repo dependency (orchestrator-plugin kanban rewire) is confirmed shipped — `gh issue view 27 --repo Emasoft/ai-maestro-orchestrator-agent` returns CLOSED.
+- [x] A later terminal card, `TRDD-TAFH4U0G` (`column: complete`, verified in `design/archived/`), explicitly declares "DE9757LJ terminal — frozen, left as historical record," corroborating the whole program landed.
+
 ## Approval log
 
 - 2026-07-07T23:23:04+0200 — USER-DIRECTED (the USER specified this entire
@@ -221,3 +227,9 @@ and the cross-repo work is delegated via issues (not direct edits).
   plan-of-record. Phase 1 (the rule-by-rule refactor) awaits the USER's explicit
   "GO" before execution; no rule files, install code, or cross-repo issues are
   touched until then.
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. Phases 1-3 landed under this
+  card's own commits (re-verified: 618f7044, 313fd7a3 both resolve); its two named
+  external blockers (janitor#73, orchestrator#27) are re-verified CLOSED; a later
+  archived card (TAFH4U0G) explicitly declares this TRDD terminal. The card was
+  simply never re-touched to flip its own column after the cross-repo work
+  finished.

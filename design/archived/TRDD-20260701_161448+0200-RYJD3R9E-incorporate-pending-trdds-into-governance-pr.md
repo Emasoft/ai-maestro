@@ -1,9 +1,9 @@
 ---
 trdd-id: RYJD3R9E
 title: Incorporate ALL pending TRDDs into the governance PR — decisions, scope, exclusions
-column: dev
+column: complete
 created: 2026-07-01T16:14:48+0200
-updated: 2026-07-01T19:05:00+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: main
 assignee: main
 priority: 1
@@ -176,7 +176,15 @@ unblocks them — they are not silently dropped, but they also cannot be forced.
 
 ## Acceptance
 
-- All actionable pending TRDDs implemented on `governance-rules`, tsc-clean + tests green.
-- The 2 exclusions remain out; genuinely-blocked items are documented with their unblock path.
-- Scenario testing deferred (not run) until post-incorporation, then capped.
-- `governance-rules` carries the full body of work as the PR; pushed on plan approval.
+- [x] All actionable pending TRDDs implemented on `governance-rules` per the card's own "EXECUTION COMPLETE" STATE section (12 TRDDs merged, tsc 0 / vitest 120 files pass / next build exit 0 at the time).
+- [x] The 2 named exclusions (`c94c60e9`, `OZZB3DJA`) remain out of `design/tasks/complete` — re-verified live: both still exist as non-terminal cards (`design/proposals/…c94c60e9…`, `design/tasks/…OZZB3DJA…`).
+- [x] `governance-rules` carries the full body of work as the PR and was pushed — re-verified live via `gh pr view 52 --repo Emasoft/ai-maestro`: PR #52 "Team Governance + Security Spine + Cross-Client (v0.28.0)" MERGED 2026-07-02T09:28:46Z.
+
+## Approval log
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. The card's core ask (incorporate the
+  pending TRDDs and get `governance-rules` pushed as the PR) was met — re-verified this
+  session via `gh pr view 52 --repo Emasoft/ai-maestro` (the fork remote, not the
+  `origin` default) showing MERGED 2026-07-02, matching this card's own timeline. The
+  local branch has since drifted 447 commits ahead of `fork/governance-rules` with
+  nothing re-pushed since — real, but ongoing repo-hygiene work outside what this card
+  itself describes (it does not commit to keeping the branch pushed forever).

@@ -1,9 +1,9 @@
 ---
 trdd-id: 6AMXSG3S
 title: A session restart must preserve the agent's conversation — today it silently destroys the in-flight mandate
-column: dev
+column: complete
 created: 2026-07-23T16:37:05+0200
-updated: 2026-07-23T16:37:05+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: ai-maestro-dev-session
 task-type: bugfix
 scope: project
@@ -15,7 +15,7 @@ effort: small
 release-via: none
 relevant-rules: []
 labels: [continuity, scen-031, harness-readiness]
-implementation-commits: []
+implementation-commits: [98f04d99]
 ---
 
 # Restart must preserve the conversation
@@ -105,7 +105,18 @@ LOW–MEDIUM. Additive and behind an existence check, so an agent with no prior 
 relaunches exactly as today. The real risk is the opposite of the bug: resuming a very long
 conversation costs tokens on relaunch. Accepted — losing the mandate costs the whole run.
 
+## Acceptance
+- [x] `lib/claude-conversation.ts` exists on disk (11907 bytes) as the single lookup-key source.
+- [x] `buildRelaunchCommand` accepts `opts.continueConversation` and appends `--continue` guarded — re-verified live at `lib/session-restart.ts:145,158,164`.
+- [x] Both restart routes are wired: `app/api/sessions/me/restart/route.ts:155,157` directly; `app/api/sessions/[id]/restart/route.ts` via the shared `lib/session-relaunch.ts:102,106` composition.
+- [x] `tests/unit/restart-preserves-conversation.test.ts` exists on disk covering this card's own described behavior.
+
 ## Approval log
 
 - 2026-07-23T16:37:05+0200 — MANDATE issued by self (min-approval-requirement: none).
   In-scope bugfix on this project's own source, reversible and local. No approval request sent.
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. `implementation-commits:` was left
+  empty (bookkeeping gap) but commit 98f04d99 ("preserve the agent's conversation
+  across a restart (TRDD-6AMXSG3S)") resolves and is verified live wired into both
+  restart routes; STATE text still read "NEXT ACTION: implement the fix" — stale prose,
+  code already shipped.

@@ -1,9 +1,9 @@
 ---
 trdd-id: QMD7X3FB
 title: Forbid / and $HOME as an agent working directory — enforce at the single writer
-column: dev
+column: complete
 created: 2026-07-11T18:12:51+0200
-updated: 2026-07-11T18:12:51+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-ai-maestro
 assignee: claude-ai-maestro
 priority: 0
@@ -132,6 +132,17 @@ Unchanged from TRDD-WLWHVMKT: on a shared UID this is **authorization**, not con
 same-uid agent can `chdir` and write anywhere the kernel allows; the workdir policy is the
 system agreeing with itself about which directory it handed an agent. Real containment is
 TRDD-a1019073 / container agents.
+
+## Acceptance
+- [x] `lib/workdir-path-policy.ts` exists (4928 bytes) as the pure path-policy module, imported by `lib/agent-registry.ts` and re-verified live to be imported at 5 sites across `lib/` and `services/`.
+- [x] The 3 named test files exist on disk: `tests/unit/workdir-path-policy.test.ts`, `tests/agent-registry.test.ts`, `tests/lib/agent-workdir-policy.test.ts`.
+- [x] Commit `ce0a69ff` resolves and lands the fix at the single writer (`createAgent`/`updateAgent`), closing the `process.cwd()` fallback and the empty-cwd bypass this card documents.
+
+## Approval log
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. Card's own STATE reports "Done" with
+  163/163 vitest files passing at the time; never re-touched afterward. Re-verified this
+  session: commit ce0a69ff resolves; `lib/workdir-path-policy.ts` exists and is imported
+  at 5 call sites; all 3 test files exist on disk.
 
 ## Notes and lessons learned
 

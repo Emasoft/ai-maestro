@@ -1,9 +1,9 @@
 ---
 trdd-id: VYQ8N4KR
 title: One invariant registry, one watchdog — merge the scattered workdir enforcers
-column: dev
+column: complete
 created: 2026-07-11T17:40:57+0200
-updated: 2026-07-11T17:40:57+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-ai-maestro
 assignee: claude-ai-maestro
 priority: 1
@@ -135,6 +135,18 @@ read this module as a sandbox.
   the rule file, its size budget, and the tamper-restore paths (JGCEA6CQ).
 - E2E on the live fleet: boot sweep over 24 workdirs; a post-boot tamper on a real
   agent restored by the watchdog in one interval (log line above).
+
+## Acceptance
+- [x] `lib/agent-invariants.ts` (413 lines) exists and exports `startAgentInvariantsWatchdog`, confirmed called from `server.mjs:1936` after a boot sweep.
+- [x] `tests/unit/agent-invariants.test.ts` exists on disk covering the invariant-list shape, trigger filtering, idempotence, and watchdog repair behavior described in this card's `## Verification` section.
+- [x] Commit `95451222` resolves and lands the consolidation across the three call sites (CreateAgent, ensureCorePluginInstalled, server boot).
+
+## Approval log
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. Card's own STATE block already
+  declared "Done and proven live" with a real tamper/self-heal demonstration; it was
+  never re-touched to flip `column:` after that. Re-verified this session: commit
+  95451222 resolves; `lib/agent-invariants.ts` and `tests/unit/agent-invariants.test.ts`
+  both exist on disk; `startAgentInvariantsWatchdog` is wired into `server.mjs:1936`.
 
 ## Notes and lessons learned
 

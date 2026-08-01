@@ -1,9 +1,9 @@
 ---
 trdd-id: MQ82BYSX
 title: Enable the gentle fleet-recovery actuator so SCEN-031 can run unsupervised (the PARTIAL to PASS continuity prereq)
-column: dev
+column: complete
 created: 2026-07-23T09:02:48+0200
-updated: 2026-07-23T09:02:48+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: session
 task-type: infra
 scope: project
@@ -88,7 +88,17 @@ stay gated off.
 LOW. Env-only flip of a dark-shipped, tested feature; hard rungs off; STOP-gated; HID-deferred;
 cooldown'd; reversible by unsetting the flag. Immediate blast radius 0 (no stalled online agents).
 
+## Acceptance
+- [x] `AIM_FLEET_RECOVERY_FIRE: '1'` present in `ecosystem.config.js`'s pm2 env block, re-verified live.
+- [x] The live running `ai-maestro` pm2 process's actual environment carries `AIM_FLEET_RECOVERY_FIRE=1` — checked directly via `pm2 jlist`, the exact verification method this card itself demands.
+- [x] The live `pm2 logs` FleetLiveness line no longer prints `[detect-only: AIM_FLEET_RECOVERY_FIRE not set]` — checked directly against the last 5 log entries.
+
 ## Approval log
 - 2026-07-23 — MANDATE: standing USER goal "make the harness ready = SCEN-031 PASSES" requires the
   continuity substrate to keep the fleet alive unsupervised; enabling the completed gentle-recovery
   actuator is the direct prerequisite. Tier-0 in-repo infra activation; min-approval-requirement: none.
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. This card's own NEXT ACTION was the
+  flag flip + confirming the watchdog log — both re-verified live this session: the
+  config file carries the flag, the RUNNING process env carries it, and the current
+  FleetLiveness log lines show `recovery targets: 0` (correct — 3 dead agents, gated;
+  no stalled online agents right now) with no `[detect-only: … not set]` marker.

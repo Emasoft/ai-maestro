@@ -1,9 +1,9 @@
 ---
 trdd-id: 5THSI5ZB
 title: trddgrep gains lint and validate, and the linter learns the overlay metadata it never checked
-column: dev
+column: complete
 created: 2026-07-28T17:19:10+0200
-updated: 2026-07-28T17:19:10+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: ai-maestro-harness
 created-by: ai-maestro-harness
 assignee: ai-maestro-harness
@@ -24,6 +24,7 @@ relevant-rules: [25]
 npt: []
 eht: []
 external-refs: [Emasoft/ai-maestro#96, Emasoft/ai-maestro#98, Emasoft/ai-maestro#59, Emasoft/ai-maestro-janitor#119]
+implementation-commits: [96035844]
 ---
 
 # trddgrep gains lint and validate, and the linter learns the overlay metadata it never checked
@@ -145,7 +146,17 @@ inputs that fail to parse** — so anything hunting malformed frontmatter runs o
 - `yarn trdd:doctor` still exits 0 (new findings are WARN except the one real conflict).
 - Every new rule gets a **neuter run**: break the guard, confirm the named test FAILS.
 
+## Acceptance
+- [x] Commit `96035844` resolves and lands `trddgrep lint`/`validate` + the 3 new rules.
+- [x] `APPROVAL-FIELD-CONFLICT`, `APPROVAL-TIER-DEPRECATED`, `META-MISSING` all confirmed live in `lib/trdd-doctor.ts` (lines 480, 489, 524).
+- [x] `tests/unit/trdd-doctor.test.ts` exists on disk with 46 test cases, matching the card's own "46/46 tests pass live" claim.
+- [x] The remaining corpus-wide field migration (294 findings) is explicitly labeled "a SEPARATE chore" in the card's own STATE block — out of this card's own defined scope.
+
 ## Approval log
 
 - 2026-07-28T17:19:10+0200 — MANDATE issued by USER (min-approval-requirement: none).
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. This card's own STATE block already
+  says "DONE (2026-07-28)"; the remaining corpus migration is explicitly out of its own
+  scope. Re-verified this session: commit 96035844 resolves; all 3 new lint rules exist
+  live in `lib/trdd-doctor.ts`; `tests/unit/trdd-doctor.test.ts` exists with 46 tests.

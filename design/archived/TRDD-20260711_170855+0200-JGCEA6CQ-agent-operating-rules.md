@@ -1,9 +1,9 @@
 ---
 trdd-id: JGCEA6CQ
 title: Ship a tiny operating-rules file to every agent workdir
-column: dev
+column: complete
 created: 2026-07-11T17:08:55+0200
-updated: 2026-07-11T17:08:55+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-ai-maestro
 assignee: claude-ai-maestro
 priority: 1
@@ -165,6 +165,20 @@ cannot quietly undo it.[^2]
   shared workdirs and **isolates a broken workdir** while the healthy one still gets its
   rules.
 - `tests/unit/agent-rules-seed.test.ts` — 5 pre-existing tests still green.
+
+## Acceptance
+- [x] `rules/aimaestro/aimaestro-agent-rules.md` exists on disk (1841 bytes, under the card's own 2200-byte budget), re-verified live.
+- [x] `tests/unit/agent-operating-rules.test.ts` and `tests/unit/agent-rules-seed.test.ts` both exist on disk.
+- [x] Its `eht: [TRDD-VYQ8N4KR]` flock is now terminal — VYQ8N4KR is closed to `complete` and archived (closed earlier in this same session), satisfying the completion gate this card was correctly withholding on.
+- [x] Commits `8e61eedf` and `95451222` both resolve.
+
+## Approval log
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. This card's completion-gate was
+  correctly withholding `complete` while its EHT (TRDD-VYQ8N4KR) was still open —
+  that flock is now terminal (closed in this same closure pass), so the gate now
+  passes. Re-verified this session: both cited commits resolve;
+  `rules/aimaestro/aimaestro-agent-rules.md` exists on disk; both cited test files
+  exist.
 
 ## Notes and lessons learned
 

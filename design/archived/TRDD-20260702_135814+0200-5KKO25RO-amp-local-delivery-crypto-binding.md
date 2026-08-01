@@ -1,9 +1,9 @@
 ---
 trdd-id: 5KKO25RO
 title: AMP local-delivery cryptographic binding — verify sigs, lock keys, host identity
-column: dev
+column: complete
 created: 2026-07-02T13:58:14+0200
-updated: 2026-07-07T03:25:00+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -27,6 +27,7 @@ review-requirements: [human-review]
 runtime-targets: [macos]
 impacts: [install-script]
 external-refs: []
+implementation-commits: [f9fddfaf, 22a58bd3, 3fb18518]
 ---
 
 # TRDD-5KKO25RO — AMP local-delivery cryptographic binding
@@ -150,3 +151,19 @@ the grounding report. This TRDD is the tracked artifact; `implementation-commits
 record the SHAs as fix-1..3 land. EHT (derived): a GOVERNANCE-RULES.md line stating local
 AMP delivery is now signature-verified; the one-time migration script (perms + orphan GC)
 added to `install-messaging.sh`'s copy list (USER runs it — writes outside the project).
+
+## Acceptance
+- [x] `save_to_inbox` no longer implicit-trusts `aimaestro.local` senders — re-verified live: `scripts/amp-helper.sh` no longer contains the `aimaestro.local ⇒ sig_valid=true` shortcut; the `elif` was flipped to `if` per fix-1, landed in commit `f9fddfaf`.
+- [x] `sign_message` refuses a group/other-readable private key + `install-messaging.sh` migrates existing keys to 0600 — landed in commit `22a58bd3`.
+- [x] `AMP_HOST=1` host-identity layer landed in commit `3fb18518`.
+- [x] EHT recorded live in `docs/API-CHANGES.md:33` documenting the local-delivery verification change.
+
+## Approval log
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. "Layer A now fully complete" per the
+  card's own STATE block; held at `dev` only pending
+  `review-requirements: [human-review]` sign-off — a column-hygiene gap, not unfinished
+  work. Re-verified this session: all 3 SHAs (f9fddfaf, 22a58bd3, 3fb18518) resolve via
+  `git cat-file -e`; `scripts/amp-helper.sh` confirmed to no longer contain the
+  local-implicit-trust shortcut; `docs/API-CHANGES.md:33` carries the EHT security-log
+  entry. Layer B (per-UID sandbox, TRDD-a1019073) remains separately tracked and is out
+  of this card's own described scope.

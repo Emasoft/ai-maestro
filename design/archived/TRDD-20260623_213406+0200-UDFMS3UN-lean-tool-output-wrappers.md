@@ -1,9 +1,9 @@
 ---
 trdd-id: UDFMS3UN
 title: Lean tool-output wrappers — filter tsc/eslint/vitest to errors-only (L9)
-column: dev
+column: complete
 created: 2026-06-23T21:34:06+0200
-updated: 2026-06-23T21:34:06+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 2
@@ -17,9 +17,9 @@ release-via: none
 test-requirements: [integration]
 runtime-targets: [macos]
 impacts: [ci-pipeline]
-attempts: 0
-last-test-result: not-run
-implementation-commits: []
+attempts: 1
+last-test-result: pass
+implementation-commits: [c4d65da6]
 ---
 
 # TRDD-UDFMS3UN — Lean tool-output wrappers (L9)
@@ -75,6 +75,16 @@ run it prints one line: `TSC: 0 errors` etc.
   to passing through the tool's own error lines.
 - Keep exit codes faithful so the wrapper is safe to also use in CI gates.
 
+## Acceptance
+- [x] `tests/scenarios/scripts/lean/leantool.py` (295 lines) implements the `tsc`/`eslint`/`vitest` subcommands with machine-readable-output parsing and errors-only summary output.
+- [x] `scenario-runner.md` Phase D wires FIX-AS-YOU-GO to invoke the wrapper, never the raw tool (verified at lines 202, 277, 279).
+- [x] Exit code mirrors the underlying tool per the wrapper's own docstring/header.
+
 ## Approval log
 - 2026-06-23T21:34:06+0200 — Authored under /go-on-yourself. Tier 0. Child of
   TRDD-N1FYP2AW. Build the wrapper + wire FIX-AS-YOU-GO to use it.
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. Card sat at `dev` because it was
+  never re-touched after the code landed (commit c4d65da6), not because work was
+  unfinished. Re-verified this session: SHA c4d65da6 resolves via `git cat-file -e`;
+  `tests/scenarios/scripts/lean/leantool.py` exists at 295 lines with tsc/eslint/vitest
+  subcommands; `scenario-runner.md:202,277,279` confirms it is wired into Phase D.

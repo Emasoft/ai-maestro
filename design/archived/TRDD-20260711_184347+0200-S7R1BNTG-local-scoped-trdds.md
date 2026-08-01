@@ -1,9 +1,9 @@
 ---
 trdd-id: S7R1BNTG
 title: LOCAL-scoped TRDDs — a machine-private task corpus beside LOCAL memory
-column: dev
+column: complete
 created: 2026-07-11T18:43:47+0200
-updated: 2026-07-11T18:43:47+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-ai-maestro
 assignee: claude-ai-maestro
 priority: 1
@@ -225,7 +225,17 @@ My argument FOR in-repo was that tooling would otherwise have to compute the slu
 three lines of shell the memory recall protocol already runs — a weak reason, and it did not
 survive contact with the three above.[^2]
 
-## Notes and lessons learned
+## Acceptance
+- [x] ai-maestro's own in-repo half was deliberately reverted (nothing left here to ship) — the deliverable of this card is the SPEC, filed as janitor issue #84.
+- [x] Janitor issue #84 ("TRDD spec: add LOCAL scope + two rule-install defects") is confirmed CLOSED (accepted/shipped) via `gh issue view 84 --repo Emasoft/ai-maestro-janitor`.
+- [x] Commit `00c9c25a` resolves and captures this card's spec authoring.
+
+## Approval log
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. This TRDD's own scope was
+  entirely a spec handed to the janitor repo (per the cross-project rule); ai-maestro's
+  in-repo half was reverted by design. Re-verified this session: commit 00c9c25a
+  resolves; janitor issue #84 is CLOSED, meaning the spec was accepted and shipped by
+  its owning repo.
 
 [^1]: [ocd:2026-07-11 lmd:2026-07-11] The janitor's Claude concluded "TRDDs cannot express
   local chores" from the fact that the only defined ROOT was git-tracked. The pillar was

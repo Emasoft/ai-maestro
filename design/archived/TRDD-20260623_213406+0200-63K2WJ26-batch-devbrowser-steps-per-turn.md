@@ -1,9 +1,9 @@
 ---
 trdd-id: 63K2WJ26
 title: Batch dev-browser steps per turn — a stop-on-failure driver (L6)
-column: dev
+column: complete
 created: 2026-06-23T21:34:06+0200
-updated: 2026-07-03T21:00:06+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 2
@@ -83,7 +83,17 @@ One turn covers as many deterministic steps as run clean. The turn only ends whe
 - Validate on one self-contained scenario; compare turns vs the §1 baseline
   (target: ≥40% fewer turns).
 
+## Acceptance
+- [x] `.claude/skills/scenario-step-batch/SKILL.md` exists on disk (verified live, 3977 bytes) implementing the declarative `runSteps()` stop-on-failure driver.
+- [x] All 3 cited commits resolve: `c4d65da6`, `dee0b805`, `3e86b80e`.
+- [x] The runner's Phase C batching + stop-on-first-failure contract is documented per this card's own Implementation section, matching the skill's own description.
+
 ## Approval log
 - 2026-06-23T21:34:06+0200 — Authored under /go-on-yourself (user directly
   ordered all four optimizations). Tier 0 (in-scope test infra). Child of
   TRDD-N1FYP2AW. Implementation this session; live validation gated on user go.
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. This card's own deliverable (the
+  `scenario-step-batch` skill/driver) is landed and re-verified live on disk; all 3
+  cited SHAs resolve. Held at `dev` pending the same PARENT-level (TRDD-N1FYP2AW) Phase
+  2 scenario-run validation as its sibling H3F2DFP7 — that gate belongs to the parent,
+  not to this card's own described scope.

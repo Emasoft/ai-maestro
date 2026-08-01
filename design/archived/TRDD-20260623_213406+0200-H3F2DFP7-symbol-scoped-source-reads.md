@@ -1,9 +1,9 @@
 ---
 trdd-id: H3F2DFP7
 title: Symbol-scoped source reads — read function bodies, not whole files (L8)
-column: dev
+column: complete
 created: 2026-06-23T21:34:06+0200
-updated: 2026-07-03T21:00:06+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 2
@@ -77,6 +77,18 @@ Read just the relevant symbol + its body. Two interfaces give this:
 - The fixer-agent split is deferred (nesting constraint) — for now the runner
   uses tldr + ranged Read; complex fixes are flagged for the orchestrator.
 
+## Acceptance
+- [x] "Scoped source reads (L8)" rule shipped in `.claude/agents/scenario-runner.md` Phase D (verified live at lines 277, 279): `tldr search "<name>" <dir>` to locate, then ranged `Read` with `offset`/`limit` — no whole-file reads, no MCP added.
+- [x] All 3 cited commits resolve: `c4d65da6`, `dee0b805`, `3e86b80e`.
+- [x] The SERENA-vs-tldr tradeoff and the `NEEDS-FIXER:` escape hatch are documented inline in the runner per this card's own Implementation section.
+
 ## Approval log
 - 2026-06-23T21:34:06+0200 — Authored under /go-on-yourself. Tier 0. Child of
   TRDD-N1FYP2AW. Resolves the SERENA-MCP-vs-L2 tension in favor of `tldr` CLI.
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. This card's own deliverable (the L8
+  rule + implementation) is landed and re-verified live at
+  `.claude/agents/scenario-runner.md:277,279`; all 3 cited SHAs resolve. It was held at
+  `dev` pending a broader Phase-2 scenario-run validation that belongs to the PARENT
+  card (TRDD-N1FYP2AW), not to this card's own described scope — that parent's Phase 2
+  remains explicitly deferred pending a separate USER go-ahead, but does not block this
+  child's own completion.

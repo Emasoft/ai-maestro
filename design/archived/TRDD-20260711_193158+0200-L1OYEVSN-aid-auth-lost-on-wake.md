@@ -1,9 +1,9 @@
 ---
 trdd-id: L1OYEVSN
 title: AID_AUTH is injected only on create — every server restart strips the fleet's API credential
-column: dev
+column: complete
 created: 2026-07-11T19:31:58+0200
-updated: 2026-07-11T19:31:58+0200
+updated: 2026-08-01T22:50:24+0200
 current-owner: claude-ai-maestro
 assignee: claude-ai-maestro
 priority: 0
@@ -142,6 +142,19 @@ three times already in this codebase, and a third copy is a third thing to forge
 - **Live E2E** — wake an agent, `tmux show-environment -t <s>` shows `AID_AUTH`, and an API
   call issued from inside the pane returns 200 rather than 401.
 - Gates: `bash scripts/with-node.sh yarn test` · `npx tsc --noEmit` · `yarn build`.
+
+## Acceptance
+- [x] `lib/session-env.ts::buildAgentSessionEnv()` is the single builder, re-verified live to be called from both `services/agents-core-service.ts` and `services/sessions-service.ts` (the two paths this card names as diverging).
+- [x] Commit `439984f9` resolves and lands the fix.
+- [x] Card's own STATE block documents a live E2E proof (kill session → pm2 restart → boot-restore rebuilds through the fixed WAKE path → curl with the issued AID_AUTH returns 200) and states "NEXT ACTION: none for the fix."
+
+## Approval log
+- 2026-08-01T22:50:24+0200 — CLOSED retroactively. The fix itself is complete and
+  proven live per the card's own STATE block; the only follow-ups it names
+  (ai-maestro#57/#46 root-cause replies, a possible belt-and-braces refresh on wake) are
+  explicitly non-blocking commentary, not open acceptance criteria. Re-verified this
+  session: commit 439984f9 resolves; `buildAgentSessionEnv` is confirmed called from
+  both `services/agents-core-service.ts` and `services/sessions-service.ts`.
 
 ## Notes and lessons learned
 

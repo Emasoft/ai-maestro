@@ -50,9 +50,27 @@ vi.mock('@/lib/json-io', async (orig) => ({
   saveJsonSafe: mockSaveJsonSafe,
 }))
 
+/**
+ * ⚠ 30s, not the 5s default. Importing this route pulls a 1700-line module and its whole transitive
+ * graph — measured 0.8s warm and 3.3-5.0s cold, so the default timeout is a coin flip under load.
+ *
+ * And a timeout here does not merely fail ITS OWN test: the timed-out `post()` stays PENDING, and
+ * when the next test queues a `mockRejectedValueOnce`, the leaked call consumes it — so the next
+ * test's own call gets the default resolve and sees a **200 where it asserted 409**. That is a
+ * failure reported against the wrong test, with a status that makes it look like the code under
+ * test regressed. Observed exactly once while neutering this file; the fix is to stop the timeout,
+ * not to chase the 200.
+ */
+vi.setConfig({ testTimeout: 30_000 })
+
 const post = async (body: Record<string, unknown>) => {
   const { POST } = await import('@/app/api/settings/marketplaces/route')
-  const req = new Request('http://localhost/api/settings/marketplaces', {
+  // Port 23000 is where the real server lives (server.mjs serves the Next.js routes AND the
+  // WebSocket upgrade on the one port). Nothing here is served over a socket — the handler is
+  // imported and called directly — so the URL is only a `Request` constructor argument and the
+  // port is never consulted. It is written realistically so the next reader does not have to
+  // wonder whether a portless URL means something.
+  const req = new Request('http://localhost:23000/api/settings/marketplaces', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),

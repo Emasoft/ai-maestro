@@ -1,7 +1,7 @@
 /**
  * TRDD-ZT3P02PO — the marketplaces route tells the user their settings file is unreadable.
  *
- * `saveJsonSafe` REFUSES to overwrite a `~/.claude/settings.json` it could not read, and
+ * The guarded writer REFUSES to overwrite a `~/.claude/settings.json` it could not read, and
  * `save-json-safe-refuses-clobber.test.ts` pins that behaviour on real files. This test pins the
  * OTHER half — the WIRING — because a guard whose refusal is swallowed is invisible:
  *
@@ -20,12 +20,13 @@
  * one. And the positive control is what proves the 409 comes from the guard rather than from a
  * failed auth or a failed pipeline somewhere upstream.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
+import { guardRealUserSettings } from '../helpers/real-home-untouched'
 
-const { mockEnforceSystemOwner, mockCreateMarketplace, mockSaveJsonSafe, mockLoadJsonSafe } = vi.hoisted(() => ({
+const { mockEnforceSystemOwner, mockCreateMarketplace, mockUpdateJson, mockLoadJsonSafe } = vi.hoisted(() => ({
   mockEnforceSystemOwner: vi.fn(),
   mockCreateMarketplace: vi.fn(),
-  mockSaveJsonSafe: vi.fn(),
+  mockUpdateJson: vi.fn(),
   mockLoadJsonSafe: vi.fn(),
 }))
 
@@ -44,10 +45,18 @@ vi.mock('@/services/element-management-service', () => ({
 // The REAL `UnreadableTargetError` class is kept (spread from the actual module) — the route maps on
 // `instanceof`, so a look-alike error object would silently take the generic branch and the test
 // would pass while pinning nothing.
+//
+// ⚠ THE MOCKED VERB MUST TRACK THE ROUTE'S ACTUAL WRITER, and getting that wrong is not a broken
+// test — it is an ESCAPE. This spread keeps every unlisted export REAL, so when the route migrated
+// from `saveJsonSafe` to `updateJson` (TRDD-RYFP030K) the mock went on mocking a function nobody
+// called and the REAL `updateJson` wrote the DEVELOPER'S OWN ~/.claude/settings.json, adding a
+// marketplace named after the fixture below. The suite reported ordinary assertion failures; nothing
+// said the global config had been edited. `guardRealUserSettings` is the verb-agnostic tripwire that
+// makes a repeat LOUD.
 vi.mock('@/lib/json-io', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   loadJsonSafe: mockLoadJsonSafe,
-  saveJsonSafe: mockSaveJsonSafe,
+  updateJson: mockUpdateJson,
 }))
 
 /**
@@ -83,12 +92,19 @@ const post = async (body: Record<string, unknown>) => {
 const ADD = { action: 'add-marketplace', url: 'https://github.com/someone/their-plugins' }
 
 describe('marketplaces route — an unreadable settings.json is reported, not clobbered', () => {
+  let assertHomeUntouched: () => void
+  beforeAll(() => { assertHomeUntouched = guardRealUserSettings() })
+  afterAll(() => { assertHomeUntouched() })
+
   beforeEach(async () => {
     vi.clearAllMocks()
     mockEnforceSystemOwner.mockReturnValue(null) // authorized
     mockCreateMarketplace.mockResolvedValue({ success: true })
     mockLoadJsonSafe.mockResolvedValue({})
-    mockSaveJsonSafe.mockResolvedValue(undefined)
+    // `updateJson` resolves an UpdateJsonResult, not undefined — the route destructures `changed`
+    // from it at one call site, and a mock returning undefined throws there instead of exercising
+    // the branch.
+    mockUpdateJson.mockResolvedValue({ changed: true, backupPath: null, attempts: 1, auditOk: true })
   })
 
   it('POSITIVE CONTROL — the same request succeeds when the settings file is readable', async () => {
@@ -96,12 +112,12 @@ describe('marketplaces route — an unreadable settings.json is reported, not cl
     const res = await post(ADD)
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ success: true, action: 'add-marketplace' })
-    expect(mockSaveJsonSafe).toHaveBeenCalledTimes(1)
+    expect(mockUpdateJson).toHaveBeenCalledTimes(1)
   })
 
   it('answers 409 and NAMES THE CAUSE when the write refuses', async () => {
     const { UnreadableTargetError } = await import('@/lib/json-io')
-    mockSaveJsonSafe.mockRejectedValueOnce(
+    mockUpdateJson.mockRejectedValueOnce(
       new UnreadableTargetError('/home/u/.claude/settings.json', 'Unexpected end of JSON input'),
     )
     const res = await post(ADD)
@@ -114,7 +130,7 @@ describe('marketplaces route — an unreadable settings.json is reported, not cl
   })
 
   it('a GENERIC error is still a 500 — the mapping is specific, not a blanket 409', async () => {
-    mockSaveJsonSafe.mockRejectedValueOnce(new Error('disk full'))
+    mockUpdateJson.mockRejectedValueOnce(new Error('disk full'))
     const res = await post(ADD)
     expect(res.status).toBe(500)
     expect(await res.json()).toMatchObject({ error: 'Action failed' })
@@ -124,9 +140,22 @@ describe('marketplaces route — an unreadable settings.json is reported, not cl
     // Pairs with `user-settings-has-two-writers.test.ts`, which forbids the direct-write SHAPE in
     // source. This is the runtime half: the handler actually calls the owner.
     await post(ADD)
-    expect(mockSaveJsonSafe).toHaveBeenCalledWith(
+    expect(mockUpdateJson).toHaveBeenCalledWith(
       expect.stringMatching(/\.claude[/\\]settings\.json$/),
-      expect.objectContaining({ extraKnownMarketplaces: expect.anything() }),
+      expect.any(Function),
+      expect.objectContaining({ createIfMissing: true }),
     )
+
+    // RUN THE MUTATOR. `expect.any(Function)` is satisfied by a mutator that does nothing at all, so
+    // the call-shape assertion above cannot tell a working stamp from an empty closure. This is
+    // strictly stronger than what the pre-migration version could assert: it checked the object
+    // handed to `saveJsonSafe`, which the route had already built, whereas this executes the
+    // route's own mutation logic against a fresh draft.
+    const mutator = mockUpdateJson.mock.calls[0][1] as (s: Record<string, unknown>) => void
+    const draft: Record<string, unknown> = {}
+    mutator(draft)
+    expect(draft.extraKnownMarketplaces).toMatchObject({
+      'someone-their-plugins': { source: { source: 'github', repo: 'someone/their-plugins' } },
+    })
   })
 })

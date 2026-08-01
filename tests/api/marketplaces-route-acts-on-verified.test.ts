@@ -29,13 +29,14 @@
  * settings entries and re-installs, so running it off a file we could not read would be acting on an
  * unknown. Collapsing `unknown` into `mismatch` is precisely the regression these tests prevent.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
+import { guardRealUserSettings } from '../helpers/real-home-untouched'
 
-const { mockChangePlugin, mockEnforceSystemOwner, mockLoadJsonSafe, mockSaveJsonSafe } = vi.hoisted(() => ({
+const { mockChangePlugin, mockEnforceSystemOwner, mockLoadJsonSafe, mockUpdateJson } = vi.hoisted(() => ({
   mockChangePlugin: vi.fn(),
   mockEnforceSystemOwner: vi.fn(),
   mockLoadJsonSafe: vi.fn(),
-  mockSaveJsonSafe: vi.fn(),
+  mockUpdateJson: vi.fn(),
 }))
 
 vi.mock('@/lib/route-auth', async (orig) => ({
@@ -48,10 +49,15 @@ vi.mock('@/services/element-management-service', () => ({
   DeleteMarketplace: vi.fn(),
   UpdateMarketplace: vi.fn(),
 }))
+// ⚠ THE MOCKED VERB MUST TRACK THE ROUTE'S ACTUAL WRITER. This spread keeps every unlisted export
+// REAL, so mocking a verb the route no longer calls does not fail — it lets the REAL writer run
+// against the developer's own ~/.claude/settings.json. That happened on 2026-08-01 when the route
+// migrated `saveJsonSafe` → `updateJson` (TRDD-RYFP030K). `guardRealUserSettings` below is the
+// verb-agnostic tripwire that makes a repeat loud instead of silent.
 vi.mock('@/lib/json-io', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   loadJsonSafe: mockLoadJsonSafe,
-  saveJsonSafe: mockSaveJsonSafe,
+  updateJson: mockUpdateJson,
 }))
 
 // Importing this route pulls a 1700-line module and its whole transitive graph — 0.8s warm and up to
@@ -81,11 +87,20 @@ const ok = (verified?: 'ok' | 'mismatch' | 'unknown') => ({
 })
 
 describe('marketplaces route — the verdict answer splits by handler', () => {
+  let assertHomeUntouched: () => void
+  beforeAll(() => { assertHomeUntouched = guardRealUserSettings() })
+  afterAll(() => { assertHomeUntouched() })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockEnforceSystemOwner.mockReturnValue(null) // authorized
     mockLoadJsonSafe.mockResolvedValue({})
-    mockSaveJsonSafe.mockResolvedValue(undefined)
+    // DEFAULT: the settings write finds nothing to change. The stale-cleanup retry is now gated on
+    // `updateJson`'s OWN `changed` verdict rather than on a flag the route computed from a separate
+    // read, so this is the knob that decides whether the repair path runs — tests that need the
+    // retry override it to `changed: true` explicitly, which makes the dependency visible instead of
+    // hiding it inside a fixture's `enabledPlugins` shape.
+    mockUpdateJson.mockResolvedValue({ changed: false, backupPath: null, attempts: 1, auditOk: true })
   })
 
   // ── The three handlers with NO recovery path ────────────────────────────────
@@ -137,9 +152,9 @@ describe('marketplaces route — the verdict answer splits by handler', () => {
   describe('install — a mismatch is routed into the EXISTING stale-cleanup retry, not answered 409', () => {
     it('RETRIES after cleanup, and a retry that verifies is a SUCCESS with staleCleanup', async () => {
       // THE LOAD-BEARING ASSERTION. A 409 here would report a fault the route knows how to fix, and
-      // the repair would never run. `mockLoadJsonSafe` returns a dangling entry so `cleaned` is true
-      // and the retry is reached at all.
-      mockLoadJsonSafe.mockResolvedValue({ enabledPlugins: { [KEY]: true } })
+      // the repair would never run. `changed: true` is what makes the cleanup count as having done
+      // something, so the retry is reached at all.
+      mockUpdateJson.mockResolvedValue({ changed: true, backupPath: null, attempts: 1, auditOk: true })
       mockChangePlugin
         .mockResolvedValueOnce(ok('mismatch')) // first attempt: ran, did not land
         .mockResolvedValueOnce(ok('ok'))       // retry after cleanup: landed
@@ -150,14 +165,14 @@ describe('marketplaces route — the verdict answer splits by handler', () => {
       expect(await res.json()).toMatchObject({ success: true, action: 'install', staleCleanup: true })
       // The repair actually ran: a second ChangePlugin call, and the dangling entry was written back.
       expect(mockChangePlugin.mock.calls.length).toBeGreaterThanOrEqual(2)
-      expect(mockSaveJsonSafe).toHaveBeenCalled()
+      expect(mockUpdateJson).toHaveBeenCalled()
     })
 
     it('409 only when the RETRY also mismatches — the repair ran and the state still disagrees', async () => {
       // A different answer from the first mismatch, and it must not be a 500 with an invented cause:
       // on a mismatch `r2.ok` is true, so `r2.lastError` is undefined and the 500 branch would read
       // "Install failed after stale cleanup: unknown".
-      mockLoadJsonSafe.mockResolvedValue({ enabledPlugins: { [KEY]: true } })
+      mockUpdateJson.mockResolvedValue({ changed: true, backupPath: null, attempts: 1, auditOk: true })
       mockChangePlugin.mockResolvedValue(ok('mismatch'))
 
       const res = await post({ action: 'install', pluginKey: KEY, pluginName: PLUGIN, marketplaceName: MKT })
@@ -175,7 +190,7 @@ describe('marketplaces route — the verdict answer splits by handler', () => {
       expect(await res.json()).toMatchObject({ success: true, action: 'install' })
       // The decisive half: no repair was attempted at all.
       expect(mockChangePlugin).toHaveBeenCalledTimes(1)
-      expect(mockSaveJsonSafe).not.toHaveBeenCalled()
+      expect(mockUpdateJson).not.toHaveBeenCalled()
     })
 
     it('POSITIVE CONTROL — a clean `ok` returns immediately, with no cleanup and no retry', async () => {
@@ -183,7 +198,7 @@ describe('marketplaces route — the verdict answer splits by handler', () => {
       const res = await post({ action: 'install', pluginKey: KEY, pluginName: PLUGIN, marketplaceName: MKT })
       expect(res.status).toBe(200)
       expect(mockChangePlugin).toHaveBeenCalledTimes(1)
-      expect(mockSaveJsonSafe).not.toHaveBeenCalled()
+      expect(mockUpdateJson).not.toHaveBeenCalled()
     })
   })
 })

@@ -5,6 +5,8 @@ column: todo
 created: 2026-08-01T12:12:38+0200
 updated: 2026-08-01T12:12:38+0200
 current-owner: ai-maestro-dev
+assignee: ai-maestro-dev
+created-by: ai-maestro-dev
 task-type: bugfix
 project-id: ai-maestro
 min-approval-requirement: none

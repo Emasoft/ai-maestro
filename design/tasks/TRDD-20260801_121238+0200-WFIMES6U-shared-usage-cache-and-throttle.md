@@ -3,7 +3,7 @@ trdd-id: WFIMES6U
 title: One shared usage cache — throttle the /usage endpoint and stop reading a 429 as exhaustion
 column: todo
 created: 2026-08-01T12:12:38+0200
-updated: 2026-08-01T12:12:38+0200
+updated: 2026-08-01T12:31:05+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 created-by: ai-maestro-dev
@@ -83,6 +83,49 @@ And for "matching the data history across tools", **freshness is the wrong lever
 tools disagree when they each fetch at different instants. Sharing ONE cache entry with an
 explicit `fetched_at` makes every tool report the *same* number for the *same* instant, which is
 what consistency actually requires. Polling faster would make them disagree *more*, not less.
+
+## A THIRD caller exists, and it is empirical proof the split works (measured 2026-08-01)
+
+The USER's statusline (`~/.claude/statusline.py`, wired in `~/.claude/settings.json`) hits the
+same endpoint and the same bucket, with its own PRIVATE cache — neither it nor the rotator knows
+the other exists. This is exactly the fragmentation the USER's "shared cache for all tools"
+directive is about.
+
+| | statusline | rotator (today) |
+|---|---|---|
+| invoked | every **3 s** (`refreshInterval: 3`) | every 60 s |
+| endpoint fetch | at most every **300 s** (`statusline.py:262`) | EVERY tick, uncached |
+| calls/hour | ≤ 12 | up to 420 |
+| User-Agent | `claude-code/<ver>` ✓ | `claude-code/<ver>` ✓ |
+| cache | `/tmp/claude/statusline-usage-cache.json` (0600) | none |
+| 429 / backoff / lock | **none** (`grep -cE "flock\|Retry-After\|429\|backoff\|cooldown"` → 0) | debounce on live only |
+
+**It settles the interval question empirically: a 3 s DISPLAY on a 300 s FETCH is survivable in
+practice** — this statusline has run that way for a long time without lockout. So the answer to
+"can we have 5 s" is: yes for the display, no for the fetch, and the split is already proven on
+this machine. It also puts the safe TTL floor at 300 s rather than 600 s; 600 s stays the target
+because the rotator multiplies by N accounts where the statusline is a single caller.
+
+Three defects found in it (REPORT ONLY — it is the USER's own file, outside any git repo, and
+must not be edited without their say-so):
+
+1. **The cache is 12 h stale against a 300 s threshold** and no error log exists, so
+   `get_oauth_token()` is returning empty and **no HTTP request is being made at all**. It reads
+   the keychain (`security find-generic-password -s 'Claude Code-credentials' -w`), which prompts
+   or fails when the calling binary is not ACL'd for the item — and it runs under the
+   llm-externalizer venv python, not Claude Code.
+2. **It renders stale numbers as live.** The `_stale_expired` sentinel only trips past 24 h, so
+   anything between 5 min and 24 h displays with no indicator. Right now it shows
+   `five_hour = 53%` for a window that **rolled 12 h ago** — fiction, not staleness. This is the
+   `^report-staleness-honestly` hazard, live.
+3. **A latent 3-second retry storm.** A failed fetch never touches the cache file's mtime, so the
+   next invocation 3 s later sees age > TTL and refetches. With zero backoff, the first real 429
+   becomes a 3 s knock loop — the behaviour that RE-ARMS the lockout. Dormant today only because
+   the no-token early return precedes any HTTP call.
+
+Defect 3, plus the rotator's 420 calls/hour, plus the "429 ⇒ maxed" misread, is the complete
+deadlock mechanism — spread across two tools that cannot see each other. **The shared cache must
+therefore be readable by the statusline too**, or we will have three private caches instead of two.
 
 ## Root cause
 

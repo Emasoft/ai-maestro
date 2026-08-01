@@ -877,7 +877,15 @@ async function dispatchUserPluginAction(
   marketplaceName: string,
   pluginKey: string,
   action: 'enable' | 'disable' | 'install' | 'uninstall' | 'update',
-): Promise<{ ok: boolean; pluginKey: string; lastError?: string }> {
+): Promise<{ ok: boolean; pluginKey: string; lastError?: string; verified?: 'ok' | 'mismatch' | 'unknown' }> {
+  // `verified` is G11's read-back verdict (TRDD-RO90UCKQ). It was DISCARDED here, so no handler
+  // below could act on it however it wanted to.
+  //
+  // A `mismatch` here does NOT mean "this key shape did not take, try the next" — the loop advances
+  // ONLY on `success === false` (below), and a verdict rides on `success: true`, so a mismatch
+  // returns at the first candidate and the next is never reached. A wrong key shape either fails
+  // (the loop advances) or lands via write-back and reads back as `ok`. So the verdict here carries
+  // the same meaning as everywhere else: the operation ran and the change did not land.
   const cliMkt = await resolveCliMarketplaceName(marketplaceName)
   const candidateMarkets = [...new Set([cliMkt, marketplaceName])]
   const auth = buildSystemAuthContext(`marketplaces-api-${action}`)
@@ -886,7 +894,7 @@ async function dispatchUserPluginAction(
     const r = await ChangePlugin(null, {
       name: pluginName, marketplace: mkt, action, scope: 'user',
     }, auth)
-    if (r.success) return { ok: true, pluginKey: `${pluginName}@${mkt}` }
+    if (r.success) return { ok: true, pluginKey: `${pluginName}@${mkt}`, verified: r.verified }
     lastErr = r.error || 'unknown'
     console.error(`[marketplaces] ${action} attempt failed for ${pluginName}@${mkt}:`, r.error)
   }
@@ -897,11 +905,26 @@ async function dispatchUserPluginAction(
       const r = await ChangePlugin(null, {
         name: parts[0], marketplace: parts[1], action, scope: 'user',
       }, auth)
-      if (r.success) return { ok: true, pluginKey }
+      if (r.success) return { ok: true, pluginKey, verified: r.verified }
       lastErr = r.error || lastErr
     }
   }
   return { ok: false, pluginKey, lastError: lastErr }
+}
+
+/** The verdict answer for a handler with NO recovery path: say the change did not land.
+ *
+ *  `=== 'mismatch'` and never `!== 'ok'`, so the idempotent no-op path (which returns before G11 and
+ *  leaves the field unset) can never read as a violation; `'unknown'` (the settings file exists and
+ *  does not parse) deliberately does not gate — an invariant may act on a positive VIOLATION and
+ *  never on an UNKNOWN (TRDD-K71FV649). Callers put this AFTER their `!r.ok` branch: reversed, a
+ *  genuine failure would report as "did not take effect" instead of its real cause.
+ */
+function mismatchResponse(r: { pluginKey: string; verified?: string }, action: string) {
+  return NextResponse.json(
+    { error: `The change did not take effect — ${r.pluginKey} is not in the expected state after ${action}.` },
+    { status: 409 },
+  )
 }
 
 async function handleEnable(pluginName: string, marketplaceName: string, pluginKey: string) {
@@ -909,6 +932,7 @@ async function handleEnable(pluginName: string, marketplaceName: string, pluginK
   if (!r.ok) {
     return NextResponse.json({ error: `Enable failed: ${r.lastError || 'plugin not found with any key format'}` }, { status: 500 })
   }
+  if (r.verified === 'mismatch') return mismatchResponse(r, 'enable')
   return NextResponse.json({ success: true, action: 'enable', pluginKey: r.pluginKey })
 }
 
@@ -918,6 +942,7 @@ async function handleDisable(pluginName: string, marketplaceName: string, plugin
   if (!r.ok) {
     return NextResponse.json({ error: `Disable failed: ${r.lastError || 'plugin not found with any key format'}` }, { status: 500 })
   }
+  if (r.verified === 'mismatch') return mismatchResponse(r, 'disable')
   return NextResponse.json({ success: true, action: 'disable', pluginKey: r.pluginKey })
 }
 
@@ -927,6 +952,7 @@ async function handleUpdate(pluginName: string, marketplaceName: string, pluginK
   if (!r.ok) {
     return NextResponse.json({ error: `Update failed: ${r.lastError || 'unknown'}` }, { status: 500 })
   }
+  if (r.verified === 'mismatch') return mismatchResponse(r, 'update')
   return NextResponse.json({ success: true, action: 'update', pluginKey: r.pluginKey })
 }
 
@@ -945,11 +971,20 @@ async function handleUpdate(pluginName: string, marketplaceName: string, pluginK
 async function handleInstall(pluginName: string, marketplaceName: string, pluginKey: string) {
   const cliMkt = await resolveCliMarketplaceName(marketplaceName)
   const r = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'install')
-  if (r.ok) {
+  if (r.ok && r.verified !== 'mismatch') {
     return NextResponse.json({ success: true, action: 'install', pluginKey: r.pluginKey })
   }
 
-  // ChangePlugin failed. Distinguish remote (network/404) vs local stale state.
+  // A MISMATCH FALLS THROUGH TO THE STALE-STATE RECOVERY BELOW rather than returning 409, and this
+  // handler is the reason TRDD-G2K02VDY exists separately from RO90UCKQ (TRDD-RO90UCKQ wired the
+  // other three routes to 409). The verdict means the settings file read CLEANLY and the plugin is
+  // not in the expected state afterwards — which is exactly the dangling-`enabledPlugins`-entry
+  // symptom the cleanup+retry below was written to repair. Answering 409 would report a fault this
+  // route already knows how to FIX, and the repair would never run.
+  //
+  // `'unknown'` (the file exists and does not parse) is NOT routed here: the cleanup DELETES entries
+  // and re-installs, and deciding to do that from a file we could not read is acting on an UNKNOWN
+  // rather than a violation (TRDD-K71FV649). It returns success above, as before.
   const errStr = r.lastError || ''
   const isRemoteError = errStr.includes('not found in marketplace') ||
     errStr.includes('404') ||
@@ -986,11 +1021,21 @@ async function handleInstall(pluginName: string, marketplaceName: string, plugin
     await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
     // Retry through ChangePlugin AIO after cleanup
     const r2 = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'install')
-    if (r2.ok) {
+    if (r2.ok && r2.verified !== 'mismatch') {
       return NextResponse.json({ success: true, action: 'install', pluginKey: r2.pluginKey, staleCleanup: true })
     }
+    // The RETRY can mismatch too, and that is a different answer from the first one: the repair ran
+    // and the state STILL disagrees, so there is nothing further this route knows how to try. Say so
+    // as a 409 rather than reporting an empty `lastError` (on a mismatch `r2.ok` is true, so
+    // `r2.lastError` is undefined and the 500 below would read "Install failed after stale cleanup:
+    // unknown" — an error string invented to fill a slot).
+    if (r2.verified === 'mismatch') return mismatchResponse(r2, 'install (after stale cleanup)')
     return NextResponse.json({ error: `Install failed after stale cleanup: ${String(r2.lastError || 'unknown').substring(0, 500)}`, errorType: 'local' }, { status: 500 })
   }
+  // Nothing was stale, so the cleanup could not run. For a mismatch that means the repair had no
+  // handle on the problem — again a 409, not a 500 whose message would be `Install failed: ` with
+  // an empty cause.
+  if (r.verified === 'mismatch') return mismatchResponse(r, 'install')
   return NextResponse.json({ error: `Install failed: ${errStr.substring(0, 500)}`, errorType: 'unknown' }, { status: 500 })
 }
 

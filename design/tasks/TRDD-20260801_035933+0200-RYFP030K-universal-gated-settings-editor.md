@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T03:59:33+0200
-updated: 2026-08-01T04:48:36+0200
+updated: 2026-08-01T05:00:49+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,12 +21,12 @@ npt: []
 eht: []
 blocked-by: []
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/105]
-implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a, 420cac1e, 4d94097c, f1680b41, 1ed50bc2]
+implementation-commits: [4fc3f93e, 34008c2e, 56331de3, f27b772a, 420cac1e, 4d94097c, f1680b41, 1ed50bc2, f2be0ebb, ec38b089]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
 
-### Where it stands — 2026-08-01T04:48
+### Where it stands — 2026-08-01T05:00
 
 **The GATE EXISTS, IS TESTED, AND EVERY PREVIOUSLY-UNLOCKED WRITER NOW GOES THROUGH IT.** What
 remains is the 21 sites that were ALREADY locked, plus the transports.
@@ -39,12 +39,29 @@ remains is the 21 sites that were ALREADY locked, plus the transports.
 | **the THIRD lock found and removed** (claude-adapter, 2 sites) + 3 tests | **done**, `420cac1e` `4d94097c` |
 | the 4 UNLOCKED writes of the user's own settings.json (role-plugin ×3, plugin-storage ×1) | **done**, `f1680b41` |
 | the marketplaces route's 5 UNLOCKED writes + the test-hygiene tripwire | **done**, `1ed50bc2` |
-| the 21 ALREADY-LOCKED sites in `element-management-service.ts` | **NOT STARTED** ← next |
+| ratchet widened to `settings.local.json`, neuter verified | **done**, `f2be0ebb` |
+| **ChangeClient's 3 RAW `writeFileSync` sites** + `restoreRawSnapshot` | **done**, `ec38b089` |
+| the 21 ALREADY-LOCKED `saveJsonSafe` sites in `element-management-service.ts` | **NOT STARTED** ← next |
 | API route + `aimaestro-settings.sh` (node entrypoint) | **NOT STARTED** |
-| ratchet widened to `settings.local.json` | **NOT STARTED** |
 | adopted/declined set reported on issue #105 | **NOT STARTED** |
 
-**11 of 32 call sites migrated, and they were the RIGHT 11** — measured, not chosen by convenience.
+### `lib/json-io.ts` IS NOW THE ONLY PERMITTED WRITER OF `settings.local.json`
+
+That is the mandate, met for that file. The widened ratchet enforces it with an allowlist of exactly
+one entry, and the debt line it carried for twenty minutes is PAID — not dropped: all three
+ChangeClient writes moved INTO json-io, which is also in `KNOWN_INDIRECT_WRITERS`.
+
+**One of those three was a LIVE instance of the original destroy-the-config bug** — G08's write-back
+fallback did `try { JSON.parse(readFileSync(…)) } catch { /* keep empty */ }` and then REPLACED the
+file, i.e. a corrupt file became `{}` and every key it held was destroyed. The 2026-07-07 shape,
+still in the tree. `updateJson` refuses an unparseable target, so it now warns and leaves the file.
+
+`restoreRawSnapshot` is the THIRD kind of write this codebase needs, alongside `updateJson` (locked
+RMW) and `saveJsonSafe` (guarded whole-object write): a compensation replays bytes captured BEFORE
+the forward path ran, so it must NOT parse and must NOT get a staleness baseline — but it must be
+atomic and locked, which the bare `writeFileSync` it replaces was not.
+
+**11 of 32 `saveJsonSafe` sites migrated + all 3 raw `writeFileSync` sites, and they were the RIGHT ones** — measured, not chosen by convenience.
 Every one of them wrote with NO cross-process lock; the 21 that remain are already inside
 `withSettingsLock`, which now delegates to the same lockdir `updateJson` takes. So the lost-update
 surface is closed; migrating the rest buys them fsync, a kept backup, and the staleness gate.
@@ -229,9 +246,11 @@ primitive. The deadlock risk is real and is why its test comes first.
       migrated import site, not only here.
 - [x] audit is detect-and-log; auto-rollback explicitly NOT implemented, with the reason recorded
 - [ ] API route + `aimaestro-settings.sh` (node entrypoint, not HTTP — installer runs server-down)
-- [ ] governance ratchet forbids any other writer of `settings*.json` incl. `settings.local.json`
-      — the `settings.json` half exists (`tests/governance/user-settings-has-two-writers.test.ts`);
-      widening it to `settings.local.json` is what remains
+- [x] governance ratchet forbids any other writer of `settings*.json` incl. `settings.local.json`
+      — both halves land in `tests/governance/user-settings-has-two-writers.test.ts`; the
+      `settings.local.json` allowlist is now exactly ONE entry, `lib/json-io.ts`. Neuter verified:
+      removing the allowlist entry reds "no NEW file writes an agent settings.local.json directly"
+      and names the offending file.
 - [x] the ceiling is documented as the honest one, never "100%" — in `lib/json-io.ts`'s gate header.
       Re-state it verbatim in the API description when that lands; the box is not closed for the
       transport layer, only for the core

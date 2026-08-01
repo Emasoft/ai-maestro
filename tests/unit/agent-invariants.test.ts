@@ -236,6 +236,56 @@ describe('the single invariants watchdog', () => {
     expect(startAgentInvariantsWatchdog(() => [], 0)).toBe(false)
   })
 
+  it('never runs two sweeps at once — a tick arriving mid-sweep is SKIPPED', async () => {
+    // TRDD-L541EREU. A bare setInterval joins a still-running sweep with the next
+    // tick, and two concurrent sweeps break this loop in two ways:
+    //
+    //   1. THE REPAIR OPENS THE TAMPER WINDOW IT EXISTS TO CLOSE. `writeProtected`
+    //      must `chmod 0o644` to overwrite its own 0444 protection, and `writeFile`
+    //      is not atomic — so a concurrent sweep reads a PARTIALLY-written rule,
+    //      concludes "bytes differ", and chmods it writable. That is the
+    //      `expected 420 to be 292` (0o644 vs 0o444) this file used to fail with
+    //      under full-suite load while passing in isolation — the signature of a
+    //      concurrency defect, not of a slow machine.
+    //   2. `stop()` LIES: the `.finally` nulls a SHARED variable, so sweep A
+    //      finishing cleared sweep B's handle and stop() returned while B was still
+    //      writing (the very bug TRDD-F4UUM8RZ fixed, surviving in the overlap case).
+    //
+    // ⚠ WHAT THIS COUNTS AND WHY. `listAgents` is called exactly once per sweep, at
+    // the top of the per-agent loop, so it IS the sweep-start counter. Without the
+    // guard, starts scale with elapsed/interval (hundreds here); with it, starts are
+    // bounded by sweeps COMPLETED, and a 40-workdir sweep is far longer than 1ms.
+    // A test asserting only "the rules got seeded" would pass either way.
+    const FLEET = 40
+    const root = mkdtempSync(join(tmpdir(), 'invariants-reentrancy-'))
+    const dirs = Array.from({ length: FLEET }, (_, i) => {
+      const d = join(root, `a${i}`)
+      mkdirSync(d, { recursive: true })
+      return d
+    })
+
+    let starts = 0
+    const fleet = () => {
+      starts++
+      return dirs.map((d, i) => ({ agentId: `a${i}`, agentName: `a${i}`, workdir: d, clientType: 'claude' as const }))
+    }
+
+    try {
+      expect(startAgentInvariantsWatchdog(fleet, 1)).toBe(true)
+      await new Promise(r => setTimeout(r, 300))
+      await stopAgentInvariantsWatchdog()
+
+      // NON-VACUITY: "few starts" is equally satisfied by a watchdog that never ran.
+      expect(starts, 'the watchdog never swept, so the bound below proves nothing').toBeGreaterThan(0)
+      // 300ms at a 1ms interval is ~300 ticks. Anything near that means ticks were
+      // joining sweeps already in flight; the guard caps starts at sweeps completed.
+      expect(starts, 'ticks joined an in-flight sweep — the re-entrancy guard is gone').toBeLessThan(50)
+    } finally {
+      await stopAgentInvariantsWatchdog()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('stop() resolves only once the in-flight sweep has finished writing — "stopped" must mean the work stopped, not just the timer', async () => {
     // The bug this pins (TRDD-F4UUM8RZ): the sweep was fire-and-forget, so stop()
     // cleared the interval and returned WHILE a sweep was still re-creating files.

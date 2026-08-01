@@ -326,6 +326,26 @@ export function startAgentInvariantsWatchdog(
   stopping = false
 
   watchdogTimer = setInterval(() => {
+    // ── ONE SWEEP AT A TIME (TRDD-L541EREU) ──
+    //
+    // A sweep that outlives its interval used to be joined by the next tick, and two
+    // concurrent sweeps break this loop in two ways:
+    //
+    //   1. THE REPAIR OPENS THE TAMPER WINDOW IT EXISTS TO CLOSE. `ensureAgentRules`
+    //      overwrites a rule whose bytes differ, and `writeProtected` must first
+    //      `chmod 0o644` to defeat its own 0444 protection. `writeFile` is not atomic,
+    //      so a concurrent sweep reads a PARTIALLY-written rule, concludes "bytes
+    //      differ", and chmods it writable — a DEP rule is transiently writable
+    //      *because* the watchdog is repairing it. Caught as `expected 420 to be 292`
+    //      (0o644 vs 0o444) in agent-invariants.test.ts under full-suite load.
+    //   2. `stop()` LIES. The `.finally` below nulls a SHARED variable, so sweep A
+    //      finishing cleared sweep B's handle and `stop()` returned while B was still
+    //      writing — exactly the bug TRDD-F4UUM8RZ fixed, surviving in the overlap case.
+    //
+    // Skipping is correct, not lossy: the sweep is idempotent enforcement, so a tick
+    // that finds one already running has nothing of its own to add.
+    if (inFlightSweep !== null) return
+
     // Hold the sweep so stopAgentInvariantsWatchdog() can AWAIT it. Without this
     // the sweep is fire-and-forget and `stop()` stops only the SCHEDULE: an
     // in-flight sweep keeps running, and it is a WRITER (it re-creates .claude/,
@@ -333,7 +353,7 @@ export function startAgentInvariantsWatchdog(
     // caller that stops the watchdog and then removes a workdir would therefore
     // race a process that puts files back — the re-appearing-workdir class of bug
     // (TRDD-KERM18NX). TRDD-F4UUM8RZ.
-    inFlightSweep = (async () => {
+    const sweep = (async () => {
       // Fleet-level check, ONCE per sweep, BEFORE the per-agent loop — never
       // per-agent. The keychain-blindness this detects is a property of the
       // tmux SERVER every pane is forked from, not of any one agent's workdir,
@@ -363,7 +383,11 @@ export function startAgentInvariantsWatchdog(
         console.warn('[InvariantsWatchdog] sweep failed:', err instanceof Error ? err.message : err)
       }
     })()
-    void inFlightSweep.finally(() => { inFlightSweep = null })
+    inFlightSweep = sweep
+    // Cleared only by the sweep that SET it. With the guard above there is never a
+    // second sweep to clobber it, and the identity check costs one comparison to make
+    // that true independently of the guard staying correct.
+    void sweep.finally(() => { if (inFlightSweep === sweep) inFlightSweep = null })
   }, intervalMs)
 
   watchdogTimer.unref?.()

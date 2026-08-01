@@ -324,7 +324,12 @@ export interface RolePlugin {
 // `writeFile` — non-atomic, so a crash mid-write left a torn `~/.claude/settings.json` (this module
 // writes the user's global config twice). That is how the corrupt file the shared guard refuses got
 // created; the two halves composed into a loop, one producing the damage the other completed.
-import { loadJsonSafe, saveJsonSafe } from '@/lib/json-io'
+// `saveJsonSafe` is deliberately NOT imported (TRDD-RYFP030K): every settings write in this module
+// is a read-modify-write, and all three now go through `updateJson`, which holds the shared lock
+// across the read AND the write. `saveJsonSafe` is retained in json-io for R51 COMPENSATIONS only —
+// an undo writes a snapshot taken before the forward path ran and must NOT get a staleness
+// baseline, because the file legitimately changed in between.
+import { loadJsonSafe, updateJson } from '@/lib/json-io'
 
 // ── TOML parsing ───────────────────────────────────────────
 
@@ -683,26 +688,23 @@ export async function ensureMarketplace(): Promise<void> {
  * versions). Hand-patching settings.json is the safer recovery here.
  */
 async function registerMarketplaceGlobally(): Promise<void> {
-  const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
-  const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-
-  // The canonical entry with the correct absolute path
-  const canonicalEntry = {
-    source: {
-      source: 'directory',
-      path: ROLE_PLUGINS_DIR,
-    },
-  }
-
-  // Always ensure the canonical entry has the correct absolute path
-  // (fixes corrupted or stale paths from earlier versions)
-  const existing = ekm[LOCAL_MARKETPLACE_NAME] as Record<string, Record<string, string>> | undefined
-  const existingPath = existing?.source?.path
-  if (existingPath === ROLE_PLUGINS_DIR) return
-
-  ekm[LOCAL_MARKETPLACE_NAME] = canonicalEntry
-  settings.extraKnownMarketplaces = ekm
-  await saveJsonSafe(USER_GLOBAL_SETTINGS, settings)
+  // ONE locked read-modify-write (TRDD-RYFP030K). This writes the human user's own
+  // ~/.claude/settings.json, and it used to be a bare load → mutate → save with no lock at all: two
+  // of these, or one of these against element-management-service, could interleave and lose an
+  // update. `updateJson` runs the mutator inside the shared lockdir and re-checks the bytes before
+  // committing.
+  //
+  // The "skip if already canonical" early return is GONE, and deliberately: `updateJson` compares
+  // the serialized result against the bytes it read and reports `changed: false` without writing or
+  // taking a backup, so the optimisation is now structural rather than hand-maintained — and unlike
+  // the hand-written version it cannot drift out of agreement with what is actually on disk.
+  await updateJson(USER_GLOBAL_SETTINGS, s => {
+    const ekm = (s.extraKnownMarketplaces || {}) as Record<string, unknown>
+    // Always assert the correct absolute path — this repairs a stale or corrupted entry left by an
+    // older release, which is the whole reason this helper exists.
+    ekm[LOCAL_MARKETPLACE_NAME] = { source: { source: 'directory', path: ROLE_PLUGINS_DIR } }
+    s.extraKnownMarketplaces = ekm
+  }, { createIfMissing: true })
 }
 
 export async function updateMarketplaceManifest(
@@ -1070,18 +1072,16 @@ async function migrateDefaultPluginSettings(): Promise<void> {
 
   // Step 1b: Remove deprecated local marketplace names from global settings
   try {
-    const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
-    const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
     const deprecatedNames = ['ai-maestro-local-agents-marketplace', 'ai-maestro-local-marketplace', 'role-plugins']
-    let cleaned = false
-    for (const name of deprecatedNames) {
-      if (ekm[name]) { delete ekm[name]; cleaned = true }
-    }
-    if (cleaned) {
-      settings.extraKnownMarketplaces = ekm
-      await saveJsonSafe(USER_GLOBAL_SETTINGS, settings)
-      console.log('[role-plugins] Cleaned deprecated marketplace names from global settings')
-    }
+    // `changed` comes from the gate rather than a hand-kept flag: it is true only if the serialized
+    // result actually differed from the bytes on disk, so the log line cannot claim a cleanup that
+    // did not happen (the old `cleaned` flag was set by the delete, before anything was written).
+    const { changed } = await updateJson(USER_GLOBAL_SETTINGS, s => {
+      const ekm = (s.extraKnownMarketplaces || {}) as Record<string, unknown>
+      for (const name of deprecatedNames) delete ekm[name]
+      s.extraKnownMarketplaces = ekm
+    }, { createIfMissing: true })
+    if (changed) console.log('[role-plugins] Cleaned deprecated marketplace names from global settings')
   } catch { /* ignore */ }
 
   // Step 2: Migrate agent settings from old local marketplace key to GitHub marketplace key
@@ -1095,42 +1095,42 @@ async function migrateDefaultPluginSettings(): Promise<void> {
       if (!existsSync(settingsPath)) continue
 
       try {
-        const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
-        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-        let changed = false
+        // The whole key migration runs INSIDE the lock now, so a concurrent enable/disable on this
+        // agent (via claudeAdapter or element-management-service — both take the same lockdir) can
+        // no longer land between the read and the write and be silently rewritten away.
+        const { changed } = await updateJson(settingsPath, s => {
+          const ep = (s.enabledPlugins || {}) as Record<string, boolean>
 
-        for (const pluginName of DEFAULT_ROLE_PLUGIN_NAMES) {
-          // Migrate from local marketplace key → GitHub marketplace key
-          const oldLocalKey = `${pluginName}@${LOCAL_MARKETPLACE_NAME}`
-          const newKey = `${pluginName}@${GITHUB_MARKETPLACE_NAME}`
-          if (ep[oldLocalKey] !== undefined && ep[newKey] === undefined) {
-            ep[newKey] = ep[oldLocalKey]
-            delete ep[oldLocalKey]
-            changed = true
-          }
-          // Also migrate from old deprecated names (ai-maestro-local-agents-marketplace, etc.)
-          const legacyKeys = [
-            `${pluginName}@ai-maestro-local-agents-marketplace`,
-            `${pluginName}@ai-maestro-local-marketplace`,
-            `${pluginName}@role-plugins`,
-          ]
-          for (const legacyKey of legacyKeys) {
-            if (ep[legacyKey] !== undefined && ep[newKey] === undefined) {
-              ep[newKey] = ep[legacyKey]
-              delete ep[legacyKey]
-              changed = true
-            } else if (ep[legacyKey] !== undefined) {
-              delete ep[legacyKey]  // Duplicate — just remove
-              changed = true
+          for (const pluginName of DEFAULT_ROLE_PLUGIN_NAMES) {
+            // Migrate from local marketplace key → GitHub marketplace key
+            const oldLocalKey = `${pluginName}@${LOCAL_MARKETPLACE_NAME}`
+            const newKey = `${pluginName}@${GITHUB_MARKETPLACE_NAME}`
+            if (ep[oldLocalKey] !== undefined && ep[newKey] === undefined) {
+              ep[newKey] = ep[oldLocalKey]
+              delete ep[oldLocalKey]
+            }
+            // Also migrate from old deprecated names (ai-maestro-local-agents-marketplace, etc.)
+            const legacyKeys = [
+              `${pluginName}@ai-maestro-local-agents-marketplace`,
+              `${pluginName}@ai-maestro-local-marketplace`,
+              `${pluginName}@role-plugins`,
+            ]
+            for (const legacyKey of legacyKeys) {
+              if (ep[legacyKey] !== undefined && ep[newKey] === undefined) {
+                ep[newKey] = ep[legacyKey]
+                delete ep[legacyKey]
+              } else if (ep[legacyKey] !== undefined) {
+                delete ep[legacyKey]  // Duplicate — just remove
+              }
             }
           }
-        }
 
-        if (changed) {
-          settings.enabledPlugins = ep
-          await saveJsonSafe(settingsPath, settings)
-          console.log(`[role-plugins] Migrated settings for agent: ${entry}`)
-        }
+          s.enabledPlugins = ep
+        })
+        // `changed` is the gate's own verdict (did the bytes differ?), not the hand-kept flag it
+        // replaces. The old flag was set the moment a key was touched, so a migration that produced
+        // an identical object still logged "Migrated settings for agent".
+        if (changed) console.log(`[role-plugins] Migrated settings for agent: ${entry}`)
       } catch { /* skip individual agent errors */ }
     }
   } catch { /* skip if agents dir can't be read */ }

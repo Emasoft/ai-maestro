@@ -100,11 +100,17 @@ describe('the boundary itself', () => {
     //
     // USER, 2026-07-17 (TRDD-QZL828OD D2): "it is a narrow exception, but it is important.
     // ai-maestro cannot function without those settings." Asserted POSITIVELY, by key.
+    //
+    // The VERB moved from `saveJsonSafe` to `updateJson` on 2026-08-01 (TRDD-RYFP030K) — the
+    // carve-out is the same one, now performed as a single locked read-modify-write. The `mkdir`
+    // entry is gone with the explicit `mkdir` call: `updateJson`'s lock acquisition creates
+    // `dirname(path)` itself, so that syscall moved into `lib/json-io.ts` on a parameter and is
+    // pinned by the KNOWN_INDIRECT_WRITERS test below instead. Updating this list is exactly the
+    // deliberate act it is meant to force — the guard fired, which is what it is for.
     const keys = ALLOWED_OUT_OF_ROOT_WRITES.map((a) => a.key)
     for (const required of [
-      'services/plugin-storage-service.ts :: saveJsonSafe :: USER_GLOBAL_SETTINGS',
-      'services/plugin-storage-service.ts :: mkdir :: USER_GLOBAL_SETTINGS',
-      'services/role-plugin-service.ts :: saveJsonSafe :: USER_GLOBAL_SETTINGS',
+      'services/plugin-storage-service.ts :: updateJson :: USER_GLOBAL_SETTINGS',
+      'services/role-plugin-service.ts :: updateJson :: USER_GLOBAL_SETTINGS',
     ]) {
       expect(keys, `the RATIFIED user-settings carve-out lost its entry: ${required}`).toContain(required)
     }
@@ -135,9 +141,17 @@ describe('the boundary itself', () => {
     // unrecorded. It is legitimate (USER-SCOPED ELEMENT STATE — the janitor owns that dir and
     // custody is split by design), but "legitimate" and "written down" are different properties and
     // only the second one is checkable.
+    //
+    // `lib/json-io.ts` is the THIRD, added 2026-08-01 (TRDD-RYFP030K), and it is the largest blind
+    // spot of the three by a wide margin: it is now the sanctioned writer for EVERY settings
+    // mutation in the codebase, and every path it touches is a parameter, so no marker can ever
+    // match it. Its CALLERS stay individually visible because they name the constant — that split
+    // is what keeps the boundary meaningful. The gate checks who ASKS for an out-of-root write;
+    // this list records where the syscall then happens.
     expect(KNOWN_INDIRECT_WRITERS.map((w) => w.file)).toEqual([
       'lib/claude-settings-enforcer.ts',
       'lib/oauth-rotator/slots.ts',
+      'lib/json-io.ts',
     ])
     for (const w of KNOWN_INDIRECT_WRITERS) {
       expect(w.ratifiedBy).toMatch(/TRDD-[A-Z0-9]{8}/)

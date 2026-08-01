@@ -825,7 +825,10 @@ const USER_GLOBAL_SETTINGS = path.join(homedir(), '.claude', 'settings.json')
 // FROM `lib/json-io.ts` (TRDD-CS25TA6W). The copy that used to live here was the weakest of the
 // four: no `existsSync` (so ENOENT and a parse failure were collapsed by construction) and a DIRECT
 // `writeFile` — non-atomic, on the user's global `~/.claude/settings.json`.
-import { loadJsonSafe, saveJsonSafe } from '@/lib/json-io'
+// `saveJsonSafe` is deliberately NOT imported (TRDD-RYFP030K): the one settings write in this
+// module is a read-modify-write and goes through `updateJson`, which holds the shared lock across
+// both halves. The remaining `loadJsonSafe` calls read a marketplace MANIFEST, not settings.
+import { loadJsonSafe, updateJson } from '@/lib/json-io'
 
 /**
  * Load the current set of plugin entries from a per-client marketplace
@@ -914,16 +917,21 @@ async function ensureCustomClientMarketplace(targetClient: string): Promise<void
   // `plugin marketplace add` yet). This tracks the `source.path` in Claude's
   // user-global settings.json so the marketplace survives CLI restarts.
   if (targetClient === 'claude') {
-    const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
-    const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
+    // ONE locked read-modify-write (TRDD-RYFP030K). This writes the human user's own
+    // ~/.claude/settings.json and was previously an unlocked load → mutate → save, so it could lose
+    // an update against role-plugin-service (which registers a DIFFERENT marketplace into the SAME
+    // `extraKnownMarketplaces` object) or against the marketplaces API route.
+    //
+    // The explicit `mkdir` is gone: `updateJson`'s lock acquisition already does
+    // `mkdir(dirname(path), {recursive:true})`, because it cannot create the lockdir otherwise.
+    // The "skip if already correct" early return is gone too — `updateJson` compares the serialized
+    // result to the bytes it read and reports `changed: false` without writing or backing up.
     const marketplaceName = `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`
-    const existing = ekm[marketplaceName] as Record<string, Record<string, string>> | undefined
-    if (existing?.source?.path === marketplaceDir) return
-
-    ekm[marketplaceName] = { source: { source: 'directory', path: marketplaceDir } }
-    settings.extraKnownMarketplaces = ekm
-    await mkdir(path.dirname(USER_GLOBAL_SETTINGS), { recursive: true })
-    await saveJsonSafe(USER_GLOBAL_SETTINGS, settings)
+    await updateJson(USER_GLOBAL_SETTINGS, s => {
+      const ekm = (s.extraKnownMarketplaces || {}) as Record<string, unknown>
+      ekm[marketplaceName] = { source: { source: 'directory', path: marketplaceDir } }
+      s.extraKnownMarketplaces = ekm
+    }, { createIfMissing: true })
   }
 }
 

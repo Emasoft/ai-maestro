@@ -24,7 +24,14 @@ import { join, relative } from 'path'
 
 /** Verbs that MUTATE the filesystem. Reads are unrestricted and deliberately absent. */
 const WRITE_VERBS = [
-  'writeFile', 'writeFileSync', 'saveJsonSafe', 'appendFile', 'appendFileSync',
+  // `updateJson` was added 2026-08-01 (TRDD-RYFP030K) WITH the migration that introduced it, and
+  // the ordering is the lesson: migrating three call sites from `saveJsonSafe` to `updateJson`
+  // dropped this detector from 3 out-of-root findings to ZERO, and its own non-vacuity check
+  // (`byClass.constant > 0`) is what caught it. The writes had not stopped — the needle had stopped
+  // knowing what a write looks like. A scanner keyed on verb NAMES goes blind the moment a refactor
+  // renames the verb, and a blind scanner reports "clean". Any future write primitive belongs here
+  // in the SAME commit that introduces it.
+  'writeFile', 'writeFileSync', 'saveJsonSafe', 'updateJson', 'appendFile', 'appendFileSync',
   'mkdir', 'mkdirSync', 'rm', 'rmSync', 'rmdir', 'rmdirSync',
   'unlink', 'unlinkSync', 'copyFile', 'copyFileSync', 'rename', 'renameSync',
   'chmod', 'chmodSync', 'symlink', 'symlinkSync',
@@ -104,6 +111,19 @@ export const KNOWN_INDIRECT_WRITERS: { file: string; target: string; ratifiedBy:
     // the failure mode this list exists to prevent: an undetectable write that nobody wrote down
     // reads exactly like a write that does not happen.
     ratifiedBy: 'TRDD-0GCIMQ9F (USER, 2026-07-30) — user-scoped-element state',
+  },
+  {
+    file: 'lib/json-io.ts',
+    target:
+      'ANY path its callers pass, including ~/.claude/settings.json (mkdir of dirname for the lockdir, fsync tmp + atomic rename, timestamped backups + pruning unlink, lockdir rm)',
+    // THE SANCTIONED WRITER, and therefore permanently invisible to a textual scan: every path it
+    // touches is a PARAMETER, so no marker can ever match. It is listed here because "invisible"
+    // and "does not happen" look identical in a green gate, and this module now performs the write
+    // for every settings mutation in the codebase — the single most consequential blind spot the
+    // detector has. Its callers remain individually visible (they name the constant), which is what
+    // keeps the boundary meaningful: the gate checks WHO asks for an out-of-root write, and this
+    // entry records WHERE the syscall then happens.
+    ratifiedBy: 'TRDD-RYFP030K (USER, 2026-08-01) — the unified settings gate',
   },
 ]
 
@@ -247,21 +267,26 @@ export function scanWriteBoundary(repoRoot: string, roots: string[]): WriteBound
  * "no violation"; that is what `KNOWN_INDIRECT_WRITERS` and this note exist to keep honest.
  */
 export const ALLOWED_OUT_OF_ROOT_WRITES: { key: string; ratifiedBy: string; why: string }[] = [
+  // The VERB changed from `saveJsonSafe` to `updateJson` on 2026-08-01 (TRDD-RYFP030K). The
+  // carve-out itself is unchanged and still rests on the same USER ratification — what changed is
+  // that the write is now a single locked read-modify-write instead of an unlocked load/save pair.
   {
-    key: 'services/plugin-storage-service.ts :: saveJsonSafe :: USER_GLOBAL_SETTINGS',
+    key: 'services/plugin-storage-service.ts :: updateJson :: USER_GLOBAL_SETTINGS',
     ratifiedBy: 'TRDD-QZL828OD D2 (USER, 2026-07-17)',
     why: 'USER: "it is a narrow exception, but it is important. ai-maestro cannot function without those settings." Marketplace registration needs extraKnownMarketplaces.',
   },
   {
-    key: 'services/plugin-storage-service.ts :: mkdir :: USER_GLOBAL_SETTINGS',
+    key: 'services/role-plugin-service.ts :: updateJson :: USER_GLOBAL_SETTINGS',
     ratifiedBy: 'TRDD-QZL828OD D2 (USER, 2026-07-17)',
-    why: 'Creates the parent dir of the ratified settings file.',
+    why: 'Same ratified carve-out. Two sites (registerMarketplaceGlobally + the deprecated-name cleanup); the key is per file+verb+marker, so both share this line.',
   },
-  {
-    key: 'services/role-plugin-service.ts :: saveJsonSafe :: USER_GLOBAL_SETTINGS',
-    ratifiedBy: 'TRDD-QZL828OD D2 (USER, 2026-07-17)',
-    why: 'Same ratified carve-out.',
-  },
+  // The `plugin-storage-service.ts :: mkdir :: USER_GLOBAL_SETTINGS` entry is GONE because the
+  // explicit `mkdir` before the write is gone: `updateJson`'s lock acquisition already creates
+  // `dirname(path)` — it must, or it could not create the lockdir. That mkdir now lives in
+  // `lib/json-io.ts` on a PARAMETER, so this textual detector cannot see it. It is listed under
+  // KNOWN_INDIRECT_WRITERS instead, which is the honest place for a write that exists and cannot be
+  // scanned — removing the line without recording where the write went is how a real write becomes
+  // invisible to both lists at once.
   // THE TWO `installed_plugins.json` ENTRIES ARE GONE, and their absence is the deliverable
   // (TRDD-0GCIMQ9F Shape A, executed by TRDD-OWO449MR). They were the only UNRATIFIED lines here —
   // an honest record that ai-maestro was a second writer over a file the `claude plugin` CLI owns.

@@ -55,6 +55,9 @@ open window left; the remaining nine are conformance-only and retrofitting them 
 ## See also
 
 - [[governance-enforcement-ratchet]] — the same ratchet pattern applied to rule enforcement.
+- [[lenient-json-reader-destroys-the-file]] — the stores these pipelines mutate are JSON files, and a
+  reader that cannot tell "absent" from "unreadable" makes both the gate's verification vacuous and
+  its compensation destructive.
 
 
 ^ATOM-2U3W-0C2K [desc:"Where the R51 retrofit stands: ChangeTitle is DONE and no pipeline has an open window left — the remaining nine are conformance-only and retrofitting them buys zero safety", keywords: which_pipeline_still_needs_the_runner is_the_R51_retrofit_finished ChangeTitle_window_closed InstallElement_conformance_only compensation_is_forbidden_here retrofit_buys_zero_safety, ocd: 2026-07-31, lmd: 2026-07-31]

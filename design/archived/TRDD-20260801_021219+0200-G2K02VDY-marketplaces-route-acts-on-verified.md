@@ -1,11 +1,11 @@
 ---
 trdd-id: G2K02VDY
 title: settings/marketplaces acts on the read-back verdict and its wiring splits by handler
-column: dev
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T02:12:19+0200
-updated: 2026-08-01T02:28:27+0200
+updated: 2026-08-01T02:53:38+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,7 +20,7 @@ relevant-rules: [R51]
 npt: []
 eht: [ZT3P02PO]
 blocked-by: []
-implementation-commits: [c8f7cb7d]
+implementation-commits: [c8f7cb7d, d917e6ab, 00a15fa4]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME
@@ -90,11 +90,39 @@ it is this card's debt: **TRDD-ZT3P02PO**. Per the derived-TRDD rule, G2K02VDY c
 - [x] uninstall MEASURED, and explicitly DECLINED: it already sweeps every key-format entry
       unconditionally AFTER the CLI (`:1082`-`:1088`), so a verdict observed before that sweep is
       stale by the time the handler returns — wiring it would gate on a stale reading
-- [ ] tests + neuters recorded by name; tsc 0 lines; suite at or above the day's baseline
-- [ ] EHT TRDD-ZT3P02PO terminal (the completion gate — see above)
+- [x] tests + neuters recorded by name; tsc 0 lines; suite at or above the day's baseline
+- [x] EHT TRDD-ZT3P02PO terminal — `completed`, archived, landed in a7ee3f62 + 74cd76ef
+
+## Outcome
+
+**Test** — `tests/api/marketplaces-route-acts-on-verified.test.ts` (16). Four handlers × {mismatch,
+`unknown` does not gate, a genuine failure keeps its own cause, positive control}.
+
+**Neuter A — the load-bearing one.** Change `if (r.ok && r.verified !== 'mismatch')` to `if (r.ok)`
+so a mismatch never reaches the repair: exactly the two install-RECOVERY tests red
+(`RETRIES after cleanup …` and `409 only when the RETRY also mismatches …`), while both `unknown`
+tests and every positive control stay green — which is what shows they discriminate the RECOVERY
+rather than the 409 shape.
+
+**Neuter B — reddened NOTHING, and that is the finding.** Reversing the mismatch / `!r.ok` branches
+in `handleEnable` left 16/16 green, because `dispatchUserPluginAction` returns
+`{ ok: false, pluginKey, lastError }` on failure and NEVER sets `verified`. `!r.ok` therefore implies
+`verified === undefined`, the check is false on either side, and the ordering hazard
+`mismatchResponse`'s docstring warns about is **unreachable through this route**. No test at this
+altitude can discriminate it (the route calls the dispatcher internally; there is no path to
+`ok: false` with a verdict set), so the three tests were renamed to what they actually pin and the
+false ORDER claim was replaced by the measured explanation (`00a15fa4`). The ordering in the handlers
+STAYS as defence in depth against a future dispatcher that returns a verdict on the failure path;
+what was removed is the claim that a test guards it.
+
+A test named ORDER, passing forever, telling every future reader the precedence is covered when
+reversing it costs nothing, is worse than no test at all.
 
 ## Approval log
 
 - 2026-08-01T02:12:19+0200 — SELF-MANDATE (min-approval-requirement: none). Tier 0: a bugfix inside
   this agent's own assignment scope, split out of TRDD-RO90UCKQ because its answer differs per
   handler. Pre-approved: issuer authority >= required approver.
+- 2026-08-01T02:53:38+0200 — COMPLETED by ai-maestro. 6/6 acceptance boxes; two neuters run (one
+  load-bearing, one that reddened nothing and thereby corrected a false claim in my own test); EHT
+  TRDD-ZT3P02PO terminal; tsc 0 lines. Landed in c8f7cb7d + d917e6ab + 00a15fa4.

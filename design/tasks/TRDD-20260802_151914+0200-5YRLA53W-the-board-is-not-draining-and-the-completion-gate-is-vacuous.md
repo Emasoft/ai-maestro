@@ -1,11 +1,11 @@
 ---
 trdd-id: 5YRLA53W
 title: The board is not draining and the completion gate is vacuous on 71 percent of open cards
-column: dev
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T16:44:56+0200
+updated: 2026-08-02T17:02:58+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -361,6 +361,26 @@ checklist is premature by design (a `planned` card has not been designed yet). E
 a real read to write a truthful checklist; inventing one from the title would be fabrication, which
 is the same damage as a scripted sweep.
 
+## ⏹ HANDOFF 2026-08-02T17:02 — `dev` → `todo`, preempted by a direct USER directive
+
+**Stopping work on this card, and saying so rather than letting it keep claiming `dev`.** The USER
+gave a new directive mid-turn: stop storing in `CLAUDE.md` what belongs in the wikimem, migrate it
+out, and leave only build/install/test/branch/push plus an overview. That is now the priority, so
+this card moves to `todo` — a card in `dev` asserts someone is working it RIGHT NOW, and after this
+edit nobody is.
+
+**Everything is committed; nothing is half-done.** 17 of 19 checklists are written and committed;
+the P7XKV3N9 verification that was in flight was finished (`a4b97003`) rather than abandoned, since
+its live checks were already run and dropping them would have thrown the evidence away.
+
+**What is left is genuinely small and genuinely low-priority:** 2 checklists, [[44RGLOO8]] and
+[[TBGGUA2V]], both already sitting in `human_review` — i.e. both already waiting on the human, so
+neither is blocked by this card's pause.
+
+**Read before resuming:** the METHOD is in the Acceptance box below, and it is the part worth
+keeping — a checklist is TRANSCRIPTION, and every claim is re-verified live rather than copied.
+Nine of the seventeen cards had a claim that did not survive that.
+
 ## Acceptance
 
 - [x] every `dev` card is either genuinely in progress, or re-columned with a recorded reason —
@@ -374,9 +394,9 @@ is the same damage as a scripted sweep.
       so a card cannot be noticed as unblocked. Not closable without a corpus-level answer
 - [x] the completion gate is ENFORCED, not merely written — `TERMINAL-WITHOUT-CHECKLIST` +
       `TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, 15 tests, 6 neuters, 0 findings today
-- [ ] open cards in WORK columns carry a checklist — **12 of 19 done. 7 left: 4 `testing`
-      ([[7U927FCM]] [[BF3JN4TL]] [[CC9PY337]] [[P7XKV3N9]]), 3 `human_review` ([[44RGLOO8]]
-      [[K2WJH7RF]] [[TBGGUA2V]]).** Each needs a real read; inventing a checklist from the title is
+- [ ] open cards in WORK columns carry a checklist — **17 of 19 done. 2 left, both
+      `human_review` and both therefore already waiting on the human: [[44RGLOO8]] and
+      [[TBGGUA2V]].** Each needs a real read; inventing a checklist from the title is
       fabrication, the same damage as a scripted sweep. Every one was transcription, not authorship
       — the cards already stated what they promised.
 
@@ -396,7 +416,17 @@ is the same damage as a scripted sweep.
       - [[7HRDAD0U]] and [[JAU1ES1C]] each had a STATE whose "NEXT" a later block already answered.
       - [[CJWC3JLU]]'s literal criterion (`git log -1` cites the TRDD) was an instantaneous
         observation that becomes a permanently-failing box; transcribed by intent instead.
-      Four of those six are gaps a *count* of checklists would score as done.
+      - [[7U927FCM]] asked for gate-flag tests **by name** and shipped only half; the flag decides
+        APP ENTRY, so wrong in one direction is a MAESTRO locked out of their own host.
+      - [[K2WJH7RF]] Part 3 was DONE and three documents still said it was not — including
+        `CLAUDE.md`, twice, the file loaded into every session.
+      - [[BF3JN4TL]]'s headless verification item had no test *and could not have one* as the suite
+        stands (every headless case 401s before `authorize()` is reached).
+      - [[CC9PY337]]'s fence was made to FIRE rather than assumed, and its 0-IMPACT keychain delta
+        re-measured at 0/0.
+      - [[P7XKV3N9]]'s route was untested while its INGREDIENTS were — and the neuter showed the
+        anti-oracle ORDER was pinned by nothing.
+      Most of those are gaps a *count* of checklists would score as done.
 - [x] the 5 stale external refs the corrected sweep surfaced — all read and recorded IN the cards.
       **Not one was simply "a blocker that cleared"**, and reading each closing COMMENT rather than
       its STATE is what made the difference: `janitor#82` closed while the flap it reports *remains

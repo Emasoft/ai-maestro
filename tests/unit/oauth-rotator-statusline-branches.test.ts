@@ -218,6 +218,18 @@ describe('autoRotate — the statusline disjunct inside the liveStatus===200 ver
     // card's original plan, refuted at the call site) — agree on every fixture where both sources
     // agree. Only a DISAGREEING one separates them: endpoint 99%, statusline 10%.
     //
+    // ⚠ DO NOT DELETE THIS AS REDUNDANT — that it is the SOLE discriminator is MEASURED, not
+    // asserted. Neutering the 200 branch to `near = sl.near` (i.e. implementing the substitution)
+    // reddened ONLY this test and left every other one in the file GREEN, including the
+    // positive-signal test that reads like the obvious guard against it. So the entire difference
+    // between "the statusline may add a reason" and "the statusline replaces the endpoint" — the
+    // distinction the whole card turns on — rests on this one assertion.
+    //
+    // It survives the 2026-08-02 revert with its discriminating power intact: with no disjunct at
+    // all the endpoint's 99% still rotates (this test passes), while the substitution would compute
+    // `near = false` from the statusline's 10% and refuse to rotate a maxed account (this test
+    // reds). It therefore guards the CURRENT design as well as it guarded the reverted one.
+    //
     // The assertion is a PAIR, deliberately. `switched === true` alone is satisfied by a build that
     // never read the statusline at all; the rendered `[statusline 5h=10% 7d=12%]` proves it READ,
     // UNDERSTOOD, and DECLINED to trip — and the absent OVER-THRESHOLD proves the declining was

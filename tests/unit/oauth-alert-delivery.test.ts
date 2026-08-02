@@ -1,9 +1,54 @@
-import { describe, it, expect, vi } from 'vitest'
-import { dueForDelivery, deliveryText, BACKOFF_LADDER_S, type AlertRecord } from '@/lib/oauth-rotator/alert-delivery'
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+import { dueForDelivery, deliveryText, BACKOFF_LADDER_S, deliverAlerts, type AlertRecord } from '@/lib/oauth-rotator/alert-delivery'
 import { runOneSupervisorBeat } from '@/lib/oauth-rotator/server-supervisor'
 
 const rec = (over: Partial<AlertRecord> = {}): AlertRecord =>
   ({ firstSeenAt: 1000, lastDeliveredAt: 1000, message: 'm', seen: 1, ...over })
+
+// ── Isolation for the tests that call the REAL deliverAlerts (file I/O) ────────────────────────
+// CLAUDE_PLUGIN_DATA must CONTAIN the janitor's data dirname or canonicalRotatorRoot() ignores it
+// (the codex-clobber guard). And the temp root must hold a state.json, because rotatorRoot() falls
+// back to the LEGACY ~/.claude/account-rotator when the canonical root has none — which on a real
+// machine is a live directory. Without that file this suite would write to the developer's actual
+// rotator state.
+const JANITOR_DIRNAME = 'ai-maestro-janitor-ai-maestro-plugins'
+const REAL_LOG = path.join(os.homedir(), '.claude', 'plugins', 'data', JANITOR_DIRNAME, 'oauth-rotator', 'rotator.log')
+const realFp = (): string => {
+  try { const s = fs.statSync(REAL_LOG); return `${s.size}:${s.mtimeMs}` } catch { return 'absent' }
+}
+let realBefore = ''
+let tmpRoot = ''
+let savedPluginData: string | undefined
+
+beforeAll(() => { realBefore = realFp() })
+afterAll(() => {
+  // Containment is by construction (env-redirected root); this PROVES it, because "contained" and
+  // "never ran" are indistinguishable in a green suite.
+  expect(realFp(), `the real rotator.log at ${REAL_LOG} CHANGED — a test escaped its temp root`).toBe(realBefore)
+})
+
+function isolateRotatorRoot(): string {
+  savedPluginData = process.env.CLAUDE_PLUGIN_DATA
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-alerts-'))
+  const data = path.join(base, JANITOR_DIRNAME)
+  const root = path.join(data, 'oauth-rotator')
+  fs.mkdirSync(root, { recursive: true })
+  fs.writeFileSync(path.join(root, 'state.json'), '{"slots":{}}')
+  process.env.CLAUDE_PLUGIN_DATA = data
+  return root
+}
+function restoreRotatorRoot(): void {
+  if (savedPluginData === undefined) delete process.env.CLAUDE_PLUGIN_DATA
+  else process.env.CLAUDE_PLUGIN_DATA = savedPluginData
+}
+
+const logLines = (root: string): string[] => {
+  try { return fs.readFileSync(path.join(root, 'rotator.log'), 'utf8').split('\n').filter(Boolean) }
+  catch { return [] }
+}
 
 describe('dueForDelivery — the backoff ladder (TRDD-RFQFCCU4)', () => {
   it('the ONSET always delivers — a never-seen code goes out at once', () => {
@@ -35,6 +80,53 @@ describe('dueForDelivery — the backoff ladder (TRDD-RFQFCCU4)', () => {
     const old = rec({ firstSeenAt: 0, lastDeliveredAt: 100_000 })
     const widest = BACKOFF_LADDER_S[BACKOFF_LADDER_S.length - 1]
     expect(dueForDelivery(old, 100_000 + widest)).toBe(true)
+  })
+})
+
+describe('the shared rotator.log records TRANSITIONS, not the steady state', () => {
+  beforeEach(() => { tmpRoot = isolateRotatorRoot() })
+  afterEach(() => { restoreRotatorRoot() })
+
+  const F = [{ code: 'pinning-env', message: '$ANTHROPIC_API_KEY is set' }]
+
+  it('writes ONSET when an alert first appears', async () => {
+    await deliverAlerts(F, { nowS: () => 1000, log: () => {} })
+    const l = logLines(tmpRoot)
+    expect(l).toHaveLength(1)
+    expect(l[0]).toContain('aim-server/alert: ONSET pinning-env')
+  })
+
+  it('does NOT append again while the SAME alert stays outstanding — the 4506-lines defect', () => {
+    // THE load-bearing assertion. The supervisor beats every 10 min; appending per beat would put
+    // ~144 identical lines a day into a file the janitor trims at 256 KB, so a persistent alert
+    // would EVICT the rotation history this log exists to preserve. The alert is still fully
+    // readable in active-alerts.json — a log records a CHANGE of state, the state file holds the
+    // state.
+    return (async () => {
+      await deliverAlerts(F, { nowS: () => 1000, log: () => {} })
+      await deliverAlerts(F, { nowS: () => 1600, log: () => {} })
+      await deliverAlerts(F, { nowS: () => 2200, log: () => {} })
+      const onsets = logLines(tmpRoot).filter((x) => x.includes('ONSET pinning-env'))
+      expect(onsets).toHaveLength(1)
+    })()
+  })
+
+  it('writes CLEARED when the alert resolves', async () => {
+    await deliverAlerts(F, { nowS: () => 1000, log: () => {} })
+    await deliverAlerts([], { nowS: () => 1600, log: () => {} })
+    const l = logLines(tmpRoot)
+    expect(l.filter((x) => x.includes('ONSET pinning-env'))).toHaveLength(1)
+    expect(l.filter((x) => x.includes('CLEARED pinning-env'))).toHaveLength(1)
+  })
+
+  it('a re-onset after a clear is a NEW transition, not a duplicate suppressed forever', async () => {
+    // Suppression keyed on "have we ever seen this code" would go permanently silent after the
+    // first occurrence — the same class of bug as an alert that never clears, seen from the
+    // other side.
+    await deliverAlerts(F, { nowS: () => 1000, log: () => {} })
+    await deliverAlerts([], { nowS: () => 1600, log: () => {} })
+    await deliverAlerts(F, { nowS: () => 2200, log: () => {} })
+    expect(logLines(tmpRoot).filter((x) => x.includes('ONSET pinning-env'))).toHaveLength(2)
   })
 })
 
@@ -79,16 +171,27 @@ describe('the beat DELIVERS, and delivery can never take the beat down', () => {
     expect(codes).toContain('pinning-env')
   })
 
-  it('NO findings ⇒ NO delivery call — silence must stay silent', () => {
+  it('NO findings ⇒ the all-clear still RECONCILES, but stays silent to the human', () => {
+    // This used to assert `deliver` was NOT called at all, which conflated two different things
+    // that deliverAlerts does: NOTIFYING a human (must stay silent when nothing is wrong) and
+    // RECONCILING active-alerts.json (must still run, or resolved codes are never dropped). With
+    // the call suppressed, the LAST alert to clear stayed in the file forever — asserting a
+    // problem that no longer existed, indistinguishable from a real one, with nothing else to
+    // prune it. So the beat now always delivers, and the silence is preserved where it actually
+    // matters: deliverAlerts([]) notifies nobody and logs nothing (pinned by the CLEARED tests
+    // above, which drive the real implementation).
     const deliver = vi.fn()
+    const log = vi.fn()
     const codes = runOneSupervisorBeat({
       optInCheck: () => true,
       tickArmedCheck: () => true,
       gatherFactsImpl: () => facts as never,
-      log: () => {},
+      log,
       deliver,
     })
     expect(codes).toEqual([])
-    expect(deliver).not.toHaveBeenCalled()
+    expect(deliver).toHaveBeenCalledWith([])
+    // The intent the old assertion was reaching for: nothing was announced.
+    expect(log.mock.calls.flat().join(' ')).not.toMatch(/DELIVER/)
   })
 })

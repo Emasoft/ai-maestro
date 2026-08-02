@@ -67,7 +67,16 @@ export function runOneSupervisorBeat(deps: RunSupervisorBeatDeps = {}): string[]
     // change that contract for every caller or, worse, let a slow filesystem stall the beat timer.
     // The delivery path never throws and swallows its own failures, so a floating promise cannot
     // surface an unhandled rejection; the `.catch` is belt to that braces.
-    if (findings.length > 0) {
+    // CALLED ON EVERY BEAT, INCLUDING THE ALL-CLEAR. This was gated on `findings.length > 0`, which
+    // silently disabled the resolution half of the system: deliverAlerts is what drops resolved
+    // codes from active-alerts.json, so when the LAST alert cleared it was never called and the
+    // file kept asserting a problem that no longer existed — indefinitely, since nothing else
+    // prunes it. An alert record that cannot clear is the same defect as an alert that never
+    // fires, just harder to notice, because a stale file reads exactly like a real outstanding
+    // alert. (It is also what would make the shared log's CLEARED transition unreachable.)
+    // The cost is one locked read-modify-write per 10-minute beat when all is well; the benefit is
+    // that "outstanding NOW" is true.
+    {
       const deliver = deps.deliver ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
         void deliverAlerts(f, { log }).catch(() => { /* never take the beat down */ })
       })

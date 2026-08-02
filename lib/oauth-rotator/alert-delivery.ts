@@ -32,6 +32,7 @@
  */
 import { updateJson, readJson } from '@/lib/json-io'
 import { rotatorRoot } from './slots'
+import { appendRotatorLog } from './decision-log'
 import path from 'path'
 
 /** Where the always-written alert record lives. Beside the rotator's own state, so anything that
@@ -155,6 +156,24 @@ export async function deliverAlerts(
       data.alerts = alerts
       data.updatedAt = nowS
     }, { createIfMissing: true })
+
+    // Mirror the two TRANSITIONS — and only the transitions — into the shared rotator.log, so the
+    // server's alerts sit in the same ordered timeline as the janitor's rotation decisions. That
+    // shared timeline is the whole point: reconstructing "why did rotation not happen at 03:00"
+    // otherwise means correlating two files by hand, at the moment you are already debugging.
+    //
+    // ONSET and CLEAR, never the steady state. Appending once per beat would put ~144 identical
+    // lines a day into a file the janitor trims at 256 KB — so a persistent alert would EVICT the
+    // rotation history this log exists to preserve, and the alert would still be there to read in
+    // active-alerts.json. That is not hypothetical here: the delivery backoff above exists because
+    // one alert reached pm2-out.log 4506 times in 4 days and became unreadable. A log records a
+    // change of state; a poll belongs in the state file, which is what `alerts` already is.
+    for (const f of findings) {
+      if (prior[f.code] === undefined) appendRotatorLog('alert', `ONSET ${f.code} — ${f.message}`)
+    }
+    for (const code of Object.keys(prior)) {
+      if (!live.has(code)) appendRotatorLog('alert', `CLEARED ${code}`)
+    }
 
     for (const [code, message, outstandingS] of toNotify) {
       const text = deliveryText(code, message, outstandingS)

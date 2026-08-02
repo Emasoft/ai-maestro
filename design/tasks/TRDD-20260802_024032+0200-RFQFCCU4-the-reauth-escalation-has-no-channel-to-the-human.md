@@ -1,11 +1,11 @@
 ---
 trdd-id: RFQFCCU4
 title: The rotator's reauth escalation has no channel to the human — it logged 4506 times over 4 days
-column: dev
+column: human_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:40:32+0200
-updated: 2026-08-02T11:00:00+0200
+updated: 2026-08-02T13:04:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -179,3 +179,23 @@ Two distinct gaps, one of which is a genuine bug:
 
 - 2026-08-02T02:40:32+0200 — Tier-0 self-mandate: a bugfix inside this project's own scope, filed
   from a live incident. `min-approval-requirement: none`, so authored directly in `design/tasks/`.
+
+## Moved to human_review 2026-08-02T13:04:11+0200 — 6 of 7 boxes done, the 7th is a USER ruling
+
+The code is landed and verified (`119f2e64`, `3062939d`): the tick's alarms are delivered, and an
+exhausted fleet no longer reports `ok`. What remains is not code.
+
+**The decision needed, stated so it can be answered in one line.** The tick's decision string is
+counts-only BY RULE — `tick.ts` says "never an email" — so a delivered tick alert *cannot name the
+account*. The supervisor's alert can and does. So either:
+
+- **(a)** relax the never-an-email rule for the DELIVERY channel only (it goes to the human who owns
+  the accounts, not to a log a model reads), or
+- **(b)** carry identity another way (an opaque slot index the human can map, e.g. "slot 2 of 3").
+
+I did not pick one, because the rule it would relax exists to keep an address out of model-visible
+output, and that is the USER's call rather than mine. **(a) is the smaller change and the more
+useful alert; (b) preserves the invariant untouched.**
+
+Sitting in `dev` would have been a lie — nobody is working it, and an untrue column is worse than an
+unstarted card because it hides the stall from the only view anyone checks.

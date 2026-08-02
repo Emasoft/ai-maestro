@@ -39,6 +39,21 @@ export const MAX_STATUSLINE_SNAPSHOTS = 500
 /** How old a snapshot may be and still count as describing a live session. */
 export const STATUSLINE_FRESH_MS = 15 * 60_000
 
+/**
+ * 256 KB — the cap on ONE ingested payload. The real payload is ~2 KB; the cap exists so a local
+ * process cannot push an arbitrary blob into the state directory, not to constrain any legitimate
+ * sender. It is the per-file twin of `MAX_STATUSLINE_SNAPSHOTS` above (that one bounds the
+ * directory, this one bounds a file), which is why it lives here rather than beside the check.
+ *
+ * IT LIVES HERE BECAUSE A NEXT.JS ROUTE MAY NOT EXPORT IT. It was `export const MAX_INGEST_BYTES`
+ * in `app/api/statusline/ingest/route.ts`, and a route module's exports are a CLOSED set (the HTTP
+ * verbs plus a fixed config list like `dynamic`/`revalidate`) — so that export failed the build
+ * with *"MAX_INGEST_BYTES is not a valid Route export field"*. `tsc --noEmit` does NOT see it: the
+ * constraint is applied by Next.js's own generated route types at build time, so the only gate that
+ * catches it is `yarn build`. Do not move a shared constant back into a route file.
+ */
+export const MAX_INGEST_BYTES = 256 * 1024
+
 /** `~/.aimaestro/statusline-state` — resolved per call; see the module header. */
 export function statuslineStateDir(): string {
   return statePath('statusline-state')

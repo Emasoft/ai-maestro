@@ -149,13 +149,17 @@ describe('POST /api/statusline/ingest — input handling', () => {
   })
 
   it('413s a payload over the cap, on the DECLARED length before buffering', async () => {
-    const { MAX_INGEST_BYTES } = await import('@/app/api/statusline/ingest/route')
+    // From the STORE, not the route: a Next.js route module may not export a non-config const
+    // (it fails `yarn build`, which `tsc` does not catch), so the cap lives in statusline-store.
+    const { MAX_INGEST_BYTES } = await import('@/lib/statusline-store')
     const r = await post(PAYLOAD(), '127.0.0.1', { 'content-length': String(MAX_INGEST_BYTES + 1) })
     expect(r.status).toBe(413)
   })
 
   it('413s a payload that LIES about its length — a header is a claim, not a fact', async () => {
-    const { MAX_INGEST_BYTES } = await import('@/app/api/statusline/ingest/route')
+    // From the STORE, not the route: a Next.js route module may not export a non-config const
+    // (it fails `yarn build`, which `tsc` does not catch), so the cap lives in statusline-store.
+    const { MAX_INGEST_BYTES } = await import('@/lib/statusline-store')
     const fat = PAYLOAD({ session_id: 'fat', transcript_path: 'x'.repeat(MAX_INGEST_BYTES) })
     const r = await post(fat, '127.0.0.1', { 'content-length': '10' })
     expect(r.status).toBe(413)
@@ -247,7 +251,8 @@ describe('GET /api/statusline — the fleet roll-up', () => {
   it('EXCLUDES a stale session from the roll-up while still listing it', async () => {
     // A session that ended hours ago still has a file, and its gauge describes a window that has
     // since reset. Counting it would report a limit that no longer exists.
-    const { rollUp } = await import('@/app/api/statusline/route')
+    // From the lib, not the route — a route module may not export a non-config symbol.
+    const { rollUp } = await import('@/lib/statusline-rollup')
     const { STATUSLINE_FRESH_MS } = await import('@/lib/statusline-store')
     const now = 10_000_000_000
     const mk = (id: string, capturedAt: number, used: number) => ({

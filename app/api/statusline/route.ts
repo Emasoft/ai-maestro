@@ -11,38 +11,16 @@
  * are closer to the limit than you thought". Taking the newest instead would let one idle session's
  * stale-but-recently-written record understate a limit that a busy session had already seen climb.
  *
- * ⚠ ONLY FRESH SNAPSHOTS CONTRIBUTE. A session that ended hours ago still has a file, and its last
- * gauge reading is a fact about a window that has since reset. `sessions` lists everything (a
- * caller may legitimately want the history); `rateLimits` is built only from the fresh ones, and
- * `freshSessions` says how many that was — so a roll-up computed from nothing is visibly a roll-up
- * computed from nothing, rather than a confident zero.
+ * The aggregation itself — and the two ⚠ rules above, in full — lives in `lib/statusline-rollup.ts`,
+ * because a Next.js route module may not export a non-config symbol (it fails `yarn build`, which
+ * `tsc` does not catch). This file is the HTTP shell: auth, read, serialize.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { enforceAuth } from '@/lib/route-auth'
-import { listStatuslineSnapshots, STATUSLINE_FRESH_MS } from '@/lib/statusline-store'
-import type { StatuslineRateWindow, StatuslineRollup, StatuslineSnapshot } from '@/types/statusline'
+import { listStatuslineSnapshots } from '@/lib/statusline-store'
+import { rollUp } from '@/lib/statusline-rollup'
 
 export const dynamic = 'force-dynamic'
-
-/** The tighter of two windows, treating "no reading" as no constraint. */
-function tighter(a: StatuslineRateWindow | null, b: StatuslineRateWindow | null): StatuslineRateWindow | null {
-  if (!a) return b
-  if (!b) return a
-  return b.usedPercentage > a.usedPercentage ? b : a
-}
-
-export function rollUp(snapshots: StatuslineSnapshot[], now = Date.now()): StatuslineRollup {
-  const fresh = snapshots.filter((s) => now - s.capturedAt <= STATUSLINE_FRESH_MS)
-  return {
-    freshSessions: fresh.length,
-    totalSessions: snapshots.length,
-    rateLimits: {
-      fiveHour: fresh.reduce<StatuslineRateWindow | null>((acc, s) => tighter(acc, s.rateLimits?.fiveHour ?? null), null),
-      sevenDay: fresh.reduce<StatuslineRateWindow | null>((acc, s) => tighter(acc, s.rateLimits?.sevenDay ?? null), null),
-    },
-    sessions: snapshots,
-  }
-}
 
 export async function GET(request: NextRequest) {
   const authErr = enforceAuth(request)

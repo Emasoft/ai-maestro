@@ -43,15 +43,9 @@ import { isNearLimit } from '@/lib/oauth-rotator/tick'
 import { admitSnapshot, stampLiveAccount } from '@/lib/statusline-admissible'
 import type { StatuslineSnapshot } from '@/types/statusline'
 import { normalizeStatuslinePayload } from '@/lib/statusline-normalize'
-import { pruneStatuslineSnapshots, writeStatuslineSnapshot } from '@/lib/statusline-store'
+import { MAX_INGEST_BYTES, pruneStatuslineSnapshots, writeStatuslineSnapshot } from '@/lib/statusline-store'
 
 export const dynamic = 'force-dynamic'
-
-/**
- * 256 KB. The real payload is ~2 KB; the cap exists so a local process cannot push an arbitrary
- * blob into the state directory, not to constrain any legitimate sender.
- */
-export const MAX_INGEST_BYTES = 256 * 1024
 
 /**
  * Claude Code debounces the statusline at 300 ms and a `refreshInterval` can be as low as 1 s, so a

@@ -3,7 +3,7 @@ trdd-id: JAU1ES1C
 title: Session-resurrection hardening — extend boot-restore toward reboot / mid-turn-429 / network-drop immortality
 column: testing
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T20:56:02+0200
+updated: 2026-08-02T16:15:13+0200
 current-owner: ai-maestro
 task-type: refactor
 scope: project
@@ -92,6 +92,38 @@ HARDENS that path toward "immortality" across three failure cases:
   with [[9ZIF82HI]]).
 - Network-drop simulation: re-attach preserves durable state; no double-write of session state.
 - `tsc` clean; boot-restore unit/integration tests green.
+
+## Acceptance
+
+Transcribed 2026-08-02 from this card's own `## Scope` and `## Verification`, **as corrected by its
+own STATE**. Two of the three Verification simulations were REASSIGNED by that correction (only
+REBOOT is a boot event); marking them `[~]` rather than `[ ]` is what keeps this card closable for
+work it explicitly disowned — an open box for another card's scope is a permanent false debt.
+
+- [x] `restoreActiveAgentsOnBoot` audited rather than rebuilt — found solid (wired at
+      `server.mjs:2078`; registry `status:'active'` SSOT, per-agent error isolation, stagger)
+- [x] the genuine gap closed: **no retry on a transient boot-wake throw** — a reboot races tmux/pm2
+      coming up, so a thrown `wakeAgent` dropped the agent permanently. `lib/retry-transient.ts`
+      (pure, generic) wrapped at `services/boot-restore-service.ts:145`, 3 attempts, exp backoff,
+      env-tunable. **7 tests, re-run green 2026-08-02**
+- [x] a governance-gate refusal returns `{ error }` — a VALUE, not a throw — so it is NEVER retried
+      and correct terminal skips are preserved. Verified: `boot-restore-service.ts:130` binds the
+      verdict, it does not throw
+- [x] every restore reads DURABLE state (`session-history.json` / `session-persistence`), never a
+      volatile in-memory snapshot
+- [x] each restore is gated on `checkAuthorizedAgentWorkdir` — the ONE workdir authority — so a
+      stale/bogus registry entry (the legacy `default` at `/`) is never resurrected into a bad cwd
+- [x] `tsc` clean; boot-restore tests green
+- [ ] **emit `next_action`-relevant state so [[DXJZM3BW]]'s `status` reflects "restoring" vs "live"**
+      — the one Scope item still genuinely owed here, and it is **unmet**: `ContinuityNextAction`
+      is `ok | monitor | switch-recommended | unknown | rotating | reauth-needed`; there is no
+      `restoring`. Note the coupling — adding it touches [[DXJZM3BW]]'s five-field response, which
+      now has a CLOSED-set guard, so the new state goes in the `nextAction` ENUM, never as a 6th field
+- [~] mid-turn-429 simulation — **REASSIGNED by this card's own scope correction** to [[9ZIF82HI]]
+      (the account switcher). A turn dies while the process lives; that is a RUNTIME event, not a
+      boot event, and forcing it into boot-restore would duplicate that NPT
+- [~] network-drop simulation — **REASSIGNED** to [[CHN16JXZ]] (the fleet-recovery liveness scan),
+      for the same reason
 
 ## Approval log
 

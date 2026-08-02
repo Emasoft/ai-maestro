@@ -633,6 +633,11 @@ export async function autoRotate(
         ? 'waiting for a window to reset'
         : `earliest window resets ${new Date(resetMs).toISOString()} (in ~${Math.max(0, (resetMs - Date.now()) / 3_600_000).toFixed(1)}h)`
     decide(deps, `auto: live ${liveEmail ?? '(live)'} exhausted (${liveDesc}) but no alternate is healthy + below safe threshold and none is structurally renewable — all paid accounts maxed; ${when}`)
+    // ⚠ UNPINNED BY ANY TEST, and measured as such (TRDD-RFQFCCU4): deleting this line leaves the
+    // whole suite green (22 rotator files / 307 tests). Reaching this branch needs real credential
+    // I/O — a live account exhausted with no healthy alternate — so `deriveDecision` is tested
+    // directly and this ASSIGNMENT is the one link nothing covers. Do not read the green suite as
+    // cover for editing it.
     if (out) out.stuck = 'all-maxed'
   } else {
     decide(deps, `auto: live ${liveEmail ?? '(live)'} is LOCALLY EXPIRED and the API is unreachable, but no alternate with a known future expiry exists — cannot rotate; manual re-auth needed`)

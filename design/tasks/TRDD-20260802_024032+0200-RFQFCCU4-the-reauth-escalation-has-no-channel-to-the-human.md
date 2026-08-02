@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:40:32+0200
-updated: 2026-08-02T04:02:03+0200
+updated: 2026-08-02T11:00:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -33,10 +33,21 @@ labels: [oauth, rotator, escalation, continuity, incident-followup]
 **This is the defect that actually caused the 2026-08-02 loss**, not the rotation trigger (that is
 [[GY0LJV6S]], and it behaved correctly throughout).
 
-**NEXT ACTION:** give `reauth-needed` a delivery path to the human. Smallest correct version first —
-an OS notification via the existing `lib/setup-bootstrap.ts` channel (already used for the
-governance-password one-shot code, so the plumbing exists and is proven), plus a tmux inject into
-live agent panes. Fail-soft: no channel available ⇒ log as today, never crash the beat.
+**STATUS 2026-08-02 11:00 — the delivery path is BUILT, WIRED TO BOTH BEATS, and green.**
+`75b495a5` built `lib/oauth-rotator/alert-delivery.ts` (file written unconditionally + best-effort
+banner + escalating backoff) and wired the SUPERVISOR. `119f2e64` wired the **TICK** — which is where
+the incident's own alarms are actually emitted — and closed the `TickResult` gap that let a fully
+exhausted fleet report `nextAction: 'ok'` / `'no action needed'`. `tsc` 0; full suite **337 files /
+4801 tests green**; 3 neuters recorded by name in Acceptance below.
+
+⚠ **NOT LIVE YET.** `lib/oauth-rotator/*.ts` is bundled into `.next`, so the running server executes
+the OLD code until `yarn build` + `pm2 restart`. Verify by EFFECT (drive a stuck/reauth tick and read
+`active-alerts.json`), never by `git log` — that exact mistake re-corrupted a ledger on 2026-07-29.
+
+**NEXT ACTION:** one decision, not code — the last open box. The tick's decision line is
+**counts-only by rule** (`tick.ts` "never an email"), so a delivered tick alert cannot name the
+account. Either relax that rule for the delivery channel specifically, or carry the identity by a
+separate route. Do NOT silently violate it: it exists so a log surface never leaks an address.
 
 ## The measurement
 
@@ -100,8 +111,26 @@ So the whole outage reduces to: **one human action, requested 4 506 times, never
 - [x] tests + at least 2 neuters recorded BY NAME; `tsc` 0; full suite green
       (`tests/unit/oauth-alert-delivery.test.ts` 9/9; full suite **332 files / 4704 tests green**,
       2026-08-02 04:00 — baseline 331 + this file)
-- [ ] **the SUPERVISOR's findings are delivered; the TICK's are NOT** — see "What is still open" below
-- [ ] `all paid accounts maxed` reaches the human — blocked on the `TickResult` gap below
+- [x] **the TICK's findings are delivered too** — `server-tick.ts` now calls `deliverAlerts` on
+      `reauth-needed` or `stuck`, with a per-fault code (`reauth-needed:refresh-dead`,
+      `rotator-stuck:all-maxed`) so backoff and resolve-detection stay per-condition (`119f2e64`)
+- [x] `all paid accounts maxed` reaches the human — the `TickResult` gap is CLOSED via an additive
+      out-param on `autoRotate` (its return type is unchanged, so all 22 rotator files / 296 tests
+      passed before a single new test was written). `deriveDecision` extracted as a pure function
+      because that was the defect's exact site and it was unreachable to a test.
+
+**Neuters recorded BY NAME (`119f2e64`):**
+| mutation | reds |
+|---|---|
+| `deriveDecision` all-maxed → `'no action needed'` (re-introduce the bug) | *THE REGRESSION: all-maxed does NOT say "no action needed"* + *stuck OUTRANKS refreshed* |
+| delivery block made inert (`if (false && alertable)`) | *delivers on reauth-needed…* + *delivers when the fleet is STUCK…* |
+| **delete `out.stuck = 'all-maxed'` in `autoRotate`** | **NOTHING — 22 files / 307 tests still green** |
+
+⚠ **That third neuter is a measured coverage gap, not a formality.** The `autoRotate` → `runTick`
+link is pinned by nothing, because reaching that branch needs a live account exhausted with no
+healthy alternate — real credential I/O. `deriveDecision` is tested directly and the delivery
+wiring is tested directly; the ASSIGNMENT between them is not. A comment at the site says so, so a
+future reader cannot mistake the green suite for cover.
 - [ ] the message names the specific account and the exact command — TRUE for the supervisor's
       findings (`cookie-leg-stuck` names both); the tick's decision line is COUNTS-ONLY BY RULE
       (`tick.ts:643` "never an email"), so this box cannot be met for tick alerts without either

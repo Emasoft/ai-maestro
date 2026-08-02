@@ -1,9 +1,9 @@
 ---
 trdd-id: WF0UE9BC
 title: Ship AgentlensPro as an official ai-maestro dependency (npm CLI, installed alongside the stack)
-column: planned
+column: human_review
 created: 2026-07-16T14:13:15+0200
-updated: 2026-07-16T15:05:00+0200
+updated: 2026-08-02T16:01:02+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -130,6 +130,54 @@ enrichment shows *which account a session ran on and its window budget*, not the
 - `bash -n scripts/install-agentlens.sh install-messaging.sh` (syntax); shellcheck if available.
 - Dry idempotency: with 2.8.0 already installed here, re-running the installer skips + exits 0.
 - `bash scripts/with-node.sh yarn build` if the TS constant is read by server code.
+
+## ⏹ TRIAGE 2026-08-02 — `planned` → `human_review` ([[5YRLA53W]])
+
+Re-columned, not closed. `planned` asserts *"not started"*; this card's code landed 17 days ago
+(`5d889dc5`), its two coordination issues are closed, and the one owner-gated action it was waiting
+on — publishing 2.8.0 to npm — happened. The single remaining item is a decision only the human can
+make (close `ai-maestro#70`, or record why it stays open), which is exactly what `human_review`
+means. It was found by the external-ref sweep on [[5YRLA53W]], not by anyone reading the board:
+`planned` is a resting column nobody re-examines.
+
+## ⏱ VERIFIED 2026-08-02 — everything landed, including the OWNER-GATED step
+
+The card sits at `column: planned` — which asserts *"not started"* — while its
+`implementation-commits:` names `5d889dc5` and every external dependency has resolved. Checked
+live today, nothing taken from the card's own record:
+
+| the card said | measured 2026-08-02 |
+|---|---|
+| *"the pin target 2.8.0 is not on npm yet (latest published = 2.6.0) — the owner must publish"* | **npm latest is 2.20.0**; this machine runs **2.21.0**. The floor resolves; the installer no longer no-ops. AgentlensPro confirmed the 2.8.0 publish on `ai-maestro#70` (OIDC trusted publishing, 2 attestations, smoke-verified from a virgin HOME) |
+| `janitor#78` (the janitor already consuming) | **CLOSED 2026-07-16** — `dispatch.py::_phase_heartbeat_cost` ships. One deliberate deviation from the proposal: the line goes to `.janitor/logs/heartbeat-cost.log`, NOT the fire's stdout, because the heartbeat's zero-output contract means every stdout byte taxes the very thing being measured |
+| `AgentlensPro#2` (lock the CLI contract) | **CLOSED 2026-07-30** |
+| `ai-maestro#70` (the coordination thread) | still **OPEN** on our side; the counterparty has closed the loop from theirs |
+
+## Acceptance
+
+Transcribed from this card's own `## Plan` (A + B) and `## Verification` list. Every item re-run or
+re-queried on 2026-08-02.
+
+- [x] A — `scripts/install-agentlens.sh` (fail-soft, idempotent, always exits 0) — `5d889dc5`
+- [x] A — called from `install-messaging.sh` after the code-analysis-tooling block
+      (`install-messaging.sh:964`)
+- [x] A — the package name and version floor as ONE source of truth:
+      `AGENTLENS_NPM_PKG` / `AGENTLENS_VERSION_FLOOR` in `lib/ecosystem-constants.ts:385-386`
+      and `scripts/ecosystem-config.sh`
+- [x] B — the 5-point contract answered on `ai-maestro#70`, and the issue opened on
+      `Emasoft/AgentlensPro` per the USER's explicit ask (`AgentlensPro#2`, now closed)
+- [x] the OWNER-GATED step — 2.8.0 published. This was the single thing the model could not do
+      (an npm publish is a credential action), and it is done
+- [x] verification — `bash -n` clean on both scripts, **shellcheck clean**, and the dry
+      idempotency run: with 2.21.0 present the installer skips and exits 0
+- [ ] close `ai-maestro#70` from our side, or say why it stays open. Deliberately NOT done
+      unilaterally: it is an outward-facing action on a coordination thread the counterparty has
+      already answered, so it is the human's call, not a housekeeping side effect
+- [~] the chat-history ENRICHMENT (the dedicated tab / token-accurate tracing per conversation)
+      — explicitly a **follow-up UI TRDD**, not this card. Recorded so the next reader does not
+      read its absence as an omission. The consumed surface and the LOCKED field paths are
+      already written above, and the R16 guardrail with them: account **metadata** may enrich the
+      UI, **OAuth token material must never reach an agent or the model**
 
 ## Approval log
 - 2026-07-16T14:13:15+0200 — MANDATE issued by USER (min-approval-requirement: user).

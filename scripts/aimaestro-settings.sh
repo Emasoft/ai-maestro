@@ -25,6 +25,24 @@
 # directly inside a ".claude" directory — see lib/settings-gate.ts. --key is
 # dot-path sugar; a key containing a literal dot needs --key-json instead.
 #
+# ⚠ AND THAT FAILS SILENTLY, WHICH IS WHY IT IS SPELLED OUT RATHER THAN LEFT TO
+# THE LINE ABOVE. Passing such a key to --key does not error — it SPLITS, exit 0,
+# and the file still parses, so the damage surfaces much later as a hook or
+# permission that never fires:
+#
+#   --key 'hooks.Bash(x.y:*)'        →  hooks → "Bash(x" → "y:*)"     WRONG, silent
+#   --key-json '["hooks","Bash(x.y:*)"]'                              correct
+#
+# This is the COMMON case, not an edge case: Claude Code matchers and permission
+# entries routinely contain dots — Bash(node script.js:*), mcp__srv__tool. Use
+# --key-json for any key that might contain one.
+#
+# (Reported by the CORE plugin's Claude, 2026-08-02, ai-maestro-plugin#31. Their
+# note on HOW they found it is worth as much as the finding: their first probe
+# used `permissions.Bash(ls:*)` and "passed" — that key has no dot INSIDE it, so
+# it proved nothing. When a property has a boundary, the fixture must cross it on
+# purpose, never by luck.)
+#
 # WHY BASH, NOT SH/ZSH: it sources scripts/pin-node.sh, which is bash-only
 # (BASH_SOURCE, `local -a`). Sourced from zsh its version gate degrades
 # SILENTLY and can hand back a Node past this repo's <26 engines cap (measured

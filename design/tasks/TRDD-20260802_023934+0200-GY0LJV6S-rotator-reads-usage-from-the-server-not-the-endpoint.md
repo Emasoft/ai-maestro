@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T14:00:36+0200
+updated: 2026-08-02T14:05:06+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -68,28 +68,101 @@ account in minutes, unattended, while the log reads like healthy rotation.**
 Not a defect in D8OYFG35 (every box it owns is delivered) — a prerequisite nobody owned, now filed as
 the NPT [[SIV45HOG]].
 
+## ⛔ THE SEAM TABLE BELOW IS WRONG — corrected 2026-08-02T14:1x+0200, read this first
+
+**The statusline can only ever ADD a reason to rotate. It can never remove one, and it can never
+replace the endpoint read.** The seam table further down says `:422` (now `:490`) *becomes*
+"statusline-fed"; the NEXT ACTION under it said "use `fiveHourPct` in place of
+`util(liveData,'five_hour')`". Both were written before the collision below existed, and building
+to either would ship a REGRESSION on [[JI7F1236]].
+
+**Measured at the call site, not inferred.** That ONE `usageRequest(liveBlob, netDeps(deps))` at
+`:490` supplies **four** things the branch below it consumes, and the statusline can carry exactly
+two of them:
+
+| what `:490` yields | consumed by | statusline? |
+|---|---|---|
+| `fh` = five_hour | `isNearLimit` | ✅ `fiveHourPct` |
+| `sd` = seven_day | `isNearLimit` | ✅ `sevenDayPct` |
+| `sc` = `worstScopedPercent(liveData)` — the **model-scoped weekly windows** | `isNearLimit`, REQUIRED param | ❌ **endpoint-only** |
+| `liveStatus` | the 429 debounce (`:514`), the 401/403 `token REJECTED` branch, `networkUp` | ❌ **has no status at all** |
+
+The scoped half is not a detail: `isNearLimit`'s own docstring says Fable 5 *"has its own weekly
+window that appears in NEITHER top-level bucket, so an account can be fully spent on it while 5h/7d
+read low"*, and `sc` is a **required** parameter precisely so a caller cannot forget it —
+[[JI7F1236]] closed that blindness deliberately. `types/statusline.ts:46` already recorded the same
+fact from the other side (*"NOT in the statusline payload … They remain endpoint-only"*). The
+knowledge existed; this card's plan simply predates it.
+
+**So "preferred with fallback" is incoherent here** — it is not a choice between two sources of the
+same number. It resolves two ways and both are wrong:
+- skip the endpoint when the statusline answers ⇒ lose scoped-window detection **and** token-rejection
+  detection. A safety card shipping a safety regression.
+- call the endpoint anyway ⇒ the ~420-calls/hour saving, which was this card's secondary rationale,
+  simply does not exist.
+
+### The shape that IS correct — asymmetric, positive-signal-only
+
+Rotating is the fail-safe direction; *not* rotating is the dangerous one. So:
+
+- **TRIP EARLY (statusline may do this alone).** An admissible reading at/over threshold is a
+  *sufficient* reason to rotate. Free, continuous, no endpoint call.
+- **CLEAR (endpoint only).** A statusline reading of "5h=10%" does **not** license "not near" — the
+  account may be fully spent on Fable 5, or its token already rejected. Only `:490` can say that.
+
+This is not a compromise; it is the same contract `isNearLimit` already states — *"Unknown (null)
+usage never trips it — only a positive over-threshold signal rotates."* The statusline is a
+positive-signal-only source by its nature, and the asymmetry makes it structurally unable to cause
+the loop [[SIV45HOG]] guards against.
+
+**And it still delivers the USER's directive verbatim** — *"if the statusline reads 98% or more in
+the 5h or 7d window it must immediately rotate"*. That asks for statusline→rotate. It does not ask
+for statusline→replace-the-endpoint; that was this card's own inference, and it is the part that
+collides. The latency win (60 s → one assistant message) survives intact via the push-trigger; only
+the call-volume saving is retired.
+
+**Concretely, in the `liveStatus === 200` branch:** `near = isNearLimit(fh, sd, sc) || liveExpired`
+gains one more disjunct fed by `freshestAdmissibleUsage`. A pure disjunct cannot remove a rotation
+reason, leaves `sc` / `liveStatus` / the 429 debounce / the 401-403 branch untouched, and is guarded
+by `admitSnapshot` against the stale-attribution loop.
+
+**Consequence for the acceptance boxes:** box 1 ("`:422` reads the live 5h/7d … not the endpoint")
+is REFUSED AS WRITTEN and restated below as the disjunct. Box 2 (candidates stay endpoint-only) was
+already right and is now right for a second reason.
+
+---
+
 **NEXT ACTION (superseded twice — read this paragraph, not the two above it).** [[SIV45HOG]] is
 CLOSED and its guard is now WIRED INTO A CALLABLE SELECTION. `lib/statusline-admissible.ts` exports
 `freshestAdmissibleUsage(snapshots, rotator, {now, maxAgeMs})` → `{fiveHourPct, sevenDayPct,
 capturedAt}` or **null**, 20 tests + 3 measured neuters (`b481b26b`, `2816405b`). It has NO caller.
 
-So the ONLY remaining edit is the substitution at **`tick.ts:490`** (NOT `:422` — see the CALL SITE
-CORRECTED section), and it is deliberately the last thing done because it is the one edit that can
-hurt. Its shape:
+The remaining edit is at **`tick.ts:490`** (NOT `:422` — see the CALL SITE CORRECTED section), and
+it is deliberately last because it is the one edit that can hurt. **Read the ⛔ correction at the top
+of this STATE block first — the shape is a DISJUNCT, not a substitution.** Steps:
 
 1. read the snapshots + rotator state, call `freshestAdmissibleUsage` with
    `maxAgeMs: STATUSLINE_FRESH_MS` (import the constant; do not restate the number — one owner);
-2. **non-null** → use `fiveHourPct` in place of `util(liveData, 'five_hour')`;
-3. **null** → fall through to the EXISTING `usageRequest(liveBlob, netDeps(deps))` path, unchanged.
-   Null must land in the same fail-safe branch as unknown usage (`:220`) — that equivalence is what
-   makes the substitution safe, and it is asserted in the module docstring rather than left implied;
-4. keep an equivalent of the `:514` one-bad-sample debounce. A statusline source has no 429, so its
-   PURPOSE (one bad reading never rotates) needs re-expressing, not deleting;
-5. log which source answered, so a discard is observable rather than silent.
+2. in the `liveStatus === 200` branch, add one disjunct:
+   `near = isNearLimit(fh, sd, sc) || liveExpired || statuslineOverThreshold`;
+3. **change NOTHING else** — the endpoint call, `sc`, `liveStatus`, the `:514` 429 debounce and the
+   401/403 branch all stay exactly as they are. A pure disjunct cannot remove a rotation reason,
+   which is what makes this safe to land in one step;
+4. **null contributes nothing** — never `false`-as-a-clearing-signal. Same contract as `isNearLimit`:
+   unknown usage never trips it, and here it must never UNTRIP it either;
+5. log when the statusline is what tripped it, so the source of a rotation is observable.
 
-**Do not delete the endpoint path in the same change.** Land it as preferred-with-fallback, verify by
-EFFECT (`yarn build` + `pm2 restart` — `lib/**` bundles into `.next`, so a restart alone replays the
-old build and `git log` proves nothing), and only then consider removing the fallback.
+The `:514` debounce needs no statusline equivalent under this shape — it exists to stop ONE bad
+endpoint sample rotating, and a disjunct that only ever fires on a *genuine* at-threshold reading
+guarded by `admitSnapshot` has no bad-sample path to debounce. (That reasoning replaces step 4 of
+the previous plan, which assumed a substitution.)
+
+Then `yarn build` + `pm2 restart` and verify by EFFECT — `lib/**` bundles into `.next`, so a restart
+alone replays the old build and `git log` proves nothing.
+
+**Still owed after this, and NOT part of it:** the push-trigger (an at/over-threshold ingest calls
+`autoRotate` immediately, 60 s timer remaining the floor). That is what delivers the USER's word
+*"immediately"*; the disjunct alone still waits for the tick.
 
 For CANDIDATE headroom read the CORRECTION section first — `agentlenspro get_account_status --all`
 now covers the non-live accounts and the old "only the endpoint can" claim is retired.
@@ -226,7 +299,7 @@ key* was dead.
 
 ## Acceptance
 
-- [ ] `tick.ts:422` reads the live 5h/7d from the ai-maestro API (statusline-fed), not the endpoint
+- [ ] REFUSED AS WRITTEN (see the ⛔ correction) — restated: `tick.ts:490` gains a statusline DISJUNCT into `near`; the endpoint read stays, because `sc` (model-scoped, JI7F1236) and `liveStatus` are endpoint-only
 - [ ] candidate reads at `:496`/`:509` unchanged, and documented as structurally endpoint-only
 - [ ] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports
 - [ ] an at/over-threshold ingest triggers `autoRotate` immediately; the 60 s timer remains the floor

@@ -98,4 +98,10 @@ to mount-all needs coordinated changes.
 
 ## See also
 
+- [[custom-server-and-websocket-pty]] — the socket whose lifetime this mount model decides. Its
+  gotcha section asserted the opposite ("WebSocket persists across agent switches") until
+  2026-08-02, because UI-CRIT-01 was applied here and not there.
+- [[dashboard-ui-patterns]] — the surrounding state model; "active agent id" selects what is
+  MOUNTED, it is not a visibility toggle.
+
 ## Notes and lessons learned

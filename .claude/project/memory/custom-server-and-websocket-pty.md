@@ -121,18 +121,15 @@ useEffect(() => {
   return () => {
     ws.close()  // CRITICAL: Clean up on unmount
   }
-}, []) // Empty deps with tab architecture - WebSocket persists across visibility changes
+}, []) // Empty deps: one socket per MOUNT. The cleanup is not optional — see below.
 ```
 
-**Tab-based architecture change (v0.3.0+):** WebSocket connections are no longer recreated on agent switch. They're created once on mount and persist until component unmounts (when agent is removed from the list).
-
-> **Note on the comment above:** the source (CLAUDE.md) describes this as a "tab-based
-> architecture" where WebSocket persists across agent switches without unmount. Elsewhere in
-> CLAUDE.md this is superseded — the shipped UI (corrected 2026-05-04, UI-CRIT-01) mounts only
-> the ONE active agent (`TerminalView`), and switching agents UNMOUNTS the previous one (closing
-> its WebSocket) and mounts a new one. So under the actual single-active-agent rendering, this
-> `useEffect` cleanup runs on every agent switch, not just on final removal. Migrated verbatim
-> from the source section per the migration spec; flagged here rather than silently corrected.[^1]
+**One socket per MOUNT, and a switch is a mount.** Only the agent matching `activeAgentId` is
+rendered, so switching agents unmounts `TerminalView`, runs this cleanup, and **closes the
+socket**; the next mount opens a new one. The empty dependency array means "once per mount", not
+"once forever" — under single-active rendering those are different things. The tmux session is
+unaffected: the pane is detached, not killed, and the next mount re-attaches and re-captures
+scrollback. See [[single-active-agent-rendering]].[^1]
 
 ### tmux Session Name Parsing
 
@@ -148,6 +145,14 @@ Parsing must handle:
 
 Use robust regex: `/^([a-zA-Z0-9_@.-]+):/`
 
+## See also
+
+- [[single-active-agent-rendering]] — owns the mount lifecycle this socket's life is tied to: a
+  switch is an unmount, which is why the cleanup above runs far more often than "tab architecture"
+  implied.
+- [[terminal-rendering-and-pty]] — the other half of the same subsystem; what the bytes arriving on
+  this socket are rendered by, and the `convertEol` / alternate-screen rules that govern them.
+
 ## Notes and lessons learned
 
 [^1]: [id:ATOM-WS-TABARCH, status:valid, keywords:"websocket_persists_across_agent_switch tab_based_architecture_stale terminal_unmounts_on_agent_switch", ocd:2026-08-02, lmd:2026-08-02]
@@ -155,5 +160,10 @@ Use robust regex: `/^([a-zA-Z0-9_@.-]+):/`
     switches, no unmount) describes current behavior, BECAUSE it was superseded by the
     single-active-agent rendering fix (UI-CRIT-01, corrected 2026-05-04) — only the active
     agent's `TerminalView` is ever mounted, so switching agents unmounts the old one and closes
-    its WebSocket. DO read `terminal-rendering-and-pty.md` and the current `TerminalView`
-    lifecycle instead when reasoning about WS persistence across agent switches.
+    its WebSocket. DO read [[single-active-agent-rendering]], which owns that correction.
+    ROOT CAUSE, and the reason this survived 3 months: UI-CRIT-01 was applied at ONE site (the
+    architecture section) while a SECOND site 1200 lines away — a gotcha entry — kept asserting
+    the superseded design, in a document too large to read end-to-end. A correction is not done
+    until every site that states the old fact is found; `grep` for the CLAIM, not for the section
+    you just edited. Corrected 2026-08-02 during the wikimem migration, which is exactly when a
+    split would have made the two halves unfindable from each other.

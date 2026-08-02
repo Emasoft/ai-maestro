@@ -580,12 +580,13 @@ make initialization happen-once-forever.
 
 ```
 App State:
-- Active agent ID (localStorage persistence, drives visibility toggle)
+- Active agent ID (localStorage persistence; decides which single agent is MOUNTED — not a
+  visibility toggle, see "Single-Active-Agent Rendering")
 - Agent list (fetched from /api/sessions every 10s)
 - WebSocket connection state (per agent, persistent)
 
 Component State:
-- Terminal instance (xterm.js, created once per agent)
+- Terminal instance (xterm.js, created once per MOUNT — i.e. re-created on every agent switch)
 - Connection errors (transient, cleared on retry)
 - Agent notes (loaded once, persist in component state)
 ```
@@ -1780,10 +1781,19 @@ useEffect(() => {
   return () => {
     ws.close()  // CRITICAL: Clean up on unmount
   }
-}, []) // Empty deps with tab architecture - WebSocket persists across visibility changes
+}, []) // Empty deps: one socket per MOUNT. The cleanup is not optional — see below.
 ```
 
-**Tab-based architecture change (v0.3.0+):** WebSocket connections are no longer recreated on agent switch. They're created once on mount and persist until component unmounts (when agent is removed from the list).
+**Corrected 2026-08-02.** This section previously read: *"Tab-based architecture change (v0.3.0+):
+WebSocket connections are no longer recreated on agent switch. They're created once on mount and
+persist until component unmounts."* **That describes the mount-all design that was never
+implemented** — the same drift UI-CRIT-01 corrected in "Single-Active-Agent Rendering" on
+2026-05-04, left behind here when the first site was fixed.
+
+What actually happens: only the agent matching `activeAgentId` is mounted, so **switching agents
+unmounts `TerminalView`, runs this cleanup, and CLOSES the socket**. A new one is opened on the next
+mount. The empty dependency array therefore means "once per mount", not "once forever" — and with
+single-active rendering, a mount happens on every switch.
 
 ### 4. tmux Session Name Parsing
 

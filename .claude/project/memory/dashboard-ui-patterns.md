@@ -21,12 +21,13 @@ UI best practices, and the TypeScript type-system domain separation used across 
 
 ```
 App State:
-- Active agent ID (localStorage persistence, drives visibility toggle)
+- Active agent ID (localStorage persistence; decides which single agent is MOUNTED — **not** a
+  visibility toggle, see [[single-active-agent-rendering]])
 - Agent list (fetched from /api/sessions every 10s)
 - WebSocket connection state (per agent, persistent)
 
 Component State:
-- Terminal instance (xterm.js, created once per agent)
+- Terminal instance (xterm.js, created once per MOUNT — i.e. re-created on every agent switch)[^1]
 - Connection errors (transient, cleared on retry)
 - Agent notes (loaded once, persist in component state)
 ```
@@ -122,3 +123,13 @@ All WebSocket messages are JSON. Raw terminal output (ANSI codes) is wrapped in 
 ## See also
 
 ## Notes and lessons learned
+
+[^1]: [id:ATOM-UI-VISTOGGLE, status:valid, keywords:"active_agent_id_visibility_toggle mount_all_agents_hidden inactive_agents_stay_mounted", ocd:2026-08-02, lmd:2026-08-02]
+    DO NOT read "active agent id drives a visibility toggle" as meaning inactive agents stay
+    mounted and hidden, BECAUSE that phrasing is a leftover of the mount-all design that was never
+    implemented — the id selects the ONE agent that is rendered at all. DO see
+    [[single-active-agent-rendering]]. ROOT CAUSE: the UI-CRIT-01 correction (2026-05-04) was
+    applied to the architecture section and to no other site, so THREE further sentences across
+    CLAUDE.md kept asserting the superseded design. Corrected 2026-08-02, at migration time,
+    because splitting the file would have put the contradicting halves in different pages where
+    neither reader could see the other.

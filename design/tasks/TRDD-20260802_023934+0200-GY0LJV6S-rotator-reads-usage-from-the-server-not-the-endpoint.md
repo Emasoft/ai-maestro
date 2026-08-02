@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T11:47:52+0200
+updated: 2026-08-02T13:40:50+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -238,3 +238,37 @@ the reason so a discard is observable.
 
 ⚠ **Nothing rotator-side is LIVE until `yarn build` + `pm2 restart`** — `lib/**` bundles into
 `.next`, so a restart alone replays the old build. Verify by EFFECT, never by `git log`.
+
+## CALL SITE CORRECTED 2026-08-02T13:40:50+0200 — it is NOT `tick.ts:422`
+
+Measured, because the cited line had rotted and building against it would have edited the wrong
+function:
+
+- **`tick.ts:422`** is inside the KEEPALIVE refresh loop — the `refresh_dead_fp` gate that stops
+  retrying a credential already classified dead. Nothing to do with usage.
+- **The real site is `tick.ts:490`**, inside `autoRotate` (the `ROTATE` section opening at :463,
+  whose own docstring says *"Reads quota from /api/oauth/usage"*):
+
+  ```ts
+  const [liveStatus, liveData] = await usageRequest(liveBlob, netDeps(deps))
+  const fh = util(liveData, 'five_hour')
+  ```
+
+`usageRequest` is imported at `:52`. That pair — the request and the `util(...)` extraction — is
+what this card replaces with a statusline read gated by
+`lib/statusline-admissible.ts::admitSnapshot`.
+
+**Two things to preserve, both already correct at that site and easy to break:**
+
+1. **`:514` debounces a 429** as *"likely a transient usage-endpoint throttle"* before rotating.
+   A statusline source has no 429, so the debounce must not simply be deleted — its PURPOSE
+   (never rotate on one bad sample) still applies and needs an equivalent.
+2. **`:220` records that a null/unknown usage NEVER trips a rotation** — *"only a positive
+   over-threshold signal rotates"*. `admitSnapshot` returning a rejection must land in the SAME
+   fail-safe branch as unknown usage, not in an error path that does something else. That
+   equivalence is the whole reason the guard is safe to wire.
+
+**Do NOT delete the endpoint path in the same change.** Land the statusline read as the preferred
+source with the endpoint as fallback, verify by effect, and remove the fallback only once the
+statusline path is observed working — the failure mode here is an unattended loop that burns every
+account, so a reversible step is worth more than a tidy diff.

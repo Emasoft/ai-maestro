@@ -6,18 +6,26 @@
  * account, rotates straight back out, and repeats at 60 s per iteration, unattended, while the log
  * reads like healthy rotation.
  *
- * NEUTERS RECORDED (run 2026-08-02, each reverted after):
+ * NEUTERS RECORDED — MEASURED 2026-08-02, each reverted after. The counts below are what the runs
+ * actually printed, not what they were expected to print: the first neuter was predicted to red 2
+ * and red 3, because the payload test's LAST assertion also exercises the identity guard. Left
+ * corrected rather than tidied away, since a neuter record is read as evidence by whoever comes
+ * next, and an unmeasured one is worth less than none.
+ *
  *   1. delete the identity check (`if (snapshot.liveFp !== rotator.live_fp) return 'stale-account'`)
- *      → REDS: "discards a report stamped with an account that is no longer live"
- *              "rejects a null stamp while a rotator IS configured"
- *      → the age tests stay GREEN, which is what proves the two guards are independent.
+ *      → REDS 3 of 13: "discards a report stamped with an account that is no longer live"
+ *                      "rejects a null stamp while a rotator IS configured"
+ *                      "a payload CLAIMING an identity cannot influence the stamp"
+ *      → both AGE tests stay GREEN. That is the load-bearing observation: it is what proves the
+ *        two guards are INDEPENDENT rather than one guard checked twice.
  *   2. drop the `* 1000` in the age check (`const switchAtMs = raw`)
- *      → REDS: "rejects a report that arrived BEFORE the switch"
- *      → and the straddle partner stays GREEN, which is what proves the test is not a guard that
- *        rejects everything.
+ *      → REDS 2 of 13: "rejects a report that arrived BEFORE the switch"
+ *                      "is INDEPENDENT of the identity guard — a matching stamp is still rejected"
+ *      → the straddle partner ("admits a report that arrived AFTER the switch") stays GREEN, which
+ *        is what proves this test is not passing against a guard that rejects everything.
  *   3. `stampLiveAccount` made inert (`return snapshot` with no assignment)
- *      → REDS: "stamps the live fingerprint server-side"
- *              "a payload CLAIMING an identity cannot influence the stamp" (its positive half)
+ *      → REDS 2 of 13: "stamps the live fingerprint server-side"
+ *                      "a payload CLAIMING an identity cannot influence the stamp" (positive half)
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 

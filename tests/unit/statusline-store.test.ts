@@ -4,7 +4,7 @@
  * The property that matters most is not "a write lands" — it is **the write goes through
  * `lib/json-io.ts` and can never trip its key-loss tripwire.** `updateJson` REFUSES a mutation that
  * drops a top-level key, so a payload describing a session with no PR and no cost must still write
- * all seven keys (with nulls) rather than omitting them. Get that wrong and ingest starts throwing
+ * all eight keys (with nulls) rather than omitting them. Get that wrong and ingest starts throwing
  * `KeyLossRefused` for perfectly valid observations, intermittently, only for the sessions that
  * happen to have shed a field since the last tick.
  *
@@ -68,6 +68,10 @@ function snapshot(sessionId: string, over: Record<string, unknown> = {}) {
     },
     context: null,
     cost: null,
+    // Required since TRDD-SIV45HOG. The builder casts `as never` at every call site, so TS
+    // cannot catch a fixture that drifts from the type — the pinned-key test is what does, and
+    // it did: without this line the store writes 7 keys and the assertion below fails.
+    liveFp: null,
     ...over,
   }
 }
@@ -82,7 +86,7 @@ describe('writeStatuslineSnapshot', () => {
     expect(JSON.parse(readFileSync(path, 'utf-8')).sessionId).toBe('sess-1')
   })
 
-  it('writes ALL SEVEN top-level keys, so json-io has nothing to lose', async () => {
+  it('writes ALL EIGHT top-level keys, so json-io has nothing to lose', async () => {
     const s = await store()
     const { STATUSLINE_SNAPSHOT_KEYS } = await import('@/types/statusline')
     await s.writeStatuslineSnapshot(snapshot('sess-keys') as never)
@@ -92,7 +96,7 @@ describe('writeStatuslineSnapshot', () => {
   })
 
   it('NULLS a section a later tick no longer carries — never stale, never deleted', async () => {
-    // Tick 1 has a cost; tick 2 does not. "Always write all seven keys" is what makes BOTH wrong
+    // Tick 1 has a cost; tick 2 does not. "Always write all eight keys" is what makes BOTH wrong
     // answers unreachable, and they are different bugs:
     //
     //   · DELETE the key   → `updateJson`'s key-loss tripwire throws KeyLossRefused, and a routine

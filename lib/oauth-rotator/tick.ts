@@ -47,6 +47,14 @@ import {
 } from './slots'
 import { readLiveBlobWithSource } from './live'
 import { switchLiveTo } from './rotate'
+// TRDD-GY0LJV6S — the statusline disjunct. `RotatorState` satisfies `RotatorAdmissionView`
+// structurally, so the guard needs no adapter and no second view of "who is live".
+import {
+  freshestAdmissibleUsage,
+  type AdmissibleUsage,
+  type UsageObservation,
+} from '@/lib/statusline-admissible'
+import { listStatuslineSnapshots, STATUSLINE_FRESH_MS } from '@/lib/statusline-store'
 import {
   accountEmail,
   usageRequest,
@@ -195,6 +203,12 @@ export interface TickDeps {
   fetchImpl?: typeof fetch
   now?: () => number
   decide?: (msg: string) => void
+  /**
+   * The statusline observations, injectable so a test can drive the disjunct below with no fs.
+   * Defaults to the real store. Returning `[]` is how a test says "no statusline signal", which
+   * must be indistinguishable from today's behaviour — see `statuslineNear`. (TRDD-GY0LJV6S)
+   */
+  readSnapshots?: () => Promise<UsageObservation[]>
 }
 
 function nowS(deps?: TickDeps): number {
@@ -205,6 +219,54 @@ function decide(deps: TickDeps | undefined, msg: string): void {
 }
 function netDeps(deps?: TickDeps): NetworkDeps {
   return deps?.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}
+}
+
+/**
+ * Does the STATUSLINE, on its own, give a reason to rotate? — TRDD-GY0LJV6S.
+ *
+ * ── IT MAY ONLY EVER ADD A REASON, NEVER REMOVE ONE ──────────────────────────────────────────────
+ * `false` here means "no statusline signal", NOT "the account is fine". That asymmetry is the whole
+ * design and it is not a compromise: the one `usageRequest` below supplies FOUR things and the
+ * statusline can carry two. The model-scoped weekly windows (`worstScopedPercent` — Fable 5 has a
+ * weekly limit appearing in NEITHER top-level bucket, TRDD-JI7F1236) and `liveStatus` (the 429
+ * debounce, the 401/403 token-REJECTED branch, `networkUp`) are ENDPOINT-ONLY. So a statusline
+ * reading of "5h=10%" cannot license "not near" — the account may be fully spent on one model, or
+ * its token already rejected. Only a POSITIVE at-threshold reading is actionable, and it is used as
+ * a pure disjunct so it can never subtract from the endpoint's verdict.
+ *
+ * ── WHY IT CALLS `isNearLimit` INSTEAD OF COMPARING TO SWITCH_AT_5H ITSELF ────────────────────────
+ * One predicate, never two. A second copy of the threshold logic is precisely how a limit gets
+ * raised in one place and not the other. `scoped: null` is not a gap being papered over — it is
+ * that function's documented contract ("unknown usage never trips it"), which is exactly true of a
+ * source that structurally cannot observe the scoped windows.
+ *
+ * Returns null for the usage when nothing is admissible, so the caller can log WHY it stayed quiet.
+ */
+export async function statuslineNear(
+  state: RotatorState,
+  deps?: TickDeps,
+): Promise<{ near: boolean; usage: AdmissibleUsage | null }> {
+  let snapshots: UsageObservation[]
+  try {
+    snapshots = deps?.readSnapshots ? await deps.readSnapshots() : await listStatuslineSnapshots()
+  } catch {
+    // FAIL-SOFT, deliberately. An unreadable statusline store must leave the rotator exactly as it
+    // was before this card — never rotate, never block a rotation the endpoint would have made.
+    return { near: false, usage: null }
+  }
+  // ⚠ MILLISECONDS. `deps.now()` is this module's clock and it returns SECONDS (`nowS` divides
+  // Date.now() by 1000, matching Python's time.time() for the janitor daemon), while a snapshot's
+  // `capturedAt` is epoch ms. Converting HERE keeps one injectable clock instead of two; passing
+  // `nowS(deps)` straight through would be wrong by 1000× and — as in `admitSnapshot`'s own unit
+  // trap — wrong in the direction that makes every sample look ancient, silently disabling this
+  // whole path while reading as a working check.
+  const nowMs = deps?.now ? deps.now() * 1000 : Date.now()
+  const usage = freshestAdmissibleUsage(snapshots, state, {
+    now: nowMs,
+    maxAgeMs: STATUSLINE_FRESH_MS,
+  })
+  if (usage === null) return { near: false, usage: null }
+  return { near: isNearLimit(usage.fiveHourPct, usage.sevenDayPct, null), usage }
 }
 
 // ── Pure decision helpers (faithful ports; unit-testable with no I/O) ────────────────────────
@@ -503,6 +565,14 @@ export async function autoRotate(
   const scS = scWorst !== null ? ` ${scWorst.model}=${Math.round(scWorst.percent)}%` : ''
   const liveExpired = blobLocallyExpired(liveBlob)
   const networkUp = liveStatus !== 0
+  // Read AFTER the endpoint call so `state` already carries the reconciled `live_fp` /
+  // `last_switch_at` the admissibility guard compares against — a snapshot is admitted relative to
+  // WHO IS LIVE NOW, so reading it against a pre-reconciliation state would judge it by the wrong
+  // account. Never throws (fail-soft inside), so it cannot break a tick that works today.
+  const sl = await statuslineNear(state, deps)
+  const slDesc = sl.usage !== null
+    ? ` [statusline 5h=${Math.round(sl.usage.fiveHourPct)}%${sl.usage.sevenDayPct !== null ? ` 7d=${Math.round(sl.usage.sevenDayPct)}%` : ''}${sl.near ? ' OVER-THRESHOLD' : ''}]`
+    : ''
 
   let near: boolean
   let liveDesc: string
@@ -518,14 +588,25 @@ export async function autoRotate(
     liveDesc = `RATE-LIMITED (429 x${streak})`
   } else if (liveStatus === 200) {
     if (state.live_429_streak) { state.live_429_streak = 0; saveState(state) }
-    near = isNearLimit(fh, sd, sc) || liveExpired
-    liveDesc = `5h=${fhS} 7d=${sdS}${scS}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}`
+    // The statusline is a PURE DISJUNCT here — it can add a reason to rotate, never remove one.
+    // Everything the endpoint said is still consulted, unchanged. See `statuslineNear`.
+    near = isNearLimit(fh, sd, sc) || liveExpired || sl.near
+    liveDesc = `5h=${fhS} 7d=${sdS}${scS}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}${slDesc}`
   } else if (liveStatus === 401 || liveStatus === 403) {
     near = true
     liveDesc = `token REJECTED (HTTP ${liveStatus}) — expired/invalid`
   } else if (liveExpired) {
     near = true
     liveDesc = `LOCALLY EXPIRED + API unreachable (status ${liveStatus})`
+  } else if (sl.near) {
+    // The endpoint is unreachable and the STATUSLINE says at/over threshold. This branch used to
+    // unconditionally stay put, which was right when the endpoint was the only source: refusing to
+    // act on no data is the fail-safe. It is the WRONG answer once a second, independent source is
+    // saying the account is spent — "we cannot reach the usage API" is not a reason to keep billing
+    // a maxed account. Note the asymmetry holds even here: the statusline can move us OFF a maxed
+    // account, and can never talk us into staying on one.
+    near = true
+    liveDesc = `usage API unreachable (status ${liveStatus}) but STATUSLINE reports${slDesc}`
   } else {
     decide(deps, `auto: live ${liveEmail ?? '(live)'} usage unreachable (status ${liveStatus}) but token still valid locally; staying put`)
     return false

@@ -1,11 +1,11 @@
 ---
 trdd-id: K8VC7J71
 title: Migrate CLAUDE.md into the project wikimem — topic pages wikipedia-style, leave only build and overview
-column: dev
+column: human_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T17:03:59+0200
-updated: 2026-08-02T17:03:59+0200
+updated: 2026-08-02T17:58:48+0200
 current-owner: ai-maestro
 created-by: user
 assignee: ai-maestro
@@ -310,8 +310,31 @@ CLAUDE.md nor findable in the wiki is knowledge nobody knows is missing. Mitigat
   entry point at all, so `overview` ERRORED — the state that makes a reader fall back to CLAUDE.md.
 - [x] a per-section destination table (**28**, not 27 — `grep -n '^## '` counts 28) is recorded IN
   this card before any deletion, `bb94f839`
-- [ ] every destination page exists and validates BEFORE its section leaves `CLAUDE.md`
-- [ ] `memgrep validate` + `memgrep lint` clean over `.claude/project/memory/`
-- [ ] no PROJECT page carries an absolute `$HOME` path, a hostname, or a username
-- [ ] `CLAUDE.md` holds only the overview + build/install/test/branch/push operating instructions
-- [ ] `MEMORY.md` keeps its ONE line pointing at the overview
+- [x] every destination page exists and validates BEFORE its section leaves `CLAUDE.md` — all 28
+  sections probed with a distinctive string each against the wiki (22 probes + a residual sweep)
+  BEFORE the rewrite; 22/22 resolved. `74f023b8`.
+  **The check was NOT sufficient, and the residual sweep is what caught it** — see the DOC-POINTER
+  finding below. Coverage of a section's CONTENT does not imply coverage of what it POINTED AT.
+- [x] `memgrep validate` + `memgrep lint` clean over `.claude/project/memory/` — validate exit 0,
+  **0** lint ERRORs, 57 pages
+- [x] no PROJECT page carries an absolute `$HOME` path, a hostname, or a username —
+  `grep -rlE '/Users/[a-z]|/home/[a-z]|C:\\Users|<username>'` → **0 files**. (The janitor's
+  `memory-scope-leak` detector reports 3; all three are false positives, triaged above.)
+- [x] `CLAUDE.md` holds only the USER's five items — **141 894 → 12 627 bytes, 2 233 → 215 lines
+  (-91%)**, `74f023b8`
+- [x] `MEMORY.md` keeps its ONE line pointing at the overview — it is the deprecated harness stub
+  and its ENTRY POINT line names `memgrep overview` → `<project>-overview.md`. Correct as-is;
+  not touched.
+
+### DOC-POINTER — the residual finding the coverage check could not see
+
+`## Documentation References` passed the section check: its links still resolved. It was also **the
+only thing in the repo pointing AT** `docs/CEREBELLUM.md`, `docs/OPERATIONS-GUIDE.md` and
+`docs/REQUIREMENTS.md`. The cerebellum case is the sharp one — `lib/cerebellum` is a whole
+subsystem, **zero** wiki pages mention it, and that list was the only evidence the doc existed.
+Deleting it made a subsystem undiscoverable by any search a future session would think to run.
+
+Fixed by `project-long-form-docs` (58 docs, ~35 000 lines, naming which subjects live ONLY there),
+linked both ways with the overview. **Lesson: a link is CONTENT when it is the last one** — grep
+for each pointer's target before removing the section that carries it. A "migrated" pointer section
+is the one case where verifying the links resolve proves nothing.

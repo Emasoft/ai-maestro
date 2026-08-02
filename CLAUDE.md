@@ -1236,8 +1236,12 @@ succeeds: live agents run it now, hibernated agents run it on wake. Delivery is
 eventual, never conditional. The queue does not widen authorization — `queue`
 maps to `send-command`, which **R42 makes self-only for every title**: an agent
 may enqueue on itself and on nobody else, MANAGER and COS included. Fanning out
-across the fleet is the human USER's alone — and the scripts have no USER auth
-path yet, so today it has no working caller at all.
+across the fleet is the human USER's alone — and the USER *can* now call it:
+`get_auth_args` resolves `$AID_AUTH` → `$AIMAESTRO_SESSION` →
+`~/.aimaestro/cli-session` (the token `aimaestro-governance.sh login` writes), so
+an agent sends a bearer and a human sends an `aim_session` cookie. (This
+paragraph said the opposite — *"no USER auth path yet, so today it has no working
+caller at all"* — for 19 days after `bc177864` built it, ai-maestro#55.)
 
 `/janitor-arm` is per-project (it arms the heartbeat of the project whose session
 runs it), which is why it must be delivered into each agent's own session. It is
@@ -1246,11 +1250,19 @@ pause flags and arms no heartbeat. No fleet-wide arm command exists today. See
 [docs/SCRIPT-LAYER.md](./docs/SCRIPT-LAYER.md) § *a hibernated agent is never
 waited on*.
 
-**Full reference: [docs/SCRIPT-LAYER.md](./docs/SCRIPT-LAYER.md)** — every subcommand, the
-authorization rules that apply to an agent caller, and the two things that are not
-true yet (`aimaestro-trdd.sh`'s write verbs 403 for agents; the scripts have no
-USER auth path). `install-messaging.sh` copies `scripts/*.sh` by glob, so a new
-wrapper needs no installer edit.
+**Full reference: [docs/SCRIPT-LAYER.md](./docs/SCRIPT-LAYER.md)** — every subcommand and the
+authorization rules that apply to an agent caller. `install-messaging.sh` copies
+`scripts/*.sh` by glob, so a new wrapper needs no installer edit.
+
+This sentence used to end *"and the two things that are not true yet
+(`aimaestro-trdd.sh`'s write verbs 403 for agents; the scripts have no USER auth
+path)"*. **Both were fixed and the sentence was not.** The write verbs work for
+agents under the `manage-trdd` action since `d7531e53` (TRDD-K2WJH7RF), and the
+USER auth path landed in `bc177864` (ai-maestro#55). A "not true yet" list is a
+promise to delete an entry when it comes true; **when you close one, delete its
+line in the same commit** — a doc that says a capability is MISSING is worse than
+one that omits it, because the reader stops looking. Two of these lived in the
+file loaded into every session of this project.
 
 ### The decoupling invariant (the WHY — derive every rule below from THIS)
 

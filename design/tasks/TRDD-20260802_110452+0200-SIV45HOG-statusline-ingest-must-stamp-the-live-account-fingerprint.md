@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:04:52+0200
-updated: 2026-08-02T11:04:52+0200
+updated: 2026-08-02T11:09:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -69,7 +69,7 @@ than merely sequenced after it.
 1. **Stamp at ingest.** `POST /api/statusline/ingest` records the live account fingerprint with each
    report, resolved **server-side at arrival time** — never taken from the payload, which is
    attacker-shaped input from a console-local process and carries no identity anyway.
-2. **Stamp the switch.** Persist `last_switch_at` where the rotator can read it, so a report can be
+2. ~~**Stamp the switch.** Persist `last_switch_at`~~ — **ALREADY DONE** (`rotate.ts:44` → `tick.ts:537`). What remains is only to READ it, converting s→ms (see the unit trap above), so a report can be
    rejected on age as well as on identity. The two guards are not redundant: identity catches a
    report from a different account, age catches a report from the SAME account emitted before the
    switch (a session that had not yet noticed).
@@ -77,14 +77,34 @@ than merely sequenced after it.
    mis-attributed usage number is worse than no number — the rotator's fail-safe on absent data is
    already "do not rotate", which is the correct outcome here.
 
-## The reuse question, to answer before writing code
+## ANSWERED 2026-08-02 11:08 — the reuse question, resolved first-hand
 
-`lib/oauth-rotator/` already resolves a live fingerprint (`fp-differs` appears in the rotator's own
-slot reporting, and `state.live_fp` is named in GY0LJV6S). **Find that existing resolver and call
-it** — do not write a second one. Two fingerprints computed two ways is precisely how the guard
-would come to disagree with the thing it guards, and it would fail OPEN (a mismatch reads as "not
-the live account" → discard → rotator sees no data → does not rotate). Safe, but it would silently
-disable the whole feature and look like a working system.
+All three located, so no second implementation is needed and **scope item 2 turns out to be already
+done**:
+
+| what | where | note |
+|---|---|---|
+| the resolver | **`fingerprint(blob)` — `lib/oauth-rotator/slots.ts:139`**, exported | `sha256(accessToken)[:16]`; deliberately identifies a token WITHOUT storing it |
+| the current value | `state.live_fp` on `RotatorState` (`slots.ts:72`) | maintained by `rotate.ts:43` and reconciled by `tick.ts:326-372` |
+| `last_switch_at` | **ALREADY PERSISTED** — written at `rotate.ts:44`, read at `tick.ts:537` | scope item 2 below needs no work |
+
+**⚠ UNIT MISMATCH — and it fails in the direction that makes the guard VACUOUS.** The two clocks are
+not the same clock:
+
+- `state.last_switch_at` = **epoch SECONDS** (`rotate.ts:44`: `Date.now() / 1000`, commented
+  "matches Python time.time()")
+- `StatuslineSnapshot.capturedAt` = **epoch MILLISECONDS** (`types/statusline.ts:125`, explicit:
+  *"Epoch ms at which the SERVER received this observation"*)
+
+A naive `capturedAt >= last_switch_at` is wrong by **1000×**, and because a ms value (~1.78e12) is
+always greater than a seconds value (~1.78e9), it **ALWAYS PASSES** — the age guard is silently
+disabled while reading like a working check, and the post-switch rotation loop this card exists to
+prevent survives untouched inside its own guard. Convert explicitly at the comparison and pin it
+with a test whose fixture straddles the switch instant in BOTH directions; asserting only the reject
+case would pass against a guard that rejects everything.
+
+This is the same defect class D8OYFG35 already handled for `resets_at` (ISO vs epoch, normalised
+once at the boundary "or every comparison between them is wrong by 1000x") — the seam simply moved.
 
 ## Verification
 
@@ -102,9 +122,10 @@ disable the whole feature and look like a working system.
 ## Acceptance
 
 - [ ] ingest stamps a server-resolved live fingerprint on every stored report
-- [ ] `last_switch_at` is persisted and readable by the rotator
+- [x] `last_switch_at` is persisted and readable by the rotator — pre-existing (`rotate.ts:44`, `tick.ts:537`)
+- [ ] the age comparison converts SECONDS→MILLISECONDS explicitly, pinned by a test straddling the switch instant in BOTH directions (a ms-vs-s compare always passes ⇒ vacuous guard)
 - [ ] a report failing EITHER guard is discarded, and the discard is observable (counter or log)
-- [ ] the fingerprint comes from the rotator's existing resolver, not a second implementation
+- [ ] the fingerprint comes from `fingerprint()` in `lib/oauth-rotator/slots.ts`, not a second implementation
 - [ ] tests + at least 2 neuters recorded BY NAME; `tsc` 0; full suite green
 - [ ] [[GY0LJV6S]] unblocked and its `blocked-by` cleared
 

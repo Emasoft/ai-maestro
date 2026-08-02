@@ -100,12 +100,24 @@ describe('runOneTick stamps the floor', () => {
  *      no work is done". The other four stay GREEN, which is the point: every test that merely
  *      exercises a WORKING rotation still passes, so this one test is the only thing standing
  *      between the design and a floor that evaporates on a struggling fleet.
- *   2. `Symbol.for(...)` → a module-level `let lastAttempt = 0`
- *      → REDS 2 of 5: "lives in the cross-realm symbol registry, not a module-level binding"
+ *   2. `Symbol.for(...)` → a module-level `let`
+ *      → REDS 3 of 5 (predicted 2 — corrected to what the run printed):
+ *                     "lives in the cross-realm symbol registry, not a module-level binding"
  *                     "treats a missing or non-numeric cell as 'never attempted'"
- *      (the second because the `beforeEach` delete no longer resets the module's own binding —
- *      itself a demonstration that a module-local floor is not externally observable).
+ *                     "stamps on ENTRY even when the R16 gate is off and no work is done"
+ *      The two I did not predict fail for the SAME reason, and it is worth stating because it is
+ *      the neuter demonstrating its own point: `beforeEach` clears the floor by deleting the
+ *      globalThis cell, which cannot reach a module-local binding, so state leaks between tests. A
+ *      module-local floor is not externally observable — which is exactly why two loaded copies of
+ *      this module could not observe each other's either.
  *   3. `>=` → `>` in `tickAttemptAllowed` → REDS 1 of 5: "allows the first attempt and blocks a
  *      second inside the window" — the exact-boundary assertion. Off-by-one at the boundary is the
  *      whole reason that fixture straddles it rather than testing one side.
+ *
+ * ⚠ N3's FIRST measurement was garbage and read as a catastrophic result: all 5 red. The cause was
+ * not the neuter — an earlier `git checkout --` in the same batch had reverted this module to HEAD,
+ * which did not yet contain the floor at all (it was uncommitted), so the imports simply vanished.
+ * COMMIT BEFORE NEUTERING; `git checkout --` eats uncommitted work underneath the mutation. The
+ * re-run above is bracketed with a blob-vs-HEAD comparison so a silently-unapplied or
+ * silently-reverted mutation cannot masquerade as a measurement in either direction.
  */

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T14:28:27+0200
+updated: 2026-08-02T14:39:50+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -422,7 +422,7 @@ key* was dead.
 - [ ] REVERTED (`3c9a7493`) — the disjunct re-opened the burn loop; see the ⛔ REVERTED section. The 200-branch form is UNSOUND and will not be re-landed; the endpoint-unreachable form needs a >=2-tick debounce + a statusline dwell. Original wording also refused: `tick.ts:490` gains a statusline DISJUNCT into `near`; the endpoint read stays, because `sc` (model-scoped, JI7F1236) and `liveStatus` are endpoint-only
 - [x] candidate reads at `:496`/`:509` unchanged, and documented as structurally endpoint-only — untouched by `d17fffbd`, and the ⛔ correction now gives a SECOND reason (`sc` + `liveStatus` are endpoint-only for the LIVE account too)
 - [x] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports — SIV45HOG (`1a92aeb0`) + the `statuslineNear` caller (`d17fffbd`)
-- [ ] an at/over-threshold ingest fires `runOneTick()` (NOT `autoRotate` — the lock is one level up) behind a zero-I/O at-threshold pre-check and a globalThis 60 s floor stamped ON ATTEMPT. See the ⏭ ACTUAL DESIGN section; design report in reports/gy0ljv6s-push-trigger/
+- [x] DONE (`39bc5cad`) — an at/over-threshold ingest fires `runOneTick()` (NOT `autoRotate` — the lock is one level up) behind a zero-I/O at-threshold pre-check and a globalThis 60 s floor stamped ON ATTEMPT. See the ⏭ ACTUAL DESIGN section; design report in reports/gy0ljv6s-push-trigger/
 - [ ] the drain-guard: no expiry-only rotation off a low-usage account onto the last healthy slot
 - [~] tests + at least 2 neuters recorded BY NAME; `tsc` 0 — 28 tests + 6 measured neuters across
   `b481b26b`/`2816405b` (the selection function) and `d17fffbd` (`statuslineNear`). **Still open:

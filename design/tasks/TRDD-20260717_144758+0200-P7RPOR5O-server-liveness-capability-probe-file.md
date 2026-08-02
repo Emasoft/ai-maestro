@@ -3,7 +3,7 @@ trdd-id: P7RPOR5O
 title: Server liveness+capability probe file — the auth-free coordination seam both janitor backends read
 column: testing
 created: 2026-07-17T14:47:58+0200
-updated: 2026-07-17T14:55:07+0200
+updated: 2026-08-02T16:09:36+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -96,6 +96,55 @@ An auth-free file under `~/.aimaestro/` that the server maintains and both backe
   fields; `capabilities` is `[]` when the R16 flag is absent and `['family-a']` when present;
   `writeServerLiveness` never throws on an unwritable dir; the write is atomic (no partial file).
 - `bash scripts/with-node.sh npx tsc --noEmit` clean; `yarn build` clean.
+
+## ⏱ VERIFIED LIVE 2026-08-02 — the seam works, and the CONSUMER'S design changed underneath it
+
+Two things this card could not know when it was written, both measured today:
+
+**1. It IS live on disk, and both built tokens are advertised.** The STATE above says *"NOT YET LIVE
+ON DISK"* and *"today `capabilities: []`"*. Neither holds now: `~/.aimaestro/server-liveness.json`
+was **16 s old** when checked (inside the 90 s staleness window the consumers use) and carries
+`capabilities: ['family-a', 'singleton-chores']`. Both tokens went live via their own NPTs exactly
+as designed; `fleet-recovery` is still correctly absent, because [[CHN16JXZ]]'s Phase B is pending —
+the honesty rule holding, not an omission.
+
+**2. THE PER-CLASS INCREMENTAL HANDOFF THIS CARD WAS BUILT FOR WAS SUPERSEDED BY THE CONSUMER.**
+This card's LOAD-BEARING RULE is that `capabilities` drives a per-class handoff *"with no flag-day"*.
+`janitor#100` closed on 2026-08-01 with the opposite: their `TRDD-LU0C5KAR` makes the yield
+**BINARY ON LIVENESS**, quoting the owner — *"if the ai-maestro server is running, those chores are
+its responsibility"* — with **no per-class capability checks**. Their SSOT (`harness_backend.py`)
+reads `server_is_alive()` and yields all five `SERVER_ABSORBED_TASKS` at once.
+
+**What that changes, and what it does NOT.** The seam itself is unaffected and still exactly right:
+the file, its atomic write, its 30 s beat and its `ts` are what the binary probe reads, so this card
+delivered the substrate the consumer actually uses. What changed is that **`capabilities` is now
+ADVISORY** — written honestly, read by nobody. The safety property inverts accordingly, and this is
+the part worth carrying forward: under the old design an un-advertised chore stayed with the
+janitor; under binary yield, **a chore this server fails to run while merely being alive is run by
+NOBODY**. The honesty rule below is therefore still worth obeying — but it no longer protects
+anything by itself. Full reading on [[KCRMSNL7]].
+
+## Acceptance
+
+Transcribed from this card's own `## Verification` list and the two NEXT-ACTION conditions its STATE
+names. Re-run live 2026-08-02 (16 tests green; the card recorded 8, it has since doubled).
+
+- [x] the file is written with its 3 fields (`ts`, `pid`, `capabilities`) — `f47d2ff4`
+- [x] `capabilities` is `[]` when the R16 flag is absent and carries `family-a` when present,
+      reusing `oauthTickEnabled()` so the flag name is never duplicated
+- [x] `writeServerLiveness` NEVER throws on an unwritable dir — a coordination beat that dies
+      because its own write failed is worse than no beat
+- [x] the write is ATOMIC (tmp + rename); no consumer can ever `stat` a partial file
+- [x] `tsc --noEmit` clean; `yarn build` clean
+- [x] **live on disk** — the STATE's one open condition. Verified 2026-08-02: 16 s old, inside the
+      90 s window, `['family-a','singleton-chores']`
+- [x] the honesty rule holds in code — `lib/server-liveness.ts:90-92`: `family-a` gated on
+      `oauthEnabled()`, `singleton-chores` on `singletonChoresLive()`, and `fleet-recovery`
+      deliberately NOT computed until its chore is live
+- [~] the per-class INCREMENTAL HANDOFF this card's rule was written to enable — **superseded by
+      the consumer** (`janitor#100` → their `TRDD-LU0C5KAR`, binary on liveness). Marked struck
+      rather than checked or dropped: it was a real goal, it is no longer reachable from here, and
+      recording that is what stops the next reader re-deriving a design the peer has abandoned
 
 ## Approval log
 

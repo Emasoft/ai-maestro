@@ -230,12 +230,30 @@ read from the TRDD's own `min-approval-requirement:`, no agent may approve a
 Until that landed they 403'd every agent with `agent_policy_undefined`, which made
 the CLI half a tool: read the board, never touch it.
 
-### One thing that is NOT true yet
+### The human's auth path — it exists (this section used to say it did not)
 
-**There is no USER auth path in the scripts.** `scripts/shell-helpers/common.sh::get_auth_args`
-emits only the AID bearer. A human running `aimaestro-panel.sh status <agent>` from a
-terminal gets `401 auth_required`. Teaching `get_auth_args` about the `aim_session`
-cookie is open work.
+`get_auth_args` resolves, first match wins:
+
+1. **`$AID_AUTH`** — an agent presenting its own identity, which must win;
+2. **`$AIMAESTRO_SESSION`** — an explicit session token (CI, a one-off shell);
+3. **`~/.aimaestro/cli-session`** — the token `aimaestro-governance.sh login` writes.
+
+An agent gets `Authorization: Bearer`, a human gets `Cookie: aim_session=…`. **The password is
+never part of this** — not an argument, not an env var, never reaching these helpers: `login`
+prompts on the TTY, exchanges it for a token once, and only the TOKEN is stored or sent. A password
+on argv leaks through `ps` and shell history (TRDD-E9BZ5P7S); an env var leaks into every child
+process.
+
+⚠ **This section asserted the opposite for 19 days.** It read *"There is no USER auth path in the
+scripts … emits only the AID bearer … is open work"*, while `bc177864` (2026-07-14, ai-maestro#55,
+*"a human could not use the script layer at all"*) had already built it — and the installed copy at
+`~/.local/share/aimaestro/shell-helpers/common.sh` carries it too. Corrected 2026-08-02 while
+verifying TRDD-K2WJH7RF Part 3, which is the item that asked for exactly this.
+
+A doc that claims a capability is missing is worse than one that omits it: the reader stops looking.
+**When you close a "not true yet" item, delete the paragraph in the same commit** — the code comment
+in `common.sh` says *"Until now these helpers emitted ONLY the bearer"*, so the fix knew it was
+falsifying this text and this text was not told.
 
 ## How they reach `~/.local/bin/`
 

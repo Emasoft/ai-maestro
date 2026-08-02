@@ -130,10 +130,23 @@ export type TickReason = 'refresh-dead' | 'slot-unreadable'
  *
  *  - `all-maxed`             — the API is reachable and no alternate is healthy + below threshold.
  *  - `cannot-rotate-offline` — the live credential is locally expired and the API is unreachable.
+ *  - `drain-guard-hold`      — a rotation was DECLINED by the drain-guard: the live account still
+ *                              has headroom and a working token, and rotating for a local expiry
+ *                              alone would have spent the last healthy alternate.
  * They are separated because the OWNER differs: the first waits for a window, the second needs a
  * human. Collapsing them would re-create the ambiguity `TickReason` already exists to avoid.
+ *
+ * WHY THE HOLD IS REPORTED RATHER THAN STAYING SILENT (TRDD-GY0LJV6S). It satisfies this type's
+ * own definition — the tick WANTED to rotate (`near`) and did not — and nothing else in the beat
+ * can see it: `surveyAlternates` (:784) skips the live account, so a LIVE credential that is
+ * expiring is invisible to it, and `keepaliveRefresh` (:469) never refreshes the live account by
+ * design. Left silent, the beat would report `nextAction: 'ok'` and `'no action needed'` for
+ * precisely the state that preceded the 2026-08-02 lockout — which is the defect documented in
+ * this very comment block, re-created one branch further along. `server-tick.ts:185` turns it into
+ * `rotator-stuck:drain-guard-hold`, and alert-delivery's per-code escalating backoff is what keeps
+ * a condition that can hold for many ticks from becoming a 60-second siren.
  */
-export type StuckReason = 'all-maxed' | 'cannot-rotate-offline'
+export type StuckReason = 'all-maxed' | 'cannot-rotate-offline' | 'drain-guard-hold'
 
 /**
  * PURE. The beat's one-line verdict. Extracted from `runTick` (TRDD-RFQFCCU4) because this is the
@@ -169,6 +182,9 @@ export function deriveDecision(f: {
   }
   if (f.stuck === 'cannot-rotate-offline') {
     return 'STUCK: live credential is locally expired and the API is unreachable — cannot rotate; manual re-auth needed'
+  }
+  if (f.stuck === 'drain-guard-hold') {
+    return 'HOLDING: the live account still has headroom and a working token, but its stored copy is expiring and at most one healthy alternate remains — not spending the last one on a local expiry; re-login the live account before its stored copy dies'
   }
   if (f.refreshedCount) return `refreshed ${f.refreshedCount} slot(s)`
   return 'no action needed'
@@ -316,6 +332,52 @@ export function selectDrainFirst(candidates: Candidate[]): Candidate | null {
     if (best === null || Math.max(c[2], c[3]) > Math.max(best[2], best[3])) best = c
   }
   return best
+}
+
+/** THE DRAIN-GUARD (TRDD-GY0LJV6S). True when rotating would spend the fleet's last healthy
+ * alternate for LOCAL EXPIRY ALONE, off an account that still has real headroom.
+ *
+ * THE INCIDENT it exists for (2026-08-01): the rotator twice moved off `fmuaddib` — at 39%/24%,
+ * then 9%/38% — purely because its stored token was expiring. When the target maxed out there was
+ * no way back: by then `fmuaddib`'s slot copy was 10.9 days expired with 69 consecutive refresh
+ * failures. The ACCOUNT had headroom the whole time; the rotator's copy of the key was dead.
+ *
+ * WHY REFUSING IS SAFE — this is the whole argument, and it rests on one measured fact. The
+ * predicate is only ever consulted after `usageRequest` returned 200 USING THE LIVE TOKEN, so the
+ * token demonstrably works right now and `liveExpired` is a PREDICTION of failure, not an
+ * observation of one. When the prediction comes true the endpoint answers 401/403 — a different
+ * branch, where `expiryOnly` is false and this guard does not apply. So a hold costs at most one
+ * 60 s tick of latency after a REAL failure, and buys not spending the escape hatch on a failure
+ * that has not happened.
+ *
+ * `viableTargets` COUNTS USAGE-CONFIRMED CANDIDATES ONLY, NEVER THE `degraded` BUCKET. A degraded
+ * slot is "not provably dead", which is not "healthy" — and a paper spare that was dead in fact IS
+ * the incident. Counting them would license the worst shape of all: with 0 confirmed candidates
+ * and 2 degraded ones, an account working at 9% usage would be rotated onto a target whose usage
+ * is unknown, for an expiry that had not yet happened.
+ *
+ * NULL DISCIPLINE, mirroring `isNearLimit`: unknown usage never TRIPS a rotation, and here it must
+ * never SUPPRESS one either — an account we cannot measure is not an account we can call
+ * low-usage. "Low usage" is `isSafeAlternate`, i.e. the rotator's own "would I rotate ONTO this?"
+ * test, so no new threshold is invented and the 90-97 band is deliberately UNPROTECTED: an account
+ * at 95% has no headroom worth saving. Pure. */
+export function drainsLastEscapeHatch(f: {
+  /** `near` is true SOLELY because the live token is locally expiring. Set only where the usage
+   *  endpoint answered 200, so 5h / 7d / scoped are KNOWN and below their switch thresholds. */
+  expiryOnly: boolean
+  fh: number | null
+  sd: number | null
+  scoped: number | null
+  /** Usage-confirmed safe alternates. NOT `degraded` — see above. */
+  viableTargets: number
+}): boolean {
+  if (!f.expiryOnly) return false
+  if (f.fh === null || f.sd === null) return false // unmeasurable ≠ low-usage
+  if (!isSafeAlternate(f.fh, f.sd, f.scoped)) return false // no headroom worth protecting
+  // `<= 1`: spares remaining after a rotation are `viableTargets - 1`, so "the target would become
+  // the last healthy slot" is exactly 1. Zero is included because the honest report there is this
+  // hold, not `all-maxed` — which would claim the live account is exhausted while it reads 9%.
+  return f.viableTargets <= 1
 }
 
 // ── The session identity beacon (F1 anchor; rotate.ts writes it, we read it) ─────────────────
@@ -583,6 +645,12 @@ export async function autoRotate(
 
   let near: boolean
   let liveDesc: string
+  // THE DRAIN-GUARD's precondition, assigned in exactly ONE branch on purpose: only the 200 arm
+  // has KNOWN usage, so only there can "the sole reason to rotate is a local expiry" be a FACT
+  // rather than an absence of data. It stays false for 429 / 401 / 403 / unreachable — and that is
+  // precisely what makes the escape hatch work: a token that really has died answers 401, lands in
+  // a branch this flag never reaches, and rotates. See `drainsLastEscapeHatch`.
+  let expiryOnly = false
   if (liveStatus === 429) {
     const streak = (typeof state.live_429_streak === 'number' ? state.live_429_streak : 0) + 1
     state.live_429_streak = streak
@@ -614,7 +682,9 @@ export async function autoRotate(
     // `MIN_DWELL_S` is not the backstop it looks like: `last_switch_at` is written ONLY inside
     // `switchLiveTo` (rotate.ts:44), so a rotation that finds no candidate leaves the dwell
     // untouched and the next tick retries immediately.
-    near = isNearLimit(fh, sd, sc) || liveExpired
+    const usageNear = isNearLimit(fh, sd, sc)
+    expiryOnly = liveExpired && !usageNear
+    near = usageNear || liveExpired
     liveDesc = `5h=${fhS} 7d=${sdS}${scS}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}${slDesc}`
   } else if (liveStatus === 401 || liveStatus === 403) {
     near = true
@@ -708,6 +778,34 @@ export async function autoRotate(
     }
   }
   if (indexHealed) saveState(state) // before any switchLiveTo (it re-loads state from disk)
+
+  // THE DRAIN-GUARD (TRDD-GY0LJV6S) — the LAST thing before either rotation path, so ONE placement
+  // covers BOTH `switchLiveTo` calls below (drain-first and degraded). It has to sit here rather
+  // than earlier because it needs the candidate COUNT, and the count is only known once the loop
+  // above has probed. A guard placed before the loop would have to guess it.
+  //
+  // ⚠ IT COUNTS `candidates` ONLY, never `degraded`. Rotating a working low-usage account onto an
+  // unevaluable target for an expiry that has not happened is the incident — not the case the
+  // degraded fallback exists for ("beats pinning the user to an exhausted/dead live account", and
+  // the live account here is neither exhausted nor dead: the endpoint just accepted its token).
+  //
+  // COST, stated rather than glossed: while this holds, every tick re-probes each alternate, where
+  // the pre-guard code would have rotated once and gone quiet. Bounded in the normal case — either
+  // Claude Code refreshes the live token (`liveExpired` clears, no rotation was wanted after all)
+  // or the token dies (401 → rotate). A blob carrying a bogus `expiresAt` that the endpoint keeps
+  // validating holds indefinitely, which is the CORRECT outcome (the token works) but keeps paying
+  // the probes. Note also that `refreshAndHealSlot` has no MAX_REFRESH_FAILURES gate — unlike
+  // keepalive's (:489) — so a dead-refresh alternate costs one wasted OAuth round-trip per held
+  // tick. That is pre-existing in every long `near` state; it is named HERE because this guard is
+  // what makes long `near` states common.
+  if (drainsLastEscapeHatch({ expiryOnly, fh, sd, scoped: sc, viableTargets: candidates.length })) {
+    decide(
+      deps,
+      `auto: live ${liveEmail ?? '(live)'} ${liveDesc} — DRAIN-GUARD: rotating for a local expiry alone would spend the last healthy alternate (${candidates.length} usage-confirmed); staying put while the token still answers 200. A real token failure returns 401 and rotates on the next tick.`,
+    )
+    if (out) out.stuck = 'drain-guard-hold'
+    return false
+  }
 
   // 1) Best usage-confirmed safe target (DRAIN-FIRST), when the network is up.
   const best = networkUp ? selectDrainFirst(candidates) : null

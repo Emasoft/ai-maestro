@@ -121,6 +121,32 @@ Everything not in those five items migrates. The KEEP verdicts below for §12 (r
 §21 (env vars), §8 (release & marketing) and §11 (file structure) are therefore **cancelled** — they
 all migrate in full.
 
+## ⚠ ORDERING CORRECTION BY THE USER, 2026-08-02 — contradictions are resolved BEFORE the split
+
+> "resolve the contraddictions before creating the wikimem pages, otherwise it will become harder
+> to discover them when the files are separated"
+
+Correct, and it was already happening: **2 of the first 7 pages had inherited a false claim**. Once
+§10.4 and §19's gotcha-3 live in different files, nobody ever sees them side by side again — the
+one property that made the contradiction findable is destroyed by the migration itself. So the
+sweep runs on the SOURCE, while it is still one file, and each item is settled against the CODE,
+never by picking whichever sentence sounds newer.
+
+### The contradiction ledger — all 6 RESOLVED
+
+| # | the contradiction | verified against | resolution |
+|---|---|---|---|
+| 1 | 4 sites asserted the mount-all UI (WebSocket persists across switches, "visibility toggle", "created once per agent"); §10.4's UI-CRIT-01 says only the active agent is mounted | `app/page.tsx` renders only `activeAgentId`; `hooks/useWebSocket.ts` closes in effect cleanup | all 4 corrected + the 2 pages that had already inherited it; error DEMOTED to `[^N]` lessons, not deleted |
+| 2 | §13 "`~/.aimaestro/messages/` is no longer used" vs §12 listing it **"(verified)"** as the live native store | `agent-registry.ts:833` calls it *"legacy"* and only backs it up on delete; `messageQueue.ts` uses `~/.agent-messaging/` | §12 entry re-marked `(legacy)` with the live path named |
+| 3 | §15 "The **7** role-plugin repos" vs §18 "**8** repos" | `PREDEFINED_ROLE_PLUGIN_NAMES` = **8** | §15 corrected to 8 + the missing `ai-maestro-autonomous-agent` row added. Also recorded: a **9th** (`ai-maestro-assistant-role-agent`) is published and in the manifest but deliberately outside the tuple — an OPEN question on #86, so "do not fix the count to 9" |
+| 4 | §13 and §18 both said "**11 skills**", with two different lists, and §18 named `agent-management` | the plugin ships **26**; `agent-management` has never existed | both replaced by the discovery command + the four families. **Two sections agreeing on a number is not verification** — they were copies of one stale snapshot, and hand-listing an auto-discovered set guarantees the recurrence |
+| 5 | §26 listed human-user auth as **Planned**; §19 describes it as shipped with the bypass CLOSED | `app/api/auth/{login,logout,session,setup-init,setup-verify}`, `webauthn/*`, `lib/session-auth.ts` | moved to Shipped. A roadmap listing a shipped feature as pending is worse than omitting it — the reader concludes it is missing and stops looking |
+| 6 | §2 "there is no `/api/health`" reads as "no health endpoint exists", while §13 documents `/api/v1/health` | `find app/api -name health` → `v1/`, `agents/`, `hosts/` — but no bare `/api/health` | both claims were true; §2 now names the three that DO exist and why none is a substitute |
+
+**Not a contradiction, and deliberately not "fixed":** §10's `###` numbering runs 1,2,3,**3**,4…10.
+The duplicate dies with the migration (a page has no number), so renumbering would cascade through
+eight headings of text that is about to be deleted.
+
 ## Findings the migration turned up (fix during the final pass, not silently in transit)
 
 **0. The `memory-scope-leak` detector's 3 PROJECT-page findings are all FALSE POSITIVES** — checked

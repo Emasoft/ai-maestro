@@ -124,7 +124,11 @@ had just been repaired — silently, while `git log` showed the fix present. So:
 
 **Port Configuration:** The application is configured to run on port 23000. This is set in the PM2 configuration.
 
-**Health Check:** Do NOT use `/api/health` to check if the site is live (it doesn't exist). Use `/api/sessions` instead - it returns the list of agents and confirms the server is running.
+**Health Check:** there is no `/api/health` — use **`/api/sessions`**, which returns the agent list
+and so proves the server is actually serving. Three *other* health routes do exist and are not
+substitutes: `/api/v1/health` is the AMP **provider** probe (documented under Agent Messaging
+Protocol), `/api/agents/health` and `/api/hosts/health` report on agents and peer hosts. Reaching
+for the word "health" lands on one of those and answers a different question.
 
 ## Code-analysis tooling (official deps — TRDD-ZFHY7UGU)
 
@@ -904,7 +908,10 @@ referenced by current code — confirm before relying on them.
 ├── amp-api-keys.json             # AMP provider API keys issued to registered agents         (verified, lib/amp-auth.ts)
 ├── teams/                        #   teams.json, groups.json, meetings.json, teams.ledger.json (append-only
 │                                 #   team ledger), tasks-<teamId>.json, documents       (verified — task/group/document registries)
-├── messages/                     #   AI-Maestro-native messages: inbox/ sent/ archived/ (per agent name)   (verified)
+├── messages/                     #   LEGACY inbox/ sent/ archived/. The live store is ~/.agent-messaging/agents/<id>/messages/
+│                                 #   (lib/messageQueue.ts). agent-registry.ts calls this dir "legacy" and only BACKS IT UP on
+│                                 #   agent delete — nothing writes here. Corrected 2026-08-02: it was marked "(verified)", which
+│                                 #   contradicted the AMP section two screens away saying it is no longer used.   (legacy)
 ├── backups/                      # registry.json backups taken before mutations          (verified, lib/agent-registry)
 ├── kanban-index/                 #   DERIVED CACHE — <hash>.json per design-dir board index. SAFE TO DELETE:
 │                                 #   rebuilt from the TRDD markdown on next read   (verified, lib/kanban-index.ts)
@@ -1058,7 +1065,15 @@ The AI Maestro plugins are installed from the marketplace `Emasoft/ai-maestro-pl
 - AMP scripts (`amp-*.sh`) → `~/.local/bin/` (CLI tools on PATH)
 - Deprecated `23blocks-OS/ai-maestro-plugins` marketplace removed (if present)
 - `ai-maestro-plugin` → from marketplace `Emasoft/ai-maestro-plugins` (`--scope user`)
-  - 11 skills: agent-messaging, agent-identity, ai-maestro-agents-management, graph-query, memory-search, docs-search, planning, team-governance, team-kanban, debug-hooks, mcp-discovery
+  - **Skills are auto-discovered from `skills/*/SKILL.md` — do not hand-maintain the list here.**
+    Read the installed set with
+    `find ~/.claude/plugins/cache/ai-maestro-plugins/ai-maestro-plugin/*/skills -maxdepth 1 -mindepth 1 -type d -exec basename {} \;`.
+    As of 2026-08-02 that is **26**, in four families: messaging/identity (`agent-messaging`,
+    `agent-identity`), agent + repo ops (`ai-maestro-agents-management`, `agent-repo-workflow`,
+    `ama-session`, `ama-panel`), the 3-pillars surface (`ama-trdd-*` ×5, `ama-prrd-*` ×4,
+    `ama-proposal-approvals`, `ama-kanban-render`, `team-kanban`, `team-governance`), and
+    search/diagnostics (`docs-search`, `graph-query`, `memory-search`, `mcp-discovery`,
+    `debug-hooks`, `network-security`, `planning`)
   - 12 AMP slash commands: `/amp-send`, `/amp-inbox`, `/amp-read`, etc.
   - Hooks: session tracking + message notifications
 - Local role-plugins marketplace → `~/agents/role-plugins/`
@@ -1494,7 +1509,15 @@ uv run python scripts/publish.py --patch
 claude plugin update <plugin-name>@ai-maestro-plugins
 ```
 
-**The 7 role-plugin repos (each independent, NOT forked):**
+**The 8 predefined role-plugin repos (each independent, NOT forked):**
+
+> **Corrected 2026-08-02.** This heading said **7** and its table omitted
+> `ai-maestro-autonomous-agent` — the one R9.13 makes mandatory for AUTONOMOUS — while the
+> "GitHub Repos Architecture" section listed **8**. `PREDEFINED_ROLE_PLUGIN_NAMES` in
+> `lib/ecosystem-constants.ts` is the authority and has 8. A **ninth** repo,
+> `Emasoft/ai-maestro-assistant-role-agent`, is published and IS in the marketplace manifest but is
+> deliberately NOT in that tuple — consumers assume a set of exactly 8, so adding it is an open
+> question tracked on ai-maestro#86, not a settled fact. Do not "fix" the count to 9.
 
 | Plugin | Repo |
 |--------|------|
@@ -1505,6 +1528,7 @@ claude plugin update <plugin-name>@ai-maestro-plugins
 | `ai-maestro-integrator-agent` | `Emasoft/ai-maestro-integrator-agent` |
 | `ai-maestro-programmer-agent` | `Emasoft/ai-maestro-programmer-agent` |
 | `ai-maestro-maintainer-agent` | `Emasoft/ai-maestro-maintainer-agent` |
+| `ai-maestro-autonomous-agent` | `Emasoft/ai-maestro-autonomous-agent` |
 
 **What NOT to do:**
 - Do NOT edit `~/.claude/plugins/cache/<marketplace>/<plugin>/` — changes are lost on update
@@ -1587,7 +1611,14 @@ This repo's scripts are **more up to date** than the upstream marketplace — th
 
 The main AI Maestro Claude Code plugin (v2.2.0+). Contains **only** skills, commands, hooks — **zero scripts** except the hook handler:
 - **1 hook script**: `scripts/ai-maestro-hook.cjs` (session tracking + message notifications)
-- **11 skills** (auto-discovered from `skills/*/SKILL.md`): agent-management, agent-messaging, agent-identity, debug-hooks, docs-search, graph-query, mcp-discovery, memory-search, planning, team-governance, team-kanban
+- **Skills**: auto-discovered from `skills/*/SKILL.md`, so the count is whatever ships — **26** as
+  of 2026-08-02. Enumerated in the AMP "Installation" section above; not duplicated here.
+
+  > **Corrected 2026-08-02.** This line, and the one in that section, both said **11** and gave two
+  > DIFFERENT lists — and this one named `agent-management`, which has never existed (it is
+  > `ai-maestro-agents-management`). Fifteen real skills, including the whole `ama-*` 3-pillars
+  > family, appeared in neither. Two sections agreeing on a number is not verification: they were
+  > copies of one stale snapshot, and hand-listing an AUTO-DISCOVERED set guarantees this recurs.
 - **12 AMP commands** (`commands/*.md`): `/amp-init`, `/amp-send`, `/amp-inbox`, etc. — reference scripts at `~/.local/bin/` (installed by main repo)
 - **No regular scripts** — all scripts live in the main repo and are installed system-wide by the installers
 
@@ -2128,9 +2159,15 @@ Key files:
 
 ## Roadmap Context
 
-**Shipped (v0.29+):** Agent auto-discovery + creation, team governance (R1-R20), Groups, role-plugin marketplace, AMP messaging, kanban boards, agent profile panel, settings page, cross-client conversion (Claude/Codex/Gemini/OpenCode/Kiro/GitHub Copilot), Tailscale remote access with IP filter, Agent Identity (AID / Ed25519 + WebAuthn), sudo-mode for strict routes, IBCT, element management pipelines (ChangeTitle, ChangePlugin, ChangeClient, ChangeTeam, etc.).
+**Shipped (v0.29+):** Agent auto-discovery + creation, team governance (R1-R20), Groups, role-plugin marketplace, AMP messaging, kanban boards, agent profile panel, settings page, cross-client conversion (Claude/Codex/Gemini/OpenCode/Kiro/GitHub Copilot), Tailscale remote access with IP filter, human-user authentication (first-run setup, login, `aim_session` cookies), Agent Identity (AID / Ed25519 + WebAuthn), sudo-mode for strict routes, IBCT, element management pipelines (ChangeTitle, ChangePlugin, ChangeClient, ChangeTeam, etc.).
 
-**Planned:** Human user authentication (login page + session cookies), CORS/CSRF protection, remote SSH sessions, richer collaboration flows.
+**Planned:** CORS/CSRF protection, remote SSH sessions, richer collaboration flows.
+
+> **Corrected 2026-08-02.** "Human user authentication (login page + session cookies)" was listed
+> here as planned. It **shipped** — `app/api/auth/{login,logout,session,setup-init,setup-verify}`,
+> `app/api/auth/webauthn/*`, `lib/session-auth.ts`, and the Network Security section already says
+> the old no-auth bypass is CLOSED. A roadmap that lists a shipped feature as pending is worse than
+> one that omits it: the reader concludes the capability is missing and stops looking for it.
 
 When implementing features:
 - Check whether the capability already exists — most roadmap items have shipped; search `services/` and `app/api/` first.

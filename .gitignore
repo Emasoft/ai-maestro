@@ -274,3 +274,10 @@ rust-tools/**/target/
 # the pattern (rather than deleting the file, which RULE 0 forbids) stops it dirtying the
 # tree forever while leaving it readable on disk. The *pages* it refers to stay tracked.
 /.claude/project/memory/*-proposed.md
+
+# unbrowse's kuri broker drops `.kuri/auth-profiles/` into whatever CWD it is run from, and
+# that directory holds SITE SESSION MATERIAL (its "saved Kuri auth profile for <domain>").
+# Running any unbrowse command from the repo root therefore plants captured cookies inside a
+# tracked, pushed repository — one `git add` from shipping a live session to every clone.
+# Ignored rather than deleted (RULE 0), so it stays readable on disk and stops dirtying the tree.
+/.kuri/

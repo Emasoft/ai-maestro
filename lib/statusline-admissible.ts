@@ -125,3 +125,79 @@ export function stampLiveAccount(snapshot: StatuslineSnapshot): StatuslineSnapsh
   snapshot.liveFp = resolveLiveAccountFp()
   return snapshot
 }
+
+/**
+ * The fields the selection reads — a `Pick`, exactly like `admitSnapshot`'s parameter and for the
+ * same reason: a real `StatuslineSnapshot[]` still passes structurally, while a test may build a
+ * fixture without inventing the fields this code never looks at. A fixture cast to the full type
+ * would compile today and go on compiling after a field it depends on changes shape.
+ */
+export type UsageObservation = Pick<StatuslineSnapshot, 'liveFp' | 'capturedAt' | 'rateLimits'>
+
+/** The two windows the rotator actually decides on, plus when the sample was taken. */
+export interface AdmissibleUsage {
+  fiveHourPct: number
+  sevenDayPct: number | null
+  capturedAt: number
+}
+
+/**
+ * The freshest snapshot the rotator may act on, or NULL — the bridge `tick.ts:490` will call.
+ *
+ * ── WHY THIS IS A SEPARATE, PURE FUNCTION ───────────────────────────────────────────────────────
+ * It is everything GY0LJV6S needs EXCEPT the one edit that can hurt. `autoRotate` is the function
+ * whose failure mode is "burns every remaining account in minutes, unattended, while the log reads
+ * like healthy rotation", so the selection logic is built and pinned here first, where it can be
+ * driven with fabricated snapshots and no rotator state at all. Wiring then becomes a small,
+ * reviewable substitution rather than new logic invented inside the dangerous function.
+ *
+ * ── NULL IS THE FAIL-SAFE, AND IT MUST STAY THAT WAY ────────────────────────────────────────────
+ * Returning null means "no usable observation" and the caller MUST fall back to the endpoint
+ * (`usageRequest`) rather than assume anything. This lines up deliberately with `tick.ts:220` —
+ * *"unknown usage never trips it; only a positive over-threshold signal rotates"* — so an
+ * inadmissible snapshot lands in the SAME branch as an unreachable endpoint. That equivalence is
+ * what makes this safe to wire; if a future edit makes null mean something else, the guard stops
+ * being a guard.
+ *
+ * ── FRESHNESS IS THE CALLER'S CONSTANT, NOT OURS ────────────────────────────────────────────────
+ * `maxAgeMs` is required rather than defaulted so this module never has to import the store (which
+ * pulls in `fs`) and so the freshness policy has exactly ONE owner — `STATUSLINE_FRESH_MS` in
+ * `lib/statusline-store.ts`. A default here would be a second policy that silently disagrees with
+ * the roll-up's definition of "describes a live session".
+ */
+export function freshestAdmissibleUsage(
+  snapshots: readonly UsageObservation[],
+  rotator: RotatorAdmissionView,
+  opts: { now: number; maxAgeMs: number },
+): AdmissibleUsage | null {
+  let best: AdmissibleUsage | null = null
+
+  for (const s of snapshots) {
+    // Age FIRST — it is the cheapest rejection and the one most snapshots fail. A stale file
+    // describes a session that ended, and its window has since reset.
+    if (opts.now - s.capturedAt > opts.maxAgeMs) continue
+    // …then identity + pre-switch. Same predicate the rest of the system uses; never a second copy.
+    if (admitSnapshot(s, rotator) !== null) continue
+
+    const fh = s.rateLimits.fiveHour?.usedPercentage
+    // The 5h window is what `autoRotate` decides on, so a snapshot without it is not a usable
+    // observation however fresh it is. Rejecting here rather than defaulting to 0 is the whole
+    // point: a missing gauge read as "0% used" would report a maxed account as empty.
+    if (typeof fh !== 'number' || !Number.isFinite(fh)) continue
+
+    // NEWEST wins. Not the highest — that is the ROLL-UP's rule (`StatuslineRollup` takes the
+    // tightest window across sessions because they disagree by sampling instant). Here every
+    // admissible snapshot is post-switch on the SAME account, so the freshest is simply the most
+    // truthful, and taking a max would let one old pessimistic sample veto recovery forever.
+    if (best === null || s.capturedAt > best.capturedAt) {
+      const sd = s.rateLimits.sevenDay?.usedPercentage
+      best = {
+        fiveHourPct: fh,
+        sevenDayPct: typeof sd === 'number' && Number.isFinite(sd) ? sd : null,
+        capturedAt: s.capturedAt,
+      }
+    }
+  }
+
+  return best
+}

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T15:56:00+0200
+updated: 2026-08-02T15:57:55+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -254,6 +254,36 @@ Re-checked with that spelling, JT3U4ZVM is the **third** instance in this same c
 **Three of the four `ai_review` cards were parked on external state that had already resolved.**
 That is no longer an anecdote; it is the column's dominant failure mode.
 
+### The sweep re-run properly — 47 refs, not 15, and 15 of them CLOSED
+
+Re-extracted spelling-agnostically (all four forms, via a Python regex union rather than one
+grep substring). **The first sweep saw 15 refs and missed 32 — 68% of them.**
+
+```bash
+# the corrected extractor: every spelling, from the frontmatter line only
+python3 -c "…"  # github.com/o/r/(issues|pull)/N  ·  gh:o/r#N  ·  o/r#N
+# then, per ref: gh issue view N --repo o/r --json state,closedAt
+```
+
+**47 distinct refs · 32 OPEN · 15 CLOSED.** The closed ones, by how long they have been closed:
+
+| closed | ref | cards still pointing at it |
+|---|---|---|
+| 07-13 | `ai-maestro-plugin#24`, `#25` | [[JT3U4ZVM]] — **resolved above** |
+| 07-14 · 07-16 · 07-23 | `maintainer-agent#28`, `orchestrator-agent#28`, `autonomous-agent#13` | [[JT3U4ZVM]] — the per-repo tag asks, all done |
+| 07-16 | `ai-maestro-plugin#17` | [[O8NCNRWO]] — **resolved above** |
+| **07-16** | **`janitor#78`** (heartbeat fire-cost) | **`WF0UE9BC` (planned) — 17 days, unexamined** |
+| **07-28** | **`janitor#82`** (oauth_rotator keychain reads) | **`1GGQ4HWY` (todo) — unexamined** |
+| **07-28** | **`janitor#118`, `#123`** (wikimem spec, memgrep validate) | **`L55IYKL4` (todo) — unexamined** |
+| **07-30** | **`AgentlensPro#2`, `#3`** | **`WF0UE9BC` (planned), `KCRMSNL7` (design) — unexamined** |
+| 07-30 | `janitor#137` | `AQTGAY60` — cited as CONTEXT, not a blocker; nothing to unblock |
+| 08-01 | `janitor#100` (the absorb-the-daemon coordination) | 8 cards: `1GGQ4HWY` `9ZIF82HI` `CHN16JXZ` `DXJZM3BW` `H24DF6ZC` `JAU1ES1C` `KCRMSNL7` `P7RPOR5O`. Closed **yesterday** — not yet stale, but it is the single most-referenced external item on the board and worth a deliberate read |
+| 08-02 | `ai-maestro-plugin#29` | `RIFM4UXN` — closed today |
+
+One reassurance from the same sweep: `9ZIF82HI` sits in `column: blocked` citing `janitor#100`, but
+its `blocked-by:` names **`1GGQ4HWY`**, a TRDD that is genuinely open — so its `blocked` claim is
+TRUE and the linter's invariant holds. The closed issue was context, not the blocker.
+
 **The systemic finding, which is worth more than the two moves.** Nothing ever re-checks an external
 blocker. A `blocked-by:` naming a TRDD is re-evaluated on every lint — `trdd-graph` reports a
 dangling or already-closed blocker. A blocker living in `external-refs:` prose is checked exactly
@@ -320,9 +350,15 @@ is the same damage as a scripted sweep.
       so a card cannot be noticed as unblocked. Not closable without a corpus-level answer
 - [x] the completion gate is ENFORCED, not merely written — `TERMINAL-WITHOUT-CHECKLIST` +
       `TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, 15 tests, 6 neuters, 0 findings today
-- [ ] open cards in WORK columns carry a checklist — **untouched, and it is 19 cards, not 69**
-      (11 `testing`, 4 `ai_review`, 4 `human_review`). Each needs a real read; inventing a
-      checklist from the title is fabrication, the same damage as a scripted sweep
+- [ ] open cards in WORK columns carry a checklist — **4 of 19 done: the whole `ai_review` column**
+      ([[O8NCNRWO]] [[78J4I4QS]] [[CNF1X3J7]] [[JT3U4ZVM]]). **15 left: 11 `testing`, 4
+      `human_review`.** Each needs a real read; inventing a checklist from the title is fabrication,
+      the same damage as a scripted sweep. Every one so far was transcription, not authorship —
+      the cards already stated what they promised
+- [ ] the 5 stale external refs the corrected sweep surfaced and nobody has read yet —
+      `WF0UE9BC` (`janitor#78`, 17d; `AgentlensPro#2`), `1GGQ4HWY` (`janitor#82`),
+      `L55IYKL4` (`janitor#118`,`#123`), `KCRMSNL7` (`AgentlensPro#3`), and a deliberate read of
+      `janitor#100` across its 8 referencing cards
 - [x] `updated:` was NOT bumped by any mechanical/format-only edit — every bump this session
       accompanied a real `column:` change, which does change what the card asserts
 - [x] the census above is re-derived at the end and the deltas recorded — and it reconciles

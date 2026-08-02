@@ -91,10 +91,10 @@ this card buys one wake of delay and should be re-scoped rather than shipped.
    summary — never raw attacker text, which would re-inject at the moment the UI or an agent reads
    it) on **both** types in `types/agent.ts`.
 2. A write path that honours the decoupling invariant: the janitor is a plugin and MUST NOT call
-   the API. There is no `flag` verb on `aimaestro-agent.sh` today (verbs are list/show/config/
-   resolve/create/delete/update/rename/session/hibernate/wake/restart/skill/plugin/export/import/
-   presence), so one is needed. **Decide the authorization before the verb:** a flag that bricks an
-   agent is a denial-of-service primitive if any agent can set it on any other.
+   the API. **RESOLVED — see "DESIGN CHANGED" at the foot of this card: a FILE
+   (`~/.aimaestro/context-integrity.json`), not a CLI verb.** The original text here proposed adding
+   a `flag` verb to `aimaestro-agent.sh` and is kept struck rather than deleted, because the reason
+   it failed is the useful part: the verb had no way to express its own authorization rule.
 3. The refusal at **both** gates (route + service), returning 409 with a distinct `error` code and
    a `profileDeepLink`, mirroring `role_missing_core`.
 4. A clear path — the flag must be clearable, or a false positive is unrecoverable without hand-editing

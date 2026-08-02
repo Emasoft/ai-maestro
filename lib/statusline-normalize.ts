@@ -204,5 +204,13 @@ export function normalizeStatuslinePayload(
     session: normalizeSession(p),
     context: normalizeContext(p.context_window, p.exceeds_200k_tokens),
     cost: normalizeCost(p.cost),
+    // ALWAYS null here, and never read from `p` — the ROUTE stamps this from server-side rotator
+    // state (`lib/statusline-admissible.ts::stampLiveAccount`). This is not shyness about an
+    // absent field: `p` is attacker-shaped input from a local process, and the stamp is the one
+    // thing in the snapshot the sender must not be able to choose. Setting it here — even from a
+    // field that happened to look right — would let a payload claim it belongs to the live
+    // account and walk past the very guard the stamp exists to feed. Hard-coding the null makes
+    // that impossible to get wrong later: there is no code path from `p` to `liveFp`.
+    liveFp: null,
   }
 }

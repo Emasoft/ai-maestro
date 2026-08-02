@@ -258,6 +258,7 @@ describe('GET /api/statusline — the fleet roll-up', () => {
       session: {} as never,
       context: null,
       cost: null,
+      liveFp: null, // the roll-up is freshness-only; account identity is the rotator's guard
     })
     const out = rollUp([mk('live', now - 1000, 5), mk('dead', now - STATUSLINE_FRESH_MS - 1, 99)], now)
     expect(out.rateLimits.fiveHour?.usedPercentage).toBe(5)

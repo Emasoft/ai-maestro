@@ -129,13 +129,38 @@ export interface StatuslineSnapshot {
   session: StatuslineSessionFacts
   context: StatuslineContextWindow | null
   cost: StatuslineCost | null
+  /**
+   * WHICH ACCOUNT WAS LIVE WHEN THIS OBSERVATION ARRIVED — the rotator's `state.live_fp`, stamped
+   * SERVER-SIDE at ingest. Null when no rotator state exists, or when it could not be read.
+   *
+   * ⚠ READ THAT SENTENCE LITERALLY. It is *not* "which account produced this report", and the
+   * difference decides what the guard in `lib/statusline-admissible.ts` can honestly claim. The
+   * payload carries no account identity (`grep -c 'account\|email\|token'` over the statusline
+   * fields → nothing usable), and there is no way to learn one: a Claude Code session holds its
+   * credential in memory and never tells us which. So the strongest true statement the server can
+   * make is about ITS OWN clock — who was live at arrival.
+   *
+   * That is enough for the failure this exists to prevent (TRDD-SIV45HOG): reports that arrived
+   * BEFORE a switch carry the OLD fingerprint, so the rotator can discard them instead of
+   * attributing an exhausted account's ~98% to the fresh one and rotating straight back out — a
+   * loop that burns every remaining account in minutes while the log reads like healthy rotation.
+   *
+   * It is NOT enough for the residual case, and pretending otherwise is how a vacuous guard ships:
+   * a session still running on the OLD credential immediately after a switch posts a report that
+   * arrives AFTER the switch, so it is stamped with the NEW fingerprint and passes both guards.
+   * That window is bounded (the session picks up the new credential or its token expires) and is
+   * the honest limit of a server-side stamp.
+   */
+  liveFp: string | null
 }
 
 /**
- * The seven top-level keys of a stored snapshot, in write order.
+ * The eight top-level keys of a stored snapshot, in write order.
  *
  * Exported so the store's test can assert that every one is written on EVERY write — the property
- * that keeps `updateJson`'s key-loss tripwire from ever firing on a legitimate payload.
+ * that keeps `updateJson`'s key-loss tripwire from ever firing on a legitimate payload. Adding a
+ * field to the interface WITHOUT adding it here writes a snapshot the store silently drops; adding
+ * it here without writing it trips the tripwire. The pair is deliberate friction.
  */
 export const STATUSLINE_SNAPSHOT_KEYS = [
   'sessionId',
@@ -145,6 +170,7 @@ export const STATUSLINE_SNAPSHOT_KEYS = [
   'session',
   'context',
   'cost',
+  'liveFp',
 ] as const
 
 /** The fleet-wide roll-up served by `GET /api/statusline`. */

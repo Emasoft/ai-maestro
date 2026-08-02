@@ -37,6 +37,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isConsolePeer, peerAddress } from '@/lib/peer-address.mjs'
 import { checkAndRecordAttempt } from '@/lib/rate-limit'
+import { stampLiveAccount } from '@/lib/statusline-admissible'
 import { normalizeStatuslinePayload } from '@/lib/statusline-normalize'
 import { pruneStatuslineSnapshots, writeStatuslineSnapshot } from '@/lib/statusline-store'
 
@@ -117,6 +118,15 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     )
   }
+
+  // Stamp WHICH ACCOUNT IS LIVE RIGHT NOW, server-side (TRDD-SIV45HOG). This must happen HERE and
+  // not in the normaliser: the normaliser is a pure payload→snapshot mapping and the payload is
+  // attacker-shaped input from a local process, so the one field the sender must not choose is
+  // resolved outside its reach. Without the stamp the rotator attributes reports produced under an
+  // exhausted account to the fresh one it just switched to, and rotates straight back out — a loop
+  // that burns every remaining account in minutes. Fail-soft by construction: an unreadable rotator
+  // state stamps null, which is inadmissible downstream rather than lost here.
+  stampLiveAccount(snapshot)
 
   try {
     await writeStatuslineSnapshot(snapshot)

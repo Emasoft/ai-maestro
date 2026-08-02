@@ -34,6 +34,27 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-janitor/issues/76"]
 
 # TRDD-K2WJH7RF — the ten routes the last decision did not cover
 
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-02
+
+**Added 2026-08-02.** This card had none, and it spans many sessions — so a reader arrived at a body
+written when NOTHING had been decided and took it for the current state. The IND rule makes a STATE
+block mandatory exactly here.
+
+**✅ ALL THREE PARTS ARE DONE** (`d7531e53` Parts 1+2, `bc177864` Part 3). `AGENT_POLICY_PENDING` is
+**EMPTY** — the debt ledger is discharged. 39 tests green. The checked list is `## Acceptance` near
+the bottom; the two things it does NOT cover are in `## ⏱ VERIFIED 2026-08-02`.
+
+**SUPERSEDED — do NOT carry forward, all three are the pre-decision framing:**
+- *"All ten routes 403 every agent today"* (body, line ~43) — the five `/api/trdd/*` verbs now work
+  for agents under `manage-trdd`, within their tier;
+- **the heading "Part 3 — the script layer has no USER auth path"** — it HAS one. `get_auth_args`
+  resolves `$AID_AUTH` → `$AIMAESTRO_SESSION` → `~/.aimaestro/cli-session`, deployed. That section
+  is the original problem statement, not a current fact;
+- the Part-2 table's tentative *"MANAGER only? or owner-only"* — ruled owner-only.
+
+**REMAINING:** an end-to-end run with a real `aim_tk_*` human token, and the human review this card's
+own `review-requirements: [human-review]` asks for. Neither is an agent's to do.
+
 **Tier 2.** Successor to TRDD-D3RP7KQZ, whose Approval log promises this file.
 
 D3RP7KQZ asked a compound question. The USER answered its central half — an agent

@@ -3,7 +3,7 @@ trdd-id: DXJZM3BW
 title: Continuity CLI surface — aimaestro-continuity.sh status + ensure-resume behind the frozen layer
 column: testing
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-02T02:06:00+0200
+updated: 2026-08-02T16:14:06+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -84,6 +84,49 @@ on a new frozen-layer script, and nothing else. Everything else reuses the exist
   is idempotent (second call within a live window is a no-op).
 - `status`/`ensure-resume` refuse a `<self>` that is not the caller's own AID (R42).
 - `bash scripts/with-node.sh npx tsc --noEmit` clean; route test green.
+
+## ⏱ VERIFIED 2026-08-02 — the cascade landed, and the CEILING GUARD was missing
+
+**1. The NEXT is done.** *"`next_action` gains the cascade states once [[1GGQ4HWY]] lands"* — it has:
+`lib/continuity-status.ts` now composes **cascade-first, heuristic-fallback**. The rotator beat
+stamps its conclusion to a file; a FRESH stamp SUPERSEDES the observable heuristic (the beat reads
+the token the heuristic cannot), and absent/stale falls back to `computeNextAction`. A status GET
+only READS the stamp and never runs the tick, so a read can never actuate a live-credential
+rotation — that file bridge is the whole point. Confirmed live: the stamp currently reads
+`reauth-needed` / `refresh-dead`.
+
+**2. THE CEILING GUARD THIS CARD PROMISED TWICE DID NOT EXIST.** Scope says *"a schema test fails CI
+if a 6th (token-adjacent) field is ever added"*; Verification repeats *"schema test red on a 6th
+field"*. There was none. All 11 tests asserted what `nextAction` **computes**; not one asserted what
+the object **contains** — and the closest thing, `toMatchObject`, **passes on a superset**, which is
+exactly the direction a token-adjacent field arrives from.
+
+That is not a bookkeeping gap: the ceiling IS this card's stated Constraint 1 (from
+[[TRDD-H24DF6ZC]]) — `status` is the ONE verb an agent may call, so no token may leak through it —
+and the route returns the object verbatim (`NextResponse.json(status)`), so those keys are the wire
+contract. It was enforced by nothing but memory.
+
+**Written and pinned** (`tests/unit/continuity-status.test.ts`): two tests asserting
+`Object.keys(status).sort()` equals exactly the five, one of them on the cascade path — the only
+code path that reads an EXTERNAL file, and therefore where a 6th field would most plausibly enter.
+**Neuter:** adding `refreshToken: "LEAKED"` to the response reddens **both** new tests and nothing
+else. 13 tests in the file (was 11); full suite 343 files / 4879 green, `tsc` 0.
+
+## Acceptance
+
+Transcribed from this card's own `## Verification` list plus its STATE's NEXT. Re-run live
+2026-08-02.
+
+- [x] `status` emits exactly the 5 fields — **now actually enforced**, see above
+- [x] the schema test is **red on a 6th field** — written today; it was promised and absent
+- [x] `ensure-resume` is idempotent (`getAgentSessionStatus` → `wakeAgent`, REAL actuation, no stub)
+- [x] both verbs refuse a `<self>` that is not the caller's own AID (R42 self-only)
+- [x] `tsc --noEmit` clean; shellcheck clean; `scripts/aimaestro-continuity.sh` carries both verbs
+      (`:141-142`) and is auto-installed by the `scripts/*.sh` glob — no installer edit (R23)
+- [x] registered in `docs/SCRIPT-LAYER.md` so CORE can teach its skills against the surface
+- [x] `next_action` gains the cascade states once [[1GGQ4HWY]] lands — landed and wired
+- [ ] the LIVE end-to-end route test — needs an authenticated caller, deferred by this card to a
+      scenario or the USER. Unit-pinned only; that is the half that ships
 
 ## Approval log
 

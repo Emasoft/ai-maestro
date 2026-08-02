@@ -85,3 +85,49 @@ describe('getContinuityStatus — OAuth cascade supersedes the interim heuristic
     })
   })
 })
+
+/**
+ * THE 5-FIELD CEILING — the safety property `status` exists to have, and the one thing
+ * `toMatchObject` above cannot check.
+ *
+ * TRDD-DXJZM3BW promised it twice ("a schema test fails CI if a 6th (token-adjacent) field is ever
+ * added"; "schema test red on a 6th field") and it was never written. Every other test here asserts
+ * what `nextAction` COMPUTES — none asserts what the object CONTAINS, and `toMatchObject` passes
+ * happily on a superset, so a 6th field would have slipped through the whole suite.
+ *
+ * The ceiling is the card's stated Constraint 1 (TRDD-H24DF6ZC): `status` is the ONE verb an agent
+ * can call, so no token may leak through it. That is enforced by the response being a CLOSED set,
+ * not by anyone remembering not to widen it. The route returns this object verbatim
+ * (`NextResponse.json(status)`), so these keys ARE the wire contract.
+ */
+describe('the 5-field ceiling (TRDD-DXJZM3BW Constraint 1) — a CLOSED set, not a superset', () => {
+  const CONTRACT = [
+    'accountHealthy',
+    'cacheTtlMinutes',
+    'nextAction',
+    'window5hPct',
+    'window7dPct',
+  ] as const
+
+  it('the response carries EXACTLY these five keys — a 6th reddens this test', async () => {
+    const s = await getContinuityStatus({
+      readMetadata: () => Promise.resolve(meta({})),
+      readTickAction: () => null,
+    })
+    // `toEqual` on the sorted key list, not `toMatchObject` / `toContain`: both of those pass on a
+    // superset, which is precisely the direction a token-adjacent field would arrive from.
+    expect(Object.keys(s).sort()).toEqual([...CONTRACT])
+  })
+
+  it('holds on the cascade path too — the stamp supersedes a value, it never adds a field', async () => {
+    // The one code path that reads an EXTERNAL file (the rotator's tick-status stamp). If a future
+    // edit passed that stamp's payload through instead of just its verdict, this is where a 6th
+    // field would enter.
+    const s = await getContinuityStatus({
+      readMetadata: () => Promise.resolve(meta({})),
+      readTickAction: () => 'reauth-needed',
+    })
+    expect(Object.keys(s).sort()).toEqual([...CONTRACT])
+    expect(s.nextAction).toBe('reauth-needed') // non-vacuity: the cascade path really was taken
+  })
+})

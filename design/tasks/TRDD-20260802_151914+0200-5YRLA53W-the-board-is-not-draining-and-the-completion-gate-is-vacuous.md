@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T15:37:19+0200
+updated: 2026-08-02T15:47:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -216,6 +216,48 @@ box), so the pass introduced no new corpus finding.
 cards with one worker is a queue, and a queue only means something if something PULLS from it. The
 next failure mode is the mirror of this one: cards that correctly say `todo` and still never move.
 
+## The gate had no enforcer — and the "wait for the backfill" objection was measured wrong
+
+Item 4 above said *"consider a lint … but only after the backfill, or it emits 69 warnings on day
+one and gets routed around."* Both halves turned out to be wrong, and the measurement is what
+showed it.
+
+**First, the rule was already there and nothing ran it.** `aimaestro-trdd-approval.md` §D4 step 5b
+declares the checklist requirement a **hard gate** on every terminal transition.
+`grep -rn checklist lib/ scripts/` returned **zero hits** across the entire toolchain. So the
+2026-07-31 repair of that rule's own vacuity (TRDD-9QV4ZCYY — a condition stated only over
+UNCHECKED boxes passes a card with NO boxes) changed the text and nothing else: **a fix to a gate
+is worth exactly what enforces it.** That is the same vacuity one level up, and it is the more
+useful finding of this card.
+
+**Second, the 69 was the wrong population.** The gate binds cards going *into* a terminal column;
+the 69 are OPEN cards. Measured over the set the gate actually sees:
+
+| terminal cards | count |
+|---|---|
+| grandfathered (`updated` < 2026-07-31, frozen by IND base §12) | 165 |
+| past the boundary, compliant | **33** |
+| past the boundary, would be flagged | **0** |
+
+**Zero findings on day one**, and 33 consecutive compliant closures — the discipline is already
+being followed; what was missing is what makes it survive a lapse. So the lint is a pure ratchet
+and there was never a reason to wait for the backfill. Landed as `TERMINAL-WITHOUT-CHECKLIST` and
+`TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, both ERROR, neither autofixable — a tool cannot
+invent a checklist and must never tick a box.
+
+Because it is silent on the live corpus, "design/ lints clean" cannot tell this rule from a blind
+one, so all 15 tests seed their shape and **six neuters** pin them; each of the four deliberate
+exclusions (grandfathered · cancelled/superseded · non-terminal · fenced code) falls to exactly
+one. Two neuters redden the LIVE-corpus gate, which is the empirical proof that the 165
+grandfathered cards are real and would flood the report.
+
+**What is still open is the backfill, and it is smaller than recorded.** Scoped to the columns the
+acceptance box names — WORK plus `human_review` — it is **19 cards**, not 69: 11 `testing`,
+4 `ai_review`, 4 `human_review`. The other 50 are `planned`/`todo`/`design`/`backburner`, where a
+checklist is premature by design (a `planned` card has not been designed yet). Each of the 19 needs
+a real read to write a truthful checklist; inventing one from the title would be fabrication, which
+is the same damage as a scripted sweep.
+
 ## Acceptance
 
 - [x] every `dev` card is either genuinely in progress, or re-columned with a recorded reason —
@@ -225,9 +267,11 @@ next failure mode is the mirror of this one: cards that correctly say `todo` and
       the `blocked` column's 6 all do. **BLOCKED ON THE VOCABULARY GAP** above: [[FKGMNGJB]] and
       [[35VKIGTC]] wait on GitHub issues and `blocked-by:` takes TRDD ids only, so they sit in
       `todo` claiming "ready to pull". Not closable without a corpus-level answer
-- [ ] open cards in WORK columns carry a checklist, so the completion gate is not vacuous —
-      **untouched. 69 of 97 still have none.** This is the half that stops the drift recurring;
-      the column pass alone only fixes today's snapshot
+- [x] the completion gate is ENFORCED, not merely written — `TERMINAL-WITHOUT-CHECKLIST` +
+      `TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, 15 tests, 6 neuters, 0 findings today
+- [ ] open cards in WORK columns carry a checklist — **untouched, and it is 19 cards, not 69**
+      (11 `testing`, 4 `ai_review`, 4 `human_review`). Each needs a real read; inventing a
+      checklist from the title is fabrication, the same damage as a scripted sweep
 - [x] `updated:` was NOT bumped by any mechanical/format-only edit — every bump this session
       accompanied a real `column:` change, which does change what the card asserts
 - [x] the census above is re-derived at the end and the deltas recorded — and it reconciles

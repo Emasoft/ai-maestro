@@ -780,3 +780,25 @@ describe('THE GATE — the real corpus lints clean', () => {
     expect(errors.filter((e) => BLOCKED_BY_IND_SECTION_12.has(e.id))).toHaveLength(2)
   })
 })
+
+/*
+ * NEUTER RECORD — the checklist gate, measured 2026-08-02. Six mutations, and every one of the
+ * four SILENT tests falls to exactly ONE of them, which is what separates a deliberate exclusion
+ * from an assertion that would pass whatever the code did.
+ *
+ *   N1  CHECKLIST_GATED = []                       → 4 red: all four FIRES tests
+ *   N2  drop `day >= CHECKLIST_GATE_SINCE`         → 2 red: the grandfathered test, AND the live
+ *                                                     corpus. That second red is the measurement:
+ *                                                     165 real archived cards would flood the
+ *                                                     report, so the boundary is load-bearing and
+ *                                                     not a theoretical nicety.
+ *   N3  add cancelled+superseded to the gated set  → 1 red: the exclusion test, alone
+ *   N4  remove the fence toggle                    → 3 red: the fenced FIRES test + both counter units
+ *   N5  count [~] as open                          → 2 red: the tilde test + a counter unit
+ *   N6  gate every column (`if (true)`)            → 3 red: non-terminal, the exclusion, the live corpus
+ *
+ * The first attempt at N1 reported ZERO red, which reads as "the tests are vacuous". They were
+ * not — the EXTRACTOR was: vitest colours its failure lines, so `grep '^\s+× '` matched nothing
+ * through the ANSI escapes. A neuter that reddens nothing is a finding about the test OR about
+ * the instrument, and the two are indistinguishable until you look at the raw output.
+ */

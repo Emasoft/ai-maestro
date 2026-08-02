@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:35:49+0200
-updated: 2026-08-02T11:35:49+0200
+updated: 2026-08-02T13:06:10+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -117,7 +117,7 @@ this card buys one wake of delay and should be re-scoped rather than shipped.
 - [ ] the fleet-scoped-scan question above is answered before any code lands (a session-scoped scan
       makes this card the weaker design, not the stronger one)
 - [ ] `contextPoisoned` + sanitized reason on both types in `types/agent.ts`
-- [ ] a CLI write path with a decided authorization rule, not an inherited one
+- [x] ~~a CLI write path with a decided authorization rule~~ — **SUPERSEDED, and the reasoning is the deliverable.** A flag that refuses a wake is a DoS primitive, so the verb needed an answer to "who may set this on whom", and all three were bad: self-only is useless (a poisoned agent flagging itself is already too late), any-agent-on-any is a fleet-wide brick button, and "only the janitor's detector" needs a caller identity **the scripts do not carry** — the janitor is a plugin in a session, with no AID. The verb could not express the one rule that would make it safe. Replaced by a FILE the janitor writes and the server reads (`~/.aimaestro/context-integrity.json`), which is `server-liveness.json` inverted — a proven boundary between exactly these two components. No caller ⇒ no authorization question; absent/stale file ⇒ no findings ⇒ no gate ⇒ fail-safe.
 - [ ] refusal at BOTH the route and the service, pinned by two tests that fall to different neuters
 - [ ] the flag is clearable, pinned by a test
 - [ ] `AgentBadge` surfaces it
@@ -128,3 +128,21 @@ this card buys one wake of delay and should be re-scoped rather than shipped.
 - 2026-08-02T11:35:49+0200 — MANDATE issued by ai-maestro (min-approval-requirement: none).
   Tier 0 self-mandate: wholly inside this agent's own assignment scope, no baseline deviation, no
   cross-team reach. No approval request was sent.
+
+## DESIGN CHANGED 2026-08-02T13:06:10+0200 — the write path is a FILE, not a CLI verb
+
+Posted to janitor#167 (comment 5157392467) so both repos build the same thing.
+
+`~/.aimaestro/context-integrity.json` — janitor WRITES, server READS:
+`{ ts, findings: [{ workdir, rule, severity, detail }] }`. Freshness handled like liveness: a
+stale file is IGNORED, so a dead janitor cannot brick the fleet by leaving a finding behind.
+`detail` is sanitized at the JANITOR's emit site, where the rule already lives — the server never
+handles raw attacker text.
+
+This also settles the iron-rule tension that produced janitor#168: their "reported direct API calls"
+were a **refusal** to bypass this very gap, not a violation. The fix is not to hand them a bypass.
+
+**STILL BLOCKING, asked three times on #167:** does `#J` scan every registered workdir FLEET-WIDE
+(hibernated included), or only its own session's workdir? Fleet-wide ⇒ the gate refuses the poisoned
+LAUNCH. Session-scoped ⇒ it blocks the NEXT wake only, which is the detection-after-load outcome the
+issue exists to beat — still worth having, but neither side may then call it the launch gate.

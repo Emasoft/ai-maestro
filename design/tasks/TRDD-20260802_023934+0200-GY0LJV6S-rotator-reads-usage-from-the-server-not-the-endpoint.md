@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T14:11:41+0200
+updated: 2026-08-02T14:22:01+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -68,7 +68,48 @@ account in minutes, unattended, while the log reads like healthy rotation.**
 Not a defect in D8OYFG35 (every box it owns is delivered) — a prerequisite nobody owned, now filed as
 the NPT [[SIV45HOG]].
 
-## ✅ LANDED 2026-08-02T14:0x+0200 — `d17fffbd`. Read the ⛔ correction under it for WHY this shape
+## ⛔ REVERTED 2026-08-02T14:2x+0200 (`3c9a7493`) — READ THIS BEFORE THE ✅ SECTION BELOW IT
+
+**`d17fffbd` re-opened the burn loop, and THIS CARD HAD WARNED ABOUT IT IN WRITING.** Both wirings
+are out. `statuslineNear` stays (pure, 8 tests, 3 neuters, **no caller**) — the same state
+`admitSnapshot` was in before, deliberately.
+
+The warning I wired straight past is two sections down, "two things it does NOT do":
+
+> *"A session still on the OLD credential immediately after a switch is stamped with the NEW
+> fingerprint and **passes both guards**."*  … and running sessions *"hold their token in memory,
+> so they are not retro-fixed"*.
+
+Compose them: after A→B, every still-live session on A keeps reporting **A's ~98%** for as long as
+it runs. Ingest stamps those with **B's** fp, post-switch — so `admitSnapshot` admits every one. The
+disjunct then reads 98% on a fresh B and rotates straight back out, per account, until the fleet is
+spent, with the log reading like healthy rotation. **Near-deterministic, not residual.** Found by
+adversarial review (Fable advisor); verified first-hand against the card and the code before acting.
+
+**`MIN_DWELL_S` is not the backstop it looks like.** `last_switch_at` is written ONLY inside
+`switchLiveTo` (`rotate.ts:44`), so a rotation that finds no candidate leaves the dwell untouched
+and the next tick retries immediately. There is no backoff on the failure path at all.
+
+**Two reverts, two DIFFERENT judgements — do not collapse them:**
+
+| branch | verdict | re-landable? |
+|---|---|---|
+| `liveStatus === 200` | **UNSOUND.** `usageRequest` with the live token just returned ground truth for the exact two windows the statusline carries, so on disagreement the statusline is wrong BY CONSTRUCTION. It can never add a TRUE reason here. | **No.** No debounce fixes a source that cannot legitimately override the answer in hand. |
+| endpoint **unreachable** | Genuinely ADDITIVE (the endpoint said nothing) — but inherits the same misattribution, and worse: every candidate is unevaluable too, so the rotation goes out blind on the `degraded` path and can walk the whole fleet a dwell at a time rather than stalling on one account. | **Yes**, with `sl.near` sustained across ≥2 consecutive ticks (mirror `LIVE_429_DEBOUNCE`) **plus** a statusline-specific dwell ≫ `MIN_DWELL_S`. |
+
+**What survived, and why it matters more than the code did:** the LOG LINE. The statusline reading
+is still recorded on every tick, it simply does not actuate — so `5h=10% … [statusline 5h=98%
+OVER-THRESHOLD]` appears in one line in production, and **the misattribution becomes measurable
+before anyone re-lands a debounced version.** That evidence did not exist when I wired this.
+
+The two integration tests that pinned the removed branches are **inverted, not deleted**, each
+naming its own reason, so re-adding either wiring turns them red.
+
+**The lesson, because it is bigger than this card:** the card's STATE block contained the exact
+sentence that refutes the design, and I read past it while implementing the design. A warning
+written in the same document you are working from is not automatically a warning you have *read*.
+
+## ✅ LANDED 2026-08-02T14:0x+0200 — `d17fffbd`, NOW REVERTED — kept for the reasoning, not the verdict
 
 `statuslineNear(state, deps)` in `lib/oauth-rotator/tick.ts` is wired at **two** call sites:
 
@@ -330,7 +371,7 @@ key* was dead.
 
 ## Acceptance
 
-- [x] REFUSED AS WRITTEN (see the ⛔ correction) — restated and DONE (`d17fffbd`): `tick.ts:490` gains a statusline DISJUNCT into `near`; the endpoint read stays, because `sc` (model-scoped, JI7F1236) and `liveStatus` are endpoint-only
+- [ ] REVERTED (`3c9a7493`) — the disjunct re-opened the burn loop; see the ⛔ REVERTED section. The 200-branch form is UNSOUND and will not be re-landed; the endpoint-unreachable form needs a >=2-tick debounce + a statusline dwell. Original wording also refused: `tick.ts:490` gains a statusline DISJUNCT into `near`; the endpoint read stays, because `sc` (model-scoped, JI7F1236) and `liveStatus` are endpoint-only
 - [x] candidate reads at `:496`/`:509` unchanged, and documented as structurally endpoint-only — untouched by `d17fffbd`, and the ⛔ correction now gives a SECOND reason (`sc` + `liveStatus` are endpoint-only for the LIVE account too)
 - [x] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports — SIV45HOG (`1a92aeb0`) + the `statuslineNear` caller (`d17fffbd`)
 - [ ] an at/over-threshold ingest triggers `autoRotate` immediately; the 60 s timer remains the floor

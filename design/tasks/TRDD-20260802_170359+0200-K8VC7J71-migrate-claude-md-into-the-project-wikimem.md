@@ -174,8 +174,11 @@ CLAUDE.md nor findable in the wiki is knowledge nobody knows is missing. Mitigat
 
 ## Acceptance
 
-- [ ] `<project>-overview.md` exists and `memgrep overview` prints it
-- [ ] a per-section destination table (all 27 sections) is recorded IN this card before any deletion
+- [x] `<project>-overview.md` exists and `memgrep overview` prints it — seeded via
+  `memgrep new-page --tier hub`, `bb94f839`. Before this the store had grown to 29 pages with no
+  entry point at all, so `overview` ERRORED — the state that makes a reader fall back to CLAUDE.md.
+- [x] a per-section destination table (**28**, not 27 — `grep -n '^## '` counts 28) is recorded IN
+  this card before any deletion, `bb94f839`
 - [ ] every destination page exists and validates BEFORE its section leaves `CLAUDE.md`
 - [ ] `memgrep validate` + `memgrep lint` clean over `.claude/project/memory/`
 - [ ] no PROJECT page carries an absolute `$HOME` path, a hostname, or a username

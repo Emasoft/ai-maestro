@@ -17,7 +17,17 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { lintCorpus, fixCorpus, readyQueue, expectedZone, VALID_COLUMNS, AUTHORITY_RANK } from '@/lib/trdd-doctor'
+import {
+  lintCorpus,
+  fixCorpus,
+  readyQueue,
+  expectedZone,
+  VALID_COLUMNS,
+  AUTHORITY_RANK,
+  countAcceptanceBoxes,
+  frontmatterDay,
+  CHECKLIST_GATE_SINCE,
+} from '@/lib/trdd-doctor'
 import { DEFAULT_STATUSES } from '@/types/task'
 
 let tmp: string
@@ -576,6 +586,166 @@ describe('META-MISSING is scoped to the zones the D4 watchdog actually scans (TR
     const fields = fieldsFor(lintCorpus(tmp), 'FFFFFFFF')
     expect(fields).not.toContain('assignee')
     expect(fields).toContain('created-by')
+  })
+})
+
+/**
+ * The terminal-column completion gate — `aimaestro-trdd-approval.md` §D4 step 5b.
+ *
+ * The rule shipped RATIFIED and enforced by nothing, which is the same vacuity it was itself
+ * written to close: on 2026-07-31 TRDD-9QV4ZCYY fixed its TEXT (a condition stated only over
+ * UNCHECKED boxes passes a card with NO boxes), and the repaired rule then had no enforcer, so
+ * the corpus never changed. These tests are the enforcer's proof.
+ *
+ * WHY EVERY SHAPE IS SEEDED. The gate emits ZERO findings on today's live corpus (measured:
+ * 165 grandfathered, 33 past the boundary, all 33 compliant). A "zero findings on the real
+ * corpus" criterion therefore cannot distinguish a working rule from a blind one — it is the
+ * exact instrument that reports clean either way. So each shape below is seeded on purpose,
+ * and each of the four NOT-flagged cases is a real exclusion the rule makes, not an accident.
+ */
+describe('the terminal-column checklist gate — every shape, seeded', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-gate-'))
+    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+      fs.mkdirSync(path.join(tmp, z), { recursive: true })
+    }
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  const POST = '2026-08-01T10:00:00+0200' // after CHECKLIST_GATE_SINCE
+  const PRE = '2026-07-20T10:00:00+0200'  // before it — grandfathered
+
+  /** A terminal card in the archived zone, with whatever checklist you hand it. */
+  const closed = (id: string, updated: string, boxes: string, column = 'completed') =>
+    `${good(id, { column, updated })}\n## Acceptance\n\n${boxes}\n`
+
+  it('FIRES: terminal after the boundary with NO checklist — the gate that read nothing', () => {
+    write('archived', 'TRDD-20260101_000000+0100-NOBOXES1-x.md', closed('NOBOXES1', POST, ''))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1) // non-vacuity: the linter saw the file
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual(['NOBOXES1'])
+  })
+
+  it('FIRES: terminal after the boundary with an UNCHECKED box — a false completion', () => {
+    write('archived', 'TRDD-20260101_000000+0100-OPENBOX1-x.md',
+      closed('OPENBOX1', POST, '- [x] done thing\n- [ ] undone thing'))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'TERMINAL-WITH-OPEN-BOX')).toEqual(['OPENBOX1'])
+    // The two rules are exclusive: a card with boxes is never ALSO reported as having none.
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual([])
+  })
+
+  it('SILENT: terminal after the boundary with every box checked — the positive control', () => {
+    write('archived', 'TRDD-20260101_000000+0100-ALLDONE1-x.md',
+      closed('ALLDONE1', POST, '- [x] one\n- [x] two'))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1)
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual([])
+    expect(idsOf(r, 'TERMINAL-WITH-OPEN-BOX')).toEqual([])
+  })
+
+  it('SILENT: terminal BEFORE the boundary — grandfathered, because a frozen card cannot be repaired', () => {
+    // 46 archived cards closed with no checklist. IND base step 12 FREEZES a terminal card's
+    // body, so flagging them is a permanent wall of warnings about work nobody may fix —
+    // which is precisely how a linter gets routed around.
+    write('archived', 'TRDD-20260101_000000+0100-OLDCARD1-x.md', closed('OLDCARD1', PRE, ''))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1)
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual([])
+  })
+
+  it('SILENT: a NON-terminal card with no checklist — the gate binds the transition, not the whole life', () => {
+    // 22 `planned` cards have no boxes for a good reason: they have not been designed yet.
+    write('tasks', 'TRDD-20260101_000000+0100-PLANNED1-x.md',
+      good('PLANNED1', { column: 'planned', updated: POST }))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1)
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual([])
+  })
+
+  it('SILENT: `cancelled` and `superseded` — open boxes are what those columns MEAN', () => {
+    // Abandoned work and overtaken work are not required to be finished. Demanding a complete
+    // checklist from them would make the honest closure of a dead card impossible.
+    write('archived', 'TRDD-20260101_000000+0100-CANCEL01-x.md', closed('CANCEL01', POST, '', 'cancelled'))
+    write('archived', 'TRDD-20260101_000000+0100-SUPERS01-x.md',
+      closed('SUPERS01', POST, '- [ ] never finished', 'superseded'))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(2)
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual([])
+    expect(idsOf(r, 'TERMINAL-WITH-OPEN-BOX')).toEqual([])
+  })
+
+  it('FIRES: boxes that exist ONLY inside a fenced block do not count — the self-match trap', () => {
+    // TRDD-5YRLA53W, the card that SPECIFIES this gate, carries a fenced
+    // `grep -cE '^- \[[ x~]\]'` in its measurement recipe. A counter that reads fenced code
+    // credits the rule's own documentation as a checklist — the same trap the body-state-claim
+    // scanner already had to solve one rule over.
+    write('archived', 'TRDD-20260101_000000+0100-FENCED01-x.md',
+      closed('FENCED01', POST, '```bash\n- [x] not a real box\n- [ ] nor this\n```'))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual(['FENCED01'])
+    expect(idsOf(r, 'TERMINAL-WITH-OPEN-BOX')).toEqual([])
+  })
+
+  it('SILENT: `[~]` counts as a decision, not an outstanding obligation', () => {
+    write('archived', 'TRDD-20260101_000000+0100-STRUCK01-x.md',
+      closed('STRUCK01', POST, '- [x] shipped\n- [~] dropped, with its reason'))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1)
+    expect(idsOf(r, 'TERMINAL-WITH-OPEN-BOX')).toEqual([])
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual([])
+  })
+
+  it('the gate covers every terminal spelling that asserts completion', () => {
+    for (const [i, col] of ['complete', 'completed', 'published', 'live'].entries()) {
+      const id = `TERMCOL${i}`
+      write('archived', `TRDD-20260101_000000+0100-${id}-x.md`, closed(id, POST, '', col))
+    }
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST').sort())
+      .toEqual(['TERMCOL0', 'TERMCOL1', 'TERMCOL2', 'TERMCOL3'])
+  })
+})
+
+describe('the gate primitives — both date shapes, and what a box is', () => {
+  // BOTH branches are pinned rather than one assumed. A YAML reader may hand back an ISO
+  // string or a parsed Date depending on its timestamp settings, and `String(someDate)` is
+  // "Fri Jul 31 2026 …" — whose first ten characters are not a date, so a string-only reader
+  // would compare garbage and quietly grandfather every card forever.
+  it('frontmatterDay reads an ISO string', () => {
+    expect(frontmatterDay('2026-08-02T15:37:19+0200')).toBe('2026-08-02')
+  })
+
+  it('frontmatterDay reads a parsed Date', () => {
+    expect(frontmatterDay(new Date('2026-08-02T13:37:19Z'))).toBe('2026-08-02')
+  })
+
+  it('frontmatterDay returns empty for absent, malformed, and invalid input', () => {
+    expect(frontmatterDay(undefined)).toBe('')
+    expect(frontmatterDay('soon')).toBe('')
+    expect(frontmatterDay(new Date('nonsense'))).toBe('')
+  })
+
+  it('an empty day never satisfies the boundary — a card with no `updated:` is not swept in', () => {
+    // String-compares against the boundary: '' < '2026-07-31' is true, so the guard must be
+    // `day && day >= SINCE`, not `day >= SINCE`. A dateless card is UPDATED-MISSING's finding,
+    // not this rule's.
+    expect(frontmatterDay('') >= CHECKLIST_GATE_SINCE).toBe(false)
+  })
+
+  it('countAcceptanceBoxes separates total from open, and ignores fenced code', () => {
+    const body = [
+      '---', 'trdd-id: X', '---', '',
+      '- [x] one', '- [ ] two', '- [~] three', '  - [ ] nested counts too',
+      '```', '- [ ] fenced does not', '```',
+      '- not a box at all',
+    ].join('\n')
+    expect(countAcceptanceBoxes(body)).toEqual({ total: 4, open: 2 })
+  })
+
+  it('an UNCLOSED fence under-counts rather than over-counts — the conservative direction', () => {
+    const body = ['---', 'trdd-id: X', '---', '', '```', '- [ ] swallowed'].join('\n')
+    expect(countAcceptanceBoxes(body)).toEqual({ total: 0, open: 0 })
   })
 })
 

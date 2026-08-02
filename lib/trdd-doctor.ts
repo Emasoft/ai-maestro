@@ -117,6 +117,12 @@ export interface Card {
    * Empty when the body makes no such claim.
    */
   bodyStateClaim: string
+  /**
+   * The acceptance checklist, REDUCED to two integers — the terminal-column completion gate
+   * (`rules/aimaestro/aimaestro-trdd-approval.md` §D4 step 5b). Decided IN THE STREAM, same
+   * reason as the two fields above: two numbers per card instead of a document.
+   */
+  boxes: { total: number; open: number }
 }
 
 /**
@@ -181,6 +187,77 @@ function scanStateClaimLines(lines: readonly string[]): { idx: number; claim: st
   }
   return null
 }
+
+/**
+ * Count a body's ACCEPTANCE BOXES — `{ total, open }`, two integers, never the prose.
+ *
+ * Reduced IN THE STREAM for the same reason as `stateReadsDone` and `bodyStateClaim`: the
+ * rule below needs two numbers, and retaining ~10 KB of body per card to compute them is
+ * most of what put the whole corpus in memory last time (see `loadCorpus`).
+ *
+ * The fence handling is the same TOGGLE as `scanStateClaimLines`, and for the same reason —
+ * a rule that scans bodies matches its OWN documentation. TRDD-5YRLA53W, the card that
+ * specifies this gate, carries a fenced `grep -cE '^- \[[ x~]\]'` in its measurement recipe;
+ * a naive counter reads that as a checkbox on the card that defines the rule. An unclosed
+ * fence makes the rest of the file fenced, which is the conservative direction here too: it
+ * UNDER-counts, and under-counting can only produce a finding a human then dismisses, never
+ * a silent pass.
+ *
+ * `[~]` counts toward `total` but not toward `open`: it is the corpus's "deliberately not
+ * doing this" marker, which is a decision, not an outstanding obligation.
+ */
+export function countAcceptanceBoxes(body: string): { total: number; open: number } {
+  const lines = body.split('\n')
+  const start = bodyStartIndex(lines)
+  if (start === null) return { total: 0, open: 0 }
+  let inFence = false
+  let total = 0
+  let open = 0
+  for (const line of lines.slice(start)) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    const m = line.match(/^\s*[-*]\s\[([ xX~])\]/)
+    if (!m) continue
+    total++
+    if (m[1] === ' ') open++
+  }
+  return { total, open }
+}
+
+/**
+ * The DAY part of a frontmatter date, as `YYYY-MM-DD`, or `''` when there is none.
+ *
+ * Handles BOTH shapes on purpose. A YAML reader may hand back an ISO string or a parsed
+ * `Date` depending on its timestamp settings, and which one it is here is not something a
+ * rule should silently depend on: `String(someDate)` yields `"Fri Jul 31 2026 …"`, whose
+ * first ten characters are not a date at all, so a string-only reader would compare garbage
+ * and quietly grandfather every card forever. Both branches are pinned by tests rather than
+ * one being assumed and the other left as dead code.
+ */
+export function frontmatterDay(v: unknown): string {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString().slice(0, 10)
+  return String(v ?? '').trim().match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? ''
+}
+
+/**
+ * The GRANDFATHER BOUNDARY of the terminal-column checklist gate.
+ *
+ * The gate is normative in `rules/aimaestro/aimaestro-trdd-approval.md` §D4 step 5b, whose
+ * own text fixes this date: 46 archived cards closed with no checklist, they are FROZEN by
+ * IND base step 12 and therefore unrepairable, and "what the fix changes is every terminal
+ * transition FROM 2026-07-31 ON". Flagging the 46 would be a wall of warnings about work
+ * nobody is permitted to fix — which is how a linter gets routed around.
+ *
+ * `updated:` is the proxy for "when it went terminal", because the transition bumps it. It is
+ * a proxy and not a proof: rule 12 lets a frozen card's `updated:` move later (a
+ * `superseded-by:` edit). That direction is safe — it can only pull a card INTO scope, and
+ * the resulting finding ("touched after the boundary, still has no checklist") is true and
+ * worth a human's glance.
+ */
+export const CHECKLIST_GATE_SINCE = '2026-07-31'
 
 /**
  * Does a body state claim AGREE with the card's `column:`?
@@ -322,6 +399,7 @@ function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[]; nod
         ),
         h1: body.match(/^#\s+(.+)$/m)?.[1] ?? '',
         bodyStateClaim: findBodyStateClaim(body),
+        boxes: countAcceptanceBoxes(body),
       })
       const node = toGraphNode(parsed)
       if (node) nodes.push(node)
@@ -585,6 +663,57 @@ export function lintCorpus(designDir: string): DoctorReport {
         message: `column '${c.column}' belongs in design/${want}/ but the file is in design/${c.zone}/ — design/tasks/ IS the definition of OPEN work, so a terminal card left there makes the open count a lie. Fix with \`git mv\` (commit the content FIRST: git mv stages the bytes on disk, so an edit made after the move is left unstaged)`,
         autofixable: false,
       })
+    }
+
+    // ---- the terminal-column completion gate (aimaestro-trdd-approval.md §D4 step 5b) ----
+    //
+    // The rule was RATIFIED and enforced by NOTHING. It is written as a "hard gate", it was
+    // repaired on 2026-07-31 (TRDD-9QV4ZCYY) to close its own vacuity — a condition stated
+    // only over UNCHECKED boxes passes a card that has NO boxes, "a gate that passes because
+    // it read nothing" — and the repaired rule then had no enforcer, so the corpus never
+    // changed. That is the same vacuity one level up: the fix to a gate is worth exactly what
+    // enforces it. `grep -rn checklist lib/ scripts/` returned nothing before this block.
+    //
+    // The gate binds the TRANSITION INTO a terminal column, never a card's whole life, so:
+    //  - a non-terminal card with no checklist is NOT flagged (premature — a `planned` card
+    //    has not been designed yet, and 22 of them have no boxes for good reason);
+    //  - a fully-checked checklist in a non-terminal column is simply not-yet-advanced;
+    //  - `cancelled` and `superseded` are DELIBERATELY excluded. Open boxes are what those
+    //    columns MEAN — abandoned work and overtaken work are not required to be finished,
+    //    and demanding a complete checklist from them would make the honest closure of a
+    //    dead card impossible.
+    //
+    // Measured before landing: 165 terminal cards grandfathered, 33 past the boundary, and
+    // ALL 33 already compliant — so this emits ZERO findings on day one. That inverts the
+    // objection recorded on TRDD-5YRLA53W ("only after the backfill, or it emits 69 warnings
+    // on day one and gets routed around"), which was sized against the 69 open cards with no
+    // checklist — a different set entirely. It is a pure ratchet: free today, binding on
+    // every terminal transition after it.
+    const CHECKLIST_GATED = ['complete', 'completed', 'published', 'live']
+    if (CHECKLIST_GATED.includes(c.column)) {
+      const day = frontmatterDay(c.fm['updated'])
+      if (day && day >= CHECKLIST_GATE_SINCE) {
+        const back = String(c.fm['pre-block-column'] ?? '').trim() || 'dev'
+        if (c.boxes.total === 0) {
+          add({
+            rule: 'TERMINAL-WITHOUT-CHECKLIST',
+            severity: 'error',
+            id: c.id,
+            filePath: c.filePath,
+            message: `is '${c.column}' with NO acceptance checklist — the completion gate is written over boxes that are unchecked, so a card with no boxes passes it having PROVEN NOTHING. Nothing records what this card promised or whether it delivered. Move it back to '${back}', write the checklist, then close it`,
+            autofixable: false,
+          })
+        } else if (c.boxes.open > 0) {
+          add({
+            rule: 'TERMINAL-WITH-OPEN-BOX',
+            severity: 'error',
+            id: c.id,
+            filePath: c.filePath,
+            message: `is '${c.column}' with ${c.boxes.open} of ${c.boxes.total} acceptance box(es) still unchecked — a false completion. Either the work is not done (move it back to '${back}') or the box is obsolete and must be struck through with its reason, never silently ticked`,
+            autofixable: false,
+          })
+        }
+      }
     }
 
     // ================= ORDER — the invariant that actually matters =================

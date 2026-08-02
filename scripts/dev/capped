@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# capped — run a command so its output can NEVER be silently truncated by the harness.
+#
+# WHY THIS EXISTS. A tool result over the harness's size cap is replaced by a "output too large,
+# saved to <path>" stub. Nothing is lost on disk, but the agent then either (a) burns an extra
+# round-trip reading it back, or (b) — the real hazard — summarises from whatever prefix it can
+# see and reports a conclusion drawn from a fragment. Those two look identical afterwards. The
+# same failure with the opposite sign is `cmd | head`: it fits, so it never warns, and the tail
+# is simply gone.
+#
+# THE CONTRACT: the FULL output always lands in a file, and this script always tells you the true
+# size and whether you are seeing all of it. It prints a bounded preview and, when there is more,
+# says so loudly with the path and the exact command to read the rest. Silence never means
+# "that was everything".
+#
+#   scripts_dev/capped [-n LINES] [-b BYTES] -- <command> [args...]
+#   scripts_dev/capped -- git status --short
+#   scripts_dev/capped -n 40 -- yarn vitest run tests/unit/foo.test.ts
+#
+# Exit status is the COMMAND's own, not this wrapper's, so `capped -- cmd && next` still works —
+# a wrapper that swallowed the status would turn a failing gate green.
+
+set -uo pipefail
+
+LINES=60
+BYTES=4000
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n) LINES="$2"; shift 2 ;;
+    -b) BYTES="$2"; shift 2 ;;
+    --) shift; break ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    *) break ;;
+  esac
+done
+
+if [ $# -eq 0 ]; then
+  echo "capped: no command given (use: capped [-n LINES] [-b BYTES] -- <command>)" >&2
+  exit 2
+fi
+
+OUT="$(mktemp "${TMPDIR:-/tmp}/capped-$(date +%H%M%S)-XXXXXX.txt")"
+
+# Capture stdout AND stderr together, to a FILE first. Never a pipe into a consumer that can exit
+# early: `cmd | tee FILE | head` SIGPIPEs tee mid-write and silently truncates FILE, so a later
+# `wc -l FILE` reports a short count that looks like a real measurement.
+"$@" > "$OUT" 2>&1
+STATUS=$?
+
+TOTAL_LINES=$(wc -l < "$OUT" | tr -d ' ')
+TOTAL_BYTES=$(wc -c < "$OUT" | tr -d ' ')
+
+# Build the preview as a FILE and measure the FILE. Never round-trip it through `$(...)`: command
+# substitution strips trailing newlines, so a fully-shown 3-line output measured 16 of 17 bytes and
+# reported itself TRUNCATED. A truncation warning that fires on every complete run is worse than
+# none — it trains you to ignore the one time it is real.
+PRE="$OUT.preview"
+head -n "$LINES" "$OUT" | head -c "$BYTES" > "$PRE"
+SHOWN_LINES=$(wc -l < "$PRE" | tr -d ' ')
+# BYTES is the authoritative comparison: `head -c` can cut mid-line, so the line count of the
+# preview may undercount by one partial line, but the byte count is always exact.
+SHOWN_BYTES=$(wc -c < "$PRE" | tr -d ' ')
+
+cat "$PRE"
+
+if [ "$SHOWN_BYTES" -lt "$TOTAL_BYTES" ]; then
+  printf '\n=== TRUNCATED PREVIEW — showing %s of %s lines (%s of %s bytes) ===\n' \
+    "$SHOWN_LINES" "$TOTAL_LINES" "$SHOWN_BYTES" "$TOTAL_BYTES"
+  printf '=== FULL OUTPUT: %s\n' "$OUT"
+  printf '=== read the rest with the Read tool on that path, or: sed -n "%s,\$p" %s\n' \
+    "$((SHOWN_LINES + 1))" "$OUT"
+else
+  printf '\n=== complete: %s lines, %s bytes (nothing withheld) · %s\n' \
+    "$TOTAL_LINES" "$TOTAL_BYTES" "$OUT"
+fi
+
+exit "$STATUS"

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# neuter — break a guard on purpose, prove which tests catch it, put it back. Safely.
+#
+# A test that passes with its guard removed pins NOTHING, so every guard needs a neuter run. But
+# doing that by hand has failure modes that all LOOK like results, and this script exists because
+# every one of them happened in a single session:
+#
+#   1. RESTORING WITH `git checkout -- FILE` DESTROYS UNCOMMITTED WORK. If the file also holds a
+#      fix you have not committed, the revert cannot tell your sabotage from your fix and silently
+#      takes both. The next run then measures the ORIGINAL code and reports green.
+#      → This script REFUSES to start unless the target is clean relative to HEAD.
+#   2. A MUTATION THAT APPLIED NOTHING looks identical to a guard nobody tests: both are "0 red".
+#      (`sed -i ''` is the classic — under GNU sed the '' is an extra empty FILENAME.)
+#      → This script compares the blob hash before/after and ABORTS if the file did not change.
+#   3. PARSING THE TEST OUTPUT WRONG turns a real 3-test failure into "0 red". vitest prints
+#      `FAIL <file> > <name>`, not a leading `×`, so a grep for `×` reads red as green.
+#      → This script parses the summary line AND lists the failing test names.
+#   4. RESTORE THAT DID NOT RESTORE leaves sabotage in the tree, to be committed later by accident.
+#      → This script verifies the restored blob equals the pre-mutation blob and screams if not.
+#
+# It also restores on Ctrl-C and on any error, via a trap — an interrupted neuter is exactly when
+# sabotage gets left behind.
+#
+#   scripts_dev/neuter -f lib/foo.ts -e 's/appendFileSync/writeFileSync/' -t tests/unit/foo.test.ts
+#   scripts_dev/neuter -f lib/foo.ts -e '...' -t "tests/unit/a.test.ts tests/unit/b.test.ts"
+#
+# EXPECT A SPECIFIC ANSWER BEFORE YOU RUN IT. "Some tests went red" is not a measurement; "the
+# three tests naming this behaviour went red, and nothing else did" is. A neuter that reddens
+# MORE than predicted usually means the mutation hit a shared code path — re-aim it, do not
+# accept the extra as a bonus.
+
+set -uo pipefail
+
+FILE=""; EXPR=""; TESTS=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -f|--file)  FILE="$2";  shift 2 ;;
+    -e|--expr)  EXPR="$2";  shift 2 ;;
+    -t|--tests) TESTS="$2"; shift 2 ;;
+    -h|--help)  sed -n '2,30p' "$0"; exit 0 ;;
+    *) echo "neuter: unknown argument '$1'" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$FILE" ] && [ -n "$EXPR" ] && [ -n "$TESTS" ] || {
+  echo "neuter: need -f FILE -e PERL_EXPR -t 'TEST_PATHS'" >&2; exit 2; }
+[ -f "$FILE" ] || { echo "neuter: no such file: $FILE" >&2; exit 2; }
+
+cd "$(git rev-parse --show-toplevel)" || exit 2
+
+# --- GUARD 1: the target must be COMMITTED. This is the one that cost a fix. ------------------
+if ! git diff --quiet HEAD -- "$FILE"; then
+  cat >&2 <<MSG
+neuter: REFUSING — $FILE has uncommitted changes.
+
+  Restoring a neuter reverts the file, and a revert cannot tell your sabotage from your fix.
+  Commit the work first, THEN neuter it:
+
+      git add $FILE && git commit -m '...'
+      $0 -f $FILE -e '$EXPR' -t '$TESTS'
+MSG
+  exit 2
+fi
+git ls-files --error-unmatch "$FILE" >/dev/null 2>&1 || {
+  echo "neuter: REFUSING — $FILE is untracked, so there is no committed state to restore to." >&2
+  exit 2; }
+
+BEFORE="$(git hash-object "$FILE")"
+BACKUP="$(mktemp "${TMPDIR:-/tmp}/neuter-backup-XXXXXX")"
+cp -p "$FILE" "$BACKUP"   # belt: restore works even if git is unavailable mid-run
+
+restore() {
+  cp -p "$BACKUP" "$FILE"
+  local now; now="$(git hash-object "$FILE")"
+  if [ "$now" != "$BEFORE" ]; then
+    echo "neuter: !!! RESTORE FAILED — $FILE is NOT back to its committed state ($now != $BEFORE)." >&2
+    echo "neuter: !!! backup kept at $BACKUP — fix this before committing anything." >&2
+    return 1
+  fi
+  rm -f "$BACKUP"
+  return 0
+}
+# Restore on interrupt/termination too: an interrupted neuter is exactly when sabotage is left behind.
+trap 'echo; echo "neuter: interrupted — restoring $FILE"; restore; exit 130' INT TERM
+
+perl -pi -e "$EXPR" "$FILE"
+
+# --- GUARD 2: the mutation must have actually changed the file -------------------------------
+AFTER="$(git hash-object "$FILE")"
+if [ "$AFTER" = "$BEFORE" ]; then
+  echo "neuter: ABORT — the expression matched NOTHING; $FILE is byte-identical." >&2
+  echo "neuter: a no-op mutation reports '0 red', which is indistinguishable from an untested guard." >&2
+  restore; exit 3
+fi
+echo "=== mutated $FILE ($(git diff --numstat -- "$FILE" | awk '{print $1" ins / "$2" del"}'))"
+git --no-pager diff --unified=0 -- "$FILE" | grep -E '^[+-][^+-]' | head -12 | sed 's/^/    /'
+
+LOG="$(mktemp "${TMPDIR:-/tmp}/neuter-tests-XXXXXX.txt")"
+# shellcheck disable=SC2086 -- TESTS is a deliberately word-split list of paths
+bash scripts/with-node.sh yarn vitest run $TESTS > "$LOG" 2>&1
+STATUS=$?
+sed 's/\x1b\[[0-9;]*m//g' "$LOG" > "$LOG.clean"
+
+# --- GUARD 3: parse the summary the way vitest actually prints it ----------------------------
+echo
+echo "=== $(grep -E '^ *Tests ' "$LOG.clean" | tr -s ' ' | sed 's/^ //')"
+RED=$(grep -oE 'FAIL [^>]+> .*' "$LOG.clean" | sed 's/.*> //' | sort -u)
+if [ -n "$RED" ]; then
+  printf '%s\n' "$RED" | sed 's/^/    RED: /'
+else
+  echo "    (nothing red — the guard is UNPINNED, or the mutation missed the branch under test)"
+fi
+[ "$STATUS" -eq 0 ] && echo "    NOTE: vitest exited 0 — the neutered code still passes everything."
+echo "    full log: $LOG"
+
+# --- GUARD 4: restore, and prove it ----------------------------------------------------------
+echo
+if restore; then echo "=== restored $FILE to its committed state (verified by blob hash)"; else exit 4; fi

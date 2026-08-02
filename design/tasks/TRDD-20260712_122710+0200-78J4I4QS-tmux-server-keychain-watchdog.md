@@ -3,7 +3,7 @@ trdd-id: 78J4I4QS
 title: reliability — detect a keychain-blind tmux server before it silently takes the whole fleet down
 column: ai_review
 created: 2026-07-12T12:27:10+0200
-updated: 2026-07-13T05:47:00+0200
+updated: 2026-08-02T15:53:10+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 1
@@ -138,6 +138,30 @@ secrets-CLI at a prompt, raise the same fleet-level alarm.
 **LOW.** Read-only detection on an existing loop, off by the same env var that already
 disables the watchdog. The one real risk is alarm fatigue, which test 2 pins: it must be
 completely silent when healthy.
+
+## Acceptance
+
+Transcribed from this card's own numbered `## Verification (TDD)` list and the two follow-ups its
+STATE block names — not criteria invented at closing time. Re-verified live 2026-08-02.
+
+- [x] 1 — probe non-zero ⇒ alarm raised ONCE (not once per agent), carrying the remediation text
+- [x] 2 — probe `rc=0` ⇒ **silent** (the alarm-fatigue pin; a muted watchdog is worse than none)
+- [x] 3 — the watchdog NEVER attempts to recreate the tmux server (pins detect-not-repair)
+- [x] 4 — non-macOS ⇒ skipped, never failed
+- [x] 5 — suite + build green. Re-run 2026-08-02: `tests/unit/tmux-server-keychain-watchdog.test.ts`
+      **14 passed** (the card recorded 13; it has since grown by one)
+- [x] deployed and live-verified — 3+ silent sweeps, zero leftover `aim-kc-watchdog` sessions,
+      after `6eef63fe` (module+wiring+tests) and `fcd0fa5b` (pre-kill the own fixed name, the fix
+      for the false `blind` alarm the first live sweep raised)
+- [ ] the dashboard banner off `getTmuxServerKeychainAlarm()` — the state is exported and
+      queryable, the UI is not wired. The card calls this **explicitly not gating**
+- [ ] the leftover `AIM_INVARIANTS_WATCHDOG_INTERVAL_MS=15000` — **still live 20 days on**,
+      verified on the process itself (`ps eww -p <pid>`), i.e. the sweep runs every 15 s against a
+      code default of 5 min. It is sourced from **no file**: `ecosystem.config.js` does not define
+      it and cites this very variable as its evidence that pm2's cached env is stale. So it
+      self-corrects on the next `pm2 restart ecosystem.config.js --update-env` rather than needing
+      a fix of its own — recorded here so the next reader does not go hunting for a config that
+      sets it. (`AIM_FLEET_RECOVERY_FIRE=1`, absent on 2026-07-29, IS live now.)
 
 ## Approval log
 

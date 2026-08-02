@@ -3,7 +3,7 @@ trdd-id: CNF1X3J7
 title: reliability — refuse to launch an agent client that cannot authenticate or whose role-plugin is not installed
 column: ai_review
 created: 2026-07-12T12:27:10+0200
-updated: 2026-07-13T05:47:00+0200
+updated: 2026-08-02T15:53:10+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -203,6 +203,36 @@ to eliminate.
 
 Dependencies: none. `SHELL_READY_TIMEOUT_MS` / `waitForShellReady()` already exist in
 `lib/agent-runtime.ts` (landed by SCEN-015), so the insertion point is present.
+
+## Acceptance
+
+Transcribed from this card's own numbered `## Verification (TDD)` list plus the residual its STATE
+block explicitly accepts. Re-verified live 2026-08-02: `agent-launch-preflight` +
+`agent-invariants` = **20 tests green**, and `lib/agent-invariants.ts:150` carries the
+`id: 'role-plugin'` row.
+
+- [x] 1 — probe non-zero ⇒ the client command is NEVER injected, the session is torn down, the
+      agent is `failed` with `keychain_unreadable` (`e8593bf4`)
+- [x] 2 — probe `rc=0` ⇒ the client IS injected (no regression on the happy path)
+- [x] 3 — probe TIMES OUT ⇒ REFUSE. This is the fail-fast pin: a future "allow on uncertainty"
+      bypass must break this test
+- [x] 4 — non-macOS ⇒ `skipped`, launch proceeds (a gate that could false-refuse off-platform
+      would be worse than the outage it prevents)
+- [x] 5 — the `role-plugin` invariant row exists and `triggers` deep-equals `['wake']`, pinned so
+      a future edit cannot quietly turn the periodic watchdog into a background plugin installer
+- [x] 6 — full suite + build green (168 files at the time; the whole suite is green today)
+- [x] wired at BOTH launch sites — `agents-core-service` (wake, real-program branch) and
+      `sessions-service` (createSession), each with `killSession` + `unpersistSession` so
+      boot-restore cannot resurrect a doomed launch (`fb8c03ea`)
+- [ ] 7 — the MANUAL end-to-end: a deliberately keychain-blind tmux server must REFUSE rather than
+      start a zombie. **Deliberately deferred, with the reason recorded:** fabricating blindness on
+      the live fleet server would disrupt real agents. The refuse path is unit-pinned (items 1+3),
+      and its EHT [[78J4I4QS]] runs the SAME `preflightPaneKeychain` through the real runtime on
+      every sweep and returns `ok` — live evidence the probe does not false-refuse on a healthy
+      server, which is the half a unit test cannot give
+- [~] the RESTART route relaunches into an EXISTING pane with NO keychain gate — an ACCEPTED
+      residual, not an omission: a server that turns blind AFTER first launch is caught
+      fleet-level by [[78J4I4QS]], not per-restart
 
 ## Approval log
 

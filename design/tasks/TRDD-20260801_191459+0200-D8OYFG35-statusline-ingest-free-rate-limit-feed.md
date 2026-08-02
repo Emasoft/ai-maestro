@@ -21,6 +21,7 @@ release-via: none
 npt: []
 eht: []
 blocked-by: []
+implementation-commits: [675f5a9f]
 ---
 
 # Statusline ingest — take the 5h/7d windows from Claude Code's own feed at zero API cost

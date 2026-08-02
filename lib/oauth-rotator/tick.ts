@@ -590,7 +590,24 @@ export async function autoRotate(
     if (state.live_429_streak) { state.live_429_streak = 0; saveState(state) }
     // The statusline is a PURE DISJUNCT here — it can add a reason to rotate, never remove one.
     // Everything the endpoint said is still consulted, unchanged. See `statuslineNear`.
-    near = isNearLimit(fh, sd, sc) || liveExpired || sl.near
+    // ⛔ NO STATUSLINE DISJUNCT HERE, AND THE ABSENCE IS THE DESIGN — reverted from `d17fffbd`
+    // after adversarial review. `usageRequest` with the LIVE token has just returned 200, so it is
+    // ground truth for the exact two windows the statusline carries. When they disagree the
+    // statusline is wrong BY CONSTRUCTION (misattribution or lag), and a source that can never
+    // legitimately override the answer already in hand adds no TRUE reason here — only a false one.
+    //
+    // And the false one is near-deterministic, not hypothetical. The stamp records who was live at
+    // ARRIVAL, not who produced the report (see `lib/statusline-admissible.ts`, and TRDD-GY0LJV6S's
+    // own "two things it does NOT do"). Sessions running when we switch A→B keep A's token in
+    // memory — they are not retro-fixed — and go on reporting A's ~98% for as long as they live.
+    // Ingest stamps those with B's fp, post-switch, so BOTH guards admit them. A disjunct here
+    // would read 98% on a fresh B and rotate straight back out, per account, until the fleet is
+    // spent: the exact burn loop TRDD-SIV45HOG exists to prevent, re-entered through its own guard.
+    //
+    // `MIN_DWELL_S` is not the backstop it looks like: `last_switch_at` is written ONLY inside
+    // `switchLiveTo` (rotate.ts:44), so a rotation that finds no candidate leaves the dwell
+    // untouched and the next tick retries immediately.
+    near = isNearLimit(fh, sd, sc) || liveExpired
     liveDesc = `5h=${fhS} 7d=${sdS}${scS}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}${slDesc}`
   } else if (liveStatus === 401 || liveStatus === 403) {
     near = true
@@ -598,16 +615,20 @@ export async function autoRotate(
   } else if (liveExpired) {
     near = true
     liveDesc = `LOCALLY EXPIRED + API unreachable (status ${liveStatus})`
-  } else if (sl.near) {
-    // The endpoint is unreachable and the STATUSLINE says at/over threshold. This branch used to
-    // unconditionally stay put, which was right when the endpoint was the only source: refusing to
-    // act on no data is the fail-safe. It is the WRONG answer once a second, independent source is
-    // saying the account is spent — "we cannot reach the usage API" is not a reason to keep billing
-    // a maxed account. Note the asymmetry holds even here: the statusline can move us OFF a maxed
-    // account, and can never talk us into staying on one.
-    near = true
-    liveDesc = `usage API unreachable (status ${liveStatus}) but STATUSLINE reports${slDesc}`
   } else {
+    // ⛔ ALSO REVERTED from `d17fffbd`: an `else if (sl.near)` sat here and rotated when the usage
+    // endpoint was unreachable but the statusline read at/over threshold. Unlike the 200 branch
+    // above, that one is genuinely ADDITIVE — the endpoint said nothing, so the statusline is the
+    // only signal — and it is worth re-landing. It is reverted anyway because it inherits the SAME
+    // misattribution: the trigger fires just as readily on an old session's report about the
+    // PREVIOUS account, and it is worse here, because with the usage API down every candidate is
+    // unevaluable too, so the rotation goes out blind (`degraded`, most-runway-first) and can walk
+    // the whole fleet one dwell window at a time instead of stalling on one account.
+    //
+    // Re-land it with the debounce it lacked: `sl.near` sustained across ≥2 consecutive ticks
+    // (mirroring `LIVE_429_DEBOUNCE`, which exists for precisely this "one bad sample must not
+    // rotate" reason) plus a statusline-specific dwell well above `MIN_DWELL_S`. That is its own
+    // change with its own tests — not a same-turn patch bolted onto the review that found the bug.
     decide(deps, `auto: live ${liveEmail ?? '(live)'} usage unreachable (status ${liveStatus}) but token still valid locally; staying put`)
     return false
   }

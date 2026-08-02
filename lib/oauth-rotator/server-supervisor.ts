@@ -22,6 +22,7 @@
 
 import { gatherFacts, diagnose, apply, optInPresent } from './supervisor'
 import { oauthTickEnabled } from './server-tick'
+import { deliverAlerts } from './alert-delivery'
 
 /** Governance cadence — supervisor.py's 10-minute loop. */
 export const SUPERVISOR_INTERVAL_MS = 600_000
@@ -36,6 +37,12 @@ export interface RunSupervisorBeatDeps {
   gatherFactsImpl?: (daemonAlive: () => boolean) => ReturnType<typeof gatherFacts>
   /** Where alert lines go. Default: the server log via console.warn. */
   log?: (msg: string) => void
+  /** DELIVERY to a human channel (TRDD-RFQFCCU4) — distinct from `log`, which is the record. The
+   *  findings were always well-formed; before this they reached only pm2-out.log, where
+   *  `a human must re-login` accumulated 4506 times over 4 days while the fleet walked into the
+   *  rate limit. Default: `deliverAlerts` (always-written file + best-effort banner + backoff).
+   *  Fire-and-forget on purpose — see the call site. */
+  deliver?: (findings: ReadonlyArray<{ code: string; message: string }>) => void
 }
 
 /**
@@ -54,7 +61,25 @@ export function runOneSupervisorBeat(deps: RunSupervisorBeatDeps = {}): string[]
     if (!optInCheck()) return [] // rotator not opted in → silent no-op, no keychain access.
     const facts = gatherFactsImpl(tickArmedCheck)
     const findings = diagnose(facts)
-    return apply(findings, log).alerts
+    const alerts = apply(findings, log).alerts
+    // DELIVER, fire-and-forget. This function is SYNCHRONOUS by contract (its callers and tests
+    // read the returned codes directly), and delivery does I/O — so awaiting it here would either
+    // change that contract for every caller or, worse, let a slow filesystem stall the beat timer.
+    // The delivery path never throws and swallows its own failures, so a floating promise cannot
+    // surface an unhandled rejection; the `.catch` is belt to that braces.
+    if (findings.length > 0) {
+      const deliver = deps.deliver ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
+        void deliverAlerts(f, { log }).catch(() => { /* never take the beat down */ })
+      })
+      // ITS OWN try/catch, NOT the outer one. A throwing deliver falling into the outer catch makes
+      // the beat return [] — so a broken notifier would DISCARD the very alerts it failed to send,
+      // turning a delivery fault into a detection fault. That is the incident's own shape (a
+      // channel that fails and takes the signal with it), and a test pins it.
+      try { deliver(findings) } catch (derr) {
+        log(`[oauth-supervisor] alert delivery threw (non-fatal, alerts still reported): ${(derr as Error)?.message ?? derr}`)
+      }
+    }
+    return alerts
   } catch (err) {
     console.warn(`[oauth-supervisor] server beat failed (non-fatal): ${(err as Error)?.message ?? err}`)
     return []

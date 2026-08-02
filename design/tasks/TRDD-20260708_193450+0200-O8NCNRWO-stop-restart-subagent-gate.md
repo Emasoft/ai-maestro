@@ -3,7 +3,7 @@ trdd-id: O8NCNRWO
 title: Harden the stop/restart safe-state gate for CC ≥2.1.198 background subagents
 column: ai_review
 created: 2026-07-08T19:34:50+0200
-updated: 2026-07-08T20:05:00+0200
+updated: 2026-08-02T15:49:10+0200
 current-owner: main-session
 assignee: main-session
 priority: 1
@@ -19,7 +19,7 @@ test-requirements: [unit, typecheck]
 impacts: []
 relevant-rules: []
 implementation-commits: [47676228, c88ffda8, 3f47dce4]
-external-refs: ["github.com/Emasoft/ai-maestro-plugin/issues/17"]
+external-refs: ["github.com/Emasoft/ai-maestro-plugin/issues/17 (CLOSED 2026-07-16, plugin v2.10.0)"]
 ---
 
 # Harden the stop/restart safe-state gate for CC ≥2.1.198 background subagents
@@ -92,5 +92,41 @@ the subagents-running flavor; with force, verify the abandon prompt is handled.
   the positive-path live e2e (an actual 409 + UI flavor with a REAL background subagent) is
   observable only after the hook stops dropping the counter — gated on ai-maestro-plugin#17.
   The negative path (unknown counter never blocks) is what ships today and is unit-proven.
+
+## ⏱ UNBLOCKED 2026-08-02 — the external blocker closed 17 days ago and nothing noticed
+
+`ai-maestro-plugin#17` is **CLOSED**, shipped in plugin **v2.10.0** on **2026-07-16**: `writeState`
+now carries `subagentCount` forward when an event omits it (explicit values still win, so
+SessionStart's reset to 0 still works — commit `4a9966e`), plus atomic temp-file+rename writes
+closing the torn-read side door (`34443db`).
+
+So the ONE thing parking this card at `ai_review` — *"observable only after the hook stops dropping
+the counter"* — has been observable since 2026-07-16. The card sat unchanged for 17 days after its
+blocker cleared, which is the failure the kanban rule names: a card sitting still is stalled unless
+its blocker is *itself still open*. Nothing re-checks an external blocker, because `blocked-by:`
+cannot name one (the vocabulary gap, [[5YRLA53W]]).
+
+**Before running the e2e, verify the installed plugin is ≥ v2.10.0** — the fix is in the plugin, not
+in this repo, so a host still on an older cached version reproduces the old behaviour exactly.
+
+## Acceptance
+
+Derived from this card's own 6-item fix plan and its Progress log — every box below is a commitment
+the card already made, not a criterion invented at closing time.
+
+- [x] 1 — stop/restart routes read `subagentCount` and refuse with 409 `subagents_running`;
+      `?force=true` preserves the old behaviour (`lib/session-safe-state.ts`, `47676228`)
+- [x] 2 — the restart poll detects `/exit`'s abandon-confirmation prompt instead of timing out
+      blind (`looksLikeAbandonPrompt` + the half-timeout probe + hinted 504, `47676228`)
+- [x] 3 — `resolveAgentStatus` surfaces a distinct "Waiting (N subagents)" flavor, threaded
+      `getHookState` → `/api/sessions/activity` → `useSessionActivity`, all four consumers (`3f47dce4`)
+- [x] 4 — `useRestartQueue` holds while `subagentCount > 0` (`3f47dce4`)
+- [x] 5 — CLAUDE.md's safe-state premise corrected + the compat audit extended to 2.1.204 (`c88ffda8`)
+- [x] 6 — unit tests for the 409 gate (>0 / =0 / absent) and the abandon-prompt branch; tsc 0,
+      eslint 0, 26 green
+- [ ] the POSITIVE-path live e2e — with a REAL background subagent: Stop returns 409 without
+      `force`, the UI shows the subagents-running flavor, and with `force` the abandon prompt is
+      handled. **Unblocked since 2026-07-16**; only the negative path (an unknown counter never
+      blocks) is proven today, and that is the half that ships
 
 ## Approval log

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T15:47:11+0200
+updated: 2026-08-02T15:50:40+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -216,6 +216,37 @@ box), so the pass introduced no new corpus finding.
 cards with one worker is a queue, and a queue only means something if something PULLS from it. The
 next failure mode is the mirror of this one: cards that correctly say `todo` and still never move.
 
+## The external-blocker sweep — 2 of 15 had already cleared, one of them 17 days ago
+
+Writing the checklist for [[O8NCNRWO]] meant verifying its blocker, and its blocker was **closed**.
+That turned one card's checklist into a corpus-wide question, so every open card's `external-refs:`
+was checked live:
+
+```bash
+# every open card parked on a GitHub issue
+for f in design/tasks/*.md design/proposals/*.md; do
+  grep -m1 '^external-refs:' "$f" | grep -q 'issues/' && grep -H -m1 '^trdd-id:' "$f"; done
+# then: gh issue view <n> --repo Emasoft/<repo> --json state
+```
+
+**15 referenced issues. 13 genuinely OPEN. 2 CLOSED:**
+
+| issue | closed | consequence |
+|---|---|---|
+| `ai-maestro-plugin#17` | 2026-07-16, plugin v2.10.0 | **[[O8NCNRWO]] sat at `ai_review` for 17 days after its one remaining item became runnable.** Its own text said the e2e was *"observable only after the hook stops dropping the counter"* — it has been observable since |
+| `ai-maestro-janitor#137` | — | cited by [[AQTGAY60]] as downstream-impact CONTEXT, not as a blocker. Nothing unblocked; noted so the next reader does not re-check it |
+
+**The systemic finding, which is worth more than the two moves.** Nothing ever re-checks an external
+blocker. A `blocked-by:` naming a TRDD is re-evaluated on every lint — `trdd-graph` reports a
+dangling or already-closed blocker. A blocker living in `external-refs:` prose is checked exactly
+once, by whoever wrote it, and then never again. So the vocabulary gap is not merely a labelling
+inconvenience: **it is why an externally-blocked card cannot be noticed as unblocked**, which is the
+same "silently abandoned" failure `BLOCKED-WITHOUT-BLOCKER` exists to prevent, one level out.
+
+Two cards ([[FKGMNGJB]], [[35VKIGTC]]) carry their blocker in the BODY and not in `external-refs:`
+at all, so even a sweep like this one misses them unless it greps prose. Both were checked by hand;
+both blockers are open.
+
 ## The gate had no enforcer — and the "wait for the backfill" objection was measured wrong
 
 Item 4 above said *"consider a lint … but only after the backfill, or it emits 69 warnings on day
@@ -264,9 +295,11 @@ is the same damage as a scripted sweep.
       all 18, across three passes; reasons in-card for 9, in the log for 9 (debt recorded above)
 - [x] `dev` holds a number of cards consistent with the number of workers — **1 card, 1 worker**
 - [ ] every card sitting still names a TRUE `blocked-by:` (a blocker that is itself still open) —
-      the `blocked` column's 6 all do. **BLOCKED ON THE VOCABULARY GAP** above: [[FKGMNGJB]] and
-      [[35VKIGTC]] wait on GitHub issues and `blocked-by:` takes TRDD ids only, so they sit in
-      `todo` claiming "ready to pull". Not closable without a corpus-level answer
+      the `blocked` column's 6 all do, and all 15 external refs are now verified (2 had cleared).
+      **BLOCKED ON THE VOCABULARY GAP** above: [[FKGMNGJB]] and [[35VKIGTC]] wait on GitHub issues
+      and `blocked-by:` takes TRDD ids only, so they sit in `todo` claiming "ready to pull". The
+      sweep proved the cost is not cosmetic — an external blocker is checked once and never again,
+      so a card cannot be noticed as unblocked. Not closable without a corpus-level answer
 - [x] the completion gate is ENFORCED, not merely written — `TERMINAL-WITHOUT-CHECKLIST` +
       `TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, 15 tests, 6 neuters, 0 findings today
 - [ ] open cards in WORK columns carry a checklist — **untouched, and it is 19 cards, not 69**

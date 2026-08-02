@@ -147,6 +147,52 @@ never by picking whichever sentence sounds newer.
 The duplicate dies with the migration (a page has no number), so renumbering would cascade through
 eight headings of text that is about to be deleted.
 
+## ⛔ BLOCKING FINDING — the project's wiki already exists, in the WRONG SCOPE
+
+Discovered 2026-08-02 while inventorying for the topic index, after `memgrep` surfaced a
+`runtime-install-tree` page dated **2026-06-19** — a name I had just minted in PROJECT.
+
+**The LOCAL store (`~/.claude/projects/<slug>/memory/`, machine-private, NEVER pushed) holds 86
+pages. Only 9 carry any machine-private marker.** The other **77** are machine-agnostic project
+knowledge that no other clone of this repo can see. Measured by grepping every page for
+`/Users/…`, `/home/…`, a hostname, `localhost:<port>`, `.ts.net`, or "on THIS machine".
+
+A dozen are the SAME SUBJECTS this migration is creating right now:
+
+| LOCAL page (private) | the PROJECT page this migration created |
+|---|---|
+| `runtime-install-tree` | `runtime-install-tree` — **identical name** |
+| `agent-first-architecture-hub` | `agent-first-architecture` |
+| `agent-terminology-canonical` | `agent-title-role-persona` |
+| `amp-comm-graph` | `amp-communication-graph` |
+| `plugin-two-worlds-source-vs-install` | `plugin-architecture-source-vs-install-target` |
+| `network-security-model` | `network-security-tailscale-bind` |
+
+plus `element-management-pipelines`, `marketplace_manifest_format`, `plugin-ecosystem-naming`,
+`governance-r26-r40-security-model`, `role-plugin-architecture`, `role-plugin-structure-spec`.
+
+**The harm is live, and it points the wrong way.** On a name conflict the MORE SPECIFIC scope wins
+— **LOCAL > PROJECT > USER**. So a recall for the install tree returns the June LOCAL page (3 050
+bytes, a thin summary whose own first atom says *"verify this against CLAUDE.md's Runtime Install
+Tree"*) instead of the 14 202-byte authoritative page committed minutes earlier. **The pushed wiki
+is the one nobody's recall reaches.** Nothing in that LOCAL page is private; it was mis-scoped the
+day it was written.
+
+This is the contradiction problem the USER named, one level up: not two sentences in one file, but
+two CORPORA covering one subject, where the private one silently wins.
+
+**NOT ACTED ON — this needs the USER's call, because promotion PUBLISHES.** LOCAL → PROJECT pushes
+content to GitHub, and the scope gate exists precisely so private material cannot ride out on a good
+intention. Options put to the USER:
+
+1. triage + promote all 77 (biggest win; a real page-by-page write-gate pass, and the merge with
+   the PROJECT twins is a judgement call per page),
+2. promote only the ~12 direct collisions now so recall stops shadowing, the remaining 65 as their
+   own TRDD — **recommended**, it stops the live harm without a 77-page judgement call inside a
+   migration already in flight,
+3. neither: stub the colliding LOCAL pages to redirect to their PROJECT twins — fixes shadowing,
+   leaves 65 pages of project knowledge unshared.
+
 ## Findings the migration turned up (fix during the final pass, not silently in transit)
 
 **0. The `memory-scope-leak` detector's 3 PROJECT-page findings are all FALSE POSITIVES** — checked

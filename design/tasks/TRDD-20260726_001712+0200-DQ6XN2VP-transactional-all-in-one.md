@@ -1,11 +1,11 @@
 ---
 trdd-id: DQ6XN2VP
 title: Make every all-in-one pipeline transactional — all-or-nothing with reverse compensation
-column: dev
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T00:17:12+0200
-updated: 2026-07-31T21:25:05+0200
+updated: 2026-08-02T15:25:31+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,6 +20,14 @@ relevant-rules: [R50, R51]
 blocked-by: []
 implementation-commits: [8a47c5a2, 4191381e, ecd1a1b, 0e08912b, dc034515, e696a6ba, 3f2e0e1d, 944063f2, 778151e9, 72886dd1, 1b129db8, 47feb243, bfc1f226, c1681c9d, 9d3c08d6, 2c5d2fcf, 653b894f, dd9ce737, 7fd5044c, da3ed3e5, 4ee79582, 61858167, 40cefbb8, 0db3f598, 4cd3d148, 353b9089, 1fa48129, 6baa7c8b, 6201ba8d, 8f2c9d71, 63e56bfa, aca4c858, be35ec55, 4d81aa69, 75a7d9e7, 73fa3db0, 790cd8cb, 2613c907]
 ---
+
+## ⏹ TRIAGE 2026-08-02T15:2x+0200 — `dev` → `todo`, nobody is working this ([[5YRLA53W]])
+
+Re-columned, not closed. The last acceptance box is genuinely OPEN (*"each pipeline declares its
+R51.7 INVARIANTS, not only its gates"*) — real remaining work, not bookkeeping. It sat in `dev`
+claiming someone was working it RIGHT NOW; with one worker on this project that was untrue, and an
+untrue column is worse than an unstarted card because it hides the stall from the only view anyone
+consults. Nothing about the work changed; only the claim did.
 
 ## ⏵ THE LAST ROW LANDED 2026-07-31 (`92c61ca5`, card `TRDD-YAGRX7W3`) — and it UNBLOCKED the parity box
 

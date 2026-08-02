@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T15:19:14+0200
+updated: 2026-08-02T15:26:15+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -102,6 +102,39 @@ was meant to repair. Two specific traps:
    Highest value on cards already near a terminal column.
 4. **Consider a lint** for "an open card in a WORK column with no checklist" — but only after the
    backfill, or it emits 69 warnings on day one and gets routed around.
+
+## Triage log — start here, this is the running record
+
+**2026-08-02T15:2x+0200 — first pass, 4 of 18 `dev` cards. `dev` 18 → 14.**
+
+The hypothesis that started this pass was WRONG and is recorded rather than quietly dropped: I
+expected the four cards nearest done (16/17, 10/11, 8/9, 5/6) to be *done-but-unclosed*, i.e. cheap
+closures. **Not one of them was.** Every one had a genuinely open box. Forcing them closed would
+have been precisely the damage the "no scripted sweep" rule exists to prevent — and the box counts,
+which is all a script can see, pointed the wrong way.
+
+The real drainage turned out to be different: **three of the four were not workable by ANYONE**, yet
+sat in `dev` claiming active work.
+
+| card | remaining box | judgement | → |
+|---|---|---|---|
+| `DQ6XN2VP` | declare each pipeline's R51.7 invariants | real pending work, nobody on it | `todo` |
+| `Y8VPE3NS` | OBSERVE two empirical PTY unknowns | needs a real wedged agent; armed and waiting | `todo` |
+| `OX5TT5OT` | end-to-end re-login — *"this is the human's step, at the host"* | only the USER can advance it | `human_review` |
+| `FKGMNGJB` | repair 2 archived cards | blocked on `janitor#139` — **verified OPEN, 0 comments, untouched since 2026-07-30** | `todo` + `external-refs` |
+
+**A finding worth more than the four moves:** `FKGMNGJB`'s last box IS the two `BODY-STATE-CLAIM`
+ERRORs that `trddgrep validate` reports on every run and that every session has been calling
+"pre-existing frozen-card noise". They are not unowned — they are one card's last box, frozen behind
+an external ruling. A known-issue list that outlives its issue starts hiding new ones.
+
+**VOCABULARY GAP, recorded rather than papered over.** There is no honest way to say *"blocked on
+something outside the corpus"*. `blocked-by:` takes TRDD ids only (all 6 blocked cards name one), so
+a card waiting on a GitHub issue cannot use `column: blocked` without making `blocked-by:` a lie.
+The existing precedent ([[35VKIGTC]] ← `janitor#167`) is `todo` + `external-refs:`, which is what
+was followed — but `todo` asserts *"ready to be pulled"*, which is also false. Both available
+answers are wrong in different directions. Worth a `blocked-external` column, or letting
+`blocked-by:` carry an external ref.
 
 ## Acceptance
 

@@ -1,11 +1,11 @@
 ---
 trdd-id: FKGMNGJB
 title: A TRDD can carry a SECOND state field in its body and every gate passes it
-column: dev
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T06:27:51+0200
-updated: 2026-07-30T07:18:11+0200
+updated: 2026-08-02T15:25:31+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,12 +21,30 @@ parent-trdd: L55IYKL4
 derived: true
 derived-kind: eht
 blocked-by: []
+external-refs: [Emasoft/ai-maestro-janitor#139]
 npt: []
 eht: []
 labels: [pillar, linter, corpus-integrity, one-source-of-truth]
 ---
 
 # A TRDD can carry a SECOND state field in its body and every gate passes it
+
+## ⏹ TRIAGE 2026-08-02T15:2x+0200 — `dev` → `todo`, blocked on an EXTERNAL ruling ([[5YRLA53W]])
+
+Re-columned, not closed. 8 of 9 boxes are done; the ninth is explicitly *"awaiting the janitor's /
+USER's ruling on janitor#139"*. **Verified 2026-08-02: that issue is OPEN with ZERO comments, last
+touched 2026-07-30** — no ruling has landed, so this is genuinely un-startable, not merely untouched.
+
+**Worth knowing for anyone reading a validate run:** the "two archived cards" this box would repair
+are `7123D51A` and `C7A81642` — i.e. the two `BODY-STATE-CLAIM` ERRORs that `trddgrep validate` has
+been reporting as "pre-existing" for days. They are not unowned noise; they are THIS card's last box,
+frozen behind an external decision.
+
+**Why `todo` and not `blocked`:** `blocked-by:` takes TRDD ids only (all 6 blocked cards on this
+board name one), and the blocker here is a GitHub issue. The corpus precedent for exactly this shape
+is [[35VKIGTC]] — `todo` + `external-refs:`. That precedent is followed here, and the vocabulary gap
+it exposes (no honest way to say "blocked on something outside the corpus") is recorded on
+[[5YRLA53W]] rather than papered over.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30T07:04
 

@@ -1,11 +1,11 @@
 ---
 trdd-id: OX5TT5OT
 title: Re-login belongs in the dashboard, not in a CLI the user has to be told about
-column: dev
+column: human_review
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:15:45+0200
-updated: 2026-07-29T20:00:07+0200
+updated: 2026-08-02T15:25:31+0200
 implementation-commits: [7b3341ac, 17b55c24]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -30,6 +30,14 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/95]
 ---
 
 # Re-login belongs in the dashboard, not in a CLI the user has to be told about
+
+## ⏹ TRIAGE 2026-08-02T15:2x+0200 — `dev` → `human_review`, the only step left is the USER's ([[5YRLA53W]])
+
+Re-columned, not closed. 10 of 11 boxes are done; the eleventh says so itself — *"End-to-end on
+`fmuaddib@` … **this is the human's step, at the host**"*. No agent can advance it, so `dev` was
+claiming work that could not be performed. `human_review` is the column that means "escalated to the
+USER", which is exactly true here. It is NOT `blocked`: `blocked-by:` takes TRDD ids and there is no
+card to name — a human action is not a card.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-29
 

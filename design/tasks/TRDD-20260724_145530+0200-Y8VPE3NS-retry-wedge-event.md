@@ -1,10 +1,10 @@
 ---
 trdd-id: Y8VPE3NS
 title: Retry-wedge event the ai-maestro 90 contract
-column: dev
+column: todo
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-25T22:18:19+0200
+updated: 2026-08-02T15:25:31+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,6 +21,13 @@ derived-kind: eht
 relevant-rules: [ai-maestro-90]
 implementation-commits: [8e78c09b, 73c9b27c]
 ---
+
+## ⏹ TRIAGE 2026-08-02T15:2x+0200 — `dev` → `todo`, nobody is working this ([[5YRLA53W]])
+
+Re-columned, not closed. The last acceptance box is genuinely OPEN — the two empirical PTY unknowns
+must be **OBSERVED**, and observation is work nobody has done. It had sat in `dev` for 8 days
+claiming active work; with one worker that was untrue. Nothing about the work changed, only the
+claim.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
 

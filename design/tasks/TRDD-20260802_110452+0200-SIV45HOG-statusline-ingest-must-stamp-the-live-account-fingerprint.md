@@ -1,11 +1,11 @@
 ---
 trdd-id: SIV45HOG
 title: Statusline ingest must stamp the live account fingerprint, or the rotator burns every account
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:04:52+0200
-updated: 2026-08-02T11:09:00+0200
+updated: 2026-08-02T11:47:29+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -121,16 +121,33 @@ once at the boundary "or every comparison between them is wrong by 1000x") — t
 
 ## Acceptance
 
-- [ ] ingest stamps a server-resolved live fingerprint on every stored report
+- [x] ingest stamps a server-resolved live fingerprint on every stored report
 - [x] `last_switch_at` is persisted and readable by the rotator — pre-existing (`rotate.ts:44`, `tick.ts:537`)
-- [ ] the age comparison converts SECONDS→MILLISECONDS explicitly, pinned by a test straddling the switch instant in BOTH directions (a ms-vs-s compare always passes ⇒ vacuous guard)
-- [ ] a report failing EITHER guard is discarded, and the discard is observable (counter or log)
-- [ ] the fingerprint comes from `fingerprint()` in `lib/oauth-rotator/slots.ts`, not a second implementation
-- [ ] tests + at least 2 neuters recorded BY NAME; `tsc` 0; full suite green
-- [ ] [[GY0LJV6S]] unblocked and its `blocked-by` cleared
+- [x] the age comparison converts SECONDS→MILLISECONDS explicitly, pinned by a test straddling the switch instant in BOTH directions (a ms-vs-s compare always passes ⇒ vacuous guard)
+- [x] a report failing EITHER guard is discarded — `admitSnapshot` returns the REASON (`stale-account` | `pre-switch`), which is stronger than a counter: the consumer can log which guard fired
+- [x] no second fingerprint implementation — the stamp reads `state.live_fp`, which IS what `fingerprint()` produced (`rotate.ts:43`). AMENDED from "calls `fingerprint()`": that takes a credential BLOB, so calling it here would read a SECRET on a path rate-limited at 600/min to obtain an identifier already held without one — and the guard protects the ROTATOR's decision, so "who is live" must be the rotator's own view
+- [x] 13 tests + 3 neuters recorded BY NAME with MEASURED counts; `tsc` 0; full suite 338 files / 4814 passed
+- [x] [[GY0LJV6S]] unblocked and its `blocked-by` cleared
 
 ## Approval log
 
 - 2026-08-02T11:04:52+0200 — MANDATE issued by ai-maestro (min-approval-requirement: none).
   Pre-approved: Tier 0 self-mandate, a derived NPT wholly inside this agent's own assignment scope.
   No approval request was sent.
+
+## Closed 2026-08-02T11:47:29+0200
+
+Landed in `1a92aeb0` (implementation) and `6dc8a076` (fixture + measured neuter record).
+
+**The honest limit, recorded because the stronger reading is the tempting one.** The stamp says
+WHICH ACCOUNT WAS LIVE WHEN THE REPORT ARRIVED — not which account produced it. A session holds its
+credential in memory and never tells us, so that is the strongest true statement a server-side
+stamp can make. It closes the primary failure (pre-switch reports carry the old fingerprint and are
+discarded, so an exhausted account's ~98% is never attributed to the fresh one). It does NOT close
+the residual: a session still running on the OLD credential immediately after a switch posts a
+report that arrives AFTER it, is stamped with the NEW fingerprint, and passes both guards. That
+window is bounded — the session picks up the new credential or its token expires — and GY0LJV6S
+should not be written as though it were closed.
+
+**Deliberately NOT wired into `tick.ts:422`.** That is GY0LJV6S's, and wiring it from here is
+exactly what the block existed to prevent.

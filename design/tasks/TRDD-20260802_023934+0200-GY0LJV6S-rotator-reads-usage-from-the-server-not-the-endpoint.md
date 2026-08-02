@@ -1,12 +1,11 @@
 ---
 trdd-id: GY0LJV6S
 title: The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
-column: blocked
-pre-block-column: todo
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T11:05:30+0200
+updated: 2026-08-02T11:47:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,7 +21,7 @@ effort: medium
 relevant-rules: [R16]
 npt: [D8OYFG35, SIV45HOG]
 eht: []
-blocked-by: [SIV45HOG]
+blocked-by: []
 release-via: none
 labels: [oauth, rotator, statusline, continuity, incident-followup]
 ---
@@ -218,3 +217,24 @@ key* was dead.
 
 - 2026-08-02T02:39:34+0200 — USER MANDATE, issued verbatim (above) after the live incident.
   Authority: USER >= any required approver, so this is authored directly in `design/tasks/`.
+
+## UNBLOCKED 2026-08-02T11:47:52+0200 — read this before wiring `tick.ts:422`
+
+[[SIV45HOG]] landed (`1a92aeb0`, `6dc8a076`): `StatuslineSnapshot.liveFp` is stamped server-side at
+ingest and `lib/statusline-admissible.ts::admitSnapshot(snapshot, rotatorState)` returns `null` to
+admit or the REASON (`stale-account` | `pre-switch`). Call it before acting on any snapshot; log
+the reason so a discard is observable.
+
+**Two things it does NOT do, so this card does not inherit a false premise:**
+
+1. **The stamp is "who was live when it ARRIVED", not "who produced it".** A session still on the
+   OLD credential immediately after a switch is stamped with the NEW fingerprint and passes both
+   guards. Bounded (the session picks up the new credential or its token expires), and unclosable
+   from the server — a session never reveals which credential it holds. Do not describe the guard
+   as complete.
+2. **Nothing is wired.** `admitSnapshot` has no caller; this card is the caller. It is also
+   deliberately pure (it takes the rotator view as a plain object), so wiring means passing
+   `loadState()` in, not reaching into the rotator from the predicate.
+
+⚠ **Nothing rotator-side is LIVE until `yarn build` + `pm2 restart`** — `lib/**` bundles into
+`.next`, so a restart alone replays the old build. Verify by EFFECT, never by `git log`.

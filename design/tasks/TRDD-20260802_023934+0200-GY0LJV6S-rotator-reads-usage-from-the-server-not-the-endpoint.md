@@ -1,11 +1,11 @@
 ---
 trdd-id: GY0LJV6S
 title: The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T14:05:06+0200
+updated: 2026-08-02T14:11:41+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -67,6 +67,37 @@ account in minutes, unattended, while the log reads like healthy rotation.**
 
 Not a defect in D8OYFG35 (every box it owns is delivered) — a prerequisite nobody owned, now filed as
 the NPT [[SIV45HOG]].
+
+## ✅ LANDED 2026-08-02T14:0x+0200 — `d17fffbd`. Read the ⛔ correction under it for WHY this shape
+
+`statuslineNear(state, deps)` in `lib/oauth-rotator/tick.ts` is wired at **two** call sites:
+
+1. the `liveStatus === 200` branch — `near = isNearLimit(fh, sd, sc) || liveExpired || sl.near`.
+   A pure disjunct; nothing about the endpoint path changed.
+2. **a NEW branch**: endpoint UNREACHABLE **and** statusline at/over threshold ⇒ rotate. That case
+   previously returned "staying put" unconditionally, which was right while the endpoint was the
+   only source (refusing to act on no data is the fail-safe) and is the wrong answer once a second,
+   independent source says the account is spent. The asymmetry survives: the statusline can move us
+   OFF a maxed account and can never talk us into staying on one.
+
+It calls `isNearLimit` rather than re-comparing to `SWITCH_AT_5H`, so ONE threshold predicate
+exists, not two that drift. `scoped: null` is that function's documented contract, exactly true of
+a source that structurally cannot see the scoped windows. Fail-soft throughout: an unreadable store
+yields `false`, i.e. today's behaviour.
+
+**Two things worth carrying forward, both found by measurement rather than reasoning:**
+- The read must happen **after** the endpoint call, because `state` only then carries the
+  reconciled `live_fp`/`last_switch_at` the guard compares against. Judged against a
+  pre-reconciliation state a snapshot is admitted relative to the *wrong account*.
+- `deps.now()` is **seconds**, `capturedAt` is **milliseconds**, converted at the seam. Unconverted
+  it is wrong by 1000× in the direction that makes every sample look *infinitely fresh* — which is
+  how that fix's own first test came out VACUOUS (it asserted "a fresh maxed sample trips", true
+  either way). The neuter reddened a different test than predicted and that is what exposed it. The
+  discriminating fixture is a fresh/stale PAIR; see the test file's neuter record.
+
+**Still open on this card:** the push-trigger (box 4 — what makes the USER's word *"immediately"*
+true; the disjunct alone still waits for the 60 s tick), the drain-guard (box 5), and integration
+coverage of the two branches above.
 
 ## ⛔ THE SEAM TABLE BELOW IS WRONG — corrected 2026-08-02T14:1x+0200, read this first
 
@@ -299,12 +330,15 @@ key* was dead.
 
 ## Acceptance
 
-- [ ] REFUSED AS WRITTEN (see the ⛔ correction) — restated: `tick.ts:490` gains a statusline DISJUNCT into `near`; the endpoint read stays, because `sc` (model-scoped, JI7F1236) and `liveStatus` are endpoint-only
-- [ ] candidate reads at `:496`/`:509` unchanged, and documented as structurally endpoint-only
-- [ ] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports
+- [x] REFUSED AS WRITTEN (see the ⛔ correction) — restated and DONE (`d17fffbd`): `tick.ts:490` gains a statusline DISJUNCT into `near`; the endpoint read stays, because `sc` (model-scoped, JI7F1236) and `liveStatus` are endpoint-only
+- [x] candidate reads at `:496`/`:509` unchanged, and documented as structurally endpoint-only — untouched by `d17fffbd`, and the ⛔ correction now gives a SECOND reason (`sc` + `liveStatus` are endpoint-only for the LIVE account too)
+- [x] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports — SIV45HOG (`1a92aeb0`) + the `statuslineNear` caller (`d17fffbd`)
 - [ ] an at/over-threshold ingest triggers `autoRotate` immediately; the 60 s timer remains the floor
 - [ ] the drain-guard: no expiry-only rotation off a low-usage account onto the last healthy slot
-- [~] tests + at least 2 neuters recorded BY NAME; `tsc` 0 — DONE for the selection function (20 tests, 3 neuters, b481b26b/2816405b); the wiring at `tick.ts:490` still owes its own
+- [~] tests + at least 2 neuters recorded BY NAME; `tsc` 0 — 28 tests + 6 measured neuters across
+  `b481b26b`/`2816405b` (the selection function) and `d17fffbd` (`statuslineNear`). **Still open:
+  the two BRANCH wirings inside `autoRotate` have no integration test** — `statuslineNear` is
+  pinned, its call sites are not. Delegated 2026-08-02T14:1x. Full suite 340 files / 4834 green.
 
 ## Approval log
 

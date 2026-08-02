@@ -162,7 +162,15 @@ describe('notifyAgent safe-state gate (TRDD-YPIRL5RA DEFECT 2) — skip on PROVE
  * Stays GREEN (correctly — they assert the fail-open half, which the deletion also produces):
  *   ✓ both POSITIVE CONTROLs, the workdir-argument test, the unknown-type test
  *
- * Complementary mutation: widen the condition to `if (hook)` (skip on ANY hook state). Reddens the
- * two POSITIVE CONTROLs + the unknown-type test and leaves the three skip tests green — which is
- * what proves the fail-open half is pinned and not merely assumed.
+ * Complementary mutation — widen the condition to `if (hook)` (skip on ANY hook state). MEASURED,
+ * and it corrects what I first wrote here: it reddens exactly 2, not 3.
+ *   × POSITIVE CONTROL — an IDLE pane with hook state present still sends
+ *   × an UNKNOWN notificationType is not busy evidence — fails open
+ *
+ * The null-state POSITIVE CONTROL stays GREEN under it, necessarily: its `hook` IS null, so
+ * `if (hook)` is false and it sends either way. That test is the non-vacuity anchor for neuter A
+ * and is BLIND to neuter B by construction — which is the whole reason the idle-pane control had to
+ * exist as a separate test. Between the two mutations every branch of the gate is pinned by one
+ * that reaches it, and no single mutation reds the whole file (a mutation that reds everything
+ * tells you nothing about which half you broke).
  */

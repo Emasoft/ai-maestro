@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: component
+  topic: architecture-and-runtime
 ---
 
 # dashboard-ui-patterns

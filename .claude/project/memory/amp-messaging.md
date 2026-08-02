@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: hub
+  topic: messaging
   globs: [scripts/amp-*.sh, app/api/v1/**]
 ---
 

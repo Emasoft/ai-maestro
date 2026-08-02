@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: teams-and-governance
 ---
 
 `docs/GOVERNANCE-RULES.md` is a FIXTURE, not just prose. The ratchet test

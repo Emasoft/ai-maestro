@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: component
+  topic: plugins-and-marketplaces
 ---
 
 # plugin-architecture-source-vs-install-target

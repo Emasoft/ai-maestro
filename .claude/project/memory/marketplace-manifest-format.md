@@ -7,6 +7,7 @@ metadata:
   lmd: 2026-07-08
   type: feedback
   tier: component
+  topic: plugins-and-marketplaces
   originSessionId: e1b4c900-d366-4fc0-93a4-353bb259fe18
 ---
 

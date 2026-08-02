@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: component
+  topic: teams-and-governance
 ---
 
 # manager-gated-team-governance

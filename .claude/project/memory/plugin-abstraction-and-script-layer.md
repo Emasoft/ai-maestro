@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: aspect
+  topic: plugins-and-marketplaces
 ---
 
 # plugin-abstraction-and-script-layer

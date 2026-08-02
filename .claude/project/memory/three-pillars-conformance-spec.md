@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: component
+  topic: design-system
 ---
 ai-maestro hosts the normative **3-pillars conformance SPEC** at
 `design/specs/3-pillars-spec.md` (ai-maestro#85, USER-directed, `spec-version` semver). It is

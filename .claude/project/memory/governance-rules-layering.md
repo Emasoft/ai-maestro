@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: aspect
+  topic: teams-and-governance
 ---
 
 # governance-rules-layering

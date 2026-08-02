@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: aspect
+  topic: architecture-and-runtime
 ---
 
 **ai-maestro serves every API route TWICE, from two independent code paths, and the headless

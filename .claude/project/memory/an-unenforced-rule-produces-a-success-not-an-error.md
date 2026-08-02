@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: aspect
+  topic: teams-and-governance
 ---
 
 **A missing authorization check does not produce an error. It produces a SUCCESS that should

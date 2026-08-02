@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: plugins-and-marketplaces
 ---
 
 # Registering a plugin in the ai-maestro-plugins marketplace

@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: design-system
 ---
 The 3-pillars corpus tooling (`lib/pillar/*`, `lib/trdd-store.ts`, `lib/trdd-doctor.ts`,
 `scripts/trddgrep.mjs`) was stateless and full-rescan until 2026-07-28. It is now built on a

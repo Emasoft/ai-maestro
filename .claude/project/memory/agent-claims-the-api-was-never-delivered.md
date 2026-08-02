@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: reliability-patterns
 ---
 
 When anyone — a fleet agent, an issue, your own plan — reports that ai-maestro never

@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: plugins-and-marketplaces
 ---
 
 ^plugin-dep-tags-need-the-name-prefix [desc:"version_constrained_plugin_dependencies_resolve_only_against_tags_named_pluginname__vversion", keywords:"has_no_git_tag_satisfying no-matching-tag plugin_dependency_version_constraint claude_plugin_tag_--push role_plugin_will_not_install", ocd: 2026-07-13, lmd: 2026-07-30]

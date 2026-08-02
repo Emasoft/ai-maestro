@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: agents
 ---
 
 # Folder adoption — `allowExternalFolder` (TRDD-57EBNB72)

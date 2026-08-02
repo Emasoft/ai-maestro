@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: agents
 ---
 
 ^agent-launch-two_silent_failures [desc:"ai_maestro_launches_agent_clients_that_cannot_possibly_work_and_they_look_alive", keywords:"agent_says_not_logged_in_but_dashboard_shows_it_online agent_pane_falls_back_to_zsh claude_--agent_exits_printing_the_available_agents_list agent_looks_alive_but_can_do_nothing", ocd: 2026-07-12, lmd: 2026-07-30]

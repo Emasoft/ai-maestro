@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: component
+  topic: security-and-auth
 ---
 
 # env-vars-and-the-governance-password

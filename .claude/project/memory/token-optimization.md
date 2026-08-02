@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: component
+  topic: tooling-and-testing
 ---
 
 A single UI scenario run could cost **130M+ cost-weighted tokens** (base context ~445K re-read across ~284 turns at Opus rate) — and an UNCAPPED fleet of them caused a ~13B-token blowup. **Cost ≈ turns × per-turn-context**, because the whole append-only transcript is re-read every turn. Two multipliers: turns (linear) and per-turn-context (everything still in the transcript). The rules below cut BOTH. The machine-wide source-of-truth is the global rule `~/.claude/rules/token-economy-agents-and-scenarios.md` (the L1-L9 levers); this page is the project-local record of the 8 user-mandated techniques, how they map to L1-L9, and **where each is implemented** so a future session can verify them in one place.

@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: agents
 ---
 
 # AI Maestro agent control + monitor API (and the permanent script layer)

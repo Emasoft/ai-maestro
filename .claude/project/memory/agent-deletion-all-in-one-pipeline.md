@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: agents
 ---
 
 **An agent is not a folder.** Deleting one touches the registry record, the cemetery archive, team

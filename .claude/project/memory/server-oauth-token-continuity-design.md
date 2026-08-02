@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: reliability-patterns
 ---
 
 The ai-maestro server absorbs the janitor's continuity daemon (Family A) — including OAuth

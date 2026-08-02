@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: agents
 ---
 
 Restarting an agent's session used to be a **cold start**: both restart routes

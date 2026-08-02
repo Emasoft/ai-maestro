@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: aspect
+  topic: security-and-auth
 ---
 **RULE (USER-ratified, TRDD-CC9PY337, 2026-07-17): an env var that can weaken a security
 property is DELETED — not read, not validated, not documented, not in `.example.env`.** Doubt

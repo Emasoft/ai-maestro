@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: architecture-and-runtime
 ---
 
 Surviving a reboot or a blackout is **three independent facts**, not one, and each can

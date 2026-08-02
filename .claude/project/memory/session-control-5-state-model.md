@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: reference
   tier: component
+  topic: agents
 ---
 
 # session-control-5-state-model

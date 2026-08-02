@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: hub
+  topic: teams-and-governance
 globs:
   - services/teams-service.ts
   - lib/team-registry.ts

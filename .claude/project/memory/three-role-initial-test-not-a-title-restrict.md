@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: feedback
   tier: component
+  topic: teams-and-governance
 ---
 
 **Why:** The USER's finalization ask — *"a version capable of running the current governance rules with only 3

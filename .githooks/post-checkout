@@ -1,6 +1,64 @@
 #!/usr/bin/env bash
 # post-checkout — project-scoped git hook
-# Delegates to Git LFS post-checkout (preserves LFS smudge after checkout).
+#
+# Two jobs, in order:
+#   1. WARN when a FILE checkout just discarded working-tree content.
+#   2. Delegate to Git LFS post-checkout (preserves LFS smudge after checkout).
+#
+# ── Why job 1 exists ────────────────────────────────────────────────────────────────────────────
+# `git checkout -- <path>` and `git restore <path>` overwrite the working-tree file from the index
+# and say NOTHING. If the file held edits that were never staged, that content is gone — there is
+# no reflog for unstaged work, no undo, no prompt. Git warns you when a BRANCH switch would lose
+# changes; for the pathspec form it is silent, because discarding is precisely what you asked for.
+#
+# The dangerous case is when it is NOT what you asked for: reverting a deliberate temporary edit
+# (a neutered guard, a debug print) in a file that ALSO holds real uncommitted work. The revert
+# cannot tell the two apart and takes both. It cost four real edits in this repo on 2026-08-02,
+# and the loss was invisible for twenty minutes because nothing announced it.
+#
+# ── What this hook can and cannot do ────────────────────────────────────────────────────────────
+# It CANNOT prevent the loss: git offers no pre-checkout hook, so by the time this runs the file
+# is already overwritten and the previous content is unrecoverable. Do not mistake this for a
+# safety net. What it buys is TIME-TO-NOTICE — seconds instead of however long until something
+# else happens to reveal it — which is the difference between retyping one edit and reconstructing
+# a session's work from memory.
+#
+# Git tells us which form ran via the third argument: 1 = branch checkout, 0 = file checkout. Only
+# the file form is interesting, and only when HEAD did not move ($1 == $2), which is exactly the
+# `checkout -- <path>` / `restore <path>` shape.
+#
+# PREVENTION lives one layer up, where a command can still be refused before it runs:
+#   • scripts/dev/neuter          — refuses to neuter a file that has uncommitted changes
+#   • .claude/scripts/git-restore-guard.sh — blocks a dirty-path restore issued by an agent
+#
+# This hook NEVER blocks and never exits non-zero on its own account: a post-checkout that fails
+# breaks LFS smudging for every checkout in the repo, which is a far worse outcome than a missed
+# warning.
+
+PREV_HEAD="${1:-}"
+NEW_HEAD="${2:-}"
+BRANCH_FLAG="${3:-}"
+
+if [ "$BRANCH_FLAG" = "0" ] && [ -n "$PREV_HEAD" ] && [ "$PREV_HEAD" = "$NEW_HEAD" ]; then
+  printf '\n\033[1;33m⚠  FILE CHECKOUT — working-tree content was just overwritten from the index.\033[0m\n' >&2
+  printf '   `git checkout -- <path>` / `git restore <path>` discard UNSTAGED edits with no undo.\n' >&2
+  printf '   If that file also held work you had not committed, it is gone NOW — check before\n' >&2
+  printf '   continuing, while you still remember what was in it.\n' >&2
+  printf '   Reverting a temporary edit (a neutered guard, a debug print)? Use: scripts/dev/neuter\n' >&2
+  printf '   — it refuses to run unless the file is committed first, which is the whole failure.\n\n' >&2
+
+  # An append-only breadcrumb, so "did a restore run while I was away?" has an answer. Best-effort
+  # and bounded: a hook that fills a disk is a hook someone deletes.
+  GITDIR="$(git rev-parse --git-dir 2>/dev/null)" || GITDIR=""
+  if [ -n "$GITDIR" ] && [ -d "$GITDIR" ]; then
+    AUDIT="$GITDIR/file-checkout-audit.log"
+    printf '%s file-checkout at %s\n' "$(date +%Y-%m-%dT%H:%M:%S%z)" "$NEW_HEAD" >> "$AUDIT" 2>/dev/null || true
+    # Keep the last 500 lines. Trimmed in place with a temp file so a reader never sees a partial.
+    if [ "$(wc -l < "$AUDIT" 2>/dev/null || echo 0)" -gt 500 ]; then
+      tail -n 250 "$AUDIT" > "$AUDIT.tmp" 2>/dev/null && mv "$AUDIT.tmp" "$AUDIT" 2>/dev/null || true
+    fi
+  fi
+fi
 
 if command -v git-lfs >/dev/null 2>&1; then
   exec git lfs post-checkout "$@"

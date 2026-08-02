@@ -3,7 +3,7 @@ trdd-id: 95IKXQI6
 title: Parameterize install/update scripts with a custom git repo+branch and a version-downgrade guard
 column: testing
 created: 2026-07-21T20:51:42+0200
-updated: 2026-07-21T21:12:00+0200
+updated: 2026-08-02T16:40:27+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -17,6 +17,7 @@ approval-datetime: 2026-07-21T20:51:42+0200
 relevant-rules: []
 labels: [installer, updater, remote-install, decoupling, destructive-safety]
 release-via: none
+implementation-commits: [a5485043, 139ae56f, 93472eb4, eba494a9]
 ---
 
 # Parameterize install/update scripts with a custom git repo+branch and a version-downgrade guard
@@ -86,6 +87,38 @@ governance-rules`). This is why column=testing, not complete.
   install-messaging `-h`. ✓
 - Live install/update against a clean target → DEFERRED to the human (see above).
 
+## ⏱ VERIFIED 2026-08-02 — the two guards were unpinned, and one fixture passed by accident
+
+**1. Everything the card asserts, re-checked live and true.** Both scripts `bash -n` clean;
+`_normalize_repo_url` (`scripts/remote-install.sh:241`) and `_version_gt` (`:263`) present and
+correct; `--repo` / `--branch` / `--allow-downgrade` all in `show_help` (`:373-375`) and
+`--repo` / `--branch` in install-messaging's `-h` (`:57-59`); the downgrade refusal wired at
+`:1167` with the `--allow-downgrade` escape named in its own message at `:1169`. **The USER
+correction held**: the default is still `23blocks-OS/ai-maestro` (`:49`), not the Emasoft fork.
+
+**2. THE TWO GUARDS WERE PINNED BY NOTHING.** The Verification list says *"isolated logic tests →
+all cases correct ✓"* — those were ad hoc and are gone; no committed test named either function.
+`_version_gt` IS the guard the USER's mandate asked for by name (*"watch out for installing a
+previous version on a new version by error"*), and its failure is **silent**: a wrong comparison
+does not error, it lets the older version install over the newer one.
+
+Written and pinned (`tests/unit/remote-install-guards.test.ts`, 16 tests, `93472eb4`). By
+EXTRACTION, not by sourcing — `remote-install.sh` is a `curl | bash` installer, so single-file is a
+design constraint and its last line is `main "$@"`; sourcing it would RUN THE INSTALLER. Bounded
+`^_name() {$` → the first bare `}`, because brace-COUNTING desyncs on `${r%.git}` and
+`${r/#\~\//$HOME/}`, whose braces are not block braces.
+
+**3. AND THE NEUTERS FOUND A FIXTURE THAT PASSED FOR AN ACCIDENTAL REASON** (`eba494a9`).
+`../ai-maestro` was resolved against vitest's CWD — the repo root, whose PARENT contains a directory
+of that name — so `[ -d ]` caught it and the case under test never ran. It stayed **green** under
+the neuter that deletes the very case it exists to pin. Now run from an empty temp dir. Both of my
+written predictions were wrong and are corrected in the file's neuter record; the surviving point is
+that the `0.57.10 > 0.57.3` case is the ONLY one able to tell a numeric comparison from a
+lexicographic one (rollover and equality agree under both).
+
+**4. The two implementing commits were unrecorded.** `a5485043` + `139ae56f` are named in the prose
+but the frontmatter had no `implementation-commits:` — the backtracking field. Added.
+
 ## SUPERSEDED — do NOT carry forward
 - The first pass (commit a5485043) flipped the remote-install.sh default `REPO_URL` from
   `23blocks-OS/ai-maestro` → `Emasoft/ai-maestro`, reasoning from CLAUDE.md that Emasoft is
@@ -93,6 +126,35 @@ governance-rules`). This is why column=testing, not complete.
   The Emasoft-fork flip is future work gated on merge→main→push (the fork's main is stale, so the
   premature default would install an OLDER version — the very downgrade the guard exists to catch).
   Reverted in the follow-up commit; `--repo` (now incl. local paths) is the override for dev.
+
+## Acceptance
+
+Transcribed 2026-08-02 from this card's own `## Verification` list and its 5 numbered Deliverables,
+re-run live. The last box stays OPEN and is owed by the **human**, not by this card's code — the card
+says so itself, and it is why `column: testing` is correct rather than `complete`.
+
+- [x] **D1** `--repo <SRC>` + `--branch` on BOTH scripts, `AIMAESTRO_REPO`/`AIMAESTRO_BRANCH` on the
+      remote one (`remote-install.sh:49-55`, `install-messaging.sh:35-44`). `<SRC>` accepts
+      `owner/repo`, a full URL, and a LOCAL path (absolute, `./`, `../`, `file://`, quoted `~/…`)
+- [x] **D2** the default `REPO_URL` STAYS `23blocks-OS/ai-maestro` (`:49`) — the USER's correction,
+      not the first pass's flip to the Emasoft fork. See SUPERSEDED below
+- [x] **D3** version-downgrade guard on the UPDATE path: refuses when the installed version is
+      strictly newer, unless `--allow-downgrade` (`:1167`, message at `:1169`)
+- [x] **D4** the update pull is branch-aware (was a hardcoded `git pull origin main`); `origin` is
+      re-pointed only when `--repo` is explicitly passed
+- [x] **D5** install-messaging `--repo`/`--branch` are OPT-IN — with neither flag it does ZERO
+      network I/O and installs from its own checked-out tree, preserving the destructive-safety
+      property (`--branch` without `--repo` is refused, `:128`)
+- [x] `bash -n scripts/remote-install.sh && bash -n install-messaging.sh` → 0 errors
+- [x] `_normalize_repo_url` / `_version_gt` logic correct — **now by committed test rather than by
+      an ad-hoc run that left no trace**: 16 tests + 2 measured neuters (`93472eb4`, `eba494a9`)
+- [x] `--repo`/`--branch`/`--allow-downgrade` in remote-install `show_help`; `--repo`/`--branch` in
+      install-messaging `-h`
+- [ ] **live install/update against a clean target** — DEFERRED to the human, deliberately and for a
+      good reason: running the installer needs a clean TARGET machine, and running it against
+      `~/ai-maestro` would have the update path's `git stash`/`pull` touch the live dev branch. The
+      guard would correctly refuse the main-over-governance-rules downgrade, which is not the same
+      as the run being safe. This box is the reason the card is `testing` and not `complete`
 
 ## Approval log
 - 2026-07-21T20:51:42+0200 — MANDATE (Tier-0, self, in-scope infra). No approval request sent.

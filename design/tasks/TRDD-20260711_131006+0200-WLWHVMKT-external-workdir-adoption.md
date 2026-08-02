@@ -1,9 +1,9 @@
 ---
 trdd-id: WLWHVMKT
 title: External workdir adoption is broken — one authority for agent-workdir policy
-column: dev
+column: todo
 created: 2026-07-11T13:10:06+0200
-updated: 2026-07-11T13:10:06+0200
+updated: 2026-08-02T15:29:34+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 priority: 0
@@ -43,6 +43,14 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-maintainer-agent/issues/2
 ---
 
 # External workdir adoption is broken — one authority for agent-workdir policy
+
+## ⏹ TRIAGE 2026-08-02 — `dev` → `todo`, nobody is working this ([[5YRLA53W]])
+
+Re-columned, NOT closed, even though the core fix landed and was proven E2E on a live server: its own
+STATE names remaining work — open follow-up TRDDs for the **three new blockers the E2E discovered**
+(pre-existing, not caused by this change). Closing it would strand three known defects with no owner.
+⚠ This card has **no acceptance checklist at all**, so the completion gate has nothing to gate on —
+the vacuity measured across 69/97 open cards on [[5YRLA53W]]. Judged from the STATE block instead.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-11
 

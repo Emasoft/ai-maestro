@@ -1,9 +1,9 @@
 ---
 trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
-column: dev
+column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-07-13T10:40:07+0000
+updated: 2026-08-02T15:29:34+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -18,6 +18,13 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 ---
 
 # TRDD-903b7a20 — Overnight fleet-readiness campaign
+
+## ⏹ TRIAGE 2026-08-02 — `dev` → `todo`, nobody is working this ([[5YRLA53W]])
+
+Re-columned, not closed. Its `## NEXT ACTION` section carries an explicit **REMAINING (pick up in
+fresh context)** list — real pending work, untouched for **20 days** while the column claimed active
+work. A 514-line campaign card with no acceptance checklist: the completion gate has nothing to gate
+on ([[5YRLA53W]]), so this was judged from the REMAINING list, not from boxes.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
 

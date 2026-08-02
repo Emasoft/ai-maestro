@@ -1,9 +1,9 @@
 ---
 trdd-id: N1FYP2AW
 title: Token-optimized scenario-runner — Sonnet[1m] executor + Opus screenshot-interpreter
-column: dev
+column: backburner
 created: 2026-06-23T20:14:21+0200
-updated: 2026-06-23T21:43:37+0200
+updated: 2026-08-02T15:29:34+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -30,6 +30,14 @@ external-refs: []
 ---
 
 # TRDD-N1FYP2AW — Token-optimized scenario-runner (Sonnet[1m] executor + Opus screenshot-interpreter)
+
+## ⏹ TRIAGE 2026-08-02 — `dev` → `backburner`, deferred by its OWN stated condition ([[5YRLA53W]])
+
+Re-columned, not closed, and not abandoned. The STATE block below already says execution is
+**DEFERRED until the token-burn emergency lifts**, and the USER's greenlight is authorization-only.
+`backburner` is the column that means *explicitly deferred by design* — a resting state the pipeline
+rule exempts from draining. It had claimed `dev` for **39 days**, the stalest card on the board,
+while its own text said it must not run yet.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-23
 

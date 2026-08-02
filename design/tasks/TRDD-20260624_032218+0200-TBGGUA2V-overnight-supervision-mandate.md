@@ -1,9 +1,9 @@
 ---
 trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
-column: dev
+column: human_review
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T23:04:20+0200
+updated: 2026-08-02T15:29:34+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -31,6 +31,13 @@ external-refs: []
 ---
 
 # TRDD-TBGGUA2V — Overnight autonomous supervision mandate
+
+## ⏹ TRIAGE 2026-08-02 — `dev` → `human_review`, gated on a USER cost-decision ([[5YRLA53W]])
+
+Re-columned, not closed. The calibration probe is done and the per-scenario cost is MEASURED; the
+STATE heading below states the rest itself — *"batch gated on a USER cost-decision"*. No agent can
+advance that, so `dev` was claiming work that could not be performed. It had done so for **38 days**.
+`human_review` is the column that means escalated to the USER, which is exactly true.
 
 ## ⏵ STATE — READ FIRST — 2026-06-25T18:04+0200 (P8 CALIBRATION PROBE DONE — SCEN-020 PASS; real cost MEASURED; batch gated on a USER cost-decision)
 

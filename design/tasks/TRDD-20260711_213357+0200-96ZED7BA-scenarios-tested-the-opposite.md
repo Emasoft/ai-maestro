@@ -1,9 +1,9 @@
 ---
 trdd-id: 96ZED7BA
 title: The scenario suite was testing the opposite of what matters — it puppeted the agents
-column: dev
+column: todo
 created: 2026-07-11T21:33:57+0200
-updated: 2026-07-11T21:33:57+0200
+updated: 2026-08-02T15:29:34+0200
 current-owner: main
 assignee: main
 priority: 0
@@ -39,6 +39,12 @@ external-refs: []
 ---
 
 # The scenario suite was testing the opposite of what matters
+
+## ⏹ TRIAGE 2026-08-02 — `dev` → `todo`, nobody is working this ([[5YRLA53W]])
+
+Re-columned, not closed. Its own STATE carries a concrete NEXT ACTION (SCEN-014 S017/S019/S023, then
+run 009 → 011 → 022 → 014) — real pending work that nobody has been doing for **21 days** while the
+column claimed otherwise. Nothing about the work changed, only the claim.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-11
 

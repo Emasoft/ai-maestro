@@ -1,9 +1,9 @@
 ---
 trdd-id: P7RPOR5O
 title: Server liveness+capability probe file — the auth-free coordination seam both janitor backends read
-column: testing
+column: ai_review
 created: 2026-07-17T14:47:58+0200
-updated: 2026-08-02T16:09:36+0200
+updated: 2026-08-02T16:10:02+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -96,6 +96,17 @@ An auth-free file under `~/.aimaestro/` that the server maintains and both backe
   fields; `capabilities` is `[]` when the R16 flag is absent and `['family-a']` when present;
   `writeServerLiveness` never throws on an unwritable dir; the write is atomic (no partial file).
 - `bash scripts/with-node.sh npx tsc --noEmit` clean; `yarn build` clean.
+
+## ⏹ TRANSITION 2026-08-02 — `testing` → `ai_review` ([[5YRLA53W]])
+
+Every verification item this card set for itself is met and re-run: 16 unit tests green, `tsc` 0,
+`yarn build` 0, and the one condition its STATE left open — *"NOT YET LIVE ON DISK"* — is now
+satisfied and measured on the running server. That is the exempt mechanical transition (all
+test-requirements PASSED), not a judgement call.
+
+The single `[~]` box is a **superseded goal**, not a failed test: the per-class handoff was
+abandoned by the consumer, not by this card. Advancing with it struck through is honest; leaving
+the card in `testing` would assert that tests are still pending when none are.
 
 ## ⏱ VERIFIED LIVE 2026-08-02 — the seam works, and the CONSUMER'S design changed underneath it
 

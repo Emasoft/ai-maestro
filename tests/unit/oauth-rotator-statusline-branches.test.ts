@@ -376,6 +376,40 @@ describe('autoRotate — the disjunct is inert without an injected statusline se
 })
 
 /**
- * NEUTERS — MEASURED, each reverted after. Counts and names are what the runs PRINTED.
- * (Filled in below after measurement.)
+ * NEUTERS — MEASURED 2026-08-02, each applied over `8f711aa6` and reverted after (`tick.ts` verified
+ * byte-identical to HEAD afterwards). Counts and names are what the runs PRINTED.
+ *
+ * ⚠ THIS TAIL WAS EMPTY FOR A DAY while the header above claimed "NEUTERS — MEASURED … See the
+ * tail". That is worse than having no header claim at all: a comment asserting a measurement that
+ * does not exist tells the next reader not to look. Recorded here because the gap, not just the
+ * result, is the lesson.
+ *
+ * Since both branch wirings are REVERTED, each neuter RE-ADDS the reverted code — the inverse of a
+ * normal neuter. A test that guards a revert is proven by making the revert un-happen.
+ *
+ *   M1. re-add the 200-branch disjunct — `near = usageNear || liveExpired` → `… || sl.near`
+ *       → REDS 1 of 8: "does NOT rotate on a statusline-only signal — the 200 endpoint is ground
+ *         truth here"
+ *
+ *   M2. re-add the endpoint-unreachable rotation — restore the `else if (sl.near) { near = true; … }`
+ *       arm ahead of the unconditional stay-put
+ *       → REDS 1 of 8: "stays put when the usage API is down — pending the debounce this branch
+ *         still lacks"
+ *
+ *   ⇒ M1 and M2 red DISJOINT single tests, which is the property that matters here: the two reverts
+ *     are DIFFERENT judgements (the 200-branch form is unsound and will not return; the unreachable
+ *     form is re-landable behind a >=2-tick debounce), and each is pinned independently. Re-landing
+ *     one cannot silently re-land the other, and neither can be re-added by accident.
+ *
+ *   M3. drop the statusline fragment from the log line — remove `${slDesc}` from `liveDesc`
+ *       → REDS 3 of 8: "does NOT rotate on a statusline-only signal — the 200 endpoint is ground
+ *         truth here" · "ASYMMETRY — a BELOW-threshold statusline does NOT cancel an
+ *         endpoint-driven rotation" · "CONTROL — neither source is near: no rotation, and the
+ *         statusline was still read"
+ *       → THE MOST IMPORTANT OF THE THREE. Observability is the ONLY thing that survived the
+ *         revert, and it is the mechanism by which the misattribution becomes measurable in
+ *         production before anyone re-lands a debounced version. It is pinned by 3 tests, not by
+ *         hope. Note it reds the ASYMMETRY test too — confirming that test's own claim that its
+ *         discriminating power lives in the PAIRED assertion (`switched === true` AND the rendered
+ *         `[statusline …]`), not in the boolean alone.
  */

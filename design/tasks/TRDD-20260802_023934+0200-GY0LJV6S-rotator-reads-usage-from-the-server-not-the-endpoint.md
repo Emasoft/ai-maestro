@@ -1,11 +1,11 @@
 ---
 trdd-id: GY0LJV6S
 title: The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
-column: dev
+column: blocked
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T15:03:23+0200
+updated: 2026-08-02T15:17:03+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,14 +22,56 @@ relevant-rules: [R16]
 npt: [D8OYFG35, SIV45HOG]
 eht: []
 implementation-commits: [39bc5cad, 9fed4781, 18deb450]
-blocked-by: []
+blocked-by: [D8OYFG35]
+pre-block-column: dev
 release-via: none
 labels: [oauth, rotator, statusline, continuity, incident-followup]
 ---
 
 # The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-02
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-02T15:1x+0200
+
+**ALL SIX ACCEPTANCE BOXES ARE CLOSED. Code is complete and unit-verified; it is NOT verified live.**
+
+**`column: blocked`, `blocked-by: [D8OYFG35]`, `pre-block-column: dev` — and the block is REAL, not
+bookkeeping.** This card was briefly moved to `testing` on 2026-08-02T15:1x and `trddgrep validate`
+correctly refused it (`ORDER-NPT-VIOLATED`: an NPT must be terminal before the parent passes `dev`).
+Checking the rule against the facts rather than arguing with the tool: **D8OYFG35's last box is the
+USER wiring the statusline hook into `~/.claude/settings.json`, and until that happens NO SNAPSHOTS
+EVER ARRIVE** — so the verification step below cannot run at all. The earlier note that D8OYFG35 "is
+not a dependency of this card's CODE" is true and was the right call for *building*; it is false for
+*verifying*, which is the phase this card is now in.
+
+**NEXT ACTION — blocked on the USER.** Once the hook is wired (D8OYFG35 → terminal), restore to
+`dev`, then:
+
+```
+bash scripts/with-node.sh yarn build && pm2 restart ai-maestro
+```
+
+then verify BY EFFECT, never by `git log`: POST a statusline snapshot and read it back, and confirm
+a rotator tick logs the `[statusline …]` fragment. `lib/**` and `app/**` bundle into `.next`, so a
+restart alone replays the OLD build — this is the single most repeated trap on this card.
+
+**What landed:** `39bc5cad` (push-trigger), `9fed4781` + `18deb450` (the drain-guard), `4ae89436`
+(provenance). 43 tests + 16 measured neuters. Full suite **343 files / 4862 tests**, `tsc` 0.
+
+**SUPERSEDED — do NOT carry forward.** Every one of these was true when written and is now false:
+
+| stale claim, below in this file | the truth |
+|---|---|
+| "⛔ RE-BLOCKED … DO NOT WIRE `tick.ts:422` YET" | [[SIV45HOG]] CLOSED; and the site was never `:422` — see CALL SITE CORRECTED |
+| "wire a statusline DISJUNCT into `near`" (every plan section) | built, REVERTED (`3c9a7493`), and the 200-branch form will NOT return. The statusline TRIGGERS, it does not DECIDE — see ⏭ THE ACTUAL DESIGN |
+| "`:422` becomes statusline-fed", "use `fiveHourPct` in place of `util(...)`" | REFUSED on measurement — `sc` and `liveStatus` are endpoint-only. See the ⛔ seam-table correction |
+| "the endpoint-unreachable branch is the only open question" | now its own card, [[7FTV9MTY]] (`backburner`) |
+| "the ONLY source for candidate headroom is the endpoint" | retired — see the CORRECTION on `agentlenspro --all` |
+
+**Still open, but NOT this card:** [[7FTV9MTY]] (re-land the unreachable branch behind a debounce)
+and [[VXFI1BR5]] (the incident's ACTUAL root cause — `switchLiveTo` discards the outgoing working
+credential; USER-tier, awaiting the USER).
+
+---
 
 USER directive, verbatim: *"the rotator must get its info from the api of ai-maestro server. and the
 api must get the info from the statusline hook of ai-maestro. is that clear? if the statusline reads
@@ -476,7 +518,14 @@ key* was dead.
 
 ## Acceptance
 
-- [ ] REVERTED (`3c9a7493`) — the disjunct re-opened the burn loop; see the ⛔ REVERTED section. The 200-branch form is UNSOUND and will not be re-landed; the endpoint-unreachable form needs a >=2-tick debounce + a statusline dwell. Original wording also refused: `tick.ts:490` gains a statusline DISJUNCT into `near`; the endpoint read stays, because `sc` (model-scoped, JI7F1236) and `liveStatus` are endpoint-only
+- [x] CLOSED AS REFUSED-AS-WRITTEN, not delivered — and the distinction is the point. The original
+  wording (`:490` reads the statusline INSTEAD of the endpoint) was refused on measurement: `sc`
+  (model-scoped, JI7F1236) and `liveStatus` are endpoint-only, so a substitution ships a safety
+  regression. Its restatement as a DISJUNCT was then built (`d17fffbd`) and REVERTED (`3c9a7493`)
+  for re-opening the burn loop — see the ⛔ REVERTED section. The 200-branch form is UNSOUND and
+  will NOT return. The endpoint-unreachable form IS re-landable and is now its own card,
+  [[7FTV9MTY]] (`backburner`), so closing this box buries nothing. **What actually delivers the
+  USER's directive is box 4**, the push-trigger: the statusline TRIGGERS a check, it does not DECIDE
 - [x] candidate reads at `:496`/`:509` unchanged, and documented as structurally endpoint-only — untouched by `d17fffbd`, and the ⛔ correction now gives a SECOND reason (`sc` + `liveStatus` are endpoint-only for the LIVE account too)
 - [x] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports — SIV45HOG (`1a92aeb0`) + the `statuslineNear` caller (`d17fffbd`)
 - [x] DONE (`39bc5cad`) — an at/over-threshold ingest fires `runOneTick()` (NOT `autoRotate` — the lock is one level up) behind a zero-I/O at-threshold pre-check and a globalThis 60 s floor stamped ON ATTEMPT. See the ⏭ ACTUAL DESIGN section; design report in reports/gy0ljv6s-push-trigger/
@@ -485,10 +534,14 @@ key* was dead.
   site, placed after the candidate loop so it covers BOTH `switchLiveTo` paths. See the
   `## ⏹ THE DRAIN-GUARD` section below for the shape, the two adversarial-review corrections, and
   the two neuters that reddened NOTHING
-- [~] tests + at least 2 neuters recorded BY NAME; `tsc` 0 — 28 tests + 6 measured neuters across
-  `b481b26b`/`2816405b` (the selection function) and `d17fffbd` (`statuslineNear`). **Still open:
-  the two BRANCH wirings inside `autoRotate` have no integration test** — `statuslineNear` is
-  pinned, its call sites are not. Delegated 2026-08-02T14:1x. Full suite 340 files / 4834 green.
+- [x] DONE — tests + neuters recorded BY NAME; `tsc` 0. **43 tests + 16 measured neuters** across
+  `b481b26b`/`2816405b` (the selection function), `d17fffbd` (`statuslineNear`), `9fed4781`/`18deb450`
+  (the drain-guard: 15 tests, 7 neuters) and the branch-wiring integration layer (8 tests, 3 neuters).
+  The branch wirings ARE now pinned — the tail of `oauth-rotator-statusline-branches.test.ts` had
+  claimed "NEUTERS — MEASURED … See the tail" over an EMPTY tail for a day; measured 2026-08-02 and
+  written up, including WHY the gap mattered. M1/M2 red DISJOINT single tests, so the two reverts are
+  independently guarded; M3 shows the surviving OBSERVABILITY is pinned by 3.
+  Full suite **343 files / 4862 tests** green.
 
 ## Approval log
 

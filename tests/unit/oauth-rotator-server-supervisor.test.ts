@@ -12,7 +12,7 @@ import { runOneSupervisorBeat, SUPERVISOR_INTERVAL_MS } from '@/lib/oauth-rotato
 import type { Facts } from '@/lib/oauth-rotator/supervisor'
 
 function facts(over: Partial<Facts> = {}): Facts {
-  return { optIn: true, onMacos: true, pinningEnv: [], slots: [], tickCompletedAgeS: 0, daemonAlive: true, ...over }
+  return { root: '/tmp/aim-test-rotator-root', optIn: true, onMacos: true, pinningEnv: [], slots: [], tickCompletedAgeS: 0, daemonAlive: true, ...over }
 }
 
 describe('server-supervisor — runOneSupervisorBeat', () => {

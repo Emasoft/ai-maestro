@@ -49,6 +49,7 @@ function healthySlot(email = 'ok@b.com'): SlotFact {
 /** A Facts skeleton: opted-in macOS host, nothing wrong — override fields per test. */
 function baseFacts(over: Partial<Facts> = {}): Facts {
   return {
+    root: '/tmp/aim-test-rotator-root',
     optIn: true,
     onMacos: true,
     pinningEnv: [],
@@ -112,6 +113,17 @@ describe('supervisor.diagnose — tick-stalled (daemon-alive gated)', () => {
   it('daemon DOWN → NO tick-stalled even with a null/stale stamp (a dead daemon is its own problem)', () => {
     expect(codes(diagnose(baseFacts({ daemonAlive: false, tickCompletedAgeS: null })))).not.toContain('tick-stalled')
     expect(codes(diagnose(baseFacts({ daemonAlive: false, tickCompletedAgeS: TICK_STALL_ALERT_S + 999 })))).not.toContain('tick-stalled')
+  })
+
+  it('points at the ABSOLUTE shared-log path from the GATHERED root, not a bare filename', () => {
+    // The alert used to read "Check rotator.log", which nobody can act on: the file lives under a
+    // plugin data dir no one memorises. The root is deliberately distinctive so this fails BOTH
+    // ways it can regress — reverting to the bare name (no absolute path), and reaching for the
+    // ambient rotatorRoot() instead of the root these facts were actually gathered from.
+    const root = '/tmp/aim-distinct-root-for-this-assertion'
+    const f = baseFacts({ root, tickCompletedAgeS: TICK_STALL_ALERT_S + 1 })
+    const msg = diagnose(f).find((x) => x.code === 'tick-stalled')?.message ?? ''
+    expect(msg).toContain(`${root}/rotator.log`)
   })
 })
 

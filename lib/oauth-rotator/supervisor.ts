@@ -20,6 +20,7 @@ import os from 'os'
 import path from 'path'
 
 import { rotatorRoot, slotKeychainRead, type CredentialBlob } from './slots'
+import { rotatorLogPath } from './decision-log'
 import { DEFAULT_MAX_REFRESH_FAILURES } from './cascade'
 
 // A pinning env var is read at process start and overrides the keychain, so the live `claude`
@@ -71,6 +72,12 @@ export interface Facts {
   tickCompletedAgeS: number | null
   /** gates the tick-stalled alert — a stale stamp with the daemon DOWN is the daemon's own problem */
   daemonAlive: boolean
+  /** The root these facts were gathered from. Carried so `diagnose` can NAME absolute paths in an
+   *  alert without reaching for the ambient `rotatorRoot()` — which would print a path the facts
+   *  did not come from whenever a caller passed its own root, the same per-root confusion
+   *  `slotFacts` warns about. Required, not optional: a default here would be the ambient root
+   *  again, silently, at exactly the call sites that forgot to set it. */
+  root: string
 }
 
 /** One supervisor conclusion — always an alert a human must act on. `code` is a stable machine
@@ -119,7 +126,12 @@ export function diagnose(facts: Facts): Finding[] {
       code: 'tick-stalled',
       message:
         `the 60s rotator tick has not COMPLETED for ${age} (> ${TICK_STALL_ALERT_S.toFixed(0)}s) while the daemon is alive ` +
-        `— the tick is hanging or failing; rotation is effectively OFF. Check rotator.log and the daemon log.`,
+        `— the tick is hanging or failing; rotation is effectively OFF. Check the shared decision log ` +
+        // The ABSOLUTE path, because this alert previously said "Check rotator.log" and that is not
+        // an instruction anyone can follow: the file sits under a plugin data dir nobody memorises,
+        // and the server did not write a byte of it, so even a reader who found it saw nothing the
+        // server had decided. Both halves are fixed — we write it now, and we say where it is.
+        `${rotatorLogPath(facts.root)} and the daemon log.`,
     })
   }
 
@@ -313,6 +325,7 @@ export function gatherFacts(opts: { root?: string; deps?: GatherDeps } = {}): Fa
   const onMacos = os.platform() === 'darwin'
   const pinningEnv = PINNING_ENV.filter((v) => process.env[v])
   return {
+    root,
     optIn,
     onMacos,
     pinningEnv,

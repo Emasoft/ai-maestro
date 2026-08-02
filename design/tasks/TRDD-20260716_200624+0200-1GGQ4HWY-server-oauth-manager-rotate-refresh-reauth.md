@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: todo
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-02T15:33:21+0200
+updated: 2026-08-02T16:02:59+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -27,6 +27,27 @@ implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e9634
 ---
 
 # Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
+
+## ⏱ EXTERNAL REF CHECKED 2026-08-02 — `janitor#82` CLOSED, and it hands this card a CONSTRAINT
+
+Surfaced by the external-ref sweep on [[5YRLA53W]] (15 of 47 refs turned out closed). `janitor#82`
+— *"keychain reads of `Claude Code-credentials` re-prompt after every app token refresh (partition
+list reset)"* — is **CLOSED 2026-07-28**, but read the closing comment before treating it as solved:
+
+- **The flap is NOT fixed.** It remains real and is tracked as the janitor's own `TRDD-V5RXQ4NB`.
+  What closed the issue is that two mitigations landed and changed its SEVERITY: the WRITE-side ACL
+  prompt is fixed and live (ACL touched only at CREATE, data-only updates thereafter), and the
+  denied-latch became a **self-healing half-open breaker** (600 s cooldown, one probe, auto-clear on
+  silent success) — so a partition-list flap now darkens rotation for **≤ one cooldown** instead of
+  forever.
+- **The constraint this port inherits, and it is load-bearing:** *no unattended ACL-touching
+  `security` op on the login keychain; prompting cures are interactive-only.* Their candidate design
+  is beacon/mirror-first reads so the tick rarely touches the app-owned item, plus a once-per-flap
+  advisory naming the interactive cure.
+
+**So this is not a blocker that cleared — it is a design input.** A faithful Python→TS port that
+reproduces the janitor's read path also reproduces the flap, and the mitigations above are part of
+what must be ported, not incidental. Do not port the pre-mitigation shape.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
 

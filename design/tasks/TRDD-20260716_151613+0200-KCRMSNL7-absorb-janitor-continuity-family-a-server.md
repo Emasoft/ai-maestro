@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-30T00:03:29+0200
+updated: 2026-08-02T16:02:59+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -21,6 +21,25 @@ release-via: none
 ---
 
 # Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
+
+## ⏱ EXTERNAL REFS CHECKED 2026-08-02 — `janitor#100`, the coordination thread this card is built on, is CLOSED
+
+Surfaced by the external-ref sweep on [[5YRLA53W]]. Two of this card's three refs are closed:
+
+- **`ai-maestro-janitor#100`** — *"[COORDINATION] ai-maestro absorbs the daemon's functions + a
+  special local-scoped janitor for ai-maestro agents"* — **CLOSED 2026-08-01**. This is the thread
+  the "three-Claude consensus" section below is built on, and it is the **single most-referenced
+  external item on the whole board: 8 cards** point at it (`1GGQ4HWY` `9ZIF82HI` `CHN16JXZ`
+  `DXJZM3BW` `H24DF6ZC` `JAU1ES1C` `KCRMSNL7` `P7RPOR5O`), spanning `todo`/`blocked`/`testing`/
+  `design`. It closed **yesterday**, so nothing here is stale yet — but a closed coordination thread
+  is exactly the input that goes unnoticed, and eight cards inherit whatever it concluded. **Read it
+  deliberately before advancing any of the eight**; do not infer its outcome from this card.
+- **`AgentlensPro#3`** — the reciprocal of `ai-maestro#70` — **CLOSED 2026-07-30**: the consumed
+  field paths are LOCKED in their `cliContract.aimaestro.test.ts`, so a reshape fails their CI. The
+  dependency side of that work is done and re-verified today (see [[WF0UE9BC]], now `human_review`:
+  npm latest 2.20.0, this machine 2.21.0, the `>=2.8.0` floor resolves).
+
+`ai-maestro#68` was re-checked in the same sweep and is still **OPEN**.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
 

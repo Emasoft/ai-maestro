@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-08-02T15:33:21+0200
+updated: 2026-08-02T16:02:59+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,6 +22,29 @@ npt: [Q3GZJI1X, LXLK7XGX, 7JK3NCV4, CTEQX0ZA]
 eht: [BQC8NQSW, C069SK9E, 8KDIB2LT, MUYRIKN3, YN8EQWYP, O4JK6RV3, 4VCXRHAY, 7CHUK1AZ, 31LJK1CX, C4YJAUD9, YHYP5XIZ, SCMPWF6R, FKGMNGJB, 217AYEOT]
 external-refs: [Emasoft/ai-maestro#96, Emasoft/ai-maestro#98, Emasoft/ai-maestro-janitor#118, Emasoft/ai-maestro-janitor#123, Emasoft/ai-maestro-janitor#126, Emasoft/ai-maestro-janitor#127]
 ---
+
+## ⏱ EXTERNAL REFS CHECKED 2026-08-02 — both janitor asks are CLOSED, and one of them SHIPPED THE SPEC
+
+Surfaced by the external-ref sweep on [[5YRLA53W]]. This card cites four janitor issues; **`#118`
+and `#123` closed on 2026-07-28** and nothing here records it.
+
+- **`janitor#118` — the ask for a CURRENT normative wikimem/memgrep spec — was ANSWERED and the
+  artefact SHIPPED:** `design/specs/wikimem-memgrep-spec.md`, **~1300 lines / 180 `WM-*` rules**, in
+  every janitor release **from v0.62.0**. Two rules were added after that answer and are worth
+  knowing before adopting anything: **`WM-ATOM-02a`** (the documenting GRAMMAR must not DECLARE
+  atoms — it was minting 13 phantom atoms in the USER index) and **`WM-BENCH-07a`** (the binary-pin
+  rule binds every test that shells out, not only the benchmarks).
+  **Their own diagnosis of the confusion matters more than the fix:** the file genuinely had **0
+  lines** in the v0.60.1 that was cached here, so the earlier reading was not a misreading — it was
+  a correct read of a stale cache. Re-fetch at ≥ v0.62.0 before concluding anything about the model.
+- **`janitor#123`** — `memgrep validate` reporting a merely-behind DB as a critical `MEMGREP-004`
+  migration failure — closed with a **correction to its own first explanation**: the re-firing is
+  not a cached finding but a legitimate **retry ladder** (`close --status FAILED` routes through
+  `mark_failed`, which increments `attempts` and returns the ticket to `OPEN` with a backoff, or
+  `needs_human` at the cap). The ticket store is **project-local at `.janitor/state/tickets/`**, not
+  in the plugin DATA dir — which is why an earlier search for it came up empty.
+
+`#126` and `#127` were re-checked in the same sweep and are still **OPEN**.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-28
 

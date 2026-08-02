@@ -632,6 +632,17 @@ describe('governance enforcement coverage — the ratchet', () => {
     ).toEqual([])
   })
 
+  // NEUTERS FOR THE TWO CHECKS BELOW — MEASURED 2026-08-02, each reverted after. Recorded here
+  // because a file that ENFORCES the neuter discipline and exempts itself from it is the joke
+  // version of this whole exercise.
+  //   A. `NEUTER_FLOOR = 21` → `22` (simulates a proof silently losing its record)
+  //      → REDS 1 of 12: "a proof test that records a NEUTER is a rising ratchet"
+  //   B. delete the `.replace(/\s*\(.*$/, '')` parenthetical-stripping line
+  //      → REDS 1 of 12: "EVERY row that names a proof names one that exists"
+  //      → this is not a hypothetical mutation: it is the exact instrument bug I made BY HAND
+  //        while measuring this corpus, which reported a 14 KB file that exists as MISSING and
+  //        nearly sent a false finding to another repo. The check now catches its own author's
+  //        mistake, which is the strongest form of evidence available for a check like this.
   it('EVERY row that names a proof names one that exists — not only the ENFORCED ones', () => {
     // The check above stops at ENFORCED, which exempts exactly the rows whose claim is most
     // fragile. A CONTRADICTED row's proof is the test PINNING THE DRIFT: R39.5 and R39.7 both cite

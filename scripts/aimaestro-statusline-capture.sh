@@ -70,8 +70,22 @@ fi
 # unknown command, so answer it instead of blocking. `[ -t 0 ]` is true ONLY when
 # stdin is a terminal, so this can never trigger under Claude Code, under a pipe,
 # or under `< /dev/null`.
-if [ -t 0 ]; then
-    cat >&2 <<'USAGE'
+# ⚠ TWO TRIGGERS, NOT ONE — and shipping only the second was a real bug (reported by the CORE
+# plugin's Claude, 2026-08-02, on ai-maestro-plugin#31).
+#
+# The `[ -t 0 ]` guard below fixed the 8-minute HANG, and I wrote in that comment that it "can never
+# trigger under a pipe or `< /dev/null`" — treating that as a safety property when it was also the
+# hole. With stdin redirected, `--help` fell through to the exec at the bottom and was run as the
+# INNER COMMAND: `line 199: --help: command not found`, **exit 0**. Silent, and worse than the hang
+# it replaced, because a hang is at least visible.
+#
+# So `--help` is answered from the ARGUMENT, independently of what stdin is. The two triggers cover
+# different callers: a human at a terminal (no args, no pipe) and anyone anywhere asking `--help`.
+#
+# This does not weaken "it has NO options of its own; every argument is the inner command" in any way
+# that matters: no real statusline is named `--help`, and the previous behaviour for that argument
+# was to fail silently rather than to run anything.
+usage() { cat >&2 <<'USAGE'
 aimaestro-statusline-capture.sh — statusLine WRAPPER (not a standalone command)
 
 It reads the statusline JSON Claude Code pipes on stdin, forks a detached copy to
@@ -87,9 +101,21 @@ preserving that command's stdout and exit code.
   Use `--` when the inner command's first word starts with a dash.
   It has NO options of its own; every argument is the inner command.
 
-Refusing to run: stdin is a terminal, so there is no statusline payload to read
-and this would block indefinitely. Pipe JSON in, or invoke it from settings.json.
 USAGE
+}
+
+# TRIGGER 1 — an explicit help request, from ANY caller, whatever stdin is.
+case "${1-}" in
+    -h|--help|help) usage; exit 0 ;;
+esac
+
+# TRIGGER 2 — a human ran it bare at a terminal: no payload is coming, so say so
+# rather than block. Exit 64 (EX_USAGE) because this one IS a misuse, whereas an
+# explicit --help above is a correct request and exits 0.
+if [ -t 0 ]; then
+    usage
+    echo "Refusing to run: stdin is a terminal, so there is no statusline payload to read" >&2
+    echo "and this would block indefinitely. Pipe JSON in, or invoke it from settings.json." >&2
     exit 64  # EX_USAGE
 fi
 

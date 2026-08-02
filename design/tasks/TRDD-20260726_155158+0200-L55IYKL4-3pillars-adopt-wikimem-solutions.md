@@ -1,11 +1,11 @@
 ---
 trdd-id: L55IYKL4
 title: Adopt the wikimem/memgrep solutions into the 3-pillars system and its grep tool
-column: dev
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-07-30T06:27:51+0200
+updated: 2026-08-02T15:33:21+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

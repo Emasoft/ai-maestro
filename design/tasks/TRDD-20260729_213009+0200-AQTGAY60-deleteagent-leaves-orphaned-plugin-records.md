@@ -1,10 +1,10 @@
 ---
 trdd-id: AQTGAY60
 title: DeleteAgent leaves the agent's local plugin records behind in installed_plugins.json
-column: dev
+column: todo
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-07-31T07:27:54+0200
+updated: 2026-08-02T15:33:21+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

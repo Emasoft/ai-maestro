@@ -1,9 +1,9 @@
 ---
 trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
-column: dev
+column: todo
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T19:06:11+0200
+updated: 2026-08-02T15:33:21+0200
 current-owner: ai-maestro
 task-type: security
 scope: project

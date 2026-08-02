@@ -4,9 +4,9 @@ title: Build the ASSISTANT-MANAGER channel and drop the superseded MAESTRO grant
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: dev
+column: todo
 created: 2026-07-30T13:09:14+0200
-updated: 2026-07-31T19:15:02+0200
+updated: 2026-08-02T15:33:21+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

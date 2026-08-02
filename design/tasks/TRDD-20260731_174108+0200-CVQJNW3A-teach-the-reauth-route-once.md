@@ -1,11 +1,11 @@
 ---
 trdd-id: CVQJNW3A
 title: Teach the REAUTH route once — close the slot-recapture hole that strands the rotator
-column: dev
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-07-31T19:12:24+0200
+updated: 2026-08-02T15:33:21+0200
 implementation-commits: [994be6d6, 041a87f8, fde71e17, 511de445, d45e050b, dfa2cf06]
 created-by: ai-maestro
 current-owner: ai-maestro

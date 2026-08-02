@@ -1,12 +1,12 @@
 ---
 trdd-id: 44RGLOO8
 title: The published web-scenario-tester ships the live governance credential in its rules doc
-column: dev
+column: human_review
 approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-07-30T03:47:53+0200
+updated: 2026-08-02T15:33:21+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 priority: 1

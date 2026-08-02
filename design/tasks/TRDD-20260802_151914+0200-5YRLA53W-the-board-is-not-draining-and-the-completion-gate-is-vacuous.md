@@ -1,11 +1,11 @@
 ---
 trdd-id: 5YRLA53W
 title: The board is not draining and the completion gate is vacuous on 71 percent of open cards
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T15:26:15+0200
+updated: 2026-08-02T15:37:19+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -136,14 +136,101 @@ was followed — but `todo` asserts *"ready to be pulled"*, which is also false.
 answers are wrong in different directions. Worth a `blocked-external` column, or letting
 `blocked-by:` carry an external ref.
 
+**second pass, 5 cards, `dev` 14 → 9 — RECONSTRUCTED after the fact, and that is itself a finding.**
+
+⚠ **The second pass wrote its reasons into each card and never wrote its entry here.** Commit
+`179b7d51` touches the five cards below and **does not touch this file**. So the only place the
+number "9 of 18" existed was `.janitor/state/agent-handoff.md` — a scratch file, not the record. The
+table below is reconstructed from that commit and from each card's own `## ⏹ TRIAGE` block, which is
+possible only because the per-card reasons WERE written. Had the pass done what the third pass did
+(reasons here, not in the cards), the hole would have been unrecoverable.
+
+| card | → | its own recorded reason |
+|---|---|---|
+| `903b7a20` | `todo` | explicit *"REMAINING (pick up in fresh context)"* list; untouched **20d**; 514 lines, no checklist |
+| `WLWHVMKT` | `todo` | core fix landed E2E, but its STATE names **3 new blockers the E2E discovered** — closing would strand them |
+| `96ZED7BA` | `todo` | concrete NEXT ACTION (SCEN-014 S017/S019/S023); nobody on it for **21d** |
+| `TBGGUA2V` | `human_review` | *"batch gated on a USER cost-decision"* — no agent can advance it; claimed `dev` for **38d** |
+| `N1FYP2AW` | `backburner` | its own STATE says **DEFERRED until the token-burn emergency lifts** — `backburner` is the column that means exactly that |
+
+**2026-08-02T15:3x+0200 — third pass, the last 9 `dev` cards. `dev` 9 → 1.**
+
+⚠ **Reasons are recorded HERE, not in each card**, unlike the first two passes — a deliberate
+trade under context pressure, stated so it reads as a decision and not an oversight. This log is
+the designated running record; `git log` on each file resolves to the same commit.
+
+| card | age | what its own STATE says | → |
+|---|---|---|---|
+| `1GGQ4HWY` | 15d | USER REFRAMED it (replace the janitor daemon, don't coordinate) — large infra, pending | `todo` |
+| `CHN16JXZ` | 10d | "Phase A (DETECTION) landed" — Phase B pending | `todo` |
+| `U6AS2YWB` | 8d | "UNBLOCKED 2026-07-24 — both blockers complete"; 3 boxes still open | `todo` |
+| `8C1Z42GV` | 8d | "NEXT ACTION: this is now PURE DATA — append a `ContinuityClientEntry` per client" | `todo` |
+| `L55IYKL4` | 3d | "UNBLOCKED … read ai-maestro#96 before touching anything"; 5 boxes open | `todo` |
+| `44RGLOO8` | 3d | *"Do not act on this without the USER … until the credential is rotated. An agent must never rotate a credential."* | **`human_review`** |
+| `AQTGAY60` | 2d | real `DeleteAgent` defect, 2 boxes open | `todo` |
+| `HW72YBZW` | 1d | implementation half of the SPS63XHA ruling; nobody on it | `todo` |
+| `CVQJNW3A` | 1d | "THE REPAIR LEG IS BUILT AND WIRED … **It is NOT armed**" | `todo` |
+
+**`5YRLA53W` itself moves `todo` → `dev`** — because it is the one card actually being worked, which
+is the whole point of the exercise. **`dev` is now 1, matching capacity exactly.**
+
+**The pattern across all 18, worth more than any single move:** not one card was abandoned, and not
+one was done-but-unclosed. Every single one was *mis-filed* — deferred by its own text, gated on a
+human, blocked externally, or simply pending with nobody on it. `dev` was never a record of work in
+progress; it was where cards went and stopped. That is why the column count, not any individual
+card, was the defect.
+
+**⚠ The third pass's "reasons here, not in each card" trade was the WRONG call, and the second pass
+is why.** I justified it as a context-pressure trade at the time. Then reconstructing the second
+pass proved the opposite discipline is what saved it: the reasons survived in the CARDS when the
+log entry was never written. A card carries its own reason to whoever opens it; a central log is a
+single point of loss and is not read by anyone working one card. **Write the reason into the card;
+the log is the index.** The nine cards moved in the third pass therefore carry no in-card triage
+note — a known, recorded debt, not an oversight.
+
+## Final census — measured 2026-08-02, both ends of the same instrument
+
+```bash
+grep -h '^column:' design/tasks/*.md | sort | uniq -c | sort -rn
+```
+
+| column | at census (97 cards) | now (98 cards) | Δ |
+|---|---|---|---|
+| todo | 17 | **31** | +14 |
+| planned | 22 | 22 | — |
+| testing | 11 | 11 | — |
+| design | 9 | 9 | — |
+| human_review | 4 | 7 | +3 |
+| backburner | 6 | 7 | +1 |
+| blocked | 6 | 6 | — |
+| ai_review | 4 | 4 | — |
+| **dev** | **18** | **1** | **−17** |
+
+It reconciles exactly, and checking that it does is the point of re-deriving: 18 `dev` cards moved
+out (14 → `todo`, 3 → `human_review`, 1 → `backburner`), this card moved `todo` → `dev`, and the
+98th card is this one, created after the census was taken. `trddgrep validate` exits 1 with the same
+**2** frozen-card `BODY-STATE-CLAIM` ERRORs as before (`7123D51A`, `C7A81642` — [[FKGMNGJB]]'s last
+box), so the pass introduced no new corpus finding.
+
+**What this does NOT fix.** `dev` is now honest; the board is not yet draining. Thirty-one `todo`
+cards with one worker is a queue, and a queue only means something if something PULLS from it. The
+next failure mode is the mirror of this one: cards that correctly say `todo` and still never move.
+
 ## Acceptance
 
-- [ ] every `dev` card is either genuinely in progress, or re-columned with a recorded reason
-- [ ] `dev` holds a number of cards consistent with the number of workers
-- [ ] every card sitting still names a TRUE `blocked-by:` (a blocker that is itself still open)
-- [ ] open cards in WORK columns carry a checklist, so the completion gate is not vacuous
-- [ ] `updated:` was NOT bumped by any mechanical/format-only edit
-- [ ] the census above is re-derived at the end and the deltas recorded
+- [x] every `dev` card is either genuinely in progress, or re-columned with a recorded reason —
+      all 18, across three passes; reasons in-card for 9, in the log for 9 (debt recorded above)
+- [x] `dev` holds a number of cards consistent with the number of workers — **1 card, 1 worker**
+- [ ] every card sitting still names a TRUE `blocked-by:` (a blocker that is itself still open) —
+      the `blocked` column's 6 all do. **BLOCKED ON THE VOCABULARY GAP** above: [[FKGMNGJB]] and
+      [[35VKIGTC]] wait on GitHub issues and `blocked-by:` takes TRDD ids only, so they sit in
+      `todo` claiming "ready to pull". Not closable without a corpus-level answer
+- [ ] open cards in WORK columns carry a checklist, so the completion gate is not vacuous —
+      **untouched. 69 of 97 still have none.** This is the half that stops the drift recurring;
+      the column pass alone only fixes today's snapshot
+- [x] `updated:` was NOT bumped by any mechanical/format-only edit — every bump this session
+      accompanied a real `column:` change, which does change what the card asserts
+- [x] the census above is re-derived at the end and the deltas recorded — and it reconciles
 
 ## Approval log
 

@@ -48,8 +48,11 @@ describe('R42 headless wiring — a drive handler that only authenticates is the
 
   it('the scan found real calls — a scanner that matches nothing reports clean', () => {
     // Non-vacuity, and the reason the comment-skip above matters: without it this count is
-    // satisfied by prose.
-    expect(calls.length).toBeGreaterThanOrEqual(8)
+    // satisfied by prose. The floor sits well BELOW the real count (8 at time of writing) on
+    // purpose: a floor pinned AT the count is a ratchet, and it reddens under this test's
+    // confusing name whenever an unrelated route's authorize call legitimately moves — measured,
+    // when a neuter removed /chat's call. What must be pinned per-route is pinned per-route below.
+    expect(calls.length).toBeGreaterThanOrEqual(5)
     expect(calls.some((c) => c.action === 'manage-skills')).toBe(true)
   })
 
@@ -99,4 +102,12 @@ describe('R42 headless wiring — a drive handler that only authenticates is the
  *       × all three drive handlers are covered — stop, restart, and chat
  *     The per-action existence tests stay green, because `/stop` still supplies a `send-command`.
  *     That is exactly why the count matters and a per-action presence check does not suffice.
+ *
+ *     MEASURED, and it found a defect in THIS FILE: (b) originally reddened 2, the second being
+ *     the non-vacuity test, because its floor was set AT the current call count (8) rather than
+ *     below it. A floor pinned at the count is a ratchet wearing a floor's name — it fires
+ *     whenever any unrelated route's authorize call moves, and it reports that under the heading
+ *     "the scan found real calls", which points the next reader at the scanner instead of at
+ *     their own edit. Lowered to 5. A prediction that survives unmeasured is how a mis-specified
+ *     assertion keeps its reputation.
  */

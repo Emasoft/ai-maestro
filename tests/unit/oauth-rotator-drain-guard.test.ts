@@ -286,9 +286,13 @@ describe('autoRotate — the drain-guard at its call site', () => {
     expect(log).not.toContain('DRAIN-GUARD')
   })
 
-  it('an account NEAR a limit rotates even when it is also expiring — expiry was not the sole reason', async () => {
-    // `expiryOnly = liveExpired && !usageNear`. Drop the `&& !usageNear` and a maxed account with a
-    // dying token would be held onto, which inverts the rotator's entire purpose.
+  it('an account NEAR a limit rotates even when it is also expiring', async () => {
+    // ⚠ WHAT THIS DOES *NOT* PIN, measured rather than assumed: it does not pin the `&& !usageNear`
+    // conjunct in `expiryOnly`. Neutering that to `expiryOnly = liveExpired` leaves this GREEN,
+    // because 98% fails the guard's `isSafeAlternate` headroom test anyway — and no fixture can
+    // separate them, since `isNearLimit` trips at >=97 while `isSafeAlternate` demands <90, so
+    // "near" always implies "no headroom". What it DOES pin is that the call site feeds the live
+    // account's real numbers to the headroom test, which is the reachable half.
     seedLive('live@x', blob('LIVE', EXPIRING()))
     addSlot('alt@x', blob('ALT', H8()))
     const deps = makeDeps(stubFetch({ LIVE: { fh: 98, sd: 38 }, ALT: { fh: 5, sd: 5 } }))
@@ -385,6 +389,62 @@ describe('runTick — the hold is REPORTED, never swallowed', () => {
 })
 
 /**
- * NEUTERS — MEASURED, each reverted after. Counts and names are what the runs PRINTED.
- * (Filled in below after measurement.)
+ * NEUTERS — MEASURED, each applied over the committed guard (`9fed4781`) and reverted after. Every
+ * count and name below is what the run PRINTED, not what was predicted. Two of the seven reddened
+ * NOTHING, and those two are the most useful entries in this list.
+ *
+ *   N1. make the guard inert — `return f.viableTargets <= 1` → `return false`
+ *       → REDS 6 of 15: "holds ONLY when the rotation would spend the last healthy alternate
+ *         (0 or 1), not at 2" · "protects only real headroom — the 90-97 band is deliberately NOT
+ *         protected" · "a spent MODEL-SCOPED window means no headroom either, though 5h/7d read
+ *         low" · "THE INCIDENT — a 9%/38% account with a dying token does NOT spend the last
+ *         alternate" · "⚠ Q2 — DEGRADED slots are NOT spares" · "surfaces the hold as a stuck
+ *         reason and an alertable code"
+ *
+ *   N2. count degraded slots as spares — `viableTargets: candidates.length`
+ *       → `candidates.length + degraded.length`
+ *       → REDS EXACTLY 1 of 15: "⚠ Q2 — DEGRADED slots are NOT spares: 0 confirmed + 2 degraded
+ *         still holds". Nothing else moved, which is the measurement that matters: it establishes
+ *         that the counting rule is load-bearing AND that this one fixture is its SOLE
+ *         discriminator. Delete that test and the choice between the two counts becomes invisible.
+ *
+ *   N3. drop the null discipline — remove `if (f.fh === null || f.sd === null) return false`
+ *       → REDS 1 of 15: "unknown usage never SUPPRESSES a rotation — unmeasurable is not
+ *         low-usage". (Also a tsc error, since the check is what narrows the type — the neuter was
+ *         run through vitest, which transpiles without type-checking.)
+ *
+ *   N4. drop the sole-reason conjunct — `expiryOnly = liveExpired && !usageNear`
+ *       → `expiryOnly = liveExpired`
+ *       → REDS 0 of 15. ⚠ A NEUTER THAT REDDENS NOTHING IS A FINDING, and here the finding is
+ *         about the CODE, not the test: the conjunct is PROVABLY REDUNDANT while SAFE(90) <
+ *         SWITCH(97). `isNearLimit` trips when some window is >= 97; `isSafeAlternate` requires
+ *         every window < 90; so `usageNear` implies `!isSafeAlternate` and the guard has already
+ *         declined by the time the conjunct could matter. No fixture can separate them — the two
+ *         predicates are mutually exclusive by construction. It is KEPT (it is what makes the
+ *         variable true to its name, and it becomes load-bearing if the thresholds are ever
+ *         reordered) and the redundancy is stated at the assignment so a green suite is not read
+ *         as cover for deleting it.
+ *
+ *   N5. disarm the escape hatch — add `expiryOnly = true` to the 401/403 branch
+ *       → REDS 0 of 15. The second finding, and the more valuable one: the hatch does not depend
+ *         on `expiryOnly` at all. `network.ts:133` returns `{ status, json: null }` for ANY
+ *         non-2xx, so `fh`/`sd` are structurally null on every non-200 branch and the N3 null
+ *         check closes the guard there regardless. Defence in depth — and it means the
+ *         `expiryOnly`-stays-false half is UNPINNABLE through `autoRotate` by construction.
+ *         ⚠ An attempt to isolate it with a fixture pairing a 401 with a populated usage body was
+ *         written, passed, and was DELETED rather than shipped: `httpJson` discards the body
+ *         before `autoRotate` can see it, so that test passed for a reason unrelated to its own
+ *         comment. The pure-predicate case "never fires when expiry was NOT the sole reason" pins
+ *         the half that is reachable.
+ *
+ *   N6. stop reporting the hold — remove `if (out) out.stuck = 'drain-guard-hold'`
+ *       → REDS 3 of 15: "THE INCIDENT" · "⚠ Q2" · "surfaces the hold as a stuck reason and an
+ *         alertable code, not as 'no action needed'". The third is the one that matters: without
+ *         the assignment the beat renders this state as `nextAction: 'ok'` + `'no action needed'`,
+ *         and `alertableTick` returns null, so no human is ever told (TRDD-RFQFCCU4).
+ *
+ *   N7. stop threading the model-scoped window — `scoped: sc` → `scoped: null` at the call site
+ *       → REDS 1 of 15: "WIRING — the model-scoped window reaches the guard, not just the two
+ *         top-level buckets". Confirms the pure scoped tests are not pinning a value the call site
+ *         never supplies.
  */

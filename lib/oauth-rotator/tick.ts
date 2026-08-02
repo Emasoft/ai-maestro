@@ -360,7 +360,15 @@ export function selectDrainFirst(candidates: Candidate[]): Candidate | null {
  * never SUPPRESS one either — an account we cannot measure is not an account we can call
  * low-usage. "Low usage" is `isSafeAlternate`, i.e. the rotator's own "would I rotate ONTO this?"
  * test, so no new threshold is invented and the 90-97 band is deliberately UNPROTECTED: an account
- * at 95% has no headroom worth saving. Pure. */
+ * at 95% has no headroom worth saving. Pure.
+ *
+ * ⚠ THE NULL CHECK IS ALSO THE ESCAPE HATCH'S SECOND LOCK, which is worth knowing before anyone
+ * "simplifies" it. `httpJson` returns `{ status, json: null }` for ANY non-2xx (network.ts:133), so
+ * on every branch other than 200 the usage windows are structurally null and this predicate
+ * declines regardless of `expiryOnly`. Measured: forcing `expiryOnly = true` in the 401 branch
+ * reddens NOTHING, because this line has already refused. The two locks are independent, and
+ * removing either leaves the hatch open — but only on paper, which is why neither is pinned by the
+ * other's test. See the neuter record in `tests/unit/oauth-rotator-drain-guard.test.ts`. */
 export function drainsLastEscapeHatch(f: {
   /** `near` is true SOLELY because the live token is locally expiring. Set only where the usage
    *  endpoint answered 200, so 5h / 7d / scoped are KNOWN and below their switch thresholds. */
@@ -683,6 +691,14 @@ export async function autoRotate(
     // `switchLiveTo` (rotate.ts:44), so a rotation that finds no candidate leaves the dwell
     // untouched and the next tick retries immediately.
     const usageNear = isNearLimit(fh, sd, sc)
+    // ⚠ `&& !usageNear` is REDUNDANT TODAY, and measured as such: neutering it to
+    // `expiryOnly = liveExpired` leaves all 15 drain-guard tests GREEN. It cannot be otherwise —
+    // `isNearLimit` trips when SOME window is >= SWITCH (97) while `isSafeAlternate` (the guard's
+    // "low usage" test) requires EVERY window < SAFE (90), so `usageNear` implies `!isSafeAlternate`
+    // and the guard already declines. It is kept because it makes the variable TRUE TO ITS NAME —
+    // "expiry was the sole reason" — which is the claim `drainsLastEscapeHatch` documents and
+    // reasons from, and because it becomes load-bearing the moment anyone reorders the two
+    // thresholds. Do not read the green suite as cover for deleting it.
     expiryOnly = liveExpired && !usageNear
     near = usageNear || liveExpired
     liveDesc = `5h=${fhS} 7d=${sdS}${scS}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}${slDesc}`

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T14:39:50+0200
+updated: 2026-08-02T15:03:23+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,6 +21,7 @@ effort: medium
 relevant-rules: [R16]
 npt: [D8OYFG35, SIV45HOG]
 eht: []
+implementation-commits: [39bc5cad, 9fed4781]
 blocked-by: []
 release-via: none
 labels: [oauth, rotator, statusline, continuity, incident-followup]
@@ -396,6 +397,62 @@ Honest limit on "immediately": a rotation swaps the credential on disk. Sessions
 their token in memory, so they are not retro-fixed; the rotation protects the next turn and every new
 session. That is how the rotator already behaves and is not changed here.
 
+## ⏹ THE DRAIN-GUARD — LANDED 2026-08-02T15:0x+0200 (`9fed4781`). Read this before the spec below it
+
+`drainsLastEscapeHatch` in `lib/oauth-rotator/tick.ts` — pure, exported, with ONE call site placed
+immediately after the candidate loop so a single guard covers BOTH `switchLiveTo` paths
+(drain-first and degraded). It declines exactly one trade: expiry is the SOLE reason, the account is
+low-usage, and the rotation would leave zero spares.
+
+**Why refusing is safe — the whole argument, and it is why this is not a stall.** The guard is only
+reachable after `usageRequest` returned 200 USING THE LIVE TOKEN, so the token demonstrably works
+and `liveExpired` is a PREDICTION. A real failure answers 401 → the token-REJECTED branch, where
+`expiryOnly` is never assigned → the rotation happens. A hold costs at most one 60 s tick after a
+genuine failure.
+
+**"Low usage" is `isSafeAlternate`**, the rotator's own "would I rotate ONTO this?" test — so no new
+constant is invented, and the 90-97 band is deliberately UNPROTECTED (an account at 95 % has no
+headroom worth saving).
+
+**Two corrections from adversarial review (Fable advisor), both verified first-hand before acting:**
+
+| correction | why |
+|---|---|
+| count `candidates` ONLY, never `degraded` | a degraded slot is *not provably dead*, which is not *healthy*, and a paper spare that was dead in fact IS the incident. Counting them licenses the worst shape of all: 0 confirmed + 2 degraded rotates a working 9 %-usage account onto a target whose usage is unknown. **Measured: this is the ONLY thing one fixture in the suite can see** — neuter N2 reds exactly that test and nothing else |
+| REPORT the hold, do not swallow it | `surveyAlternates` skips the live account (`:784`) and `keepaliveRefresh` never refreshes it by design (`:469`), so nothing else in the beat can see that the LIVE credential is the dying one. Silent, this renders as `nextAction: ok` + `no action needed` for the state that preceded the lockout — [[RFQFCCU4]]'s defect one branch on. Hence a third `StuckReason`, which `server-tick.ts:185` turns into `rotator-stuck:drain-guard-hold` under alert-delivery's per-code backoff |
+
+**16 tests (15 in `tests/unit/oauth-rotator-drain-guard.test.ts` + the reporting pair), 7 measured
+neuters.** Rotator suite 25 files/328 → 26/343; `tsc` 0. **The two neuters that reddened NOTHING are
+the most useful records** — both are findings about the CODE, and both are written into the source
+rather than left implied:
+
+- **`&& !usageNear` is provably redundant** while `SAFE(90) < SWITCH(97)`: `isNearLimit` trips at
+  ≥97, `isSafeAlternate` demands <90, so "near" always implies "no headroom". Kept (it makes the
+  variable true to its name and becomes load-bearing if the thresholds are reordered), redundancy
+  stated at the assignment.
+- **The escape hatch has a SECOND, independent lock.** `httpJson` returns `json: null` for any
+  non-2xx (`network.ts:133`), so the usage windows are structurally null on every non-200 branch and
+  the null-discipline check declines there regardless of `expiryOnly`. A fixture written to isolate
+  the `expiryOnly` half passed, was found to pass for an unrelated reason, and was **deleted rather
+  than shipped** — `httpJson` discards the body before `autoRotate` can see it, so that half is
+  unpinnable through `autoRotate` by construction.
+
+**Cost, stated rather than glossed:** while the guard holds, each tick still probes every alternate,
+where the pre-guard code would have rotated once and gone quiet. Bounded normally (the token is
+refreshed, or dies → 401 → rotate); unbounded only for a blob whose `expiresAt` is bogus while the
+endpoint keeps returning 200 — correct behaviour on a working token, but it keeps paying the probes.
+
+## ⛔ NOT THE ROOT CAUSE — filed separately as [[VXFI1BR5]] (`design/proposals/`, USER-tier)
+
+The guard makes the incident's *trigger* rare. It does not close the mechanism, and the difference
+matters: `switchLiveTo` (`rotate.ts:31-56`) reads the outgoing live blob ONLY to preserve `mcpOAuth`,
+then overwrites `claudeAiOauth` — it **never writes the outgoing credential back into the outgoing
+account's slot**. So at every rotate-off the rotator is holding a working token for the account it is
+leaving and discards it, and that slot keeps whatever stale copy it had (in the incident: 10.9 days
+old, 69 failed refreshes). This guard DELAYS rotation to the 401 moment, when the outgoing token is
+worthless — so it slightly entrenches the gap. Snapshot-on-rotate-off is its own card, and it is not
+free: in-memory sessions still holding the old token can race the same single-use rotating grant.
+
 ## Also required — the drain-guard (from the incident)
 
 Do NOT rotate off a low-usage account for LOCAL EXPIRY alone when the target would become the last
@@ -423,7 +480,11 @@ key* was dead.
 - [x] candidate reads at `:496`/`:509` unchanged, and documented as structurally endpoint-only — untouched by `d17fffbd`, and the ⛔ correction now gives a SECOND reason (`sc` + `liveStatus` are endpoint-only for the LIVE account too)
 - [x] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports — SIV45HOG (`1a92aeb0`) + the `statuslineNear` caller (`d17fffbd`)
 - [x] DONE (`39bc5cad`) — an at/over-threshold ingest fires `runOneTick()` (NOT `autoRotate` — the lock is one level up) behind a zero-I/O at-threshold pre-check and a globalThis 60 s floor stamped ON ATTEMPT. See the ⏭ ACTUAL DESIGN section; design report in reports/gy0ljv6s-push-trigger/
-- [ ] the drain-guard: no expiry-only rotation off a low-usage account onto the last healthy slot
+- [x] DONE (`9fed4781` + the neuter-record follow-up) — the drain-guard: no expiry-only rotation
+  off a low-usage account onto the last healthy slot. `drainsLastEscapeHatch` (pure) + ONE call
+  site, placed after the candidate loop so it covers BOTH `switchLiveTo` paths. See the
+  `## ⏹ THE DRAIN-GUARD` section below for the shape, the two adversarial-review corrections, and
+  the two neuters that reddened NOTHING
 - [~] tests + at least 2 neuters recorded BY NAME; `tsc` 0 — 28 tests + 6 measured neuters across
   `b481b26b`/`2816405b` (the selection function) and `d17fffbd` (`statuslineNear`). **Still open:
   the two BRANCH wirings inside `autoRotate` have no integration test** — `statuslineNear` is

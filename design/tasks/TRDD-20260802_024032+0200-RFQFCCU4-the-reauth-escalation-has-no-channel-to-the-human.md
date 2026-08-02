@@ -1,11 +1,11 @@
 ---
 trdd-id: RFQFCCU4
 title: The rotator's reauth escalation has no channel to the human — it logged 4506 times over 4 days
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:40:32+0200
-updated: 2026-08-02T02:40:32+0200
+updated: 2026-08-02T04:02:03+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -89,11 +89,62 @@ So the whole outage reduces to: **one human action, requested 4 506 times, never
 
 ## Acceptance
 
-- [ ] `reauth-needed` and `all paid accounts maxed` reach the human outside the log file
-- [ ] escalating backoff — no per-beat repetition; the message carries how long it has been pending
-- [ ] the message names the specific account and the exact command
-- [ ] fail-soft: no channel ⇒ log only, beat unaffected
-- [ ] tests + at least 2 neuters recorded BY NAME; `tsc` 0; full suite green
+- [x] a delivery channel exists that is not the log file — `lib/oauth-rotator/alert-delivery.ts`: the
+      `active-alerts.json` file written unconditionally + a best-effort banner on top. Built around the
+      trap `lib/setup-bootstrap.ts` documents: under pm2 `osascript display notification` returns exit 0
+      and delivers NOTHING, so a banner must never be the sole channel.
+- [x] escalating backoff — no per-beat repetition; the message carries how long it has been pending
+      (`BACKOFF_LADDER_S` = onset/15m/1h/3h, never permanently silent; `deliveryText` states the age)
+- [x] fail-soft: no channel ⇒ log only, beat unaffected — delivery has its OWN try/catch, because
+      falling into the beat's outer catch made it return `[]` and DISCARD the alerts it failed to send
+- [x] tests + at least 2 neuters recorded BY NAME; `tsc` 0; full suite green
+      (`tests/unit/oauth-alert-delivery.test.ts` 9/9; full suite **332 files / 4704 tests green**,
+      2026-08-02 04:00 — baseline 331 + this file)
+- [ ] **the SUPERVISOR's findings are delivered; the TICK's are NOT** — see "What is still open" below
+- [ ] `all paid accounts maxed` reaches the human — blocked on the `TickResult` gap below
+- [ ] the message names the specific account and the exact command — TRUE for the supervisor's
+      findings (`cookie-leg-stuck` names both); the tick's decision line is COUNTS-ONLY BY RULE
+      (`tick.ts:643` "never an email"), so this box cannot be met for tick alerts without either
+      relaxing that rule or delivering the identity by a different route. Needs a decision, not code.
+
+## What is still open (verified first-hand 2026-08-02 04:02, not inferred)
+
+The commit wired delivery into **`server-supervisor.ts`** — the 10-minute governance beat, whose
+`diagnose()` emits exactly five codes: `pinning-env`, `non-macos`, `tick-stalled`,
+`setup-token-expiring`, `cookie-leg-stuck`.
+
+**None of them is the incident's alert.** `reauth-needed` and `all paid accounts maxed` are emitted by
+**`tick.ts`** — the 60s rotation beat — a different loop entirely. So the 4 506 lines that accumulated
+over four days would still not be delivered today. Closing this card on the strength of the commit
+would have been a false claim; the check that caught it was grepping for who actually emits the codes.
+
+Two distinct gaps, one of which is a genuine bug:
+
+1. **`reauth-needed` is deliverable and simply unwired.** It IS on `TickResult`
+   (`nextAction: 'reauth-needed'`, `reason: 'refresh-dead' | 'slot-unreadable'`, plus `decision`
+   carrying the human text). `server-tick.ts` calls `writeTickStatus(result)` and stops. Wiring it to
+   the existing `deliverAlerts` is additive — the module was deliberately built standalone rather than
+   inlined in the supervisor, so it takes both callers with no change to it.
+
+2. **`all paid accounts maxed` never reaches `TickResult` at all — this is a REAL BUG, not just a
+   missing wire.** It is a `decide()` call at `tick.ts:567`, inside `autoRotate`, which returns a bare
+   `boolean`. So on the all-maxed path `runTick` computes `decision: 'no action needed'` and
+   `nextAction: 'ok'` — the fleet is fully exhausted with nothing to rotate to, and the tick's own
+   status reads as **healthy**. That is precisely the failure the comment at `tick.ts:652` was written
+   to fix one level down ("must not say 'no action needed' while nextAction is reauth-needed — that
+   reads as health and is how this stayed unexamined"), still present one level up.
+
+   It did not surface during the 2026-08-02 incident only by luck: two slots were dead-refresh, so
+   `deadRefresh > 0` forced `reauth-needed` anyway. With three *healthy but maxed* accounts the tick
+   would have reported `ok`.
+
+   **Fix shape (chosen, not yet applied):** `autoRotate` is exported with ONE internal call site, so
+   change it additively — `autoRotate(deps?, out?: { stuck?: StuckReason })` — leaving every existing
+   caller and test untouched. Add `stuck?: 'all-maxed' | 'cannot-rotate-offline'` to `TickResult`, feed
+   it into the `decision`/`nextAction` derivation, and deliver on `nextAction === 'reauth-needed' ||
+   result.stuck`. **Do NOT** capture it by string-matching the decision text in a wrapped `decide` seam
+   — a needle keyed on a message goes blind on the first rewording, which is the defect class this card
+   already exists to fix.
 
 ## Approval log
 

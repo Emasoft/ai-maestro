@@ -3,10 +3,11 @@ trdd-id: 7U927FCM
 title: Signup recovery-relay role-split — MAESTRO required relay + normal-user 2FA email
 column: testing
 created: 2026-07-16T04:03:50+0200
-updated: 2026-07-16T04:31:46+0200
+updated: 2026-08-02T16:47:39+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 parent-trdd: P7XKV3N9
+implementation-commits: [84d5b072, 434c636e, 10f910f4, ff648fa0]
 relevant-rules: [16, 36, 38, 40]
 min-approval-requirement: user
 mandate: true
@@ -162,6 +163,64 @@ Design: a **post-bootstrap REQUIRED-recovery gate**, not a change to the atomic 
 MED. 2A touches the auth/gate path (LoginGate + session route) — a bug there could block
 app entry, so the opt-out escape is mandatory and must be tested. 2B is additive and gated.
 Depends on Phase 1 (shipped).
+
+## Acceptance
+
+Transcribed 2026-08-02 from this card's own `## Verification` list, re-run live. The two REMAINING
+2B items are `[~]`, not `[ ]`: the card's STATE **deliberately** scoped them out ("both are gated by
+features that aren't built; building the callers now would be speculative UI"), so an open box for
+them would be a permanent false debt against a feature this card never owned.
+
+- [x] **2A backend** — `recoveryOptOut` on the config (`types/governance.ts:109`),
+      `setRecoveryOptOut` (`lib/governance.ts:295`) and `isRecoverySetupComplete` (`:310`);
+      `GET /api/auth/session` exposes `recoverySetupComplete` (`app/api/auth/session/route.ts:43`)
+- [x] **the opt-out route is owner-gated ONLY and NOT console-gated** — the card's own CORRECTION,
+      verified applied and not merely written: `app/api/governance/recovery-optout/route.ts` calls
+      `enforceSystemOwner` and nothing else, with the reasoning in the file. Console-gating it would
+      strand a REMOTE owner (iPad over Tailscale) on a host with unreachable SMTP — unable to
+      configure email AND unable to waive it. An escape hatch behind the thing it escapes is a trap
+- [x] **2A UI** — `LoginGate` carries the `'recovery'` state (`:81`, entered at `:103` on
+      `recoverySetupComplete === false`) and renders `RecoveryGate` (`:20`, `:163-164`), which is a
+      component INSIDE LoginGate.tsx, not a separate file
+- [x] **2B core** — `UserRecord.email?` as a DESTINATION address never a credential
+      (`types/user.ts:49`), `setUserEmail`, and `sendUserCodeEmail` (`lib/mailer.ts:158`) sending
+      `to` = the user with the SMTP account = the MAESTRO's verified relay
+- [x] unit tests for **the `accountEmail`-vs-`to` relay send** — `tests/unit/mailer-user-relay.test.ts`,
+      4 tests (no-relay / unverified / missing-app-password all skip; verified relays correctly)
+- [x] unit tests for **the gate flag logic** — **this half was promised and ABSENT.** Nothing in the
+      tree named `isRecoverySetupComplete` / `setRecoveryOptOut` / `recoverySetupComplete`; the only
+      greppable hits were scenario state-backup fixtures, i.e. DATA. Written today (`ff648fa0`):
+      8 tests + 2 neuters, each reddening exactly 2. The load-bearing case is the UNVERIFIED email —
+      see below
+- [x] `tsc --noEmit` clean; full vitest suite green; `yarn build` exit 0 — all re-run 2026-08-02
+- [ ] **live 2A** — owner resets password (Settings → Revoke) to re-enter first-run, types the
+      MAESTRO relay creds, verifies, and app entry unlocks; or takes the opt-out. **HUMAN-ONLY by
+      R16** — the relay credentials are entered by the owner and never by an agent or a model. Not
+      an engineering item and not one an agent may do on the owner's behalf
+- [~] **live 2B** — admit a foreign user with an email, trigger their 2FA. **Unreachable, not
+      unfinished:** it needs a normal-user admission UI and a per-user password/sudo-reset route,
+      and neither exists yet. Deferred with its two design items below
+- [~] capture the email at admission (R40, `element-management-service.ts`) — deliberately not
+      built; there is no non-speculative hook site until a normal-user admission UI exists
+- [~] the user-facing 2FA trigger calling `sendUserCodeEmail` — deliberately not built; no per-user
+      reset route exists. `sendUserCodeEmail` + `UserRecord.email` ARE the primitives it will call,
+      which is what this card shipped
+
+## ⏱ VERIFIED 2026-08-02 — the promised gate-flag test was absent, and the case it needed is not obvious
+
+`isRecoverySetupComplete()` decides whether `LoginGate` lets anyone into the app. Wrong in one
+direction and a fresh MAESTRO sails past the gate with **no recovery configured** and can lock
+themselves out of their own host — the precise state this card exists to make impossible. Wrong in
+the other and the owner is held at a gate, survivable only because of the opt-out. A gate is a
+two-sided claim, so both directions are now pinned.
+
+**The case that had to be written is the UNVERIFIED email.** Configuring an address proves nothing —
+`setRecoveryEmail` deliberately clears `recoveryEmailVerifiedAt` on every (re)configure, because
+RECEIPT is what proves the relay can actually reach the owner. A flag satisfied by a mere address
+would wave through the silently-unrecoverable account: a typo'd address, a wrong app-password, an
+unreachable SMTP host. Both "a verified email completes it" tests pass under that mistake, which is
+exactly why neither could have caught it — measured: the neuter that drops the verification
+conjunct reds the unverified case and the re-configure case, and nothing else.
 
 ## Approval log
 - 2026-07-16T04:03:50+0200 — MANDATE issued by USER (min-approval-requirement: user).

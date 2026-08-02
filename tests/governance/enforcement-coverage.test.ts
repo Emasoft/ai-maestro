@@ -632,6 +632,103 @@ describe('governance enforcement coverage — the ratchet', () => {
     ).toEqual([])
   })
 
+  it('EVERY row that names a proof names one that exists — not only the ENFORCED ones', () => {
+    // The check above stops at ENFORCED, which exempts exactly the rows whose claim is most
+    // fragile. A CONTRADICTED row's proof is the test PINNING THE DRIFT: R39.5 and R39.7 both cite
+    // one "(pins the drift + the no-producer fact)". If that file vanishes, the drift is documented
+    // in prose and enforced by nothing — someone "fixes" the code back to the superseded shape and
+    // the suite stays green. A PARTIAL row's proof is the half that IS covered, and the same holds.
+    //
+    // Measured before landing: 145 proof citations across every verdict, 0 broken. So this arrives
+    // as a clean invariant rather than a ratchet — no grandfathering, no wall of warnings for
+    // anyone to route around.
+    //
+    // ⚠ STRIP THE PARENTHETICAL, and this is not incidental. Citations legitimately carry a note
+    // (`tests/x.test.ts (pins the drift)`), and a first cut of this check tested the whole string
+    // as a path — reporting a 14 KB file that exists as MISSING and nearly sending a false finding
+    // to another repo. The instrument was wrong, not the corpus. Hence the positive control below:
+    // it asserts the parser RESOLVES a real file, so a future edit that breaks the stripping fails
+    // loudly here instead of quietly reporting every row as broken (or, worse, none).
+    const cited = rows
+      .filter(r => r.test && r.test !== '—')
+      .flatMap(r =>
+        r.test
+          .split(',')
+          .map(t =>
+            t
+              .trim()
+              .replace(/\s*\(.*$/, '') // a trailing "(note)" is prose, not part of the path
+              .split(':')[0]           // a ":line" suffix is a coordinate, not part of the path
+              .trim(),
+          )
+          .filter(t => t.startsWith('tests/'))
+          .map(t => ({ subRule: r.subRule, verdict: r.verdict, path: t })),
+      )
+
+    // POSITIVE CONTROL. Without it, a parser that returns [] passes this test forever — the exact
+    // "matches nothing, reads as clean" failure this whole file exists to prevent.
+    expect(cited.length).toBeGreaterThan(100)
+
+    const broken = cited
+      .filter(c => !existsSync(resolve(ROOT, c.path)))
+      .map(c => `${c.subRule} [${c.verdict}] → ${c.path}`)
+    expect(
+      broken,
+      `A rule names a proof that does not exist. For a CONTRADICTED or PARTIAL row this is worse\n` +
+        `than for an ENFORCED one: the missing test is what pins the drift, so nothing reddens when\n` +
+        `someone reverts the code to the superseded shape:\n  ${broken.join('\n  ')}`,
+    ).toEqual([])
+  })
+
+  it('a proof test that records a NEUTER is a rising ratchet — the count may never fall', () => {
+    // WHY (ai-maestro-janitor#167, reported 2026-08-02). The janitor hit the same defect THREE
+    // times in one day: a lowercase severity set against a library emitting "CRITICAL"; a
+    // `_SKIP_DIRS` entry matching only a directory literally named `_dev`; `drop_gitignored`, the
+    // right predicate for the wrong question. Every one passed lint and types. Every one was
+    // SILENT on genuinely malicious input. And every one had passing tests throughout — because
+    // they all asserted "clean input → stays quiet", which a guard that matches nothing satisfies
+    // perfectly.
+    //
+    // This file's own docstring already concedes the gap: it proves "something claims to test it",
+    // never that the test would FAIL if the guard were deleted. That is the difference between a
+    // test and a proof, and only one artifact closes it: a RECORDED NEUTER — delete the guard, run,
+    // and write down which NAMED tests went red.
+    //
+    // A ratchet, not a rule, and deliberately so: 21 of 40 today. Demanding all 40 retroactively
+    // would produce 19 warnings nobody asked for, and a linter that shouts on landing is one that
+    // gets routed around. New and touched proofs raise it; nothing may lower it.
+    //
+    // ⚠ THE HONEST LIMIT, stated because overselling it would be the same sin. This verifies a
+    // neuter was RECORDED, not that it was RUN — prose can lie, and no test can read the past. It
+    // cannot be strengthened into proof. What it does is make the OMISSION visible, which is the
+    // one property all three janitor bugs lacked.
+    const NEUTER_FLOOR = 21
+
+    const proofs = [
+      ...new Set(
+        rows
+          .filter(r => r.verdict === 'ENFORCED' && r.test && r.test !== '—')
+          .flatMap(r =>
+            r.test
+              .split(',')
+              .map(t => t.trim().replace(/\s*\(.*$/, '').split(':')[0].trim())
+              .filter(t => t.startsWith('tests/')),
+          ),
+      ),
+    ].filter(p => existsSync(resolve(ROOT, p)))
+
+    // Positive control again — same reason. A glob that resolves nothing must not read as a pass.
+    expect(proofs.length).toBeGreaterThanOrEqual(40)
+
+    const withNeuter = proofs.filter(p => /neuter/i.test(readFileSync(resolve(ROOT, p), 'utf-8')))
+    expect(
+      withNeuter.length,
+      `Proof tests recording a neuter fell from ${NEUTER_FLOOR} to ${withNeuter.length}.\n` +
+        `A guard whose deletion reddens nothing is not enforced — it is described. Add the neuter\n` +
+        `record back, or raise the floor if you genuinely removed a proof.`,
+    ).toBeGreaterThanOrEqual(NEUTER_FLOOR)
+  })
+
   it('ENFORCED-without-a-test is a shrinking ratchet — it may never grow', () => {
     // The lesson of this codebase, applied as a monotone decrease rather than a false cliff.
     // A guard nobody tests is a guard nobody has watched refuse anything — but downgrading every

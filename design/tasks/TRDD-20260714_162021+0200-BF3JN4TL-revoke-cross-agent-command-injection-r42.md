@@ -3,7 +3,7 @@ trdd-id: BF3JN4TL
 title: Revoke cross-agent command injection entirely (R42) — messaging becomes the only channel
 column: testing
 created: 2026-07-14T16:20:21+0200
-updated: 2026-07-14T17:45:00+0200
+updated: 2026-08-02T16:57:17+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: security
@@ -20,7 +20,7 @@ release-via: none
 relevant-rules: [6, 10, 26, 32, 42]
 labels: [security, governance, authorization, injection, r42]
 blocks: [HGE9T6VT]
-implementation-commits: [6dcc57fd]
+implementation-commits: [6dcc57fd, 42f2c278, ee18f59c]
 ---
 
 # Revoke cross-agent command injection entirely (R42) — messaging becomes the only channel
@@ -235,6 +235,59 @@ should not have existed.
 an error, so a happy-path suite is *constitutionally blind* to one — every hole closed here was
 live for months under a fully green run. The only test that can prove a prohibition attempts the
 forbidden act and asserts the refusal. See `[[an-unenforced-rule-produces-a-success-not-an-error]]`.
+
+## Acceptance
+
+Transcribed 2026-08-02 from this card's own adversarial `## Verification` list, re-run live. The
+open box is the SOAK the STATE names as the reason this card is not `complete`.
+
+- [x] **MANAGER → drive another agent → DENIED**, `reason` matching `/^R42:/`. The test that proves
+      the rule, because MANAGER is the title everyone assumes is exempt
+- [x] **COS → drive an own-team agent → DENIED.** The card calls this "the sharpest inversion" —
+      this exact call was ALLOWED before R42, and the old assertion was INVERTED rather than deleted
+- [x] any agent → drive **ITSELF** → allowed (R42.4 must not regress)
+- [x] MANAGER → **reconfigure** another agent → allowed (R42.6 — configuring is not driving)
+- [x] MANAGER → **hibernate/wake** another agent → allowed. The DRIVE/LIFECYCLE seam the STATE warns
+      against "harmonizing": hibernate injects ONE fixed terminating sequence and cannot make the
+      victim *do* anything; the send-command family carries arbitrary text into a live prompt
+- [x] the **system-owner** (the human at the dashboard) is unaffected
+- [x] the fail-OPEN is closed — an unresolvable session name no longer SKIPS RBAC
+      (`tests/authorization.test.ts`, 42 tests green)
+- [x] the janitor's global ops are machine-wide FLAGS, not a fan-out of per-agent `send-command`
+- [x] **AUTONOMOUS → headless `/stop` → refused.** See below: the DECISION was pinned and the
+      WIRING was not, and the wiring is the half this card exists about. Ratcheted today
+      (`42f2c278`)
+
+## ⏱ VERIFIED 2026-08-02 — the headless half was pinned by reading the code, and one claim went stale
+
+**1. THE HEADLESS VERIFICATION ITEM HAD NO TEST, and the reason is structural.** The card asks for
+*"AUTONOMOUS → `POST /api/sessions/<manager>/stop`, **headless** → 403"*. Every headless
+auth-mirror case uses a FORGED bearer, so `authenticateAgent` returns **401** before `authorize()`
+is consulted — and reaching a 403 needs a real cryptographic AID token the suite cannot mint. That
+file records the limit itself, and it is why two of its assertions are `expect([401, 403]).toContain(…)`,
+an OR satisfied by a 401 and therefore silent about authorization.
+
+So the R42 DECISION was pinned behaviourally and the WIRING — that these handlers consult it at
+all — was pinned by nobody. **That is precisely the bug this card was written about**, and its own
+SUPERSEDED block calls the assumption behind it "the most dangerous sentence on the card": a rule in
+`lib/authorization.ts` cannot bind a code path that never calls `authorize()`. Ratcheted in
+`42f2c278` (`tests/unit/headless-drive-routes-authorize.test.ts`) — a source scan that SKIPS comment
+lines (the router describes the Next.js chain in prose, so matching comments would let a DELETED
+call pass on the strength of the text describing it) and requires a **third argument**, because a
+bare `authorize(auth, 'send-command')` is a self-check that GRANTS. Verified live at
+`services/headless-router.ts:923` (`/stop`), `:1044` (`/restart`), `:1390` (`/chat`).
+
+**2. THIS CARD'S OWN CLOSING FINDING IS NOW STALE — and it was the good news.** The enumeration ends:
+*"the scripts cannot authenticate the USER at all … a fleet-wide arm now has no working caller
+whatsoever."* True when written; `bc177864` landed the USER auth path the **same day**
+(ai-maestro#55), so `get_auth_args` resolves `$AID_AUTH` → `$AIMAESTRO_SESSION` →
+`~/.aimaestro/cli-session`. The gap R42 surfaced is CLOSED, and `TRDD-SB5I53K1`'s stated
+prerequisite is met.
+
+The same sentence had propagated into `docs/SCRIPT-LAYER.md` and — twice — into `CLAUDE.md`, the
+file loaded into every session of this project. All three corrected (`61364678`, `29470c8f`). **Three
+documents inherited one stale fact from each other**, which is what a "not true yet" list does when
+nobody deletes the entry that came true.
 
 ## Approval log
 

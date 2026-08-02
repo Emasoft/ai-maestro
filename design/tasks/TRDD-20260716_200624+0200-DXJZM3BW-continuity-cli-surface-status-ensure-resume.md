@@ -1,10 +1,9 @@
 ---
 trdd-id: DXJZM3BW
 title: Continuity CLI surface — aimaestro-continuity.sh status + ensure-resume behind the frozen layer
-column: blocked
-pre-block-column: testing
+column: testing
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T06:34:21+0200
+updated: 2026-08-02T02:06:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -22,7 +21,7 @@ derived: true
 derived-kind: npt
 npt: []
 eht: []
-blocked-by: [Y916N7WL]
+blocked-by: []
 release-via: none
 implementation-commits: [03c40474]
 ---

@@ -1,9 +1,9 @@
 ---
 trdd-id: Y916N7WL
 title: Derive continuity status metadata from the AgentlensPro CLI (observe-only source)
-column: testing
+column: complete
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T20:35:34+0200
+updated: 2026-08-02T02:05:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -72,6 +72,25 @@ that the consumed surface can never carry a credential.
   malformed/absent field fails fast (no silent default that masks a dead account).
 - Contract test red on any AgentlensPro shape drift or any token-adjacent field.
 - `bash scripts/with-node.sh npx tsc --noEmit` clean; `yarn test` green.
+
+## Acceptance
+
+- [x] server-side reader shells the AgentlensPro CLI and maps its output to the four observable
+      `status` fields — `lib/agentlens-status.ts`, commit `fbf28fb0` (verified: file present, sha
+      resolves)
+- [x] unit: the four fields map from a live payload; a malformed payload FAILS FAST and an absent
+      one degrades to `null`, never a silent `0` that masks a dead account — 12 tests in
+      `tests/unit/agentlens-status.test.ts`
+- [x] **CONTRACT test red on shape drift or any token-adjacent field** — the load-bearing invariant
+      of the trust boundary. **It did not exist when this card was parked in `testing` on
+      2026-07-16**; written 2026-08-02. Three cases: a hostile payload's credentials are dropped
+      (with a positive control proving the sentinel is in the INPUT), the surfaced key set is
+      EXACTLY the six declared fields (keyed on the key set, because a leak arrives under whatever
+      name upstream picks), and renamed upstream paths degrade to `null` rather than to a wrong
+      number a continuity monitor would act on.
+      Neuter: spread the raw payload into the return → reds the two credential guards and only them.
+- [x] `tsc --noEmit` clean; suite green (15 tests in this file)
+- [x] no token material on the consumed surface — enforced by the key-set assertion, not by a comment
 
 ## Approval log
 

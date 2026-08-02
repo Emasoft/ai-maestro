@@ -9,7 +9,10 @@ import {
 // "calibrated" — a deliberate case: calibrated is a proven LOWER bound and must NOT mark the
 // account unhealthy.
 const LIVE_CALIBRATED = JSON.stringify({
-  summary: 'emanuele.sabetta@gmail.com · Max 20x · 5h 150% / 7d 166% (calibrated)',
+  // Redacted: the captured payload carried the owner's real address here while `account.email`
+  // three lines down was already anonymised. A fixture is committed and pushed, so the live
+  // capture must be scrubbed on the way in, not left because "it is only a summary string".
+  summary: 'e@example.com · Max 20x · 5h 150% / 7d 166% (calibrated)',
   account: {
     accountId: '80ddbe47-7ad4-4af7-a381-cf908e33c916',
     email: 'e@example.com',
@@ -20,6 +23,67 @@ const LIVE_CALIBRATED = JSON.stringify({
   mode: 'subscription (within plan)',
   cacheTtl: { minutes: 60, regime: 'subscription', ttlSource: 'doc-matrix' },
   usageWindows: { fiveHourPct: 149.4, sevenDayPct: 165.76, windowSource: 'calibrated' },
+})
+
+/**
+ * THE CONTRACT TEST (TRDD-Y916N7WL). Its own card names this "the load-bearing invariant" and
+ * required it red "on any AgentlensPro shape drift or any token-adjacent field" — and it was never
+ * written, which is why that card sat in `testing` for 17 days looking finished.
+ *
+ * AgentlensPro is OUT of ai-maestro's trust boundary: this module only ever READS metadata, and
+ * custody + rotation stay with the OAuth manager. The guard that makes that true is not a comment,
+ * it is the assertion below that a credential in the CLI's output cannot reach our surface.
+ */
+describe('CONTRACT — the consumed surface can never carry a credential', () => {
+  // Every field name a drifting/compromised AgentlensPro could plausibly add, each carrying a
+  // sentinel we can then prove absent. Nested as well as top-level: a leak that only ever appeared
+  // at the root would be caught by the key-set assertion alone, and the interesting case is the
+  // one that rides INSIDE a block we do read.
+  const SENTINEL = 'SENTINEL-CREDENTIAL-MUST-NOT-SURFACE'
+  const HOSTILE = JSON.stringify({
+    summary: 'acct · Max 20x',
+    account: { accountId: 'a1', email: 'e@example.com', accessToken: SENTINEL, apiKey: SENTINEL },
+    accessToken: SENTINEL,
+    refreshToken: SENTINEL,
+    sessionKey: SENTINEL,
+    authorization: `Bearer ${SENTINEL}`,
+    cookie: `sessionKey=${SENTINEL}`,
+    cacheTtl: { minutes: 60, secret: SENTINEL },
+    usageWindows: { fiveHourPct: 10, sevenDayPct: 20, windowSource: 'cc-rate-limits', token: SENTINEL },
+  })
+
+  it('drops every token-adjacent field the CLI offers', () => {
+    // POSITIVE CONTROL FIRST: without this the assertion below passes on any input that simply
+    // never contained a secret, which is the vacuous shape an absence check decays into.
+    expect(HOSTILE).toContain(SENTINEL)
+
+    const s = parseAgentlensStatus(HOSTILE)
+    expect(JSON.stringify(s)).not.toContain(SENTINEL)
+  })
+
+  it('surfaces EXACTLY the six declared metadata fields — a seventh is how a credential arrives', () => {
+    // Keyed on the KEY SET, not on the absence of known-bad names: a leak arrives under whatever
+    // name upstream chooses, so enumerating bad names can only ever catch the ones we guessed.
+    // This reds on any added field, which is the only formulation drift cannot walk around.
+    expect(Object.keys(parseAgentlensStatus(HOSTILE)).sort()).toEqual([
+      'accountHealthy', 'available', 'cacheTtlMinutes', 'window5hPct', 'window7dPct', 'windowSource',
+    ])
+  })
+
+  it('reads the CANONICAL paths — a renamed upstream field degrades to null, never to a wrong value', () => {
+    // Shape drift must fail SAFE. The danger is not a crash; it is silently reading some other
+    // number and reporting it as the 5h window, which a continuity monitor would act on.
+    const DRIFTED = JSON.stringify({
+      account: { accountId: 'a1' },
+      cacheTtl: { mins: 60 },                                   // was `minutes`
+      usageWindows: { fiveHour: 10, sevenDay: 20, source: 'cc-rate-limits' }, // all renamed
+    })
+    const s = parseAgentlensStatus(DRIFTED)
+    expect(s.window5hPct).toBeNull()
+    expect(s.window7dPct).toBeNull()
+    expect(s.cacheTtlMinutes).toBeNull()
+    expect(s.windowSource).toBeNull()
+  })
 })
 
 describe('parseAgentlensStatus', () => {

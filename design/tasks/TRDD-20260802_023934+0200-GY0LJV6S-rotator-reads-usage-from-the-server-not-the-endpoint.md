@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T14:22:01+0200
+updated: 2026-08-02T14:28:27+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -67,6 +67,54 @@ account in minutes, unattended, while the log reads like healthy rotation.**
 
 Not a defect in D8OYFG35 (every box it owns is delivered) — a prerequisite nobody owned, now filed as
 the NPT [[SIV45HOG]].
+
+## ⏭ THE ACTUAL DESIGN — 2026-08-02T14:3x+0200. Read this first; it supersedes every plan below
+
+**THE STATUSLINE'S JOB IS TO SAY "CHECK NOW", NOT "ROTATE NOW".** That one sentence is what the
+whole card was missing, and it dissolves the problem the revert below was forced to solve.
+
+Every previous plan — the original substitution, then my disjunct — tried to make the statusline
+**decide**. Both failed on the same rock: the statusline cannot be a decider, because its reading
+may describe the PREVIOUS account (the stamp is arrival-time; see the ⛔ block). So stop trying.
+Let it **trigger**, and let the endpoint keep deciding:
+
+> an at/over-threshold ingest fires `runOneTick()` → which does its normal endpoint-backed
+> `autoRotate` → which rotates only if the endpoint agrees.
+
+**Misattribution becomes harmless BY CONSTRUCTION.** A stale 98% from a session on the old
+credential fires a tick; the tick asks the endpoint; the endpoint says 10%; nothing happens. The
+cost of being wrong drops from *an account* to *one HTTP call*, bounded by a 60 s floor. No
+debounce, no dwell tuning, no admissibility subtleties in the actuating path — the guard
+(`admitSnapshot`) still filters the trigger, but its failure mode is now merely a wasted call.
+
+**And it delivers the USER's directive more faithfully than the reverted code did.** *"If the
+statusline reads 98% or more … it must immediately rotate"* — the statusline is what makes it
+IMMEDIATE (sub-second, on the arriving report, instead of up to 60 s of timer latency); the rotation
+itself goes through the one safe, already-tested path. Latency was always the real win here; the
+call-volume saving was the part that collided with reality, and it is retired.
+
+**Design report (commissioned, evidence-anchored):**
+`reports/gy0ljv6s-push-trigger/20260802_141505+0200-design.md`. Its load-bearing findings:
+
+- **Fire `runOneTick()`, NOT `autoRotate()` / `runTick()`.** The tick LOCK lives in `runOneTick`
+  (`server-tick.ts:112`) — `autoRotate` takes none. Calling either inner function makes the route a
+  second, unserialized writer into the live credential. Also bypasses the R16 flag gate.
+- **`void runOneTick().catch(() => {})` — never `await`.** `runOneTick` already swallows errors, and
+  the caller (`aimaestro-statusline-capture.sh`) is detached and discards the response by contract.
+  Awaiting holds a request open across the rotator's network I/O.
+- **The 60 s floor must be stamped ON ATTEMPT, in `globalThis`, and by `runOneTick` itself** so the
+  timer's own beats advance it too. Two traps: `state.last_switch_at` is the WRONG source (written
+  only on a *successful* switch — `rotate.ts:44` — so a failing rotation has no backoff at all), and
+  a module-level `let` splits across the two module instances in full mode.
+- **Use the snapshot already in hand** (`route.ts:129`) with `admitSnapshot` + `isNearLimit(fh, sd,
+  null)`. Do NOT call `listStatuslineSnapshots()` — a readdir on a 600/min path is the exact cost
+  this is removing.
+
+**Consequence for the reverted branches.** The `liveStatus === 200` disjunct stays dead — it was
+unsound and this design does not need it. The endpoint-unreachable branch is now the ONLY open
+question, and it is genuinely separate: when the endpoint is down there is no decider to defer to,
+so it is the one place the statusline would still have to actuate. Decide it on its own merits
+later; it is not on this path.
 
 ## ⛔ REVERTED 2026-08-02T14:2x+0200 (`3c9a7493`) — READ THIS BEFORE THE ✅ SECTION BELOW IT
 
@@ -374,7 +422,7 @@ key* was dead.
 - [ ] REVERTED (`3c9a7493`) — the disjunct re-opened the burn loop; see the ⛔ REVERTED section. The 200-branch form is UNSOUND and will not be re-landed; the endpoint-unreachable form needs a >=2-tick debounce + a statusline dwell. Original wording also refused: `tick.ts:490` gains a statusline DISJUNCT into `near`; the endpoint read stays, because `sc` (model-scoped, JI7F1236) and `liveStatus` are endpoint-only
 - [x] candidate reads at `:496`/`:509` unchanged, and documented as structurally endpoint-only — untouched by `d17fffbd`, and the ⛔ correction now gives a SECOND reason (`sc` + `liveStatus` are endpoint-only for the LIVE account too)
 - [x] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports — SIV45HOG (`1a92aeb0`) + the `statuslineNear` caller (`d17fffbd`)
-- [ ] an at/over-threshold ingest triggers `autoRotate` immediately; the 60 s timer remains the floor
+- [ ] an at/over-threshold ingest fires `runOneTick()` (NOT `autoRotate` — the lock is one level up) behind a zero-I/O at-threshold pre-check and a globalThis 60 s floor stamped ON ATTEMPT. See the ⏭ ACTUAL DESIGN section; design report in reports/gy0ljv6s-push-trigger/
 - [ ] the drain-guard: no expiry-only rotation off a low-usage account onto the last healthy slot
 - [~] tests + at least 2 neuters recorded BY NAME; `tsc` 0 — 28 tests + 6 measured neuters across
   `b481b26b`/`2816405b` (the selection function) and `d17fffbd` (`statuslineNear`). **Still open:

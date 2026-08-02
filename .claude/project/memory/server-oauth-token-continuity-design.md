@@ -1,8 +1,8 @@
 ---
 name: server-oauth-token-continuity-design
-description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off"
+description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom"
 ocd: 2026-07-16
-lmd: 2026-07-16
+lmd: 2026-08-02
 metadata:
   node_type: memory
   type: project
@@ -58,6 +58,30 @@ must replicate, so server + `#N` daemon coordinate not fight):**
 - One writer = the janitor's machine-wide `daemon.flock` — the server takes the SAME lock, and
   the exact lock-FILE PATH is in the janitor repo (`oauth_rotator/`/`daemon.py`): a CROSS-REPO
   item to obtain, never guessed. See [[family-a-continuity-absorption-plan]] (NPT 1GGQ4HWY).
+
+
+^ATOM-S7SH-7ZQO [desc:"the rotator can DELIBERATELY refuse a rotation and log DRAIN-GUARD / HOLDING — that is not a stall, do not fix it", keywords: rotator_refuses_to_rotate DRAIN-GUARD_in_the_log HOLDING_not_rotating rotator_stuck_drain-guard-hold is_the_rotator_stalled why_did_it_not_rotate_an_expiring_token rotated_off_an_account_that_still_had_headroom, ocd: 2026-08-02, lmd: 2026-08-02]
+
+The rotator can DELIBERATELY decline a rotation it has already computed as needed, logging
+`DRAIN-GUARD` (tick) / `HOLDING` (beat). That is not a stall — do not "fix" it.
+
+`drainsLastEscapeHatch` (`lib/oauth-rotator/tick.ts`) refuses exactly one trade: the ONLY reason to
+rotate is the live token's LOCAL EXPIRY, the account is still low-usage (below SAFE on every window
+including the model-scoped one), and rotating would leave ZERO usage-confirmed spares. On 2026-08-01
+the rotator rotated off an account at 9%/38% for expiry alone; when the target maxed out the
+abandoned account's stored credential had rotted (10.9 days expired, 69 failed refreshes). The
+account had headroom the whole time — the rotator's COPY OF THE KEY was dead.
+
+It is safe because it is only reachable after `/usage` returned 200 USING THE LIVE TOKEN, so the
+expiry is a PREDICTION, not an observation. A token that has really died answers 401 — a branch the
+guard never applies to — so rotation happens within one 60 s tick.
+
+It counts USAGE-CONFIRMED candidates ONLY, never the `degraded` bucket: "not provably dead" is not
+"healthy", and a paper spare that was dead in fact is the incident.
+
+The hold is REPORTED, not silent (`StuckReason: drain-guard-hold` → `rotator-stuck:drain-guard-hold`),
+because `surveyAlternates` skips the LIVE account and the beat would otherwise render a fleet one
+credential from lockout as `nextAction: ok`.
 
 ## Notes and lessons learned
 [^1]: [id:ATOM-R16D-CASC, status:valid, keywords:"rotate_refresh_reauth cascade progressive_fallback the_only_human_step reauth_needs_new_cookie", ocd:2026-07-16, lmd:2026-07-16]

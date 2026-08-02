@@ -350,3 +350,68 @@ describe('THE POSITIVE CONTROL — the capture actually fires, with the right by
     expect(leftover, 'the parent leaked its payload when cancelled').toEqual([])
   })
 })
+
+/**
+ * The INTERACTIVE GUARD (found 2026-08-02 by installing the script on PATH and running
+ * `--help` to see what it was — it blocked for EIGHT MINUTES before the caller gave up).
+ *
+ * The wrapper deliberately has no argument parsing: every argument is the inner command, and it
+ * reads stdin unconditionally because Claude Code always pipes the statusline payload in. That is
+ * correct on the production path and a trap on PATH, where the first thing anyone does to an
+ * unfamiliar command is run it bare. A discovery attempt that hangs the caller's session is worse
+ * than an unknown command.
+ *
+ * The guard keys on `[ -t 0 ]`, which is true ONLY for a terminal — so the pipe case below is the
+ * one that actually protects production, and it is the assertion to keep if either must go.
+ */
+describe('6. interactive guard — answers a discovery attempt instead of blocking forever', () => {
+  it('does NOT fire on the production path: piped stdin still runs the inner and relays its code', () => {
+    // THE REGRESSION THAT MATTERS. If the guard ever widened past `-t 0` it would break every
+    // real statusline tick, and it would do so silently in the user's status bar.
+    const r = spawnSync('bash', [WRAPPER, 'sh', '-c', 'printf INNER; exit 7'], {
+      input: Buffer.from('{"session_id":"guard-neg"}', 'utf-8'),
+      env: { ...process.env, AIMAESTRO_STATUSLINE_CLI: '/usr/bin/true' },
+    })
+    expect(r.stdout.toString('utf-8')).toContain('INNER')
+    expect(r.stdout.toString('utf-8')).not.toContain('statusLine WRAPPER')
+    expect(r.status, 'inner exit code must survive the wrapper').toBe(7)
+  })
+
+  it('does NOT fire when stdin is closed — /dev/null is not a terminal', () => {
+    const r = spawnSync('bash', [WRAPPER, 'echo', 'OK'], {
+      input: Buffer.alloc(0),
+      env: { ...process.env, AIMAESTRO_STATUSLINE_CLI: '/usr/bin/true' },
+    })
+    expect(r.stdout.toString('utf-8')).not.toContain('statusLine WRAPPER')
+    expect(r.status).toBe(0)
+  })
+
+  it('DOES fire on a real terminal: prints usage and exits EX_USAGE instead of hanging', () => {
+    // A real pty is the only way to exercise `[ -t 0 ]` — spawnSync always gives the child a pipe,
+    // so without this the guard's own branch would be pinned by nothing. python3 is already a hard
+    // dependency of this repo (uv, publish.py). The 10s cap is what turns the ORIGINAL bug into a
+    // failure rather than a hung suite: if the guard regresses, this times out and reports.
+    const driver = `
+import pty, os, select, time, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv("/bin/sh", ["/bin/sh", "-c", ${JSON.stringify(`exec bash ${WRAPPER} --help`)}])
+buf = b""; t0 = time.time()
+while time.time() - t0 < 10:
+    r, _, _ = select.select([fd], [], [], 0.5)
+    if r:
+        try: d = os.read(fd, 65536)
+        except OSError: break
+        if not d: break
+        buf += d
+    elif buf: break
+_, status = os.waitpid(pid, 0)
+sys.stdout.write(buf.decode(errors="replace"))
+sys.stderr.write("EXITCODE=%d" % os.waitstatus_to_exitcode(status))
+`
+    const r = spawnSync('python3', ['-c', driver], { timeout: 20000 })
+    expect(r.stdout.toString('utf-8'), 'guard did not answer on a TTY').toContain('statusLine WRAPPER')
+    expect(r.stdout.toString('utf-8')).toContain('USAGE:')
+    expect(r.stderr.toString('utf-8'), 'must exit EX_USAGE, not hang or succeed').toContain('EXITCODE=64')
+  })
+})

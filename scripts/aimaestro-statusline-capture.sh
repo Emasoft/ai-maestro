@@ -59,6 +59,40 @@ if [ "${1:-}" = "--" ]; then
     shift
 fi
 
+# INTERACTIVE GUARD. Everything below reads stdin unconditionally and by design —
+# Claude Code always pipes the statusline JSON in, so stdin is never a TTY on the
+# production path and this branch is dead there. It exists because the script is
+# installed on PATH, where the FIRST thing a human or an agent does to a new
+# command is run it bare or with --help to see what it is. With no arg parsing
+# (deliberately — see above) that invocation fell through to the stdin capture and
+# blocked FOREVER with no output: measured at 8 minutes before the caller gave up.
+# A discovery attempt that hangs the caller's session is a worse failure than an
+# unknown command, so answer it instead of blocking. `[ -t 0 ]` is true ONLY when
+# stdin is a terminal, so this can never trigger under Claude Code, under a pipe,
+# or under `< /dev/null`.
+if [ -t 0 ]; then
+    cat >&2 <<'USAGE'
+aimaestro-statusline-capture.sh — statusLine WRAPPER (not a standalone command)
+
+It reads the statusline JSON Claude Code pipes on stdin, forks a detached copy to
+the ingest CLI, and relays stdin byte-for-byte to the inner command you give it,
+preserving that command's stdout and exit code.
+
+  USAGE:  aimaestro-statusline-capture.sh [--] <inner-command> [args...]
+
+  In ~/.claude/settings.json:
+      "statusLine": { "type": "command",
+                      "command": "aimaestro-statusline-capture.sh <your-existing-statusline>" }
+
+  Use `--` when the inner command's first word starts with a dash.
+  It has NO options of its own; every argument is the inner command.
+
+Refusing to run: stdin is a terminal, so there is no statusline payload to read
+and this would block indefinitely. Pipe JSON in, or invoke it from settings.json.
+USAGE
+    exit 64  # EX_USAGE
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
 # Resolve the ONE component that knows the endpoint. Never inline a URL here:

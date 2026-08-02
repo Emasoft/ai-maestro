@@ -33,7 +33,10 @@ Three memory scopes exist and are not interchangeable. **PROJECT** (`.claude/pro
 git-tracked and **pushed** — it must never carry a home path, a hostname, or anything
 machine-private. **LOCAL** (`~/.claude/projects/<slug>/memory/`) never leaves this machine.
 **USER** is global across all projects. On a name conflict the more specific scope wins — **LOCAL
-beats PROJECT** — so a page duplicated into LOCAL silently shadows the shared one.
+beats PROJECT** — but that is a rule for deciding which fact to BELIEVE, **not** a search filter:
+`memgrep recall` over several roots returns pages from all of them, ranked by relevance only.
+Measured 2026-08-02 — a duplicated page returns TWICE, and the older, thinner copy can outrank the
+authoritative one. Duplicate a page into LOCAL and you get two answers to reconcile, not one.
 
 ## Repositories
 

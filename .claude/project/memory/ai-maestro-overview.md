@@ -32,7 +32,7 @@ Three scopes exist and they are not interchangeable. **PROJECT** (this store) is
 **pushed** — it must never carry a home path, a hostname, or anything machine-private. **LOCAL**
 (`~/.claude/projects/<slug>/memory/`) is machine-private and never leaves the machine. **USER** is
 global across all projects. On a name conflict the more specific scope wins — **LOCAL beats
-PROJECT** — so a page duplicated into LOCAL will silently shadow the shared one.
+PROJECT** — but that governs which fact you BELIEVE, **not** what search returns.[^2]
 
 **When a page is not enough**, the repo's own `docs/` folder holds 58 long-form documents
 (~35 000 lines) — see [[project-long-form-docs]]. Some subjects, notably the cerebellum subsystem,
@@ -146,3 +146,16 @@ exist ONLY there.
     substring `.local`. A detector whose remedy is destructive and whose findings are all false is
     worse than none — it trains the reader to ignore it, so the day it is RIGHT nobody looks. Fix
     belongs upstream in `Emasoft/ai-maestro-janitor`, not by editing pages here.
+
+[^2]: [id:ATOM-SCOPE-NOT-A-FILTER, status:valid, keywords:"does LOCAL shadow PROJECT on recall duplicate page in two scopes which one comes back memgrep recall multiple roots ranking", ocd:2026-08-02, lmd:2026-08-02]
+    DO NOT read "LOCAL beats PROJECT" as meaning a LOCAL page HIDES the PROJECT page of the same
+    name from search, BECAUSE it does not — `memgrep recall <query> <PROJECT> <LOCAL>` returns
+    pages from EVERY root passed to it, ranked by relevance alone. MEASURED 2026-08-02 with a
+    genuine duplicate (`runtime-install-tree` existed in both scopes): **both were returned**, and
+    the older, thinner LOCAL copy ranked THIRD while the authoritative PROJECT page ranked FIFTH.
+    So the real cost of a cross-scope duplicate is not invisibility, it is TWO ANSWERS TO
+    RECONCILE — with the stale one able to outrank the current one, and no marker saying which is
+    which. The precedence rule resolves a CONFLICT for the reader; it is not a search filter.
+    DO verify a claim about tool BEHAVIOUR by running the tool, not by reading the rule that
+    describes it. This correction exists because I asserted the shadowing three times, and wrote
+    it into CLAUDE.md, before running the one command that settles it.

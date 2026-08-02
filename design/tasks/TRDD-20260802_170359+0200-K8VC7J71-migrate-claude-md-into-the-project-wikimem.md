@@ -171,7 +171,18 @@ A dozen are the SAME SUBJECTS this migration is creating right now:
 plus `element-management-pipelines`, `marketplace_manifest_format`, `plugin-ecosystem-naming`,
 `governance-r26-r40-security-model`, `role-plugin-architecture`, `role-plugin-structure-spec`.
 
-**The harm is live, and it points the wrong way.** On a name conflict the MORE SPECIFIC scope wins
+**CORRECTED 2026-08-02, by measurement — the harm is REAL but SMALLER than stated below, and of a
+different KIND.** I claimed LOCAL *shadows* PROJECT on recall. It does not.
+`memgrep recall <q> <PROJECT> <LOCAL>` returns pages from EVERY root passed to it, ranked by
+relevance alone; the precedence rule resolves which fact a reader BELIEVES, it is not a search
+filter. Measured on the genuine duplicate: **both** `runtime-install-tree` pages came back — the
+June LOCAL copy ranked 3rd, the authoritative PROJECT page 5th. And there is exactly **ONE** name
+collision, not ~12: the other twelve are DIFFERENT names on overlapping subjects, which produce
+duplicate answers, not hidden ones. So the cost is *two answers to reconcile, the stale one able to
+outrank the current one*, and the fix is supersession, not promotion-to-stop-shadowing. The
+paragraph below is kept for the record; read it with this correction.
+
+**The original (over-stated) claim:** On a name conflict the MORE SPECIFIC scope wins
 — **LOCAL > PROJECT > USER**. So a recall for the install tree returns the June LOCAL page (3 050
 bytes, a thin summary whose own first atom says *"verify this against CLAUDE.md's Runtime Install
 Tree"*) instead of the 14 202-byte authoritative page committed minutes earlier. **The pushed wiki

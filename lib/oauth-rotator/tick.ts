@@ -108,11 +108,72 @@ export type NextAction = 'ok' | 'rotating' | 'reauth-needed'
  */
 export type TickReason = 'refresh-dead' | 'slot-unreadable'
 
+/**
+ * WHY `stuck` exists (TRDD-RFQFCCU4). "Nothing was rotatable" was reported ONLY through
+ * `decide()`, i.e. to the log — it never reached `TickResult`, so `runTick` computed
+ * `decision: 'no action needed'` and `nextAction: 'ok'` for a fleet with NOTHING left to rotate
+ * to. A fully exhausted fleet reported itself HEALTHY.
+ *
+ * That is the same failure the comment further down was written to fix one level lower ("must not
+ * say 'no action needed' while nextAction is reauth-needed — that reads as health and is how this
+ * stayed unexamined"), still present one level up. It stayed hidden through the 2026-08-02
+ * incident only by luck: two slots happened to be dead-refresh, which forced `reauth-needed`
+ * anyway. Three HEALTHY-but-maxed accounts would have read `ok` while every session stalled.
+ *
+ *  - `all-maxed`             — the API is reachable and no alternate is healthy + below threshold.
+ *  - `cannot-rotate-offline` — the live credential is locally expired and the API is unreachable.
+ * They are separated because the OWNER differs: the first waits for a window, the second needs a
+ * human. Collapsing them would re-create the ambiguity `TickReason` already exists to avoid.
+ */
+export type StuckReason = 'all-maxed' | 'cannot-rotate-offline'
+
+/**
+ * PURE. The beat's one-line verdict. Extracted from `runTick` (TRDD-RFQFCCU4) because this is the
+ * EXACT site of the defect and it was unreachable to a test: driving it through `runTick` needs
+ * real credential I/O, so every existing test stubs the whole tick and the derivation itself was
+ * pinned by nothing.
+ *
+ * PRECEDENCE, and why it is this way:
+ *   switched > reason > stuck > refreshed > idle
+ * `reason` outranks `stuck` where both hold, because a dead credential names an ACTIONABLE human
+ * chore while `all-maxed` only names a wait. `stuck` outranks `refreshed`/idle because a tick that
+ * WANTED to rotate and could not is the most urgent thing this beat can observe — and before this
+ * it was the one outcome that produced the string `'no action needed'`, i.e. the fleet reporting
+ * itself healthy while it was about to stall completely.
+ */
+export function deriveDecision(f: {
+  switched: boolean
+  reason?: TickReason
+  stuck?: StuckReason
+  unreadable: number
+  deadRefresh: number
+  refreshedCount: number
+}): string {
+  if (f.switched) return 'rotated the live account'
+  if (f.reason === 'slot-unreadable') {
+    return `reauth-needed: ${f.unreadable} alternate slot(s) UNREADABLE from this process — credential access, not a re-login`
+  }
+  if (f.reason === 'refresh-dead') {
+    return `reauth-needed: ${f.deadRefresh} alternate slot(s) have a dead refresh and are expiring — a human must re-login`
+  }
+  if (f.stuck === 'all-maxed') {
+    return 'STUCK: live account is exhausted and no alternate is healthy + below the safe threshold — all paid accounts maxed'
+  }
+  if (f.stuck === 'cannot-rotate-offline') {
+    return 'STUCK: live credential is locally expired and the API is unreachable — cannot rotate; manual re-auth needed'
+  }
+  if (f.refreshedCount) return `refreshed ${f.refreshedCount} slot(s)`
+  return 'no action needed'
+}
+
 export interface TickResult {
   /** The one-line status the continuity CLI surfaces. */
   nextAction: NextAction
   /** Why `nextAction` is `reauth-needed`; absent for `ok` / `rotating`. */
   reason?: TickReason
+  /** Set when the tick WANTED to rotate and could not. Absent when no rotation was needed —
+   *  "did not need to rotate" and "could not rotate" are opposite facts. */
+  stuck?: StuckReason
   /** Emails whose slot token was keepalive-refreshed this tick. */
   refreshed: string[]
   /** True iff the live credential was switched to an alternate this tick. */
@@ -404,7 +465,14 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
  * rejected AND a safer alternate exists. Reads quota from /api/oauth/usage (zero inference
  * cost), never switches onto an account itself near a limit, honours the dwell guard, and
  * fails safe (unknown usage never triggers a switch). Returns true iff a switch occurred. */
-export async function autoRotate(deps?: TickDeps): Promise<boolean> {
+export async function autoRotate(
+  deps?: TickDeps,
+  /** OUT-param, deliberately ADDITIVE (TRDD-RFQFCCU4). This function is exported and has one
+   *  internal call site, so widening the RETURN type would break every existing caller and test
+   *  for a fact only `runTick` consumes. An optional out-param leaves them all untouched: callers
+   *  that do not pass it observe byte-identical behaviour. Written ONLY on a stuck path. */
+  out?: { stuck?: StuckReason },
+): Promise<boolean> {
   let state = loadState()
   const [liveBlobRaw, liveSrc] = readLiveBlobWithSource()
   let liveBlob = liveBlobRaw
@@ -565,8 +633,10 @@ export async function autoRotate(deps?: TickDeps): Promise<boolean> {
         ? 'waiting for a window to reset'
         : `earliest window resets ${new Date(resetMs).toISOString()} (in ~${Math.max(0, (resetMs - Date.now()) / 3_600_000).toFixed(1)}h)`
     decide(deps, `auto: live ${liveEmail ?? '(live)'} exhausted (${liveDesc}) but no alternate is healthy + below safe threshold and none is structurally renewable — all paid accounts maxed; ${when}`)
+    if (out) out.stuck = 'all-maxed'
   } else {
     decide(deps, `auto: live ${liveEmail ?? '(live)'} is LOCALLY EXPIRED and the API is unreachable, but no alternate with a known future expiry exists — cannot rotate; manual re-auth needed`)
+    if (out) out.stuck = 'cannot-rotate-offline'
   }
   return false
 }
@@ -627,7 +697,8 @@ export function surveyAlternates(): AlternateSurvey {
 export async function runTick(deps?: TickDeps): Promise<TickResult> {
   const refreshed = await keepaliveRefresh(deps)
   if (refreshed.length) decide(deps, `keepalive: refreshed ${refreshed.join(', ')}`)
-  const switched = await autoRotate(deps)
+  const rotateOut: { stuck?: StuckReason } = {}
+  const switched = await autoRotate(deps, rotateOut)
 
   // Derive next_action: a switch happened → rotating; else if the fleet has any account that
   // can only be recovered by a human re-login → reauth-needed; else ok. "reauth-needed" is a
@@ -652,15 +723,10 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
   // The decision line is the beat's only log surface, so it must not say "no action needed" while
   // nextAction is reauth-needed — that reads as health and is how this stayed unexamined. State
   // the fault and its scope (counts only; never an email, never a token).
-  const decision = switched
-    ? 'rotated the live account'
-    : reason === 'slot-unreadable'
-      ? `reauth-needed: ${unreadable} alternate slot(s) UNREADABLE from this process — credential access, not a re-login`
-      : reason === 'refresh-dead'
-        ? `reauth-needed: ${deadRefresh} alternate slot(s) have a dead refresh and are expiring — a human must re-login`
-        : refreshed.length
-          ? `refreshed ${refreshed.length} slot(s)`
-          : 'no action needed'
-  if (reason) decide(deps, decision)
-  return { nextAction, reason, refreshed, switched, decision }
+  const stuck = switched ? undefined : rotateOut.stuck
+  const decision = deriveDecision({ switched, reason, stuck, unreadable, deadRefresh, refreshedCount: refreshed.length })
+  // Emit the decision line for a STUCK tick too. Previously only `reason` did, so the most urgent
+  // outcome was also the quietest one on the beat's own log surface.
+  if (reason || stuck) decide(deps, decision)
+  return { nextAction, reason, stuck, refreshed, switched, decision }
 }

@@ -4,8 +4,9 @@ import * as os from 'os'
 import * as path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
 import { globalStateDir } from '@/lib/oauth-rotator/global-state'
-import { oauthTickEnabled, runOneTick } from '@/lib/oauth-rotator/server-tick'
+import { oauthTickEnabled, runOneTick, alertableTick } from '@/lib/oauth-rotator/server-tick'
 import type { RepairResult } from '@/lib/oauth-rotator/reauth-repair'
+import { deriveDecision } from '@/lib/oauth-rotator/tick'
 
 // 0-IMPACT / R16 SAFETY (copied from oauth-rotator-tick.test.ts). The gate is a FLAG FILE under
 // ~/.aimaestro and the tick lock lives under the janitor global-state dir — BOTH anchored on
@@ -173,5 +174,143 @@ describe('server-tick — the REPAIR leg is wired, and inherits every gate the b
     } finally {
       warn.mockRestore()
     }
+  })
+})
+
+/**
+ * The TICK's OWN ALARMS REACH A HUMAN (TRDD-RFQFCCU4).
+ *
+ * The delivery channel was built for the SUPERVISOR beat, whose diagnose() emits pinning-env /
+ * non-macos / tick-stalled / setup-token-expiring / cookie-leg-stuck. **None of those is the alarm
+ * that fired during the 2026-08-02 incident.** `reauth-needed` and the stuck states are emitted
+ * HERE, in the 60s rotation beat, and reached only pm2-out.log — `a human must re-login` logged
+ * 4506 times over 4 days while every session on the host walked into the rate limit.
+ *
+ * No assertion on the tick's RETURN VALUE could ever have caught that: the finding was already
+ * perfect. Only an assertion that it reached a CHANNEL can, which is what `deliverImpl` is for.
+ */
+describe('server-tick — the beat DELIVERS its own alarms (TRDD-RFQFCCU4)', () => {
+  const armed = { enabledCheck: () => true, claudeRunningCheck: async () => true }
+
+  it('delivers on reauth-needed, carrying the SPECIFIC reason in the code', async () => {
+    const sent: Array<ReadonlyArray<{ code: string; message: string }>> = []
+    await runOneTick({
+      ...armed,
+      runTickImpl: async () => ({
+        nextAction: 'reauth-needed', reason: 'refresh-dead', refreshed: [], switched: false,
+        decision: 'reauth-needed: 2 alternate slot(s) have a dead refresh and are expiring — a human must re-login',
+      }),
+      deliverImpl: (f) => { sent.push(f) },
+    })
+    expect(sent).toHaveLength(1)
+    // The code is per-FAULT, not a generic bucket: backoff and resolve-detection are keyed on it,
+    // so collapsing refresh-dead into a shared code would make a still-dead credential look
+    // resolved the moment an unrelated condition cleared.
+    expect(sent[0][0].code).toBe('reauth-needed:refresh-dead')
+    expect(sent[0][0].message).toContain('a human must re-login')
+  })
+
+  it('delivers when the fleet is STUCK — the state that used to report itself as healthy', async () => {
+    // THE BUG. `all paid accounts maxed` was a decide() call inside autoRotate, which returns a
+    // bare boolean, so it never reached TickResult: runTick computed `nextAction: 'ok'` and
+    // `decision: 'no action needed'` for a fleet with nothing left to rotate to.
+    const sent: Array<ReadonlyArray<{ code: string; message: string }>> = []
+    await runOneTick({
+      ...armed,
+      runTickImpl: async () => ({
+        nextAction: 'ok', stuck: 'all-maxed', refreshed: [], switched: false,
+        decision: 'STUCK: live account is exhausted and no alternate is healthy + below the safe threshold — all paid accounts maxed',
+      }),
+      deliverImpl: (f) => { sent.push(f) },
+    })
+    expect(sent, 'a fully exhausted fleet must reach a human').toHaveLength(1)
+    expect(sent[0][0].code).toBe('rotator-stuck:all-maxed')
+  })
+
+  it('stays SILENT on a healthy tick — an alert that always fires is furniture', async () => {
+    const deliverImpl = vi.fn()
+    await runOneTick({
+      ...armed,
+      runTickImpl: async () => ({ nextAction: 'ok', refreshed: [], switched: false, decision: 'no action needed' }),
+      deliverImpl,
+    })
+    expect(deliverImpl).not.toHaveBeenCalled()
+  })
+
+  it('a THROWING delivery never takes the beat down', async () => {
+    // A guardian that removes itself is worse than the silence this fix exists to end.
+    await expect(runOneTick({
+      ...armed,
+      runTickImpl: async () => ({
+        nextAction: 'reauth-needed', reason: 'slot-unreadable', refreshed: [], switched: false, decision: 'x',
+      }),
+      deliverImpl: () => { throw new Error('notifier exploded') },
+    })).resolves.toBeUndefined()
+  })
+})
+
+describe('alertableTick — as tolerant as writeTickStatus, or a legal stub would throw', () => {
+  // runTickImpl is deliberately `Promise<unknown>` so a test can stub a shapeless value, and
+  // writeTickStatus treats that as a silent no-op. The alert path must be EXACTLY as tolerant:
+  // four tests above this file already stub `async () => {}`, so an intolerant narrowing would
+  // have broken them rather than the new code.
+  it('answers null for the shapes that mean "nothing to deliver"', () => {
+    expect(alertableTick(null), 'lock held by another process').toBeNull()
+    expect(alertableTick(undefined), 'stubbed beat').toBeNull()
+    expect(alertableTick({}), 'shapeless stub — the existing tests use exactly this').toBeNull()
+    expect(alertableTick({ nextAction: 'reauth-needed' }), 'no decision line ⇒ nothing worth sending').toBeNull()
+    expect(alertableTick({ nextAction: 'ok', decision: 'no action needed' }), 'healthy').toBeNull()
+  })
+
+  it('answers the payload for the two alarm shapes', () => {
+    expect(alertableTick({ nextAction: 'reauth-needed', reason: 'refresh-dead', decision: 'd' })?.reason).toBe('refresh-dead')
+    expect(alertableTick({ nextAction: 'ok', stuck: 'cannot-rotate-offline', decision: 'd' })?.stuck).toBe('cannot-rotate-offline')
+  })
+})
+
+/**
+ * deriveDecision — THE SITE OF THE BUG (TRDD-RFQFCCU4).
+ *
+ * `all paid accounts maxed` was a decide() call inside autoRotate, which returns a bare boolean, so
+ * it never reached TickResult and runTick emitted `'no action needed'` for a fleet with nothing
+ * left to rotate to. Extracted from runTick precisely so this can be asserted: driving it through
+ * runTick needs real credential I/O, so every other test in this file stubs the whole tick and the
+ * derivation was pinned by nothing.
+ *
+ * It stayed hidden through the 2026-08-02 incident only by luck — two slots were dead-refresh, so
+ * `reason` forced `reauth-needed` anyway. Three HEALTHY-but-maxed accounts would have read `ok`.
+ */
+describe('deriveDecision — a stuck fleet must never report itself healthy', () => {
+  const base = { switched: false, unreadable: 0, deadRefresh: 0, refreshedCount: 0 }
+
+  it('THE REGRESSION: all-maxed does NOT say "no action needed"', () => {
+    const d = deriveDecision({ ...base, stuck: 'all-maxed' })
+    expect(d).not.toBe('no action needed')
+    expect(d).toContain('STUCK')
+    expect(d).toContain('all paid accounts maxed')
+  })
+
+  it('cannot-rotate-offline is distinct from all-maxed — the OWNER differs', () => {
+    // One waits for a window; the other needs a human. Collapsing them re-creates exactly the
+    // ambiguity TickReason already exists to avoid.
+    const offline = deriveDecision({ ...base, stuck: 'cannot-rotate-offline' })
+    expect(offline).not.toBe(deriveDecision({ ...base, stuck: 'all-maxed' }))
+    expect(offline).toContain('manual re-auth needed')
+  })
+
+  it('reason OUTRANKS stuck — an actionable chore beats a wait', () => {
+    const d = deriveDecision({ ...base, reason: 'refresh-dead', deadRefresh: 2, stuck: 'all-maxed' })
+    expect(d).toContain('a human must re-login')
+    expect(d).not.toContain('STUCK')
+  })
+
+  it('stuck OUTRANKS refreshed — a rotation that could not happen beats routine upkeep', () => {
+    expect(deriveDecision({ ...base, stuck: 'all-maxed', refreshedCount: 3 })).toContain('STUCK')
+  })
+
+  it('the healthy paths are unchanged — this must not turn quiet ticks noisy', () => {
+    expect(deriveDecision({ ...base })).toBe('no action needed')
+    expect(deriveDecision({ ...base, refreshedCount: 2 })).toBe('refreshed 2 slot(s)')
+    expect(deriveDecision({ ...base, switched: true, stuck: 'all-maxed' })).toBe('rotated the live account')
   })
 })

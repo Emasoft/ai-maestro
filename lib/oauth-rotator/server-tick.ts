@@ -27,7 +27,25 @@ import { execFile } from 'child_process'
 import { statePath } from '../ecosystem-constants'
 import { withTickLock } from './tick-lock'
 import { runTick } from './tick'
+import type { TickResult } from './tick'
 import { writeTickStatus } from './tick-status'
+import { deliverAlerts } from './alert-delivery'
+
+/**
+ * Narrow the tick's `unknown` result to the fields the alert needs, WITHOUT tightening
+ * `runTickImpl` (TRDD-RFQFCCU4). That dep is deliberately `Promise<unknown>` so a test can stub a
+ * shapeless value, and `writeTickStatus` already treats such a value as a silent no-op — so the
+ * alert path must be exactly as tolerant, or a stub that is legal for one consumer would throw in
+ * the other. A `null` (lock held by another process) and an unshaped stub both answer `null` here,
+ * which reads as "nothing to deliver" rather than as an error.
+ */
+export function alertableTick(result: unknown): Pick<TickResult, 'nextAction' | 'reason' | 'stuck' | 'decision'> | null {
+  if (result === null || typeof result !== 'object') return null
+  const r = result as Partial<TickResult>
+  if (typeof r.decision !== 'string') return null // no human-readable line ⇒ nothing worth sending
+  if (r.nextAction !== 'reauth-needed' && r.stuck === undefined) return null
+  return { nextAction: r.nextAction as TickResult['nextAction'], reason: r.reason, stuck: r.stuck, decision: r.decision }
+}
 import { repairOneDeadSlot, type RepairResult } from './reauth-repair'
 
 /** The opt-in flag FILE (not an env var, per TRDD-CC9PY337). Its ABSENCE is the R16 default. */
@@ -70,6 +88,11 @@ export interface RunOneTickDeps {
   runTickImpl?: () => Promise<unknown>
   /** Default `repairOneDeadSlot` — the re-capture leg, behind its OWN flag (TRDD-CVQJNW3A). */
   repairImpl?: () => Promise<RepairResult>
+  /** DELIVERY of this beat's own alarms to a human (TRDD-RFQFCCU4). A seam, mirroring the
+   *  supervisor's, so a test can assert the alert REACHED a channel without a filesystem or a
+   *  notifier — the defect being fixed is precisely "the finding was perfect and reached nobody",
+   *  which no assertion on the tick's return value could ever have caught. */
+  deliverImpl?: (findings: ReadonlyArray<{ code: string; message: string }>) => void
 }
 
 /**
@@ -91,6 +114,36 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
     // `status` verb can READ it without ever running the tick (R16). A null (lock held) / undefined
     // (stub) / shapeless result is a silent no-op inside writeTickStatus — the last good value stays.
     writeTickStatus(result)
+    // DELIVER the tick's own alarms to a human (TRDD-RFQFCCU4). The delivery channel was built for
+    // the SUPERVISOR beat, whose diagnose() emits pinning-env / non-macos / tick-stalled /
+    // setup-token-expiring / cookie-leg-stuck — none of which is the alarm that actually fired
+    // during the 2026-08-02 incident. `reauth-needed` and the stuck states are emitted HERE, in the
+    // 60s rotation beat, and reached only pm2-out.log: `a human must re-login` accumulated 4506
+    // times over 4 days while every session on the host walked into the rate limit. Detection was
+    // perfect and delivery did not exist, which is outcome-identical to no detection at all.
+    //
+    // alert-delivery was deliberately built standalone rather than inlined in the supervisor, so it
+    // takes this second caller unchanged: same always-written file, same escalating backoff, same
+    // resolved-codes-dropped semantics. A code that stops firing stops being reported.
+    const alertable = alertableTick(result)
+    if (alertable) {
+      // The code carries the SPECIFIC fault, not a generic bucket, because the backoff and the
+      // resolve-detection are per code: collapsing `refresh-dead` and `all-maxed` into one would
+      // make a still-broken credential look resolved the moment a window freed up.
+      const code = alertable.stuck ? `rotator-stuck:${alertable.stuck}` : `reauth-needed:${alertable.reason ?? 'unknown'}`
+      const deliver = deps.deliverImpl ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
+        void deliverAlerts(f, { log: (m: string) => console.warn(m) })
+          .catch(() => { /* delivery swallows its own failures; never take the beat down */ })
+      })
+      try {
+        deliver([{ code, message: alertable.decision }])
+      } catch (derr) {
+        // Its OWN catch, NOT the outer one. The outer catch reports "server tick failed", which
+        // would be a FALSE attribution when the tick succeeded and only the notifier threw — and a
+        // false attribution on a credential subsystem sends the next reader to the wrong file.
+        console.warn(`[oauth-rotator] alert delivery threw (non-fatal, tick unaffected): ${(derr as Error)?.message ?? derr}`)
+      }
+    }
     // REPAIR (TRDD-CVQJNW3A). The beat above can DETECT a dead slot and has nowhere to go —
     // re-capture is the one repair it cannot perform, and on 2026-07-31 that gap cost the owner a
     // manual login while the rotator watched it happen every 60 s. This is that leg.

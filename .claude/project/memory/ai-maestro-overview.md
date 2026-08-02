@@ -126,3 +126,23 @@ exist ONLY there.
 <!-- WIKIMEM-INDEX-END -->
 
 ## Notes and lessons learned
+
+[^1]: [id:ATOM-SCOPELEAK-FP, status:valid, keywords:"memory-scope-leak detector reports private data in PROJECT memory demote to LOCAL false positive pii_email machine-host alice@default.local", ocd:2026-08-02, lmd:2026-08-02]
+    DO NOT act on the janitor's `memory-scope-leak` findings for this store without checking each
+    match by hand, BECAUSE every one measured so far is a FALSE POSITIVE and its prescribed remedy
+    — *"demote to LOCAL scope"* — would move correct, public documentation out of the shared wiki.
+    Measured 2026-08-02: 9 findings, 9 false positives. `pii:email` matched the AMP **address
+    format** (`alice@default.local`, `bob@myteam.local`, `alice@acme.crabmail.ai`,
+    `backend@company.otherprovider.com`, `alice@org.local`) and the clone-URL prefix
+    `git@github.com`; `machine-host` matched the `agentId@hostId` addressing FORMAT, the PUBLIC
+    GitHub org that owns the marketplace, and the filename `settings.local.json`. A grep for any
+    real provider domain returns nothing, and
+    `grep -rlE '/Users/[a-z]|/home/[a-z]' .claude/project/memory/` returns **0 files**.
+    **The count GROWS as the wiki grows** (3 → 9 when the AMP pages landed) and can never clear
+    itself, because the report's own footer says "re-run clears this once the leak is gone" and
+    there is no leak. DO run
+    `grep -rnE '[A-Za-z0-9._%+-]+@(gmail|icloud|outlook|yahoo|users\.noreply)'` plus the home-path
+    grep above; if both are empty, the finding is the detector matching an `@`-shaped token or the
+    substring `.local`. A detector whose remedy is destructive and whose findings are all false is
+    worse than none — it trains the reader to ignore it, so the day it is RIGHT nobody looks. Fix
+    belongs upstream in `Emasoft/ai-maestro-janitor`, not by editing pages here.

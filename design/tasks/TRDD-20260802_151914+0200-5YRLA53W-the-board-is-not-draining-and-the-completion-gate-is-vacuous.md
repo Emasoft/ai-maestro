@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T16:03:45+0200
+updated: 2026-08-02T16:08:14+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -387,10 +387,17 @@ is the same damage as a scripted sweep.
       wikimem spec, from v0.62.0) and diagnosed why the earlier reading was a correct read of a
       *stale cache*; `janitor#123` corrected its own first explanation; [[WF0UE9BC]] had shipped
       entirely, including the one owner-gated step
-- [ ] read `janitor#100` deliberately — closed 2026-08-01, the single most-referenced external item
-      on the board (**8 cards**: `1GGQ4HWY` `9ZIF82HI` `CHN16JXZ` `DXJZM3BW` `H24DF6ZC` `JAU1ES1C`
-      `KCRMSNL7` `P7RPOR5O`). Flagged on [[KCRMSNL7]]; not stale yet, which is exactly why it is
-      worth reading before any of the eight advances rather than after
+- [x] read `janitor#100` deliberately — done, recorded in full on [[KCRMSNL7]]. It closed as
+      **superseded** by the janitor's shipped two-backend split, and its conclusion is one fact the
+      8 cards all depend on: **the yield is BINARY ON LIVENESS, not on capabilities.** A live server
+      takes all five absorbed chores; the `capabilities` array we publish is never consulted.
+      Verified by effect (the liveness file was 16 s old, so the janitor is yielding right now)
+- [ ] `ai-maestro#95` and `#102` are OPEN and **both are stale** — the rotator tick is armed and
+      beating (status 27 s old; its verdict is `reauth-needed`/`refresh-dead`, a real state needing
+      the human), and #102's root cause — a reader stat'ing `version-update-request` against a
+      writer that writes `version-update-requested.flag` — is fixed in `lib/janitor-control.ts:48`.
+      Closing them is an outward-facing action on our own tracker: the human's call, not a
+      housekeeping side effect
 - [x] `updated:` was NOT bumped by any mechanical/format-only edit — every bump this session
       accompanied a real `column:` change, which does change what the card asserts
 - [x] the census above is re-derived at the end and the deltas recorded — and it reconciles

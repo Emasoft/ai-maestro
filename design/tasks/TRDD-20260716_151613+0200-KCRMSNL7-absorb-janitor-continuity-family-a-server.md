@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-08-02T16:02:59+0200
+updated: 2026-08-02T16:08:14+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -21,6 +21,51 @@ release-via: none
 ---
 
 # Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
+
+## ⏱ `janitor#100` READ IN FULL 2026-08-02 — what it concluded, and what it means for the 8 cards
+
+It closed as **SUPERSEDED, not abandoned** — by the janitor's shipped two-backend split
+(their `TRDD-PZLVT2RN`), which implements the coordination this thread asked for. Their SSOT is
+`scripts/lib/harness_backend.py`:
+
+- **`SERVER_ABSORBED_TASKS`** = `marketplace-refresh`, `user-plugins-update`, `version-update`,
+  `oauth-rotator-supervisor`, `oauth-rotator-tick`.
+- **`server_is_alive()`** probes `~/.aimaestro/server-liveness.json`; **30 s beat, 90 s staleness**
+  (`LIVENESS_STALE_AFTER_S = 90`). Absent / stale / malformed ⇒ no live capability claim.
+- The daemon honours it via `_SERVER_ABSORBED_TASK_NAMES` + `_task_yielded_to_server()`.
+
+**THE LOAD-BEARING FACT — coordination is BINARY ON LIVENESS, NOT on capabilities**
+(their `TRDD-LU0C5KAR`). Their code quotes the owner verbatim: *"if the ai-maestro server is
+running, those chores are its responsibility… the janitor daemon must switch off those chores. any
+other event is a bug"* — **no per-class capability checks**. So the `capabilities` array this server
+publishes (`['family-a','singleton-chores']`) is **advertised and never consulted**: a live server
+takes ALL FIVE, an absent one gives back ALL FIVE.
+
+**Verified by effect, not from the changelog.** `~/.aimaestro/server-liveness.json` is fresh (16 s
+at the time of writing, well inside the 90 s window), written by `lib/server-liveness.ts` and wired
+at `server.mjs:1973`. **So the janitor is yielding all five chores to this server right now.**
+
+**The structural hazard the 8 cards inherit, stated plainly:** because the yield is binary on
+liveness, any absorbed chore this server advertises-by-being-alive but does not actually RUN is run
+by **nobody**. That is not hypothetical — it is exactly what `ai-maestro#95` and `#102` were filed
+about.
+
+**Both of those issues are now STALE, and both are still OPEN:**
+
+| issue | what it reported | measured 2026-08-02 |
+|---|---|---|
+| `ai-maestro#95` | *"Server absorbs oauth-rotator-tick but does not run it"* | the tick is **ARMED and BEATING** — the opt-in flag file `~/.aimaestro/oauth-rotator-tick.enabled` is present and `oauth-rotator-tick-status.json` was **27 s** old. Its live verdict is `nextAction: reauth-needed`, `reason: refresh-dead` — a real state that needs the human, not a stalled chore |
+| `ai-maestro#102` | *"the absorbed version-update chore is not running"* | **root cause fixed** — the reader stat'd `version-update-request` (no `ed`, no `.flag`) against a janitor that writes `version-update-requested.flag`. Corrected in `lib/janitor-control.ts:48` (TRDD-4F40QCCH), verified against the WRITER at janitor `lib/global_state.py:596` |
+
+**A correction to my own first pass, worth keeping.** Grepping our tree for the literal chore name
+`oauth-rotator-supervisor` returned **zero** files, which reads as "not implemented". It is
+implemented — `lib/oauth-rotator/server-supervisor.ts`, wired at `server.mjs:1965` — under our own
+symbol names. **Grep for the THING, not for the peer's name for it**; all five chores do have an
+implementation here.
+
+**Do NOT reopen `#100`.** Their closing comment is explicit: a change to the SHAPE of the contract
+(rather than its existence) belongs in a **fresh issue against their `design/ARCHITECTURE.md` §3`**;
+reopening would re-litigate a landed design.
 
 ## ⏱ EXTERNAL REFS CHECKED 2026-08-02 — `janitor#100`, the coordination thread this card is built on, is CLOSED
 

@@ -26,6 +26,26 @@
  *   3. `stampLiveAccount` made inert (`return snapshot` with no assignment)
  *      → REDS 2 of 13: "stamps the live fingerprint server-side"
  *                      "a payload CLAIMING an identity cannot influence the stamp" (positive half)
+ *
+ * NEUTERS FOR `freshestAdmissibleUsage` — MEASURED 2026-08-02, each reverted after:
+ *
+ *   4. delete the delegation (`if (admitSnapshot(s, rotator) !== null) continue`)
+ *      → REDS 1 of 20: "skips a sample the identity guard rejects, and one the pre-switch guard
+ *        rejects". This is what pins that the selection DELEGATES to the one predicate instead of
+ *        re-implementing it — a second copy is exactly how the seconds-vs-milliseconds trap returns.
+ *   5. newest-wins → last-one-wins (`if (best === null || s.capturedAt > …)` → `if (true)`)
+ *      → REDS 1 of 20: "takes the NEWEST admissible sample, not the highest". The fixture is
+ *        ordered so a max-by-usage rule AND a last-one-wins rule both pick the same wrong sample,
+ *        so this one test rejects both plausible alternatives.
+ *   6. a missing 5h gauge defaults to 0 instead of being rejected
+ *      → REDS 2 of 20: "skips a sample with no five-hour gauge rather than reading it as 0%"
+ *                      "rejects a non-finite gauge, which JSON.parse admits and arithmetic does not"
+ *
+ * ⚠ The first attempt at these three measured NOTHING and read as "all green, the code is
+ * unpinned": `sed -i ''` is BSD-only, and the GNU sed on PATH here took `''` as an empty FILENAME,
+ * so no file was ever modified. The tell was the changed-line count, not the exit code. Re-run with
+ * `perl -pi -e`, which behaves identically on both. Recorded because a neuter that silently applies
+ * nothing is indistinguishable from a guard that nothing depends on.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 

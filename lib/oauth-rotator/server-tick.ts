@@ -96,6 +96,53 @@ export interface RunOneTickDeps {
 }
 
 /**
+ * The minimum spacing between two rotation ATTEMPTS, whoever initiates them — TRDD-GY0LJV6S.
+ *
+ * Matches the timer's own period, so adding the statusline push-trigger cannot raise the rate at
+ * which the rotator runs: it only lets a beat happen SOONER within a window the timer would have
+ * used anyway. That is the whole safety claim of the trigger, and it is why the floor exists.
+ */
+export const TICK_ATTEMPT_FLOOR_MS = 60_000
+
+/**
+ * ⚠ `globalThis`, NOT a module-level `let`, and this is load-bearing rather than stylistic.
+ *
+ * In FULL mode `server.mjs` and the Next.js bundle load this module TWICE (two module registries,
+ * two copies of every module-scope binding). A `let` would give the timer and the ingest route a
+ * floor each, so each would happily fire while the other's said "too soon" — i.e. exactly double
+ * the rate the floor exists to bound, and invisibly, because each instance's own accounting looks
+ * correct. `Symbol.for` is keyed in the cross-realm registry, so both copies address one cell.
+ */
+const TICK_ATTEMPT_AT = Symbol.for('aimaestro.oauth-rotator.lastTickAttemptMs')
+
+/** Epoch ms of the last rotation ATTEMPT, or 0 if none this process. */
+export function lastTickAttemptMs(): number {
+  const v = (globalThis as Record<symbol, unknown>)[TICK_ATTEMPT_AT]
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0
+}
+
+/**
+ * May a rotation attempt start now? Pure + zero-I/O, so a hot request path (the ingest route runs
+ * at up to 600/min) can ask without touching disk.
+ */
+export function tickAttemptAllowed(nowMs = Date.now(), floorMs = TICK_ATTEMPT_FLOOR_MS): boolean {
+  return nowMs - lastTickAttemptMs() >= floorMs
+}
+
+/**
+ * Record that an attempt is starting.
+ *
+ * ⚠ ON ATTEMPT, never on success — the distinction is the entire point. `state.last_switch_at` is
+ * the obvious-looking alternative and it is WRONG here: `switchLiveTo` (rotate.ts) writes it only
+ * after a switch actually lands, so a rotation that finds no healthy candidate — precisely the
+ * state a struggling fleet is in — advances nothing and leaves the next attempt unbounded. A floor
+ * derived from it would vanish exactly when it is needed most.
+ */
+export function stampTickAttempt(nowMs = Date.now()): void {
+  ;(globalThis as Record<symbol, unknown>)[TICK_ATTEMPT_AT] = nowMs
+}
+
+/**
  * One rotation beat, extracted from the timer so tests call it deterministically:
  * gate on the flag → gate on a live client → run `runTick` under the tick lock. A held lock skips
  * this round (withTickLock returns null without running the body). The whole body is wrapped so a
@@ -106,6 +153,11 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
   const enabledCheck = deps.enabledCheck ?? oauthTickEnabled
   const claudeRunningCheck = deps.claudeRunningCheck ?? claudeRunning
   const runTickImpl = deps.runTickImpl ?? (() => runTick())
+  // Stamp BEFORE the gates, so the floor tracks ATTEMPTS rather than beats-that-did-work. The
+  // timer's own beats advance it too, which is what makes 60 s a floor for the whole subsystem
+  // instead of for the push-trigger alone — otherwise an ingest arriving just after a beat would
+  // fire a second run the timer had already covered. (TRDD-GY0LJV6S)
+  stampTickAttempt()
   try {
     if (!enabledCheck()) return // R16 default: flag absent → do nothing, write nothing.
     if (!(await claudeRunningCheck())) return // no live client → nobody to keep signed in.

@@ -37,7 +37,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isConsolePeer, peerAddress } from '@/lib/peer-address.mjs'
 import { checkAndRecordAttempt } from '@/lib/rate-limit'
-import { stampLiveAccount } from '@/lib/statusline-admissible'
+import { loadState } from '@/lib/oauth-rotator/slots'
+import { runOneTick, tickAttemptAllowed } from '@/lib/oauth-rotator/server-tick'
+import { isNearLimit } from '@/lib/oauth-rotator/tick'
+import { admitSnapshot, stampLiveAccount } from '@/lib/statusline-admissible'
+import type { StatuslineSnapshot } from '@/types/statusline'
 import { normalizeStatuslinePayload } from '@/lib/statusline-normalize'
 import { pruneStatuslineSnapshots, writeStatuslineSnapshot } from '@/lib/statusline-store'
 
@@ -137,9 +141,62 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // ── PUSH-TRIGGER (TRDD-GY0LJV6S) ────────────────────────────────────────────────────────────
+  // The statusline says "CHECK NOW"; it does NOT say "rotate now". This fires the ordinary
+  // endpoint-backed rotation beat and lets THAT decide — which is what makes a misattributed
+  // reading harmless: the report's account stamp records who was live at ARRIVAL, not who produced
+  // it, so a session running through an A→B switch keeps reporting A's ~98% and is admitted as B's.
+  // Acting on that directly burns the fleet (measured, and reverted in 3c9a7493). Triggering on it
+  // costs one HTTP call the endpoint then answers with the truth.
+  maybeTriggerRotationCheck(snapshot)
+
   // Housekeeping, deliberately AFTER the write and deliberately unable to fail the request: a
   // successful observation must never be reported as lost because a prune could not run.
   const pruned = await pruneStatuslineSnapshots().catch(() => 0)
 
   return NextResponse.json({ ok: true, sessionId: snapshot.sessionId, capturedAt: snapshot.capturedAt, pruned })
+}
+
+/**
+ * Fire the ordinary rotation beat when THIS observation is at/over threshold — TRDD-GY0LJV6S.
+ *
+ * ── WHY `runOneTick` AND NOTHING INNER ───────────────────────────────────────────────────────────
+ * The tick LOCK lives in `runOneTick`, not in `runTick` and not in `autoRotate`. Calling either
+ * inner function would make this route a SECOND, UNSERIALIZED writer into the live credential,
+ * racing the 60 s timer — the one irreversible failure the rotator subsystem is built to avoid. It
+ * would also bypass the R16 activation gate, so a user who never enabled rotation would get one.
+ *
+ * ── WHY IT IS NEVER AWAITED ──────────────────────────────────────────────────────────────────────
+ * `runOneTick` already swallows every error by contract, and the caller here
+ * (`scripts/aimaestro-statusline-capture.sh`) is detached and discards the response. Awaiting would
+ * hold an HTTP request open across the rotator's network I/O for no reader.
+ *
+ * ── THE TWO ZERO-I/O GATES, IN THIS ORDER ────────────────────────────────────────────────────────
+ * This runs on a path rate-limited at 600/min, so both gates must be free. The floor is checked
+ * FIRST because it is a pure arithmetic compare, where the threshold test reads rotator state from
+ * disk. Note what is deliberately NOT here: `listStatuslineSnapshots()`. The freshest observation
+ * is the one in hand; a readdir per ingest is exactly the cost this feature exists to remove.
+ */
+function maybeTriggerRotationCheck(snapshot: StatuslineSnapshot): void {
+  try {
+    if (!tickAttemptAllowed()) return // cheapest gate first — pure compare, no I/O
+
+    // `admitSnapshot` is the SAME predicate the rest of the system uses — never a second copy.
+    // It cannot make the trigger safe (the arrival-stamp hole is unclosable from the server), but
+    // it removes the observations we CAN prove irrelevant, so the wasted-call rate stays low.
+    if (admitSnapshot(snapshot, loadState()) !== null) return
+
+    const fh = snapshot.rateLimits.fiveHour?.usedPercentage ?? null
+    const sd = snapshot.rateLimits.sevenDay?.usedPercentage ?? null
+    // `null` scoped: the statusline structurally cannot observe the model-scoped weekly windows,
+    // and `isNearLimit` documents null as "contributes nothing". Passing 0 would be a lie that
+    // reads as healthy; passing a second threshold constant would be a copy that drifts.
+    if (!isNearLimit(fh, sd, null)) return
+
+    void runOneTick().catch(() => {}) // fire-and-forget; see above
+  } catch {
+    // FAIL-SOFT, and this is the contract that lets the trigger sit in a request path at all: an
+    // unreadable rotator state, a missing flag file, anything — the observation was already written
+    // and acknowledged, and the 60 s timer still runs. The worst case is the latency we had before.
+  }
 }

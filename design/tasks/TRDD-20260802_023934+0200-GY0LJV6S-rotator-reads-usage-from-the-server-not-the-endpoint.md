@@ -1,12 +1,11 @@
 ---
 trdd-id: GY0LJV6S
 title: The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
-column: blocked
-pre-block-column: todo
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T02:39:34+0200
+updated: 2026-08-02T10:52:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,7 +21,7 @@ effort: medium
 relevant-rules: [R16]
 npt: [D8OYFG35]
 eht: []
-blocked-by: [D8OYFG35]
+blocked-by: []
 release-via: none
 labels: [oauth, rotator, statusline, continuity, incident-followup]
 ---
@@ -36,12 +35,23 @@ api must get the info from the statusline hook of ai-maestro. is that clear? if 
 98% or more in the 5h or 7d window it must immediately rotate to another account oauth with still
 headroom."*
 
-**Blocked on [[D8OYFG35]]**, which builds the wrapper → `POST /api/statusline/ingest` → state-file →
-`GET` half. This card is the CONSUMER: it re-points the rotator's LIVE read at that API and makes
-the trigger push-driven instead of a 60 s poll.
+**UNBLOCKED 2026-08-02 10:52 — [[D8OYFG35]] has landed** (`675f5a9f`, `f26e794d`; +`ec157607`
+NUL-escape, +`ed688407` interactive guard). `types/statusline.ts`, `lib/statusline-normalize.ts`,
+`lib/statusline-store.ts` and all three routes are committed, `tsc` clean, full suite **337 files /
+4787 tests green**. D8OYFG35 itself sits at `human_review` because its LAST step is a USER action
+(wiring `~/.claude/settings.json`), which is **not** a dependency of this card's code — so waiting on
+it would have stalled this card behind a human, not behind an artifact.
 
-**NEXT ACTION:** wait for D8OYFG35 to land `types/statusline.ts` + the ingest state shape, then wire
-`tick.ts:422` (see the seam table below). Do not start before that — the state shape is the contract.
+**⚠ NOT LIVE YET, and that is not the same as not landed.** `app/` is bundled into `.next`, so the
+running server still 404s the statusline routes until `yarn build` + restart. Verify by EFFECT
+(POST and read it back), never by `git log`.
+
+**NEXT ACTION:** wire `tick.ts:422` to the ingest-fed read (seam table below), honouring the two
+traps this card already records: the payload carries **no account identity** (stamp `live_fp` at
+ingest and reject reports whose stamp ≠ the live fingerprint, or a post-switch loop burns every
+account), and the statusline speaks **only** for the live account. For CANDIDATE headroom read the
+CORRECTION section below first — `agentlenspro get_account_status --all` now covers the non-live
+accounts and the old "only the endpoint can" claim is retired.
 
 ## The incident this comes from (2026-08-02, ~02:26)
 
@@ -87,6 +97,41 @@ that are not live, and the only source for that is the endpoint with each altern
 The economics still land where the USER wants them: the *continuous* read (the live account, every
 few seconds, forever) becomes free, and the endpoint is touched only in the seconds around an actual
 rotation — a handful of calls, rarely, instead of ~420/hour.
+
+### CORRECTION (2026-08-02, measured) — "the ONLY source" above is too strong
+
+The sentence *"the only source for that is the endpoint with each alternate's own token"* was true
+when this card was written and is **no longer true**. `agentlenspro get_account_status --all` (shipped
+in **2.21.0**, the feature requested as `Emasoft/AgentlensPro#8`) reports every account's 5h/7d
+windows — including the ones that are NOT live — **reads no credential**, and is assembled entirely
+from files, so it *answers with the server down*, which is exactly the state a wedged machine is in.
+
+It does **not** replace the endpoint read, and the difference is the whole point: `--all` returns what
+was **OBSERVED while that account was last live**, with an explicit per-window freshness verdict:
+
+| verdict | meaning | usable as |
+|---|---|---|
+| `fresh` | measured inside the cache TTL | a real number |
+| `aged` | past TTL, window not yet reset — utilization only grows | a **LOWER bound** |
+| `rolled` | window reset AND this machine was off the account when the new one began | **INFERRED ~0% ⇒ available** |
+| `stale` / `unreadable` | reset but activity cannot be excluded / never observed | `null` + a stated reason |
+
+So the correct shape is **pre-filter, then confirm**: use `--all` to rank candidates and eliminate the
+provably-full ones (and to *find* the `rolled` ones, which is the signal that pays for the feature —
+an account at 91% whose window has since reset is available, not unknown), then read the endpoint for
+the ONE candidate about to be actuated. That cuts the rotation-time endpoint calls from "every
+candidate" to "one", and gives the rotator a usable answer even when the endpoint is unreachable —
+the failure mode that made the 02:26 incident unrecoverable.
+
+**Measured on this host 2026-08-02 10:48, and it argues for doing this:** of three accounts, the LIVE
+one (`fmuaddib`) reports `unreadable / never observed`, one reports `stale` + `77% aged`, one
+`unreadable`. Two of three have no usable window data at all. A rotator reading only the endpoint is
+blind exactly when it needs to choose, and `--all` at least distinguishes *"I cannot see this"* from
+*"this has no headroom"* — opposite signals that a missing row renders identically.
+
+**Do NOT read this as "drop the endpoint reads".** `--all` is observational and can be arbitrarily
+stale; actuating a rotation on an `aged` lower bound would be exactly the class of decision this card
+exists to make safe.
 
 ## The payload carries NO account identity — the server must stamp it
 

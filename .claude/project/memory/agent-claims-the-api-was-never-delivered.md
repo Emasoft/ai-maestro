@@ -82,14 +82,14 @@ rather than tagging it with a marker that invites removal.
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-14 lmd:2026-07-14] The first instinct on both incidents was to go build
+[^1]: [id:ATOM-CLAIM-API-MISSING, status:valid, keywords:"agent_says_capability_missing verbs_never_delivered feature_reported_absent check_before_building assume_missing_api", ocd:2026-07-14, lmd:2026-07-14] The first instinct on both incidents was to go build
   the missing API — and on the janitor one, several turns were burned hunting through logs
   and AMP inboxes for a spec that never existed. The cheap check (does the route already
   exist? does the verb already exist?) costs one grep and would have short-circuited both.
   Lesson: when a downstream consumer reports an absence, the first move is to look, not to
   build.
 
-[^2]: [ocd:2026-07-14 lmd:2026-07-14] A **third** trap, distinct from both halves above:
+[^2]: [id:ATOM-CLAIM-ASSERTED-VS-PROVEN, status:valid, keywords:"asserted_identity_not_proven grant_capability_to_janitor session_env_self_identification server_verified_identity trust_conflated_with_unblocked", ocd:2026-07-14, lmd:2026-07-14] A **third** trap, distinct from both halves above:
   *asserted* identity is not *proven* identity. `#46` resolves "which agent am I?" from the
   session's own environment — sufficient for self-identification, and NOT sufficient for
   "grant this capability to the janitor and to nobody else", which needs an identity a
@@ -98,7 +98,7 @@ rather than tagging it with a marker that invites removal.
   (This footnote also used to say R41's **authentication** was "still convention — the
   Approval-log line is forgeable". That half is now FALSE; see [^3].)
 
-[^3]: [ocd:2026-07-14 lmd:2026-07-14] **CORRECTION.** [^2] and the R41 implementation note
+[^3]: [id:ATOM-CLAIM-SIGNATURE-CORRECTION, status:valid, keywords:"approval_signature_forgeable mandate_tokens_already_existed host_signed_ledger_token verify_exits_nonzero reasoned_about_what_would_be_needed", ocd:2026-07-14, lmd:2026-07-14] **CORRECTION.** [^2] and the R41 implementation note
   both said the approval *signature* was unenforceable and needed, in sequence: mandate
   tokens → a `verify` verb → the per-agent identity of #46. That sequence was wrong in its
   premise — **the tokens already existed** (row 4 of the table), so only the *surface* and a

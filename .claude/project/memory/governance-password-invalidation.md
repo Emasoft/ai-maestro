@@ -90,7 +90,7 @@ password-change half was ever built.
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-13 lmd:2026-07-13] **A route CANNOT trust `x-forwarded-for` /
+[^1]: [id:ATOM-XFF-SPOOFABLE-PEER-IP, status:valid, keywords:"x-forwarded-for_spoofable client_sets_headers_not_trustworthy loopback_check_defeated_by_vpn re-stamp_from_socket_remoteAddress dual_stack_ffff_127_0_0_1_console_peer", ocd:2026-07-13, lmd:2026-07-13] **A route CANNOT trust `x-forwarded-for` /
   `x-real-ip` for a security decision — the client sets them.** A route handler
   gets a `Request`, never a socket, and every existing route in this repo reads the
   client IP from those headers. A phone on the VPN sends `X-Forwarded-For:
@@ -108,7 +108,7 @@ password-change half was ever built.
   dual-stack and Node reports an IPv4 client in that v4-mapped form; miss it and the
   owner is denied at their own keyboard.
 
-[^2]: [ocd:2026-07-13 lmd:2026-07-13] **`server.mjs` CANNOT import a `.ts` module —
+[^2]: [id:ATOM-SERVER-MJS-CANNOT-IMPORT-TS, status:valid, keywords:"server.mjs_crashes_importing_ts pm2_crash_loop_errored tsx_only_transpiles_entry_file lib_shared_modules_must_be_mjs SyntaxError_does_not_provide_export", ocd:2026-07-13, lmd:2026-07-13] **`server.mjs` CANNOT import a `.ts` module —
   it crashes at boot** with `SyntaxError: The requested module './lib/foo' does not
   provide an export named 'X'`, and pm2 crash-loops (`errored`, dozens of restarts).
   `package.json` runs `tsx server.mjs`, which tempts you to think `.ts` imports

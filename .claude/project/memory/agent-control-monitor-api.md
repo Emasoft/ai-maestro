@@ -125,7 +125,7 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-09 lmd:2026-07-09] This page previously said "agent callers need AID
+[^1]: [id:ATOM-STRICT-AGENT-RULES-UNREGISTERED, status:valid, keywords:"agent_403_on_strict_route unregistered_STRICT_AGENT_RULES epic_marked_complete_but_broken read_dispatcher_not_the_table AID_proof_of_possession_not_working", ocd:2026-07-09, lmd:2026-07-09] This page previously said "agent callers need AID
   proof-of-possession", implying the agent path worked. It did not. All 8 strict routes the epic
   shipped 403'd every agent — the janitor included — for the entire life of the epic, and the epic
   was marked `complete`. I read `requireSudoToken`'s R32 dual-path, saw the agent branch, and stopped;
@@ -134,7 +134,7 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   table it dispatches on. When a doc/comment asserts a capability, exercise it — a design that is
   correct on paper can be unregistered in practice.
 
-[^2]: [ocd:2026-07-09 lmd:2026-07-09] The HTML panel's feedback channel never worked, and every health
+[^2]: [id:ATOM-PANEL-WS-STALE-REF, status:valid, keywords:"panel_feedback_channel_silently_dead websocket_onclose_nulls_ref health_check_green_but_broken agent_switch_stale_socket sendFeedback_no_ops", ocd:2026-07-09, lmd:2026-07-09] The HTML panel's feedback channel never worked, and every health
   signal said it did: the server reported `connectedClients: 1`, the UI rendered "Panel channel
   connected", and control messages kept arriving. `usePanelWebSocket`'s `ws.onclose` nulled
   `wsRef.current` unconditionally, so an agent switch let the OLD socket's late close wipe the ref to
@@ -145,7 +145,7 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   guard every handler on `wsRef.current === sock`; a handler that closes over a reassignable `ws`
   variable acts on whatever socket is current when it fires, not its own.
 
-[^3]: [ocd:2026-07-09 lmd:2026-07-09] This page previously said the `send-command` mapping "would DENY an
+[^3]: [id:ATOM-QUEUE-DELETE-UNGATED, status:valid, keywords:"DELETE_queue_entry_ungated authenticate_vs_authorize enforceAuth_stops_short cross_agent_command_deletion self_drive_vs_self_reconfigure", ocd:2026-07-09, lmd:2026-07-09] This page previously said the `send-command` mapping "would DENY an
   agent driving its OWN panel/queue" and that deciding it was open Tier-2 governance. The USER decided it
   on 2026-07-09 (self-drive allowed, self-reconfigure never), and the code shipped. Two lessons, and the
   second cost a real vulnerability. **(a)** `requireAuth` / `enforceAuth` AUTHENTICATE and stop — they
@@ -159,7 +159,7 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   or does it mean REFUSE?" separates them — driving your own surface is allowed, vetoing an order is not.
   Always falsify the guard: strip it, and confirm the refusal tests actually fail.
 
-[^4]: [ocd:2026-07-09 lmd:2026-07-09] `POST /api/agents/[id]/chat` typed arbitrary text + Enter into ANY
+[^4]: [id:ATOM-CHAT-ROUTE-AUTH-BYPASS, status:valid, keywords:"chat_route_bypasses_sendkeys_gate route_name_sounds_harmless capability_defined_by_code_not_name enforceAuth_only_no_sudo indexOf_vacuous_when_absent", ocd:2026-07-09, lmd:2026-07-09] `POST /api/agents/[id]/chat` typed arbitrary text + Enter into ANY
   agent's tmux pane with `enforceAuth` alone — a total bypass of both the `send-command` matrix and
   sudo-mode, while the openly-named `PATCH …/session` was gated by both. It survived because auditors read
   the endpoint's NAME. "chat" sounds like messaging; the code called `sendKeys(literal, enter)`. Lesson:
@@ -170,7 +170,7 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   the exact code it existed to reject — assert presence before order. Third: `enforceAuth` returns
   `NextResponse | null` and throws the identity away; grep for it as a SMELL, not as a guard.
 
-[^5]: [ocd:2026-07-09 lmd:2026-07-09] This page previously said "`/janitor-global-arm` therefore always
+[^5]: [id:ATOM-JANITOR-GLOBAL-ARM-FABRICATED, status:valid, keywords:"janitor-global-arm_does_not_enqueue fabricated_command_behavior name_supplied_by_user_is_hypothesis kill_switch_vs_agent_awareness wrote_mechanism_against_wrong_name", ocd:2026-07-09, lmd:2026-07-09] This page previously said "`/janitor-global-arm` therefore always
   succeeds — armed now, or armed later", and `docs/SCRIPT-LAYER.md` went further: "It fans out one `queue`
   call per agent and returns." Both were fabricated. `/janitor-global-arm` runs `global_control_cli.py arm`,
   which clears the machine-wide kill-switch + global-pause flags and is the exact reverse of
@@ -183,7 +183,7 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   hypothesis.** Read the implementation before committing the fact, especially into PROJECT-scope memory,
   where a wrong fact is pushed to every contributor.
 
-[^6]: [ocd:2026-07-09 lmd:2026-07-09] This page, the coverage ledger, AND TRDD-YEE33F3A all recorded
+[^6]: [id:ATOM-EXPORT-ZIP-KEY-THEFT, status:valid, keywords:"export_route_leaks_private_keys GET_not_POST_is_dangerous impersonation_not_disclosure danger_is_not_mutation comment_describes_test_enforces", ocd:2026-07-09, lmd:2026-07-09] This page, the coverage ledger, AND TRDD-YEE33F3A all recorded
   `export` as "POST — any agent reads any agent's transcripts, confidentiality". Every part was wrong.
   The dangerous verb is **GET** (POST has zero callers), and the payload is not transcripts but
   `keys/private.pem` + `registrations/` + `agent.db`. The consequence is not disclosure but permanent,
@@ -196,7 +196,7 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   `EXFIL_FUNCTIONS` net now asserts `exportAgentZip` really does archive the keys dir, so the
   justification cannot rot into a lie the way that comment did.
 
-[^7]: [ocd:2026-07-17 lmd:2026-07-17 keywords:"session_command_verb aimaestro-agent_vs_aimaestro-session
+[^7]: [id:ATOM-SESSION-COMMAND-VERB-WRONG-GREP, status:valid, ocd:2026-07-17, lmd:2026-07-17, keywords:"session_command_verb aimaestro-agent_vs_aimaestro-session
   grep_wrong_script verb_does_not_exist agent-session_module"] DO NOT claim an `aimaestro-agent.sh
   <verb> <subverb>` command is absent by grepping `aimaestro-session.sh` (or the `aimaestro-agent.sh`
   dispatcher file alone), BECAUSE `aimaestro-agent.sh` is a thin dispatcher that SOURCES `agent-*.sh`

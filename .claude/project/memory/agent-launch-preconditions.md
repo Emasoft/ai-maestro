@@ -152,7 +152,7 @@ NOT in the arguments — a fake-adapter test at the boundary cannot see this.
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-12 lmd:2026-07-12] This was found the hard way: the entire fleet
+[^1]: [id:ATOM-FLEET-UNAUTH-SILENT, status:valid, keywords:"whole_fleet_unauthenticated_but_dashboard_green process_context_failure_not_config wasted_time_wrong_layer_subscription_api_keys preflight_loud_and_immediate silent_fleet_wide_auth_failure", ocd:2026-07-12, lmd:2026-07-12] This was found the hard way: the entire fleet
   was unauthenticated for hours while the dashboard showed every agent online. The
   investigation burned a long time on the wrong layer (subscription, API keys,
   settings files, containers, model flags, env vars, workdir) because the agents
@@ -160,7 +160,7 @@ NOT in the arguments — a fake-adapter test at the boundary cannot see this.
   piece of configuration. The preflight exists to make that class of failure loud and
   immediate instead of silent and fleet-wide.
 
-[^2]: [ocd:2026-07-13 lmd:2026-07-13] Both gates + the fleet watchdog are now LIVE
+[^2]: [id:ATOM-WATCHDOG-STALE-SESSION-FALSE-ALARM, status:valid, keywords:"watchdog_false_fleet_wide_alarm stale_throwaway_session_name_collision fixed_name_resource_must_precleanup fail_safe_reports_healthy_as_blind comment_promised_cleanup_code_did_not", ocd:2026-07-13, lmd:2026-07-13] Both gates + the fleet watchdog are now LIVE
   (TRDD-CNF1X3J7 commits fb8c03ea, TRDD-78J4I4QS commits 6eef63fe+fcd0fa5b). Lesson
   from the watchdog's FIRST production sweep: a fail-safe detector that uses a
   fixed-name throwaway resource MUST pre-clean its own leftover, or its own debris
@@ -170,14 +170,14 @@ NOT in the arguments — a fake-adapter test at the boundary cannot see this.
   cleanup-by-name ("the fixed name exists so leftovers can be killed by name"),
   verify the CODE implements it — the promise had been written, the pre-kill hadn't.
 
-[^3]: [ocd:2026-07-13 lmd:2026-07-13] Resolving WHICH plugin is an agent's role in
+[^3]: [id:ATOM-ROLE-PLUGIN-SCANNER-BLIND, status:valid, keywords:"role_plugin_resolution_fails_enabled_not_installed scanner_only_sees_disk_files launch_args_as_truthful_fallback agent-main-agent_names_intended_plugin quad_match_returns_null", ocd:2026-07-13, lmd:2026-07-13] Resolving WHICH plugin is an agent's role in
   the enabled-but-not-installed state cannot use the scanner: the quad-match only
   sees plugins whose files exist on disk, so it returns null in exactly the broken
   state. The truthful fallback is the agent's own launch args — `--agent
   <plugin>-main-agent` names precisely what the client will try (and fail) to load.
   Implemented in the `role-plugin` invariant row (lib/agent-invariants.ts).
 
-[^4]: [ocd:2026-07-14 lmd:2026-07-14] The janitor's `memory-scope-leak` detector flags
+[^4]: [id:ATOM-SCOPE-LEAK-FALSE-POSITIVE-LAUNCH, status:valid, keywords:"memory_scope_leak_false_positive keychain_macOS_vocabulary_not_private_data demote_to_local_would_lose_fleet_lesson scope_leak_finding_is_candidate_not_verdict write_gate_stranger_clone_test", ocd:2026-07-14, lmd:2026-07-14] The janitor's `memory-scope-leak` detector flags
   this page as `machine-host` and proposes demoting it to LOCAL. **Verified 2026-07-14:
   false positive — do NOT demote it.** The page carries no username, no `$HOME` path, no
   hostname, no credential and no one-box install state; it passes the write gate cleanly

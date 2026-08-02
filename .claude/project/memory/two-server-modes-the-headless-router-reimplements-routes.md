@@ -41,7 +41,7 @@ graph; never infer it from the architecture you expect. "It's all funnelled thro
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-14 lmd:2026-07-14] Cost a near-miss the day this page was written. The plan
+[^1]: [id:ATOM-HEADLESS-ROUTER-BYPASSES-AUTHORIZE, status:valid, keywords:"one_central_edit_did_not_close_all_routes headless_router_reimplements_routes_raw_execSync never_calls_authorize verify_call_graph_not_architecture enforced_in_full_mode_unenforced_headless", ocd:2026-07-14, lmd:2026-07-14] Cost a near-miss the day this page was written. The plan
   for R42 (TRDD-BF3JN4TL) stated that one edit to `lib/authorization.ts` "closes all six routes
   in **both** server modes at once". It did not. `services/headless-router.ts` reimplements
   `POST /api/sessions/[id]/stop` and `/restart` with raw `execSync` + `authenticateAgent` and
@@ -51,7 +51,7 @@ graph; never infer it from the architecture you expect. "It's all funnelled thro
   by opening `headless-router.ts:864` instead of trusting the card.
   **Lesson: verify the call graph before trusting "one central edit closes everything".**
 
-[^2]: [ocd:2026-07-14 lmd:2026-07-14] The same sweep — done *because* of [^1], not because
+[^2]: [id:ATOM-HEADLESS-CHAT-NO-AUTH-AT-ALL, status:valid, keywords:"headless_chat_route_no_auth_call_at_all command_injection_via_sendKeys chat_route_hides_as_control_surface one_drift_instance_sweep_whole_router unauthenticated_agent_pane_injection", ocd:2026-07-14, lmd:2026-07-14] The same sweep — done *because* of [^1], not because
   anything pointed at it — found `POST /api/agents/[id]/chat` in the headless router with **no
   auth call at all**, not even `authenticateAgent`, ending in `sendKeys(session, msg, {literal,
   enter})`. An unauthenticated command-injection endpoint into any agent's pane. The Next.js
@@ -61,7 +61,7 @@ graph; never infer it from the architecture you expect. "It's all funnelled thro
   headless from the same declarative table, fail closed on an undeclared strict route) is
   `TRDD-HGE9T6VT` and is still OPEN.
 
-[^3]: [ocd:2026-07-14 lmd:2026-07-14] Why no test caught either: a missing authorization guard
+[^3]: [id:ATOM-MISSING-AUTHZ-GUARD-IS-SUCCESS-NOT-ERROR, status:valid, keywords:"missing_authz_guard_produces_success_not_error happy_path_suite_blind_to_it parity_test_both_modes_same_decision no_test_caught_it dual_mode_route_authorization_parity", ocd:2026-07-14, lmd:2026-07-14] Why no test caught either: a missing authorization guard
   produces a **SUCCESS**, not an error, so a happy-path suite is constitutionally blind to it —
   see [[an-unenforced-rule-produces-a-success-not-an-error]]. The parity test that *would* have
   caught all of them on the day they were written: **for every route served by both modes, the

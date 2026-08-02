@@ -73,14 +73,14 @@ update ai-maestro-plugins`, then `claude plugin install <name>@ai-maestro-plugin
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-08 lmd:2026-07-08] The local marketplace clone was **187 commits
+[^1]: [id:ATOM-MARKETPLACE-CLONE-STALE, status:valid, keywords:"local_marketplace_clone_behind_origin edit_without_pull_reverts_version_bumps machine_pushed_repo_treat_as_stale pull_before_every_edit manifest_silently_reverted", ocd:2026-07-08, lmd:2026-07-08] The local marketplace clone was **187 commits
   behind** origin when the registration was attempted — every plugin publish had been
   pushing version bumps to GitHub for weeks. Editing without the ff-pull would have
   produced a manifest that silently reverted dozens of version bumps. Lesson: for any
   repo that MACHINES push to (notify workflows, bots), treat the local clone as stale by
   default and pull before every edit.
 
-[^2]: [ocd:2026-07-09 lmd:2026-07-09] The CPV `publish.py` bump stage updates
+[^2]: [id:ATOM-PUBLISH-UVLOCK-DIRTY-TREE, status:valid, keywords:"publish_py_working_tree_is_dirty uv_lock_not_updated_on_bump next_publish_dirties_tree_before_preflight pyproject_version_ahead_of_uv_lock CPV_bump_stage_incomplete", ocd:2026-07-09, lmd:2026-07-09] The CPV `publish.py` bump stage updates
   `pyproject.toml` + `.claude-plugin/plugin.json` + `marketplace.json` but does NOT run
   `uv lock`, so the committed `uv.lock`'s own project-version entry stays one version behind
   pyproject. On the NEXT publish, `uv run scripts/publish.py` re-locks `uv.lock` on invocation

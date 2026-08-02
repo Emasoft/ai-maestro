@@ -143,7 +143,7 @@ Open work: `[[TRDD-F1SL03CK]]` (the creation gate) · `[[TRDD-0KMDJVON]]` (the R
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-14 lmd:2026-07-14] On 2026-07-14 I reported *"`createNewTeam` never builds
+[^1]: [id:ATOM-CREATENEWTEAM-COS-BUILDS-MEMBERS, status:valid, keywords:"createNewTeam_does_not_build_5_members false_hole_report_COS_builds_roster R29.1_disagrees_with_R12_R30_R31 governance_corpus_is_system_of_claims read_defining_rule_before_acting", ocd:2026-07-14, lmd:2026-07-14] On 2026-07-14 I reported *"`createNewTeam` never builds
   the 5 base members"* as a hole. **It is not a hole** — the COS is supposed to build them
   (R12.2, R31.1), so creating only the auto-COS is correct. I had read **R29.1**, transcribed
   it, and audited the code against it — never noticing R29.1 disagrees with R12.1, R12.2, R30.2

@@ -54,7 +54,7 @@ See also [[session-control-subagent-gate]] (same campaign, same fleet-readiness 
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-08 lmd:2026-07-08] The original WS1 design wrote the managed block to
+[^1]: [id:ATOM-ADOPT-GITIGNORE-DIRTY, status:valid, keywords:"adopted_repo_shows_M_gitignore synthetic_test_repo_missed_it real_cloned_repo_tracks_gitignore live_dummy_adoption_rehearsal import_path_change_verification", ocd:2026-07-08, lmd:2026-07-08] The original WS1 design wrote the managed block to
   `.gitignore`; the live dummy adoption of a real plugin repo immediately showed
   ` M .gitignore` because real repos track that file. Lesson: unit tests with synthetic
   repos missed it (they never tracked `.gitignore`); a live rehearsal against a REAL

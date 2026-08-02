@@ -6,3 +6,4 @@ index at .memgrep/index.db). To use project memory:
   (prints <project>-overview.md: the overview that links out to the deeper pages)
 - RECALL by symptom:  memgrep recall "<symptom>" <memdir>   (or: memgrep find …)
 Protocol: ~/.claude/rules/markdown-memory-recall.md
+- [wikimem — project overview](ai-maestro-overview.md) — the curated wiki that coexists with this file; recall by symptom: `memgrep recall "<symptom>" <memdir>`

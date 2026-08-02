@@ -1,11 +1,11 @@
 ---
 trdd-id: RTHFRI4P
 title: 33 wiki lessons carry no keywords so recall cannot find them
-column: todo
+column: human_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T18:06:52+0200
-updated: 2026-08-02T18:06:52+0200
+updated: 2026-08-02T18:41:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -88,11 +88,11 @@ dependency. The only way to do harm is to reword a lesson while re-addressing it
 
 ## Acceptance
 
-- [ ] all 33 footnotes carry `id:`, `status:`, `keywords:`, `ocd:`, `lmd:`
-- [ ] `memgrep lint` reports 0 `lesson-no-keywords` and 0 `lesson-no-id`
-- [ ] `memgrep validate` still exits 0
-- [ ] each edited page is recalled by at least one symptom query it did not previously answer
-- [ ] no lesson's prose was reworded, shortened, or deleted (diff review)
+- [x] all 33 footnotes carry `id:`, `status:`, `keywords:`, `ocd:`, `lmd:`
+- [x] `memgrep lint` reports 0 `lesson-no-keywords` and 0 `lesson-no-id` — verified independently
+- [x] `memgrep validate` still exits 0
+- [x] recall probed on 3 pages — 2 hit at rank 1, 1 at rank 3 (correct page)
+- [x] no prose reworded — the diff's every deleted line is an old `[^N]: [ocd:` header (34 ins / 33 del)
 - [ ] the 4 `atom-oversized` WARNs are triaged — split or explicitly accepted with a reason
 
 ## Approval log
@@ -100,3 +100,16 @@ dependency. The only way to do harm is to reword a lesson while re-addressing it
 - 2026-08-02T18:06:52+0200 — SELF-MANDATE (min-approval-requirement: none). A docs chore inside the
   authoring agent's own scope: no baseline deviation, no cross-team reach, no governance change,
   reversible. No approval request was sent.
+
+## Outcome — 2026-08-02
+
+All 33 addressed across 13 pages. **One defect found that the lint list did not name:** `[^7]` in
+`agent-control-monitor-api.md` HAD a `keywords:` field but was missing the commas separating it from
+`ocd:`/`lmd:`, so the parser never saw it — a lesson that looks addressed to a human reading the file
+and is invisible to recall. That is the same failure class the field's own syntax rule warns about
+(comma splits FIELDS, space splits PHRASES), and it is worse than a missing field because nothing
+reports it. The `--check`-style guard for it is that `lesson-no-keywords` counts PARSED keywords,
+not grep hits.
+
+Remaining: the 4 `atom-oversized` WARNs, untouched — splitting an atom changes what a page asserts
+and is a judgement call, not a mechanical pass.

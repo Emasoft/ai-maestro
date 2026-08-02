@@ -49,7 +49,7 @@ tree — file an issue or a PR).
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-13 lmd:2026-07-13] This page first said **"Claude Code 2.1.207 cannot
+[^1]: [id:ATOM-GIT-TAG-PREFIX-NOT-VENDOR-BUG, status:valid, keywords:"no_git_tag_satisfying_range false_upstream_bug_conclusion complete_matrix_wrong_axes tag_name_prefix_plugin-name--v read_vendor_spec_before_blaming_vendor", ocd:2026-07-13, lmd:2026-07-13] This page first said **"Claude Code 2.1.207 cannot
   resolve ANY versioned plugin dependency — it is an upstream bug"**, and I filed 8 issues
   prescribing "drop the version pin". Both were WRONG, and I retracted them. The WHY is
   worth more than the fact: I ran what *looked* like an exhaustive elimination — varying
@@ -63,7 +63,7 @@ tree — file an issue or a PR).
   is broken** — especially when the feature is recent (this one landed in CC 2.1.110) and
   our packaging predates it. The USER caught it with one instruction: "read the specs".
 
-[^2]: [ocd:2026-07-13 lmd:2026-07-13] Second-order lesson, from the same episode: I filed
+[^2]: [id:ATOM-CROSS-REPO-ISSUES-BEFORE-VERIFY, status:valid, keywords:"filed_public_issues_before_verifying cross_repo_issue_higher_bar_than_local_commit wrong_prescription_could_mislead_other_claudes verify_authoritative_source_first retraction_costs_more_than_delay", ocd:2026-07-13, lmd:2026-07-13] Second-order lesson, from the same episode: I filed
   8 public issues on other repos *before* checking the spec, and their Claudes could have
   acted on a wrong prescription. Cross-repo issues are an outward-facing, hard-to-recall
   action — the bar for "am I sure?" is higher than for a local commit. Verify against the

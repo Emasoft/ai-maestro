@@ -58,14 +58,14 @@ the one HIGH finding out of 1107 changelog entries). See also [[folder-adoption-
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-08 lmd:2026-07-08] First instinct was to block whenever the counter
+[^1]: [id:ATOM-SUBAGENT-COUNTER-ONE-DIRECTION-TRUST, status:valid, keywords:"subagent_counter_untrustworthy_low_direction fail_safe_would_wedge_restart_forever gate_only_on_trusted_direction abandon_dialog_backstop restart_stop_504_times_out", ocd:2026-07-08, lmd:2026-07-08] First instinct was to block whenever the counter
   wasn't provably 0 ("fail safe"). Wrong here: the counter is structurally untrustworthy
   in the LOW direction (plugin#17), so "fail safe" would mean permanently wedging
   stop/restart on data that can never prove safety. When a signal can only be trusted in
   ONE direction, gate only on that direction and put a backstop (the abandon-dialog probe)
   behind the undetectable case.
 
-[^2]: [ocd:2026-07-08 lmd:2026-07-08] Replace-not-merge state writes destroyed a field
+[^2]: [id:ATOM-REPLACE-NOT-MERGE-STATE-WRITE, status:valid, keywords:"replace_not_merge_destroyed_field_thrice writeState_hook_dropped_fields setActivity_replace_bug spread_prev_key_before_writing keyed_map_partial_object_overwrite", ocd:2026-07-08, lmd:2026-07-08] Replace-not-merge state writes destroyed a field
   THREE independent times in this one saga: the hook's writeState (plugin#17), the WS
   handler's setActivity replace, and nearly the fix itself. Lesson: any per-key state
   update that spreads a NEW object over a keyed map must start from `...prev[key]` unless

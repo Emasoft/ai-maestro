@@ -105,14 +105,14 @@ is the most dangerous, and it is the same shape as the `agent_policy_undefined` 
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-14 lmd:2026-07-14] All four holes above surfaced from **stopping and
+[^1]: [id:ATOM-RESTART-SURFACED-AUTH-HOLES, status:valid, keywords:"bugs_found_just_by_restarting_server authorization_layer_never_exercised happy_path_success_is_camouflage assume_unverified_not_working power_switch_found_defects", ocd:2026-07-14, lmd:2026-07-14] All four holes above surfaced from **stopping and
   restarting the server** — nobody was using ai-maestro, no feature was under test. Touching
   the power switch was enough. The lesson is not "we found bugs"; it is that the defects sat in
   the authorization layer, where nothing exercises them, and the system's own success was the
   camouflage. When a subsystem's correctness is only ever observed through its happy path,
   assume it is unverified rather than working.
 
-[^2]: [ocd:2026-07-14 lmd:2026-07-14] I filed `TRDD-F1SL03CK` saying its blocking question —
+[^2]: [id:ATOM-COS-CREATE-AGENT-ALREADY-ANSWERED, status:valid, keywords:"declared_question_unanswerable_when_answered filed_TRDD_asking_manager_to_settle grep_governance_rules_before_asking R30.2_COS_can_create_agent reasoned_instead_of_reading", ocd:2026-07-14, lmd:2026-07-14] I filed `TRDD-F1SL03CK` saying its blocking question —
   *"does a COS ever create an agent in normal team operation?"* — was one I could not answer and
   that the MANAGER could settle "in one query". **R30.2 already answered it: yes.** The answer
   was written by the USER, in the repo, in the rules file the TRDD itself cites. I reasoned about

@@ -3,7 +3,7 @@ trdd-id: JT3U4ZVM
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
 column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-07-13T12:05:00+0200
+updated: 2026-08-02T15:55:24+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -107,6 +107,25 @@ because an already-installed copy keeps working. Filed as claude-menu-system#2 /
     it throws away the breaking-change protection the pin exists for.
   - ✗ "`v`-prefixed vs bare tags" and "`url` vs `github` source type" — both were dead
     ends; neither is the variable that matters. The variable is the tag NAME PREFIX.
+
+## ⏱ VERIFIED 2026-08-02 — every external item is CLOSED, and the durability half SHIPPED
+
+This card's STATE calls PR `ai-maestro-plugin#25` *"the single highest-value open item in the whole
+ecosystem … one click"*, and warns that without it **"v2.8.1 ships without the resolver tag and the
+entire fleet breaks again at the next version bump"**. Checked live today:
+
+| item | state | evidence |
+|---|---|---|
+| `ai-maestro-plugin#25` (the durability PR) | **landed** | CLOSED 2026-07-13T19:07 — *not* abandoned. Its 4 commits were **rebased onto `main`** and shipped in **v2.9.0** (`2394013`), because that repo's `.githooks/pre-push` refuses any push whose ancestry is not `publish.py`, so a feature branch's CI can never be greened from a normal clone. Merging it "properly" would have required the bypass the hook exists to prevent |
+| the tag step is DURABLE | **yes** | `scripts/publish.py:1618` in that repo today: `dep_tag = f"{plugin_name}--v{new_ver}"` |
+| the feared regression | **did not happen** | tags exist for `--v2.9.0`, `--v2.10.0`, `--v2.11.0`; latest release is **v2.11.0** (2026-07-26). Three releases past the rescue, each carrying its own resolver tag |
+| `ai-maestro-plugin#24` (backfill) | CLOSED | |
+| `claude-menu-system#2` / `CPV#163` (the swept fleet exposure) | CLOSED | `claude-menu-system--v0.2.0/0.2.1/0.2.2` now exist — CPV is installable from clean again |
+
+**So the card has sat at `ai_review` for 20 days with every one of its external items already
+resolved.** That is the third card in this same column found parked on stale external state
+(cf. [[O8NCNRWO]] ← `ai-maestro-plugin#17`, closed 17 days before anyone looked). Nothing
+re-checks an external blocker — see the sweep on [[5YRLA53W]].
 
 ## ⏵ CI STATE of PR ai-maestro-plugin#25 (branch `fix/dependency-resolution-tag`) — GREEN 2026-07-13 07:35
 
@@ -252,6 +271,35 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
 - 2026-07-13T06:15:10+0200 — **MANDATE** (Tier 0 authoring: an investigation TRDD in this
   repo's own design corpus; the code fix is delivered as issues on the plugin repos, per
   the cross-project rule). Root cause established empirically before authoring.
+
+## Acceptance
+
+Transcribed from this card's own STATE — its DONE list, its residual, and its NEXT ACTION. Every
+external item re-verified live on 2026-08-02 (see the VERIFIED block above), not taken from the
+card's own record of them.
+
+- [x] root cause proven and CORRECTED — the resolver wants `{plugin-name}--v{version}`; our tags
+      were `v2.8.0`. Not an upstream bug: a spec requirement never met
+- [x] verified for OUR hub-and-spoke layout — the tag must live on the plugin's OWN repo, not the
+      marketplace's. Proven on a synthetic marketplace by flipping one variable at a time
+- [x] the rescue: `ai-maestro-plugin--v2.8.0` → `c0cf169` pushed (USER-authorized), and the exact
+      call that had been failing for every agent now succeeds with its dependency auto-installed
+- [x] independently confirmed in a REAL agent workdir, not a scratch install — `~/agents/jack-bot`
+      via `claude plugin list --json` (the ground truth, never `settings.local.json`)
+- [x] the 8 role-plugin issues corrected and retitled — their pins STAY; the ask is the same tag
+      step in their own pipelines
+- [x] fleet exposure swept beyond our own repos — `claude-menu-system#2` / `CPV#163` filed, both
+      now CLOSED with the tags published
+- [x] **the DURABILITY half** — `ai-maestro-plugin` PR #25 landed in **v2.9.0** by rebase onto
+      `main` (the repo's own sanctioned release path; the merge button could not be used without
+      bypassing its pre-push hook). The tag step is in that repo's `publish.py` today, and three
+      subsequent releases each carry their resolver tag. **The regression this card feared did not
+      happen**
+- [ ] the card's own NEXT ACTION: stand up a MANAGER + one MAINTAINER **through the dashboard** and
+      watch ChangeTitle G15/G16 report `installed` rather than `WARN — Failed to install`. The
+      OUTCOME is confirmed (jack-bot carries the plugin, dependency resolved, pane on Claude 2.1.207
+      rather than a fallen-back `zsh`) but the pipeline observation itself was never recorded, and
+      that is what this box asks for
 
 ## Notes — the investigation's own post-mortem
 

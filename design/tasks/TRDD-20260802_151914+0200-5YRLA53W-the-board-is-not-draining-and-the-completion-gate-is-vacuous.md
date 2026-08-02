@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T15:50:40+0200
+updated: 2026-08-02T15:56:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -235,6 +235,24 @@ for f in design/tasks/*.md design/proposals/*.md; do
 |---|---|---|
 | `ai-maestro-plugin#17` | 2026-07-16, plugin v2.10.0 | **[[O8NCNRWO]] sat at `ai_review` for 17 days after its one remaining item became runnable.** Its own text said the e2e was *"observable only after the hook stops dropping the counter"* — it has been observable since |
 | `ai-maestro-janitor#137` | — | cited by [[AQTGAY60]] as downstream-impact CONTEXT, not as a blocker. Nothing unblocked; noted so the next reader does not re-check it |
+
+**⚠ THE SWEEP ITSELF WAS INCOMPLETE, by exactly the mechanism it was documenting.** It grepped
+`external-refs:` for the substring `issues/` — and [[JT3U4ZVM]], the card with **twelve** external
+refs and by far the most externally-dependent on the board, writes them as
+`gh:Emasoft/ai-maestro-plugin#24`. No `issues/`, so the sweep reported it as having none. Found only
+because it was the next card in the checklist backfill. There are at least four spellings in use
+(`github.com/…/issues/N`, `https://github.com/…/issues/N`, `gh:owner/repo#N`, and a bare repo URL),
+so **enumerate the spellings before declaring an absence** — a needle keyed on one shape reports a
+confident clean about a set it never scanned.
+
+Re-checked with that spelling, JT3U4ZVM is the **third** instance in this same column:
+
+| card | its own claim | measured 2026-08-02 |
+|---|---|---|
+| [[JT3U4ZVM]] | PR `ai-maestro-plugin#25` is *"the single highest-value open item in the whole ecosystem … one click"*, and without it *"the entire fleet breaks again at the next version bump"* | **landed 20 days ago** — rebased onto `main` and shipped in v2.9.0, the tag step is durably in that repo's `publish.py`, and three releases since each carry their resolver tag. All 4 of its other external items (`#24`, `cms#2`, `CPV#163`) are CLOSED too |
+
+**Three of the four `ai_review` cards were parked on external state that had already resolved.**
+That is no longer an anecdote; it is the column's dominant failure mode.
 
 **The systemic finding, which is worth more than the two moves.** Nothing ever re-checks an external
 blocker. A `blocked-by:` naming a TRDD is re-evaluated on every lint — `trdd-graph` reports a

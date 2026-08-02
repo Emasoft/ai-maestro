@@ -2,11 +2,12 @@
 name: governance-password-invalidation
 description: "how does the user rotate / revoke / reset the governance password / forgot password / password leaked, must change it / next login asks to create a new password / why is a route denied only from my phone but works on the Mac (console_required 403) / how does a route know the real client IP / x-forwarded-for spoof / server crashed at boot 'does not provide an export named' after adding a lib import to server.mjs — the invalidate-by-possession + console-presence design (TRDD-P7XKV3N9)"
 ocd: 2026-07-13
-lmd: 2026-07-30
+lmd: 2026-08-02
 metadata:
   node_type: memory
   type: project
   tier: component
+  topic: security-and-auth
   functionality: security
   globs: ["app/api/governance/password/invalidate/route.ts", "lib/peer-address.mjs", "lib/governance.ts", "lib/setup-bootstrap.ts", "server.mjs"]
 ---
@@ -51,13 +52,16 @@ returns `passwordInvalidatedAt` so the UI can say WHY it is asking (a forced
 revocation and a fresh install both present as "no password", and "welcome, pick a
 password" is the wrong thing to say to someone whose credential was just revoked).
 
-**Scope of the console gate — TWO operations, nothing else.** `isConsolePeer()`
-gates MAESTRO login and MAESTRO password-change ONLY. Every other route stays
-usable from any device on the Tailscale VPN, because remote work from a phone is a
-feature. The gate is a *presence* factor, NOT a general authorization signal — do
-not apply the loopback check to other routes or you break remote admin. And the
-security work is done by the **code (the PIN), not the IP**: the IP just decides
-whether a code is issued at all.
+**Scope of the console gate — read the census at its source, never here.** The
+authoritative, categorised list of `isConsolePeer()` callers lives in
+`lib/peer-address.mjs`'s own docstring, beside the function. **Do not restate it on this
+page** — that is precisely what drifted.[^3]
+
+What is stable and belongs here: the gate is a *presence* factor, **not** a general
+authorization signal. Every other route stays usable from any device on the Tailscale VPN,
+because remote work from a phone is a feature — do not copy the loopback check to a new route
+without the same deliberate ruling. And the security work is done by the **code (the PIN), not
+the IP**: the IP only decides whether a code is issued at all.
 
 **Two surfaces, zero policy in them** — the settings-page **Revoke** button
 (`components/governance/RevokePasswordDialog.tsx`) and the CLI verb
@@ -66,14 +70,14 @@ POST and render what the endpoint says. Every gate lives in the endpoint, becaus
 **every route is curl-able**: a check placed in a client is skippable with one
 curl, so it is not a weak check, it is no check.
 
-**Governs / see also:** the project's security model and network perimeter — CLAUDE.md
-§ *Network Security Model*, plus `lib/tailscale-detect.mjs` (`isAllowedSource`) and
+**Governs / see also:** the project's security model and network perimeter —
+[[network-security-tailscale-bind]], plus `lib/tailscale-detect.mjs` (`isAllowedSource`) and
 `lib/peer-address.mjs`, which are the perimeter + trusted-peer plumbing this page's
-console gate rides on — and the still-open successor
-**TRDD-9MZQ4T7E** (the general TTY→sudo-token path for OTHER strict routes — this
-endpoint sidestepped it by self-authenticating). MAESTRO *login* is not yet
-console-gated: §2b binds the rule to two operations and only the password-change
-half is built.
+console gate rides on — and the still-open successor **TRDD-9MZQ4T7E** (the general
+TTY→sudo-token path for OTHER strict routes — this endpoint sidestepped it by
+self-authenticating). **MAESTRO login is NOT console-gated** (`app/api/auth/login/route.ts`
+contains no `isConsolePeer` call): §2b scoped the rule to two operations and only the
+password-change half was ever built.
 
 ## See also
 
@@ -113,3 +117,20 @@ half is built.
   evidence; "but tsx runs it" was a guess that took the server down. ALWAYS restart
   pm2 and curl a route after touching `server.mjs`'s imports — a green `tsc` does not
   prove the server boots.
+
+[^3]: [id:ATOM-CONSOLE-CENSUS, status:valid, keywords:"console gate gates exactly two operations isConsolePeer callers miscounted maestro login console-gated", ocd:2026-08-02, lmd:2026-08-02]
+  DO NOT state how many operations the console gate binds anywhere but beside
+  `isConsolePeer()` itself, BECAUSE this page asserted **"TWO operations, nothing else …
+  gates MAESTRO login and MAESTRO password-change ONLY"** and both halves were false:
+  `grep -rn isConsolePeer app lib` finds **five** call sites (`settings/edit`,
+  `statusline/ingest`, `password/reset`, `password/invalidate`,
+  `oauth-rotator/reauth-guard`) and **`app/api/auth/login/route.ts` contains none** — the
+  one operation the sentence named first is the one that never had the gate. The page even
+  contradicted itself, saying "MAESTRO login is not yet console-gated" fifteen lines lower.
+  ROOT CAUSE: a count copied out of the spec (§2b) and then never re-derived while the code
+  grew, in a second location that nothing checks. `lib/peer-address.mjs`'s docstring had
+  ALREADY been corrected for exactly this and says so in its own words — *"previously read
+  'it gates exactly two operations … and nothing else', which had been false since the third
+  caller landed. A comment that miscounts its own callers is worse than none"* — so the
+  correction existed and this copy never received it. DO link to the source and re-derive
+  with a grep. Corrected 2026-08-02.

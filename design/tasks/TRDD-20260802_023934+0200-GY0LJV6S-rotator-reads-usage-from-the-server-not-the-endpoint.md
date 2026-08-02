@@ -1,11 +1,12 @@
 ---
 trdd-id: GY0LJV6S
 title: The rotator takes the live account's usage from the ai-maestro API, fed by the statusline hook
-column: todo
+column: blocked
+pre-block-column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T10:52:00+0200
+updated: 2026-08-02T11:05:30+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -19,9 +20,9 @@ approval-datetime: 2026-08-02T02:39:34+0200
 severity: critical
 effort: medium
 relevant-rules: [R16]
-npt: [D8OYFG35]
+npt: [D8OYFG35, SIV45HOG]
 eht: []
-blocked-by: []
+blocked-by: [SIV45HOG]
 release-via: none
 labels: [oauth, rotator, statusline, continuity, incident-followup]
 ---
@@ -46,12 +47,33 @@ it would have stalled this card behind a human, not behind an artifact.
 running server still 404s the statusline routes until `yarn build` + restart. Verify by EFFECT
 (POST and read it back), never by `git log`.
 
-**NEXT ACTION:** wire `tick.ts:422` to the ingest-fed read (seam table below), honouring the two
-traps this card already records: the payload carries **no account identity** (stamp `live_fp` at
-ingest and reject reports whose stamp ≠ the live fingerprint, or a post-switch loop burns every
-account), and the statusline speaks **only** for the live account. For CANDIDATE headroom read the
-CORRECTION section below first — `agentlenspro get_account_status --all` now covers the non-live
-accounts and the old "only the endpoint can" claim is retired.
+**⛔ RE-BLOCKED 2026-08-02 11:05 on [[SIV45HOG]] — DO NOT WIRE `tick.ts:422` YET.**
+
+The 10:52 unblock above was right about D8OYFG35 and wrong about this card being startable. Checking
+the precondition instead of assuming it: the ingest **does not stamp an account identity** —
+measured, not inferred:
+
+| check | result |
+|---|---|
+| `grep -rn 'live_fp\|liveFp\|fingerprint'` over `lib/statusline-*.ts`, `types/statusline.ts`, `app/api/statusline/` | **0 hits** |
+| `grep -rn 'accountId\|liveEmail\|liveAccount'` over the store + routes | **0 hits** |
+| the same grep over D8OYFG35's own card | **0 hits — it was never in its scope** |
+
+`StatuslineSnapshot` is `{ sessionId, capturedAt, source, rateLimits, session, context, cost }`.
+There is nowhere for an identity to live. So wiring `:422` today would do **precisely** what the
+"payload carries NO account identity" section below warns about: after a switch, reports still
+arriving from sessions on the OLD credential get attributed to the NEW live account, the rotator
+reads ~98 % on a fresh account and rotates straight back out — **a loop that burns every remaining
+account in minutes, unattended, while the log reads like healthy rotation.**
+
+Not a defect in D8OYFG35 (every box it owns is delivered) — a prerequisite nobody owned, now filed as
+the NPT [[SIV45HOG]].
+
+**NEXT ACTION:** implement [[SIV45HOG]] (stamp at ingest + `last_switch_at` + reject-don't-repair,
+reusing the rotator's EXISTING fingerprint resolver rather than writing a second one). Only then wire
+`:422` per the seam table below. For CANDIDATE headroom read the CORRECTION section first —
+`agentlenspro get_account_status --all` now covers the non-live accounts and the old "only the
+endpoint can" claim is retired.
 
 ## The incident this comes from (2026-08-02, ~02:26)
 

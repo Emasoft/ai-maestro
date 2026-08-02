@@ -47,12 +47,20 @@ MCP server. That rule has no element-level exception, including the core plugin.
 
 ---
 
-## 2. Tier A — the frozen skill-facing CLI (44 scripts)
+## 2. Tier A — the frozen skill-facing CLI (46 scripts)
 
-### 2.1 `aimaestro-*` — the server surface (8)
+### 2.1 `aimaestro-*` — the server surface (11)
 
-Everything that touches the AI Maestro API goes through one of these eight. They all
-accept `help`, all read `AID_AUTH` / `AIMAESTRO_SUDO_TOKEN` / `AIMAESTRO_API_BASE` (§6).
+Everything that touches the AI Maestro API goes through one of these eleven. They all
+accept `help`, and every one that talks to the server reads `AID_AUTH` /
+`AIMAESTRO_SUDO_TOKEN` / `AIMAESTRO_API_BASE` (§6).
+
+> The subheading read `(8)` while NINE were documented below it — stale by one since
+> whichever entry was added without bumping it. Both counts here are now measured
+> (`grep -c '^#### \`aimaestro-'` in this section), and the totals reconcile:
+> 11 + 28 + 6 + 1 = 46. Separately, `scripts/aimaestro-settings.sh` exists in the repo
+> and is documented in NO tier — a pre-existing gap, left as found rather than
+> classified in passing.
 
 #### `aimaestro-agent.sh <command> [options]` — agent lifecycle
 
@@ -231,6 +239,35 @@ plugin; it must not `fetch` the API.)
 | `activity --cwd <dir>` | `--status S` `--hook-status H` `--notification-type idle_prompt\|permission_prompt\|elicitation_dialog` `--subagent-count N` `--error-type E` `--end-reason R` |
 | `notify --cwd <dir> --message <text>` | — |
 | `check-messages --cwd <dir>` | `--json` |
+
+#### `aimaestro-statusline.sh <command> [flags]` — the statusline observation feed (TRDD-D8OYFG35)
+
+The **only** thing that knows the `/api/statusline/*` endpoints. Claude Code hands its
+`statusLine` command a payload that already carries the 5-hour and 7-day rate-limit
+windows, computed locally at **zero API cost**; this is how that number reaches the fleet
+instead of being thrown away.
+
+| Subcommand | Flags | Notes |
+|---|---|---|
+| `ingest` | `--file PATH` | payload on stdin, or from PATH. Needs **no** credential — the route is console-only |
+| `get <sessionId>` | — | that session's last observation + its age |
+| `list` | — | fleet roll-up: the TIGHTEST 5h/7d window across live sessions |
+
+`resets_at` is normalised to **epoch milliseconds** at the server boundary, from either
+wire format (this feed sends epoch seconds; `/api/oauth/usage` sends ISO 8601).
+The model-scoped weekly windows, `severity` and `is_active` are **not** in this feed and
+remain endpoint-only.
+
+#### `aimaestro-statusline-capture.sh [--] <inner command…>` — the statusline wrapper
+
+A PASS-THROUGH, not a replacement: Claude Code supports exactly one `statusLine` command,
+so "capture in addition" means wrapping. Reads stdin once, forks
+`aimaestro-statusline.sh ingest` **detached**, and hands the identical bytes to the inner
+command — relaying its stdout byte-for-byte and its exit code unchanged. Never writes to
+stdout itself; fails soft when the server is down, slow, or absent.
+
+Env: `AIMAESTRO_STATUSLINE_CLI` (override the ingest CLI path),
+`AIMAESTRO_STATUSLINE_DEBUG` (diagnostics to stderr).
 
 ---
 

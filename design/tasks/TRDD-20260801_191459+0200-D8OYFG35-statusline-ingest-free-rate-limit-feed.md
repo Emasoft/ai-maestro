@@ -1,9 +1,9 @@
 ---
 trdd-id: D8OYFG35
 title: Statusline ingest — take the 5h/7d windows from Claude Code's own feed at zero API cost
-column: todo
+column: human_review
 created: 2026-08-01T19:14:59+0200
-updated: 2026-08-01T19:14:59+0200
+updated: 2026-08-02T06:21:18+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 created-by: ai-maestro-dev
@@ -25,7 +25,43 @@ blocked-by: []
 
 # Statusline ingest — take the 5h/7d windows from Claude Code's own feed at zero API cost
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-01
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-02
+
+**STEPS 1-6 ARE BUILT, TESTED AND COMMITTED. STEP 7 IS THE USER'S AND IS THE ONLY THING LEFT.**
+
+Nothing is live yet: the pipeline exists end to end and NOTHING CALLS IT until the USER adds one
+line to `~/.claude/settings.json` (below). That file was deliberately not touched.
+
+**NEXT ACTION — the USER pastes this, replacing the `statusLine.command` value.** The current value
+is `agentlenspro statusline --inner '<python> ~/.claude/statusline.py'`; the wrapper takes the whole
+existing command as its arguments, so nothing about the bar changes:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "~/.local/bin/aimaestro-statusline-capture.sh agentlenspro statusline --inner '/Users/<you>/Code/llm-externalizer/llm-externalizer-plugin/.venv/bin/python3 /Users/<you>/.claude/statusline.py'",
+  "refreshInterval": 3
+}
+```
+
+`~/.local/bin/aimaestro-statusline-capture.sh` appears after the next `./install-messaging.sh`
+(the `scripts/*.sh` glob picks both new scripts up; no installer edit was needed). Until then the
+in-repo path `scripts/aimaestro-statusline-capture.sh` works identically.
+
+**Also needs a `yarn build` + restart before the routes answer** — `app/` is bundled into `.next`,
+so the running server still 404s `/api/statusline/*` until it is rebuilt.
+
+**DEVIATION FROM THE PLAN, deliberate:** the wrapper lives at
+`scripts/aimaestro-statusline-capture.sh` → `~/.local/bin/`, NOT at `~/.claude/statusline-capture.sh`
+as step 1 said. It is repo-canonical, git-tracked, installed by the existing glob, and it keeps the
+whole feature inside one repo — and `~/.claude/` is the USER's directory, which this work was not
+to write into.
+
+**SUPERSEDED — do NOT carry forward:** nothing. The plan held; only the wrapper's path moved.
+
+---
+
+## ⏵ Original STATE — 2026-08-01
 
 USER directive: *"lets use the internal statusline api then. its 300ms, but its already cached and
 all. You only need to create an hook script that capture all values. It must be in addition of the
@@ -145,16 +181,31 @@ gated on the USER.
 
 ## Acceptance
 
-- [ ] wrapper passes `statusline.py`'s stdout/exit code through byte-identically
-- [ ] capture is detached; wrapper returns well inside 300 ms even when the target hangs
-- [ ] wrapper is fail-soft with the server down
-- [ ] `scripts/aimaestro-statusline.sh` is the only thing that knows the endpoint
-- [ ] `POST /api/statusline/ingest` + `GET /api/statusline/:sessionId`, localhost-only
-- [ ] state written through `lib/json-io.ts`, under `~/.aimaestro/statusline-state/`
-- [ ] `resets_at` normalized to epoch ms at the boundary, both input formats pinned by test
-- [ ] our own payload type, with a `source` field distinguishing feed-fed from endpoint-fed
-      windows; ZERO agentlens coupling
-- [ ] `~/.claude/settings.json` flipped **only after the USER agrees**
+- [x] wrapper passes the inner command's stdout/exit code through byte-identically
+      — `statusline-capture-wrapper.test.ts`, Buffer equality against an un-wrapped run, over three
+      inputs (trailing newline / none / multibyte + ANSI). Exit codes 0, 3 and 127 all relayed.
+- [x] capture is detached; wrapper returns well inside 300 ms even when the target hangs
+      — measured 47 ms mean over 10 runs against an ingest that blocks 5 s (floor: ~41 ms of pure
+      `bash` startup). Neuter: drop the `&` → the test reads 5429 ms and reddens.
+- [x] wrapper is fail-soft with the server down — CLI absent / erroring / hanging / chattering, and
+      an unwritable temp dir: the bar renders in every case and the exit code stays the inner's.
+- [x] `scripts/aimaestro-statusline.sh` is the only thing that knows the endpoint
+      — the wrapper names no URL; it forks the CLI. Pinned by `statusline-cli.test.ts` against a
+      real ephemeral-port server, including the true end-to-end wrapper → CLI → HTTP.
+- [x] `POST /api/statusline/ingest` + `GET /api/statusline/:sessionId`, localhost-only
+      — plus `GET /api/statusline` (fleet roll-up). Ingest is `isConsolePeer`-gated; a forged
+      `x-forwarded-for` does not move it. The READS are authenticated but NOT console-gated, so
+      remote work from a phone still sees the fleet.
+- [x] state written through `lib/json-io.ts`, under `~/.aimaestro/statusline-state/`
+      — `updateJson` + `{createIfMissing:true}`, mutating in place. All 7 top-level keys written
+      every time, so the key-loss tripwire can never fire on a session that sheds a field.
+- [x] `resets_at` normalized to epoch ms at the boundary, both input formats pinned by test
+      — epoch seconds AND ISO 8601 asserted to land on the SAME instant, at the normaliser and
+      again through the route.
+- [x] our own payload type (`types/statusline.ts`), with `source` on each WINDOW as well as the
+      record; ZERO agentlens coupling — nothing imports or names any agentlens symbol.
+- [ ] `~/.claude/settings.json` flipped **only after the USER agrees** — NOT DONE, by design. The
+      exact line is in the STATE block above. This is the only step left.
 
 ## Approval log
 

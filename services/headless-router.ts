@@ -566,10 +566,20 @@ function getHeader(req: IncomingMessage, name: string): string | null {
  * these and therefore always 401'd; forwarding them is what makes the
  * delegated handler authenticate the REAL caller instead of a credential-less
  * fake request. Only credential headers are forwarded — nothing else.
+ *
+ * `x-aim-peer` rides along for the same reason and with the same safety
+ * (TRDD-D8OYFG35). It is a TRUSTED header, not a client-supplied one: `server.mjs`
+ * DELETES any inbound copy and re-stamps it from `req.socket.remoteAddress`
+ * before the router ever sees the request, in BOTH modes (the stamp lives in the
+ * shared `startServer`). So the value forwarded here can only be the one the
+ * socket produced. Without it, a delegated console-gated handler
+ * (`isConsolePeer`) sees no peer, fails closed, and answers 403 in headless mode
+ * to a caller standing at the machine — the gate would be forked in the exact
+ * way `delegateNextRoute` exists to prevent.
  */
 function forwardAuthHeaders(req: IncomingMessage, extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {}
-  for (const name of ['authorization', 'cookie', 'x-agent-id', 'x-sudo-token']) {
+  for (const name of ['authorization', 'cookie', 'x-agent-id', 'x-sudo-token', 'x-aim-peer']) {
     const v = getHeader(req, name)
     if (v !== null) headers[name] = v
   }
@@ -583,10 +593,18 @@ function forwardAuthHeaders(req: IncomingMessage, extra?: Record<string, string>
  * so the context is typed to that rather than a `Record<string, string>` — which
  * would not overlap with the handlers' own `{ id: string }` and force an
  * `unknown` cast that erases the mismatch instead of surfacing it.
+ *
+ * The parameter `P` (TRDD-D8OYFG35) defaults to `{ id: string }`, so every existing
+ * call site is unchanged, and it is NOT a widening to `Record<string, string>`: `P`
+ * is INFERRED from the handler being delegated to, so a route whose segment is named
+ * something else (`/api/statusline/[sessionId]`) gets its own exact shape and handing
+ * it the wrong param key is still a compile error. The property the paragraph above
+ * asks for — the mismatch surfaces instead of being cast away — is preserved per call
+ * site rather than by pinning the whole file to one segment name.
  */
-type NextRouteHandler = (
+type NextRouteHandler<P extends Record<string, string> = { id: string }> = (
   request: never,
-  context?: { params: Promise<{ id: string }> },
+  context?: { params: Promise<P> },
 ) => Promise<Response>
 
 /**
@@ -612,12 +630,12 @@ type NextRouteHandler = (
  * its `status` (not `statusCode`) to a 500. Forwarding verbatim lets each
  * handler's own JSON handling produce the same answer it does in full mode.
  */
-async function delegateNextRoute(
+async function delegateNextRoute<P extends Record<string, string> = { id: string }>(
   req: IncomingMessage,
   res: ServerResponse,
-  handler: NextRouteHandler,
+  handler: NextRouteHandler<P>,
   pathname: string,
-  opts: { method: string; params?: { id: string }; withBody?: boolean },
+  opts: { method: string; params?: P; withBody?: boolean },
 ): Promise<void> {
   const { NextRequest } = await import('next/server')
   const rawUrl = req.url || ''
@@ -4166,6 +4184,32 @@ const routes: Route[] = [
     })
   }},
 
+  // ── Statusline observation feed (TRDD-D8OYFG35) ────────────────────────────
+  // All three delegate for the same reason the TRDD block below does: the ingest
+  // gate is `isConsolePeer`, and a re-implementation here would be a SECOND copy
+  // of a security decision. `x-aim-peer` is forwarded (see forwardAuthHeaders),
+  // so the delegated handler judges the real socket peer, not a blank one.
+  //
+  // The static `/api/statusline` roll-up is registered BEFORE the parameterized
+  // form on purpose — matchRoute takes the FIRST match, and while `([^/]+)`
+  // cannot swallow a path with no segment, keeping the two adjacent and ordered
+  // is what stops a later `/api/statusline/<something>` addition from doing so.
+  { method: 'GET', pattern: /^\/api\/statusline$/, paramNames: [], handler: async (req, res) => {
+    const mod = await import('@/app/api/statusline/route')
+    await delegateNextRoute(req, res, mod.GET as NextRouteHandler, '/api/statusline', { method: 'GET' })
+  }},
+  { method: 'POST', pattern: /^\/api\/statusline\/ingest$/, paramNames: [], handler: async (req, res) => {
+    const mod = await import('@/app/api/statusline/ingest/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler, '/api/statusline/ingest',
+      { method: 'POST', withBody: true })
+  }},
+  { method: 'GET', pattern: /^\/api\/statusline\/([^/]+)$/, paramNames: ['sessionId'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/statusline/[sessionId]/route')
+    await delegateNextRoute<{ sessionId: string }>(req, res, mod.GET as NextRouteHandler<{ sessionId: string }>,
+      `/api/statusline/${encodeURIComponent(params.sessionId)}`,
+      { method: 'GET', params: { sessionId: params.sessionId } })
+  }},
+
   // ── TRDD / 3-pillars task API (TRDD-KJQZEYXW) ──────────────────────────────
   // Every handler delegates to its Next.js twin so the strict routes' sudo gate
   // runs in headless mode too — see delegateNextRoute for why re-implementation is not
@@ -4280,6 +4324,14 @@ const HEADLESS_AUTH_WHITELIST: ReadonlyArray<RegExp> = [
   // (mirrors middleware.ts WHITELIST). Returns only a random single-use nonce;
   // the real auth is the Ed25519 proof at /api/v1/auth/token.
   /^\/api\/v1\/auth\/challenge\/?$/,
+  // Statusline INGEST (TRDD-D8OYFG35) — mirrors middleware.ts's WHITELIST entry,
+  // and mirrors it deliberately: an endpoint reachable without a credential in
+  // full mode and 401 in headless mode is a forked gate, which is the bug class
+  // this whole file's delegation pattern exists to avoid. Claude Code runs the
+  // user's statusline in a terminal with no cookie and no AID token. The handler
+  // is console-only, confers no capability and returns no secret; the READ routes
+  // (`GET /api/statusline*`) are pointedly NOT here and go through normal auth.
+  /^\/api\/statusline\/ingest\/?$/,
 ]
 
 /**

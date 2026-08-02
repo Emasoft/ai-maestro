@@ -64,6 +64,18 @@ const WHITELIST: ReadonlyArray<RegExp> = [
   // 30s-TTL nonce (no lookup, no secret); the real auth is the Ed25519 proof
   // verified at /api/v1/auth/token. Rate-limited + store-capped in the handler.
   /^\/api\/v1\/auth\/challenge(\/|$)/,
+  // Statusline INGEST (TRDD-D8OYFG35) — the ONE write-shaped entry on this list, and the
+  // narrowest. Claude Code runs the user's `statusLine` command in a plain terminal that has no
+  // cookie jar and no AID token, so requiring a credential would make the primary case — the
+  // human's own status bar — permanently 401. What keeps it from being an open door is that the
+  // handler is CONSOLE-ONLY (`isConsolePeer`, so no device on the Tailscale VPN can reach it at
+  // all), it accepts DATA and confers no capability, it returns `{ ok, sessionId }` and no secret,
+  // and it is rate-limited and size-capped per peer. Its entire blast radius is: a process already
+  // running as the user on this machine can make one session's cached 5h/7d gauge lie — and that
+  // same process could equally run `claude` itself. Note the asymmetry with the READ routes below
+  // it (`GET /api/statusline*`), which are NOT whitelisted: they serve the fleet and go through
+  // normal auth.
+  /^\/api\/statusline\/ingest(\/|$)/,
 ]
 
 /**

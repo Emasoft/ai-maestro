@@ -3,7 +3,7 @@ trdd-id: RIFM4UXN
 title: COS-reassign route requires the governance password — contradicts R29/R32 and defeats MANAGER ruling #64
 column: testing
 created: 2026-07-16T12:48:13+0200
-updated: 2026-07-16T16:02:18+0200
+updated: 2026-08-02T16:42:19+0200
 current-owner: ai-maestro
 task-type: audit
 scope: project
@@ -140,6 +140,52 @@ asked for (a MANAGER agent assigning a COS) does not exist.
   + registry title).
 - Option B: **LOW code / HIGH governance** — no code change to the route, but amends a
   ratified security rule (R32) and a MANAGER ruling (#64).
+
+## Acceptance
+
+Transcribed 2026-08-02 from this card's own `## Verification` list — **the Option A branch only**,
+since the USER ruled Option A; Option B's items were never owed and are not listed as debt. Re-run
+live. The last box is CROSS-REPO and belongs to CORE, not to this card.
+
+- [x] `password` is `.optional()` on `app/api/teams/[id]/chief-of-staff/route.ts:19`, mirroring the
+      sibling update/delete route that was already optional — the internal inconsistency this card
+      opened on is gone
+- [x] the MANAGER is authenticated by AID: `authorize(auth, 'manage-team')` at `:64`, replacing the
+      old "the password IS the authorization" gate that made a shipped #64 verb uncallable
+- [x] **the self-assign ban** — the guard this card MISSED and CORE added (`:72-79`): an agent
+      cannot make itself COS. Without it the verb is a fleet-takeover primitive, so it is part of
+      the ruling, not a nicety
+- [x] a MANAGER AID call with NO password → **200**
+- [x] a non-MANAGER → **403**
+- [x] a USER/UI call WITH the password → **200** — the human path is a strict superset, unchanged;
+      the route still 400s a human who omits it and 401s a wrong one, so nothing human-side weakened
+- [x] a route test exists and is green: `tests/unit/cos-reassign-authorization.test.ts`, **6 cases**,
+      one per bullet above plus the two human-path negatives. `yarn test` green (345 files / 4889)
+- [x] the #64-canonical CLI surface ships: `aimaestro-teams.sh update --cos <uuid>` /
+      `--remove-cos` (`:122`, routed to the chief-of-staff POST at `:212-216`), with `reassign-cos`
+      kept as a thin alias whose `--password` is now USER/UI-only (`:134-135`)
+- [ ] **CORE drops the stale DECOUPLE-BLOCKED markers and teaches `update --cos`** — cross-repo
+      (`Emasoft/ai-maestro#69`, OPEN), and CORE gates it on the verb being on a DEPLOYED host. That
+      gate has TWO conditions and exactly one holds today: `~/.local/bin/aimaestro-teams.sh` is
+      byte-identical to the repo copy (installed ✓), but `governance-rules` is **2517 commits ahead
+      of `origin/main`** and unmerged, so the verb does not exist for anyone else. Not this card's
+      to close
+
+## ⏱ VERIFIED 2026-08-02 — everything ai-maestro owed is met; the residue is a DEPLOY, not a defect
+
+Two things worth recording beyond the boxes:
+
+**The deploy gate is half-met, and only the half nobody can act on is missing.** The STATE says
+CORE's follow-up waits for the CLI verb to be "on a DEPLOYED host (`governance-rules` merged to
+`main` + installed to `~/.local/bin/`)". The install half is verified true; the merge half is
+2517 commits away and is USER/ops-gated for the whole branch. So this card is not waiting on
+engineering — it is waiting on a release decision that is not an agent's to make.
+
+**`Emasoft/ai-maestro-plugin#29` is CLOSED, and its closing comment names its successor.** CORE
+closed it because the build-offer was confirmed *standing, not one-shot*, and moved the standing
+channel to **`ai-maestro-plugin#31`** (the script/skill sync loop). Reading the STATE alone would
+leave #29 looking like a live dependency; reading the closing COMMENT is what says where the thread
+actually lives now — the same reason a closed ref is never read from its state alone.
 
 ## Approval log
 - 2026-07-16T16:02:18+0200 — RULED by USER: **Option A + self-assign ban** (CORE #69 and

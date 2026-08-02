@@ -75,6 +75,12 @@ endpoint sidestepped it by self-authenticating). MAESTRO *login* is not yet
 console-gated: §2b binds the rule to two operations and only the password-change
 half is built.
 
+## See also
+
+- [[network-security-tailscale-bind]] — the surrounding network model: why the perimeter is the
+  network but the gate is identity, and why this op's console check is a deliberate, narrow
+  exception rather than the general rule.
+
 ## Notes and lessons learned
 
 [^1]: [ocd:2026-07-13 lmd:2026-07-13] **A route CANNOT trust `x-forwarded-for` /

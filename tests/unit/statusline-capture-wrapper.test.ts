@@ -412,6 +412,41 @@ sys.stderr.write("EXITCODE=%d" % os.waitstatus_to_exitcode(status))
     const r = spawnSync('python3', ['-c', driver], { timeout: 20000 })
     expect(r.stdout.toString('utf-8'), 'guard did not answer on a TTY').toContain('statusLine WRAPPER')
     expect(r.stdout.toString('utf-8')).toContain('USAGE:')
-    expect(r.stderr.toString('utf-8'), 'must exit EX_USAGE, not hang or succeed').toContain('EXITCODE=64')
+    // EXIT 0, not 64 — and this assertion CHANGED on 2026-08-02, because the behaviour it pinned
+    // was wrong. It drove the TTY guard using `--help`, which conflated two different callers.
+    // `--help` is a CORRECT REQUEST and must succeed; a bare invocation at a terminal is a MISUSE
+    // and must not. The old expectation was only satisfiable while `--help` had no handler of its
+    // own — i.e. while the bug CORE reported (ai-maestro-plugin#31) was present, where a redirected
+    // `--help` fell through and ran as the inner command, exit 0, silently.
+    expect(r.stderr.toString('utf-8'), '--help is a correct request; it must exit 0').toContain('EXITCODE=0')
+  })
+
+  it('BARE on a real terminal is a MISUSE: usage + EX_USAGE, never a hang', () => {
+    // The OTHER trigger, and the one the 8-minute hang actually belonged to. It needs its own test
+    // because the two are now independent code paths: `--help` is answered from the ARGUMENT before
+    // stdin is examined, this one from stdin being a TTY with no argument. A single test driving
+    // both through `--help` proved only whichever ran first.
+    const driver = `
+import pty, os, select, time, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv("/bin/sh", ["/bin/sh", "-c", ${JSON.stringify(`exec bash ${WRAPPER}`)}])
+buf = b""; t0 = time.time()
+while time.time() - t0 < 10:
+    r, _, _ = select.select([fd], [], [], 0.5)
+    if r:
+        try: d = os.read(fd, 65536)
+        except OSError: break
+        if not d: break
+        buf += d
+    elif buf: break
+_, status = os.waitpid(pid, 0)
+sys.stdout.write(buf.decode(errors="replace"))
+sys.stderr.write("EXITCODE=%d" % os.waitstatus_to_exitcode(status))
+`
+    const r = spawnSync('python3', ['-c', driver], { timeout: 20000 })
+    expect(r.stdout.toString('utf-8'), 'guard did not answer a bare TTY invocation').toContain('USAGE:')
+    expect(r.stdout.toString('utf-8'), 'must say WHY it refused').toContain('Refusing to run')
+    expect(r.stderr.toString('utf-8'), 'a bare TTY run is a misuse: EX_USAGE').toContain('EXITCODE=64')
   })
 })

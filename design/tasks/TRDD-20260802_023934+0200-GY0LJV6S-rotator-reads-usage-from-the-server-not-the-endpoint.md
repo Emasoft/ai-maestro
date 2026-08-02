@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:39:34+0200
-updated: 2026-08-02T13:40:50+0200
+updated: 2026-08-02T14:00:36+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -68,11 +68,31 @@ account in minutes, unattended, while the log reads like healthy rotation.**
 Not a defect in D8OYFG35 (every box it owns is delivered) — a prerequisite nobody owned, now filed as
 the NPT [[SIV45HOG]].
 
-**NEXT ACTION:** implement [[SIV45HOG]] (stamp at ingest + `last_switch_at` + reject-don't-repair,
-reusing the rotator's EXISTING fingerprint resolver rather than writing a second one). Only then wire
-`:422` per the seam table below. For CANDIDATE headroom read the CORRECTION section first —
-`agentlenspro get_account_status --all` now covers the non-live accounts and the old "only the
-endpoint can" claim is retired.
+**NEXT ACTION (superseded twice — read this paragraph, not the two above it).** [[SIV45HOG]] is
+CLOSED and its guard is now WIRED INTO A CALLABLE SELECTION. `lib/statusline-admissible.ts` exports
+`freshestAdmissibleUsage(snapshots, rotator, {now, maxAgeMs})` → `{fiveHourPct, sevenDayPct,
+capturedAt}` or **null**, 20 tests + 3 measured neuters (`b481b26b`, `2816405b`). It has NO caller.
+
+So the ONLY remaining edit is the substitution at **`tick.ts:490`** (NOT `:422` — see the CALL SITE
+CORRECTED section), and it is deliberately the last thing done because it is the one edit that can
+hurt. Its shape:
+
+1. read the snapshots + rotator state, call `freshestAdmissibleUsage` with
+   `maxAgeMs: STATUSLINE_FRESH_MS` (import the constant; do not restate the number — one owner);
+2. **non-null** → use `fiveHourPct` in place of `util(liveData, 'five_hour')`;
+3. **null** → fall through to the EXISTING `usageRequest(liveBlob, netDeps(deps))` path, unchanged.
+   Null must land in the same fail-safe branch as unknown usage (`:220`) — that equivalence is what
+   makes the substitution safe, and it is asserted in the module docstring rather than left implied;
+4. keep an equivalent of the `:514` one-bad-sample debounce. A statusline source has no 429, so its
+   PURPOSE (one bad reading never rotates) needs re-expressing, not deleting;
+5. log which source answered, so a discard is observable rather than silent.
+
+**Do not delete the endpoint path in the same change.** Land it as preferred-with-fallback, verify by
+EFFECT (`yarn build` + `pm2 restart` — `lib/**` bundles into `.next`, so a restart alone replays the
+old build and `git log` proves nothing), and only then consider removing the fallback.
+
+For CANDIDATE headroom read the CORRECTION section first — `agentlenspro get_account_status --all`
+now covers the non-live accounts and the old "only the endpoint can" claim is retired.
 
 ## The incident this comes from (2026-08-02, ~02:26)
 
@@ -211,7 +231,7 @@ key* was dead.
 - [ ] ingest stamps the live fingerprint; the rotator rejects non-live-stamped and pre-switch reports
 - [ ] an at/over-threshold ingest triggers `autoRotate` immediately; the 60 s timer remains the floor
 - [ ] the drain-guard: no expiry-only rotation off a low-usage account onto the last healthy slot
-- [ ] tests + at least 2 neuters recorded BY NAME; `tsc` 0; full suite green
+- [~] tests + at least 2 neuters recorded BY NAME; `tsc` 0 — DONE for the selection function (20 tests, 3 neuters, b481b26b/2816405b); the wiring at `tick.ts:490` still owes its own
 
 ## Approval log
 

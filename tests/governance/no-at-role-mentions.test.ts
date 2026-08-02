@@ -38,8 +38,16 @@ const ROOT = resolve(__dirname, '../..')
  * taken than a word.
  */
 const ROLES = [
+  // governance titles
   'manager', 'chief-of-staff', 'cos', 'architect', 'orchestrator',
   'integrator', 'member', 'maintainer', 'autonomous', 'reviewer',
+  // COMPONENT names — added 2026-08-02 after the USER caught the gap this list originally had.
+  // `@janitor` paged Raman Barkholenka (account since 2011) and my first version did NOT catch it,
+  // because "janitor" is not a governance title and the list was built from the title enum. That is
+  // the wrong generating idea: GitHub does not care what OUR taxonomy calls a word, only whether
+  // someone registered it. Checked the same day — 7 of 8 component-shaped names we use every day
+  // are REAL accounts: janitor, plugin, agent, maestro, bot, owner, assistant (only `admin` is free).
+  'janitor', 'plugin', 'agent', 'maestro', 'bot', 'owner', 'assistant', 'dev-browser', 'memgrep',
 ]
 
 /** `@role` at a word boundary, case-insensitively — `@Manager` pages the same person as `@manager`. */
@@ -67,10 +75,13 @@ describe('no @role mentions in anything we ship', () => {
     expect(AT_ROLE.test('please ask @manager to review')).toBe(true)
     expect(AT_ROLE.test('@Maintainer - could you weigh in?')).toBe(true)
     expect(AT_ROLE.test('@cos will route it')).toBe(true)
+    expect(AT_ROLE.test('ask @janitor to sweep')).toBe(true)   // the one the USER caught
     // …and does NOT fire on the legitimate forms, or the rule is unusable and gets deleted.
     expect(AT_ROLE.test('the MANAGER approves it')).toBe(false)
     expect(AT_ROLE.test('`governanceTitle: manager`')).toBe(false)
     expect(AT_ROLE.test('posted via the shared @Emasoft gh auth')).toBe(false)
+    // Backticked mentions are SAFE (GitHub renders no mention inside a code span) and the scan
+    // strips them before testing — asserted at the scan level below, not here.
   })
 
   it('no tracked file writes a governance role as an @-handle', () => {
@@ -89,7 +100,13 @@ describe('no @role mentions in anything we ship', () => {
         continue // deleted between ls-files and read; nothing to judge
       }
       text.split('\n').forEach((line, i) => {
-        if (AT_ROLE.test(line)) hits.push(`${f}:${i + 1}: ${line.trim().slice(0, 120)}`)
+        // Strip inline code spans FIRST. The USER's rule is precise — "never use the `@<name>`
+        // syntax OUTSIDE of a code block" — because GitHub does not render a mention inside
+        // backticks, so `@owner` in prose ABOUT the convention is correct writing, not a defect.
+        // Without this the guard flags every doc that documents the rule, which is the fastest
+        // way to get a guard deleted.
+        const bare = line.replace(/`[^`]*`/g, '')
+        if (AT_ROLE.test(bare)) hits.push(`${f}:${i + 1}: ${line.trim().slice(0, 120)}`)
       })
     }
 

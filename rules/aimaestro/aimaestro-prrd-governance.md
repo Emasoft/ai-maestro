@@ -54,7 +54,7 @@ Every AI Maestro project PRRD SHOULD carry, as its first golden rule
 > authored it, because all AI Maestro agents share the single
 > human-owner GitHub identity (the owner's `gh` CLI auth). Recommended
 > leading line: `_Posted by the Claude developing **<plugin-or-role>**
-> (via the shared @owner gh auth)._` Commit messages SHOULD carry an
+> (via the shared `@<owner>` gh auth)._` Commit messages SHOULD carry an
 > `Agent: <plugin-slug>` trailer (the plugin's stable package slug,
 > e.g. `Agent: ai-maestro-maintainer-agent` — greppable ecosystem-wide
 > and rename-surviving, vs a freeform role).

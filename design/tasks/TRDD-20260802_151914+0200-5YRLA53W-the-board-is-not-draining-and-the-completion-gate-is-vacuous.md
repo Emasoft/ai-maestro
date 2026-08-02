@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T16:08:14+0200
+updated: 2026-08-02T16:44:56+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -374,11 +374,29 @@ is the same damage as a scripted sweep.
       so a card cannot be noticed as unblocked. Not closable without a corpus-level answer
 - [x] the completion gate is ENFORCED, not merely written — `TERMINAL-WITHOUT-CHECKLIST` +
       `TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, 15 tests, 6 neuters, 0 findings today
-- [ ] open cards in WORK columns carry a checklist — **4 of 19 done: the whole `ai_review` column**
-      ([[O8NCNRWO]] [[78J4I4QS]] [[CNF1X3J7]] [[JT3U4ZVM]]). **15 left: 11 `testing`, 4
-      `human_review`.** Each needs a real read; inventing a checklist from the title is fabrication,
-      the same damage as a scripted sweep. Every one so far was transcription, not authorship —
-      the cards already stated what they promised
+- [ ] open cards in WORK columns carry a checklist — **12 of 19 done. 7 left: 4 `testing`
+      ([[7U927FCM]] [[BF3JN4TL]] [[CC9PY337]] [[P7XKV3N9]]), 3 `human_review` ([[44RGLOO8]]
+      [[K2WJH7RF]] [[TBGGUA2V]]).** Each needs a real read; inventing a checklist from the title is
+      fabrication, the same damage as a scripted sweep. Every one was transcription, not authorship
+      — the cards already stated what they promised.
+
+      **AND TRANSCRIBING IS NOT COPYING — six cards' claims did not survive re-running.** The
+      checklist is worth writing because writing it forces the check:
+      - [[DXJZM3BW]] promised a 5-field ceiling guard TWICE and had none (`toMatchObject` passes on
+        a superset — the exact direction a token-adjacent field arrives from). Written + neutered.
+      - [[YPIRL5RA]]'s DEFECT 2 safe-state gate was pinned by NOTHING: 7 of the 8 files importing
+        the module `vi.mock` it away, so a grep reads like coverage. Written + 2 neuters.
+      - [[95IKXQI6]]'s two installer guards were "isolated logic tested" in a run that left no
+        trace — including the DOWNGRADE guard the USER's mandate named, whose failure is silent.
+        Written; and the neuters then found a fixture passing for an accidental reason (a relative
+        path resolved against a CWD whose parent happens to contain the directory).
+      - **[[YPIRL5RA]]'s "build green" box found the BUILD BROKEN** — red since `675f5a9f`, owned by
+        [[D8OYFG35]], invisible to `tsc` because a route module's exports are a closed set enforced
+        only by Next.js's generated types. Fixed + ratcheted (`34e2be76`).
+      - [[7HRDAD0U]] and [[JAU1ES1C]] each had a STATE whose "NEXT" a later block already answered.
+      - [[CJWC3JLU]]'s literal criterion (`git log -1` cites the TRDD) was an instantaneous
+        observation that becomes a permanently-failing box; transcribed by intent instead.
+      Four of those six are gaps a *count* of checklists would score as done.
 - [x] the 5 stale external refs the corrected sweep surfaced — all read and recorded IN the cards.
       **Not one was simply "a blocker that cleared"**, and reading each closing COMMENT rather than
       its STATE is what made the difference: `janitor#82` closed while the flap it reports *remains

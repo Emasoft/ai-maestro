@@ -106,5 +106,7 @@ below. Derive the consequence for each element type; do not wait to be told.**
 ## See also
 
 - [[role-plugins]] — role-plugins are one of the two plugin categories this script-layer boundary governs
+- [[project-long-form-docs]] — `docs/PLUGIN-ABSTRACTION-PRINCIPLE.md` is the full long-form guide
+  behind this page; go there for detail beyond what fits here.
 
 ## Notes and lessons learned

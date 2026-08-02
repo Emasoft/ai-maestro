@@ -2,7 +2,7 @@
 name: an-unenforced-rule-produces-a-success-not-an-error
 description: "the scenario passed / the tests are green / the feature works — but is the governance rule actually ENFORCED? how do I test authorization? why didn't the test suite catch that anyone can create an agent?"
 ocd: 2026-07-14
-lmd: 2026-07-14
+lmd: 2026-08-02
 metadata:
   node_type: memory
   type: project
@@ -96,6 +96,12 @@ is the most dangerous, and it is the same shape as the `agent_policy_undefined` 
   security-review passes (SVC2-MAJ-12, SVC2-CRIT-01/02) each added an *authn* check, wrote a
   comment calling the operation privileged, and left the *authz* hole wide open — under a fully
   green suite.
+
+## See also
+
+- [[governance-enforcement-ratchet]] — the build-time obligation this aspect motivated: every
+  governance sub-rule now needs a declared guard + test, or the suite goes red, so this asymmetry
+  can no longer hide behind a green happy-path suite.
 
 ## Notes and lessons learned
 

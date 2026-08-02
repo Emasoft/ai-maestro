@@ -64,5 +64,7 @@ suggestions, and design rationale.
 ## See also
 
 - [[amp-messaging]] — the AMP protocol itself, installation, CLI commands, architecture
+- [[project-long-form-docs]] — `docs/COMMUNICATION-GRAPH.md` is the full S→R notation spec
+  behind this page's adjacency matrix.
 
 ## Notes and lessons learned

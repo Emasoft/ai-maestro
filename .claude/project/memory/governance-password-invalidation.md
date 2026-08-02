@@ -84,6 +84,9 @@ password-change half was ever built.
 - [[network-security-tailscale-bind]] — the surrounding network model: why the perimeter is the
   network but the gate is identity, and why this op's console check is a deliberate, narrow
   exception rather than the general rule.
+- [[env-var-security-delete-not-gate]] — cites this page's `x-forwarded-for` can't-trust-client-
+  headers lesson as a sibling case of "the client controls what it sends, so the server can't
+  trust it without independent verification".
 
 ## Notes and lessons learned
 

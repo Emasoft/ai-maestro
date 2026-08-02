@@ -2,7 +2,7 @@
 name: two-server-modes-the-headless-router-reimplements-routes
 description: "I added the guard in lib/ and the tests are green — but is it actually enforced? the same request behaves differently in headless mode / the route still returns 200 / a central edit was supposed to close every route"
 ocd: 2026-07-14
-lmd: 2026-07-14
+lmd: 2026-08-02
 metadata:
   node_type: memory
   type: project
@@ -66,3 +66,9 @@ graph; never infer it from the architecture you expect. "It's all funnelled thro
   see [[an-unenforced-rule-produces-a-success-not-an-error]]. The parity test that *would* have
   caught all of them on the day they were written: **for every route served by both modes, the
   two modes must reach the same authorization decision for the same caller.**
+
+## See also
+
+- [[governance-enforcement-ratchet]] — the map row for a parity rule must cite BOTH modes'
+  guards comma-separated (a rule enforced in full mode only is exactly the drift this page
+  describes), and its own $7$-assertion suite is what makes such an omission build-red.

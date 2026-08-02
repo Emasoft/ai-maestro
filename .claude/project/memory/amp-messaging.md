@@ -196,5 +196,7 @@ The AMP skill (from `agent-messaging` plugin in the marketplace) provides natura
 ## See also
 
 - [[amp-communication-graph]] — the title-based directed communication graph, enforcement layers, and its v2/v3 update history
+- [[runtime-install-tree]] — where AMP's client storage (`~/.agent-messaging/`) sits among every
+  other on-disk store AI Maestro maintains.
 
 ## Notes and lessons learned

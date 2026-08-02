@@ -82,4 +82,9 @@ fitAddon.fit()                     // 3. Then fit
 
 Wrong order causes crashes or non-functional addons.
 
+## See also
+
+- [[custom-server-and-websocket-pty]] — the other half of the same subsystem: how the bytes
+  this page renders get from tmux to the browser over the WebSocket-PTY bridge.
+
 ## Notes and lessons learned

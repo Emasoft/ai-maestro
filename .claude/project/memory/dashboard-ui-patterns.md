@@ -123,6 +123,9 @@ All WebSocket messages are JSON. Raw terminal output (ANSI codes) is wrapped in 
 
 ## See also
 
+- [[single-active-agent-rendering]] — owns the mount model this page's "active agent id" state
+  actually drives: it selects the one MOUNTED agent, not a visibility toggle.
+
 ## Notes and lessons learned
 
 [^1]: [id:ATOM-UI-VISTOGGLE, status:valid, keywords:"active_agent_id_visibility_toggle mount_all_agents_hidden inactive_agents_stay_mounted", ocd:2026-08-02, lmd:2026-08-02]

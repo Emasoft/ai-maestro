@@ -2,7 +2,7 @@
 name: session-control-subagent-gate
 description: "restart API times out 504 / stop refused with subagents_running / /exit lands on a confirmation dialog instead of exiting / agent badge shows 'Waiting (N subagents)' / is idle_prompt still the safe state — the CC >=2.1.198 background-subagents gate (TRDD-O8NCNRWO)"
 ocd: 2026-07-08
-lmd: 2026-07-08
+lmd: 2026-08-02
 metadata:
   node_type: memory
   type: project
@@ -48,6 +48,13 @@ on the first WS event. It now MERGES over the previous entry.[^2]
 Docs: CLAUDE.md §Session Control Architecture (corrected premise) +
 `docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md` fifth pass (2.1.190–204: no hard break, this was
 the one HIGH finding out of 1107 changelog entries). See also [[folder-adoption-import]].
+
+## See also
+
+- [[agent-control-monitor-api]] — the queue (D1) and the command-injection surface reuse this
+  gate's idle/subagent safe-state check before firing.
+- [[restart-conversation-continuity]] — the other half of the restart path: once this gate lets
+  a restart proceed, that page decides whether the relaunch preserves the conversation.
 
 ## Notes and lessons learned
 

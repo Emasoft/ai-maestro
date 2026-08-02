@@ -3,7 +3,7 @@ trdd-id: CJWC3JLU
 title: Invert governance authority — the SPEC is the source of truth and GOVERNANCE-RULES.md emanates from it (spec-first)
 column: human_review
 created: 2026-07-22T17:02:20+0200
-updated: 2026-07-22T18:20:00+0200
+updated: 2026-08-02T16:43:44+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -106,3 +106,51 @@ and any statement that GOVERNANCE-RULES.md is the canonical source. Both are rev
 ## Verify
 `grep -n "source of truth" docs/GOVERNANCE-RULES.md design/specs/governance-spec.md` → the spec is
 named the source in both; `git log --oneline -1` cites TRDD-CJWC3JLU; #30 carries the correction.
+
+## Acceptance
+
+Transcribed 2026-08-02 from this card's own `## Verify` line and the numbered EDITS its STATE
+specifies, re-run live. One criterion is transcribed by INTENT rather than literally — see the note
+under it. The card sits in `human_review`: the work is done, what is outstanding is the USER's read.
+
+- [x] **the spec is named the source in BOTH files** — `design/specs/governance-spec.md:9`
+      (frontmatter `authority:`) and `:27` in prose; `docs/GOVERNANCE-RULES.md:8` records the
+      inversion in its own changelog and calls itself the PRIMARY EMANATION
+- [x] **EDIT 1 — the spec's frontmatter is inverted**: `derived-from:` is GONE (verified absent, not
+      merely unread), `spec-version` took the MAJOR bump for the role change
+- [x] **EDIT 2 — the catalog's §0 declaration is flipped** and carries the `4.8.0` changelog entry
+      naming the reversal, including the retirement of the old "Mirror-sync" direction
+- [x] the implementing commits cite `TRDD-CJWC3JLU` — `60c38453` (the inversion), `032b274f` (the
+      full-fidelity rewrite), plus `5b0b12a0` / `a7df9006` / `b0f9445e`.
+      **Transcribed by intent.** The literal criterion — *"`git log --oneline -1` cites
+      TRDD-CJWC3JLU"* — was an INSTANTANEOUS observation, true only until the next commit landed.
+      Taken literally it is a box that must fail forever after; what it meant is that the work is
+      traceable to the card, and that is what is checked
+- [x] **`ai-maestro-assistant-manager-agent#30` carries the correction** — read live today, not
+      inferred from the card: the comment states the direction is INVERTED, names the spec as SOURCE
+      and the catalog as PRIMARY EMANATION, and tells the MANAGER to re-point its read. The issue is
+      still OPEN, which is correct — it is the SPEC-layer thread, not a task this card owns
+- [x] the rewrite's content-verify gate passed — 6 chunks by itemized `source ⊆ assembled` miss-lists
+      (counts explicitly forbidden as the deliverable, because the USER caught the inversion's
+      parity check being COUNT-based and therefore blind to content loss), **0 material misses**
+- [x] `tests/unit/governance-spec-conformance.test.ts` — **14/14 green, re-run 2026-08-02**
+- [ ] **USER inspection of the new source-of-truth spec** — the reason the column is `human_review`.
+      Not an engineering item and not this card's to check off
+
+## ⏱ VERIFIED 2026-08-02 — the inversion did not merely land, it has been USED
+
+The strongest evidence is not that the two files still say the right thing; it is that the artifact
+this card made authoritative **has been edited three more times as the authority, and the catalog
+followed each time**:
+
+| | at the card (2026-07-22) | today |
+|---|---|---|
+| `spec-version` | 2.0.0 → 2.1.0 | **2.3.0** |
+| catalog `version` | 4.8.0 | **5.2.0** |
+| `GOV-R` sections | 49 | **51** |
+| spec length | 1998 lines | **2052** |
+
+Two rules have been authored since, and they were authored in the SPEC — which is the whole point of
+the inversion and the one thing a static grep of the authority sentence could not tell you. A card
+that only re-checked its own edits would have reported "unchanged, still correct" and missed that
+the model is live.

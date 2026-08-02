@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:20:00+0200
 created: 2026-07-13T14:20:00+0200
-updated: 2026-07-17T11:02:15+0200
+updated: 2026-08-02T17:01:55+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -21,7 +21,7 @@ derived: false
 npt: []
 eht: [7U927FCM]
 blocked-by: []
-implementation-commits: [13dfbb92, 0d2d421f, 76e738f9, fdeee818, 396b5d10]
+implementation-commits: [13dfbb92, 0d2d421f, 76e738f9, fdeee818, 396b5d10, fbefaa3d]
 relevant-rules: []
 ---
 
@@ -279,6 +279,64 @@ possession + presence — and does not pretend to be that. When passkeys land th
 - The PIN appears in **no** HTTP response body and in **no** log file (grep the
   request/response of every path, including the failure path).
 - Restart the server after an invalidate ⇒ still invalidated.
+
+## Acceptance
+
+Transcribed 2026-08-02 from this card's own `## Verification` list, re-run live. The open boxes are
+the two things the STATE names as deliberately not done, plus the rotation itself — which is the
+owner's, because **an agent must never rotate a credential**.
+
+- [x] invalidate with the CORRECT password ⇒ the hash is DESTROYED and the next login demands a new
+      one. `invalidatePassword()` does not flag-and-keep: nothing remains to verify against, so
+      every caller reading `passwordHash` without also consulting a flag cannot honour a revoked
+      credential
+- [x] invalidate with a WRONG password ⇒ nothing changes and **no state is consumed** — no code
+      burned, not invalidated, and the password still verifies afterwards
+- [x] from the console ⇒ a code goes to the DESKTOP and the operation completes only when it is
+      echoed back; a wrong code leaves the password intact
+- [x] **from a Tailscale peer ⇒ denied, and no code is EVER emitted.** Pinned three ways, including
+      that a remote caller with the CORRECT password and one with a WRONG password get a
+      byte-identical 403 — the anti-oracle property, which is why the presence check sits ahead of
+      the credential check. Also proven LIVE from this host's real Tailscale IP (STATE): an honest
+      remote call 403s, and one FORGING `X-Forwarded-For` + `X-Real-IP` + `X-Aim-Peer` also 403s
+- [x] the code appears in **no HTTP response body** — asserted on the SERIALIZED body, not on a
+      named key, because a spread of the flow object is exactly how an unpredicted key arrives.
+      Checked on the failure bodies too
+- [x] the code appears in **no log line** — verified by reading rather than by test: neither
+      `lib/setup-bootstrap.ts` nor the route interpolates it into any `console.*` call
+- [x] restart the server after an invalidate ⇒ **still invalidated** (persisted in
+      `~/.aimaestro/governance.json`)
+- [x] **the ROUTE itself is now tested** — it was not; see below (`fbefaa3d`, 11 tests, 3 neuters)
+- [ ] **the owner rotates the leaked credential using this feature** — Settings → Revoke, or
+      `aimaestro-governance.sh invalidate-password`. This is what unblocks [[44RGLOO8]], and it is
+      HUMAN-ONLY: an agent must never rotate a credential
+- [ ] **MAESTRO *login* is not yet console-gated** — §2b binds the console rule to two operations
+      and only the password-change half is built. Deliberate and still open
+- [ ] the general TTY→sudo-token path for other strict routes — [[9MZQ4T7E]]. This endpoint
+      sidesteps it by self-authenticating (its input IS the password), which is why it shipped first
+- [ ] the recovery-email SMTP override (`396b5d10`) — *"AWAITING the USER's retry with their real
+      server"*. The route tests cover the override-vs-autodetect branch; what is untested is the
+      user's actual relay
+
+## ⏱ VERIFIED 2026-08-02 — the route's INGREDIENTS were tested and the route was not
+
+`password-invalidation.test.ts` covers the `invalidatePassword()` FUNCTION; `peer-address.test.ts`
+covers `isConsolePeer`. Both are the route's ingredients; neither is the route. Its sibling
+`POST /api/governance/password/reset` has a full 16-case route suite — and **this** endpoint, which
+this card calls *"the single most attractive target on the whole surface"* precisely because its
+input IS the secret, had none.
+
+Three properties could not be borrowed from the ingredient tests and are now pinned
+(`tests/unit/password-invalidate-route.test.ts`): the remote refusal happens BEFORE the credential
+is touched, the code never reaches a response body, and a wrong password consumes nothing. Plus the
+throttle (5 then 429) and the IPv4-mapped loopback `::ffff:127.0.0.1` a dual-stack bind actually
+reports — rejecting that shape would lock the owner out at their own keyboard.
+
+**The instructive neuter is the ORDER.** Moving the presence check below the password check reds
+exactly ONE test: the other two remote cases still get a 403, just from further down. So a suite
+without that one test would call an oracle-shaped endpoint correct, and the ordering — the entire
+anti-oracle argument, and the thing the route's own comment says it is doing "deliberately" — was
+pinned by nothing until today.
 
 ## Approval log
 

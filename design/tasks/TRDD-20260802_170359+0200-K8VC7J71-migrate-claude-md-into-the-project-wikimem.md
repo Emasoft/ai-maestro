@@ -93,6 +93,50 @@ machine" — go LOCAL (`~/.claude/projects/<slug>/memory/`), cross-linked. **UNS
 - Mint a page for a topic one of the existing 29 already owns — fold into it and link.
 - Put a machine-private path into a PROJECT page (it is pushed to GitHub).
 
+## The destination table — ALL 28 sections, decided before any deletion
+
+Line numbers are from `CLAUDE.md` @ `a4529af4`; re-derive with `grep -n '^## ' CLAUDE.md`.
+
+**The 29 existing pages are SYMPTOM-indexed lessons** (component/aspect, `description:` = the
+symptom a future session will search with). CLAUDE.md's content is a different KIND — reference
+architecture, "how this is built". So most rows mint NEW `reference`-type pages; only a few fold
+into an existing lesson page. Both kinds live in the same store and cross-link.
+
+| # | § (line) | verdict | destination |
+|---|---|---|---|
+| 1 | Project Overview (5) | **KEEP** | the "general overview" the USER asked to keep |
+| 2 | Development Commands (15) | **KEEP** | build/install/test — incl. the Node-22 wrapper and *"a restart does not rebuild"*. The pillar-CLI exit-code trichotomy folds into [[pillar-tooling-scale-and-index]] |
+| 3 | Code-analysis tooling (129) | MIGRATE | `code-analysis-tooling` (tldr/fastedit/distill + the cross-client skill variants) |
+| 4 | Governance rules IND+DEP (162) | MIGRATE | `governance-rules-layering` — links [[three-pillars-conformance-spec]], [[governance-enforcement-ratchet]] |
+| 5 | Agent-workdir invariants (224) | MIGRATE | `agent-workdir-invariants` — links [[agent-launch-preconditions]] |
+| 6 | Version Management (264) | **KEEP** | `bump-version.sh` is release mechanics |
+| 7 | Pre-PR Checklist (288) | **KEEP** | branch/push |
+| 8 | Release & Marketing (303) | SPLIT | PR protocol → KEEP; the X/Medium templates + `marketing/` → `release-and-marketing` |
+| 9 | Agent Terminology TITLE/ROLE/PERSONA (358) | MIGRATE | `agent-title-role-persona` — the core vocabulary; links [[three-role-initial-test-not-a-title-restrict]] |
+| 10 | Architecture: Critical Design Patterns (388) | MIGRATE ×N | **370 lines, 10 numbered patterns** → a `server-architecture` HUB + component pages: `custom-server-and-websocket-pty`, `agent-first-architecture`, `single-active-agent-rendering`, `session-control-5-state-model`, `manager-gated-team-governance`, `team-meeting-and-kanban` |
+| 11 | File Structure Conventions (760) | MIGRATE | `repo-file-structure` |
+| 12 | Runtime Install Tree (847) | MIGRATE | `runtime-install-tree` — **scope-check every path**: the tree itself is machine-AGNOSTIC (`~/.aimaestro`, `~/agents`), so PROJECT; any `/Users/…` example is genericized |
+| 13 | Agent Messaging Protocol (999) | MIGRATE ×N | `amp-messaging` HUB + `amp-communication-graph` (the adjacency matrix + its 3 enforcement layers) |
+| 14 | Plugin Abstraction Principle (1199) | MIGRATE | `plugin-abstraction-and-script-layer` — the decoupling invariant; links [[agent-control-monitor-api]], [[agent-claims-the-api-was-never-delivered]] |
+| 15 | Plugin Architecture two worlds (1292) | MIGRATE ×N | `plugin-architecture` HUB + `role-plugins`, `editing-role-plugins` — folds into [[marketplace-manifest-format]], [[marketplace-plugin-registration]] |
+| 16 | Groups Feature (1513) | MIGRATE | `groups-feature` — links [[team-creation]] |
+| 17 | Ecosystem Constants (1551) | MIGRATE | `ecosystem-constants` |
+| 18 | GitHub Repos Architecture (1571) | MIGRATE | `github-repos-architecture` |
+| 19 | Critical Implementation Details (1616) | MIGRATE | `terminal-rendering-and-pty` (xterm config, `convertEol`, alt-screen) |
+| 20 | Common Gotchas (1724) | MIGRATE | fold per-gotcha into the pages that own them; the API-nesting one → `agent-first-architecture` |
+| 21 | Environment Variables (1813) | SPLIT | the `.example.env` pointer → KEEP; the **phantom-knob** lesson → `env-vars-documented-but-unread`, linked from [[env-var-security-delete-not-gate]] |
+| 22 | Server Modes (1862) | **KEEP** | `yarn dev` / `yarn headless` is how you RUN it |
+| 23 | Testing the Application (1894) | SPLIT | the commands → KEEP; AMP test suites + the 24 UI scenarios → `scenario-and-amp-testing`, linked from [[token-optimization]] |
+| 24 | Documentation References (2037) | **KEEP** | a short pointer list, already link-only |
+| 25 | Cross-Client Conversion (2049) | MIGRATE | `cross-client-conversion` (acplugin/crucible/Hookbridge, the model map, the Universal IR) |
+| 26 | Roadmap Context (2119) | MIGRATE | fold into the overview page |
+| 27 | What NOT to Do (2130) | MIGRATE | fold each bullet into the page that owns its subject — a free-floating don't-list is unfindable by symptom |
+| 28 | Key Files to Understand (2144) | MIGRATE | fold into `server-architecture` HUB's `globs:` + reading order |
+
+**Network security** (inside §10) → `network-security-tailscale-bind` — it is a distinct subject
+(the `::` bind + `isAllowedSource`, the trusted-peer header, the console-presence census) and is
+already cited by [[governance-password-invalidation]].
+
 ## Problem
 
 `CLAUDE.md` has become the project's knowledge base. It is 2186 lines in the file that is loaded

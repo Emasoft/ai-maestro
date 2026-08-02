@@ -58,7 +58,27 @@ export interface ServerLiveness {
  *                          this token reports. It ships WITH `marketplace-op.lock`.
  *   - `fleet-recovery`   → server-internal session-liveness/fleet-stop for harness agents (CHN16JXZ,
  *                          gated on ai-maestro#60). NOT built yet, so not pushed.
- * An absent token means "the janitor still owns this" — the safe default.
+ *
+ * ⚠ THESE TOKENS GATE NOTHING TODAY — VERIFIED ON BOTH SIDES, 2026-08-02. This docstring used to
+ * end "an absent token means the janitor still owns this — the safe default", which describes a
+ * PER-TOKEN gating contract. The consumer RETIRED that contract in janitor TRDD-LU0C5KAR (owner
+ * directive 2026-07-17: "if the ai-maestro server is running, those chores are its responsibility
+ * … any other event is a bug"). Measured, not inferred:
+ *
+ *   - janitor side: `server_capabilities()` has exactly ONE caller, `server_is_alive`, which
+ *     returns `server_capabilities(now) is not None` — the token CONTENT is never inspected, and
+ *     its own docstring says so ("deliberately IGNORED");
+ *   - our side: nothing reads the tokens back either.
+ *
+ * So the field is WRITE-ONLY across the whole ecosystem, and the janitor yields ALL absorbed chores
+ * on FILE FRESHNESS alone. The correction matters because the old sentence was a trap for the next
+ * author: it invites you to add a token believing it gates a chore, when it would gate nothing —
+ * silently, and looking exactly like it worked. (That is the "control that reads as correct and
+ * does nothing" class the janitor hit three times in one day; see janitor#167.)
+ *
+ * Keep computing them honestly anyway: they are the ecosystem's only machine-readable statement of
+ * what the server actually absorbed, they cost nothing, and janitor#134 is an OPEN proposal to gate
+ * on them again — at which point this warning is what tells you the contract changed back.
  */
 export function currentCapabilities(deps: {
   oauthEnabled?: () => boolean

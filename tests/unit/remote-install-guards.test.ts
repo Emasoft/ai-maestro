@@ -102,7 +102,15 @@ describe('_normalize_repo_url — owner/repo becomes a URL, everything already r
     // the owner/repo case ran first, "/Users/me/ai-maestro" would become
     // "https://github.com//Users/me/ai-maestro.git" — a URL that clones nothing, from a flag the
     // USER added specifically so a dev could install from a LOCAL checkout.
-    expect(normalize(p)).toBe(p)
+    //
+    // RUN FROM A FRESH TEMP CWD, and that is not tidiness. The relative forms are resolved against
+    // the process CWD by the `[ -d "$r" ]` fallback further down, and vitest's CWD is the repo root
+    // — whose parent DOES contain a directory named `ai-maestro`. So `../ai-maestro` passed for an
+    // accidental reason and stayed GREEN under the neuter that deletes the case this test exists to
+    // pin. From an empty temp dir none of the three exists, so the explicit-path case is the ONLY
+    // thing that can produce the expected answer and all three discriminate.
+    const empty = mkdtempSync(join(tmpdir(), 'aim-cwd-'))
+    expect(normalize(p, { cwd: empty })).toBe(p)
   })
 
   it('a relative path WITH slashes that EXISTS is a local repo, not an owner/repo', () => {
@@ -146,19 +154,30 @@ describe('_version_gt — the downgrade guard, and it must compare NUMERICALLY',
 })
 
 /**
- * NEUTER RECORD — 2026-08-02
+ * NEUTER RECORD — 2026-08-02. MEASURED, and both of my written predictions were wrong; the
+ * corrections are the useful part.
  *
- * (a) `_version_gt` → replace the `sort -V` comparison with a lexicographic `[ "$1" \> "$2" ]`.
- *     Reds exactly 2, by name:
+ * (a) `_version_gt` → replace the `sort -V` comparison with a lexicographic `[[ "$1" > "$2" ]]`.
+ *     Reds 2:
  *       × 0.57.10 is greater than 0.57.3 — the case a string compare gets backwards
- *       × orders across a major/minor rollover
- *     The strictness test stays green (both forms agree that equal is not greater) — which is why
- *     it could never have caught this on its own.
+ *       × the extraction itself — a scanner that pulls nothing tests nothing
+ *     I predicted the ROLLOVER test would red too. It does not, and cannot: lexicographically
+ *     "1.0.0" > "0.99.99" and "0.58.0" > "0.57.99" are BOTH true, so the two comparisons agree on
+ *     every rollover case. Together with the strictness test (equal is not greater — also agreed by
+ *     both), that leaves the 0.57.10 case as the ONE case in the file able to tell a numeric
+ *     comparison from a lexicographic one. The extraction check reds as designed: it asserts the
+ *     pulled text still contains `sort -V`.
  *
- * (b) `_normalize_repo_url` → move the explicit local-path case (the one matching a leading slash,
- *     dot-slash or dotdot-slash) BELOW the owner/repo case. Reds exactly 1:
- *       × passes an explicit local path through untouched: /Users/someone/ai-maestro
- *     `./ai-maestro` and `../ai-maestro` survive it, because the `*)` branch's `[ -d ]` test still
- *     catches an existing relative dir — so ONLY the absolute case discriminates the ordering, and
- *     a suite carrying just the relative ones would have passed the bug through.
+ * (b) `_normalize_repo_url` → delete the explicit local-path case (leading slash / dot-slash /
+ *     dotdot-slash), so those fall through to the owner/repo branch. Reds 4:
+ *       × all three "passes an explicit local path through untouched" cases
+ *       × expands a QUOTED literal ~/ to $HOME
+ *     I predicted 1, reasoning that `[ -d ]` in the fallback would still catch the relative forms.
+ *     It catches them only if they EXIST — which is a fact about the CWD, not about the function.
+ *     Before the fix above, this test ran from the repo root, whose parent really does contain an
+ *     `ai-maestro` directory, so `../ai-maestro` passed for an accidental reason and survived the
+ *     neuter. It now runs from an empty temp dir and all three discriminate. The tilde test reds
+ *     for the same underlying reason (its expanded `$HOME/ai-maestro` does not exist either), which
+ *     is honest rather than redundant: the expansion's whole point is to produce a LOCAL PATH, and
+ *     without the local-path case a local path is not what comes out.
  */

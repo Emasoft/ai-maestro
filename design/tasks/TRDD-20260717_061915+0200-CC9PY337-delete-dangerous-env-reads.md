@@ -1,9 +1,9 @@
 ---
 trdd-id: CC9PY337
 title: Delete every security-risk env read — dashboard-only settings, non-env test seams
-column: testing
+column: human_review
 created: 2026-07-17T06:19:15+0200
-updated: 2026-07-17T07:44:00+0200
+updated: 2026-08-02T16:52:54+0200
 current-owner: ai-maestro
 task-type: security
 parent-trdd: QZL828OD
@@ -14,7 +14,7 @@ mandated-by: self
 approved: true
 approval-judge: user
 approval-datetime: 2026-07-17T06:19:15+0200
-implementation-commits: [4e2e90b4]
+implementation-commits: [4e2e90b4, 8e124445, dac3ca8f, 752f798f, 4a4c28c0, a50984b4, cb593862, b4ce9d3e]
 scope: project
 ---
 
@@ -225,6 +225,46 @@ integration contract, and `tests/unit/agentlens-status.test.ts` exists.
 whose failure mode is "the user's live credentials". Each phase lands and verifies alone. The
 0-IMPACT property is the thing that must not regress: a test that starts writing to the real
 keychain is a worse outcome than the vector this TRDD closes.
+
+## Acceptance
+
+Transcribed 2026-08-02 from this card's own `## Verification` list, **every item re-run live** —
+including the two that are measurements rather than commands, because a security card's value is
+exactly in those. The last box is the human's, and the card names it itself.
+
+- [x] `bash scripts/with-node.sh npx tsc --noEmit` → **0 errors**
+- [x] `yarn test` green — the suite has grown well past the card's 205/3032 and is **345 files /
+      4889 tests** today
+- [x] `yarn build` (the real ESLint gate) → **exit 0**
+- [x] **STILL 0-IMPACT — measured by DELTA on the live keychain, not inferred from a green suite.**
+      Counted `Claude Code-rotator-slot` items → **12**; ran the 31 rotator + SMTP + mailer +
+      fence files (**404 tests, all green**); recounted → **12. Delta 0/0.** SMTP control:
+      `find-generic-password -s ai-maestro-smtp` → "could not be found", before and after. The
+      delta proves TWO things at once, which is why the card insisted on it: the gate holds, AND
+      the tests genuinely exercise the forced-`none` backend rather than silently reaching the real
+      store
+- [x] **the Phase-4 fence fails if a deleted name is re-added — NEUTERED, not assumed.** Appended
+      a bare `process.env.AIM_JSONL_READER_PATH` to a `lib/` file: the fence reddened with the
+      exact `statusline-rollup.ts:50`, naming the file and line. Restored; green again. A fence
+      that has never been made to fire is a fence nobody has checked is connected
+- [x] `TEST_ONLY_ENV` (4 live seams) and `FORBIDDEN_ENV` (6 deleted names) are DISJOINT, asserted
+      by a test — so a var is either a seam or forbidden, never quietly both
+- [ ] **the USER's review of a credential-custody change.** The card asks for this in its own
+      words: *"a human eye on credential-custody code is worth having before `complete`"*. It was a
+      Tier-0 self-mandate, so no approval gate blocked the work — which is precisely why the review
+      is worth asking for rather than assuming
+
+## ⏹ TRANSITION 2026-08-02 — `testing` → `human_review` ([[5YRLA53W]]), in two recorded hops
+
+**`testing → ai_review`** is the exempt mechanical transition: every test-requirement PASSED, and
+they were re-run today rather than read off the STATE. **`ai_review → human_review`** follows from
+the review recorded above — the four gates plus the two measurements the card set for itself, one
+of which (the fence) was verified by making it FAIL on purpose. Both hops are named because the
+same session performed them, and a transition whose authority is unstated is one nobody can audit.
+
+It lands in `human_review` because that is what the card says is left. Leaving it in `ai_review`
+would make the next reader re-derive that from 230 lines — the "queueing is a handoff, not a
+resolution" failure, one column further along.
 
 ## Approval log
 

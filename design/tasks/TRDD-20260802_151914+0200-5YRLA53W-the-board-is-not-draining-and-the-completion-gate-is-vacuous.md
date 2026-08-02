@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T15:57:55+0200
+updated: 2026-08-02T16:03:45+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -280,6 +280,30 @@ python3 -c "…"  # github.com/o/r/(issues|pull)/N  ·  gh:o/r#N  ·  o/r#N
 | 08-01 | `janitor#100` (the absorb-the-daemon coordination) | 8 cards: `1GGQ4HWY` `9ZIF82HI` `CHN16JXZ` `DXJZM3BW` `H24DF6ZC` `JAU1ES1C` `KCRMSNL7` `P7RPOR5O`. Closed **yesterday** — not yet stale, but it is the single most-referenced external item on the board and worth a deliberate read |
 | 08-02 | `ai-maestro-plugin#29` | `RIFM4UXN` — closed today |
 
+**Resolved 2026-08-02, and the shape of the answers is the lesson.** All five were read. **Not one
+was "a blocker that cleared."** A CLOSED state and a resolved dependency are different facts, and
+only the closing COMMENT distinguishes them:
+
+- `janitor#82` → [[1GGQ4HWY]]: closed, and **the flap it reports is still real** (their
+  `TRDD-V5RXQ4NB`). What changed is its severity — two mitigations landed. It hands the card a
+  **constraint** (*no unattended ACL-touching `security` op; prompting cures are interactive-only*),
+  so a faithful port must carry the mitigations, not the pre-mitigation shape. Treating "CLOSED" as
+  "solved" would have ported the bug.
+- `janitor#118` → [[L55IYKL4]]: **shipped the artefact the card was waiting for** — the ~1300-line
+  wikimem/memgrep spec, in every release from v0.62.0. And it explains the confusion: the file
+  genuinely had **0 lines** in the cached v0.60.1, so the earlier reading was a *correct read of a
+  stale cache*, not a misreading.
+- `janitor#123` → [[L55IYKL4]]: closed by **correcting its own first explanation** — a retry ladder,
+  not a cached finding, with the ticket store project-local at `.janitor/state/tickets/`.
+- `janitor#78` + `AgentlensPro#2` → [[WF0UE9BC]]: the whole card had **shipped**, including the one
+  step a model structurally cannot do (the npm publish). Re-columned `planned` → `human_review`.
+- `AgentlensPro#3` → [[KCRMSNL7]]: the reciprocal contract, LOCKED in their CI.
+
+**A second resting column, found the same way.** [[WF0UE9BC]] sat at `column: planned` — which
+asserts *not started* — 17 days after its code landed and every dependency resolved. `planned` is
+as unexamined as `dev` was, and a completed card frozen there is invisible in exactly the same way.
+The sweep found it; reading the board never would have.
+
 One reassurance from the same sweep: `9ZIF82HI` sits in `column: blocked` citing `janitor#100`, but
 its `blocked-by:` names **`1GGQ4HWY`**, a TRDD that is genuinely open — so its `blocked` claim is
 TRUE and the linter's invariant holds. The closed issue was context, not the blocker.
@@ -355,10 +379,18 @@ is the same damage as a scripted sweep.
       `human_review`.** Each needs a real read; inventing a checklist from the title is fabrication,
       the same damage as a scripted sweep. Every one so far was transcription, not authorship —
       the cards already stated what they promised
-- [ ] the 5 stale external refs the corrected sweep surfaced and nobody has read yet —
-      `WF0UE9BC` (`janitor#78`, 17d; `AgentlensPro#2`), `1GGQ4HWY` (`janitor#82`),
-      `L55IYKL4` (`janitor#118`,`#123`), `KCRMSNL7` (`AgentlensPro#3`), and a deliberate read of
-      `janitor#100` across its 8 referencing cards
+- [x] the 5 stale external refs the corrected sweep surfaced — all read and recorded IN the cards.
+      **Not one was simply "a blocker that cleared"**, and reading each closing COMMENT rather than
+      its STATE is what made the difference: `janitor#82` closed while the flap it reports *remains
+      real* (tracked as their `TRDD-V5RXQ4NB`) and hands [[1GGQ4HWY]] a design constraint, not an
+      unblocking; `janitor#118` **shipped the artefact** [[L55IYKL4]] was waiting for (the ~1300-line
+      wikimem spec, from v0.62.0) and diagnosed why the earlier reading was a correct read of a
+      *stale cache*; `janitor#123` corrected its own first explanation; [[WF0UE9BC]] had shipped
+      entirely, including the one owner-gated step
+- [ ] read `janitor#100` deliberately — closed 2026-08-01, the single most-referenced external item
+      on the board (**8 cards**: `1GGQ4HWY` `9ZIF82HI` `CHN16JXZ` `DXJZM3BW` `H24DF6ZC` `JAU1ES1C`
+      `KCRMSNL7` `P7RPOR5O`). Flagged on [[KCRMSNL7]]; not stale yet, which is exactly why it is
+      worth reading before any of the eight advances rather than after
 - [x] `updated:` was NOT bumped by any mechanical/format-only edit — every bump this session
       accompanied a real `column:` change, which does change what the card asserts
 - [x] the census above is re-derived at the end and the deltas recorded — and it reconciles

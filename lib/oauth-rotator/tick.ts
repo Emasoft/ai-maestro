@@ -565,10 +565,17 @@ export async function autoRotate(
   const scS = scWorst !== null ? ` ${scWorst.model}=${Math.round(scWorst.percent)}%` : ''
   const liveExpired = blobLocallyExpired(liveBlob)
   const networkUp = liveStatus !== 0
-  // Read AFTER the endpoint call so `state` already carries the reconciled `live_fp` /
-  // `last_switch_at` the admissibility guard compares against — a snapshot is admitted relative to
-  // WHO IS LIVE NOW, so reading it against a pre-reconciliation state would judge it by the wrong
-  // account. Never throws (fail-soft inside), so it cannot break a tick that works today.
+  // Must be read after RECONCILIATION (`:546`/`:549`) — not, as an earlier version of this comment
+  // claimed, "after the endpoint call". The endpoint call sits between them and contributes nothing
+  // to it; the requirement is only that `state` already carries the reconciled `live_fp` /
+  // `last_switch_at` the admissibility guard compares against, since a snapshot is admitted
+  // relative to WHO IS LIVE NOW and a pre-reconciliation state would judge it by the wrong account.
+  // The distinction matters because the wrong version invites someone to preserve an ordering
+  // constraint that does not exist while moving the one that does.
+  //
+  // ⚠ THE RESULT IS OBSERVED, NOT ACTED ON — see the two ⛔ blocks below. `sl` feeds the log line
+  // only. That is deliberate: it makes the misattribution measurable in production before anyone
+  // re-lands a debounced version. Never throws (fail-soft inside), so it cannot break a tick.
   const sl = await statuslineNear(state, deps)
   const slDesc = sl.usage !== null
     ? ` [statusline 5h=${Math.round(sl.usage.fiveHourPct)}%${sl.usage.sevenDayPct !== null ? ` 7d=${Math.round(sl.usage.sevenDayPct)}%` : ''}${sl.near ? ' OVER-THRESHOLD' : ''}]`

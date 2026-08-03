@@ -17,6 +17,8 @@ import {
   setFrontmatterField,
   appendApprovalLog,
 } from '@/lib/trdd-store'
+import { withJsonLock } from '@/lib/json-io'
+import { documentLockKey } from '@/lib/pillar/edit'
 
 let designDir: string
 const ISO = '2026-07-09T13:00:00.000Z'
@@ -434,5 +436,54 @@ describe('trdd-store fails loud instead of reporting an empty corpus', () => {
     fs.mkdirSync(dir, { recursive: true })
     expect(() => parseTrddFile(dir, 'tasks')).toThrow(/cannot read TRDD/)
     expect(() => parseTrddFile(dir, 'tasks')).toThrow(/EISDIR/)
+  })
+})
+
+/**
+ * TRDD-D7KVF4HQ — the verb lock.
+ *
+ * Written because the NEUTER found nothing: replacing `withTrddLock`'s body with a
+ * direct call left all 54 existing tests green, i.e. the lock was shipped UNPINNED.
+ * Every existing test drives a single writer, and a single writer never contends.
+ *
+ * Not written as a race. Firing two verbs concurrently and asserting both survive
+ * passes with the lock deleted, because whether the losing interleaving occurs is
+ * the scheduler's choice.
+ */
+describe('the write verbs hold the document identity lock', () => {
+  it('a verb cannot proceed while the document lock is held, and completes once released', async () => {
+    const id = 'LOCK0001'
+    writeProposal(id, 'lock-test')
+
+    let done = false
+    let release!: () => void
+    const held = new Promise<void>((r) => { release = r })
+
+    // Hold the identity key from a SIBLING async context — withJsonLock is
+    // re-entrant via AsyncLocalStorage, so a contender started inside the holder
+    // would inherit the held set, skip the lock, and pass whatever the code does.
+    const holder = withJsonLock(documentLockKey(designDir, 'trdd', id), async () => { await held })
+
+    const contender = promoteTrdd(designDir, id, { approver: 'manager', iso: ISO })
+      .then(() => { done = true })
+
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5))
+
+    // The card must still be in proposals/: the lock wraps find -> git mv -> edit,
+    // so a blocked verb has performed NO part of the transition. Asserting only
+    // `done === false` would not distinguish "blocked before the move" from
+    // "moved, then blocked before the edit" — which is the half-applied state the
+    // atomicity clause exists to forbid.
+    expect(done).toBe(false)
+    expect(findTrdd(designDir, id)?.zone).toBe('proposals')
+
+    release()
+    await holder
+    await contender
+
+    // POSITIVE CONTROL: `false` above is equally satisfied by a contender that threw
+    // or was never called. This is what proves it was merely WAITING.
+    expect(done).toBe(true)
+    expect(findTrdd(designDir, id)?.zone).toBe('tasks')
   })
 })

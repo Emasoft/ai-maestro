@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-03T01:50:37+0200
-updated: 2026-08-03T02:06:07+0200
+updated: 2026-08-03T02:31:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -41,9 +41,20 @@ external-refs: [Emasoft/ai-maestro#57]
 > message *"The content of the TRDD/PRRD/SPEC file changed since your command was enqueued. Please
 > reread the file first."* or similar warning.
 
-**NEXT ACTION:** extend `lib/trdd-store.ts::editTrdd` — the funnel that already exists — with the
-lock + CAS layer, before touching anything else. See "what already exists" below; the shape of this
-work is *smaller than it looks* for TRDD and *larger than it looks* for PRRD/SPEC.
+**USER DIRECTIVE 2, 2026-08-03 — the edit primitive, and the PRRD/SPEC decision.** Verbatim:
+
+> the `trddgrep`, `specgrep` and `prrdgrep` (**if they do not exist, you must create them**..) must use
+> a editing procedure like **AT LINE N REPLACE X WITH Y**, so if X is not found, this means the file
+> has changed and **the command is blocked**.
+
+This resolves the open question the card carried: **`prrdgrep` and `specgrep` are CREATED HERE**, as
+siblings of `trddgrep`, with the transaction layer built in from line one. It is no longer a
+cross-repo negotiation with the janitor's `prrd-edit.py`.
+
+**NEXT ACTION:** implement the `AT LINE N REPLACE X WITH Y` primitive at
+`lib/trdd-store.ts::editTrdd` — the funnel that already exists — then build `prrdgrep` / `specgrep`
+around the same primitive. See "what already exists" below; the shape of this work is *smaller than it
+looks* for TRDD and *larger than it looks* for PRRD/SPEC.
 
 ## What the USER's directive corrects about the original card
 
@@ -89,7 +100,37 @@ The precedent is right there in the same codebase and should be reused, not rein
 `lib/json-io.ts::updateJson` is described as *the ONE lock + write path for every settings mutation*,
 and `withLock` keys already exist for `agents`, `amp-index`, `tasks-<teamId>`, and others.
 
-## PRRD and SPEC — the directive names two tools that do not exist
+## The edit primitive — `AT LINE N REPLACE X WITH Y` (USER-specified, canonical)
+
+Every mutation in all three tools goes through one operation:
+
+```
+AT LINE <N> REPLACE <X> WITH <Y>
+```
+
+- `N` — the line number, from the caller's read.
+- `X` — the **exact original text** the caller believes is at that line.
+- `Y` — the replacement.
+- **If `X` is not found at line `N`, the file changed since the read → the command is BLOCKED**, with
+  the directive's message: *"The content of the TRDD/PRRD/SPEC file changed since your command was
+  enqueued. Please reread the file first."*
+
+**Why line-anchored rather than file-wide unique-match** (the harness `Edit` tool's shape): the line
+number turns an O(file) search into an O(1) check, makes the failure message precise (*"line 14 no
+longer reads …"* rather than *"no match"*), and — the load-bearing part — a caller that read line 14
+and edits line 14 is asserting something a whole-file match cannot express: **that its view of that
+specific line is current.** A unique-match edit silently succeeds when the content moved to a different
+line, which for frontmatter (where `column:` may legitimately appear in a fenced example in the body)
+is precisely the wrong outcome.
+
+**A blocked command is not an error to swallow.** The whole value is that it is loud: the caller must
+re-read and re-issue. A tool that retries automatically, or that falls back to a fuzzy match, has
+deleted the guarantee while appearing to implement it.
+
+**This is the CAS clause, and it is the half a lock cannot provide** — it catches a change made by
+anything that never took the lock: a hand edit, a `git mv`, a symlinked peer, another tool.
+
+## PRRD and SPEC — the directive names two tools that do not exist (RESOLVED: create them)
 
 ```
 trddgrep : ON PATH   (scripts/trddgrep.mjs)
@@ -97,17 +138,30 @@ prrdgrep : ABSENT    — not on PATH, not in this repo
 specgrep : ABSENT    — not on PATH, not in this repo
 ```
 
-So for PRRD and SPEC there is **no funnel to extend**. Today the PRRD editor is `prrd-edit.py`, shipped
-by the **ai-maestro-janitor**, not by this repo — a cross-repo boundary. Two consequences to settle
-before building:
+So for PRRD and SPEC there is **no funnel to extend** — that half is a **create**, not a modify.
 
-1. **Do `prrdgrep` / `specgrep` get created here** (as siblings of `trddgrep`, with the transaction
-   layer built in from line one), **or** does the janitor add the transaction layer to `prrd-edit.py`?
-2. Whichever way, **the two must share one lock**, not two. A lock in this repo and a lock in the
-   janitor's Python tool would exclude each other **nowhere** — which is worse than no lock, because it
-   reads as protection. (This exact failure has been recorded before: two modules each individually
-   correct, contending for nothing, because "one lock" meant one *function name* rather than one
-   physical object.)
+**RESOLVED by USER directive 2: create them here.** `prrdgrep` and `specgrep` are built as siblings of
+`trddgrep`, sharing the same transaction core from line one. The janitor's `prrd-edit.py` is no longer
+the design centre for PRRD edits.
+
+**The residual hazard this decision does NOT remove**, and which must be handled explicitly:
+`prrd-edit.py` still exists and still writes. So the moment `prrdgrep` ships, **two writers exist for
+the PRRD** — one here holding our lock, one in the janitor holding nothing (or its own). A lock in this
+repo and a lock in the janitor's Python tool would exclude each other **nowhere**, which is worse than
+no lock because it reads as protection. (Recorded failure: two modules each individually correct,
+contending for nothing, because "one lock" meant one *function name* rather than one physical object.)
+
+Two acceptable resolutions, and the choice must be recorded here before `prrdgrep` ships:
+
+1. **One physical lock both honour** — a filesystem lock (a lockdir / flock on a path both tools
+   compute identically), since they are different languages in different processes and cannot share an
+   in-process Map. This is the only mechanism that actually excludes across the boundary.
+2. **`prrd-edit.py` is retired** in favour of `prrdgrep`, coordinated with the janitor — one writer,
+   no cross-language lock needed.
+
+The CAS clause partially mitigates either way — an edit by the unlocked writer is *detected* by the
+locked one, because the line no longer matches — but detection after a lost update is not the same as
+preventing it.
 
 ## The transaction contract (from the directive, made testable)
 
@@ -182,22 +236,28 @@ status quo because it looks solved.
 
 ## Acceptance
 
-- [ ] the transaction layer lands at `lib/trdd-store.ts::editTrdd` (the existing single funnel), not beside it
+- [ ] `AT LINE N REPLACE X WITH Y` is the ONE mutation primitive, implemented at `lib/trdd-store.ts::editTrdd` (the existing single funnel), not beside it
+- [ ] `X` not found at line `N` ⇒ the command is **BLOCKED** with the directive's message — never a fuzzy match, never an auto-retry
+- [ ] `prrdgrep` and `specgrep` CREATED, sharing the same transaction core as `trddgrep`
+- [ ] the `prrd-edit.py` double-writer resolved and the choice recorded here: one filesystem lock both honour, **or** `prrd-edit.py` retired (coordinated with the janitor)
 - [ ] per-card lock key, using the existing `withLock` primitive
 - [ ] the `column:` edit and the zone `git mv` are one atomic unit
 - [ ] queued writers wait and then proceed — a blocked write is never silently dropped
-- [ ] CAS: the replace applies only to the exact text read; on mismatch it refuses with the directive's message
 - [ ] the same command on the same input is byte-deterministic
 - [ ] crash mid-move leaves a doctor-classifiable state
-- [ ] PRRD/SPEC decision recorded here: new `prrdgrep`/`specgrep` in this repo, **or** the janitor extends `prrd-edit.py` — and either way ONE shared physical lock, verified to exclude across both
 - [ ] lock test pins the interleaving deterministically (hold → blocked → release → completes)
-- [ ] CAS test mutates the file behind the tool's back and asserts the refusal
+- [ ] CAS test mutates line `N` behind the tool's back and asserts the BLOCK — plus a positive control proving the same command succeeds when the line is unchanged, or "blocked" is equally satisfied by a tool that blocks everything
 - [ ] a neuter recorded for each guard, naming which test it alone reddens
 
 ## Approval log
 
 - 2026-08-02T01:50:37+0200 — SELF-MANDATE (min-approval-requirement: none). Filed from the
   `Emasoft/ai-maestro#57` verification pass after measuring that no `withLock` key covers `design/`.
+- 2026-08-03T02:31:00+0200 — **USER DIRECTIVE 2** (quoted verbatim in the STATE block). Specifies the
+  edit primitive `AT LINE N REPLACE X WITH Y` with a hard BLOCK when `X` is absent at `N`, and RESOLVES
+  the card's open question: `prrdgrep` / `specgrep` are **created here**, not negotiated with the
+  janitor. The `prrd-edit.py` double-writer hazard is recorded as the residual to settle before
+  `prrdgrep` ships.
 - 2026-08-03T02:06:07+0200 — **USER DIRECTIVE** (quoted verbatim in the STATE block). Scope widened from
   the TRDD tree to all three pillar edit tools; severity `medium → high` and effort `medium → large`
   because design folders are **symlinked between agents**, making the race the operating model rather

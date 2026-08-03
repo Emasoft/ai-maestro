@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { replaceAtLines, StaleDocumentError } from '@/lib/pillar/edit'
+import { replaceAtLines, StaleDocumentError, documentLockKey } from '@/lib/pillar/edit'
 import { withJsonLock } from '@/lib/json-io'
 
 let dir: string
@@ -150,5 +150,51 @@ describe('replaceAtLines — the lock', () => {
     // or was never called. This is what proves it was merely WAITING.
     expect(done).toBe(true)
     expect(readFileSync(doc, 'utf-8')).toContain('column: dev')
+  })
+})
+
+describe('documentLockKey — the lock must survive a zone move', () => {
+  it('is identical for the same id in DIFFERENT zones (the whole point)', () => {
+    // A TRDD transition is `git mv proposals/X.md tasks/X.md` and THEN an edit. A
+    // path-keyed lock would be taken on the old path by one writer and the new path
+    // by another — two locks, zero exclusion, both looking correct.
+    const root = '/corpus/design'
+    expect(documentLockKey(root, 'trdd', 'ABCD1234'))
+      .toBe(documentLockKey(root, 'trdd', 'ABCD1234'))
+    // and it depends on NEITHER zone:
+    expect(documentLockKey(root, 'trdd', 'ABCD1234')).not.toContain('proposals')
+    expect(documentLockKey(root, 'trdd', 'ABCD1234')).not.toContain('tasks')
+  })
+
+  it('is distinct per document and per pillar, so unrelated work does not serialise', () => {
+    const root = '/corpus/design'
+    expect(documentLockKey(root, 'trdd', 'AAAA1111')).not.toBe(documentLockKey(root, 'trdd', 'BBBB2222'))
+    expect(documentLockKey(root, 'trdd', 'AAAA1111')).not.toBe(documentLockKey(root, 'prrd', 'AAAA1111'))
+  })
+
+  it('lands beside the corpus root, not inside a zone a git mv would orphan', () => {
+    expect(documentLockKey('/corpus/design', 'trdd', 'ABCD1234')).toBe('/corpus/design/.trdd-lock-ABCD1234')
+  })
+
+  it('two writers on the SAME id via DIFFERENT paths still exclude each other', async () => {
+    // The behavioural form of the first test: same id, two paths (as before and
+    // after a zone move), one shared lockKey. Path-keying would let both through.
+    const key = documentLockKey(dir, 'trdd', 'ABCD1234')
+    const other = join(dir, 'moved-copy.md')
+    writeFileSync(other, ORIGINAL, 'utf-8')
+
+    let secondDone = false
+    let release!: () => void
+    const held = new Promise<void>((r) => { release = r })
+    const holder = withJsonLock(key, async () => { await held })
+
+    const contender = replaceAtLines(other, [{ line: 3, expect: 'todo', replace: 'dev' }], { lockKey: key })
+      .then(() => { secondDone = true })
+
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5))
+    expect(secondDone).toBe(false)   // blocked by a lock taken on the OTHER path's document
+
+    release(); await holder; await contender
+    expect(secondDone).toBe(true)    // positive control: it was waiting, not dead
   })
 })

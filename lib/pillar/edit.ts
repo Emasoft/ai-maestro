@@ -32,7 +32,33 @@
  * each other nowhere (json-io's header records that exact incident).
  */
 import { readFile, writeFile, rename, unlink } from 'fs/promises'
+import { join } from 'path'
 import { withJsonLock, type JsonLockOpts } from '../json-io'
+import type { PillarName } from './kinds'
+
+/**
+ * The exclusion key for one document — **derived from its IDENTITY, never its
+ * current path**.
+ *
+ * This is not a style choice, it is the difference between a lock and a decoration.
+ * A TRDD lifecycle transition MOVES the file (`git mv proposals/X.md tasks/X.md`)
+ * and then edits it at the new path. A lock keyed on the path would be taken on
+ * `proposals/X.md` by one writer and on `tasks/X.md` by another, and those two
+ * writers would exclude each other NOWHERE while both appearing correctly locked —
+ * the same "two paths, two locks, no exclusion" failure `lib/json-io.ts`'s header
+ * records against O_EXCL-vs-mkdir.
+ *
+ * So every operation on a document — a CLI line-edit, a route's field edit, a zone
+ * move — must pass the SAME key, and the only thing stable across a move is the id.
+ *
+ * The lock directory lands beside the corpus root rather than beside the document,
+ * for the same reason: a lockdir inside `proposals/` would be orphaned by the very
+ * `git mv` it is meant to serialise, and would additionally be walked by
+ * `listDocuments`.
+ */
+export function documentLockKey(corpusRoot: string, kind: PillarName, id: string): string {
+  return join(corpusRoot, `.${kind}-lock-${id}`)
+}
 
 /** One `AT LINE N REPLACE X WITH Y` instruction. `line` is 1-based, as a reader sees it. */
 export interface LineEdit {
@@ -67,6 +93,16 @@ export class StaleDocumentError extends Error {
     )
     this.name = 'StaleDocumentError'
   }
+}
+
+/** Options for `replaceAtLines`: the lock windows, plus the identity key. */
+export interface ReplaceOpts extends JsonLockOpts {
+  /**
+   * The exclusion key, from `documentLockKey`. Omit ONLY for a document that
+   * cannot move; a pillar caller that omits it around a zone transition is not
+   * locked against a peer that used the other path.
+   */
+  lockKey?: string
 }
 
 export interface ReplaceResult {
@@ -107,8 +143,14 @@ function splitLines(text: string): { lines: string[]; trailingNewline: boolean }
 export async function replaceAtLines(
   filePath: string,
   edits: readonly LineEdit[],
-  opts: JsonLockOpts = {},
+  opts: ReplaceOpts = {},
 ): Promise<ReplaceResult> {
+  // Lock on the caller's IDENTITY key when it supplies one. Defaulting to the path
+  // is safe ONLY for a corpus whose documents never move; for the pillars, a caller
+  // that omits `lockKey` around a zone transition gets two locks and no exclusion
+  // (see `documentLockKey`). The default exists so a one-off edit is not forced to
+  // know the corpus root, not because path-keying is equivalent.
+  const lockKey = opts.lockKey ?? filePath
   if (edits.length === 0) {
     throw new Error('replaceAtLines: refusing an empty edit batch — a no-op write is a caller bug')
   }
@@ -128,7 +170,7 @@ export async function replaceAtLines(
   }
 
   return withJsonLock(
-    filePath,
+    lockKey,
     async () => {
       // Read INSIDE the lock. Reading outside would re-open the very window the lock
       // closes: the caller's line numbers would be checked against a snapshot that a

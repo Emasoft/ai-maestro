@@ -49,7 +49,9 @@ external-refs: [Emasoft/ai-maestro#57]
 
 This resolves the open question the card carried: **`prrdgrep` and `specgrep` are CREATED HERE**, as
 siblings of `trddgrep`, with the transaction layer built in from line one. It is no longer a
-cross-repo negotiation with the janitor's `prrd-edit.py`.
+cross-repo negotiation with the janitor's `prrd-edit.py` — and because the lock is a filesystem
+`mkdir` directory, Python can take the identical lock, so a surviving `prrd-edit.py` is fixable rather
+than fatal.
 
 **NEXT ACTION:** implement the `AT LINE N REPLACE X WITH Y` primitive at
 `lib/trdd-store.ts::editTrdd` — the funnel that already exists — then build `prrdgrep` / `specgrep`
@@ -96,9 +98,43 @@ invalid value *before* the write, because a permissive editor once left 158 card
 all. **What it does not guarantee:** anything about concurrency. `grep -n 'withLock' lib/trdd-store.ts`
 → **nothing**. No lock, no queue, no compare-and-swap.
 
-The precedent is right there in the same codebase and should be reused, not reinvented:
-`lib/json-io.ts::updateJson` is described as *the ONE lock + write path for every settings mutation*,
-and `withLock` keys already exist for `agents`, `amp-index`, `tasks-<teamId>`, and others.
+## The lock — `withLock` is the WRONG primitive here, and reading it is what showed that
+
+**Correction to this card's first draft, which said "reuse `withLock`".** `lib/file-lock.ts:192`'s
+`withLock` is a **PROCESS-LOCAL** `Map`+`Set` mutex, and its own header says so under REG-MIN-05:
+
+> *"The Map+Set machinery below is PROCESS-LOCAL. It serialises concurrent load→modify→save sequences
+> within a single Node.js process but provides NO protection against: … Test harnesses or CLI utilities
+> directly importing registry modules while a dev/prod server is running."*
+
+The USER's threat model is **N agents on one host through symlinked design folders** — N *processes*.
+A process-local mutex protects nothing there. Reusing it would have produced a lock that is correct,
+tested, and inert against the exact race this card exists to stop.
+
+**The right precedent is already in this codebase**, at `lib/json-io.ts` — the ONE lock + write path
+for every settings mutation (TRDD-RYFP030K):
+
+```ts
+:176   const lockDir = `${filePath}.lock`        // taken with mkdir(recursive: false)
+```
+
+A **lock DIRECTORY beside the file**, acquired by `mkdir` failing atomically when it exists. Three
+properties this card needs and `withLock` cannot give:
+
+1. **Cross-process** — the filesystem is the shared object, not a Map in one heap.
+2. **Cross-language** — Python's `os.mkdir` takes the identical lock, which is what makes the
+   `prrd-edit.py` double-writer resolvable at all.
+3. **Per-document by construction** — the lock path is derived from the file path, so the unit of
+   exclusion is one card, never the tree.
+
+And `json-io.ts`'s header already records the failure this card must not repeat, in its own words:
+
+> *"AgentlensPro's is a FILE at `${file}.agentlens-lock` taken with O_EXCL. Two different paths AND two
+> different mechanisms … leaving a `withSettingsLock` caller silently unprotected against this module,
+> which is the very split this card exists to close."*
+
+**Same mechanism, same path convention, or it is not the same lock.** `mkdir` on `${file}.lock` — not
+O_EXCL, not a `.lock` file, not a different suffix.
 
 ## The edit primitive — `AT LINE N REPLACE X WITH Y` (USER-specified, canonical)
 
@@ -203,7 +239,7 @@ with no way to tell which half was intended.
   under a lock that reads as correct — the most expensive outcome.
 - **ONE physical lock across all three pillars and both languages** (see the PRRD/SPEC section). Not one
   per tool, not one per process.
-- **Reuse `withLock` / the `json-io` precedent** rather than inventing a second vocabulary.
+- **Reuse `lib/json-io.ts`'s `mkdir` lock-directory mechanism verbatim** — same path (`${file}.lock`), same primitive. NOT `withLock` (process-local; see the lock section above). A second mechanism or a second path is a second lock, and two locks exclude each other nowhere.
 - **Crash safety:** a process killed mid-move leaves a state the doctor can classify, never a card in
   neither zone.
 - **A hand edit outside the tooling takes no lock at all** — which is exactly why the CAS clause is not
@@ -240,7 +276,7 @@ status quo because it looks solved.
 - [ ] `X` not found at line `N` ⇒ the command is **BLOCKED** with the directive's message — never a fuzzy match, never an auto-retry
 - [ ] `prrdgrep` and `specgrep` CREATED, sharing the same transaction core as `trddgrep`
 - [ ] the `prrd-edit.py` double-writer resolved and the choice recorded here: one filesystem lock both honour, **or** `prrd-edit.py` retired (coordinated with the janitor)
-- [ ] per-card lock key, using the existing `withLock` primitive
+- [ ] the lock is a **`mkdir` lock DIRECTORY at `${file}.lock`** — `lib/json-io.ts`'s mechanism and path convention, NOT `withLock` (process-local, inert across agents) and NOT a different suffix or O_EXCL
 - [ ] the `column:` edit and the zone `git mv` are one atomic unit
 - [ ] queued writers wait and then proceed — a blocked write is never silently dropped
 - [ ] the same command on the same input is byte-deterministic

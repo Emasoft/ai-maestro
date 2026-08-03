@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-03T01:50:37+0200
-updated: 2026-08-03T02:31:00+0200
+updated: 2026-08-03T02:58:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -245,6 +245,22 @@ with no way to tell which half was intended.
 - **A hand edit outside the tooling takes no lock at all** — which is exactly why the CAS clause is not
   optional. State this limit rather than hide it.
 
+## Neuter record — 2026-08-03, `lib/pillar/edit.ts` (via `scripts/dev/neuter`)
+
+Two guards, two neuters, and the attribution is **disjoint** — neither test set can be reddened by
+the other guard's mutation, so each is pinned by tests only it reddens:
+
+| neuter | red | which tests |
+|---|---|---|
+| CAS disarmed (`if (actual === undefined \|\| !actual.includes(e.expect))` → `if (false)`) | **4** | BLOCKS when the line changed · BLOCKS past end of file · carries the USER-specified message · is ALL-OR-NOTHING |
+| lock removed (`withJsonLock` → pass-through identity) | **1** | a contender cannot complete while the lock is held, and completes once released |
+
+**A third mutation is recorded because it produced a NON-result and that is worth keeping.** An
+earlier attempt at neuter 2 rewrote the `return withJsonLock(` line into invalid TypeScript; the run
+reported *"no tests"*, which the tool correctly flagged as ambiguous — *"nothing red — the guard is
+UNPINNED, or the mutation missed the branch under test"*. A broken mutation and an unpinned guard look
+identical in the output. Re-aimed at the import (keeping the file valid) it reddened exactly one test.
+
 ## Verification
 
 ```bash
@@ -272,18 +288,18 @@ status quo because it looks solved.
 
 ## Acceptance
 
-- [ ] `AT LINE N REPLACE X WITH Y` is the ONE mutation primitive, implemented at `lib/trdd-store.ts::editTrdd` (the existing single funnel), not beside it
-- [ ] `X` not found at line `N` ⇒ the command is **BLOCKED** with the directive's message — never a fuzzy match, never an auto-retry
+- [x] `AT LINE N REPLACE X WITH Y` implemented as `lib/pillar/edit.ts::replaceAtLines` — the shared WRITE seam mirroring `lib/pillar/store.ts` (the READ seam), so all three tools share ONE concurrency story. **Still to do:** route `lib/trdd-store.ts::editTrdd` through it.
+- [x] `X` not found at line `N` ⇒ **BLOCKED** via `StaleDocumentError`, carrying the directive's message verbatim; no fuzzy match, no auto-retry
 - [ ] `prrdgrep` and `specgrep` CREATED, sharing the same transaction core as `trddgrep`
 - [ ] the `prrd-edit.py` double-writer resolved and the choice recorded here: one filesystem lock both honour, **or** `prrd-edit.py` retired (coordinated with the janitor)
-- [ ] the lock is a **`mkdir` lock DIRECTORY at `${file}.lock`** — `lib/json-io.ts`'s mechanism and path convention, NOT `withLock` (process-local, inert across agents) and NOT a different suffix or O_EXCL
+- [x] the lock is a **`mkdir` lock DIRECTORY at `${file}.lock`** — `lib/json-io.ts`'s mechanism and path convention, NOT `withLock` (process-local, inert across agents) and NOT a different suffix or O_EXCL
 - [ ] the `column:` edit and the zone `git mv` are one atomic unit
-- [ ] queued writers wait and then proceed — a blocked write is never silently dropped
-- [ ] the same command on the same input is byte-deterministic
+- [x] queued writers wait and then proceed (`withJsonLock`'s in-process queue + cross-process lock) — pinned by the lock test's release-then-completes half
+- [x] byte-deterministic — edits applied in line order regardless of caller order; no trailing-newline normalisation; a byte-identical result skips the write entirely (an mtime bump is what every `lib/pillar/` freshness probe keys on)
 - [ ] crash mid-move leaves a doctor-classifiable state
-- [ ] lock test pins the interleaving deterministically (hold → blocked → release → completes)
-- [ ] CAS test mutates line `N` behind the tool's back and asserts the BLOCK — plus a positive control proving the same command succeeds when the line is unchanged, or "blocked" is equally satisfied by a tool that blocks everything
-- [ ] a neuter recorded for each guard, naming which test it alone reddens
+- [x] lock test pins the interleaving deterministically (hold → blocked → release → completes), contender started from a SIBLING async context because `withJsonLock` is re-entrant via AsyncLocalStorage
+- [x] CAS test mutates line `N` behind the tool's back and asserts the BLOCK, with the positive control alongside it
+- [x] a neuter recorded for each guard, disjoint attribution — see the neuter record above
 
 ## Approval log
 

@@ -61,7 +61,7 @@ export async function POST(
   const authzErr = authorizeTrddVerb(auth, designDir, id, 'archive')
   if (authzErr) return authzErr
 
-  const result = archiveTrdd(designDir, id, {
+  const result = await archiveTrdd(designDir, id, {
     approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
     state: state as (typeof ARCHIVE_STATES)[number],
     reason: typeof body.reason === 'string' ? body.reason : undefined,

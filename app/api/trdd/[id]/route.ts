@@ -84,7 +84,7 @@ export async function PATCH(
   const authzErr = authorizeTrddVerb(auth, designDir, id, 'edit')
   if (authzErr) return authzErr
 
-  const result = editTrdd(designDir, id, edits, new Date().toISOString())
+  const result = await editTrdd(designDir, id, edits, new Date().toISOString())
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

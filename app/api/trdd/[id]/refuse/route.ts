@@ -43,7 +43,7 @@ export async function POST(
   const authzErr = authorizeTrddVerb(auth, designDir, id, 'refuse')
   if (authzErr) return authzErr
 
-  const result = refuseTrdd(designDir, id, {
+  const result = await refuseTrdd(designDir, id, {
     approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
     reason: typeof body.reason === 'string' ? body.reason : undefined,
     iso: new Date().toISOString(),

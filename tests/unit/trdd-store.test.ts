@@ -198,10 +198,10 @@ describe('trdd-store pure writers preserve the grep-first format', () => {
 })
 
 describe('trdd-store lifecycle transitions', () => {
-  it('editTrdd edits a field in place and bumps updated (no folder move)', () => {
+  it('editTrdd edits a field in place and bumps updated (no folder move)', async () => {
     const id = 'EDIT0001'
     writeTask(id, 'edit-me', 'dev')
-    const r = editTrdd(designDir, id, { severity: 'HIGH' }, ISO)
+    const r = await editTrdd(designDir, id, { severity: 'HIGH' }, ISO)
     expect(r.ok).toBe(true)
     const t = findTrdd(designDir, id)!
     expect(t.zone).toBe('tasks') // unmoved
@@ -212,10 +212,10 @@ describe('trdd-store lifecycle transitions', () => {
     expect(new Date(t.frontmatter.updated as Date).toISOString()).toBe(ISO)
   })
 
-  it('promote moves a proposal → tasks/, sets column=planned, logs APPROVED', () => {
+  it('promote moves a proposal → tasks/, sets column=planned, logs APPROVED', async () => {
     const id = 'PROM0001'
     writeProposal(id, 'promote-me')
-    const r = promoteTrdd(designDir, id, { approver: 'manager', rationale: 'looks good', iso: ISO })
+    const r = await promoteTrdd(designDir, id, { approver: 'manager', rationale: 'looks good', iso: ISO })
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(r.from).toBe('proposals')
@@ -232,18 +232,18 @@ describe('trdd-store lifecycle transitions', () => {
     expect(fs.existsSync(path.join(designDir, 'proposals', path.basename(t.filePath)))).toBe(false)
   })
 
-  it('promote refuses a non-proposal (409)', () => {
+  it('promote refuses a non-proposal (409)', async () => {
     const id = 'PROM0002'
     writeTask(id, 'already-open', 'dev')
-    const r = promoteTrdd(designDir, id, { approver: 'm', iso: ISO })
+    const r = await promoteTrdd(designDir, id, { approver: 'm', iso: ISO })
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.status).toBe(409)
   })
 
-  it('refuse moves a proposal → refused/ with column=refused', () => {
+  it('refuse moves a proposal → refused/ with column=refused', async () => {
     const id = 'REFU0001'
     writeProposal(id, 'refuse-me')
-    const r = refuseTrdd(designDir, id, { approver: 'manager', reason: 'out of scope', iso: ISO })
+    const r = await refuseTrdd(designDir, id, { approver: 'manager', reason: 'out of scope', iso: ISO })
     expect(r.ok).toBe(true)
     const t = findTrdd(designDir, id)!
     expect(t.zone).toBe('refused')
@@ -251,20 +251,20 @@ describe('trdd-store lifecycle transitions', () => {
     expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('REFUSED by manager')
   })
 
-  it('advanceColumn advances an open task in place (no move)', () => {
+  it('advanceColumn advances an open task in place (no move)', async () => {
     const id = 'ADVN0001'
     writeTask(id, 'advance-me', 'dev')
-    const r = advanceColumn(designDir, id, 'testing', { iso: ISO, approver: 'orch' })
+    const r = await advanceColumn(designDir, id, 'testing', { iso: ISO, approver: 'orch' })
     expect(r.ok).toBe(true)
     const t = findTrdd(designDir, id)!
     expect(t.zone).toBe('tasks')
     expect(t.column).toBe('testing')
   })
 
-  it('archive moves a task → archived/ with the terminal state + superseded-by', () => {
+  it('archive moves a task → archived/ with the terminal state + superseded-by', async () => {
     const id = 'ARCH0001'
     writeTask(id, 'archive-me', 'complete')
-    const r = archiveTrdd(designDir, id, {
+    const r = await archiveTrdd(designDir, id, {
       approver: 'manager',
       state: 'superseded',
       supersededBy: 'TRDD-NEWONE01',
@@ -278,14 +278,14 @@ describe('trdd-store lifecycle transitions', () => {
     expect(fs.readFileSync(t.filePath, 'utf-8')).toContain('SUPERSEDED by manager')
   })
 
-  it('archive refuses an already-terminal (refused) TRDD (409)', () => {
+  it('archive refuses an already-terminal (refused) TRDD (409)', async () => {
     const id = 'ARCH0002'
     const f = writeProposal(id, 'refused-already')
     // simulate it already living in refused/
     const refusedDir = path.join(designDir, 'refused')
     fs.mkdirSync(refusedDir, { recursive: true })
     fs.renameSync(f, path.join(refusedDir, path.basename(f)))
-    const r = archiveTrdd(designDir, id, { approver: 'm', state: 'completed', iso: ISO })
+    const r = await archiveTrdd(designDir, id, { approver: 'm', state: 'completed', iso: ISO })
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.status).toBe(409)
   })
@@ -342,34 +342,34 @@ describe('trdd-store lifecycle transitions stage the file they moved (real git r
     git('commit', '-q', '-m', 'seed')
   }
 
-  it('promoteTrdd stages the column edit, not just the rename', () => {
+  it('promoteTrdd stages the column edit, not just the rename', async () => {
     seedAndCommit(() => writeProposal('AAAA1111', 'promote-me', 'proposal', '', repoDesign))
-    const r = promoteTrdd(repoDesign, 'AAAA1111', { approver: 'MANAGER', iso: ISO })
+    const r = await promoteTrdd(repoDesign, 'AAAA1111', { approver: 'MANAGER', iso: ISO })
     expect(r.ok).toBe(true)
     expectFullyStaged('planned')
     expect(git('diff', '--cached', '--', 'design')).toContain('APPROVED by MANAGER')
   })
 
-  it('refuseTrdd stages the column edit, not just the rename', () => {
+  it('refuseTrdd stages the column edit, not just the rename', async () => {
     seedAndCommit(() => writeProposal('BBBB2222', 'refuse-me', 'proposal', '', repoDesign))
-    const r = refuseTrdd(repoDesign, 'BBBB2222', { approver: 'MANAGER', iso: ISO })
+    const r = await refuseTrdd(repoDesign, 'BBBB2222', { approver: 'MANAGER', iso: ISO })
     expect(r.ok).toBe(true)
     expectFullyStaged('refused')
   })
 
-  it('archiveTrdd stages the column edit, not just the rename', () => {
+  it('archiveTrdd stages the column edit, not just the rename', async () => {
     seedAndCommit(() => writeTask('CCCC3333', 'archive-me', 'complete', repoDesign))
-    const r = archiveTrdd(repoDesign, 'CCCC3333', { approver: 'm', state: 'completed', iso: ISO })
+    const r = await archiveTrdd(repoDesign, 'CCCC3333', { approver: 'm', state: 'completed', iso: ISO })
     expect(r.ok).toBe(true)
     expectFullyStaged('completed')
   })
 
-  it('does not begin tracking a TRDD that git was not already following', () => {
+  it('does not begin tracking a TRDD that git was not already following', async () => {
     // No `git add` — the file is untracked, so `git mv` fails and moveZone falls
     // back to renameSync. Staging it here would sneak an untracked file into
     // whatever the caller commits next. The move must still succeed.
     writeProposal('DDDD4444', 'untracked', 'proposal', '', repoDesign)
-    const r = promoteTrdd(repoDesign, 'DDDD4444', { approver: 'MANAGER', iso: ISO })
+    const r = await promoteTrdd(repoDesign, 'DDDD4444', { approver: 'MANAGER', iso: ISO })
     expect(r.ok).toBe(true)
     expect(git('ls-files', '--', 'design')).toBe('')
     expect(git('diff', '--cached', '--', 'design')).toBe('')

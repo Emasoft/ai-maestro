@@ -26,6 +26,8 @@ import { execFileSync } from 'child_process'
 import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pillar/kinds'
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
+import { withJsonLock } from './json-io'
+import { documentLockKey } from './pillar/edit'
 
 // Re-exported so this module's PUBLIC API is unchanged by the move to lib/pillar/:
 // every existing caller imports TrddZone / TRDD_ZONES from here, and the proof the
@@ -280,7 +282,8 @@ export function editTrdd(
   id: string,
   fields: Record<string, string>,
   iso: string,
-): TrddResult {
+): Promise<TrddResult> {
+  return withTrddLock(designDir, id, () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
 
@@ -302,6 +305,7 @@ export function editTrdd(
   content = setFrontmatterField(content, 'updated', iso)
   fs.writeFileSync(trdd.filePath, content)
   return { ok: true, id: trdd.id, column: trdd.column, filePath: trdd.filePath }
+  })
 }
 
 /**
@@ -356,6 +360,31 @@ function stageMovedFile(designDir: string, filePath: string): void {
   }
 }
 
+/**
+ * Run `fn` holding the TRDD's identity lock (TRDD-D7KVF4HQ).
+ *
+ * WHY EVERY VERB BELOW IS ASYNC. Design folders are symlinked between agents
+ * working the same project, so N agents in N processes edit one corpus, and until
+ * this landed nothing serialised them. The cross-process lock (`withJsonLock`, a
+ * `mkdir` lock DIRECTORY) is async, and `lib/file-lock.ts::withLock` — the sync-ish
+ * alternative — is a PROCESS-LOCAL Map+Set that its own header (REG-MIN-05)
+ * documents as no protection against exactly this. A sync `mkdirSync` spin-wait was
+ * considered and REJECTED: it blocks the Node event loop for the whole process, and
+ * three of these callers are server route handlers.
+ *
+ * WHY THE LOCK WRAPS THE WHOLE VERB, `findTrdd` INCLUDED. A lifecycle transition is
+ * find → `git mv` → edit → stage, and those must be ONE atomic unit: a peer that
+ * moves the card between our find and our move leaves us editing a path that no
+ * longer holds it. Locking only the write would serialise the harmless half.
+ *
+ * WHY THE KEY IS THE ID AND NOT THE PATH. The verb MOVES the file, so a path-keyed
+ * lock is taken on `proposals/X.md` by one writer and `tasks/X.md` by another — two
+ * locks, zero exclusion, both looking correct from inside. See `documentLockKey`.
+ */
+function withTrddLock<T>(designDir: string, id: string, fn: () => T | Promise<T>): Promise<T> {
+  return withJsonLock(documentLockKey(designDir, 'trdd', id), async () => fn())
+}
+
 function editAt(filePath: string, edits: Array<[string, string]>, logLine: string): void {
   let content = fs.readFileSync(filePath, 'utf-8')
   for (const [k, v] of edits) content = setFrontmatterField(content, k, v)
@@ -385,7 +414,8 @@ export function promoteTrdd(
   designDir: string,
   id: string,
   opts: { approver: string; rationale?: string; iso: string; approvalToken?: string | null },
-): TrddResult {
+): Promise<TrddResult> {
+  return withTrddLock(designDir, id, () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
   if (trdd.zone !== 'proposals') {
@@ -422,6 +452,7 @@ export function promoteTrdd(
   )
   if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: 'proposals', to: 'tasks', column: 'planned', filePath: newPath }
+  })
 }
 
 /** REFUSE a proposal → refused (git mv proposals/ → refused/). */
@@ -429,7 +460,8 @@ export function refuseTrdd(
   designDir: string,
   id: string,
   opts: { approver: string; reason?: string; iso: string },
-): TrddResult {
+): Promise<TrddResult> {
+  return withTrddLock(designDir, id, () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
   if (trdd.zone !== 'proposals') {
@@ -444,6 +476,7 @@ export function refuseTrdd(
   )
   if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: 'proposals', to: 'refused', column: 'refused', filePath: newPath }
+  })
 }
 
 /** ADVANCE an in-flight TRDD's column within tasks/ (no folder move); bumps `updated`. */
@@ -452,7 +485,8 @@ export function advanceColumn(
   id: string,
   column: string,
   opts: { iso: string; note?: string; approver?: string },
-): TrddResult {
+): Promise<TrddResult> {
+  return withTrddLock(designDir, id, () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
   if (trdd.zone !== 'tasks') {
@@ -467,6 +501,7 @@ export function advanceColumn(
   }
   fs.writeFileSync(trdd.filePath, content)
   return { ok: true, id: trdd.id, column, filePath: trdd.filePath }
+  })
 }
 
 /** ARCHIVE a once-approved TRDD → completed|cancelled|superseded (git mv → archived/). */
@@ -480,7 +515,8 @@ export function archiveTrdd(
     supersededBy?: string
     iso: string
   },
-): TrddResult {
+): Promise<TrddResult> {
+  return withTrddLock(designDir, id, () => {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
   // A refused proposal is terminal in refused/; only proposals/ or tasks/ archive.
@@ -499,4 +535,5 @@ export function archiveTrdd(
   )
   if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: trdd.zone, to: 'archived', column: opts.state, filePath: newPath }
+  })
 }

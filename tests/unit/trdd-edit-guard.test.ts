@@ -268,12 +268,12 @@ describe('editTrdd wires the gate before its first write', () => {
     fs.rmSync(designDir, { recursive: true, force: true })
   })
 
-  it('refuses column=not-started and leaves the file BYTE-IDENTICAL', () => {
+  it('refuses column=not-started and leaves the file BYTE-IDENTICAL', async () => {
     const id = 'GRDX0001'
     const file = writeTask(id, 'edit-me', 'dev')
     const before = fs.readFileSync(file, 'utf-8')
 
-    const r = editTrdd(designDir, id, { column: 'not-started' }, ISO)
+    const r = await editTrdd(designDir, id, { column: 'not-started' }, ISO)
     expect(r.ok).toBe(false)
     if (!r.ok) {
       expect(r.status).toBe(400)
@@ -284,12 +284,12 @@ describe('editTrdd wires the gate before its first write', () => {
     expect(after).toBe(before)
   })
 
-  it('refuses a dangling blocked-by id and leaves the file BYTE-IDENTICAL', () => {
+  it('refuses a dangling blocked-by id and leaves the file BYTE-IDENTICAL', async () => {
     const id = 'GRDX0002'
     const file = writeTask(id, 'edit-me-2', 'dev')
     const before = fs.readFileSync(file, 'utf-8')
 
-    const r = editTrdd(designDir, id, { 'blocked-by': '[ZZZZZZZZ]', column: 'blocked' }, ISO)
+    const r = await editTrdd(designDir, id, { 'blocked-by': '[ZZZZZZZZ]', column: 'blocked' }, ISO)
     expect(r.ok).toBe(false)
     if (!r.ok) {
       expect(r.status).toBe(400)
@@ -299,33 +299,33 @@ describe('editTrdd wires the gate before its first write', () => {
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)
   })
 
-  it('accepts a resolvable blocked-by id against the real corpus (positive control)', () => {
+  it('accepts a resolvable blocked-by id against the real corpus (positive control)', async () => {
     const blockerId = 'BLOCKER1'
     writeTask(blockerId, 'the-blocker', 'dev')
     const id = 'GRDX0003'
     writeTask(id, 'edit-me-3', 'dev')
 
-    const r = editTrdd(designDir, id, { 'blocked-by': `[${blockerId}]`, column: 'blocked' }, ISO)
+    const r = await editTrdd(designDir, id, { 'blocked-by': `[${blockerId}]`, column: 'blocked' }, ISO)
     expect(r.ok).toBe(true)
     const t = findTrdd(designDir, id)!
     expect(t.column).toBe('blocked')
   })
 
-  it('still allows a legitimate field edit (severity) — the gate does not over-refuse', () => {
+  it('still allows a legitimate field edit (severity) — the gate does not over-refuse', async () => {
     const id = 'GRDX0004'
     writeTask(id, 'edit-me-4', 'dev')
-    const r = editTrdd(designDir, id, { severity: 'HIGH' }, ISO)
+    const r = await editTrdd(designDir, id, { severity: 'HIGH' }, ISO)
     expect(r.ok).toBe(true)
     const t = findTrdd(designDir, id)!
     expect(t.frontmatter.severity).toBe('HIGH')
   })
 
-  it('refuses editing a frozen terminal (complete) card and leaves it BYTE-IDENTICAL', () => {
+  it('refuses editing a frozen terminal (complete) card and leaves it BYTE-IDENTICAL', async () => {
     const id = 'GRDX0005'
     const file = writeTask(id, 'edit-me-5', 'complete')
     const before = fs.readFileSync(file, 'utf-8')
 
-    const r = editTrdd(designDir, id, { severity: 'HIGH' }, ISO)
+    const r = await editTrdd(designDir, id, { severity: 'HIGH' }, ISO)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.status).toBe(400)
     expect(fs.readFileSync(file, 'utf-8')).toBe(before)

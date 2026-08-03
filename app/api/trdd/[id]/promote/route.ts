@@ -50,7 +50,7 @@ export async function POST(
   const authzErr = authorizeTrddVerb(auth, designDir, id, 'promote')
   if (authzErr) return authzErr
 
-  const result = advanceColumn(designDir, id, column, {
+  const result = await advanceColumn(designDir, id, column, {
     iso: new Date().toISOString(),
     note: typeof body.note === 'string' ? body.note : undefined,
     approver: typeof body.approver === 'string' ? body.approver : auth.agentId || undefined,

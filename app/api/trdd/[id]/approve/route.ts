@@ -64,7 +64,7 @@ export async function POST(
   // back. The honest degradation is an approval that says it cannot prove itself.
   const approvalToken = await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval')
 
-  const result = promoteTrdd(designDir, id, {
+  const result = await promoteTrdd(designDir, id, {
     approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
     rationale: typeof body.rationale === 'string' ? body.rationale : undefined,
     iso: new Date().toISOString(),

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-03T01:50:37+0200
-updated: 2026-08-03T04:36:00+0200
+updated: 2026-08-03T04:48:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -80,9 +80,18 @@ queue is only fairness — so A and B interoperate. **But a sync spin-wait block
 for the whole process**, and three of the callers are server route handlers. That makes B wrong for
 exactly the callers that matter, and acceptable only for a standalone CLI.
 
-**Recommendation: A**, with B rejected in writing so nobody re-proposes it. Not started: an async
-conversion half-applied across a sync module is worse than none, and this needs a clean pass rather
-than the tail of a context window.
+**DECIDED BY THE USER: A.** Landed `99997a06`. All five write verbs (`editTrdd`, `promoteTrdd`,
+`refuseTrdd`, `advanceColumn`, `archiveTrdd`) are async and run inside
+`withJsonLock(documentLockKey(designDir, 'trdd', id), …)`. **The lock wraps the WHOLE verb, `findTrdd`
+included** — a transition is find → `git mv` → edit → stage and those must be one unit; a peer that
+moves the card between our find and our move leaves us editing a path that no longer holds it.
+
+Ripple was exactly as measured and entirely mechanical: 5 route call sites gained `await` (handlers
+were already async), 16 test callbacks became `async` across 2 files. **B stays rejected in writing**
+so it is not re-proposed on the grounds that it preserves signatures.
+
+**NEXT ACTION:** create `prrdgrep` and `specgrep` on the shared core (`lib/pillar/edit.ts`), then
+settle the `prrd-edit.py` double-writer.
 
 ## What the USER's directive corrects about the original card
 
@@ -281,6 +290,14 @@ the other guard's mutation, so each is pinned by tests only it reddens:
 | CAS disarmed (`if (actual === undefined \|\| !actual.includes(e.expect))` → `if (false)`) | **4** | BLOCKS when the line changed · BLOCKS past end of file · carries the USER-specified message · is ALL-OR-NOTHING |
 | lock removed (`withJsonLock` → pass-through identity) | **1** | a contender cannot complete while the lock is held, and completes once released |
 | lock key reverted to the PATH (`opts.lockKey ?? filePath` → `filePath`) | **1** | two writers on the SAME id via DIFFERENT paths still exclude each other |
+| `withTrddLock` → direct call (`lib/trdd-store.ts`) | **1** | a verb cannot proceed while the document lock is held, and completes once released |
+
+**The fourth neuter found the lock SHIPPED UNPINNED, and that is the most useful thing it has done.**
+Run against the 54 existing `trdd-store` / `trdd-edit-guard` tests it reddened **nothing** — the lock
+was live, correct, and untested. The reason is structural, not an oversight: **every existing test
+drives a SINGLE writer, and a single writer never contends.** A guard whose failure mode requires two
+actors cannot be caught by a suite that only ever supplies one, however thorough that suite is. The
+test written for it reddens on the identical mutation.
 
 **The path-keying neuter records a defect found by READING, not by a failing test.** `promoteTrdd` /
 `refuseTrdd` / `archiveTrdd` each `git mv` the file and THEN edit it at the new path, so a lock keyed
@@ -323,12 +340,12 @@ status quo because it looks solved.
 
 ## Acceptance
 
-- [x] `AT LINE N REPLACE X WITH Y` implemented as `lib/pillar/edit.ts::replaceAtLines` — the shared WRITE seam mirroring `lib/pillar/store.ts` (the READ seam), so all three tools share ONE concurrency story. **Still to do:** route `lib/trdd-store.ts::editTrdd` through it.
+- [x] `AT LINE N REPLACE X WITH Y` implemented as `lib/pillar/edit.ts::replaceAtLines` — the shared WRITE seam mirroring `lib/pillar/store.ts` (the READ seam), so all three tools share ONE concurrency story
 - [x] `X` not found at line `N` ⇒ **BLOCKED** via `StaleDocumentError`, carrying the directive's message verbatim; no fuzzy match, no auto-retry
 - [ ] `prrdgrep` and `specgrep` CREATED, sharing the same transaction core as `trddgrep`
 - [ ] the `prrd-edit.py` double-writer resolved and the choice recorded here: one filesystem lock both honour, **or** `prrd-edit.py` retired (coordinated with the janitor)
 - [x] the lock is a **`mkdir` lock DIRECTORY at `${file}.lock`** — `lib/json-io.ts`'s mechanism and path convention, NOT `withLock` (process-local, inert across agents) and NOT a different suffix or O_EXCL
-- [ ] the `column:` edit and the zone `git mv` are one atomic unit
+- [x] the `column:` edit and the zone `git mv` are one atomic unit — the lock wraps find → mv → edit → stage (`99997a06`), pinned by the zone assertion in the verb-lock test
 - [x] queued writers wait and then proceed (`withJsonLock`'s in-process queue + cross-process lock) — pinned by the lock test's release-then-completes half
 - [x] byte-deterministic — edits applied in line order regardless of caller order; no trailing-newline normalisation; a byte-identical result skips the write entirely (an mtime bump is what every `lib/pillar/` freshness probe keys on)
 - [ ] crash mid-move leaves a doctor-classifiable state

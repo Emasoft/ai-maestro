@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-03T01:50:37+0200
-updated: 2026-08-03T03:06:00+0200
+updated: 2026-08-03T04:36:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -280,6 +280,15 @@ the other guard's mutation, so each is pinned by tests only it reddens:
 |---|---|---|
 | CAS disarmed (`if (actual === undefined \|\| !actual.includes(e.expect))` → `if (false)`) | **4** | BLOCKS when the line changed · BLOCKS past end of file · carries the USER-specified message · is ALL-OR-NOTHING |
 | lock removed (`withJsonLock` → pass-through identity) | **1** | a contender cannot complete while the lock is held, and completes once released |
+| lock key reverted to the PATH (`opts.lockKey ?? filePath` → `filePath`) | **1** | two writers on the SAME id via DIFFERENT paths still exclude each other |
+
+**The path-keying neuter records a defect found by READING, not by a failing test.** `promoteTrdd` /
+`refuseTrdd` / `archiveTrdd` each `git mv` the file and THEN edit it at the new path, so a lock keyed
+on the path is taken on `proposals/X.md` by one writer and `tasks/X.md` by another — **two locks, zero
+exclusion, both looking correct from inside.** Fixed by `documentLockKey(corpusRoot, kind, id)`: the
+id is the only thing stable across a move. Same failure `json-io`'s header records against
+O_EXCL-vs-mkdir, from a different direction — there two mechanisms, here one mechanism with two names
+for the same document.
 
 **A third mutation is recorded because it produced a NON-result and that is worth keeping.** An
 earlier attempt at neuter 2 rewrote the `return withJsonLock(` line into invalid TypeScript; the run

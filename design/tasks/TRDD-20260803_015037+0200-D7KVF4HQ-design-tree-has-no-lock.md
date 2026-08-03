@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-03T01:50:37+0200
-updated: 2026-08-03T02:58:00+0200
+updated: 2026-08-03T03:06:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -53,10 +53,36 @@ cross-repo negotiation with the janitor's `prrd-edit.py` — and because the loc
 `mkdir` directory, Python can take the identical lock, so a surviving `prrd-edit.py` is fixable rather
 than fatal.
 
-**NEXT ACTION:** implement the `AT LINE N REPLACE X WITH Y` primitive at
-`lib/trdd-store.ts::editTrdd` — the funnel that already exists — then build `prrdgrep` / `specgrep`
-around the same primitive. See "what already exists" below; the shape of this work is *smaller than it
-looks* for TRDD and *larger than it looks* for PRRD/SPEC.
+**DONE 2026-08-03:** the primitive is built, tested and neutered — `lib/pillar/edit.ts::replaceAtLines`
+(commit `422ed7f8`). It is at the **pillar** layer, not inside `trdd-store`, because
+`lib/pillar/kinds.ts` already carries `PillarName = 'trdd' | 'prrd' | 'spec'` and `PILLAR_KINDS`, so
+`prrdgrep` / `specgrep` inherit the transaction core instead of reimplementing it. 10 tests; two
+disjoint neuters recorded below.
+
+**NEXT ACTION — and it opens a fork that must be decided before code:** route
+`lib/trdd-store.ts`'s four write verbs through the seam. **The whole module is SYNCHRONOUS and
+`withJsonLock` is async.** Measured ripple:
+
+```
+writers:        editTrdd:303   promoteTrdd:363   refuseTrdd   archiveTrdd:468
+route callers:  app/api/trdd/[id]/route.ts · .../approve/route.ts · .../refuse/route.ts
+test callers:   tests/unit/trdd-edit-guard.test.ts (5 sites) · tests/unit/trdd-store.test.ts
+```
+
+Two ways, and they are not equivalent:
+
+**A — make the four verbs `async`** and route through `withJsonLock`. Correct, and the ripple above is
+the cost (3 routes + 2 test files). Route handlers are already async, so that half is free.
+
+**B — add a SYNC lock variant** (`mkdirSync` on the same `${file}.lock`) so the sync module keeps its
+signatures. It IS the same physical lock — the lockdir is the exclusion object and the in-process
+queue is only fairness — so A and B interoperate. **But a sync spin-wait blocks the Node event loop
+for the whole process**, and three of the callers are server route handlers. That makes B wrong for
+exactly the callers that matter, and acceptable only for a standalone CLI.
+
+**Recommendation: A**, with B rejected in writing so nobody re-proposes it. Not started: an async
+conversion half-applied across a sync module is worse than none, and this needs a clean pass rather
+than the tail of a context window.
 
 ## What the USER's directive corrects about the original card
 

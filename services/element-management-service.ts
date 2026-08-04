@@ -6243,6 +6243,19 @@ export async function ChangeLSP(agentId: string | null, desired: {
       : join(HOME, '.lsp.json')
     ops.push(`G03: LSP config path = ${lspJsonPath}`)
 
+    // ── G03b: IRON rule — the unresolved-dir fallback IS user scope ─
+    // (never-user-scope rule, TRDD-a6d93b9c). ChangeLSP takes no `scope` parameter, which is
+    // exactly why it slipped the gate: the user-scope write is not spelled by a flag, it is
+    // what happens when `resolveAgentDir` returns null (neither `agentDir` nor a registered
+    // `agentId` with a workingDirectory) and the path falls back to the host-wide
+    // ~/.lsp.json. G00 above notes LSP servers "run as child processes in agent context";
+    // registered host-wide they are inherited by every project on the machine. The literal
+    // 'user' mirrors ChangeMarketplace's call, whose scope is likewise implicit.
+    if (!resolvedDir) {
+      const ironErr = assertAgentMayNotUserScope('user', desired.action, authContext, ops)
+      if (ironErr) { result.error = ironErr; return result }
+    }
+
     // ── G04: Read/Write .lsp.json ─────────────────────────────
     const lspExisted = existsSync(lspJsonPath)
     let lspConfig: Record<string, unknown> = {}
@@ -6350,6 +6363,19 @@ export async function ChangeHook(agentId: string | null, desired: {
     }
     const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
     if (g0err) { result.error = g0err; return result }
+
+    // ── G00b: IRON rule — no agent may state-add at user scope ─
+    // (never-user-scope rule, TRDD-a6d93b9c). COVERAGE GAP, not a new policy: the gate is
+    // already wired into InstallElement/ChangePlugin/ChangeMarketplace/ChangeSkill/the
+    // ChangeAgentDef family/ChangeMCP, and ChangeHook — which G00 above calls "the
+    // highest-impact code-injection vector in the entire pipeline" — was the one
+    // scope-carrying pipeline it never reached. At `scope:'user'` this writes
+    // ~/.claude/settings.json, so an agent-token caller that clears the title check could
+    // land a shell command that runs on every tool use in EVERY Claude Code project on the
+    // host. `action:'add'` is in USER_SCOPE_STATE_ADDING_ACTIONS; 'remove' reduces reach and
+    // is deliberately not gated.
+    const ironErr = assertAgentMayNotUserScope(desired.scope, desired.action, authContext, ops)
+    if (ironErr) { result.error = ironErr; return result }
 
     // ── G01: Validate event name ──────────────────────────────
     if (!isSafePathComponent(desired.event) || !VALID_HOOK_EVENTS.has(desired.event)) {

@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readFile, readdir, stat, rm } from 'fs/promises'
 import { existsSync, realpathSync } from 'fs'
-import { join, basename, resolve } from 'path'
+import { join, basename, resolve, sep } from 'path'
 import os from 'os'
 import semver from 'semver'
 import { MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
@@ -114,6 +114,35 @@ export const dynamic = 'force-dynamic'
  * Rejects anything with shell metacharacters that could enable command injection.
  * Only allows: alphanumeric, hyphens, underscores, dots, slashes, @, and colons.
  */
+/**
+ * A marketplace name is ONE path segment, never a path. The same shape
+ * `handleAddMarketplace` already enforces on the way in — applied here so the DELETE side
+ * cannot be handed something the ADD side would have refused.
+ */
+const MARKETPLACE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
+
+/**
+ * Refuse a path that does not resolve INSIDE `root`.
+ *
+ * `join()` happily resolves `..` segments back out of its base, so `join(CACHE_DIR, name)`
+ * is a containment check only if `name` has already been proven to be a plain segment —
+ * and for a caller-supplied path there is no name to check at all. This resolves both
+ * sides and compares with a trailing separator, because a bare `startsWith(root)` also
+ * accepts a SIBLING whose name merely begins with the root's (`/a/bc` passes for `/a/b`).
+ *
+ * Used by the two destructive actions that previously took an unvalidated caller string:
+ * `remove-element` (which `rm`s `elementPath` verbatim) and `delete-marketplace` (which
+ * `rm -r`s `join(CACHE_DIR, marketplaceName)`).
+ */
+function assertInside(root: string, candidate: string): string {
+  const resolvedRoot = resolve(root)
+  const resolved = resolve(candidate)
+  if (resolved !== resolvedRoot && !resolved.startsWith(resolvedRoot + sep)) {
+    throw new Error(`refusing to touch "${candidate}": it resolves outside ${resolvedRoot}`)
+  }
+  return resolved
+}
+
 function shellSafe(input: string): string {
   const sanitized = input.replace(/[^a-zA-Z0-9._/@:+-]/g, '')
   if (sanitized !== input) {
@@ -133,6 +162,9 @@ const HOME = os.homedir()
 // See BUG-POLLUTION-001.
 const SETTINGS_PATH = join(HOME, '.claude', 'settings.json')
 const CACHE_DIR = join(HOME, '.claude', 'plugins', 'cache')
+/** Every user-scope element this route may delete lives under `~/.claude/` — rules, agents,
+ *  skills and output-styles all sit in siblings of that one directory. */
+const ELEMENTS_ROOT = join(HOME, '.claude')
 const MARKETPLACES_DIR = join(HOME, '.claude', 'plugins', 'marketplaces')
 
 // Previously excluded local role-plugin marketplaces. The user asked for them
@@ -754,8 +786,13 @@ export async function POST(req: NextRequest) {
             break
           }
           case 'rule': {
-            // Rules at user level are files in ~/.claude/rules/<name>.md
-            const rulePath = elementPath || join(HOME, '.claude', 'rules', `${elementName}.md`)
+            // Rules at user level are files in ~/.claude/rules/<name>.md.
+            // `elementPath` is a CALLER-SUPPLIED string that used to reach `rm()` verbatim —
+            // only `elementName` was ever sanitized, and its safe form is used solely by the
+            // `mcp` branch above. Containment is what makes this an element remover rather
+            // than an arbitrary-file-delete primitive: the route is owner+sudo gated but NOT
+            // console-gated, so it is reachable from any device on the VPN.
+            const rulePath = assertInside(ELEMENTS_ROOT, elementPath || join(HOME, '.claude', 'rules', `${elementName}.md`))
             if (existsSync(rulePath)) {
               await rm(rulePath)
             }
@@ -763,7 +800,7 @@ export async function POST(req: NextRequest) {
           }
           case 'agent': {
             // Agents at user level are files in ~/.claude/agents/<name>.md
-            const agentPath = elementPath || join(HOME, '.claude', 'agents', `${elementName}.md`)
+            const agentPath = assertInside(ELEMENTS_ROOT, elementPath || join(HOME, '.claude', 'agents', `${elementName}.md`))
             if (existsSync(agentPath)) {
               await rm(agentPath)
             }
@@ -771,8 +808,11 @@ export async function POST(req: NextRequest) {
           }
           case 'outputStyle': {
             // Output styles at user level are files in ~/.claude/output-styles/
-            if (elementPath && existsSync(elementPath)) {
-              await rm(elementPath)
+            if (elementPath) {
+              const stylePath = assertInside(ELEMENTS_ROOT, elementPath)
+              if (existsSync(stylePath)) {
+                await rm(stylePath)
+              }
             }
             break
           }
@@ -1188,8 +1228,21 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   // Belt-and-braces: remove any remaining per-plugin cache dirs
   // (DeleteMarketplace cleans the top-level marketplace dir but not the
   // per-plugin children under `~/.claude/plugins/cache/<marketplace>/`).
+  //
+  // The name is validated HERE and not only at the top of the handler because this loop is
+  // the recursive delete, and `nameCandidates` accumulates entries from three sources: the
+  // caller's `marketplaceName`, the CLI's resolved name, and keys read out of
+  // `extraKnownMarketplaces`. `handleAddMarketplace` refuses anything outside
+  // MARKETPLACE_NAME_RE on the way in, so the DELETE side accepting a `..` segment the ADD
+  // side would have rejected is pure asymmetry — and `join(CACHE_DIR, '../../Documents')`
+  // resolves cleanly out of the cache into the user's home. Skip-and-log rather than
+  // abort: one malformed candidate must not strand the other names' cleanup.
   for (const name of nameCandidates) {
-    const mktCacheDir = join(CACHE_DIR, name)
+    if (!MARKETPLACE_NAME_RE.test(name)) {
+      console.error('[marketplaces] refusing cache cleanup for unsafe marketplace name:', name)
+      continue
+    }
+    const mktCacheDir = assertInside(CACHE_DIR, join(CACHE_DIR, name))
     if (existsSync(mktCacheDir)) {
       await rm(mktCacheDir, { recursive: true, force: true })
     }

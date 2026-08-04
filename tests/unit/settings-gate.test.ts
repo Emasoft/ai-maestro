@@ -113,6 +113,42 @@ describe('applySettingsOps — set/delete on a nested key path', () => {
   it('REJECTS an op with an empty keyPath', () => {
     expect(() => applySettingsOps({}, [{ op: 'set', keyPath: [], value: 1 }])).toThrow(TypeError)
   })
+
+  // Prototype-pollution guard. `walkToParent` reaches an intermediate segment with a plain
+  // `cursor[seg]`, and for the literal string '__proto__' that is NOT a lookup on the data
+  // object — it resolves to Object.prototype. So a `set` walked OUT of the settings document
+  // and wrote onto the prototype of every object in the server process, while the file itself
+  // was untouched (the write even reported `changed: false`).
+  //
+  // The last case is the one that makes this suite non-vacuous: without it, a guard that
+  // simply refused ALL ops would pass every assertion above it.
+  describe('REFUSES a key path that addresses the object prototype', () => {
+    it.each([
+      ['__proto__ as an intermediate segment', ['__proto__', 'polluted']],
+      ['__proto__ as the leaf', ['__proto__']],
+      ['constructor/prototype', ['constructor', 'prototype', 'polluted']],
+      ['nested under a legitimate key', ['enabledPlugins', '__proto__', 'polluted']],
+    ])('%s', (_label, keyPath) => {
+      const data: Record<string, unknown> = {}
+      expect(() => applySettingsOps(data, [{ op: 'set', keyPath: keyPath as string[], value: 'pwned' }]))
+        .toThrow(TypeError)
+      // The real assertion: nothing leaked onto Object.prototype.
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+      expect(data).toEqual({})
+    })
+
+    it('also refuses them on a delete op', () => {
+      expect(() => applySettingsOps({}, [{ op: 'delete', keyPath: ['__proto__', 'toString'] }]))
+        .toThrow(TypeError)
+      expect({}.toString).toBeTypeOf('function')
+    })
+
+    it('POSITIVE CONTROL — an ordinary plugin key with the same shape still works', () => {
+      const data: Record<string, unknown> = {}
+      applySettingsOps(data, [{ op: 'set', keyPath: ['enabledPlugins', 'proto-tools@mkt'], value: true }])
+      expect(data).toEqual({ enabledPlugins: { 'proto-tools@mkt': true } })
+    })
+  })
 })
 
 describe('editSettings / readSettings — real filesystem', () => {

@@ -86,6 +86,25 @@ export function resolveSettingsPath(rawPath: string): string {
   return resolved
 }
 
+/**
+ * Key-path segments that are REFUSED outright, at every position.
+ *
+ * `walkToParent` reaches an intermediate segment with a plain `cursor[seg]`, and for the
+ * literal string `__proto__` that expression is NOT a property lookup on the data object —
+ * it resolves to `Object.prototype`. A `set` op with `keyPath: ['__proto__', 'x']` therefore
+ * walks OUT of the parsed settings document and writes `x` onto the prototype of every
+ * object in the server process, while the settings file itself is left untouched (so the
+ * write even reports `changed: false`). `constructor`/`prototype` are refused for the same
+ * class of reachability, belt-and-braces: today `cursor['constructor']` is a FUNCTION, so
+ * the `typeof next !== 'object'` branch below replaces it with a plain `{}` own-property and
+ * the walk cannot escape — but that containment is an accident of the shape check, not a
+ * decision, and it would silently vanish if that branch were ever relaxed.
+ *
+ * No legitimate settings key is named any of these: the real key paths are
+ * `enabledPlugins`, `extraKnownMarketplaces`, `hooks`, and plugin/marketplace names.
+ */
+const FORBIDDEN_KEY_SEGMENTS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype'])
+
 /** A single, JSON-serializable mutation. `keyPath` is a list of object keys walked from
  *  the settings file's root — `['enabledPlugins', 'foo@bar']` means `data.enabledPlugins['foo@bar']`. */
 export type SettingsOp =
@@ -133,6 +152,17 @@ export function applySettingsOps(data: Record<string, unknown>, ops: SettingsOp[
   for (const op of ops) {
     if (!Array.isArray(op.keyPath) || op.keyPath.length === 0 || !op.keyPath.every(k => typeof k === 'string')) {
       throw new TypeError(`settings op "${op.op}" needs a non-empty keyPath of strings`)
+    }
+    // Refuse BEFORE the walk, not inside it: by the time `walkToParent` has stepped onto
+    // `Object.prototype` the damage is one assignment away, and the `delete` path would
+    // equally delete OFF the prototype. Checked here rather than in `walkToParent` so both
+    // ops are covered by one check that runs before either of them touches `data`.
+    const bad = op.keyPath.find(k => FORBIDDEN_KEY_SEGMENTS.has(k))
+    if (bad !== undefined) {
+      throw new TypeError(
+        `settings op "${op.op}" refuses the key-path segment "${bad}": it addresses the object ` +
+        `prototype, not the settings document (prototype-pollution guard)`,
+      )
     }
     if (op.op === 'set') {
       const loc = walkToParent(data, op.keyPath, { create: true })

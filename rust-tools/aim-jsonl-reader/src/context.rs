@@ -381,6 +381,26 @@ mod tests {
         assert_eq!(context_limit_for_model("some-unknown-model"), 200_000);
     }
 
+    // Opus 5 (CC 2.1.219, the default Opus) is natively 1M under the bare id
+    // `claude-opus-5`. The family rule was sonnet-5-only until 2026-08-04, so
+    // the bare id fell through to 200K while `claude-opus-5[1m]` resolved
+    // correctly via the tag — the tagged form being the common one is exactly
+    // what hid a 5x UNDER-report. Both cases are asserted deliberately: a test
+    // covering only the tagged id would have passed throughout the bug.
+    // Mirrors tests/unit/context-limits.test.ts (TRDD-9X2STNL2).
+    #[test]
+    fn opus_5_native_one_million_without_marker() {
+        assert_eq!(context_limit_for_model("claude-opus-5"), 1_000_000);
+        assert_eq!(context_limit_for_model("CLAUDE-OPUS-5"), 1_000_000);
+        assert_eq!(context_limit_for_model("claude-opus-5[1m]"), 1_000_000);
+        // The `(?![0-9])` boundary: a different major version must NOT inherit
+        // the window, and the 4.x line stays 200K.
+        assert_eq!(context_limit_for_model("claude-opus-50"), 200_000);
+        assert_eq!(context_limit_for_model("claude-opus-55"), 200_000);
+        assert_eq!(context_limit_for_model("claude-opus-4-8"), 200_000);
+        assert_eq!(context_limit_for_model("opus"), 200_000);
+    }
+
     // Sonnet 5 (CC 2.1.197) is natively 1M and its id is bare `claude-sonnet-5`
     // (no `[1m]` tag) — verified against 2554 real JSONL records. The family
     // rule must grant 1M without a tag, WITHOUT promoting Sonnet 4.6 (TRDD-CS51MFIX).

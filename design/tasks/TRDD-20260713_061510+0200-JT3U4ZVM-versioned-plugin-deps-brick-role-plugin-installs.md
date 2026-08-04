@@ -3,7 +3,7 @@ trdd-id: JT3U4ZVM
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
 column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-08-02T15:55:24+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -300,6 +300,20 @@ card's own record of them.
       OUTCOME is confirmed (jack-bot carries the plugin, dependency resolved, pane on Claude 2.1.207
       rather than a fallen-back `zsh`) but the pipeline observation itself was never recorded, and
       that is what this box asks for
+
+- [ ] **THE BLOCKER IS NOT FULLY RESOLVED — measured 2026-08-05, and this is bigger than the box
+      above.** Audited all 10 ecosystem repos for the `{plugin-name}--v{version}` tag prefix the
+      resolver requires (the spec point the USER's *"read the specs"* correction established — see
+      [[plugin-install-no-git-tag-satisfying]]). **8 of 10 carry it; TWO carry NONE:**
+      · `ai-maestro-architect-agent` — **0 prefixed of 20 tags**, marketplace declares `2.11.1`
+      · `ai-maestro-integrator-agent` — **0 prefixed of 21 tags**, marketplace declares `1.3.7`
+      Both are PREDEFINED roles, so ARCHITECT and INTEGRATOR are the two the original fleet blocker
+      would still hit. The confirmed outcome that made this card look finished — jack-bot, a
+      MAINTAINER — is the repo with the MOST prefixed tags (12), i.e. the best case, not a
+      representative one.
+      **Limit of this evidence, stated so nobody over-reads it:** I measured the TAGS against the
+      documented requirement; I did NOT reproduce a failing install. That is exactly the bar this
+      card's own memory page raises after 8 cross-repo issues were filed on an unverified theory.
 
 ## Notes — the investigation's own post-mortem
 

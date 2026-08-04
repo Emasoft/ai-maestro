@@ -1,9 +1,10 @@
 ---
 trdd-id: DP2HI2MP
 title: The R20 disk-layout migration writes a marketplace source path that claude plugin validate rejects
-column: todo
+column: complete
 created: 2026-08-04T16:12:25+0200
-updated: 2026-08-04T16:12:25+0200
+updated: 2026-08-04T16:24:23+0200
+implementation-commits: [a1725693, 2b71090c]
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -129,11 +130,56 @@ source shape.
 - 2026-08-04T16:12:25+0200 — MANDATE (self). Tier 0: a bugfix confined to this repo's own script,
   no baseline deviation, no cross-team or release surface. No approval request was sent.
 
+## Outcome — 2026-08-04T16:24
+
+Landed as `a1725693` + `2b71090c`. The eight-line inline `python3 -c` block was **extracted** to
+`scripts/migrate_r20_marketplace_sources.py` rather than patched in place: inline it could not be
+tested, which is why three defects accumulated in eight lines, and the extraction is what makes
+any of the acceptance below assertable. A **fourth** defect surfaced during the extraction and is
+fixed with the rest — a non-string `source` (the `{"source":"url","url":…}` object form that
+`services/role-plugin-service.ts` legitimately writes) hit `.rstrip` on a dict and raised
+AttributeError into the discarded stderr, so ONE object-form entry silently skipped the rewrite
+for the entire manifest.
+
+**Four complementary neuters, each reddening a distinct set** — recorded because a neuter that
+reddens nothing is a finding about the test, and one of these did:
+
+| neuter | tests red |
+|---|---|
+| `WANTED_PREFIX` loses the `./` | **4** — including the second-run case, since dropping the prefix re-breaks idempotence too |
+| the skip guard never matches | **2** — the already-correct positive control, and the second run |
+| drop the non-string skip | **1** |
+| make the write non-atomic (the pre-fix in-place truncate) | **1** — and it was **0** until `2b71090c` |
+
+That last row is the one worth keeping. The original "leaves no temp file behind" test was named
+as if it pinned atomicity and did not: *no temp file survives* is equally true of a script that
+never made one. The reachable half — a FAILED write leaves the original byte-identical — needed
+its own case, provoked by a read-only directory (POSIX needs write permission on the DIRECTORY to
+create the temp entry, while the pre-fix form needs it only on the file, so the neutered version
+truncates and exits 0 where the atomic one refuses and exits 1). Its non-vacuity guard FAILS
+rather than skips, because a chmod is advisory as root.
+
+**The live manifest was repaired**, backed up first to the session scratchpad
+(`marketplace.json.pre-DP2HI2MP-20260804_162349+0200.bak`, sha `46a69070…` — the pre-repair
+bytes, fully recoverable). Measured before and after:
+
+```text
+before:  claude plugin validate ~/agents/role-plugins  → exit 1, plugins.5.source: Invalid input
+after:   claude plugin validate ~/agents/role-plugins  → exit 0, ✔ Validation passed with warnings
+re-run:  [R20] marketplace.json paths already correct        ← idempotence, on the real file
+```
+
 ## Acceptance
 
-- [ ] `scripts/migrate-r20-disk-layout.sh` emits `./roles-marketplace/<base>`
-- [ ] the second-run-is-a-no-op behaviour is pinned by a test, with a positive control
-- [ ] python's stderr reaches the operator instead of `/dev/null`
-- [ ] the manifest rewrite is atomic (temp + `os.replace`)
-- [ ] `claude plugin validate ~/agents/role-plugins` exits 0, OR the card records why the live
-      manifest was deliberately left alone
+- [x] `scripts/migrate-r20-disk-layout.sh` emits `./roles-marketplace/<base>` — via the extracted
+      `scripts/migrate_r20_marketplace_sources.py`; the bash side gained a `SCRIPT_DIR` so the
+      helper resolves regardless of the operator's cwd
+- [x] the second-run-is-a-no-op behaviour is pinned by a test, with a positive control — the
+      already-correct manifest case, without which "reports no change" is satisfied by a script
+      that never reports one
+- [x] python's stderr reaches the operator instead of `/dev/null` — captured to a temp file so
+      stdout keeps carrying the `[R20]` result line; a parse error, a permission error and a
+      crash no longer collapse into one contentless warn
+- [x] the manifest rewrite is atomic (temp + `os.replace`) — and pinned, see the neuter table
+- [x] `claude plugin validate ~/agents/role-plugins` exits 0 — measured above, with the original
+      backed up before the repair

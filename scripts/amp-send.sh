@@ -399,11 +399,21 @@ send_via_api() {
         }')
 
     local response
+    # `|| true` is LOAD-BEARING (TRDD-2U56TLBX). Under this script's `set -eo pipefail`, an
+    # assignment whose command substitution fails takes the script down with that command's
+    # exit status — so an unreachable server (curl exit 7) killed it HERE, and the honest
+    # "❌ Failed to send" branch below never ran. The agent got a bare `exit 7` and no
+    # diagnostic, for a message that was never delivered.
+    #
+    # Only the GUARD is needed here, not the exit-status half that `amp-fetch.sh` also
+    # required: curl still writes `000` through `-w`, the failure branch below already
+    # reports it and `return 1`s, and both call sites already do `|| exit 1`. So the caller's
+    # exit status was correct all along — what was missing was the explanation.
     response=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 \
         -X POST "${send_url}" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${api_key}" \
-        -d "$api_body" 2>&1)
+        -d "$api_body" 2>&1) || true
 
     local http_code
     http_code=$(echo "$response" | tail -n1)
@@ -799,11 +809,14 @@ else
     # Send full AMP envelope to external provider (strip internal metadata/local fields)
     EXT_SEND_BODY=$(echo "$MESSAGE_JSON" | jq 'del(.metadata, .local)')
     EXT_SEND_URL="${ROUTE_URL:-${API_URL}/v1/route}"
+    # `|| true` is LOAD-BEARING — same reason as the send_via_api site above
+    # (TRDD-2U56TLBX). The `else` branch below already prints the HTTP code and `exit 1`s, so
+    # this restores the diagnostic without changing the exit status.
     RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 \
         -X POST "${EXT_SEND_URL}" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${API_KEY}" \
-        -d "$EXT_SEND_BODY")
+        -d "$EXT_SEND_BODY") || true
 
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
     BODY=$(echo "$RESPONSE" | sed '$d')

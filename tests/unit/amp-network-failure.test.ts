@@ -31,6 +31,7 @@ import path from 'path'
 
 const REPO = path.resolve(__dirname, '..', '..')
 const SCRIPT = path.join(REPO, 'scripts', 'amp-fetch.sh')
+const SEND = path.join(REPO, 'scripts', 'amp-send.sh')
 
 /** Port 1 is privileged and unbound: curl fails to connect instantly (exit 7, HTTP 000). */
 const UNREACHABLE = 'http://127.0.0.1:1'
@@ -64,9 +65,10 @@ function ampHome(providers: Record<string, string>): string {
   fs.mkdirSync(path.join(dir, 'registrations'), { recursive: true })
   fs.mkdirSync(path.join(dir, 'keys'), { recursive: true })
   fs.mkdirSync(path.join(dir, 'inbox'), { recursive: true })
-  execFileSync('openssl', [
-    'genpkey', '-algorithm', 'ED25519', '-out', path.join(dir, 'keys', 'private.pem'),
-  ])
+  fs.mkdirSync(path.join(dir, 'sent'), { recursive: true })
+  const priv = path.join(dir, 'keys', 'private.pem')
+  execFileSync('openssl', ['genpkey', '-algorithm', 'ED25519', '-out', priv])
+  execFileSync('openssl', ['pkey', '-in', priv, '-pubout', '-out', path.join(dir, 'keys', 'public.pem')])
   fs.writeFileSync(
     path.join(dir, 'config.json'),
     JSON.stringify({
@@ -95,15 +97,18 @@ function ampHome(providers: Record<string, string>): string {
  * healthy provider hung until curl's `--max-time 15` and the "reachable" control failed
  * looking exactly like a broken script. The harness was the broken thing.
  */
-function runFetch(dir: string): Promise<{ status: number | null; out: string }> {
+function run(script: string, args: string[], dir: string): Promise<{ status: number | null; out: string }> {
   return new Promise((resolve) => {
-    const child = spawn('bash', [SCRIPT, '-v'], { env: { ...process.env, AMP_DIR: dir } })
+    const child = spawn('bash', [script, ...args], { env: { ...process.env, AMP_DIR: dir } })
     let out = ''
     child.stdout.on('data', (d) => { out += d })
     child.stderr.on('data', (d) => { out += d })
     child.on('close', (status) => resolve({ status, out }))
   })
 }
+
+const runFetch = (dir: string) => run(SCRIPT, ['-v'], dir)
+const runSend = (dir: string, to: string) => run(SEND, [to, 'subject', 'body'], dir)
 
 describe('amp-fetch reports an unreachable provider honestly (TRDD-2U56TLBX)', () => {
   beforeAll(() => { hits = [] })
@@ -153,6 +158,47 @@ describe('amp-fetch reports an unreachable provider honestly (TRDD-2U56TLBX)', (
       expect(hits, 'the healthy sibling was never contacted — the loop still aborts')
         .toContain('/v1/messages/pending')
       expect(out).toMatch(/Could not connect to a-down/)
+      expect(status, out).not.toBe(0)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  }, 60_000)
+})
+
+/**
+ * The SEND path (TRDD-2U56TLBX phase 2). Same `set -e` mechanism, different consequence: a
+ * send is a WRITE, so the failure mode was an agent believing it had delivered a message that
+ * never left the machine — with no output to say otherwise.
+ *
+ * Only the guard was needed here, unlike amp-fetch.sh: the failure branch already prints the
+ * HTTP code and exits 1, and both call sites already do `|| exit 1`. So the exit status was
+ * correct all along and what was missing was the EXPLANATION. These tests therefore assert
+ * the diagnostic explicitly rather than resting on the exit code, which was never wrong.
+ */
+describe('amp-send reports an unreachable provider honestly (TRDD-2U56TLBX)', () => {
+  const EXTERNAL = 'someone@acme.crabmail.ai'
+
+  it('POSITIVE CONTROL: a reachable provider accepts the message and exits 0', async () => {
+    hits = []
+    const dir = ampHome({ 'crabmail.ai': healthyUrl })
+    try {
+      const { status, out } = await runSend(dir, EXTERNAL)
+      expect(status, out).toBe(0)
+      expect(out).toMatch(/Message sent/)
+      expect(hits, 'the provider was never actually contacted').toContain('/v1/route')
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  it('an unreachable provider PRINTS the failure instead of dying mute', async () => {
+    const dir = ampHome({ 'crabmail.ai': UNREACHABLE })
+    try {
+      const { status, out } = await runSend(dir, EXTERNAL)
+
+      // Pre-fix this was a bare `exit 7` with NO output — the branch that prints this line
+      // could not be reached, so an undelivered message looked like nothing at all.
+      expect(out, 'the failure branch is still unreachable').toMatch(/Failed to send message \(HTTP 000\)/)
       expect(status, out).not.toBe(0)
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })

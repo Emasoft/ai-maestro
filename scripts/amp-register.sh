@@ -251,15 +251,25 @@ fi
 
 # Send registration request
 echo "Sending registration request..."
+# `|| true` on BOTH arms is LOAD-BEARING (TRDD-2U56TLBX). Under `set -eo pipefail` an
+# assignment whose command substitution fails takes the script down with that command's exit
+# status, so an unreachable provider (curl exit 7) killed registration HERE — and the failure
+# branch below, which specifically checks for `000` and prints "Could not connect to
+# ${API_URL} / Check your internet connection", was unreachable dead code. curl still writes
+# `000` through `-w`, so that branch now runs as written.
+#
+# Guard only, no exit-status half: the failure branch already ends in `exit 1`. `amp-init.sh`
+# has had this guard on both its own curl sites all along — this restores consistency with it
+# rather than introducing a convention.
 if [ -n "$AUTH_HEADER" ]; then
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${API_URL}/v1/register" \
         -H "Content-Type: application/json" \
         -H "$AUTH_HEADER" \
-        -d "$REG_REQUEST" 2>&1)
+        -d "$REG_REQUEST" 2>&1) || true
 else
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${API_URL}/v1/register" \
         -H "Content-Type: application/json" \
-        -d "$REG_REQUEST" 2>&1)
+        -d "$REG_REQUEST" 2>&1) || true
 fi
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)

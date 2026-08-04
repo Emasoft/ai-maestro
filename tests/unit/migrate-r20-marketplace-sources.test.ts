@@ -109,15 +109,46 @@ describe('migrate_r20_marketplace_sources — idempotence', () => {
     expect(fs.readFileSync(manifest, 'utf8')).toBe(before)
   })
 
-  it('leaves no temp file behind (the write is a replace, not an in-place truncate)', () => {
+  it('leaves no temp file behind after a successful run', () => {
     seed([{ name: 'genny-bot', source: 'genny-bot' }])
 
     expect(run().status).toBe(0)
-
-    // An interrupted `open(path,'w')` + `json.dump` truncates the very file whose corruption
-    // makes every plugin in the marketplace uninstallable, so the rewrite goes through a temp
-    // file + os.replace. Nothing but the manifest may survive the run.
     expect(fs.readdirSync(dir)).toEqual(['marketplace.json'])
+  })
+
+  it('leaves the ORIGINAL manifest intact when the write fails', () => {
+    // This is the half of atomicity that is reachable without a crash-injection seam, and it is
+    // the half that matters: an interrupted `open(path,'w')` + `json.dump` truncates the very
+    // file whose corruption makes every plugin in the marketplace uninstallable.
+    //
+    // Stated plainly because the neuter says so: replacing write_atomically with the pre-fix
+    // in-place truncate reddens NOTHING in the two tests above — "no temp file survives" is
+    // equally true of a script that never made one. Only this case can tell them apart.
+    seed([{ name: 'genny-bot', source: 'genny-bot' }])
+    const original = fs.readFileSync(manifest, 'utf8')
+
+    fs.chmodSync(dir, 0o555)
+    try {
+      // Non-vacuity guard, FAILING rather than skipping: as root the chmod is advisory, and a
+      // permissions fixture that silently did nothing would make every assertion below pass
+      // over a write that simply succeeded.
+      let fixtureHolds = false
+      try {
+        fs.writeFileSync(path.join(dir, 'probe'), 'x')
+        fs.unlinkSync(path.join(dir, 'probe'))
+      } catch {
+        fixtureHolds = true
+      }
+      expect(fixtureHolds, 'the directory is still writable — running as root?').toBe(true)
+
+      const r = run()
+
+      expect(r.status).toBe(1)
+      expect(r.stderr).toMatch(/cannot write .*marketplace\.json/)
+      expect(fs.readFileSync(manifest, 'utf8')).toBe(original)
+    } finally {
+      fs.chmodSync(dir, 0o755)
+    }
   })
 })
 

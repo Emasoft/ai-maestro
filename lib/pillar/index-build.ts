@@ -138,6 +138,25 @@ function syncWithin(db: Database.Database, root: string, kind: PillarKind): Sync
     const zone = zoneOf.get(path) ?? ''
     const doc = readDocument(path, kind, zone)
     if (!doc) continue // vanished mid-pass; the next sync will see it as removed
+
+    // A document with `doc.parseError` is indexed ANYWAY, deliberately (TRDD-5XJWR473).
+    //
+    // Decided rather than inherited, because the same lenient read caused real damage one
+    // layer up: `trdd-doctor` used to treat "could not parse" as "has no fields" and
+    // "repaired" such a card by inserting duplicates of the fields sitting unparsed in it.
+    // The obvious symmetric move here — skip it — is WRONG for the index, for two reasons.
+    //
+    // First, absence from the index is how this builder signals DELETION, so skipping would
+    // make an unparseable card indistinguishable from a removed one, and every sync would
+    // re-add and re-drop it. Second, the row it produces is not a lie in the way the linter's
+    // was: `col: ''` matches no column filter, so the card is INVISIBLE to board queries
+    // rather than misfiled into one — which is the honest answer for a card whose column
+    // genuinely cannot be read. What makes it visible to a HUMAN is `trdd-doctor` raising
+    // UNPARSEABLE at severity error, which it now does.
+    //
+    // If a future board wants to surface these directly, the fix is a column on the row, not
+    // a skip here — the parity contract between this index and the walk requires that every
+    // document the walk yields also appears here.
     const row: PendingRow = {
       path,
       zone,

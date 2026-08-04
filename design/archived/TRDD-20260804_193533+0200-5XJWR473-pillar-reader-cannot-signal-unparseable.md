@@ -1,9 +1,10 @@
 ---
 trdd-id: 5XJWR473
 title: readDocument cannot signal unparseable, so trdd-doctor --fix duplicates fields on every run
-column: todo
+column: complete
 created: 2026-08-04T19:35:33+0200
-updated: 2026-08-04T19:35:33+0200
+updated: 2026-08-04T19:43:23+0200
+implementation-commits: [8c0c459d]
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -124,10 +125,57 @@ was written; the reported line numbers had already shifted under the pass's othe
 - 2026-08-04T19:35:33+0200 — MANDATE (self). Tier 0: a bugfix confined to this repo's own pillar
   tooling, no baseline deviation, no cross-team or release surface. No approval request was sent.
 
+## Outcome — 2026-08-04T19:43
+
+Landed as `8c0c459d`. `PillarDocument.parseError` carries the parser's own reason, propagated
+through `ParsedTrdd` to `Card` — a FIELD rather than a throw, because `walkDocuments` streams the
+whole corpus and one malformed card must not abort a sweep over the other 371.
+
+**The tests forced out a half the plan did not contain.** The plan said "refuse to autofix"; the
+first run of the new suite failed on a case I had written almost as an afterthought — the linter
+was still emitting `COLUMN-MISSING` for the broken card. That is a FALSE finding (the column is
+right there in the file), and it is the specific false finding that told `--fix` to insert a
+duplicate. So the main rule loop skips such a card too: **a linter that misdiagnoses is worse than
+one that abstains**, and reporting `UNPARSEABLE` *and* `COLUMN-MISSING` about the same card invites
+exactly the repair that caused the damage.
+
+`UNPARSEABLE` was also extended to the case it was NAMED for. It previously fired only when a
+FILENAME carried no id; a YAML parse failure produced a perfectly ordinary `Card` with blank fields
+and was never reported as unparseable at all.
+
+**Three complementary neuters, each line-anchored, each reddening a distinct set:**
+
+| neuter | tests red |
+|---|---|
+| the reader stops recording `parseError` | **4** — all of them; the whole feature rests on that one signal |
+| the LINT loop stops skipping (`trdd-doctor.ts:509`) | **1** — exactly the "not reported as merely missing its fields" case |
+| `fixCorpus` stops skipping (`trdd-doctor.ts:1118`) | **2** — the two-run case AND its positive control |
+
+The two skip sites are anchored by LINE, not by pattern: an unanchored substitution matches both
+`if (c.parseError) continue` sites at once and its result is unattributable. Same trap as
+TRDD-YR4G2CZH's first neuter attempt, caught the same way — by reading `changed: 2+/2-` where
+`1+/1-` was intended.
+
+**The fixture's premise was verified before the fixture was written:** gray-matter really does
+throw on an unclosed double-quoted scalar (`unexpected end of the stream within a double quoted
+scalar`). A fixture that merely looked malformed but parsed fine would have made every assertion
+in the file vacuous.
+
 ## Acceptance
 
-- [ ] `readDocument` can express "unparseable" distinctly from "no fields", without throwing
-- [ ] `trdd-doctor --fix` refuses to autofix an unparseable document and reports it instead
-- [ ] the two-run byte-identical test exists, with the positive control and a recorded neuter
-- [ ] the linter surfaces an unparseable card as its own finding rather than as a field-less one
-- [ ] the index builder's handling of an unparseable card is decided explicitly, not inherited
+- [x] `readDocument` can express "unparseable" distinctly from "no fields", without throwing —
+      `PillarDocument.parseError`, propagated to `ParsedTrdd` and `Card`
+- [x] `trdd-doctor --fix` refuses to autofix an unparseable document and reports it instead
+- [x] the two-run byte-identical test exists, with the positive control and a recorded neuter —
+      plus the occurrence-count assertions, so a future failure says WHY rather than only that the
+      bytes differ
+- [x] the linter surfaces an unparseable card as its own finding rather than as a field-less one —
+      and, the part the tests added, STOPS surfacing it as a field-less one
+- [x] the index builder's handling of an unparseable card is decided explicitly, not inherited —
+      decision: **keep indexing it**, recorded in a comment at the site. The symmetric move (skip
+      it) is wrong here for two measured reasons: absence from the index is how this builder
+      signals DELETION, so skipping would make an unparseable card indistinguishable from a
+      removed one and every sync would re-add and re-drop it; and the row it writes is not a lie
+      in the way the linter's was — `col: ''` matches no column filter, so the card is INVISIBLE
+      to board queries rather than misfiled into one, which is the honest answer for a column that
+      cannot be read. Visibility to a human comes from `UNPARSEABLE` at severity error

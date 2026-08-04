@@ -3,8 +3,8 @@ trdd-id: 2U56TLBX
 title: A network failure kills every AMP script at the curl assignment, before its own error handler can run
 column: dev
 created: 2026-08-04T22:51:33+0200
-updated: 2026-08-04T22:59:49+0200
-implementation-commits: [8b91f884]
+updated: 2026-08-04T23:07:32+0200
+implementation-commits: [8b91f884, d18c11ba]
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -35,11 +35,18 @@ labels: [amp, messaging, network-errors, fail-open, shell]
 
 - **Diagnosis: COMPLETE and MEASURED** (both layers below, empirically, not read).
 - **PHASE 1 DONE** — `scripts/amp-fetch.sh`, landed as `8b91f884`, with 3 tests in
-  `tests/unit/amp-fetch-network-failure.test.ts` and two neuters recorded below.
-- **NEXT ACTION:** phase 2 — the rest of the `-w "%{http_code}"` family. Take them ~5 files
-  at a time, in this order: `amp-send.sh` (2 sites), `amp-register.sh` (2), `amp-init.sh` (2),
-  then the six `amp-kanban-*.sh` (1 each), then `amp-helper.sh` (6). Each site needs the same
-  TWO halves; the exit-status half is the one a reviewer will skip.
+  `tests/unit/amp-network-failure.test.ts` and two neuters recorded below.
+- **PHASE 2 PART A DONE** — `amp-send.sh` (2 sites) + `amp-register.sh` (2), landed as
+  `d18c11ba`, with 2 more tests and a neuter. Scanner: **34 → 29** unguarded sites; the three
+  messaging-core scripts are clear.
+- **NEXT ACTION:** phase 2 part B — the six `amp-kanban-*.sh` (1 site each), then
+  `amp-helper.sh` (6). `amp-init.sh` needs NOTHING; it was already correct (see the
+  correction below) and is the model to copy.
+- **Each site needs ONE or TWO halves, and that is a per-script QUESTION, not a template.**
+  The guard is always needed. The exit-status half is needed only where the script's own
+  SUMMARY would misreport — true for `amp-fetch.sh` (it announced an empty inbox), false for
+  `amp-send.sh`/`amp-register.sh` (their failure branches already `exit 1`). Applying both
+  everywhere is cargo cult; ask what the caller would wrongly conclude.
 - **The trap that makes the obvious fix wrong:** `|| true` alone is NOT the fix. Measured —
   it trades a silent crash for a silent lie. Both halves are required, and neuter B below is
   what proves the second half is load-bearing rather than decorative.
@@ -102,8 +109,20 @@ provider's messages are never collected, and nothing says so.
 never turned off anywhere in `scripts/amp-*.sh`.
 
 Only **three** scripts even attempt to handle HTTP 000 — `amp-fetch.sh`, `amp-init.sh`,
-`amp-register.sh` — and in all three the branch is unreachable. The other ~28 sites do not
-handle it at all; they simply die.
+`amp-register.sh` — and in **two** of them the branch is unreachable. The other ~28 sites do
+not handle it at all; they simply die.
+
+> **CORRECTED 2026-08-04, while starting phase 2.** This paragraph first said the branch was
+> unreachable in **all three**. It is not: **`amp-init.sh` already ends BOTH its curl
+> assignments with `|| true`** (lines 286 and 363), so its two `000` branches are reachable
+> and its "not reachable — skipping" messages really do print. I generalized from the two I
+> had opened to a third I had not. The scanner never flagged `amp-init.sh` — the error was in
+> the prose, not the instrument, which is the direction that is hardest to catch because the
+> data was right in front of me.
+>
+> This makes the card STRONGER, not weaker: `amp-init.sh` is proof that the correct pattern
+> was already known in this codebase, so the fix everywhere else is *restoring consistency*
+> with a sibling rather than introducing a new convention. Use it as the model.
 
 ## Root cause
 
@@ -191,6 +210,17 @@ honest "2 failed, and the control is untouched by this neuter".
 Both restored and proved byte-identical to `HEAD` with `git hash-object` ==
 `git rev-parse HEAD:<path>`.
 
+## Phase 2 part A — neuter record
+
+ONE neuter here, not a pair, because the send fix has only ONE half: dropping the `|| true`
+from `amp-send.sh`'s external-send site reddened **exactly** the new send test and left the
+other four green. Its output is the bug verbatim — the whole captured output was the identity
+auto-fix noise, with the `Failed to send message (HTTP 000)` line absent. The script died
+mute on a message that was never delivered.
+
+Restored and proved byte-identical to `HEAD` with `git hash-object` ==
+`git rev-parse HEAD:<path>`.
+
 ## Acceptance
 
 - [x] `amp-fetch.sh` prints its diagnostic, does NOT report an empty inbox, and exits non-zero
@@ -199,7 +229,8 @@ Both restored and proved byte-identical to `HEAD` with `git hash-object` ==
       (asserted from the test server's OWN request record, not from log text — a banner proves
       nothing about whether the request was made)
 - [ ] the `-w "%{http_code}"` family across the AMP scripts is guarded, with the dead branches
-      made live — **phase 2, ~20 sites, not started**
+      made live — **phase 2 part A done** (`amp-send.sh`, `amp-register.sh`; `amp-init.sh`
+      needed nothing). Part B remains: six `amp-kanban-*.sh`, `amp-helper.sh`
 - [ ] the `curl -sf … | jq` family is handled SEPARATELY, with an emptiness check rather than
       a guard that fails open — **phase 3, not started**
 - [x] tests exist with a positive control and a recorded neuter (for phase 1; phases 2-3 owe

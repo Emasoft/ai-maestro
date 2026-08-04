@@ -1,10 +1,10 @@
 ---
 trdd-id: 2U56TLBX
 title: A network failure kills every AMP script at the curl assignment, before its own error handler can run
-column: dev
+column: complete
 created: 2026-08-04T22:51:33+0200
-updated: 2026-08-04T23:15:21+0200
-implementation-commits: [8b91f884, d18c11ba, 8636bcc7, 9129d791]
+updated: 2026-08-04T23:25:33+0200
+implementation-commits: [8b91f884, d18c11ba, 8636bcc7, 9129d791, 98a24478, 38416723]
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -42,11 +42,10 @@ labels: [amp, messaging, network-errors, fail-open, shell]
 - **PHASE 2 PART B DONE** — the six `amp-kanban-*.sh` + `amp-helper.sh`'s six attachment
   sites, landed as `8636bcc7`, plus a structural ratchet as `9129d791`. Scanner: **34 → 17**,
   and the `-w "%{http_code}"` family in `scripts/amp-*.sh` is now **100% guarded**.
-- **NEXT ACTION:** phase 3 — the `curl -sf … | jq` family (11 sites in
-  `amp-project-info.sh`, `amp-project-repos.sh`, `amp-task-blocked.sh`, `amp-task-done.sh`,
-  `amp-team-members.sh`). **Do NOT reach for `|| true` there** — it leaves the variable EMPTY
-  and the script proceeds with a blank team id, turning a loud abort into a fail-open. Each
-  needs an explicit emptiness check.
+- **PHASE 3 DONE** — the `curl -sf … | jq` family, all 11 sites, landed as `98a24478` +
+  `38416723`, with the ratchet widened to cover EVERY AMP curl assignment. Scanner:
+  **34 → 6**, and **zero AMP scripts remain unguarded**.
+- **CLOSED.** Nothing outstanding on this card.
 - **OUT OF SCOPE, recorded so nobody counts them as debt against this card:** the remaining 6
   sites are in `export-agent.sh`, `import-agent.sh`, `list-agents.sh` — not AMP messaging.
 - **Each site needs ONE or TWO halves, and that is a per-script QUESTION, not a template.**
@@ -257,6 +256,50 @@ green. Restored and proved byte-identical to `HEAD`.
    genuinely suspends `set -e`. A version that knew only the trailing form reported
    already-correct code as broken, which cost a re-scan earlier in this card.
 
+## Phase 3 — the `-sf | jq` family, and the neuter that justifies the whole design
+
+This family was held back from phases 1-2 because **the fix that worked there is a fail-open
+here**, and that is not a theory — it was demonstrated on running code, against a server that
+answers the AGENT lookup and 404s the TEAM lookup (a *partial* outage, the only shape that
+reaches `amp-task-blocked.sh`'s `exit 0` branch):
+
+| variant | exit | what the caller sees |
+|---|---|---|
+| **the fix** (fetch-then-parse) | **1** | `Error: no answer for team T1 … — the blocker was NOT reported.` |
+| **neuter A** — fuse the lookup back (the original bug) | **7** | *nothing at all* |
+| **neuter B** — the naive `\|\| true` | **0** | `Warning: No orchestrator assigned — nothing was sent.` |
+
+Neuter B is the load-bearing one. The naive guard returns **success**, and its warning
+misattributes the cause — it blames the team for having no orchestrator when in fact nobody
+answered. An agent reporting that it is BLOCKED would be told the report went through.
+
+So each lookup is split into FETCH then PARSE, which is the only way to keep "the server did
+not answer" distinguishable from "the answer is legitimately empty". Without the split the
+pre-existing message is itself a lie: *"Agent is not in a team"* when the truth is that
+nobody could be asked.
+
+**`jq` needed guarding too, and only measurement showed it:** jq exits **0** on EMPTY input
+but **5** on NON-JSON (a proxy's HTML error page under HTTP 200) — which would abort the
+script all over again, one line after the curl was handled.
+
+**A false claim corrected in passing, unrelated to any network fault:** `amp-task-done.sh`'s
+no-orchestrator branch printed *"sending to team"* and then `exit 0` **without sending
+anything to anyone**. It now says nothing was sent, because that is what happens.
+
+**Two sites had no check at all**, so the failure was invisible rather than merely mute:
+`amp-team-members.sh` emitted an EMPTY ROSTER and `amp-project-repos.sh` printed nothing —
+both indistinguishable from a real answer.
+
+## The ratchet, widened
+
+With every AMP curl assignment guarded, `tests/unit/amp-curl-abort-ratchet.test.ts` dropped
+its `%{http_code}` filter and now covers **all 43** assignments under `set -e`. Widening it
+immediately found a false positive **in the ratchet itself**: `amp-statusline.sh` has no
+`set -e`, so its unguarded curl cannot kill anything, and flagging it would be the kind of
+cry-wolf finding people learn to ignore. The scan is now conditional on `set -e` per file —
+which also means it starts demanding a guard the day someone adds `set -e` to such a script,
+exactly when the site becomes dangerous.
+
 ## Acceptance
 
 - [x] `amp-fetch.sh` prints its diagnostic, does NOT report an empty inbox, and exits non-zero
@@ -268,7 +311,9 @@ green. Restored and proved byte-identical to `HEAD`.
       made live — **DONE**. 34 → 17 unguarded sites; the family is 100% guarded in
       `scripts/amp-*.sh`, and a ratchet keeps it that way. The 17 that remain are the 11 of
       phase 3 plus 6 in non-AMP scripts
-- [ ] the `curl -sf … | jq` family is handled SEPARATELY, with an emptiness check rather than
-      a guard that fails open — **phase 3, not started**
-- [x] tests exist with a positive control and a recorded neuter (for phase 1; phases 2-3 owe
-      their own)
+- [x] the `curl -sf … | jq` family is handled SEPARATELY, with an emptiness check rather than
+      a guard that fails open — **DONE**, all 11 sites, split fetch-from-parse. The neuter
+      proved the guard-alone form returns exit 0 on a dropped blocker
+- [x] tests exist with a positive control and a recorded neuter — 5 behavioural tests across
+      the two drivable scripts, a structural ratchet over all 43 AMP curl assignments, and
+      four recorded neuters (two for phase 1, one for 2A, one for 2B, two for phase 3)

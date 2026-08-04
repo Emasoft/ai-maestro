@@ -1,7 +1,7 @@
 ---
 trdd-id: P7XKV3N9
 title: Invalidate a password with the password, and gate MAESTRO rotation on console presence
-column: testing
+column: human_review
 min-approval-requirement: user
 mandate: true
 mandated-by: user
@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:20:00+0200
 created: 2026-07-13T14:20:00+0200
-updated: 2026-08-02T17:01:55+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -339,6 +339,13 @@ anti-oracle argument, and the thing the route's own comment says it is doing "de
 pinned by nothing until today.
 
 ## Approval log
+- 2026-08-05T01:08:00+0200 — `testing → human_review`. Column only; no work, no boxes, no scope changed.
+  `testing` asserts someone is actively working this card, and nobody is — all four remaining boxes are human-only; the card says so itself of the first — *"this is what unblocks 44RGLOO8, and it is HUMAN-ONLY: an agent must never rotate a credential"*.
+  `blocked` would be the wrong move: it requires a non-empty `blocked-by:` naming an open
+  CARD, and what this waits on is a person, not a card. `human_review` is the column that
+  says "done to the point where a human must act", which is true. Re-columned during the
+  triage of the 13 stale WORK-column cards, after reading this card's open box individually.
+
 
 - 2026-07-13T14:20:00+0200 — **MANDATE issued by the USER** (min-approval-requirement:
   user; the issuer IS the tier-3 authority). Pre-approved: no approval request was

@@ -1,9 +1,9 @@
 ---
 trdd-id: DXJZM3BW
 title: Continuity CLI surface — aimaestro-continuity.sh status + ensure-resume behind the frozen layer
-column: testing
+column: human_review
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-02T16:14:06+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -129,6 +129,13 @@ Transcribed from this card's own `## Verification` list plus its STATE's NEXT. R
       scenario or the USER. Unit-pinned only; that is the half that ships
 
 ## Approval log
+- 2026-08-05T01:08:00+0200 — `testing → human_review`. Column only; no work, no boxes, no scope changed.
+  `testing` asserts someone is actively working this card, and nobody is — its one box is *"deferred by this card to a scenario or the USER"* — the live e2e needs an authenticated caller. Unit-pinned only, which the card calls "the half that ships".
+  `blocked` would be the wrong move: it requires a non-empty `blocked-by:` naming an open
+  CARD, and what this waits on is a person, not a card. `human_review` is the column that
+  says "done to the point where a human must act", which is true. Re-columned during the
+  triage of the 13 stale WORK-column cards, after reading this card's open box individually.
+
 
 - 2026-07-16T20:06:24+0200 — Tier-0 self-mandate (derived NPT of [[KCRMSNL7]], in-scope
   frozen-layer dev). Authored directly as `planned`.

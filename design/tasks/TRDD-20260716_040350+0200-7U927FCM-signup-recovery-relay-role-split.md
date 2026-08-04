@@ -1,9 +1,9 @@
 ---
 trdd-id: 7U927FCM
 title: Signup recovery-relay role-split — MAESTRO required relay + normal-user 2FA email
-column: testing
+column: human_review
 created: 2026-07-16T04:03:50+0200
-updated: 2026-08-02T16:47:39+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 parent-trdd: P7XKV3N9
@@ -223,6 +223,13 @@ exactly why neither could have caught it — measured: the neuter that drops the
 conjunct reds the unverified case and the re-configure case, and nothing else.
 
 ## Approval log
+- 2026-08-05T01:08:00+0200 — `testing → human_review`. Column only; no work, no boxes, no scope changed.
+  `testing` asserts someone is actively working this card, and nobody is — its one box is marked *"HUMAN-ONLY by R16 — the relay credentials are entered by the owner and never by an agent or a model. Not an engineering item"*.
+  `blocked` would be the wrong move: it requires a non-empty `blocked-by:` naming an open
+  CARD, and what this waits on is a person, not a card. `human_review` is the column that
+  says "done to the point where a human must act", which is true. Re-columned during the
+  triage of the 13 stale WORK-column cards, after reading this card's open box individually.
+
 - 2026-07-16T04:03:50+0200 — MANDATE issued by USER (min-approval-requirement: user).
   Pre-approved: issuer authority >= required approver. Verbatim directives in the STATE block.
   No approval request was sent.

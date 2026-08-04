@@ -1,9 +1,9 @@
 ---
 trdd-id: CNF1X3J7
 title: reliability — refuse to launch an agent client that cannot authenticate or whose role-plugin is not installed
-column: ai_review
+column: human_review
 created: 2026-07-12T12:27:10+0200
-updated: 2026-08-02T15:53:10+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -235,6 +235,13 @@ block explicitly accepts. Re-verified live 2026-08-02: `agent-launch-preflight` 
       fleet-level by [[78J4I4QS]], not per-restart
 
 ## Approval log
+- 2026-08-05T01:08:00+0200 — `ai_review → human_review`. Column only; no work, no boxes, no scope changed.
+  `ai_review` asserts someone is actively working this card, and nobody is — its one box is marked *"Deliberately deferred, with the reason recorded"* — fabricating keychain blindness on the live fleet server would disrupt real agents; the refuse path is unit-pinned.
+  `blocked` would be the wrong move: it requires a non-empty `blocked-by:` naming an open
+  CARD, and what this waits on is a person, not a card. `human_review` is the column that
+  says "done to the point where a human must act", which is true. Re-columned during the
+  triage of the 13 stale WORK-column cards, after reading this card's open box individually.
+
 
 - 2026-07-12T12:27:10+0200 — **MANDATE** issued by USER ("create the TRDD").
   `min-approval-requirement: none` (Tier 0 — in-scope dev, reversible, local, no

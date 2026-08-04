@@ -1,9 +1,9 @@
 ---
 trdd-id: 95IKXQI6
 title: Parameterize install/update scripts with a custom git repo+branch and a version-downgrade guard
-column: testing
+column: human_review
 created: 2026-07-21T20:51:42+0200
-updated: 2026-08-02T16:40:27+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -157,6 +157,13 @@ says so itself, and it is why `column: testing` is correct rather than `complete
       as the run being safe. This box is the reason the card is `testing` and not `complete`
 
 ## Approval log
+- 2026-08-05T01:08:00+0200 — `testing → human_review`. Column only; no work, no boxes, no scope changed.
+  `testing` asserts someone is actively working this card, and nobody is — its one box is marked *"DEFERRED to the human, deliberately and for a good reason"* — the installer needs a clean TARGET machine, and running it here would have the update path's `git stash`/`pull` touch the live dev branch.
+  `blocked` would be the wrong move: it requires a non-empty `blocked-by:` naming an open
+  CARD, and what this waits on is a person, not a card. `human_review` is the column that
+  says "done to the point where a human must act", which is true. Re-columned during the
+  triage of the 13 stale WORK-column cards, after reading this card's open box individually.
+
 - 2026-07-21T20:51:42+0200 — MANDATE (Tier-0, self, in-scope infra). No approval request sent.
 - 2026-07-21T21:12:00+0200 — USER correction folded in: default reverted to 23blocks-OS;
   `--repo` extended to accept local repo paths (the dev-workflow source).

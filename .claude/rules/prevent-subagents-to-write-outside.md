@@ -168,23 +168,31 @@ This applies to `Bash` tool calls only — the `Write` tool is not affected beca
 | 2026-04-14 | Overnight batch implementer escaped worktree, corrupted parent tree | Project-scoped write-guard at .claude/scripts/subagent-write-guard.sh + this rule + migration of scenario agent definitions into project-scoped `.claude/` |
 | 2026-08-04 | **Claude Code 2.1.216 closed the `git -C` escape at the platform level** — a `isolation: 'worktree'` subagent can no longer redirect git at the main checkout via `git -C` / `--git-dir`. That is exactly the 2026-04-14 route. | **Nothing removed. The guard STAYS**, and this row exists so nobody reads the platform fix as permission to drop it. Two reasons, both concrete: (a) the platform fix covers *git redirection only* — the guard also blocks a plain `Write`/`Edit` at an absolute outside path and redirection via `rm`/`mv`/`cp`/`tee`/`sed -i`, none of which 2.1.216 touches; (b) a defence that is removed the moment one of its routes is closed elsewhere leaves the rule enforced by a version of a tool we do not pin. Recorded under TRDD-9X2STNL2 (the 2.1.210–2.1.221 alignment pass). |
 
-### Known weakness — the guard FAILS OPEN with no `CLAUDE_PROJECT_DIR`
+### The guard now REFUSES when it cannot resolve a project root (fixed 2026-08-04)
 
-Measured behaviourally 2026-08-04 by driving `.claude/scripts/subagent-write-guard.sh` directly
-(CC 2.1.221). It discriminates correctly when the env var is present — an outside path exits **2
-BLOCKED**, an inside path exits **0** — but with `CLAUDE_PROJECT_DIR` **unset** it prints
-`WARN: CLAUDE_PROJECT_DIR not set, allowing tool call` and exits **0**, allowing every write
-(script lines 68-72).
+It used to `exit 0` there — allow **every** write, anywhere — printing a warning to a stderr
+stream nothing reads. Found by driving `.claude/scripts/subagent-write-guard.sh` directly under
+CC 2.1.221, which also confirmed it discriminates correctly when the root IS resolvable (outside
+path → exit **2 BLOCKED**, inside path → exit **0**).
 
-That branch is deliberate and its trade-off is real: failing CLOSED in a context where Claude Code
-legitimately does not export the variable would block every write for that agent rather than only
-the unsafe ones. It is recorded here rather than silently changed, because the honest statement of
-this rule's coverage is *"enforced whenever the project root is resolvable"*, not *"always
-enforced"*. Tracked as **TRDD-YR4G2CZH**.
+Resolution order is now `CLAUDE_PROJECT_DIR` → the hook payload's `.cwd` → `git rev-parse
+--show-toplevel` → **refuse with exit 2**, naming all three attempts. Fixed under
+**TRDD-YR4G2CZH**; four cases in `.claude/scripts/test-subagent-write-guard.sh` pin it, and that
+harness — which nothing had ever run — is now executed by the suite via
+`tests/unit/subagent-write-guard.test.ts`.
 
-A second, separate gap: it is still **unproven that Claude Code invokes this hook at all** under
-2.1.218's workspace-trust requirement, and *"the guard went inert"* is indistinguishable from
-*"the guard allowed the write"* from the outside. Proving it needs a real agent spawn attempting a
-write outside the project and outside `/tmp` — see TRDD-9X2STNL2's open acceptance box. Spawn the
-agent by its **BARE name**: a plugin-namespaced name resolves to the plugin's copy, whose
-frontmatter `hooks:` Claude Code ignores, so the probe would prove nothing.
+Failing closed was measured to cost nothing on the hook path *before* it was chosen: all four
+agents below build the hook command from `${CLAUDE_PROJECT_DIR}`, so with the variable unset the
+hook's own path does not resolve and the script never runs. What the fix actually buys is the
+other case — Claude Code expanding that placeholder into the command PATH without exporting the
+variable into the hook's ENVIRONMENT, where the script runs normally, sees an unset var, and (in
+the old form) went silently inert for every write of the session.
+
+### Still open — that Claude Code INVOKES the hook at all
+
+Unproven under 2.1.218's workspace-trust requirement, and *"the guard went inert"* is
+indistinguishable from *"the guard allowed the write"* from the outside, so no config read
+answers it. Proving it needs a real agent spawn attempting a write outside the project and
+outside `/tmp` — see TRDD-9X2STNL2's open acceptance box. Spawn the agent by its **BARE name**: a
+plugin-namespaced name resolves to the plugin's copy, whose frontmatter `hooks:` Claude Code
+ignores, so the probe would prove nothing.

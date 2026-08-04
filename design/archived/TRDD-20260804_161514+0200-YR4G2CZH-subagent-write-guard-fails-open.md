@@ -1,9 +1,10 @@
 ---
 trdd-id: YR4G2CZH
 title: The subagent write-guard fails open when CLAUDE_PROJECT_DIR is unset
-column: todo
+column: complete
 created: 2026-08-04T16:15:14+0200
-updated: 2026-08-04T16:15:14+0200
+updated: 2026-08-04T16:30:29+0200
+implementation-commits: [0ba0ba06]
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -116,11 +117,56 @@ ignores, so the probe would prove nothing.
 - 2026-08-04T16:15:14+0200 — MANDATE (self). Tier 0: a fix confined to this repo's own hook
   script, no baseline deviation, no cross-team or release surface. No approval request was sent.
 
+## Outcome — 2026-08-04T16:30
+
+**Option 1 chosen — fail closed, behind two fallbacks** — and the measurement that decided it was
+cheap and decisive: all four agents declaring the hook build its command as
+`"${CLAUDE_PROJECT_DIR}/.claude/scripts/subagent-write-guard.sh"`, so with the variable unset the
+hook's own PATH does not resolve and the script never runs. The branch is unreachable that way, so
+refusing costs nothing on the hook path. Resolution is now `CLAUDE_PROJECT_DIR` → the payload's
+`.cwd` → `git rev-parse --show-toplevel` → exit 2 naming all three attempts.
+
+**What the fix actually buys** is the case the original card had not identified: Claude Code
+expanding `${CLAUDE_PROJECT_DIR}` into the command PATH *without* exporting it into the hook's
+ENVIRONMENT. There the script runs normally, sees an unset variable, and under the old form went
+silently inert for every write of the session — the single scenario where fail-open is worst is
+also the only one where the branch is reachable in production.
+
+**The harness could not have caught this**, and that is the reusable part: it exports
+`CLAUDE_PROJECT_DIR` unconditionally at line 14, so the unset path was unreachable BY
+CONSTRUCTION. A branch is not untested because nobody wrote the case; sometimes the fixture makes
+the case impossible.
+
+**Second finding, fixed in the same commit: nothing ran the harness.** Measured — its only
+references anywhere in the repo were a README and an archived TRDD. So a guard enforcing an IRON
+rule was covered by a test no gate executed. It is now run by `tests/unit/subagent-write-guard.test.ts`,
+which asserts a FLOOR on the reported case count, because `[ $FAIL -eq 0 ]` is trivially satisfied
+by a harness that ran zero cases (a `set -u` abort, a moved GUARD path, a missing `jq`).
+
+**Two complementary neuters, each reddening exactly ONE harness case:**
+
+| neuter | the case that failed |
+|---|---|
+| the unresolvable-root branch `exit 2` → `exit 0` (the original bug) | `no CLAUDE_PROJECT_DIR, no .cwd, not in a repo → BLOCK` (expected BLOCK, got ALLOW) |
+| both fallbacks removed, refusal kept | `fallback root still ALLOWS an in-project write (positive control)` (expected ALLOW, got BLOCK) |
+
+Neither alone certifies both halves: the first proves the refusal is load-bearing, the second
+proves the fallbacks are — and that the refusal is not simply blocking everything.
+
+**Worth recording: the first attempt at neuter 1 was over-broad.** `s{^    exit 2$}{    exit 0}`
+matched **both** `exit 2` sites — the root refusal AND the write block — so its result was
+unattributable. The tell was `changed: 2+/2-` where 1+/1- was intended; re-running it anchored to
+the line number (`if $. == 116`) gave the single-case attribution above.
+
 ## Acceptance
 
-- [ ] the fail-open-vs-fail-closed choice is made deliberately, with the empty/non-empty question
-      of option 1 MEASURED rather than assumed
-- [ ] the chosen behaviour is pinned by a test with a positive control, and a recorded neuter
-- [ ] the script comment states WHY the chosen branch was preferred, not only what it does
-- [ ] `.claude/rules/prevent-subagents-to-write-outside.md` "Known weakness" section is updated to
-      match whatever was decided (or removed if the weakness is closed)
+- [x] the fail-open-vs-fail-closed choice is made deliberately, with the empty/non-empty question
+      of option 1 MEASURED rather than assumed — measured via the four agents' hook command form;
+      the hook path cannot reach the branch, so failing closed costs nothing there
+- [x] the chosen behaviour is pinned by a test with a positive control, and a recorded neuter —
+      four harness cases (three BLOCK + the ALLOW positive control) and the two-neuter table above
+- [x] the script comment states WHY the chosen branch was preferred, not only what it does — the
+      `WHY FAIL CLOSED` block beside the resolution, plus the note in the header's EXIT CODES
+- [x] `.claude/rules/prevent-subagents-to-write-outside.md` "Known weakness" section is updated to
+      match whatever was decided — replaced by a section recording the fix and the measurement,
+      with the still-open "does CC invoke the hook at all" question split out as its own heading

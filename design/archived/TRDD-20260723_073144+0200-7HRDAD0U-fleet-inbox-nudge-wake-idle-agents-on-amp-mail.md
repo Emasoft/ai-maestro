@@ -1,9 +1,9 @@
 ---
 trdd-id: 7HRDAD0U
 title: Fleet inbox-nudge — wake an idle agent that never fires idle_prompt so it drains its AMP inbox
-column: testing
+column: complete
 created: 2026-07-23T07:31:44+0200
-updated: 2026-08-02T16:17:36+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: session
 task-type: feature
 scope: project
@@ -124,10 +124,22 @@ supersedes it — the proof was obtained. A reader who stops at "NEXT" concludes
       workers sat at **0 tokens, deaf**. The two fixes proved COMPLEMENTARY, not redundant:
       [[YPIRL5RA]] (DEFECT 1) makes the SessionStart check actually submit — the at-creation case;
       this nudge catches the LATER case, a follow-up message to an already-idle worker
-- [ ] the SCEN-031 PASS/FAIL verdict itself — *"still pending the runner's completion"*. The
+- [~] the SCEN-031 PASS/FAIL verdict itself — *"still pending the runner's completion"*. The
       worker-wake blocker this card exists for is RESOLVED and evidenced above; what is outstanding
       is the scenario's overall verdict, which is the runner's to give, not this card's
+      **REASSIGNED 2026-08-05, not abandoned** — using this corpus's `[~]` marker rather
+      than a false `[x]`, because the verdict genuinely has not been given and ticking it
+      would claim otherwise. It is the SCENARIO's verdict, and this card says so itself; a
+      card cannot stay open waiting on an outcome it explicitly disclaims ownership of, or it
+      holds a WORK column hostage to another artifact's lifecycle forever.
 
 ## Approval log
+- 2026-08-05T01:08:00+0200 — `testing → complete`. The card's own remaining box says the worker-wake
+  blocker it exists for is *"RESOLVED and evidenced above"*, and that what is outstanding is
+  *"the scenario's overall verdict, which is the runner's to give, not this card's"*. Everything in
+  this card's scope is done; it was being held open by another artifact's pending verdict. Marked
+  `[~]` REASSIGNED (not `[x]` — the verdict has not been given, and a tick would assert it had).
+  npt/eht both `[]`, release-via absent (⇒ `none`). Archived as `completed`.
+
 - 2026-07-23 — MANDATE: USER chose "In-repo: server watchdog" for the worker-wake fix (AskUserQuestion). Tier-0
   in-repo feature build under the standing harness-ready goal; min-approval-requirement: none.

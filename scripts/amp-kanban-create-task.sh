@@ -292,10 +292,15 @@ fi
 # =============================================================================
 # Create the task
 # =============================================================================
+# `|| true` is LOAD-BEARING (TRDD-2U56TLBX). Under `set -e` an assignment whose command
+# substitution fails takes the script down with that command's exit status, so an unreachable
+# server (curl exit 7) killed it HERE and the "❌ Failed to create task" branch below never
+# ran — a bare exit 7 with no diagnostic, for a task that was never created. curl still
+# writes `000` through `-w`. Guard only: the branch already ends in `exit 1`.
 RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 \
     -X POST "$API/api/teams/$TEAM_ID/tasks" \
     -H "Content-Type: application/json" \
-    -d "$BODY")
+    -d "$BODY") || true
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 RESP_BODY=$(echo "$RESPONSE" | sed '$d')

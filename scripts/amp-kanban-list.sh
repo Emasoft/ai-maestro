@@ -170,7 +170,13 @@ URL="$API/api/teams/$TEAM_ID/tasks"
 # =============================================================================
 # Fetch and display tasks
 # =============================================================================
-RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 "$URL")
+# `|| true` is LOAD-BEARING (TRDD-2U56TLBX). Under `set -e` an assignment whose command
+# substitution fails takes the script down with that command's exit status, so an unreachable
+# server (curl exit 7) killed it HERE and the "❌ Failed to list tasks" branch below never
+# ran — a bare exit 7 with no diagnostic, which for a LIST is the worst shape: an agent
+# asking "what is on the board" got silence, not an error. curl still writes `000` through
+# `-w`. Guard only: the branch already ends in `exit 1`.
+RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 "$URL") || true
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 RESP_BODY=$(echo "$RESPONSE" | sed '$d')

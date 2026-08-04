@@ -1983,11 +1983,20 @@ upload_attachment() {
         '{filename: $filename, content_type: $content_type, size: $size, digest: $digest}')
 
     local init_response
+    # `|| true` is LOAD-BEARING, here and at the five sibling curl sites in this file
+    # (TRDD-2U56TLBX). Every script that sources this helper runs under `set -e`, where an
+    # assignment whose command substitution fails takes the WHOLE SCRIPT down with that
+    # command's exit status. So an unreachable provider (curl exit 7) killed the caller here,
+    # inside a helper function, and the http-code check two lines below never ran — a bare
+    # exit 7 with no diagnostic, from a script that never mentioned attachments.
+    #
+    # curl still writes the `-w` format on failure, so the code becomes `000` and the checks
+    # below work as written. Guard only: each check already reports and fails on its own.
     init_response=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 \
         -X POST "${api_url}/attachments/upload" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${api_key}" \
-        -d "$init_body" 2>&1)
+        -d "$init_body" 2>&1) || true
 
     local init_http
     init_http=$(echo "$init_response" | tail -n1)
@@ -2019,10 +2028,11 @@ upload_attachment() {
     if [ -n "$upload_url" ]; then
         echo "    Uploading $(format_file_size "$file_size")..." >&2
         local upload_response
+        # `|| true`: see the upload-init site above (TRDD-2U56TLBX).
         upload_response=$(curl -s -w "\n%{http_code}" --connect-timeout 10 --max-time 120 \
             -X PUT "$upload_url" \
             -H "Content-Type: ${content_type}" \
-            --data-binary "@${filepath}" 2>&1)
+            --data-binary "@${filepath}" 2>&1) || true
 
         local upload_http
         upload_http=$(echo "$upload_response" | tail -n1)
@@ -2035,9 +2045,10 @@ upload_attachment() {
 
     # Step 3: Confirm upload
     local confirm_response
+    # `|| true`: see the upload-init site above (TRDD-2U56TLBX).
     confirm_response=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 \
         -X POST "${api_url}/attachments/${att_id}/confirm" \
-        -H "Authorization: Bearer ${api_key}" 2>&1)
+        -H "Authorization: Bearer ${api_key}" 2>&1) || true
 
     local confirm_http
     confirm_http=$(echo "$confirm_response" | tail -n1)
@@ -2069,9 +2080,10 @@ upload_attachment() {
         [ "$poll_delay" -gt 10 ] && poll_delay=10
 
         local status_response
+        # `|| true`: see the upload-init site above (TRDD-2U56TLBX).
         status_response=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 10 \
             -X GET "${api_url}/attachments/${att_id}" \
-            -H "Authorization: Bearer ${api_key}" 2>&1)
+            -H "Authorization: Bearer ${api_key}" 2>&1) || true
 
         local status_http
         status_http=$(echo "$status_response" | tail -n1)
@@ -2218,21 +2230,23 @@ download_attachment() {
             echo "Warning: Downloading over HTTP (not HTTPS). Connection is not encrypted." >&2
         fi
         local dl_response
+        # `|| true`: see the upload-init site above (TRDD-2U56TLBX).
         dl_response=$(curl -s -w "\n%{http_code}" --connect-timeout 10 --max-time 120 \
             --max-filesize "$AMP_MAX_ATTACHMENT_SIZE" \
             --max-redirs 3 --proto '=https,http' \
             -C - \
-            -o "$dest_path" "$download_url" 2>&1)
+            -o "$dest_path" "$download_url" 2>&1) || true
         dl_http=$(echo "$dl_response" | tail -n1)
     elif [ -n "$api_url" ] && [ "$api_url" != "null" ] && [ -n "$api_key" ] && [ "$api_key" != "null" ]; then
         local dl_response
+        # `|| true`: see the upload-init site above (TRDD-2U56TLBX).
         dl_response=$(curl -s -w "\n%{http_code}" --connect-timeout 10 --max-time 120 \
             --max-filesize "$AMP_MAX_ATTACHMENT_SIZE" \
             --max-redirs 3 \
             -C - \
             -o "$dest_path" \
             -H "Authorization: Bearer ${api_key}" \
-            "${api_url}/attachments/${att_id}/download" 2>&1)
+            "${api_url}/attachments/${att_id}/download" 2>&1) || true
         dl_http=$(echo "$dl_response" | tail -n1)
     else
         echo "Error: No download URL or API credentials available" >&2

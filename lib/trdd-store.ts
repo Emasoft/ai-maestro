@@ -472,6 +472,60 @@ function editAt(filePath: string, edits: Array<[string, string]>, logLine: strin
 }
 
 /**
+ * Reverse a {@link moveZone}. Called only when the edit that was supposed to follow it
+ * failed, so the card does not stay in a zone whose column it never got.
+ *
+ * Best-effort by construction: if the reversal itself fails there is nothing further this
+ * process can do, and the ORIGINAL error is the one worth propagating.
+ */
+function undoMoveZone(designDir: string, fromPath: string, toPath: string, tracked: boolean): void {
+  const projectRoot = path.dirname(designDir)
+  try {
+    if (tracked) execFileSync('git', ['mv', toPath, fromPath], { cwd: projectRoot, stdio: 'pipe' })
+    else fs.renameSync(toPath, fromPath)
+  } catch {
+    // `git mv` can refuse for reasons a plain rename does not care about; the file being
+    // back in its old zone matters more than the index entry, which a later status shows.
+    try {
+      fs.renameSync(toPath, fromPath)
+    } catch {
+      /* nothing left to try — the caller's error is the real failure */
+    }
+  }
+}
+
+/**
+ * `editAt` on a file `moveZone` has ALREADY moved — restoring the move if the edit throws.
+ *
+ * Every lifecycle verb moves the file BEFORE rewriting its frontmatter, and
+ * `setFrontmatterField` now THROWS on a card with no usable `---` fence — a shape that
+ * demonstrably occurs, since `trdd-doctor` carries a repair for it ("added a full
+ * frontmatter (was: none)"). Without this compensation the throw escaped the lock AND the
+ * route (no try/catch at `approve/route.ts:67`): the API 500'd, and the card was left in
+ * the NEW zone still declaring its OLD column, with the rename staged. Every retry then
+ * failed the zone guard — "Only a proposal can be approved; X is in tasks" — permanently,
+ * so a merely malformed card became unrecoverable without a hand edit.
+ *
+ * A partial mutation that reports failure is recoverable; one that leaves the store in a
+ * state no retry can reach is not.
+ */
+function editAfterMove(
+  designDir: string,
+  originalPath: string,
+  newPath: string,
+  tracked: boolean,
+  edits: Array<[string, string]>,
+  logLine: string,
+): void {
+  try {
+    editAt(newPath, edits, logLine)
+  } catch (err) {
+    undoMoveZone(designDir, originalPath, newPath, tracked)
+    throw err
+  }
+}
+
+/**
  * The retired `approval-tier: N` decoded to the ladder title, for the LOG LINE
  * only (never written as a card field). An absent requirement emits nothing — the
  * log records what the card DECLARED, not the authz default of `manager`.
@@ -521,8 +575,11 @@ export function promoteTrdd(
   ]
   if (opts.approvalToken) fields.push(['approval-token', opts.approvalToken])
 
-  editAt(
+  editAfterMove(
+    designDir,
+    trdd.filePath,
     newPath,
+    tracked,
     fields,
     `- ${opts.iso} — APPROVED by ${opts.approver}${reqStr}. ${opts.rationale ?? 'promoted proposal → planned'}.` +
       (opts.approvalToken
@@ -548,8 +605,11 @@ export function refuseTrdd(
   }
   const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'refused')
   const reqStr = minApprovalSuffix(trdd.frontmatter)
-  editAt(
+  editAfterMove(
+    designDir,
+    trdd.filePath,
     newPath,
+    tracked,
     [['column', 'refused'], ['updated', opts.iso]],
     `- ${opts.iso} — REFUSED by ${opts.approver}${reqStr}. ${opts.reason ?? 'refused at proposal gate'}.`,
   )
@@ -607,8 +667,11 @@ export function archiveTrdd(
   if (opts.state === 'superseded' && opts.supersededBy) {
     edits.push(['superseded-by', `[${opts.supersededBy}]`])
   }
-  editAt(
+  editAfterMove(
+    designDir,
+    trdd.filePath,
     newPath,
+    tracked,
     edits,
     `- ${opts.iso} — ${opts.state.toUpperCase()} by ${opts.approver}. ${opts.reason ?? `archived → ${opts.state}`}.`,
   )

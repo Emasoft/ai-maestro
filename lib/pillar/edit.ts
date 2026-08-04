@@ -31,7 +31,7 @@
  * mechanism. Two different suffixes, or O_EXCL vs mkdir, are two locks that exclude
  * each other nowhere (json-io's header records that exact incident).
  */
-import { readFile, writeFile, rename, unlink } from 'fs/promises'
+import { readFile, writeFile, rename, unlink, stat, chmod } from 'fs/promises'
 import { basename, join } from 'path'
 import { withJsonLock, type JsonLockOpts } from '../json-io'
 import type { PillarKind, PillarName } from './kinds'
@@ -195,6 +195,20 @@ export async function replaceAtLines(
     if (!Number.isInteger(e.line) || e.line < 1) {
       throw new Error(`replaceAtLines: line must be a positive integer, got ${e.line}`)
     }
+    // An EMPTY `expect` is not a degenerate case, it is the whole guard defeated.
+    // The primitive is "AT LINE N REPLACE X WITH Y, and if X is not at line N the file
+    // changed since you read it" — but `''` is a substring of EVERY string, so PASS 1's
+    // `includes` passes unconditionally and PASS 2's `replace` prepends at index 0.
+    // Measured before this check existed: `--expect "" --replace "anything goes. "` against
+    // a PRRD golden rule exited 0 and prepended to a line the caller had never read,
+    // reporting a successful edit. A CAS whose comparand matches everything is not a CAS.
+    if (e.expect === '') {
+      throw new Error(
+        `replaceAtLines: the expected text at line ${e.line} is empty. An empty X matches every ` +
+          'line, so the staleness check could never block and the replacement would be blindly ' +
+          'prepended to whatever that line now holds. Pass the text you actually read.',
+      )
+    }
     if (seen.has(e.line)) {
       throw new Error(
         `replaceAtLines: two edits target line ${e.line}. Their combined result would depend on ` +
@@ -270,8 +284,21 @@ export async function replaceAtLines(
  */
 async function atomicWrite(filePath: string, content: string): Promise<void> {
   const tmp = `${filePath}.tmp.${process.pid}`
+  // PRESERVE THE ORIGINAL'S MODE. `writeFile` creates the temp at the default
+  // `0666 & ~umask`, and `rename` carries the TEMP's mode onto the document — so a
+  // tmp+rename write silently REPLACES the permissions of the file it rewrites.
+  // Measured: a 0444 (write-protected) governance document came back 0644 after one
+  // `edit`, i.e. the tool that edits rule files also quietly unprotects them, and the
+  // next writer no longer meets the refusal the 0444 existed to raise.
+  let mode: number | undefined
+  try {
+    mode = (await stat(filePath)).mode & 0o7777
+  } catch {
+    mode = undefined // the document is new or unreadable; let the default stand
+  }
   try {
     await writeFile(tmp, content, 'utf-8')
+    if (mode !== undefined) await chmod(tmp, mode)
     await rename(tmp, filePath)
   } catch (err) {
     // Best-effort cleanup: a failed rename leaves the temp behind, and a stray

@@ -1212,8 +1212,29 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       // fires for it — the two conditions have to be complements or the card falls through
       // both. Adding the missing field is not repurposing the other one: `status:` survives.
       if (!c.column && !statusIsPipelineState) {
-        text = text.replace(/^(trdd-id:.*)$/m, `$1\ncolumn: todo`)
-        changes.push('column: todo (was missing — the uncertainty law)')
+        // INSERT only when there is genuinely no `column:` KEY.
+        //
+        // `c.column` is falsy for TWO different shapes: "no key at all", and "the key is
+        // there with an EMPTY value" (`column:` parses to `column: null`, which yields ''
+        // and NO parseError, so the `if (c.parseError) continue` guard above cannot see
+        // it). Blind-inserting into the second shape writes a SECOND `column:` line, and
+        // js-yaml then throws `duplicated mapping key` — the card becomes permanently
+        // UNPARSEABLE, drops off the board, and is un-fixable by that same guard, which
+        // keys on the PRE-fix state and so can never see damage this pass just caused.
+        // A repairer that manufactures the corruption it screens for is the worst case.
+        const hasColumnKey = /^column:/m.test(text)
+        const next = hasColumnKey
+          ? text.replace(/^column:.*$/m, 'column: todo')
+          : text.replace(/^(trdd-id:.*)$/m, `$1\ncolumn: todo`)
+        // Report only a repair that ACTUALLY LANDED. The push used to be unconditional,
+        // so a card whose frontmatter carries no `trdd-id:` line (the anchor) had its
+        // replace no-op while `--fix` still claimed the repair, still bumped `updated:`,
+        // and still wrote — so the card stayed column-less, the claim repeated every run,
+        // and its board sort key floated to the top forever. `--fix` never converged.
+        if (next !== text) {
+          text = next
+          changes.push('column: todo (was missing — the uncertainty law)')
+        }
       }
       // uppercase the id
       if (c.fm['trdd-id'] && !/^[A-Z0-9]{8}$/.test(String(c.fm['trdd-id']))) {
@@ -1225,8 +1246,17 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       if (!c.title) {
         const title = c.h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
         if (title) {
-          text = text.replace(/^(trdd-id:.*)$/m, `$1\ntitle: ${title.replace(/:/g, ' —')}`)
-          changes.push('title lifted from the H1')
+          // Same two-shapes hazard as `column:` above — an empty `title:` parses to null,
+          // so inserting would produce a duplicate key and an unparseable card.
+          const hasTitleKey = /^title:/m.test(text)
+          const line = `title: ${title.replace(/:/g, ' —')}`
+          const next = hasTitleKey
+            ? text.replace(/^title:.*$/m, line)
+            : text.replace(/^(trdd-id:.*)$/m, `$1\n${line}`)
+          if (next !== text) {
+            text = next
+            changes.push('title lifted from the H1')
+          }
         }
       }
 

@@ -91,9 +91,18 @@ let rest = rawArgv.filter((a) => a !== '--no-index')
 function takeFlag(list, name) {
   const i = list.indexOf(name)
   if (i < 0) return [undefined, list]
-  // A flag with no value yields '' — NOT undefined, so "absent" and "given empty" stay
-  // distinguishable. Each consumer below validates its own value.
-  return [list[i + 1] ?? '', [...list.slice(0, i), ...list.slice(i + 2)]]
+  // A MISSING value is a could-not-run, not ''. "Each consumer validates its own value"
+  // was the theory; measured, none of them can: `Number('') === 0` and `0` is `--limit`'s
+  // documented "no limit", so a truncated `--limit` UNCAPPED the output the cap exists to
+  // bound (129 lines vs the 112-line cap), and `path.resolve('')` is the cwd, so a
+  // valueless `--design-dir` silently retargets the corpus and then blames the working
+  // directory in its diagnostic.
+  const value = list[i + 1]
+  if (value === undefined) {
+    console.error(`trddgrep: ${name} needs a value`)
+    process.exit(2)
+  }
+  return [value, [...list.slice(0, i), ...list.slice(i + 2)]]
 }
 
 let designDirVal, limitVal, columnVal
@@ -105,6 +114,22 @@ const designDir = path.resolve(designDirVal ?? path.join(process.cwd(), 'design'
 const argv = rest
 const cmd = argv[0] ?? 'board'
 const arg = argv[1]
+
+// THE VERB MUST COME FIRST. `lib/pillar/cli.ts` strips the edit flags from anywhere before
+// it binds its verb; here `parseEditFlags` is a lazy import inside the `edit` case, so it
+// cannot. Without this refusal `cmd` binds to the FLAG: measured,
+// `trddgrep --at-line 4 --expect X --replace Y edit TRDD-XXXXXXXX` ran a regex SEARCH for
+// "--at-line", edited nothing, and exited 0 — a governance write that silently did not
+// happen while the tool reported success. The byte-identical argument order really does
+// edit under prrdgrep/specgrep, which is precisely the cross-tool drift the shared core
+// exists to prevent, so this fails loudly rather than diverging quietly.
+const EDIT_FLAGS = new Set(['--at-line', '--expect', '--replace'])
+if (EDIT_FLAGS.has(cmd)) {
+  console.error(
+    `trddgrep: put the verb first — \`trddgrep edit <id> ${cmd} …\`; the edit flags follow it.`,
+  )
+  process.exit(2)
+}
 
 // Rows a list-shaped answer prints before it STOPS AND SAYS SO.
 //
@@ -707,7 +732,19 @@ switch (cmd) {
   case 'edit': {
     const { TRDD_KIND } = await import('../lib/pillar/kinds.ts')
     const { parseEditFlags, runPillarEdit, palette } = await import('../lib/pillar/cli.ts')
-    const { edits } = parseEditFlags(argv.slice(2))
+    const { edits, rest: strayEdit } = parseEditFlags(argv.slice(2))
+    // `rest` used to be DISCARDED, so any token `parseEditFlags` did not recognise was
+    // silently dropped and the write proceeded anyway. trddgrep's own help advertises
+    // `--dry-run` for the sibling `fix` verb, so `trddgrep edit ID … --dry-run` performed
+    // a REAL locked write to a governance document and exited 0 — measured. A mutating
+    // verb must never ignore a token it does not understand.
+    if (strayEdit.length > 0) {
+      console.error(
+        `trddgrep: unrecognised option(s) on \`edit\`: ${strayEdit.join(' ')} — ` +
+          '`edit` performs a real locked write and has no --dry-run.',
+      )
+      process.exit(2)
+    }
     // designDir IS the TRDD corpus root (TRDD_KIND.corpusSubdir is ''), so the lock key
     // this computes is byte-identical to the one lib/trdd-store.ts's write verbs take —
     // pinned by a test, because two keys for one document is exactly the failure this
@@ -805,8 +842,12 @@ Repair of the mechanically-derivable findings: ${C.c('yarn trdd:fix')}
     // unchanged by the streaming — the comparator sees an identically-ordered input.
     hits.sort((a, b) => b.score - a.score || (a.c.zone === 'tasks' ? -1 : 1))
     if (hits.length === 0) {
+      // EXIT 1, not 0. `show`/`need()` here already exit 1 on an unknown id, and the
+      // shared core returns 1 for this identical answer (measured: `specgrep zzz` → 1,
+      // `trddgrep zzz` → 0). Exiting 0 told any script keyed on the trichotomy that the
+      // search had MATCHED, which is the collapse in the direction that lies to a caller.
       console.log(C.d(`\nno TRDD matches /${cmd}/i\n`))
-      break
+      process.exit(1)
     }
     console.log(C.b(`\n${hits.length} match(es) for /${cmd}/i\n`))
     for (const h of hits.slice(0, 25)) {

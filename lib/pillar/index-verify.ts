@@ -317,7 +317,17 @@ const DEFAULT_INTERVAL_MS = ((): number => {
  * waiting. A minute later nobody is waiting, and any server that lives longer than that
  * still gets its check. `AIM_PILLAR_INDEX_VERIFY_DELAY_MS` overrides (tests pass it).
  */
-const DEFAULT_INITIAL_DELAY_MS = Number(process.env.AIM_PILLAR_INDEX_VERIFY_DELAY_MS) || 60_000
+// Parsed the same explicit way as the INTERVAL above, and for the same reason: `||`
+// swallows a deliberate `0`. A test (or an operator) setting
+// `AIM_PILLAR_INDEX_VERIFY_DELAY_MS=0` to run the first sweep immediately silently got
+// 60 s instead, with nothing to indicate the value had been ignored.
+const DEFAULT_INITIAL_DELAY_MS = (() => {
+  const raw = process.env.AIM_PILLAR_INDEX_VERIFY_DELAY_MS
+  if (raw === undefined || raw.trim() === '') return 60_000
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return 60_000
+  return parsed
+})()
 
 /**
  * One sweep + one honest report. Never throws.

@@ -101,10 +101,22 @@ export function parseEditFlags(argv: string[]): { edits: Partial<LineEdit>[]; re
 /** A caller-input fault: exits 2, because the command could not run as asked. */
 export class UsageError extends Error {}
 
+/**
+ * Pull `--name <value>` out of the list.
+ *
+ * A MISSING value is a UsageError, never `''`. The old `?? ''` failed OPEN in both
+ * callers and neither failure was visible: `Number('') === 0`, and `0` is `--limit`'s
+ * documented "no limit" sentinel, so a truncated `--limit` UNCAPPED the output the cap
+ * exists to bound (measured: 60 of 60 records instead of the 50-row cap). `path.resolve('')`
+ * is the cwd, so a valueless `--design-dir` silently pointed the tool at `<cwd>` instead of
+ * `<cwd>/design` and then blamed the working directory in its diagnostic.
+ */
 function takeFlag(list: string[], name: string): [string | undefined, string[]] {
   const i = list.indexOf(name)
   if (i < 0) return [undefined, list]
-  return [list[i + 1] ?? '', [...list.slice(0, i), ...list.slice(i + 2)]]
+  const value = list[i + 1]
+  if (value === undefined) throw new UsageError(`${name} needs a value`)
+  return [value, [...list.slice(0, i), ...list.slice(i + 2)]]
 }
 
 /**
@@ -164,6 +176,18 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
       console.log(`corpus=${root}`)
       return process.exit(0)
     }
+
+    // An UNKNOWN OPTION is a could-not-run (2), never a no-match (1).
+    //
+    // Every `--flag` this tool understands has been stripped by now, so anything still
+    // carrying a `--` prefix is a typo or a flag from another tool — and the `default:`
+    // branch below would otherwise fold it into the SEARCH PATTERN and report exit 1,
+    // "no record matches". That is the forbidden collapse, in the direction that lies to a
+    // caller: measured, `prrdgrep G1.1 --limt 5` answered "no PRRD record matches
+    // \"G1.1 --limt 5\"" with exit 1, telling a gate that rule G1.1 does not exist because
+    // the gate's own flag had a typo in it.
+    const unknown = positional.find((t) => t.startsWith('--'))
+    if (unknown) throw new UsageError(`unknown option ${unknown} — see \`${tool} help\``)
 
     // Throws with the kind's own label on an absent or unreadable root. This is what
     // separates "the corpus is empty" from "you are not where you think you are" — a

@@ -487,3 +487,35 @@ describe('the write verbs hold the document identity lock', () => {
     expect(findTrdd(designDir, id)?.zone).toBe('tasks')
   })
 })
+
+describe('the verb lock and `trddgrep edit` key the SAME document identically (TRDD-D7KVF4HQ)', () => {
+  /**
+   * The two write paths to one TRDD are `lib/trdd-store.ts`'s verbs (what the API routes
+   * call) and `trddgrep edit` (what a human or an agent calls). They must compute the
+   * same lock directory or they exclude each other NOWHERE while both looking locked.
+   *
+   * They reach it by different routes — the verbs build the key from a raw caller id,
+   * the CLI from a resolved record through `documentLockKeyFor` — so agreement is a
+   * property to PIN, not one to assume. It did not hold when this was written: the verbs
+   * keyed on the caller's spelling, so a lowercase legacy id (76% of one live board, and
+   * permanently valid because it is cited in immutable commit subjects) took a different
+   * lock from the same card's uppercase form.
+   */
+  it('agrees for every spelling of the id that resolves to the same card', async () => {
+    const { documentLockKey, documentLockKeyFor } = await import('@/lib/pillar/edit')
+    const { TRDD_KIND } = await import('@/lib/pillar/kinds')
+    const designDir = '/corpus/design'
+
+    // What the CLI computes, from a record it resolved off disk.
+    const cliKey = documentLockKeyFor(designDir, TRDD_KIND, {
+      id: 'ABCD1234',
+      filePath: `${designDir}/tasks/TRDD-20260101_000000+0000-ABCD1234-x.md`,
+    })
+
+    // What the store's verbs compute, for each spelling a caller may legitimately pass.
+    // Mirrors `withTrddLock` exactly — including its normalize step, which is the fix.
+    for (const spelling of ['ABCD1234', 'abcd1234', 'TRDD-ABCD1234', 'TRDD-abcd1234']) {
+      expect(documentLockKey(designDir, 'trdd', TRDD_KIND.normalizeId(spelling))).toBe(cliKey)
+    }
+  })
+})

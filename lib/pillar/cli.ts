@@ -40,7 +40,7 @@ import { assertCorpusRoot, findRecord, walkRecords, type PillarRecord } from './
 import { documentLockKeyFor, replaceAtLines, StaleDocumentError, type LineEdit } from './edit'
 
 /** Colour, but only for a human. A pipe or a test spawn gets clean bytes. */
-function palette(useColour: boolean) {
+export function palette(useColour: boolean) {
   const w = (code: string) => (s: string) => (useColour ? `\x1b[${code}m${s}\x1b[0m` : s)
   return { b: w('1'), d: w('2'), r: w('31'), g: w('32'), y: w('33'), c: w('36') }
 }
@@ -58,7 +58,7 @@ function palette(useColour: boolean) {
  * trddgrep's own header records why: locating a flag by index in a list that still
  * holds other flags is an ordering hazard that returns with every flag added.
  */
-function parseEditFlags(argv: string[]): { edits: Partial<LineEdit>[]; rest: string[] } {
+export function parseEditFlags(argv: string[]): { edits: Partial<LineEdit>[]; rest: string[] } {
   const edits: Partial<LineEdit>[] = []
   const rest: string[] = []
   let current: Partial<LineEdit> | null = null
@@ -99,7 +99,7 @@ function parseEditFlags(argv: string[]): { edits: Partial<LineEdit>[]; rest: str
 }
 
 /** A caller-input fault: exits 2, because the command could not run as asked. */
-class UsageError extends Error {}
+export class UsageError extends Error {}
 
 function takeFlag(list: string[], name: string): [string | undefined, string[]] {
   const i = list.indexOf(name)
@@ -172,7 +172,7 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
 
     switch (cmd) {
       case 'edit':
-        return await runEdit(kind, root, arg, rawEdits, C, tool)
+        return await runPillarEdit(kind, root, arg, rawEdits, C, tool)
 
       case 'show': {
         if (!arg) throw new UsageError(`show needs an id — try \`${tool} list\``)
@@ -226,7 +226,7 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
  * common case and the one where a hand-counted line number would silently hit the
  * wrong rule.
  */
-async function runEdit(
+export async function runPillarEdit(
   kind: PillarKind,
   root: string,
   id: string | undefined,

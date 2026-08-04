@@ -66,7 +66,13 @@ const C = {
 // corpus exited 0 — "I found nothing wrong" and "I looked at nothing" were the
 // same answer. They are now different answers with different exit codes.
 process.on('uncaughtException', (err) => {
-  console.error(`trddgrep: could not run — ${err?.message ?? err}`)
+  // A BLOCKED edit is a 2 like everything else here — the caller asked for a mutation and
+  // none happened. But 2 also means "no corpus", so a retry loop keying on the code alone
+  // would spin forever in the wrong directory. `STALE` first is the only thing that can
+  // carry that distinction, and it is the same token prrdgrep and specgrep print — all
+  // three tools share one retry contract or none of them does. (TRDD-D7KVF4HQ)
+  const stale = err?.name === 'StaleDocumentError'
+  console.error(`${stale ? 'STALE ' : ''}trddgrep: could not run — ${err?.message ?? err}`)
   if (process.env.TRDD_DEBUG) console.error(err?.stack ?? '')
   process.exit(2)
 })
@@ -685,6 +691,31 @@ switch (cmd) {
     process.exit(0)
   }
 
+  // ---- AT LINE N REPLACE X WITH Y, the USER-specified transaction (TRDD-D7KVF4HQ).
+  //
+  // The directive named all THREE tools — "the trddgrep, specgrep and prrdgrep ... must
+  // use a editing procedure like AT LINE N REPLACE X WITH Y". `fix` above is not that
+  // verb: it applies the doctor's mechanically-DERIVABLE repairs, so it decides for
+  // itself what to write. This one writes exactly what the caller says and BLOCKS when
+  // the caller's view of the line is stale.
+  //
+  // It goes through `lib/pillar/cli.ts`, the same core prrdgrep and specgrep use, rather
+  // than a fourth implementation — the whole reason that core exists is that three tools
+  // must not drift into three concurrency stories. `--at-line` is REQUIRED here and
+  // optional there: a TRDD is a per-DOCUMENT pillar whose record has no declaration
+  // line, and defaulting to line 1 would be a confident write to the wrong place.
+  case 'edit': {
+    const { TRDD_KIND } = await import('../lib/pillar/kinds.ts')
+    const { parseEditFlags, runPillarEdit, palette } = await import('../lib/pillar/cli.ts')
+    const { edits } = parseEditFlags(argv.slice(2))
+    // designDir IS the TRDD corpus root (TRDD_KIND.corpusSubdir is ''), so the lock key
+    // this computes is byte-identical to the one lib/trdd-store.ts's write verbs take —
+    // pinned by a test, because two keys for one document is exactly the failure this
+    // card exists to prevent.
+    await runPillarEdit(TRDD_KIND, designDir, arg, edits, palette(false), 'trddgrep')
+    break
+  }
+
   // ---- which corpus am I, and why. The USER's mandate (2026-07-30) is that the tools
   // DETECT their environment rather than being configured per project, so that detection
   // has to be inspectable: an agent that cannot see what the tool concluded cannot tell
@@ -721,6 +752,12 @@ ${C.b('trddgrep')} — query AND validate the TRDD corpus (offline; no server)
   ${C.c('trddgrep validate')}         the WRITE GATE — TAB rows: SEV⇥CODE⇥id⇥path⇥msg
   ${C.d('  … add --strict to either to fail on warnings too (exit 1)')}
   ${C.c('trddgrep fix')}              write the mechanically-derivable repairs (--dry-run first)
+
+  ${C.c('trddgrep edit <id> --at-line N --expect X --replace Y')}
+  ${C.d('  AT LINE N, REPLACE X WITH Y — under the document lock. If X is not at line N the')}
+  ${C.d('  card changed since you read it and the edit is BLOCKED (exit 2, stderr starts STALE).')}
+  ${C.d('  --at-line is REQUIRED: a TRDD record spans the whole document, so there is no line')}
+  ${C.d('  to default to. Repeat the triple for a batch; a batch is ALL-OR-NOTHING.')}
 
   ${C.c('trddgrep env')}              which corpus this is — standalone project or ai-maestro agent
 

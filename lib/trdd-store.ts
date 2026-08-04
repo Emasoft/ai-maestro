@@ -382,7 +382,19 @@ function stageMovedFile(designDir: string, filePath: string): void {
  * locks, zero exclusion, both looking correct from inside. See `documentLockKey`.
  */
 function withTrddLock<T>(designDir: string, id: string, fn: () => T | Promise<T>): Promise<T> {
-  return withJsonLock(documentLockKey(designDir, 'trdd', id), async () => fn())
+  // NORMALIZE THE ID, or the key depends on how the CALLER happened to spell it.
+  //
+  // Lookups here are case-INSENSITIVE and legacy lowercase ids are permanently valid (the
+  // IND base: they are cited in immutable commit subjects, and were measured at 76% of one
+  // live board). So `abcd1234`, `ABCD1234` and `TRDD-abcd1234` all reach the SAME document
+  // — and without this, all three produce DIFFERENT lock directories. Two writers of one
+  // TRDD would then exclude each other nowhere while both looking correctly locked, which
+  // is the precise failure `documentLockKey`'s own comment exists to prevent, reintroduced
+  // one level up by the spelling of an argument.
+  //
+  // It also makes this key byte-identical to the one `trddgrep edit` computes through
+  // `documentLockKeyFor`, which is what stops the CLI and the API routes from racing.
+  return withJsonLock(documentLockKey(designDir, 'trdd', TRDD_KIND.normalizeId(id)), async () => fn())
 }
 
 function editAt(filePath: string, edits: Array<[string, string]>, logLine: string): void {

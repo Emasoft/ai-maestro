@@ -214,6 +214,20 @@ describe('documentLockKey — the lock must survive a zone move', () => {
       .not.toBe(documentLockKeyFor(root, TRDD_KIND, { id: 'BBBB2222', filePath: `${root}/tasks/a.md` }))
   })
 
+  it('is INSENSITIVE to how the caller spelled the TRDD id — case, and the TRDD- prefix', () => {
+    // THE SECOND INSTANCE of the same bug, found while wiring `trddgrep edit`. Lookups
+    // here are case-insensitive and legacy lowercase ids are permanently valid, so all
+    // three spellings below reach ONE document. `lib/trdd-store.ts`'s write verbs keyed
+    // on the caller's RAW id, so `abcd1234` and `ABCD1234` produced two lock directories
+    // — the CLI and the API routes racing on one card while both looked locked.
+    const root = '/corpus/design'
+    const canonical = documentLockKeyFor(root, TRDD_KIND, { id: 'ABCD1234', filePath: `${root}/tasks/x.md` })
+    for (const spelling of ['abcd1234', 'ABCD1234', 'TRDD-abcd1234', 'trdd-ABCD1234']) {
+      expect(documentLockKeyFor(root, TRDD_KIND, { id: spelling, filePath: `${root}/tasks/x.md` }))
+        .toBe(canonical)
+    }
+  })
+
   it('BEHAVIOURAL: two writers on different BULLETS of one PRRD file exclude each other', async () => {
     // The assertions above compare strings; this proves the string is actually used as
     // a lock. Under record-id keying both writers hold different keys, the contender

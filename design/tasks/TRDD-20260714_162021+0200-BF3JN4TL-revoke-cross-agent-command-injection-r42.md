@@ -3,7 +3,7 @@ trdd-id: BF3JN4TL
 title: Revoke cross-agent command injection entirely (R42) — messaging becomes the only channel
 column: testing
 created: 2026-07-14T16:20:21+0200
-updated: 2026-08-02T16:57:17+0200
+updated: 2026-08-05T00:39:18+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: security
@@ -257,6 +257,18 @@ open box is the SOAK the STATE names as the reason this card is not `complete`.
 - [x] **AUTONOMOUS → headless `/stop` → refused.** See below: the DECISION was pinned and the
       WIRING was not, and the wiring is the half this card exists about. Ratcheted today
       (`42f2c278`)
+- [ ] **THE SOAK — the reason this card is not `complete`, and it was MISSING from this list until
+      2026-08-05.** Owed, in the STATE's own words: *nothing has run against R42 yet (the fleet was
+      stopped when the code landed)*, so the operational-risk item stands — **enumerate the flows
+      that depended on a MANAGER/COS driving a pane**, and confirm each either survives R42 or has a
+      messaging replacement. Until that runs, R42 is proven correct in tests and unexercised in
+      operation, which are different claims.
+      **Why this box's absence mattered:** the list's own preamble says "The open box is the SOAK",
+      and there was no open box — 9 of 9 `[x]`. So the checklist-gated completion rule (D4 §5b) read
+      this card as fully satisfied while both its STATE and its preamble said it was not done. The
+      gate can only see obligations written as BOXES; one that lives in prose is invisible to it,
+      and a card whose remaining work is prose-only looks finished to every automated check.
+      Found 2026-08-05 while triaging the 13 stale WORK-column cards
 
 ## ⏱ VERIFIED 2026-08-02 — the headless half was pinned by reading the code, and one claim went stale
 

@@ -18,7 +18,7 @@
 import { spawnSync } from 'child_process'
 import path from 'path'
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 const REPO = path.resolve(__dirname, '..', '..')
 const HARNESS = path.join(REPO, '.claude', 'scripts', 'test-subagent-write-guard.sh')
@@ -43,30 +43,42 @@ function runHarness() {
   }
 }
 
+/**
+ * ONE invocation, shared by both tests. The harness forks ~28 shells; running it per-test doubled
+ * that for no extra coverage and blew vitest's 5 s per-test default under full-suite load — the
+ * file passed in isolation and failed in the suite, which is the signature of a cost problem, not
+ * a flake. The generous `beforeAll` timeout is for the suite's slowest moment, not its typical one.
+ */
+let harness: ReturnType<typeof runHarness>
+
+beforeAll(() => {
+  harness = runHarness()
+}, 120_000)
+
 describe('subagent write-guard — the project-scoped PreToolUse hook', () => {
   it('passes its own harness, and the harness actually ran its cases', () => {
-    const r = runHarness()
-
-    expect(r.plain, 'the harness printed no Results line — it aborted before finishing').toMatch(
-      /Results:\s*\d+\s*pass/,
-    )
-    expect(r.failed).toBe(0)
-    expect(r.status).toBe(0)
     expect(
-      r.passed,
-      `only ${r.passed} cases ran; a green harness that evaluated almost nothing is the failure this floor exists to catch`,
+      harness.plain,
+      'the harness printed no Results line — it aborted before finishing',
+    ).toMatch(/Results:\s*\d+\s*pass/)
+    expect(harness.failed).toBe(0)
+    expect(harness.status).toBe(0)
+    expect(
+      harness.passed,
+      `only ${harness.passed} cases ran; a green harness that evaluated almost nothing is the failure this floor exists to catch`,
     ).toBeGreaterThanOrEqual(MIN_CASES)
   })
 
   it('refuses rather than allows when it cannot resolve a project root', () => {
-    // Named separately from the harness run because this is the specific claim TRDD-YR4G2CZH
-    // decided, and it is the one a future reader will come looking for. The guard used to `exit 0`
-    // here — allowing every write anywhere — so an unenforceable state read as permission.
-    const r = runHarness()
-
-    expect(r.plain).toMatch(/no CLAUDE_PROJECT_DIR, no \.cwd, not in a repo → BLOCK\s+\(BLOCK\)/)
+    // Named separately from the harness-passed assertion because this is the specific claim
+    // TRDD-YR4G2CZH decided, and it is the one a future reader will come looking for. The guard
+    // used to `exit 0` here — allowing every write anywhere — so an unenforceable state read as
+    // permission.
+    expect(harness.plain).toMatch(
+      /no CLAUDE_PROJECT_DIR, no \.cwd, not in a repo → BLOCK\s+\(BLOCK\)/,
+    )
     // Its positive control, in the same run: a resolved fallback root must still ALLOW an
     // in-project write, or "BLOCK" above is satisfied by a guard that blocks unconditionally.
-    expect(r.plain).toMatch(/fallback root still ALLOWS an in-project write .*\(ALLOW\)/)
+    expect(harness.plain).toMatch(/fallback root still ALLOWS an in-project write .*\(ALLOW\)/)
   })
 })

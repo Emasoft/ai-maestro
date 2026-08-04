@@ -3,8 +3,8 @@ trdd-id: 2U56TLBX
 title: A network failure kills every AMP script at the curl assignment, before its own error handler can run
 column: dev
 created: 2026-08-04T22:51:33+0200
-updated: 2026-08-04T23:07:32+0200
-implementation-commits: [8b91f884, d18c11ba]
+updated: 2026-08-04T23:15:21+0200
+implementation-commits: [8b91f884, d18c11ba, 8636bcc7, 9129d791]
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -39,9 +39,16 @@ labels: [amp, messaging, network-errors, fail-open, shell]
 - **PHASE 2 PART A DONE** — `amp-send.sh` (2 sites) + `amp-register.sh` (2), landed as
   `d18c11ba`, with 2 more tests and a neuter. Scanner: **34 → 29** unguarded sites; the three
   messaging-core scripts are clear.
-- **NEXT ACTION:** phase 2 part B — the six `amp-kanban-*.sh` (1 site each), then
-  `amp-helper.sh` (6). `amp-init.sh` needs NOTHING; it was already correct (see the
-  correction below) and is the model to copy.
+- **PHASE 2 PART B DONE** — the six `amp-kanban-*.sh` + `amp-helper.sh`'s six attachment
+  sites, landed as `8636bcc7`, plus a structural ratchet as `9129d791`. Scanner: **34 → 17**,
+  and the `-w "%{http_code}"` family in `scripts/amp-*.sh` is now **100% guarded**.
+- **NEXT ACTION:** phase 3 — the `curl -sf … | jq` family (11 sites in
+  `amp-project-info.sh`, `amp-project-repos.sh`, `amp-task-blocked.sh`, `amp-task-done.sh`,
+  `amp-team-members.sh`). **Do NOT reach for `|| true` there** — it leaves the variable EMPTY
+  and the script proceeds with a blank team id, turning a loud abort into a fail-open. Each
+  needs an explicit emptiness check.
+- **OUT OF SCOPE, recorded so nobody counts them as debt against this card:** the remaining 6
+  sites are in `export-agent.sh`, `import-agent.sh`, `list-agents.sh` — not AMP messaging.
 - **Each site needs ONE or TWO halves, and that is a per-script QUESTION, not a template.**
   The guard is always needed. The exit-status half is needed only where the script's own
   SUMMARY would misreport — true for `amp-fetch.sh` (it announced an empty inbox), false for
@@ -221,6 +228,35 @@ mute on a message that was never delivered.
 Restored and proved byte-identical to `HEAD` with `git hash-object` ==
 `git rev-parse HEAD:<path>`.
 
+## Phase 2 part B — the ratchet, and why it replaces twelve behavioural tests
+
+Twelve sites landed with **no behavioural test each, deliberately and not silently.** Two of
+them cannot be driven, and neither reason is laziness:
+
+- the **kanban scripts REFUSE** to run without a resolvable AMP identity, and their refusal
+  says in as many words not to pass an arbitrary `--id`, because every registered uuid
+  belongs to a real, possibly LIVE agent. That guard is correct; subverting it to make a test
+  pass would be the worst trade on this card.
+- `amp-helper.sh`'s six are inside the attachment upload/download path, reachable only
+  through a full signed send to a real provider.
+
+So the instrument is `tests/unit/amp-curl-abort-ratchet.test.ts`, which reads the source.
+It covers all twelve AND every future curl anyone adds — which is the failure this card is
+actually about, since the trap is invisible at the call site.
+
+**Neuter:** reintroducing the bug at ONE site (`amp-kanban-move.sh`) reddened the ratchet,
+naming `amp-kanban-move.sh:143` exactly; the scan-set floor and the classifier control stayed
+green. Restored and proved byte-identical to `HEAD`.
+
+**Two traps the ratchet itself had to survive**, both caught before commit:
+
+1. Its scan-set floors were written from **numbers I had not measured** (20/13). The real
+   figures, re-derived by running the scan itself, are **31 scripts / 20 sites**. A floor
+   taken from a guess is exactly the vacuity the floor exists to prevent.
+2. The classifier must accept `||` **inside** the substitution — `$(curl … || echo '{}')`
+   genuinely suspends `set -e`. A version that knew only the trailing form reported
+   already-correct code as broken, which cost a re-scan earlier in this card.
+
 ## Acceptance
 
 - [x] `amp-fetch.sh` prints its diagnostic, does NOT report an empty inbox, and exits non-zero
@@ -228,9 +264,10 @@ Restored and proved byte-identical to `HEAD` with `git hash-object` ==
 - [x] one unreachable provider no longer stops the loop — a healthy sibling is still fetched
       (asserted from the test server's OWN request record, not from log text — a banner proves
       nothing about whether the request was made)
-- [ ] the `-w "%{http_code}"` family across the AMP scripts is guarded, with the dead branches
-      made live — **phase 2 part A done** (`amp-send.sh`, `amp-register.sh`; `amp-init.sh`
-      needed nothing). Part B remains: six `amp-kanban-*.sh`, `amp-helper.sh`
+- [x] the `-w "%{http_code}"` family across the AMP scripts is guarded, with the dead branches
+      made live — **DONE**. 34 → 17 unguarded sites; the family is 100% guarded in
+      `scripts/amp-*.sh`, and a ratchet keeps it that way. The 17 that remain are the 11 of
+      phase 3 plus 6 in non-AMP scripts
 - [ ] the `curl -sf … | jq` family is handled SEPARATELY, with an emptiness check rather than
       a guard that fails open — **phase 3, not started**
 - [x] tests exist with a positive control and a recorded neuter (for phase 1; phases 2-3 owe

@@ -1,9 +1,9 @@
 ---
 trdd-id: JAU1ES1C
 title: Session-resurrection hardening — extend boot-restore toward reboot / mid-turn-429 / network-drop immortality
-column: testing
+column: complete
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-02T16:15:13+0200
+updated: 2026-08-04T23:54:48+0200
 current-owner: ai-maestro
 task-type: refactor
 scope: project
@@ -23,7 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
-implementation-commits: [166bd8a4]
+implementation-commits: [166bd8a4, 14046e53, 79a18bad]
 ---
 
 # Session-resurrection hardening — extend boot-restore toward reboot / mid-turn-429 / network-drop immortality
@@ -114,11 +114,20 @@ work it explicitly disowned — an open box for another card's scope is a perman
 - [x] each restore is gated on `checkAuthorizedAgentWorkdir` — the ONE workdir authority — so a
       stale/bogus registry entry (the legacy `default` at `/`) is never resurrected into a bad cwd
 - [x] `tsc` clean; boot-restore tests green
-- [ ] **emit `next_action`-relevant state so [[DXJZM3BW]]'s `status` reflects "restoring" vs "live"**
-      — the one Scope item still genuinely owed here, and it is **unmet**: `ContinuityNextAction`
-      is `ok | monitor | switch-recommended | unknown | rotating | reauth-needed`; there is no
-      `restoring`. Note the coupling — adding it touches [[DXJZM3BW]]'s five-field response, which
-      now has a CLOSED-set guard, so the new state goes in the `nextAction` ENUM, never as a 6th field
+- [x] **emit `next_action`-relevant state so [[DXJZM3BW]]'s `status` reflects "restoring" vs "live"**
+      — **DONE 2026-08-04** (`14046e53` + `79a18bad`). `restoring` went into the `nextAction` ENUM,
+      never as a 6th field, exactly as the coupling note above required; the closed-set guard is on
+      `Object.keys`, so it admits a new value, and there is now a ceiling test on the restoring path
+      too. Bridged by `lib/boot-restore-status.ts` (stamp file), because an in-memory flag **cannot**
+      work here: `server.mjs:2220` imports this service at RUNTIME while the status route is served
+      from the prebuilt `.next` bundle, which carries its own copy of every `lib/*.ts` — same
+      process, two module graphs, so the reader's flag would simply never be true and the verb would
+      look correct while reporting nothing. Precedence is cascade > restoring > heuristic, ranked by
+      what each source KNOWS: a `reauth-needed` read off the actual token is never masked by a
+      transient state, and `restoring` displaces the heuristic because the heuristic is exactly what
+      goes unreliable mid-restore (half-formed metadata → a spurious `switch-recommended` → an
+      account switch the host never needed). **That misfire is the harm; the nicer wording is not.**
+      15 tests, 5 neuters each reddening a different test
 - [~] mid-turn-429 simulation — **REASSIGNED by this card's own scope correction** to [[9ZIF82HI]]
       (the account switcher). A turn dies while the process lives; that is a RUNTIME event, not a
       boot event, and forcing it into boot-restore would duplicate that NPT
@@ -129,3 +138,11 @@ work it explicitly disowned — an open box for another card's scope is a perman
 
 - 2026-07-16T20:06:24+0200 — Tier-0 self-mandate (derived NPT of [[KCRMSNL7]], in-scope
   hardening of existing code). Authored directly as `planned`.
+- 2026-08-04T23:54:48+0200 — `testing → complete`. The last open box (the `restoring` state) is
+  implemented, tested and neutered; the two `[~]` items were REASSIGNED by this card's own scope
+  correction to [[9ZIF82HI]] and [[CHN16JXZ]], not dropped. Gate check: every box is `- [x]`, the
+  checklist is non-empty, and `npt`/`eht` are both `[]`, so the NPT/EHT completion gate is
+  vacuously satisfied on a depth-1 derived card. Archived as `completed`.
+  **One finding worth carrying forward:** the writer half of the bridge was pinned by NOTHING —
+  deleting `clearBootRestore()` from the `finally` left all 5051 tests green — while the reader
+  half had 9 tests. Full coverage on one side is what made the other side's absence invisible.

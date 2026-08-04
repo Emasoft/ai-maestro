@@ -1,9 +1,9 @@
 ---
 trdd-id: YPIRL5RA
 title: Wake an idle agent on an AMP notification — press Enter on the inbox alert, gate the sibling notify path
-column: ai_review
+column: complete
 created: 2026-07-23T07:01:43+0200
-updated: 2026-08-02T16:36:32+0200
+updated: 2026-08-05T00:39:18+0200
 current-owner: session
 task-type: bugfix
 scope: project
@@ -81,7 +81,14 @@ pane mid-turn. FIX = read `readHookNotification(agent.workingDirectory)` and SKI
 notificationType (anything other than `idle_prompt`), while FAIL-OPEN on a null/absent state file (matching the
 existing convention — many agents have no hook state). Does NOT touch the SCEN-031 wake, so it is a separate commit.
 
-**NEXT ACTION (in order):**
+**⛔ SUPERSEDED — the 5-step NEXT ACTION below is SPENT (2026-08-02); do NOT execute it.** All five
+steps were carried out and each is recorded as an evidenced `[x]` in `## Acceptance`, and step 5's
+fork (DEFECT 3) was closed by the USER choosing the server-watchdog, which shipped as [[7HRDAD0U]].
+Kept for provenance, not as instructions. **A reader who acts on the list below will redo landed
+work** — this block is the first thing a resume reads, and it outranked the Acceptance section that
+had already retired it.
+
+**NEXT ACTION (in order) — SPENT, see above:**
 1. Edit DEFECT 1 (`scripts/aimaestro-hook.sh:163`) + a WHY comment; commit `fix(hook): press Enter on inbox notify …`.
 2. Edit DEFECT 2 (`lib/notification-service.ts` gate) + a WHY comment; commit `fix(notify): safe-state gate …`.
 3. Verify: `bash scripts/with-node.sh npx tsc --noEmit` · `bash scripts/with-node.sh yarn test` · `bash scripts/with-node.sh yarn build`.
@@ -196,6 +203,16 @@ this the exempt mechanical transition (all test-requirements PASSED), not a judg
 also gained the test its DEFECT 2 never had, so "tests green" now says something about the gate.
 
 ## Approval log
+- 2026-08-05T00:39:18+0200 — `ai_review → complete`. Nothing new was owed: the 2026-08-02 transition
+  note already recorded every item met and re-run, and the DEFECT-3 fork closed by [[7HRDAD0U]].
+  8/8 boxes `[x]`, checklist non-empty, `npt`/`eht` both `[]`, `release-via` absent (⇒ `none`) —
+  both completion gates satisfied. Archived as `completed`.
+  **Correction made in the same edit:** the STATE's 5-step NEXT ACTION was stale and is now marked
+  SUPERSEDED. I had myself misread this card as "five unstarted implementation steps" an hour
+  earlier, from the STATE alone — the Acceptance section that retired it sits far below. A STATE
+  block is authoritative *and* it is the block most likely to go stale, because it is written first
+  and read first.
+
 - 2026-07-23 — MANDATE (standing harness-ready goal, USER). Both changes are Tier-0 in-repo bugfixes
   (min-approval-requirement: none). DEFECT 3 (the fleet-wide cron-arming fork) is NOT in this TRDD — it stays the
   tier-2 proposal 4ALV5ISB awaiting USER direction.

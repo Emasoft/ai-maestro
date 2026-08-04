@@ -571,3 +571,98 @@ describe('the verb lock and `trddgrep edit` key the SAME document identically (T
     expect(findTrdd(designDir, id)?.zone).toBe('tasks')
   })
 })
+
+/**
+ * TRDD-7S27HJCS — the store's writes are ATOMIC, and they preserve the document's mode.
+ *
+ * The bug. `editTrdd`, `editAt` and `advanceColumn` used a plain `fs.writeFileSync`, which
+ * TRUNCATES the target and then writes — so a crash between those two steps leaves a truncated
+ * or empty governance card. They ran under a lock imported from `lib/json-io.ts`, whose own
+ * documented contract is "ATOMIC (tmp + rename)": the module borrowed the serialisation from an
+ * atomic writer and then did not write atomically. A lock answers "can two writers collide";
+ * atomicity answers "can ONE writer leave a half-file", and the second is the question a crash
+ * asks.
+ *
+ * What is testable without a crash-injection seam is the half that matters: a write that FAILS
+ * must leave the original byte-identical. A read-only DIRECTORY separates the two mechanisms
+ * cleanly — POSIX needs write permission on the directory to create the temp entry, while an
+ * in-place `writeFileSync` needs it only on the file, so the pre-fix code truncates and succeeds
+ * exactly where the atomic version refuses.
+ */
+describe('the store writes atomically (TRDD-7S27HJCS)', () => {
+  let dir: string
+  let cardPath: string
+
+  const CARD = [
+    '---',
+    'trdd-id: A7A7A7A7',
+    'title: atomic write fixture',
+    'column: dev',
+    'created: 2026-01-01T00:00:00+0100',
+    'updated: 2026-01-01T00:00:00+0100',
+    '---',
+    '',
+    '# TRDD-A7A7A7A7 — atomic write fixture',
+    '',
+    'body',
+    '',
+  ].join('\n')
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-atomic-'))
+    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+      fs.mkdirSync(path.join(dir, z), { recursive: true })
+    }
+    cardPath = path.join(dir, 'tasks', 'TRDD-20260101_000000+0100-A7A7A7A7-x.md')
+    fs.writeFileSync(cardPath, CARD)
+  })
+  afterEach(() => {
+    try {
+      fs.chmodSync(path.join(dir, 'tasks'), 0o755)
+    } catch {
+      /* already writable */
+    }
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a successful edit lands, and leaves no temp file behind (the positive control)', async () => {
+    // Without this, every assertion below is satisfied by a store that writes nothing at all.
+    const r = await editTrdd(dir, 'A7A7A7A7', { priority: '1' }, ISO)
+    expect(r.ok).toBe(true)
+    expect(fs.readFileSync(cardPath, 'utf8')).toMatch(/^priority: 1$/m)
+    expect(fs.readdirSync(path.join(dir, 'tasks'))).toEqual([path.basename(cardPath)])
+  })
+
+  it('PRESERVES the document mode — a rename carries the TEMP’s mode onto the target', async () => {
+    // Measured on the async twin before this was fixed: a 0444 write-protected governance
+    // document came back 0644 after one edit, i.e. the tool that edits rule files also quietly
+    // unprotected them. 0644 is used rather than 0444 because the store must still be able to
+    // write; what is asserted is that the mode is CARRIED, not defaulted.
+    fs.chmodSync(cardPath, 0o600)
+    await editTrdd(dir, 'A7A7A7A7', { priority: '2' }, ISO)
+    expect(fs.statSync(cardPath).mode & 0o777).toBe(0o600)
+  })
+
+  it('a FAILED write leaves the original byte-identical', async () => {
+    const before = fs.readFileSync(cardPath, 'utf8')
+    fs.chmodSync(path.join(dir, 'tasks'), 0o555)
+
+    // Non-vacuity guard that FAILS rather than skips: as root a chmod is advisory, and a
+    // permissions fixture that silently did nothing would make the assertion below pass over a
+    // write that simply succeeded.
+    let fixtureHolds = false
+    try {
+      fs.writeFileSync(path.join(dir, 'tasks', 'probe'), 'x')
+      fs.unlinkSync(path.join(dir, 'tasks', 'probe'))
+    } catch {
+      fixtureHolds = true
+    }
+    expect(fixtureHolds, 'the directory is still writable — running as root?').toBe(true)
+
+    await editTrdd(dir, 'A7A7A7A7', { priority: '3' }, ISO).catch(() => undefined)
+
+    // The pre-fix `writeFileSync` needs write permission only on the FILE, so it truncated and
+    // succeeded here; the atomic form cannot create its temp entry and refuses instead.
+    expect(fs.readFileSync(cardPath, 'utf8')).toBe(before)
+  })
+})

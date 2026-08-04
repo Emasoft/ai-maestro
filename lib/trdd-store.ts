@@ -27,7 +27,7 @@ import { TRDD_KIND, TRDD_ZONES, trddIdFromFilename, type TrddZone } from './pill
 import { assertCorpusRoot, listDocuments, readDocument, walkDocuments } from './pillar/store'
 import { validateTrddFieldEdits } from './trdd-edit-guard'
 import { withJsonLock } from './json-io'
-import { documentLockKey } from './pillar/edit'
+import { documentLockKey, atomicWriteSync } from './pillar/edit'
 
 // Re-exported so this module's PUBLIC API is unchanged by the move to lib/pillar/:
 // every existing caller imports TrddZone / TRDD_ZONES from here, and the proof the
@@ -327,8 +327,13 @@ export function appendApprovalLog(content: string, logLine: string): string {
  *
  * This is the ONE write funnel every caller (the API route, the CLI, every
  * lifecycle verb) shares, so it is where the validate-BEFORE-write gate lives
- * (TRDD-SCMPWF6R). The gate runs before the FIRST `fs.writeFileSync` — a refusal
- * leaves the file byte-identical, because nothing has touched it yet.
+ * (TRDD-SCMPWF6R). The gate runs before the FIRST write — a refusal leaves the
+ * file byte-identical, because nothing has touched it yet.
+ *
+ * That write is `atomicWriteSync` (tmp + rename), not `writeFileSync`, since
+ * TRDD-7S27HJCS: an in-place truncate leaves a HALF-WRITTEN governance card if the
+ * process dies between truncating and writing, and the lock this runs under does not
+ * help — it stops two writers colliding, not one writer dying mid-write.
  */
 export function editTrdd(
   designDir: string,
@@ -356,7 +361,7 @@ export function editTrdd(
     content = setFrontmatterField(content, k, v)
   }
   content = setFrontmatterField(content, 'updated', iso)
-  fs.writeFileSync(trdd.filePath, content)
+  atomicWriteSync(trdd.filePath, content)
   return { ok: true, id: trdd.id, column: trdd.column, filePath: trdd.filePath }
   })
 }
@@ -468,7 +473,7 @@ function editAt(filePath: string, edits: Array<[string, string]>, logLine: strin
   let content = fs.readFileSync(filePath, 'utf-8')
   for (const [k, v] of edits) content = setFrontmatterField(content, k, v)
   content = appendApprovalLog(content, logLine)
-  fs.writeFileSync(filePath, content)
+  atomicWriteSync(filePath, content)
 }
 
 /**
@@ -638,7 +643,7 @@ export function advanceColumn(
     const who = opts.approver ? ` by ${opts.approver}` : ''
     content = appendApprovalLog(content, `- ${opts.iso} — column → ${column}${who}. ${opts.note ?? ''}`.trimEnd())
   }
-  fs.writeFileSync(trdd.filePath, content)
+  atomicWriteSync(trdd.filePath, content)
   return { ok: true, id: trdd.id, column, filePath: trdd.filePath }
   })
 }

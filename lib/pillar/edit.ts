@@ -31,6 +31,7 @@
  * mechanism. Two different suffixes, or O_EXCL vs mkdir, are two locks that exclude
  * each other nowhere (json-io's header records that exact incident).
  */
+import fsSync from 'fs'
 import { readFile, writeFile, rename, unlink, stat, chmod } from 'fs/promises'
 import { basename, join } from 'path'
 import { withJsonLock, type JsonLockOpts } from '../json-io'
@@ -305,6 +306,50 @@ async function atomicWrite(filePath: string, content: string): Promise<void> {
     // `*.tmp.<pid>` beside a corpus document is exactly the kind of litter that
     // makes a later `walkDocuments` count wrong.
     await unlink(tmp).catch(() => {})
+    throw err
+  }
+}
+
+/**
+ * The SYNCHRONOUS twin of {@link atomicWrite} — same recipe, same guarantees.
+ *
+ * It exists because `lib/trdd-store.ts`'s three write sites (`editTrdd`, `editAt`,
+ * `advanceColumn`) are synchronous functions, and making them async would change their
+ * signature for every caller — the restructuring TRDD-7S27HJCS deliberately did not want
+ * bolted onto a write-atomicity fix. Two thin entry points over ONE documented recipe is
+ * not duplication; a second hand-rolled tmp+rename in another module would be, and that is
+ * precisely how the mode bug below gets re-introduced.
+ *
+ * WHY those sites needed this at all (TRDD-7S27HJCS): they used a plain `writeFileSync`,
+ * which TRUNCATES the target and then writes, so a crash between the two steps leaves a
+ * truncated or empty governance card. They ran under a lock imported from `json-io`, whose
+ * own contract is "ATOMIC (tmp + rename)" — so the module borrowed the serialisation from an
+ * atomic writer and then did not write atomically. A lock answers "can two writers collide";
+ * atomicity answers "can ONE writer leave a half-file", and the second is what a crash asks.
+ */
+export function atomicWriteSync(filePath: string, content: string): void {
+  const tmp = `${filePath}.tmp.${process.pid}`
+  // Same mode preservation as the async twin, and for the same measured reason: `rename`
+  // carries the TEMP's mode onto the document, so without this a 0444 write-protected rule
+  // file comes back 0644 and the next writer no longer meets the refusal it existed to raise.
+  let mode: number | undefined
+  try {
+    mode = fsSync.statSync(filePath).mode & 0o7777
+  } catch {
+    mode = undefined // new or unreadable; let the default stand
+  }
+  try {
+    fsSync.writeFileSync(tmp, content, 'utf-8')
+    if (mode !== undefined) fsSync.chmodSync(tmp, mode)
+    fsSync.renameSync(tmp, filePath)
+  } catch (err) {
+    // Best-effort cleanup — a stray `*.tmp.<pid>` beside a corpus document is exactly the
+    // litter that makes a later `walkDocuments` count wrong.
+    try {
+      fsSync.unlinkSync(tmp)
+    } catch {
+      /* the temp may never have been created */
+    }
     throw err
   }
 }

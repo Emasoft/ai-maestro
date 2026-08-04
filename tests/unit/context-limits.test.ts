@@ -88,6 +88,32 @@ describe('contextLimitForModel — the [1m] tag or a native-1M family grants the
     expect(contextLimitForModel('claude-sonnet-55')).toBe(200_000)
   })
 
+  it('claude-opus-5 → 1000000 (native 1M, no [1m] tag — CC 2.1.219, TRDD-9X2STNL2)', () => {
+    // 2.1.219 made claude-opus-5 the default Opus with a NATIVE 1M window.
+    // The family match was written when Sonnet 5 was the only native-1M model,
+    // so the bare id fell through to 200K. Measured before the fix:
+    // contextLimitForModel('claude-opus-5') → 200000, a 5x UNDER-report.
+    expect(contextLimitForModel('claude-opus-5')).toBe(1_000_000)
+  })
+
+  it('claude-opus-5[1m] → 1000000 via the TAG — the path that hid the bare-id gap', () => {
+    // This one always passed, which is exactly why nothing failed while the
+    // bare id was wrong: the tagged form is the common one in real JSONL.
+    // Keep both cases — a test that only covers the tagged id cannot see the bug.
+    expect(contextLimitForModel('claude-opus-5[1m]')).toBe(1_000_000)
+  })
+
+  it('the opus-5 rule must NOT promote the 4.x line or a different major version', () => {
+    // Same `(?![0-9])` boundary the sonnet-5 rule pins, asserted for opus so a
+    // future `claude-opus-50` cannot inherit a window it does not have.
+    expect(contextLimitForModel('claude-opus-4-8')).toBe(200_000)
+    expect(contextLimitForModel('claude-opus-50')).toBe(200_000)
+    expect(contextLimitForModel('claude-opus-55')).toBe(200_000)
+    expect(contextLimitForModel('opus')).toBe(200_000)
+    // fable-5 ends in `-5` but is not an opus/sonnet family — must stay 200K.
+    expect(contextLimitForModel('claude-fable-5')).toBe(200_000)
+  })
+
   it('a dated snapshot of the sonnet-5 family is still native 1M', () => {
     expect(contextLimitForModel('claude-sonnet-5-20260630')).toBe(1_000_000)
   })

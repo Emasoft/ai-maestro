@@ -342,16 +342,24 @@ fn usage_field(v: &Value, field: &str) -> Option<u64> {
 pub fn context_limit_for_model(model_id: &str) -> u64 {
     let m = model_id.to_ascii_lowercase();
     if m.contains("[1m]") { return 1_000_000; }
-    // Sonnet 5 ships a native 1M window with a bare, untagged id. Anchor on a
-    // trailing non-digit so a DIFFERENT version number that merely starts with
-    // these digits (e.g. "claude-sonnet-50") is NOT mistaken for the sonnet-5
-    // family — mirrors NATIVE_1M_FAMILY_RE `/sonnet-5(?![0-9])/` in
-    // lib/context-limits.ts. "claude-sonnet-5" and dated snapshots
-    // ("claude-sonnet-5-20260630") stay 1M; "claude-sonnet-50" stays 200K.
-    if let Some(pos) = m.find("sonnet-5") {
-        let after = m.as_bytes().get(pos + "sonnet-5".len()).copied();
-        if !matches!(after, Some(b'0'..=b'9')) {
-            return 1_000_000;
+    // Sonnet 5 and Opus 5 ship a native 1M window with a bare, untagged id.
+    // Anchor on a trailing non-digit so a DIFFERENT version number that merely
+    // starts with these digits (e.g. "claude-sonnet-50") is NOT mistaken for
+    // the -5 family — mirrors NATIVE_1M_FAMILY_RE
+    // `/(?:sonnet|opus)-5(?![0-9])/` in lib/context-limits.ts.
+    // "claude-opus-5" and dated snapshots stay 1M; "claude-opus-50" stays 200K.
+    //
+    // Opus 5 was added 2026-08-04 (TRDD-9X2STNL2, CC 2.1.219 made it the
+    // default Opus). The bare id had been falling through to 200K while
+    // "claude-opus-5[1m]" resolved correctly via the tag — which is precisely
+    // what hid the gap: the tagged form is the common one, so the bare id
+    // UNDER-reported a 1M session by 5x with nothing failing.
+    for needle in ["sonnet-5", "opus-5"] {
+        if let Some(pos) = m.find(needle) {
+            let after = m.as_bytes().get(pos + needle.len()).copied();
+            if !matches!(after, Some(b'0'..=b'9')) {
+                return 1_000_000;
+            }
         }
     }
     DEFAULT_CONTEXT_LIMIT

@@ -143,7 +143,14 @@ export function parseTrddFile(filePath: string, zone: TrddZone): ParsedTrdd | nu
 
 /** Find one TRDD by id across all four zones (case-insensitive), or null. */
 export function findTrdd(designDir: string, id: string): ParsedTrdd | null {
-  const want = id.toUpperCase()
+  // `normalizeId`, not `toUpperCase`: it ALSO strips the `TRDD-` prefix, which is the
+  // CANONICAL citation form the IND base defines ("Reference a TRDD as `TRDD-<id8>`").
+  // Without it this resolved a bare id and 404'd on the very spelling every commit
+  // subject, every frontmatter reference and every agent-to-agent message uses — while
+  // `trddgrep edit TRDD-<id8>` resolved it fine, because the CLI goes through
+  // `findRecord`, which normalizes. Two lookups disagreeing about what an id IS.
+  // Strictly more permissive: a bare id normalizes to itself, so no caller loses.
+  const want = TRDD_KIND.normalizeId(id)
   for (const zone of TRDD_ZONES) {
     for (const file of listTrddFiles(designDir, zone)) {
       if (idFromFilename(path.basename(file)) === want) {
@@ -381,20 +388,34 @@ function stageMovedFile(designDir: string, filePath: string): void {
  * lock is taken on `proposals/X.md` by one writer and `tasks/X.md` by another — two
  * locks, zero exclusion, both looking correct from inside. See `documentLockKey`.
  */
+/**
+ * The lock key for one TRDD, from any spelling of its id.
+ *
+ * EXPORTED so a test can compare it against the one `trddgrep edit` computes through
+ * `documentLockKeyFor`. That comparison cannot be written any other way: an expectation
+ * that RE-IMPLEMENTS the normalization passes with the normalization deleted (measured —
+ * the first version of that test did exactly this and its neuter reddened nothing).
+ *
+ * NORMALIZE, or the key depends on how the CALLER happened to spell the id. Lookups here
+ * are case-INSENSITIVE and legacy lowercase ids are permanently valid (the IND base: they
+ * are cited in immutable commit subjects, and were measured at 76% of one live board), so
+ * `abcd1234` and `ABCD1234` reach the SAME card and without this produce two lock
+ * directories. That also makes this byte-identical to the CLI's key, which is what stops
+ * `trddgrep edit` and the API routes from racing on one document.
+ *
+ * ⚠ THE CASE VARIANT IS INVISIBLE ON macOS AND REAL ON LINUX. APFS is case-INSENSITIVE, so
+ * `mkdir .trdd-lock-abcd1234` beside an existing `.trdd-lock-ABCD1234` returns EEXIST and
+ * the two keys accidentally collide into one working lock — verified with a bare `mkdir`.
+ * On ext4 they are two directories and two writers proceed at once. So a behavioural test
+ * of this on a dev Mac cannot fail, and its passing says nothing about CI. That is why the
+ * guard is pinned on the KEY rather than on an observed block.
+ */
+export function trddLockKey(designDir: string, id: string): string {
+  return documentLockKey(designDir, 'trdd', TRDD_KIND.normalizeId(id))
+}
+
 function withTrddLock<T>(designDir: string, id: string, fn: () => T | Promise<T>): Promise<T> {
-  // NORMALIZE THE ID, or the key depends on how the CALLER happened to spell it.
-  //
-  // Lookups here are case-INSENSITIVE and legacy lowercase ids are permanently valid (the
-  // IND base: they are cited in immutable commit subjects, and were measured at 76% of one
-  // live board). So `abcd1234`, `ABCD1234` and `TRDD-abcd1234` all reach the SAME document
-  // — and without this, all three produce DIFFERENT lock directories. Two writers of one
-  // TRDD would then exclude each other nowhere while both looking correctly locked, which
-  // is the precise failure `documentLockKey`'s own comment exists to prevent, reintroduced
-  // one level up by the spelling of an argument.
-  //
-  // It also makes this key byte-identical to the one `trddgrep edit` computes through
-  // `documentLockKeyFor`, which is what stops the CLI and the API routes from racing.
-  return withJsonLock(documentLockKey(designDir, 'trdd', TRDD_KIND.normalizeId(id)), async () => fn())
+  return withJsonLock(trddLockKey(designDir, id), async () => fn())
 }
 
 function editAt(filePath: string, edits: Array<[string, string]>, logLine: string): void {

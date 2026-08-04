@@ -501,21 +501,73 @@ describe('the verb lock and `trddgrep edit` key the SAME document identically (T
    * permanently valid because it is cited in immutable commit subjects) took a different
    * lock from the same card's uppercase form.
    */
-  it('agrees for every spelling of the id that resolves to the same card', async () => {
-    const { documentLockKey, documentLockKeyFor } = await import('@/lib/pillar/edit')
+  it('the store key equals the CLI key for every spelling, via BOTH real code paths', async () => {
+    // Both sides call the SHIPPED function — `trddLockKey` (what every write verb uses)
+    // and `documentLockKeyFor` (what `trddgrep edit` uses). Neither is re-implemented
+    // here, which is the whole point: the first version of this test computed the
+    // expectation the same way the fix does and passed with the fix fully reverted.
+    const { trddLockKey } = await import('@/lib/trdd-store')
+    const { documentLockKeyFor } = await import('@/lib/pillar/edit')
     const { TRDD_KIND } = await import('@/lib/pillar/kinds')
-    const designDir = '/corpus/design'
 
-    // What the CLI computes, from a record it resolved off disk.
-    const cliKey = documentLockKeyFor(designDir, TRDD_KIND, {
-      id: 'ABCD1234',
-      filePath: `${designDir}/tasks/TRDD-20260101_000000+0000-ABCD1234-x.md`,
-    })
+    const id = 'LOCK0003'
+    writeProposal(id, 'key-agreement')
+    const found = findTrdd(designDir, id)!
+    const cliKey = documentLockKeyFor(designDir, TRDD_KIND, { id: found.id, filePath: found.filePath })
 
-    // What the store's verbs compute, for each spelling a caller may legitimately pass.
-    // Mirrors `withTrddLock` exactly — including its normalize step, which is the fix.
-    for (const spelling of ['ABCD1234', 'abcd1234', 'TRDD-ABCD1234', 'TRDD-abcd1234']) {
-      expect(documentLockKey(designDir, 'trdd', TRDD_KIND.normalizeId(spelling))).toBe(cliKey)
+    for (const spelling of [id, id.toLowerCase(), `TRDD-${id}`, `trdd-${id.toLowerCase()}`]) {
+      expect(trddLockKey(designDir, spelling)).toBe(cliKey)
     }
+  })
+
+  it('a verb called with a PREFIXED id blocks on the lock the CLI would take', async () => {
+    // BEHAVIOURAL, and it has to be. The first version asserted
+    //   documentLockKey(dir, 'trdd', TRDD_KIND.normalizeId(spelling)) === cliKey
+    // which RE-IMPLEMENTS the fix in the test instead of calling the code — it never
+    // touched `withTrddLock` at all, so it passed with the fix fully reverted. The
+    // neuter reddening NOTHING is what exposed it: an expectation computed the same way
+    // the implementation computes it cannot detect that implementation changing.
+    //
+    // THE SPELLING IS `TRDD-`-PREFIXED, NOT LOWERCASE, AND THAT CHOICE IS LOAD-BEARING.
+    // The behavioural version was written with the lowercase spelling first and STILL
+    // passed under the neuter — because macOS APFS is case-INSENSITIVE, so
+    // `mkdir .trdd-lock-lock0002` beside an existing `.trdd-lock-LOCK0002` returns
+    // EEXIST and the two keys accidentally collide into one working lock. Verified with
+    // a bare `mkdir` on this machine. The bug is therefore INVISIBLE on macOS for a
+    // case-only difference and REAL on a case-sensitive filesystem (ext4, i.e. CI) —
+    // exactly the shape that passes at home and breaks elsewhere. `TRDD-<id>` differs by
+    // more than case, so it creates a genuinely separate lockdir on ANY filesystem.
+    const { documentLockKeyFor } = await import('@/lib/pillar/edit')
+    const { TRDD_KIND } = await import('@/lib/pillar/kinds')
+
+    const id = 'LOCK0002'
+    writeProposal(id, 'spelling-test')
+    const found = findTrdd(designDir, id)!
+
+    // The CLI's key, from a record it resolved off disk — the canonical spelling.
+    const cliKey = documentLockKeyFor(designDir, TRDD_KIND, { id: found.id, filePath: found.filePath })
+
+    let done = false
+    let release!: () => void
+    const held = new Promise<void>((r) => { release = r })
+    const holder = withJsonLock(cliKey, async () => { await held })
+
+    // The verb, called the way a legacy caller legitimately may — the citation form
+    // `TRDD-<id8>`, which resolves to the same card and used to produce a second lock.
+    const contender = promoteTrdd(designDir, `TRDD-${id}`, { approver: 'manager', iso: ISO })
+      .then(() => { done = true })
+
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5))
+    expect(done).toBe(false)
+    expect(findTrdd(designDir, id)?.zone).toBe('proposals')  // no half-applied transition
+
+    release()
+    await holder
+    await contender
+
+    // POSITIVE CONTROL: `false` above is equally satisfied by a contender that threw or
+    // was never called. This proves it was merely WAITING on the CLI's key.
+    expect(done).toBe(true)
+    expect(findTrdd(designDir, id)?.zone).toBe('tasks')
   })
 })

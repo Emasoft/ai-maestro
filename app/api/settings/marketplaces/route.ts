@@ -162,9 +162,24 @@ const HOME = os.homedir()
 // See BUG-POLLUTION-001.
 const SETTINGS_PATH = join(HOME, '.claude', 'settings.json')
 const CACHE_DIR = join(HOME, '.claude', 'plugins', 'cache')
-/** Every user-scope element this route may delete lives under `~/.claude/` — rules, agents,
- *  skills and output-styles all sit in siblings of that one directory. */
-const ELEMENTS_ROOT = join(HOME, '.claude')
+/**
+ * Containment roots for `remove-element`, ONE PER ELEMENT TYPE.
+ *
+ * These used to be a single `ELEMENTS_ROOT = ~/.claude`, which is far too wide to be a
+ * containment check: `remove-element` takes a caller-supplied `elementPath` and `rm`s it,
+ * so rooting at `~/.claude` stopped traversal OUT of the tree but still authorised the
+ * deletion of ANY single file INSIDE it — `~/.claude/settings.json` (taking
+ * `enabledPlugins` and `extraKnownMarketplaces` with it) or `~/.claude/.credentials.json`
+ * (logging the whole fleet out). As this handler's own comment notes, the route is
+ * owner+sudo gated but NOT console-gated, so it is reachable from any device on the VPN.
+ *
+ * Each branch already knows the only directory its element can legitimately live in, so
+ * rooting there costs nothing and turns an arbitrary-file-delete primitive back into an
+ * element remover.
+ */
+const RULES_DIR = join(HOME, '.claude', 'rules')
+const AGENTS_DIR = join(HOME, '.claude', 'agents')
+const OUTPUT_STYLES_DIR = join(HOME, '.claude', 'output-styles')
 const MARKETPLACES_DIR = join(HOME, '.claude', 'plugins', 'marketplaces')
 
 // Previously excluded local role-plugin marketplaces. The user asked for them
@@ -792,7 +807,7 @@ export async function POST(req: NextRequest) {
             // `mcp` branch above. Containment is what makes this an element remover rather
             // than an arbitrary-file-delete primitive: the route is owner+sudo gated but NOT
             // console-gated, so it is reachable from any device on the VPN.
-            const rulePath = assertInside(ELEMENTS_ROOT, elementPath || join(HOME, '.claude', 'rules', `${elementName}.md`))
+            const rulePath = assertInside(RULES_DIR, elementPath || join(RULES_DIR, `${elementName}.md`))
             if (existsSync(rulePath)) {
               await rm(rulePath)
             }
@@ -800,7 +815,7 @@ export async function POST(req: NextRequest) {
           }
           case 'agent': {
             // Agents at user level are files in ~/.claude/agents/<name>.md
-            const agentPath = assertInside(ELEMENTS_ROOT, elementPath || join(HOME, '.claude', 'agents', `${elementName}.md`))
+            const agentPath = assertInside(AGENTS_DIR, elementPath || join(AGENTS_DIR, `${elementName}.md`))
             if (existsSync(agentPath)) {
               await rm(agentPath)
             }
@@ -809,7 +824,7 @@ export async function POST(req: NextRequest) {
           case 'outputStyle': {
             // Output styles at user level are files in ~/.claude/output-styles/
             if (elementPath) {
-              const stylePath = assertInside(ELEMENTS_ROOT, elementPath)
+              const stylePath = assertInside(OUTPUT_STYLES_DIR, elementPath)
               if (existsSync(stylePath)) {
                 await rm(stylePath)
               }

@@ -591,14 +591,38 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
       // a plaintext mkdir/write/chmod/rename, so an ENOSPC or EACCES on a keyring-less host
       // escaped `runTick`, skipped the `saveState` below (losing every mutation this loop had
       // already made) and stopped the beat before `autoRotate` ever ran.
+      // ...but mark the slot DEAD only when the grant ACTUALLY rotated.
+      //
+      // The premise above — "the endpoint accepted and therefore ROTATED the old grant" —
+      // is not universally true, and `network.ts:247-251` is explicit about it: a
+      // NON-rotating server omits `refresh_token` from the response and we deliberately
+      // "keep the old one … so we never lose the ability to refresh again". Against such a
+      // server the old blob in the slot is still perfectly refreshable, so banning it on a
+      // TRANSIENT write failure (a momentarily-locked keychain, where `writeSlot` throws
+      // before writing anything) is the brick this branch was written to prevent, merely
+      // arrived at from the other side: `refresh_dead_fp` is keyed on the UNCHANGED old
+      // blob, so the gate at :559 matches on every later beat, keepalive never retries even
+      // once the keychain unlocks seconds later, and only a human re-login clears it.
+      //
+      // When the grant did NOT rotate we still surface the failure, but leave the slot
+      // retryable — the next beat re-presents a credential that genuinely still works.
+      const oldRefresh = oauthOf(blob).refreshToken ?? oauthOf(blob).refresh_token
+      const newRefresh = oauthOf(fresh).refreshToken ?? oauthOf(fresh).refresh_token
+      const grantRotated = Boolean(newRefresh) && newRefresh !== oldRefresh
       const meta = slots[email]
-      if (meta && typeof meta === 'object') {
+      if (meta && typeof meta === 'object' && grantRotated) {
         meta.refresh_failures = MAX_REFRESH_FAILURES
         meta.refresh_dead_fp = fingerprint(blob)
         changed = true
       }
       const why = exc instanceof SlotKeychainWriteError ? 'keychain write refused' : 'slot write failed'
-      decide(deps, `[keepalive] ${email}: ${why} (${exc instanceof Error ? exc.message : String(exc)}) — the refreshed token could not be stored and the old grant is already rotated; slot needs re-login`)
+      decide(
+        deps,
+        `[keepalive] ${email}: ${why} (${exc instanceof Error ? exc.message : String(exc)}) — the refreshed token could not be stored; ` +
+          (grantRotated
+            ? 'the old grant was rotated by the exchange and is now dead, so the slot needs re-login'
+            : 'the endpoint did not rotate the grant, so the stored credential still works and the next beat will retry'),
+      )
       continue
     }
     const meta = slots[email]

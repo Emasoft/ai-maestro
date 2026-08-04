@@ -3,7 +3,8 @@ trdd-id: 2U56TLBX
 title: A network failure kills every AMP script at the curl assignment, before its own error handler can run
 column: dev
 created: 2026-08-04T22:51:33+0200
-updated: 2026-08-04T22:51:33+0200
+updated: 2026-08-04T22:59:49+0200
+implementation-commits: [8b91f884]
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -33,12 +34,17 @@ labels: [amp, messaging, network-errors, fail-open, shell]
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-04
 
 - **Diagnosis: COMPLETE and MEASURED** (both layers below, empirically, not read).
-- **Fix: NOT STARTED.**
-- **NEXT ACTION:** phase 1 — `scripts/amp-fetch.sh` only. Guard the assignment at line 148
-  AND add the failure counter so the summary and exit status stop claiming an empty inbox.
-  Then the test, then the neuter.
+- **PHASE 1 DONE** — `scripts/amp-fetch.sh`, landed as `8b91f884`, with 3 tests in
+  `tests/unit/amp-fetch-network-failure.test.ts` and two neuters recorded below.
+- **NEXT ACTION:** phase 2 — the rest of the `-w "%{http_code}"` family. Take them ~5 files
+  at a time, in this order: `amp-send.sh` (2 sites), `amp-register.sh` (2), `amp-init.sh` (2),
+  then the six `amp-kanban-*.sh` (1 each), then `amp-helper.sh` (6). Each site needs the same
+  TWO halves; the exit-status half is the one a reviewer will skip.
 - **The trap that makes the obvious fix wrong:** `|| true` alone is NOT the fix. Measured —
-  it trades a silent crash for a silent lie. Both halves are required.
+  it trades a silent crash for a silent lie. Both halves are required, and neuter B below is
+  what proves the second half is load-bearing rather than decorative.
+- **SUPERSEDED — do NOT carry forward:** the line numbers in the Problem section below are
+  pre-fix. `amp-fetch.sh`'s curl assignment is no longer at 148; re-locate by symbol.
 
 ## Problem
 
@@ -161,13 +167,40 @@ with its positive control, and the absence of any `ERR` trap.
 - 2026-08-04T22:51:33+0200 — MANDATE (self). Tier 0: this repo's own scripts, no baseline
   deviation, no cross-team or release surface.
 
+## Phase 1 — neuter record (a COMPLEMENTARY PAIR, because the fix has two halves)
+
+One neuter would have certified half of it. The two are independent by construction — neuter A
+removes the guard so the script dies before any branch; neuter B keeps the guard and removes
+only the honest summary + exit — and each redO a different set:
+
+| Mutation | Reddened | Left green |
+|---|---|---|
+| **A** — drop `\|\| true` (the original bug) | the 2 unreachable-provider tests | the positive control |
+| **B** — keep the guard, drop the `TOTAL_UNREACHED` summary + `exit 2` (the naive one-token "fix") | the same 2, now on *"No new messages from external providers"* being printed and on the exit status | the positive control |
+
+Neuter B is the important one: it is the fix a reviewer would call sufficient, and it fails
+here for exactly the reason the card exists — the outage is announced AND then reported as an
+empty inbox.
+
+**One flake, and how it was handled:** under neuter B the positive control failed once with a
+60 s timeout. Re-run in isolation (`-t "POSITIVE CONTROL"`) it passed in 324 ms, and the full
+file re-run reproduced only the intended 2 failures. So the timeout was a harness flake, not
+an attribution — recorded because "3 failed" would otherwise read as a richer result than the
+honest "2 failed, and the control is untouched by this neuter".
+
+Both restored and proved byte-identical to `HEAD` with `git hash-object` ==
+`git rev-parse HEAD:<path>`.
+
 ## Acceptance
 
-- [ ] `amp-fetch.sh` prints its diagnostic, does NOT report an empty inbox, and exits non-zero
+- [x] `amp-fetch.sh` prints its diagnostic, does NOT report an empty inbox, and exits non-zero
       when a provider is unreachable
-- [ ] one unreachable provider no longer stops the loop — a healthy sibling is still fetched
+- [x] one unreachable provider no longer stops the loop — a healthy sibling is still fetched
+      (asserted from the test server's OWN request record, not from log text — a banner proves
+      nothing about whether the request was made)
 - [ ] the `-w "%{http_code}"` family across the AMP scripts is guarded, with the dead branches
-      made live
+      made live — **phase 2, ~20 sites, not started**
 - [ ] the `curl -sf … | jq` family is handled SEPARATELY, with an emptiness check rather than
-      a guard that fails open
-- [ ] tests exist with a positive control and a recorded neuter
+      a guard that fails open — **phase 3, not started**
+- [x] tests exist with a positive control and a recorded neuter (for phase 1; phases 2-3 owe
+      their own)

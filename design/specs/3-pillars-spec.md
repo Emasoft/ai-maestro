@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.5.0
+spec-version: 1.6.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-08-01T19:31:12+0200
+updated: 2026-08-04T15:33:39+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -67,6 +67,32 @@ same clause across versions; deleting a clause tombstones its id (never re-assig
 `3P-VER-04` **bidirectional-loop** — #83 froze the overlay FILENAMES the IND bases cite;
 this spec + the janitor check freeze the content CONTRACT. Together they close the loop in
 both directions.
+
+`3P-VER-05` **change-signal-is-the-blob-sha** — a consumer polling for changes `MUST` poll
+the per-FILE blob sha, never the branch commit sha:
+
+```bash
+gh api "repos/Emasoft/ai-maestro/contents/design/specs/3-pillars-spec.md?ref=governance-rules" --jq .sha
+gh api "repos/Emasoft/ai-maestro/contents/rules/aimaestro?ref=governance-rules" --jq '.[] | "\(.sha[0:12])  \(.name)"'
+```
+
+A blob sha changes **iff** those bytes change, so six shas are a complete per-file
+fingerprint of the SPEC + all five DEP overlays. This also covers what `spec-version` alone
+cannot: the overlays carry no version field, so an overlay-only edit moves no number.
+
+**The branch commit sha is FORBIDDEN as a change signal, and the reason is that it fails in
+the dangerous direction.** It moves on every unrelated commit, so a conforming consumer
+polls, sees movement, refetches, gets a byte-identical document, and records "checked,
+current" — manufacturing confidence instead of supplying information. Silence would be
+safer. Measured on ai-maestro#97 (2026-07-31, reproduced 2026-08-04): the branch sha moved
+`7b1a3e64 → ea97c73c` on four commits (`docs(lessons)`, `docs(pm2)`, `fix(oauth-rotator)`, a
+TRDD zone move) while the SPEC blob sat unchanged at `b38d895f…` for 13 days — during which
+the served version was `1.1.1` and the working copy reached `1.5.0`. I had documented the
+branch sha as the signal on 2026-07-29; that guidance is RETRACTED by this clause.
+
+The general form, worth stating because it outlives this instance: **an amendment the
+designated authority does not SERVE is not published, however correct its text** — so the
+signal must watch the served artifact, not the repository that produces it.
 
 ## 3P-KAN — Pillar 1: the kanban column vocabulary (17 columns)
 

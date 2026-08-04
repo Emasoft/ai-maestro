@@ -41,7 +41,7 @@ describe('SPEC — N clauses per document, id in the body', () => {
   it('finds every clause the live 3-pillars spec declares (positive control on real data)', () => {
     const recs = [...walkRecords(path.join(REPO, 'design/specs'), SPEC_KIND)]
     const threeP = recs.filter((r) => r.filePath.endsWith('3-pillars-spec.md'))
-    // 67 line-anchored declarations, counted independently with grep (NOT copied from
+    // 68 line-anchored declarations, counted independently with grep (NOT copied from
     // this test's own failure output) each time the spec gains a family. A fixture of my
     // own making could not have caught a wrong regex; the live corpus can. Was 38 until
     // spec 1.2.0 added 3P-DAG (+3) and 3P-IDX (+14) — TRDD-LXLK7XGX / EHT MUYRIKN3; then
@@ -49,9 +49,12 @@ describe('SPEC — N clauses per document, id in the body', () => {
     // 3P-IDX-15 (+1) for TRDD-C4YJAUD9's unwired-pass clause, batched into the SAME bump;
     // then 1.4.0 added 3P-TRDD-12 (+1), the validate-before-write mandate (TRDD-SCMPWF6R);
     // then 1.5.0 added 3P-KAN-10..16 (+7), the USER-ratified PIPELINE INVARIANT — the board
-    // must DRAIN, `blocked-by:` is the only licence to sit still, WIP matches capacity
-    // (`grep -cE '^\`3P-[A-Z]+-[0-9]{2}\`' design/specs/3-pillars-spec.md` → 67).
-    expect(threeP.length).toBe(67)
+    // must DRAIN, `blocked-by:` is the only licence to sit still, WIP matches capacity;
+    // then 1.6.0 added 3P-VER-05 (+1), the change-signal clause (ai-maestro#97 — poll the
+    // per-FILE blob sha, never the branch commit sha, which moves on every unrelated commit
+    // and so reports "current" over a 13-day-stale document)
+    // (`grep -cE '^\`3P-[A-Z]+-[0-9]{2}\`' design/specs/3-pillars-spec.md` → 68).
+    expect(threeP.length).toBe(68)
     expect(threeP.every((r) => /^3P-[A-Z]+-\d{2}$/.test(r.id))).toBe(true)
     // Every record carries the line it was declared on — that is what a lint reports.
     expect(threeP.every((r) => typeof r.line === 'number' && r.line! > 0)).toBe(true)

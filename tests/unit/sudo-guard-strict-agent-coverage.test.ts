@@ -99,7 +99,7 @@ const K2WJH7RF_OWNER_ONLY = [
  * TRDD-K2WJH7RF Part 1 — the five TRDD write verbs. The guard now ADMITS an
  * authenticated agent (`deferToRoute`) because the decision needs the target
  * TRDD's approval tier, which lives on disk and which the guard refuses to read.
- * The real check is `authorizeTrddVerb()` inside each route.
+ * The real check is `withAuthorizedTrdd()` inside each route.
  *
  * These are what ai-maestro-janitor#76 told the janitor to SKIP.
  */
@@ -113,7 +113,7 @@ const K2WJH7RF_TRDD_VERBS = [
 
 /**
  * The route FILE behind each deferred verb. Deferral means the guard performs no
- * check, so if one of these files stopped calling `authorizeTrddVerb()` the route
+ * check, so if one of these files stopped calling `withAuthorizedTrdd()` the route
  * would authorize NOBODY — it would authorize EVERYONE. Nothing else in the
  * system would notice. This mapping is what makes that regression impossible.
  */
@@ -220,23 +220,29 @@ describe('strict-route agent-path coverage (TRDD-6A2I6ZO0)', () => {
     }
   })
 
-  it('K2WJH7RF: every DEFERRED route actually calls authorizeTrddVerb (else it authorizes EVERYONE)', () => {
+  it('K2WJH7RF: every DEFERRED route actually calls withAuthorizedTrdd (else it authorizes EVERYONE)', () => {
     // This is the load-bearing test of the whole deferral design. The guard waves
     // these routes through, so the route's own call is the ONLY check. A route
     // that lost it would not fail closed — it would fail OPEN, silently, and let
     // any agent approve any TRDD (its own proposals included).
+    //
+    // TRDD-6D6SQNI6 renamed the seam from `authorizeTrddVerb` to `withAuthorizedTrdd`,
+    // which now performs the decision AND the write under one document lock. The old
+    // name is deliberately no longer exported, so a route reaching for it fails to
+    // compile rather than silently authorizing outside the lock — but this test still
+    // pins the CALL, because an unimported-and-uncalled route compiles fine.
     const holes: string[] = []
 
     for (const [routeKey, relPath] of Object.entries(DEFERRED_ROUTE_FILES)) {
       const src = readFileSync(path.join(repoRoot, relPath), 'utf8')
-      const imports = /import\s+\{[^}]*\bauthorizeTrddVerb\b[^}]*\}\s+from\s+'@\/lib\/trdd-authz'/.test(src)
-      const calls = /\bauthorizeTrddVerb\s*\(\s*auth\b/.test(src)
+      const imports = /import\s+\{[^}]*\bwithAuthorizedTrdd\b[^}]*\}\s+from\s+'@\/lib\/trdd-authz'/.test(src)
+      const calls = /\bwithAuthorizedTrdd\s*\(\s*auth\b/.test(src)
       if (!imports || !calls) holes.push(`${routeKey}  (${relPath})`)
     }
 
     expect(
       holes,
-      'These routes are DEFERRED by the sudo-guard but do not call authorizeTrddVerb(auth, …).\n' +
+      'These routes are DEFERRED by the sudo-guard but do not call withAuthorizedTrdd(auth, …).\n' +
         'The guard performs no check on them, so they are wide open to every agent:\n  ' +
         holes.join('\n  '),
     ).toEqual([])

@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { readTrdd, editTrdd } from '@/lib/trdd-store'
-import { authorizeTrddVerb } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd } from '@/lib/trdd-authz'
 
 /**
  * GET /api/trdd/[id] — read one TRDD (full frontmatter + body) by its 8-char id.
@@ -81,10 +81,15 @@ export async function PATCH(
   // TRDD-K2WJH7RF: `edit` is the mechanical column transition, EXEMPT from
   // approval — so the gate is OWNERSHIP, not tier: the card's assignee, its
   // team's ORCHESTRATOR, or MANAGER. The sudo-guard deferred this route.
-  const authzErr = authorizeTrddVerb(auth, designDir, id, 'edit')
-  if (authzErr) return authzErr
+  //
+  // TRDD-6D6SQNI6: the decision and the write are ONE critical section on the card,
+  // because ownership is read off the very frontmatter a racing peer would be editing.
+  const outcome = await withAuthorizedTrdd(auth, designDir, id, 'edit', () =>
+    editTrdd(designDir, id, edits, new Date().toISOString()),
+  )
+  if (outcome.denied) return outcome.denied
 
-  const result = await editTrdd(designDir, id, edits, new Date().toISOString())
+  const result = outcome.value
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

@@ -3,7 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { archiveTrdd } from '@/lib/trdd-store'
-import { authorizeTrddVerb, rejectUnarchivableState } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd, rejectUnarchivableState } from '@/lib/trdd-authz'
 
 const ARCHIVE_STATES = ['completed', 'cancelled', 'superseded'] as const
 
@@ -58,16 +58,20 @@ export async function POST(
   if (stateErr) return stateErr
 
   //  2. AUTHORIZATION — the owner or MANAGER. The sudo-guard deferred this route.
-  const authzErr = authorizeTrddVerb(auth, designDir, id, 'archive')
-  if (authzErr) return authzErr
+  //     TRDD-6D6SQNI6: decided and written under ONE hold on the card, so a peer cannot
+  //     change the fields the decision reads between the two.
+  const outcome = await withAuthorizedTrdd(auth, designDir, id, 'archive', () =>
+    archiveTrdd(designDir, id, {
+      approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
+      state: state as (typeof ARCHIVE_STATES)[number],
+      reason: typeof body.reason === 'string' ? body.reason : undefined,
+      supersededBy: typeof body.supersededBy === 'string' ? body.supersededBy : undefined,
+      iso: new Date().toISOString(),
+    }),
+  )
+  if (outcome.denied) return outcome.denied
 
-  const result = await archiveTrdd(designDir, id, {
-    approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
-    state: state as (typeof ARCHIVE_STATES)[number],
-    reason: typeof body.reason === 'string' ? body.reason : undefined,
-    supersededBy: typeof body.supersededBy === 'string' ? body.supersededBy : undefined,
-    iso: new Date().toISOString(),
-  })
+  const result = outcome.value
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

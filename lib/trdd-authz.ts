@@ -22,7 +22,7 @@
 import { NextResponse } from 'next/server'
 import type { AgentAuthResult } from './agent-auth'
 import { authorize, type TrddVerb, type TrddApprovalTitle } from './authorization'
-import { readTrdd } from './trdd-store'
+import { readTrdd, withTrddLock } from './trdd-store'
 import { getAgent, getAgentByNameAnyHost } from './agent-registry'
 
 /**
@@ -100,9 +100,13 @@ function resolveActor(v: unknown): string | null {
 /**
  * Read the target TRDD, then authorize `verb` against it.
  *
+ * NOT EXPORTED — call {@link withAuthorizedTrdd}, which runs this and the write it
+ * authorises inside ONE document lock. See that function for why the unlocked spelling
+ * was deliberately taken away rather than left beside the locked one.
+ *
  * @returns a NextResponse the route must RETURN (404 / 403), or null to proceed.
  */
-export function authorizeTrddVerb(
+function authorizeTrddVerb(
   auth: AgentAuthResult,
   designDir: string,
   id: string,
@@ -128,6 +132,55 @@ export function authorizeTrddVerb(
     )
   }
   return null
+}
+
+/**
+ * Authorize `verb` and perform `write` as ONE critical section on the target document
+ * (TRDD-6D6SQNI6).
+ *
+ * THE BUG THIS CLOSES. `authorizeTrddVerb` reads the card to decide who may act; the store
+ * verb then takes the document lock and writes. Between those two steps the card is
+ * unlocked, so a peer changing `assignee` or `min-approval-requirement` — the two fields
+ * the decision turns on, and precisely the ones a racing governance edit would be
+ * changing — lets the mutation land on an authorization computed against a state that no
+ * longer exists.
+ *
+ * WHY THE LOCK LIVES HERE, AND NOT IN THE FIVE ROUTES. The card's root cause is not the
+ * missing lock, it is that the gap was INVISIBLE: the store's lock is real, it does
+ * serialise the writes, and a reader auditing a route sees a lock and stops looking —
+ * which is how this survived the pass that introduced the lock and the pass after it. A
+ * fix that asks each of five routes (and every future sixth) to remember an extra
+ * acquisition reproduces exactly that failure mode, because the omission looks like
+ * nothing. This module is already the ONE seam all five go through — `lib/sudo-guard.ts`
+ * DEFERS them here on purpose — so widening the section here covers every caller, and
+ * un-exporting the unlocked `authorizeTrddVerb` leaves no spelling that skips it.
+ *
+ * WHY NOT AUTHORIZE INSIDE THE STORE. The store is also driven by the `trddgrep` CLI,
+ * which has no `AgentAuthResult`. Every verb would grow an OPTIONAL auth parameter — and
+ * an optional authorization argument fails open by default, which is a worse bug than the
+ * one being fixed.
+ *
+ * SAFE TO NEST, MEASURED: `withTrddLock` is reentrant (see its own note), so the store's
+ * inner acquisition on the same normalized key runs directly instead of deadlocking.
+ *
+ * `write` runs ONLY if authorization passed, and everything it needs — minting an approval
+ * token, for instance — belongs inside it: a token minted before authority is established
+ * would leave an audit record for an approval that never happened.
+ *
+ * @returns `{denied}` — a NextResponse the route must RETURN — or `{denied: null, value}`.
+ */
+export async function withAuthorizedTrdd<T>(
+  auth: AgentAuthResult,
+  designDir: string,
+  id: string,
+  verb: TrddVerb,
+  write: () => T | Promise<T>
+): Promise<{ denied: NextResponse; value?: undefined } | { denied: null; value: T }> {
+  return withTrddLock(designDir, id, async () => {
+    const denied = authorizeTrddVerb(auth, designDir, id, verb)
+    if (denied) return { denied }
+    return { denied: null, value: await write() }
+  })
 }
 
 /**

@@ -3,7 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { advanceColumn } from '@/lib/trdd-store'
-import { authorizeTrddVerb } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd } from '@/lib/trdd-authz'
 
 /**
  * POST /api/trdd/[id]/promote — advance an OPEN (design/tasks/) TRDD's `column`
@@ -47,14 +47,17 @@ export async function POST(
   // TRDD-K2WJH7RF: promotion IS the approval act, so it shares approve's rule —
   // same tier, same self-approval ban. Letting them diverge would make `promote`
   // a way to launder an approval the caller could not grant.
-  const authzErr = authorizeTrddVerb(auth, designDir, id, 'promote')
-  if (authzErr) return authzErr
+  // TRDD-6D6SQNI6: decision and write share one hold on the card.
+  const outcome = await withAuthorizedTrdd(auth, designDir, id, 'promote', () =>
+    advanceColumn(designDir, id, column, {
+      iso: new Date().toISOString(),
+      note: typeof body.note === 'string' ? body.note : undefined,
+      approver: typeof body.approver === 'string' ? body.approver : auth.agentId || undefined,
+    }),
+  )
+  if (outcome.denied) return outcome.denied
 
-  const result = await advanceColumn(designDir, id, column, {
-    iso: new Date().toISOString(),
-    note: typeof body.note === 'string' ? body.note : undefined,
-    approver: typeof body.approver === 'string' ? body.approver : auth.agentId || undefined,
-  })
+  const result = outcome.value
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

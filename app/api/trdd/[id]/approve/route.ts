@@ -3,7 +3,7 @@ import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { promoteTrdd } from '@/lib/trdd-store'
-import { authorizeTrddVerb } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd } from '@/lib/trdd-authz'
 import { mintTrddDecisionToken } from '@/lib/trdd-approval-token'
 
 /**
@@ -53,23 +53,30 @@ export async function POST(
   // route (it will not read the task corpus), so this call is the only thing
   // standing between an agent and an approval it has no authority to grant —
   // including approving its OWN proposal, or one reserved for the USER.
-  const authzErr = authorizeTrddVerb(auth, designDir, id, 'approve')
-  if (authzErr) return authzErr
+  // TRDD-6D6SQNI6: the decision, the mint and the write are ONE critical section on the
+  // card. The mint stays INSIDE it deliberately — minting before authority is established
+  // would leave a signed approval token in the audit ledger for an approval that never
+  // happened, and moving it after the write would be too late to pass it in.
+  const outcome = await withAuthorizedTrdd(auth, designDir, id, 'approve', async () => {
+    // Mint the proof, now that the authority is established. A null token means the
+    // audit ledger was unavailable — the approval still stands (it was authorized,
+    // and the prose log records it exactly as before), but it will report as
+    // UNVERIFIABLE. Failing the approval instead would turn a logging outage into a
+    // governance outage: the fleet could not approve anything until the ledger came
+    // back. The honest degradation is an approval that says it cannot prove itself.
+    const approvalToken = await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval')
 
-  // Mint the proof, now that the authority is established. A null token means the
-  // audit ledger was unavailable — the approval still stands (it was authorized,
-  // and the prose log records it exactly as before), but it will report as
-  // UNVERIFIABLE. Failing the approval instead would turn a logging outage into a
-  // governance outage: the fleet could not approve anything until the ledger came
-  // back. The honest degradation is an approval that says it cannot prove itself.
-  const approvalToken = await mintTrddDecisionToken(buildAuthContext(auth), id, 'approval')
-
-  const result = await promoteTrdd(designDir, id, {
-    approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
-    rationale: typeof body.rationale === 'string' ? body.rationale : undefined,
-    iso: new Date().toISOString(),
-    approvalToken,
+    const result = await promoteTrdd(designDir, id, {
+      approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
+      rationale: typeof body.rationale === 'string' ? body.rationale : undefined,
+      iso: new Date().toISOString(),
+      approvalToken,
+    })
+    return { approvalToken, result }
   })
+  if (outcome.denied) return outcome.denied
+
+  const { approvalToken, result } = outcome.value
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

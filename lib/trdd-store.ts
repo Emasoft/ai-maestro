@@ -465,7 +465,20 @@ export function trddLockKey(designDir: string, id: string): string {
   return documentLockKey(designDir, 'trdd', TRDD_KIND.normalizeId(id))
 }
 
-function withTrddLock<T>(designDir: string, id: string, fn: () => T | Promise<T>): Promise<T> {
+/**
+ * EXPORTED so a CALLER can widen the critical section to include the DECISION that
+ * authorised the write (TRDD-6D6SQNI6) — the verbs below lock their own write, which
+ * does not cover an authorization computed before the verb was ever called.
+ *
+ * Nesting this is safe, and that is a MEASURED fact rather than a reading: `withJsonLock`
+ * is reentrant through an `AsyncLocalStorage` held-set keyed on the exact lock-key string,
+ * and `trddLockKey` NORMALIZES the id — so an outer acquisition here and the inner one
+ * inside every verb collapse to one string and the inner call runs directly instead of
+ * waiting on a lock its own chain already holds. Measured both arms: a nested re-acquire
+ * completes, and a SIBLING async context on the same key blocks until release (without
+ * that second arm, the first passes just as well against a lock that excludes nobody).
+ */
+export function withTrddLock<T>(designDir: string, id: string, fn: () => T | Promise<T>): Promise<T> {
   return withJsonLock(trddLockKey(designDir, id), async () => fn())
 }
 

@@ -42,6 +42,16 @@ export interface ParsedTrdd {
   title: string
   frontmatter: Record<string, unknown>
   body: string
+  /**
+   * Set when the frontmatter could not be PARSED, carrying the parser's own reason
+   * (TRDD-5XJWR473). Distinct from `frontmatter: {}`, which legitimately means "parsed
+   * fine, no fields" — see `PillarDocument.parseError` for why conflating the two let
+   * the auto-fixer duplicate fields on every run.
+   *
+   * `column` and `title` are `''` here, exactly as for a field-less card, so ANY caller
+   * that writes based on their absence MUST check this first.
+   */
+  parseError?: string
 }
 
 export interface TrddSummary {
@@ -138,6 +148,10 @@ export function parseTrddFile(filePath: string, zone: TrddZone): ParsedTrdd | nu
     title: typeof data.title === 'string' ? data.title : '',
     frontmatter: data,
     body: doc.body,
+    // Propagated, not swallowed: a card whose YAML does not parse reaches every caller
+    // looking exactly like one that merely lacks fields, and the auto-fixer used to
+    // "repair" it by inserting duplicates of the fields sitting unparsed below.
+    ...(doc.parseError ? { parseError: doc.parseError } : {}),
   }
 }
 

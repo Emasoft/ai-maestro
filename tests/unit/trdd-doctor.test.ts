@@ -802,3 +802,114 @@ describe('THE GATE — the real corpus lints clean', () => {
  * through the ANSI escapes. A neuter that reddens nothing is a finding about the test OR about
  * the instrument, and the two are indistinguishable until you look at the raw output.
  */
+
+/**
+ * TRDD-5XJWR473 — a card whose FRONTMATTER DOES NOT PARSE must be reported, never repaired.
+ *
+ * The bug this pins. `lib/pillar/store.ts` used to swallow a gray-matter failure into
+ * `data = {}`, so "this document has no fields" and "I could not read this document" were the
+ * SAME answer, and no caller could tell them apart. `fixCorpus` keys its `column:`/`title:`
+ * insertions on those fields being absent — so an unparseable card got a SECOND pair inserted
+ * after `trdd-id:` while the real ones sat, unparsed, a few lines below. The insertion does not
+ * make the YAML parseable, so the NEXT run inserted another pair, and the next. Unbounded
+ * duplication, produced by the tool whose entire job is repairing the corpus.
+ *
+ * The load-bearing case is the SECOND run. A single-run assertion passes even with the bug
+ * present, because one inserted pair looks exactly like a repair — it is only on re-running that
+ * "repair" and "corruption" become distinguishable.
+ *
+ * The fixture's premise was verified before it was written: gray-matter really does throw on an
+ * unclosed double-quoted scalar ("unexpected end of the stream within a double quoted scalar").
+ * A fixture that merely looked malformed but parsed fine would make every assertion here vacuous.
+ */
+describe('unparseable frontmatter is REPORTED, not "repaired" (TRDD-5XJWR473)', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-unparseable-'))
+    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+      fs.mkdirSync(path.join(tmp, z), { recursive: true })
+    }
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  const BROKEN_NAME = 'TRDD-20260101_000000+0100-DDDDDDDD-broken.md'
+  /**
+   * Unparseable YAML that nonetheless CONTAINS a real `column:` and `title:`. Both halves
+   * matter: unparseable is what makes every field read as absent, and the fields being present
+   * in the text is what makes an insertion a duplication rather than a legitimate repair.
+   */
+  const BROKEN = [
+    '---',
+    'trdd-id: DDDDDDDD',
+    'title: "an unclosed quote starts here',
+    'column: dev',
+    'created: 2026-01-01T00:00:00+0100',
+    'updated: 2026-01-01T00:00:00+0100',
+    '---',
+    '',
+    '# TRDD-DDDDDDDD — a card whose YAML is broken',
+    '',
+    'body',
+    '',
+  ].join('\n')
+
+  const brokenPath = () => path.join(tmp, 'tasks', BROKEN_NAME)
+
+  it('lintCorpus reports UNPARSEABLE, names the parser reason, and refuses to call it autofixable', () => {
+    write('tasks', BROKEN_NAME, BROKEN)
+
+    const r = lintCorpus(tmp)
+    const f = r.findings.filter((x) => x.rule === 'UNPARSEABLE')
+
+    expect(r.scanned).toBe(1) // non-vacuity: the linter actually SAW the file
+    expect(f).toHaveLength(1)
+    expect(f[0].severity).toBe('error')
+    // autofixable:false is the machine-readable half of "a human must resolve this" — which of
+    // two `column:` lines is the real one is a judgement, not a mechanical repair.
+    expect(f[0].autofixable).toBe(false)
+    // The parser's own reason, so the operator learns WHAT is malformed, not merely THAT it is.
+    expect(f[0].message).toMatch(/double quoted scalar/i)
+  })
+
+  it('an unparseable card is NOT reported as merely missing its fields', () => {
+    // Before the fix this card emitted COLUMN-MISSING (and friends), because every field read as
+    // absent. That is the misdiagnosis that made `--fix` insert duplicates: the linter said the
+    // fields were missing, and they were not.
+    write('tasks', BROKEN_NAME, BROKEN)
+
+    const rules = new Set(lintCorpus(tmp).findings.map((f) => f.rule))
+    expect(rules.has('UNPARSEABLE')).toBe(true)
+    expect(rules.has('COLUMN-MISSING')).toBe(false)
+  })
+
+  it('fixCorpus does not touch it — and a SECOND run does not either (the unbounded half)', () => {
+    write('tasks', BROKEN_NAME, BROKEN)
+
+    fixCorpus(tmp)
+    const afterFirst = fs.readFileSync(brokenPath(), 'utf8')
+    expect(afterFirst).toBe(BROKEN)
+
+    // The assertion the single-run case cannot make. With the bug present this run appends
+    // ANOTHER `column:`/`title:` pair on top of the first run's, which is what turns a
+    // one-off misrepair into unbounded growth.
+    fixCorpus(tmp)
+    expect(fs.readFileSync(brokenPath(), 'utf8')).toBe(BROKEN)
+
+    // Named explicitly rather than left to the byte comparison, so a future failure says WHY.
+    const occurrences = (s: string, re: RegExp) => (s.match(re) ?? []).length
+    expect(occurrences(fs.readFileSync(brokenPath(), 'utf8'), /^column:/gm)).toBe(1)
+    expect(occurrences(fs.readFileSync(brokenPath(), 'utf8'), /^title:/gm)).toBe(1)
+  })
+
+  it('POSITIVE CONTROL — a card that genuinely LACKS a column still gets one, in the same run', () => {
+    // Without this, "fixCorpus changed nothing" is satisfied by a fixer that repairs nothing at
+    // all, and the skip above would look correct while having disabled the whole tool.
+    write('tasks', BROKEN_NAME, BROKEN)
+    const NEEDS_FIX = 'TRDD-20260101_000000+0100-EEEEEEEE-needs.md'
+    write('tasks', NEEDS_FIX, good('EEEEEEEE').replace(/^column:.*$/m, ''))
+
+    fixCorpus(tmp)
+
+    expect(fs.readFileSync(path.join(tmp, 'tasks', NEEDS_FIX), 'utf8')).toMatch(/^column: todo$/m)
+    expect(fs.readFileSync(brokenPath(), 'utf8')).toBe(BROKEN)
+  })
+})

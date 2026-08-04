@@ -100,6 +100,14 @@ export interface Card {
   title: string
   fm: Record<string, unknown>
   /**
+   * Set when this card's frontmatter could NOT be parsed (TRDD-5XJWR473). Such a card
+   * arrives with `column: ''`, `title: ''` and `fm: {}` — indistinguishable from a card
+   * that genuinely lacks those fields — so every AUTOFIX must skip it. Its real fields
+   * are sitting in the file, unparsed; inserting more is not a repair, it is a guess
+   * that compounds on every run.
+   */
+  parseError?: string
+  /**
    * The STALE-COLUMN verdict, decided IN THE STREAM so the body is released with the
    * file. It is the only rule that reads prose, and holding ~10 KB of body per card to
    * answer one boolean is most of what put the entire corpus in memory.
@@ -394,6 +402,7 @@ function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[]; nod
         column: String(parsed.column ?? '').trim(),
         title: String(parsed.title ?? '').trim(),
         fm: parsed.frontmatter ?? {},
+        ...(parsed.parseError ? { parseError: parsed.parseError } : {}),
         stateReadsDone: STATE_READS_DONE.test(
           body.match(/##\s*⏵?\s*STATE[\s\S]{0,1200}/i)?.[0] ?? '',
         ),
@@ -441,6 +450,23 @@ export function lintCorpus(designDir: string): DoctorReport {
     })
   }
 
+  // The OTHER unparseable shape, and the one this rule was named for (TRDD-5XJWR473).
+  // `unparsed` above only ever holds files whose FILENAME carries no id — a YAML parse
+  // failure produced a perfectly ordinary Card with blank column/title, so a broken card
+  // was reported as a card merely missing fields, and `--fix` then "repaired" it by
+  // inserting duplicates of the fields sitting unparsed in the file.
+  for (const c of cards) {
+    if (!c.parseError) continue
+    add({
+      rule: 'UNPARSEABLE',
+      severity: 'error',
+      id: c.id,
+      filePath: c.filePath,
+      message: `frontmatter does not parse (${c.parseError}) — every field reads as ABSENT, so the board sees a card with no column and no title while the real ones sit in the file. Repair the YAML by hand: an autofix here would insert a SECOND copy of each missing field and do it again on every run`,
+      autofixable: false,
+    })
+  }
+
   const byId = new Map<string, Card[]>()
   for (const c of cards) {
     if (!byId.has(c.id)) byId.set(c.id, [])
@@ -474,6 +500,14 @@ export function lintCorpus(designDir: string): DoctorReport {
   }
 
   for (const c of cards) {
+    // Every field-based verdict below is derived from `c.fm`, and for an unparseable card
+    // `c.fm` is `{}` — not because the fields are absent but because they could not be READ
+    // (TRDD-5XJWR473). Emitting COLUMN-MISSING for a card whose `column:` is sitting right
+    // there in the file is a FALSE finding, and it is the specific false finding that made
+    // `--fix` insert a duplicate. UNPARSEABLE was already raised for this card above; that is
+    // the one true thing there is to say about it until a human repairs the YAML.
+    if (c.parseError) continue
+
     const fmHas = (k: string) => c.fm[k] !== undefined && c.fm[k] !== null && String(c.fm[k]) !== ''
 
     // ---- schema ----
@@ -1071,6 +1105,18 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
   }
 
   for (const c of cards) {
+    // NEVER autofix a card whose frontmatter did not PARSE (TRDD-5XJWR473). Such a card
+    // arrives with every field reading as absent, so each "missing field" repair below
+    // fires and inserts a duplicate of something already in the file — and because the
+    // insertion does not make the YAML parseable, the next run inserts another, and the
+    // next. Unbounded corruption, produced by the tool whose job is to repair.
+    //
+    // Reported instead: `runDoctor` raises UNPARSEABLE (severity error, autofixable
+    // false) for exactly these cards, so a human sees it rather than a silent skip.
+    // Broken frontmatter is a judgement call — which of the two `column:` lines is real
+    // is not something a mechanical pass can know.
+    if (c.parseError) continue
+
     const changes: string[] = []
     // Re-read the ONE file about to be repaired, rather than carrying every file's bytes
     // through the lint path to serve the rare fix path (TRDD-BQC8NQSW).

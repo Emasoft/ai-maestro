@@ -55,6 +55,26 @@ export interface PillarDocument {
    * always disagree — measured on a 3-line-frontmatter PRRD, by exactly 3.
    */
   bodyLineOffset: number
+  /**
+   * Set when the frontmatter could NOT be parsed — the reason, verbatim from the parser.
+   *
+   * WHY this field exists (TRDD-5XJWR473, 2026-08-04). The parse failure used to be
+   * swallowed into `frontmatter = {}`, which made "this document has no fields" and "I
+   * could not read this document" the SAME answer. That is a lenient read, and its
+   * danger is not on the read side — it is on whatever WRITES based on it. Measured:
+   * `trdd-doctor --fix` keys its `column:`/`title:` insertions on those fields being
+   * absent, so an unparseable card got a SECOND pair inserted after `trdd-id:` while the
+   * real ones sat unparsed below. The insertion does not make the YAML parseable, so the
+   * next run appended another pair, and the next — unbounded, on the tool whose whole job
+   * is keeping the corpus honest.
+   *
+   * It is a FIELD rather than a thrown error on purpose: `walkDocuments` streams the whole
+   * corpus, and one malformed card must not abort a sweep over the other 370.
+   *
+   * A caller that WRITES must refuse when this is set. A caller that only READS may treat
+   * the document as field-less, which is what every caller did before this existed.
+   */
+  parseError?: string
 }
 
 export interface PillarRecord {
@@ -155,15 +175,21 @@ export function readDocument(
   }
   let data: Record<string, unknown> = {}
   let content = ''
+  let parseError: string | undefined
   try {
     // NO_MATTER_CACHE, or the reader accumulates every document it ever parsed —
     // which would make the streaming above theatre. See lib/gray-matter-nocache.ts.
     const parsed = matter(raw, NO_MATTER_CACHE)
     data = (parsed.data ?? {}) as Record<string, unknown>
     content = parsed.content ?? ''
-  } catch {
+  } catch (err) {
+    // The document survives as text so a reader can still show it, but the failure is
+    // REPORTED rather than flattened into "no fields" — see `parseError` on the type for
+    // the corruption that flattening caused. Degrading silently here is what made a
+    // careful writer downstream do the wrong thing with total confidence.
     data = {}
     content = raw
+    parseError = (err as Error)?.message || String(err)
   }
   return {
     kind: kind.name,
@@ -172,6 +198,7 @@ export function readDocument(
     frontmatter: data,
     body: content,
     bodyLineOffset: bodyLineOffset(raw, content),
+    ...(parseError ? { parseError } : {}),
   }
 }
 

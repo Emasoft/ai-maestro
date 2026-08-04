@@ -314,6 +314,16 @@ card's own record of them.
       **Limit of this evidence, stated so nobody over-reads it:** I measured the TAGS against the
       documented requirement; I did NOT reproduce a failing install. That is exactly the bar this
       card's own memory page raises after 8 cross-repo issues were filed on an unverified theory.
+      **UPSTREAM ISSUES ALREADY EXIST — do not file duplicates.** Deduped 2026-08-05 before acting:
+      `Emasoft/ai-maestro-architect-agent#25` and `Emasoft/ai-maestro-integrator-agent#22` are both
+      OPEN and already ask for `claude plugin tag --push` in the publish pipeline (as is
+      `ai-maestro-visual-communicator-plugin#8`). Today's measurement was added as a COMMENT on the
+      two predefined-role issues rather than as new issues. What the comment adds: the audit is
+      manifest-wide (9 of 13 declared versions resolve, 4 do not), and it asks for a BACKFILL of the
+      currently-declared release — a publish-pipeline fix alone is future-only and leaves today's
+      declared version unresolvable.
+      `ai-maestro-webdesign` (0.1.7) has NO existing tag issue; not filed, as it is not a role-plugin
+      and nothing in this fleet installs it — recorded here so the gap is visible rather than lost.
 
 ## Notes — the investigation's own post-mortem
 

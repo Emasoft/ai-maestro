@@ -78,21 +78,46 @@ if [ -z "$AGENT_ID" ]; then
   exit 1
 fi
 
-# Find orchestrator from agent's team
-TEAM_ID=$(curl -sf "$API/api/agents/$AGENT_ID" | jq -r '.agent.teamId // empty' 2>/dev/null)
+# Find orchestrator from agent's team.
+#
+# TRDD-2U56TLBX. FETCH-then-PARSE per lookup, for the reasons written out in full at the
+# matching block in `amp-task-blocked.sh`: fused as `VAR=$(curl -sf … | jq …)` under
+# `set -eo pipefail`, a curl failure kills the script at the assignment before its own check
+# can run, and the naive `|| true` repair is WORSE than the bug here — an unreachable server
+# would leave ORCH_ID empty, and that branch `exit 0`s, so a completion report would be
+# dropped while the script claimed success.
+#
+# jq is guarded too, measured: exit 0 on EMPTY input, 5 on NON-JSON — which would abort again.
+AGENT_JSON=$(curl -sf "$API/api/agents/$AGENT_ID") || AGENT_JSON=""
+if [ -z "$AGENT_JSON" ]; then
+  echo "Error: no answer from AI Maestro at $API — the completion was NOT reported." >&2
+  exit 1
+fi
+TEAM_ID=$(echo "$AGENT_JSON" | jq -r '.agent.teamId // empty' 2>/dev/null) || TEAM_ID=""
 if [ -z "$TEAM_ID" ]; then
   echo "Error: Agent is not in a team" >&2
   exit 1
 fi
 
-ORCH_ID=$(curl -sf "$API/api/teams/$TEAM_ID" | jq -r '.orchestratorId // empty' 2>/dev/null)
+TEAM_JSON=$(curl -sf "$API/api/teams/$TEAM_ID") || TEAM_JSON=""
+if [ -z "$TEAM_JSON" ]; then
+  # "no answer" rather than "unreachable": curl -sf also fails on an HTTP error, so this
+  # covers both a dead server and a team that has gone away.
+  echo "Error: no answer for team $TEAM_ID from $API — the completion was NOT reported." >&2
+  exit 1
+fi
+ORCH_ID=$(echo "$TEAM_JSON" | jq -r '.orchestratorId // empty' 2>/dev/null) || ORCH_ID=""
 if [ -z "$ORCH_ID" ]; then
-  echo "Warning: No orchestrator assigned, sending to team" >&2
+  # Reached ONLY when the team genuinely has no orchestrator. The message used to say
+  # "sending to team" and then `exit 0` WITHOUT sending anything to anyone — a claim the code
+  # never made good on, independent of any network fault. Corrected to say what happens.
+  echo "Warning: No orchestrator assigned — nothing was sent." >&2
   exit 0
 fi
 
 # Get orchestrator name for AMP
-ORCH_NAME=$(curl -sf "$API/api/agents/$ORCH_ID" | jq -r '.agent.name // empty' 2>/dev/null)
+ORCH_JSON=$(curl -sf "$API/api/agents/$ORCH_ID") || ORCH_JSON=""
+ORCH_NAME=$(echo "$ORCH_JSON" | jq -r '.agent.name // empty' 2>/dev/null) || ORCH_NAME=""
 if [ -n "$ORCH_NAME" ]; then
   "$SCRIPT_DIR/amp-send.sh" "$ORCH_NAME" "Task Complete" "$MESSAGE"
   echo "Reported to orchestrator: $ORCH_NAME"

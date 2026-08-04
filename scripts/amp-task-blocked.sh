@@ -78,21 +78,54 @@ if [ -z "$AGENT_ID" ]; then
   exit 1
 fi
 
-# Find orchestrator from agent's team
-TEAM_ID=$(curl -sf "$API/api/agents/$AGENT_ID" | jq -r '.agent.teamId // empty' 2>/dev/null)
+# Find orchestrator from agent's team.
+#
+# TRDD-2U56TLBX. Each lookup is split into FETCH-then-PARSE, and that is not style — it is
+# the only way to tell "the server did not answer" from "the answer is legitimately empty".
+# Fused as `VAR=$(curl -sf … | jq …)`, three things go wrong at once under `set -eo pipefail`:
+#
+#   1. a curl failure fails the pipeline and takes the script down AT THE ASSIGNMENT, so the
+#      `if [ -z … ]` check below never runs — a bare exit 7 with no diagnostic;
+#   2. the naive repair (`|| true`) is WORSE HERE than the bug. A failed team lookup would
+#      leave ORCH_ID empty, and that branch prints a warning and `exit 0` — so a BLOCKER an
+#      agent reported would be silently dropped and the script would claim success. This is
+#      the one place in the AMP scripts where a bare guard flips a loud failure into a quiet
+#      one, which is why this family was deliberately held back from phases 1-2;
+#   3. even with the network handled, the existing message would be a lie: "Agent is not in a
+#      team" when the truth is that nobody could be asked.
+#
+# jq is guarded too, measured: it exits 0 on EMPTY input but 5 on NON-JSON (a proxy's HTML
+# error page under HTTP 200), which would abort the script all over again.
+AGENT_JSON=$(curl -sf "$API/api/agents/$AGENT_ID") || AGENT_JSON=""
+if [ -z "$AGENT_JSON" ]; then
+  echo "Error: no answer from AI Maestro at $API — the blocker was NOT reported." >&2
+  exit 1
+fi
+TEAM_ID=$(echo "$AGENT_JSON" | jq -r '.agent.teamId // empty' 2>/dev/null) || TEAM_ID=""
 if [ -z "$TEAM_ID" ]; then
   echo "Error: Agent is not in a team" >&2
   exit 1
 fi
 
-ORCH_ID=$(curl -sf "$API/api/teams/$TEAM_ID" | jq -r '.orchestratorId // empty' 2>/dev/null)
+TEAM_JSON=$(curl -sf "$API/api/teams/$TEAM_ID") || TEAM_JSON=""
+if [ -z "$TEAM_JSON" ]; then
+  # "no answer" rather than "unreachable": curl -sf also fails on an HTTP error, so this
+  # covers both a dead server and a team that has gone away. Either way the actionable half
+  # is the same and it is stated — nothing was reported.
+  echo "Error: no answer for team $TEAM_ID from $API — the blocker was NOT reported." >&2
+  exit 1
+fi
+ORCH_ID=$(echo "$TEAM_JSON" | jq -r '.orchestratorId // empty' 2>/dev/null) || ORCH_ID=""
 if [ -z "$ORCH_ID" ]; then
-  echo "Warning: No orchestrator assigned" >&2
+  # Reached ONLY when the team genuinely has no orchestrator — a server that did not answer
+  # exits 1 above rather than falling into this exit 0.
+  echo "Warning: No orchestrator assigned — nothing was sent." >&2
   exit 0
 fi
 
 # Get orchestrator name for AMP
-ORCH_NAME=$(curl -sf "$API/api/agents/$ORCH_ID" | jq -r '.agent.name // empty' 2>/dev/null)
+ORCH_JSON=$(curl -sf "$API/api/agents/$ORCH_ID") || ORCH_JSON=""
+ORCH_NAME=$(echo "$ORCH_JSON" | jq -r '.agent.name // empty' 2>/dev/null) || ORCH_NAME=""
 if [ -n "$ORCH_NAME" ]; then
   "$SCRIPT_DIR/amp-send.sh" "$ORCH_NAME" "Task Blocked" "$REASON" --priority high
   echo "Blocker reported to orchestrator: $ORCH_NAME"

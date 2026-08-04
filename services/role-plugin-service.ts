@@ -111,6 +111,18 @@ export const DEFAULT_ROLE_PLUGIN_NAMES: string[] = [...PREDEFINED_ROLE_PLUGIN_NA
 // generation, extract to a shared constant module first. Do NOT load it
 // from the filesystem on every plugin generate — it would couple plugin
 // production to deployment-time filesystem layout.
+//
+// WHY both skills below pin `background: false` (2026-08-04, TRDD-9X2STNL2):
+// Claude Code 2.1.218 made `context: fork` skills run in the BACKGROUND by
+// default. A backgrounded skill returns only an agent handle — its result
+// arrives later as a task notification — so an agent that invokes one of
+// these gets NO governance rules in the turn that asked for them, and no
+// error either. These two skills exist purely to LOAD reference text into
+// the asking turn, which is the one shape backgrounding breaks. `background:
+// false` is the changelog's own opt-out and restores exactly what this
+// committed frontmatter meant before 2.1.218 — do not drop it when editing
+// the frontmatter. (The `context: fork` itself stays: forking is what keeps
+// this multi-kilobyte reference out of the agent's main context.)
 
 const AIM_GOVERNANCE_RULES_SKILL = `---
 name: aim-governance-rules
@@ -121,6 +133,7 @@ metadata:
   author: AI Maestro
   version: 1.0.0
 context: fork
+background: false
 user-invocable: false
 ---
 
@@ -172,6 +185,7 @@ metadata:
   author: AI Maestro
   version: 1.0.0
 context: fork
+background: false
 user-invocable: false
 ---
 

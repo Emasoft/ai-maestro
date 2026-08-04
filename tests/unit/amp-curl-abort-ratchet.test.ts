@@ -1,10 +1,10 @@
 /**
- * TRDD-2U56TLBX — the ratchet. No AMP script may capture an http-code curl into a variable
+ * TRDD-2U56TLBX — the ratchet. No AMP script may capture a curl into a variable
  * without suspending `set -e` for that assignment.
  *
  * WHY A STRUCTURAL GUARD AND NOT SIX MORE BEHAVIOURAL TESTS. The mechanism is already pinned
  * behaviourally in `amp-network-failure.test.ts` for `amp-fetch.sh` and `amp-send.sh`. What
- * those cannot do is cover the other eleven sites, for two reasons:
+ * those cannot do is cover the other 41 sites, for two reasons:
  *
  *   1. The kanban scripts REFUSE to run without a resolvable AMP identity, and their refusal
  *      says in as many words not to pass an arbitrary `--id` — every registered uuid belongs
@@ -37,8 +37,8 @@ interface Site {
 }
 
 /**
- * Find `VAR=$(curl … -w "…%{http_code}" …)` assignments and decide whether `set -e` is
- * suspended for each.
+ * Find `VAR=$(curl …)` assignments in a script that runs under `set -e`, and decide whether
+ * `set -e` is suspended for each.
  *
  * "Guarded" means ANY of: a trailing `||`/`&&` on the statement, one INSIDE the substitution
  * (`$(curl … || echo '{}')` is a real guard), or the assignment used as an `if`/`while`
@@ -48,6 +48,13 @@ interface Site {
 function scan(file: string): Site[] {
   const lines = fs.readFileSync(path.join(SCRIPTS, file), 'utf8').split('\n')
   const out: Site[] = []
+
+  // The hazard exists only under `set -e`. `amp-statusline.sh` has none, so its unguarded
+  // curl simply continues — flagging it would be a false alarm, and a ratchet that cries wolf
+  // is one people learn to ignore. Deciding this per FILE also means the ratchet starts
+  // demanding a guard the day someone adds `set -e` to such a script, which is exactly when
+  // the site becomes dangerous.
+  if (!lines.some((l) => /^\s*set\s+-[a-zA-Z]*e/.test(l))) return out
 
   for (let i = 0; i < lines.length; i++) {
     if (!/^\s*(?:if\s+|while\s+|local\s+)?[A-Za-z_][A-Za-z0-9_]*=\$\(\s*curl\b/.test(lines[i])) continue
@@ -63,7 +70,6 @@ function scan(file: string): Site[] {
     }
 
     const span = lines.slice(i, end + 1).join('\n')
-    if (!span.includes('%{http_code}')) continue // a different family — see the card's phase 3
 
     out.push({
       file,
@@ -83,14 +89,14 @@ describe('no AMP script dies at a curl assignment before its own error handler (
     // The floor that makes every assertion below non-vacuous. A regex that silently stopped
     // matching would otherwise report zero unguarded sites and read as a pass.
     //
-    // MEASURED 2026-08-04 by running this exact scan: 31 amp-*.sh scripts, 20 http-code curl
-    // sites. The floors sit below those so ordinary edits do not trip them, and far above
-    // zero. (The first version of this comment carried 20/13 — numbers I wrote down without
-    // running the scan. Re-derived here through the code that BUILDS the set, which is the
-    // only count that means anything.)
+    // MEASURED 2026-08-04 by running this exact scan: 31 amp-*.sh scripts, 43 curl
+    // assignments under `set -e`. The floors sit below those so ordinary edits do not trip
+    // them, and far above zero. (An earlier version carried 20/13 — numbers written down without running
+    // the scan. Re-derived through the code that BUILDS the set, which is the only count
+    // that means anything.)
     expect(ampScripts.length, 'no amp-*.sh scripts found — wrong directory?').toBeGreaterThan(25)
-    expect(sites.length, 'the http-code curl scan found (almost) nothing — the regex broke')
-      .toBeGreaterThan(15)
+    expect(sites.length, 'the curl scan found (almost) nothing — the regex broke')
+      .toBeGreaterThan(35)
   })
 
   it('POSITIVE CONTROL: the classifier can actually say "unguarded"', () => {
@@ -102,6 +108,7 @@ describe('no AMP script dies at a curl assignment before its own error handler (
       fs.writeFileSync(
         tmp,
         [
+          'set -eo pipefail', // required, or scan() correctly returns nothing at all
           'BAD=$(curl -s -w "\\n%{http_code}" \\',
           '    -X GET "$URL")',
           '',
@@ -118,7 +125,7 @@ describe('no AMP script dies at a curl assignment before its own error handler (
     }
   })
 
-  it('every http-code curl assignment suspends set -e', () => {
+  it('every curl assignment in an AMP script suspends set -e', () => {
     const unguarded = sites.filter((s) => !s.guarded).map((s) => `${s.file}:${s.line}  ${s.text}`)
 
     expect(

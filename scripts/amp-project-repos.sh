@@ -57,11 +57,27 @@ API="${AIMAESTRO_API:-http://localhost:23000}"
 
 if [ -z "$TEAM_ID" ]; then
     AGENT_ID="${CLAUDE_AGENT_ID:-$(amp_resolve_agent_id)}"
-    TEAM_ID=$(curl -sf "$API/api/agents/$AGENT_ID" | jq -r '.agent.teamId // empty')
+    # TRDD-2U56TLBX: FETCH then PARSE — see the matching block in `amp-project-info.sh`.
+    # Fused, a curl failure kills the script at the assignment before the check below runs;
+    # a bare `|| true` reaches it with the wrong message.
+    AGENT_JSON=$(curl -sf "$API/api/agents/$AGENT_ID") || AGENT_JSON=""
+    if [ -z "$AGENT_JSON" ]; then
+        echo "Error: no answer from AI Maestro at $API — cannot resolve the team." >&2
+        exit 1
+    fi
+    TEAM_ID=$(echo "$AGENT_JSON" | jq -r '.agent.teamId // empty') || TEAM_ID=""
     if [ -z "$TEAM_ID" ]; then
         echo "Error: Agent is not in a team. Use --team <id>" >&2
         exit 1
     fi
 fi
 
-curl -sf "$API/api/teams/$TEAM_ID/repos" | jq '.'
+# The `||` block matters even though this is the last statement: under `pipefail` a failed
+# curl fails the whole pipeline, and without it the script exits with curl's raw status and
+# prints NOTHING — a caller asking "which repos does my team own" gets silence, not an error.
+REPOS_JSON=$(curl -sf "$API/api/teams/$TEAM_ID/repos") || REPOS_JSON=""
+if [ -z "$REPOS_JSON" ]; then
+    echo "Error: no answer for team $TEAM_ID's repos from $API." >&2
+    exit 1
+fi
+echo "$REPOS_JSON" | jq '.'

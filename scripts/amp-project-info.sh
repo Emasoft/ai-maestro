@@ -58,7 +58,18 @@ API="${AIMAESTRO_API:-http://localhost:23000}"
 # Auto-detect team from agent registry if not provided
 if [ -z "$TEAM_ID" ]; then
     AGENT_ID="${CLAUDE_AGENT_ID:-$(amp_resolve_agent_id)}"
-    TEAM_ID=$(curl -sf "$API/api/agents/$AGENT_ID" | jq -r '.agent.teamId // empty')
+    # TRDD-2U56TLBX: FETCH then PARSE, so "the server did not answer" and "the agent has no
+    # team" stay distinguishable. Fused as `$(curl -sf … | jq …)` under `set -eo pipefail`, a
+    # curl failure kills the script AT THE ASSIGNMENT and the check below never runs; a bare
+    # `|| true` would reach it with the WRONG message, blaming the agent's team membership
+    # for a server that was never asked. jq is guarded because it exits 5 on non-JSON
+    # (measured), which would abort here just the same.
+    AGENT_JSON=$(curl -sf "$API/api/agents/$AGENT_ID") || AGENT_JSON=""
+    if [ -z "$AGENT_JSON" ]; then
+        echo "Error: no answer from AI Maestro at $API — cannot resolve the team." >&2
+        exit 1
+    fi
+    TEAM_ID=$(echo "$AGENT_JSON" | jq -r '.agent.teamId // empty') || TEAM_ID=""
     if [ -z "$TEAM_ID" ]; then
         echo "Error: Agent is not in a team. Use --team <id>" >&2
         exit 1
@@ -66,7 +77,11 @@ if [ -z "$TEAM_ID" ]; then
 fi
 
 # Fetch team info
-TEAM_JSON=$(curl -sf "$API/api/teams/$TEAM_ID")
+TEAM_JSON=$(curl -sf "$API/api/teams/$TEAM_ID") || TEAM_JSON=""
+if [ -z "$TEAM_JSON" ]; then
+    echo "Error: no answer for team $TEAM_ID from $API." >&2
+    exit 1
+fi
 echo "$TEAM_JSON" | jq '{
   name: .name,
   description: .description,

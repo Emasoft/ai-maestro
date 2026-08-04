@@ -67,7 +67,14 @@ describe('getContinuityStatus — OAuth cascade supersedes the interim heuristic
 
   it('falls back to the interim heuristic when no cascade state is stamped (absent/stale → null)', async () => {
     const pressured = () => Promise.resolve(meta({ window5hPct: 95 })) // heuristic → 'monitor'
-    const s = await getContinuityStatus({ readMetadata: pressured, readTickAction: () => null })
+    const s = await getContinuityStatus({
+      readMetadata: pressured,
+      readTickAction: () => null,
+      // Injected, not defaulted: with the cascade returning null this is the one path that would
+      // otherwise fall through to the REAL stamp file on the developer machine, and a genuine
+      // boot restore running during a test run would flip this assertion to 'restoring'.
+      readBootRestoring: () => false,
+    })
     expect(s.nextAction).toBe('monitor')
   })
 
@@ -75,6 +82,7 @@ describe('getContinuityStatus — OAuth cascade supersedes the interim heuristic
     const s = await getContinuityStatus({
       readMetadata: () => Promise.resolve(meta({ window5hPct: 12, window7dPct: 34, cacheTtlMinutes: 60 })),
       readTickAction: () => null,
+      readBootRestoring: () => false,
     })
     expect(s).toMatchObject({
       accountHealthy: true,
@@ -113,6 +121,7 @@ describe('the 5-field ceiling (TRDD-DXJZM3BW Constraint 1) — a CLOSED set, not
     const s = await getContinuityStatus({
       readMetadata: () => Promise.resolve(meta({})),
       readTickAction: () => null,
+      readBootRestoring: () => false,
     })
     // `toEqual` on the sorted key list, not `toMatchObject` / `toContain`: both of those pass on a
     // superset, which is precisely the direction a token-adjacent field would arrive from.
@@ -129,5 +138,66 @@ describe('the 5-field ceiling (TRDD-DXJZM3BW Constraint 1) — a CLOSED set, not
     })
     expect(Object.keys(s).sort()).toEqual([...CONTRACT])
     expect(s.nextAction).toBe('reauth-needed') // non-vacuity: the cascade path really was taken
+  })
+
+  it('holds on the boot-restore path too — `restoring` is an ENUM value, not a 6th field', async () => {
+    // TRDD-JAU1ES1C's stated trap: the obvious way to surface "the fleet is coming back up" is a
+    // `restoring: true` field, and that would breach the five-field ceiling the whole verb is
+    // built around. The state goes in the vocabulary instead; this is what keeps that honest.
+    const s = await getContinuityStatus({
+      readMetadata: () => Promise.resolve(meta({})),
+      readTickAction: () => null,
+      readBootRestoring: () => true,
+    })
+    expect(Object.keys(s).sort()).toEqual([...CONTRACT])
+    expect(s.nextAction).toBe('restoring') // non-vacuity: the restoring path really was taken
+  })
+})
+
+/**
+ * PRECEDENCE — cascade > restoring > heuristic (TRDD-JAU1ES1C).
+ *
+ * Three sources can each name a `next_action`, and the ranking is by WHAT EACH ONE KNOWS. These
+ * tests pin the two orderings that are decisions rather than mechanics: that a credential verdict
+ * is never masked by a transient one, and that a transient one does displace a guess.
+ */
+describe('getContinuityStatus — restoring sits between the cascade and the heuristic', () => {
+  const healthy = () => Promise.resolve(meta({})) // heuristic → 'ok'
+
+  it('the cascade OUTRANKS restoring — a dead credential is never reported as merely busy', async () => {
+    // `reauth-needed` means a human must log in, and that stays true while a restore runs. If
+    // `restoring` won here, the single most actionable state on the host would be hidden behind a
+    // transient one for as long as the walk lasted — and the walk is exactly when an operator is
+    // watching. The cascade also read the actual token; the restore flag knows nothing about it.
+    const s = await getContinuityStatus({
+      readMetadata: healthy,
+      readTickAction: () => 'reauth-needed',
+      readBootRestoring: () => true,
+    })
+    expect(s.nextAction).toBe('reauth-needed')
+  })
+
+  it('restoring OUTRANKS the heuristic — and this is the misfire it prevents', async () => {
+    // The concrete harm, not a cosmetic distinction. Mid-restore, AgentlensPro metadata is missing
+    // or half-formed, so `accountHealthy: false` is routine — and the heuristic turns that into
+    // `switch-recommended`, which invites an account switch the host never needed. Note the
+    // metadata here would compute exactly that, so this test fails if the ordering is reversed.
+    const midRestore = () => Promise.resolve(meta({ accountHealthy: false }))
+    expect(computeNextAction(await midRestore())).toBe('switch-recommended') // the value being displaced
+    const s = await getContinuityStatus({
+      readMetadata: midRestore,
+      readTickAction: () => null,
+      readBootRestoring: () => true,
+    })
+    expect(s.nextAction).toBe('restoring')
+  })
+
+  it('not restoring → the heuristic is unchanged (the state is additive, not a takeover)', async () => {
+    const s = await getContinuityStatus({
+      readMetadata: () => Promise.resolve(meta({ accountHealthy: false })),
+      readTickAction: () => null,
+      readBootRestoring: () => false,
+    })
+    expect(s.nextAction).toBe('switch-recommended')
   })
 })

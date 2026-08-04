@@ -3,6 +3,7 @@ import { loadAgents } from '@/lib/agent-registry'
 import { checkAuthorizedAgentWorkdir } from '@/lib/agent-workdir-policy'
 import { wakeAgent } from '@/services/agents-core-service'
 import { retryTransient } from '@/lib/retry-transient'
+import { markBootRestoreInFlight, clearBootRestore } from '@/lib/boot-restore-status'
 
 // TRDD-WLWHVMKT: the local AGENTS_ROOT const that used to live here was a COPY of the
 // same invariant enforced in lib/agent-runtime.ts — and the two drifted, which is the
@@ -104,6 +105,34 @@ export async function restoreActiveAgentsOnBoot(): Promise<BootRestoreResult> {
 
   console.log(`[BootRestore] Restoring ${activeAgents.length} agent(s) that were active before shutdown`)
 
+  // TRDD-JAU1ES1C: publish "a restore is in flight" so the continuity `status` verb can answer
+  // `restoring` instead of a steady-state view (TRDD-DXJZM3BW). The stamp goes up only once there
+  // is genuinely something to restore — both early returns above (disabled, and nothing active)
+  // leave it absent, because neither is a restore. The `finally` is what makes the claim honest:
+  // every exit from the walk, including a throw, takes the stamp back down.
+  markBootRestoreInFlight()
+  try {
+    await restoreEach(activeAgents, result)
+  } finally {
+    clearBootRestore()
+  }
+
+  console.log(
+    `[BootRestore] Done — restored ${result.restored.length}, ` +
+    `already running ${result.alreadyRunning.length}, ` +
+    `skipped ${result.skipped.length}, failed ${result.failed.length}`,
+  )
+  return result
+}
+
+/** The fleet walk itself. Extracted so the in-flight stamp above has an unambiguous `finally`
+ *  boundary around EVERY path out of it — with the loop inline, a future early `return` inside it
+ *  would leave the stamp up until it aged out, and a stamp that outlives its restore is the one
+ *  thing this bridge must never do. */
+async function restoreEach(
+  activeAgents: ReturnType<typeof loadAgents>,
+  result: BootRestoreResult,
+): Promise<void> {
   for (const agent of activeAgents) {
     const name = agent.name || agent.id
 
@@ -141,6 +170,11 @@ export async function restoreActiveAgentsOnBoot(): Promise<BootRestoreResult> {
 
     for (const sessionIndex of indexes) {
       const label = `${name}[${sessionIndex}]`
+      // Re-stamp per session: the reader ages the stamp out after MAX_AGE_S, so on a large fleet
+      // a single start-of-walk marker would expire mid-restore and the status verb would start
+      // claiming the host was live while it was still coming up. This heartbeat is what lets that
+      // age bound stay short enough to also self-heal a crashed restore.
+      markBootRestoreInFlight()
       try {
         const res = await retryTransient(
           () =>
@@ -189,11 +223,4 @@ export async function restoreActiveAgentsOnBoot(): Promise<BootRestoreResult> {
       await sleep(STAGGER_MS)
     }
   }
-
-  console.log(
-    `[BootRestore] Done — restored ${result.restored.length}, ` +
-    `already running ${result.alreadyRunning.length}, ` +
-    `skipped ${result.skipped.length}, failed ${result.failed.length}`,
-  )
-  return result
 }

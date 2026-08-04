@@ -1,5 +1,6 @@
 import { readAgentlensStatus, type AgentlensStatusMetadata } from '@/lib/agentlens-status'
 import { readTickStatus } from '@/lib/oauth-rotator/tick-status'
+import { isBootRestoreInFlight } from '@/lib/boot-restore-status'
 
 // The composition layer for the continuity `status` verb (TRDD-DXJZM3BW, NPT of KCRMSNL7).
 // It assembles the FIVE-field contract the `aimaestro-continuity.sh status <self>` CLI returns
@@ -18,7 +19,13 @@ import { readTickStatus } from '@/lib/oauth-rotator/tick-status'
 /** The continuity actions surfaced by the `status` verb. `ok` / `monitor` / `switch-recommended`
  *  / `unknown` are derivable from OBSERVABLE metadata; `rotating` / `reauth-needed` are the
  *  OAuth-cascade outcomes owned by the rotator beat (TRDD-1GGQ4HWY) and reach here only via the
- *  persisted tick-status stamp. */
+ *  persisted tick-status stamp; `restoring` is the boot-restore walk (TRDD-JAU1ES1C), likewise via
+ *  a stamp.
+ *
+ *  This ENUM is where a new continuity state goes. The response itself is a fixed FIVE-field
+ *  ceiling (TRDD-H24DF6ZC Constraint 1) with a closed-set guard in the schema test, so widening
+ *  the vocabulary must never widen the surface — a 6th field would spend a security budget that
+ *  was deliberately capped. */
 export type ContinuityNextAction =
   | 'ok'
   | 'monitor'
@@ -26,6 +33,7 @@ export type ContinuityNextAction =
   | 'unknown'
   | 'rotating'
   | 'reauth-needed'
+  | 'restoring'
 
 export interface ContinuityStatus {
   /** account identified AND not definitively rate-limited (see agentlens-status). */
@@ -67,6 +75,8 @@ export interface ContinuityStatusDeps {
   readMetadata?: () => Promise<AgentlensStatusMetadata>
   /** default `readTickStatus` — the persisted OAuth-cascade next_action, or null when absent/stale. */
   readTickAction?: () => ContinuityNextAction | null
+  /** default `isBootRestoreInFlight` — true only while the boot-restore walk is heartbeating. */
+  readBootRestoring?: () => boolean
 }
 
 // Assemble the 5-field status. Reads the observable metadata (no token, R16) for four fields, then
@@ -76,8 +86,23 @@ export interface ContinuityStatusDeps {
 export async function getContinuityStatus(deps: ContinuityStatusDeps = {}): Promise<ContinuityStatus> {
   const readMetadata = deps.readMetadata ?? readAgentlensStatus
   const readTickAction = deps.readTickAction ?? readTickStatus
+  const readBootRestoring = deps.readBootRestoring ?? isBootRestoreInFlight
   const m = await readMetadata()
-  const nextAction = readTickAction() ?? computeNextAction(m)
+  // PRECEDENCE — cascade, then restoring, then the heuristic. Each source is ranked by WHAT IT
+  // KNOWS, not by how recently it spoke:
+  //
+  //   1. The cascade stamp read the actual TOKEN. `reauth-needed` means a human must log in, and
+  //      that stays true (and stays the most actionable thing on the host) whether or not a
+  //      restore is running. Letting `restoring` mask it would hide a real credential failure
+  //      behind a transient state — a dead account reported as merely busy.
+  //   2. `restoring` outranks the heuristic because the heuristic is exactly what goes unreliable
+  //      during a restore: AgentlensPro's metadata is missing or half-formed while sessions come
+  //      up, so `computeNextAction` can emit a spurious `switch-recommended` and provoke an
+  //      account switch the host never needed. That misfire is the concrete harm this state exists
+  //      to prevent — not the cosmetic difference between "restoring" and "live".
+  //   3. The heuristic is the steady-state default, and says so about itself (a calibrated lower
+  //      bound over observables).
+  const nextAction = readTickAction() ?? (readBootRestoring() ? 'restoring' : computeNextAction(m))
   return {
     accountHealthy: m.accountHealthy,
     window5hPct: m.window5hPct,

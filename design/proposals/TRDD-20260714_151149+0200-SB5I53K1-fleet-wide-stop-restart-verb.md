@@ -3,7 +3,7 @@ trdd-id: SB5I53K1
 title: A fleet-wide stop and restart verb on the script layer so the janitor can cycle every agent
 column: proposal
 created: 2026-07-14T15:11:49+0200
-updated: 2026-07-14T17:45:00+0200
+updated: 2026-08-04T13:15:48+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: feature
@@ -18,6 +18,48 @@ labels: [agents, lifecycle, script-layer, janitor, fleet]
 ---
 
 # A fleet-wide stop and restart verb on the script layer so the janitor can cycle every agent
+
+## ⏵ THE HOLD CONDITION IS MET — nobody re-evaluated it (2026-08-04)
+
+This card was held on an explicit precondition, stated to the janitor on `Emasoft/ai-maestro#68`:
+
+> *"`TRDD-SB5I53K1` (fleet-wide stop/restart verb) is **deliberately held** until D5XDT49I lands,
+> on the reasoning that a `restart --all` that silently wipes every agent's conversation is worse
+> than having no verb at all."*
+
+**`TRDD-D5XDT49I` reached `column: complete` on 2026-07-25** (archived;
+`implementation-commits: [18aaf300, 9d71c3ef, c9bc48db]`), and `lib/claude-conversation.ts` now
+carries the resume flag — *"the wizard passes `continueConversation: false`; every other path
+leaves it true"*. So a fleet restart no longer silently wipes conversations, and **the stated
+reason for the hold no longer exists.**
+
+This card did not move: `updated:` sat at 2026-07-14T17:45 — **before** the comment that announced
+the hold — for 21 days. Found while verifying #68, not by anything watching the dependency.
+
+**And the reason nothing watched it is a real gap, not an oversight by whoever wrote this card.**
+The STATE block below deliberately recorded the edge as `blocks: [SB5I53K1]` on `D5XDT49I`, on the
+sound reasoning that it should be *"one greppable edge, stated once, on the card that can actually
+act."* That edge **does exist** — `D5XDT49I:24`. It is simply **read by nothing**:
+
+```
+lib/trdd-graph.ts:103   export const BLOCKER_FIELDS = ['blocked-by', 'npt'] as const
+grep -rn "'blocks'" lib/ scripts/   →  no matches
+grep -rl '^blocks:' design/         →  2 cards
+```
+
+So `blocks:` is greppable by a HUMAN and invisible to every TOOL — the doctor, the graph, the
+board and `trddgrep why` all ignore it. A dependency recorded there cannot fire, cannot surface a
+stall, and cannot appear in `unblocks`. The intent was right; the field it chose has no reader.
+
+That is the transferable shape: **a frontmatter field with no consumer is documentation wearing
+the costume of a mechanism.** The `updated:` date is what finally exposed this one, 21 days late,
+and only because a human was reading the thread it came from. Either `blocks:` gets a reader (it
+is the exact inverse of `blocked-by`, so the graph could derive it) or it should stop being
+written, because its presence implies a guarantee it does not provide.
+
+**This note does NOT approve the card.** It remains `column: proposal` awaiting its approver; what
+changed is that the objection which justified deferring it is now void, so the decision is live
+again rather than parked.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14
 

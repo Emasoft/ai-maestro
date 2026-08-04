@@ -1,11 +1,12 @@
 ---
 trdd-id: D7KVF4HQ
 title: Give the pillar edit tools a transaction system — locks, queue, and CAS on the original text
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-03T01:50:37+0200
-updated: 2026-08-04T12:30:34+0200
+updated: 2026-08-04T16:36:04+0200
+implementation-commits: [422ed7f8, 41c913bf, 99997a06, 31d297f4, 70c7ef65, 267bd79a, b03d4dae]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -29,7 +30,27 @@ external-refs: [Emasoft/ai-maestro#57]
 
 # Give the pillar edit tools a transaction system — locks, queue, and CAS on the original text
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-04
+## ⏵ STATE — CLOSED 2026-08-04T16:36 (authoritative)
+
+**Closed, `column: complete`, archived.** The work had been finished since `2026-08-04T12:30` —
+15/15 boxes, `npt: []`, `eht: []`, `release-via: none` — and the card simply never moved out of
+`dev`, so for four hours the board asserted that someone was working it. That is the failure the
+kanban rule names: *an untrue column is worse than an unstarted card*, because it hides the state
+from the one view anyone consults. It surfaced only because a STALE `[janitor-resume]` directive
+(recorded at a compaction ~35 min earlier) pointed a fresh turn at this card — the directive was
+wrong about what to do and right about where to look.
+
+**Verified by EFFECT before closing, not by the checkboxes:** all seven commits below resolve with
+the expected subjects; `trddgrep`, `prrdgrep` and `specgrep` all answer **on PATH**
+(`~/.local/bin/`, not a repo-relative invocation); and `trddgrep edit` responds with the
+trichotomy's **exit 2 = COULD NOT RUN**, naming the missing `--expect/--replace` pair — a verb
+that exists and validates, not a "command not found".
+
+**The residual is in ANOTHER repo** — `Emasoft/ai-maestro-plugin#54`, the `prrd-edit.py`
+double-writer. It cannot be closed from here (cross-repo work is issues-only), so it is tracked
+there rather than holding this card open; see *The `prrd-edit.py` double-writer* below.
+
+---
 
 **ALL THREE TOOLS SHIP THE TRANSACTION. 15 of 15 acceptance boxes met.** The residual is in
 ANOTHER repo and is tracked as `Emasoft/ai-maestro-plugin#54` — see *The `prrd-edit.py`

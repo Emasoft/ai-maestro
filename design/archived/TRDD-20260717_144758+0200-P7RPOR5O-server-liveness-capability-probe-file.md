@@ -1,9 +1,9 @@
 ---
 trdd-id: P7RPOR5O
 title: Server liveness+capability probe file — the auth-free coordination seam both janitor backends read
-column: ai_review
+column: complete
 created: 2026-07-17T14:47:58+0200
-updated: 2026-08-02T16:10:02+0200
+updated: 2026-08-05T00:39:18+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -28,9 +28,22 @@ implementation-commits: [f47d2ff4]
 
 # Server liveness+capability probe file — the auth-free coordination seam both janitor backends read
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-05
 
-**✅ IMPLEMENTED 2026-07-17 (`f47d2ff4`) — `column: testing`.** `lib/server-liveness.ts` +
+**🟢 LIVE AND VERIFIED ON DISK 2026-08-05 — the two caveats below are SPENT.** Measured on the
+running server: `~/.aimaestro/server-liveness.json` exists, mtime 2 s old (inside the 30 s beat),
+`pid` matching the live server process, and `capabilities: ["family-a", "singleton-chores"]`.
+**SUPERSEDED — do NOT carry forward:** ~~"today `capabilities: []`"~~ and ~~"NOT YET LIVE ON
+DISK"~~. Both tokens the card called unbuilt are now advertised, and each is honestly gated —
+`family-a` on `oauthTickEnabled()` (the USER armed the R16 flag on 2026-07-29) and
+`singleton-chores` on `isAbsorbedDutySchedulerRunning()`. `fleet-recovery` is still deliberately
+NOT computed, with the comment in `currentCapabilities()` naming [[CHN16JXZ]] as its owner — so the
+card's own rule, *"Do NOT advertise a token before its chore runs"*, holds today.
+(Checked because the opposite looked plausible: `family-a` reads like CHN16JXZ's token and CHN16JXZ
+is still `todo`. It is not — it is the OAuth token. One read of `currentCapabilities()` settled it,
+and guessing would have produced a false defect report against working code.)
+
+**✅ IMPLEMENTED 2026-07-17 (`f47d2ff4`).** `lib/server-liveness.ts` +
 `server.mjs` boot wiring (beside the OAuth tick) + 8 unit tests (0-IMPACT temp HOME). tsc 0,
 `yarn build` 0. The file writes `{ts,pid,capabilities}` atomically every 30 s; today
 `capabilities: []` (OAuth INERT via the R16 flag; nothing else built) → the janitor keeps 100%.
@@ -158,6 +171,14 @@ names. Re-run live 2026-08-02 (16 tests green; the card recorded 8, it has since
       recording that is what stops the next reader re-deriving a design the peer has abandoned
 
 ## Approval log
+- 2026-08-05T00:39:18+0200 — `testing → complete`. The card's ONE remaining caveat was "NOT YET
+  LIVE ON DISK", which is a claim about the running system rather than about code — so it was
+  settled by measuring the system, not by re-reading the card: the file is present, freshly
+  written inside its 30 s beat, with a pid matching the live server. Both previously-unbuilt
+  capability tokens are now advertised and honestly gated, and `fleet-recovery` remains correctly
+  withheld pending [[CHN16JXZ]]. Its own NEXT ACTION already scoped this card to the SEAM, with the
+  tokens' chores delegated to other NPTs, so nothing here is owed. 7/7 boxes `[x]`, checklist
+  non-empty, `npt`/`eht` both `[]` — both completion gates satisfied. Archived as `completed`.
 
 - 2026-07-17T14:47:58+0200 — Tier-0 self-mandate (derived NPT of [[KCRMSNL7]], coordination
   substrate the janitor is blocked on; in-scope server dev, no token material). Authored as `dev`.

@@ -122,6 +122,12 @@ fi
 # Fetch from each provider
 TOTAL_NEW=0
 
+# Providers we could not get an ANSWER from (TRDD-2U56TLBX). Counted separately from
+# TOTAL_NEW because "the inbox is empty" and "we never reached the inbox" are different
+# facts, and reporting the second as the first is how an agent concludes it has no mail
+# during an outage. Drives the summary and the exit status below.
+TOTAL_UNREACHED=0
+
 for provider in "${PROVIDERS[@]}"; do
     REG_FILE="${AMP_REGISTRATIONS_DIR}/${provider}.json"
     REGISTRATION=$(cat "$REG_FILE")
@@ -145,10 +151,21 @@ for provider in "${PROVIDERS[@]}"; do
     fi
 
     # Fetch messages from provider
+    # `|| true` is LOAD-BEARING (TRDD-2U56TLBX). This script runs under `set -eo pipefail`,
+    # where an assignment whose command substitution fails takes the whole script down with
+    # that command's exit status — so an unreachable provider (curl exit 7) killed it HERE,
+    # before any line below could look at HTTP_CODE. The `000` branch further down was
+    # unreachable dead code, and since there is no ERR trap the caller got a bare `exit 7`
+    # and no output at all. Worse, the abort was inside this per-provider loop, so ONE
+    # unreachable provider stopped the agent fetching from every other provider.
+    #
+    # curl still writes the `-w` format on failure, so HTTP_CODE becomes `000` and the
+    # existing branches now work as written. This guard alone is NOT the whole fix — see
+    # the summary at the bottom for why it has to be paired with TOTAL_UNREACHED.
     RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 \
         -X GET "${FETCH_ENDPOINT}" \
         -H "Authorization: Bearer ${API_KEY}" \
-        -H "Accept: application/json" 2>&1)
+        -H "Accept: application/json" 2>&1) || true
 
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
     BODY=$(echo "$RESPONSE" | sed '$d')
@@ -308,15 +325,18 @@ for provider in "${PROVIDERS[@]}"; do
         done < <(echo "$BODY" | jq -c '.messages[]' 2>/dev/null)
 
     elif [ "$HTTP_CODE" = "401" ]; then
+        TOTAL_UNREACHED=$((TOTAL_UNREACHED + 1))
         echo "Error: Authentication failed for ${provider}"
         echo "  Your API key may have expired. Re-register with:"
         echo "  amp-register --provider ${provider} --force"
 
     elif [ "$HTTP_CODE" = "000" ]; then
+        TOTAL_UNREACHED=$((TOTAL_UNREACHED + 1))
         echo "Error: Could not connect to ${provider}"
         echo "  Check your internet connection."
 
     else
+        TOTAL_UNREACHED=$((TOTAL_UNREACHED + 1))
         echo "Error: Failed to fetch from ${provider} (HTTP ${HTTP_CODE})"
         ERROR_MSG=$(echo "$BODY" | jq -r '.error // .message // empty' 2>/dev/null)
         if [ -n "$ERROR_MSG" ]; then
@@ -331,6 +351,26 @@ if [ "$TOTAL_NEW" -gt 0 ]; then
     echo "✅ Fetched ${TOTAL_NEW} new message(s)"
     echo ""
     echo "View messages: amp-inbox"
-else
+elif [ "$TOTAL_UNREACHED" -eq 0 ]; then
     echo "No new messages from external providers."
+fi
+
+# THE OTHER HALF OF TRDD-2U56TLBX. Guarding the curl above makes the diagnostics print, and
+# on its own that is worse than the crash it replaced: the summary went on to announce "No
+# new messages from external providers" and the script exited 0, so a total outage read as a
+# healthy empty inbox. Measured — that is exactly what the one-token fix produced.
+#
+# So an unreached provider suppresses the empty-inbox claim above and exits NON-ZERO. The
+# code is 2, matching this repo's established trichotomy (0 clean · 1 findings · 2 COULD NOT
+# RUN) that `trddgrep` and the pillar CLIs already use: a network outage is could-not-run,
+# and a caller must be able to tell it from "there was nothing for you".
+#
+# Non-zero even when some providers DID deliver: a partial fetch cannot support the
+# conclusion "I have seen all my mail", which is the only conclusion the exit status is
+# consulted for.
+if [ "$TOTAL_UNREACHED" -gt 0 ]; then
+    echo ""
+    echo "⚠️  ${TOTAL_UNREACHED} provider(s) could not be reached — this is NOT an empty inbox."
+    echo "   Messages may be waiting. Retry once the provider is reachable."
+    exit 2
 fi

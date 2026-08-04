@@ -1,9 +1,9 @@
 ---
 trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
-column: todo
+column: backburner
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-02T16:02:59+0200
+updated: 2026-08-04T23:57:41+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -49,7 +49,17 @@ list reset)"* — is **CLOSED 2026-07-28**, but read the closing comment before 
 reproduces the janitor's read path also reproduces the flap, and the mitigations above are part of
 what must be ported, not incidental. Do not port the pre-mitigation shape.
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-17
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-04
+
+**🔴 THE ROTATOR IS LIVE. SUPERSEDED — do NOT carry forward: every "INERT", "NOT ACTIVATED",
+"NOT RUN LIVE", and "no code path is wired to a tick/route" claim below.** Those were true when
+written and describe a pre-activation world. **The USER gave the R16 go-ahead on 2026-07-29
+09:33** by creating `~/.aimaestro/oauth-rotator-tick.enabled` (their call alone, exactly as this
+card requires). Measured 2026-08-04: the flag exists and the beat is running — `server-tick.ts`
+stamped `{"nextAction":"ok","at":"2026-08-04T21:57:58.156Z"}`. Treat `lib/oauth-rotator/` as a
+**LIVE writer against the real `Claude Code-credentials`**, not as gated infra: an edit there can
+now rotate a real token on the next beat. The phase lines below remain accurate about WHAT was
+built and by which sha; they are stale only about whether it runs.
 
 **▶ REFRAMED by the USER (2026-07-16): REPLACE the janitor daemon — don't coordinate with it.**
 Verbatim: *"look at the janitor source code for the daemon and convert the code into typescript as
@@ -257,3 +267,33 @@ daemon (Python) uses, so the two coordinate rather than fight:
   coordinate/authenticate with it. Same tier/mandate (user); this narrows the implementation to a
   faithful port and dissolves the janitor#100 lock-path dependency (path read from source). Moved
   `planned → dev`; Phase A (cascade port) landed as `ddec060f`.
+- 2026-08-04T23:57:41+0200 — **COLUMN CORRECTED `todo → backburner`. Only the column moved — no
+  work, no gate, no flag.** The card was asserting `todo` — *not started* — while carrying NINE
+  `implementation-commits` and six phases marked DONE (A, B, C, D, E, G), i.e. a working but
+  deliberately INERT server mechanism. That is the worst direction for a column to be wrong in:
+  `todo` invites a future session to *begin* work that is already built, and the duplicate would
+  be written against live-credential machinery. Found by cross-checking this card against
+  [[DXJZM3BW]]'s acceptance box, which states the cascade states "landed and wired" — one card
+  claiming landed code the other claimed unstarted.
+  `backburner` is the honest resting state, and each alternative is a different lie: `dev` asserts
+  someone is working it right now (nobody is), and `blocked` requires a non-empty `blocked-by:`
+  naming an open CARD — what remains is Phase F (the REAUTH browser tier, which this card's own
+  NEXT ACTION deprioritizes *behind* [[9ZIF82HI]]) plus the FIRST LIVE ACTIVATION, and neither is
+  a card. Per the pipeline rule `backburner` is an explicitly-deferred resting state and carries
+  no drain obligation, and the id stays in [[KCRMSNL7]]`.npt`, so the parent's completion gate
+  still tracks it and it cannot be silently lost.
+  **The R16 go-ahead is untouched and remains the USER's alone** — nothing in this edit touches
+  `~/.aimaestro/oauth-rotator-tick.enabled`.
+- 2026-08-04T23:59+0200 — **CORRECTION to the line above, and to this card's STATE: the rotator is
+  NOT inert. It has been LIVE since 2026-07-29 09:33.** I wrote "the mechanism is as inert after
+  this edit as before it" on the strength of a check I ran in the same breath as the commit — so
+  the commit landed before I read the result, and the result said the opposite. The flag file
+  EXISTS (created Jul 29, six days ago, size 0) and the beat is running: the tick stamped
+  `{"nextAction":"ok","at":"2026-08-04T21:57:58.156Z"}` seconds after I claimed inertness.
+  The USER gave the R16 go-ahead on 2026-07-29 — exactly as this card requires, and their call
+  alone. Nothing improper happened; what was wrong was my description of the system. **Every
+  "INERT" / "NOT ACTIVATED" / "no code path is wired" claim in the Phase E and Phase G lines and in
+  the NEXT ACTION is therefore STALE as of 2026-07-29 and must not be carried forward** — they were
+  true when written and describe a pre-activation world. A future reader must assume the rotator
+  is a LIVE writer against the real `Claude Code-credentials`. This does not change the column:
+  Phase F remains deferred behind [[9ZIF82HI]], so `backburner` still holds.

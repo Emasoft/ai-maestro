@@ -1,9 +1,10 @@
 ---
 trdd-id: 7S27HJCS
 title: The TRDD store truncates in place while holding a lock borrowed from an atomic writer
-column: todo
+column: complete
 created: 2026-08-04T22:18:06+0200
-updated: 2026-08-04T22:18:06+0200
+updated: 2026-08-04T22:29:14+0200
+implementation-commits: [f977a7f5]
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -103,11 +104,52 @@ contract were both measured.
 
 - 2026-08-04T22:18:06+0200 — MANDATE (self). Tier 0: confined to this repo's own store, no
   baseline deviation, no cross-team or release surface.
+- 2026-08-04T22:29:14+0200 — CLOSED at `complete` by governance-rules. Landed as `f977a7f5`;
+  355 files / 5027 pass / 2 skip / 0 fail (+3 over the 5024 baseline — exactly the new tests),
+  `tsc --noEmit` 0 lines.
+
+## What landed
+
+The three sites (`editTrdd`, `editAt`, `advanceColumn`) now call `atomicWriteSync`, a
+**synchronous twin** of `lib/pillar/edit.ts`'s `atomicWrite`, exported from that same module.
+
+It is a second entry point, not a fourth spelling: these three verbs are synchronous, and making
+them async would change their signature for every caller — a restructuring this card deliberately
+did not want bolted onto a write-atomicity fix. Two thin entry points over ONE documented recipe,
+in ONE module, is what keeps the mode-preservation fix from being re-introduced by hand; a
+hand-rolled tmp+rename in `trdd-store.ts` is precisely how the `0444` → `0644` regression comes
+back. The WHY is written at both functions, so a reader of either meets it.
+
+## Neuter record — a COMPLEMENTARY PAIR, because the file makes two claims
+
+One neuter would have certified half the file. The two are independent by construction (an
+in-place `writeFileSync` preserves the mode trivially, so the atomicity neuter cannot reach the
+mode assertion; the chmod neuter still writes atomically, so it cannot reach the read-only-dir
+assertion), and each reddened exactly one test — which is what attributes the failure.
+
+| Mutation (line-anchored) | Reddened |
+|---|---|
+| `lib/trdd-store.ts:364` → back to `fs.writeFileSync` | **1** — *a FAILED write leaves the original byte-identical* (33 passed) |
+| `lib/pillar/edit.ts:343` → drop the `chmodSync` on the temp | **1** — *PRESERVES the document mode* (33 passed) |
+
+Both anchored with `perl … if $. == N` and verified `1+/1-` before running: an unanchored
+substitution hits every sibling site and the failure becomes unattributable. Both restored and
+proved byte-identical to `HEAD` with `git hash-object` == `git rev-parse HEAD:<path>`.
 
 ## Acceptance
 
-- [ ] the three sites write through `atomicWrite`, not a fourth spelling of tmp+rename
-- [ ] the original's MODE survives the write (the `0444` → `0644` regression stays fixed)
-- [ ] the read-only-directory test exists, with a FAILING (not skipping) non-vacuity guard, a
+- [x] the three sites write through `atomicWrite`, not a fourth spelling of tmp+rename —
+      via its synchronous twin in the same module, for the signature reason above
+- [x] the original's MODE survives the write (the `0444` → `0644` regression stays fixed) —
+      pinned by its own test, which falls to its own neuter and to no other
+- [x] the read-only-directory test exists, with a FAILING (not skipping) non-vacuity guard, a
       positive control, and a recorded neuter
-- [ ] no temp file survives a successful run — asserted, but NOT as the atomicity proof
+- [x] no temp file survives a successful run — asserted in the positive control, and documented
+      in the test as HYGIENE rather than the atomicity proof (it is equally true of a writer that
+      never made one — measured under TRDD-DP2HI2MP)
+
+## What this does NOT fix — stated so the next reader does not infer it
+
+A crash *between* the read and the write still loses the edit; atomicity guarantees the file is
+never left half-written, not that the edit survives. And the authorization that permitted the
+write is still computed OUTSIDE this lock — that is **TRDD-6D6SQNI6**, deliberately separate.

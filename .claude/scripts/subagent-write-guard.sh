@@ -45,12 +45,17 @@
 #   Claude Code passes the PreToolUse hook input as JSON on stdin:
 #     {
 #       "tool_name": "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "Bash",
-#       "tool_input": { "file_path"|"notebook_path"|"command": ... }
+#       "tool_input": { "file_path"|"notebook_path"|"command": ... },
+#       "cwd": "<the hook's working directory>"      # optional, used as a fallback root
 #     }
 #
 # EXIT CODES
 #   0 — allow the tool call
 #   2 — block the tool call (stderr becomes the reason shown to Claude)
+#
+#   Note that 2 also covers "the project root could not be resolved at all". That case
+#   used to exit 0 — allow everything — which made an unenforceable guard indistinguishable
+#   from a permissive one; see WHY FAIL CLOSED at the resolution block below (TRDD-YR4G2CZH).
 #
 # DEPENDENCIES
 #   jq (any version)
@@ -64,12 +69,51 @@ INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 
 # Resolve the project root (CLAUDE_PROJECT_DIR points at the agent's
-# working tree — main tree for runner, worktree dir for implementer).
+# working tree — main tree for runner, worktree dir for implementer),
+# then fall back, then REFUSE. It used to fall back to nothing and
+# ALLOW — see WHY FAIL CLOSED below.
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-}"
+
+# Fallback 1: the hook payload's own `cwd`, when Claude Code sends one. This covers the
+# scenario that makes fail-open dangerous — CC expanding `${CLAUDE_PROJECT_DIR}` into the
+# hook's COMMAND PATH without also exporting it into the hook's ENVIRONMENT. There the
+# script runs normally and sees an unset variable, so without a fallback the guard is
+# silently inert for every write of that whole session.
 if [ -z "$PROJECT_ROOT" ]; then
-    # No project root → cannot enforce the rule → fail open but log.
-    echo "[write-guard] WARN: CLAUDE_PROJECT_DIR not set, allowing tool call" >&2
-    exit 0
+    PROJECT_ROOT=$(echo "$INPUT" | jq -r '.cwd // ""')
+fi
+
+# Fallback 2: the git worktree containing the hook's cwd. Correct for BOTH shapes the
+# guard serves — the main checkout for the runner, and the worktree itself for a
+# `isolation: worktree` implementer, since `--show-toplevel` inside a linked worktree
+# returns that worktree, not the main tree.
+if [ -z "$PROJECT_ROOT" ]; then
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+fi
+
+if [ -z "$PROJECT_ROOT" ]; then
+    # ── WHY FAIL CLOSED (TRDD-YR4G2CZH, 2026-08-04) ──
+    # This branch used to `exit 0` — allow EVERY write, anywhere on the filesystem — on the
+    # reasoning that a guard which cannot resolve its root cannot enforce anything. That
+    # reasoning is right about enforcement and wrong about the choice: the rule this guard
+    # implements is IRON (.claude/rules/prevent-subagents-to-write-outside.md), and it exists
+    # because a subagent once escaped its worktree and corrupted the parent tree. Allowing
+    # everything is not a neutral outcome, it is that outcome.
+    #
+    # Failing closed was measured to cost nothing on the hook path. All four agents that
+    # declare this hook build its command as
+    # "${CLAUDE_PROJECT_DIR}/.claude/scripts/subagent-write-guard.sh", so with the variable
+    # unset the hook's own path does not resolve and the script never runs at all — this
+    # branch is unreachable that way. It is reachable only by direct invocation (a human, or
+    # the test harness) or by the expanded-path-without-exported-env case above, and both
+    # fallbacks fire before we get here. So refusing costs a clear error in the case where
+    # someone forgot the variable, and buys enforcement in the case where the guard would
+    # otherwise have gone quietly inert.
+    echo "[write-guard] BLOCKED: cannot resolve the project root." >&2
+    echo "  Tried: \$CLAUDE_PROJECT_DIR, the hook payload's .cwd, and 'git rev-parse --show-toplevel'." >&2
+    echo "  Refusing rather than allowing: this guard enforces an IRON rule, so an unenforceable" >&2
+    echo "  state must not read as permission. Set CLAUDE_PROJECT_DIR, or run from inside the repo." >&2
+    exit 2
 fi
 
 # Resolve to absolute path (with symlink resolution when possible)

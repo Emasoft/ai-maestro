@@ -130,6 +130,68 @@ write_case "Write to /etc" BLOCK "/etc/hosts"
 write_case "Write to ~/.aimaestro" BLOCK "$HOME/.aimaestro/x.json"
 
 echo
+echo "=== Root resolution: the guard must never allow when it cannot resolve a root ==="
+# TRDD-YR4G2CZH. Until 2026-08-04 this block did not exist and COULD not: the harness
+# exports CLAUDE_PROJECT_DIR unconditionally at line 14, so the unset path was unreachable
+# by construction. That is why a branch allowing every write survived unnoticed.
+#
+# Each case runs in `env -u CLAUDE_PROJECT_DIR` from a cwd chosen to make exactly one
+# fallback available, so a pass attributes to that fallback and not to another.
+root_case() {
+    local label="$1" expected="$2" workdir="$3" payload_cwd="$4"
+    local input
+    if [ -n "$payload_cwd" ]; then
+        input=$(jq -nc --arg c "$payload_cwd" '{tool_name:"Write", tool_input:{file_path:"/etc/hosts"}, cwd:$c}')
+    else
+        input=$(jq -nc '{tool_name:"Write", tool_input:{file_path:"/etc/hosts"}}')
+    fi
+
+    local rc=0
+    ( cd "$workdir" && echo "$input" | env -u CLAUDE_PROJECT_DIR "$GUARD" ) >/dev/null 2>&1 || rc=$?
+    local got; [ $rc -eq 0 ] && got="ALLOW" || got="BLOCK"
+
+    if [ "$got" = "$expected" ]; then
+        printf '  \033[32mPASS\033[0m %-70s (%s)\n' "$label" "$got"
+        PASS=$((PASS + 1))
+    else
+        printf '  \033[31mFAIL\033[0m %-70s (expected %s, got %s)\n' "$label" "$expected" "$got"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
+NON_REPO=$(mktemp -d)   # no CLAUDE_PROJECT_DIR, no .cwd, and NOT inside any git repo
+trap 'rm -rf "$NON_REPO"' EXIT
+
+# The case the fail-open branch used to permit: nothing resolves, so the guard must REFUSE.
+# It writes to /etc, which is outside every allowlist under any root — so an ALLOW here can
+# only mean the guard gave up, never that it evaluated and approved.
+root_case "no CLAUDE_PROJECT_DIR, no .cwd, not in a repo → BLOCK" BLOCK "$NON_REPO" ""
+# Fallback 1: the payload's cwd. /etc is outside the project, so it must still block —
+# what this proves is that the guard RESOLVED a root and evaluated, rather than gave up.
+root_case "no CLAUDE_PROJECT_DIR, .cwd supplied → resolves, still blocks /etc" BLOCK "$NON_REPO" "$PROJECT_ROOT"
+# Fallback 2: git. Same reasoning, reached from inside the repo with no payload cwd.
+root_case "no CLAUDE_PROJECT_DIR, no .cwd, cwd inside the repo → resolves via git" BLOCK "$PROJECT_ROOT" ""
+
+# Positive control for the three above: with a root resolved from a fallback, an INSIDE
+# path must still be ALLOWED. Without this, every row above is satisfied by a guard that
+# blocks unconditionally — which is a different bug wearing the same exit code.
+root_allow_case() {
+    local label="$1" workdir="$2" payload_cwd="$3"
+    local input rc=0
+    input=$(jq -nc --arg p "$PROJECT_ROOT/README.md" --arg c "$payload_cwd" \
+        '{tool_name:"Write", tool_input:{file_path:$p}, cwd:$c}')
+    ( cd "$workdir" && echo "$input" | env -u CLAUDE_PROJECT_DIR "$GUARD" ) >/dev/null 2>&1 || rc=$?
+    if [ $rc -eq 0 ]; then
+        printf '  \033[32mPASS\033[0m %-70s (ALLOW)\n' "$label"
+        PASS=$((PASS + 1))
+    else
+        printf '  \033[31mFAIL\033[0m %-70s (expected ALLOW, got BLOCK rc=%d)\n' "$label" "$rc"
+        FAIL=$((FAIL + 1))
+    fi
+}
+root_allow_case "fallback root still ALLOWS an in-project write (positive control)" "$NON_REPO" "$PROJECT_ROOT"
+
+echo
 echo "============================================================"
 printf "Results: \033[32m%d pass\033[0m, \033[31m%d fail\033[0m\n" $PASS $FAIL
 echo "============================================================"

@@ -171,7 +171,7 @@ with its positive control, and the absence of any `ERR` trap.
 
 One neuter would have certified half of it. The two are independent by construction — neuter A
 removes the guard so the script dies before any branch; neuter B keeps the guard and removes
-only the honest summary + exit — and each redO a different set:
+only the honest summary + exit — and each reddens a DIFFERENT set:
 
 | Mutation | Reddened | Left green |
 |---|---|---|

@@ -117,12 +117,23 @@ describe('PRRD — N rules in ONE file, id in the bullet line', () => {
     'Prose that cites PRRD G1.2 without declaring it.',
   ].join('\n')
 
-  it('yields one record per rule line, with its line number', () => {
+  it('yields one record per rule line, with its FILE line number', () => {
     fs.writeFileSync(path.join(tmp, 'PRRD.md'), PRRD)
     const recs = [...walkRecords(tmp, PRRD_KIND)]
     expect(recs.map((r) => r.id)).toEqual(['G1.2', 'S2.1', 'S64.134'])
-    // Frontmatter is stripped by the parser, so line 1 of the body is `## GOLDEN`.
-    expect(recs[0].line).toBe(3)
+
+    // CORRECTED 2026-08-04 (TRDD-D7KVF4HQ). This asserted `3` — the BODY line — with a
+    // comment explaining that frontmatter is stripped by the parser. That is true of
+    // the parser and wrong for every consumer: `index-build.ts` stores this number to
+    // jump to a declaration, and `prrdgrep edit` hands it to `replaceAtLines`, whose
+    // compare-and-swap reads the FILE. A body-relative value there does not misprint a
+    // line, it aims a WRITE three lines off. Do not "restore" the old expectation.
+    expect(recs[0].line).toBe(6)
+    // Derived from the FILE rather than from a constant, so this cannot silently drift
+    // back: the assertion above pins the number, this one pins that it MEANS something.
+    const raw = fs.readFileSync(path.join(tmp, 'PRRD.md'), 'utf-8').split('\n')
+    for (const rec of recs) expect(raw[rec.line! - 1]).toBe(rec.text)
+
     expect(recs.every((r) => r.filePath.endsWith('PRRD.md'))).toBe(true)
   })
 
@@ -284,5 +295,74 @@ describe('listDocuments returns a STABLE order (TRDD-L55IYKL4)', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+})
+
+describe('a record line is FILE-relative, not body-relative (TRDD-D7KVF4HQ)', () => {
+  /**
+   * `doc.body` is gray-matter's `content`, which has the frontmatter STRIPPED — so a
+   * line counted in it is NOT the line the file has. Every per-line pillar document
+   * carries frontmatter, so the two ALWAYS disagree.
+   *
+   * This shipped as a body-relative number and nothing caught it, because both
+   * consumers only ever PRINTED it: the CLI in a `file:line` string and
+   * `index-build.ts` into a column nobody had jumped from yet. It surfaced the moment
+   * a third consumer ACTED on it — `prrdgrep edit` aims `replaceAtLines` at that line,
+   * and the CAS refused an edit whose expected text sat three lines up.
+   *
+   * A refusal was the lucky outcome. Had line N+offset happened to contain the
+   * expected substring — trivially likely in a corpus of similarly-shaped bullets —
+   * the edit would have SILENTLY REWRITTEN THE WRONG RULE.
+   */
+  const PRRD_WITH_FRONTMATTER = [
+    '---', // 1
+    'project-id: fixture', // 2
+    '---', // 3
+    '', // 4
+    '# PRRD', // 5
+    '', // 6
+    '- **G1.1** — the golden rule.', // 7
+    '- **S7.4** — the silver rule.', // 8
+    '', // 9
+  ].join('\n')
+
+  it('reports the line the FILE has, verified against the raw file rather than a constant', () => {
+    const root = path.join(tmp, 'requirements')
+    fs.mkdirSync(root, { recursive: true })
+    const file = path.join(root, 'PRRD.md')
+    fs.writeFileSync(file, PRRD_WITH_FRONTMATTER, 'utf-8')
+
+    const raw = fs.readFileSync(file, 'utf-8').split('\n')
+    const recs = [...walkRecords(root, PRRD_KIND)]
+    expect(recs.map((r) => r.id)).toEqual(['G1.1', 'S7.4'])
+
+    // Derived from the FILE, never from the implementation under test — an expectation
+    // computed by calling the same code cannot detect that code changing.
+    for (const rec of recs) {
+      expect(raw[rec.line! - 1]).toBe(rec.text)
+    }
+    expect(recs.map((r) => r.line)).toEqual([7, 8])
+  })
+
+  it('POSITIVE CONTROL — a document with NO frontmatter gets offset 0, so the fix is not a constant fudge', () => {
+    // Without this, `line + 3` would satisfy the test above just as well.
+    const root = path.join(tmp, 'specs')
+    fs.mkdirSync(root, { recursive: true })
+    const file = path.join(root, 'x-spec.md')
+    fs.writeFileSync(file, ['`3P-AAA-01` **first** — no frontmatter here.', ''].join('\n'), 'utf-8')
+
+    const [rec] = [...walkRecords(root, SPEC_KIND)]
+    expect(rec.line).toBe(1)
+    expect(readDocument(file, SPEC_KIND, '')!.bodyLineOffset).toBe(0)
+  })
+
+  it('the offset equals the frontmatter block height', () => {
+    const root = path.join(tmp, 'requirements')
+    fs.mkdirSync(root, { recursive: true })
+    const file = path.join(root, 'PRRD.md')
+    fs.writeFileSync(file, PRRD_WITH_FRONTMATTER, 'utf-8')
+    // `---`, `project-id:`, `---` — and gray-matter also consumes the newline that
+    // ends the closing delimiter, so body line 1 is file line 4.
+    expect(readDocument(file, PRRD_KIND, '')!.bodyLineOffset).toBe(3)
   })
 })

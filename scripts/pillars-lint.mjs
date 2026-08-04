@@ -62,11 +62,14 @@ const asJson = argv.includes('--json')
 // refusing to run until it does would make the lint unusable in exactly the project
 // that needs it. The skip is REPORTED, so an omission is never implied by silence.
 const fs = await import('fs')
-const candidateRoots = {
-  trdd: designDir,
-  spec: path.join(designDir, 'specs'),
-  prrd: path.join(designDir, 'requirements'),
-}
+// The kind→root mapping lives on the PillarKind (`corpusSubdir`), not here. It used to
+// be this literal, and the moment prrdgrep/specgrep needed the same answer that literal
+// became one of two copies — where a CLI pointed at the wrong root does not fail, it
+// reports a confident "0 records" about a corpus it never read.
+const { PILLAR_KINDS, corpusRootFor } = await import('../lib/pillar/kinds.ts')
+const candidateRoots = Object.fromEntries(
+  Object.values(PILLAR_KINDS).map((k) => [k.name, corpusRootFor(designDir, k)]),
+)
 const roots = {}
 const skipped = []
 for (const [name, root] of Object.entries(candidateRoots)) {

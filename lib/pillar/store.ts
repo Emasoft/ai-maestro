@@ -45,6 +45,16 @@ export interface PillarDocument {
   filePath: string
   frontmatter: Record<string, unknown>
   body: string
+  /**
+   * How many lines of the FILE sit above `body` — i.e. the frontmatter block. Add it
+   * to a body-relative line number to get a file-relative one.
+   *
+   * It exists because `body` is gray-matter's `content`, which has the frontmatter
+   * STRIPPED, so a line counted in `body` is NOT the line a reader (or `sed -n Np`,
+   * or an editor) would find it on. Every per-line pillar has frontmatter, so the two
+   * always disagree — measured on a 3-line-frontmatter PRRD, by exactly 3.
+   */
+  bodyLineOffset: number
 }
 
 export interface PillarRecord {
@@ -155,7 +165,35 @@ export function readDocument(
     data = {}
     content = raw
   }
-  return { kind: kind.name, zone, filePath, frontmatter: data, body: content }
+  return {
+    kind: kind.name,
+    zone,
+    filePath,
+    frontmatter: data,
+    body: content,
+    bodyLineOffset: bodyLineOffset(raw, content),
+  }
+}
+
+/**
+ * Lines of `raw` above where `content` starts.
+ *
+ * Computed by SUFFIX, not by re-parsing the delimiters: gray-matter's `content` is a
+ * literal slice of the input on every normal path, so the prefix it leaves behind is
+ * exactly the frontmatter block and counting its newlines is exact for any delimiter
+ * style, any frontmatter language, and no frontmatter at all (prefix `''` → 0).
+ *
+ * When `content` is NOT a suffix — a normalisation gray-matter can apply — we return 0,
+ * which is the behaviour every caller had before this function existed. That is a
+ * deliberate degrade to the previous semantics rather than a guess: the CAS in
+ * `lib/pillar/edit.ts` is what makes it safe, because an edit aimed at the wrong line
+ * is BLOCKED rather than applied. A wrong offset costs a refusal; it cannot cost a
+ * write to the wrong rule.
+ */
+function bodyLineOffset(raw: string, content: string): number {
+  if (!raw.endsWith(content)) return 0
+  const prefix = raw.slice(0, raw.length - content.length)
+  return prefix.split('\n').length - 1
 }
 
 /**
@@ -196,7 +234,11 @@ export function* recordsOf(doc: PillarDocument, kind: PillarKind): Generator<Pil
   const lines = doc.body.split('\n')
   for (let i = 0; i < lines.length; i++) {
     const m = declarationRe.exec(lines[i])
-    if (m) yield { ...base, id: idFromMatch(m), line: i + 1, text: lines[i] }
+    // FILE-relative, never body-relative. `line` is what an editor, `sed -n Np`, and
+    // `replaceAtLines`'s compare-and-swap all mean by a line number, so a body-relative
+    // value here is not an off-by-N in a display string — it aims a WRITE at the wrong
+    // line. It shipped that way and only the CAS refusing an edit exposed it.
+    if (m) yield { ...base, id: idFromMatch(m), line: i + 1 + doc.bodyLineOffset, text: lines[i] }
   }
 }
 

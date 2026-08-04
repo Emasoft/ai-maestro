@@ -18,7 +18,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { replaceAtLines, StaleDocumentError, documentLockKey } from '@/lib/pillar/edit'
+import { replaceAtLines, StaleDocumentError, documentLockKey, documentLockKeyFor } from '@/lib/pillar/edit'
+import { PRRD_KIND, SPEC_KIND, TRDD_KIND } from '@/lib/pillar/kinds'
 import { withJsonLock } from '@/lib/json-io'
 
 let dir: string
@@ -174,6 +175,68 @@ describe('documentLockKey — the lock must survive a zone move', () => {
 
   it('lands beside the corpus root, not inside a zone a git mv would orphan', () => {
     expect(documentLockKey('/corpus/design', 'trdd', 'ABCD1234')).toBe('/corpus/design/.trdd-lock-ABCD1234')
+  })
+
+  it('is identical for TWO DIFFERENT RECORDS of the same per-line document', () => {
+    // THE FINDING. `documentLockKey` takes a RECORD id, which is the right key only
+    // where id↔document is 1:1 — TRDD and nothing else. PRRD is ONE file whose records
+    // are bullets, so keying on the bullet id hands two writers of the SAME file two
+    // DIFFERENT lockdirs: both acquire instantly, both read, both write, second wins.
+    const file = '/corpus/design/requirements/PRRD.md'
+    expect(documentLockKeyFor('/corpus/design/requirements', PRRD_KIND, { id: 'G1.1', filePath: file }))
+      .toBe(documentLockKeyFor('/corpus/design/requirements', PRRD_KIND, { id: 'S64.134', filePath: file }))
+  })
+
+  it('is DISTINCT for records of two different SPEC documents, so unrelated specs do not serialise', () => {
+    // The other half — a key that collapsed everything to one lock would be "correct"
+    // by the assertion above while serialising the whole corpus. Both must hold.
+    const root = '/corpus/design/specs'
+    expect(documentLockKeyFor(root, SPEC_KIND, { id: '3P-KAN-06', filePath: `${root}/3-pillars-spec.md` }))
+      .not.toBe(documentLockKeyFor(root, SPEC_KIND, { id: 'GOV-R6-01', filePath: `${root}/governance-spec.md` }))
+  })
+
+  it('survives a SPEC zone move — same basename in proposals/ and at the root is one document', () => {
+    // SPEC's zones are ['', 'proposals', 'archived'], so a spec really can move, and
+    // `governance-spec.md` is the same document either side of that move.
+    const root = '/corpus/design/specs'
+    expect(documentLockKeyFor(root, SPEC_KIND, { id: 'GOV-R6-01', filePath: `${root}/proposals/governance-spec.md` }))
+      .toBe(documentLockKeyFor(root, SPEC_KIND, { id: 'GOV-R6-01', filePath: `${root}/governance-spec.md` }))
+  })
+
+  it('still keys a TRDD on its ID, not its file — the per-document case is unchanged', () => {
+    // A per-document pillar must NOT switch to basename-keying: a TRDD's filename moves
+    // between zones, which is the very case `documentLockKey`'s own doc-comment exists
+    // for. So the dispatch has to differ per kind, and this pins the other branch.
+    const root = '/corpus/design'
+    expect(documentLockKeyFor(root, TRDD_KIND, { id: 'ABCD1234', filePath: `${root}/proposals/TRDD-x-ABCD1234-a.md` }))
+      .toBe(documentLockKeyFor(root, TRDD_KIND, { id: 'ABCD1234', filePath: `${root}/tasks/TRDD-x-ABCD1234-a.md` }))
+    expect(documentLockKeyFor(root, TRDD_KIND, { id: 'AAAA1111', filePath: `${root}/tasks/a.md` }))
+      .not.toBe(documentLockKeyFor(root, TRDD_KIND, { id: 'BBBB2222', filePath: `${root}/tasks/a.md` }))
+  })
+
+  it('BEHAVIOURAL: two writers on different BULLETS of one PRRD file exclude each other', async () => {
+    // The assertions above compare strings; this proves the string is actually used as
+    // a lock. Under record-id keying both writers hold different keys, the contender
+    // completes immediately, and `secondDone` is true before the release.
+    const prrd = join(dir, 'PRRD.md')
+    writeFileSync(prrd, ['---', 'x: 1', '---', '', '- **G1.1** — one', '- **S2.1** — two', ''].join('\n'), 'utf-8')
+
+    const keyA = documentLockKeyFor(dir, PRRD_KIND, { id: 'G1.1', filePath: prrd })
+    const keyB = documentLockKeyFor(dir, PRRD_KIND, { id: 'S2.1', filePath: prrd })
+
+    let secondDone = false
+    let release!: () => void
+    const held = new Promise<void>((r) => { release = r })
+    const holder = withJsonLock(keyA, async () => { await held })
+
+    const contender = replaceAtLines(prrd, [{ line: 6, expect: 'two', replace: 'TWO' }], { lockKey: keyB })
+      .then(() => { secondDone = true })
+
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5))
+    expect(secondDone).toBe(false)
+
+    release(); await holder; await contender
+    expect(secondDone).toBe(true)   // positive control: it was waiting, not dead
   })
 
   it('two writers on the SAME id via DIFFERENT paths still exclude each other', async () => {

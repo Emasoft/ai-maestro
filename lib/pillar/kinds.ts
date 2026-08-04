@@ -24,6 +24,8 @@
  * false positives, which is how a linter gets routed around.
  */
 
+import path from 'path'
+
 export type PillarName = 'trdd' | 'prrd' | 'spec'
 
 /**
@@ -45,6 +47,18 @@ export interface PillarKind {
    * strings (the CLIs and their tests), so it is part of the contract, not decor.
    */
   label: string
+  /**
+   * Where this pillar's corpus root sits UNDER the project's `design/` dir. `''`
+   * means `design/` itself.
+   *
+   * It lives here because two consumers already needed it and one of them had
+   * hardcoded its own copy (`scripts/pillars-lint.mjs` carried a
+   * `{trdd: designDir, spec: designDir/specs, prrd: designDir/requirements}`
+   * literal). A second consumer copying that literal is the moment the two start
+   * drifting — and a CLI pointed at the wrong root does not fail, it reports a
+   * confident "0 records" about a corpus it never read.
+   */
+  corpusSubdir: string
   /**
    * Zone subdirectories under the corpus root, in scan order. `''` means the root
    * itself — which is how a zone-less pillar (PRRD) and a flat one (SPEC) fit the
@@ -88,6 +102,8 @@ export const TRDD_ZONES: readonly TrddZone[] = ['proposals', 'tasks', 'archived'
 export const TRDD_KIND: PillarKind = {
   name: 'trdd',
   label: 'TRDD',
+  // The zone dirs sit directly under `design/`, so the corpus root IS the design dir.
+  corpusSubdir: '',
   zones: TRDD_ZONES,
   isDocument: (n) => n.endsWith('.md') && trddIdFromFilename(n) !== null,
   source: { mode: 'per-document', idFromFilename: trddIdFromFilename },
@@ -105,6 +121,7 @@ const SPEC_DECLARATION_RE = /^`([A-Z0-9]{2,4}-[A-Z]{2,8}-\d{2})`/
 export const SPEC_KIND: PillarKind = {
   name: 'spec',
   label: 'spec',
+  corpusSubdir: 'specs',
   // Flat today. `proposals/` and `archived/` exist but are EMPTY (verified with
   // find(1) — an earlier glob-based count of mine said 65 and was meaningless).
   // They are listed so a spec that lands there is not silently invisible.
@@ -133,6 +150,7 @@ const PRRD_DECLARATION_RE = /^\s*-\s+\*\*([GS])(\d+\.\d+)\*\*/
 export const PRRD_KIND: PillarKind = {
   name: 'prrd',
   label: 'PRRD',
+  corpusSubdir: 'requirements',
   zones: [''],
   isDocument: (n) => n === 'PRRD.md',
   source: {
@@ -150,4 +168,17 @@ export const PILLAR_KINDS: Record<PillarName, PillarKind> = {
   trdd: TRDD_KIND,
   prrd: PRRD_KIND,
   spec: SPEC_KIND,
+}
+
+/**
+ * This pillar's corpus root, given the project's `design/` dir.
+ *
+ * The ONE place the mapping lives. Every caller that resolves a pillar root — the
+ * CLIs, the cross-pillar lint — goes through here, so a project that reorganises
+ * `design/` changes one line rather than N literals that agree until they don't.
+ */
+export function corpusRootFor(designDir: string, kind: PillarKind): string {
+  // `path.join(dir, '')` normalises to `dir`, so the zone-less TRDD case needs no
+  // branch — and a branch is where the two cases would eventually disagree.
+  return path.join(designDir, kind.corpusSubdir)
 }

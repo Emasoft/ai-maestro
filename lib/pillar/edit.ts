@@ -32,9 +32,9 @@
  * each other nowhere (json-io's header records that exact incident).
  */
 import { readFile, writeFile, rename, unlink } from 'fs/promises'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { withJsonLock, type JsonLockOpts } from '../json-io'
-import type { PillarName } from './kinds'
+import type { PillarKind, PillarName } from './kinds'
 
 /**
  * The exclusion key for one document — **derived from its IDENTITY, never its
@@ -58,6 +58,41 @@ import type { PillarName } from './kinds'
  */
 export function documentLockKey(corpusRoot: string, kind: PillarName, id: string): string {
   return join(corpusRoot, `.${kind}-lock-${id}`)
+}
+
+/**
+ * The lock key for the DOCUMENT a given record lives in — **use this from a CLI, not
+ * `documentLockKey` directly.**
+ *
+ * `documentLockKey(root, kind, id)` takes a RECORD id, and that is the right key only
+ * where id↔document is 1:1. That is TRDD and nothing else. Measured, from
+ * `lib/pillar/kinds.ts`'s own header:
+ *
+ *   TRDD  one FILE per record   → id ↔ document is 1:1
+ *   SPEC  N CLAUSES per file    → N ids share one document
+ *   PRRD  N BULLETS in ONE file → EVERY id shares one document
+ *
+ * So keying a PRRD edit on its bullet id would hand two writers of the SAME file two
+ * DIFFERENT lock directories: both acquire instantly, both read, both write, and the
+ * second silently discards the first. The CAS would catch it only when the two edits
+ * touch the same LINE — which is exactly the case a lock is least needed for. A lock
+ * that excludes nothing while looking correct is worse than no lock, because it stops
+ * anyone asking whether the file is protected (`lib/json-io.ts`'s header records the
+ * same failure from the other direction: two mechanisms, one path, zero exclusion).
+ *
+ * The key is therefore whatever survives a zone move for THAT pillar: the id for a
+ * per-document pillar, the file's BASENAME for a per-line one. SPEC's zones are
+ * `['', 'proposals', 'archived']`, so a spec really can move — and `governance-spec.md`
+ * is the same document in either zone.
+ */
+export function documentLockKeyFor(
+  corpusRoot: string,
+  kind: PillarKind,
+  rec: { id: string; filePath: string },
+): string {
+  const documentId =
+    kind.source.mode === 'per-document' ? kind.normalizeId(rec.id) : basename(rec.filePath)
+  return documentLockKey(corpusRoot, kind.name, documentId)
 }
 
 /** One `AT LINE N REPLACE X WITH Y` instruction. `line` is 1-based, as a reader sees it. */

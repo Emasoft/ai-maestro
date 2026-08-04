@@ -36,7 +36,10 @@ function writeSpec(name: string, frontmatter: string, body = '\n`3P-XXX-01` **cl
 }
 
 function doc(kind: PillarDocument['kind'], frontmatter: Record<string, unknown>): PillarDocument {
-  return { kind, zone: '', filePath: `/fake/${kind}.md`, frontmatter, body: '' }
+  // `bodyLineOffset: 0` because this fixture's body is empty — the DAG lint reads only
+  // frontmatter, so no line number is ever derived from these. A real document's offset
+  // is its frontmatter height (TRDD-D7KVF4HQ).
+  return { kind, zone: '', filePath: `/fake/${kind}.md`, frontmatter, body: '', bodyLineOffset: 0 }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -33,6 +33,10 @@
 
 set -euo pipefail
 
+# Resolve this script's own directory so the helpers beside it are found regardless of the
+# caller's cwd — the migration is run by hand from wherever the operator happens to be.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 AGENTS_DIR="${HOME}/agents"
 CUSTOM="${AGENTS_DIR}/custom-plugins"
 ROLES="${AGENTS_DIR}/role-plugins"
@@ -383,26 +387,21 @@ echo "4. Marketplace manifests"
 
 ROLES_MANIFEST="${ROLES}/.claude-plugin/marketplace.json"
 if [[ -f "$ROLES_MANIFEST" ]] && ! $DRY_RUN; then
-  python3 -c "
-import json, os
-with open('$ROLES_MANIFEST') as f:
-    data = json.load(f)
-changed = False
-for p in data.get('plugins', []):
-    src = p.get('source', '')
-    base = os.path.basename(src.rstrip('/'))
-    # Fix any path not under roles-marketplace/
-    if '/roles-marketplace/' not in src:
-        p['source'] = 'roles-marketplace/' + base
-        changed = True
-if changed:
-    with open('$ROLES_MANIFEST', 'w') as f:
-        json.dump(data, f, indent=2)
-        f.write('\n')
-    print('  [R20] Updated source paths in marketplace.json')
-else:
-    print('  [R20] marketplace.json paths already correct')
-  " 2>/dev/null || warn "Could not update marketplace manifest"
+  # Delegated to a real script (TRDD-DP2HI2MP) rather than an inline `python3 -c`: this rewrite
+  # is the one that decides whether every plugin in the marketplace is installable, and inline
+  # it could not be tested. See scripts/migrate_r20_marketplace_sources.py for the three defects
+  # that accumulated behind that.
+  #
+  # stderr is CAPTURED, not discarded. The old form ended in `2>/dev/null || warn "Could not
+  # update marketplace manifest"`, so a parse error, a permission error and a crash on an
+  # object-form source all surfaced as the same contentless line — and the crash case was real.
+  # A temp file rather than an fd-swap: stdout must keep flowing to the terminal (it carries the
+  # `[R20]` result line), and `$(cmd 2>&1 1>&3) 3>&1` buys that at the cost of being unreadable.
+  MANIFEST_ERR_FILE=$(mktemp)
+  if ! python3 "${SCRIPT_DIR}/migrate_r20_marketplace_sources.py" "$ROLES_MANIFEST" 2>"$MANIFEST_ERR_FILE"; then
+    warn "Could not update marketplace manifest: $(cat "$MANIFEST_ERR_FILE")"
+  fi
+  rm -f "$MANIFEST_ERR_FILE"
 else
   log "Marketplace manifest: $(if $DRY_RUN; then echo 'skipped (dry-run)'; else echo 'not found'; fi)"
 fi

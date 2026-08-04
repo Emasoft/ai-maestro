@@ -211,28 +211,60 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/** Set (or insert) a single `field: value` line inside the `---` frontmatter. */
+/** Raised by {@link setFrontmatterField} when the content has no usable `---` frontmatter
+ *  block, so a caller can report the failure instead of writing an unchanged file. */
+export class NoFrontmatterError extends Error {
+  constructor(reason: string) {
+    super(`cannot set a frontmatter field: ${reason}`)
+    this.name = 'NoFrontmatterError'
+  }
+}
+
+/**
+ * Set (or insert) a single `field: value` line inside the `---` frontmatter.
+ *
+ * THROWS rather than returning the content unchanged when there is no frontmatter to edit.
+ * The previous silent `return content` was indistinguishable from a successful edit at every
+ * call site — `advanceColumn`/`editTrdd`/`editAt` all write the buffer and return `{ok:true,
+ * column}` unconditionally — so a card the writer could not parse was reported as moved while
+ * its `column:` on disk never changed. A no-op that reports success is the worst outcome here:
+ * the board, the API and the CLI all agree on a transition that did not happen.
+ *
+ * The `\r?` in the fence match is the reason this was reachable at all in practice. Splitting
+ * on '\n' leaves a trailing CR on every line of a CRLF-authored TRDD, so `lines[0]` was
+ * `'---\r'` and the strict `=== '---'` comparison rejected the whole file. CRLF is an
+ * anticipated input elsewhere in this pillar (`trdd-doctor.ts` matches `\r?\n`), so those
+ * cards were silently unwritable. Inserted lines inherit the file's own line ending so a CRLF
+ * document does not acquire one stray LF-only line.
+ */
 export function setFrontmatterField(content: string, field: string, value: string): string {
   const lines = content.split('\n')
-  if (lines[0] !== '---') return content
+  const isFence = (line: string | undefined): boolean => line !== undefined && line.trimEnd() === '---'
+  if (!isFence(lines[0])) {
+    throw new NoFrontmatterError('the document does not open with a `---` fence')
+  }
   let end = -1
   for (let i = 1; i < lines.length; i++) {
-    if (lines[i] === '---') {
+    if (isFence(lines[i])) {
       end = i
       break
     }
   }
-  if (end === -1) return content
+  if (end === -1) {
+    throw new NoFrontmatterError('the opening `---` fence is never closed')
+  }
 
+  // Preserve the document's own line ending on any line this function writes.
+  const eol = lines[0].endsWith('\r') ? '\r' : ''
   const re = new RegExp(`^${escapeRe(field)}:`)
   for (let i = 1; i < end; i++) {
     if (re.test(lines[i])) {
-      lines[i] = `${field}: ${value}`
+      lines[i] = `${field}: ${value}${eol}`
       return lines.join('\n')
     }
   }
   // Not present — insert just before the closing fence.
-  lines.splice(end, 0, `${field}: ${value}`)
+  lines.splice(end, 0, `${field}: ${value}${eol}`)
   return lines.join('\n')
 }
 

@@ -113,13 +113,38 @@ describe('claudeAdapter CLI argv (TRDD-RCL2HC9Y)', () => {
   describe('the arguments that are NOT the directory are still correct', () => {
     // Positive controls: without these, every assertion above is satisfied by
     // an adapter that spawns nothing recognisable at all.
-    it('install spawns `claude plugin install <name> <marketplace> --scope local`', async () => {
+    // The marketplace is EMBEDDED in the single positional, exactly as `uninstall` below
+    // already did. `claude plugin install --help` reads
+    // `Usage: claude plugin install|i [options] <plugin>` … "use plugin@marketplace for
+    // specific marketplace" — one positional, no more. This test previously pinned the
+    // two-positional form (`… 'some-plugin', 'some-marketplace'`), which froze the bug: the
+    // second argument was dropped by the CLI, so an install asking for a SPECIFIC
+    // marketplace silently resolved the bare name across all of them and stamped a
+    // different `<plugin>@<marketplace>` settings key than the caller asked for.
+    it('install spawns `claude plugin install <name@marketplace> --scope local`', async () => {
       await inAdapterContext('test', () =>
         claudeAdapter.install(PLUGIN, '/tmp/agent-dir', { scope: 'local', marketplace: 'some-marketplace' }))
       const call = only()
       expect(call.cmd).toBe('claude')
-      expect(call.args.slice(0, 4)).toEqual(['plugin', 'install', 'some-plugin', 'some-marketplace'])
+      expect(call.args.slice(0, 3)).toEqual(['plugin', 'install', 'some-plugin@some-marketplace'])
       expect(call.args).toEqual(expect.arrayContaining(['--scope', 'local']))
+    })
+
+    it('install at user scope also embeds the marketplace in the one positional', async () => {
+      await inAdapterContext('test', () =>
+        claudeAdapter.install(PLUGIN, '/tmp/agent-dir', { scope: 'user', marketplace: 'some-marketplace' }))
+      expect(only().args.slice(0, 3)).toEqual(['plugin', 'install', 'some-plugin@some-marketplace'])
+    })
+
+    it('install with NO marketplace passes the bare name, never an empty positional', async () => {
+      // The old form appended `marketplace || ''` unconditionally, so a marketplace-less
+      // install spawned `claude plugin install some-plugin ""` — an empty string is not a
+      // plugin name, and it is the shape a `slice(0, 4)` assertion could not see.
+      await inAdapterContext('test', () =>
+        claudeAdapter.install(PLUGIN, '/tmp/agent-dir', { scope: 'local' }))
+      const call = only()
+      expect(call.args.slice(0, 3)).toEqual(['plugin', 'install', 'some-plugin'])
+      expect(call.args).not.toContain('')
     })
 
     it('uninstall spawns `claude plugin uninstall <name@marketplace> --scope local`', async () => {

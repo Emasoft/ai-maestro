@@ -67,10 +67,21 @@ const claudeAdapter: ClientPluginAdapter = {
     assertAdapterContext('claudeAdapter.install')
     const marketplace = options?.marketplace || ''
     const scope = options?.scope || 'local'
+    // ONE positional, `name@marketplace` — never two. `claude plugin install --help` is
+    // explicit: `Usage: claude plugin install|i [options] <plugin>` … "use plugin@marketplace
+    // for specific marketplace". Passing the marketplace as a SECOND positional meant the
+    // requested marketplace was dropped and the CLI resolved the bare name across every
+    // registered marketplace — so an install asking for `foo@ai-maestro-local-roles-marketplace`
+    // could land `foo` from `ai-maestro-plugins` and stamp the settings key
+    // `foo@ai-maestro-plugins`, i.e. a DIFFERENT key from the one a rollback had removed.
+    // `uninstall` below already built the key this way (`buildPluginKey`); the asymmetry
+    // between the two halves is what hid it. When no marketplace is supplied the old form
+    // also passed an empty-string positional, which is not a plugin name either.
+    const pluginKey = buildPluginKey(plugin.name, marketplace || undefined)
 
     try {
       if (scope === 'user') {
-        await execFileAsync('claude', ['plugin', 'install', plugin.name, marketplace, '--scope', 'user'], { timeout: 120000 })
+        await execFileAsync('claude', ['plugin', 'install', pluginKey, '--scope', 'user'], { timeout: 120000 })
       } else {
         // Local scope: the CLI has NO --cwd flag. `--scope local` means "the
         // project dir this process is running in", so the directory is passed
@@ -87,7 +98,7 @@ const claudeAdapter: ClientPluginAdapter = {
         // both settings.local.json and its own installed_plugins.json row.
         const resolved = resolveDir(targetDir)
         await execFileAsync('claude', [
-          'plugin', 'install', plugin.name, marketplace,
+          'plugin', 'install', pluginKey,
           '--scope', 'local'
         ], { timeout: 120000, cwd: resolved })
       }

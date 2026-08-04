@@ -358,7 +358,17 @@ async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoU
   // (never on 'already-current', or an idle host would churn its fleet hourly for
   // no reason). The fan-out layer decides WHICH agents it may touch; the driver's
   // safe-state gate decides which are safe right now.
-  if (fleetRestartNotifier && entries.some(e => e.status === 'updated')) {
+  //
+  // `absorbed:marketplace:*` entries are EXCLUDED, and that exclusion is what makes the
+  // sentence above true. A marketplace refresh is a manifest fetch, not a code change: the
+  // branch that records it (step 1) has no 'already-current' classification at all — unlike
+  // the plugin branches, which do — so `UpdateMarketplace` succeeding stamps 'updated' on
+  // every single tick. With at least one registered marketplace the `some(...)` was
+  // therefore permanently true, and the guard fired the whole-fleet restart hourly on a
+  // completely idle host: exactly the churn the comment above says it exists to prevent.
+  // Only a plugin whose CODE changed can leave every agent running stale code.
+  const codeChanged = entries.some(e => e.status === 'updated' && !e.target.startsWith('absorbed:marketplace:'))
+  if (fleetRestartNotifier && codeChanged) {
     try {
       fleetRestartNotifier('user-scope plugin update (absorbed duty)')
     } catch (err) {

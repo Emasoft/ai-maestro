@@ -129,10 +129,20 @@ function statIdentity(file: string): FileIdentity | null {
   try {
     const st = fs.statSync(file, { bigint: true })
     return { id: `stat:${st.size}:${st.mtimeNs}`, source: 'stat' }
-  } catch {
-    // The file vanished between listing and stat — a concurrent `git mv` lifecycle
-    // transition is normal traffic here. The caller drops it from this pass.
-    return null
+  } catch (err) {
+    // ENOENT ONLY. The file vanished between listing and stat — a concurrent `git mv`
+    // lifecycle transition is normal traffic here, and the caller drops it from this pass.
+    //
+    // Every OTHER errno must propagate, because "absent from `live`" is not a neutral
+    // observation downstream: `index-build.ts` puts such a path in `delta.removed` and
+    // EVICTS its records and edges from the index. So a transient EIO on a network mount,
+    // or an EACCES after a permission change, silently DELETES a live document from the
+    // index — `board`/`why`/`unblocks` then answer as if the card does not exist and every
+    // `blocked-by` pointing at it becomes a dangling reference the doctor reports as real.
+    // `store.ts:153` already draws this exact line for the same reason; a catch-all here
+    // was the one place in the pillar that did not.
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return null
+    throw new Error(`cannot stat ${file}: ${(err as Error).message}`)
   }
 }
 

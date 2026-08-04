@@ -738,27 +738,19 @@ export function getExportJobStatus(jobId: string): ServiceResult<{
 
   console.log(`[Export Jobs API] Get status: Job=${jobId}`)
 
-  // TODO: Load export job from database or file system
-  const exportJob: ExportJob = {
-    id: jobId,
-    agentId: 'unknown',
-    agentName: 'Unknown Agent',
-    sessionId: undefined,
-    type: 'json',
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-    progress: 0,
-    filePath: undefined,
-    errorMessage: undefined,
-  }
-
+  // There is NO export-job store yet (Phase 5). This used to answer 200 with
+  // `success: true` and a fabricated job — `agentId: 'unknown'`, `status: 'pending'`,
+  // `progress: 0` — for EVERY jobId, including ones that never existed. A client polling
+  // for completion therefore polled a hardcoded 'pending' forever and could never
+  // distinguish "still working" from "this feature was never built"; the fabricated
+  // `agentId`/`createdAt` were indistinguishable from real data on the wire.
+  //
+  // 501 is the honest answer and it is what the sibling stub at
+  // `app/api/teams/[id]/repos/route.ts` already returns for the same situation. When the
+  // store lands, replace this with the real lookup (404 for an unknown jobId).
   return {
-    data: {
-      success: true,
-      job: exportJob,
-      message: 'Export job status retrieved (placeholder - Phase 5 implementation pending)',
-    },
-    status: 200,
+    error: 'Export job status is not implemented yet (no export-job store exists)',
+    status: 501,
   }
 }
 
@@ -782,12 +774,12 @@ export function deleteExportJob(jobId: string): ServiceResult<{
 
   console.log(`[Export Jobs API] Delete job: Job=${jobId}`)
 
-  // TODO: Delete export job from database or file system
+  // Same as getExportJobStatus: nothing is stored, so nothing can be deleted. Reporting
+  // `success: true` told the caller a job had been cancelled when no cancellation had
+  // occurred and no job existed — the worst shape for a DELETE, because the caller stops
+  // tracking work it believes it stopped. 501 until the store exists.
   return {
-    data: {
-      success: true,
-      message: 'Export job deleted (placeholder - Phase 5 implementation pending)',
-    },
-    status: 200,
+    error: 'Export job deletion is not implemented yet (no export-job store exists)',
+    status: 501,
   }
 }

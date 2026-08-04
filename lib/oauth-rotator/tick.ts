@@ -572,11 +572,34 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
     try {
       writeSlot(email, fresh)
     } catch (exc) {
-      if (exc instanceof SlotKeychainWriteError) {
-        decide(deps, `[keepalive] ${email}: keychain write refused (${exc.message}) — kept old token, skipped`)
-        continue
+      // THE EXCHANGE ALREADY HAPPENED. `refreshOauthToken` above returned a fresh pair, which
+      // means the endpoint accepted — and therefore ROTATED — the old grant (this module's
+      // header and reauth-flow.ts:20-21 both state the grant is single-use rotating). So the
+      // old token in the slot is ALREADY DEAD, and the previous "kept old token, skipped" was
+      // describing a credential that no longer works: every later beat re-presented it, got
+      // null, and burned one of MAX_REFRESH_FAILURES until the slot was classified
+      // refresh-dead — a slot bricked purely by one transient keychain refusal.
+      //
+      // Record it as dead IMMEDIATELY instead, against the OLD blob's fingerprint. That is
+      // the honest state (the credential really is unusable) and it routes the slot straight
+      // to the REAUTH leg a human can act on, rather than three beats of pointless traffic.
+      // The fingerprint keying is what lets it recover: a human re-login writes a new blob
+      // with a different fp, and the gate above stops applying the instant that happens.
+      //
+      // And this catch is now TOTAL. The docstring promises "never throws", but the
+      // non-SlotKeychainWriteError path re-threw — and `writeSlot`'s NO_KEYCHAIN fallback is
+      // a plaintext mkdir/write/chmod/rename, so an ENOSPC or EACCES on a keyring-less host
+      // escaped `runTick`, skipped the `saveState` below (losing every mutation this loop had
+      // already made) and stopped the beat before `autoRotate` ever ran.
+      const meta = slots[email]
+      if (meta && typeof meta === 'object') {
+        meta.refresh_failures = MAX_REFRESH_FAILURES
+        meta.refresh_dead_fp = fingerprint(blob)
+        changed = true
       }
-      throw exc
+      const why = exc instanceof SlotKeychainWriteError ? 'keychain write refused' : 'slot write failed'
+      decide(deps, `[keepalive] ${email}: ${why} (${exc instanceof Error ? exc.message : String(exc)}) — the refreshed token could not be stored and the old grant is already rotated; slot needs re-login`)
+      continue
     }
     const meta = slots[email]
     if (meta && typeof meta === 'object') {

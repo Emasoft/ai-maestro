@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-07-23T06:42:00+0200
+updated: 2026-08-05T00:27:02+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -39,8 +39,9 @@ iterate) → v1.0.0 release → install+smoke-test → notify user → user inst
 Exercises the 3 no-team host titles. **AUTHORED + committed `4623dc83`** (`tests/scenarios/SCEN-031_*.scen.md`
 + setup wrapper + sample-zip fixture + NEXT_SCEN_NUMBER→32). The A-F bar below is now SUPPORTING EVIDENCE
 (it proves the governance/enforcement substrate SCEN-031 depends on is sound — enforcement 378 green,
-invariants boot-active, spec authoritative), NOT the definition. **NEXT = RUN SCEN-031** (via the
-`run-scenario-test` skill) — but it has REAL GitHub side effects (creates `Emasoft/zipsearcher` + PRs +
+invariants boot-active, spec authoritative), NOT the definition. **NEXT = RUN SCEN-031** (by dispatching the
+`scenario-runner` AGENT — the `run-scenario-test` skill this card originally named does NOT exist
+at any scope, verified 2026-08-04; see TRDD-F181A4AE) — but it has REAL GitHub side effects (creates `Emasoft/zipsearcher` + PRs +
 release), runs long (agents build real software), and needs prereqs (gh auth, a template repo, MANAGER-
 capable) → needs the USER's explicit go-ahead + a prereq check before the run.
 
@@ -55,7 +56,7 @@ ai-maestro-plugin status scripts / `aimaestro-agent.sh` (read-only status = moni
 role-plugins cached; ✗ **NO Emasoft template repo exists** (step-6 blocker — USER must create one, OR allow a
 public/3rd-party template, OR from-scratch), ✗ **AIM_GOVERNANCE_PASSWORD unset in shell** (likely in
 gitignored `.env.local` which the runner sources — confirm). **NEXT = resolve the 2 blockers with the USER,
-then RUN SCEN-031 via the `run-scenario-test` skill.** SCEN-031 file: `tests/scenarios/SCEN-031_zipsearcher-end-to-end-fleet-ship.scen.md`.
+then RUN SCEN-031 by dispatching the `scenario-runner` agent.** SCEN-031 file: `tests/scenarios/SCEN-031_zipsearcher-end-to-end-fleet-ship.scen.md`.
 
 **▶ 2026-07-22 (SCEN-031 v1.1 — shared board + column ownership).** USER added: the two worker agents build the
 SAME project → they SHARE one project `design/` kanban board (git-tracked zipsearcher TRDD corpus, NOT siloed

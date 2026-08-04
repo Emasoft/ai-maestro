@@ -1,8 +1,8 @@
 ---
 name: testing-and-scenarios
-description: "how do I run a UI scenario test / run-scenario-test skill forks a subagent why / how many scenarios exist SCEN-NNN / AMP routing test scripts / cross-host mesh test / manual tmux testing workflow / where do scenario rules live SCENARIOS_TESTS_RULES.md symlink"
+description: "how do I run a UI scenario test / why is there no slash command to run one scenario / scenario-runner does not appear in autocomplete / the run-scenario-test skill does not exist / how many scenarios exist SCEN-NNN / AMP routing test scripts / cross-host mesh test / manual tmux testing workflow / where do scenario rules live SCENARIOS_TESTS_RULES.md symlink"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-08-04
 metadata:
   node_type: memory
   type: reference
@@ -14,7 +14,7 @@ metadata:
 
 AI Maestro's test surface has three layers: a manual tmux workflow for spot-checking, two AMP
 messaging test scripts (local + cross-host), and a git-tracked suite of browser-driven UI
-scenarios that always run through the isolated `run-scenario-test` skill.
+scenarios that always run through the isolated `scenario-runner` agent.
 
 **Manual testing workflow:**
 
@@ -73,12 +73,17 @@ Currently 24 scenarios live in `tests/scenarios/SCEN-NNN_*.scen.md` (SCEN-001 th
 SCEN-024). They are git-tracked. Reports and screenshots are gitignored (session-local test
 artifacts).
 
-**Running a scenario — ALWAYS use the `run-scenario-test` skill.** Do NOT drive scenarios from
-the main conversation. The skill is installed at `~/.claude/skills/run-scenario-test/` and uses
-`context: fork`, `model: opus`, `agent: general-purpose` so a full ~150-step UI walkthrough runs
-in an isolated subagent context and returns only a 2-line summary to the orchestrator. Trigger
-phrases: "run scenario 16", "execute SCEN-018", "run the maintainer scenario", "rerun 1 and 19".
-For parallel runs of multiple scenarios, the orchestrator triggers the skill multiple times in
+**Running a scenario — ALWAYS use the `scenario-runner` AGENT.** Do NOT drive scenarios from the
+main conversation. The agent is defined project-scoped at `.claude/agents/scenario-runner.md`
+(`model: opus[1m]`, its own forked context, `memory: project`), so a full ~150-step UI walkthrough
+runs in isolation and returns only a short summary to the orchestrator. Trigger phrases: "run
+scenario 16", "execute SCEN-018", "run the maintainer scenario", "rerun 1 and 19".[^1]
+
+**There is NO `/slash` handle for a single scenario, and this surprises people.** Agents are
+dispatched through the Agent tool and never appear in autocomplete; only SKILLS do. The only
+scenario skill is `/run-scenarios-batch` (batch-only). So "run one scenario" always means asking
+the orchestrator, which dispatches the agent — there is nothing to find in the menu.
+For parallel runs of multiple scenarios, the orchestrator dispatches the agent multiple times in
 the same turn — one forked agent per scenario.
 
 The forked agent reads the scenario file, follows `SCENARIOS_TESTS_RULES.md`, drives the
@@ -94,3 +99,16 @@ listed in the scenario's frontmatter.
 ## See also
 
 ## Notes and lessons learned
+[^1]: [id:ATOM-SCEN-NOSKILL, status:valid, keywords:"run_scenario_test_skill_missing no_slash_command_for_one_scenario scenario_runner_not_in_autocomplete cannot_find_the_scenario_runner, how_do_i_run_a_single_scenario", ocd:2026-08-04, lmd:2026-08-04]
+  SUPERSEDED BODY (wrong since the skill was removed): *"Running a scenario — ALWAYS use the
+  `run-scenario-test` skill … installed at `~/.claude/skills/run-scenario-test/` and uses
+  `context: fork`, `model: opus`, `agent: general-purpose`."*
+  DO NOT tell anyone to run a scenario "via the `run-scenario-test` skill" — it DOES NOT EXIST at
+  any scope (verified absent 2026-08-04 while hundreds of sibling user-scope skills remain), and
+  `TRDD-F181A4AE` flagged it as a gap on 2026-06-21 with that card still `blocked`. DO say
+  "dispatch the `scenario-runner` AGENT", and say in the same breath that there is NO `/slash`
+  handle for one scenario — agents never appear in autocomplete, only skills do, and the only
+  scenario skill is the batch-only `/run-scenarios-batch`. The user went hunting the autocomplete
+  menu on the strength of this page and of three lines in `SCENARIOS_TESTS_RULES.md`; the wording
+  named an ACTOR ("the user runs it") without naming the MECHANISM, so a reader fills the gap with
+  the mechanism they know — a command.

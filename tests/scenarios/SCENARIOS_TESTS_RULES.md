@@ -1148,7 +1148,7 @@ An autonomous scenario batch has **three distinct phases**, and only Phase 1 run
 
 | Phase | When | What runs | What the agent is allowed to do | Output |
 |---|---|---|---|---|
-| **Phase 1 — Scenario execution** | Overnight, unattended | cron fires, spawns `run-scenario-test` skill per scenario | Edit source files to fix bugs **in place on the current branch** (Rule 4 FIX-AS-YOU-GO). Commit fixes per scenario. Author each improvement suggestion as its own TRDD-proposal file (Rule 11) and commit those too. | Each scenario commits bug fixes + its `design/proposals/TRDD-*.md` proposal files on the current branch, and writes `SCEN-NNN_<ts>.report.md` (gitignored evidence). Master cleanup writes a lightweight `BATCH_SUMMARY_<batch_id>.md` index. |
+| **Phase 1 — Scenario execution** | Overnight, unattended | cron fires, spawns the `scenario-runner` AGENT per scenario (via the Agent tool — see the note below on the retired `run-scenario-test` skill) | Edit source files to fix bugs **in place on the current branch** (Rule 4 FIX-AS-YOU-GO). Commit fixes per scenario. Author each improvement suggestion as its own TRDD-proposal file (Rule 11) and commit those too. | Each scenario commits bug fixes + its `design/proposals/TRDD-*.md` proposal files on the current branch, and writes `SCEN-NNN_<ts>.report.md` (gitignored evidence). Master cleanup writes a lightweight `BATCH_SUMMARY_<batch_id>.md` index. |
 | **Phase 2 — Proposal screening** | When the user wakes up | Standard TRDD approval flow (`~/.claude/rules/trdd-approval-tiers.md`) | Review `design/proposals/` (the batch summary lists this batch's TRDD ids). Approve/refuse per proposal — batch syntax `approved: n,n` / `refused: n,n` (amama-proposal-approvals) or manual `git mv` + `column:` edit. | Approved proposals: `column: planned`, moved to `design/tasks/`. Refused: `column: refused`, moved to `design/refused/`. Unreviewed proposals simply stay PENDING in `design/proposals/`. |
 | **Phase 3 — Proposal implementation** | After approval, unattended but fast | The user invokes `/run-scenarios-batch --improve <batch_id\|range>` OR `/implement-scenarios-proposals`. The `scenario-improvement-implementer` agent runs in `isolation: worktree` for each approved proposal TRDD. | Worktree-isolated edits for APPROVED proposal TRDDs only. Each proposal gets its own commit citing `TRDD-<id8>`; the implementer appends the SHAs to the TRDD's `implementation-commits:`. Returns worktree branch name. | Each worktree branch becomes a draft PR (or the user merges the worktree back directly). Because Phase 1 already landed bug fixes on the current branch, the implementer sees a clean bug-free codebase and conflicts are minimal. |
 
@@ -1166,7 +1166,7 @@ Claude Code does NOT exit on rate-limit / API errors. Only the current TURN ends
 
 2. **Recurring durable cron** — created via `CronCreate` with `durable: true` at a 5-20 min interval. **The cron IS the wake-up mechanism.** Every fire becomes a fresh user turn. Fires that hit 429 cooldown queue and deliver in batch when the REPL goes back to idle. The cron persists in `.claude/scheduled_tasks.json` so it survives `claude --continue` restarts.
 
-3. **Idempotent state file + run-one-step prompt** — the state file at `tests/scenarios/state/autonomous-batch-state.json` tracks which scenarios are pending / in-progress / done / failed. The cron prompt is short and idempotent: "read state, run the next pending scenario via the run-scenario-test skill, update state, exit". Each cron fire executes ONE scenario. If the same fire is delivered twice (rate-limit queue artifact), the idempotent state read makes the second fire a no-op.
+3. **Idempotent state file + run-one-step prompt** — the state file at `tests/scenarios/state/autonomous-batch-state.json` tracks which scenarios are pending / in-progress / done / failed. The cron prompt is short and idempotent: "read state, run the next pending scenario by spawning the `scenario-runner` agent, update state, exit". Each cron fire executes ONE scenario. If the same fire is delivered twice (rate-limit queue artifact), the idempotent state read makes the second fire a no-op.
 
 ### The autonomous batch state file
 
@@ -1308,7 +1308,22 @@ This phase runs ONLY ONCE per batch. Per-scenario runners assume the daemon is u
 
 ### Per-scenario runner (one cron fire = one scenario)
 
-The cron fire spawns the `run-scenario-test` skill with the next pending scenario. The skill (and ultimately the `scenario-runner` agent it invokes) does Phases A-H from the runner agent definition: loads dev-browser, reads the scenario file, runs the steps, applies FIX-AS-YOU-GO for any bug found (editing source in place on the current branch), writes the scenario report, authors its improvement-proposal TRDDs (Rule 11), returns a 2-line verdict.
+The cron fire spawns the `scenario-runner` AGENT with the next pending scenario.
+
+> **The `run-scenario-test` skill DOES NOT EXIST — do not look for it, and do not write it into a
+> prompt.** It was a USER-scope skill at `~/.claude/skills/run-scenario-test/` and it is gone
+> (verified absent 2026-08-04, while hundreds of sibling user-scope skills remain). This document
+> instructed callers to use it in three places; `TRDD-F181A4AE` flagged it as a gap on 2026-06-21
+> and that card is still `blocked`. The working path has always been the AGENT — the cron prompt
+> further down this rule already says "Spawn the scenario-runner agent via the Agent tool", which
+> is why the overnight batch kept working while the prose was wrong.
+>
+> Note the consequence, because it is the part people trip on: **there is no way to run a SINGLE
+> scenario from the slash menu.** Agents have no `/slash` form (only skills do), and the only
+> scenario skill is `/run-scenarios-batch`, which is batch-only. "Run one scenario" means asking
+> the orchestrator, which then dispatches the agent.
+
+The agent does Phases A-H from the runner agent definition: loads dev-browser, reads the scenario file, runs the steps, applies FIX-AS-YOU-GO for any bug found (editing source in place on the current branch), writes the scenario report, authors its improvement-proposal TRDDs (Rule 11), returns a 2-line verdict.
 
 The cron fire then:
 - Updates state.json with the scenario's verdict and report paths

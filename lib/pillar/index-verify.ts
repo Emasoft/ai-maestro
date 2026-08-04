@@ -294,7 +294,20 @@ export interface VerifyWatchdogOptions extends SweepOptions {
  * measurable CPU forever to shorten a detection window that nothing acts on faster than
  * a human anyway.
  */
-const DEFAULT_INTERVAL_MS = Number(process.env.AIM_PILLAR_INDEX_VERIFY_INTERVAL_MS) || 6 * 60 * 60 * 1000
+const DEFAULT_INTERVAL_MS = ((): number => {
+  // NOT `Number(env) || DEFAULT`. `Number('0')` is 0, which is FALSY, so the `||` form sent
+  // the one value the doc line above documents as meaningful — 0, meaning "switch the sweep
+  // off" — straight to the 6-hour default, and the `intervalMs <= 0` disable branch in
+  // `startPillarIndexVerifyWatchdog` was unreachable through the env var it names. An
+  // operator on a host with large corpora who set the variable to 0 kept paying the sweep
+  // forever with no way to tell it had been ignored. Explicit parse, explicit finite check:
+  // only a genuinely absent or non-numeric value falls back to the default.
+  const raw = process.env.AIM_PILLAR_INDEX_VERIFY_INTERVAL_MS
+  if (raw === undefined || raw.trim() === '') return 6 * 60 * 60 * 1000
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return 6 * 60 * 60 * 1000
+  return parsed
+})()
 
 /**
  * The first sweep is DELAYED, not run at boot.

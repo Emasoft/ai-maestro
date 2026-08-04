@@ -229,7 +229,13 @@ export async function replaceAtLines(
         const before = lines[e.line - 1]
         // Replace the FIRST occurrence only. A line carrying `expect` twice is
         // ambiguous, and replaceAll would rewrite text the caller never looked at.
-        const after = before.replace(e.expect, e.replace)
+        // FUNCTION replacement, not a string one. `String.prototype.replace` treats `$&`,
+        // `` $` ``, `$'`, `$$` and `$n` in a STRING replacement as substitution patterns, so
+        // `--replace "use $& twice"` against `--expect "cite the rule"` wrote
+        // `use cite the rule twice` — bytes the caller never asked for, silently persisted to
+        // a governance document. A replacer function's return value is used verbatim, which
+        // is the only correct reading of a literal `--replace` argument from argv.
+        const after = before.replace(e.expect, () => e.replace)
         lines[e.line - 1] = after
         diffParts.push(`@@ line ${e.line} @@\n-${before}\n+${after}`)
       }

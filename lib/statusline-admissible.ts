@@ -65,7 +65,18 @@ export function admitSnapshot(
   // rotator is no longer using. Note this also rejects when the stamp is null and a rotator IS
   // configured (state unreadable at ingest ⇒ no identity ⇒ no data), which is the fail-safe
   // direction: the rotator's behaviour on absent data is already "do not rotate".
-  if (snapshot.liveFp !== rotator.live_fp) return 'stale-account'
+  //
+  // BOTH sides are normalised through the same '' → null collapse. `resolveLiveAccountFp`
+  // already does it to the STAMP, for the reason its own comment gives — "otherwise
+  // `'' !== null` makes the identity check reject on a difference that means nothing" — but
+  // that comparison reads the RAW `rotator.live_fp`, so the fix covered only one side.
+  // `fingerprint()` returns '' for a blob with no accessToken and `rotate.ts:43` /
+  // `tick.ts:472` assign it verbatim, so the moment `live_fp` is '' the stamp is null,
+  // `null !== ''` holds, and EVERY observation is judged 'stale-account' — permanently, and
+  // silently: the push-trigger stops firing, `freshestAdmissibleUsage` always returns null,
+  // and the rotator falls back to the API polling this whole path exists to eliminate.
+  const liveFp = rotator.live_fp === '' ? null : rotator.live_fp
+  if (snapshot.liveFp !== liveFp) return 'stale-account'
 
   // AGE. Independent of identity, and NOT redundant with it: a switch away and back (A→B→A), or a
   // state.json that was reset and rebuilt, both produce a report whose stamp matches the current

@@ -31,12 +31,13 @@
 
 set -uo pipefail
 
-FILE=""; EXPR=""; TESTS=""
+FILE=""; EXPR=""; TESTS=""; ALLOW_DOLLAR=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -f|--file)  FILE="$2";  shift 2 ;;
     -e|--expr)  EXPR="$2";  shift 2 ;;
     -t|--tests) TESTS="$2"; shift 2 ;;
+    --allow-dollar) ALLOW_DOLLAR=1; shift ;;
     -h|--help)  sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "neuter: unknown argument '$1'" >&2; exit 2 ;;
   esac
@@ -82,6 +83,38 @@ restore() {
 }
 # Restore on interrupt/termination too: an interrupted neuter is exactly when sabotage is left behind.
 trap 'echo; echo "neuter: interrupted — restoring $FILE"; restore; exit 130' INT TERM
+
+# --- GUARD 1.5: an UNESCAPED `$VAR` / `$(` in the expression ---------------------------------
+# The single highest-frequency way a neuter silently measures the WRONG THING, hit three times in
+# one session (2026-08-05). In a perl s///, the REPLACEMENT side interpolates: an unescaped
+# `$TMP` or `$d` expands to the EMPTY STRING, and `$(` to a perl variable. The result is not an
+# error — it is a DIFFERENT, usually syntactically-broken mutation that still applies, still
+# changes the blob (so GUARD 2 passes), and still produces a red/green verdict.
+#
+# That verdict is the trap. Once it reddened all 3 tests (the script became a syntax error, which
+# reads as "everything depends on this") and once it reddened exactly the RIGHT test for entirely
+# the wrong reason — indistinguishable from a correct measurement without re-reading the diff.
+#
+# Legitimate `$` that must NOT trip this: perl backrefs `$1`-`$9` and `$&`, and the end-of-line
+# anchor (`$` before `/` or at the end). So the needle is `$` followed by a LETTER, `_`, `(` or
+# `{`, not preceded by a backslash. Override with --allow-dollar when you really mean it.
+if [ "$ALLOW_DOLLAR" -eq 0 ] && printf '%s' "$EXPR" | grep -qE '(^|[^\\])\$[A-Za-z_({]'; then
+  BAD="$(printf '%s' "$EXPR" | grep -oE '(^|[^\\])\$[A-Za-z_({][A-Za-z_0-9]*' | head -3 | tr '\n' ' ')"
+  cat >&2 <<MSG
+neuter: REFUSING — the expression contains an UNESCAPED \$ that perl will interpolate: ${BAD}
+
+  In a perl s///, the replacement side interpolates. \$TMP / \$d expand to the EMPTY STRING and
+  \$( becomes a perl variable — so the mutation that lands is NOT the one you wrote. It still
+  applies, still changes the blob, and still yields a red/green verdict, which is why this is
+  worth refusing rather than warning about: a wrong measurement that LOOKS right is worse than
+  a broken one.
+
+  Escape it:   \\\$TMP   \\\$d   \\\$(
+  Backrefs (\$1, \$&) and the end anchor (\$/ or trailing \$) do not trip this.
+  If you genuinely mean an interpolated \$, re-run with --allow-dollar.
+MSG
+  restore; exit 4
+fi
 
 perl -pi -e "$EXPR" "$FILE"
 

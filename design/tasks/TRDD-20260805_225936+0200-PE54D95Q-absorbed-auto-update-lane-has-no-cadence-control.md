@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:02:52+0200
+updated: 2026-08-05T23:08:32+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -142,17 +142,67 @@ no per-target loop. The **state-file honesty problem survives** and is still wor
 `enabled: false` + `lastRunAt: null` beside a lane that ran an hour ago is what made this
 take six wrong hypotheses — so it is retained as an acceptance box below.
 
-### One thing to resolve before coding, NOT to guess at
+### RESOLVED — the per-plugin loop is redundant, not merely wasteful (USER, 2026-08-05)
 
-"Nothing else" reads unambiguously for the *marketplace-refresh* duty. What it does not
-settle is whether per-plugin updates (`claude plugin update …`) should stop **entirely**,
-or merely stop being part of this lane. Those are different operations: marketplace update
-refreshes manifests; plugin update installs new plugin versions. Dropping the latter
-entirely means installed plugins stop receiving updates until something else does it.
+I had flagged this as the one thing not to guess at: does dropping the per-plugin
+`claude plugin update` calls strand installed plugins with nothing updating them?
 
-Ask before implementing. Do not infer it from "nothing else" — the phrase was answering
-"what should the marketplace refresh do", and reading it as "delete plugin auto-update"
-would be inventing a scope the ruling did not name.
+It does not. USER, verbatim: *"actually it only updates the marketplaces. but if the plugin
+has the option 'auto-update' on, then if the updated marketplace is reporting a new version
+of a plugin, the claude code harness will automatically update the plugin too."*
+
+So the upgrade path already exists **inside the harness**: refresh the catalog, and Claude
+Code updates every auto-update-ON plugin whose newer version the refreshed catalog now
+reports. The loop was not doing work the harness omits — it was **duplicating** work the
+harness already performs, 200 invocations at a time.
+
+That strengthens the ruling rather than qualifying it. There is no residual duty to
+re-home, no follow-up card, and no coverage gap to argue about: **one command, and the
+harness does the rest.** Recorded in USER-scope memory as `claude-marketplaces#ATOM-BPYR-XUUH`
+so it outlives this card.
+
+One boundary worth stating, since it is the only thing the catalog refresh cannot reach:
+plugins whose auto-update is **OFF** are not upgraded by it. Per the existing
+`claude-marketplaces#auto-update` atom that is the default for third-party and local-dev
+marketplaces. Those were equally unserved by the 158 failing per-target calls, so nothing
+regresses — but "the harness does the rest" means *for auto-update-ON plugins*, and a
+future reader should not widen it.
+
+### The missing half — the refresh currently upgrades NOTHING (measured 2026-08-05)
+
+USER: *"the janitor should turn auto-update on for every plugin, since it is off by
+default."* Measured on this host, in `~/.claude/plugins/known_marketplaces.json`:
+
+| quantity | value |
+|---|---|
+| registered marketplaces | **275** |
+| entries carrying an `autoUpdate` key at all | **15** |
+| of those, `autoUpdate: true` | **0** |
+
+The other 260 have no key and fall to the default, which for third-party and local-dev
+marketplaces is OFF (`claude-marketplaces#auto-update`). So **today the catalog refresh
+does the entire network cost and produces zero upgrades** — nothing is opted in for the
+harness to act on. Fixing the cadence without fixing this ships a cheaper version of a
+no-op.
+
+`autoUpdate` is a plain field beside `source` / `installLocation` / `lastUpdated`, so it is
+settable non-interactively; the `/plugin` menu is one writer of that file, not the only one.
+
+### Two constraints on writing that file — neither is optional
+
+USER: *"it reads only at the moment it loads the claude code instance."*
+
+1. **No "apply now".** An external edit reaches only the **NEXT** session. That is coherent
+   with auto-update being STARTUP-only — the same boot that reads the flag is the one that
+   acts on it — but it means a fleet-wide flip is a fleet-wide restart, or it lands session
+   by session as each starts. Do not report the flip as effective when it is merely written.
+2. **Lost-update race.** A running instance holds an in-memory copy and writes the file back
+   (`lastUpdated` proves it does). With 13 concurrent sessions, whichever writes last wins —
+   **with the copy it read at ITS boot**, silently reverting the janitor's edit. So the
+   writer must re-verify the flag survived rather than assume the write took, and ideally
+   write when the fleet is quiet.
+
+Recorded in USER memory as `claude-marketplaces#ATOM-KDMD-BPXI` so it outlives this card.
 
 ## Non-goals
 

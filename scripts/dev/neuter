@@ -17,6 +17,16 @@
 #      → This script parses the summary line AND lists the failing test names.
 #   4. RESTORE THAT DID NOT RESTORE leaves sabotage in the tree, to be committed later by accident.
 #      → This script verifies the restored blob equals the pre-mutation blob and screams if not.
+#   5. A MUTATION THAT HIT MORE SITES THAN YOU AIMED AT is worse than one that hit none, because
+#      it still produces a plausible red set and you write that number down. An expression matched
+#      by CODE SHAPE silently widens to every site sharing the shape.
+#      → This script asserts the changed-line count (default 1, --expect-lines to raise it) and
+#        ABORTS with the diff otherwise (exit 5).
+#      Measured 2026-08-05: an expression aimed at ONE `has("error")` guard in `cmd_subconscious`
+#      also rewrote the byte-identical one in `cmd_hibernation` — "2 ins / 2 del", 3 red, where the
+#      truth was 1. Printing the diff on abort also exposed that the replacement was MALFORMED
+#      (`if false; then| jq -e ...`), so the 3 red were a corrupt file, not a disabled guard. Both
+#      defects were invisible in the old output and both are caught by the same assertion.
 #
 # It also restores on Ctrl-C and on any error, via a trap — an interrupted neuter is exactly when
 # sabotage gets left behind.
@@ -31,13 +41,14 @@
 
 set -uo pipefail
 
-FILE=""; EXPR=""; TESTS=""; ALLOW_DOLLAR=0
+FILE=""; EXPR=""; TESTS=""; ALLOW_DOLLAR=0; EXPECT_LINES=1
 while [ $# -gt 0 ]; do
   case "$1" in
     -f|--file)  FILE="$2";  shift 2 ;;
     -e|--expr)  EXPR="$2";  shift 2 ;;
     -t|--tests) TESTS="$2"; shift 2 ;;
     --allow-dollar) ALLOW_DOLLAR=1; shift ;;
+    --expect-lines) EXPECT_LINES="$2"; shift 2 ;;
     -h|--help)  sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "neuter: unknown argument '$1'" >&2; exit 2 ;;
   esac
@@ -125,6 +136,33 @@ if [ "$AFTER" = "$BEFORE" ]; then
   echo "neuter: a no-op mutation reports '0 red', which is indistinguishable from an untested guard." >&2
   restore; exit 3
 fi
+
+# --- GUARD 2b: the mutation must have changed the EXPECTED NUMBER OF LINES --------------------
+# Guard 2 catches a mutation that hit NOTHING. This catches the mirror: one that hit MORE than
+# you aimed at, which is worse, because it still produces a plausible red set and you will write
+# that number down.
+#
+# Measured 2026-08-05: `s/if echo "$response" | jq -e 'has("error")'.../` was aimed at ONE guard
+# in `cmd_subconscious`; `cmd_hibernation` carries a byte-identical one, so perl rewrote BOTH and
+# the run reported "2 ins / 2 del" and 3 red. The true answer, re-aimed at the single line, was
+# 1 red. Nothing in the output said the extra two failures came from a function the test file was
+# not about — a shape-matched expression silently widens to every site sharing the shape.
+#
+# So the site count is now an ASSERTION, not a line of output nobody reads. Default 1 because a
+# neuter targets one guard by definition; raise it deliberately with --expect-lines when a fix is
+# genuinely spread across N lines.
+CHANGED="$(git diff --numstat -- "$FILE" | awk '{print $1}')"
+CHANGED="${CHANGED:-0}"
+if [ "$CHANGED" != "$EXPECT_LINES" ]; then
+  echo "neuter: ABORT — the expression changed ${CHANGED} line(s), expected ${EXPECT_LINES}." >&2
+  echo "neuter: a mutation that hits more sites than you aimed at still reds tests, and the count" >&2
+  echo "        it produces is about code your test file may not even cover. Anchor the expression" >&2
+  echo "        to a line number (\$_ = \"...\" if \$. == N), or pass --expect-lines ${CHANGED} if that" >&2
+  echo "        really is the intended blast radius. What it changed:" >&2
+  git --no-pager diff --unified=0 -- "$FILE" | grep -E '^[+-][^+-]' | sed 's/^/        /' >&2
+  restore; exit 5
+fi
+
 echo "=== mutated $FILE ($(git diff --numstat -- "$FILE" | awk '{print $1" ins / "$2" del"}'))"
 git --no-pager diff --unified=0 -- "$FILE" | grep -E '^[+-][^+-]' | head -12 | sed 's/^/    /'
 

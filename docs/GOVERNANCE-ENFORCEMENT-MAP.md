@@ -328,6 +328,7 @@ Row format is fixed so a regex parses each line:
 | R42.5 | UNENFORCED | — | — |
 | R42.6 | UNENFORCED | — | — |
 | R42.7 | ENFORCED | `lib/fleet-restart-driver.ts:126-127`, `lib/fleet-restart-fanout.ts:40`, `server.mjs:1824-1825`, `server.mjs:1852-1853` | `tests/unit/fleet-restart-driver.test.ts` |
+| R42.8 | UNENFORCED | — | — |
 <!-- R43-R48: multi-host governance (GOVERNANCE-RULES v4.4.0, committed bf70bf47). Design-stage —
      these sub-rules are DECLARED but deliberately UNBUILT during the transition phase, so nothing
      enforces them yet (Guard = —). Not from a governance-audit report: the verdict is the honest

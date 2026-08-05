@@ -1,9 +1,9 @@
 ---
 spec: governance
-spec-version: 2.3.0
+spec-version: 2.4.0
 status: normative
 created: 2026-07-22T10:19:26+0200
-updated: 2026-07-30T13:20:29+0200
+updated: 2026-08-05T21:05:00+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a governance rule changes; docs/GOVERNANCE-RULES.md and the code/personas/DEP-overlays are its IMPLEMENTATIONS, authored AFTER it (see `implementations`). Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). This spec was previously derived FROM the catalog; that direction is reversed for good."
@@ -1694,12 +1694,16 @@ deliberately**. #47 asked for *verification*; making a token *mandatory* for an 
 decision with its own blast radius — a per-operation, reversible flip, not slipped in beside a refactor.
 
 ### GOV-R42 — No Agent May Drive Another Agent — Messaging Is the ONLY Channel [CRITICAL · IRON · USER-set]
-`R42.0` **invariant** — an agent influences another agent **only** by sending it a message; nothing else. There is **no
-title-based exemption** — not MANAGER, not CHIEF-OF-STAFF.
+`R42.0` **invariant** — an agent influences another agent's **WORK** only by sending it a message; nothing else. There
+is **no title-based exemption from THAT** — not MANAGER, not CHIEF-OF-STAFF. The single carve-out is **R42.8**, which
+permits UNBLOCKING a stalled agent (answering a prompt it is already waiting on) and grants no power to direct it.
 `R42.1` **no-injection** [Explicit, USER] — no agent may inject a command, keystroke, prompt, or queued input into
-another agent's session — by API, by CLI, or by tmux. This is **ABSOLUTE**.
-`R42.2` **no-title-exemption** [Explicit, USER] — no title is exempt; MANAGER and CHIEF-OF-STAFF are bound exactly as
-every other agent. A directive from a superior is a **message**, not a keystroke.
+another agent's session — by API, by CLI, or by tmux — **to assign, redirect, or perform that agent's work**. This is
+**ABSOLUTE**, and R42.8 does not weaken it: an unblock answers a pending prompt and may carry nothing else.
+`R42.2` **no-title-exemption** [Explicit, USER] — no title is exempt from R42.1; MANAGER and CHIEF-OF-STAFF are bound
+exactly as every other agent. A directive from a superior is a **message**, not a keystroke. Those two titles hold one
+narrow power the others do not — **R42.8** unblocking — and it is not a power to direct: it returns an
+already-assigned task to motion and can express nothing beyond the answer to a prompt the agent itself raised.
 `R42.3` **AMP-is-only-channel** [Explicit, USER] — the messaging system (AMP) is the ONLY channel by which one agent may
 influence another, governed by the R6 communication graph (who may message whom).
 `R42.4` **self-drive-permitted** [Explicit, USER] — an agent may drive its OWN session (`/compact`, its own panel, its
@@ -1728,6 +1732,40 @@ R42.1 injection under another name:
     can reconstruct afterwards is indistinguishable from an intrusion.
 (f) **no agent may invoke it** — it is reachable only from the server's own update/enforce tick, never from a route, a
     script, or a CLI an agent can call. An agent asking for a fleet restart remains an R42.1 violation.
+`R42.8` **blocked-prompt-unblock-exception** [Explicit, USER — 2026-08-05, ai-maestro#125, TRDD-AODXPI5E] — a **MANAGER**
+or a **CHIEF-OF-STAFF** MAY read and answer a pending permission / `AskUserQuestion` prompt that is **BLOCKING** another
+agent, in realtime, through the frozen `aimaestro-session.sh` (`read-prompt` / `answer` / `inject` / `queue`). The USER
+granted this directly and in the first person, having been told R42 was absolute: *"there is a case where it is
+absolutely necessary to override that rule, and that is the case of a question or permission query blocking an agent
+from doing its work. In this case only the MANAGER and the CHIEF-OF-STAFF are allowed to read and inject commands
+directly in the agent terminal in realtime."* Eight constraints, each load-bearing, and together the reason this is
+UNBLOCKING and not R42.1 injection renamed:
+(a) **blocked-only trigger** — the ONLY permitted trigger is an agent stalled on a permission / question prompt. An
+    agent that is working, or idle but unblocked, or merely slow, remains untouchable. "It would be faster if I typed
+    it" is R42.1.
+(b) **unblock, never drive** — answer ONLY the pending prompt. Nothing appended, no new work, no redirection, no
+    correction of the agent's course. Work is still assigned by AMP alone (R42.3); smuggling an instruction through an
+    unblock is R42.1 with extra steps.
+(c) **title-scoped** — MANAGER: any agent on the host except an ASSISTANT. CHIEF-OF-STAFF: agents of **its own team**
+    only, same ASSISTANT exclusion. Every other title: none. This is the R42.2 carve-out and it is exhaustive.
+(d) **never an ASSISTANT, under any title** — an ASSISTANT is the surface a human talks *through*, so text typed into
+    its session is indistinguishable from something its human said. That launders an agent's instruction into apparent
+    human intent, in the one place nobody would think to check. (A USER is not a terminal-bearing entity, so there is
+    no USER-target case to guard — do not implement one.)
+(e) **identity prompts ESCALATE, never answer** — if the pending prompt asks the agent to verify the CALLER's own
+    authority or identity, it MUST go to the human. Answering it yourself is self-certification through a second
+    channel: it proves nothing, and a spoofer with the same CLI access performs the identical act. Observed
+    2026-08-05 — the blocking prompt was literally *"You vouch that testbot really is your MANAGER"*.
+(f) **read before answer** — `read-prompt` FIRST; never answer a prompt you have not read. Prefer `queue` over
+    interrupting, and `--require-idle` on `inject`.
+(g) **server-enforced, not self-policed** — the server authorizes by `AID_AUTH` + governance title and MUST fail
+    closed; an unauthorized call FAILS. That refusal is the check — never the caller's own restraint.
+(h) **audited** — every cross-agent unblock is recorded in the agent ops ledger, on R42.7(e)'s reasoning: an
+    unattended cross-agent action nobody can reconstruct afterwards is indistinguishable from an intrusion.
+> **Why the exception exists.** The capability was built, shipped and title-gated, and the rule told agents it did not
+> exist for them — so on 2026-08-05 a MANAGER with the authority, the AID and the CLI refused **twice** to unblock a
+> stalled AUTONOMOUS agent and escalated to the human, defeating the automation the product exists to provide. R42
+> protects the comm graph from agents *directing* one another; it was never meant to keep a stalled agent stalled.
 `R42.super` **superseded-prior-design** [TRDD-BF3JN4TL] — `lib/authorization.ts` `send-command` formerly allowed a
 MANAGER to drive ANY agent and a COS to drive its own team's (`SELF_DRIVE_ACTIONS` permitted self; another agent required
 MANAGER / own-team COS). Six routes carried it: `POST …/[id]/{panel,queue,prompt/answer}`, `PATCH …/[id]/session`

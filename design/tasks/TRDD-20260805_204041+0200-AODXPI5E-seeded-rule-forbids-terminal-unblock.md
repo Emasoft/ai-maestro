@@ -1,11 +1,11 @@
 ---
 trdd-id: AODXPI5E
 title: Seeded agent rule forbids the terminal-unblock capability the server ships
-column: blocked
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T20:52:00+0200
+updated: 2026-08-05T21:08:00+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -19,15 +19,66 @@ approval-datetime: 2026-08-05T20:40:41+0200
 derived: false
 npt: []
 eht: []
-blocked-by: [user-ruling-on-R42]
+blocked-by: []
 release-via: none
-relevant-rules: []
+relevant-rules: [42]
 labels: [manager-filed, testbot-session, owner-mixed]
 external-refs: [Emasoft/ai-maestro#125]
 ---
 # Seeded agent rule forbids the terminal-unblock capability the server ships
 
-## ⏵ BLOCKED ON A USER RULING — READ FIRST (added 2026-08-05 by ai-maestro)
+## ⏵ UNBLOCKED — THE USER RULED DIRECTLY, R42.8 IS RATIFIED (2026-08-05T21:05)
+
+The USER granted the exception in the first person, to me, having been reminded R42 was absolute:
+
+> i know that i said that that rule is absolute, you don't need to remind me. But I just realized
+> that there is a case where it is absolutely necessary to override that rule, and that is the case
+> of a question or permission query blocking an agent from doing its work. In this case only the
+> MANAGER and the CHIEF-OF-STAFF are allowed to read and inject commands directly in the agent
+> terminal in realtime. is it clear? change this golden rule. you have my permission.
+
+**LANDED (rule layer):**
+- `design/specs/governance-spec.md` — **GOV-R42.8** authored FIRST per the v4.8.0 authority
+  inversion, spec-version **2.3.0 → 2.4.0**; `R42.0/.1/.2` re-scoped from "influence" to "assign,
+  redirect, or perform another agent's WORK", which is what they always meant to protect.
+- `docs/GOVERNANCE-RULES.md` **5.2.0 → 5.3.0** — the R42.8 row + changelog entry, and a new
+  rationale paragraph explaining why an unblock does NOT undo R42's "why this is absolute"
+  argument (the agent already chose its action and is waiting on an input it asked for; the prompt
+  is its own question).
+- `rules/aimaestro/aimaestro-agent-rules.md` — the seeded rule every agent reads each turn.
+
+Eight constraints carry it (blocked-only · unblock-never-drive · title-scoped · never-an-ASSISTANT ·
+identity-prompts-escalate · read-before-answer · server-enforced · audited). The COS-own-team and
+ASSISTANT-exclusion detail was folded in from the USER's earlier ruling relayed in #125, and is
+flagged to the USER as folded-in rather than assumed silently.
+
+## ⚠ STILL OPEN — AND THE CAPABILITY DOES NOT WORK YET
+
+**R42.8 is `UNENFORCED` in the map, and that is the honest row.** Measured while landing the rule:
+`app/api/agents/[id]/prompt/answer/route.ts` routes through `sendAgentSessionCommand`, whose
+`authorize()` gate is the **`send-command`** action — which R42 **denies cross-agent**, and which
+`tests/authorization.test.ts` pins as denied for MANAGER and for own-team COS.
+
+So the CLI's help text (*"Agent callers authorize by AID_AUTH + governance title"*) describes the
+**pre-R42 world**: the API has been refusing this since R42 landed. The MANAGER's diagnosis in #125
+was right that rule and CLI conflict; the sharper truth is that the CLI advertises an authority the
+API already revoked.
+
+**Therefore: a MANAGER still cannot unblock a stalled agent today.** The rule now permits it; the
+server does not yet implement it. That fails CLOSED (safe), but the original incident is not fixed.
+
+**The remaining work, precisely:**
+1. A NEW authorization action for the unblock path — **not** a loosening of `send-command`. The
+   existing R42 denials for `send-command` / `restart-session` are correct and must stay green.
+2. Title scoping in `lib/authorization.ts`: MANAGER → any target except an ASSISTANT; COS → its own
+   team only, same exclusion; every other title → deny. Fail closed on an unresolved target.
+3. Route wiring for `read-prompt` and `answer` onto the new action, leaving `send-command` alone.
+4. Ledger audit per R42.8(h), and the ASSISTANT + identity-prompt exclusions enforced in code, not
+   merely written — (d) and (e) are the two cases where an unblock CAN forge intent.
+5. Then flip the map row to ENFORCED with a proof test + neuter, and fix the CLI help text so it
+   stops advertising the pre-R42 model.
+
+## ⏵ SUPERSEDED — the block that preceded the ruling (kept for the reasoning)
 
 **This card cannot be implemented as written without reversing R42, which is CRITICAL / IRON /
 USER-set. I drafted the replacement rule text, measured the conflict, and REVERTED it unshipped.**

@@ -5,8 +5,8 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T22:36:19+0200
-implementation-commits: [0d31e3bc, 51db1b8a]
+updated: 2026-08-05T22:43:24+0200
+implementation-commits: [0d31e3bc, 51db1b8a, f2abd10d]
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -93,12 +93,15 @@ every verb obey it.
       cleanup path.
 - [ ] A failing `plugin marketplace add` prints the underlying error to
       stderr and exits non-zero.
-- [ ] `list --status` no longer silently returns empty for an advertised
+- [x] `list --status` no longer silently returns empty for an advertised
       value that cannot match (#114). — The fix IS in the deployed source
-      (`agent-commands.sh:87-96` rejects `hibernated` with a reason naming the
-      cause). NOT ticked, because I could not observe it end-to-end: the API
-      gate answers 401 before argument validation is reached, so the branch is
-      unproven from outside. Proving it needs an authenticated run.
+      (`agent-commands.sh::validate_status_value` rejects `hibernated` with a
+      reason naming the cause).
+
+      *Originally left unticked, because the branch could not be observed from
+      outside: the API gate answered 401 before argument validation was reached.
+      The two updates below are why it is ticked now — the answer was to move
+      the validation, not to find an authenticated session to watch it from.*
 
       **UPDATED 2026-08-05 — this is not merely an observability problem, it is
       the SAME defect as `--help`, and there is a third instance.** §6.4 says a
@@ -129,8 +132,10 @@ every verb obey it.
       rejected as unknown, or an unknown one reaches the gate and gets the
       misleading message back.
 
-      Two implementation traps, both hit: the arms must be
-      `[ "$mode" = check ] || cmd_x "$@"`, never `&& return 0` — `set -euo
+      Two implementation traps, both hit: the arms must be `|| cmd_x "$@"` on a
+      guard (see the `--status` half below for which guard — this originally read
+      `[ "$mode" = check ]` and that polarity turned out to be the third trap),
+      never `&& return 0` — `set -euo
       pipefail` is on, and a bare `cond && return 0` whose condition FAILS makes
       the statement's status 1 and kills the shell, breaking every run-mode
       dispatch. And the test must assert the server is **not blamed**, not
@@ -143,14 +148,43 @@ every verb obey it.
       **1 red / 56 green — `an UNKNOWN VERB is reported locally, without blaming
       the server`, and only it.**
 
-      **STILL OPEN — the `--status` half.** The same hoist has not been done for
-      verb-local *argument* grammar, so `list --status hibernated` is still
-      unobservable from outside. It is not a repeat of the above: the valid-value
-      set lives inside `cmd_list`'s parsing loop, so hoisting it means extracting
-      the value check into one function that both `cmd_list` and a pre-gate pass
-      call — otherwise the valid set is enumerated twice and drifts, which is the
-      exact trap the verb half was designed around. Once that lands, this box is
-      checkable offline and needs no authenticated run at all.
+      **DONE — the `--status` half (`f2abd10d`).** `dispatch()` gained a third
+      mode, `validate`, on the SAME verb list, called between recognition and the
+      gate. Measured on PATH with no credential: `list --status hibernated` exits
+      1 naming the real reason, **zero** mentions of the server; `list --status
+      active` (valid) passes validation and reaches the gate. The valid set now
+      lives in one `validate_status_value()` called by both `cmd_list`'s parser
+      and the pre-gate `validate_list_args()`.
+
+      **The guard polarity was the trap.** Every other arm had to change from
+      `[ "$mode" = check ] ||` to `[ "$mode" != run ] ||`. With `= check`, a third
+      mode falls THROUGH to executing the command — adding `validate` would have
+      made `dispatch validate list` actually list: a validation pass performing
+      the operation it exists to pre-screen. A mode nobody wired up must be inert.
+
+      **A vacuous test, caught by its own neuter — worth recording because the
+      assertion looked obviously right.** The polarity test asserted the output
+      blamed the server, and reverting the guard reddened NOTHING: `cmd_show`
+      executing ALSO fails with 401, so no pattern matching *any* 401 can separate
+      "fell through to the gate" from "ran the command and it failed at the same
+      server". The discriminator is `cmd_show`'s OWN diagnostics (`Search agents
+      failed`, `Get agent by ID failed`), which the gate never emits — asserting
+      their ABSENCE, with the 401 match kept as the non-vacuity guard since a
+      purely negative assertion also passes when nothing ran at all.
+
+      Three neuters OBSERVED, each reddening exactly its own test and nothing
+      else: skip the validate pass → the invalid-`--status` test; revert the
+      polarity → the not-executed test; gate before recognition → the
+      unknown-verb test.
+
+      **Recorded, not built — the structurally correct successor.** There is no
+      shared `api_request()` in `agent-commands.sh`; 11+ verbs call `curl`
+      directly. So the gate cannot yet live at the point of network use, which is
+      where it belongs and which would make any pre-gate pass unnecessary. Until
+      then `validate_list_args` is a second walk over the same argv and must
+      consume value-taking flags exactly as `cmd_list` does (`list --format
+      --status` otherwise diverges) — stated in a comment at both ends. Extracting
+      `api_request()` from a frozen CLI is its own card.
 - [x] A regression test asserts exit status, not just output, for at least
       the sampled verbs. — `tests/unit/cli-help-exit-contract.test.ts`, **56
       tests** (was 28 when this box was first ticked; the EHT's fix moved 27

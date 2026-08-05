@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T21:55:18+0200
+updated: 2026-08-05T22:32:10+0200
 implementation-commits: [0d31e3bc]
 current-owner: ai-maestro
 created-by: assistant-manager-agent
@@ -95,17 +95,50 @@ every verb obey it.
       stderr and exits non-zero.
 - [ ] `list --status` no longer silently returns empty for an advertised
       value that cannot match (#114). — The fix IS in the deployed source
-      (`agent-commands.sh` now rejects `hibernated` with a reason naming the
+      (`agent-commands.sh:87-96` rejects `hibernated` with a reason naming the
       cause). NOT ticked, because I could not observe it end-to-end: the API
       gate answers 401 before argument validation is reached, so the branch is
       unproven from outside. Proving it needs an authenticated run.
+
+      **UPDATED 2026-08-05 — this is not merely an observability problem, it is
+      the SAME defect as `--help`, and there is a third instance.** §6.4 says a
+      LOCAL, OFFLINE operation must not be gated on the server. Rejecting an
+      argument the grammar cannot accept is exactly that: `--status hibernated`
+      is invalid on a host with no network at all, and the CLI already knows it
+      — `check_api_running` just answers first. So a caller who typos an
+      argument is told *"the API is not reachable"*, which is false and aims
+      them at the wrong thing. The third instance is the dispatcher's own
+      `*) Unknown command` arm (`aimaestro-agent.sh:132`): a nonexistent verb
+      also cannot be reported without a live server.
+
+      **Fix shape (not applied — deliberately, see below).** Hoist the
+      *recognition* pass above `check_api_running`, keeping the dispatch below
+      it: verb membership first, then any verb-local argument grammar, then the
+      gate, then execution. The trap to avoid is the obvious implementation —
+      a second `case` listing the verbs above the gate — because that is two
+      enumerations of one fact and they drift the first time a verb is added.
+      It needs ONE list consulted twice, and that is a real restructure of
+      `main()`, not a move. It was NOT attempted at the end of a session with
+      little context left: a half-landed dispatcher rewrite is worse than a
+      recorded finding, and this card's whole subject is CLIs that mislead
+      their callers.
+
+      Once hoisted, the box becomes checkable offline and needs no
+      authenticated run at all — which is the second reason to prefer the fix
+      over chasing a live session to observe the current shape.
 - [x] A regression test asserts exit status, not just output, for at least
-      the sampled verbs. — `tests/unit/cli-help-exit-contract.test.ts`, 28
-      tests: 24 compliant scripts asserted individually, plus both ratchet
+      the sampled verbs. — `tests/unit/cli-help-exit-contract.test.ts`, **56
+      tests** (was 28 when this box was first ticked; the EHT's fix moved 27
+      scripts from the known-violator list into the asserted set, and the count
+      is restated here rather than left to rot into a wrong number beside a
+      ticked box). 53 compliant scripts asserted individually, both ratchet
       directions (a NEW violator fails; a FIXED one fails with "delete this
-      line") and two scan-liveness guards. Neuter recorded: restoring
-      `check_api_running` ahead of the help dispatch reddens exactly
-      `aimaestro-agent.sh --help exits 0`.
+      line"), two scan-liveness guards, and the true-positive gate test.
+      Neuters recorded, both observed: restoring `check_api_running` ahead of
+      the help dispatch reddens exactly `aimaestro-agent.sh --help exits 0`;
+      and `s/exit 1/exit 0/` on the amp identity abort reddens exactly the
+      true-positive test — 1 of 56, which is what proves the 55 help
+      assertions cannot stand alone.
 
 ## Non-goals
 

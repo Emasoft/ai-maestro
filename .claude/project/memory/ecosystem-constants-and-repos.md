@@ -1,6 +1,6 @@
 ---
 name: ecosystem-constants-and-repos
-description: "where are the marketplace repo names defined / MARKETPLACE_REPO MAIN_PLUGIN_NAME single source of truth / which github repo owns amp-*.sh scripts / 3-repo split ai-maestro vs ai-maestro-plugin vs ai-maestro-plugins / can I merge upstream 23blocks-OS into the marketplace fork / role-plugin repo list"
+description: "where are the marketplace repo names defined / MARKETPLACE_REPO MAIN_PLUGIN_NAME single source of truth / which github repo owns amp-*.sh scripts / 3-repo split ai-maestro vs ai-maestro-plugin vs ai-maestro-plugins / can I merge upstream 23blocks-OS into the marketplace fork / role-plugin repo list / which repo do I post the issue to / origin is the upstream not my fork / a tool reports 23blocks-OS instead of Emasoft / origin-main-HEAD overstates the unpushed commit count"
 ocd: 2026-08-02
 lmd: 2026-08-02
 metadata:
@@ -84,8 +84,36 @@ Each is an independent Emasoft-owned repo (not forked from 23blocks-OS):
 
 All have `compatible-titles` and `compatible-clients` fields in their `.agent.toml`. No upstream sync needed. See [[role-plugins]] for the plugin-content detail (fourfold identity rule, Haephestos creation flow, editing workflow) behind each of these repos.
 
+## ⚠ `origin` IS THE UPSTREAM HERE — the remotes are inverted
+
+```
+origin   →  https://github.com/23blocks-OS/ai-maestro.git    ← UPSTREAM (not ours)
+fork     →  https://github.com/Emasoft/ai-maestro.git        ← where work lands, where issues go
+```
+
+This is the opposite of the usual convention, and it silently inverts three habits:
+
+- **"post the issue to origin" files against a repo the owner does not control** — an
+  apparently-correct rule that violates the `Emasoft/*`-only constraint.
+- **"push to origin" would push to the upstream.** Work goes to `fork`.
+- **`origin/main..HEAD` measures the fork-vs-UPSTREAM gap**, roughly 4× the real unpushed count.
+  Always derive against `fork/`. That substitution has been made at least three times.
+
+Any tool that reads "the repo" from `git remote get-url origin` reports `23blocks-OS` on this
+repo and is not wrong — it is reading the name faithfully. Key on SEMANTICS (upstream vs push
+target), never on the remote's NAME.
+
 ## See also
 
 - [[role-plugins]] — the plugin-content detail (fourfold identity rule, Haephestos creation flow, editing workflow) behind each predefined role-plugin repo
 
 ## Notes and lessons learned
+
+[^9]: [id:ATOM-ECOR-0009, status:valid, keywords:"which_repo_do_I_post_the_issue_to origin_is_the_upstream remote_named_fork_holds_my_repo posted_to_the_wrong_repo origin_main_HEAD_overstates_unpushed_count tool_reports_23blocks_instead_of_Emasoft", ocd:2026-08-05, lmd:2026-08-05]
+    DO NOT resolve "our repo" from the remote NAMED `origin`, BECAUSE in this repo `origin` is the
+    UPSTREAM (`23blocks-OS/ai-maestro`) and the owner's fork sits under a remote literally named
+    `fork` — so the conventional reading sends issues and pushes to a repo the owner does not
+    control, and makes `origin/main..HEAD` overstate the unpushed count ~4×. DO resolve it by
+    SEMANTICS (which remote is the push target) and derive commit counts against `fork/`.
+    Surfaced 2026-08-05 when a status report "misreported" the repo and was in fact reading
+    `origin` correctly — see TRDD-U27WXLWT.

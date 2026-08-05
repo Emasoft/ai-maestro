@@ -1,11 +1,12 @@
 ---
 trdd-id: T3FXA0Y0
 title: Establish and enforce an exit-status contract across the frozen CLI
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T20:40:41+0200
+updated: 2026-08-05T21:55:18+0200
+implementation-commits: [0d31e3bc]
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -18,7 +19,7 @@ approval-judge: user
 approval-datetime: 2026-08-05T20:40:41+0200
 derived: false
 npt: []
-eht: []
+eht: [3KJW8P6R]
 blocked-by: []
 release-via: none
 relevant-rules: []
@@ -75,20 +76,36 @@ every verb obey it.
 
 ## Acceptance criteria
 
-- [ ] The exit-status contract is written down in the repo, not only in
-      this TRDD.
-- [ ] Every verb audited against it; findings recorded even where no change
-      was needed (a verified non-defect is evidence, and stops the next
-      audit re-deriving it).
-- [ ] `create` with a valid spec exits 0.
+- [x] The exit-status contract is written down in the repo, not only in
+      this TRDD. — `docs/SCRIPT-MANIFEST.md` **§6.4**, beside the identity,
+      environment and authorization conventions the same consumers already
+      read. Three rules, each closing a way the signal has already broken
+      here, plus the second-order harm as the reason it exists.
+- [x] Every verb audited against it; findings recorded even where no change
+      was needed. — `--help` across all **50 deployed** CLIs: **29 violated**,
+      21 clean. The audit is recorded twice on purpose: as prose in §6.4, and
+      executably as `KNOWN_VIOLATORS` in the ratchet, so it cannot rot into a
+      stale paragraph. **28 of the 29 share one root** and are now
+      **TRDD-3KJW8P6R** (this card's EHT).
+- [ ] `create` with a valid spec exits 0. — NOT verified. It needs a live
+      authenticated session and it CREATES AN AGENT, so it is not something to
+      fire off at the end of a session; it wants a disposable target and a
+      cleanup path.
 - [ ] A failing `plugin marketplace add` prints the underlying error to
       stderr and exits non-zero.
 - [ ] `list --status` no longer silently returns empty for an advertised
-      value that cannot match (#114 — fold it in or keep it separate, your
-      call).
-- [ ] A regression test asserts exit status, not just output, for at least
-      the sampled verbs. Without this the contract decays back to today's
-      state, because nothing observes an exit code that nobody branches on.
+      value that cannot match (#114). — The fix IS in the deployed source
+      (`agent-commands.sh` now rejects `hibernated` with a reason naming the
+      cause). NOT ticked, because I could not observe it end-to-end: the API
+      gate answers 401 before argument validation is reached, so the branch is
+      unproven from outside. Proving it needs an authenticated run.
+- [x] A regression test asserts exit status, not just output, for at least
+      the sampled verbs. — `tests/unit/cli-help-exit-contract.test.ts`, 28
+      tests: 24 compliant scripts asserted individually, plus both ratchet
+      directions (a NEW violator fails; a FIXED one fails with "delete this
+      line") and two scan-liveness guards. Neuter recorded: restoring
+      `check_api_running` ahead of the help dispatch reddens exactly
+      `aimaestro-agent.sh --help exits 0`.
 
 ## Non-goals
 

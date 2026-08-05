@@ -1,11 +1,12 @@
 ---
 trdd-id: 14HI8ZPR
 title: Server suppresses the janitor daemon entirely but absorbs only 5 of its 11 global chores
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T06:43:03+0200
+updated: 2026-08-05T06:58:17+0200
+implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -76,9 +77,40 @@ stamps are 10-14 days old. The highest-severity is `session-liveness`.
 | `rules-cleanup` | 1 h | uninstalled plugins keep injecting rules into every session |
 | `github-config-audit` | 6 h | fleet-wide config/branch-protection drift unnoticed |
 
-**NEXT ACTION:** write the five stamps we already earn. It is the smallest change, it converts a
-silent handover into a verifiable one, and it immediately shrinks the reported problem from
-eleven chores to six — which is the honest number.
+## ⏵ SLICE 1 LANDED — the five stamps (`01a56c40`, 2026-08-05)
+
+`lib/janitor-chore-stamp.ts` + call sites at all five: `marketplace-refresh`, `version-update`,
+`user-plugins-update` (the absorbed-duty tick) and `oauth-rotator-tick`,
+`oauth-rotator-supervisor` (the rotator's own beats). Written on ATTEMPT, not on success —
+the stamp answers *"is anyone doing this chore on cadence"*, and stamping only on total success
+would make a flaky chore look UNOWNED, sending the janitor to restart a daemon that is not the
+problem. Full suite 362 files / 5104 pass / 2 skip, zero timeouts.
+
+**The writer is a NEW module on purpose.** `lib/janitor-control.ts` states a hard invariant in its
+header — *"NEVER WRITE … this module has no writer and exports none"* — because writing a FLAG
+there ratchets fleet mode into something nothing lifts. That is about flags, and it is not
+weakened: the new module composes `${chore}.last-run.ts` from a CLOSED literal union, so no
+argument to it can produce a control-plane flag name. A construction guarantee, not a comment.
+
+**⚠ A defect I introduced and then fixed in the same slice, worth reading before adding a chore.**
+The stamp write lives inside each chore's own code path, so ANY test that drives a chore writes
+the developer's real `~/.claude/janitor-control/`. Measured immediately: `runOneSupervisorBeat` is
+driven by **four** test files, **none** had containment, and one run left a real
+`oauth-rotator-supervisor.last-run.ts` on this machine (removed). Fixing those four files would
+have left the fifth for whoever comes next, so the redirect went into a vitest `setupFiles` hook
+(`tests/setup/janitor-control-containment.ts`) — the guard belongs at the primitive, not the call
+sites. A stray stamp is not cosmetic: it tells the janitor a chore ran when only a TEST ran, which
+is the false-healthy direction, and a contract tests can forge is not a contract.
+
+**NEXT ACTION:** `session-liveness` — the fleet guardian, and the one whose darkness hides every
+other. Decide first whether this is an ABSORB (new implementation) or a WIRE-UP: the repo already
+carries `lib/fleet-liveness.ts`, `lib/fleet-recovery-actuator.ts` and `lib/fleet-continuity.ts`,
+and which of those is the answer changes the size of the work by an order of magnitude. Do not
+start coding before that read.
+
+⚠ **Adding a chore to `ABSORBED_CHORES` is NOT what absorbs it — running it is.** A stamp for a
+chore nobody runs is strictly worse than no stamp: it reports healthy while nothing happens, which
+is the failure this card exists to remove, re-created facing the other way.
 
 ## The decision this card must make
 
@@ -126,12 +158,12 @@ act on other sessions, and a bug there is a fleet-wide event rather than a local
 
 ## Acceptance
 
-- [ ] the absorb-vs-narrow decision recorded here with its reasoning
-- [ ] `<task-name>.last-run.ts` written for all five already-absorbed chores
+- [x] the absorb-vs-narrow decision recorded here with its reasoning — **(1) absorb all eleven, staged**; (2) would walk back the one-daemon-per-host invariant TRDD-5ZVS1DDP established deliberately
+- [x] `<task-name>.last-run.ts` written for all five already-absorbed chores — `01a56c40`, all five sites
 - [ ] each of the six unabsorbed chores given a verdict: absorb (with owner + cadence) or hand back
 - [ ] `session-liveness` resolved first — it is the one whose darkness hides all the others
-- [ ] a test that fails when an absorbed chore runs without writing its stamp
-- [ ] reply on `ai-maestro#111` with the decision, so the janitor can drop its side of the ambiguity
+- [x] a test that fails when an absorbed chore runs without writing its stamp — plus its complement (the gate refusing must NOT stamp, or an unowned chore would look owned) and an epoch-SECONDS pin, since a milliseconds value parses fine and reads as permanently fresh for ~55 000 years
+- [x] reply on `ai-maestro#111` with the decision, so the janitor can drop its side of the ambiguity — [comment 5187649837](https://github.com/Emasoft/ai-maestro/issues/111#issuecomment-5187649837)
 
 ## Approval log
 

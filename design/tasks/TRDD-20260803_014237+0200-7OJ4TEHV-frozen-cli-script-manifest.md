@@ -1,11 +1,11 @@
 ---
 trdd-id: 7OJ4TEHV
 title: Build the frozen-CLI script manifest from the Usage contract, not from --help
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-03T01:42:37+0200
-updated: 2026-08-03T01:42:37+0200
+updated: 2026-08-05T18:40:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -29,7 +29,51 @@ external-refs: [Emasoft/ai-maestro#35, Emasoft/ai-maestro#56, Emasoft/ai-maestro
 
 # Build the frozen-CLI script manifest from the Usage contract, not from --help
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-03
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-05
+
+**THE SCOPE QUESTION THIS CARD LEFT OPEN IS NOW ANSWERED BY MEASUREMENT, and the card's own scope
+line was wrong.** It says: *"all four families (`aimaestro-*`, `amp-*`, `aid-*`, `agent-*`), minus
+the internal libs (`amp-helper`, `amp-security`, `aid-helper`, `agent-helper`, `common.sh`)"* — and
+notes scope confirmation was asked of the MANAGER on #35 and never answered. Measured 2026-08-05:
+
+**`agent-*` IS NOT A SKILL-FACING FAMILY. It is `aimaestro-agent.sh`'s module set — ALL SIX of
+them.** `scripts/aimaestro-agent.sh:64-73` sources every one:
+
+```
+_source_module "agent-helper.sh"   _source_module "agent-core.sh"     _source_module "agent-commands.sh"
+_source_module "agent-session.sh"  _source_module "agent-skill.sh"    _source_module "agent-plugin.sh"
+```
+
+The dispatcher's ~19 verbs (`list show config resolve create delete update rename session hibernate
+wake restart skill plugin export import presence hibernation subconscious`) resolve to `cmd_*`
+bodies **in those modules** — e.g. `cmd_resolve` is `scripts/agent-session.sh:290`, not in the
+dispatcher at all. So the card's exclusion list (which names only `agent-helper`) would have put
+**five module files into a manifest of skill-facing CLIs** — the precise "reads authoritative,
+is wrong" failure this card exists to prevent, found while building it.
+
+**The discriminator that actually works, and the two that do NOT.** A script is skill-facing iff it
+**dispatches at top level** (a `case` on `$1` outside any function). Both cheaper tests fail:
+- *"has `main "$@"`"* → only **4** of 87 match; `amp-kanban-create-task.sh` parses args at top level
+  with no `main()` and is plainly skill-facing.
+- *"is sourced by another script"* → misses dynamic sourcing entirely (`_source_module "${module}"`
+  is a variable, so a literal-name grep sees none of the six above) AND over-captures, since
+  `amp-send.sh` is both sourced once and unambiguously skill-facing.
+
+**Re-measured counts (the card's are 2 days stale, which is itself the argument for generating
+this):** `aimaestro-*` **14** (card said 13) · `amp-*` 31 · `aid-*` 7 · `agent-*` 6 · **87** total
+`.sh` at `scripts/` top level (card said 85). Two scripts landed in two days.
+
+**Confirmed standalone CLIs** (spot-checked, each ends in a top-level dispatch carrying its own
+`--version|-v)` and `*)` arms): `aimaestro-teams.sh`, `aimaestro-trdd.sh`, `aimaestro-groups.sh`,
+`aimaestro-governance.sh`, `aimaestro-portfolio.sh`.
+
+**NEXT ACTION:** write `scripts/build-script-manifest.mjs` using the top-level-dispatch
+discriminator above, excluding the whole `agent-*` family plus `amp-helper` / `amp-security` /
+`amp-name-resolve` / `aid-helper` / `common.sh`. The exclusion list must be DATA a test asserts
+(per the card's own box 2) — and the test should assert the DISCRIMINATOR, not the list, so a new
+module added tomorrow is excluded by construction rather than by someone remembering.
+
+## ⏵ SUPERSEDED STATE — 2026-08-03 (its measurements stand; its SCOPE line does not)
 
 The core plugin has asked for a canonical **FROZEN script manifest** since #35 — it can grep what its
 skills *call*, but cannot prove *full coverage* (no script uncovered, no skill on a stale signature)

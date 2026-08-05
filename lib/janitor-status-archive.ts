@@ -111,8 +111,21 @@ export function archiveNameFor(sourceBasename: string, mtime: Date): string {
   return `${stampFor(mtime)}-${SOURCE_PREFIX}${unique}${SOURCE_SUFFIX}`
 }
 
-/** Guard for anything that came from a request. An archive name is never joined into a path
- *  without passing this — it admits only names this module itself produces. */
+/**
+ * Guard for anything that came from a request. An archive name is never joined into a path without
+ * passing this — it admits only names this module itself produces.
+ *
+ * THE ANCHORED REGEX IS THE LOAD-BEARING CHECK. Measured by neuter 2026-08-05: replacing it with
+ * a match-anything pattern reddens the shape test immediately, while removing all three `includes`
+ * checks and keeping the regex reddens NOTHING — nothing containing `/`, `\` or `..` can match an
+ * anchored pattern whose body is `[A-Za-z0-9_]+`. So the three `includes` calls are today STRICTLY
+ * REDUNDANT and are unpinnable by construction.
+ *
+ * They stay anyway, and it is worth saying why rather than deleting them as dead: they are the
+ * defence that survives someone loosening the regex later — the exact edit whose author would be
+ * thinking about filenames, not traversal. What must NOT happen is reading them as the working
+ * guard: if the regex is ever relaxed, these three become load-bearing and need their own test.
+ */
 export function isValidArchiveName(name: string): boolean {
   return (
     typeof name === 'string' &&

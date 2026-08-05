@@ -32,6 +32,7 @@ import os from 'os'
 
 import { loadAgents, createAgent, getAgent, getAgentByName, getAgentByNameAnyHost, updateAgent, deleteAgent, markAgentAsAMPRegistered, checkMeshAgentExists, getAMPRegisteredAgents } from '@/lib/agent-registry'
 import { authenticateRequest, createApiKey, hashApiKey, extractApiKeyFromHeader, revokeApiKey, rotateApiKey, revokeAllKeysForAgent } from '@/lib/amp-auth'
+import { authenticateAgent } from '@/lib/agent-auth'
 import { saveKeyPair, loadKeyPair, calculateFingerprint, verifySignature, generateKeyPair } from '@/lib/amp-keys'
 import { queueMessage, getPendingMessages, acknowledgeMessage, acknowledgeMessages, cleanupAllExpiredMessages } from '@/lib/amp-relay'
 import { deliver } from '@/lib/message-delivery'
@@ -1568,14 +1569,30 @@ export function listAMPAgents(
 export function getAgentSelf(authHeader: string | null): ServiceResult<any> {
   const auth = authenticateRequest(authHeader)
 
-  if (!auth.authenticated) {
+  // ai-maestro#46, RULED 2026-08-06 (GET-scoped widening, the #47 /portfolio/verify
+  // pattern): a session must be able to ask the notary "who am I" with the credential
+  // the SERVER ITSELF handed it — the mst_* session secret or an aim_tk_ AID token —
+  // not only an AMP api-key it may never have minted. Refusing the server's own
+  // credential is what sent sessions to read the raw registry by hand, where one
+  // misread a field and refused a legitimate MANAGER mandate. Read-only: PATCH and
+  // DELETE on this route keep the strict AMP auth and do NOT inherit this. A USER
+  // token (no agent behind it) is still refused here — this is agent self-identity.
+  let selfAgentId = auth.authenticated ? auth.agentId! : null
+  let ampAddress: string | null = auth.authenticated ? auth.address ?? null : null
+  if (!selfAgentId) {
+    const mainAuth = authenticateAgent(authHeader, null, null)
+    if (mainAuth.agentId) {
+      selfAgentId = mainAuth.agentId
+    }
+  }
+  if (!selfAgentId) {
     return {
       data: { error: auth.error || 'unauthorized', message: auth.message || 'Authentication required' } as AMPError,
       status: 401
     }
   }
 
-  const agent = getAgent(auth.agentId!)
+  const agent = getAgent(selfAgentId)
   if (!agent) {
     return {
       data: { error: 'not_found', message: 'Agent not found' } as AMPError,
@@ -1583,11 +1600,16 @@ export function getAgentSelf(authHeader: string | null): ServiceResult<any> {
     }
   }
 
-  const keyPair = loadKeyPair(auth.agentId!)
+  const keyPair = loadKeyPair(selfAgentId)
+  // Main-auth fallback path has no AMP-layer address; the registration metadata is
+  // the record of one, and null is honest when the agent never AMP-registered.
+  if (!ampAddress) {
+    ampAddress = (agent.metadata?.amp?.address as string | undefined) ?? null
+  }
 
   return {
     data: {
-      address: auth.address,
+      address: ampAddress,
       alias: agent.alias || agent.label,
       delivery: agent.metadata?.amp?.delivery || {},
       fingerprint: keyPair?.fingerprint || agent.metadata?.amp?.fingerprint || null,

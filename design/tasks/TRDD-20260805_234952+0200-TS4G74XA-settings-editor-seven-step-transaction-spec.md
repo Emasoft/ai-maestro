@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T23:49:52+0200
-updated: 2026-08-05T23:49:52+0200
+updated: 2026-08-05T23:55:16+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -45,6 +45,35 @@ external-refs: []
 > 6. the edited copy is finally swapped with the original copy
 > 7. the editor reports a successful transaction to the caller, and then it goes on
 >    executing the next transaction in queue
+
+## Retry semantics clarified (USER, 2026-08-06, verbatim)
+
+> note that when i say 'retry' i mean the whole transaction. from the beginning at step 1.
+> in other words: the copy is discarded (it will be overwritten anyway), and a new copy is
+> made and the sequence is attempted again. if the same error at the same step repeats more
+> than 3 times, then no more retry, but the transaction is declared failed.
+
+Two consequences, one already true and one that changes GAP A's design:
+
+1. **The retry UNIT already conforms.** The shipped staleness-gate retry restarts the whole
+   transaction: `continue` (:417) loops to the top, re-reads the file (the fresh copy),
+   re-clones, re-applies the ops against the NEW base. It never patches the stale copy. No
+   change needed — recorded so nobody "fixes" it into a per-step resume.
+2. **The budget is per (step, error), not one global attempt counter.** Today only one step
+   retries, so the shipped single `attempt` counter is indistinguishable from the spec. Once
+   GAP A makes step 2 retryable too, the counters MUST be separate: a transaction that
+   burned one attempt on a transient step-2 torn read has NOT spent any of step 5's budget.
+   A shared counter would fail a transaction that never repeated the same error 3 times —
+   stricter than the spec, and precisely on the contended hosts the retry exists for.
+
+Boundary to pin in a test, because the prose admits two readings: *"repeats more than 3
+times"* — the transaction fails on the 4th occurrence of the same (step, error); three
+repeats still retry. If implementation prefers the stricter fail-on-3rd, that is a
+deviation to surface, not to silently pick.
+
+Step 4 remains NO-retry per the spec's own step text — a deterministic re-edit reproduces
+the same invalid result, so its failure is never "the same error repeating" in the
+transient sense; it is the same error guaranteed.
 
 ## Conformance of the shipped editor (`lib/json-io.ts::updateJson`, verified 2026-08-05)
 
@@ -96,6 +125,12 @@ result. Fail and report.
 - [ ] Pre-lint retries: a read that parses on attempt 2 or 3 SUCCEEDS the transaction; one
       unparseable on all 3 fails with `UnreadableTargetError`. Pinned with a fixture whose
       reads are injected (attempt-counted), not chmod-based.
+- [ ] Retry restarts the WHOLE transaction: the retried attempt operates on a FRESH read,
+      never the discarded copy — pinned by a fixture whose file content CHANGES between
+      attempts and an assertion that the committed result derives from the newest content.
+- [ ] Per-(step, error) budgets: a transaction that spends 1 attempt on a step-2 torn read
+      and then hits step-5 conflicts still has step 5's FULL budget — a shared global
+      counter fails this test. The >3 boundary pinned: 3 repeats retry, the 4th fails.
 - [ ] The retry is of the READ only — a neuter proving no write occurs on any failed
       pre-lint path (the file's bytes are untouched after 3 failures).
 - [ ] Post-edit schema lint: a `set` op writing a schema-invalid value for a covered key

@@ -635,6 +635,36 @@ describe('sendCommand', () => {
     expect(result.error).toMatch(/not idle/i)
   })
 
+  // CHARACTERISATION TEST — this pins CURRENT behaviour, and the behaviour looks WRONG.
+  // Reported, not silently "fixed": changing it alters live injection fleet-wide, which is the
+  // same reason #110 is user-gated.
+  //
+  // The gate is UNCONDITIONAL. `sendCommand` bumps sessionActivity to Date.now() at
+  // services/sessions-service.ts:1340, and isSessionIdle (:307-311) is
+  //   const activity = sessionActivity.get(name); if (!activity) return true
+  //   return (Date.now() - activity) > IDLE_THRESHOLD_MS
+  // so by the time the check runs the elapsed time is ~0 and can never exceed the threshold. The
+  // `!activity` early-out cannot save the first call either, because the bump already wrote it.
+  // Net: with requireIdle at its default (true), EVERY call 409s — even the first one, on a
+  // completely fresh session with no prior activity, which is what this test demonstrates.
+  //
+  // Consequences worth stating, because they reframe three other issues:
+  //   - the "protect a busy agent" gate protects nothing; it refuses everything;
+  //   - #110's CLI hardcoding require_idle=false reads as a WORKAROUND for this, not a mistake —
+  //     which means "fix the CLI to use the server default" would 409 every CLI injection;
+  //   - #51's wake mechanism cannot use the default path at all.
+  it('CHARACTERISATION (#51/#110): 409s even on a FRESH session — the idle gate never passes', async () => {
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    // Deliberately NO sessionActivity seeded: this session has never been touched.
+    expect(mockSharedState.sessionActivity.has('pristine-agent')).toBe(false)
+
+    const result = await sendCommand('pristine-agent', 'ls', { authContext: SYSTEM_OWNER_CTX })
+
+    expect(result.status).toBe(409)
+    expect(result.error).toMatch(/not idle/i)
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
+  })
+
   it('sends command even when busy if requireIdle is false', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockSharedState.sessionActivity.set('busy-agent', Date.now())

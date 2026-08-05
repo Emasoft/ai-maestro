@@ -67,6 +67,63 @@ EOF
 # LIST
 # ============================================================================
 
+# VALIDATE BEFORE THE REQUEST (ai-maestro#114). The list filter is an exact string compare
+# against `Agent.status`, whose enum is `active | idle | offline | deleted` (types/agent.ts).
+# A value outside that set CANNOT match, and the old code accepted it silently: jq returned
+# `{agents: []}` at exit 0, which reads as "no agents are in that state" rather than "that is
+# not a state". `jq -e` does not rescue it — it fails only on a null/false last output, and an
+# empty object is truthy. So an unmatchable status must be an ERROR here, not an empty list
+# downstream.
+#
+# THE VALID SET LIVES HERE AND NOWHERE ELSE (TRDD-T3FXA0Y0). Two callers need it —
+# `cmd_list`'s parser, and `validate_list_args` below, which runs BEFORE the API gate so a bad
+# value is rejected locally instead of behind a 401. Enumerating the set twice is exactly how
+# they would drift into disagreeing about what is valid, so they share this one function.
+validate_status_value() {
+    case "$1" in
+        active|idle|offline|deleted|all) return 0 ;;
+        hibernated)
+            # Named separately because it is the one a caller reaches for on purpose:
+            # ai-maestro-plugin#55 tells consumers to stop inferring liveness from
+            # `Agent.status`, and this flag looks exactly like that fix. It is not —
+            # hibernated agents read `offline`, so the field cannot carry the answer.
+            print_error "--status hibernated cannot match: hibernation is not carried by Agent.status (a hibernated agent reads 'offline')."
+            print_error "Use --status offline, or the dedicated hibernation probe once ai-maestro#113 lands."
+            return 1 ;;
+        *)
+            print_error "Invalid --status '$1'. Valid values: active, idle, offline, deleted, all"
+            return 1 ;;
+    esac
+}
+
+# The pre-gate pass for `list`, called by `dispatch validate` before check_api_running.
+# It answers only "is this argv locally invalid?" — it sets nothing and runs nothing.
+#
+# ⚠ IT MUST CONSUME VALUE-TAKING FLAGS THE SAME WAY `cmd_list` DOES. This is a second walk
+# over the same argv, and the one way two walks diverge is disagreeing about which tokens are
+# values: `list --format --status` makes `cmd_list` swallow `--status` as the format's value,
+# so a validator that did not also consume `--format`'s value would find a `--status` that is
+# not a flag at all and report the wrong error. Mirroring the consume-2 flags keeps them
+# aligned; adding a value-taking flag to `cmd_list` means adding it here in the same edit.
+#
+# The structurally-correct successor, recorded rather than built: there is no shared
+# `api_request()` in this file — 11+ verbs call `curl` directly — so the gate cannot yet live
+# at the point of network use, which is where it belongs and which would remove the need for
+# any pre-gate pass at all. That is a refactor of a frozen CLI and is its own card.
+validate_list_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --status)
+                [[ $# -lt 2 ]] && { print_error "--status requires a value"; return 1; }
+                validate_status_value "$2" || return 1
+                shift 2 ;;
+            --format) shift 2 || return 0 ;;
+            *) shift ;;
+        esac
+    done
+    return 0
+}
+
 cmd_list() {
     local status_filter=""
     local format="table"
@@ -75,27 +132,7 @@ cmd_list() {
         case "$1" in
             --status)
                 [[ $# -lt 2 ]] && { print_error "--status requires a value"; return 1; }
-                # VALIDATE BEFORE THE REQUEST (ai-maestro#114). The filter below is an exact string
-                # compare against `Agent.status`, whose enum is `active | idle | offline | deleted`
-                # (types/agent.ts). A value outside that set CANNOT match, and the old code accepted
-                # it silently: jq returned `{agents: []}` at exit 0, which reads as "no agents are in
-                # that state" rather than "that is not a state". `jq -e` does not rescue it either —
-                # it fails only on a null/false last output, and an empty object is truthy. So an
-                # unmatchable status must be an ERROR here, not an empty list downstream.
-                case "$2" in
-                    active|idle|offline|deleted|all) ;;
-                    hibernated)
-                        # Named separately because it is the one a caller reaches for on purpose:
-                        # ai-maestro-plugin#55 tells consumers to stop inferring liveness from
-                        # `Agent.status`, and this flag looks exactly like that fix. It is not —
-                        # hibernated agents read `offline`, so the field cannot carry the answer.
-                        print_error "--status hibernated cannot match: hibernation is not carried by Agent.status (a hibernated agent reads 'offline')."
-                        print_error "Use --status offline, or the dedicated hibernation probe once ai-maestro#113 lands."
-                        return 1 ;;
-                    *)
-                        print_error "Invalid --status '$2'. Valid values: active, idle, offline, deleted, all"
-                        return 1 ;;
-                esac
+                validate_status_value "$2" || return 1
                 status_filter="$2"; shift 2 ;;
             --format)
                 [[ $# -lt 2 ]] && { print_error "--format requires a value"; return 1; }

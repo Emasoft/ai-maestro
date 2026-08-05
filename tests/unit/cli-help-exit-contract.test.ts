@@ -187,6 +187,60 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
     expect(output, 'and it must say what was actually wrong').toMatch(/Unknown command/i)
   })
 
+  /** Run `aimaestro-agent.sh <args>` with no credential; return status + combined output. */
+  function runAgentCli(args: string[]): { status: number; output: string } {
+    try {
+      const out = execFileSync('bash', [join(SCRIPTS, 'aimaestro-agent.sh'), ...args], {
+        stdio: 'pipe',
+        timeout: 20_000,
+        env: { ...process.env, AID_AUTH: '', AIMAESTRO_SESSION: '', AIMAESTRO_SUDO_TOKEN: '' },
+      })
+      return { status: 0, output: out.toString() }
+    } catch (err) {
+      const e = err as { status?: number; stderr?: Buffer; stdout?: Buffer }
+      return {
+        status: typeof e.status === 'number' ? e.status : 1,
+        output: `${e.stderr?.toString() ?? ''}${e.stdout?.toString() ?? ''}`,
+      }
+    }
+  }
+
+  const BLAMES_SERVER = /not reachable|not running|HTTP 401|:23000/i
+
+  it('an INVALID --status is rejected locally, without blaming the server (#114)', () => {
+    // TRDD-T3FXA0Y0 box 3. `--status hibernated` cannot match on ANY host — hibernation is
+    // not carried by Agent.status — so it is wrong with no network at all. It was correctly
+    // rejected in cmd_list, but behind check_api_running, so an unauthenticated caller got a
+    // 401 instead and the branch was unobservable from outside.
+    const { status, output } = runAgentCli(['list', '--status', 'hibernated'])
+    expect(status, 'an unmatchable filter is an error, not an empty list').not.toBe(0)
+    expect(output, 'the value is wrong offline too — do not blame the server').not.toMatch(BLAMES_SERVER)
+    expect(output).toMatch(/hibernation is not carried by Agent\.status/i)
+  })
+
+  it('a VALID --status is NOT rejected locally — it reaches the gate', () => {
+    // The positive control, and it is not optional: `validate_list_args` returning 1
+    // unconditionally satisfies the test above completely. This is the only assertion that
+    // separates "validates" from "refuses everything".
+    //
+    // It also proves `validate` mode does not EXECUTE. Reaching check_api_running means the
+    // pre-gate pass returned without running cmd_list — a validation pass that performed the
+    // operation it was meant to pre-screen would never get here.
+    const { status, output } = runAgentCli(['list', '--status', 'active'])
+    expect(status, 'unauthenticated, so it still fails — at the GATE, which is correct').not.toBe(0)
+    expect(output, 'a valid value must survive local validation and reach the server').toMatch(
+      BLAMES_SERVER,
+    )
+  })
+
+  it('a verb with NO local grammar is not executed by the validate pass', () => {
+    // Every arm but `list` is `[ "$mode" != run ] || cmd_x "$@"`. The guard tests `!= run`
+    // rather than `= check` precisely so a third mode is INERT by default; with `= check`,
+    // adding `validate` would have made every other verb execute during validation.
+    const { output } = runAgentCli(['show', 'some-agent'])
+    expect(output, 'it must fall through to the gate, not run the command').toMatch(BLAMES_SERVER)
+  })
+
   it('every listed violator still exists (no stale names hiding a deleted script)', () => {
     const ghosts = [...KNOWN_VIOLATORS].filter((s) => !CANDIDATES.includes(s))
     expect(ghosts, `KNOWN_VIOLATORS names scripts that no longer exist: ${ghosts.join(', ')}`).toEqual([])

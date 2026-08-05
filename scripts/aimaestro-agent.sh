@@ -104,33 +104,49 @@ trap cleanup EXIT INT TERM
 # rejected as unknown, or an unknown one reaches the gate and gets the old
 # misleading message back. The mode parameter is what keeps it to one list.
 #
-# Each arm is `[ "$mode" = check ] || cmd_x "$@"` rather than `&& return 0`,
+# Each arm is `[ "$mode" != run ] || cmd_x "$@"` rather than `&& return 0`,
 # because `set -e` is on: a bare `cond && return 0` whose condition FAILS makes
-# the statement's status 1 and kills the shell. The `||` form succeeds in check
-# mode by short-circuit, and in run mode carries the command's own status.
+# the statement's status 1 and kills the shell. The `||` form succeeds in every
+# non-run mode by short-circuit, and in run mode carries the command's own status.
+#
+# The guard tests `!= run`, NOT `= check`, and that polarity is load-bearing: with
+# `= check` a third mode falls through to EXECUTING the command, so adding
+# `validate` would have made `dispatch validate list` actually list — a validation
+# pass that performs the operation it was meant to pre-screen. A mode nobody wired
+# up must do nothing; default-to-inert is the only safe direction here.
+#
+# A THIRD MODE, `validate`, runs a verb's LOCAL argument grammar before the gate — same
+# reasoning one level down: `list --status hibernated` is invalid on a host with no network,
+# and the CLI already knows it (agent-commands.sh::validate_status_value). Most verbs have no
+# local grammar and simply return 0; a verb that grows one adds its validator on its own arm,
+# so the verb list still exists exactly once.
 dispatch() {
     local mode="$1"; shift
     local verb="$1"; shift
     case "$verb" in
-        list)         [ "$mode" = check ] || cmd_list "$@" ;;
-        show)         [ "$mode" = check ] || cmd_show "$@" ;;
-        config)       [ "$mode" = check ] || cmd_config "$@" ;;
-        resolve)      [ "$mode" = check ] || cmd_resolve "$@" ;;
-        create)       [ "$mode" = check ] || cmd_create "$@" ;;
-        delete)       [ "$mode" = check ] || cmd_delete "$@" ;;
-        update)       [ "$mode" = check ] || cmd_update "$@" ;;
-        rename)       [ "$mode" = check ] || cmd_rename "$@" ;;
-        session)      [ "$mode" = check ] || cmd_session "$@" ;;
-        hibernate)    [ "$mode" = check ] || cmd_hibernate "$@" ;;
-        wake)         [ "$mode" = check ] || cmd_wake "$@" ;;
-        restart)      [ "$mode" = check ] || cmd_restart "$@" ;;
-        skill)        [ "$mode" = check ] || cmd_skill "$@" ;;
-        plugin)       [ "$mode" = check ] || cmd_plugin "$@" ;;
-        export)       [ "$mode" = check ] || cmd_export "$@" ;;
-        import)       [ "$mode" = check ] || cmd_import "$@" ;;
-        presence)     [ "$mode" = check ] || cmd_presence "$@" ;;
-        hibernation)  [ "$mode" = check ] || cmd_hibernation "$@" ;;
-        subconscious) [ "$mode" = check ] || cmd_subconscious "$@" ;;
+        list)         case "$mode" in
+                          check)    return 0 ;;
+                          validate) validate_list_args "$@" ;;
+                          *)        cmd_list "$@" ;;
+                      esac ;;
+        show)         [ "$mode" != run ] || cmd_show "$@" ;;
+        config)       [ "$mode" != run ] || cmd_config "$@" ;;
+        resolve)      [ "$mode" != run ] || cmd_resolve "$@" ;;
+        create)       [ "$mode" != run ] || cmd_create "$@" ;;
+        delete)       [ "$mode" != run ] || cmd_delete "$@" ;;
+        update)       [ "$mode" != run ] || cmd_update "$@" ;;
+        rename)       [ "$mode" != run ] || cmd_rename "$@" ;;
+        session)      [ "$mode" != run ] || cmd_session "$@" ;;
+        hibernate)    [ "$mode" != run ] || cmd_hibernate "$@" ;;
+        wake)         [ "$mode" != run ] || cmd_wake "$@" ;;
+        restart)      [ "$mode" != run ] || cmd_restart "$@" ;;
+        skill)        [ "$mode" != run ] || cmd_skill "$@" ;;
+        plugin)       [ "$mode" != run ] || cmd_plugin "$@" ;;
+        export)       [ "$mode" != run ] || cmd_export "$@" ;;
+        import)       [ "$mode" != run ] || cmd_import "$@" ;;
+        presence)     [ "$mode" != run ] || cmd_presence "$@" ;;
+        hibernation)  [ "$mode" != run ] || cmd_hibernation "$@" ;;
+        subconscious) [ "$mode" != run ] || cmd_subconscious "$@" ;;
         # help / --version are dispatched in main BEFORE the gate — deliberately
         # NOT repeated here, so there is one dispatch site per verb.
         #
@@ -175,6 +191,11 @@ main() {
         cmd_help
         exit 1
     }
+
+    # A verb's LOCAL argument grammar is answerable offline too, so it is answered
+    # here — one level down from recognition, same reasoning. `--status hibernated`
+    # cannot match on any host, network or not.
+    dispatch validate "$@" || exit 1
 
     # Everything past this point genuinely needs the server.
     check_api_running || exit 1

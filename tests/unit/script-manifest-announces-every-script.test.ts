@@ -26,10 +26,18 @@
  * provide. The `refuse --reason` drift earlier the same day was a CORRECTNESS drift and this test
  * would not have caught it.
  *
- * NEUTER RUN (2026-08-05 — OBSERVED): renaming any one manifest mention (here
- * `aimaestro-check-decoupling.sh` → `aimaestro-check-decoupled.sh`) reddens the coverage closure and
- * names the missing script; deleting a Tier count line reddens the count closure. The two are
- * independent — neither mutation reddens the other's closure.
+ * NEUTER RUNS (2026-08-05 — OBSERVED). The two halves are independent, which was the prediction and
+ * is what the runs show:
+ *
+ *   - rename one manifest mention (`aimaestro-check-decoupling.sh` → `…-decoupled.sh`):
+ *     **1 red** — the coverage closure, naming the missing script. Both count closures stay green,
+ *     since a rename moves no counts.
+ *   - revert a tier heading (`Tier C (27)` → `(21)`): **2 red**, not the 1 first predicted here —
+ *     it breaks BOTH the disk-sum closure and the §1-vs-heading closure, because that number is
+ *     asserted in two places. Coverage stays green.
+ *
+ * That second result is the reason the §1-vs-heading closure exists at all: a single count is only
+ * ever wrong in one place, and this document's actual failure was four numbers disagreeing.
  */
 
 import { describe, it, expect } from 'vitest'

@@ -23,6 +23,29 @@
 # caller authorizes by AID + governance title (the R32 dual-path) and never
 # needs one.
 #
+# WHAT AN AGENT MAY AIM AT ANOTHER AGENT — read this before assuming a title is
+# enough. The verbs split in two, and the split is not by danger, it is by whose
+# decision the keystroke expresses:
+#
+#   inject / slash / queue / state --pane  →  SELF-ONLY for every title.
+#       R42 revoked cross-agent drive outright: an injected command IS the
+#       victim's own action, taken without its judgment. No title is exempt, and
+#       that includes MANAGER and CHIEF-OF-STAFF. Aim these at another agent and
+#       the server answers 403 — correctly. Use AMP messaging: ask, never inject.
+#
+#   read-prompt / answer  →  the R42.8 exception (USER ruling, 2026-08-05).
+#       A MANAGER may answer any agent's PENDING prompt; a CHIEF-OF-STAFF may
+#       answer one for agents OF ITS OWN TEAM. Never an ASSISTANT, under any
+#       title. Answering your OWN prompt has always been allowed. `answer` also
+#       requires a prompt to actually be pending — with none, it 409s, because
+#       an unblock answers a question the agent raised and nothing else.
+#
+# This block replaced a line that said agent callers "authorize by AID +
+# governance title" full stop. That described the PRE-R42 world and had been
+# false since 2026-07-14: a MANAGER following it refused twice to unblock a
+# stalled agent, then escalated to the human, because the CLI advertised an
+# authority the API had already revoked.
+#
 # Usage:
 #   aimaestro-session.sh inject <agent> --command "<text>" [--no-newline] [--require-idle]
 #   aimaestro-session.sh slash <agent> <command-key>
@@ -166,6 +189,13 @@ Commands:
 
 Strict routes (answer, queue) require AIMAESTRO_SUDO_TOKEN for USER callers.
 Agent callers authorize by AID_AUTH + governance title and need no sudo token.
+
+Cross-agent limits (R42 / R42.8) — a title alone is NOT enough:
+  inject, slash, queue, state --pane    SELF-ONLY for every title, MANAGER and
+                                        CHIEF-OF-STAFF included. Ask by AMP.
+  read-prompt, answer                   MANAGER: any agent. CHIEF-OF-STAFF: its
+                                        own team. Never an ASSISTANT. Requires a
+                                        prompt to actually be pending (else 409).
 
 Environment:
   AID_AUTH               Bearer token for agent callers (REQUIRED — no localhost exemption)

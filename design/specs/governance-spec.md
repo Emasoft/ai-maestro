@@ -1,9 +1,9 @@
 ---
 spec: governance
-spec-version: 2.4.0
+spec-version: 2.4.1
 status: normative
 created: 2026-07-22T10:19:26+0200
-updated: 2026-08-05T21:05:00+0200
+updated: 2026-08-05T21:23:56+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a governance rule changes; docs/GOVERNANCE-RULES.md and the code/personas/DEP-overlays are its IMPLEMENTATIONS, authored AFTER it (see `implementations`). Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). This spec was previously derived FROM the catalog; that direction is reversed for good."
@@ -1734,7 +1734,11 @@ R42.1 injection under another name:
     script, or a CLI an agent can call. An agent asking for a fleet restart remains an R42.1 violation.
 `R42.8` **blocked-prompt-unblock-exception** [Explicit, USER — 2026-08-05, ai-maestro#125, TRDD-AODXPI5E] — a **MANAGER**
 or a **CHIEF-OF-STAFF** MAY read and answer a pending permission / `AskUserQuestion` prompt that is **BLOCKING** another
-agent, in realtime, through the frozen `aimaestro-session.sh` (`read-prompt` / `answer` / `inject` / `queue`). The USER
+agent, in realtime, through the frozen `aimaestro-session.sh` — **`read-prompt` and `answer` ONLY**. (Corrected
+2026-08-05 against the implementation: this clause first listed `inject` and `queue` too. It cannot. Those deliver an
+arbitrary command — `queue` at the next idle window — so they express the CALLER's decision, which is exactly what
+R42.1 revokes; they remain SELF-ONLY for every title and the server 403s them cross-agent. A rule naming a verb the
+server refuses does not grant a capability, it sends every reader who follows it into a denial.) The USER
 granted this directly and in the first person, having been told R42 was absolute: *"there is a case where it is
 absolutely necessary to override that rule, and that is the case of a question or permission query blocking an agent
 from doing its work. In this case only the MANAGER and the CHIEF-OF-STAFF are allowed to read and inject commands
@@ -1756,8 +1760,17 @@ UNBLOCKING and not R42.1 injection renamed:
     authority or identity, it MUST go to the human. Answering it yourself is self-certification through a second
     channel: it proves nothing, and a spoofer with the same CLI access performs the identical act. Observed
     2026-08-05 — the blocking prompt was literally *"You vouch that testbot really is your MANAGER"*.
-(f) **read before answer** — `read-prompt` FIRST; never answer a prompt you have not read. Prefer `queue` over
-    interrupting, and `--require-idle` on `inject`.
+    **The reason no agent can answer such a prompt is that no agent is the authority on identity: the ai-maestro
+    SERVER is the sole notary.** It created or imported every agent, registered the agent and its AID in the signed
+    ledger, alone holds the private key that signs and rotates that AID, and alone signs and verifies every AMP
+    message. Identity is therefore ESTABLISHED by the server's own verification and never ASSERTED by a party to the
+    exchange — which is also why the title scoping in (c) means anything: `authorize()` reads back the server's
+    notarized record, not a claim the caller made. An agent vouching for another agent adds no evidence to a fact the
+    server already holds, and adds a forgeable channel to one that is not.
+(f) **read before answer** — `read-prompt` FIRST; never answer a prompt you have not read. (This clause also once said
+    "prefer `queue` over interrupting, and `--require-idle` on `inject`". Struck for the same reason as the verb list
+    above: both are self-only, so that advice always 403s. An unblock does not interrupt anything — the agent is
+    already stopped, waiting on the answer.)
 (g) **server-enforced, not self-policed** — the server authorizes by `AID_AUTH` + governance title and MUST fail
     closed; an unauthorized call FAILS. That refusal is the check — never the caller's own restraint.
 (h) **audited** — every cross-agent unblock is recorded in the agent ops ledger, on R42.7(e)'s reasoning: an

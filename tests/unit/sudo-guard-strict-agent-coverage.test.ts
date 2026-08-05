@@ -292,7 +292,6 @@ describe('strict-route agent-path coverage (TRDD-6A2I6ZO0)', () => {
     const DRIVE_ROUTES = [
       'POST /api/agents/[id]/panel',
       'POST /api/agents/[id]/queue',
-      'POST /api/agents/[id]/prompt/answer',
       'PATCH /api/agents/[id]/session',
       'POST /api/sessions/[id]/stop',
       'POST /api/sessions/[id]/restart',
@@ -302,6 +301,21 @@ describe('strict-route agent-path coverage (TRDD-6A2I6ZO0)', () => {
       const message = await messageFor(method, rest.join(' '))
       expect(message, `${routeKey} must refuse a MANAGER under R42`).toMatch(/^R42:/)
     }
+
+    // `POST /api/agents/[id]/prompt/answer` LEFT this list on 2026-08-05: the USER
+    // ruling made it R42.8's `unblock-prompt`, so a MANAGER with a RESOLVED target
+    // is now ALLOWED there (pinned in tests/governance/r42-8-unblock-prompt-authority).
+    //
+    // It is asserted here rather than deleted, because the probe's unresolvable
+    // target still has to fail closed — and under the NEW rule, with the NEW
+    // reason. Dropping the row would have silently stopped testing that, and a
+    // carve-out whose fail-closed half nobody checks is how an exception becomes a
+    // bypass: rename a session so `[id]` no longer resolves, and an ungated route
+    // would let the caller through on "we could not tell".
+    expect(
+      await messageFor('POST', '/api/agents/[id]/prompt/answer'),
+      'the unblock route must still refuse an UNRESOLVED target, under R42.8',
+    ).toMatch(/^R42\.8:/)
 
     // CONFIGURATION (R42.6) — unchanged: a MANAGER still reconfigures other agents.
     expect(await messageFor('PATCH', '/api/agents/[id]'), 'PATCH /api/agents/[id]').toBeNull()

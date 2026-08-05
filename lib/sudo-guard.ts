@@ -420,7 +420,21 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // the assumption that a downstream pipeline re-runs a finer one.
   'POST /api/agents/[id]/panel': { action: 'send-command', targetFromPathId: true },
   'POST /api/agents/[id]/queue': { action: 'send-command', targetFromPathId: true },
-  'POST /api/agents/[id]/prompt/answer': { action: 'send-command', targetFromPathId: true },
+  // R42.8 (USER ruling, 2026-08-05) — `answer` LEAVES the send-command trio.
+  // It is the one verb the ruling carved out: answering the prompt a STALLED
+  // agent is blocked on. It therefore declares 'unblock-prompt', whose matrix is
+  // MANAGER any / COS own-team / never an ASSISTANT / self always.
+  //
+  // This entry is load-bearing, and getting it wrong is SILENT: the guard runs
+  // BEFORE the handler, so leaving 'send-command' here would deny every
+  // cross-agent unblock at the door while lib/authorization.ts and the service
+  // both claimed to permit it. The rule would read ENFORCED and the capability
+  // would not work — which is precisely the state R42.8 was written to end.
+  //
+  // The other two stay 'send-command' deliberately. `panel` and `queue` deliver
+  // arbitrary commands (queue at "the next idle window"), so they DRIVE; neither
+  // answers a question the agent itself raised.
+  'POST /api/agents/[id]/prompt/answer': { action: 'unblock-prompt', targetFromPathId: true },
   // #54 (TRDD-ED9A4VVY): the IMMEDIATE twin of `queue` — PATCH …/session types
   // arbitrary text straight into a live pane. Only its arbitrary-`command` branch
   // calls the guard (the curated `commandKey` allowlist branch stays open), so a

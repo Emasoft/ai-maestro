@@ -37,7 +37,14 @@ export async function GET(
     for (const agentId of team.agentIds || []) {
       const agent = getAgent(agentId)
       if (agent) {
-        const title = (agent.governanceTitle || agent.role || 'unknown').toLowerCase()
+        // AUTHORITY COMES FROM `governanceTitle`, FULL STOP — never from `role` (ai-maestro#122,
+        // TRDD-4Z62YRDG). `role` is the MESSAGING role; it is a different field that merely shares
+        // the `AgentRole` vocabulary, and it DEFAULTS to 'autonomous'. Falling back to it here was
+        // wrong in two ways: an untitled agent was reported as holding the title 'autonomous', and
+        // — the one that matters — an agent whose `role` happened to read 'architect' with no
+        // governance title would have SATISFIED the ARCHITECT requirement of a composition check it
+        // never earned. A missing title is `unknown`, which is the truth.
+        const title = (agent.governanceTitle || 'unknown').toLowerCase()
         presentTitles.add(title)
         agentDetails.push({ id: agent.id, name: agent.name, title })
       }

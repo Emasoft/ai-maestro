@@ -1109,9 +1109,12 @@ export default function DashboardPage() {
                         agentName={agent.label || agent.name}
                         agentInfo={{
                           name: agent.label || agent.name,
-                          // Prefer explicit governanceTitle (architect/integrator/orchestrator) over raw role field
-                          // BUG: agent.role stays 'member' when governanceTitle is set — useGovernance derives the correct title
-                          title: (agent.governanceTitle || agent.role) as AgentRole | undefined,
+                          // `governanceTitle` ONLY — never fall back to `role` (ai-maestro#122,
+                          // TRDD-4Z62YRDG). `role` is the MESSAGING role, a different field sharing
+                          // the same vocabulary and defaulting to 'autonomous', so the old fallback
+                          // rendered every UNTITLED agent as AUTONOMOUS in the profile panel. An
+                          // absent title must read as absent; `useGovernance` derives the real one.
+                          title: agent.governanceTitle as AgentRole | undefined,
                           program: agent.program,
                           tags: agent.tags,
                           // TRDD-c7a81642: forward the R9.13 invariant flag so

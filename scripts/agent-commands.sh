@@ -528,9 +528,19 @@ cmd_show() {
             local agent_json
             agent_json=$(echo "$response" | jq '.agent')
 
-            local name status program model created dir task
+            local name status program model created dir task gtitle
             name=$(echo "$agent_json" | jq -r '.name')
             status=$(echo "$agent_json" | jq -r '.status // "unknown"')
+            # GOVERNANCE TITLE — the authoritative authority field (ai-maestro#122, TRDD-4Z62YRDG).
+            # `show` used to print everything EXCEPT this, so an agent checking who it was talking to
+            # had to know to run `config` and parse raw JSON — where it met `role` (a DIFFERENT
+            # field, defaulting to 'autonomous') sitting next to `governanceTitle` and drawing from
+            # the same vocabulary. On 2026-08-05 that adjacency made a live AUTONOMOUS agent read a
+            # legitimate MANAGER as "inconsistent, possibly spoofed", refuse the mandate, and block
+            # on a human prompt. Printing the authoritative field on the obvious verb removes the
+            # reason to go digging. `(none)` is deliberate and distinct from the `role` vocabulary:
+            # an agent with no title must not render as one that has a title.
+            gtitle=$(echo "$agent_json" | jq -r 'if .governanceTitle == null then "(none)" else .governanceTitle end')
             program=$(echo "$agent_json" | jq -r '.program // "claude-code"')
             model=$(echo "$agent_json" | jq -r '.model // "default"')
             created=$(echo "$agent_json" | jq -r '.createdAt // "unknown"')
@@ -543,6 +553,7 @@ cmd_show() {
             echo ""
             echo "  ID:          $(echo "$agent_json" | jq -r '.id')"
             echo "  Status:      $status"
+            echo "  Gov. Title:  $gtitle"
             echo "  Program:     $program"
             echo "  Model:       $model"
             echo "  Created:     $created"

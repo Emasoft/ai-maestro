@@ -72,3 +72,7 @@ graph; never infer it from the architecture you expect. "It's all funnelled thro
 - [[governance-enforcement-ratchet]] — the map row for a parity rule must cite BOTH modes'
   guards comma-separated (a rule enforced in full mode only is exactly the drift this page
   describes), and its own $7$-assertion suite is what makes such an omission build-red.
+- [[nextjs-full-route-cache-freezes-api-responses]] — a mode difference that runs the OTHER way:
+  Next.js can serve a full-mode GET from a build-time cache without entering the handler at all,
+  while the headless router (being outside Next.js) always executes it. So "stale in full mode,
+  correct in headless" is evidence for route caching, not for a missing headless guard.

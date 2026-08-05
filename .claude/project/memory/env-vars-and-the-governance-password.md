@@ -53,6 +53,14 @@ step, or a commit. Write the variable NAME, never the literal. A scenario's fron
 `governance_password: "$AIM_GOVERNANCE_PASSWORD"`; a step says *"call `aim_sudo_modal`"*, never
 *"type the password"*. A step that instructs anyone to type it is a bug in that step.[^2]
 
+## See also
+
+- [[nextjs-full-route-cache-freezes-api-responses]] — one concrete cause of "I set an env var and
+  nothing happened": an API route that returns env-derived fields can be full-route-cached at build
+  time, so it reports the environment of whatever machine ran `yarn build`. `pm2 restart
+  ecosystem.config.js --update-env` changes the process env with no rebuild, which is exactly the
+  workflow that leaves such a route permanently stale.
+
 ## Notes and lessons learned
 
 [^1]: [id:ATOM-ENV-PHANTOM, status:valid, keywords:"env_var_documented_but_never_read set_env_var_nothing_happens phantom_config_knob WS_RECONNECT_DELAY TERMINAL_SCROLLBACK", ocd:2026-08-02, lmd:2026-08-02]

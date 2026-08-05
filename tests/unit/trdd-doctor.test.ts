@@ -897,6 +897,69 @@ describe('the gate primitives — both date shapes, and what a box is', () => {
   })
 })
 
+/**
+ * APPROVAL-UNAPPROVED-IN-WORK-ZONE — the third arm of the approval invariant.
+ *
+ * The governance overlay states it as `approved: false ⟺ column ∈ {proposal, superseded}`. Two arms
+ * were checked (`rejected` must sit in `refused`; an approval decision needs a judge) and this one
+ * was not — so a card could claim `approved: false` from a WORKING column and nothing said a word.
+ * The board then shows it as authorized work while the card itself asserts nobody signed off.
+ *
+ * Found 2026-08-05 while pulling TRDD-VLBVO0ZP, which is one of NINE such cards in `design/tasks/`;
+ * four sit at a `manager`/`user` floor, i.e. awaiting an approval nobody had been told was
+ * outstanding.
+ */
+describe('APPROVAL-UNAPPROVED-IN-WORK-ZONE — a card cannot be unapproved AND in the work zone', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-appr-'))
+    fs.mkdirSync(path.join(tmp, 'tasks'), { recursive: true })
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  const findingsFor = (id: string) =>
+    lintCorpus(tmp).findings.filter((f) => f.rule === 'APPROVAL-UNAPPROVED-IN-WORK-ZONE' && f.id === id)
+
+  it('FIRES on `approved: false` in a working column, and names the approver it is waiting for', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-APPRWAIT-x.md',
+      good('APPRWAIT', { column: 'dev', approved: 'false', 'min-approval-requirement': 'manager' }))
+    const f = findingsFor('APPRWAIT')
+    expect(f).toHaveLength(1)
+    expect(f[0].severity).toBe('warn')          // WARN, so a governance backlog cannot redden the gate
+    expect(f[0].autofixable).toBe(false)        // moving zones is a governance act, not a format repair
+    expect(f[0].message).toMatch(/manager/)     // the floor is named — that is the actionable part
+    expect(f[0].message).toMatch(/design\/proposals\//)
+  })
+
+  // The two messages are not cosmetic: they prescribe OPPOSITE repairs. A floor of `none` means the
+  // card is a self-mandate and the missing edit is `approved: true`; a real floor means the card
+  // must go back to `proposals/` and wait. A single generic message would send half of them the
+  // wrong way.
+  it('a floor of `none` is diagnosed as a missing `approved: true`, NOT as a card to un-authorize', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-APPRSELF-x.md',
+      good('APPRSELF', { column: 'dev', approved: 'false', 'min-approval-requirement': 'none' }))
+    const f = findingsFor('APPRSELF')
+    expect(f).toHaveLength(1)
+    expect(f[0].message).toMatch(/self-mandate/)
+    expect(f[0].message).toMatch(/approved: true/)
+    expect(f[0].message).not.toMatch(/design\/proposals\//)
+  })
+
+  it('does NOT fire on the LEGITIMATE pending shapes — `proposal` and `superseded`', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-APPRPROP-x.md',
+      good('APPRPROP', { column: 'proposal', approved: 'false', 'min-approval-requirement': 'manager' }))
+    write('tasks', 'TRDD-20260101_000000+0100-APPRSUPD-x.md',
+      good('APPRSUPD', { column: 'superseded', approved: 'false', 'min-approval-requirement': 'manager' }))
+    expect(findingsFor('APPRPROP')).toEqual([])
+    expect(findingsFor('APPRSUPD')).toEqual([])
+  })
+
+  it('does NOT fire on an APPROVED card in a working column — the ordinary case', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-APPROKAY-x.md',
+      good('APPROKAY', { column: 'dev', approved: 'true', 'approval-judge': 'someone' }))
+    expect(findingsFor('APPROKAY')).toEqual([])
+  })
+})
+
 describe('THE GATE — the real corpus lints clean', () => {
   it('design/ has zero ERROR-level findings', () => {
     const report = lintCorpus(path.join(process.cwd(), 'design'))

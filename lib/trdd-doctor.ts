@@ -888,6 +888,37 @@ export function lintCorpus(designDir: string): DoctorReport {
         autofixable: false,
       })
     }
+    // The THIRD arm of the same invariant, and the one that was missing.
+    //
+    // `approved: false` means "nobody has signed off" — pending, or overtaken by a newer card. The
+    // governance overlay states it as `approved: false ⟺ column ∈ {proposal, superseded}`. The two
+    // arms above cover `rejected` and `true`; a card claiming `approved: false` from a WORKING
+    // column was checked by nothing, so the board could show it as authorized work while the card
+    // itself said the opposite. Measured 2026-08-05: NINE such cards in `design/tasks/`, four of
+    // them at a `manager`/`user` floor — i.e. sitting in the authorized folder awaiting an approval
+    // that nobody had been told was outstanding.
+    //
+    // WARN, not ERROR, deliberately. Each of the nine needs a HUMAN judgement — mis-filed, or
+    // genuinely pending and needing routing to its approver — and an ERROR here would redden the
+    // corpus gate over a governance backlog, which is how a linter gets routed around rather than
+    // read. Not autofixable for the same reason: moving a card between zones is a governance act,
+    // not a format repair.
+    const PENDING_COLUMNS = new Set(['proposal', 'superseded'])
+    if (approved === false && c.column && !PENDING_COLUMNS.has(c.column)) {
+      const floor = String(c.fm['min-approval-requirement'] ?? 'none')
+      add({
+        rule: 'APPROVAL-UNAPPROVED-IN-WORK-ZONE',
+        severity: 'warn',
+        id: c.id,
+        filePath: c.filePath,
+        message:
+          `approved: false but column is '${c.column}' — the card sits in the authorized-work set while asserting nobody approved it` +
+          (floor === 'none'
+            ? '. Its floor is `none`, so it is a self-mandate and `approved: true` is almost certainly the missing edit'
+            : `. Its floor is '${floor}', so it is genuinely awaiting that approver and belongs in \`design/proposals/\` (column: proposal) until they rule`),
+        autofixable: false,
+      })
+    }
 
     // `superseded-by:` is the one reference field trdd-graph does NOT walk (it checks
     // npt/eht/blocked-by/parent-trdd). Kept here for that field alone — everything else

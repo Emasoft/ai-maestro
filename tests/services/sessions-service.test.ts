@@ -592,8 +592,8 @@ describe('renameSession', () => {
 describe('sendCommand', () => {
   it('sends command to idle session', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
-    // sendCommand sets activity before idle check, so requireIdle must be false
-    // to test basic command-sending behavior
+    // requireIdle: false = explicit opt-out; since the #110 fix the default (true) also
+    // passes on a fresh session — pinned by 'the idle gate PASSES a fresh session' below.
     const result = await sendCommand('my-agent', 'ls -la', { requireIdle: false, authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(200)
@@ -635,34 +635,37 @@ describe('sendCommand', () => {
     expect(result.error).toMatch(/not idle/i)
   })
 
-  // CHARACTERISATION TEST — this pins CURRENT behaviour, and the behaviour looks WRONG.
-  // Reported, not silently "fixed": changing it alters live injection fleet-wide, which is the
-  // same reason #110 is user-gated.
+  // THE #110 FIX, pinned from both directions (ruled 2026-08-06 under the USER's delegation).
+  // The old code bumped sessionActivity BEFORE the idle check, so isSessionIdle always read
+  // ~0 elapsed and the gate 409'd EVERY caller — a fresh session included (the former
+  // CHARACTERISATION test here demonstrated it with an empty activity map). The bump now
+  // lands on the SUCCESS path only, beside the #117 injection mark, for the same reason: a
+  // refused send interacted with nothing.
   //
-  // The gate is UNCONDITIONAL. `sendCommand` bumps sessionActivity to Date.now() at
-  // services/sessions-service.ts:1340, and isSessionIdle (:307-311) is
-  //   const activity = sessionActivity.get(name); if (!activity) return true
-  //   return (Date.now() - activity) > IDLE_THRESHOLD_MS
-  // so by the time the check runs the elapsed time is ~0 and can never exceed the threshold. The
-  // `!activity` early-out cannot save the first call either, because the bump already wrote it.
-  // Net: with requireIdle at its default (true), EVERY call 409s — even the first one, on a
-  // completely fresh session with no prior activity, which is what this test demonstrates.
-  //
-  // Consequences worth stating, because they reframe three other issues:
-  //   - the "protect a busy agent" gate protects nothing; it refuses everything;
-  //   - #110's CLI hardcoding require_idle=false reads as a WORKAROUND for this, not a mistake —
-  //     which means "fix the CLI to use the server default" would 409 every CLI injection;
-  //   - #51's wake mechanism cannot use the default path at all.
-  it('CHARACTERISATION (#51/#110): 409s even on a FRESH session — the idle gate never passes', async () => {
+  // The pair discriminates the two ways this can regress:
+  //   - fresh+default → 200 catches the bump moving back ABOVE the check;
+  //   - send-then-immediate-send → 409 catches the bump being DELETED outright.
+  it('the idle gate PASSES a fresh session under the DEFAULT requireIdle (#110 fixed)', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     // Deliberately NO sessionActivity seeded: this session has never been touched.
     expect(mockSharedState.sessionActivity.has('pristine-agent')).toBe(false)
 
     const result = await sendCommand('pristine-agent', 'ls', { authContext: SYSTEM_OWNER_CTX })
 
-    expect(result.status).toBe(409)
-    expect(result.error).toMatch(/not idle/i)
-    expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
+    expect(result.status).toBe(200)
+    expect(mockRuntime.sendKeys).toHaveBeenCalled()
+    // The successful send IS activity now — recorded after, not before, the gate.
+    expect(mockSharedState.sessionActivity.has('pristine-agent')).toBe(true)
+  })
+
+  it('a successful send makes the NEXT default send 409 — the bump survives on the success path', async () => {
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    const first = await sendCommand('pristine-agent', 'ls', { authContext: SYSTEM_OWNER_CTX })
+    expect(first.status).toBe(200)
+
+    const second = await sendCommand('pristine-agent', 'ls', { authContext: SYSTEM_OWNER_CTX })
+    expect(second.status).toBe(409)
+    expect(second.error).toMatch(/not idle/i)
   })
 
   it('sends command even when busy if requireIdle is false', async () => {
@@ -693,11 +696,9 @@ describe('sendCommand', () => {
 
   // ai-maestro#117 — the injection MARK. Without these two the `injectedPrompts.set(...)` line
   // could be deleted and this whole file would stay green: the mock would simply go unused.
-  // `requireIdle: false` is REQUIRED here and is not boilerplate: the activity bump at
-  // sessions-service.ts:1340 runs before the idle check and sets the timestamp to NOW, so with
-  // requireIdle defaulting to true this call ALWAYS 409s (see the same note at line 595). That
-  // also means the neighbouring 'updates activity timestamp' test is green on a 409 — it asserts
-  // the map the refusal path writes anyway. This one is not: a mark only exists after a send.
+  // requireIdle: false is explicit opt-out (since the #110 fix the default also passes on a
+  // fresh session). The mark only exists after a SUCCESSFUL send — both stamps now live on
+  // the success path, so a refused send writes neither.
   it('MARKS the session as injected after a successful send', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
 

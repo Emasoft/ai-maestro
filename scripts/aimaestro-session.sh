@@ -47,7 +47,7 @@
 # authority the API had already revoked.
 #
 # Usage:
-#   aimaestro-session.sh inject <agent> --command "<text>" [--no-newline] [--require-idle]
+#   aimaestro-session.sh inject <agent> --command "<text>" [--no-newline] [--no-require-idle]
 #   aimaestro-session.sh slash <agent> <command-key>
 #   aimaestro-session.sh slash-keys
 #   aimaestro-session.sh state <agent> [--pane]
@@ -171,7 +171,8 @@ aimaestro-session.sh — AI Maestro agent terminal-control CLI
 Commands:
   inject <agent> --command "<text>"     Type arbitrary text into the agent's pane
       --no-newline                      Do not press Enter after the text
-      --require-idle                    Refuse unless the agent is at an idle prompt
+      --require-idle                    Refuse unless the agent is at an idle prompt (DEFAULT since #110)
+      --no-require-idle                 Opt out of the idle gate (inject into a busy pane)
   slash <agent> <command-key>           Send a curated slash command (allowlisted)
   slash-keys                            List the allowed command keys
   state <agent>                         Session status (online/offline, activity)
@@ -207,12 +208,15 @@ EOF
 cmd_inject() {
     local ref="${1:-}"; shift || true
     [ -z "$ref" ] && { echo "Error: agent required" >&2; return 1; }
-    local text="" newline="true" require_idle="false"
+    # Default TRUE since the #110 fix — the server gate works now; the old false default
+    # was a workaround for a gate that 409'd everything. --no-require-idle opts out.
+    local text="" newline="true" require_idle="true"
     while [ $# -gt 0 ]; do
         case "$1" in
             --command)      text="$2"; shift 2 ;;
             --no-newline)   newline="false"; shift ;;
             --require-idle) require_idle="true"; shift ;;
+            --no-require-idle) require_idle="false"; shift ;;
             *) echo "Error: unknown flag for 'inject': $1" >&2; return 1 ;;
         esac
     done

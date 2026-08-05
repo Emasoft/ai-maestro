@@ -206,13 +206,18 @@ cmd_session_exec() {
 # Send a command to a tmux session BY SESSION NAME (POST /api/sessions/<name>/command).
 # Distinct from `session exec` (agent-keyed PATCH): this is what a hook/daemon uses
 # when it already holds the tmux session name. Usage:
-#   aimaestro-agent.sh session command <session-name> [--require-idle] [--newline] -- <cmd...>
+#   aimaestro-agent.sh session command <session-name> [--no-require-idle] [--newline] -- <cmd...>
 cmd_session_command() {
-    local session="" require_idle=false add_newline=false
+    # requireIdle defaults TRUE since the #110 fix (the server gate used to be unpassable —
+    # the old hardcoded false was a workaround for that, not a design choice). The owner's
+    # ratified injection rules demand idle-gated typing; --no-require-idle is the explicit
+    # opt-out, and --require-idle stays accepted (now the default) for existing callers.
+    local session="" require_idle=true add_newline=false
     local -a cmd_args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --require-idle) require_idle=true; shift ;;
+            --no-require-idle) require_idle=false; shift ;;
             --newline) add_newline=true; shift ;;
             --) shift; cmd_args=("$@"); break ;;
             -*) print_error "Unknown option: $1"; return 1 ;;

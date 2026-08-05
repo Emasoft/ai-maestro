@@ -1336,9 +1336,6 @@ export async function sendCommand(
     return { error: 'Tmux session not found', status: 404, data: undefined }
   }
 
-  // Update activity before idle check: any interaction attempt counts as activity
-  sessionActivity.set(sessionName, Date.now())
-
   if (requireIdle && !isSessionIdle(sessionName)) {
     return {
       error: 'Session is not idle',
@@ -1349,9 +1346,12 @@ export async function sendCommand(
 
   await runtime.cancelCopyMode(sessionName)
   await runtime.sendKeys(sessionName, command, { literal: true, enter: addNewline })
-  // ai-maestro#117 — twin of the mark in agents-core-service. Placed AFTER the send, not at the
-  // activity bump above, because that one runs BEFORE the idle check and so also fires for a send
-  // this function then REFUSES with 409; a refused send injects no prompt and must veto nothing.
+  // BOTH stamps land on the SUCCESS path only (ai-maestro#110 + #117, ruled 2026-08-06).
+  // The activity bump used to run BEFORE the idle check, so isSessionIdle always read ~0
+  // elapsed and the gate 409'd EVERY caller — even a fresh session with an empty activity
+  // map (proven by the characterisation test in sessions-service.test.ts). A refused send
+  // interacted with nothing: it must neither count as activity nor veto user presence.
+  sessionActivity.set(sessionName, Date.now())
   injectedPrompts.set(sessionName, Date.now())
 
   return { data: { success: true, sessionName, commandSent: command, method: 'tmux-send-keys', wasIdle: true }, status: 200 }

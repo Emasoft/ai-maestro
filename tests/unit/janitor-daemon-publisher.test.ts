@@ -249,6 +249,9 @@ describe('publishHibernationResponses — envelope and robustness', () => {
     expect(readdirSync(path.join(dir, 'archive')).filter((f) => f.includes('.tmp.'))).toEqual([])
   })
 
+  // NEUTERS ACTUALLY RUN 2026-08-05 (scripts/dev/neuter), both reddening exactly this test:
+  //   · `const changed = dataChanged(...)` → `const changed = true`  (archive every beat)
+  //   · `uniqueArchiveName` returning a constant name                (collide instead of suffix)
   it('archives a timestamped copy ONLY when the payload data changed', async () => {
     const wd = path.join(agentsRoot, 'good')
     mkdirSync(wd, { recursive: true })

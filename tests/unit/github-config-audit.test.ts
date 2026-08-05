@@ -14,13 +14,17 @@
  *      `null` must never become a finding. An audit that invents findings when the network is flaky
  *      trains its reader to ignore it, which is worse than not running.
  *
- * NEUTER RUNS (recorded 2026-08-05, via scripts/dev/neuter):
- *   · `classifyRepo` returning findings on `rulesets: null` (drop the null guard) → reddens
- *     "stays silent when the rulesets probe failed". 1 red.
- *   · `runGithubConfigAudit` stamping unconditionally (move the stamp above the null check) →
- *     reddens "writes NO stamp when the population could not be resolved". 1 red.
- *   · `fleetRepoSlugs` returning a hard-coded list instead of parsing the catalog → reddens
- *     "derives the population from the catalog file". 1 red.
+ * NEUTER RUNS — ACTUALLY RUN 2026-08-05 via scripts/dev/neuter, results as observed:
+ *   · `if (facts.admin !== true) return []` → `if (false) return []`
+ *     → 1 red: "stays silent when the viewer is not admin, or admin is indeterminate".
+ *   · `runGithubConfigAudit` stamping before the population check
+ *     → 1 red: "writes NO stamp when the population could not be resolved".
+ *
+ * AND ONE FINDING ABOUT THE TEST, caught by predicting a neuter before running it: the admin
+ * assertion originally used `cleanFacts` — a fully-compliant repo — so it read `[]` whether the
+ * guard existed or not, and the mutation above would have reddened NOTHING. It now feeds facts
+ * that DO produce findings, with a positive control asserting they do, so the guard is the only
+ * thing that can silence them.
  */
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'

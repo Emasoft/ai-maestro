@@ -13,13 +13,25 @@
  * `process.env.HOME` and assumed it worked would silently prune the developer's real archive, and
  * these documents cannot be regenerated.
  *
- * NEUTER RUNS (recorded 2026-08-05, via scripts/dev/neuter):
- *   · `pruneArchive` slicing at `keep + 1` (off-by-one) → reddens "keeps exactly the newest N". 1 red.
- *   · `pruneArchive` sorting ascending instead of descending → reddens "keeps the NEWEST, not the
- *     oldest". 1 red.
- *   · `isValidArchiveName` returning true for anything → reddens all four traversal cases. 1 red
- *     (one test, four assertions).
- *   · `archiveDiscovered` dropping its `existsSync` skip → reddens "a second sweep adds nothing". 1 red.
+ * NEUTER RUNS — ACTUALLY RUN 2026-08-05 via scripts/dev/neuter, results as observed (two of the
+ * three predictions were wrong, which is the reason to run them rather than assert them):
+ *
+ *   · `listArchive` sorting ASCENDING instead of descending
+ *     → 2 red (predicted 1): "keeps exactly the newest N" AND "returns newest first". The prune
+ *       reads its order from `listArchive`, so one mutation reaches both — which is what makes
+ *       "keeps the newest" a real claim rather than a restatement of the count.
+ *   · the anchored filename regex → a match-anything pattern
+ *     → 2 red: "rejects names that are merely close to the archive shape" AND "returns newest
+ *       first and ignores foreign files" (the listing filters on the same predicate).
+ *   · `archiveDiscovered` dropping its `existsSync` skip
+ *     → 1 red: "a second sweep adds nothing".
+ *
+ *   · removing ALL THREE `includes('/')` / `('\\')` / `('..')` checks, keeping the regex
+ *     → **0 red.** That is a measurement, not a pass: those three are strictly redundant with the
+ *       anchored regex (nothing containing a separator can match it), so they are unpinnable by
+ *       construction. They stay as the defence that survives a future regex loosening; the reason
+ *       is recorded on `isValidArchiveName` itself so nobody mistakes them for the working guard.
+ *       The complementary neuter above is what proves the regex IS the working guard.
  */
 
 import { describe, expect, it, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'

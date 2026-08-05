@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:11:01+0200
+updated: 2026-08-05T23:14:18+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -251,6 +251,40 @@ production callers in `app lib services` minus the defining file, and **(2)** de
 once, end to end on a single agent, that a flag written to `known_marketplaces.json` before
 a restart is honoured by the instance that comes back. The parent cannot proceed past `dev`
 until both pass.
+
+### HARD CONSTRAINT — a simultaneous fleet restart is an ANTHROPIC rate-limit ban
+
+USER, 2026-08-05: *"you cannot restart the whole fleet at the same time! it will immediately
+trigger a rate limit ban! because each claude code will resend the full conversation to the
+server, that is 1m tokens per agent and subagent."*
+
+**This is a different limit from the GitHub one this card is about, and a far more severe
+one.** A resumed Claude Code instance re-sends its whole transcript; at ~1M tokens per agent
+**and per subagent**, restarting N agents together is an N-million-token burst at the
+Anthropic API. The fix for a GitHub connection limit must not be implemented in a way that
+trips an Anthropic token limit — that is trading a throttle for a ban.
+
+Measured in the driver, and the answer is half-good:
+
+- ✓ **It is sequential, not parallel.** `lib/fleet-restart-driver.ts:78` — *"Restart every
+  target that is safe to restart, sequentially"* — and the body is a `for (const target of
+  targets)` loop, not `Promise.all`. So despite `fleet-restart-fanout.ts` being named for
+  the shape that would be worst here, it does not spawn a thundering herd.
+- ✗ **There is no PACING.** Neither file contains a delay, sleep, interval, or concurrency
+  cap: `grep -nE "stagger|delay|sleep|concurren|batch|interval"` returns nothing across
+  both. Sequential-without-delay still fires restarts back to back as fast as each returns.
+
+And the loop awaits the **restart operation**, not the resumed conversation's token resend.
+So instance N+1 can begin while instance N is still streaming its transcript — the bursts
+overlap even though the restarts do not. Sequential is necessary here and not sufficient.
+
+**Consequence for this card:** the write-then-restart step must be *paced*, not merely
+ordered — an inter-restart delay (or a token-budget-aware drip) sized against the transcript
+resend, not against how long a restart call takes to return. Restarting 13 agents is not an
+operation to perform in one pass at all; a flag flip that lands session-by-session as each
+agent naturally restarts is strictly safer than any fleet-wide sweep, and costs only time.
+That may well be the right answer: **the flag does not need to take effect everywhere at
+once.**
 
 ## Non-goals
 

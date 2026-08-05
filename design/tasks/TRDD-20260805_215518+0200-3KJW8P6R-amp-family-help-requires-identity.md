@@ -1,11 +1,12 @@
 ---
 trdd-id: 3KJW8P6R
 title: The amp-* family requires an AMP identity to print --help
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T21:55:18+0200
-updated: 2026-08-05T21:55:18+0200
+updated: 2026-08-05T22:29:50+0200
+implementation-commits: [c4472e1e]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -90,19 +91,36 @@ and a neuter rather than a quick edit at the end of a session.
 
 ## Acceptance criteria
 
-- [ ] `amp-send.sh --help` prints usage and exits 0 with **no** `AID_AUTH`, **no** agent
+- [x] `amp-send.sh --help` prints usage and exits 0 with **no** `AID_AUTH`, **no** agent
       workdir, and **no** `AIM_AGENT_ID` in the environment.
-- [ ] The same holds for all 27 sibling `amp-*` scripts.
-- [ ] **A true-positive regression test in the SAME run:** a real `amp-send.sh` invocation
-      (not `--help`) from an unbound session still refuses, still exits non-zero, and still
-      does NOT print a pickable uuid list. A fix that reaches box 1 by weakening the identity
-      gate must fail here.
-- [ ] Each fixed script is DELETED from `KNOWN_VIOLATORS` in
+- [x] The same holds for all 27 sibling `amp-*` scripts. **31/31 measured** — the count is
+      higher than the 28 this card was filed with because the scan set is discovered, not
+      listed. One of them, `amp-create-branch.sh`, turned out to have **no `--help` verb at
+      all**: the flag was read as `<repo-path>` and fell through to the usage line at exit 1,
+      so a caller asking what the script does got the same signal as one who used it wrong.
+      A separate defect wearing the same symptom, fixed with its own case block.
+- [x] **A true-positive regression test in the SAME run:** `TRUE POSITIVE — a real amp
+      operation from an UNBOUND session is still refused`, in the same file as the 55 help
+      assertions. Asserts BOTH halves: non-zero exit, and zero uuid-shaped strings in the
+      output. Verified by hand first, then written as a test, because a hand-verified claim
+      protects only the session that made it.
+- [x] Each fixed script is DELETED from `KNOWN_VIOLATORS` in
       `tests/unit/cli-help-exit-contract.test.ts` — the ratchet fails if a listed script
-      starts passing, so the list cannot go stale.
-- [ ] A neuter is recorded: re-introducing the identity requirement on the help path reddens
-      a named test.
-- [ ] `aid-auth.sh` either complies or its row moves to a stated exception with a reason.
+      starts passing, so the list cannot go stale. **28 → 1.**
+- [x] A neuter is recorded — but not the one this box predicted, and the difference is the
+      finding. "Re-introduce the identity requirement on the help path" would have reddened
+      the 55 help assertions and told me nothing I did not already know from watching them
+      go green. The load-bearing neuter is the opposite one: **`s/exit 1/exit 0/ if $. == 343`**
+      (the identity abort itself) → **1 red / 55 green — the true-positive test, and only it**.
+      That is the measurement that matters, because it proves the 55 help assertions are
+      *indifferent* to the gate and would survive a "fix" that simply stopped aborting.
+      Also recorded, in the test itself: the shortcut this suite CANNOT catch (widening the
+      help-only `case` to match everything), and why the nonexistent-path sentinel covers it
+      instead of an assertion.
+- [x] `aid-auth.sh` REMAINS listed, deliberately, with the reason stated in the file: it
+      PRINTS a token to stdout, so `--help` is not a distinct verb for it and deciding what
+      help even *means* there is a design question, not the identity bug this card is about.
+      Left on the ratchet rather than quietly exempted.
 
 ## Non-goals
 

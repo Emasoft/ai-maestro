@@ -101,6 +101,55 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
     ).toEqual([])
   })
 
+  it('TRUE POSITIVE — a real amp operation from an UNBOUND session is still refused', () => {
+    // TRDD-3KJW8P6R. The help-only skip in amp-helper.sh must not have weakened the identity
+    // gate, and every assertion above is satisfied by a fix that simply disables it — so this
+    // runs in the SAME suite, which is the only arrangement that can catch that trade.
+    //
+    // Two claims, because "it refused" is not enough: the abort is deliberately written to
+    // name only the paths that PROVE identity and to REFUSE to print a pickable uuid list.
+    // An unbound session copying a live peer's uuid is the exact state-corrupting act the
+    // message exists to prevent — an error must not hand the caller the exploit.
+    //
+    // NEUTER RUN (2026-08-05 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+    //   s/exit 1/exit 0/ if $. == 343     (the identity abort in amp-helper.sh)
+    //   → 1 red / 55 green: this test, and ONLY this test.
+    // The 55 help assertions are indifferent to it, which is the whole point — they would
+    // stay green through a "fix" that simply stopped aborting.
+    //
+    // What this does NOT catch, stated rather than implied: widening the help-only `case`
+    // to match every invocation. That shortcut leaves AMP_DIR at the nonexistent sentinel,
+    // so a real send still fails and still prints no uuid — the outcome is identical and no
+    // assertion here can tell them apart. It is caught upstream instead, by the sentinel
+    // being a path that cannot exist rather than a plausible default.
+    let status = 0
+    let output = ''
+    try {
+      execFileSync('bash', [join(SCRIPTS, 'amp-send.sh'), 'someone', 'subject', 'body'], {
+        stdio: 'pipe',
+        timeout: 20_000,
+        env: {
+          ...process.env,
+          AID_AUTH: '',
+          AIM_AGENT_ID: '',
+          AIM_AGENT_NAME: '',
+          AMP_DIR: '',
+          AGENT_WORK_DIR: '',
+        },
+      })
+    } catch (err) {
+      const e = err as { status?: number; stderr?: Buffer; stdout?: Buffer }
+      status = typeof e.status === 'number' ? e.status : 1
+      output = `${e.stderr?.toString() ?? ''}${e.stdout?.toString() ?? ''}`
+    }
+
+    expect(status, 'an unbound session must NOT be able to send').not.toBe(0)
+    expect(
+      output.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) ?? [],
+      'the refusal must not print a pickable uuid list',
+    ).toEqual([])
+  })
+
   it('every listed violator still exists (no stale names hiding a deleted script)', () => {
     const ghosts = [...KNOWN_VIOLATORS].filter((s) => !CANDIDATES.includes(s))
     expect(ghosts, `KNOWN_VIOLATORS names scripts that no longer exist: ${ghosts.join(', ')}`).toEqual([])

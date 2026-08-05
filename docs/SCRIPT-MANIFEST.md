@@ -91,7 +91,10 @@ list · show · config · resolve · create · delete · update · rename · ses
 hibernate · wake · restart · skill · plugin · export · import · presence · help
 ```
 
-- `create <name> --dir <path> [options] [-- <program-args>…]`
+- `create <name> [--dir <path>] [options] [-- <program-args>…]` — `--dir` is OPTIONAL and
+  defaults to `~/agents/<name>/`, the only location the server accepts for an agent folder
+  (the Wizard's G03 guard rejects any other, and `DeleteAgent` refuses `alsoDeleteFolder`
+  outside it). There is still no way to register an agent WITHOUT a folder.
 - `resolve <name> | --cwd <dir>` → the agent's tmux session name
 - `config <agent>` → consolidated config (teams, repo, docker, tasks, AID)
 - `presence` → the human user's last input + idle window

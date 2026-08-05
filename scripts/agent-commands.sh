@@ -576,10 +576,12 @@ cmd_create() {
                 break ;;
             -h|--help)
                 cat << 'HELP'
-Usage: aimaestro-agent.sh create <name> --dir <path> [options] [-- <program-args>...]
+Usage: aimaestro-agent.sh create <name> [--dir <path>] [options] [-- <program-args>...]
 
 Options:
-  -d, --dir <path>       Working directory (REQUIRED - must be full path)
+  -d, --dir <path>       Working directory, full path. OPTIONAL — defaults to
+                         ~/agents/<name>/, which is the only location the server
+                         accepts for an agent folder anyway.
   -p, --program <prog>   Program to run (default: claude-code)
   -m, --model <model>    AI model (e.g., claude-sonnet-4)
   -t, --task <desc>      Task description
@@ -663,12 +665,27 @@ HELP
         fi
     fi
 
-    # Directory is REQUIRED - must be specified explicitly
+    # --dir is OPTIONAL and defaults to ~/agents/<name>/ (ai-maestro#76 op 2).
+    #
+    # WHY THAT DEFAULT, AND WHY IT IS NOT A NEW CONVENTION. `~/agents/<name>/` is already the
+    # ONLY place an agent folder may live: the Wizard's G03-ENFORCE guard rejects any other
+    # target, and DeleteAgent refuses `alsoDeleteFolder` for a workdir outside it. Requiring
+    # --dir therefore made every caller retype the one path the server would accept anyway, and
+    # invited them to type a different one and be refused later. The default makes the CLI agree
+    # with the UI.
+    #
+    # ASSIGNED HERE, ABOVE the canonicalization + HOME-containment guard below, ON PURPOSE: the
+    # default is validated by exactly the same code as a caller-supplied path. A default that
+    # skipped that guard would be the bug. `$name` has already passed `validate_agent_name` at
+    # this point, so it cannot smuggle a traversal into the folder name.
+    #
+    # ANNOUNCED, not silent: creating a folder somewhere the caller did not name is a surprise
+    # worth one line. And note what this does NOT add — there is still no way to register an
+    # agent WITHOUT a folder; a registry row with no folder is the orphan state behind the
+    # 2026-07-25 folder-regrowth incident.
     if [[ -z "$dir" ]]; then
-        print_error "Working directory is required (--dir <path>)"
-        print_error "You must specify the full path for the agent's project folder"
-        print_error "Example: aimaestro-agent.sh create my-agent --dir /path/to/project"
-        return 1
+        dir="$HOME/agents/$name"
+        print_info "No --dir given — using the default agent folder: $dir"
     fi
 
     # MEDIUM-6: Validate directory path is safe using proper canonicalization that

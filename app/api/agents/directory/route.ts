@@ -11,6 +11,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDirectory } from '@/services/agents-directory-service'
 
+// This handler never reads its Request (`_request` is unused), which is what makes Next.js
+// full-route-cache it. But `getDirectory()` calls `rebuildLocalDirectory()` on every invocation
+// and then reads the live registry — the returned `entries` and `stats` are a snapshot of which
+// agents exist RIGHT NOW. Cached, a peer host syncing against this endpoint would receive the
+// agent set as it stood on the machine that ran `yarn build`, forever: agents created since would
+// be invisible to the mesh and deleted ones would keep being advertised, with no error and no log
+// line. The route is unreachable today only because middleware 401s it first — a different layer,
+// which is exactly why this must not depend on that gate staying where it is.
+export const dynamic = 'force-dynamic'
+
 export async function GET(_request: NextRequest) {
   try {
     const result = getDirectory()

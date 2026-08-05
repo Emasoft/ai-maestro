@@ -61,7 +61,9 @@ let installRoot: string
 let outsideRoot: string
 
 /** Build a roster whose agents point wherever the test wants to aim the writer. */
-function rosterWith(agents: Array<{ id: string; name: string; wd: string | null }>): HibernationRoster {
+function rosterWith(
+  agents: Array<{ id: string; name: string; wd: string | null; state?: 'hibernated' | 'running' }>,
+): HibernationRoster {
   return {
     agents: agents.map((a) => ({
       agentId: a.id,
@@ -69,8 +71,8 @@ function rosterWith(agents: Array<{ id: string; name: string; wd: string | null 
       sessionName: a.name,
       workingDirectory: a.wd,
       persisted: false,
-      tmux: false,
-      state: 'hibernated' as const,
+      tmux: a.state === 'running',
+      state: a.state ?? ('hibernated' as const),
       reason: 'not persisted and no tmux — cleanly hibernated',
     })),
     orphanedPersistedSessions: [],
@@ -231,8 +233,45 @@ describe('publishHibernationResponses — envelope and robustness', () => {
     const wd = path.join(agentsRoot, 'good')
     mkdirSync(wd, { recursive: true })
     await publish(rosterWith([{ id: 'a1', name: 'good', wd }]))
-    const files = readdirSync(path.join(wd, DAEMON_RESPONSES_DIR))
-    expect(files).toEqual([HIBERNATION_RESPONSE_FILE])
+
+    // Asserted as "no .tmp survives", NOT as an exact directory listing. It used to be
+    // `toEqual([HIBERNATION_RESPONSE_FILE])`, which was an adequate proxy while the directory held
+    // exactly one file — and became wrong (without the atomicity claim becoming wrong) the moment
+    // the change-detected `archive/` sibling was added. An exact listing pins the whole directory's
+    // contents under a name that promises only one thing about it.
+    const dir = path.join(wd, DAEMON_RESPONSES_DIR)
+    const files = readdirSync(dir)
+    expect(files.filter((f) => f.includes('.tmp.'))).toEqual([])
+    expect(files).toContain(HIBERNATION_RESPONSE_FILE)
+
+    // The archive must be atomic too — it writes through the same helper, and a half-written
+    // archived response is a corrupt audit record rather than a stale one.
+    expect(readdirSync(path.join(dir, 'archive')).filter((f) => f.includes('.tmp.'))).toEqual([])
+  })
+
+  it('archives a timestamped copy ONLY when the payload data changed', async () => {
+    const wd = path.join(agentsRoot, 'good')
+    mkdirSync(wd, { recursive: true })
+    const archive = path.join(wd, DAEMON_RESPONSES_DIR, 'archive')
+    const roster = rosterWith([{ id: 'a1', name: 'good', wd }])
+
+    // First publish is itself a transition — there was no previous state to be unchanged from.
+    await publish(roster)
+    expect(readdirSync(archive)).toHaveLength(1)
+
+    // The envelope's `ts` moves on every beat by construction, so an unchanged fleet MUST still
+    // archive nothing. Comparing whole envelopes instead of their `data` would archive 720
+    // identical files per agent per day and bury every real transition in noise.
+    await publish(roster)
+    await publish(roster)
+    expect(readdirSync(archive)).toHaveLength(1)
+
+    // A real transition — this agent woke — must be recorded. Note the three publishes above and
+    // this one all land inside the same second, which is exactly the collision `uniqueArchiveName`
+    // exists for: without it this assertion reads 1, because the new file would overwrite the old
+    // one under an identical name.
+    await publish(rosterWith([{ id: 'a1', name: 'good', wd, state: 'running' }]))
+    expect(readdirSync(archive)).toHaveLength(2)
   })
 
   it('a failing gather is RECORDED, never thrown — it runs unattended on a timer', async () => {

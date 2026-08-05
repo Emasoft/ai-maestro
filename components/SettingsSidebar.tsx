@@ -1,8 +1,8 @@
 'use client'
 
-import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield, Activity, RefreshCw, BarChart3 } from 'lucide-react'
+import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield, Activity, RefreshCw, BarChart3, ClipboardList } from 'lucide-react'
 
-type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics' | 'analytics' | 'plugin-updates'
+type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics' | 'analytics' | 'plugin-updates' | 'janitor-report'
 
 interface SettingsSidebarProps {
   activeSection: SectionId
@@ -98,6 +98,16 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
       label: 'Analytics',
       icon: BarChart3,
       description: 'Sessions, cost & cache health',
+    },
+    {
+      // The janitor's whole-host status document, preserved verbatim as an audit trail. Belongs
+      // with Diagnostics and Analytics for the same reason they belong together — all three are
+      // "inspect what the system is actually doing", and this is the only one of the three that
+      // sees claude instances OUTSIDE this server's own registry.
+      id: 'janitor-report' as const,
+      label: 'Janitor Report',
+      icon: ClipboardList,
+      description: 'Whole-host status, archived',
     },
     {
       id: 'experiments' as const,

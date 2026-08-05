@@ -78,18 +78,108 @@ function writeAtomic(dest: string, payload: unknown): void {
   fs.renameSync(tmp, dest)
 }
 
+/** Timestamped copies live beside the live file, never replacing it. */
+export const RESPONSE_ARCHIVE_DIR = 'archive'
+
+/** Keep the newest N archived responses per agent (USER decision 2026-08-05, same bound as the
+ *  status-document archive). */
+export const RESPONSE_ARCHIVE_KEEP = 50
+
+/**
+ * Local time + GMT offset, per the project timestamp rule. Duplicated from
+ * `janitor-status-archive.ts` rather than imported so this module keeps its zero-dependency
+ * property — it is the one thing that writes into every agent workdir on the host, and a cycle
+ * here would be paid on every beat.
+ */
+function stamp(d: Date): string {
+  const p = (n: number) => String(Math.abs(n)).padStart(2, '0')
+  const offMin = -d.getTimezoneOffset()
+  const sign = offMin < 0 ? '-' : '+'
+  return (
+    `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_` +
+    `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}` +
+    `${sign}${p(Math.floor(Math.abs(offMin) / 60))}${p(Math.abs(offMin) % 60)}`
+  )
+}
+
+/**
+ * Has the payload actually CHANGED since the last publish?
+ *
+ * The envelope's `ts` moves on every beat by construction, so comparing whole envelopes would call
+ * every beat a change and archive 720 identical files per agent per day. Comparing only `data`
+ * makes each archived file mark a REAL transition — an agent hibernated, crashed, or woke — which
+ * is the only thing an audit trail of this feed is worth keeping for.
+ */
+function dataChanged(dest: string, payload: unknown): boolean {
+  try {
+    const prev = JSON.parse(fs.readFileSync(dest, 'utf8')) as { data?: unknown }
+    const next = (payload as { data?: unknown })?.data
+    return JSON.stringify(prev?.data) !== JSON.stringify(next)
+  } catch {
+    // No previous file (or unreadable) — the first publish IS a transition worth recording.
+    return true
+  }
+}
+
+/**
+ * An archive filename that cannot collide with one already in `dir`.
+ *
+ * The stamp resolves to the SECOND, so two transitions inside the same second would compose the
+ * same name and the second would silently REPLACE the first. That is the one failure this archive
+ * exists to prevent — the USER's requirement is literally "so to not overwriting the last one" —
+ * and losing the earlier of two rapid transitions is worse than losing a slow one, because rapid
+ * transitions are what an incident looks like. A `-2`, `-3`, … suffix keeps both, and keeps the
+ * name sortable and human-readable.
+ */
+function uniqueArchiveName(dir: string, when: Date): string {
+  const base = stamp(when)
+  for (let n = 1; n < 1000; n++) {
+    const name = `${base}${n === 1 ? '' : `-${n}`}-${HIBERNATION_RESPONSE_FILE}`
+    if (!fs.existsSync(path.join(dir, name))) return name
+  }
+  // 1000 transitions in one second is not a real fleet; fall back rather than loop forever.
+  return `${base}-${process.pid}-${HIBERNATION_RESPONSE_FILE}`
+}
+
+/** Keep the newest `keep` archived responses in one agent's archive dir. Best-effort. */
+function pruneResponseArchive(dir: string, keep: number): void {
+  try {
+    const files = fs
+      .readdirSync(dir)
+      .filter(f => f.endsWith(`-${HIBERNATION_RESPONSE_FILE}`))
+      .map(f => ({ f, m: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.m - a.m)
+    for (const { f } of files.slice(keep)) fs.rmSync(path.join(dir, f), { force: true })
+  } catch {
+    // Retention is best-effort; failing to prune must never fail a publish.
+  }
+}
+
 /**
  * Publish one response file into one project root.
  *
  * `projectDir` MUST already be validated by the caller. This function does not accept a destination
  * file path, only a project root, and composes the rest from module constants — so no argument can
  * steer the write outside `<projectDir>/.janitor/daemon_responses/`.
+ *
+ * The LIVE file keeps its stable name and is overwritten every beat: three cross-repo contracts
+ * (`ai-maestro-janitor#194`/`#196`, `ai-maestro-plugin#55`) tell consumers to read exactly that
+ * path, so it must not become timestamped. The timestamped copy is ADDITIVE, written into
+ * `archive/` only when the payload's `data` actually changed (USER directive 2026-08-05).
  */
 function publishInto(projectDir: string, payload: unknown, outcome: PublishOutcome): void {
   const dest = path.join(projectDir, DAEMON_RESPONSES_DIR, HIBERNATION_RESPONSE_FILE)
   try {
+    const changed = dataChanged(dest, payload)
     writeAtomic(dest, payload)
     outcome.written.push(dest)
+
+    if (changed) {
+      const dir = path.join(projectDir, DAEMON_RESPONSES_DIR, RESPONSE_ARCHIVE_DIR)
+      fs.mkdirSync(dir, { recursive: true })
+      writeAtomic(path.join(dir, uniqueArchiveName(dir, new Date())), payload)
+      pruneResponseArchive(dir, RESPONSE_ARCHIVE_KEEP)
+    }
   } catch (err) {
     // A single unwritable project must never abort the rest of the sweep — one agent with a
     // read-only or vanished workdir would otherwise starve every other janitor on the host.

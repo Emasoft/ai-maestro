@@ -2024,6 +2024,38 @@ async function startServer(handleRequest) {
       console.warn('[Startup] Janitor response publisher init failed (non-fatal):', err?.message || err)
     }
 
+    // ── Fleet GitHub-config audit (TRDD-14HI8ZPR, USER go-ahead 2026-08-05) ────
+    // The sixth absorbed janitor chore, and the only one of the six that COULD be
+    // absorbed: its population is DATA (the marketplace catalog's repo list), not
+    // live host processes. While this server owns the host the janitor daemon never
+    // spawns, so without this beat nobody audits fleet branch protection at all.
+    //
+    // Read-only `gh api` GETs; it never mutates a repo. 4 h cadence per the USER,
+    // AIM_GITHUB_CONFIG_AUDIT_INTERVAL_MS overrides, 0 disables.
+    try {
+      const { startGithubConfigAuditScheduler } = await import('./lib/github-config-audit.ts')
+      if (startGithubConfigAuditScheduler()) {
+        console.log('[Startup] GitHub-config audit scheduler started (4h, read-only)')
+      }
+    } catch (err) {
+      console.warn('[Startup] GitHub-config audit init failed (non-fatal):', err?.message || err)
+    }
+
+    // ── Janitor status-document archiver (TRDD-TCKNOA72) ──────────────────────
+    // The janitor's global-status HTML is an AUDIT ARTIFACT, and it is written to
+    // the OS temp dir where it is swept — measured 2026-08-05, both of the USER's
+    // sample documents were already gone. This watches for new ones and preserves
+    // them, timestamped so none overwrites the last. It only COPIES; it never runs
+    // the generator, so it can never open a browser window.
+    try {
+      const { startJanitorStatusArchiver } = await import('./lib/janitor-status-archive.ts')
+      if (startJanitorStatusArchiver()) {
+        console.log('[Startup] Janitor status archiver started (~/.aimaestro/janitor-reports/)')
+      }
+    } catch (err) {
+      console.warn('[Startup] Janitor status archiver init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Pillar-index full verifier (TRDD-C4YJAUD9) ─────────────────────────────
     // TRDD-4VCXRHAY moved the index's whole-file `integrity_check` off the read path,
     // because running it on every open made the SAFETY MECHANISM the scaling wall (an

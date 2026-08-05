@@ -64,6 +64,10 @@ const {
     },
     mockSharedState: {
       sessionActivity: new Map<string, number>(),
+      // ai-maestro#117 — `sendCommand` marks here after a SUCCESSFUL send. This mock lists its
+      // exports explicitly, so a new export the code imports must be added or every test that
+      // reaches the marking line dies on "No X export is defined on the mock".
+      injectedPrompts: new Map<string, number>(),
       broadcastStatusUpdate: vi.fn(),
     },
     mockFs: (() => {
@@ -158,6 +162,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   resetFixtureCounter()
   mockSharedState.sessionActivity.clear()
+  mockSharedState.injectedPrompts.clear()
   // Reset runtime mock defaults
   mockRuntime.listSessions.mockResolvedValue([])
   mockRuntime.sessionExists.mockResolvedValue(false)
@@ -654,6 +659,39 @@ describe('sendCommand', () => {
     await sendCommand('my-agent', 'ls', { authContext: SYSTEM_OWNER_CTX })
 
     expect(mockSharedState.sessionActivity.get('my-agent')).toBeDefined()
+  })
+
+  // ai-maestro#117 — the injection MARK. Without these two the `injectedPrompts.set(...)` line
+  // could be deleted and this whole file would stay green: the mock would simply go unused.
+  // `requireIdle: false` is REQUIRED here and is not boilerplate: the activity bump at
+  // sessions-service.ts:1340 runs before the idle check and sets the timestamp to NOW, so with
+  // requireIdle defaulting to true this call ALWAYS 409s (see the same note at line 595). That
+  // also means the neighbouring 'updates activity timestamp' test is green on a 409 — it asserts
+  // the map the refusal path writes anyway. This one is not: a mark only exists after a send.
+  it('MARKS the session as injected after a successful send', async () => {
+    mockRuntime.sessionExists.mockResolvedValue(true)
+
+    const result = await sendCommand('my-agent', 'ls', { requireIdle: false, authContext: SYSTEM_OWNER_CTX })
+
+    expect(result.status).toBe(200)
+    expect(mockSharedState.injectedPrompts.get('my-agent')).toBeDefined()
+  })
+
+  // THE LOAD-BEARING ONE, and the reason the mark is not written beside the activity bump.
+  // The bump at sessions-service.ts:1340 runs BEFORE the idle check, so it fires even for a send
+  // this function then REFUSES with 409. A refused send injects nothing, so it must leave no mark
+  // — otherwise the next genuine keystroke would be vetoed as an echo of a prompt never sent.
+  // Asserting BOTH maps is what makes this discriminating: it fails if the two are ever marked
+  // at the same point, which is the "simplification" a future reader is most likely to attempt.
+  it('does NOT mark a send it REFUSES with 409, though it still bumps activity', async () => {
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSharedState.sessionActivity.set('busy-agent', Date.now()) // very recent = not idle
+
+    const result = await sendCommand('busy-agent', 'ls', { authContext: SYSTEM_OWNER_CTX })
+
+    expect(result.status).toBe(409)
+    expect(mockSharedState.sessionActivity.get('busy-agent')).toBeDefined()
+    expect(mockSharedState.injectedPrompts.has('busy-agent')).toBe(false)
   })
 })
 

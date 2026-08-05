@@ -73,6 +73,10 @@ const {
     },
     mockSharedState: {
       sessionActivity: new Map<string, number>(),
+      // ai-maestro#117 — `sendAgentSessionCommand` marks here after a SUCCESSFUL send. This mock
+      // lists its exports explicitly, so a new export the code imports must be added or the call
+      // throws and the service reports 500.
+      injectedPrompts: new Map<string, number>(),
       broadcastAgentUpdate: vi.fn(),
     },
     mockAgentStartup: {
@@ -193,6 +197,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   resetFixtureCounter()
   mockSharedState.sessionActivity.clear()
+  mockSharedState.injectedPrompts.clear()
   mockRuntime.listSessions.mockResolvedValue([])
   mockRuntime.sessionExists.mockResolvedValue(false)
   mockRuntime.createSession.mockResolvedValue(undefined)
@@ -1130,6 +1135,34 @@ describe('sendAgentSessionCommand', () => {
     await sendAgentSessionCommand('agent-1', { command: 'ls' }, SYSTEM_OWNER_CTX)
 
     expect(mockSharedState.sessionActivity.get('my-agent')).toBeDefined()
+  })
+
+  // ai-maestro#117 — the injection MARK. Twin of the pair in sessions-service.test.ts. Without
+  // these the `injectedPrompts.set(...)` line could be deleted with the file staying green.
+  it('MARKS the session as injected after a successful send', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+
+    await sendAgentSessionCommand('agent-1', { command: 'ls' }, SYSTEM_OWNER_CTX)
+
+    expect(mockSharedState.injectedPrompts.get('my-agent')).toBeDefined()
+  })
+
+  // The discriminating one: a 409-refused send injects nothing, so it must leave NO mark, even
+  // though activity IS bumped. Asserting both maps is what fails if the two are ever marked at
+  // the same point — the "simplification" a future reader is most likely to attempt.
+  it('does NOT mark a send it REFUSES with 409, though it still bumps activity', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSharedState.sessionActivity.set('my-agent', Date.now())
+
+    const result = await sendAgentSessionCommand('agent-1', { command: 'ls' }, SYSTEM_OWNER_CTX)
+
+    expect(result.status).toBe(409)
+    expect(mockSharedState.sessionActivity.get('my-agent')).toBeDefined()
+    expect(mockSharedState.injectedPrompts.has('my-agent')).toBe(false)
   })
 
   it('returns 400 when agent has no name', async () => {

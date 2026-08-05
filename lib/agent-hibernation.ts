@@ -112,6 +112,13 @@ export interface RosterAgentInput {
   sessionName: string
   /** The registry has ever recorded a session — see `HibernationInput.hasSession`. */
   hasSession: boolean
+  /**
+   * The agent's own working directory, carried through so the daemon publisher can DERIVE where to
+   * deposit this agent's response without a second registry read. It is validated against
+   * `AGENTS_ROOT` at the point of write, never trusted from here — a hand-edited or corrupted
+   * registry row must not be able to aim the writer at an arbitrary directory.
+   */
+  workingDirectory?: string | null
 }
 
 /** A persisted row as it appears in `sessions.json` — `id` is the SESSION NAME, not an agent id. */
@@ -135,6 +142,8 @@ export interface AgentHibernationRecord extends HibernationVerdict {
   sessionName: string
   persisted: boolean
   tmux: boolean
+  /** Carried through from the input — see `RosterAgentInput.workingDirectory`. */
+  workingDirectory?: string | null
 }
 
 /**
@@ -175,7 +184,15 @@ export function buildHibernationRoster(input: RosterInput): HibernationRoster {
     const tmux = input.liveTmuxSessions.has(a.sessionName)
     const persisted = persistedAgentIds.has(a.id)
     const verdict = classifyHibernation({ hasSession: a.hasSession, exists: tmux, isPersisted: persisted })
-    return { agentId: a.id, name: a.name, sessionName: a.sessionName, persisted, tmux, ...verdict }
+    return {
+      agentId: a.id,
+      name: a.name,
+      sessionName: a.sessionName,
+      workingDirectory: a.workingDirectory ?? null,
+      persisted,
+      tmux,
+      ...verdict,
+    }
   })
 
   const liveAgentIds = new Set(input.agents.map((a) => a.id))

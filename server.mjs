@@ -2001,6 +2001,29 @@ async function startServer(handleRequest) {
       console.warn('[Startup] Fleet-liveness watchdog init failed (non-fatal):', err?.message || err)
     }
 
+    // ── Janitor response publisher (TRDD-14HI8ZPR; USER security ruling) ──────
+    // Only the daemon integrated into THIS server may read agent status or run
+    // these commands, and only while the server is up — with no server there is
+    // nothing to validate signatures against. So janitor processes never call in:
+    // they READ a file this deposits in their own project folder, under
+    // <project>/.janitor/daemon_responses/. Every destination is DERIVED from the
+    // registry and validated against ~/agents/ before a byte is written; there is
+    // no output-path parameter anywhere in that module, which is what keeps fleet
+    // data out of /tmp and off any caller-steered path.
+    //
+    // Each agent gets its OWN record plus fleet-wide counts, never the full
+    // roster — the whole map in every workdir would mean compromising one agent
+    // yields the fleet. AIM_JANITOR_PUBLISH_INTERVAL_MS overrides the 2-min
+    // cadence; 0 disables.
+    try {
+      const { startJanitorResponsePublisher } = await import('./lib/janitor-daemon-publisher.ts')
+      if (startJanitorResponsePublisher()) {
+        console.log('[Startup] Janitor response publisher started (<project>/.janitor/daemon_responses/)')
+      }
+    } catch (err) {
+      console.warn('[Startup] Janitor response publisher init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Pillar-index full verifier (TRDD-C4YJAUD9) ─────────────────────────────
     // TRDD-4VCXRHAY moved the index's whole-file `integrity_check` off the read path,
     // because running it on every open made the SAFETY MECHANISM the scaling wall (an

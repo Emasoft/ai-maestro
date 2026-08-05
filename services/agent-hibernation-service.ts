@@ -72,6 +72,9 @@ export async function gatherHibernationRoster(deps: GatherDeps = {}): Promise<Hi
       // `getAgentSessionStatus().hasSession`, which returns true for any named agent and so could
       // never surface `never_woken`. See the field's docstring in lib/agent-hibernation.ts.
       hasSession: (s.sessions?.length ?? 0) > 0,
+      // Same fallback chain `defaultFleetScanDeps` uses: an AgentSummary does not always carry the
+      // workdir directly, but the index-0 session record does.
+      workingDirectory: s.sessions?.find((x) => x.index === 0)?.workingDirectory ?? null,
     })),
     persisted,
     liveTmuxSessions,

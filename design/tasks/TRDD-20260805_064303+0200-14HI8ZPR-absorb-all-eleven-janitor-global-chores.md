@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T08:18:39+0200
+updated: 2026-08-05T09:03:49+0200
 implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -284,15 +284,40 @@ orphaned rules persist indefinitely. This is not hypothetical: the janitor's shi
 `janitor-footprint.md` opens by telling a reader what to do when it finds itself orphaned — *"this
 file is an orphan the plugin could not remove"*. Reported on `ai-maestro-janitor#196`.
 
-**✓ VERIFIED for the one absorbable row:** the server already holds the population
-(`lib/ecosystem-constants.ts` — `MARKETPLACE_REPO`, `PREDEFINED_ROLE_PLUGIN_NAMES`, the per-plugin
-repo URLs) and `gh` is installed and authenticated in its environment. So `github-config-audit` is
-the one chore where absorbing is both possible and honest.
+**⚠ CORRECTED 2026-08-05 — the VERIFIED below checked the wrong half.** It proved the server holds
+*a* repo list; it never asked whether that list EQUALS the janitor's audit population. It does not.
+Surfaced by the Fable advisor, then measured first-hand.
 
-**NEXT ACTION:** implement `github-config-audit` on our side (read-only `gh` probes over the
-ecosystem repo list, on a 6 h cadence, writing both the chore stamp and findings), then — and only
-then — name it in the contract. Everything else on this card is now the janitor's call, tracked on
-`#196`.
+The janitor's population is `github_config_audit.fleet_repo_slugs()` — the `source.url` of every
+plugin in `~/.claude/plugins/marketplaces/ai-maestro-plugins/.claude-plugin/marketplace.json`, pure
+over that file, no network. Measured against what `lib/ecosystem-constants.ts` can enumerate:
+
+| | count | the difference |
+|---|---|---|
+| overlap | 10 | the 8 role-plugins + `assistant-role-agent` + `ai-maestro-plugin` |
+| **janitor audits, we cannot name** | **4** | `ai-maestro-janitor`, `-visual-communicator-plugin`, `-web-scenario-tester`, `-webdesign` — they are in the catalog and we hold no constant for them |
+| we hold, it never audits | 5 | `23blocks-OS/ai-maestro`, `agent-identity`, `AgentlensPro`, `ai-maestro-plugins`, `claude-plugin` |
+
+So an audit driven off `ecosystem-constants.ts` would cover **10 of 14** and, if it stamped, would
+commit exactly the ATOM-6U79-6OHD violation this card's own memory page records: a partial stamp
+tells the janitor to stop covering the rest, and those 4 repos would then be audited by nobody.
+
+**But this makes the chore MORE absorbable, not less** — the population is a FILE, and the server
+can read the same file. Deriving from the catalog instead of from our constants makes the two
+populations identical *by construction* rather than by coincidence, and the stamp honest. That the
+list is enumerable was never the point; that both sides enumerate it from ONE source is.
+
+**~~✓ VERIFIED~~ (superseded above):** the server already holds the population
+(`lib/ecosystem-constants.ts` — `MARKETPLACE_REPO`, `PREDEFINED_ROLE_PLUGIN_NAMES`, the per-plugin
+repo URLs) and `gh` is installed and authenticated in its environment.
+
+**NEXT ACTION — still gated on the USER, and the question is CONSENT, not feasibility.** Implement
+`github-config-audit` reading the **marketplace catalog** (never `ecosystem-constants.ts`), on a 6 h
+cadence, writing the stamp and findings. Measured cost of one beat: ~5-8 read-only `gh api` GETs per
+admin repo × 14 repos ≈ **70-110 GETs / 6 h** (~2% of one hour's 5 000-request authenticated budget),
+all GETs — the janitor's module never mutates a repo. The open question is whether recurring
+authenticated calls on the owner's single shared GitHub identity are wanted at all. Everything else
+on this card is the janitor's call, tracked on `#196`.
 
 **~~NOT yet done:~~ DONE in slice 5** — `yarn build` + restart. (The reasoning stays, because it is
 the reason the step exists: a restart does NOT rebuild, since `app/` is bundled into `.next`, while

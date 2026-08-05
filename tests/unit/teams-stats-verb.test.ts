@@ -40,9 +40,15 @@
  * `unknown command` (never dispatched) — since asserting merely "it failed" cannot tell them apart.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { spawnSync } from 'child_process'
 import * as path from 'path'
+
+// Every test here spawns bash + sources the CLI. Under full-suite CPU contention that
+// spawn intermittently exceeds vitest's 5s default — measured 2026-08-06 ("Test timed
+// out in 5000ms", green in isolation, 1 firing in 4 full runs). The subprocess already
+// carries its own 60s guard; the TEST timeout must not be the shorter of the two.
+vi.setConfig({ testTimeout: 30_000 })
 
 const REPO = path.resolve(__dirname, '../..')
 const CLI = path.join(REPO, 'scripts', 'aimaestro-teams.sh')

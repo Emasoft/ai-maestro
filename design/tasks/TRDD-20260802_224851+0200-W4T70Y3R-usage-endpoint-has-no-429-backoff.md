@@ -1,7 +1,7 @@
 ---
 trdd-id: W4T70Y3R
 title: The usage endpoint is polled every 60s with no 429 back-off, and a 429 is read as meaning
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T22:48:51+0200

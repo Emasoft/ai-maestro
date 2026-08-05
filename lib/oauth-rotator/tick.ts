@@ -666,7 +666,12 @@ export async function autoRotate(
     state = await reconcileLiveEmail(state, liveBlob, deps)
   }
   const liveEmail = state.live_email
-  const [liveStatus, liveData] = await usageRequest(liveBlob, netDeps(deps))
+  // `accountKey` is what keys the 429 back-off + TTL cache (TRDD-W4T70Y3R). Passing it is not
+  // optional decoration: without a key the probe skips the cooldown entirely and this call site
+  // goes back to re-knocking every 60 s, which is the behaviour the card exists to stop.
+  const [liveStatus, liveData] = await usageRequest(liveBlob, netDeps(deps), {
+    accountKey: liveEmail ?? undefined,
+  })
   const fh = util(liveData, 'five_hour')
   const sd = util(liveData, 'seven_day')
   // The worst MODEL-SCOPED window (Fable 5 has its own weekly limit, reachable only via
@@ -803,7 +808,7 @@ export async function autoRotate(
       b = refreshed
     }
     if (networkUp) {
-      let [st2, d2] = await usageRequest(b, netDeps(deps))
+      let [st2, d2] = await usageRequest(b, netDeps(deps), { accountKey: email })
       if (st2 !== 200 && st2 !== 429) {
         // REFRESH-ON-ERR net: a non-200/429 probe almost always means the slot's access token
         // expired (401/403). Refresh + re-probe before excluding, so one stale token can't
@@ -816,7 +821,7 @@ export async function autoRotate(
         }
         indexHealed = indexHealed || healed
         b = refreshed
-        ;[st2, d2] = await usageRequest(b, netDeps(deps))
+        ;[st2, d2] = await usageRequest(b, netDeps(deps), { accountKey: email })
       }
       if (st2 !== 200) {
         // 429 → genuinely maxed, drop it. Else (transient probe failure on a FRESH token) →

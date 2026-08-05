@@ -33,6 +33,17 @@
 import { execFileSync } from 'node:child_process'
 
 import { oauthOf, type CredentialBlob } from './slots'
+import {
+  backoffMs,
+  classify429,
+  readCooldowns,
+  serverRetryAtMs,
+  USAGE_TTL_MS,
+  withProbeLock,
+  writeCooldowns,
+  type CooldownEntry,
+  type UsageReason,
+} from './usage-cooldown'
 
 const ROLES_URL = 'https://api.anthropic.com/api/oauth/claude_cli/roles'
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
@@ -103,6 +114,17 @@ export interface NetworkDeps {
   fetchImpl?: typeof fetch
   /** Pin the `claude --version` string instead of shelling out (tests; 0-IMPACT). */
   claudeVersion?: string
+  /** Test seam for the 429 back-off state. Default = the file-backed store in
+   *  `usage-cooldown.ts`. Injecting an in-memory one keeps a unit test 0-IMPACT: without it a
+   *  test that drives a 429 would write the DEVELOPER'S real machine-wide rotator state. */
+  cooldownStore?: {
+    read: () => Record<string, CooldownEntry>
+    write: (data: Record<string, CooldownEntry>) => void
+  }
+  /** Test seam for the cross-process probe lock. Default = the real O_EXCL lock. A unit test has
+   *  no second process, so it passes a pass-through; a CONTENTION test passes `async () => null`,
+   *  which is what a real contended acquire returns. */
+  probeLock?: <T>(fn: () => Promise<T>) => Promise<T | null>
 }
 
 function resolveFetch(deps?: NetworkDeps): typeof fetch {
@@ -120,7 +142,7 @@ async function httpJson(
   url: string,
   opts: { method?: string; headers: Record<string, string>; body?: string; timeoutMs: number },
   fetchImpl: typeof fetch,
-): Promise<{ status: number; json: unknown | null }> {
+): Promise<{ status: number; json: unknown | null; headers?: Record<string, string> }> {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs)
   try {
@@ -130,16 +152,43 @@ async function httpJson(
       body: opts.body,
       signal: ac.signal,
     })
-    if (!res.ok) return { status: res.status, json: null } // non-2xx → HTTPError.code, no body
+    // Response headers are lowercased into a plain record so callers can read `retry-after` /
+    // `anthropic-ratelimit-*` without depending on the Headers object (which a stubbed fetch in a
+    // test may not fully implement). Collected on BOTH paths — the 429 back-off needs them from
+    // the non-2xx path, which is exactly the one that used to return before touching them.
+    const headers = readHeaders(res)
+    if (!res.ok) return { status: res.status, json: null, headers } // non-2xx → code, no body
     try {
-      return { status: res.status, json: await res.json() }
+      return { status: res.status, json: await res.json(), headers }
     } catch {
-      return { status: 0, json: null } // 2xx, unparseable → Python's JSONDecodeError → (0, None)
+      return { status: 0, json: null, headers } // 2xx, unparseable → JSONDecodeError → (0, None)
     }
   } catch {
     return { status: 0, json: null } // network / abort / timeout → URLError/TimeoutError → (0, None)
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/** Lowercase-keyed copy of a response's headers. Tolerates a stub whose `headers` is missing or
+ *  is a plain object rather than a real `Headers` — a probe must never throw on telemetry. */
+function readHeaders(res: Response): Record<string, string> | undefined {
+  try {
+    const h = (res as { headers?: unknown }).headers
+    if (!h) return undefined
+    const out: Record<string, string> = {}
+    if (typeof (h as Headers).forEach === 'function') {
+      ;(h as Headers).forEach((v, k) => {
+        out[k.toLowerCase()] = v
+      })
+      return out
+    }
+    for (const [k, v] of Object.entries(h as Record<string, unknown>)) {
+      if (typeof v === 'string') out[k.toLowerCase()] = v
+    }
+    return out
+  } catch {
+    return undefined
   }
 }
 
@@ -179,26 +228,162 @@ export async function accountEmail(blob: CredentialBlob, deps?: NetworkDeps): Pr
 export async function usageRequest(
   blob: CredentialBlob,
   deps?: NetworkDeps,
+  opts?: UsageProbeOpts,
 ): Promise<[number, unknown | null]> {
+  const r = await usageProbe(blob, deps, opts)
+  return [r.status, r.data]
+}
+
+/** Extra inputs to {@link usageProbe}. Optional so every existing call site keeps compiling. */
+export interface UsageProbeOpts {
+  /** Stable per-account identity (the rotator's email) that the back-off state is keyed by.
+   *  WITHOUT it the cooldown machinery is skipped entirely and the probe behaves exactly as it
+   *  did before TRDD-W4T70Y3R — state that cannot be attributed to an account must not be
+   *  attributed to all of them. */
+  accountKey?: string
+}
+
+/** A usage reading plus HOW it was obtained. #94 recommends reporting the reason rather than
+ *  re-deriving it downstream, which is what stops a throttle being read as an exhausted account
+ *  after the fact. */
+export interface UsageOutcome {
+  /** The ROTATOR-VISIBLE status, preserving the existing contract: 200 usable, 429 the account
+   *  really is maxed, 0 unknown-don't-act. A throttle deliberately never surfaces as 429. */
+  status: number
+  data: unknown | null
+  reason: UsageReason
+  /** Age of a served cached reading, ms. Present only when `data` came from the cache — this is
+   *  the "staleness surfaced rather than rendered as live" the card requires. */
+  ageMs?: number
+  /** Epoch ms before which we will not probe again. */
+  retryAtMs?: number
+}
+
+/**
+ * Probe /api/oauth/usage with 429 back-off and a TTL cache (TRDD-W4T70Y3R; recipe from
+ * `Emasoft/ai-maestro#94`). Costs ZERO inference quota.
+ *
+ * The rotator-visible status keeps its old meanings exactly. What changes is that a 429 no longer
+ * automatically means "maxed": a THROTTLE 429 resolves to the last known reading (flagged stale)
+ * or to 0/unknown, never to 429 — because reporting a rate limit as an exhausted account is what
+ * made a transient throttle self-sustaining. See `classify429` for the split, and the header of
+ * `usage-cooldown.ts` for why the cache is a correctness requirement rather than a nicety.
+ */
+export async function usageProbe(
+  blob: CredentialBlob,
+  deps?: NetworkDeps,
+  opts?: UsageProbeOpts,
+): Promise<UsageOutcome> {
   const tok = oauthOf(blob).accessToken
-  if (typeof tok !== 'string' || !tok) return [0, null]
-  const { status, json } = await httpJson(
-    USAGE_URL,
-    {
-      headers: {
-        Authorization: 'Bearer ' + tok,
-        'Content-Type': 'application/json',
-        'anthropic-beta': OAUTH_BETA,
-        // ⚠️ MUST be `claude-code/<version>`, NOT the rotator UA. A non-`claude-code` UA earns
-        // persistent 429s here, and a 429 at this call site is read as "account maxed" — which
-        // is the rotation deadlock (janitor#117 / TRDD-WBYFTU2L).
-        'User-Agent': claudeCodeUserAgent(deps),
+  if (typeof tok !== 'string' || !tok) return { status: 0, data: null, reason: 'error' }
+
+  const key = opts?.accountKey?.trim()
+  const fetchOnce = () =>
+    httpJson(
+      USAGE_URL,
+      {
+        headers: {
+          Authorization: 'Bearer ' + tok,
+          'Content-Type': 'application/json',
+          'anthropic-beta': OAUTH_BETA,
+          // ⚠️ MUST be `claude-code/<version>`, NOT the rotator UA. A non-`claude-code` UA earns
+          // persistent 429s here, and a 429 at this call site is read as "account maxed" — which
+          // is the rotation deadlock (janitor#117 / TRDD-WBYFTU2L).
+          'User-Agent': claudeCodeUserAgent(deps),
+        },
+        timeoutMs: 20_000,
       },
-      timeoutMs: 20_000,
-    },
-    resolveFetch(deps),
-  )
-  return [status, json]
+      resolveFetch(deps),
+    )
+
+  // No account identity ⇒ no attributable back-off state ⇒ behave exactly as before.
+  if (!key) {
+    const { status, json } = await fetchOnce()
+    return { status, data: json, reason: status === 200 ? 'fresh' : status === 429 ? 'quota_429' : 'error' }
+  }
+
+  const store = deps?.cooldownStore ?? { read: readCooldowns, write: writeCooldowns }
+  const lock = deps?.probeLock ?? withProbeLock
+
+  /** Serve the cache when it is inside the TTL, else the given unknown-shaped outcome. */
+  const cachedOr = (entry: CooldownEntry | undefined, reason: UsageReason, now: number): UsageOutcome => {
+    if (entry?.cachedAtMs !== undefined) {
+      const age = now - entry.cachedAtMs
+      if (age >= 0 && age < USAGE_TTL_MS) {
+        return { status: 200, data: entry.cachedData ?? null, reason, ageMs: age, retryAtMs: entry.cooldownUntilMs }
+      }
+    }
+    return { status: 0, data: null, reason, retryAtMs: entry?.cooldownUntilMs }
+  }
+
+  /**
+   * What to answer while a cooldown holds — WITHOUT touching the network.
+   *
+   * A QUOTA cooldown keeps answering 429. Suppressing the probe must not suppress the ANSWER:
+   * `autoRotate` needs two consecutive 429s on the live account to rotate away, so reporting
+   * "unknown" here would strand the rotator on a maxed account. The fact is stable until the
+   * window resets, so replaying it costs nothing and stops the 60-knocks-an-hour that #94
+   * measured re-arming the lockout.
+   *
+   * A THROTTLE cooldown falls back to the cached reading (or unknown) — there we have no reason
+   * to believe anything about the account's quota at all.
+   */
+  const duringCooldown = (entry: CooldownEntry, now: number): UsageOutcome =>
+    entry.lastKind === 'quota_429'
+      ? { status: 429, data: null, reason: 'quota_429', retryAtMs: entry.cooldownUntilMs }
+      : cachedOr(entry, 'cooldown', now)
+
+  const now0 = Date.now()
+  const pre = store.read()[key]
+  if (pre && now0 < pre.cooldownUntilMs) return duringCooldown(pre, now0)
+
+  const result = await lock(async (): Promise<UsageOutcome> => {
+    // RE-CHECK AFTER ACQUIRING. Two callers can both pass the cooldown check above before either
+    // fires; without this re-read they double-hit, and — reading the same consecutive count —
+    // both compute the SAME back-off, so the escalation silently fails to escalate. #94 flags
+    // this as the subtle clause, and it is the reason to copy their recipe rather than re-derive.
+    const now = Date.now()
+    const all = store.read()
+    const entry = all[key]
+    if (entry && now < entry.cooldownUntilMs) return duringCooldown(entry, now)
+
+    const { status, json, headers } = await fetchOnce()
+
+    if (status === 200) {
+      all[key] = { consecutive429: 0, cooldownUntilMs: 0, cachedAtMs: now, cachedData: json }
+      store.write(all)
+      return { status: 200, data: json, reason: 'fresh' }
+    }
+
+    if (status === 429) {
+      const kind = classify429(headers, entry)
+      const consecutive = (entry?.consecutive429 ?? 0) + 1
+      // The SERVER's instant wins when it named one; the exponential is only the fallback.
+      const retryAtMs = serverRetryAtMs(headers, now) ?? now + backoffMs(consecutive)
+      all[key] = {
+        consecutive429: consecutive,
+        cooldownUntilMs: retryAtMs,
+        lastKind: kind,
+        // The cached reading SURVIVES a 429 — it is the only thing keeping rotation from going
+        // blind during a THROTTLE back-off, which is the deadlock this change exists to avoid.
+        cachedAtMs: entry?.cachedAtMs,
+        cachedData: entry?.cachedData,
+      }
+      store.write(all)
+      if (kind === 'quota_429') return { status: 429, data: null, reason: 'quota_429', retryAtMs }
+      return { ...cachedOr(all[key], 'throttle_429', now), retryAtMs }
+    }
+
+    // 401/403/0 — bad token or network. Untouched by the back-off: tick.ts already answers these
+    // with a refresh-and-reprobe, and putting them in the 429 counter would let an expired token
+    // suppress the probe that is trying to heal it.
+    return { status, data: json, reason: 'error' }
+  })
+
+  // Lock contended ⇒ another process is probing this very moment. Do NOT fetch (that is the whole
+  // point of the lock); serve the cache if we have a fresh one.
+  if (result === null) return cachedOr(store.read()[key], 'lock_contended', Date.now())
+  return result
 }
 
 /** The usage dict on HTTP 200, else null (a display convenience). */

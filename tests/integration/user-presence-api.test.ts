@@ -10,13 +10,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // --- Hoisted module mocks ---------------------------------------------------
 
-const { mockAuthenticateFromRequest, presenceFile } = vi.hoisted(() => ({
+const { mockAuthenticateFromRequest, mockGetAgent, presenceFile } = vi.hoisted(() => ({
   mockAuthenticateFromRequest: vi.fn(),
+  mockGetAgent: vi.fn(),
   presenceFile: { last_user_input_epoch: null as number | null },
 }))
 
 vi.mock('@/lib/agent-auth', () => ({
   authenticateFromRequest: (...args: unknown[]) => mockAuthenticateFromRequest(...args),
+}))
+
+vi.mock('@/lib/agent-registry', () => ({
+  getAgent: (...args: unknown[]) => mockGetAgent(...args),
 }))
 
 // We replace `lib/user-presence` itself so the file-system + locking
@@ -98,5 +103,76 @@ describe('AMAMA presence API', () => {
       // Caller computes age = server_now - last
       expect(body.server_now_epoch - body.last_user_input_epoch).toBe(100)
     })
+  })
+})
+
+/**
+ * The injected-prompt VETO (ai-maestro#117).
+ *
+ * WHY. `UserPromptSubmit` fires for EVERY prompt, and injection is literal keystrokes
+ * (`sendKeys(…, {literal:true})`), so the hook cannot tell an injected prompt from a typed
+ * one. It POSTs this route, and `fleet-recovery-runner` reads the record as "a human is at
+ * the keyboard, defer" — so every queued task silently stood recovery down. The hook cannot
+ * know; the SERVER does, because it did the injecting.
+ *
+ * These use the REAL `injectedPrompts` map rather than a double: the whole mechanism is the
+ * wiring between the send sites and this route, and a faithful double of the map would still
+ * pass if that wiring were broken.
+ *
+ * THE LOAD-BEARING TEST is `records presence when there is NO mark`. The veto must fire on
+ * POSITIVE evidence only — inferring "not human" from a missing mark would make recovery race
+ * a live user, which is worse than the bug this fixes. If that test ever goes green while the
+ * others are inverted, the direction has been flipped and the guard is now the hazard.
+ */
+import { injectedPrompts } from '@/services/shared-state'
+
+const AGENT = { id: 'agent-1', name: 'alpha', sessions: [] as { status: string; index: number }[] }
+// computeSessionName(name, 0) === name, so 'alpha' is this agent's session name.
+const SESSION = 'alpha'
+
+describe('user-input: injected-prompt veto (#117)', () => {
+  beforeEach(() => {
+    injectedPrompts.clear()
+    presenceFile.last_user_input_epoch = null
+    mockGetAgent.mockReturnValue(AGENT)
+    mockAuthenticateFromRequest.mockReturnValue({ agentId: 'agent-1' })
+  })
+
+  it('records presence when there is NO mark — the direction guard', async () => {
+    const res = await postUserInput(makeRequest())
+    expect(res.status).toBe(200)
+    expect(await res.json()).toHaveProperty('recorded_at_epoch')
+    expect(presenceFile.last_user_input_epoch).toBe(1_700_000_000)
+  })
+
+  it('vetoes the echo of a fresh injection, and does NOT advance presence', async () => {
+    injectedPrompts.set(SESSION, Date.now())
+    const res = await postUserInput(makeRequest())
+    expect(await res.json()).toEqual({ recorded: false, reason: 'injected_prompt' })
+    expect(presenceFile.last_user_input_epoch).toBeNull()
+  })
+
+  it('CONSUMES the mark — the next prompt records normally', async () => {
+    injectedPrompts.set(SESSION, Date.now())
+    await postUserInput(makeRequest()) // vetoed, spends the mark
+    const res = await postUserInput(makeRequest())
+    expect(await res.json()).toHaveProperty('recorded_at_epoch')
+    expect(presenceFile.last_user_input_epoch).toBe(1_700_000_000)
+    expect(injectedPrompts.has(SESSION)).toBe(false)
+  })
+
+  it('discards a mark whose echo never arrived, rather than eating a real keystroke', async () => {
+    injectedPrompts.set(SESSION, Date.now() - 120_000) // far past INJECTION_ECHO_MAX_AGE_MS
+    const res = await postUserInput(makeRequest())
+    expect(await res.json()).toHaveProperty('recorded_at_epoch')
+    expect(injectedPrompts.has(SESSION)).toBe(false)
+  })
+
+  it('never vetoes a non-agent (human/cookie) caller, even with a mark present', async () => {
+    // The human path has no agentId, so no session resolves and no veto can apply.
+    injectedPrompts.set(SESSION, Date.now())
+    mockAuthenticateFromRequest.mockReturnValue({ agentId: undefined })
+    const res = await postUserInput(makeRequest())
+    expect(await res.json()).toHaveProperty('recorded_at_epoch')
   })
 })

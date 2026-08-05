@@ -6,7 +6,7 @@ pre-block-column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T06:43:03+0200
+updated: 2026-08-05T08:04:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -53,7 +53,34 @@ artifact. Read `#112` for the janitor's own framing before choosing a shape.
 gitignored, and the file is 26 MB so it must not be committed), then read its actual table
 structure. Do not design against the description of it — the source is on disk.
 
-## Why this is blocked on TRDD-14HI8ZPR
+## ⚠ CORRECTION 2026-08-05 — the premise below is WRONG. Read the artifact, not this section.
+
+The section that follows says the report's headline is a **per-chore status table**, and blocks
+this card on `14HI8ZPR` for that reason. **The sample artifact contradicts it**, which is exactly
+what its own NEXT ACTION warned ("Do not design against the description of it — the source is on
+disk"). I then designed against the description anyway until I opened the file.
+
+Measured on the 26 MB sample (now rescued to `reports_dev/janitor-report-samples/`, sha256-verified
+byte-identical — it was still in the OS temp dir, along with a **second**, 16 KB one nobody had
+recorded):
+
+- **2 tables, 14 rows.** The 26 MB is **99.8% a single `<script>` block** holding `var KB=[…]` — an
+  embedded kanban card-body knowledge base, rendered client-side. It is not table data.
+- The 23 columns are `⚑ status · kanban · pid · project · model · branch · github repo · armed ·
+  active · cron · waiting for · dispatch · started · uptime · uncommit · CI · gh sec · loc sec scan ·
+  PRRD · wiki·proj · wiki·local · last job · last error`.
+
+That is **one row per running claude instance** — a fleet table. **There is no chore column at
+all.** So the missing `<task-name>.last-run.ts` stamps are not this section's headline content, and
+the stated reason for `blocked-by: [14HI8ZPR]` does not hold.
+
+**Left blocked deliberately, for the USER to rule on** rather than silently unblocked: `14HI8ZPR`
+is still open, so the field is not currently false, and whether a real dependency remains is a
+judgement about what this section should show — not something to decide from the artifact alone.
+The `⚑ status`, `armed`, `active` and `cron` columns are per-instance janitor health, which is
+where `hibernated` vs `crashed` belongs, and that half now exists (see `14HI8ZPR` slice 3).
+
+## The ORIGINAL blocking rationale — superseded, kept for the audit trail
 
 `blocked-by: [14HI8ZPR]` is load-bearing, not bookkeeping. The report's headline content is the
 per-chore status table — and today **every** chore reads as stale because the server never writes
@@ -95,7 +122,7 @@ rather than a nicety.
 
 ## Acceptance
 
-- [ ] the 26 MB sample copied somewhere durable and its real table structure read (not assumed)
+- [x] the 26 MB sample copied somewhere durable and its real table structure read — BOTH samples rescued to `reports_dev/janitor-report-samples/` (sha256-verified; a second 16 KB one was found alongside it), and the structure read: 2 tables / 14 rows, per-INSTANCE not per-chore, the 26 MB being 99.8% an embedded card-body KB in one <script>
 - [ ] "same information" vs "same markup" resolved with the user
 - [ ] refresh mechanism chosen and justified against the 60 s-6 h cadence range
 - [ ] `JANITOR REPORT` section renders per-chore status from the stamp contract

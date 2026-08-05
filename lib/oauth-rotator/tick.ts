@@ -58,6 +58,7 @@ import { listStatuslineSnapshots, STATUSLINE_FRESH_MS } from '@/lib/statusline-s
 import {
   accountEmail,
   usageRequest,
+  usageProbe,
   refreshOauthToken,
   util,
   scopedLimits,
@@ -225,6 +226,17 @@ export interface TickDeps {
    * must be indistinguishable from today's behaviour — see `statuslineNear`. (TRDD-GY0LJV6S)
    */
   readSnapshots?: () => Promise<UsageObservation[]>
+  /**
+   * The 429 back-off seams, forwarded to `NetworkDeps` (TRDD-WFIMES6U).
+   *
+   * `network.ts` declares both as test seams and says why: without an injected store, a test that
+   * drives a 429 writes the DEVELOPER'S real machine-wide rotator state. But `netDeps` forwarded
+   * only `fetchImpl`, so the seams were unreachable from the tick — which is why no tick test had
+   * ever driven a cooldown, and why the status-0 overload the `networkUp` comment describes could
+   * sit here undetected. A seam that no caller can reach is not a seam.
+   */
+  cooldownStore?: NetworkDeps['cooldownStore']
+  probeLock?: NetworkDeps['probeLock']
 }
 
 function nowS(deps?: TickDeps): number {
@@ -234,7 +246,14 @@ function decide(deps: TickDeps | undefined, msg: string): void {
   ;(deps?.decide ?? ((m: string) => console.log(`[oauth-rotator] ${m}`)))(msg)
 }
 function netDeps(deps?: TickDeps): NetworkDeps {
-  return deps?.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}
+  // Each key is set only when present, so an absent seam stays absent and `network.ts` falls back
+  // to its real default — `{cooldownStore: undefined}` and `{}` are the same to `??`, but keeping
+  // the object minimal means a snapshot of it reads as what was actually injected.
+  const out: NetworkDeps = {}
+  if (deps?.fetchImpl) out.fetchImpl = deps.fetchImpl
+  if (deps?.cooldownStore) out.cooldownStore = deps.cooldownStore
+  if (deps?.probeLock) out.probeLock = deps.probeLock
+  return out
 }
 
 /**
@@ -669,9 +688,14 @@ export async function autoRotate(
   // `accountKey` is what keys the 429 back-off + TTL cache (TRDD-W4T70Y3R). Passing it is not
   // optional decoration: without a key the probe skips the cooldown entirely and this call site
   // goes back to re-knocking every 60 s, which is the behaviour the card exists to stop.
-  const [liveStatus, liveData] = await usageRequest(liveBlob, netDeps(deps), {
+  // `usageProbe` rather than `usageRequest`: the latter drops the `reason`, and `reason` is the
+  // only thing that distinguishes the three different meanings status 0 now carries. See the
+  // `networkUp` derivation below — reading 0 as "offline" is wrong for two of them.
+  const liveOutcome = await usageProbe(liveBlob, netDeps(deps), {
     accountKey: liveEmail ?? undefined,
   })
+  const liveStatus = liveOutcome.status
+  const liveData = liveOutcome.data
   const fh = util(liveData, 'five_hour')
   const sd = util(liveData, 'seven_day')
   // The worst MODEL-SCOPED window (Fable 5 has its own weekly limit, reachable only via
@@ -686,7 +710,26 @@ export async function autoRotate(
   const sdS = sd !== null ? `${Math.round(sd)}%` : '?'
   const scS = scWorst !== null ? ` ${scWorst.model}=${Math.round(scWorst.percent)}%` : ''
   const liveExpired = blobLocallyExpired(liveBlob)
-  const networkUp = liveStatus !== 0
+  // NETWORK-DOWN IS A POSITIVE FINDING, NOT THE ABSENCE OF A READING (TRDD-WFIMES6U).
+  //
+  // This was `liveStatus !== 0`, which was right when 0 could ONLY mean network/abort/timeout/
+  // unparseable. TRDD-W4T70Y3R then made `usageProbe` return 0 for two MORE reasons that say
+  // nothing whatever about the network: `cooldown` (we are throttling OURSELVES, deliberately,
+  // with no usable cache) and `lock_contended` (another process holds the probe lock this
+  // instant). So a self-imposed back-off — or merely a second process probing — made the rotator
+  // conclude it was offline.
+  //
+  // That is not a cosmetic misread. `networkUp` gates FIVE things below: candidates are not
+  // probed at all, a lapsed-but-rescuable alternate is not renewed, `selectDrainFirst` is
+  // skipped, and the log line says "API unreachable" — which points the next person debugging it
+  // straight at the network, the one place nothing is wrong. Rotation degrades to picking on
+  // token-expiry alone at exactly the moment a throttle means it is most needed, which is the
+  // same failure W4T70Y3R fixed arriving by the route W4T70Y3R opened.
+  //
+  // So: conclude "down" only from `reason === 'error'`, the one value that actually reports a
+  // failed call. Same discipline as the injected-prompt veto (#117) — act on positive evidence,
+  // never on a missing reading.
+  const networkUp = liveStatus !== 0 || liveOutcome.reason !== 'error'
   // Must be read after RECONCILIATION (`:546`/`:549`) — not, as an earlier version of this comment
   // claimed, "after the endpoint call". The endpoint call sits between them and contributes nothing
   // to it; the requirement is only that `state` already carries the reconciled `live_fp` /
@@ -808,8 +851,16 @@ export async function autoRotate(
       b = refreshed
     }
     if (networkUp) {
-      let [st2, d2] = await usageRequest(b, netDeps(deps), { accountKey: email })
-      if (st2 !== 200 && st2 !== 429) {
+      const o2 = await usageProbe(b, netDeps(deps), { accountKey: email })
+      let [st2, d2] = [o2.status, o2.data]
+      // A SELF-IMPOSED BACK-OFF IS NOT AN EXPIRED TOKEN (TRDD-WFIMES6U). Same status-0 overload as
+      // `networkUp` above: `cooldown` and `lock_contended` also arrive as 0, and REFRESH-ON-ERR
+      // below would answer them by burning a real token refresh — per candidate, per 60 s tick —
+      // and then re-probing into the same cooldown for the same 0. The refresh is for a token the
+      // endpoint REJECTED; we never even asked. Fall through to the degraded classification, which
+      // is already the right answer for a candidate we could not read.
+      const unread = st2 === 0 && (o2.reason === 'cooldown' || o2.reason === 'lock_contended')
+      if (st2 !== 200 && st2 !== 429 && !unread) {
         // REFRESH-ON-ERR net: a non-200/429 probe almost always means the slot's access token
         // expired (401/403). Refresh + re-probe before excluding, so one stale token can't
         // deadlock rotation. 429 is NOT refreshed (maxed account, not an expired token).

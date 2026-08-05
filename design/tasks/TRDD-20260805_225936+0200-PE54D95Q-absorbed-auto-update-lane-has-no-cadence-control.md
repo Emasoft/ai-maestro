@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:14:18+0200
+updated: 2026-08-05T23:15:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -279,12 +279,35 @@ So instance N+1 can begin while instance N is still streaming its transcript —
 overlap even though the restarts do not. Sequential is necessary here and not sufficient.
 
 **Consequence for this card:** the write-then-restart step must be *paced*, not merely
-ordered — an inter-restart delay (or a token-budget-aware drip) sized against the transcript
-resend, not against how long a restart call takes to return. Restarting 13 agents is not an
-operation to perform in one pass at all; a flag flip that lands session-by-session as each
-agent naturally restarts is strictly safer than any fleet-wide sweep, and costs only time.
-That may well be the right answer: **the flag does not need to take effect everywhere at
-once.**
+ordered — an inter-restart delay sized against the transcript resend, not against how long a
+restart call takes to return.
+
+#### The pacing constant: ≥ 60 s between agents (USER, 2026-08-05)
+
+*"you must wait at least 60 seconds between each agent"* — a floor, not a target.
+
+At 13 live agents that is **≥ 13 minutes** for one fleet pass, and the true figure is higher
+because the USER's token estimate counts *subagents* too: the unit being paced is every
+process that resends a transcript, not every named agent. So the loop must pace on
+**restarts issued**, not on entries in the agent registry.
+
+⚠ **This CONTRADICTS the 3-second figure in `~/.claude/rules/workflows-rules.md`**
+(*"wait 3 seconds before spawning/restarting the next"*), and the difference is 20×. Both
+are right for their own case and the rule does not say which case it means: 3 s paces a
+**cold spawn**, which starts from an empty context; 60 s paces a **restart**, which resumes
+and re-sends up to ~1M tokens. Anyone implementing this from the global rule alone will
+under-pace the fleet by a factor of twenty and get the ban this section exists to prevent.
+Whoever lands the fix should carry the distinction back into that rule — the current wording
+is a trap for exactly the person following it correctly.
+
+#### The option that needs no sweep at all
+
+Restarting 13 agents is not an operation to perform in one pass. A flag flip that lands
+**session-by-session, as each agent naturally restarts**, is strictly safer than any
+fleet-wide sweep and costs only time. Given the downside here is a *ban* rather than a
+throttle, that is probably the right answer: **the flag does not need to take effect
+everywhere at once.** Prefer it, and treat a paced sweep as the fallback for when a change
+genuinely cannot wait.
 
 ## Non-goals
 

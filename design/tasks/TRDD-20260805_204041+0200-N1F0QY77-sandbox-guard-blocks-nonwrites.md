@@ -1,11 +1,11 @@
 ---
 trdd-id: N1F0QY77
 title: Sandbox directory guard blocks commands that write nothing
-column: todo
+column: blocked
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T20:40:41+0200
+updated: 2026-08-06T00:39:08+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -19,7 +19,8 @@ approval-datetime: 2026-08-05T20:40:41+0200
 derived: false
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [LBFB7VST]
+pre-block-column: todo
 release-via: none
 relevant-rules: []
 labels: [manager-filed, testbot-session, owner-plugin]
@@ -108,3 +109,10 @@ Drive the acceptance list as real commands through the guard, asserting on
 exit status and on whether the command actually ran — not on message text
 alone. Include at least one true-positive case in the same run, so a fix
 that simply disables the guard cannot pass.
+
+## Approval log
+
+- 2026-08-06T00:39:08+0200 — BLOCKED on the `Emasoft/ai-maestro-plugin` repo. The
+  remaining work lands there (measured absent at plugin v3.0.4); the durable work
+  order is posted as `Emasoft/ai-maestro#123` comment 5198192106. Unblock when the plugin
+  ships it; restore to `pre-block-column`.

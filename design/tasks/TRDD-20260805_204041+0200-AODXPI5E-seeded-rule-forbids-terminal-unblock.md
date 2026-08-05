@@ -1,11 +1,11 @@
 ---
 trdd-id: AODXPI5E
 title: Seeded agent rule forbids the terminal-unblock capability the server ships
-column: dev
+column: blocked
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T22:17:05+0200
+updated: 2026-08-06T00:39:08+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -19,7 +19,8 @@ approval-datetime: 2026-08-05T20:40:41+0200
 derived: false
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [LBFB7VST]
+pre-block-column: dev
 release-via: none
 relevant-rules: [42]
 labels: [manager-filed, testbot-session, owner-mixed]
@@ -261,3 +262,10 @@ Behavioural, not textual. The failure was an agent that read the rule and
 complied correctly. Re-run the scenario: block an agent on a prompt, and
 observe whether a titled peer unblocks it without human involvement — and
 whether it still escalates the identity-vouching case.
+
+## Approval log
+
+- 2026-08-06T00:39:08+0200 — BLOCKED on the `Emasoft/ai-maestro-plugin` repo. The
+  remaining work lands there (measured absent at plugin v3.0.4); the durable work
+  order is posted as `Emasoft/ai-maestro#125` comment 5198197291. Unblock when the plugin
+  ships it; restore to `pre-block-column`.

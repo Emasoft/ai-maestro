@@ -30,11 +30,17 @@
  *     independent: realpath normalizes `..` as well, so removing resolve() only defers the same
  *     refusal by one step, and the traversal closure's assertion (`/outside the agents root/`)
  *     matched the SYMLINK message too, which is a superset of that phrase. Tightened with
- *     `not.toMatch(/via a link/)` so the closure pins WHICH check fired; the same neuter now reds
- *     exactly it.
+ *     `not.toMatch(/via a link/)` so the closure pins WHICH check fired — and it STILL reddened
+ *     nothing, because of a second, independent defect: the fixture was built with `path.join`,
+ *     which NORMALIZES `..` at construction. The "traversal" input had no `..` in it by the time
+ *     the code saw it, so the closure had been quietly testing the ordinary outside-the-root case
+ *     all along. Rebuilt by string concatenation, the same neuter now reds exactly that closure and
+ *     nothing else.
  *
- * The lesson generalises: when two guards can catch the same input, an assertion on the OUTCOME
- * cannot tell them apart — only an assertion on which one spoke can.
+ * Two lessons, both general. When two guards can catch the same input, an assertion on the OUTCOME
+ * cannot tell them apart — only an assertion on which one spoke can. And when a property has a
+ * boundary, the fixture must cross it ON PURPOSE: a path helper that tidies its argument will
+ * happily tidy away the exact hostile shape the test exists to model.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -123,7 +129,11 @@ describe('publishHibernationResponses — containment', () => {
   it('DEFECT 1 — a `..` traversal that string-prefixes the agents root is refused BY THE LEXICAL CHECK', async () => {
     // `<agentsRoot>/../outside` literally starts with `<agentsRoot>` + sep, so an unresolved
     // `isUnder` check accepts it. This is the exact input that escaped the first implementation.
-    const traversal = path.join(agentsRoot, '..', 'outside')
+    // Built by CONCATENATION, not path.join — join() normalizes `..` away at construction, so a
+    // "traversal" fixture built with it contains no `..` by the time the code sees it and the
+    // closure silently tests the ordinary outside-the-root case instead. Measured: with join() this
+    // test passed under every mutation, including removing the check it is named for.
+    const traversal = `${agentsRoot}${path.sep}..${path.sep}outside`
     const o = await publish(rosterWith([{ id: 'a1', name: 'sneaky', wd: traversal }]))
     expect(existsSync(responsePath(outsideRoot))).toBe(false)
     expect(o.written).toHaveLength(1) // the install root only

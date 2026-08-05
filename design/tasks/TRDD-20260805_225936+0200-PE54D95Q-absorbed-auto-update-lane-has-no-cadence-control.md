@@ -5,16 +5,16 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T22:59:36+0200
+updated: 2026-08-05T23:01:54+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: bugfix
 min-approval-requirement: none
 mandate: true
-mandated-by: self
+mandated-by: user
 approved: true
-approval-judge: ai-maestro
+approval-judge: user
 approval-datetime: 2026-08-05T22:59:36+0200
 derived: false
 npt: []
@@ -93,19 +93,47 @@ both say no: `enabled: false` and `lastRunAt: null`. Only `lastRunSummary`'s tim
 reveal that a different lane ran three hours earlier. **The state file is honest per-field
 and misleading as a whole**, which is what made this take six wrong hypotheses to find.
 
-## Proposed fix
+## The fix — USER ruling, 2026-08-05
 
-1. **Give the absorbed lane its own cadence setting** — e.g. `absorbedIntervalMinutes`,
-   clamped with a floor that keeps the duty meaningful (the pre-absorption janitor cadence
-   of 3600 s is the natural default, so behaviour is unchanged unless asked). This must NOT
-   be gated on `enabled`; it is a *rate* control, not an off switch, which is exactly the
-   distinction #102's rationale draws.
-2. **Back off permanently-failing targets.** After N consecutive failures with a
-   not-found-shaped error, drop the target to a long retry (or surface it once for the user
-   to prune). Same freshness for the 42 that work; ~79% fewer connections.
-3. **Make the state file answer the question it is asked.** `lastRunAt` should not read
-   `null` while a lane of the same service ran an hour ago — either record the absorbed
-   lane's own `lastRunAt`, or name the field so it cannot be read as "this service is idle".
+Verbatim: *"the marketplace updates should simply be executed once every 3 hours by the
+daemon. not by every agent! one single command: `claude plugin marketplace update`.
+nothing else."*
+
+Three constraints, and they are narrower than what this card originally proposed:
+
+1. **ONE command, no per-target loop.** `claude plugin marketplace update` with no
+   arguments refreshes every registered marketplace in a single invocation. The current
+   shape — 200 per-target `claude plugin update <plugin> <marketplace> --scope user` calls,
+   158 of them failing — is replaced, not throttled. This alone removes the 79% waste
+   without any backoff logic, because there are no longer per-target invocations to fail.
+2. **Cadence: 3 hours.** Not the 3600 s the lane hardcodes today, and not a user-facing
+   knob — the ruling names the interval directly.
+3. **The DAEMON executes it, once. Not every agent, not every session.** This is the
+   load-bearing half: a per-session duty multiplies by the number of live sessions (13 here)
+   and by project count (53 janitor dirs), which is the same per-instance-interval-against-a
+   -per-account-limit error filed as `Emasoft/ai-maestro-janitor` #215. One executor, one
+   schedule.
+
+### Superseded by the above
+
+The original proposal (kept so the reasoning is auditable, NOT to be implemented): a
+per-lane `absorbedIntervalMinutes` setting, a consecutive-failure backoff for not-found
+targets, and a `lastRunAt` fix. Items 1 and 2 are moot once there is a single command with
+no per-target loop. The **state-file honesty problem survives** and is still worth fixing —
+`enabled: false` + `lastRunAt: null` beside a lane that ran an hour ago is what made this
+take six wrong hypotheses — so it is retained as an acceptance box below.
+
+### One thing to resolve before coding, NOT to guess at
+
+"Nothing else" reads unambiguously for the *marketplace-refresh* duty. What it does not
+settle is whether per-plugin updates (`claude plugin update …`) should stop **entirely**,
+or merely stop being part of this lane. Those are different operations: marketplace update
+refreshes manifests; plugin update installs new plugin versions. Dropping the latter
+entirely means installed plugins stop receiving updates until something else does it.
+
+Ask before implementing. Do not infer it from "nothing else" — the phrase was answering
+"what should the marketplace refresh do", and reading it as "delete plugin auto-update"
+would be inventing a scope the ruling did not name.
 
 ## Non-goals
 
@@ -117,16 +145,25 @@ and misleading as a whole**, which is what made this take six wrong hypotheses t
 
 ## Acceptance criteria
 
-- [ ] The absorbed lane's cadence is settable, with the current 3600 s as the default, and a
-      changed value demonstrably changes the observed interval.
-- [ ] `enabled: false` still does NOT stop the lane (a test pins this — the #102 rationale
-      is the thing most likely to be "simplified" away by someone reading only this card).
-- [ ] A target failing with a not-found-shaped error N times is no longer retried hourly;
-      pinned by a test that counts invocations across simulated ticks.
+- [ ] The marketplace refresh is **one** `claude plugin marketplace update` invocation with
+      no arguments — pinned by a test asserting the exact argv and that the per-target loop
+      is gone. Counting invocations is the assertion; asserting "it succeeded" would pass
+      over a 200-call loop unchanged.
+- [ ] Cadence is **3 hours**. Pinned against the constant, not against an observed run —
+      a wall-clock test would take 3 h and would still only prove one interval.
+- [ ] Exactly **one** executor. A test proves N concurrent sessions produce N=1 refresh, not
+      N — this is the half that scales into the rate limit and the half a per-session
+      implementation passes trivially by testing a single session.
+- [ ] `enabled: false` still does NOT stop the lane (a test pins this — the #102
+      "consent-to-add is not consent-to-remove" rationale is the thing most likely to be
+      "simplified" away by someone reading only this card).
 - [ ] A reader of `~/.aimaestro/auto-update-settings.json` can tell that the absorbed lane
       ran, without inferring it from `lastRunSummary` timestamps.
-- [ ] Measured after the change: hourly `claude plugin update` invocations on a host with
-      158 permanently-failing targets drop by roughly that proportion.
+- [ ] Measured after the change on this host: `claude plugin update` invocations per hour
+      drop from **200** (158 of them failing) to **0**, and marketplace refreshes drop from
+      hourly-per-session to one every 3 h machine-wide.
+- [ ] The per-plugin-update question in "One thing to resolve" above is answered by the
+      USER before any code lands, and the answer is recorded here.
 
 ## Verification
 

@@ -106,6 +106,32 @@ non-team title, but nothing derives *invalidity* from an autonomous agent sittin
 6. **Do not let it become a fourth special case.** If this ships without moving R9.13 / R20.3 /
    R9.4 onto the shared gate, the result is four implementations instead of three.
 
+## Acceptance criteria
+
+Added 2026-08-05T21:47 — the card shipped with NO checklist at all, which makes the terminal-column
+gate **vacuous on it**: that gate is written only over boxes that are unchecked, so a card with zero
+boxes satisfies it having proven nothing, and could be closed while none of the work below existed.
+(Exactly the defect TRDD-9QV4ZCYY fixed in the gate's own wording; this is the same hole seen from
+the card side.) The boxes are transcribed from this card's own Verification and decision sections —
+none is invented, and none of them is guessed.
+
+- [ ] **The condition list is enumerated and USER-signed-off**, with each entry marked HARD-INVALID
+      (refuse the wake) or ADVISORY (warn only). This gates every box below it — per "Estimated
+      risk", a predicate that is wrong or too eager hibernates a working fleet, so the enumeration
+      is USER-tier and must not be guessed.
+- [ ] One predicate, one flag, one REASON — the flag CLEARS when the condition is fixed (R9.13's
+      recorded lesson: a flag only ever set true bricks the agent forever).
+- [ ] The gate lives in the SERVICE (`wakeAgent`'s altitude), mirrored at the route — a route-only
+      gate is bypassable in headless (the SF4 finding).
+- [ ] It REFUSES THE WAKE and never force-stops a live session.
+- [ ] Grandfathering measured, not assumed: the pre-fork `~/Code/*` agents are checked for actual
+      state before deciding retroactive-vs-boundary-date.
+- [ ] R9.13, R20.3 and R9.4 are MOVED onto the shared gate — shipping without this yields four
+      implementations instead of three, which is the failure this card exists to end.
+- [ ] Both directions pinned with a recorded neuter: a failing agent cannot reach a running session
+      by ANY path, the refusal names WHICH condition failed, and fixing it makes the agent wakeable
+      in the same session with no restart.
+
 ## Verification
 
 An agent failing ANY enumerated condition cannot reach a running session by any path (route or

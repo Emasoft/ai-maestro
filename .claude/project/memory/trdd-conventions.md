@@ -1,8 +1,8 @@
 ---
 name: trdd-conventions
-description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete."
+description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item."
 ocd: 2026-06-23
-lmd: 2026-07-30
+lmd: 2026-08-05
 metadata:
   node_type: memory
   type: reference
@@ -65,11 +65,31 @@ Two `lib/trdd-doctor.ts` rules enforce it, and they do not overlap — two defec
 sits where it does, label the explanation for what it is — `**Deferred until:**`,
 `**Waiting on:**`, `**Blocked by:**`, `**Coverage:**`, `**Scope:**` — never `**Status:**`.
 
-**Terminal cards are the sharp edge.** IND §12 freezes a terminal TRDD's body, so a
-`column: complete` card carrying `**Status:** Not started` cannot be repaired without a governance
-call — and that is exactly the pair that misled a detector for 35 days.[^3] Two of ours are
-blocked on it (`C7A81642`, `7123D51A`), tracked on TRDD-FKGMNGJB behind a self-retiring gate
-allowance.
+**Terminal cards are the sharp edge, and there is now a NARROW carve-out.** IND §12 freezes a
+terminal TRDD's body — that is exactly the pair that misled a detector for 35 days.[^3] The
+governance call was routed to the janitor (`ai-maestro-janitor#139`) and **RULED 2026-08-05**
+(their `c80945ee`):
+
+> a body line that **VERIFIABLY contradicts** the terminal `column:` may be removed, *"because
+> deleting a false claim ABOUT history is not rewriting history"* — authorising removal of **ONLY a
+> machine-verifiable contradiction, never a line that merely disagrees in wording, adds context, or
+> cannot be mechanically proven false."*
+
+**Read the exclusion clause, not just the permission — it is what decides most cases.** Applied to
+our two blocked cards it split them, which is why the gate allowance in
+`tests/unit/trdd-doctor.test.ts` **shrank 2 → 1 rather than being deleted**:
+
+- `C7A81642` — `**Status:** Not started` beside `column: complete`. `not-started` is in the
+  vocabulary and maps to `backburner`, so a machine PROVES the contradiction. **Repaired.**
+- `7123D51A` — `**Status:** Implemented 2026-04-20 (…) Derived tasks #241/#242/#243 unblocked.`
+  **Permanently excluded**, by the clause twice over: it ADDS CONTEXT and CANNOT be mechanically
+  proven false — it is TRUE, merely unparseable, because "Implemented" names an ACTION that can
+  predate the column and a date follows the verb. Clearing it would mean deleting a true line from
+  a frozen card, or teaching the predicate to accept `implemented`, which this rule deliberately
+  refuses. It is a permanent exclusion, **not a backlog item**.
+
+So `trddgrep validate` reports **1** ERROR, not the 2 that were called "the baseline" for days.
+TRDD-FKGMNGJB is closed and archived.[^7]
 
 ## See also
 - [[three-pillars-conformance-spec]] — the ARBITER. The one-state-field contract above is pinned
@@ -110,3 +130,18 @@ allowance.
   grep -q .`, which the IND base mandates for exactly this reason. (The snippet above carried the
   `ls` form from its authoring on 2026-06-23 until this correction.)
 [^2]: [id:ATOM-TRDC-ID-BASE36-NOT-UUID, status:valid, keywords:"trdd_id_8char_uppercase_base36 not_a_uuid_anymore collision_odds_at_1000_trdds uppercase_only_case_insensitive_filesystem size_id_to_population", ocd:2026-06-23, lmd:2026-06-23] TRDD ids used to be the first 8 hex of an RFC-4122 UUIDv4 (the FULL UUID in `trdd-id:`, the 8-hex prefix in the filename). The user found the long UUIDs hard to type/remember and pointed out 8 chars over the full 36-symbol alphabet (`A-Z`+`0-9`) is plenty: 36^8 ≈ 2.8e12 ⇒ ~1-in-5.6M collision odds at 1000 TRDDs, ~2M TRDDs for a coin-flip. Changed 2026-06-23: `trdd-id` IS now an 8-char UPPERCASE base36 id (no UUID at all). Uppercase-only because macOS/Windows filenames are case-insensitive — a lowercase letter could fold two distinct ids onto one file and silently overwrite. Collisions are handled by a create-time regenerate-on-hit `while ls` check, NOT the old "widen to 12 chars" idea (prevention beats post-hoc repair). Global rules updated together: `trdd-design-tasks.md`, `trdd-approval-tiers.md`, `commit-discipline.md`. Lesson: size an id to its population — a 36^8 space is collision-free for any realistic TRDD count, and short ids are the ones humans actually cite without typos.
+
+[^7]: [id:ATOM-TRDC-0007, status:valid, keywords:"carve_out_permission_clause_vs_exclusion_clause ruling_landed_but_split_the_set acceptance_box_assumed_a_ruling_that_cleared_both allowance_shrank_instead_of_being_deleted permanent_exclusion_not_a_backlog_item re_check_an_external_blocker_before_re_reading_the_card", ocd:2026-08-05, lmd:2026-08-05]
+  DO NOT read a governance carve-out as "the blocker cleared, so repair everything it was blocking",
+  BECAUSE janitor#139's permission clause covers only a MACHINE-VERIFIABLE contradiction while its
+  EXCLUSION clause ("merely disagrees in wording, adds context, or cannot be mechanically proven
+  false") is the half that decided the second of our two cards — so a ruling can land in full and
+  still SPLIT the set it was asked about. TRDD-FKGMNGJB's acceptance box said "repair the two cards,
+  then DELETE the gate allowance"; that wording assumed a ruling clearing both and could not be
+  satisfied as written. DO apply a carve-out item-by-item against its exclusion clause, shrink the
+  allowance rather than deleting it when the set splits, and close the box as AMENDED with the
+  divergence stated — never force a box whose premise the ruling falsified.
+  Second half, cheaper and independently useful: the card had been parked since 2026-07-30 and last
+  verified its blocker OPEN on 2026-08-02; on resume it had CLOSED hours earlier. DO re-check an
+  EXTERNAL blocker before re-reading the card — a card can only ever report what was true when
+  someone last looked, and for a GitHub blocker that is one `gh issue view` call.

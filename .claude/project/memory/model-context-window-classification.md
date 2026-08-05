@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: component
+  topic: architecture-and-runtime
   globs: [lib/context-limits.ts, rust-tools/aim-jsonl-reader/src/context.rs]
 ---
 

@@ -46,6 +46,7 @@ exist ONLY there.
 
 - **`custom-server-and-websocket-pty`** — why does server.mjs exist / Next.js WebSocket same port
 - **`dashboard-ui-patterns`** — how are agent category colors assigned in the sidebar
+- **`model-context-window-classification`** — the context percentage is wrong
 - **`pm2-boot-persistence`** — server did not come back after a reboot
 - **`repo-file-structure`** — where should I put a new component or hook in this repo
 - **`runtime-install-tree`** — where does ai-maestro store data on a host
@@ -118,6 +119,7 @@ exist ONLY there.
 ### Tooling and Testing
 
 - **`code-analysis-tooling`** — what is tldr / fastedit / distill
+- **`nul-byte-makes-a-file-invisible-to-grep`** — grep returns no match for a file I KNOW contains the string
 - **`project-long-form-docs`** — where is the long-form documentation
 - **`release-and-marketing`** — do I need to draft an X twitter post when opening a PR
 - **`testing-and-scenarios`** — how do I run a UI scenario test

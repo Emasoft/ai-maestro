@@ -27,11 +27,16 @@
  * errored AFTER issuing the POST would still exit non-zero while having already refused the card
  * on the server — the one outcome this is meant to prevent.
  *
- * NEUTER RUN (2026-08-05 — OBSERVED): deleting the whole `if [ "$verb" = "refuse" ]` block reddens
- * the 6 rejection closures below and leaves both positive controls green. The `approve` closure is
- * the one that proves the guard is scoped rather than global — it stays green under BOTH the
- * neuter and the fix, and it would red if the guard were hoisted out of the `refuse` branch, which
- * is the mistake a future edit is most likely to make.
+ * NEUTER RUN (2026-08-05 — OBSERVED, and it corrected the count this comment first guessed):
+ * `if [ "$verb" = "refuse" ]` → `if false` gives **10 red / 2 green**. The 10 are every rejection
+ * closure (4 here plus the 6 parameterised stock dismissals — the first draft of this line said
+ * "6", having counted the `it.each` as one). The 2 green are exactly the two positive controls,
+ * which is the split that matters: it shows the guard rejects non-answers rather than everything.
+ *
+ * The `approve` closure is green under BOTH the neuter and the fix, so it pins nothing about the
+ * guard's PRESENCE — it pins its SCOPE. It reds only if the guard is hoisted out of the `refuse`
+ * branch, which is the mistake a future edit is most likely to make, and no other closure here
+ * could detect it.
  */
 
 import { describe, it, expect } from 'vitest'

@@ -33,6 +33,13 @@ import { Readable } from 'stream'
 import { readdirSync } from 'fs'
 import { join } from 'path'
 
+// The subject is a HEAVY IMPORT: every handler here `await import()`s a Next route module, and
+// the router module itself pulls in the whole route table. Warm that is sub-second; cold, under
+// parallel file execution, it runs past vitest's 5s default and the file fails with five
+// `Test timed out` errors and not one assertion — a failure that reads exactly like a
+// regression. Raised at the file so the suite's own concurrency cannot decide the verdict.
+vi.setConfig({ testTimeout: 30_000 })
+
 const AGENT_ID = 'parity-agent-id'
 const AGENT_NAME = 'parity-agent'
 

@@ -1014,6 +1014,24 @@ const routes: Route[] = [
     }
     sendJson(res, 200, { success: true, sessionName, command: outcome.command })
   }},
+  // TRDD-T2Q4KXQH / ai-maestro#117 — the user-presence record, MISSING from this table until now.
+  //
+  // The agent's `UserPromptSubmit` hook POSTs this on every prompt, and `fleet-recovery-runner`
+  // reads what it writes as "a human is at the keyboard, defer". With no entry here the hook 404'd
+  // in headless mode, so presence was NEVER recorded and recovery read a permanently stale record —
+  // the OPPOSITE failure from the one #117 fixed in full mode, and the direction that makes
+  // recovery race a live user. Full mode recorded presence and vetoed forged presence; headless
+  // recorded neither, so the two modes held different truths about whether a human was present.
+  //
+  // DELEGATES to the same module as the Next route rather than reimplementing it. That is the whole
+  // reason this class of gap keeps recurring — a hand-written twin drifts — and it is the pattern
+  // /portfolio/verify already uses. The injected-prompt veto therefore applies identically in both
+  // modes, including its consume-once semantics, with no second copy to keep in step.
+  { method: 'POST', pattern: /^\/api\/sessions\/me\/user-input$/, paramNames: [], handler: async (req, res) => {
+    const mod = await import('@/app/api/sessions/me/user-input/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
+      '/api/sessions/me/user-input', { method: 'POST', withBody: true })
+  }},
   // Restart session — /exit, poll for shell prompt, relaunch. Uses the SHARED
   // lib/session-restart.ts (execFileSync, no shell) so it CANNOT diverge from the
   // Next.js app route (TRDD-4P1M8I18 Phase 2b). The prior copy here was a third,

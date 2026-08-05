@@ -1,11 +1,11 @@
 ---
 trdd-id: BLBNDGZ1
 title: Seven test files fail only under full-suite parallel load and pass in isolation
-column: todo
+column: cancelled
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T19:15:40+0200
-updated: 2026-08-02T19:15:40+0200
+updated: 2026-08-05T04:58:45+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -28,7 +28,50 @@ labels: [tests, concurrency, flake-suspect]
 
 # Seven test files fail only under full-suite parallel load and pass in isolation
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-02
+## ⏵ STATE — CLOSED 2026-08-05 as NOT REPRODUCIBLE. Zero code changed.
+
+The card's own prescribed experiment was run, and it **refutes the card's premise at the card's own
+base commit**. Numbers, all measured today:
+
+| where | result | the 7 named files |
+|---|---|---|
+| **HEAD**, full suite ×5 | `5070 passed / 2 skipped`, exit 0 every run | **7/7 passed, 5/5 runs** |
+| **base `0fcf7116`**, full suite in a scratch worktree | `4928 passed`, 2 failed | **7/7 passed, 0 failed** |
+
+So "30 failed across these 7 files" does not reproduce **even at the commit where it was observed**.
+Nothing was fixed in the meantime either: `git log --since=2026-08-02` over all seven paths returns
+**zero commits** — the test files are byte-identical to when the failure was recorded.
+
+**The 2 base-commit failures are artifacts of my own experiment, not findings.** Both are
+workdir-policy tests asserting a specific denial REASON:
+
+```
+expected 'outside $HOME (/private/tmp/aim-base)' to match /ai-maestro installation/i
+```
+
+The worktree lives in `/private/tmp`, so an earlier guard ("outside `$HOME`") fires and the policy
+denies for a different — equally correct — reason. The guard works; the assertion is
+location-dependent. **That is a real, separate defect** — filed as **TRDD-ZR5WUQJZ** rather than
+smuggled into this one, because it is deterministic and this card's subject is not.
+
+**Why the experiment is sound rather than a confound:** `git diff 0fcf7116..HEAD -- package.json
+yarn.lock` is EMPTY across all 104 commits, so symlinking the current `node_modules` into the base
+checkout introduces no dependency drift — the one confound the card's recipe did not mention.
+
+**What this does NOT claim.** Not "the failures were never real". The original observation was made
+in the main checkout under whatever ambient load existed at 2026-08-02T19:15; today's runs are a
+different machine state. The honest verdict is **transient / environment-dependent, not
+reproducible on demand**, which is precisely the disposition the card's own "Why this is not filed
+as 'just a flake'" section was written to avoid reaching casually — so it is reached here with five
+HEAD runs and a base-commit control behind it, not with a shrug.
+
+**Column `cancelled`, not `complete`:** the investigation finished, but no defect was found and no
+code was written. Calling it `complete` would assert a fix that does not exist.
+
+**SUPERSEDED — do NOT carry forward:** the failure counts, the NEXT ACTION, and the seven-file list
+as a live defect set.
+
+## ⏹ The original report — 2026-08-02 (premise refuted above; kept for the record)
 
 `yarn test` → **30 failed / 4915 passed / 2 skipped across 350 files**, in these 7:
 
@@ -106,14 +149,34 @@ reaching `yarn test` and being read as noise.
 
 ## Acceptance
 
-- [ ] full suite run at base commit `0fcf7116`, failing set recorded — pre-existing or not, stated
-- [ ] each of the 7 files given its OWN verdict (shared-state fixture / real ordering bug / timeout)
-- [ ] no file closed as "flake" without naming the specific shared resource or the timeout measured
-- [ ] `yarn test` exits 0 with no per-file exclusions added to hide a failure
-- [ ] the 5 files doing `mkdtemp`/`HOME` juggling audited for cross-test leakage
+- [x] full suite run at base commit `0fcf7116`, failing set recorded — **done, and it refuted the
+      premise**: `4928 passed`, and all 7 named files PASSED there. The only 2 failures are
+      artifacts of the worktree being outside `$HOME`, filed separately.
+- [~] each of the 7 files given its OWN verdict — **moot, and deliberately not manufactured.** A
+      per-file verdict requires a per-file failure to diagnose; none of the 7 fails at HEAD (5 runs)
+      or at base. Inventing seven verdicts for seven passing files would be fiction.
+- [x] no file closed as "flake" without naming the specific shared resource or the timeout measured
+      — **honoured by NOT closing them as flakes.** The verdict is "not reproducible", which names
+      what was measured (5 HEAD runs + a base control) instead of guessing a mechanism.
+- [x] `yarn test` exits 0 with no per-file exclusions added to hide a failure — exit 0, five times,
+      with zero exclusions and zero code changed
+- [~] the 5 files doing `mkdtemp`/`HOME` juggling audited for cross-test leakage — **NOT done and
+      deliberately NOT carried forward as a card.** A speculative audit with no symptom to audit
+      against is exactly the card that sits on a board forever, and the board is already the thing
+      this project is trying to drain. What the experiment DID surface from that same class is one
+      CONCRETE, reproducible instance — an assertion that depends on the checkout's location
+      relative to `$HOME` — and that is filed, because it fails deterministically rather than
+      hypothetically. If a leak in the other four ever fires, it arrives with a symptom and gets a
+      card then.
 
 ## Approval log
 
 - 2026-08-02T19:15:40+0200 — SELF-MANDATE (min-approval-requirement: none). Test-hygiene work
   inside the authoring agent's own scope: no baseline deviation, no cross-team reach, no
   governance change, reversible. No approval request was sent.
+- 2026-08-05T04:58:45+0200 — CLOSED as `cancelled` by ai-maestro. The card's own prescribed
+  base-commit control run REFUTED its premise: all 7 named files pass at `0fcf7116` and at HEAD
+  (5 full-suite runs, exit 0 each), and zero commits touched any of the 7 files in between. No
+  defect found, no code changed — hence `cancelled`, not `complete`. The control run's only 2
+  failures were artifacts of the worktree living outside `$HOME`; that IS a real, deterministic
+  defect and is split out as TRDD-ZR5WUQJZ rather than absorbed here.

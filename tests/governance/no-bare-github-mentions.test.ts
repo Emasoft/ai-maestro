@@ -13,6 +13,22 @@ import * as path from 'path'
 // verbatim because angle brackets read as a slot; a bare handle is, because it looks like finished
 // text. Hence the fix belongs in the template and the guard belongs in CI.
 //
+// ── ITS SIBLING, AND WHY BOTH EXIST ─────────────────────────────────────────────────────────────
+// `no-at-role-mentions.test.ts` guards the same class and is NOT superseded by this file. Before
+// deleting either as a duplicate, here is the mutation each one alone would miss:
+//
+//   • THAT one matches a CLOSED list of governance role names (`@manager`, `@cos`, …) over
+//     `git ls-files rules docs scripts .claude`. It is the only one that covers `scripts/` and
+//     `.claude/`, and it carries the incident that started this — a real person named `manager`
+//     asking us to stop paging him. It CANNOT see a handle that is not a role: it read straight
+//     past `@spec`, which is a real Organization.
+//   • THIS one matches ANY handle shape, over the governance PROSE an agent copies templates from,
+//     including `design/specs/` which the other does not scan. It is the one that found `@spec`.
+//     It does not look at `scripts/` or `.claude/`, so it cannot replace the other.
+//
+// Two detectors, one hazard, disjoint blind spots. Keep both; if either scan set ever grows to
+// cover the other, collapse them then and say so here.
+//
 // TWO DESIGN NOTES, both from CORE's implementation and both load-bearing:
 //   1. Code spans and fenced blocks are EXEMPT — wrapping in backticks is the prescribed fix, so it
 //      must not also be a finding. A guard that flags the remedy trains everyone to ignore it.

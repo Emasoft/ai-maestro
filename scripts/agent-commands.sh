@@ -45,8 +45,8 @@ Examples:
   # Create a new agent with a project folder
   aimaestro-agent.sh create my-agent -d ~/Code/my-project -t "My task"
 
-  # List all online agents
-  aimaestro-agent.sh list --status online
+  # List the agents that are currently active
+  aimaestro-agent.sh list --status active
 
   # Hibernate and later wake an agent
   aimaestro-agent.sh hibernate my-agent
@@ -75,6 +75,27 @@ cmd_list() {
         case "$1" in
             --status)
                 [[ $# -lt 2 ]] && { print_error "--status requires a value"; return 1; }
+                # VALIDATE BEFORE THE REQUEST (ai-maestro#114). The filter below is an exact string
+                # compare against `Agent.status`, whose enum is `active | idle | offline | deleted`
+                # (types/agent.ts). A value outside that set CANNOT match, and the old code accepted
+                # it silently: jq returned `{agents: []}` at exit 0, which reads as "no agents are in
+                # that state" rather than "that is not a state". `jq -e` does not rescue it either —
+                # it fails only on a null/false last output, and an empty object is truthy. So an
+                # unmatchable status must be an ERROR here, not an empty list downstream.
+                case "$2" in
+                    active|idle|offline|deleted|all) ;;
+                    hibernated)
+                        # Named separately because it is the one a caller reaches for on purpose:
+                        # ai-maestro-plugin#55 tells consumers to stop inferring liveness from
+                        # `Agent.status`, and this flag looks exactly like that fix. It is not —
+                        # hibernated agents read `offline`, so the field cannot carry the answer.
+                        print_error "--status hibernated cannot match: hibernation is not carried by Agent.status (a hibernated agent reads 'offline')."
+                        print_error "Use --status offline, or the dedicated hibernation probe once ai-maestro#113 lands."
+                        return 1 ;;
+                    *)
+                        print_error "Invalid --status '$2'. Valid values: active, idle, offline, deleted, all"
+                        return 1 ;;
+                esac
                 status_filter="$2"; shift 2 ;;
             --format)
                 [[ $# -lt 2 ]] && { print_error "--format requires a value"; return 1; }
@@ -86,7 +107,7 @@ cmd_list() {
 Usage: aimaestro-agent.sh list [options]
 
 Options:
-  --status <status>   Filter by status (online, offline, hibernated, all)
+  --status <status>   Filter by status (active, idle, offline, deleted, all)
   --format <format>   Output format (table, json, names)
   -q, --quiet         Output names only (same as --format names)
   --json              Output as JSON (same as --format json)
@@ -98,11 +119,12 @@ Examples:
   # List all agents including hibernated
   aimaestro-agent.sh list --status all
 
-  # List only online agents
-  aimaestro-agent.sh list --status online
+  # List only the agents currently running a turn
+  aimaestro-agent.sh list --status active
 
-  # List only hibernated agents
-  aimaestro-agent.sh list --status hibernated
+  # List stopped agents. NOTE: this includes hibernated ones — Agent.status cannot
+  # distinguish them, which is why no hibernated filter is offered (ai-maestro#113).
+  aimaestro-agent.sh list --status offline
 
   # Output as JSON (for scripting)
   aimaestro-agent.sh list --json

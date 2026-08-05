@@ -90,14 +90,33 @@ export async function GET(
   // hunting "the auth refactor task" had no way to find it by content. Applied as
   // a post-fetch filter here (not in listTeamTasks) so the GitHub-Projects query
   // path is untouched; scoping to the already-authorized team's own tasks.
+  //
+  // ai-maestro#53 adds `parentTask` on the SAME footing, for the same reason: it is an
+  // exact-match field like the four above, but `listTeamTasks`'s filter parameter is typed and
+  // feeds the GitHub-Projects query, so widening it there would reach into that path for a
+  // filter this route can apply itself.
+  //
+  // It only works because `parentTask` survives the round-trip: it is encoded as the
+  // `parent:<id>` label on the way out (lib/github-project.ts:75) and parsed back on the way in
+  // (:225), so it is present on every task here. A filter on a field that did NOT round-trip
+  // would return an empty list and look exactly like "this epic has no children".
+  //
+  // The two filters COMPOSE (`?parentTask=X&q=y` means both), which is why neither returns early.
   const q = url.searchParams.get('q')?.trim().toLowerCase()
-  if (q && result.data && Array.isArray((result.data as { tasks?: unknown[] }).tasks)) {
-    const data = result.data as { tasks: Array<{ subject?: string; description?: string; labels?: string[] }> }
-    const filtered = data.tasks.filter((t) => {
-      const hay = `${t.subject ?? ''}\n${t.description ?? ''}\n${(t.labels ?? []).join(' ')}`.toLowerCase()
-      return hay.includes(q)
-    })
-    return NextResponse.json({ ...data, tasks: filtered })
+  const parentTask = url.searchParams.get('parentTask')?.trim()
+  if ((q || parentTask) && result.data && Array.isArray((result.data as { tasks?: unknown[] }).tasks)) {
+    const data = result.data as {
+      tasks: Array<{ subject?: string; description?: string; labels?: string[]; parentTask?: string }>
+    }
+    let tasks = data.tasks
+    if (parentTask) tasks = tasks.filter((t) => t.parentTask === parentTask)
+    if (q) {
+      tasks = tasks.filter((t) => {
+        const hay = `${t.subject ?? ''}\n${t.description ?? ''}\n${(t.labels ?? []).join(' ')}`.toLowerCase()
+        return hay.includes(q)
+      })
+    }
+    return NextResponse.json({ ...data, tasks })
   }
 
   return NextResponse.json(result.data)

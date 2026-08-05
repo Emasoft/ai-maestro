@@ -53,6 +53,9 @@ SEVERITY=""
 EFFORT=""
 RELEASE_VIA=""
 EXTERNAL_REF=""
+# ai-maestro#53: accumulated across repeated --attachment flags, so it is built as JSON here
+# rather than as a delimited string that would have to be re-parsed at body-build time.
+ATTACHMENTS_JSON="[]"
 
 show_help() {
     echo "Usage: amp-kanban-create-task.sh <title> [options]"
@@ -80,6 +83,9 @@ show_help() {
     echo "  --severity LEVEL           CRITICAL|HIGH|MEDIUM|LOW|NIT"
     echo "  --effort SIZE              S|M|L|XL"
     echo "  --release-via MODE         publish|deploy|none"
+    echo "  --attachment \"URL|NAME|KIND\"  Attach a link/file. REPEATABLE (max 50)."
+    echo "                             NAME and KIND are optional: \"https://…/pr/7\","
+    echo "                             \"https://…/pr/7|Fix PR\", \"https://…/pr/7|Fix PR|pr\"."
     echo "  --external-ref REF         GitHub issue/PR URL or number"
     echo "  --team TEAM_ID             Team UUID (auto-detected from agent if omitted)"
     echo "  --id UUID                  Operate as this agent (UUID from config.json)"
@@ -157,6 +163,29 @@ while [[ $# -gt 0 ]]; do
             ;;
         --external-ref)
             EXTERNAL_REF="$2"
+            shift 2
+            ;;
+        # ai-maestro#53. The server has accepted `attachments` since TRDD-95d23f3b (the POST
+        # route Zod-validates {url, name?, kind?}); only this flag was missing, so a caller had
+        # to hand-build JSON and POST it directly — i.e. bypass the R23 frozen verb to use a
+        # field the verb's own endpoint already supported.
+        --attachment)
+            IFS='|' read -r _att_url _att_name _att_kind <<< "$2"
+            if [ -z "$_att_url" ]; then
+                echo "Error: --attachment requires a URL (format: URL|NAME|KIND, NAME/KIND optional)" >&2
+                exit 1
+            fi
+            ATTACHMENTS_JSON=$(printf '%s' "$ATTACHMENTS_JSON" | jq -c \
+                --arg u "$_att_url" --arg n "${_att_name:-}" --arg k "${_att_kind:-}" \
+                '. + [ {url: $u}
+                       + (if $n != "" then {name: $n} else {} end)
+                       + (if $k != "" then {kind: $k} else {} end) ]')
+            # Fail here rather than on a server 400: the server caps the array at 50, and a
+            # rejected POST after N flags does not say WHICH constraint the caller broke.
+            if [ "$(printf '%s' "$ATTACHMENTS_JSON" | jq 'length')" -gt 50 ]; then
+                echo "Error: at most 50 --attachment flags (the server rejects more)" >&2
+                exit 1
+            fi
             shift 2
             ;;
         --team)
@@ -254,6 +283,13 @@ fi
 
 if [ -n "$EXTERNAL_REF" ]; then
     BODY=$(echo "$BODY" | jq --arg r "$EXTERNAL_REF" '. + {externalRef: $r}')
+fi
+
+# Omitted entirely when no --attachment was given: the POST schema is `.strict()`, and sending
+# an empty array would be a claim ("this task has no attachments") where saying nothing is the
+# honest input. Same reason the flags above are all conditional.
+if [ "$ATTACHMENTS_JSON" != "[]" ]; then
+    BODY=$(echo "$BODY" | jq --argjson a "$ATTACHMENTS_JSON" '. + {attachments: $a}')
 fi
 
 if [ -n "$SEVERITY" ]; then

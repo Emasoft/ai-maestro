@@ -384,9 +384,9 @@ never bends to them.
 
 | Script | Signature |
 |---|---|
-| `amp-kanban-list.sh` | `[--status S] [--assignee A] [--label L] [--task-type T] [--query TEXT] [--team ID] [--id]` |
+| `amp-kanban-list.sh` | `[--status S] [--assignee A] [--label L] [--task-type T] [--parent TASK_ID] [--query TEXT] [--team ID] [--id]` |
 | `amp-kanban-get.sh` | `<task-id> [--team ID] [--id]` |
-| `amp-kanban-create-task.sh` | `<title> [--description D] [--assignee A] [--labels "a,b"] [--status S] [--priority N] [--task-type T] [--parent ID] [--npt "…"] [--eht "…"] [--supersedes "…"] [--relevant-rules "3,27"] [--severity CRITICAL\|HIGH\|MEDIUM\|LOW\|NIT] [--effort S\|M\|L\|XL] [--release-via publish\|deploy\|none] [--external-ref REF] [--team ID] [--id]` |
+| `amp-kanban-create-task.sh` | `<title> [--description D] [--assignee A] [--labels "a,b"] [--status S] [--priority N] [--task-type T] [--parent ID] [--npt "…"] [--eht "…"] [--supersedes "…"] [--relevant-rules "3,27"] [--severity CRITICAL\|HIGH\|MEDIUM\|LOW\|NIT] [--effort S\|M\|L\|XL] [--release-via publish\|deploy\|none] [--external-ref REF] [--attachment "URL\|NAME\|KIND"]… [--team ID] [--id]` |
 | `amp-kanban-move.sh` | `<task-id> <status> [--team ID] [--id]` — the narrow verb (status only) |
 | `amp-kanban-edit.sh` | `<task-id> (--set k=v \| --set-json k=<json>)… [--team ID] [--id]` — the general one |
 | `amp-kanban-archive.sh` | `<task-id> [--team ID] [--id]` |

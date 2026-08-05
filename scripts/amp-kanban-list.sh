@@ -43,6 +43,7 @@ LABEL=""
 TASK_TYPE=""
 TEAM_ID=""
 QUERY_TEXT=""
+PARENT_TASK=""
 
 show_help() {
     echo "Usage: amp-kanban-list.sh [options]"
@@ -57,6 +58,7 @@ show_help() {
     echo "  --assignee, -a AGENT_ID    Filter by assignee agent UUID"
     echo "  --label, -l LABEL          Filter by label"
     echo "  --task-type TYPE           Filter by task type (bug|feature|chore)"
+    echo "  --parent TASK_ID           Filter to the children of one epic/parent task"
     echo "  --query, -q TEXT           Free-text keyword search over subject, description, labels"
     echo "  --team TEAM_ID             Team UUID (auto-detected from agent if omitted)"
     echo "  --id UUID                  Operate as this agent (UUID from config.json)"
@@ -68,6 +70,8 @@ show_help() {
     echo "  amp-kanban-list.sh --assignee agent-uuid --status ai_review"
     echo "  amp-kanban-list.sh --label bug --team team-uuid"
     echo "  amp-kanban-list.sh --query \"login redirect\""
+    echo "  amp-kanban-list.sh --parent \"\$EPIC_ID\"              # every child of one epic"
+    echo "  amp-kanban-list.sh --parent \"\$EPIC_ID\" --status dev  # filters compose"
 }
 
 # Parse arguments
@@ -87,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --task-type)
             TASK_TYPE="$2"
+            shift 2
+            ;;
+        --parent)
+            PARENT_TASK="$2"
             shift 2
             ;;
         --query|-q)
@@ -156,6 +164,13 @@ fi
 if [ -n "$TASK_TYPE" ]; then
     [ -n "$QUERY" ] && QUERY="${QUERY}&"
     QUERY="${QUERY}taskType=$(printf '%s' "$TASK_TYPE" | jq -sRr @uri)"
+fi
+# ai-maestro#53: children of one epic. Server-side (the route filters after fetch, alongside
+# `q`), so this narrows the payload's task list rather than making every caller re-implement
+# `jq 'select(.parentTask == $p)'` — which is what the client-side fallback was.
+if [ -n "$PARENT_TASK" ]; then
+    [ -n "$QUERY" ] && QUERY="${QUERY}&"
+    QUERY="${QUERY}parentTask=$(printf '%s' "$PARENT_TASK" | jq -sRr @uri)"
 fi
 # Free-text search. The server applies `q` AFTER the structured filters above,
 # matching subject + description + labels, so it narrows rather than widens.

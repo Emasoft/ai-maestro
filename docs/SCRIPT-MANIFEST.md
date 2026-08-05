@@ -20,9 +20,13 @@ fails the build otherwise. Per **R23.8**, announcing a verb is part of shipping 
 verb looks absent, and a plugin that believes the layer lacks what it needs is pushed back toward
 `/api/*`.
 
-- Source of truth: `scripts/*.sh` (77 files at the time of writing)
+- Source of truth: `scripts/*.sh` (**87** files)
 - Install target: `~/.local/bin/` (via `install-messaging.sh`, by glob)
-- Last reconciled: 2026-07-17 — added `aimaestro-continuity.sh` (Tier A) + `install-agentlens.sh` (Tier C)
+- Last reconciled: **2026-08-05** — announced the 7 scripts that were shipping unannounced
+  (`aimaestro-settings.sh` → Tier A; `aimaestro-check-decoupling.sh`, `install-boot-persistence.sh`,
+  `install-pillar-tooling.sh`, `setup-local-marketplaces.sh`, `distribute-tailscale-skill.sh`,
+  `simulate-blackout.sh` → Tier C), reconciled four contradictory counts, and added
+  `aimaestro-groups.sh` (Tier A, ai-maestro#64 residual 6)
 
 ---
 
@@ -47,29 +51,36 @@ MCP server. That rule has no element-level exception, including the core plugin.
 
 | Tier | Promise |
 |---|---|
-| **A — frozen CLI** (§2, 47 scripts) | a contract. Call these. |
+| **A — frozen CLI** (§2, 48 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
 | **C — operator/dev** (§4, 27 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
-47 + 12 + 27 = **86**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+48 + 12 + 27 = **87**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
 
 ---
 
-## 2. Tier A — the frozen skill-facing CLI (47 scripts)
+## 2. Tier A — the frozen skill-facing CLI (48 scripts)
 
-### 2.1 `aimaestro-*` — the server surface (11)
+### 2.1 `aimaestro-*` — the server surface (12)
 
-Everything that touches the AI Maestro API goes through one of these eleven. They all
+Everything that touches the AI Maestro API goes through one of these twelve. They all
 accept `help`, and every one that talks to the server reads `AID_AUTH` /
 `AIMAESTRO_SUDO_TOKEN` / `AIMAESTRO_API_BASE` (§6).
 
-> The subheading read `(8)` while NINE were documented below it — stale by one since
-> whichever entry was added without bumping it. Both counts here are now measured
-> (`grep -c '^#### \`aimaestro-'` in this section), and the totals reconcile:
-> 11 + 28 + 6 + 1 = 46. Separately, `scripts/aimaestro-settings.sh` exists in the repo
-> and is documented in NO tier — a pre-existing gap, left as found rather than
-> classified in passing.
+> **Sub-counts reconcile: 12 + 28 + 6 + 2 = 48** (§2.1 + §2.2 + §2.3 + §2.4), matching the Tier-A
+> total in §1. Measured with `grep -c '^#### \`aimaestro-'` per section, not asserted.
+>
+> This note previously recorded two things that are now resolved, kept here because the *pattern*
+> keeps recurring: the subheading once read `(8)` while NINE entries sat below it, and
+> `scripts/aimaestro-settings.sh` shipped **documented in no tier at all** — recorded as "a
+> pre-existing gap, left as found rather than classified in passing". It was classified on
+> 2026-08-05 (Tier A, §2.4), along with six other unannounced scripts. **Leaving a known gap as
+> found is how it survives**: the note describing it reads as coverage.
+>
+> ⚠ These sub-counts are NOT covered by `tests/unit/script-manifest-announces-every-script.test.ts`,
+> which checks only the three tier headings against disk. They can still drift silently — as the
+> `(8)`-vs-nine case did. Bump them by hand when adding a `####` section here.
 
 #### `aimaestro-agent.sh <command> [options]` — agent lifecycle
 
@@ -218,6 +229,33 @@ ban's predicates unmatchable — the gate still ran, it just could never fire.
 
 `create --type T` is vestigial: `TeamType` is the single-valued union `'closed'`, so there is
 nothing to select. `update` has no `--type` and will not gain one (ai-maestro#64 residual 5).
+
+#### `aimaestro-groups.sh <command> [flags]` — groups (ai-maestro#64 residual 6)
+
+| Subcommand | Flags |
+|---|---|
+| `list` / `show <groupId>` | — |
+| `create --name N` | `--description D` `--subscribers u1,u2` |
+| `update <groupId>` | `--name N` \| `--description D` \| `--subscribers u1,u2` (at least one required) |
+| `delete <groupId>` | — |
+| `subscribe <groupId> <agentUUID>` | — |
+| `unsubscribe <groupId> <agentUUID>` | — |
+| `notify <groupId> --message M` | `--priority low\|normal\|high\|urgent` |
+
+**Groups are NOT teams, and the authorization difference is the point.** A team is a governed
+structure — closed messaging, an ACL, a COS, a kanban board — so creating or deleting one is a
+governance action carrying the password. A group is a lightweight, unstructured collection used for
+fan-out notification and **confers no authority**, so per **R20** every route here is *authenticated
+but governance-FREE*: an agent authenticates by AID and that is the whole check.
+
+**There is deliberately NO `--password` on any subcommand.** Adding one would imply a gate the
+server does not have, and R32.3 forbids the governance password passing through a model regardless.
+
+`update` sends only the flags actually given: both schemas are `.strict()` (an unsolicited key is a
+**400**, not an ignored field), and every field is optional on PUT — so a blanket body would reach
+2xx while silently CLEARING whatever the caller did not mention. `--priority` is validated in the
+CLI before the request, so an unmatchable value fails locally naming the valid set rather than
+costing a round-trip.
 
 #### `aimaestro-governance.sh <command> [flags]` — governance
 
@@ -559,8 +597,8 @@ none matching: a documented check nobody runs is not a check, and R23.8 makes an
 formally nonexistent. The test is what keeps the count honest now; this block is for humans.
 
 ```bash
-# every Tier-A/B/C script this repo ships — must equal 47 + 12 + 27
-ls -1 scripts/*.sh | wc -l                     # 86
+# every Tier-A/B/C script this repo ships — must equal 48 + 12 + 27
+ls -1 scripts/*.sh | wc -l                     # 87
 
 # scripts a plugin calls but this repo does not ship (must be EMPTY — §5 is the debt)
 comm -13 <(ls -1 scripts/*.sh | xargs -n1 basename | sort) \

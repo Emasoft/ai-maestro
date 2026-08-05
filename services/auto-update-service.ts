@@ -65,6 +65,7 @@ import {
 import { isDependencyPlugin } from '@/lib/dependency-plugins'
 import { withMarketplaceLock } from '@/lib/marketplace-lock'
 import { isJanitorInstalledAndArmed as realIsJanitorInstalledAndArmed } from '@/lib/janitor-presence'
+import { stampChoreRun } from '@/lib/janitor-chore-stamp'
 
 /** AuthContext used for every pipeline call this scheduler makes. The
  *  scheduler runs in-process inside the server and has no per-agent
@@ -306,6 +307,12 @@ async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoU
       entries.push(entry(`absorbed:marketplace:${mkt}`, 'failed', errMsg(err)))
     }
   }
+  // The janitor cannot see this ran unless we say so. Its daemon is SUPPRESSED on a host we own
+  // (one-daemon-per-host), so `<task>.last-run.ts` is the only channel by which a chore we
+  // absorbed is distinguishable from one nobody is doing — and until TRDD-14HI8ZPR we never
+  // wrote it, so all five absorbed chores correctly read as dark for weeks (ai-maestro#111).
+  // Stamped OUTSIDE the loop: the chore is `marketplace-refresh` (singular), not one per market.
+  stampChoreRun('marketplace-refresh')
 
   // 2. version-update — keep the janitor plugin itself current at user scope.
   try {
@@ -329,6 +336,7 @@ async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoU
   } catch (err) {
     entries.push(entry(`absorbed:${JANITOR_PLUGIN_NAME}@${MARKETPLACE_NAME}`, 'failed', errMsg(err)))
   }
+  stampChoreRun('version-update')
 
   // 3. user-plugins-update — every plugin currently installed at user scope.
   for (const p of await readers.listUserScopePlugins()) {
@@ -351,6 +359,7 @@ async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoU
       entries.push(entry(key, 'failed', errMsg(err)))
     }
   }
+  stampChoreRun('user-plugins-update')
 
   // R42.7 — a user-scope plugin that actually CHANGED is a global change: every
   // harness agent loads it at launch, so every one of them is running stale code

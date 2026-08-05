@@ -44,6 +44,7 @@ import {
   type CandidateReaders,
 } from '@/services/auto-update-service'
 import { MARKETPLACE_NAME, LOCAL_MARKETPLACE_NAME, CUSTOM_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
+import { readChoreStamp } from '@/lib/janitor-chore-stamp'
 
 const JANITOR = 'ai-maestro-janitor'
 
@@ -55,11 +56,61 @@ function fakeReaders(userScope: Array<{ name: string; marketplace: string }> = [
   }
 }
 
+// CONTAINMENT, added with the janitor chore stamps (TRDD-14HI8ZPR). The tick now writes
+// `<chore>.last-run.ts` into the janitor control dir, so the file-header claim that these tests
+// "never touch the real filesystem at all" stopped being true the moment that landed — without
+// this redirect every test below would write the DEVELOPER'S real `~/.claude/janitor-control/`.
+// `$JANITOR_CONTROL_DIR` is the same override the janitor itself honours, deliberately: isolating
+// one side and not the other would be a silent skew.
+let controlDir = ''
+let priorControlDir: string | undefined
+
 beforeEach(() => {
   updateMarketplace.mockClear()
   changePlugin.mockClear()
   updateMarketplace.mockResolvedValue({ success: true })
   changePlugin.mockResolvedValue({ success: true })
+  priorControlDir = process.env.JANITOR_CONTROL_DIR
+  controlDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-chore-stamp-'))
+  process.env.JANITOR_CONTROL_DIR = controlDir
+})
+
+afterEach(() => {
+  if (priorControlDir === undefined) delete process.env.JANITOR_CONTROL_DIR
+  else process.env.JANITOR_CONTROL_DIR = priorControlDir
+  fs.rmSync(controlDir, { recursive: true, force: true })
+})
+
+describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
+  it('writes a last-run stamp for each of the three chores this lane owns', async () => {
+    // The defect this pins: the server absorbed these chores and never told the janitor, whose
+    // daemon it had suppressed. Every one read as dark for weeks while all three ran hourly.
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders() })
+
+    for (const chore of ['marketplace-refresh', 'version-update', 'user-plugins-update'] as const) {
+      expect(readChoreStamp(chore), `${chore} left no stamp`).not.toBeNull()
+    }
+  })
+
+  it('stamps EPOCH SECONDS — milliseconds would read as permanently fresh, for ever', async () => {
+    // The one wrong answer worse than "stale": a ms value parses fine and lands ~55 000 years
+    // out, so every chore would report healthy including the ones that stop running.
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders() })
+
+    const raw = fs.readFileSync(path.join(controlDir, 'marketplace-refresh.last-run.ts'), 'utf8')
+    const secs = Number(raw.trim())
+    expect(Number.isInteger(secs)).toBe(true)
+    expect(Math.abs(secs * 1000 - Date.now())).toBeLessThan(60_000)
+  })
+
+  it('does NOT stamp when the gate refused — an unowned chore must not look owned', async () => {
+    // The complement, and the one that makes the two above non-vacuous: if the stamp were written
+    // unconditionally, a host where the janitor is uninstalled/disarmed would report every chore
+    // fresh while nothing ran.
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => false, readers: fakeReaders() })
+
+    expect(readChoreStamp('marketplace-refresh')).toBeNull()
+  })
 })
 
 describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on settings.enabled', () => {

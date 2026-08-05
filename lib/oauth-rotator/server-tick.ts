@@ -30,6 +30,7 @@ import { runTick } from './tick'
 import type { TickResult } from './tick'
 import { writeTickStatus } from './tick-status'
 import { deliverAlerts } from './alert-delivery'
+import { stampChoreRun } from '../janitor-chore-stamp'
 
 /**
  * Narrow the tick's `unknown` result to the fields the alert needs, WITHOUT tightening
@@ -158,6 +159,17 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
   // instead of for the push-trigger alone — otherwise an ingest arriving just after a beat would
   // fire a second run the timer had already covered. (TRDD-GY0LJV6S)
   stampTickAttempt()
+  // The janitor's handover stamp, beside the internal one on purpose — they answer different
+  // questions and are easy to confuse. `stampTickAttempt` is OURS: a rate floor so two triggers
+  // cannot double-beat. `stampChoreRun` is THEIRS: the only way a janitor whose daemon we have
+  // suppressed can tell an absorbed chore from an unowned one (TRDD-14HI8ZPR / ai-maestro#111).
+  //
+  // Placed BEFORE the gates for the same reason `stampTickAttempt` is: it records that the chore
+  // was ATTEMPTED. A tick that correctly does nothing because the flag is off or no client is
+  // running is still a chore being owned on cadence, which is the question the janitor is asking;
+  // whether the rotation itself is healthy is reported separately by writeTickStatus and the
+  // alert-delivery path below.
+  stampChoreRun('oauth-rotator-tick')
   try {
     if (!enabledCheck()) return // R16 default: flag absent → do nothing, write nothing.
     if (!(await claudeRunningCheck())) return // no live client → nobody to keep signed in.

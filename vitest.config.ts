@@ -10,6 +10,11 @@ export default defineConfig({
     // default node environment above is unchanged for the .ts suite.
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     exclude: ['node_modules', '.next'],
+    // Redirects $JANITOR_CONTROL_DIR to a throwaway so no test can write the developer's real
+    // `~/.claude/janitor-control/`. The absorbed chores stamp that dir from inside their own code
+    // path (TRDD-14HI8ZPR), so containment cannot live at the call sites — one test file already
+    // leaked a real stamp before this existed. See the file header for the measurement.
+    setupFiles: ['tests/setup/janitor-control-containment.ts'],
   },
   // Automatic JSX runtime so .tsx tests need no explicit React import. Affects only files
   // containing JSX; the existing .ts tests transform identically to before.

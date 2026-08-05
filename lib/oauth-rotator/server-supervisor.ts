@@ -23,6 +23,7 @@
 import { gatherFacts, diagnose, apply, optInPresent } from './supervisor'
 import { oauthTickEnabled } from './server-tick'
 import { deliverAlerts } from './alert-delivery'
+import { stampChoreRun } from '../janitor-chore-stamp'
 
 /** Governance cadence — supervisor.py's 10-minute loop. */
 export const SUPERVISOR_INTERVAL_MS = 600_000
@@ -57,6 +58,10 @@ export function runOneSupervisorBeat(deps: RunSupervisorBeatDeps = {}): string[]
   const gatherFactsImpl =
     deps.gatherFactsImpl ?? ((daemonAlive: () => boolean) => gatherFacts({ deps: { daemonAlive } }))
   const log = deps.log ?? ((msg: string) => console.warn(msg))
+  // The janitor's handover stamp — see TRDD-14HI8ZPR / ai-maestro#111. Written on ATTEMPT, before
+  // the opt-in gate, because a supervisor beat that correctly no-ops is still this chore being
+  // owned on cadence, which is the only thing the stamp claims.
+  stampChoreRun('oauth-rotator-supervisor')
   try {
     if (!optInCheck()) return [] // rotator not opted in → silent no-op, no keychain access.
     const facts = gatherFactsImpl(tickArmedCheck)

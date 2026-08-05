@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T08:15:53+0200
+updated: 2026-08-05T08:18:39+0200
 implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -249,10 +249,50 @@ the root: writing fleet data into directories outside `~/agents/` is precisely w
 to prevent. It does mean a per-session janitor inside one of those agents gets no response file
 until the agent lives under `~/agents/` — worth knowing before anyone reads the silence as a bug.
 
-**NEXT ACTION:** the five remaining unabsorbed chores each need a verdict — and each should now be
-checked against the binary-suppression fact in slice 4 FIRST, because the same "we only do half"
-trap applies to `fleet-stop` and `memory-guard` at least. Do not stamp any of them before answering
-*"can the server even SEE this population?"*.
+## ⏵ SLICE 6 — the five remaining chores, each with a verdict — 2026-08-05
+
+Applied the slice-4 test to each: **"can the server even SEE this population?"** Read from the
+janitor's own task implementations (`daemon.py`), not from the chore names.
+
+| chore | its population | server sees it? | verdict |
+|---|---|---|---|
+| `fleet-stop` | **every running claude session**, reached by `fleet_scan` discovery + the tmux/iTerm channel + `fleet_inject` | **no** | **HAND BACK** |
+| `memory-guard` | **janitor-owned processes machine-wide**, selected by the janitor's own signature allowlist, then SIGTERM→SIGKILL | **no** | **HAND BACK** |
+| `cache-prune` | `~/.claude/plugins/cache/…` — but its cardinal safety cutoff is pulled behind **the oldest live claude session's start** | **half** | **HAND BACK** |
+| `rules-cleanup` | the janitor's **own** `~/.claude/rules/` files, and only once it is CONFIRMED fully uninstalled | **n/a** | **HAND BACK** (structurally) |
+| `github-config-audit` | an **enumerable list of GitHub repos** | **YES** | **ABSORBABLE** |
+
+**The pattern, which is the thing worth keeping:** a chore is absorbable **iff its population is
+DATA the server already holds**. It is not absorbable when the population is **processes or sessions
+on the host** — the server has no view of those and cannot acquire one, because acquiring it means
+becoming the daemon. That single test explains every verdict on this card, including
+`session-liveness`'s split, and it is a better rule than "absorb all eleven, staged".
+
+**Notes that decided the harder rows.** `cache-prune` looks absorbable — the cache is just a
+directory — until you read what makes it *safe*: it must never prune a version a live session might
+still have loaded, so the cutoff is computed from the oldest live `claude` process. Absorbing the
+prune without the cutoff would take the one chore whose failure mode is *pulling a plugin out from
+under a running session*. `memory-guard` additionally **kills processes**, which ai-maestro should
+not take on by inheritance.
+
+**⚠ `rules-cleanup` is a genuine paradox, and the suppression makes it unreachable.** It runs
+*only* when the janitor is confirmed fully uninstalled, from the janitor's own orphaned cache,
+during the ~7-day window before Claude Code GCs that cache — the plugin's hooks can no longer fire,
+so the daemon beat is the only actor left. But `ensure_daemon_running` refuses to spawn while a
+server owns the host, so **on a host running ai-maestro this cleanup can never run at all** and the
+orphaned rules persist indefinitely. This is not hypothetical: the janitor's shipped
+`janitor-footprint.md` opens by telling a reader what to do when it finds itself orphaned — *"this
+file is an orphan the plugin could not remove"*. Reported on `ai-maestro-janitor#196`.
+
+**✓ VERIFIED for the one absorbable row:** the server already holds the population
+(`lib/ecosystem-constants.ts` — `MARKETPLACE_REPO`, `PREDEFINED_ROLE_PLUGIN_NAMES`, the per-plugin
+repo URLs) and `gh` is installed and authenticated in its environment. So `github-config-audit` is
+the one chore where absorbing is both possible and honest.
+
+**NEXT ACTION:** implement `github-config-audit` on our side (read-only `gh` probes over the
+ecosystem repo list, on a 6 h cadence, writing both the chore stamp and findings), then — and only
+then — name it in the contract. Everything else on this card is now the janitor's call, tracked on
+`#196`.
 
 **~~NOT yet done:~~ DONE in slice 5** — `yarn build` + restart. (The reasoning stays, because it is
 the reason the step exists: a restart does NOT rebuild, since `app/` is bundled into `.next`, while
@@ -311,7 +351,7 @@ act on other sessions, and a bug there is a fleet-wide event rather than a local
 
 - [x] the absorb-vs-narrow decision recorded here with its reasoning — originally **(1) absorb all eleven, staged**, on the grounds that (2) would walk back the one-daemon-per-host invariant TRDD-5ZVS1DDP established deliberately. ⚠ **QUALIFIED by slice 4:** the choice was posed over a model that does not exist. The server does not absorb chores one at a time — the daemon EXITS wholesale (`ensure_daemon_running` → `if _server_owns_host(): return False`) and `SERVER_ABSORBED_TASKS` is inert in normal operation, by the janitor's own PORT NOTE. So (1) is not achievable for any chore whose population is host-wide, and the real question per chore is "can the server even SEE this population?" — not "should we absorb it?"
 - [x] `<task-name>.last-run.ts` written for all five already-absorbed chores — `01a56c40`, all five sites
-- [ ] each of the six unabsorbed chores given a verdict: absorb (with owner + cadence) or hand back — 1 of 6 done (`session-liveness`)
+- [x] each of the six unabsorbed chores given a verdict — ALL SIX done: `session-liveness` SPLIT (slice 2), and slice 6 rules `fleet-stop` / `memory-guard` / `cache-prune` / `rules-cleanup` HAND BACK and `github-config-audit` ABSORBABLE. The deciding test: a chore is absorbable iff its population is DATA the server already holds, not processes or sessions on the host
 - [x] `session-liveness` **verdict recorded**: SPLIT — wire-up our half (already running, armed, verified in the live process env), hand back the host-wide half (the server has no reach; the janitor's `server_owned` exclusion already makes the two disjoint)
 - [x] `session-liveness` wire-up RESOLVED — it cannot be done on our side: stamping it would be a false claim (we run only the harness half) and SERVER_ABSORBED_TASKS is inert in normal operation, because the daemon exits wholesale before the per-chore yield is evaluated. Filed cross-repo; see slice 4
 - [x] the janitor can tell HIBERNATED from CRASHED — `lib/agent-hibernation.ts`, served by an AUTHENTICATED route and published per-janitor to `<project>/.janitor/daemon_responses/` (`eb0e9e95`, `400e9f9d`, `28c99c48`; the unauthenticated first attempt reverted in `3f069c22`)

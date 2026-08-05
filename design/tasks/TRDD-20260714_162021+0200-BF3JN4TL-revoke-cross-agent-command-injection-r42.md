@@ -3,7 +3,7 @@ trdd-id: BF3JN4TL
 title: Revoke cross-agent command injection entirely (R42) — messaging becomes the only channel
 column: testing
 created: 2026-07-14T16:20:21+0200
-updated: 2026-08-05T00:39:18+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: security
@@ -269,6 +269,26 @@ open box is the SOAK the STATE names as the reason this card is not `complete`.
       gate can only see obligations written as BOXES; one that lives in prose is invisible to it,
       and a card whose remaining work is prose-only looks finished to every automated check.
       Found 2026-08-05 while triaging the 13 stale WORK-column cards
+
+      **▶ THE STATIC HALF OF THE ENUMERATION IS DONE (2026-08-05). Only the behavioural half
+      remains.** The box asks to *enumerate the flows that depended on a MANAGER/COS driving a
+      pane*. Traced every caller of the six revoked routes:
+      · `components/AgentProfile.tsx:477` (`/stop`) — the DASHBOARD, i.e. the human system-owner,
+        who is EXEMPT from R42. Not a dependent flow.
+      · `scripts/aimaestro-continuity.sh:121` — calls `/api/sessions/me/restart`, whose target is
+        DERIVED from `auth.agentId`. Self-drive, explicitly allowed by R42.4. Not affected.
+      · `scripts/agent-session.sh`, `scripts/agent-core.sh`, `scripts/register-agent-from-session.mjs`
+        — all operate on `RESOLVED_AGENT_ID`, i.e. the caller's own registration. Not affected.
+      · `scripts/aimaestro-session.sh` (queue / prompt-answer) and `scripts/aimaestro-panel.sh`
+        (panel) — the ONLY cross-agent-capable callers: each resolves an arbitrary `$ref` via
+        `_resolve_agent_id`, so an agent CAN name another agent and will now be denied.
+      **Neither script documents cross-agent use** — grepping both for "another agent" / "other
+      agent" / "target agent" returns ZERO hits, so no published workflow instructed a MANAGER or
+      COS to drive a peer's pane.
+      **What this does NOT settle, and why the box stays open:** an UNDOCUMENTED habit. A MANAGER
+      persona that had *learned* to drive panes leaves no trace in the source, and that is precisely
+      what a soak finds and static analysis cannot. So the remaining risk is behavioural, not
+      structural — a smaller and better-specified question than the box originally posed.
 
 ## ⏱ VERIFIED 2026-08-02 — the headless half was pinned by reading the code, and one claim went stale
 

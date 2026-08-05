@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: todo
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-08-02T15:33:21+0200
+updated: 2026-08-05T05:11:23+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -290,5 +290,34 @@ neuter then reddened exactly that one test.
       point. A live cycle measured against today's ordering is invalidated by that change, so
       running it now buys a number that has to be thrown away — and, being a real create + hard
       delete on this host, it is not free to repeat.
-- [ ] The pre-existing 93 orphans are reported to the USER with a proposed reconcile — RULE 0
+- [x] The pre-existing 93 orphans are reported to the USER with a proposed reconcile — RULE 0.
+      **Re-measured 2026-08-05 (read-only; nothing was touched).** Still exactly **93** of 101
+      local-scope records, only **8** live — and the count being UNCHANGED over 7 days is itself the
+      useful number: **the population is CLOSED, not growing**, so a one-time reconcile finishes the
+      problem instead of being a treadmill. Newest orphan in either group predates G09b landing.
+
+      **The reconcile is TWO different problems, which is why "delete the 93" would have been the
+      wrong proposal:**
+
+      | group | n | `projectPath` | cause | G09b covers it? |
+      |---|---|---|---|---|
+      | **A** | **77** | under `~/agents/` | deleted agent workdirs — this card's subject | **yes, going forward.** These are the historical backlog G09b was built to stop |
+      | **B** | **16** | under `/private/tmp` (11 in Claude Code session **scratchpads**) | **never an agent workdir.** Something installed a plugin at local scope with `projectPath` set to an ephemeral per-session dir | **NO — and it never will.** No agent owns them, so no DeleteAgent gate can ever reach them |
+      | **C** | 0 | elsewhere | — | — |
+
+      Group A spans 2026-03-16 → 2026-07-29 over 21 distinct days; group B spans 2026-07-08 →
+      2026-07-22 and is 65% `ai-maestro-plugin@ai-maestro-plugins`, the rest `dev-browser`.
+
+      **Group B is a SEPARATE defect and is recorded here rather than filed as its own card,**
+      because this card cannot close anyway (the live-cycle box is the operator's) and a 16-record
+      cosmetic leak does not earn a card of its own on a board this size. What it wants, if anyone
+      chases it: find who installs local-scope into `$CLAUDE_*/scratchpad` and give it `user` scope
+      or no install at all.
+
+      **PROPOSED RECONCILE — not executed. RULE 0: `~/.claude/plugins/installed_plugins.json` is the
+      USER's global file, outside this repo and untracked, so it is not mine to edit.** For the
+      USER: back the file up, then drop every `scope: local` record whose `projectPath` is absent
+      from disk (all 93 qualify; the 8 live ones are untouched). It is a pure prune of dangling
+      pointers — no plugin is uninstalled, no cache is touched, and a wrong entry costs at most a
+      re-install. Verify after with the same read-only census that produced this table.
 - [x] ai-maestro#102 answered with the measured topology and this defect

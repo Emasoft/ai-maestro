@@ -7,9 +7,18 @@ Read [SCRIPT-LAYER.md](./SCRIPT-LAYER.md) first — it explains *why* the layer 
 what the authorization model is, and what each of the main scripts *means*. This file is
 the other half: the exhaustive **inventory** and the **freeze contract**.
 
-Generated from `scripts/*.sh` **in this repo** — deliberately *not* from a host's
+Derived from `scripts/*.sh` **in this repo** — deliberately *not* from a host's
 `~/.local/bin/`. A deployed directory is one machine's snapshot; using it as the source
 of truth is exactly what §5 shows going wrong.
+
+**HAND-MAINTAINED, and enforced by a test rather than by a generator.** This line used to say
+*"Generated from"*, which was false — nothing generated it — and that false claim is precisely why
+it drifted: a reader who believes a file is generated does not check it. On 2026-08-05 it was
+missing **7 shipped scripts** and carried **four mutually contradictory counts**. Adding a script to
+`scripts/` therefore means adding its row HERE, in the same commit; `tests/unit/script-manifest-announces-every-script.test.ts`
+fails the build otherwise. Per **R23.8**, announcing a verb is part of shipping it — an unannounced
+verb looks absent, and a plugin that believes the layer lacks what it needs is pushed back toward
+`/api/*`.
 
 - Source of truth: `scripts/*.sh` (77 files at the time of writing)
 - Install target: `~/.local/bin/` (via `install-messaging.sh`, by glob)
@@ -38,16 +47,16 @@ MCP server. That rule has no element-level exception, including the core plugin.
 
 | Tier | Promise |
 |---|---|
-| **A — frozen CLI** (§2, 44 scripts) | a contract. Call these. |
+| **A — frozen CLI** (§2, 47 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
-| **C — operator/dev** (§4, 21 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
+| **C — operator/dev** (§4, 27 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
-44 + 12 + 21 = 77, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+47 + 12 + 27 = **86**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
 
 ---
 
-## 2. Tier A — the frozen skill-facing CLI (46 scripts)
+## 2. Tier A — the frozen skill-facing CLI (47 scripts)
 
 ### 2.1 `aimaestro-*` — the server surface (11)
 
@@ -341,11 +350,26 @@ never bends to them.
 | `aid-token.sh` | `--auth <url> [--scope "…"] [--json] [--no-cache] [--quiet]` — RS256 JWT from a 23blocks auth server |
 | `aid-register.sh` | `--auth <url> --token <jwt> --role-id <id> [--api-key K] [--name N] [--description D] [--lifetime S]` |
 
-### 2.4 Other frozen skill-facing CLI (1)
+### 2.4 Other frozen skill-facing CLI (2)
 
 | Script | Signature |
 |---|---|
 | `mcp-discover.sh` | `<config-path> <server-name> [opts]` \| `--plugin <plugin-name> <server-name> [opts]`; `--format json\|text\|llm` `--raw` `--method <jsonrpc-method>` `--tool-name <name>` — backs the `mcp-discovery` skill |
+| `aimaestro-settings.sh` | `get <path>` · `set <path> --key <dot.path>\|--key-json <arr> --value <v> [--no-create]` · `delete <path> --key\|--key-json [--no-create]` · `edit <path> --ops '<json array>'` — the gated `settings.json` / `settings.local.json` editor |
+
+**`aimaestro-settings.sh` is the ONLY sanctioned way to mutate a `settings.json`.** It is
+Tier A despite not calling the HTTP API — deliberately so: it invokes
+`scripts/aimaestro-settings-cli.mjs` in-process because the installer runs with the server
+DOWN, and an HTTP-only tool would be useless at the moment it is most needed. It shares
+`lib/settings-gate.ts` with `app/api/settings/edit/route.ts`, and both delegate to
+`lib/json-io.ts`'s `updateJson` — the ONE lock-and-write path for every settings mutation in
+this codebase.
+
+That single-path property is the whole point, and it is why hand-editing is forbidden rather
+than merely discouraged: a non-atomic write produces the torn file that a lenient reader then
+parses as `{}` and replaces, so one defect creates the damage another completes. `<path>` must
+be an absolute `settings.json`/`settings.local.json` living directly inside a `.claude`
+directory — the guard that stops this becoming an arbitrary-file writer.
 
 ---
 
@@ -370,7 +394,7 @@ API (`ChangePlugin`). It still works; do not build on it.
 
 ---
 
-## 4. Tier C — operator / dev scripts (21) — **not** a plugin API
+## 4. Tier C — operator / dev scripts (27) — **not** a plugin API
 
 `install-messaging.sh` copies `scripts/*.sh` by glob, so these land in `~/.local/bin` too.
 Being on `PATH` does **not** make them a contract. A plugin must never call them.
@@ -382,7 +406,15 @@ Being on `PATH` does **not** make them a contract. A plugin must never call them
 | `with-node.sh` · `build-jsonl-reader.sh` · `bump-version.sh` | build / release (`bash scripts/with-node.sh <cmd>` — the repo needs Node 22) |
 | `migrate-r20-disk-layout.sh` · `index-all-agents.sh` | one-shot migrations / maintenance |
 | `export-agent.sh` · `import-agent.sh` · `list-agents.sh` | operator equivalents of `aimaestro-agent.sh export/import/list` — **use the CLI subcommands instead** |
-| `test-amp-routing.sh` · `test-amp-cross-host.sh` · `test-amp-local-delivery-sig.sh` · `test-tailscale-access.sh` | test suites |
+| `test-amp-routing.sh` · `test-amp-cross-host.sh` · `test-amp-local-delivery-sig.sh` · `test-tailscale-access.sh` · `simulate-blackout.sh` | test suites |
+| `install-boot-persistence.sh` · `install-pillar-tooling.sh` · `setup-local-marketplaces.sh` · `distribute-tailscale-skill.sh` | installers / host setup (added 2026-08-05 — previously shipped and unannounced) |
+| `aimaestro-check-decoupling.sh` | **the R23 compliance gate, made runnable.** Scans a plugin tree for direct `/api/` calls — code *and* `.md` prompts, since a SKILL telling an agent to `curl` is a bypass. Self-tests its own needle each run. Exit `0` clean · `1` findings · **`2` COULD NOT RUN** |
+
+> **`aimaestro-check-decoupling.sh` is Tier C by AUDIENCE, not by importance.** It is an
+> audit/CI tool a plugin author runs *against* a tree — not something a plugin calls at
+> runtime — so it is not a frozen contract. Run it from a checkout: `scripts/aimaestro-check-decoupling.sh <plugin-dir> ...`.
+> Never write `check-decoupling || echo ok`: that collapses `2` into `1` and turns *"I never
+> looked"* into *"I looked and it was fine"*, which is the exact failure it exists to prevent.
 
 ---
 
@@ -499,9 +531,15 @@ the TTY — a password on `argv` leaks through `ps` and shell history (TRDD-E9BZ
 
 ## 8. Verifying this manifest
 
+**These are documented so they can be run, and the first one is now also a TEST**
+(`tests/unit/script-manifest-announces-every-script.test.ts`) — because this section previously
+claimed `75` while §1 said `77`, §2's own heading said `46`, and the disk held `86`. Four numbers,
+none matching: a documented check nobody runs is not a check, and R23.8 makes an unannounced verb
+formally nonexistent. The test is what keeps the count honest now; this block is for humans.
+
 ```bash
-# every Tier-A/B/C script this repo ships — must equal 43 + 12 + 20
-ls -1 scripts/*.sh | wc -l                     # 75
+# every Tier-A/B/C script this repo ships — must equal 47 + 12 + 27
+ls -1 scripts/*.sh | wc -l                     # 86
 
 # scripts a plugin calls but this repo does not ship (must be EMPTY — §5 is the debt)
 comm -13 <(ls -1 scripts/*.sh | xargs -n1 basename | sort) \

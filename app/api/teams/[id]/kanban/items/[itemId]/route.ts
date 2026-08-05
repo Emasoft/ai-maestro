@@ -5,6 +5,7 @@ import { isValidUuid } from '@/lib/validation'
 import { getTeam } from '@/lib/team-registry'
 import { checkTeamAccess } from '@/lib/team-acl'
 import { moveProjectItem, archiveProjectItem, configureProjectTemplate } from '@/lib/github-cli'
+import { DEFAULT_KANBAN_COLUMNS } from '@/types/team'
 
 const UpdateKanbanItemSchema = z.object({
   status: z.string().min(1).max(64),
@@ -60,15 +61,32 @@ export async function PATCH(
     }
     const { status } = parsed.data
 
-    // Map short names to display names
-    const statusMap: Record<string, string> = {
-      'backlog': 'Backlog',
-      'todo': 'To Do',
-      'in_progress': 'In Progress',
-      'review': 'Review',
-      'done': 'Done',
+    // Resolve the GitHub Project's Status label from the CANONICAL column id.
+    //
+    // This used to be a hand-rolled 5-entry map (backlog/todo/in_progress/review/done) with an
+    // `|| status` fallthrough — a legacy vocabulary that predates the ratified 17 columns. It was
+    // wrong in both directions: it ACCEPTED four ids that are not statuses at all, and for 16 of
+    // the 17 real ids it fell through and sent GitHub the raw id ("human_review") instead of the
+    // Status option's label ("Human Review"), so the mirror silently drifted from the board. Only
+    // `todo` happened to map correctly. The kanban overlay is explicit that consumers — GitHub
+    // Project mirrors included — align TO the 17-column vocabulary, never the reverse.
+    //
+    // The team's own `kanbanConfig` wins when set (a custom board defines its own ids AND labels,
+    // exactly as `validStatusesForTeam` accepts only that team's ids); otherwise the 17 defaults.
+    const columns = team.kanbanConfig ?? DEFAULT_KANBAN_COLUMNS
+    const column = columns.find(c => c.id === status)
+    if (!column) {
+      // Reject rather than fall through. A pass-through would move the item to a Status option
+      // that does not exist on the project, which fails deep inside `gh` (or worse, succeeds
+      // against a same-named option) with nothing naming the real cause.
+      return NextResponse.json(
+        {
+          error: `Unknown kanban column "${status}" for this team. Valid: ${columns.map(c => c.id).join(', ')}`,
+        },
+        { status: 400 },
+      )
     }
-    const displayStatus = statusMap[status] || status
+    const displayStatus = column.label
 
     // Get field IDs (may need to configure template first)
     const fieldIds = configureProjectTemplate(

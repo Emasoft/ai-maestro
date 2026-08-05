@@ -1,9 +1,10 @@
 ---
 trdd-id: WFIMES6U
 title: One shared usage cache — throttle the /usage endpoint and stop reading a 429 as exhaustion
-column: todo
+column: dev
 created: 2026-08-01T12:12:38+0200
-updated: 2026-08-01T12:31:05+0200
+updated: 2026-08-05T18:16:42+0200
+implementation-commits: [4e70d79e, 46d36646, c27a7774]
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 created-by: ai-maestro-dev
@@ -25,7 +26,56 @@ external-refs: [reports/claude-multi-usage-analysis/20260801_115728+0200-verifie
 
 # One shared usage cache — throttle the /usage endpoint and stop reading a 429 as exhaustion
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-01
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-05
+
+**⚠ THE 2026-08-01 STATE BLOCK BELOW IS SUPERSEDED IN ITS CENTRAL PREMISE.** It opens with *"There
+is no cache, TTL, cooldown, or `Retry-After` handling anywhere around `usageRequest`"* and cites a
+grep returning nothing. That was true when written and is **false now**: `TRDD-W4T70Y3R` landed
+`lib/oauth-rotator/usage-cooldown.ts` (commit `e7bb81f3`) with a TTL cache, `Retry-After` +
+`anthropic-ratelimit-*` parsing, exponential back-off, a `UsageReason` cause on every read, and a
+cross-process probe lock — at **the exact constants this card proposes** (600 s TTL, 600→7200 s
+back-off). It is wired: `network.ts` imports it and `usageProbe` uses it. **Do not build
+`usage-cache.ts`.** Read `usage-cooldown.ts` and `usageProbe` first; §Proposed fix steps 1-4
+describe a thing that already exists under another name.
+
+**WHAT THIS SESSION FOUND AND FIXED (commits `4e70d79e`, `46d36646`, `c27a7774`).** W4T70Y3R fixed
+the inversion this card's box 5 names — a THROTTLE 429 no longer surfaces as 429 — and in doing so
+opened a new one at the layer above. `usageProbe` reports a throttle as **status 0**, and
+`tick.ts` read `liveStatus !== 0` as `networkUp`. Before W4T70Y3R, 0 meant only network
+error/abort/timeout/unparseable, so that was a fair reading; afterwards 0 ALSO means `cooldown`
+(we are throttling ourselves, deliberately) and `lock_contended` (another process is probing this
+instant). Neither says anything about the network.
+
+`networkUp` gates five things, so the cost is not cosmetic: candidates are not probed at all, a
+lapsed-but-rescuable alternate is not renewed, `selectDrainFirst` is skipped, and the decision log
+says `API unreachable` — aiming the next debugger at the one place nothing is wrong. Rotation
+degrades to choosing on token-expiry alone exactly when a throttle means it is needed most. Same
+root cause, second consequence: REFRESH-ON-ERR answered a throttled CANDIDATE by exchanging a
+token — one refresh per candidate per 60 s tick — then re-probed into the same cooldown for the
+same 0. The refresh is for a token the endpoint REJECTED; we never asked.
+
+Both now derive from `reason`, so "down" is a positive finding rather than the absence of a
+reading — the same discipline as the #117 injected-prompt veto.
+
+**A seam that no caller could reach.** `network.ts` declares `cooldownStore`/`probeLock` as test
+seams and explains why they must exist (without them a 429 test writes the DEVELOPER'S real
+machine-wide rotator state) — but `netDeps` forwarded only `fetchImpl`. So no tick test had ever
+driven a cooldown, which is why this sat undetected. Forwarding them was part of the fix.
+
+**NEXT ACTION:** decide box 1's remaining half (below). Nothing else here is blocked.
+
+**Open, precisely** — and box 1 is a genuine open QUESTION, not leftover typing:
+- The cache lives in `globalStateDir()` behind `withServerLock`, **not** under `~/.aimaestro/`
+  behind `json-io`. The card's own warning ("do NOT invent a second lock — RYFP030K's finding was
+  that three lock implementations over one file exclude nobody") therefore still applies, and
+  `usage-cooldown.ts` documents its lock name as *deliberately* distinct because a probe runs
+  INSIDE a tick that already holds the tick lock. Those two facts pull opposite ways and the
+  reconciliation is unresolved. It needs measuring — which locks actually cover this file, and
+  whether any two of them exclude each other — before anything is moved.
+- Boxes 2/3/4 are satisfied by `usage-cooldown.ts` rather than by this card's plan; they are
+  ticked below with WHERE, so nobody re-implements them.
+
+## ⏵ SUPERSEDED STATE — 2026-08-01 (kept for the reasoning, NOT for its premise)
 
 Filed straight from a USER directive: *"these endpoints are rate limited, so you must be very
 careful to read them and put the values in a shared cache for all tools/functions to share. I
@@ -191,15 +241,29 @@ Dependencies: none. Touches `lib/json-io.ts` only as a CONSUMER.
 
 ## Acceptance
 
-- [ ] `usage-cache.ts` is the only caller of `usageRequest`; cache lives under `~/.aimaestro/`
-      and is written through the `json-io` gate (no fourth lock)
-- [ ] TTL 600 s honored across processes, re-checked after lock acquisition
-- [ ] 429 backoff honors `Retry-After`, then the `anthropic-ratelimit-*` headers, then
-      exponential 600→7200 s
-- [ ] every read reports its resolution cause; a cached number never renders as live, and the
-      reset countdown is suppressed when stale
-- [ ] an unreadable candidate is treated as UNKNOWN (degraded), never MAXED
-- [ ] both neuters redden exactly their named tests; suite green; `tsc` 0
+> Ticked boxes name WHERE the behaviour lives. Most of it shipped under **TRDD-W4T70Y3R**, not
+> here — recorded that way on purpose, so nobody re-implements it and nobody reads this card as
+> having done work it did not do.
+
+- [ ] **THE ONE REAL REMAINDER, and it is a question.** The cache is in `globalStateDir()` behind
+      `withServerLock`, not under `~/.aimaestro/` behind `json-io`. `usage-cooldown.ts` argues its
+      lock must be distinct (a probe runs inside a tick already holding the tick lock); this card
+      argues a second lock over one file excludes nobody. Both are reasonable and they conflict.
+      MEASURE which locks actually cover this file before moving anything
+- [x] TTL 600 s across processes, re-checked after lock acquisition — `usage-cooldown.ts`
+      (`USAGE_TTL_MS`), and the post-acquire re-read is in `usageProbe`'s locked section
+- [x] 429 back-off honors `Retry-After`, then `anthropic-ratelimit-*`, then exponential
+      600→7200 s — `serverRetryAtMs` / `backoffMs`, `BACKOFF_BASE_MS`..`BACKOFF_CAP_MS`
+- [x] every read reports its resolution cause — `UsageReason` on `UsageOutcome`, and a served
+      cached reading carries `ageMs` so staleness is surfaced rather than rendered as live
+- [x] an unreadable candidate is UNKNOWN, never MAXED — `classify429` splits throttle from quota
+      so a throttle never surfaces as 429; **and (this session) the same must hold one layer up**:
+      an unreadable LIVE probe no longer means "offline", and an unreadable CANDIDATE no longer
+      triggers a token refresh
+- [x] neuters redden exactly their named tests; suite green; `tsc` 0 — THREE neuters, three
+      distinct reds, each behavioural test falling to exactly one; 29 files / 390 tests green,
+      `tsc` 0 lines. Two of the three first reddened NOTHING and both zeros were fixture defects
+      in the new test file, recorded in its header
 
 ## Approval log
 

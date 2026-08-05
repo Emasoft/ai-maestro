@@ -26,6 +26,25 @@
  * satisfied by hard-wiring `networkUp = true`, which would delete the offline handling entirely.
  * So test 2 drives a REAL network failure and asserts the tick still concludes offline. Neither
  * assertion means anything without the other; together they pin the DISCRIMINATION, not the value.
+ *
+ * NEUTER RUNS (2026-08-05 — OBSERVED via scripts/dev/neuter, each restore verified by blob hash).
+ * Three mutations, three DISTINCT reds: every behavioural test here falls to exactly one, so none
+ * of them passes for a reason nobody has named.
+ *
+ *   s/networkUp = liveStatus !== 0 || liveOutcome.reason !== 'error'/networkUp = liveStatus !== 0/
+ *     → 1 red: "a THROTTLED live probe is NOT offline"          (the regression itself)
+ *   s/if (st2 !== 200 && st2 !== 429 && !unread)/if (st2 !== 200 && st2 !== 429)/
+ *     → 1 red: "a THROTTLED candidate does not burn a token refresh"
+ *   s/networkUp = liveStatus !== 0 || liveOutcome.reason !== 'error'/networkUp = true/
+ *     → 1 red: "FALSIFICATION PAIR: a REAL network failure IS still read as offline"
+ *
+ * TWO OF THOSE THREE FIRST REDDENED NOTHING, and each zero was a defect in THIS file, not a clean
+ * bill for the code — recorded because the fixture bug is the interesting part both times:
+ *   - the refresh test ran at 50% usage, where the tick logs "within limits" and RETURNS before
+ *     the candidate loop, so it counted refreshes on a path that never executed;
+ *   - the offline test's stub threw BEFORE incrementing its counter, so an ATTEMPTED probe was
+ *     indistinguishable from a skipped one and `networkUp = true` passed unnoticed.
+ * A neuter that reddens nothing is a measurement of the test. It was worth two rounds here.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'

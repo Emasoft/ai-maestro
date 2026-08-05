@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T23:49:52+0200
-updated: 2026-08-05T23:55:16+0200
+updated: 2026-08-06T00:06:08+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -66,10 +66,19 @@ Two consequences, one already true and one that changes GAP A's design:
    A shared counter would fail a transaction that never repeated the same error 3 times —
    stricter than the spec, and precisely on the contended hosts the retry exists for.
 
-Boundary to pin in a test, because the prose admits two readings: *"repeats more than 3
-times"* — the transaction fails on the 4th occurrence of the same (step, error); three
-repeats still retry. If implementation prefers the stricter fail-on-3rd, that is a
-deviation to surface, not to silently pick.
+**Boundary RESOLVED (USER, 2026-08-06):** *"if one step failed for more than 3 times (that
+is, at the 4th attempt: the first + the 3 retries) then the whole transaction fails. but if
+it succeed at the 4th attempt, the next step with the error counter is evaluated
+independently in the same way. the errors do not compound across steps. … multiple steps
+with 3 errors each, even if cumulatively they amount to 6 errors, they do not trigger the
+failure, since they are relative to different issues."*
+
+So, exactly: **the counter is keyed PER STEP** (the latest ruling's key — the earlier
+"(step, error)" phrasing collapses to this); a step gets **4 attempts** (first + 3
+retries); the **4th failure of the same step** fails the transaction; a **success at the
+4th attempt is a valid success** and hands over to the next step with ITS OWN untouched
+counter. Cross-step totals are meaningless — 3+3 errors across two steps is a passing
+transaction if each step eventually succeeded.
 
 Step 4 remains NO-retry per the spec's own step text — a deterministic re-edit reproduces
 the same invalid result, so its failure is never "the same error repeating" in the
@@ -128,9 +137,12 @@ result. Fail and report.
 - [ ] Retry restarts the WHOLE transaction: the retried attempt operates on a FRESH read,
       never the discarded copy — pinned by a fixture whose file content CHANGES between
       attempts and an assertion that the committed result derives from the newest content.
-- [ ] Per-(step, error) budgets: a transaction that spends 1 attempt on a step-2 torn read
-      and then hits step-5 conflicts still has step 5's FULL budget — a shared global
-      counter fails this test. The >3 boundary pinned: 3 repeats retry, the 4th fails.
+- [ ] PER-STEP budgets, independent: a transaction whose step 2 fails 3× then succeeds on
+      its 4th attempt, and whose step 5 then fails 3× and succeeds on ITS 4th, COMMITS —
+      6 cumulative errors, zero steps at 4. A shared global counter fails this test.
+- [ ] The 4-attempt boundary, both directions: a step succeeding on its 4th attempt is a
+      VALID success (the transaction proceeds); a step failing its 4th attempt fails the
+      whole transaction, reported to the caller with the step named.
 - [ ] The retry is of the READ only — a neuter proving no write occurs on any failed
       pre-lint path (the file's bytes are untouched after 3 failures).
 - [ ] Post-edit schema lint: a `set` op writing a schema-invalid value for a covered key

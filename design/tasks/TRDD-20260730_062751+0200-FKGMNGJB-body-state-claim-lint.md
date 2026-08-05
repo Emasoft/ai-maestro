@@ -1,11 +1,11 @@
 ---
 trdd-id: FKGMNGJB
 title: A TRDD can carry a SECOND state field in its body and every gate passes it
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-30T06:27:51+0200
-updated: 2026-08-02T15:25:31+0200
+updated: 2026-08-05T04:41:05+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -29,7 +29,40 @@ labels: [pillar, linter, corpus-integrity, one-source-of-truth]
 
 # A TRDD can carry a SECOND state field in its body and every gate passes it
 
+## ⏵ STATE — DONE, 2026-08-05. The ruling landed and the last box is closed.
+
+**janitor#139 is CLOSED** (2026-08-05T00:06Z, fixed in their `c80945ee`) — checked on resume, six
+days after this card last verified it OPEN with zero comments. The ruling grants a **deliberately
+narrow** carve-out to IND §12: a body line that **VERIFIABLY contradicts** the terminal `column:`
+may be removed, *"because deleting a false claim ABOUT history is not rewriting history"* — but only
+*"a machine-verifiable contradiction, never a line that merely disagrees in wording, adds context, or
+cannot be mechanically proven false."*
+
+**That splits the two cards, and the split — not the count — is the outcome:**
+
+| card | verdict | why |
+|---|---|---|
+| `C7A81642` | **REPAIRED** | `**Status:** Not started` beside `column: complete`. `not-started` is in the vocabulary and maps to `backburner`, so a machine PROVES the contradiction rather than inferring it. The line carried nothing but the false state, so it is gone. |
+| `7123D51A` | **PERMANENTLY EXCLUDED** | `**Status:** Implemented 2026-04-20 (…) Derived tasks #241/#242/#243 unblocked.` Excluded by the ruling's own clause, twice: it ADDS CONTEXT, and it CANNOT be mechanically proven false — it is in fact TRUE and merely unparseable, because "Implemented" names an ACTION that can predate the column and a date follows the verb. |
+
+So the gate allowance **shrank 2 → 1 rather than vanishing**, and that is the correct answer, not a
+half-finished repair. The one remaining entry is not a backlog item waiting on anyone: clearing it
+would require either deleting a true, informative line from a frozen card, or teaching the predicate
+to accept `implemented` — which this rule deliberately refuses (`done` is the ONE inflection allowed,
+being the past participle of the terminal set itself, not a synonym guess).
+
+The allowance stays asserted EXACTLY, not `<=`. Its self-retiring property did its job here: the day
+`C7A81642` healed, the gate failed and forced the comment to be rewritten instead of quietly
+absorbing the repair. `trddgrep validate` now reports **1** ERROR where it reported 2 for days.
+
+**SUPERSEDED — do NOT carry forward:** every statement below that this card is blocked, that
+janitor#139 is open, or that "the two archived cards" will be repaired together.
+
 ## ⏹ TRIAGE 2026-08-02T15:2x+0200 — `dev` → `todo`, blocked on an EXTERNAL ruling ([[5YRLA53W]])
+
+> **RESOLVED 2026-08-05 — see the STATE block above.** Kept for the record: the reasoning was
+> correct at the time, and the *"blocked on a GitHub issue with no way to say so in `blocked-by:`"*
+> vocabulary gap it names is still open on [[5YRLA53W]].
 
 Re-columned, not closed. 8 of 9 boxes are done; the ninth is explicitly *"awaiting the janitor's /
 USER's ruling on janitor#139"*. **Verified 2026-08-02: that issue is OPEN with ZERO comments, last
@@ -46,22 +79,30 @@ is [[35VKIGTC]] — `todo` + `external-refs:`. That precedent is followed here, 
 it exposes (no honest way to say "blocked on something outside the corpus") is recorded on
 [[5YRLA53W]] rather than papered over.
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-30T07:04
+## ⏹ Implementation record — 2026-07-30T07:04 (the STATE block at the top is the authoritative one)
+
+> This was the STATE block until 2026-08-05. Demoted, not deleted: its engineering content below is
+> still accurate and load-bearing, but its **status** claims are not — one card was repaired and the
+> other permanently excluded. Two blocks both saying "READ THIS FIRST" is exactly how a reader ends
+> up believing the older one.
 
 **The rule SHIPPED.** `BODY-STATE-CLAIM` is live in `lib/trdd-doctor.ts`, the `--fix` half is
 implemented, 6 new guards pin it, 5 recorded neuters each redden a NAMED test, and the full
 suite is green (276 files / 4133 tests, exit 0).
 
-**NEXT ACTION — the ONE open item is a governance question, not code:** two of our own archived
+**~~NEXT ACTION~~ — RESOLVED 2026-08-05, see the STATE block:** two of our own archived
 cards carry a body claim the rule correctly reports, and **IND §12 forbids the remedy**
 ("Do not edit the body of a `complete` / `failed` / `superseded` / `published` / `live` TRDD").
 §12 is the janitor's IND base, so reinterpreting it to authorise our own edit is the move the
-cross-project rule forbids. FILED as janitor#139 (2026-07-30), with the 1.3.0 notification and the IND-wording ask. Awaiting the ruling; then repair the two cards and DELETE the gate allowance, which is written to fail the moment they heal.
+cross-project rule forbids. FILED as janitor#139 (2026-07-30), with the 1.3.0 notification and the
+IND-wording ask. ~~Awaiting the ruling; then repair the two cards and DELETE the gate allowance~~ —
+the ruling landed and granted a NARROW carve-out that covers one card and explicitly excludes the
+other, so the allowance shrank 2 → 1 rather than being deleted.
 
-| card | zone · column | body claim | why it is blocked |
+| card | zone · column | body claim | outcome under the ruling |
 |---|---|---|---|
-| `C7A81642` | archived · `complete` | `**Status:** Not started` | a TRUE contradiction — the exact incident shape, in our own corpus |
-| `7123D51A` | archived · `completed` | `**Status:** Implemented 2026-04-20 (…)` | semantically agrees; unprovable by a tool (a date follows the verb) |
+| `C7A81642` | archived · `complete` | ~~`**Status:** Not started`~~ | **REPAIRED** — a machine-verifiable contradiction, which the carve-out covers |
+| `7123D51A` | archived · `completed` | `**Status:** Implemented 2026-04-20 (…)` | **PERMANENTLY EXCLUDED** — semantically agrees, unprovable by a tool (a date follows the verb), and the carve-out excludes exactly that |
 
 **Disposition of the 10 (measured, then acted on):**
 
@@ -217,11 +258,17 @@ this is migration residue, and it will keep being authored as long as old cards 
       1.3.0 spec-version notification `3P-CHK-03` obliges and a second ASK: `trdd-design-tasks.md`
       step 6's *"v2 replaced v1's `status:`"* reads as "retired", which is the reading that made
       this project's own autofix a data destroyer
-- [ ] **OPEN (awaiting the janitor's / USER's ruling on janitor#139):** repair the two archived
-      cards, then DELETE the gate allowance in
-      `tests/unit/trdd-doctor.test.ts` (it asserts the count EXACTLY, so it fails the moment
-      they heal — an allowance that tolerates its own healing is how a known-issue list
-      outlives the issue and starts hiding new ones)
+- [x] **CLOSED 2026-08-05 — the ruling landed (janitor#139, their `c80945ee`), and it SPLIT the
+      two cards rather than clearing both.** `C7A81642` is repaired (a machine-verifiable
+      contradiction, which the carve-out covers); `7123D51A` is PERMANENTLY excluded by the
+      ruling's own exclusion clause (it adds context and cannot be mechanically proven false —
+      it is true, merely unparseable). So the gate allowance in `tests/unit/trdd-doctor.test.ts`
+      SHRANK 2 → 1 instead of being deleted, and its comment now carries the ruling and the
+      per-card reasoning. It stays asserted EXACTLY, not `<=`: that property is what failed the
+      build the moment `C7A81642` healed and forced this rewrite rather than a silent absorption,
+      and it keeps doing that job for the remaining entry. `trddgrep validate`: 2 ERRORs → 1.
+      **Amended from the box as written** ("repair the two … then DELETE the allowance") — that
+      wording assumed a ruling that cleared both, and the ruling deliberately did not.
 
 ## Notes and lessons learned
 

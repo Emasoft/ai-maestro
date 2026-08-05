@@ -25,7 +25,6 @@ implementation-commits: []
 **TRDD ID:** `c7a81642-66ca-4e4e-bef1-0bb81c184984`
 **Filename:** `design/tasks/TRDD-c7a81642-66ca-4e4e-bef1-0bb81c184984-role-plugin-or-hibernate.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
-**Status:** Not started
 **Created:** 2026-04-20
 **Owner:** TBD
 **Priority:** P0 — a wake-able agent without a role-plugin violates R9.13 and produces undefined runtime behaviour. Today's enforcement (PG04 in ChangePlugin) covers uninstall → reinstall-default, but not the case where the default itself cannot be installed (missing from client marketplace, converter failure, etc.). This TRDD closes that gap.

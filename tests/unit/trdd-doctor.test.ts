@@ -905,27 +905,50 @@ describe('THE GATE — the real corpus lints clean', () => {
     expect(report.scanned).toBeGreaterThan(100)
     const errors = report.findings.filter((f) => f.severity === 'error')
 
-    // TWO known-blocked cards, and the block is a GOVERNANCE one, not a backlog item.
+    // ONE permanently-excluded card. This was TWO until the ruling landed, and the allowance
+    // shrinking rather than vanishing is the actual answer, not a half-finished repair.
     //
-    // Both carry a body state claim that BODY-STATE-CLAIM correctly reports, and both sit in
-    // design/archived/ with a terminal column — where IND §12 says, without qualification:
-    // "Do not edit the body of a `complete` / `failed` / `superseded` / `published` / `live`
-    // TRDD." Removing the line IS a body edit. §12 belongs to the janitor's IND base, so
-    // reinterpreting it to authorise our own edit is exactly the move the cross-project rule
-    // forbids — the question is routed there instead (tracked on TRDD-FKGMNGJB).
+    // Both cards carried a body state claim that BODY-STATE-CLAIM correctly reports, in
+    // design/archived/ with a terminal column, where IND §12 says without qualification: "Do not
+    // edit the body of a `complete` / `failed` / `superseded` / `published` / `live` TRDD."
+    // Removing the line IS a body edit, and §12 belongs to the janitor's IND base — so the
+    // question was routed there (janitor#139) rather than reinterpreted here.
     //
-    // The five cards that were in design/tasks/ had no such block and are repaired.
-    const BLOCKED_BY_IND_SECTION_12 = new Set(['7123D51A', 'C7A81642'])
+    // RULING, janitor#139, CLOSED 2026-08-05 in `c80945ee`: a body line that VERIFIABLY
+    // contradicts the terminal `column:` MAY be removed, "because deleting a false claim ABOUT
+    // history is not rewriting history" — but the carve-out is "deliberately narrow", authorising
+    // removal of "ONLY a machine-verifiable contradiction, never a line that merely disagrees in
+    // wording, adds context, or cannot be mechanically proven false."
+    //
+    // That splits the two, and it is worth reading the split rather than the count:
+    //
+    //   C7A81642  `column: complete` + `**Status:** Not started`  → COVERED. `not-started` is in
+    //             the vocabulary and maps to `backburner`, so the contradiction is one a machine
+    //             proves rather than infers. The line carried nothing but the false state, so it
+    //             is gone and this card now lints clean.
+    //   7123D51A  `column: completed` + `**Status:** Implemented 2026-04-20 (…tests shipped in
+    //             task #250). Derived tasks #241/#242/#243 unblocked.` → EXCLUDED, and by the
+    //             ruling's own exclusion clause twice over: the line ADDS CONTEXT (it names the
+    //             work and the unblocked cards) and it CANNOT BE MECHANICALLY PROVEN FALSE — it
+    //             is in fact TRUE, and merely unparseable, because "Implemented" names an ACTION
+    //             that can predate the column and a date follows the verb.
+    //
+    // So this entry is NOT a backlog item waiting on anyone. Removing it would require either
+    // deleting a true, informative line from a frozen card, or teaching the predicate to accept
+    // `implemented` — which the rule deliberately refuses (`done` is the one inflection allowed,
+    // being the past participle of the terminal set itself, not a synonym guess).
+    const PERMANENTLY_EXCLUDED_BY_JANITOR_139 = new Set(['7123D51A'])
     const unexpected = errors.filter(
-      (e) => !(e.rule === 'BODY-STATE-CLAIM' && BLOCKED_BY_IND_SECTION_12.has(e.id)),
+      (e) => !(e.rule === 'BODY-STATE-CLAIM' && PERMANENTLY_EXCLUDED_BY_JANITOR_139.has(e.id)),
     )
     expect(unexpected.map((e) => `${e.rule} ${e.id} — ${e.message.slice(0, 90)}`)).toEqual([])
 
-    // The allowance is SELF-RETIRING, and that is the whole point of asserting the exact count
-    // rather than `<=`: the day §12 is answered and the two are repaired, THIS line fails and
-    // forces the allowance to be deleted. An allowance that silently tolerates its own healing
-    // is how a known-issue list outlives the issue and starts hiding new ones.
-    expect(errors.filter((e) => BLOCKED_BY_IND_SECTION_12.has(e.id))).toHaveLength(2)
+    // Still asserted EXACTLY, not `<=`. The self-retiring property is what forced this comment to
+    // be rewritten instead of quietly absorbing the repair: the day C7A81642 healed, THIS line
+    // failed. It keeps doing that job for the remaining entry — if 7123D51A ever stops erroring
+    // (someone edits it, or the predicate changes), the gate fails and the exclusion must be
+    // re-justified rather than outliving its reason and starting to hide new findings.
+    expect(errors.filter((e) => PERMANENTLY_EXCLUDED_BY_JANITOR_139.has(e.id))).toHaveLength(1)
   })
 })
 

@@ -3,7 +3,7 @@ trdd-id: RIFM4UXN
 title: COS-reassign route requires the governance password — contradicts R29/R32 and defeats MANAGER ruling #64
 column: testing
 created: 2026-07-16T12:48:13+0200
-updated: 2026-08-02T16:42:19+0200
+updated: 2026-08-05T01:08:00+0200
 current-owner: ai-maestro
 task-type: audit
 scope: project
@@ -167,9 +167,19 @@ live. The last box is CROSS-REPO and belongs to CORE, not to this card.
 - [ ] **CORE drops the stale DECOUPLE-BLOCKED markers and teaches `update --cos`** — cross-repo
       (`Emasoft/ai-maestro#69`, OPEN), and CORE gates it on the verb being on a DEPLOYED host. That
       gate has TWO conditions and exactly one holds today: `~/.local/bin/aimaestro-teams.sh` is
-      byte-identical to the repo copy (installed ✓), but `governance-rules` is **2517 commits ahead
-      of `origin/main`** and unmerged, so the verb does not exist for anyone else. Not this card's
-      to close
+      byte-identical to the repo copy (installed ✓), but `governance-rules` is unpushed, so the verb
+      does not exist for anyone else. Not this card's to close
+      **⚠ METRIC CORRECTED 2026-08-05 — this box cited "2517 commits ahead of `origin/main`",
+      which is the WRONG DISTANCE and overstates the pending work ~4x.** `origin/main` is the
+      UPSTREAM (`23blocks-OS/ai-maestro`), so that number is the fork-vs-upstream gap, not unpushed
+      work. Measured today: `origin/main..HEAD` = **2646** (so the 2517 was stale as well as wrong),
+      while the number that actually answers *"does anyone else have this verb"* is
+      `fork/governance-rules..HEAD` = **660**, with **0 behind** — a clean fast-forward.
+      The CONCLUSION was right (the verb is not published) and only the EVIDENCE was wrong, which is
+      the harder error to catch: a true claim resting on a wrong number survives every review that
+      checks whether the claim is true. This repo's handoff records the same substitution being
+      quoted TWICE before being caught — this card is the third — so re-derive with
+      `git rev-list --count fork/<branch>..HEAD`, never by copying a number forward.
 
 ## ⏱ VERIFIED 2026-08-02 — everything ai-maestro owed is met; the residue is a DEPLOY, not a defect
 

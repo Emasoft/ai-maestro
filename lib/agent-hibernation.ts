@@ -1,7 +1,10 @@
 // Agent hibernation state — the ONE derivation of "is this agent deliberately asleep, or broken?"
 //
 // WHY THIS MODULE EXISTS. There is no stored hibernation fact to read. `Agent['status']` is
-// `active | offline | deleted`, so a hibernated agent, a crashed one, and one that was never woken
+// `active | idle | offline | deleted` (types/agent.ts:465) — four values, NONE of them
+// `hibernated`. (This said three until ai-maestro#114 caught the omission; the argument is
+// unchanged, but a reader who checked it against the real type found a mismatch that made a
+// correct claim look wrong.) So a hibernated agent, a crashed one, and one that was never woken
 // are ALL recorded as `offline` — measured 2026-08-05 on the live registry: 9 non-deleted agents,
 // every single one `offline`, of which 6 were cleanly hibernated and 3 had crashed. Anything that
 // reports from `status` alone therefore cannot distinguish a deliberate sleep from an outage, and a

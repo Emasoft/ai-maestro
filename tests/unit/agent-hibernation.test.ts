@@ -2,7 +2,8 @@
  * The hibernation derivation (TRDD-14HI8ZPR) — is an agent deliberately ASLEEP, or BROKEN?
  *
  * WHY THIS NEEDS PINNING. Nothing in the registry answers the question: `Agent['status']` is
- * `active | offline | deleted`, so a hibernated agent, a crashed one and one never woken all read
+ * `active | idle | offline | deleted` (types/agent.ts:465) — four values, NONE of them `hibernated`;
+ * this said three until ai-maestro#114 caught it. So a hibernated agent, a crashed one and one never woken all read
  * `offline`. Measured on the live host the day this was written: 9 non-deleted agents, EVERY one
  * `offline`, of which 6 were cleanly hibernated and 3 had crashed. The whole value of this module is
  * the split those three states collapse into one field, so a test that does not exercise all four

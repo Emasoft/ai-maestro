@@ -236,7 +236,10 @@ cmd_presence() {
 
 # cmd_hibernation — is each agent deliberately ASLEEP, or BROKEN? (TRDD-14HI8ZPR)
 #
-# Nothing in the registry answers this: Agent['status'] is active|offline|deleted, so a
+# Nothing in the registry answers this: Agent['status'] is active|idle|offline|deleted — four
+# values, NONE of them `hibernated` (types/agent.ts:465; this comment and the route's twin both
+# said three until ai-maestro#114 caught the omission, and a reader checking the claim against
+# the real type would have found a mismatch that makes the correct argument below look wrong). So a
 # hibernated agent, a crashed one and one never woken ALL read `offline`. Measured on a
 # live host: 9 agents, every one `offline`, of which 6 were cleanly hibernated and 3 had
 # crashed. A guardian reporting from `status` alone therefore cannot tell a deliberate

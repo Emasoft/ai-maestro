@@ -12,7 +12,9 @@ export const dynamic = 'force-dynamic'
  *
  * For every live agent: `running | hibernated | crashed | never_woken`, plus the persistence rows
  * that reference agents no longer in the registry. Nothing in the registry answers this on its own
- * — `Agent['status']` is `active | offline | deleted`, so a hibernated agent, a crashed one and one
+ * — `Agent['status']` is `active | idle | offline | deleted` (types/agent.ts:465) — four values,
+ * NONE of them `hibernated`; this said three until ai-maestro#114 caught it, and the omission made
+ * the correct argument below look wrong to anyone who checked it. So a hibernated agent, a crashed one and one
  * never woken all read `offline`.
  *
  * AUTH IS REQUIRED AND IS THE POINT. A roster names every agent, its uuid and its tmux session

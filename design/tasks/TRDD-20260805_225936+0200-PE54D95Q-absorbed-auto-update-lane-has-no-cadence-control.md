@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:21:53+0200
+updated: 2026-08-05T23:27:56+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -476,3 +476,53 @@ The causal link between this lane and the USER's throttling is **not proven**: i
 mechanism whose traffic is invisible to every meter that read clean, at a volume that fits
 the symptom. Raising the cadence and watching whether the throttling clears is the
 confirming experiment.
+
+## Verification of the safe editor against the USER's stated contract (2026-08-05)
+
+Asked: *"it should retry after every lint error, and if 3 retry failed, it should skip the
+edit transaction and execute the next one, while reporting the failed transactions to the
+callers."* Verified by a full read of `lib/json-io.ts` (524 lines), each part to a line:
+
+- **3 retries then give up** — HOLDS for the conflict case: `retries ?? 3` (:348), backoff
+  `200ms × attempt` (:416), `ConcurrentModificationError` (:411).
+- **Skip failed, run next** — HOLDS: the per-path queue awaits the prior holder with
+  `.catch(() => {})` (*"a previous holder's failure must not cascade"*, :229); lock released
+  in `finally` (:234); next edit proceeds on a fresh read.
+- **Report failures to callers** — HOLDS via typed throws (`UnreadableTargetError`,
+  `ConcurrentModificationError`, `KeyLossRefused`); success carries `attempts` + `auditOk`.
+- **Next edit always finds a valid file** — HOLDS BY CONSTRUCTION, stronger than a lint:
+  fsync-tmp + atomic rename (:404,:420); a failed transaction removes its tmp and never
+  renames (:410,:422); the post-commit re-read (:426-427) re-parses after every commit.
+
+**The one deviation: a LINT error is not retried — it refuses immediately** (`parseOrRefuse`
+throws on attempt 1, :367). Correct for corrupt-AT-REST (same bytes, same failure; and
+overwriting an unknown state is the `{}`-rebuild incident this module prevents). GAP inside
+it: a transient TORN READ from a non-atomic non-participating writer (the claude CLI takes
+no lock of ours, :133-137) presents as the same lint error and WOULD be cured by a retry.
+Whether that can occur depends on the CLI's write atomicity — unverifiable from this repo.
+If ever fixed: retry the READ N times before refusing; never retry the write.
+
+Two caveats, recorded not fixed: `auditOk` is a returned field nobody is forced to branch on
+(deliberate — auto-rollback would destroy a legitimate CLI write, :327-331), and the ~30
+gate callers' handling of it is unaudited. `editSettings` does not forward `retries`; gate
+callers are pinned at 3 (conformant with the contract, not tunable).
+
+Also verified: `editSettings`' `allowKeyLoss: true` default is safe BECAUSE the ops grammar
+is bounded — only an explicit `delete` op can drop a key, so the bypassed tripwire cannot
+fire accidentally through the gate.
+
+## The two-file split is WORSE than either branch — neither contains the other (measured)
+
+The subset test refutes the clean declarative→runtime story:
+
+| set | count |
+|---|---|
+| `settings.json` keys NOT in `known_marketplaces.json` | **2** |
+| `known_marketplaces.json` keys NOT in `settings.json` | **20** |
+
+Overlapping sets, each holding entries the other lacks. Editing `settings.json` alone
+misses 20 marketplaces; the registry alone misses 2 — and only the first has a sanctioned
+writer. "Pick the authoritative file" is not available as a strategy; the authority
+question is now: what RELATIONSHIP does Claude Code maintain between them, and in which
+direction does it sync? That must be answered empirically (flip one entry in each, restart
+a disposable session, observe) before any bulk flip.

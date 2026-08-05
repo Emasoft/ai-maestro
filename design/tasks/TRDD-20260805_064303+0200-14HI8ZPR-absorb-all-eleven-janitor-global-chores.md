@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T08:10:10+0200
+updated: 2026-08-05T08:15:53+0200
 implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -226,14 +226,38 @@ gain per-chore suppression (so the host-wide half keeps running while the server
 half) or to accept that the half is unguarded while the server is up. Both are its calls. Filed
 cross-repo rather than worked around here.
 
-**NEXT ACTION:** (a) `yarn build` + restart so the authenticated route is in the running bundle,
-then verify by EFFECT; (b) the five remaining unabsorbed chores each need a verdict — and each
-should now be checked against the binary-suppression fact above, because the same "we only do half"
-trap applies to `fleet-stop` and `memory-guard` at least.
+## ⏵ SLICE 5 — DEPLOYED and verified by EFFECT — 2026-08-05 08:14
 
-**NOT yet done:** `yarn build` + restart, so the new route is not in the running bundle yet (a
-restart does NOT rebuild — `app/` is bundled into `.next`). The publisher is in `server.mjs`, which
-IS loaded at runtime, so it goes live on a plain restart. Verify by EFFECT, never by `git log`.
+`yarn build` (123 s, exit 0) → `pm2 restart` (pid 11440 → 94221). Verified against the ARTIFACT and
+the RUNNING SYSTEM, never `git log`:
+
+- the route is in the new bundle as `ƒ /api/agents/hibernation` (dynamic — the `force-dynamic` took)
+  and `.next/server/app/api/agents/hibernation/route.js` exists;
+- **the publisher ran and wrote** `.janitor/daemon_responses/hibernation.json` (7 491 B) with a
+  correct envelope — `v:1`, `ts:1785910485` (10 digits, i.e. SECONDS not millis), `staleAfterS:360`;
+- its counts match the independent live measurement exactly: **6 hibernated, 3 crashed, 14 orphaned**;
+- `.janitor/` is gitignored (`.gitignore:230`), so fleet data cannot be committed. Confirmed with
+  `git check-ignore`, not assumed.
+
+**The containment gate fired on REAL data, and its verdict is a finding:** `1 written; 9 refused`,
+every refusal `outside the agents root`. All nine agents on this host live under `~/Code/*` — they
+are the owner's pre-fork agents, which the scenarios rules already single out as never-to-be-touched.
+
+**So the per-agent half of the publisher currently serves NOBODY on this host**, and only the
+install tree receives a file. That is correct by construction and must not be "fixed" by widening
+the root: writing fleet data into directories outside `~/agents/` is precisely what the gate exists
+to prevent. It does mean a per-session janitor inside one of those agents gets no response file
+until the agent lives under `~/agents/` — worth knowing before anyone reads the silence as a bug.
+
+**NEXT ACTION:** the five remaining unabsorbed chores each need a verdict — and each should now be
+checked against the binary-suppression fact in slice 4 FIRST, because the same "we only do half"
+trap applies to `fleet-stop` and `memory-guard` at least. Do not stamp any of them before answering
+*"can the server even SEE this population?"*.
+
+**~~NOT yet done:~~ DONE in slice 5** — `yarn build` + restart. (The reasoning stays, because it is
+the reason the step exists: a restart does NOT rebuild, since `app/` is bundled into `.next`, while
+the publisher lives in `server.mjs` and is loaded at runtime, so it would have gone live on a plain
+restart alone. Verify by EFFECT, never by `git log`.)
 
 ⚠ **Adding a chore to `ABSORBED_CHORES` is NOT what absorbs it — running it is.** A stamp for a
 chore nobody runs is strictly worse than no stamp: it reports healthy while nothing happens, which
@@ -291,7 +315,7 @@ act on other sessions, and a bug there is a fleet-wide event rather than a local
 - [x] `session-liveness` **verdict recorded**: SPLIT — wire-up our half (already running, armed, verified in the live process env), hand back the host-wide half (the server has no reach; the janitor's `server_owned` exclusion already makes the two disjoint)
 - [x] `session-liveness` wire-up RESOLVED — it cannot be done on our side: stamping it would be a false claim (we run only the harness half) and SERVER_ABSORBED_TASKS is inert in normal operation, because the daemon exits wholesale before the per-chore yield is evaluated. Filed cross-repo; see slice 4
 - [x] the janitor can tell HIBERNATED from CRASHED — `lib/agent-hibernation.ts`, served by an AUTHENTICATED route and published per-janitor to `<project>/.janitor/daemon_responses/` (`eb0e9e95`, `400e9f9d`, `28c99c48`; the unauthenticated first attempt reverted in `3f069c22`)
-- [ ] `yarn build` + restart so the new route is in the running bundle, then verify by EFFECT
+- [x] `yarn build` + restart so the new route is in the running bundle, then verify by EFFECT — slice 5: route present as a dynamic entry in the artifact, publisher wrote a correct envelope whose counts match the independent measurement, `.janitor/` confirmed gitignored, and the containment gate refused all 9 out-of-root workdirs
 - [x] a test that fails when an absorbed chore runs without writing its stamp — plus its complement (the gate refusing must NOT stamp, or an unowned chore would look owned) and an epoch-SECONDS pin, since a milliseconds value parses fine and reads as permanently fresh for ~55 000 years
 - [x] reply on `ai-maestro#111` with the decision, so the janitor can drop its side of the ambiguity — [comment 5187649837](https://github.com/Emasoft/ai-maestro/issues/111#issuecomment-5187649837)
 

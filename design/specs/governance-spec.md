@@ -1,6 +1,6 @@
 ---
 spec: governance
-spec-version: 2.4.1
+spec-version: 2.4.2
 status: normative
 created: 2026-07-22T10:19:26+0200
 updated: 2026-08-05T21:23:56+0200
@@ -106,6 +106,18 @@ within the governance system. The 8 valid titles are in R3. TITLE is the access-
 the behaviour. Changing a TITLE runs the `ChangeTitle` pipeline (**23 gates**) and requires the
 governance password OR MANAGER/COS authorization (per R3, R16). Code: `agent.governanceTitle`
 (lowercase kebab).
+**Naming binding (2.4.2, USER statement 2026-08-06 + delegated ruling, TRDD-MCKBB117):**
+`title` and `governanceTitle` are ONE concept under two spellings — TITLE is the taxonomy
+term (every human-facing surface says TITLE), `governanceTitle` is its single code/API/storage
+spelling (scoped because bare `title` is overloaded: TRDD frontmatter, UI panel titles), and
+the signed AID-token wire spelling is `governance_title`. NO fourth spelling may appear. The
+field is deliberately NOT renamed to `title`: signed `aim_tk_*` tokens held by live agents
+embed `governance_title` and cannot be rewritten, so a rename would require the server to
+accept two spellings through a rotation window — mandatory backward-compat code, which the
+no-legacy rule forbids. Measured blast radius at decision time: 216 production sites, 1819
+test references, deployed fleet CLIs parsing `.governanceTitle`, and the cross-repo work
+orders naming it. Re-open only as a coordinated flag-day (full token rotation + fleet CLI
+redeploy + every consumer repo in one window).
 
 `TERM-03` **ROLE** (§TERMINOLOGY.2) — the role-plugin MAIN AGENT the PERSONA is currently running,
 referenced fully-qualified as `<plugin-name>:<main-agent-name>@<marketplace>`. The `@<marketplace>`

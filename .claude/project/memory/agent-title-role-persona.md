@@ -62,4 +62,18 @@ with the title, never bare deletion — the one such site (composition-check's
 Messaging authority derives from the TITLE at message time
 (`isManager()`/`isChiefOfStaffAnywhere()`).
 
+
+^ATOM-XER0-P82F [desc:"title == governanceTitle, ONE concept: TITLE is the taxonomy term, governanceTitle the code/API spelling, governance_title the signed-token wire — bound, not renamed (TRDD-MCKBB117)", keywords: title_vs_governanceTitle why_two_names_for_title rename_governanceTitle governance_title_wire title_naming_binding, type: reference, ocd: 2026-08-05, lmd: 2026-08-05]
+
+`title` and `governanceTitle` are ONE concept (USER, 2026-08-06: "governanceTitle and
+title are the same thing"). Ruled under delegation in TRDD-MCKBB117: the names are BOUND,
+not renamed — TITLE is the taxonomy term on every human-facing surface; `governanceTitle`
+is the single code/API/storage spelling (bare `title` is overloaded — TRDD frontmatter,
+UI titles); `governance_title` is the signed AID-token wire spelling. No fourth spelling.
+The rename was REJECTED on measured facts: 216 production sites + 1819 test refs, deployed
+fleet CLIs parse `.governanceTitle`, and signed `aim_tk_*` tokens embed `governance_title`
+— unrewritable, so a rename forces dual-spelling acceptance through rotation (forbidden
+backward-compat). Normative home: governance-spec.md TERM-02 (2.4.2). Re-open only as a
+coordinated flag-day.
+
 ## Notes and lessons learned

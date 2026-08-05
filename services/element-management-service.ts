@@ -9976,7 +9976,10 @@ export async function CreateAgent(
             tags: desired.tags || undefined,
             model: desired.model || undefined,
             taskDescription: desired.taskDescription || '',
-            role: 'autonomous',
+            // No `role:` — deliberately (TRDD-4Z62YRDG). This was `role: 'autonomous'`,
+            // hand-writing the default into the persisted record; absent means the same
+            // thing to every reader and cannot be misread as contradicting a later
+            // governanceTitle. See createAgent in lib/agent-registry.ts for the audit.
           })
           c.agent = created
           result.agentId = created.id

@@ -221,6 +221,22 @@ export function loadAgents(): Agent[] {
           needsMigration = true
         }
       }
+      // Strip the persisted DEFAULT messaging role (TRDD-4Z62YRDG, ai-maestro#122).
+      // Records used to be created with `role: request.role || 'autonomous'`, baking the
+      // default in — and on a manager-titled agent the pair `role: "autonomous"` +
+      // `governanceTitle: "manager"` was misread as a title contradiction by two separate
+      // Claude readers, one of which refused a legitimate MANAGER mandate over it.
+      // A defaulted and an explicit 'autonomous' are indistinguishable in old records, and
+      // they are also SEMANTICALLY IDENTICAL to every reader (audited 2026-08-06: nothing
+      // reads the persisted value; readers needing the messaging default apply it at read
+      // time), so stripping the value == the default loses nothing and removes the one
+      // shape that reads as a contradiction. A NON-default role is kept verbatim.
+      for (const agent of agents) {
+        if ((agent as { role?: string }).role === 'autonomous') {
+          delete (agent as { role?: string }).role
+          needsMigration = true
+        }
+      }
       if (needsMigration) {
         // Schedule a locked save without making loadAgents async. The
         // caller does not need to await the migration — readers see
@@ -229,7 +245,7 @@ export function loadAgents(): Agent[] {
         // 'agents' lock. If this save fails, the migration retries
         // on the next process restart.
         void withLock('agents', async () => { saveAgents(agents) })
-          .then(() => console.log('[Agent Registry] Migrated claudeArgs → programArgs (locked)'))
+          .then(() => console.log('[Agent Registry] Migrated registry (claudeArgs → programArgs; defaulted role stripped) (locked)'))
           .catch((err) => console.error('[Agent Registry] Migration save failed:', err))
       }
       _claudeArgsMigrationDone = true
@@ -576,7 +592,16 @@ export async function createAgent(request: CreateAgentRequest): Promise<Agent> {
     tags: normalizeTags(request.tags),
     capabilities: [],
     owner: request.owner,
-    role: request.role || 'autonomous',
+    // ONLY when explicitly requested (TRDD-4Z62YRDG, ai-maestro#122). Persisting the
+    // default (`|| 'autonomous'`) made a defaulted role indistinguishable from an explicit
+    // one, and on a manager-titled agent the pair `role: "autonomous"` +
+    // `governanceTitle: "manager"` read as a title contradiction — a live AUTONOMOUS agent
+    // refused a legitimate MANAGER mandate on the strength of it. Absent means "default
+    // applies"; readers that need the messaging default apply `?? 'autonomous'` at READ
+    // time. Audited 2026-08-06: zero production sites read the persisted field's value
+    // (the attestation path derives from isManager()/isChiefOfStaffAnywhere(), the UI
+    // handles absence), so omitting it changes what a record CLAIMS, not what anything does.
+    ...(request.role ? { role: request.role } : {}),
     team: request.team,
     documentation: request.documentation,
     metadata: request.metadata,

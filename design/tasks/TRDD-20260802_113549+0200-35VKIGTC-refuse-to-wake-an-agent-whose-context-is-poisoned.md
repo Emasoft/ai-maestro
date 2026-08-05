@@ -1,11 +1,11 @@
 ---
 trdd-id: 35VKIGTC
 title: Refuse to wake an agent whose auto-loaded context is poisoned
-column: todo
+column: backburner
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:35:49+0200
-updated: 2026-08-02T13:06:10+0200
+updated: 2026-08-05T18:28:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -29,6 +29,47 @@ external-refs: [Emasoft/ai-maestro-janitor#167]
 ---
 
 # Refuse to wake an agent whose auto-loaded context is poisoned
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-05
+
+**THE PRECONDITION THIS CARD SET FOR ITSELF HAS BEEN MEASURED, AND IT FAILS. DO NOT BUILD THE
+GATE.** The body's "⚠ The architectural finding that decides whether this is worth building" says
+to confirm the janitor's scan is **fleet-scoped** before building, and that if it can only scan its
+own session's workdir the card "buys one wake of delay and should be re-scoped rather than
+shipped". Measured 2026-08-05, first-hand:
+
+| question | answer | evidence |
+|---|---|---|
+| what roots does the detector walk? | **exactly one — the current session's project** | `scripts/detectors/ai-context-poisoning.py:307` → `project_root = state.project_root()`; `state.py:135` resolves a single dir, and `janitor_root()` is `project_root()/.janitor` (per-project state) |
+| does it enumerate the agent registry? | **no** | grep over `scripts/detectors/` for `registry.json` returns exactly ONE file, `gh-reply-watch.py` — which is also the positive control proving the search works |
+| does the live behaviour agree? | **yes** | this session's own heartbeat reported 17 patterns in 7 files, every path under `/Users/emanuelesabetta/ai-maestro` — its own project, no other workdir |
+
+So a flag would be written by a janitor running INSIDE the agent's own session, which — in the
+body's own words — "blocks the NEXT wake, not this one", by which time the poisoned instructions
+are already in the context window. Shipping it "while the janitor believes it got the launch gate
+would be the worst outcome available here."
+
+**Moved `todo → backburner`,** which is an honest resting state rather than a lie: the work is not
+ready and nothing local blocks it, so `blocked` would be wrong too (that requires a non-empty
+`blocked-by:` naming an open card, and the missing capability is not a card in this repo).
+
+**WHAT WOULD UNBLOCK IT:** the janitor gaining a fleet-scoped context scan — walking every
+*registered* workdir, including hibernated agents — so a poisoned agent is flagged while it is not
+running and the gate refuses its next launch. That capability lives in
+**`Emasoft/ai-maestro-janitor`**, a repo I may not edit; per the cross-project rule the route is an
+issue (or a fork+PR) on their tracker, continuing the existing thread at janitor#167. **That ask
+has NOT been filed — it needs the USER's word, because it is a cross-repo write.**
+
+**A SECOND, INDEPENDENT REASON TO WAIT — the detector's precision is not yet good enough to gate a
+launch on.** All 5 findings it raised against this repo on 2026-08-05 are FALSE POSITIVES, and they
+share one nameable defect: it does not distinguish *prohibitive* from *directive* framing. Every
+cited line is a rule RESTRAINING an agent, matched by a detector hunting rules DIRECTING one —
+`scenario-runner.md:54` / `SCENARIOS_TESTS_RULES.md:47` ("you have BECOME the system", the rule
+FORBIDDING the runner from puppeting the fleet), `:101`/`:112` (rows of a diagnostics TABLE), and
+`:145` (a safety BLACKLIST). Provenance on all of them is our own commits. A gate that bricks an
+agent's launch on this signal would refuse to start agents over their own safety documentation.
+That precision problem belongs upstream with the detector, and it must be fixed BEFORE, not after,
+any enforcement is wired to it.
 
 ## Why this exists
 

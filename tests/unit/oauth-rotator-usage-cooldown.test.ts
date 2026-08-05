@@ -282,8 +282,12 @@ describe('usageProbe — the cross-process lock', () => {
       { fetchImpl: impl, cooldownStore: store, probeLock: lockThatLetsTheOtherRacerWin },
       { accountKey: 'a@x' },
     )
-    expect(calls).toHaveLength(0) // the re-check caught it; without it this would be a double-hit
-    expect(r.status).toBe(429)
+    // `calls` IS the whole claim: the re-check caught it, so no double-hit. Asserting the STATUS
+    // here would borrow `duringCooldown`'s lastKind guard — measured, that made this test go red
+    // when lastKind was neutered, so the two rows could not fail independently. The 429 is that
+    // guard's claim and is pinned by its own test above.
+    expect(calls).toHaveLength(0)
+    expect(r.reason).not.toBe('fresh') // a fresh reading would mean it fetched anyway
   })
 })
 

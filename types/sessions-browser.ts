@@ -217,9 +217,18 @@ export interface MessageUsage {
   /**
    * Optional split of `cacheCreationTokens` into the 1-hour ephemeral write
    * tier (`usage.cache_creation.ephemeral_1h_input_tokens`). Additive; see
-   * {@link MessageUsage.cacheCreation5mTokens}. Pricing-wise the cost module
-   * still bills the whole `cacheCreationTokens` at the 5m write rate — this
-   * field exists for display only, not for a separate price calculation.
+   * {@link MessageUsage.cacheCreation5mTokens}.
+   *
+   * **This field IS priced.** `lib/token-cost.ts` bills this portion at the 1h
+   * write rate (2× input) and the remainder — derived as
+   * `cacheCreationTokens − cacheCreation1hTokens`, since the total stays
+   * authoritative — at the 5m rate (1.25×). A record without this field is
+   * billed entirely at the 5m rate, exactly as before.
+   *
+   * It used to be display-only, which under-reported every 1h write by 37.5%
+   * (billing 1.25 where 2 was due) on precisely the long-lived sessions the
+   * cost view exists to weigh. Measured upstream as `Emasoft/ai-maestro#94`
+   * finding 3.
    */
   cacheCreation1hTokens?: number
 }

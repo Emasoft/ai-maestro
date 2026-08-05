@@ -39,6 +39,13 @@ export interface FamilyPrices {
   output: number
   /** USD per 1M cache-WRITE tokens (the 5-minute ephemeral write tier). */
   cacheWrite: number
+  /**
+   * USD per 1M cache-WRITE tokens at the **1-hour** ephemeral tier (2× input,
+   * vs the 5m tier's 1.25×). Applied only to the portion a record reports as
+   * `cacheCreation1hTokens`; when a record carries no split, everything is
+   * billed at {@link FamilyPrices.cacheWrite} exactly as before.
+   */
+  cacheWrite1h: number
   /** USD per 1M cache-READ (cache-hit) tokens. */
   cacheRead: number
 }
@@ -52,7 +59,22 @@ export interface FamilyPrices {
  *
  * Derivation of the cache tiers (Anthropic's documented multipliers):
  *   - cache WRITE (5m ephemeral) ≈ 1.25 × input rate
+ *   - cache WRITE (1h ephemeral) ≈ 2.00 × input rate
  *   - cache READ  (cache hit)     ≈ 0.10 × input rate
+ *
+ * ⚠️ THE TWO WRITE TIERS ARE NOT INTERCHANGEABLE, AND THE 1h ONE IS THE
+ *    EXPENSIVE ONE. Billing a 1h write at the 5m rate reports 1.25/2 =
+ *    62.5% of it — a systematic 37.5% UNDER-report, silently, on exactly
+ *    the traffic that costs most. Long-lived agent sessions run on the 1h
+ *    TTL, so the sessions this dashboard exists to weigh were the ones most
+ *    under-priced. Measured and reported upstream as `Emasoft/ai-maestro#94`
+ *    finding 3 by AgentlensPro, which replaced an inferred window model with
+ *    telemetry.
+ *
+ *    It also breaks the RELATIVE comparison this module is for: a marathon
+ *    1h-TTL session and a short 5m one were being weighed on different
+ *    scales, so "which session is expensive" was answerable only up to that
+ *    distortion. Approximate is fine; differently-approximate-per-row is not.
  *
  * Base list rates used (per 1M tokens):
  *   opus    ≈ $15 in  / $75 out
@@ -64,18 +86,21 @@ export const PRICES: Readonly<Record<ModelFamily, FamilyPrices>> = {
     input: 15,
     output: 75,
     cacheWrite: 18.75, // 15 × 1.25
+    cacheWrite1h: 30, // 15 × 2.00
     cacheRead: 1.5, // 15 × 0.10
   },
   sonnet: {
     input: 3,
     output: 15,
     cacheWrite: 3.75, // 3 × 1.25
+    cacheWrite1h: 6, // 3 × 2.00
     cacheRead: 0.3, // 3 × 0.10
   },
   haiku: {
     input: 0.8,
     output: 4,
     cacheWrite: 1.0, // 0.80 × 1.25
+    cacheWrite1h: 1.6, // 0.80 × 2.00
     cacheRead: 0.08, // 0.80 × 0.10
   },
 } as const
@@ -128,6 +153,31 @@ export function isFallbackFamily(model: string | null | undefined): boolean {
  * @param usage Token buckets for one message (or a summed total).
  * @param model The model id; resolved to a family via {@link modelFamily}.
  */
+/**
+ * Price the cache-WRITE bucket across its two tiers, in raw (pre-÷1M) units.
+ *
+ * `cacheCreationTokens` is the AUTHORITATIVE total (see `MessageUsage`), so the
+ * 5-minute portion is derived as `total − 1h` rather than read from
+ * `cacheCreation5mTokens`. Trusting two independently-parsed optional fields to
+ * sum to a third is a second source of truth, and the day a record reports only
+ * one of them the total would silently stop matching the sum of its parts. One
+ * authoritative number, one subtraction.
+ *
+ * `Math.max(0, …)` is not defensive noise: the split fields are documented as
+ * best-effort, so a malformed record claiming more 1h tokens than the total
+ * would otherwise make the 5m remainder NEGATIVE and quietly refund money.
+ * Clamping keeps a bad record merely wrong, never sign-flipped.
+ *
+ * Shared by both entry points ON PURPOSE — `approxCostUsd` and `costBreakdown`
+ * are documented to agree for the same inputs, and two copies of this
+ * arithmetic is exactly how that guarantee would rot.
+ */
+function cacheWriteRawUsd(usage: MessageUsage, p: FamilyPrices): number {
+  const oneHour = Math.min(usage.cacheCreation1hTokens ?? 0, usage.cacheCreationTokens)
+  const fiveMin = Math.max(0, usage.cacheCreationTokens - oneHour)
+  return fiveMin * p.cacheWrite + oneHour * p.cacheWrite1h
+}
+
 export function approxCostUsd(
   usage: MessageUsage,
   model: string | null | undefined,
@@ -137,7 +187,7 @@ export function approxCostUsd(
     usage.inputTokens * p.input +
     usage.outputTokens * p.output +
     usage.cacheReadTokens * p.cacheRead +
-    usage.cacheCreationTokens * p.cacheWrite
+    cacheWriteRawUsd(usage, p)
   return usd / 1_000_000
 }
 
@@ -194,7 +244,7 @@ export function costBreakdown(
   }
   const cacheCreation: CostBucket = {
     tokens: usage.cacheCreationTokens,
-    usd: (usage.cacheCreationTokens * p.cacheWrite) / 1_000_000,
+    usd: cacheWriteRawUsd(usage, p) / 1_000_000,
   }
   const totalTokens =
     input.tokens + output.tokens + cacheRead.tokens + cacheCreation.tokens

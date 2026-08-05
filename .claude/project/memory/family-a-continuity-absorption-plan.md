@@ -57,6 +57,13 @@ freeze-recovery — NPT4) · `ai-maestro#51` (active idle-agent wake — NPT4/NP
 The 5-state safe-state model (`lib/session-safe-state.ts`) + stop/restart poll are the actuation
 substrate `ensure-resume` builds on.
 
+**See also [[janitor-chore-absorbability]]** — this page owns the **Family-A** (oauth / continuity)
+absorption specifically. That one owns the SEPARATE question of the janitor's GLOBAL chore set
+(`session-liveness`, `fleet-stop`, `memory-guard`, `cache-prune`, `rules-cleanup`,
+`github-config-audit`): which of them the server can absorb at all, and the test that decides it.
+Read it before assuming any chore is absorbable — it also records that `SERVER_ABSORBED_TASKS` is
+inert while a server is up, because the daemon exits wholesale rather than yielding chore by chore.
+
 ## Notes and lessons learned
 [^1]: [id:ATOM-FAMA-NPT, status:valid, keywords:"family_a_npt_map decompose_KCRMSNL7 which_npt_unblocked oauth_manager_blocked_on_design", ocd:2026-07-16, lmd:2026-07-16]
   DO NOT author the 6 NPT ids into KCRMSNL7's `npt:` list before the NPT TRDD FILES exist,

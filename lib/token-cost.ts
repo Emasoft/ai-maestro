@@ -163,10 +163,19 @@ export function isFallbackFamily(model: string | null | undefined): boolean {
  * one of them the total would silently stop matching the sum of its parts. One
  * authoritative number, one subtraction.
  *
- * `Math.max(0, …)` is not defensive noise: the split fields are documented as
- * best-effort, so a malformed record claiming more 1h tokens than the total
- * would otherwise make the 5m remainder NEGATIVE and quietly refund money.
- * Clamping keeps a bad record merely wrong, never sign-flipped.
+ * THE `Math.min` IS THE GUARD, and it is load-bearing: the split fields are
+ * documented as best-effort, so a malformed record claiming MORE 1h tokens than
+ * the total would otherwise drive the 5m remainder NEGATIVE and quietly refund
+ * money. Bounding `oneHour` by the total keeps a bad record merely wrong rather
+ * than sign-flipped, and it is what the malformed-record test pins.
+ *
+ * This first shipped with a belt-and-braces `Math.max(0, …)` on the next line
+ * too, described in this very comment as "not defensive noise". MEASURED, it
+ * was: removing it left 19/19 GREEN, because `Math.min` already makes the
+ * subtraction non-negative, while removing the `Math.min` reds exactly the
+ * malformed-record test. A redundant guard that only prose defends is the
+ * anti-pattern this repo has already been bitten by — so it is gone, and the
+ * one real guard is named here instead.
  *
  * Shared by both entry points ON PURPOSE — `approxCostUsd` and `costBreakdown`
  * are documented to agree for the same inputs, and two copies of this
@@ -174,7 +183,7 @@ export function isFallbackFamily(model: string | null | undefined): boolean {
  */
 function cacheWriteRawUsd(usage: MessageUsage, p: FamilyPrices): number {
   const oneHour = Math.min(usage.cacheCreation1hTokens ?? 0, usage.cacheCreationTokens)
-  const fiveMin = Math.max(0, usage.cacheCreationTokens - oneHour)
+  const fiveMin = usage.cacheCreationTokens - oneHour
   return fiveMin * p.cacheWrite + oneHour * p.cacheWrite1h
 }
 

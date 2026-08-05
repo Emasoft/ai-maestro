@@ -17,6 +17,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { execSync } from 'child_process'
 import { statePath } from './ecosystem-constants'
+import { ABSORBED_CHORES } from './janitor-chore-stamp'
 import { oauthTickEnabled } from './oauth-rotator/server-tick'
 import { isAbsorbedDutySchedulerRunning } from '@/services/auto-update-service'
 
@@ -42,6 +43,27 @@ export interface ServerLiveness {
   dirty: boolean
   /** The chore classes the server owns+runs RIGHT NOW (honest, live-only — see the file header). */
   capabilities: string[]
+  /**
+   * The janitor-registry names of the daemon chores THIS server absorbs — `ABSORBED_CHORES`
+   * verbatim (`Emasoft/ai-maestro#111` asks us to "expose which chores the server claims").
+   *
+   * UNLIKE `capabilities`, THIS FIELD IS MEANT TO BE READ. `capabilities` is write-only across the
+   * ecosystem (see the long note on `currentCapabilities`); this one exists precisely so the janitor
+   * can stop hardcoding the boundary. Today its `harness_backend.SERVER_ABSORBED_TASKS` is a frozen
+   * literal of FIVE names, while we absorb SIX — `github-config-audit` joined on 2026-08-05 — so the
+   * two sides already disagree about who owns that chore, and neither can see the disagreement.
+   *
+   * That drift is harmless only while the janitor daemon is suppressed outright. The moment it
+   * narrows suppression to "run what the server does not claim" (#111 resolution 2, which is the one
+   * we are asking for), a stale five-name list makes BOTH sides run `github-config-audit` — the
+   * two-owners-per-chore condition the one-daemon-per-host rule exists to prevent. So publishing the
+   * list is not a convenience for that fix; it is a precondition of it.
+   *
+   * A consumer that finds the field ABSENT is reading an older server and should fall back to its own
+   * list — an absent field must never be read as "this server absorbs nothing", which would hand every
+   * chore back to a daemon that is still suppressed.
+   */
+  absorbed_chores: string[]
 }
 
 /**
@@ -167,6 +189,10 @@ export function writeServerLiveness(deps: WriteServerLivenessDeps = {}): void {
     sha_full: build.sha_full,
     dirty: build.dirty,
     capabilities,
+    // Spread into a fresh mutable array: `ABSORBED_CHORES` is `as const`, and handing a frozen
+    // readonly tuple to `JSON.stringify` would serialise identically but lets a future caller of
+    // `writeServerLiveness` mutate the module's own constant through the payload it gets back.
+    absorbed_chores: [...ABSORBED_CHORES],
   }
   const dest = statePath(path.basename(SERVER_LIVENESS_FILE))
   const tmp = `${dest}.tmp.${pid}`

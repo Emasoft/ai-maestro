@@ -74,6 +74,34 @@ describe('writeServerLiveness — atomic write of the 3-field shape', () => {
     writeServerLiveness({ now: () => 1, pid: 1, capabilities: () => [] })
     expect(readLiveness().capabilities).toEqual([])
   })
+
+  // ai-maestro#111 asked us to publish WHICH chores the server claims, so the janitor can narrow
+  // its all-or-nothing daemon suppression instead of hardcoding the boundary. These names are a
+  // CROSS-PROCESS WIRE CONTRACT with another project's registry, so the expectation below is
+  // written out literally ON PURPOSE rather than read back from `ABSORBED_CHORES`: comparing the
+  // payload against the very constant that produced it would pass through any rename, which is the
+  // one change that actually breaks the consumer.
+  it('publishes absorbed_chores as the exact janitor registry names (ai-maestro#111)', () => {
+    writeServerLiveness({ now: () => 1, pid: 1, capabilities: () => [] })
+    expect(readLiveness().absorbed_chores).toEqual([
+      'marketplace-refresh',
+      'user-plugins-update',
+      'version-update',
+      'oauth-rotator-supervisor',
+      'oauth-rotator-tick',
+      'github-config-audit',
+    ])
+  })
+
+  it('serialises absorbed_chores as a COPY, so a consumer cannot mutate the module constant', () => {
+    writeServerLiveness({ now: () => 1, pid: 1, capabilities: () => [] })
+    const first = readLiveness().absorbed_chores
+    first.push('kill-switch')
+    // A second beat must be unaffected — if the payload had shipped the `as const` tuple itself,
+    // a caller holding the returned array could poison every later heartbeat.
+    writeServerLiveness({ now: () => 2, pid: 1, capabilities: () => [] })
+    expect(readLiveness().absorbed_chores).not.toContain('kill-switch')
+  })
   it('leaves no .tmp partial file behind after a successful write', () => {
     writeServerLiveness({ now: () => 1, pid: 7, capabilities: () => [] })
     const dir = path.join(tmpHome, '.aimaestro')

@@ -1,11 +1,11 @@
 ---
 trdd-id: T3FXA0Y0
 title: Establish and enforce an exit-status contract across the frozen CLI
-column: dev
+column: blocked
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T22:43:24+0200
+updated: 2026-08-06T00:44:42+0200
 implementation-commits: [0d31e3bc, 51db1b8a, f2abd10d]
 current-owner: ai-maestro
 created-by: assistant-manager-agent
@@ -20,7 +20,8 @@ approval-datetime: 2026-08-05T20:40:41+0200
 derived: false
 npt: []
 eht: [3KJW8P6R]
-blocked-by: []
+blocked-by: [YU37A3M4]
+pre-block-column: dev
 release-via: none
 relevant-rules: []
 labels: [manager-filed, testbot-session, owner-ours]

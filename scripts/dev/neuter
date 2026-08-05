@@ -184,6 +184,47 @@ fi
 [ "$STATUS" -eq 0 ] && echo "    NOTE: vitest exited 0 — the neutered code still passes everything."
 echo "    full log: $LOG"
 
+# --- GUARD 5: emit the OBSERVED block, so nobody has to TYPE the numbers ----------------------
+# The most repeated documentation error here is a docstring that says "NEUTER RUN … OBSERVED"
+# carrying counts that were PREDICTED. It happened twice in one session, both times off by one,
+# and both times the prose asserted it had been measured.
+#
+# No static check can catch it: `it.each` means the test count cannot be derived from the source,
+# and this ledger is machine-local, so a lint would be vacuous in a fresh clone. What CAN be
+# changed is the incentive — typing a guess is only tempting while the truth is inconvenient. So
+# the exact counts and the exact red names are printed ready to paste, and every run is recorded.
+SUMMARY="$(grep -E '^ *Tests ' "$LOG.clean" | tr -s ' ' | sed 's/^ //')"
+NRED="$(printf '%s' "$SUMMARY"   | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' | head -1)"
+NGREEN="$(printf '%s' "$SUMMARY" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' | head -1)"
+NRED="${NRED:-0}"; NGREEN="${NGREEN:-0}"
+TODAY="$(date +%Y-%m-%d)"
+
+echo
+echo "=== PASTE THIS — do not retype the numbers"
+echo " * NEUTER RUN (${TODAY} — OBSERVED via scripts/dev/neuter, restore verified by blob hash):"
+echo " *   ${EXPR}"
+if [ -n "$RED" ]; then
+  echo " *   → ${NRED} red / ${NGREEN} green:"
+  printf '%s\n' "$RED" | sed 's/^/ *       /'
+else
+  echo " *   → ${NRED} red / ${NGREEN} green — NOTHING reddened, which is a finding about the TEST,"
+  echo " *     not a clean bill for the code. Re-aim the mutation or say why the guard is unpinnable."
+fi
+
+# The ledger is EVIDENCE, so it lives under reports/ (gitignored) per the agent-reports rule —
+# never in the source tree, and never as the basis of a gate, since a fresh clone has none.
+LEDGER_DIR="$(git rev-parse --show-toplevel)/reports/dev-neuter"
+mkdir -p "$LEDGER_DIR"
+python3 - "$LEDGER_DIR/neuter-runs.jsonl" "$FILE" "$EXPR" "$TESTS" "$CHANGED" "$NRED" "$NGREEN" "$LOG" <<'PY' 2>/dev/null || true
+import json, sys, datetime
+path, f, expr, tests, changed, nred, ngreen, log = sys.argv[1:9]
+rec = {"ts": datetime.datetime.now().astimezone().isoformat(), "file": f, "expr": expr,
+       "tests": tests, "changed_lines": int(changed), "red": int(nred), "green": int(ngreen),
+       "log": log}
+with open(path, "a") as fh:
+    fh.write(json.dumps(rec) + "\n")
+PY
+
 # --- GUARD 4: restore, and prove it ----------------------------------------------------------
 echo
 if restore; then echo "=== restored $FILE to its committed state (verified by blob hash)"; else exit 4; fi

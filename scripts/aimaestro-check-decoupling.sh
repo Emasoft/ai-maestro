@@ -175,7 +175,13 @@ for line in sys.stdin:
         if not skip_path.search(line.split(":")[0]) and any(verb.search(w) for w in win):
             out.append(line)
         win = []
-print("\n".join(out))
+# A BLANK LINE IS NOT A FINDING. print("\n".join([])) emits ONE EMPTY LINE, which
+# survives the third-party grep below (an empty line matches no exclusion, so -v keeps
+# it) and makes wc -l return 1 — so a perfectly CLEAN plugin reported "FINDINGS: 1"
+# and exited 1, failing any CI gate wired to this. The self-test could never catch it:
+# the needle worked, the COUNT was wrong. Print only when there is something to print.
+if out:
+    print("\n".join(out))
 ' < "$TMP/raw.txt" > "$TMP/hits.txt" 2>/dev/null || true
 
 # Third-party APIs are OUT of scope by rule (GitHub, Anthropic, crates.io). Dropped LAST so the
@@ -183,7 +189,13 @@ print("\n".join(out))
 grep -vE 'api\.(github|anthropic)\.com|crates\.io|localhost:16686' "$TMP/hits.txt" \
   > "$TMP/final.txt" 2>/dev/null || true
 
-N=$(wc -l < "$TMP/final.txt" | tr -d ' ')
+# Count NON-EMPTY lines, not lines. The blank-line bug above is fixed at its source, but a
+# counter that treats a blank as a finding is fragile against ANY future stage emitting one —
+# and the failure mode is the worst available for a compliance gate: a false violation on a
+# clean tree, exit 1, CI red, with no file:line to chase. `grep -c .` exits 1 when nothing
+# matches, hence the `|| true` and the default.
+N=$(grep -c . "$TMP/final.txt" 2>/dev/null || true)
+N="${N:-0}"
 if [ "$QUIET" -eq 0 ] && [ "$N" -gt 0 ]; then
   echo "── direct ai-maestro server API calls (the frozen CLI is the ONLY allowed caller) ──"
   cat "$TMP/final.txt"

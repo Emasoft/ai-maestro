@@ -6,7 +6,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-08-02T15:33:21+0200
+updated: 2026-08-05T05:21:53+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 priority: 1
@@ -228,5 +228,49 @@ the board's own top-priority signal a lie.
 **Still the owner's alone (unchanged):** whether tags `v0.1.1`-`v0.1.3` are deleted or left
 standing. Now that the string is dead, *leave them standing* is defensible and avoids a history
 rewrite — the issue says so and proposes neither.
+
+## Acceptance
+
+Transcribed 2026-08-05 from what this card already states — the four numbered items under
+*"The work, once unblocked"* and the verified results under *"ROTATION LANDED"*. Nothing here is
+authored from the title; every box quotes a promise the card had already made in prose, which is
+why it could be written at all (a checklist invented from a title is fabrication).
+
+**Ours — all done, and this is why the card is not an exposure any more:**
+
+- [x] the forced order's step 1 satisfied: the USER rotated (`passwordSetAt` 2026-07-17), so the
+      published literal is **SUPERSEDED** at both `v0.1.3` and `master` — verified by a comparison
+      whose ONLY output was a boolean (env → sed → fd → `grep -qFf`; never argv, never disk, never
+      a model's context), guarded by a positive control that the pattern matches itself
+- [x] the CURRENT password is absent from this repo — **0 tracked files**, absent across the last
+      60 commits, and `.env.local` is gitignored (`.gitignore:33`)
+- [x] the upstream issue filed with the ROOT CAUSE, not just the symptom —
+      `Emasoft/ai-maestro-web-scenario-tester#3`, carrying the two rule lines, the verified-dead
+      status stated up front so nobody treats it as a live incident, the 197-literals / 34-files
+      evidence for why "be careful" is not a fix, the `1e6246ff` reference implementation
+      (*helpers take no password argument*), and a shape-not-value CI regression check. Method 1
+      per the cross-project rule — this session did not touch that tree, and offered a fork+PR if
+      the owner prefers the patch
+- [x] severity re-ranked CRITICAL → major, priority 0 → 1, with the reason recorded: a dead
+      credential in a public tag is bad hygiene and a false signal, but leaving it P0/CRITICAL
+      would make the board's own top-priority signal a lie
+
+**Upstream — the owner's repo, NOT ours to edit.** `#3` is OPEN with 0 comments as of 2026-08-05:
+
+- [ ] the two literal occurrences in `references/SCENARIOS_TESTS_RULES.md` replaced with
+      `governancePasswordRef: env:AIM_GOVERNANCE_PASSWORD`
+- [ ] **the MANDATE amended** — the frontmatter field documented as *"The actual password value, in
+      quotes"* / *"Referenced verbatim in steps"* is the root cause. Scrubbing the two occurrences
+      without amending it re-creates the exposure on the next scenario authored, so this box is the
+      one that actually closes the defect; the one above only closes today's instance
+- [ ] the SECOND shipped copy at `skills/amwst-scenarios-rules/references/` converged — it
+      diverges from the first, so fixing one leaves the other mandating the literal
+- [ ] re-published (`publish.py --patch`) so the marketplace resolves a clean version
+
+**Yours alone:**
+
+- [ ] **USER DECISION — tags `v0.1.1`–`v0.1.3`: deleted, or left standing?** Now that the string is
+      dead, *left standing* is defensible and avoids a history rewrite. The issue proposes neither,
+      deliberately. This is the box that keeps the card in `human_review`.
 
 ## Notes and lessons learned

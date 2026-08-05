@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: human_review
 created: 2026-06-24T03:22:18+0200
-updated: 2026-08-02T15:29:34+0200
+updated: 2026-08-05T05:21:53+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -223,6 +223,60 @@ gate is now the budget guard, not a manual hold.
   through the curated runner; record token cost; `batch-budget-guard.sh validate
   <toks>` + `arm <hours>`; only then run a capped, throttled batch. If cost is
   not provably low, STOP and leave a report.
+
+## Acceptance
+
+Transcribed 2026-08-05 from this card's own `## Phases` list — which is itself the card's
+paraphrase of the USER's mandate, so the boxes are the phases, one for one. Nothing is authored
+from the title; the only judgement applied was reading each phase's own status words (`DONE this
+turn`, `LAST, GATED`) and the 2026-08-02 triage note.
+
+**One box was ticked without a phase saying so**, and it is flagged rather than assumed: P8's
+calibration probe is recorded as complete in the 2026-06-25 STATE heading (*"P8 CALIBRATION PROBE
+DONE — SCEN-020 PASS"*), which is a sub-part of P8, not P8 itself. P8 stays open.
+
+- [x] **P0 — safety scaffold** — `a5cffe3a`: token kill-switch (`batch-budget-guard.sh`,
+      fail-closed) + the universal token rule + this card
+- [x] **P1 — install flawless + secure** (the mandate's *"above all"*) — install security VERIFIED
+      CLEAN on the high-risk surfaces, deterministically (shellcheck + read): no command injection,
+      all routes auth-gated. Evidence in `reports/install-security-audit/`
+- [x] **P2 — API: tmux command injection** — `3bf491bb` / `27d17e03` / `aede643d`: the curated
+      `lib/agent-commands.ts` allowlist → `PATCH /api/agents/[id]/session` accepts a KEY → a fixed
+      literal slash-command, injection-proof. 5 tests. Built on the CLI script layer as the phase
+      required, NOT raw API in plugins
+- [x] **P3 — API: richer agent state** — `9914a370`: a hook classifies StopFailure into
+      `notificationType: rate_limited|api_error`, which `resolveAgentStatus` renders. 9 tests.
+      **`context-usage` (%) honestly DEFERRED** — no non-fabricated hook signal existed
+- [x] **P4 — install/extensions API ↔ Claude changelog + Anthropic specs** — recorded done at the
+      2026-06-24T20:30 STATE (*"P0–P7 done"*). The USER reopened P4/P6 that day, noting they were
+      *"never gated, just parked"*, and the later STATE records them delivered
+- [x] **P5 — other-client graceful degradation** — `430f5e41`: `isMarketplaceSupported()`. 4 tests.
+      FINDING recorded: element conversion ALREADY degrades via the warnings pattern, and the 17
+      converter throws are legitimate fail-fast that MUST stay
+- [x] **P6 — UI + governance polish** — state-surfacing shipped (named at the 20:30 STATE); UI gated
+      with `next build` 0 alongside tsc/vitest/eslint
+- [x] **P7 — cross-repo coordination via GitHub issues** — answered the core-plugin spec request
+      `ai-maestro#49` with verified facts (gov `v4.0.2`/R40 max, the 4.0.1→4.0.2 R38/R39 sub-rule
+      delta, `reassign-cos` built, no standalone assign-title verb → deferred to MANAGER/USER).
+      Issues only; nothing published unsupervised
+- [ ] **P8 — scenario testing (LAST, GATED)** — the calibration probe is DONE (SCEN-020 PASS 17/17,
+      0 application bugs, per-scenario cost MEASURED), so what remains is the capped, throttled
+      BATCH. **This is the box holding the card in `human_review`:** it is gated on a USER
+      cost-decision, and the card's own safety stance says P8 is the ONLY blowup vector — every
+      other phase is bounded editing. If the cost is not provably low, STOP and leave a report
+
+**P0–P7 all shipped; only P8 is open, and it is a cost decision, not engineering.** The card's own
+safety stance predicted exactly this shape: P1–P7 are *"editing + committing — bounded, delegatable,
+no blowup risk"*, while P8 is *"the ONLY blowup vector"* and is therefore gated behind a measured
+per-scenario cost. The engineering finished; the gate held.
+
+> **Correction, 2026-08-05 — recorded because the near-miss is the lesson.** The first draft of this
+> checklist marked P1–P7 **OPEN**, transcribed from the `## Phases` section alone. That section is
+> the PLAN; the STATE blocks are the DELIVERY RECORD, and the 2026-06-24T20:30 one says *"P0–P7
+> done"* with commit SHAs for most of them. A checklist is only a transcription if you read what the
+> card RECORDS, not just what it PROPOSES — reading the plan and calling it status is the same
+> fabrication as inventing boxes from the title, just harder to notice, and it would have told a
+> human reviewer that seven finished phases still needed doing.
 
 ## Safety stance (why the order)
 

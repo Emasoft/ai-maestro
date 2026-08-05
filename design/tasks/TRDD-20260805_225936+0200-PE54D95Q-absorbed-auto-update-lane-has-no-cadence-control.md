@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:08:32+0200
+updated: 2026-08-05T23:09:23+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -203,6 +203,37 @@ USER: *"it reads only at the moment it loads the claude code instance."*
    write when the fleet is quiet.
 
 Recorded in USER memory as `claude-marketplaces#ATOM-KDMD-BPXI` so it outlives this card.
+
+### The restart is already an API capability — but it is UNTESTED (NPT)
+
+USER: *"its not that bad, its just the reason i've added the option to the ai-maestro api to
+restart automatically the client. never tested, though."*
+
+That softens constraint 1 considerably: a flag flip does not require a manual fleet-wide
+restart, because the server can restart the client itself. The read-at-load semantics stop
+being a blocker and become a **sequencing** requirement — write the flag, then restart, in
+that order.
+
+**But "never tested" makes this a prerequisite, not a given.** This card's design would
+depend on a path nobody has exercised, and a dependency you cannot demonstrate is
+indistinguishable from one that does not work. It must be verified BEFORE the janitor flips
+275 entries, or the fleet ends up with flags written and never read — which looks exactly
+like the flip having failed.
+
+What I verified myself, and what I did not:
+
+- ✓ The restart routes exist: `app/api/sessions/[id]/restart/route.ts` and
+  `app/api/sessions/me/restart/route.ts` (both `strict` under sudo-mode).
+- ✓ The plumbing that would drive it exists: plugin-mutating routes return `restartNeeded`
+  (`app/api/agents/role-plugins/install/route.ts`, `app/api/agents/[id]/local-plugins/route.ts`)
+  explicitly "so the UI can queue a stop+restart".
+- ✗ **I could NOT locate a named auto-restart option** — `autoRestart`, `auto_restart`,
+  `restartClient`, `restartAfter` return nothing outside tests. So either it is named
+  something I did not guess, or the plumbing exists while the option that consumes it does
+  not. **Do not assume it is the former.** Find the actual symbol before building on it.
+
+This is a genuine NPT: the parent cannot proceed past `dev` until the auto-restart path is
+located and demonstrated once, end to end, on a single agent.
 
 ## Non-goals
 

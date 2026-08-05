@@ -212,6 +212,95 @@ cmd_presence() {
     echo "$response"
 }
 
+# cmd_hibernation — is each agent deliberately ASLEEP, or BROKEN? (TRDD-14HI8ZPR)
+#
+# Nothing in the registry answers this: Agent['status'] is active|offline|deleted, so a
+# hibernated agent, a crashed one and one never woken ALL read `offline`. Measured on a
+# live host: 9 agents, every one `offline`, of which 6 were cleanly hibernated and 3 had
+# crashed. A guardian reporting from `status` alone therefore cannot tell a deliberate
+# sleep from an outage.
+#
+# States: running | hibernated | crashed | never_woken.
+#   hibernated is HEALTHY — it must never be reported as a fault.
+#   crashed means the clean hibernate path never ran: hibernateAgent unpersists the
+#   session, so a surviving persistence record proves the shutdown was not clean.
+#
+# THIS LIVES HERE, ON THE AUTHENTICATED SCRIPT, ON PURPOSE. A roster names every agent,
+# its uuid and its tmux session name — a map of the fleet, the same metadata class
+# /api/agents gates ("CC-GOV-008: Auth required to prevent metadata leaks via
+# Tailscale"). aimaestro-agent.sh already runs `check_api_running || exit 1` before its
+# dispatch table and sends the AID_AUTH bearer, so this subcommand inherits both instead
+# of duplicating — and drifting from — that boundary. An earlier revision shipped a
+# standalone CLI that read ~/.aimaestro with no auth and worked with the server DOWN;
+# it was reverted (3f069c22). With no server there is nothing to validate signatures
+# against, so nothing may execute.
+#
+# The JANITOR does not call this. The in-server daemon publishes each janitor the slice
+# it is entitled to, under that project's own .janitor/daemon_responses/.
+cmd_hibernation() {
+    local format="table"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --json)  format="json"; shift ;;
+            --table) format="table"; shift ;;
+            -h|--help)
+                cat << 'HELP'
+Usage: aimaestro-agent.sh hibernation [options]
+
+Report whether each agent is asleep or broken.
+
+Options:
+  --table   Human-readable table (default)
+  --json    Raw JSON roster
+
+States:
+  running       a live tmux session exists
+  hibernated    cleanly asleep — a HEALTHY state, never a fault
+  crashed       still persisted but tmux is gone; the clean hibernate never ran
+  never_woken   created but never started
+
+Also reports persistence rows referencing agents no longer in the registry
+(the class behind the 2026-07-25 agent-regrowth incident).
+HELP
+                return 0 ;;
+            *) print_error "Unknown option: $1"; return 1 ;;
+        esac
+    done
+
+    local api_base
+    api_base=$(get_api_base) || return 1
+    local -a auth_args=()
+    _build_auth_args auth_args
+    local response
+    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/agents/hibernation" 2>/dev/null)
+    if [[ -z "$response" ]]; then
+        print_error "Failed to fetch the hibernation roster"
+        return 1
+    fi
+    # An auth failure returns a JSON {error} with a 200-shaped body here; surface it rather
+    # than rendering an empty table, which would read as "the fleet is empty" (the
+    # could-not-look vs looked-and-found-nothing conflation this repo bans elsewhere).
+    if echo "$response" | jq -e 'has("error")' >/dev/null 2>&1; then
+        print_error "$(echo "$response" | jq -r '.error')"
+        return 1
+    fi
+
+    if [[ "$format" == "json" ]]; then
+        echo "$response"
+        return 0
+    fi
+
+    echo "$response" | jq -r '
+        (.counts | "running=\(.running)  hibernated=\(.hibernated)  crashed=\(.crashed)  never_woken=\(.never_woken)  orphaned=\(.orphaned)"),
+        "",
+        (.agents[] | "\(.state)\t\(.name // .agentId)\t\(.reason)"),
+        (if (.orphanedPersistedSessions | length) > 0 then
+            "", "orphaned persistence rows (agent no longer in the registry):",
+            (.orphanedPersistedSessions[] | "orphaned\t\(.name // .agentId)\tsession \(.sessionId)")
+         else empty end)
+    ' | column -t -s $'\t'
+}
+
 # cmd_config — the consolidated agent config a monitoring agent (the janitor,
 # MANAGER, …) needs in ONE call: the full registry record (launch program +
 # programArgs, governance title, workdir, hooks, deployment.cloud), the teams it

@@ -629,12 +629,24 @@ code. Once they do, the exits that ARE real become invisible, and the `cmd || ex
 the shell rules mandate becomes a liability: it aborts correct runs, so it gets deleted, so
 nothing catches the real failures.
 
-**Measured baseline, 2026-08-05.** On the **50 deployed** `aimaestro-*`/`amp-*`/`aid-*` CLIs,
-`--help` exited non-zero on **29**. `tests/unit/cli-help-exit-contract.test.ts` pins the
-violators BY NAME as a ratchet that may only shrink — it scans the **52 in `scripts/`** (the
-repo is the source of truth per §5, and it holds two the host had not been given:
-`aimaestro-groups.sh`, since deployed, and the Tier-C `aimaestro-check-decoupling.sh`), so
-52 − 28 listed violators = 24 compliant scripts asserted individually.
+**Measured baseline, 2026-08-05 — and then closed the same day.** On the **50 deployed**
+`aimaestro-*`/`amp-*`/`aid-*` CLIs, `--help` exited non-zero on **29**.
+`tests/unit/cli-help-exit-contract.test.ts` pins the violators BY NAME as a ratchet that may
+only shrink; it scans the **52 in `scripts/`** (the repo is the source of truth per §5).
+
+**29 → 1.** `aimaestro-agent.sh` was an ordering bug (the API gate ran before the dispatch).
+The other 28 were **one root**: `amp-helper.sh` resolved AMP identity at SOURCE time, so
+`--help` died before the calling script's own — correct — help branch was ever reached. The
+helper now recognises a help-only invocation and skips resolution, setting `AMP_DIR` to a
+**nonexistent** path so any operation attempted in that mode fails loudly rather than acting as
+some other agent. The identity abort itself is untouched: a real `amp-send` from an unbound
+session still exits 1, and still declines to print a pickable uuid list. `amp-create-branch.sh`
+needed a second, unrelated fix — it had no `--help` verb at all, so the flag was read as a
+positional argument.
+
+**`aid-auth.sh` is the one remaining violator**, deliberately: it PRINTS a token to stdout, so
+what `--help` should even mean there is a design question rather than this bug. It stays on the
+list rather than being quietly exempted.
 `aimaestro-agent.sh` is fixed. The remaining 28 are the whole `amp-*` family plus
 `aid-auth.sh`, and they share ONE root — sourcing `amp-helper.sh` resolves AMP identity at
 source time, so `--help` requires an identity it should never need. That is deliberately a

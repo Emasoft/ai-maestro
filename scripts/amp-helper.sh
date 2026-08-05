@@ -129,6 +129,37 @@ _index_lookup() {
     return 1
 }
 
+# ── `--help` is a LOCAL, OFFLINE operation (TRDD-3KJW8P6R, ai-maestro#121) ──
+#
+# This file is SOURCED, so the identity resolution below runs before the calling
+# script's own argument loop is ever reached. That made `--help` require an AMP
+# identity: `amp-send.sh --help` died here, at exit 1, while its own (perfectly
+# correct) `--help) show_help; exit 0` branch two dozen lines later was never
+# reached. Measured 2026-08-05: 28 of 50 deployed CLIs could not print their own
+# usage, which is SCRIPT-MANIFEST.md §6.4's contract violated fleet-wide.
+#
+# A sourced file sees the CALLER's positional parameters, and all 25 amp-* scripts
+# source this helper BEFORE consuming argv (verified, 0 exceptions), so `$*` here
+# is the caller's original command line.
+#
+# WHY THIS CANNOT BECOME A BYPASS — three independent reasons, because weakening
+# the identity gate is the one thing this change must not do:
+#   1. It sets AMP_DIR to a path that DOES NOT EXIST. Every derived path below
+#      (config, keys, inbox, sent) lands under it, so an operation attempted in
+#      this mode fails loudly on a missing file — it cannot silently act as some
+#      other agent. Failing toward a broken path is the point, not a side effect.
+#   2. The identity block is SKIPPED, not satisfied: no agent id is resolved, so
+#      there is no identity to borrow in the first place.
+#   3. Every amp-* script treats `--help`/`-h` anywhere in argv as help and exits
+#      before performing any operation.
+# The abort below is untouched — it still refuses, and still declines to print a
+# pickable uuid list (an error message must not hand the caller the exploit).
+case " $* " in
+    *" --help "*|*" -h "*)
+        : "${AMP_DIR:=/nonexistent/amp-help-only}"
+        ;;
+esac
+
 if [ -z "${AMP_DIR:-}" ]; then
     _amp_resolved=false
 

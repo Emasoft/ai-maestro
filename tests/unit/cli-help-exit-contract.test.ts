@@ -30,26 +30,22 @@ import { join } from 'path'
 const SCRIPTS = join(process.cwd(), 'scripts')
 
 /**
- * The 28 scripts that still violate §6.4, by name. THIS LIST MAY ONLY SHRINK.
+ * The scripts that still violate §6.4, by name. THIS LIST MAY ONLY SHRINK.
  *
- * All of them share ONE root: they `source amp-helper.sh`, which resolves AMP identity at
- * SOURCE time and exits when the session is not bound to an agent — so `--help` requires an
- * identity it has no reason to need. Fixing them is TRDD-3KJW8P6R and is deliberately
- * separate: the abort must not be weakened, because it is security code that purposefully
- * refuses to print a pickable uuid list (an error message must not hand the caller an
- * exploit).
+ * **27 amp-* entries were removed on 2026-08-05 (TRDD-3KJW8P6R).** They shared one root:
+ * `amp-helper.sh` resolved AMP identity at SOURCE time, so `--help` died before the calling
+ * script's own (correct) help branch was ever reached. The helper now recognises a help-only
+ * invocation and skips resolution — WITHOUT weakening the identity abort, which still refuses
+ * a real operation and still declines to print a pickable uuid list. Verified in the same run
+ * as the fix: 31/31 print help with no identity; a real `amp-send` from an unbound session
+ * still exits 1 with zero uuid-shaped strings in its output.
  *
- * `aid-auth.sh` is here for a different reason — it PRINTS a token, so `--help` is not a
- * distinct verb for it. That is a design question, not the same bug.
+ * `aid-auth.sh` REMAINS, and for a different reason: it PRINTS a token to stdout, so `--help`
+ * is not a distinct verb for it — deciding what help even means there is a design question,
+ * not the identity bug. Left listed rather than quietly exempted.
  */
 const KNOWN_VIOLATORS = new Set([
-  'amp-clone-repo.sh', 'amp-create-branch.sh', 'amp-create-repo.sh', 'amp-delete.sh',
-  'amp-download.sh', 'amp-fetch.sh', 'amp-helper.sh', 'amp-identity.sh',
-  'amp-inbox.sh', 'amp-init.sh', 'amp-kanban-archive.sh', 'amp-kanban-create-task.sh',
-  'amp-kanban-edit.sh', 'amp-kanban-get.sh', 'amp-kanban-list.sh', 'amp-kanban-move.sh',
-  'amp-list-local-repos.sh', 'amp-project-info.sh', 'amp-project-repos.sh', 'amp-read.sh',
-  'amp-register.sh', 'amp-reply.sh', 'amp-send.sh', 'amp-status.sh',
-  'amp-task-blocked.sh', 'amp-task-done.sh', 'amp-team-members.sh', 'aid-auth.sh',
+  'aid-auth.sh',
 ])
 
 /** Tier-A + amp/aid surface: the scripts a plugin may invoke. */

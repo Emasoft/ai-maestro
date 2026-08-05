@@ -66,6 +66,7 @@ import { isDependencyPlugin } from '@/lib/dependency-plugins'
 import { withMarketplaceLock } from '@/lib/marketplace-lock'
 import { isJanitorInstalledAndArmed as realIsJanitorInstalledAndArmed } from '@/lib/janitor-presence'
 import { stampChoreRun } from '@/lib/janitor-chore-stamp'
+import { consumeWorkRequest } from '@/lib/janitor-work-request'
 
 /** AuthContext used for every pipeline call this scheduler makes. The
  *  scheduler runs in-process inside the server and has no per-agent
@@ -315,6 +316,18 @@ async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoU
   stampChoreRun('marketplace-refresh')
 
   // 2. version-update — keep the janitor plugin itself current at user scope.
+  //
+  // CONSUME THE RELEASE TRIGGER FIRST (ai-maestro#102 step 3). The janitor's per-session detector
+  // raises `version-update-requested.flag` when it notices the cache is behind GitHub, and the
+  // owner of the chore is contracted to consume it clear-before-run. We never did: the flag was in
+  // `FLEET_CONTROL_FLAGS` but had ZERO readers, so it sat set on this host from 2026-08-02 — long
+  // after the 2.1.0->2.3.0 update it asked for had actually completed. A permanently-set trigger is
+  // worse than none: the requester cannot distinguish its new request from its own stale one, so
+  // the janitor's evidence that we were not running the chore was a flag we simply never cleared.
+  //
+  // Clearing BEFORE the update (not after) is what makes a request raised mid-run survive to the
+  // next pass. See `lib/janitor-work-request.ts`.
+  const hadUpdateRequest = consumeWorkRequest('version-update-requested.flag')
   try {
     const r = await ChangePlugin(null, {
       name: JANITOR_PLUGIN_NAME,
@@ -324,7 +337,13 @@ async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoU
       rolePluginSwap: true,
     }, SYSTEM_AUTH_CONTEXT)
     if (r.success) {
-      entries.push(entry(`absorbed:${JANITOR_PLUGIN_NAME}@${MARKETPLACE_NAME}`, 'updated', 'Updated to latest (user, absorbed duty)'))
+      entries.push(entry(
+        `absorbed:${JANITOR_PLUGIN_NAME}@${MARKETPLACE_NAME}`,
+        'updated',
+        hadUpdateRequest
+          ? 'Updated to latest (user, absorbed duty; a pending version-update request was consumed)'
+          : 'Updated to latest (user, absorbed duty)',
+      ))
     } else {
       const msg = r.error || 'Unknown failure'
       entries.push(entry(

@@ -131,6 +131,7 @@ Commands:
       --set <columns-json>      set columns (inline JSON array, 1..20 items)
       --set-file <path>         set columns from a JSON-array file
   tasks <teamId>                List the team's kanban tasks (GET /api/teams/<id>/tasks)
+  stats                         ALL-teams aggregate task/doc counts (no teamId; #64)
   reassign-cos <teamId> <agentUUID> [--password P]
                                 Alias of `update --cos` (MANAGER by AID; --password is USER/UI only)
   help
@@ -371,6 +372,13 @@ cmd_tasks() {
     _api GET "/api/teams/${id}/tasks"
 }
 
+# stats — ALL-TEAMS aggregate counts (ai-maestro#64 residual 3).
+#
+# Takes NO teamId, deliberately. Per-team counts were always obtainable by
+# aggregating `tasks <id>` client-side with jq; what had no CLI surface was the
+# fleet-wide aggregate, which is one route call instead of N+1.
+cmd_stats() { _api GET "/api/teams/stats"; }
+
 # reassign-cos <teamId> <agentUUID> [--password P] — reassign the team's
 # chief-of-staff via the dedicated route (POST /api/teams/<id>/chief-of-staff).
 # ALIAS of the #64-canonical `update --cos <uuid>` (RIFM4UXN Option A). Both hit
@@ -411,6 +419,7 @@ case "${1:-help}" in
     remove-agent) shift; cmd_remove_agent "$@" ;;
     kanban-config) shift; cmd_kanban_config "$@" ;;
     tasks)        shift; cmd_tasks "$@" ;;
+    stats)        shift; cmd_stats "$@" ;;
     reassign-cos) shift; cmd_reassign_cos "$@" ;;
     help|--help|-h) show_help ;;
     --version|-v) echo "aimaestro-teams.sh v1.2.0" ;;

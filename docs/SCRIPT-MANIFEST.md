@@ -190,13 +190,34 @@ Nothing is committed for you.
 |---|---|
 | `list` / `show <teamId>` | — |
 | `create --name N` | `--description D` `--agents u1,u2` `--type T` `--cos UUID` `--password P` `--gh-owner O` `--gh-repo R` |
-| `update <teamId>` | `--name` `--description` `--agents` `--orchestrator UUID\|null` `--gh-owner` `--gh-repo` |
+| `update <teamId>` | `--name` `--description` `--agents` `--orchestrator UUID\|null` **`--cos UUID` \| `--remove-cos`** `--gh-owner` `--gh-repo` |
 | `delete <teamId>` | `--password P` `--delete-agents` |
 | `add-agent <teamId> <agentUUID>` | `--password P` |
 | `remove-agent <teamId> <agentUUID>` | `--password P` |
 | `kanban-config <teamId>` | `--get` \| `--set <columns-json>` \| `--set-file <path>` (1..20 columns) |
 | `tasks <teamId>` | — |
-| `reassign-cos <teamId> <agentUUID> --password P` | — |
+| **`stats`** | — · **ALL-teams aggregate counts. Takes NO teamId** (ai-maestro#64 residual 3) |
+| `reassign-cos <teamId> <agentUUID>` | `--password P` *(OPTIONAL)* — thin alias of `update --cos` |
+
+**`update --cos <uuid>` / `--remove-cos` is the #64-canonical way to move the COS slot on an
+EXISTING team** (`20f5ba72`, TRDD-RIFM4UXN). **MANAGER-by-AID, no governance password** — R32.3
+forbids the password passing through a model — plus a **self-assign ban**: an agent may not make
+itself or its ally the COS, which would otherwise be a fleet-takeover primitive. The human/UI path
+keeps its password confirmation unchanged, so this is a strict superset with zero human-side
+weakening. `reassign-cos` survives as a thin alias and its `--password` is now OPTIONAL, not
+required as this table previously showed.
+
+The team PUT deliberately **strips `chiefOfStaffId`**, so moving the COS slot always goes through
+this verb rather than through a generic field update.
+
+`kanban-config --set` **rejects a custom board that drops any governance column id** (`06e8ffe6`).
+The 11 that must survive: `dev` `ai_review` `human_review` `complete` `publish` `deploy` `published`
+`live` `live_auditing` `failed` `superseded`. Freely renameable/omittable: `backburner` `todo`
+`design` `dispatch` `testing` `blocked`. A board that renamed `human_review` left the self-review
+ban's predicates unmatchable — the gate still ran, it just could never fire.
+
+`create --type T` is vestigial: `TeamType` is the single-valued union `'closed'`, so there is
+nothing to select. `update` has no `--type` and will not gain one (ai-maestro#64 residual 5).
 
 #### `aimaestro-governance.sh <command> [flags]` — governance
 

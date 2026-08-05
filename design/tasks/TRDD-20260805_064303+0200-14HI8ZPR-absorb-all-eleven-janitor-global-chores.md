@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T08:08:14+0200
+updated: 2026-08-05T08:10:10+0200
 implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -25,7 +25,7 @@ eht: []
 blocked-by: []
 release-via: none
 labels: [janitor, daemon-absorption, fleet-guardian, cross-repo]
-external-refs: [Emasoft/ai-maestro#111]
+external-refs: [Emasoft/ai-maestro#111, Emasoft/ai-maestro-janitor#194, Emasoft/ai-maestro-janitor#196, Emasoft/ai-maestro-plugin#55]
 ---
 
 # Server suppresses the janitor daemon entirely but absorbs only 5 of its 11 global chores

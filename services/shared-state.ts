@@ -109,6 +109,30 @@ export const sessionActivity: Map<string, number> = state.sessionActivity
  * presence exactly as before. Only a matching entry suppresses one record. Inverting that —
  * treating no-entry as "not human" — would make recovery race a live user, which is the
  * failure the presence gate exists to prevent and is strictly worse than what we had.
+ *
+ * THREE writers, and the third is not like the other two. `sessions-service.sendCommand` and
+ * `agents-core-service.sendAgentSessionCommand` mark unconditionally after a successful send.
+ * `agents-chat-service.sendChatMessage` marks only when its caller says an AGENT drove the call,
+ * because that same function also serves the dashboard's chat box — a human genuinely typing.
+ *
+ * DO NOT ADD a `lastPromptOrigin`-style "last verdict per session" map beside this one.
+ * It was designed and REJECTED (advisor review, 2026-08-05): a non-consuming "last per session"
+ * value re-creates the very race it claims to remove — between a consumer's write and its read a
+ * second prompt overwrites it, so the reader gets a confident answer about the wrong prompt. The
+ * per-request verdict already travels synchronously in the POST response body of
+ * `/api/sessions/me/user-input`, which is strictly better because it cannot be overwritten. If a
+ * second consumer ever appears that genuinely cannot see that response, key verdicts by PROMPT
+ * IDENTITY (session + a hash of the prompt text the hook forwards), never by "last".
+ *
+ * KNOWN GAPS, both real and both out of scope here — see ai-maestro#117:
+ *   - HEADLESS MODE has no `/api/sessions/me/user-input` route at all (0 of the headless router's
+ *     251 route entries match it), so the hook 404s, presence is never recorded, and the veto is
+ *     inert there. The bug it fixes is also absent there, but the presence FEATURE is missing.
+ *   - A SINGLE SCALAR per session loses the second of two injections that land before either echo
+ *     arrives, and the route GUESSES which pane the echo came from (`online ?? sessions[0]`) while
+ *     the marks key the pane actually written. Both are fixed structurally by the prompt-identity
+ *     protocol above, which needs the hook (a different repo) to start forwarding its own session
+ *     name and prompt hash.
  */
 export const injectedPrompts: Map<string, number> = state.injectedPrompts
 

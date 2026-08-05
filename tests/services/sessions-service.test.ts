@@ -683,6 +683,13 @@ describe('sendCommand', () => {
   // — otherwise the next genuine keystroke would be vetoed as an echo of a prompt never sent.
   // Asserting BOTH maps is what makes this discriminating: it fails if the two are ever marked
   // at the same point, which is the "simplification" a future reader is most likely to attempt.
+  //
+  // NEUTER RUNS (2026-08-05 — OBSERVED via scripts/dev/neuter, restore verified by blob hash).
+  // The second one performs exactly that simplification, and only this test catches it:
+  //   s/injectedPrompts\.set\(sessionName, Date\.now\(\)\)/void 0/
+  //   → 1 red / 66 green:  MARKS the session as injected after a successful send
+  //   s/^  sessionActivity\.set\(sessionName, Date\.now\(\)\)/  sessionActivity.set(sessionName, Date.now()); injectedPrompts.set(sessionName, Date.now())/m
+  //   → 1 red / 66 green:  does NOT mark a send it REFUSES with 409, though it still bumps activity
   it('does NOT mark a send it REFUSES with 409, though it still bumps activity', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockSharedState.sessionActivity.set('busy-agent', Date.now()) // very recent = not idle

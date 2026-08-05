@@ -212,6 +212,16 @@ describe('sendChatMessage — TUI menu refusal (P0-003)', () => {
  * "simplification" that inverts the veto's direction and starts swallowing genuine keystrokes,
  * which is worse than the bug being fixed. This suite does NOT mock @/services/shared-state, so
  * these assert the real Map.
+ *
+ * NEUTER RUNS (2026-08-05 — OBSERVED via scripts/dev/neuter, restore verified by blob hash).
+ * A complementary pair: each mutation reds a DIFFERENT single test, so neither test is carrying
+ * the other, and the conditional itself is pinned separately from the mark.
+ *   s/injectedPrompts\.set\(sessionName, Date\.now\(\)\)/void 0/
+ *   → 1 red / 10 green:
+ *       MARKS the pane when an AGENT drove the send
+ *   s/if \(opts\.markAsInjected\)/if (true)/
+ *   → 1 red / 10 green:
+ *       does NOT mark when the HUMAN dashboard drove the send
  */
 describe('sendChatMessage — the injected-prompt mark (#117)', () => {
   // This is a SIBLING describe, so the block above's beforeEach does NOT run for it — its full

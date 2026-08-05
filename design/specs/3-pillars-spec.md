@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.6.0
+spec-version: 1.7.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-08-04T15:33:39+0200
+updated: 2026-08-05T17:34:56+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -26,11 +26,11 @@ This is a REFERENCE doc: every normative clause starts with a stable `` `3P-<FAM
 anchor and a bold key-phrase, so you grep to the clause instead of reading through.
 
 ```text
-3P-GREP  all clauses of a family:   grep '3P-KAN'  (or META TRDD PRRD DAG IDX BND VER CHK MNT)
+3P-GREP  all clauses of a family:   grep '3P-KAN'  (or META TRDD ZON PRRD DAG IDX BND VER CHK MNT)
 3P-GREP  one clause by id:          grep '3P-KAN-01'
 3P-GREP  the authoritative columns: grep -A20 '@spec:kanban-columns'
 3P-GREP  the version stamp:         grep '^spec-version:'
-3P-GREP  families: META=arbiter KAN=kanban TRDD=trdd PRRD=prrd DAG=reference-dag
+3P-GREP  families: META=arbiter KAN=kanban TRDD=trdd ZON=zone-pipeline PRRD=prrd DAG=reference-dag
 3P-GREP            IDX=index-safety BND=ind/dep-boundary VER=versioning
 3P-GREP            CHK=conformance-checks MNT=maintenance
 ```
@@ -254,6 +254,120 @@ would ERROR on cannot be written in the first place — one definition, not two 
 post-hoc linter is `NOT` a substitute: it reports corruption that already happened, and the
 158 column-less cards this clause exists to prevent were every one of them written by a seam
 that checked only that each value was a string (TRDD-SCMPWF6R).
+
+## 3P-ZON — the ZONE pipeline: proposals → tasks → archived
+
+A **ZONE** is the lifecycle FOLDER a card sits in. A **COLUMN** is its position on the 17-column
+board. They are orthogonal and are constantly confused: 3P-KAN governs the column, 3P-TRDD-06 the
+scope root, and until this family nothing governed the zone. The zone answers *"is this card
+authorized, open, or finished?"*; the column answers *"how far along is it?"*.
+
+`3P-ZON-01` **four-zones** — `MUST`: every scope root holds exactly four lifecycle folders —
+`proposals/` (awaiting authorization), `tasks/` (OPEN work), `archived/` (once-approved, now
+terminal), `refused/` (never approved). A card `MUST` sit in exactly one. The four exist in BOTH
+scope roots (3P-TRDD-06), so every clause here applies by swapping one path.
+
+`3P-ZON-02` **zone-column-agreement** — `MUST`: zone and `column:` `MUST NOT` contradict.
+`proposals/` ⇒ `column: proposal`; `refused/` ⇒ `column: refused`; `archived/` ⇒ a terminal column;
+`tasks/` ⇒ any NON-terminal, non-`proposal`, non-`refused` column. A mismatch is an ERROR, not a
+warning: the open-card count is read off the zone, so a terminal column left in `tasks/` makes that
+count a lie — and that count is the one number anyone checks.
+
+`3P-ZON-03` **promotion-is-approval** — `MUST`: a card leaves `proposals/` for `tasks/` ONLY when
+the authority its `min-approval-requirement:` names has approved it. Promotion writes ALL THREE
+PLACES, in one commit (3P-ZON-10 · 3P-ZON-12):
+
+- **frontmatter** — `column: proposal` → the entry column; `approved: false` → `approved: true`;
+  `approval-judge:` = WHO decided; `approval-datetime:` = when; `updated:` bumped.
+- **body** — an appended `## Approval log` line naming the approver, the requirement satisfied, and
+  the RATIONALE. A card in `tasks/` asserts *someone with authority said yes*; with no logged reason
+  that assertion has no evidence behind it and cannot be audited later.
+- **the file** — `git mv` into `tasks/`.
+
+`3P-ZON-04` **refusal-is-terminal-but-not-archival** — `MUST`: a refused proposal moves to
+`refused/` with `column: refused`, `approved: rejected`, `approval-judge:`, `approval-datetime:`,
+and `MUST NOT` be archived. `refused/` means NEVER approved; `archived/` means ONCE approved and now
+finished — collapsing them destroys the distinction between *we decided not to* and *we did it*.
+**The body `MUST` record the refusal per the R49 protocol**: the PRECISE DEFECT (a named command,
+input path, or rule — "insufficiently secure" is not a finding), the BAR the proposal must clear to
+be approvable, and an explicit invitation to re-propose. A bare "denied" is malpractice even when the
+ruling is correct, because the proposer cannot read the approver's mind and will tear out the
+dependent work instead of fixing the named defect.
+
+`3P-ZON-05` **archive-eligible-set** — `MUST`: only `completed | cancelled | superseded | published
+| live` may enter `archived/`. `published` and `live` archive **AS THEMSELVES** — rewriting either
+to `completed` on the way in destroys the fact that it SHIPPED, which is the one fact an archive
+exists to preserve. An absent `release-via:` defaults to `none` (terminal `complete`). Archival
+writes all three places (3P-ZON-12): frontmatter gains `archived: true` beside the terminal
+`column:` and a bumped `updated:`; **the body `MUST` record the OUTCOME and WHY it is being
+archived** — what shipped, what was abandoned and on whose call, or which card superseded it. An
+archive entry whose body does not say why it ended is a file, not a record: the next reader can see
+that it stopped and never why, which is the single question an archive is consulted for.
+
+`3P-ZON-06` **failed-is-open** — `MUST NOT`: move a `failed` card to `archived/`. `failed` is an
+OPEN, retryable state and stays in `tasks/`. Giving up on one is a DISTINCT act — `cancelled` — and
+only that moves. An archived `failed` card is indistinguishable from work abandoned silently.
+
+`3P-ZON-07` **terminal-freeze-boundary** — `MUST`: a card in `archived/` is frozen. Three clauses,
+without which the rule forbids the very edit that closes a card: the closing edit is the LAST
+PERMITTED write, not the first forbidden one; `## Approval log` is append-only and EXEMPT (an audit
+trail that cannot record the act of closing is not an audit trail); and only `updated:` and
+`superseded-by:` may change afterwards. New work is a NEW card.
+
+`3P-ZON-08` **local-promotion** — `MUST`: promoting a LOCAL card to PROJECT moves the file with a
+plain `mv` (LOCAL is in no repo, so `git mv` does not apply) and the card `MUST` keep its id — ids
+are unique across BOTH roots (3P-TRDD-01), so nothing collides. **The move is the smallest part**:
+3P-ZON-12 applies unchanged, and the body `MUST` record that the card changed SCOPE and why it now
+matters to other contributors — a fact no field carries and no reader can reconstruct, since the
+card's whole LOCAL history is invisible in the clone that receives it. **And promotion `MUST` be
+refused while the card carries ANY outbound citation to a LOCAL card** (`parent-trdd`, `blocked-by`,
+`npt`, `eht`): a PROJECT card citing a LOCAL one is a dangling reference for every other
+contributor, who can never resolve a file absent from their clone. This is the one hard invariant
+the scope split introduces, and it is greppable.
+
+`3P-ZON-09` **the-wrapper-is-correctness-not-permission** — `MUST`: exactly ONE model governs zone
+moves — *files are the source of truth, audited asynchronously*. A CLI that performs zone moves
+(`aimaestro-trdd.sh` and successors) is a **correctness wrapper**: it exists to make 3P-ZON-03's
+three edits atomically and consistently, and `MUST NOT` be described or relied upon as an
+**authorization boundary**. The reason is structural, not political — any agent can write the file
+directly with an editor, so a gate covering only callers who choose to use it is a suggestion with
+extra steps. Authorization is enforced retrospectively (3P-ZON-11), never by the wrapper.
+
+`3P-ZON-10` **zone-move-is-atomic** — `MUST`: the `column:` edit and the file move land in the SAME
+commit. A commit carrying one without the other publishes a card whose zone and column contradict
+(3P-ZON-02). That window is not theoretical: it is the exact defect the zone linter exists to catch,
+and it has been committed in this repo.
+
+`3P-ZON-11` **authorization-is-audited-not-gated** — `MUST`: a card's approval claim (`mandate:
+true`, `mandated-by:`, `min-approval-requirement:`) is plain text its author controls, so it `MUST`
+be verified against an OBJECTIVE floor recomputed from what the card actually TOUCHED — the changed
+paths of the commits citing it — and `MUST NOT` be verified against the card's own declared floor,
+which compares a claim to itself and passes trivially. The check is necessarily RETROSPECTIVE (the
+objective evidence exists only once code lands); that is consistent with the model, not a weakness.
+A watchdog scheduled NOWHERE satisfies nothing here — being scheduled is part of the clause.
+
+`3P-ZON-12` **a-zone-move-writes-THREE-places** — `MUST`: every zone move updates the
+**frontmatter**, the **body**, and the **file location**, together, in one commit. **A zone move is
+not a file operation; it is the RECORD OF A DECISION**, and a `mv` alone records only that the
+decision's consequence happened, never that it was made, by whom, or why.
+
+- **frontmatter** carries the VERDICT, so it is machine-readable: `column:`, `approved:`
+  (`false` → `true` | `rejected`), `approval-judge:`, `approval-datetime:`, `archived: true` on
+  archival, and a bumped `updated:`.
+- **the body** carries the REASONING, because no field can hold it: the rationale on promotion, the
+  named defect and the bar on refusal (3P-ZON-04), the outcome and the why on archival (3P-ZON-05).
+- **the location** carries the current state at a glance, and is what every `find`/`grep` sweep and
+  every open-card count reads.
+
+`archived:` is DENORMALIZED and therefore owes an invariant a checker can enforce:
+`archived: true` ⟺ the file is in `archived/` ⟺ `column:` is in the 3P-ZON-05 set. Any two of the
+three disagreeing is an ERROR, and `MUST NOT` be auto-resolved — which of them is true is a
+judgment, and a tool that silently picks one loses the decision it was meant to preserve.
+
+Rationale, because the shortcut is always available and always tempting: a card moved by `mv` alone
+still *looks* correct in every listing — right folder, right column — and is unauditable forever
+after. The evidence that an authority approved it, or that a human decided to abandon it, exists
+only in the two places `mv` does not touch. **Ratified by the USER, 2026-08-05.**
 
 ## 3P-PRRD — Pillar 3: the PRRD contract
 

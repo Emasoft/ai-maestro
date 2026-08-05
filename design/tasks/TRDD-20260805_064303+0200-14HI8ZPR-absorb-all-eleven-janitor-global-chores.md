@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T07:18:52+0200
+updated: 2026-08-05T08:02:01+0200
 implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -142,12 +142,60 @@ wrong as a *blanket*: a chore whose population is host-wide is not absorbable by
 owns one registry. The honest resolution for `session-liveness` is the SPLIT — and it costs
 nothing, because the janitor's exclusion table already implements our half of it.
 
-**NEXT ACTION (the wire-up, small):** name `session-liveness` in `SERVER_ABSORBED_TASKS`,
-stamp it from `runFleetLivenessTick`, and decide the cadence (janitor 2 min vs our 5 min default;
-the stamp's staleness window is what makes the choice observable). **Blocked on one thing first:
-the janitor cannot currently tell a HIBERNATED agent from a CRASHED one** (USER directive,
-2026-08-05) — see the new derived task; a chore that reports deliberate hibernation as a fault is
-worse than one that reports nothing.
+## ⏵ SLICE 3 LANDED — the hibernation probe, and a SECURITY CORRECTION — 2026-08-05
+
+USER directive: give the janitor a way to tell a HIBERNATED agent from a CRASHED one. It is a
+genuine gap — `Agent['status']` is `active | offline | deleted`, so hibernated, crashed and
+never-woken all read `offline`. Measured live: **9 agents, every one `offline`; 6 cleanly
+hibernated, 3 crashed, plus 14 orphaned persistence rows.** `hibernateAgent` unpersists
+(`agents-core-service.ts:2587`), so a surviving record proves the clean path never ran; all 3 were
+checked against the stale-by-rename hypothesis and refuted (each row's session id equals its
+agent's computed session name).
+
+**⚠ THE FIRST IMPLEMENTATION WAS A SECURITY DEFECT, and the reasoning that produced it is the part
+worth keeping.** It shipped as a standalone CLI that read `~/.aimaestro` directly with **no
+authentication**, dumped the whole fleet roster (every agent uuid, name and tmux session name), and
+**worked with the server down** — which I documented as a FEATURE in both the module header and the
+commit message. Reverted in `3f069c22` on the USER's ruling: agent status is not public data; with
+no server there is nothing to validate signatures against, so nothing may execute; the
+server-integrated daemon is the only party authorized to read this data or run these commands.
+
+The root error: `aimaestro-agent.sh` runs `check_api_running || exit 1` and sends an `AID_AUTH`
+bearer. I read that as an **obstacle to route around**, because the janitor daemon has neither. It
+is the security boundary. And the premise was false anyway — **the janitor never needs to call in;
+the daemon publishes to it.**
+
+**What shipped instead**, all green (365 files / 5137 pass / 2 skip; `pillars:lint` 0;
+`trddgrep validate` at its 1-ERROR baseline):
+
+| piece | commit | note |
+|---|---|---|
+| `lib/agent-hibernation.ts` — the ONE derivation | `eb0e9e95` | `classifyLiveness` now calls it; its 18 tests pass UNCHANGED, which is the proof the extraction is behaviour-preserving |
+| `GET /api/agents/hibernation` behind `authenticateFromRequest` | `400e9f9d` | plus `services/agent-hibernation-service.ts` (two in-server callers only) |
+| `aimaestro-agent.sh hibernation` | `400e9f9d` | a subcommand on the EXISTING authenticated script, inheriting the boundary rather than duplicating it |
+| `lib/janitor-daemon-publisher.ts` → `<project>/.janitor/daemon_responses/` | `28c99c48` | derived paths only; no output-path parameter exists, and adding one would be the bug |
+
+**Least privilege:** an agent workdir receives `agentScopedView` — its own record plus fleet-wide
+COUNTS. The full roster goes only to the install tree. The whole map in every workdir would mean
+compromising any one agent yields the fleet.
+
+**Three defects the tests caught before landing**, all mine, all in the hardening itself:
+`isUnder` is a raw string compare so `<agents>/../../etc` passed; `resolve()` is lexical so a
+SYMLINK out of the agents root still passed; and comparing a lexical child against a realpathed
+root refused *every* legitimate write (on macOS `/var` → `/private/var`) — a gate that always
+refuses fails as quietly as one that always allows. Two neuters now pin the lexical and physical
+checks independently, and getting there required fixing the test twice: the first assertion matched
+a phrase both refusal messages share, and the fixture was built with `path.join`, which normalizes
+`..` away at construction so the "traversal" input contained none.
+
+**NEXT ACTION (the wire-up, small):** name `session-liveness` in `SERVER_ABSORBED_TASKS`, stamp it
+from `runFleetLivenessTick`, and decide the cadence (janitor 2 min vs our 5 min default; the stamp's
+staleness window is what makes the choice observable). No longer blocked — the hibernated-vs-crashed
+answer now exists, so the chore can report a deliberate sleep as healthy instead of as a fault.
+
+**NOT yet done:** `yarn build` + restart, so the new route is not in the running bundle yet (a
+restart does NOT rebuild — `app/` is bundled into `.next`). The publisher is in `server.mjs`, which
+IS loaded at runtime, so it goes live on a plain restart. Verify by EFFECT, never by `git log`.
 
 ⚠ **Adding a chore to `ABSORBED_CHORES` is NOT what absorbs it — running it is.** A stamp for a
 chore nobody runs is strictly worse than no stamp: it reports healthy while nothing happens, which
@@ -203,7 +251,9 @@ act on other sessions, and a bug there is a fleet-wide event rather than a local
 - [x] `<task-name>.last-run.ts` written for all five already-absorbed chores — `01a56c40`, all five sites
 - [ ] each of the six unabsorbed chores given a verdict: absorb (with owner + cadence) or hand back — 1 of 6 done (`session-liveness`)
 - [x] `session-liveness` **verdict recorded**: SPLIT — wire-up our half (already running, armed, verified in the live process env), hand back the host-wide half (the server has no reach; the janitor's `server_owned` exclusion already makes the two disjoint)
-- [ ] `session-liveness` wire-up SHIPPED — blocked on the hibernated-vs-crashed probe below
+- [ ] `session-liveness` wire-up SHIPPED — no longer blocked; the hibernated-vs-crashed answer now exists
+- [x] the janitor can tell HIBERNATED from CRASHED — `lib/agent-hibernation.ts`, served by an AUTHENTICATED route and published per-janitor to `<project>/.janitor/daemon_responses/` (`eb0e9e95`, `400e9f9d`, `28c99c48`; the unauthenticated first attempt reverted in `3f069c22`)
+- [ ] `yarn build` + restart so the new route is in the running bundle, then verify by EFFECT
 - [x] a test that fails when an absorbed chore runs without writing its stamp — plus its complement (the gate refusing must NOT stamp, or an unowned chore would look owned) and an epoch-SECONDS pin, since a milliseconds value parses fine and reads as permanently fresh for ~55 000 years
 - [x] reply on `ai-maestro#111` with the decision, so the janitor can drop its side of the ambiguity — [comment 5187649837](https://github.com/Emasoft/ai-maestro/issues/111#issuecomment-5187649837)
 

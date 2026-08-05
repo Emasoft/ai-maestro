@@ -199,3 +199,80 @@ describe('sendChatMessage — TUI menu refusal (P0-003)', () => {
     expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The injected-prompt MARK on the chat surface (ai-maestro#117).
+ *
+ * Chat is the THIRD `sendKeys(…, {literal:true, enter:true})` in the product and the one
+ * governance tooling actually drives, so an unmarked chat send forges human presence exactly as
+ * the other two did. It is also the ONLY one that is caller-conditional, because the same
+ * function serves the dashboard's chat box — a human typing, whose presence is real.
+ *
+ * That makes the SECOND test here the load-bearing one: marking unconditionally would be an easy
+ * "simplification" that inverts the veto's direction and starts swallowing genuine keystrokes,
+ * which is worse than the bug being fixed. This suite does NOT mock @/services/shared-state, so
+ * these assert the real Map.
+ */
+describe('sendChatMessage — the injected-prompt mark (#117)', () => {
+  // This is a SIBLING describe, so the block above's beforeEach does NOT run for it — its full
+  // setup has to be repeated here. Omitting it inherited the previous test's
+  // `sessionExists=false` and every case 400'd before ever reaching the marking line.
+  beforeEach(async () => {
+    const { injectedPrompts } = await import('@/services/shared-state')
+    injectedPrompts.clear()
+    vi.clearAllMocks()
+    mockGetAgent.mockReturnValue(TEST_AGENT)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockRuntime.sendKeys.mockResolvedValue(undefined)
+    mockRuntime.capturePane.mockResolvedValue('shell prompt $ ')
+    mockExistsSync.mockReturnValue(false)
+  })
+
+  it('MARKS the pane when an AGENT drove the send', async () => {
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const { injectedPrompts } = await import('@/services/shared-state')
+
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello there', { markAsInjected: true })
+
+    expect(result.status).toBe(200)
+    expect(injectedPrompts.get(TEST_AGENT.name)).toBeDefined()
+  })
+
+  // THE DIRECTION GUARD. The dashboard chat box is a HUMAN typing; its presence must still be
+  // recorded, so this path must leave no mark. Both spellings are asserted — the explicit false
+  // and the omitted option — because the route passes Boolean(auth.agentId), which is `false`,
+  // while any other caller that simply forgets the option gets `undefined`.
+  it('does NOT mark when the HUMAN dashboard drove the send', async () => {
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const { injectedPrompts } = await import('@/services/shared-state')
+
+    const explicit = await sendChatMessage(TEST_AGENT.id, 'hello there', { markAsInjected: false })
+    expect(explicit.status).toBe(200)
+    expect(injectedPrompts.has(TEST_AGENT.name)).toBe(false)
+
+    const omitted = await sendChatMessage(TEST_AGENT.id, 'hello again')
+    expect(omitted.status).toBe(200)
+    expect(injectedPrompts.has(TEST_AGENT.name)).toBe(false)
+  })
+
+  // Twin of the 409 cases in sessions-service / agents-core-service: a send that is REFUSED
+  // injects nothing, so it must leave no mark — otherwise the next genuine keystroke is vetoed
+  // as the echo of a prompt that was never delivered. Chat refuses on a TUI permission menu.
+  it('does NOT mark a send REFUSED by the TUI-menu guard, even when the agent asked to mark', async () => {
+    mockExistsSync.mockImplementation((p: string) => p === STATE_FILE_PATH)
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      status: 'waiting_for_input',
+      notificationType: 'permission_prompt',
+      updatedAt: new Date().toISOString(),
+    }))
+
+    const { sendChatMessage } = await import('@/services/agents-chat-service')
+    const { injectedPrompts } = await import('@/services/shared-state')
+
+    const result = await sendChatMessage(TEST_AGENT.id, 'hello there', { markAsInjected: true })
+
+    expect(result.status).toBe(409)
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
+    expect(injectedPrompts.has(TEST_AGENT.name)).toBe(false)
+  })
+})

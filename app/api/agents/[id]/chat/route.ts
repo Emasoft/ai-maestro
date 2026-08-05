@@ -104,7 +104,13 @@ export async function POST(
     if (!body.message || typeof body.message !== 'string') {
       return NextResponse.json({ success: false, error: 'Missing or invalid "message" field (must be a non-empty string)' }, { status: 400 })
     }
-    const result = await sendChatMessage(agentId, body.message)
+    // ai-maestro#117 — mark ONLY when an agent drove this. `auth.agentId` is set for an agent
+    // Bearer and undefined for the human/system-owner cookie, which is the dashboard chat box —
+    // a human typing, whose presence must still be recorded. Same discriminator the veto route
+    // uses. R42 makes the agent case self-only, so the marked pane is the caller's own.
+    const result = await sendChatMessage(agentId, body.message, {
+      markAsInjected: Boolean(auth.agentId),
+    })
     if (result.error) {
       return NextResponse.json({ success: false, error: result.error }, { status: result.status })
     }

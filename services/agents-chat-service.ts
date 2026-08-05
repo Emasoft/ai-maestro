@@ -7,6 +7,7 @@
 
 import { getAgent } from '@/lib/agent-registry'
 import { getRuntime } from '@/lib/agent-runtime'
+import { injectedPrompts } from '@/services/shared-state'
 import * as fs from 'fs'
 import * as fsp from 'fs/promises'
 import * as path from 'path'
@@ -396,7 +397,8 @@ async function detectTuiMenu(
  */
 export async function sendChatMessage(
   agentId: string,
-  message: string
+  message: string,
+  opts: { markAsInjected?: boolean } = {}
 ): Promise<ServiceResult<Record<string, unknown>>> {
   if (!message || typeof message !== 'string') {
     return { error: 'Message is required', status: 400 }
@@ -432,6 +434,20 @@ export async function sendChatMessage(
   }
 
   await runtime.sendKeys(sessionName, message, { literal: true, enter: true })
+
+  // ai-maestro#117 — the THIRD injection surface, and the one governance tooling actually uses.
+  // Identical `sendKeys(…, {literal:true, enter:true})` to the two in sessions-service and
+  // agents-core-service, so the pane cannot tell it from a human's typing either.
+  //
+  // CALLER-CONDITIONAL, and that is the whole subtlety: this same function serves the dashboard's
+  // chat box, which IS a human typing. Marking that would invert the veto's direction and make it
+  // swallow real presence — worse than the bug. The caller passes markAsInjected only when an
+  // AGENT drove the call (its `auth.agentId` is set); the human/system-owner path leaves it false.
+  // Per R42 (TRDD-BF3JN4TL) `send-command` is SELF-ONLY for agents, so when it IS an agent the
+  // target is the caller's own pane and the echo is its own — exactly the one prompt to veto.
+  if (opts.markAsInjected) {
+    injectedPrompts.set(sessionName, Date.now())
+  }
 
   console.log('[Chat Service] Message sent successfully')
 

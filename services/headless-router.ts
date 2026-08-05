@@ -1390,7 +1390,11 @@ const routes: Route[] = [
     const chatAuthz = authorize(auth, 'send-command', params.id)
     if (!chatAuthz.allowed) { sendJson(res, 403, { error: chatAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await sendChatMessage(params.id, body.message))
+    // ai-maestro#117 parity with the Next.js twin: mark ONLY when an agent drove this, never for
+    // the human/system-owner path. See the rationale in services/agents-chat-service.ts.
+    sendServiceResult(res, await sendChatMessage(params.id, body.message, {
+      markAsInjected: Boolean(auth.agentId),
+    }))
   }},
 
   // Metrics (memory/search/tracking/index-delta routes removed — TRDD-70a521d9 Phase 2)

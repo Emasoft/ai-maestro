@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:20:58+0200
+updated: 2026-08-05T23:21:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -385,6 +385,38 @@ So the "which file is authoritative" fork now has a sharp consequence:
 
 **Resolve the authority question first.** It is no longer a detail: one branch is a
 half-hour's work, the other is a governance decision about a file we may not own.
+
+#### The ops grammar is a TRANSACTION, and it dissolves the lost-update race
+
+USER: *"this will also help to queue the edits and execute them as a series or ordered
+transactions."* Correct, and the gate already implements it — verified, not assumed:
+
+```ts
+export async function editSettings(rawPath: string, ops: SettingsOp[], opts = {}) {
+  if (!Array.isArray(ops) || ops.length === 0) throw new TypeError(...)
+  const path = resolveSettingsPath(rawPath)
+  return updateJson(path, data => { applySettingsOps(data, ops) }, {...})
+}
+```
+
+`ops` is an **array**, and every op in it is applied inside a **single `updateJson` mutator
+callback** — so N edits are ONE locked read-modify-write, applied in order, not N races.
+
+That is the property this card needed and I had been treating as an open risk. Flipping 257
+marketplace flags is **one transaction**, not 257 chances to lose the boot-copy race
+recorded above. A serialisable op is also a *storable* one, so edits can be accumulated
+across callers and drained as one ordered batch — which is what makes "queue them" more than
+a convenience: it is how concurrent writers stop competing.
+
+And the reader half is already correct too: `readSettings` delegates to `readJson`, which
+per its own comment *"distinguishes 'missing' from 'unreadable' rather than collapsing both
+to `{}`, so a caller can tell a first-run file from a corrupt one"* — precisely the
+refuse-on-unexpected-shape guard I was specifying two sections above. Also already solved.
+
+**Net effect on this card:** for the `settings.json` branch there is no remaining safety work
+to design. One `editSettings` call, one ops array, one transaction. The only open question is
+still which file is authoritative — and if it is `known_marketplaces.json`, none of the above
+applies to it, which is now the strongest argument for settling that first.
 
 ## Non-goals
 

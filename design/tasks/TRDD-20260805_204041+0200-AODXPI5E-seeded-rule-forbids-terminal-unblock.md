@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T21:29:16+0200
+updated: 2026-08-05T22:17:05+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -98,9 +98,31 @@ and found none. **It is gated** — `lib/sudo-guard.ts:422` via `STRICT_AGENT_RU
 comment says that guard is the ONLY check for `panel` and `queue`. Reverted. Concluding "ungated"
 from one file was the error; the gate was in another layer.
 
-### Not done here
+### (h) LEDGER AUDIT — DONE (2026-08-05T22:20, commit `6299ae72`)
 
-- **(h) ledger audit** — an unblock is not yet written to the agent ops ledger. Own TRDD.
+New `LedgerOp` **`unblock_prompt`**, declared rather than left to the open taxonomy for
+precisely the reason `fleet_restart` was declared for R42.7 — that precedent states it
+outright: *when a rule makes the audit trail part of the grant, the op must be groupable by an
+external tool, not merely verifiable.* The taxonomy is additive and `verify()` does not
+enum-check `op`, so no existing chain is affected.
+
+Emitted from the **SERVICE**, not the route (headless calls services directly — same altitude
+and same SF4 reasoning as Gate 0b). Scoped to a **CROSS-agent unblock by an agent caller**: a
+self-unblock is self-drive and predates R42.8, and logging it would bury the one entry that
+matters under the many that do not; the system owner is not audited either, since R42.8 governs
+agents.
+
+The diff is **empty on purpose** — an unblock mutates no registry field. Its audit value is
+entirely WHO did it TO WHOM and WHEN, carried by the `authAction`/`authAgentId`/`authActor`
+triple, the same shape `send_message` uses.
+
+**Complementary neuter pair, each reddening exactly ONE distinct test:** disabling the emit →
+`AUDITS a cross-agent unblock`; widening the scope so a self-unblock also audits → `does NOT
+audit a SELF-unblock`. The negative is the load-bearing one, and modelling `registryLedger` as
+a real spy rather than a no-op is what makes the positive assertable at all — *"it did not
+crash"* is a different claim from *"it was recorded"*.
+
+### Not done here
 - **`ama-session` skill** (scope item 4) — still scoped to self, so the cross-agent procedure stays
   undiscoverable. It lives in `Emasoft/ai-maestro-plugin`, so it is an issue or a fork+PR there,
   not an edit here.

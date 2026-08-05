@@ -136,8 +136,14 @@ describe('classifyRepo — the silence rules', () => {
   })
 
   it('stays silent when the viewer is not admin, or admin is indeterminate', () => {
-    expect(classifyRepo(cleanFacts({ admin: false }))).toEqual([])
-    expect(classifyRepo(cleanFacts({ admin: null }))).toEqual([])
+    // The facts must be ones that WOULD produce findings, or this test is vacuous: with a
+    // fully-compliant repo the result is [] whether the admin guard exists or not, so removing
+    // the guard would redden nothing. (Caught by predicting the neuter before running it.)
+    const wouldFlag = { rulesets: [], classicProtected: false, hasWorkflows: false }
+    expect(classifyRepo(cleanFacts({ ...wouldFlag, admin: true })).length).toBeGreaterThan(0)
+
+    expect(classifyRepo(cleanFacts({ ...wouldFlag, admin: false }))).toEqual([])
+    expect(classifyRepo(cleanFacts({ ...wouldFlag, admin: null }))).toEqual([])
   })
 
   it('does NOT claim UNPROTECTED when classic protection is merely indeterminate', () => {

@@ -61,7 +61,7 @@ import { resolveLaunchArgs } from '@/services/agent-launch-args'
 import { initAgentAMPHome, getAgentAMPDir } from '@/lib/amp-inbox-writer'
 import { buildAgentSessionEnv } from '@/lib/session-env'
 import { initializeAllAgents, getStartupStatus } from '@/lib/agent-startup'
-import { sessionActivity } from '@/services/shared-state'
+import { sessionActivity, injectedPrompts } from '@/services/shared-state'
 import { getRuntime, prepareShellForLaunch, preflightPaneKeychain, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
 import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
@@ -1600,6 +1600,11 @@ export async function sendAgentSessionCommand(
 
     // Update activity timestamp
     sessionActivity.set(sessionName, Date.now())
+    // ai-maestro#117: the pane cannot tell these keystrokes from a human's, and the agent's
+    // UserPromptSubmit hook will shortly report them as human presence. Record that WE sent
+    // them so /api/sessions/me/user-input can veto exactly that one echo. Marked only AFTER
+    // a successful send — a refused one (409 on a busy pane) produces no prompt to veto.
+    injectedPrompts.set(sessionName, Date.now())
 
     return {
       data: {

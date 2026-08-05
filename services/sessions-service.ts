@@ -33,7 +33,7 @@ import { getHosts, getSelfHost, isSelf, getHostById } from '@/lib/hosts-config'
 import { persistSession, loadPersistedSessions, unpersistSession } from '@/lib/session-persistence'
 import { parseNameForDisplay } from '@/types/agent'
 import { buildAgentSessionEnv } from '@/lib/session-env'
-import { sessionActivity, broadcastStatusUpdate } from '@/services/shared-state'
+import { sessionActivity, injectedPrompts, broadcastStatusUpdate } from '@/services/shared-state'
 import { getRuntime, prepareShellForLaunch, preflightPaneKeychain, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
 import crypto from 'crypto'
 import { statePath } from '@/lib/ecosystem-constants'
@@ -1349,6 +1349,10 @@ export async function sendCommand(
 
   await runtime.cancelCopyMode(sessionName)
   await runtime.sendKeys(sessionName, command, { literal: true, enter: addNewline })
+  // ai-maestro#117 — twin of the mark in agents-core-service. Placed AFTER the send, not at the
+  // activity bump above, because that one runs BEFORE the idle check and so also fires for a send
+  // this function then REFUSES with 409; a refused send injects no prompt and must veto nothing.
+  injectedPrompts.set(sessionName, Date.now())
 
   return { data: { success: true, sessionName, commandSent: command, method: 'tmux-send-keys', wasIdle: true }, status: 200 }
 }

@@ -50,6 +50,7 @@ declare global {
   // eslint-disable-next-line no-var
   var _sharedState: {
     sessionActivity: Map<string, number>
+    injectedPrompts: Map<string, number>
     terminalSessions: Map<string, PTYSessionState>
     statusSubscribers: Set<WebSocket>
     companionClients: Map<string, Set<WebSocket>>
@@ -61,6 +62,7 @@ declare global {
 if (!globalThis._sharedState) {
   globalThis._sharedState = {
     sessionActivity: new Map<string, number>(),
+    injectedPrompts: new Map<string, number>(),
     terminalSessions: new Map<string, PTYSessionState>(),
     statusSubscribers: new Set<WebSocket>(),
     companionClients: new Map<string, Set<WebSocket>>(),
@@ -88,6 +90,27 @@ const state = globalThis._sharedState
 
 /** sessionName -> last activity timestamp (ms). Populated by server.mjs PTY data handler. */
 export const sessionActivity: Map<string, number> = state.sessionActivity
+
+/**
+ * sessionName -> epoch ms of the last prompt THE SERVER ITSELF injected into that pane.
+ *
+ * WHY THIS EXISTS (ai-maestro#117). Injection is literal keystrokes
+ * (`sendKeys(…, {literal:true})`), so Claude Code's `UserPromptSubmit` hook cannot tell an
+ * injected prompt from a typed one — and that hook is what POSTs
+ * `/api/sessions/me/user-input`, the record `fleet-recovery-runner` reads as "a human is at
+ * the keyboard, defer". Result: every queued task, nudge or self-trigger silently reported
+ * human presence and stood recovery down. No attacker required; the system forged it.
+ *
+ * The hook cannot be fixed where it runs — it has no way to know. The SERVER does know,
+ * because it did the injecting, so the knowledge lives here and the route consults it.
+ *
+ * DIRECTION MATTERS, and it is the whole design: this is a **veto on positive evidence**,
+ * never an inference from absence. A missing entry means "we did not inject" ⇒ record
+ * presence exactly as before. Only a matching entry suppresses one record. Inverting that —
+ * treating no-entry as "not human" — would make recovery race a live user, which is the
+ * failure the presence gate exists to prevent and is strictly worse than what we had.
+ */
+export const injectedPrompts: Map<string, number> = state.injectedPrompts
 
 /** sessionName -> PTY process + connected clients. Populated by server.mjs WebSocket handler. */
 export const terminalSessions: Map<string, PTYSessionState> = state.terminalSessions

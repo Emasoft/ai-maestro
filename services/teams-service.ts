@@ -375,7 +375,9 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
             avatar: robotAvatar,
             workingDirectory: cosWorkDir,
             taskDescription: `Chief-of-Staff for team "${name}"`,
-            role: 'chief-of-staff',
+            // No `role` — not part of the taxonomy (TRDD-4Z62YRDG). COS-ness is the
+            // TITLE assigned below plus team.chiefOfStaffId; a persisted role field
+            // never expressed it.
             createSession: false,
           })
           cosId = cosAgent.id

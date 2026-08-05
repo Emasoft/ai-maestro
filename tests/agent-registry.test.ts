@@ -1053,3 +1053,59 @@ describe('incrementAgentMetric', () => {
     expect(result).toBe(false)
   })
 })
+
+// ============================================================================
+// No `role` field — the taxonomy is TITLE + role-plugin (TRDD-4Z62YRDG, #122)
+// ============================================================================
+
+/**
+ * USER ruling 2026-08-06 (verbatim): "there is no such thing as a `role`. There is
+ * the `title`, and there is the `role-plugin`. role is not part of the taxonomy."
+ * These pin the three writers' silence: createAgent persists no key, a smuggled
+ * request value is ignored (not kept), and the load migration strips a legacy key
+ * WHATEVER its value — not only the old 'autonomous' default.
+ */
+describe('role is not part of the taxonomy (TRDD-4Z62YRDG)', () => {
+  it('createAgent persists NO role key — in the returned record and on disk', async () => {
+    const agent = await createAgent(makeCreateRequest({ name: 'no-role-agent' }))
+    expect('role' in agent).toBe(false)
+
+    const saved = JSON.parse(fileStore[statePath('agents', 'registry.json')]) as Record<string, unknown>[]
+    const mine = saved.find(a => a.name === 'no-role-agent')
+    expect(mine).toBeDefined()
+    expect('role' in mine!).toBe(false)
+  })
+
+  it('a role smuggled into the request (legacy caller) is IGNORED, not kept', async () => {
+    const req = makeCreateRequest({ name: 'smuggled-role' })
+    // The field no longer exists on CreateAgentRequest; a stale caller could still
+    // send it over the wire. It must not land in the record.
+    ;(req as unknown as Record<string, unknown>).role = 'member'
+    const agent = await createAgent(req)
+    expect('role' in agent).toBe(false)
+  })
+
+  it('loadAgents strips a legacy role key WHATEVER its value, leaving the title untouched', async () => {
+    // Fresh module instance: the migration runs once per process
+    // (_claudeArgsMigrationDone), and the static import at the top of this file has
+    // already consumed it for the shared instance.
+    vi.resetModules()
+    const file = statePath('agents', 'registry.json')
+    fileStore[file] = JSON.stringify([
+      // The old default — the shape that was misread as contradicting the title.
+      { id: 'legacy-1', name: 'legacy-default', role: 'autonomous', governanceTitle: 'manager', status: 'active', hostId: 'local', sessions: [] },
+      // An EXPLICIT non-default value — stripped too under the ruling (an earlier fix
+      // kept this one verbatim; that behaviour is the one this test forbids).
+      { id: 'legacy-2', name: 'legacy-explicit', role: 'member', status: 'active', hostId: 'local', sessions: [] },
+    ])
+    fileMtimes[file] = ++mtimeCounter
+
+    const fresh = await import('@/lib/agent-registry')
+    const agents = fresh.loadAgents() as unknown as Record<string, unknown>[]
+    const byId = new Map(agents.map(a => [a.id, a]))
+    expect(byId.size).toBe(2) // non-vacuity: the seeded registry really was read
+    expect('role' in byId.get('legacy-1')!).toBe(false)
+    expect('role' in byId.get('legacy-2')!).toBe(false)
+    expect(byId.get('legacy-1')!.governanceTitle).toBe('manager')
+  })
+})

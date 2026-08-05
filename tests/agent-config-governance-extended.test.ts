@@ -302,7 +302,6 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     taskDescription: 'Extended governance testing',
     hostId: 'local',
     sessions: [],
-    role: 'member',
     status: 'active',
     workingDirectory: '/tmp/test-agent',
     createdAt: '2026-01-15T10:00:00.000Z',

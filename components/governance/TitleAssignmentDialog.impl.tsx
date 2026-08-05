@@ -520,7 +520,10 @@ export default function TitleAssignmentDialog({
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ governanceTitle: null, role: 'autonomous' }),
+            // No `role` in the body — the field is not part of the taxonomy
+            // (TRDD-4Z62YRDG): title + role-plugin only. AUTONOMOUS is expressed by
+            // `governanceTitle: null`, which the server normalizes to 'autonomous'.
+            body: JSON.stringify({ governanceTitle: null }),
           },
           await freshSudoToken(),
         )

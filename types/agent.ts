@@ -144,7 +144,6 @@ export interface AgentSession {
   index: number                     // 0, 1, 2... (0 = primary/coordinator)
   status: 'online' | 'offline'      // Runtime: is tmux session alive?
   workingDirectory?: string         // Override agent's default working directory
-  role?: string                     // Future: "coordinator", "backend", "frontend"
   createdAt?: string                // When session was created
   lastActive?: string               // Last activity timestamp
 }
@@ -212,9 +211,9 @@ export interface Agent {
   tags?: string[]               // Optional tags (e.g., ["backend", "api", "typescript"])
   capabilities?: string[]       // Technical capabilities (e.g., ["typescript", "postgres"])
 
-  // Ownership, Role & Team
+  // Ownership & Team. No `role` field: the taxonomy is TITLE (governanceTitle) +
+  // role-plugin, nothing else (USER ruling 2026-08-06, TRDD-4Z62YRDG, ai-maestro#122).
   owner?: string                // Owner name or email
-  role?: AgentRole              // Messaging role: 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' | 'maintainer' (default: 'autonomous')
   governanceTitle?: AgentRole | null   // Explicit governance title (null = cleared/unset)
   team?: string                 // Team name (e.g., "Backend Team", "23blocks")
 
@@ -495,7 +494,6 @@ export interface AgentSummary {
   name: string                  // Agent identity (was alias)
   label?: string                // Optional display override (was displayName)
   avatar?: string               // Avatar URL or emoji
-  role?: AgentRole              // Messaging role
   hostId: string                // Host where agent lives
   hostUrl?: string              // Host URL for API calls
   status: AgentStatus
@@ -530,12 +528,11 @@ export interface CreateAgentRequest {
   deploymentType?: DeploymentType // Where to deploy (local or cloud)
   hostId?: string               // Target host for agent creation (defaults to 'local')
   owner?: string
-  role?: AgentRole              // Messaging role (default: 'autonomous')
   team?: string
   documentation?: AgentDocumentation
   metadata?: AgentMetadata
   // MAINTAINER title properties (R19)
-  githubRepo?: string             // Required when role === 'maintainer'. Format: 'owner/repo'.
+  githubRepo?: string             // Required when governanceTitle === 'maintainer'. Format: 'owner/repo'.
   // DEPRECATED: for backward compatibility
   /** @deprecated Use 'name' instead. */
   alias?: string
@@ -556,7 +553,6 @@ export interface UpdateAgentRequest {
   program?: string              // AI client: 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro'
   tags?: string[]
   owner?: string
-  role?: AgentRole              // Update messaging role
   governanceTitle?: AgentRole | null   // Explicit governance title (undefined = no change; null = clear)
   team?: string
   workingDirectory?: string     // Update default working directory

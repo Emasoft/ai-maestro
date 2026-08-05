@@ -221,18 +221,19 @@ export function loadAgents(): Agent[] {
           needsMigration = true
         }
       }
-      // Strip the persisted DEFAULT messaging role (TRDD-4Z62YRDG, ai-maestro#122).
-      // Records used to be created with `role: request.role || 'autonomous'`, baking the
-      // default in — and on a manager-titled agent the pair `role: "autonomous"` +
-      // `governanceTitle: "manager"` was misread as a title contradiction by two separate
-      // Claude readers, one of which refused a legitimate MANAGER mandate over it.
-      // A defaulted and an explicit 'autonomous' are indistinguishable in old records, and
-      // they are also SEMANTICALLY IDENTICAL to every reader (audited 2026-08-06: nothing
-      // reads the persisted value; readers needing the messaging default apply it at read
-      // time), so stripping the value == the default loses nothing and removes the one
-      // shape that reads as a contradiction. A NON-default role is kept verbatim.
+      // Strip the persisted `role` field ENTIRELY (TRDD-4Z62YRDG, ai-maestro#122).
+      // USER ruling 2026-08-06: "there is no such thing as a `role`. There is the
+      // `title`, and there is the `role-plugin`. role is not part of the taxonomy."
+      // Records used to be created with `role: request.role || 'autonomous'`, and on a
+      // manager-titled agent the pair `role: "autonomous"` + `governanceTitle: "manager"`
+      // was misread as a title contradiction by two separate Claude readers, one of which
+      // refused a legitimate MANAGER mandate over it. Audited 2026-08-06: zero production
+      // sites read the persisted value (attestation derives from isManager()/
+      // isChiefOfStaffAnywhere() at message time; the UI handles absence), so deleting
+      // the key — WHATEVER its value, not just the old default — loses nothing and
+      // removes a field that should never have existed.
       for (const agent of agents) {
-        if ((agent as { role?: string }).role === 'autonomous') {
+        if ('role' in agent) {
           delete (agent as { role?: string }).role
           needsMigration = true
         }
@@ -245,7 +246,7 @@ export function loadAgents(): Agent[] {
         // 'agents' lock. If this save fails, the migration retries
         // on the next process restart.
         void withLock('agents', async () => { saveAgents(agents) })
-          .then(() => console.log('[Agent Registry] Migrated registry (claudeArgs → programArgs; defaulted role stripped) (locked)'))
+          .then(() => console.log('[Agent Registry] Migrated registry (claudeArgs → programArgs; role field stripped) (locked)'))
           .catch((err) => console.error('[Agent Registry] Migration save failed:', err))
       }
       _claudeArgsMigrationDone = true
@@ -592,16 +593,11 @@ export async function createAgent(request: CreateAgentRequest): Promise<Agent> {
     tags: normalizeTags(request.tags),
     capabilities: [],
     owner: request.owner,
-    // ONLY when explicitly requested (TRDD-4Z62YRDG, ai-maestro#122). Persisting the
-    // default (`|| 'autonomous'`) made a defaulted role indistinguishable from an explicit
-    // one, and on a manager-titled agent the pair `role: "autonomous"` +
-    // `governanceTitle: "manager"` read as a title contradiction — a live AUTONOMOUS agent
-    // refused a legitimate MANAGER mandate on the strength of it. Absent means "default
-    // applies"; readers that need the messaging default apply `?? 'autonomous'` at READ
-    // time. Audited 2026-08-06: zero production sites read the persisted field's value
-    // (the attestation path derives from isManager()/isChiefOfStaffAnywhere(), the UI
-    // handles absence), so omitting it changes what a record CLAIMS, not what anything does.
-    ...(request.role ? { role: request.role } : {}),
+    // No `role` — the field is not part of the taxonomy (TRDD-4Z62YRDG, ai-maestro#122;
+    // USER ruling 2026-08-06: an agent has a TITLE (governanceTitle) and a ROLE-PLUGIN,
+    // nothing else). Messaging authority derives from the title at message time
+    // (isManager()/isChiefOfStaffAnywhere()); the loadAgents migration strips the key
+    // from old records. Do not reintroduce it, even as an explicit-request passthrough.
     team: request.team,
     documentation: request.documentation,
     metadata: request.metadata,
@@ -1424,7 +1420,7 @@ export async function deleteAgentBySession(sessionName: string, hard: boolean = 
  * Add a session to an existing agent (for multi-session support)
  * Returns the new session index
  */
-export async function addSessionToAgent(agentId: string, workingDirectory?: string, role?: string): Promise<number | null> {
+export async function addSessionToAgent(agentId: string, workingDirectory?: string): Promise<number | null> {
   return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
@@ -1450,7 +1446,6 @@ export async function addSessionToAgent(agentId: string, workingDirectory?: stri
     index: nextIndex,
     status: 'offline',
     workingDirectory: workingDirectory || agents[index].workingDirectory,
-    role,
     createdAt: new Date().toISOString(),
   })
 

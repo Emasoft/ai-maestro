@@ -102,7 +102,6 @@ export default function AgentCreationHelper({ onClose, onComplete }: AgentCreati
     ...createEmptyDraft(),
     program: 'claude-code',
     model: 'sonnet',
-    role: 'member',
   })
   const [agentDescPath, setAgentDescPath] = useState('')
   const [agentDescDisplay, setAgentDescDisplay] = useState('')

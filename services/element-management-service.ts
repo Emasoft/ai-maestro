@@ -2519,7 +2519,7 @@ export async function ChangeTitle(
     //       passes `null` today means "revert to AUTONOMOUS" (teams-service
     //       on member-remove, governance-service on manager-demote, the
     //       chief-of-staff replace route, and the TitleAssignmentDialog
-    //       which sends `{governanceTitle: null, role: 'autonomous'}`).
+    //       which sends `{governanceTitle: null}`).
     //       Previously `null` slipped through Gates 15/16 without installing
     //       `ai-maestro-autonomous-agent`, violating R9.13 silently. The
     //       normalization here fixes that regression end-to-end.
@@ -2559,7 +2559,7 @@ export async function ChangeTitle(
     // these clients cannot load Claude Code role-plugins.
     // Uses effectiveTitle (post-Gate 1 normalization). Previously this
     // referenced `newTitle` directly, which meant a PATCH body of
-    // `{governanceTitle: null, role: 'autonomous'}` passed through as
+    // `{governanceTitle: null}` passed through as
     // "no title → no plugin required", skipping Gates 15/16 and leaving
     // the agent with no role-plugin. Now `null` becomes `'autonomous'`
     // at Gate 1 and this check correctly resolves `ai-maestro-autonomous-agent`.
@@ -9976,10 +9976,10 @@ export async function CreateAgent(
             tags: desired.tags || undefined,
             model: desired.model || undefined,
             taskDescription: desired.taskDescription || '',
-            // No `role:` — deliberately (TRDD-4Z62YRDG). This was `role: 'autonomous'`,
-            // hand-writing the default into the persisted record; absent means the same
-            // thing to every reader and cannot be misread as contradicting a later
-            // governanceTitle. See createAgent in lib/agent-registry.ts for the audit.
+            // No `role:` — the field is not part of the taxonomy (TRDD-4Z62YRDG; USER
+            // ruling 2026-08-06: an agent has a TITLE and a ROLE-PLUGIN, nothing else).
+            // This was `role: 'autonomous'`, hand-writing a field the registry no longer
+            // persists at all. See createAgent in lib/agent-registry.ts.
           })
           c.agent = created
           result.agentId = created.id

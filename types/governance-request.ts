@@ -92,7 +92,6 @@ export interface GovernanceRequestPayload {
   teamId?: string                           // Target team
   fromTeamId?: string                       // Source team (for transfers)
   toTeamId?: string                         // Destination team (for transfers)
-  role?: AgentRole                          // Role to assign
   configuration?: ConfigurationPayload      // Agent configuration (for configure-agent)
 }
 

@@ -13,7 +13,6 @@ import {
   User,
   FolderOpen,
   Cpu,
-  Shield,
 } from 'lucide-react'
 
 // --- Types (local to avoid circular imports from API routes) ---
@@ -22,7 +21,6 @@ export interface AgentConfigDraft {
   name?: string
   program?: string
   model?: string
-  role?: 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous'
   workingDirectory?: string
   skills: Array<{ name: string; description: string }>
   plugins: Array<{ name: string; description: string }>
@@ -57,12 +55,6 @@ const itemVariants = {
   initial: { opacity: 0, y: -8, scale: 0.95 },
   animate: { opacity: 1, y: 0, scale: 1 },
   exit: { opacity: 0, y: 8, scale: 0.95 },
-}
-
-const ROLE_LABELS: Record<string, string> = {
-  manager: 'Manager',
-  'chief-of-staff': 'Chief of Staff',
-  member: 'Member',
 }
 
 // --- Section header with icon, title, and count badge ---
@@ -219,7 +211,6 @@ export default function AgentConfigPanel({
           <InfoRow icon={User} label="Name" value={config.name} />
           <InfoRow icon={Cpu} label="Program" value={config.program} />
           <InfoRow icon={Cpu} label="Model" value={config.model} />
-          <InfoRow icon={Shield} label="Role" value={config.role ? ROLE_LABELS[config.role] : undefined} />
           <InfoRow icon={FolderOpen} label="Dir" value={config.workingDirectory} />
         </div>
       </div>

@@ -107,7 +107,8 @@ export async function apiResetAgentTitle(agentId: string): Promise<void> {
   await fetch(`${BASE_URL}/api/agents/${agentId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ governanceTitle: null, role: 'autonomous' }),
+    // No `role` — not part of the taxonomy (TRDD-4Z62YRDG); null title = AUTONOMOUS.
+    body: JSON.stringify({ governanceTitle: null }),
   })
 }
 

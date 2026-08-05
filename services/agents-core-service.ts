@@ -165,6 +165,17 @@ export interface AgentSessionCommandParams {
   command: string
   requireIdle?: boolean
   addNewline?: boolean
+  /**
+   * Which authorization action this send is. Defaults to 'send-command', which
+   * R42 REVOKES cross-agent — that default is the safe one and must stay.
+   *
+   * 'unblock-prompt' is the R42.8 exception and is NOT a bypass switch: setting
+   * it buys a title-scoped gate (MANAGER any / COS own-team / never an
+   * ASSISTANT) AND a precondition the caller cannot opt out of — the target must
+   * actually BE blocked on a pending prompt. So it can never carry new work into
+   * an idle agent, which is the line between unblocking and driving.
+   */
+  authAction?: 'send-command' | 'unblock-prompt'
 }
 
 export interface LinkSessionParams {
@@ -1539,7 +1550,7 @@ export async function sendAgentSessionCommand(
   idleThreshold?: number
 }>> {
   try {
-    const { command, requireIdle = true, addNewline = true } = params
+    const { command, requireIdle = true, addNewline = true, authAction = 'send-command' } = params
 
     // ── Gate 0: Authorization (SVC2-CRIT-02 fix, 2026-05-06) ──────
     // Same threat as SVC2-CRIT-01 but reached via /api/agents/:id/session —
@@ -1554,7 +1565,7 @@ export async function sendAgentSessionCommand(
         governanceTitle: authContext.governanceTitle,
         teamId: authContext.teamId,
       }
-      const authz = authorize(authResult, 'send-command', agentId)
+      const authz = authorize(authResult, authAction, agentId)
       if (!authz.allowed) {
         return { error: authz.reason || 'Not authorized to send command to this agent', status: 403 }
       }
@@ -1567,6 +1578,23 @@ export async function sendAgentSessionCommand(
     const agent = getAgent(agentId)
     if (!agent) {
       return { error: 'Agent not found', status: 404 }
+    }
+
+    // ── Gate 0b: R42.8 blocked-only precondition ──────────────────
+    // An unblock is authorized because the agent ASKED a question and is waiting
+    // on the answer. With no pending prompt there is no question, so the send
+    // would be plain injection wearing the exception's name — refuse it here, in
+    // the service, so no route (present or future) can turn the narrow verb into
+    // a general channel by passing the flag. R42.8(a) + (g).
+    if (authAction === 'unblock-prompt' && !authContext.isSystemOwner) {
+      const { readPendingPrompt } = await import('@/services/sessions-service')
+      const pending = agent.workingDirectory ? readPendingPrompt(agent.workingDirectory) : null
+      if (!pending) {
+        return {
+          error: 'R42.8: no prompt is pending for this agent — an unblock may only answer a question the agent itself raised',
+          status: 409,
+        }
+      }
     }
 
     const agentNameForSession = agent.name

@@ -47,6 +47,10 @@ export type AuthAction =
   | 'delete-agent'      // DELETE agent
   | 'send-command'      // Send command to agent's tmux session
   | 'restart-session'   // Restart agent session
+  // R42.8 (USER ruling, 2026-08-05): read/answer the prompt a STALLED agent is
+  // blocked on. Deliberately its OWN action and NOT a loosening of
+  // 'send-command' — R42 revokes cross-agent send-command and that stays true.
+  | 'unblock-prompt'    // Read/answer another agent's PENDING prompt (R42.8 only)
   | 'hibernate-agent'   // Hibernate agent
   | 'wake-agent'        // Wake agent
   | 'link-session'      // Link a tmux session name to an agent record (registry write)
@@ -161,6 +165,9 @@ function agentAuthority(title: string | undefined | null): number {
 const SELF_DRIVE_ACTIONS: ReadonlySet<AuthAction> = new Set<AuthAction>([
   'send-command',
   'hibernate-agent',
+  // Answering your OWN pending prompt is the original `ama-session` use case and
+  // predates R42.8 — it is self-drive, not an exception to anything.
+  'unblock-prompt',
 ])
 
 /**
@@ -194,6 +201,11 @@ const SELF_DRIVE_ACTIONS: ReadonlySet<AuthAction> = new Set<AuthAction>([
  *   • SELF-drive — an agent driving its OWN surface (the janitor's `/compact`,
  *     answering its own prompt). That is SELF_DRIVE_ACTIONS above, and it is
  *     exactly what the `targetAgentId !== auth.agentId` test preserves.
+ *   • UNBLOCK (R42.8, USER ruling 2026-08-05) — 'unblock-prompt', a SEPARATE
+ *     action with its own title-scoped gate below. It answers a question the
+ *     stalled agent itself raised; it never assigns work. Do NOT fold it in
+ *     here, and do NOT re-open 'send-command' to reach it: the whole point is
+ *     that the narrow verb is authorized and the general one stays revoked.
  *
  * ⚠ HONEST LIMIT — this closes the API, NOT the tmux channel. Every agent runs
  * under one OS uid, so `tmux send-keys -t <other-agent>` still succeeds and no
@@ -502,6 +514,93 @@ export function authorize(
       reason:
         `R42: no agent may ${action} on another agent — not even a MANAGER or CHIEF-OF-STAFF. ` +
         `Messaging is the only channel of agent-to-agent influence: ask, never inject.`,
+    }
+  }
+
+  // ── R42.8 — the UNBLOCK exception, title-scoped ─────────────
+  // USER ruling 2026-08-05 (verbatim, first person, having been reminded R42 is
+  // absolute): a question or permission query blocking an agent from doing its
+  // work is the ONE case where reading and answering another agent's terminal is
+  // necessary — "only the MANAGER and the CHIEF-OF-STAFF are allowed".
+  //
+  // Why this does not undo R42's rationale: an INJECTED command is the victim's
+  // own action taken without its judgment. A pending prompt is the opposite —
+  // the agent already CHOSE the action and is waiting on an input IT asked for.
+  // Answering it resumes the agent's own decision; it never supplies a new one.
+  //
+  // Reached only when targetAgentId !== auth.agentId — self-unblock is
+  // SELF_DRIVE_ACTIONS below, and it must stay that way so an agent can always
+  // answer its own prompt regardless of title.
+  //
+  // WHY A TITLE-SCOPED GATE IS WORTH ANYTHING HERE: the caller's identity and
+  // title are NOT self-asserted. THE SERVER IS THE NOTARY of every agent
+  // identity — it created or imported the agent, it registered the agent and its
+  // AID into the signed ledger, it alone holds the private key that signs and
+  // rotates that AID, and it alone signs and verifies AMP messages. So
+  // `auth.agentId` / `auth.governanceTitle` arriving here are the server reading
+  // back its OWN notarized record, which is why this decision can be trusted at
+  // all. An agent CLAIMING a title over any other channel proves nothing.
+  if (action === 'unblock-prompt' && targetAgentId !== auth.agentId) {
+    // Fails CLOSED on an unresolved target, same reasoning as the R42 test
+    // above: "we could not prove who this is" must never read as "it is fine".
+    if (!targetAgentId) {
+      return {
+        allowed: false,
+        reason: 'R42.8: unblocking requires a resolved target agent — refusing an unidentified target',
+      }
+    }
+
+    let targetTitle: string | null = null
+    try {
+      const targetAgent = getAgent(targetAgentId)
+      if (!targetAgent) {
+        return {
+          allowed: false,
+          reason: `R42.8: target agent ${targetAgentId} is not in the registry — refusing to unblock an unknown session`,
+        }
+      }
+      targetTitle = (targetAgent.governanceTitle as string | undefined)?.toLowerCase() ?? null
+    } catch (err) {
+      // A registry read that THREW is not a registry read that said "no". Deny,
+      // and say so — a swallowed error here would silently widen the exception.
+      console.error('[authorization] R42.8 target lookup failed:', err)
+      return {
+        allowed: false,
+        reason: 'R42.8: could not read the target agent record — refusing to unblock',
+      }
+    }
+
+    // (d) NEVER an ASSISTANT, under ANY title. Its session is the surface a
+    // human talks THROUGH, so text injected there is indistinguishable from
+    // something its human said — an unblock would forge the human's intent.
+    if (targetTitle === 'assistant') {
+      return {
+        allowed: false,
+        reason:
+          'R42.8: no title may unblock an ASSISTANT — its session is a human conversation surface, ' +
+          'so injected text is indistinguishable from something the human said.',
+      }
+    }
+
+    if (title === 'manager') {
+      return { allowed: true }
+    }
+
+    if (title === 'chief-of-staff') {
+      const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
+      const targetTeamId = lookupTeamIdForAgent(targetAgentId)
+      if (cosTeamId && cosTeamId === targetTeamId) {
+        return { allowed: true }
+      }
+      return {
+        allowed: false,
+        reason: 'R42.8: a CHIEF-OF-STAFF may only unblock agents of its OWN team',
+      }
+    }
+
+    return {
+      allowed: false,
+      reason: `R42.8: only a MANAGER or a CHIEF-OF-STAFF may unblock another agent (caller title: ${title})`,
     }
   }
 

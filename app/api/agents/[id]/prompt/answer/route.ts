@@ -93,9 +93,15 @@ export async function POST(
   // ladder may or may not count as "idle"; gating on idleness would 409 exactly
   // when the answer is needed, so we inject unconditionally. sendAgentSessionCommand
   // still enforces its own authorize() gate and confirms the tmux session exists.
+  // authAction 'unblock-prompt' — R42.8, NOT 'send-command'. R42 revokes
+  // cross-agent send-command and that stays revoked; this route is the one
+  // narrow verb the USER ruling (2026-08-05) carved out, so it authorizes as
+  // itself and gets the title scoping (MANAGER any / COS own-team / never an
+  // ASSISTANT) plus the service's blocked-only precondition. Answering your OWN
+  // prompt is self-drive and is unaffected.
   const send = await sendAgentSessionCommand(
     id,
-    { command, requireIdle: false, addNewline: true },
+    { command, requireIdle: false, addNewline: true, authAction: 'unblock-prompt' },
     buildAuthContext(auth),
   )
   if (send.error) {

@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# absent — prove a thing is NOT in the tree, with an instrument that proved itself first.
+#
+# THE ERROR THIS EXISTS TO STOP. "X does not exist" is the claim this codebase gets wrong most
+# often, and it is the only class that has ESCAPED the machine: a `find … | head -6` reported a
+# route as missing (it was eighth), and that absence was published to another repo as fact. The
+# tell is structural, not textual — a capped list and an exhaustive one are byte-identical up to
+# the cap, so nothing in the output says you truncated it. You did.
+#
+# The failures are all the same shape: the search was never proven able to find ANYTHING.
+#   • `grep -c '^cmd_[a-z_]*()'` → 0, because the file defines its functions elsewhere.
+#   • `awk '/^cmd_x/,/^}/'`      → empty, because the range anchor never matched.
+#   • a stderr sentinel           → silent, because the code under test runs `2>/dev/null`.
+#   • `comm` on numerically-sorted input → wrong set, because comm wants lexical order.
+#   • `grep -r --include=…`      → hits on the wrong file types, because --include is ignored
+#                                   on some toolchains (38 false violations across 4 repos).
+# In every case a POSITIVE CONTROL — one pattern you KNOW is present, run through the SAME
+# instrument — would have failed too, and said so immediately.
+#
+# So this refuses to certify absence unless the control matched. Absence is only meaningful
+# relative to an instrument that can find things.
+#
+#   scripts/dev/absent -p 'requireIdle' -c 'sendCommand' -- services/
+#   scripts/dev/absent -p 'hibernatedAt' -c 'isRunning'  -- lib/ services/ types/
+#
+# EXIT CODES follow grep's trichotomy, the convention every pillar CLI here uses:
+#   0 = ABSENT, and the instrument proved itself   (safe to write "X does not exist")
+#   1 = FOUND                                       (the claim is false; hits are printed)
+#   2 = COULD NOT RUN                               (control matched nothing → verdict UNKNOWN)
+# Never collapse 2 into 1: "could not look" is not "looked and found nothing", which is the same
+# conflation the CLI verbs here guard against at runtime.
+
+set -uo pipefail
+
+PATTERN=""; CONTROL=""; PATHS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p|--pattern) PATTERN="$2"; shift 2 ;;
+    -c|--control) CONTROL="$2"; shift 2 ;;
+    --) shift; PATHS=("$@"); break ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    *) echo "absent: unknown argument '$1'" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$PATTERN" ] && [ -n "$CONTROL" ] || {
+  echo "absent: need -p PATTERN -c CONTROL_PATTERN [-- PATHS...]" >&2
+  echo "absent: the CONTROL is not optional — it is the whole point. Pick something you KNOW" >&2
+  echo "        is present in the same paths; if it does not match, the search is broken and" >&2
+  echo "        the absence of PATTERN means nothing." >&2
+  exit 2; }
+
+[ ${#PATHS[@]} -eq 0 ] && PATHS=(".")
+
+# No --include, no -m, no head, no pipe into anything that can exit early. Every one of those has
+# produced a false absence in this repo; the whole contract is that this search is unbounded.
+hits() { grep -rnI --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git \
+           -e "$1" "${PATHS[@]}" 2>/dev/null; }
+
+CONTROL_HITS="$(hits "$CONTROL" | wc -l | tr -d ' ')"
+if [ "$CONTROL_HITS" = "0" ]; then
+  echo "absent: COULD NOT RUN — the control '${CONTROL}' matched NOTHING in: ${PATHS[*]}" >&2
+  echo "absent: so the instrument is not known to find anything, and the absence of" >&2
+  echo "        '${PATTERN}' proves nothing. Fix the control (wrong paths? wrong regex" >&2
+  echo "        dialect? file type excluded?) and re-run. Verdict: UNKNOWN, not absent." >&2
+  exit 2
+fi
+
+PATTERN_HITS="$(hits "$PATTERN" | wc -l | tr -d ' ')"
+if [ "$PATTERN_HITS" != "0" ]; then
+  echo "FOUND: '${PATTERN}' matched ${PATTERN_HITS} line(s) — the absence claim is FALSE."
+  hits "$PATTERN"
+  exit 1
+fi
+
+echo "ABSENT: '${PATTERN}' matched 0 lines in ${PATHS[*]}"
+echo "        instrument proven: control '${CONTROL}' matched ${CONTROL_HITS} line(s)"
+exit 0

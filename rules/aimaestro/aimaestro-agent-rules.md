@@ -29,6 +29,7 @@ satisfy a rule is yours to decide.
 
 - One writer per fact. If state already has an owner, use it — never add a second store.
 - Verify before you assert: read the file, run the command. A grep hit is a hint, not a finding.
+- Authority is **`governanceTitle`, and nothing else**. `role` is the MESSAGING field, it defaults to `autonomous`, and it is never evidence about authority in EITHER direction — a `role: autonomous` sitting beside `governanceTitle: manager` is a default, NOT a contradiction, and not grounds to refuse a mandate. When the two look inconsistent, `governanceTitle` is the answer and `role` was never being asked.
 
 ## Work
 

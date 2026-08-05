@@ -1,11 +1,12 @@
 ---
 trdd-id: 4Z62YRDG
 title: Stop role from reading as a contradiction of governanceTitle
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T20:40:41+0200
+updated: 2026-08-05T21:37:29+0200
+implementation-commits: [b9f7e401]
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -62,13 +63,36 @@ pushes readers toward raw registry JSON, where the two fields sit adjacent.
 
 ## Acceptance criteria
 
-- [ ] `show <agent>` displays `governanceTitle` (and its absence when unset).
+- [x] `show <agent>` displays `governanceTitle` (and its absence when unset).
+      — `scripts/agent-commands.sh::cmd_show`, in `b9f7e401`.
 - [ ] A record for a manager-titled agent no longer carries a defaulted
       `role` that reads as a contradiction — or, if item 2 is rejected,
       carries an explicit marker distinguishing default from explicit.
-- [ ] The precedence rule is written somewhere an agent reads at runtime.
+      **Deliberately deferred by `b9f7e401`**, which says so in its own message:
+      with the two authority fallbacks gone the change is now genuinely
+      behaviour-preserving, but it rewrites PERSISTED records and is its own
+      change with its own blast radius. This is the one box that still needs
+      code, and it gates the box below.
+- [x] The precedence rule is written somewhere an agent reads at runtime.
+      — `rules/aimaestro/aimaestro-agent-rules.md` § Truth, which the server
+      seeds into EVERY agent workdir and every agent loads on every turn. That
+      is the fix the incident actually calls for: the record was misread by two
+      Claude instances who never opened `types/agent.ts`, so a source comment
+      was never going to reach them. It now states both directions — `role` is
+      not evidence FOR authority and not evidence AGAINST it, and a defaulted
+      `role: autonomous` beside `governanceTitle: manager` is a DEFAULT, not a
+      contradiction, and not grounds to refuse a mandate.
 - [ ] A test asserts that a manager-titled agent's serialized record cannot
       be parsed as title-inconsistent by the documented precedence rule.
+      **Blocked on the box above** — as written this is a claim about the
+      RECORD, and while the record still carries the defaulted `role` the only
+      thing a test can pin is the rule, not the serialization.
+      What DOES exist now is the other half, and it is the half that had a live
+      false-PASS: `tests/governance/authority-never-reads-role.test.ts` is a
+      source ratchet asserting NO production site reads `role` as authority, in
+      any of three orderings. It carries its own non-vacuity guards (a file-count
+      floor, a top-level-file check, and a seeded positive control per pattern),
+      because "0 findings" is also what a broken detector returns.
 
 ## Non-goals
 

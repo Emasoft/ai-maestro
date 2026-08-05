@@ -645,6 +645,12 @@ describe('sendCommand', () => {
   // The pair discriminates the two ways this can regress:
   //   - fresh+default → 200 catches the bump moving back ABOVE the check;
   //   - send-then-immediate-send → 409 catches the bump being DELETED outright.
+  //
+  // NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+  //   re-adding the bump ABOVE the check (at :1339) → 2 red / 67 green: exactly this pair.
+  //   deleting the success-path bump (:1354) → 3 red / 66 green: this pair PLUS
+  //   'updates activity timestamp after sending command' — which the fix PROMOTED from
+  //   vacuous (it used to pass on the refusal path's write) to a real guard of the bump.
   it('the idle gate PASSES a fresh session under the DEFAULT requireIdle (#110 fixed)', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     // Deliberately NO sessionActivity seeded: this session has never been touched.

@@ -22,6 +22,7 @@
 //    fight the one-daemon-per-host rule forbids.
 
 import { fleetActuationBlocked } from '@/lib/janitor-control'
+import { classifyHibernation } from '@/lib/agent-hibernation'
 
 /** Liveness classes, mirroring the janitor's diagnosis in server terms. */
 export type LivenessClass =
@@ -77,19 +78,34 @@ export function classifyLiveness(
   input: LivenessInput,
   stallThresholdMs: number = DEFAULT_STALL_THRESHOLD_MS,
 ): LivenessVerdict {
-  if (!input.hasSession) {
-    return { class: 'offline', recoveryRecommended: false, reason: 'no session record (hibernated/never-woken)' }
-  }
-  if (!input.exists) {
-    // The registry has a session but the tmux session is GONE. PERSISTED (the registry still expects
-    // it running) ⇒ it CRASHED → `dead`. NOT persisted ⇒ a clean hibernate → `offline`. This
-    // `isPersisted` split is the ONLY reliable crashed-vs-hibernated discriminator (`hasSession` is
-    // ~always true for a named agent). `dead` is DETECTION-ONLY for now (recoveryRecommended:false):
-    // hard recovery (relaunch) is the gated Phase C hard-actuator, which also debounces the
-    // post-restart sessions.json overcompleteness before it ever kills/relaunches anything.
-    return input.isPersisted
-      ? { class: 'dead', recoveryRecommended: false, reason: 'persisted session but tmux gone — process crashed (Phase C hard-recovery, gated)' }
-      : { class: 'offline', recoveryRecommended: false, reason: 'no live session (hibernated/offline)' }
+  // The never-woken / hibernated / crashed split is ONE decision, shared with the janitor's
+  // auth-free probe and the JANITOR REPORT (`lib/agent-hibernation.ts`). It used to be inlined here,
+  // which made it reachable only from inside the running server; three consumers now need the same
+  // answer, and a second copy of a four-way classification drifts toward "the fleet thinks it is
+  // fine". Only the MAPPING onto liveness classes stays here, so this function's observable
+  // behaviour — classes, flags and reason strings — is unchanged by the extraction.
+  //
+  // `dead` is DETECTION-ONLY (recoveryRecommended:false): hard recovery (relaunch) is the gated
+  // Phase C hard-actuator, which also debounces the post-restart sessions.json overcompleteness
+  // before it ever kills/relaunches anything.
+  const hibernation = classifyHibernation({
+    hasSession: input.hasSession,
+    exists: input.exists,
+    isPersisted: input.isPersisted,
+  })
+  switch (hibernation.state) {
+    case 'never_woken':
+      return { class: 'offline', recoveryRecommended: false, reason: 'no session record (hibernated/never-woken)' }
+    case 'hibernated':
+      return { class: 'offline', recoveryRecommended: false, reason: 'no live session (hibernated/offline)' }
+    case 'crashed':
+      return {
+        class: 'dead',
+        recoveryRecommended: false,
+        reason: 'persisted session but tmux gone — process crashed (Phase C hard-recovery, gated)',
+      }
+    case 'running':
+      break // a live tmux session — fall through to the liveness ladder below
   }
   // Token-blocked BEFORE anything else: resuming an agent whose credential is dead
   // just burns another turn. It must be healed by the OAuth cascade (1GGQ4HWY) first;

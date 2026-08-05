@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T06:58:17+0200
+updated: 2026-08-05T07:18:52+0200
 implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -102,11 +102,52 @@ have left the fifth for whoever comes next, so the redirect went into a vitest `
 sites. A stray stamp is not cosmetic: it tells the janitor a chore ran when only a TEST ran, which
 is the false-healthy direction, and a contract tests can forge is not a contract.
 
-**NEXT ACTION:** `session-liveness` — the fleet guardian, and the one whose darkness hides every
-other. Decide first whether this is an ABSORB (new implementation) or a WIRE-UP: the repo already
-carries `lib/fleet-liveness.ts`, `lib/fleet-recovery-actuator.ts` and `lib/fleet-continuity.ts`,
-and which of those is the answer changes the size of the work by an order of magnitude. Do not
-start coding before that read.
+## ⏵ SLICE 2 — `session-liveness`: the read is DONE. It is **NEITHER** absorb nor wire-up — 2026-08-05
+
+The question was "ABSORB (new implementation) or WIRE-UP (the existing fleet modules)?" **The
+answer is that `session-liveness` is not one chore.** It is two populations with one name, and
+each gets a different verdict. This is the counter-example that qualifies this card's own
+"absorb all eleven" recommendation — do not read that recommendation as settled for this chore.
+
+**✓ VERIFIED — the server-owned half is already ABSORBED IN FACT, and only the CONTRACT is
+missing.** `startFleetLivenessWatchdog()` is wired at `server.mjs:1996`, unconditional, 5-min
+default cadence. Actuation is not merely present but ARMED: `AIM_FLEET_RECOVERY_FIRE: '1'` in
+`ecosystem.config.js:34` **and confirmed in the LIVE process env** (`ps eww -p 11440` →
+`AIM_FLEET_RECOVERY_FIRE=1`) — checked against the process, not the config file, because
+`pm2 restart` replays a cached env and the two drift. `runFleetLivenessTick` runs detection, the
+recovery ladder, the inbox nudge and the continuity automaton. So for this half the work is
+**three lines and a cadence decision**, not an implementation.
+
+**✗ VERIFIED — the other half is a population the server cannot see at all.** The janitor's
+chore is not "watch agents"; it is *"find EVERY running claude instance on the host and diagnose
+**its janitor's** health from OUTSIDE it"* (`scripts/lib/fleet_scan.py` header — written after a
+live scan found 23 instances, 15 with a broken janitor). It reaches them by `ps`/`lsof`/`tmux`/
+`osascript`, resolving each by **live TTY** so it can rescue a zombie whose janitor predates
+`terminal-identity.json`. The server has no concept of a claude process outside its own registry.
+
+**And the two halves DO NOT OVERLAP — by explicit construction on the janitor's side.**
+`session_liveness.py:245` returns `server_owned` **before** it tests dead/frozen, and
+`_DIAGNOSIS_RECOVERY['server_owned'] = None`. `harness_backend.instance_is_server_owned` makes
+any instance rooted under `~/agents/` owned (the registry-free signal, load-bearing because
+`aimaestro-agent.sh list` 401s the daemon — it has no `AID_AUTH`). So the janitor already refuses
+our agents, and we already watch them. **The chore is disjoint, and the split is the design.**
+
+| half | population | verdict |
+|---|---|---|
+| server-owned harness agents | the ai-maestro registry | **WIRE-UP** — running today; add the contract |
+| every other claude instance | iTerm tabs, zombies, legacy, non-harness | **HAND BACK** — the server has no reach, and absorbing it means enumerating and TTY-injecting arbitrary processes to guard *the janitor's own* health. That is the daemon's purpose, not the server's. |
+
+**Consequence for this card's recommendation.** "Absorb all eleven" is right as an *intent* and
+wrong as a *blanket*: a chore whose population is host-wide is not absorbable by a process that
+owns one registry. The honest resolution for `session-liveness` is the SPLIT — and it costs
+nothing, because the janitor's exclusion table already implements our half of it.
+
+**NEXT ACTION (the wire-up, small):** name `session-liveness` in `SERVER_ABSORBED_TASKS`,
+stamp it from `runFleetLivenessTick`, and decide the cadence (janitor 2 min vs our 5 min default;
+the stamp's staleness window is what makes the choice observable). **Blocked on one thing first:
+the janitor cannot currently tell a HIBERNATED agent from a CRASHED one** (USER directive,
+2026-08-05) — see the new derived task; a chore that reports deliberate hibernation as a fault is
+worse than one that reports nothing.
 
 ⚠ **Adding a chore to `ABSORBED_CHORES` is NOT what absorbs it — running it is.** A stamp for a
 chore nobody runs is strictly worse than no stamp: it reports healthy while nothing happens, which
@@ -160,8 +201,9 @@ act on other sessions, and a bug there is a fleet-wide event rather than a local
 
 - [x] the absorb-vs-narrow decision recorded here with its reasoning — **(1) absorb all eleven, staged**; (2) would walk back the one-daemon-per-host invariant TRDD-5ZVS1DDP established deliberately
 - [x] `<task-name>.last-run.ts` written for all five already-absorbed chores — `01a56c40`, all five sites
-- [ ] each of the six unabsorbed chores given a verdict: absorb (with owner + cadence) or hand back
-- [ ] `session-liveness` resolved first — it is the one whose darkness hides all the others
+- [ ] each of the six unabsorbed chores given a verdict: absorb (with owner + cadence) or hand back — 1 of 6 done (`session-liveness`)
+- [x] `session-liveness` **verdict recorded**: SPLIT — wire-up our half (already running, armed, verified in the live process env), hand back the host-wide half (the server has no reach; the janitor's `server_owned` exclusion already makes the two disjoint)
+- [ ] `session-liveness` wire-up SHIPPED — blocked on the hibernated-vs-crashed probe below
 - [x] a test that fails when an absorbed chore runs without writing its stamp — plus its complement (the gate refusing must NOT stamp, or an unowned chore would look owned) and an epoch-SECONDS pin, since a milliseconds value parses fine and reads as permanently fresh for ~55 000 years
 - [x] reply on `ai-maestro#111` with the decision, so the janitor can drop its side of the ambiguity — [comment 5187649837](https://github.com/Emasoft/ai-maestro/issues/111#issuecomment-5187649837)
 

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:27:56+0200
+updated: 2026-08-05T23:38:58+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -501,6 +501,33 @@ it: a transient TORN READ from a non-atomic non-participating writer (the claude
 no lock of ours, :133-137) presents as the same lint error and WOULD be cured by a retry.
 Whether that can occur depends on the CLI's write atomicity — unverifiable from this repo.
 If ever fixed: retry the READ N times before refusing; never retry the write.
+
+**SUPERSEDED IN PART by the USER's clarification (2026-08-05), which dissolves the
+"deviation".** The intended contract's retry was never about the lint — it is about the
+**verification of the edited lines**: between copying the file and swapping it back, any of
+the 20+ concurrent Claude Code instances can write settings.json, so the pre-swap check
+finds changes beyond the ones the transaction was called to make, the swap is cancelled,
+and the transaction retries against a fresh copy. THAT is the common failure, and THAT
+retry **IS implemented**: the staleness gate (:408-417) re-reads immediately before the
+rename and cancels + retries (3 attempts, 200ms×attempt backoff, lock held) whenever the
+bytes changed since transaction start. The lint is refuse-only by design — also as the USER
+describes: it exists to stop invalid inserted content, not to be retried.
+
+One implementation difference, equivalent in effect and worth stating so nobody "fixes" it:
+the shipped check is a **whole-file byte-compare** (now vs transaction start), not a
+line-diff of the edited copy. Both cancel the swap on ANY concurrent write; the other half
+of a diff-check — "did my edit touch only the intended lines" — is delivered by
+construction (the bounded set/delete ops grammar cannot touch lines it was not aimed at)
+plus the post-commit content-equality audit (:426-427).
+
+**The residual TRUE gap, verified in `applySettingsOps` (:151-181): the lint checks JSON
+validity only — there is NO claude-code-SCHEMA validation of inserted values.** JSON
+validity of the output is guaranteed by construction (`JSON.stringify` of an object), but
+`op.value` is assigned verbatim: a `set` op writing a value Claude Code itself would reject
+(wrong type, unknown enum) commits cleanly and the invalidity surfaces only when a session
+next loads the file. The USER's description names "invalid claude code syntax" as something
+the lint should catch; today it does not. Candidate enhancement, its own card if wanted —
+the schema source of truth (what Claude Code accepts) is the design question in it.
 
 Two caveats, recorded not fixed: `auditOk` is a returned field nobody is forced to branch on
 (deliberate — auto-rollback would destroy a legitimate CLI write, :327-331), and the ~30

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:15:25+0200
+updated: 2026-08-05T23:18:46+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -308,6 +308,42 @@ fleet-wide sweep and costs only time. Given the downside here is a *ban* rather 
 throttle, that is probably the right answer: **the flag does not need to take effect
 everywhere at once.** Prefer it, and treat a paced sweep as the fallback for when a change
 genuinely cannot wait.
+
+### "Safely" is the open question — TWO files, and one belongs to the human
+
+USER: *"so now the ai-maestro daemon will edit (safely, i hope) the settings.json and ensure
+that every plugin has the auto-update value on true?"*
+
+Two corrections to that shape before any code is written, and a hazard that outranks both.
+
+**It is per MARKETPLACE, not per plugin.** The flag lives on the marketplace entry; plugins
+inherit from the catalog they came from. "Every plugin" is not a thing the field can express.
+
+**It is TWO files, and they do not agree** (measured 2026-08-05):
+
+| file | entries | `autoUpdate: true` |
+|---|---|---|
+| `~/.claude/plugins/known_marketplaces.json` (runtime registry) | **275** | **0** (15 keyed, all `false`) |
+| `~/.claude/settings.json` → `extraKnownMarketplaces` (declarative) | **257** | **0** (256 absent, 1 `false`) |
+
+The 18-entry gap proves they are not mirrors. **Which one is authoritative is UNKNOWN and
+must be established first** — edit the wrong one and the flip either does nothing or is
+overwritten by the other on the next load, in both cases looking exactly like the write
+having failed.
+
+**The hazard that outranks both: `~/.claude/settings.json` is the HUMAN USER'S file.** It is
+900+ lines of their own Claude Code configuration, not a machine registry. A daemon doing
+read-modify-write on it is precisely the shape of the `lenient-json-reader-destroys-the-file`
+incident this project has already suffered — a tolerant reader returns `{}` on a parse it
+cannot handle, the writer serialises that, and the user's config is replaced by a nearly-empty
+object while the operation reports success. Any writer here MUST refuse to write when the
+read did not yield the expected shape, rather than treating an unparseable file as an empty
+one. Backing it up first is not sufficient and not the point: the write must not happen.
+
+Compounded by the lost-update race already recorded above — 13 sessions each hold and rewrite
+their boot-time copy. So the safe shape is: establish authority, prefer the machine registry
+over the human's settings file, refuse-on-unexpected-shape, write when the fleet is quiet,
+and **verify the flag survived** rather than assume the write took.
 
 ## Non-goals
 

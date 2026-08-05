@@ -134,9 +134,18 @@ HTML is capped at 2 MB; `javascript:` / `file:` / `data:` URLs are rejected 400.
 | `verify <id>` | `--json` — **is this card's approval REAL?** exit `0` verified · **`2` NOT verified** · `1` error |
 | `edit <id>` | `--set k=v` (repeatable) — frontmatter in place, no folder move |
 | `approve <id>` | `--approver W` `--tier N` `--rationale R` — proposal → planned, `git mv` proposals/ → tasks/ |
-| `refuse <id>` | `--approver W` `--tier N` `--reason R` — → refused/ |
+| `refuse <id>` | **`--reason R` (REQUIRED)** · `--approver W` `--tier N` — → refused/ |
 | `promote <id> --column C` | `--note N` `--approver W` — advance in place |
 | `archive <id> --state S` | `--reason R` `--superseded-by ID` `--approver W` |
+
+**`refuse` REQUIRES `--reason`, and it must name a DEFECT** (ai-maestro#71, R49 — the refusal
+protocol). An empty reason is rejected, and so are the stock dismissals (`denied`, `no`, `wontfix`,
+`out of scope`, `insufficient`, …) — those are a verdict, not a finding. The error names the three
+elements a refusal must carry: the precise defect, the bar for acceptance, and an invitation to
+re-propose. **`approve` is deliberately exempt** — an approval that says nothing is merely terse; a
+refusal that says nothing is the failure the protocol was ratified from. This is an ADDITIVE
+tightening of a required-argument rule, not an interface change: every previously-valid `refuse`
+call that named its defect still works.
 
 Global: `--agent <uuid\|name>` operates on that agent's `<workdir>/design` corpus.
 `archive --state` accepts `completed`, `cancelled`, `superseded` — and **refuses `failed`**

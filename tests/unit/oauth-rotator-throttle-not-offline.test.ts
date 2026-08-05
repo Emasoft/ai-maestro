@@ -192,16 +192,22 @@ describe('TRDD-WFIMES6U — a throttle must not be read as an offline API', () =
     seedLive('live@x', blob('LIVE', H8()))
     addSlot('alt@x', blob('ALT', H8()))
     const counts: Counts = { usageByToken: {}, tokenExchanges: 0 }
-    // Live reads fine; the ALTERNATE is the one cooling down. Its probe returns 0/cooldown, which
-    // REFRESH-ON-ERR would otherwise answer by exchanging a token — per candidate, per 60s tick —
-    // and then re-probing into the same cooldown for the same 0.
-    const deps = makeDeps(stubFetch({ LIVE: { fh: 50, sd: 50 } }, counts), {
+    // THE LIVE ACCOUNT MUST BE NEAR ITS LIMIT (98 ≥ SWITCH), AND ITS TOKEN MUST *NOT* BE EXPIRING.
+    // Both halves were learned from a neuter that reddened nothing:
+    //   - at 50% the tick logs "within limits" and RETURNS before the candidate loop, so the
+    //     assertion below was vacuously true — it counted refreshes on a path that never ran;
+    //   - a locally-expiring live token would refresh ITSELF, adding an exchange that has nothing
+    //     to do with the candidate and making the count unable to discriminate.
+    // Near-limit + healthy token is the one fixture where every token exchange observed can only
+    // have come from REFRESH-ON-ERR answering the throttled candidate.
+    const deps = makeDeps(stubFetch({ LIVE: { fh: 98, sd: 50 } }, counts), {
       cooldownStore: memStore({ 'alt@x': throttled() }),
     })
 
     await runTick(deps)
 
     expect(counts.usageByToken.LIVE ?? 0).toBeGreaterThan(0) // the live path really did run
+    expect(counts.usageByToken.ALT ?? 0).toBe(0) // and the candidate's probe was suppressed by ITS cooldown
     expect(counts.tokenExchanges).toBe(0)
   })
 })

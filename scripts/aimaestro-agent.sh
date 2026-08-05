@@ -87,6 +87,25 @@ trap cleanup EXIT INT TERM
 # ============================================================================
 
 main() {
+    # HELP AND VERSION ARE LOCAL, OFFLINE OPERATIONS — they must be answerable with
+    # no server, no network and no credential, so they are dispatched BEFORE
+    # check_api_running (TRDD-T3FXA0Y0, ai-maestro#121).
+    #
+    # Two defects in one line, and the exit code was the lesser of them. With the
+    # API gate first, `--help` exited 1 on a perfectly successful run — which is
+    # #121's exact complaint, and it trains every caller to stop branching on the
+    # exit status. Worse: an unauthenticated caller got the 401 diagnostic INSTEAD
+    # of the help text, so the CLI became undiscoverable at precisely the moment
+    # someone needed it — a new agent, or a human whose AID_AUTH is not yet set,
+    # asking the one question the tool can always answer.
+    #
+    # Ordering IS the fix: nothing below this point can be reached without the
+    # server, and nothing above it needs one.
+    case "${1:-help}" in
+        help|--help|-h) cmd_help; return 0 ;;
+        --version|-v)   echo "aimaestro-agent.sh v1.0.1"; return 0 ;;
+    esac
+
     # Check API is running
     check_api_running || exit 1
 
@@ -110,8 +129,8 @@ main() {
         presence)  shift; cmd_presence "$@" ;;
         hibernation) shift; cmd_hibernation "$@" ;;
         subconscious) shift; cmd_subconscious "$@" ;;
-        help|--help|-h) cmd_help ;;
-        --version|-v) echo "aimaestro-agent.sh v1.0.1" ;;
+        # help / --version are handled above, before the API gate — deliberately
+        # NOT repeated here, so there is one dispatch site per verb.
         *) print_error "Unknown command: $1"; echo ""; cmd_help; exit 1 ;;
     esac
 }

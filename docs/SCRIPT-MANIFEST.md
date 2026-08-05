@@ -596,6 +596,51 @@ the TTY — a password on `argv` leaks through `ps` and shell history (TRDD-E9BZ
 > bearer — there is **no USER auth path in the scripts**. A human running
 > `aimaestro-panel.sh status <agent>` from a terminal gets `401 auth_required`. Open work.
 
+### 6.4 Exit status — the contract (TRDD-T3FXA0Y0, ai-maestro#121)
+
+The fleet drives these scripts non-interactively and R23 makes this CLI the only sanctioned
+surface, so **the exit status is the fleet's single machine-readable success signal**.
+
+| Exit | Means | Obligation |
+|---|---|---|
+| `0` | the requested state change is **committed and verifiable** — or the verb was a pure query that answered | nothing further |
+| non-zero | anything else | **at least one line on STDERR** naming what failed and why |
+
+Three rules follow, and each closes a way the signal has already been broken here:
+
+1. **No verb exits non-zero without a message.** A bare `1` is undiagnosable, and the caller
+   cannot tell it from a crash.
+2. **No verb exits `0` on a no-op the caller asked to be an op.** `list --status online`
+   returning "exit 0, empty" for a value that *can never match* reports "no agents" when the
+   truth is "your filter is impossible" (#114).
+3. **`--help`, `-h`, `help`, `--version` and `-v` are LOCAL, OFFLINE operations.** They must
+   be answerable with **no server, no network and no credential**, and must exit `0`. Put
+   them BEFORE any `check_api_running` / identity-resolution / auth gate in the dispatcher.
+
+**Why rule 3 is a rule and not a nicety.** With the API gate first, `aimaestro-agent.sh
+--help` exited `1` on a completely successful run, and an unauthenticated caller got a 401
+diagnostic *instead of* the help text — so the CLI was undiscoverable at exactly the moment
+someone needed it most (a new agent, or a human whose `AID_AUTH` is not yet set, asking the
+one question the tool can always answer). Ordering is the whole fix.
+
+**The second-order harm, which is the reason this contract exists at all.** A CLI that exits
+non-zero on success trains every caller — human and agent — to stop branching on the exit
+code. Once they do, the exits that ARE real become invisible, and the `cmd || exit 1` guard
+the shell rules mandate becomes a liability: it aborts correct runs, so it gets deleted, so
+nothing catches the real failures.
+
+**Measured baseline, 2026-08-05.** On the **50 deployed** `aimaestro-*`/`amp-*`/`aid-*` CLIs,
+`--help` exited non-zero on **29**. `tests/unit/cli-help-exit-contract.test.ts` pins the
+violators BY NAME as a ratchet that may only shrink — it scans the **52 in `scripts/`** (the
+repo is the source of truth per §5, and it holds two the host had not been given:
+`aimaestro-groups.sh`, since deployed, and the Tier-C `aimaestro-check-decoupling.sh`), so
+52 − 28 listed violators = 24 compliant scripts asserted individually.
+`aimaestro-agent.sh` is fixed. The remaining 28 are the whole `amp-*` family plus
+`aid-auth.sh`, and they share ONE root — sourcing `amp-helper.sh` resolves AMP identity at
+source time, so `--help` requires an identity it should never need. That is deliberately a
+separate change (**TRDD-3KJW8P6R**): the abort it must not weaken is security code that
+purposefully refuses to print a pickable uuid list.
+
 ---
 
 ## 7. Adding a capability

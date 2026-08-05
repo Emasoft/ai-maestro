@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:09:23+0200
+updated: 2026-08-05T23:11:01+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -227,13 +227,30 @@ What I verified myself, and what I did not:
 - ✓ The plumbing that would drive it exists: plugin-mutating routes return `restartNeeded`
   (`app/api/agents/role-plugins/install/route.ts`, `app/api/agents/[id]/local-plugins/route.ts`)
   explicitly "so the UI can queue a stop+restart".
-- ✗ **I could NOT locate a named auto-restart option** — `autoRestart`, `auto_restart`,
-  `restartClient`, `restartAfter` return nothing outside tests. So either it is named
-  something I did not guess, or the plumbing exists while the option that consumes it does
-  not. **Do not assume it is the former.** Find the actual symbol before building on it.
+- ✓ **FOUND, on a wider search — the symbol is `restartHarnessFleet`**
+  (`lib/fleet-restart-driver.ts:89`), with a fan-out wrapper in
+  `lib/fleet-restart-fanout.ts` that injects it as a dependency. My first four guesses
+  (`autoRestart`, `auto_restart`, `restartClient`, `restartAfter`) all missed because the
+  feature is named for the FLEET, not for the auto-ness — a reminder that guessing a symbol
+  from the feature's description fails whenever the author named it for its object instead.
 
-This is a genuine NPT: the parent cannot proceed past `dev` until the auto-restart path is
-located and demonstrated once, end to end, on a single agent.
+What remains unverified, and it is the part that matters:
+
+- **Test coverage is ONE file** (`tests/unit/fleet-restart-driver.test.ts`) and it pins the
+  **R42.7(c) safe-state gate** — that a busy session is not restarted. That is a refusal
+  test. It does not demonstrate that a restart, when permitted, actually restarts a client
+  and that the new instance re-reads `known_marketplaces.json`. So the USER's "never tested"
+  is accurate about the thing this card needs, even though the symbol is not untested.
+- **Production callers not counted.** The grep surfaced only `lib/` and the test file — no
+  `app/api` route among the hits. Whether an API route reaches it is UNKNOWN and is exactly
+  the shape that has bitten this repo before (a well-tested symbol with zero production
+  callers is indistinguishable from a wired one until you count).
+
+The NPT therefore stands and narrows to two checks: **(1)** count `restartHarnessFleet`'s
+production callers in `app lib services` minus the defining file, and **(2)** demonstrate
+once, end to end on a single agent, that a flag written to `known_marketplaces.json` before
+a restart is honoured by the instance that comes back. The parent cannot proceed past `dev`
+until both pass.
 
 ## Non-goals
 

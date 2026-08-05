@@ -1,10 +1,11 @@
 ---
 trdd-id: WFIMES6U
 title: One shared usage cache — throttle the /usage endpoint and stop reading a 429 as exhaustion
-column: dev
+column: complete
+archived: true
 created: 2026-08-01T12:12:38+0200
-updated: 2026-08-05T18:16:42+0200
-implementation-commits: [4e70d79e, 46d36646, c27a7774]
+updated: 2026-08-05T18:24:34+0200
+implementation-commits: [4e70d79e, 46d36646, c27a7774, e6f5d402, b6c97250]
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 created-by: ai-maestro-dev
@@ -245,11 +246,19 @@ Dependencies: none. Touches `lib/json-io.ts` only as a CONSUMER.
 > here — recorded that way on purpose, so nobody re-implements it and nobody reads this card as
 > having done work it did not do.
 
-- [ ] **THE ONE REAL REMAINDER, and it is a question.** The cache is in `globalStateDir()` behind
-      `withServerLock`, not under `~/.aimaestro/` behind `json-io`. `usage-cooldown.ts` argues its
-      lock must be distinct (a probe runs inside a tick already holding the tick lock); this card
-      argues a second lock over one file excludes nobody. Both are reasonable and they conflict.
-      MEASURE which locks actually cover this file before moving anything
+- [x] **MEASURED, and the answer is DO NOT MOVE IT.** The box asked to relocate the cache under
+      `~/.aimaestro/` behind `json-io` to avoid "a fourth lock". The measurement says that premise
+      is absent here: **one** writer (`usageProbe`, via the default/injected store), **one** lock
+      over it (`withProbeLock` → `withServerLock('oauth-usage-probe.lock')`, a real cross-process
+      named lock), and `json-io` holds **no** reference to `globalStateDir` at all — verified with
+      a positive control (json-io does export 8 functions, so the search instrument works).
+      RYFP030K's finding was THREE lock implementations over ONE file; this is one over one, with
+      no co-writer. Moving it would ADD a mechanism to a file that currently has exactly one, and
+      would break the documented reason the probe lock must be distinct — a probe runs INSIDE a
+      tick already holding the tick lock, so sharing a name self-deadlocks. The **single-reader**
+      half is now genuinely true: `accountUsage` (which called `usageRequest` with no accountKey
+      and so bypassed the cache, cooldown and back-off entirely) had ZERO production callers and
+      was deleted in `b6c97250`
 - [x] TTL 600 s across processes, re-checked after lock acquisition — `usage-cooldown.ts`
       (`USAGE_TTL_MS`), and the post-acquire re-read is in `usageProbe`'s locked section
 - [x] 429 back-off honors `Retry-After`, then `anthropic-ratelimit-*`, then exponential
@@ -267,6 +276,14 @@ Dependencies: none. Touches `lib/json-io.ts` only as a CONSUMER.
 
 ## Approval log
 
+- 2026-08-05T18:24:34+0200 — CLOSED `complete` and archived by ai-maestro. Every box is resolved:
+  four were already satisfied by **TRDD-W4T70Y3R** and are ticked naming where, one was fixed here
+  (the status-0 overload, both consequences), and the last was resolved BY MEASUREMENT as
+  "do not move it" rather than deferred. Nothing in `npt:`/`eht:` was open. The residual this
+  card's prose recorded but no box covered — the USER's statusline holding a third private cache
+  with three defects — is filed as **TRDD-D39FH00U** (`proposal`, floor `user`, since it is the
+  user's own file outside any repo) rather than dying with the parent. Archived AS `complete`
+  (`release-via: none`).
 - 2026-08-01T12:12:38+0200 — MANDATE (self) at `min-approval-requirement: none`: in-scope bugfix
   in ai-maestro's own rotator, filed directly from a USER directive. No governance, release,
   cross-team, or baseline surface.

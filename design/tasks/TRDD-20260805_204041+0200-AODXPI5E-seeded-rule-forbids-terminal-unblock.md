@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T21:08:00+0200
+updated: 2026-08-05T21:29:16+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -52,31 +52,63 @@ identity-prompts-escalate · read-before-answer · server-enforced · audited). 
 ASSISTANT-exclusion detail was folded in from the USER's earlier ruling relayed in #125, and is
 flagged to the USER as folded-in rather than assumed silently.
 
-## ⚠ STILL OPEN — AND THE CAPABILITY DOES NOT WORK YET
+## ⏵ ENFORCED — the capability works (2026-08-05T21:30, commits 2237ca4d · 0f104dba · d536560b)
 
-**R42.8 is `UNENFORCED` in the map, and that is the honest row.** Measured while landing the rule:
-`app/api/agents/[id]/prompt/answer/route.ts` routes through `sendAgentSessionCommand`, whose
-`authorize()` gate is the **`send-command`** action — which R42 **denies cross-agent**, and which
-`tests/authorization.test.ts` pins as denied for MANAGER and for own-team COS.
+**R42.8 is `ENFORCED` in the map.** Three layers, all pinned:
 
-So the CLI's help text (*"Agent callers authorize by AID_AUTH + governance title"*) describes the
-**pre-R42 world**: the API has been refusing this since R42 landed. The MANAGER's diagnosis in #125
-was right that rule and CLI conflict; the sharper truth is that the CLI advertises an authority the
-API already revoked.
+| layer | what it does |
+|---|---|
+| `lib/sudo-guard.ts` | `POST …/prompt/answer` declares **`unblock-prompt`** (was `send-command`) |
+| `lib/authorization.ts` | the `unblock-prompt` gate: MANAGER any · COS own-team · never an ASSISTANT · fails closed |
+| `services/agents-core-service.ts` | **Gate 0b** — the target must ACTUALLY be blocked on a pending prompt |
 
-**Therefore: a MANAGER still cannot unblock a stalled agent today.** The rule now permits it; the
-server does not yet implement it. That fails CLOSED (safe), but the original incident is not fixed.
+`unblock-prompt` is a NEW action, deliberately **not** a loosening of `send-command`; R42's
+cross-agent revocation of `send-command`/`restart-session` stays green, asserted by a complement
+block that reddens if a future change reaches the unblock by widening the general verb.
 
-**The remaining work, precisely:**
-1. A NEW authorization action for the unblock path — **not** a loosening of `send-command`. The
-   existing R42 denials for `send-command` / `restart-session` are correct and must stay green.
-2. Title scoping in `lib/authorization.ts`: MANAGER → any target except an ASSISTANT; COS → its own
-   team only, same exclusion; every other title → deny. Fail closed on an unresolved target.
-3. Route wiring for `read-prompt` and `answer` onto the new action, leaving `send-command` alone.
-4. Ledger audit per R42.8(h), and the ASSISTANT + identity-prompt exclusions enforced in code, not
-   merely written — (d) and (e) are the two cases where an unblock CAN forge intent.
-5. Then flip the map row to ENFORCED with a proof test + neuter, and fix the CLI help text so it
-   stops advertising the pre-R42 model.
+**Six neuters, each 1:1 with a distinct test** (via `scripts/dev/neuter`, restores blob-verified):
+ASSISTANT exclusion → 2 red · COS own-team → 1 · undefined target → 1 · other titles → 1 ·
+`DRIVE_ACTIONS` emptied → **10 red** (3 new + 7 pre-existing R42) · Gate 0b → **0 red, then 1**.
+
+**That 0 was the finding.** Gate 0b survived its own deletion across 108 tests — pinned by nothing.
+Four cases now pin it (`0f104dba`), including the positive control without which "no pending prompt
+⇒ 409" passes equally against a gate that refuses *everything*.
+
+### Three defects the BUILD found that re-reading the text never would
+
+1. **The rule named verbs the server refuses.** The clause listed `inject`/`queue` and advised
+   "prefer `queue` over interrupting". Both deliver an arbitrary command, so they express the
+   CALLER's decision — R42.1 — and stay SELF-ONLY. **An agent following the rule would be 403'd on
+   the rule's own advice.** The exception is `read-prompt` + `answer`, nothing else.
+2. **The guard made the whole thing inert.** `sudo-guard` runs BEFORE the handler, so with
+   `send-command` still declared there, both lower layers permitted an unblock the door refused.
+   R42.8 would have read ENFORCED and *not worked* — the original incident, one layer up.
+3. **The identity carve-out lacked its reason** (USER, this session): no agent can answer an
+   identity prompt because **no agent is the authority on identity — the SERVER is the sole
+   notary.** It created/imported every agent, registered it and its AID in the signed ledger, alone
+   holds the key that signs and rotates that AID, and alone signs and verifies AMP messages.
+   Identity is ESTABLISHED by the server's verification, never ASSERTED by a party to the exchange
+   — which is also what makes the title scoping meaningful: `authorize()` reads back the server's
+   notarized record, not a caller's claim.
+
+### One wrong turn, recorded
+
+I added an `authorize()` call to the queue POST believing it ungated, having read the whole handler
+and found none. **It is gated** — `lib/sudo-guard.ts:422` via `STRICT_AGENT_RULES`, whose own
+comment says that guard is the ONLY check for `panel` and `queue`. Reverted. Concluding "ungated"
+from one file was the error; the gate was in another layer.
+
+### Not done here
+
+- **(h) ledger audit** — an unblock is not yet written to the agent ops ledger. Own TRDD.
+- **`ama-session` skill** (scope item 4) — still scoped to self, so the cross-agent procedure stays
+  undiscoverable. It lives in `Emasoft/ai-maestro-plugin`, so it is an issue or a fork+PR there,
+  not an edit here.
+- **The behavioural check** (last acceptance box) needs a live fleet, not a unit test.
+- **Pre-existing, NOT mine:** `tests/governance/` has a load-dependent flake — measured at HEAD with
+  every change of mine stashed, 5 failures in one run and 1 in the next across `r1-teams-service`
+  and `r10-restart`/`r10-wake`. Passes in isolation, which is the signature of a shared-state
+  concurrency defect, not evidence of its absence. Own TRDD.
 
 ## ⏵ SUPERSEDED — the block that preceded the ruling (kept for the reasoning)
 
@@ -177,10 +209,15 @@ capability).
 
 ## Acceptance criteria
 
-- [ ] The seeded rule permits unblocking and still forbids driving, with
+- [x] The seeded rule permits unblocking and still forbids driving, with
       the boundary stated in terms an agent can apply without a judgment
-      call.
-- [ ] The identity-vouching carve-out is explicit.
+      call. — `rules/aimaestro/aimaestro-agent-rules.md`. The boundary is
+      now stated as VERBS, not as a judgment: `read-prompt`/`answer` cross,
+      `inject`/`slash`/`queue` do not. An agent no longer has to decide what
+      counts as "driving" — and the server 403s the wrong choice anyway.
+- [x] The identity-vouching carve-out is explicit — and now carries its
+      REASON (the server is the sole notary of identity), which is what makes
+      it followable rather than a rule to memorise.
 - [ ] `ama-session` documents the cross-agent unblock procedure, including
       which governance titles may perform it against which targets.
 - [ ] A behavioural check: a MANAGER agent presented with a blocked

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T08:02:01+0200
+updated: 2026-08-05T08:08:14+0200
 implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -188,10 +188,48 @@ checks independently, and getting there required fixing the test twice: the firs
 a phrase both refusal messages share, and the fixture was built with `path.join`, which normalizes
 `..` away at construction so the "traversal" input contained none.
 
-**NEXT ACTION (the wire-up, small):** name `session-liveness` in `SERVER_ABSORBED_TASKS`, stamp it
-from `runFleetLivenessTick`, and decide the cadence (janitor 2 min vs our 5 min default; the stamp's
-staleness window is what makes the choice observable). No longer blocked — the hibernated-vs-crashed
-answer now exists, so the chore can report a deliberate sleep as healthy instead of as a fault.
+## ⏵ SLICE 4 — the wire-up CANNOT be done on our side, and "absorb" is the wrong model — 2026-08-05
+
+Slice 3 closed by naming a NEXT ACTION: *"name `session-liveness` in `SERVER_ABSORBED_TASKS`, stamp
+it from `runFleetLivenessTick`, decide the cadence."* **Both halves of that are wrong**, and the
+janitor's own source says so. Do not execute it.
+
+**1. Stamping `session-liveness` would be a FALSE CLAIM.** Slice 2's verdict is that the chore is a
+SPLIT: we run the harness half, and the host-wide half (every other claude instance — iTerm tabs,
+zombies, legacy) is invisible to us. A stamp says *"this chore is being done on cadence"*. Writing
+one would tell the janitor to stop covering the half we cannot see. That is this card's own warning
+— *"a stamp for a chore nobody runs is strictly worse than no stamp"* — at half scale, which is the
+same defect with a smaller blast radius.
+
+**2. `SERVER_ABSORBED_TASKS` IS INERT IN NORMAL OPERATION**, so adding a name to it changes nothing.
+The janitor's own PORT NOTE at `scripts/daemon.py:1770-1780` states it outright:
+
+> *"a REAL fresh server-liveness file triggers the ONE-DAEMON-PER-HOST binary EXIT in main() … BEFORE
+> this per-chore yield is ever evaluated — so with a genuine live server the daemon STOPS ENTIRELY
+> and even the Family-B chores pause … In normal operation without that override,
+> `server_runs_chores() == server_is_alive()`, so the break at line 2150 wins and **this yield
+> yields nothing**."*
+
+Confirmed at the source: `global_state.py::ensure_daemon_running` is
+`if _server_owns_host(): return False` — unconditional, no per-chore granularity, gated at the same
+choke point as every other caller.
+
+**So the mental model this card was built on is wrong.** The server does not absorb chores one at a
+time while the daemon keeps the rest. **The daemon exits wholesale, and whatever the server does not
+do, nobody does.** `SERVER_ABSORBED_TASKS` is a list that governs only the env-override and
+maintenance-keepalive paths. That is a sharper statement of the original bug than the card's opening
+— the gap is not "5 of 11 absorbed", it is "the suppression is binary and the absorption is
+partial", which is why the arithmetic never balanced.
+
+**Consequence: the fix for `session-liveness` is not ours to make.** It needs the janitor to either
+gain per-chore suppression (so the host-wide half keeps running while the server owns the harness
+half) or to accept that the half is unguarded while the server is up. Both are its calls. Filed
+cross-repo rather than worked around here.
+
+**NEXT ACTION:** (a) `yarn build` + restart so the authenticated route is in the running bundle,
+then verify by EFFECT; (b) the five remaining unabsorbed chores each need a verdict — and each
+should now be checked against the binary-suppression fact above, because the same "we only do half"
+trap applies to `fleet-stop` and `memory-guard` at least.
 
 **NOT yet done:** `yarn build` + restart, so the new route is not in the running bundle yet (a
 restart does NOT rebuild — `app/` is bundled into `.next`). The publisher is in `server.mjs`, which
@@ -247,11 +285,11 @@ act on other sessions, and a bug there is a fleet-wide event rather than a local
 
 ## Acceptance
 
-- [x] the absorb-vs-narrow decision recorded here with its reasoning — **(1) absorb all eleven, staged**; (2) would walk back the one-daemon-per-host invariant TRDD-5ZVS1DDP established deliberately
+- [x] the absorb-vs-narrow decision recorded here with its reasoning — originally **(1) absorb all eleven, staged**, on the grounds that (2) would walk back the one-daemon-per-host invariant TRDD-5ZVS1DDP established deliberately. ⚠ **QUALIFIED by slice 4:** the choice was posed over a model that does not exist. The server does not absorb chores one at a time — the daemon EXITS wholesale (`ensure_daemon_running` → `if _server_owns_host(): return False`) and `SERVER_ABSORBED_TASKS` is inert in normal operation, by the janitor's own PORT NOTE. So (1) is not achievable for any chore whose population is host-wide, and the real question per chore is "can the server even SEE this population?" — not "should we absorb it?"
 - [x] `<task-name>.last-run.ts` written for all five already-absorbed chores — `01a56c40`, all five sites
 - [ ] each of the six unabsorbed chores given a verdict: absorb (with owner + cadence) or hand back — 1 of 6 done (`session-liveness`)
 - [x] `session-liveness` **verdict recorded**: SPLIT — wire-up our half (already running, armed, verified in the live process env), hand back the host-wide half (the server has no reach; the janitor's `server_owned` exclusion already makes the two disjoint)
-- [ ] `session-liveness` wire-up SHIPPED — no longer blocked; the hibernated-vs-crashed answer now exists
+- [x] `session-liveness` wire-up RESOLVED — it cannot be done on our side: stamping it would be a false claim (we run only the harness half) and SERVER_ABSORBED_TASKS is inert in normal operation, because the daemon exits wholesale before the per-chore yield is evaluated. Filed cross-repo; see slice 4
 - [x] the janitor can tell HIBERNATED from CRASHED — `lib/agent-hibernation.ts`, served by an AUTHENTICATED route and published per-janitor to `<project>/.janitor/daemon_responses/` (`eb0e9e95`, `400e9f9d`, `28c99c48`; the unauthenticated first attempt reverted in `3f069c22`)
 - [ ] `yarn build` + restart so the new route is in the running bundle, then verify by EFFECT
 - [x] a test that fails when an absorbed chore runs without writing its stamp — plus its complement (the gate refusing must NOT stamp, or an unowned chore would look owned) and an epoch-SECONDS pin, since a milliseconds value parses fine and reads as permanently fresh for ~55 000 years

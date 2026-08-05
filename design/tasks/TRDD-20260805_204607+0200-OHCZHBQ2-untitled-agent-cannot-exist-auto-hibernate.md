@@ -1,11 +1,11 @@
 ---
 trdd-id: OHCZHBQ2
-title: An agent with no governance title cannot be active — auto-hibernate until one is assigned
+title: An agent that is not 100 percent valid must stay hibernated — one validity gate, not N special cases
 column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:46:07+0200
-updated: 2026-08-05T20:46:07+0200
+updated: 2026-08-05T20:58:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,78 +22,109 @@ eht: []
 blocked-by: []
 release-via: none
 severity: high
-effort: medium
-relevant-rules: []
-labels: [governance, titles, hibernation, user-mandate]
+effort: large
+relevant-rules: [9, 17, 20]
+labels: [governance, validity, hibernation, user-mandate]
 external-refs: [Emasoft/ai-maestro#122]
 ---
 
-# An agent with no governance title cannot be active — auto-hibernate until one is assigned
+# An agent that is not 100 percent valid must stay hibernated — one validity gate, not N special cases
 
 ## The directive
 
-USER, 2026-08-05T20:46, verbatim:
+USER, 2026-08-05, in two parts. First:
 
 > an agent with no title cannot exist. it must be automatically kept hibernated until someone
 > assign a title to it.
 
-Queued rather than executed inline: it arrived mid-implementation of the five MANAGER-filed cards
-(#121-125) and is a NEW governance invariant, not part of any of them. Filed immediately so the
-handoff is a card and not a sentence in a transcript.
+Then, generalising it:
 
-## Why it belongs beside TRDD-4Z62YRDG
+> i remember to have added the rule that any agent with ANY invalid configuration must be
+> automatically kept hibernated until it is configured with valid settings and plugins. only when
+> it is valid at 100% it can be dehibernated. there are many things that can make an agent invalid.
+> so for example an agent with AUTONOMOUS title but assigned to a TEAM. that is invalid. so it must
+> stay hibernated. but there are hundreds.. missing role-plugin, missing name, missing core plugin,
+> missing workdir or invalid workdir, missing rule files, missing ai client, wrong cli arguments,
+> invalid AID, etc.
 
-That card (ai-maestro#122) removed the two places where an absent `governanceTitle` silently
-resolved to the MESSAGING `role` — which defaults to `'autonomous'`. Before that fix, an untitled
-agent *looked* titled: the profile panel rendered it AUTONOMOUS and the team composition check
-carried `'autonomous'` as its title. After it, an untitled agent correctly reads as **untitled**.
+## ⚠ THE RECOLLECTION IS HALF-RIGHT, AND THE HALF THAT IS MISSING IS THE WHOLE CARD
 
-This directive is the next question that exposes: if the fleet can now SEE untitled agents, what
-should happen to one? The USER's answer is that it should not be running at all.
+Measured 2026-08-05 before designing anything. **The PATTERN exists and is shipped — three times,
+as three unrelated rules, each with its own flag, its own gate and its own wording. The GENERAL
+rule does not exist anywhere.**
 
-Measured on this host 2026-08-05 — untitled agents are not hypothetical:
-
-| agent | governanceTitle | role |
+| condition | rule | mechanism |
 |---|---|---|
-| `claude-skills-factory` | **(none)** | `autonomous` |
-| `libs-svg-svgbbox` | (none) | (none) |
+| missing **role-plugin** | **R9.13** (`GOVERNANCE-RULES.md:485`) | FAAF: persist `roleMissing: true`, hibernate, and `wakeAgent` refuses until a plugin is assigned. *"Quarantined-and-inert is a valid state; role-less-and-runnable is not."* |
+| missing **core plugin** | **R20.3** (`:855`) | "Agents missing the core plugin MUST be forced to hibernate until they comply." |
+| **team agent, no MANAGER** | **R9.4** (`governance-spec.md:440`) | teams blocked ⇒ member tmux sessions killed; cannot be woken until a MANAGER is assigned |
 
-(from ai-maestro#122's own fleet table). Note these are the USER's own pre-fork agents under
-`~/Code/*`, which is exactly why the rollout question below is not optional.
+Searches that returned **zero**: `"invalid configuration"` in `GOVERNANCE-RULES.md`; any rule
+heading matching hibernate/valid; any validity predicate or condition enumeration in the spec.
+
+So there is no umbrella rule, no `isAgentValid()`, no shared flag, and no list of what "valid"
+means. What exists is the same good idea implemented three times by three cards that did not know
+about each other — which is exactly why a fourth condition (no title) went unhandled and produced
+the incident in #122, and why the USER remembers a general rule that was never written.
+
+**That reframes this card.** It is not "add a hibernate-if-untitled check". It is: **promote a
+proven pattern to a first-class VALIDITY GATE with one predicate, one flag, one refusal, and one
+clearing path — then move the three existing cases onto it.**
+
+## The conditions the USER named (starting set, explicitly not exhaustive)
+
+no governance title · AUTONOMOUS title **but assigned to a team** · missing role-plugin · missing
+core plugin · missing name · missing or invalid workdir · missing rule files · missing AI client ·
+wrong CLI arguments · invalid AID.
+
+Two of these are already enforced (role-plugin, core plugin). One — **AUTONOMOUS-in-a-team** — is
+the interesting one: `element-management-service.ts:9688` has `NON_TEAM_TITLES = {autonomous,
+manager, maintainer, ''}` used for FOLDER placement, so the codebase already knows autonomous is a
+non-team title, but nothing derives *invalidity* from an autonomous agent sitting in `agentIds[]`.
 
 ## What must be decided before building — do NOT guess these
 
-1. **Scope: which agents?** The pre-fork agents above predate governance entirely and are already
-   hibernated. A blanket sweep that hibernates every untitled agent is either a no-op or a
-   fleet-wide stop, depending on state nobody has measured yet. Measure first.
-2. **The trigger set.** At minimum: creation without a title, and title REMOVAL on a live agent.
-   Title removal is the sharp one — `ChangeTitle` demoting to no-title would have to hibernate the
-   agent it just demoted, and that interacts with the R51 transaction work.
-3. **The wake gate.** `app/api/agents/[id]/wake/route.ts:55` already reads
-   `governanceTitle ?? null` into its context, so a refusal has a natural home there — and the
-   `corePluginMissing` / `role_missing_core` 409 is the shipped PRECEDENT for exactly this shape
-   (refuse the wake, name the reason, deep-link the fix). Copy it rather than inventing one.
-4. **Both modes.** The headless router calls services directly, so a route-only gate is bypassable
-   in headless — the SF4 finding. Gate the SERVICE, mirror at the route.
-5. **A path back.** Whatever refuses must be clearable by assigning a title, and the clearing write
-   must exist, or an agent is bricked with no route out. That is the `corePluginMissing` lesson:
-   a flag only ever set true never clears.
+1. **One predicate, one flag.** `roleMissing` is the shipped precedent and its lesson is recorded
+   in R9.13: a flag only ever set true never clears and bricks the agent forever. The clearing
+   write is not an optimisation. Whatever replaces/absorbs it needs the same discipline, plus a
+   REASON (which condition failed) or the UI can only say "invalid".
+2. **Refuse the WAKE; do not force-stop a live session.** Fail toward the recoverable, visible
+   failure. Force-hibernating an agent the USER is mid-conversation with is a worse outcome than a
+   delayed refusal.
+3. **Gate the SERVICE, mirror at the route.** The headless router calls services directly, so a
+   route-only gate is bypassable in headless — the SF4 finding, recorded on TRDD-47a35ba2. R9.13's
+   own site is `wakeAgent`, which is the correct altitude; copy it.
+4. **Grandfathering, and it is not optional.** The two untitled agents on this host
+   (`claude-skills-factory`, `libs-svg-svgbbox` — from #122's fleet table) are the USER's own
+   PRE-FORK agents under `~/Code/*`. A blanket sweep is either a no-op (they are already
+   hibernated) or a fleet-wide stop, depending on state nobody has measured. Measure, then decide
+   whether the gate is retroactive or applies from a boundary date.
+5. **"Hundreds" is a spec problem, not a coding problem.** The value is in the ENUMERATION and its
+   severity split — which conditions are hard-invalid (refuse the wake) versus advisory (warn).
+   Wiring a predicate takes an afternoon; deciding the condition list is the actual work, and it
+   is USER-tier because each entry can stop an agent from starting.
+6. **Do not let it become a fourth special case.** If this ships without moving R9.13 / R20.3 /
+   R9.4 onto the shared gate, the result is four implementations instead of three.
 
 ## Verification
 
-An untitled agent cannot reach a running session by ANY path (route or headless service), assigning
-a title makes it wakeable in the same session with no restart, and the refusal names the reason.
-Both directions pinned, with a neuter recorded.
+An agent failing ANY enumerated condition cannot reach a running session by any path (route or
+headless service); the refusal names WHICH condition failed; fixing that condition makes it
+wakeable in the same session with no restart; and the three existing cases route through the new
+gate rather than their own. Both directions pinned, neuter recorded.
 
 ## Estimated risk
 
-MEDIUM. The failure mode to design against is not "we hibernated too little" — it is hibernating an
-agent the USER is mid-conversation with, or bricking one with no path back. Fail toward refusing the
-WAKE (recoverable, visible) rather than force-stopping a live session.
+HIGH — not technically, but in blast radius: this can stop every agent on a host. The failure to
+design against is not under-blocking, it is a predicate that is wrong or too eager and hibernates a
+working fleet. That is why the wake-refusal (recoverable) is preferred over force-stop, and why the
+condition list needs the USER's sign-off before it gates anything.
 
 ## Approval log
 
-- 2026-08-05T20:46:07+0200 — MANDATE issued by USER, verbatim above. Pre-approved: issuer authority
-  >= required approver. Queued (not executed inline) because the in-flight work is the #121-125
-  implementation; recorded per the rule that a new directive is queued or forked, never left
-  unqueued.
+- 2026-08-05T20:46:07+0200 — MANDATE issued by USER (untitled-agent form). Queued rather than
+  executed inline; the in-flight work was the #121-125 implementation.
+- 2026-08-05T20:58:00+0200 — GENERALISED by the USER's follow-up to any invalid configuration, and
+  re-scoped after measuring that the general rule does not exist while three per-condition
+  instances do. Still a USER mandate; the condition ENUMERATION is called out above as needing
+  explicit USER sign-off before it gates anything, because each entry can stop an agent starting.

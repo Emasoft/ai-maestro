@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:01:54+0200
+updated: 2026-08-05T23:02:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -99,7 +99,26 @@ Verbatim: *"the marketplace updates should simply be executed once every 3 hours
 daemon. not by every agent! one single command: `claude plugin marketplace update`.
 nothing else."*
 
-Three constraints, and they are narrower than what this card originally proposed:
+**This costs nothing, and that is the whole point — do not read it as a tradeoff.** USER,
+correcting this card's first draft: *"its not aggressive, its just right. it is useless to
+run that command multiple times! the claude code plugins can only be updated once!"*
+
+An update either applies (a newer version exists and is fetched) or is a no-op. Running it
+again inside the same window cannot make a plugin fresher than the first run already did —
+it re-asks a question whose answer has not changed, and pays a connection for the answer.
+So the *only* thing frequency buys is latency against upstream publishing, and past that
+point every extra invocation is pure waste, not margin.
+
+That reframes the measurement above. The **200 invocations/hour, 158 of them failing** are
+not "a load level to tune down" — the loop had no freshness to trade away in the first
+place. Which is why the three constraints below give up nothing:
+
+**A guardrail for whoever reads this later:** if you are tempted to raise the frequency
+back up "to keep plugins fresher", it will not. Re-running is idempotent; you would be
+buying zero freshness with N× the connections, which is exactly the state this card exists
+to end.
+
+Three constraints:
 
 1. **ONE command, no per-target loop.** `claude plugin marketplace update` with no
    arguments refreshes every registered marketplace in a single invocation. The current

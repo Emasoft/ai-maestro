@@ -113,7 +113,55 @@ status is not public data.
 An agent workdir receives only its OWN record plus fleet-wide COUNTS, never the roster: the full map
 in every workdir would mean compromising any one agent yields the whole fleet.
 
+
+^ATOM-A3SZ-S4BB [desc:"github-config-audit IS absorbed (4h) — but its population must come from the marketplace catalog, never from lib/ecosystem-constants.ts", keywords: which_repos_does_the_github-config-audit_scan audit_population_differs_from_ecosystem-constants my_audit_covers_only_some_repos absorbed_a_chore_but_it_audits_the_wrong_set where_does_the_janitor_get_its_fleet_repo_list, ocd: 2026-08-05, lmd: 2026-08-05]
+
+**`github-config-audit` is ABSORBED as of 2026-08-05** (USER go-ahead, 4-hour cadence — tighter
+than the janitor's own 6 h). It is the only one of the six formerly-unowned chores that could be,
+per the absorbability test above. `lib/github-config-audit.ts`, read-only `gh api` GETs, wired in
+`server.mjs`, stamping `github-config-audit.last-run.ts`.
+
+**THE POPULATION COMES FROM THE MARKETPLACE CATALOG, NEVER FROM `lib/ecosystem-constants.ts`.**
+The janitor derives it from each plugin's `source.url` in
+`~/.claude/plugins/marketplaces/ai-maestro-plugins/.claude-plugin/marketplace.json`
+(`github_config_audit.fleet_repo_slugs`). Measured, that set and what our constants can enumerate
+differ in BOTH directions:
+
+| | count |
+|---|---|
+| overlap | 10 |
+| **it audits, our constants cannot name** | **4** (`ai-maestro-janitor`, `-visual-communicator-plugin`, `-web-scenario-tester`, `-webdesign`) |
+| we hold, it never audits | 5 (the app upstream, `agent-identity`, `AgentlensPro`, the marketplace, `claude-plugin`) |
+
+So a constants-driven audit covers **10 of 14** — and because it also STAMPS, it would tell the
+janitor to stop covering the other four, which would then be audited by nobody. Reading the same
+file makes both populations identical BY CONSTRUCTION rather than by a coincidence that drifts the
+next time a plugin is published.
+
+Where the findings go, and why not into the janitor's own directory: see `^ATOM-GC1D-F6ZS`. [^3]
+
+
+^ATOM-GC1D-F6ZS [desc:"The findings file is wire-identical to the janitor's but lives in ~/.aimaestro — we publish, they consume", keywords: where_do_the_github-config_findings_go can_I_write_into_the_janitor_state_dir server_publishes_janitor_consumes findings_file_path write_boundary_only_aimaestro_and_agents, ocd: 2026-08-05, lmd: 2026-08-05]
+
+The audit's findings go to **`~/.aimaestro/github-config-findings.json`**, deliberately
+wire-identical to the janitor's own: same `FINDING_CODES`, same `FINDING_BLURB` text, same
+`{generated_at, repos_scanned, findings:[{slug, code, detail}]}` shape, and the same tri-state
+silence rules (a probe that could not determine an answer never becomes a finding).
+
+**Same basename, different directory, and the directory is not negotiable.**
+`lib/write-boundary.ts` carries a standing USER directive — *"the only writings should be into
+`~/.aimaestro` and into `~/agents`"* — with a build-gate detector enforcing it. So writing into the
+janitor's `<global-state>/` to feed their near-free per-session detector directly would breach it,
+however convenient. Asked them to read our path instead on `ai-maestro-janitor#197`.
+
+That is the established direction of travel in this ecosystem and worth generalising: **the server
+PUBLISHES, the janitor CONSUMES** — the same shape as `server-liveness.json`,
+`agent-directory.json` and `<project>/.janitor/daemon_responses/`. When a cross-project handoff
+needs a file, the question is never "may I write into their tree" but "where do I publish so they
+can read it".
+
 ## Notes and lessons learned
 
 [^1]: [id:ATOM-W713-40TF, status:valid, desc:"The gate that blocks your tool is usually the security boundary, not an obstacle", keywords:"check_api_running_blocks_my_tool the_janitor_daemon_has_no_AID_AUTH build_an_auth-free_CLI works_with_the_server_down_is_a_feature agent_roster_without_authentication", ocd:2026-08-05, lmd:2026-08-05] DO NOT route around `aimaestro-agent.sh`'s `check_api_running || exit 1` + `$AID_AUTH` bearer by building a side-door CLI that reads `~/.aimaestro` directly, BECAUSE that gate IS the security boundary: agent status is not public data (a roster names every agent, its uuid and its tmux session name), and with no server running there is nothing to validate signatures against, so nothing may execute. Shipped exactly that — an unauthenticated roster dump that "worked with the server down", documented as a FEATURE in both the module header and the commit message — and it was reverted (`3f069c22`). The premise was false anyway: the janitor never needs to call in, because the daemon PUBLISHES to it. DO put the surface behind the existing authenticated script (inheriting the boundary rather than duplicating it) and let the in-server daemon publish to `<project>/.janitor/daemon_responses/` for anything that cannot authenticate.
 [^2]: [id:ATOM-6U79-6OHD, status:valid, desc:"Never stamp a chore you only partly perform — it tells the other owner to stop covering the rest", keywords:"stamp_a_chore_we_only_half_do last-run_stamp_for_a_partially_covered_chore reporting_a_chore_as_owned absorbed_chore_stamp", ocd:2026-08-05, lmd:2026-08-05] DO NOT write a `<chore>.last-run.ts` stamp for a chore you only PARTLY perform, BECAUSE a stamp asserts "this chore is being done on cadence" and the janitor reads it as permission to stop — so a half-covered stamp silently disowns the half nobody else can see. Nearly stamped `session-liveness` on the strength of running the harness half, which would have told the janitor to drop the host-wide half it was already declining. DO answer "can the server even SEE this population?" FIRST, and stamp only a chore you cover completely; a chore reported healthy while half of it happens is the same defect as one reported healthy while none of it happens.
+[^3]: [id:ATOM-ZOTD-QPTN, status:valid, desc:"A zero-findings audit cannot distinguish a clean fleet from a blind probe", keywords:"zero_findings_on_a_live_corpus my_audit_found_nothing_is_that_good clean_result_or_blind_probe audit_reports_no_findings is_the_scan_actually_seeing_anything", ocd:2026-08-05, lmd:2026-08-05] DO NOT report an audit's ZERO FINDINGS as a clean result, BECAUSE zero is exactly what a blind probe returns too — this classifier is silent on every unprovable answer by design, so a missing `gh`, a revoked token, or a non-admin repo yields the same empty findings list as a fully compliant fleet. DO prove the zero is REAL before believing it: check the probe returns live data for at least one repo and hand-trace that repo's verdict, then confirm every repo was actually VISIBLE (here: 14/14 admin, since a non-admin repo is silently skipped). Measured 2026-08-05 — the first live run read 14 repos / 0 findings, and only those two checks separated "the fleet is compliant" from "the sweep saw nothing".

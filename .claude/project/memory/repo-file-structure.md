@@ -107,4 +107,28 @@ CLAUDE.md               - This file - guidance for Claude Code
 - [[runtime-install-tree]] — the runtime data tree (`~/.aimaestro/`, `~/agents/`) this source
   repo is NOT part of once packaged
 
+
+^ATOM-CKJ3-GYYA [desc:"Never name a source directory 'reports' — .gitignore's bare 'reports/' matches at ANY depth and silently un-commits source", keywords: git_add_refused_my_file my_source_file_is_gitignored the_routes_were_not_committed hint_use_-f_if_you_really_want_to_add_them fresh_clone_missing_files_that_work_locally never_name_a_source_directory_reports, ocd: 2026-08-05, lmd: 2026-08-05]
+
+**Never name a source directory `reports` (or `reports_dev`) anywhere in this repo** — not even
+deep inside `app/api/`.
+
+`.gitignore` carries a bare `reports/`, and a git pattern with a trailing slash and no leading
+slash matches a directory of that name **at ANY depth**. So `app/api/janitor/reports/route.ts` is
+ignored by the rule written for the project-root `reports/`.
+
+**The failure is silent in the worst direction.** Measured 2026-08-05: three new API routes were
+written there and `git add` skipped them, but `tsc` passed (it reads the disk), the dev server
+served them, the settings section calling them worked, and the build listed them. Everything was
+green and the commit contained none of it — a fresh clone would have had a UI fetching three
+endpoints that do not exist, with nothing in CI to say so. It was caught only because `git add`
+prints `hint: Use -f if you really want to add them`, which is easy to scroll past.
+
+**Fix by RENAMING the directory, never by negating the ignore rule.** `reports/` exists to keep
+private data out of commits (absolute paths, hostnames, agent names, tokens caught in logs), and
+widening it to accommodate a URL choice is the wrong trade when the collision is avoidable. The
+route became `/api/janitor/status-archive/`, which is also the more accurate name.
+
+**Check it costs one command:** `git check-ignore -v <path>` names the exact rule and line.
+
 ## Notes and lessons learned

@@ -1064,6 +1064,20 @@ describe('incrementAgentMetric', () => {
  * These pin the three writers' silence: createAgent persists no key, a smuggled
  * request value is ignored (not kept), and the load migration strips a legacy key
  * WHATEVER its value — not only the old 'autonomous' default.
+ *
+ * NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/^(    owner: request\.owner,)$/$1\n    role: (request as { role?: string }).role || 'autonomous',/ if $. == 595
+ *   → 2 red / 97 green:
+ *       a role smuggled into the request (legacy caller) is IGNORED, not kept
+ *       createAgent persists NO role key — in the returned record and on disk
+ *
+ * NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \('role' in agent\) \{/if ((agent as { role?: string }).role === 'autonomous') {/ if $. == 236
+ *   → 1 red / 98 green:
+ *       loadAgents strips a legacy role key WHATEVER its value, leaving the title untouched
+ *
+ * Complementary pair: each neuter reddens a DISJOINT test set, so each pin is
+ * attributed to exactly one guard (the createAgent silence vs the migration width).
  */
 describe('role is not part of the taxonomy (TRDD-4Z62YRDG)', () => {
   it('createAgent persists NO role key — in the returned record and on disk', async () => {

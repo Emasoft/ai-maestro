@@ -1,12 +1,12 @@
 ---
 trdd-id: 4Z62YRDG
 title: Stop role from reading as a contradiction of governanceTitle
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T21:37:29+0200
-implementation-commits: [b9f7e401]
+updated: 2026-08-06T00:32:20+0200
+implementation-commits: [b9f7e401, 4262889f, 4b039716]
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -27,6 +27,28 @@ labels: [manager-filed, testbot-session, owner-ours]
 external-refs: [Emasoft/ai-maestro#122]
 ---
 # Stop role from reading as a contradiction of governanceTitle
+
+## ⏵ RESOLUTION — USER ruling 2026-08-06 (supersedes Scope items 2 and 3)
+
+> "there is no such thing as a `role`. There is the `title`, and there is the
+> `role-plugin`. role is not part of the taxonomy."
+
+The field is REMOVED, not conditionally omitted (`4b039716`). Scope item 2's
+"omit when never explicitly set" and item 3's `messagingRole` rename are both
+moot: there is no field to omit or rename. `createAgent` writes no `role` under
+any input; the `loadAgents` migration strips a legacy key WHATEVER its value;
+the type surface (Agent, AgentSummary, CreateAgentRequest, UpdateAgentRequest,
+AgentSession, GovernanceRequestPayload) no longer declares it.
+
+USER follow-up ruling (2026-08-06, same thread): where `role` was used in a
+DECISION (agent validity, plugin compatibility), removal must be a REPLACEMENT
+with the `title` field, never a bare deletion. Verified satisfied: the one
+decision site that ever read `role` as authority — composition-check's
+`(governanceTitle || role || 'unknown')` fallback — was replaced with the
+title in `b9f7e401` and is pinned by the falsification-pair test; every line
+removed by `4b039716` was a WRITE or dead passthrough. Post-removal sweeps
+(typed reads via tsc; untyped casts; runtime `lib/*.mjs` + `server.mjs`;
+126 shell scripts), each positive-controlled, found zero remaining readers.
 
 ## Problem
 
@@ -65,14 +87,13 @@ pushes readers toward raw registry JSON, where the two fields sit adjacent.
 
 - [x] `show <agent>` displays `governanceTitle` (and its absence when unset).
       — `scripts/agent-commands.sh::cmd_show`, in `b9f7e401`.
-- [ ] A record for a manager-titled agent no longer carries a defaulted
-      `role` that reads as a contradiction — or, if item 2 is rejected,
-      carries an explicit marker distinguishing default from explicit.
-      **Deliberately deferred by `b9f7e401`**, which says so in its own message:
-      with the two authority fallbacks gone the change is now genuinely
-      behaviour-preserving, but it rewrites PERSISTED records and is its own
-      change with its own blast radius. This is the one box that still needs
-      code, and it gates the box below.
+- [x] A record for a manager-titled agent no longer carries a defaulted
+      `role` that reads as a contradiction.
+      — Satisfied STRONGER than written, per the USER ruling: NO record carries
+      a `role` key at all. `createAgent` never writes one (`4262889f` stopped
+      the default, `4b039716` removed the field), and the `loadAgents`
+      migration strips any legacy key whatever its value. The misread shape is
+      now impossible by construction, not merely disambiguated.
 - [x] The precedence rule is written somewhere an agent reads at runtime.
       — `rules/aimaestro/aimaestro-agent-rules.md` § Truth, which the server
       seeds into EVERY agent workdir and every agent loads on every turn. That
@@ -82,17 +103,24 @@ pushes readers toward raw registry JSON, where the two fields sit adjacent.
       not evidence FOR authority and not evidence AGAINST it, and a defaulted
       `role: autonomous` beside `governanceTitle: manager` is a DEFAULT, not a
       contradiction, and not grounds to refuse a mandate.
-- [ ] A test asserts that a manager-titled agent's serialized record cannot
+- [x] A test asserts that a manager-titled agent's serialized record cannot
       be parsed as title-inconsistent by the documented precedence rule.
-      **Blocked on the box above** — as written this is a claim about the
-      RECORD, and while the record still carries the defaulted `role` the only
-      thing a test can pin is the rule, not the serialization.
-      What DOES exist now is the other half, and it is the half that had a live
-      false-PASS: `tests/governance/authority-never-reads-role.test.ts` is a
-      source ratchet asserting NO production site reads `role` as authority, in
-      any of three orderings. It carries its own non-vacuity guards (a file-count
-      floor, a top-level-file check, and a seeded positive control per pattern),
-      because "0 findings" is also what a broken detector returns.
+      — Now pinned at the RECORD level, unblocked by the box above: the
+      "role is not part of the taxonomy" describe block in
+      `tests/agent-registry.test.ts` asserts (1) createAgent persists NO role
+      key, in the returned record AND on disk; (2) a role smuggled by a stale
+      caller is IGNORED; (3) the migration strips a legacy key whatever its
+      value ('autonomous' AND 'member'), leaving `governanceTitle: manager`
+      untouched. Neuter pair OBSERVED (scripts/dev/neuter, restores
+      blob-verified): re-adding the write → exactly the 2 createAgent pins
+      red; narrowing the migration to `=== 'autonomous'` → exactly the
+      migration pin red. Disjoint sets — each guard attributed to its own test.
+      The other half stands: `tests/governance/authority-never-reads-role.test.ts`
+      (source ratchet, no production site reads role as authority) and
+      `tests/governance/composition-check-title-authority.test.ts`, whose
+      fixtures DELIBERATELY keep seeding a `role` key into mock data — legacy
+      records may carry it until the migration runs, and the route must ignore
+      it even then.
 
 ## Non-goals
 
@@ -108,3 +136,15 @@ record, hand it to a reader with no access to `types/agent.ts`, and confirm
 that the correct governance conclusion is now reachable from the record
 alone. That is the actual failure mode — not a unit-test-shaped one, so
 test it as it actually failed.
+
+**Closed 2026-08-06:** the reproduction is now impossible by construction — a
+serialized record cannot carry a `role` key (never written; stripped on load),
+so the ambiguous shape the two Claude readers misread no longer exists. The
+runtime precedence rule (`aimaestro-agent-rules.md` § Truth) remains as the
+guard for the transition window before a host's migration has run.
+
+## Approval log
+
+- 2026-08-06T00:32:20+0200 — COMPLETED by ai-maestro (mandate, mandated-by:
+  user). All 4 boxes checked; USER ruling recorded verbatim in RESOLUTION;
+  code in b9f7e401 + 4262889f + 4b039716; neuter pair observed and disjoint.

@@ -23,10 +23,24 @@
  * worse bug than the one being fixed. So the seeded-violation case is a mandatory positive control,
  * and it asserts the emitted `file:line`, not merely a non-zero exit.
  *
- * NEUTER RUN (2026-08-05 — OBSERVED): reverting the count to `wc -l` reddens ONLY the clean case
- * (1 of 3) and leaves both violation closures green — which is the correct split and also the proof
- * that the positive control cannot mask a regression in the fix. Reverting the `if out:` guard
- * alone reddens the same single closure, the two being belt-and-braces on the same failure.
+ * NEUTER RUNS (2026-08-05 — OBSERVED, and they corrected what this comment first predicted).
+ * The two halves of the fix are **REDUNDANT, not complementary**, and that is only visible by
+ * running all three mutations:
+ *
+ *   - `if out:` → `if True:` alone .................... **0 red.** `grep -c .` still drops the blank.
+ *   - `grep -c .` → `wc -l` alone ..................... **0 red.** `if out:` means the file is empty.
+ *   - **both together** ............................... **1 red** — and exactly the clean case,
+ *     with both positive controls green.
+ *
+ * So neither half is individually pinned: each masks the other. The first draft of this comment
+ * asserted each would redden the clean case on its own, which is the intuitive reading of
+ * "belt-and-braces" and is simply false here. Stated plainly because it changes what a future
+ * editor may safely delete: **removing EITHER half alone will not redden this file**, so the
+ * redundancy has to be defended in prose rather than by the suite.
+ *
+ * (A fourth mutation was discarded rather than reported: an unescaped perl replacement interpolated
+ * `$(` and `$TMP` and left the script syntactically broken, reddening all 3. That measured the
+ * instrument, not the tests.)
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'

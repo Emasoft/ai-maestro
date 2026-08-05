@@ -149,3 +149,72 @@ describe('no bare GitHub at-mention in governance-bearing prose (ai-maestro#109)
     expect(findings).toEqual([])
   })
 })
+
+/**
+ * THE BYLINE TEMPLATE MUST CARRY NO `@` AT ALL — including a PLACEHOLDER.
+ *
+ * `BARE_MENTION` above requires an alphanumeric right after the `@`, so it matches `@Emasoft`
+ * and reads straight past `@<owner>`. That is the wrong way round for a TEMPLATE: the
+ * placeholder is the form a reader SUBSTITUTES A REAL HANDLE INTO at copy time, so the guard
+ * was catching the handle that is already real and missing the one that is about to become
+ * real. Measured 2026-08-05: `docs/GOVERNANCE-RULES.md` R22.2 and
+ * `rules/aimaestro/aimaestro-prrd-governance.md` both shipped `@<owner>` for months, green.
+ *
+ * Backticks are no defence here and that is the whole point — a template's purpose is to be
+ * copied OUT of its code span into a real comment, where the `@` linkifies and pages a live
+ * account. The janitor hit the identical defect in its own IND base rule and disclosed paging
+ * a real account from it (ai-maestro#109); `~/.claude/rules/github-mentions.md` already rules
+ * it: "Templates carry no `@` at all."
+ *
+ * SCOPED TO THE TEMPLATE SPAN, not the line: the prose AROUND a byline legitimately discusses
+ * `@` (this rule's own text does), and a line-level check would fire on the explanation that
+ * exists to prevent the bug.
+ */
+const BYLINE_SPAN = /Posted by the Claude developing[\s\S]{0,200}?gh auth/g
+
+/** Collapse markdown line-wrapping + blockquote markers so a template split across lines is
+ *  still ONE span. The overlay's copy wraps mid-template; without this it is invisible. */
+function bylineTemplates(text: string): string[] {
+  const flat = text.replace(/\n\s*>?\s*/g, ' ')
+  return flat.match(BYLINE_SPAN) ?? []
+}
+
+describe('governance: the self-identification BYLINE TEMPLATE carries no @', () => {
+  it('detects a placeholder handle AND a real one (positive control)', () => {
+    // Without this the corpus assertion below passes for any reason at all, including a regex
+    // that matches nothing — which is exactly how the placeholder survived the other guard.
+    expect(bylineTemplates('_Posted by the Claude developing **X** (via the shared @<owner> gh auth)._')[0])
+      .toContain('@')
+    expect(bylineTemplates('_Posted by the Claude developing **X** (via the shared @Emasoft gh auth)._')[0])
+      .toContain('@')
+  })
+
+  it('accepts the corrected form (plain owner name, no @)', () => {
+    const spans = bylineTemplates('_Posted by the Claude developing **X** (via the shared <owner> gh auth)._')
+    expect(spans).toHaveLength(1)
+    expect(spans[0]).not.toContain('@')
+  })
+
+  it('finds the template in a NON-EMPTY set of governance files (non-vacuity)', () => {
+    // A rule written only over BAD items is vacuous on an empty set: if no file carried the
+    // byline at all, the corpus assertion below would pass having read nothing.
+    const withByline = SCANNED.filter((rel) => {
+      const abs = path.join(REPO, rel)
+      return fs.existsSync(abs) && bylineTemplates(fs.readFileSync(abs, 'utf8')).length > 0
+    })
+    expect(withByline.length).toBeGreaterThanOrEqual(2)
+    expect(withByline).toContain('docs/GOVERNANCE-RULES.md')
+  })
+
+  it('finds no @ in any byline template in the governance corpus', () => {
+    const findings: string[] = []
+    for (const rel of SCANNED) {
+      const abs = path.join(REPO, rel)
+      if (!fs.existsSync(abs)) continue
+      for (const span of bylineTemplates(fs.readFileSync(abs, 'utf8'))) {
+        if (span.includes('@')) findings.push(`${rel}  ${span.slice(0, 90)}`)
+      }
+    }
+    expect(findings).toEqual([])
+  })
+})

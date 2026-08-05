@@ -1382,7 +1382,7 @@ global PRRD baseline golden rule `G1.1`.
 `R22.1` **self-id-every-github-write** — every agent that writes to GitHub — **issue, issue comment, PR, PR comment, PR
 review, discussion, release note** — MUST begin the body with a one-line self-identification of which agent / role /
 plugin authored it. `R22.2` **recommended-line** — recommended leading line:
-`_Posted by the Claude developing **<plugin-or-role>** (via the shared @<owner> gh auth)._` `R22.3` **commit-trailer** —
+`_Posted by the Claude developing **<plugin-or-role>** (via the shared <owner> gh auth)._` — the template carries NO `@`: it is copied OUT of its code span into a real comment, where an `@` linkifies and pages a live account (corrected 2026-08-05, mirrors R22.2). `R22.3` **commit-trailer** —
 commits SHOULD carry an `Agent: <plugin-slug>` trailer = the plugin's **stable package slug** (e.g.
 `Agent: ai-maestro-maintainer-agent`), greppable ecosystem-wide + rename-surviving, NOT a freeform role name
 [Explicit (USER), refined 2026-06-02]. `R22.4` **anti-impersonation** — this is an anti-impersonation / clarity

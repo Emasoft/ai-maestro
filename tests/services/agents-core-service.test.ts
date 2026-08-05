@@ -27,6 +27,7 @@ const {
   mockAuthorization,
   mockGovernance,
   mockTeamRegistry,
+  mockSessionsService,
 } = vi.hoisted(() => {
   const mockRuntime = {
     listSessions: vi.fn().mockResolvedValue([]),
@@ -43,6 +44,13 @@ const {
   let uuidCounter = 0
 
   return {
+    // R42.8 Gate 0b reads the pending prompt through a DYNAMIC import of
+    // sessions-service (line ~1590 of the service). That is its ONLY use in
+    // agents-core-service, so mocking the module here is inert for every other
+    // test in this file — verified by grep before adding it.
+    mockSessionsService: {
+      readPendingPrompt: vi.fn().mockReturnValue(null),
+    },
     mockRuntime,
     mockAgentRegistry: {
       loadAgents: vi.fn().mockReturnValue([]),
@@ -136,6 +144,7 @@ vi.mock('child_process', () => ({
 vi.mock('@/lib/authorization', () => mockAuthorization)
 vi.mock('@/lib/governance', () => mockGovernance)
 vi.mock('@/lib/team-registry', () => mockTeamRegistry)
+vi.mock('@/services/sessions-service', () => mockSessionsService)
 
 // Mock element-management-service: pipelines that agents-core-service delegates to
 const mockDeleteAgentPipeline = vi.fn()
@@ -1052,6 +1061,103 @@ describe('hibernateAgent', () => {
 // ============================================================================
 // sendAgentSessionCommand
 // ============================================================================
+
+/**
+ * R42.8 Gate 0b — an unblock may only answer a question the agent RAISED.
+ *
+ * TRDD-AODXPI5E. `authorize()` decides WHO may unblock; this gate decides WHETHER
+ * there is anything to unblock, and it lives in the service rather than the route
+ * so that no route — present or future — can turn the narrow verb into a general
+ * injection channel just by passing the flag. With no pending prompt there is no
+ * question, so a send under the exception's name would be plain injection.
+ *
+ * `@/lib/authorization` is mocked ALLOWED in this file, which is what makes these
+ * tests about Gate 0b alone: the title gate cannot be the thing that refuses.
+ *
+ * NEUTER (2026-08-05, OBSERVED): making this gate inert — `if (false)` — left
+ * 108/108 green across the three files that drive sendAgentSessionCommand, i.e.
+ * the gate was pinned by NOTHING. That measurement is why this block exists.
+ */
+describe('sendAgentSessionCommand — R42.8 blocked-only precondition (Gate 0b)', () => {
+  const AGENT_CALLER: AuthContext = {
+    isSystemOwner: false,
+    agentId: 'the-manager',
+    governanceTitle: 'manager',
+  } as AuthContext
+
+  it('REFUSES an unblock when no prompt is pending', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue(null)
+
+    const result = await sendAgentSessionCommand(
+      'agent-1',
+      { command: 'rm -rf something-nobody-asked-for', requireIdle: false, authAction: 'unblock-prompt' },
+      AGENT_CALLER,
+    )
+
+    expect(result.status).toBe(409)
+    expect(result.error).toMatch(/no prompt is pending/i)
+    // The whole point: the keystroke never reached the pane.
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
+  })
+
+  it('ALLOWS an unblock when a prompt IS pending', async () => {
+    // Positive control. Without it, the refusal above passes equally well against
+    // a gate that refuses everything — and a gate that always refuses is not a
+    // precondition, it is a broken feature.
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue({
+      question: 'Allow this command?',
+      options: [{ key: '1', label: 'Yes' }],
+    })
+
+    const result = await sendAgentSessionCommand(
+      'agent-1',
+      { command: '1', requireIdle: false, authAction: 'unblock-prompt' },
+      AGENT_CALLER,
+    )
+
+    expect(result.status).toBe(200)
+    expect(result.data?.success).toBe(true)
+  })
+
+  it('does NOT gate an ordinary send-command on a pending prompt', async () => {
+    // Gate 0b is scoped to the exception. If it leaked into the default action it
+    // would break every self-drive send (the janitor's own /compact, the queue
+    // drain) the moment the agent was not mid-prompt.
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue(null)
+
+    const result = await sendAgentSessionCommand(
+      'agent-1',
+      { command: 'ls', requireIdle: false },
+      AGENT_CALLER,
+    )
+
+    expect(result.status).toBe(200)
+  })
+
+  it('does NOT bind the human owner — R42.8 governs AGENTS', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue(null)
+
+    const result = await sendAgentSessionCommand(
+      'agent-1',
+      { command: 'anything', requireIdle: false, authAction: 'unblock-prompt' },
+      SYSTEM_OWNER_CTX,
+    )
+
+    expect(result.status).toBe(200)
+  })
+})
 
 describe('sendAgentSessionCommand', () => {
   it('sends command to idle session', async () => {

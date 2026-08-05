@@ -150,6 +150,38 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
     ).toEqual([])
   })
 
+  it('an UNKNOWN VERB is reported locally, without blaming the server', () => {
+    // TRDD-T3FXA0Y0 box 3, third instance of the gate-ordering defect. Recognising a verb
+    // is a LOCAL, OFFLINE determination — `aimaestro-agent.sh nonsense` is wrong on a host
+    // with no network, and the script already knows it. With `check_api_running` first, the
+    // caller was told "the API is not reachable", so someone who typo'd a verb went and
+    // debugged a server that had nothing to do with it.
+    //
+    // The second assertion is the load-bearing one. Exit 1 was ALREADY correct before the
+    // fix — the gate exits 1 too — so a test asserting only the status passes either way
+    // and pins nothing. What changed is WHICH failure is reported, and the only way to see
+    // that is to assert the server is NOT blamed.
+    let status = 0
+    let output = ''
+    try {
+      execFileSync('bash', [join(SCRIPTS, 'aimaestro-agent.sh'), 'nonsense-verb'], {
+        stdio: 'pipe',
+        timeout: 20_000,
+        env: { ...process.env, AID_AUTH: '', AIMAESTRO_SESSION: '', AIMAESTRO_SUDO_TOKEN: '' },
+      })
+    } catch (err) {
+      const e = err as { status?: number; stderr?: Buffer; stdout?: Buffer }
+      status = typeof e.status === 'number' ? e.status : 1
+      output = `${e.stderr?.toString() ?? ''}${e.stdout?.toString() ?? ''}`
+    }
+
+    expect(status, 'an unknown verb must be a failure').not.toBe(0)
+    expect(output, 'the caller typo\'d a verb — do not send them to debug the server').not.toMatch(
+      /not reachable|not running|HTTP 401|:23000/i,
+    )
+    expect(output, 'and it must say what was actually wrong').toMatch(/Unknown command/i)
+  })
+
   it('every listed violator still exists (no stale names hiding a deleted script)', () => {
     const ghosts = [...KNOWN_VIOLATORS].filter((s) => !CANDIDATES.includes(s))
     expect(ghosts, `KNOWN_VIOLATORS names scripts that no longer exist: ${ghosts.join(', ')}`).toEqual([])

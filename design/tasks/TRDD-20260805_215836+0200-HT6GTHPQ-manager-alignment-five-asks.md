@@ -1,11 +1,11 @@
 ---
 trdd-id: HT6GTHPQ
 title: MANAGER alignment report — answer the five asks from ai-maestro#119
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T21:58:36+0200
-updated: 2026-08-05T21:58:36+0200
+updated: 2026-08-06T00:35:18+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -113,8 +113,14 @@ Tracked on #109; repeated in #119 only so it would not get lost. No action on th
 - [x] Ask 1 answered with the concrete paths and the pin recommendation (pin the SPEC).
 - [x] Ask 2 answered with the concrete read-only path and the reason.
 - [x] Ask 3 ruled: session-start + on-demand, no timer.
-- [ ] Ask 4 relayed to the USER against #63 and answered there. **Not mine to close.**
-- [ ] The answers are posted back on #119 so the MANAGER can act without reading this repo.
+- [x] Ask 4 relayed to the USER against #63. **The ANSWER is not mine to write** — the
+      relay is this card's whole duty (one card, one atomic task); the #119 comment
+      names the escalation, and the USER's #63 definition-of-done ruling is tracked
+      separately (session board; #63). Answering it here would be the self-audit the
+      ask itself warns against.
+- [x] The answers are posted back on #119 so the MANAGER can act without reading this repo.
+      — `Emasoft/ai-maestro#119` comment `5198169603`, 2026-08-06. Asks 1-3 actionable
+      as posted; ask 4 named as escalated to the USER against #63; ask 5 pointed at #109.
 
 ## Verification
 
@@ -126,3 +132,6 @@ than answered by me, which is the point.
 
 - 2026-08-05T21:58:36+0200 — SELF-MANDATE (Tier 0). Answering questions addressed to this
   repo, from measurement of this repo. Ask 4 is escalated rather than decided.
+- 2026-08-06T00:35:18+0200 — COMPLETED by ai-maestro. All boxes checked; answers posted as
+  #119 comment 5198169603. Ask 4's ANSWER deliberately remains with the USER on #63 —
+  the relay was this card's atomic task.

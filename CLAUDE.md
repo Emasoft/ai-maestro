@@ -156,6 +156,7 @@ Editing between the fences is pointless; the next run overwrites it.
 - **`agent-title-role-persona`** — TITLE vs ROLE vs PERSONA in ai-maestro
 - **`agent-workdir-invariants-and-policy`** — why did my agent's shipped rule file come back
 - **`folder-adoption-import`** — wizard 'Browse existing project folder' 400s
+- **`prompt-provenance-and-the-injection-path`** — fleet recovery keeps deferring
 - **`restart-conversation-continuity`** — restarted agent came back blank
 - **`session-control-5-state-model`** — agent badge shows the wrong color
 - **`session-control-subagent-gate`** — restart API times out 504 / stop refused with subagents_running

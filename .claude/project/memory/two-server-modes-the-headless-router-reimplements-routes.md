@@ -76,3 +76,8 @@ graph; never infer it from the architecture you expect. "It's all funnelled thro
   Next.js can serve a full-mode GET from a build-time cache without entering the handler at all,
   while the headless router (being outside Next.js) always executes it. So "stale in full mode,
   correct in headless" is evidence for route caching, not for a missing headless guard.
+- [[prompt-provenance-and-the-injection-path]] — a live instance of this page's failure mode, and
+  the contrast that shows what "done right" looks like: `POST /api/sessions/me/user-input` exists
+  in Next and in NONE of the headless table's entries, so the hook 404s and presence is never
+  recorded there — while `/portfolio/verify` appears in both AND delegates to the same module, so
+  those two cannot drift.

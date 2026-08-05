@@ -73,4 +73,9 @@ broadcast → `useSessionActivity` → `AgentBadge`/`AgentProfile`
 
 ## See also
 
+- [[prompt-provenance-and-the-injection-path]] — the other half of "is this agent busy": that page
+  covers who TYPED a prompt (the server marks what it injects, so an injected prompt no longer
+  reports human presence) and the `sendCommand` idle gate, which is a **server-side** refusal
+  distinct from the UI status model here.
+
 ## Notes and lessons learned

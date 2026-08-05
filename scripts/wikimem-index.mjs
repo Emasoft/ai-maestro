@@ -165,12 +165,30 @@ function main() {
 
   if (check) {
     const missing = pages.filter((p) => !p.topic).map((p) => p.name).sort()
+    // TOPIC_ORDER is a CLOSED vocabulary, so an off-vocabulary value is always a typo — and it
+    // fails INVISIBLY. An unknown topic is appended as its own group and rendered raw
+    // (`TOPIC_TITLES[topic] || topic`), so `topic: Agents` produced a SECOND `### Agents` heading
+    // byte-identical to the real one in the rendered index. Nothing downstream complains: the page
+    // is present, its row is there, and the only symptom is a duplicate section a reader assumes is
+    // intentional. Checking PRESENCE alone could never catch it.
+    const unknown = pages
+      .filter((p) => p.topic && !TOPIC_ORDER.includes(p.topic))
+      .map((p) => `${p.name} (topic: ${p.topic})`)
+      .sort()
+
+    // Both classes are reported in ONE run, and neither exits early. An early exit on `missing`
+    // would mask every `unknown` behind whichever page happened to lack a topic that day — so the
+    // second check would sit there looking enforced while being unreachable.
     if (missing.length > 0) {
       console.error(`wikimem-index --check: ${missing.length} page(s) missing metadata.topic:`)
       for (const name of missing) console.error(`  - ${name}`)
-      process.exit(1)
     }
-    process.exit(0)
+    if (unknown.length > 0) {
+      console.error(`wikimem-index --check: ${unknown.length} page(s) with an unknown metadata.topic:`)
+      for (const row of unknown) console.error(`  - ${row}`)
+      console.error(`  known topics: ${TOPIC_ORDER.join(', ')}`)
+    }
+    process.exit(missing.length + unknown.length > 0 ? 1 : 0)
   }
 
   const byTopic = new Map()

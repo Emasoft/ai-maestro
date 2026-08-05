@@ -1,6 +1,6 @@
 # SPEC — AI Maestro ROLE-PLUGINS (on-disk structure, `.agent.toml`, quad-identity)
 
-- **spec-version:** 1.0.0
+- **spec-version:** 1.0.1
 - **status:** authoritative
 - **authority:** PRRD ▶ SPEC ▶ TRDD. This SPEC governs the on-disk shape of every role-plugin.
 - **scope:** what makes a Claude Code plugin a *role-plugin*, its file tree, the `.agent.toml`
@@ -248,9 +248,11 @@ USER-provided source) conforms to this SPEC as a **minimum-tree LOCAL/D4** role-
   planning / agent-messaging / agent-identity / team-kanban (deliberately NO `team-governance`, R39.8).
 - **Minimum tree ✓** — plugin.json + `.agent.toml` + main-agent only (no bundled payload).
 - **model:** opus on the main-agent (RP-MODEL).
-- **LOCAL/D4** — not in `PREDEFINED_ROLE_PLUGIN_NAMES`, no published GitHub repo; the Emasoft 404
-  is by design (R39.2). Publishing is a USER-owned decision (would flip it to a predefined-style
-  published role-plugin + require R39.2 + `PREDEFINED_ROLE_PLUGIN_NAMES` updates).
+- **PUBLISHED** (1.0.1 correction — the 1.0.0 text said "no published GitHub repo; the Emasoft
+  404 is by design", stale since 2026-07-22): `Emasoft/ai-maestro-assistant-role-agent` is
+  PUBLIC and listed in the `ai-maestro-plugins` marketplace manifest, while remaining absent
+  from `PREDEFINED_ROLE_PLUGIN_NAMES` — an OPEN QUESTION on ai-maestro#86 F2 (consumers
+  assume exactly 8 predefined plugins; do not "fix" the count to 9).
 
 `RP-ASSISTANT-02` The persona itself (behaviour) is governed by GOVERNANCE-RULES R39
 (R39.1–R39.10) + the governance SPEC, not by this SPEC — this SPEC covers only the plugin's

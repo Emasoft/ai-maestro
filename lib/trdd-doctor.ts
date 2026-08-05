@@ -1078,6 +1078,11 @@ export interface FixResult {
   filePath: string
   id: string
   changes: string[]
+  /**
+   * Whether this card's `updated:` was moved. False for a purely MECHANICAL repair set —
+   * see the `record` helper in `fixCorpus` for the test and why it matters.
+   */
+  bumped: boolean
 }
 
 /**
@@ -1118,6 +1123,28 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
     if (c.parseError) continue
 
     const changes: string[] = []
+    let semantic = false
+    /**
+     * Record a repair AND its verdict. The kind is a REQUIRED argument precisely so a new
+     * branch cannot be added without deciding it — an implicit default is how this bug
+     * shipped in the first place.
+     *
+     * The test is the rule's own: does the repair CHANGE WHAT THE CARD ASSERTS?
+     *
+     * - MECHANICAL — the card asserts exactly what it asserted before. A second copy of a
+     *   fact removed, a value re-spelled, a denormalized pointer restored from evidence that
+     *   was already on disk. Nothing a reader believes about the card has changed.
+     * - SEMANTIC — the card now claims something it did not. A pipeline state invented,
+     *   resolved, or lifted into the field consumers actually read; a frontmatter created.
+     *
+     * When in doubt choose `'mechanical'`. An under-bumped card carries a stale `updated:`
+     * until its next real edit corrects it. An over-bumped one reorders the board with
+     * nothing in the output saying why, and no later edit can undo that.
+     */
+    const record = (kind: 'mechanical' | 'semantic', msg: string) => {
+      changes.push(msg)
+      if (kind === 'semantic') semantic = true
+    }
     // Re-read the ONE file about to be repaired, rather than carrying every file's bytes
     // through the lint path to serve the rare fix path (TRDD-BQC8NQSW).
     let text: string
@@ -1161,7 +1188,10 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         '',
       ].join('\n')
       text = fm + text
-      changes.push('added a full frontmatter (was: none) — column=todo per the uncertainty law')
+      // SEMANTIC: the card asserted nothing structured before and now asserts a whole field
+      // set, `column: todo` among them. (The generated block stamps `updated:` itself above,
+      // so the bump below is a no-op replace on the line this branch just wrote.)
+      record('semantic', 'added a full frontmatter (was: none) — column=todo per the uncertainty law')
     } else {
       // A COLUMN VALUE sitting in the `status:` field.
       //
@@ -1191,7 +1221,14 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         // dead spelling overwrite the live one.
         const agrees = mappedFromV1 === c.column || statusKey === c.column
         text = text.replace(/^status:.*\n/m, '')
-        changes.push(
+        record(
+          // The two sub-cases are NOT the same kind of repair, which is why the verdict is
+          // computed rather than fixed. AGREES: the card said one state twice and now says it
+          // once — the assertion set is unchanged. DISAGREES: the card was making TWO competing
+          // pipeline claims and one is now gone; `column:` was always the authoritative one, but
+          // deleting a claim is still a change to what the card says, and a reader should see
+          // the card as recently touched.
+          agrees ? 'mechanical' : 'semantic',
           agrees
             ? `dropped \`status: ${statusRaw}\` (a column value, redundant — \`column: ${c.column}\` already says it)`
             : `dropped \`status: ${statusRaw}\`; KEPT \`column: ${c.column}\` (both held a pipeline state and disagreed — the v2 state machine wins)`,
@@ -1201,7 +1238,10 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         // ONLY because the value is a recognised state; no default, no guess.
         const mapped = mappedFromV1 ?? statusKey
         text = text.replace(/^status:.*$/m, `column: ${mapped}`)
-        changes.push(`status: ${statusRaw} → column: ${mapped} (a column value in the wrong field)`)
+        // SEMANTIC, though the VALUE is unchanged: no consumer reads `status:` for a pipeline
+        // position, so before this repair the card was column-less to every reader and to the
+        // board. It joins the board here, which is a pipeline claim it was not making.
+        record('semantic', `status: ${statusRaw} → column: ${mapped} (a column value in the wrong field)`)
       }
       // A `status:` whose value is NOT a pipeline state is deliberately left alone.
       //
@@ -1233,14 +1273,18 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         // and its board sort key floated to the top forever. `--fix` never converged.
         if (next !== text) {
           text = next
-          changes.push('column: todo (was missing — the uncertainty law)')
+          // SEMANTIC, and the clearest case: this INVENTS a pipeline state nobody chose. The
+          // card now claims `todo` on the doctor's authority, and that must be visible.
+          record('semantic', 'column: todo (was missing — the uncertainty law)')
         }
       }
       // uppercase the id
       if (c.fm['trdd-id'] && !/^[A-Z0-9]{8}$/.test(String(c.fm['trdd-id']))) {
         const short = normalizeTrddRef(String(c.fm['trdd-id']).slice(0, 8))
         text = text.replace(/^trdd-id:.*$/m, `trdd-id: ${short}`)
-        changes.push(`trdd-id → ${short} (8-char UPPERCASE base36)`)
+        // MECHANICAL: ids are matched case-insensitively everywhere (`normalizeTrddRef`, the
+        // `-iname` lookups), so this re-spells an identity without changing it.
+        record('mechanical', `trdd-id → ${short} (8-char UPPERCASE base36)`)
       }
       // title from H1
       if (!c.title) {
@@ -1255,7 +1299,9 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
             : text.replace(/^(trdd-id:.*)$/m, `$1\n${line}`)
           if (next !== text) {
             text = next
-            changes.push('title lifted from the H1')
+            // MECHANICAL: the title was already IN the document, as the H1. This lifts it into
+            // frontmatter — the same denormalization repair as the `derived:` back-link below.
+            record('mechanical', 'title lifted from the H1')
           }
         }
       }
@@ -1274,7 +1320,11 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         const stripped = removeBodyStateClaimLine(text)
         if (stripped !== null) {
           text = stripped
-          changes.push(
+          // MECHANICAL by construction: the guard above admits ONLY the agreeing case, so what
+          // is removed is a duplicate of a fact `column:` already carries. The disagreeing case
+          // is left byte-for-byte alone and never reaches here.
+          record(
+            'mechanical',
             `dropped the body's \`Status: ${c.bodyStateClaim.slice(0, 40)}\` line (a second copy of \`column: ${c.column}\`, free to go stale)`,
           )
         }
@@ -1294,17 +1344,35 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         if (!/^derived-kind:/m.test(text)) {
           text = text.replace(/^(derived: true)$/m, `$1\nderived-kind: ${kind}`)
         }
-        changes.push(`derived: true + derived-kind: ${kind} (TRDD-${claims[0].parent} lists it in its \`${kind}:\` — the back-link was missing)`)
+        // MECHANICAL — the headline case. The parent's own `npt:`/`eht:` already asserted the
+        // derivation; this restores the child's half of a denormalized pointer and changes no
+        // fact the card makes. A corpus-wide back-link repair used to reorder the whole board.
+        record('mechanical', `derived: true + derived-kind: ${kind} (TRDD-${claims[0].parent} lists it in its \`${kind}:\` — the back-link was missing)`)
       }
     }
 
     if (changes.length > 0) {
-      // Any repair bumps `updated:` — the board sorts on it.
-      text = /^updated:/m.test(text)
-        ? text.replace(/^updated:.*$/m, `updated: ${stamp}`)
-        : text.replace(/^(created:.*)$/m, `$1\nupdated: ${stamp}`)
+      // Bump `updated:` ONLY when the repair set changed what the card ASSERTS.
+      //
+      // This comment used to read "Any repair bumps `updated:` — the board sorts on it",
+      // citing as its justification the very clause that now forbids it. The rule was
+      // corrected on 2026-07-31 to "a MECHANICAL repair (a format/syntax pass that changes no
+      // fact) must NOT bump it, or the repair silently reorders the whole board" — the same
+      // sentence flipped from the reason TO bump into the reason not to. Nothing flagged the
+      // inversion, because a tool cites a rule's WORDS, not its VERSION (TRDD-R6R9XHZI).
+      //
+      // The damage was never a wrong timestamp: the board sorts on `updated:`, so a
+      // corpus-wide `yarn trdd:fix` reordered the view every human and agent reads into an
+      // artefact of when someone last ran a formatter, with nothing saying so. Keeping every
+      // `updated:` byte-identical across a mechanical run is also the only cheap proof,
+      // afterwards, that the run WAS mechanical.
+      if (semantic) {
+        text = /^updated:/m.test(text)
+          ? text.replace(/^updated:.*$/m, `updated: ${stamp}`)
+          : text.replace(/^(created:.*)$/m, `$1\nupdated: ${stamp}`)
+      }
       if (!opts.dryRun) fs.writeFileSync(c.filePath, text, 'utf8')
-      results.push({ filePath: c.filePath, id: c.id, changes })
+      results.push({ filePath: c.filePath, id: c.id, changes, bumped: semantic })
     }
   }
   return results

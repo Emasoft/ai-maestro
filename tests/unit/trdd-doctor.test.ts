@@ -480,6 +480,154 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
   })
 })
 
+/**
+ * `updated:` moves ONLY for a repair that changed what the card ASSERTS (TRDD-R6R9XHZI).
+ *
+ * The board is READ in `updated:` order, so an unconditional bump made a corpus-wide
+ * `yarn trdd:fix` reorder the view every human and agent consults — invisibly, since nothing
+ * in the output said the sort key had moved. The rule (`trdd-design-tasks.md`, corrected
+ * 2026-07-31) forbids it for a MECHANICAL repair specifically.
+ *
+ * EVERY mechanical test below asserts TWO things: that the repair LANDED, and that `updated:`
+ * did not move. The second assertion alone is vacuous — "no `updated:` changed" is satisfied
+ * just as well by a fixer that repaired nothing at all.
+ */
+describe('trdd-doctor — the `updated:` bump is conditional on the repair being SEMANTIC', () => {
+  const NOW = '2026-07-13T12:00:00+0200'
+  const ORIG = 'updated: 2026-01-01T00:00:00+0100'
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-bump-'))
+    fs.mkdirSync(path.join(tmp, 'tasks'), { recursive: true })
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  const read = (name: string) => fs.readFileSync(path.join(tmp, 'tasks', name), 'utf8')
+
+  // ---- MECHANICAL: the card asserts exactly what it asserted before ----
+
+  // The card's headline case. The parent's own `eht:` ALREADY asserted this derivation; the
+  // child's `derived:` is a denormalized copy of it. Restoring the copy changes no fact — and
+  // this is the repair a corpus-wide pass fires most often, so it is the one that reordered
+  // the whole board.
+  it('MECHANICAL — a derivation back-link repair leaves `updated:` byte-identical', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-MECHBKLN-p.md', good('MECHBKLN', { eht: '[TRDD-MECHCHLD]' }))
+    write('tasks', 'TRDD-20260101_000000+0100-MECHCHLD-c.md', good('MECHCHLD', { 'parent-trdd': 'TRDD-MECHBKLN' }))
+    const res = fixCorpus(tmp, { now: NOW })
+    const out = read('TRDD-20260101_000000+0100-MECHCHLD-c.md')
+    expect(out).toContain('derived: true')                 // the repair LANDED (non-vacuity)
+    expect(out).toContain(ORIG)                            // ...and the sort key did NOT move
+    expect(out).not.toContain(NOW)
+    expect(res.find((r) => r.id === 'MECHCHLD')?.bumped).toBe(false)
+  })
+
+  it('MECHANICAL — uppercasing `trdd-id` leaves `updated:` untouched (an id is matched case-insensitively)', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-MECHCASE-x.md', good('mechcase'))
+    const res = fixCorpus(tmp, { now: NOW })
+    const out = read('TRDD-20260101_000000+0100-MECHCASE-x.md')
+    expect(out).toContain('trdd-id: MECHCASE')
+    expect(out).toContain(ORIG)
+    expect(res[0].bumped).toBe(false)
+  })
+
+  it('MECHANICAL — dropping an AGREEING body state claim leaves `updated:` untouched', () => {
+    const file = 'TRDD-20260101_000000+0100-MECHBODY-x.md'
+    write('tasks', file, `${good('MECHBODY')}\n**Status:** In progress\n\nkeep this.\n`)
+    const res = fixCorpus(tmp, { now: NOW })
+    const out = read(file)
+    expect(out).not.toMatch(/\*\*Status:\*\*/)
+    expect(out).toContain(ORIG)
+    expect(res[0].bumped).toBe(false)
+  })
+
+  // The verdict for this branch is COMPUTED, not fixed — see the disagreeing twin below.
+  // `in-progress` maps to `dev`, which is exactly the column here, so the card said one
+  // state twice and now says it once.
+  it('MECHANICAL — dropping an AGREEING redundant `status:` leaves `updated:` untouched', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-MECHSTAT-x.md',
+      good('MECHSTAT', { column: 'dev', status: 'in-progress' }))
+    const res = fixCorpus(tmp, { now: NOW })
+    const out = read('TRDD-20260101_000000+0100-MECHSTAT-x.md')
+    expect(out).not.toMatch(/^status:/m)
+    expect(out).toContain(ORIG)
+    expect(res[0].bumped).toBe(false)
+  })
+
+  // ---- SEMANTIC: the card now claims something it did not ----
+
+  it('SEMANTIC — inventing a missing `column: todo` MOVES `updated:` (nobody chose that state)', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-SEMANOCO-x.md',
+      good('SEMANOCO').replace(/^column:.*$/m, ''))
+    const res = fixCorpus(tmp, { now: NOW })
+    const out = read('TRDD-20260101_000000+0100-SEMANOCO-x.md')
+    expect(out).toContain('column: todo')
+    expect(out).toContain(`updated: ${NOW}`)
+    expect(out).not.toContain(ORIG)
+    expect(res[0].bumped).toBe(true)
+  })
+
+  // The VALUE is unchanged here, and it is still semantic: nothing reads `status:` for a
+  // pipeline position, so before the repair this card was column-less to the board. It JOINS
+  // the board — a pipeline claim it was not making.
+  it('SEMANTIC — migrating `status:` into `column:` MOVES `updated:` (the card joins the board)', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-SEMAMIGR-x.md',
+      good('SEMAMIGR', { status: 'not-started' }).replace(/^column:.*$/m, ''))
+    const res = fixCorpus(tmp, { now: NOW })
+    const out = read('TRDD-20260101_000000+0100-SEMAMIGR-x.md')
+    expect(out).toContain('column: backburner')
+    expect(out).toContain(`updated: ${NOW}`)
+    expect(res[0].bumped).toBe(true)
+  })
+
+  // The pair that proves the verdict is COMPUTED per sub-case rather than fixed per branch:
+  // the SAME line of code produced `bumped: false` for the agreeing fixture above and `true`
+  // here. A blanket verdict on this branch passes one of the two and fails the other.
+  it('SEMANTIC — dropping a DISAGREEING `status:` MOVES `updated:` (one of two competing claims is gone)', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-SEMAFGHT-x.md',
+      good('SEMAFGHT', { column: 'ai_review', status: 'in-progress' }))
+    const res = fixCorpus(tmp, { now: NOW })
+    const out = read('TRDD-20260101_000000+0100-SEMAFGHT-x.md')
+    expect(out).not.toMatch(/^status:/m)
+    expect(out).toContain('column: ai_review')
+    expect(out).toContain(`updated: ${NOW}`)
+    expect(res[0].bumped).toBe(true)
+  })
+
+  it('a card with BOTH kinds of repair bumps — one semantic change is enough', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-MIXEDCAS-x.md',
+      good('mixedcas').replace(/^column:.*$/m, ''))    // lowercase id (mechanical) + no column (semantic)
+    const res = fixCorpus(tmp, { now: NOW })
+    const out = read('TRDD-20260101_000000+0100-MIXEDCAS-x.md')
+    expect(out).toContain('trdd-id: MIXEDCAS')
+    expect(out).toContain('column: todo')
+    expect(out).toContain(`updated: ${NOW}`)
+    expect(res[0].bumped).toBe(true)
+  })
+
+  /**
+   * The acceptance proof from `Emasoft/ai-maestro#96` law 8, at corpus scale: a run in which
+   * every repair is mechanical must change ZERO `updated:` lines. That is what makes a
+   * migration AUDITABLE afterwards — a run that bumped dates can never be shown to have been
+   * lossless, because the evidence it would need is the thing it overwrote.
+   */
+  it('a mechanical-only run over a whole corpus changes ZERO `updated:` lines', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-CORPPARN-p.md', good('CORPPARN', { npt: '[TRDD-CORPCHLD]' }))
+    write('tasks', 'TRDD-20260101_000000+0100-CORPCHLD-c.md', good('CORPCHLD', { 'parent-trdd': 'TRDD-CORPPARN' }))
+    write('tasks', 'TRDD-20260101_000000+0100-CORPCASE-x.md', good('corpcase'))
+    write('tasks', 'TRDD-20260101_000000+0100-CORPBODY-x.md', `${good('CORPBODY')}\n**Status:** In progress\n`)
+    write('tasks', 'TRDD-20260101_000000+0100-CORPSTAT-x.md', good('CORPSTAT', { column: 'dev', status: 'in-progress' }))
+
+    const res = fixCorpus(tmp, { now: NOW })
+    expect(res.length).toBe(4)                                  // four cards really were repaired
+    expect(res.every((r) => r.changes.length > 0)).toBe(true)
+    expect(res.filter((r) => r.bumped)).toEqual([])             // ...and not one sort key moved
+
+    const all = fs.readdirSync(path.join(tmp, 'tasks')).map(read).join('\n')
+    expect(all).not.toContain(NOW)
+    expect(all.match(/^updated: 2026-01-01T00:00:00\+0100$/gm)).toHaveLength(5)
+  })
+})
+
 describe('the vocabulary is the ratified one', () => {
   it('carries all 17 ratified columns', () => {
     expect(DEFAULT_STATUSES).toHaveLength(17)

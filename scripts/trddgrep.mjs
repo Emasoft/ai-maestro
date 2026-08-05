@@ -706,9 +706,20 @@ switch (cmd) {
     }
     console.log(C.b(`\n${dryRun ? 'WOULD REPAIR' : 'REPAIRED'} ${results.length} file(s):\n`))
     for (const r of results) {
-      console.log(`  ${C.b(r.id)}  ${C.d(path.relative(process.cwd(), r.filePath))}`)
+      // Say whether the card's SORT KEY moved. The board is read in `updated:` order, so a
+      // reader has to be able to tell a repair that reordered it from one that did not —
+      // and a run reporting no bump at all is the cheap proof it was purely mechanical
+      // (TRDD-R6R9XHZI).
+      const badge = r.bumped ? C.y('  [updated: bumped — semantic]') : C.d('  [mechanical — updated: untouched]')
+      console.log(`  ${C.b(r.id)}  ${C.d(path.relative(process.cwd(), r.filePath))}${badge}`)
       for (const c of r.changes) console.log(`      • ${c}`)
     }
+    const bumpedCount = results.filter((r) => r.bumped).length
+    console.log(
+      bumpedCount === 0
+        ? C.g(`\nall ${results.length} repair(s) were MECHANICAL — no \`updated:\` changed, so the board order is untouched`)
+        : C.y(`\n${bumpedCount} of ${results.length} file(s) had a SEMANTIC repair — their \`updated:\` moved and the board reordered`),
+    )
     // COMMIT BEFORE ANY `git mv`: a zone move stages the rename from the blob already in
     // the index, so a content edit made first stays UNSTAGED at the new path.
     console.log(dryRun ? C.d('\n(dry run — nothing written)') : C.y('\nReview the diff, then COMMIT THE CONTENT BEFORE any `git mv`.'))

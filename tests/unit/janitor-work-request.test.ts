@@ -97,6 +97,20 @@ describe('the closed union is the safety property — a MODE flag can never be d
     expect(fs.existsSync(path.join(tmpDir, 'maintenance-mode.flag'))).toBe(true)
   })
 
+  it('no MODE flag may ever join WORK_REQUEST_FLAGS', () => {
+    // The union being closed stops a CALLER passing a mode flag. It does nothing to stop a future
+    // author widening the union itself, which is the way this guarantee would actually be lost —
+    // and the loss would be invisible, because every existing test would still pass. Named
+    // literally rather than derived from the module, so the assertion survives a refactor there.
+    const CATASTROPHIC = ['kill-switch.flag', 'global-pause.flag', 'maintenance-mode.flag']
+    for (const mode of CATASTROPHIC) {
+      expect(WORK_REQUEST_FLAGS as readonly string[]).not.toContain(mode)
+    }
+    // Non-vacuity: the list we are checking against must be non-empty and must really be the set
+    // the module exposes, or the loop above asserts nothing.
+    expect(WORK_REQUEST_FLAGS.length).toBeGreaterThan(0)
+  })
+
   it('every consumable name is a flag the reader module also knows about', () => {
     // A work-request name that the control-plane reader does not list would mean the two modules
     // disagree about what exists in that dir — the drift class this whole file guards.

@@ -24,11 +24,20 @@
  * and the `_api` stub must be installed AFTER the source, then the `cmd_*` function called directly.
  * A stub defined before the source is simply overwritten by the real one.
  *
- * NEUTER RUNS (2026-08-05 — OBSERVED): repointing `cmd_stats` at `/api/teams` (the `list` route)
- * reddens 3 of the 4 closures — both route closures and the no-id closure — while the `help`
- * closure stays green, since help text is independent of routing. Deleting the `stats)` dispatch
- * line reddens only the `help` closure, because the other three call `cmd_stats` directly and never
- * traverse the dispatch. The two halves are independent and neither alone covers the verb.
+ * NEUTER RUNS (2026-08-05 — OBSERVED, and the second one FOUND A HOLE AND ADDED A TEST).
+ *
+ *   - repoint `cmd_stats` at `/api/teams` (the `list` route): **3 red** — both route closures and
+ *     the no-id closure. The `help` closure stays green, correctly: help text is independent of
+ *     routing. Predicted, and it held.
+ *   - delete the `stats)` line from the top-level `case`: **0 red.** NOT predicted — I expected the
+ *     `help` closure to catch it. It cannot: the three route closures call `cmd_stats` DIRECTLY,
+ *     and `help` reads the help TEXT block, which the dispatch never touches. **So the verb could
+ *     have become unreachable from the CLI while every test stayed green** — function intact, no
+ *     caller able to reach it.
+ *
+ * The last closure in this file exists because of that second run. It drives the REAL CLI and
+ * discriminates on WHICH error returns — `HTTP 401` (dispatched, reached the transport) versus
+ * `unknown command` (never dispatched) — since asserting merely "it failed" cannot tell them apart.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -84,5 +93,26 @@ describe('stats is fleet-wide — it takes no teamId', () => {
     // R23.8: an unannounced verb formally does not exist. `help` is the in-CLI half of announcing.
     expect(help).toMatch(/^\s*stats\s/m)
     expect(help).not.toMatch(/stats <teamId>/)
+  })
+})
+
+describe('the dispatch actually routes `stats` to the function', () => {
+  it('is reachable as a subcommand — not merely defined', () => {
+    // ADDED AFTER A NEUTER SHOWED THIS WAS UNPINNED. Deleting the `stats)` line from the top-level
+    // `case` reddened NOTHING: the three closures above call `cmd_stats` directly, and the `help`
+    // closure reads the help TEXT block, which the dispatch does not touch. So the verb could have
+    // become unreachable from the CLI while every test stayed green — the function still working,
+    // and no caller able to get to it.
+    //
+    // The discriminator is which ERROR comes back, because this drives the real CLI with no
+    // credentials: a dispatched `stats` reaches the transport and dies at `HTTP 401`, while an
+    // undispatched one dies at `unknown command` before any request. Asserting merely "it failed"
+    // could not tell those apart, which is the whole point.
+    const r = spawnSync('bash', [CLI, 'stats'], { encoding: 'utf8', timeout: 60_000 })
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`
+    expect(out).not.toMatch(/unknown command/i)
+    // Positive half: prove it got as far as the transport, so this cannot pass by the CLI failing
+    // for some third reason before dispatch (the ai-maestro#114 shape).
+    expect(out).toMatch(/HTTP \d{3}|auth_required/i)
   })
 })

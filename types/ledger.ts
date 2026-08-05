@@ -37,6 +37,19 @@ export type LedgerOp =
    *  the audit trail part of the grant: an unattended fan-out has to be groupable by
    *  an external audit tool, not just technically verifiable. */
   | 'fleet_restart'
+  // ── R42.8 blocked-prompt unblock (TRDD-AODXPI5E) ─────────────
+  /** A MANAGER or CHIEF-OF-STAFF answered the pending prompt a STALLED agent was blocked
+   *  on. Declared rather than left to the open taxonomy for the same reason `fleet_restart`
+   *  is: R42.8(h) makes the audit trail PART OF THE GRANT. R42 revokes cross-agent drive
+   *  outright, and this is its single carve-out — so the one class of cross-agent keystroke
+   *  the system still permits has to be groupable by an external audit tool, not merely
+   *  verifiable. An exception nobody can enumerate after the fact is indistinguishable from
+   *  the rule never having held.
+   *
+   *  Carries an EMPTY diff on purpose: an unblock mutates no registry field. Its audit value
+   *  is entirely in WHO did it TO WHOM and WHEN — the authAction/authAgentId/authActor
+   *  triple — which is the same shape `send_message` already uses. */
+  | 'unblock_prompt'
   // ── Team lifecycle ───────────────────────────────────────────
   | 'create_team' | 'delete_team' | 'update_team'
   // ── Group lifecycle ──────────────────────────────────────────

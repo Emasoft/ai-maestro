@@ -1634,6 +1634,36 @@ export async function sendAgentSessionCommand(
     // a successful send — a refused one (409 on a busy pane) produces no prompt to veto.
     injectedPrompts.set(sessionName, Date.now())
 
+    // ── R42.8(h): the audit trail is PART OF THE GRANT ────────────
+    // R42 revokes cross-agent drive outright; the unblock is its single carve-out. So the
+    // one class of cross-agent keystroke the system still permits must be enumerable after
+    // the fact — an exception nobody can audit is indistinguishable from the rule never
+    // having held.
+    //
+    // Emitted HERE, in the service, rather than in the route: the headless router calls
+    // services directly, so a route-side emit would be silently absent in headless mode.
+    // Same altitude and same reasoning as Gate 0b above (the SF4 finding).
+    //
+    // Only for a CROSS-agent unblock. Answering your OWN prompt is self-drive, predates
+    // R42.8, and is not the thing R42.8 grants — logging it would bury the 1 entry that
+    // matters under the many that do not. The system owner is likewise not audited here:
+    // R42.8 governs AGENTS, and the human needs no grant to answer their own agent.
+    if (
+      authAction === 'unblock-prompt' &&
+      !authContext.isSystemOwner &&
+      authContext.agentId &&
+      authContext.agentId !== agentId
+    ) {
+      const { emitAgentOp } = await import('@/lib/ledger-emit')
+      // Empty diff on purpose — an unblock changes no registry field. The audit value is
+      // WHO did it TO WHOM and WHEN, which the auth triple below carries.
+      emitAgentOp('unblock_prompt', [], {
+        action: 'unblock-prompt',
+        agentId: authContext.agentId,
+        actor: 'agent',
+      })
+    }
+
     return {
       data: {
         success: true,

@@ -64,6 +64,13 @@ const {
       searchAgents: vi.fn().mockReturnValue([]),
       linkSession: vi.fn(),
       unlinkSession: vi.fn(),
+      // R42.8(h): lib/ledger-emit imports registryLedger FROM this module, so the
+      // dynamic import in the unblock path resolves through this mock. Without it the
+      // service throws and reports 500 — exactly the failure mode the comment on
+      // mockSharedState below warns about, arriving from a second direction.
+      // Modelled as a real spy (not a no-op) so the audit ENTRY can be asserted:
+      // "it did not crash" is not the same claim as "it was recorded".
+      registryLedger: { append: vi.fn().mockResolvedValue(undefined) },
     },
     mockHostsConfig: {
       getHosts: vi.fn().mockReturnValue([{ id: 'test-host', name: 'Test Host', url: 'http://localhost:23000' }]),
@@ -1123,6 +1130,61 @@ describe('sendAgentSessionCommand — R42.8 blocked-only precondition (Gate 0b)'
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
+  })
+
+  it('AUDITS a cross-agent unblock in the ledger — R42.8(h)', async () => {
+    // The audit trail is PART OF THE GRANT, not a nicety: R42 revokes cross-agent drive
+    // outright and this is its single carve-out, so the one permitted class of cross-agent
+    // keystroke has to be enumerable after the fact. An exception nobody can audit is
+    // indistinguishable from the rule never having held.
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue({
+      question: 'Allow this command?',
+      options: [{ key: '1', label: 'Yes' }],
+    })
+    mockAgentRegistry.registryLedger.append.mockClear()
+
+    await sendAgentSessionCommand(
+      'agent-1',
+      { command: '1', requireIdle: false, authAction: 'unblock-prompt' },
+      AGENT_CALLER,
+    )
+
+    expect(mockAgentRegistry.registryLedger.append).toHaveBeenCalledTimes(1)
+    const [op, file, diff, opts] = mockAgentRegistry.registryLedger.append.mock.calls[0]
+    expect(op).toBe('unblock_prompt')
+    expect(file).toBe('agents/registry.json')
+    expect(diff).toEqual([]) // an unblock mutates no registry field, by design
+    // WHO did it TO WHOM — the only thing that carries audit value here.
+    expect(opts).toMatchObject({
+      authAction: 'unblock-prompt',
+      authAgentId: 'the-manager',
+      authActor: 'agent',
+    })
+  })
+
+  it('does NOT audit a SELF-unblock — that is self-drive, and predates R42.8', async () => {
+    // Logging every self-answer would bury the one entry that matters under the many that
+    // do not. Self-unblock is not what R42.8 grants, so it is not what R42.8(h) audits.
+    const agent = makeAgent({ id: 'the-manager', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue({
+      question: 'Allow this command?',
+      options: [{ key: '1', label: 'Yes' }],
+    })
+    mockAgentRegistry.registryLedger.append.mockClear()
+
+    const result = await sendAgentSessionCommand(
+      'the-manager',
+      { command: '1', requireIdle: false, authAction: 'unblock-prompt' },
+      AGENT_CALLER,
+    )
+
+    expect(result.status).toBe(200)
+    expect(mockAgentRegistry.registryLedger.append).not.toHaveBeenCalled()
   })
 
   it('does NOT gate an ordinary send-command on a pending prompt', async () => {

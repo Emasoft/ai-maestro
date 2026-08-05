@@ -1,9 +1,9 @@
 ---
 trdd-id: G3HYXBKF
 title: Publish the absorbed-chore list in server-liveness so the janitor can narrow its daemon suppression
-column: dev
+column: complete
 created: 2026-08-05T10:33:09+0200
-updated: 2026-08-05T10:33:09+0200
+updated: 2026-08-05T10:52:41+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -27,7 +27,7 @@ release-via: none
 labels: [janitor-interface, chore-ownership, cross-repo]
 external-refs: [Emasoft/ai-maestro#111, Emasoft/ai-maestro#103, Emasoft/ai-maestro#102, Emasoft/ai-maestro#95]
 relevant-rules: []
-implementation-commits: []
+implementation-commits: [464dad08]
 ---
 
 # Publish the absorbed-chore list in server-liveness
@@ -120,10 +120,14 @@ changes on our side; the write path already never throws.
 
 - [x] `absorbed_chores` published from the single `ABSORBED_CHORES` constant
 - [x] `tsc` clean, `server-liveness` suite green
-- [ ] neuter run recorded (delete the field → the literal-names test reds)
-- [ ] `#111` answered: our ratified six, why the other five stay theirs, and the new field
-- [ ] `#103` answered with the per-chore execution table
-- [ ] janitor told their `SERVER_ABSORBED_TASKS` is stale at five names
+- [x] neuter run recorded — deleting the field reddened **exactly 2**, both predicted (the
+      literal-names test and the copy test); restored and blob-hash verified
+- [x] `#111` answered — resolution **2** (narrow the suppression), the six we absorb, why the other
+      five stay theirs, and the new field · comment `5189499546`
+- [x] `#103` answered with the per-chore execution table + the capability-vocabulary correction
+      (`family-a` is NOT the whole set — `singleton-chores` exists) · comment `5189514244`
+- [x] janitor told their `SERVER_ABSORBED_TASKS` is stale at five names, and told WHY it only starts
+      to matter once they narrow suppression
 
 ## Approval log
 

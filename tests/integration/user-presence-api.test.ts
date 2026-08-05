@@ -119,10 +119,20 @@ describe('AMAMA presence API', () => {
  * wiring between the send sites and this route, and a faithful double of the map would still
  * pass if that wiring were broken.
  *
- * THE LOAD-BEARING TEST is `records presence when there is NO mark`. The veto must fire on
- * POSITIVE evidence only — inferring "not human" from a missing mark would make recovery race
- * a live user, which is worse than the bug this fixes. If that test ever goes green while the
- * others are inverted, the direction has been flipped and the guard is now the hazard.
+ * THE DIRECTION — veto on POSITIVE evidence only — is what must never invert: inferring "not
+ * human" from a MISSING mark would make recovery race a live user, which is worse than the bug
+ * this fixes.
+ *
+ * MEASURED, and not what I first wrote here. I labelled `records presence when there is NO
+ * mark` the load-bearing direction guard. It is not: neutering `injectedAt !== undefined` to
+ * `=== undefined` reddens the OTHER THREE and leaves that one GREEN. With no mark `injectedAt`
+ * is `undefined`, so `Date.now() - undefined` is `NaN`, `NaN <= MAX_AGE` is false, and the age
+ * check accidentally rescues the inverted branch into recording presence anyway.
+ *
+ * So the direction IS pinned — by the ensemble, not by the test named for it. Keep all four:
+ * dropping any of the three on the grounds that "the direction test covers it" would leave the
+ * inversion undetected. And do not trust the NaN rescue as a safety property; it is an accident
+ * of evaluation order that a reorder would remove.
  */
 import { injectedPrompts } from '@/services/shared-state'
 

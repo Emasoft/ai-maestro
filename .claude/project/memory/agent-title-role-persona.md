@@ -44,4 +44,22 @@ Every AI Maestro agent has exactly **three orthogonal layers**. Do NOT collapse 
 
 ## See also
 
+
+^ATOM-PNJX-P7AY [desc:"USER ruling 2026-08-06: no role field exists — taxonomy is TITLE + role-plugin; registry role key removed and migration-stripped", keywords: role_field_removed role_is_not_part_of_the_taxonomy agent.role messaging_role role_autonomous_contradiction role_vs_governanceTitle registry_role_key_stripped, type: reference, ocd: 2026-08-05, lmd: 2026-08-05]
+
+There is NO persisted `role` field on an agent record — and there never should have
+been. USER ruling 2026-08-06, verbatim: "there is no such thing as a `role`. There is
+the `title`, and there is the `role-plugin`. role is not part of the taxonomy." The
+registry used to persist `role: request.role || 'autonomous'` (a "messaging role"
+sharing the AgentRole vocabulary), and on a manager-titled agent the pair
+`role: "autonomous"` + `governanceTitle: "manager"` was misread as a title
+contradiction — a live agent refused a legitimate MANAGER mandate over it
+(ai-maestro#122, TRDD-4Z62YRDG). Removed in `4b039716` (types, writers, UI); the
+`loadAgents` migration strips a legacy `role` key WHATEVER its value. If code ever
+used `role` in a DECISION (validity, plugin compatibility), the fix is REPLACEMENT
+with the title, never bare deletion — the one such site (composition-check's
+`governanceTitle || role` fallback) was replaced with the title in `b9f7e401`.
+Messaging authority derives from the TITLE at message time
+(`isManager()`/`isChiefOfStaffAnywhere()`).
+
 ## Notes and lessons learned

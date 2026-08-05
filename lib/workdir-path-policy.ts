@@ -99,10 +99,21 @@ export function checkWorkdirPathPolicy(dir: unknown): WorkdirVerdict {
     }
   }
 
-  if (!isUnder(resolved, HOME)) {
-    return { ok: false, reason: `outside $HOME (${resolved})` }
-  }
-
+  // THE RECURSION GUARD RUNS BEFORE THE OUTSIDE-$HOME CATCH-ALL, and the order is
+  // load-bearing even though both arms deny.
+  //
+  // `INSTALL_ROOT` is `process.cwd()` at module load, so it is only USUALLY under $HOME
+  // (`~/ai-maestro`). A checkout at `/opt/ai-maestro`, a container at `/app`, or a scratch
+  // worktree under `/tmp` puts it outside — and with the generic check first, asking for the
+  // install tree itself was answered `outside $HOME`. Still a denial, so nothing was ever
+  // unsafe; but the caller was told the least useful of the two true reasons, and the one
+  // hazard this policy most needs to NAME went unnamed exactly where the layout is unusual
+  // enough that a human would need it named.
+  //
+  // Reordering cannot change any verdict — both arms return `ok: false` — only which reason
+  // is reported. Specific beats generic when both apply. (TRDD-ZR5WUQJZ; found when two
+  // "must never regress" tests went red from a /tmp worktree, asserting the message they
+  // were written to pin.)
   if (isUnder(resolved, INSTALL_ROOT)) {
     return {
       ok: false,
@@ -111,6 +122,10 @@ export function checkWorkdirPathPolicy(dir: unknown): WorkdirVerdict {
         `source tree of the server that manages it — that is a recursion, not a project. ` +
         `Use an isolated container to develop ai-maestro itself.`,
     }
+  }
+
+  if (!isUnder(resolved, HOME)) {
+    return { ok: false, reason: `outside $HOME (${resolved})` }
   }
 
   return { ok: true }

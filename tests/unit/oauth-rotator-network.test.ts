@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   accountEmail,
   usageRequest,
-  accountUsage,
   refreshOauthToken,
   util,
   scopedLimits,
@@ -124,10 +123,6 @@ describe('usageRequest (/usage) — status is load-bearing', () => {
   it('network error → [0, null]; no token → [0, null]', async () => {
     expect(await usageRequest(withTok(), { fetchImpl: fakeFetch(0, null, { reject: true }) })).toEqual([0, null])
     expect(await usageRequest({ claudeAiOauth: {} }, { fetchImpl: fakeFetch(200, {}) })).toEqual([0, null])
-  })
-  it('accountUsage returns the data on 200, else null', async () => {
-    expect(await accountUsage(withTok(), { fetchImpl: fakeFetch(200, { a: 1 }) })).toEqual({ a: 1 })
-    expect(await accountUsage(withTok(), { fetchImpl: fakeFetch(429, null) })).toBeNull()
   })
 })
 

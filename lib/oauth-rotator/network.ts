@@ -386,12 +386,6 @@ export async function usageProbe(
   return result
 }
 
-/** The usage dict on HTTP 200, else null (a display convenience). */
-export async function accountUsage(blob: CredentialBlob, deps?: NetworkDeps): Promise<unknown | null> {
-  const [status, data] = await usageRequest(blob, deps)
-  return status === 200 ? data : null
-}
-
 /**
  * Exchange a SLOT's refreshToken for a fresh token pair and return a NEW `{ claudeAiOauth }` blob
  * (accessToken / refreshToken / expiresAt updated, other inner fields kept), or null on any

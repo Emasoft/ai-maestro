@@ -23,11 +23,18 @@
  * proving a legitimate agent does receive its file, this suite would pass against a completely
  * broken channel.
  *
- * NEUTER RUNS (recorded 2026-08-05, via scripts/dev/neuter):
- *   · dropping the realpath re-check reddens only the symlink closure;
- *   · dropping `path.resolve` before the first `isUnder` reddens only the traversal closure.
- *   Each mutation reds exactly one, which is what shows the two checks are independent rather than
- *   one of them masking the other.
+ * NEUTER RUNS (recorded 2026-08-05, via scripts/dev/neuter) — including one that failed first:
+ *   · dropping the realpath re-check reddens ONLY the symlink closure. 1 red.
+ *   · dropping `path.resolve` before the first `isUnder` reddened NOTHING on the first attempt —
+ *     all 12 green. That was a finding about the TEST, not a passing guard. The two checks are NOT
+ *     independent: realpath normalizes `..` as well, so removing resolve() only defers the same
+ *     refusal by one step, and the traversal closure's assertion (`/outside the agents root/`)
+ *     matched the SYMLINK message too, which is a superset of that phrase. Tightened with
+ *     `not.toMatch(/via a link/)` so the closure pins WHICH check fired; the same neuter now reds
+ *     exactly it.
+ *
+ * The lesson generalises: when two guards can catch the same input, an assertion on the OUTCOME
+ * cannot tell them apart — only an assertion on which one spoke can.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -113,14 +120,23 @@ describe('publishHibernationResponses — containment', () => {
     expect(o.written).not.toContain(responsePath(outsideRoot))
   })
 
-  it('DEFECT 1 — a `..` traversal that string-prefixes the agents root is refused', async () => {
+  it('DEFECT 1 — a `..` traversal that string-prefixes the agents root is refused BY THE LEXICAL CHECK', async () => {
     // `<agentsRoot>/../outside` literally starts with `<agentsRoot>` + sep, so an unresolved
     // `isUnder` check accepts it. This is the exact input that escaped the first implementation.
     const traversal = path.join(agentsRoot, '..', 'outside')
     const o = await publish(rosterWith([{ id: 'a1', name: 'sneaky', wd: traversal }]))
     expect(existsSync(responsePath(outsideRoot))).toBe(false)
     expect(o.written).toHaveLength(1) // the install root only
-    expect(o.refused.map((r) => r.reason).join()).toMatch(/outside the agents root/)
+    const reason = o.refused.map((r) => r.reason).join()
+    expect(reason).toMatch(/outside the agents root/)
+    // ...AND it must be the LEXICAL check that caught it, not the realpath one downstream.
+    //
+    // Without this second assertion the closure is vacuous with respect to `path.resolve`: realpath
+    // ALSO normalizes `..`, so removing the resolve() merely defers the same refusal one step, and
+    // the reason string still contains "outside the agents root" (the symlink message is a
+    // superset of it). Measured — neutering resolve() with only the loose assertion left all 12
+    // green. Pinning WHICH check fired is what makes the two independently testable.
+    expect(reason).not.toMatch(/via a link/)
   })
 
   it('DEFECT 2 — a SYMLINK out of the agents root is refused', async () => {

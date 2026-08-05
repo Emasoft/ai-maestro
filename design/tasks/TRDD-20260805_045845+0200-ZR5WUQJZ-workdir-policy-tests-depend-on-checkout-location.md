@@ -1,11 +1,11 @@
 ---
 trdd-id: ZR5WUQJZ
 title: Two workdir-policy tests fail whenever the checkout lives outside $HOME
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T04:58:45+0200
-updated: 2026-08-05T04:58:45+0200
+updated: 2026-08-05T05:04:12+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,12 +23,44 @@ npt: []
 eht: []
 blocked-by: []
 release-via: none
+implementation-commits: [0963a64d]
 labels: [tests, portability, workdir-policy]
 ---
 
 # Two workdir-policy tests fail whenever the checkout lives outside $HOME
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-05
+## ⏵ STATE — DONE, 2026-08-05. Shipped in `0963a64d`, same session it was filed.
+
+**The guard-order question is answered: the recursion guard now runs BEFORE the outside-`$HOME`
+catch-all.** `INSTALL_ROOT` is `process.cwd()` at module load, so it is only USUALLY under `$HOME`;
+with the generic check first, asking for the install tree itself was answered `outside $HOME`. Both
+arms return `ok: false`, so **reordering cannot change a verdict — only which reason is reported**,
+and specific beats generic when both apply. Nothing was ever unsafe; the hazard this policy exists
+to NAME simply went unnamed exactly where an unusual layout makes naming it most useful.
+
+One edit, not two: `agent-workdir-policy` delegates to `checkWorkdirPathPolicy`, so both consumers
+share one predicate and cannot drift.
+
+**Measured, both locations, 36/36 each:** normal checkout `~/ai-maestro` and a worktree at
+`/private/tmp/aim-loc`. Full suite `361 files / 5070 passed`, exit 0.
+
+**The neuter (`if (isUnder(resolved, INSTALL_ROOT))` → `if (false)`) reddens from BOTH locations,
+and the ASYMMETRY is the finding worth keeping:**
+
+| run from | red |
+|---|---|
+| inside `$HOME` | **4** — every install-tree test |
+| outside `$HOME` | **2** — only the two asserting the specific MESSAGE |
+
+Outside `$HOME` the catch-all still denies, so tests asserting merely *"was it denied"* stay green
+with the recursion guard deleted. The only two that fail are the ones pinning the message — i.e.
+**the exact assertions the tempting portability fix (`expect(allowed).toBe(false)`) would have
+removed.** Relaxing them would have left the guard deletable with a green suite from any location.
+
+**SUPERSEDED — do NOT carry forward:** the NEXT ACTION below (answered) and the framing of the
+guard order as an open question.
+
+## ⏹ The original report — 2026-08-05 (resolved above)
 
 Found while running the full suite in a scratch worktree at `/private/tmp/aim-base` (the control
 run for [[BLBNDGZ1]]). Two tests fail there and pass in the normal checkout:
@@ -111,12 +143,17 @@ weakening a "must never regress" guard while making it portable.
 
 ## Acceptance
 
-- [ ] the guard-ORDER question answered explicitly (install-tree before or after outside-`$HOME`),
-      with the reasoning recorded here — not decided implicitly by whichever edit makes tests pass
-- [ ] both tests pass from a checkout inside `$HOME` AND from one outside it
-- [ ] a neuter deleting the install-tree denial reddens a NAMED test from BOTH locations, proving
-      the portability fix did not hollow out the recursion guard
-- [ ] `yarn test` exits 0 in the normal checkout with no new exclusions
+- [x] the guard-ORDER question answered explicitly: **install-tree BEFORE outside-`$HOME`**, because
+      both arms deny so the order can only change which REASON is reported, and the specific hazard
+      should be named over the generic catch-all. Reasoning recorded in the STATE block and in a
+      comment at the reorder site.
+- [x] both tests pass from a checkout inside `$HOME` AND from one outside it — 36/36 each, verified
+      in `~/ai-maestro` and in a worktree at `/private/tmp/aim-loc`
+- [x] a neuter deleting the install-tree denial reddens a NAMED test from BOTH locations — 4 red
+      inside `$HOME`, 2 outside. The asymmetry is recorded in the STATE block: outside `$HOME` only
+      the two MESSAGE-asserting tests fail, which is exactly why relaxing them to
+      `expect(allowed).toBe(false)` would have left the guard deletable with a green suite.
+- [x] `yarn test` exits 0 in the normal checkout with no new exclusions — `361 files / 5070 passed`
 
 ## Approval log
 
@@ -124,3 +161,7 @@ weakening a "must never regress" guard while making it portable.
   agent's own scope; reversible, no baseline deviation, no cross-team reach. Split out of
   [[BLBNDGZ1]] rather than absorbed into it: that card's premise was refuted, and this is a
   different, reproducible defect that its control run exposed.
+- 2026-08-05T05:04:12+0200 — CLOSED `todo → complete` by ai-maestro, same session it was filed.
+  Fixed in `0963a64d` (one conditional reordered, no assertion touched). All four acceptance boxes
+  met; the neuter reddens from both checkout locations, so the portability fix did not cost the
+  recursion guard its teeth.

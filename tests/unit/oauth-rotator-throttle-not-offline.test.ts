@@ -84,15 +84,24 @@ const blob = (accessToken: string, expiresAt: number, refreshToken = 'r') => ({
 
 interface Counts { usageByToken: Record<string, number>; tokenExchanges: number }
 
-/** Counts every call so a test can assert on what was NOT asked, which is the whole subject here. */
+/**
+ * Counts every call so a test can assert on what was NOT asked, which is the whole subject here.
+ *
+ * ⚠ THE COUNTER MUST INCREMENT *BEFORE* `throwAll` THROWS. A neuter caught the other order: with
+ * the throw first, an ATTEMPTED probe was never counted, so "the candidate was not probed" read
+ * identically to "the candidate was probed and the network failed". The offline test then passed
+ * with `networkUp` hard-wired to `true` — the exact mutation it exists to catch. Counting the
+ * attempt is what makes the two distinguishable.
+ */
 function stubFetch(usage: Record<string, { fh: number; sd: number }>, counts: Counts, throwAll = false): typeof fetch {
   return (async (url: string, init?: RequestInit) => {
-    if (throwAll) throw new Error('ECONNREFUSED')
     const u = String(url)
     const auth = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? '')
     const tok = auth.replace('Bearer ', '')
+    if (u.includes('/oauth/usage')) counts.usageByToken[tok] = (counts.usageByToken[tok] ?? 0) + 1
+    if (u.includes('/oauth/token')) counts.tokenExchanges += 1
+    if (throwAll) throw new Error('ECONNREFUSED')
     if (u.includes('/oauth/usage')) {
-      counts.usageByToken[tok] = (counts.usageByToken[tok] ?? 0) + 1
       const spec = usage[tok]
       if (!spec) return new Response('{}', { status: 200 })
       return new Response(
@@ -101,7 +110,6 @@ function stubFetch(usage: Record<string, { fh: number; sd: number }>, counts: Co
       )
     }
     if (u.includes('/oauth/token')) {
-      counts.tokenExchanges += 1
       return new Response(JSON.stringify({ access_token: 'NEW', refresh_token: 'nr', expires_in: 28800 }), { status: 200 })
     }
     if (u.includes('/roles')) return new Response(JSON.stringify({ organization_name: "x@x's Organization" }), { status: 200 })

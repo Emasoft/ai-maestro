@@ -26,7 +26,9 @@
 #   aimaestro-trdd.sh read <trdd-id> [--agent A]
 #   aimaestro-trdd.sh edit <trdd-id> --set key=value [--set key=value ...] [--agent A]
 #   aimaestro-trdd.sh approve <trdd-id> [--approver W] [--tier N] [--rationale R] [--agent A]
-#   aimaestro-trdd.sh refuse  <trdd-id> [--approver W] [--tier N] [--reason R]    [--agent A]
+#   aimaestro-trdd.sh refuse  <trdd-id> [--approver W] [--tier N] --reason R      [--agent A]
+#       --reason is REQUIRED for refuse (ai-maestro#71): it must name the defect, not the
+#       verdict. A bare "denied" is rejected. `approve` keeps it optional.
 #   aimaestro-trdd.sh promote <trdd-id> --column C [--note N] [--approver W]      [--agent A]
 #   aimaestro-trdd.sh archive <trdd-id> --state completed|cancelled|superseded
 #       [--reason R] [--superseded-by ID] [--approver W] [--agent A]
@@ -130,7 +132,8 @@ Commands:
   edit <trdd-id> --set k=v ...   Edit frontmatter fields IN PLACE (no folder move)
   approve <trdd-id>              proposal → planned, git mv proposals/ → tasks/
       --approver W --tier N --rationale R
-  refuse <trdd-id>               proposal → refused, git mv → refused/
+  refuse <trdd-id> --reason R    proposal → refused, git mv → refused/
+                                 --reason REQUIRED and must name the defect (ai-maestro#71)
       --approver W --tier N --reason R
   promote <trdd-id> --column C   Advance `column` forward inside tasks/ (in place)
       --note N --approver W
@@ -313,6 +316,53 @@ _gate_verb() {
     if [ -n "$tier" ] && [[ ! "$tier" =~ ^[0-9]+$ ]]; then
         echo "Error: --tier must be a number (0-3)" >&2; return 1
     fi
+
+    # A REFUSAL MUST NAME ITS DEFECT (ai-maestro#71 — the USER-ratified refusal protocol,
+    # `rules/aimaestro/aimaestro-trdd-approval.md` "an approver is a GUIDE, not a GATE").
+    #
+    # `approve` is deliberately exempt: an approval that says nothing is merely terse. A refusal
+    # that says nothing is malpractice EVEN WHEN THE RULING IS CORRECT, because the proposer
+    # cannot read the approver's mind — it hears "no", concludes the capability is forbidden, and
+    # tears out the work that depended on it. That is not hypothetical: it is the incident the
+    # protocol was ratified from, where a correct security denial led a plugin Claude to start
+    # deleting its own working skills.
+    #
+    # The bar is a proxy, not a judge — no check can tell a real defect from a fluent
+    # non-answer. What it CAN do is make the cheapest failure impossible: the one-word "denied"
+    # that ends the thread. So it rejects an empty reason and the stock dismissals, and the error
+    # TEACHES the three required elements, because the remedy is the refuser writing them.
+    if [ "$verb" = "refuse" ]; then
+        local reason_trimmed
+        reason_trimmed="$(printf '%s' "$reason" | tr -d '[:space:]')"
+        local stock='^(no|nope|denied|deny|rejected|reject|refused|refuse|wontfix|invalid|na|n/a|notnow|later|unclear|insufficient|insecure|toorisky|outofscope)[.!]?$'
+        if [ -z "$reason_trimmed" ]; then
+            cat >&2 <<'MSG'
+Error: refuse requires --reason.
+
+  A refusal is the START of the work on a proposal, not the end. Per the ratified
+  approval protocol (ai-maestro#71), every refusal must carry all three:
+
+    1. THE PRECISE DEFECT   the exact command / input path / abuse / rule.
+                            "insufficiently secure" is not a finding;
+                            "--exec takes an unsanitized string a malicious agent
+                            can pass to a shell" is.
+    2. THE BAR             what would make it approvable.
+    3. THE INVITATION      say re-proposal is welcome — and when the design cannot
+                            be saved, push toward the goal by another route.
+                            Refuse the implementation; never refuse the need.
+
+  If you cannot name the defect, you do not yet understand your own objection
+  well enough to have refused.
+MSG
+            return 1
+        fi
+        if printf '%s' "${reason_trimmed}" | tr '[:upper:]' '[:lower:]' | grep -Eq "$stock"; then
+            echo "Error: --reason \"${reason}\" names no defect — it is a verdict, not a finding." >&2
+            echo "       State WHAT is wrong, WHAT would fix it, and that a re-proposal is welcome (ai-maestro#71)." >&2
+            return 1
+        fi
+    fi
+
     local body
     body="$(jq -nc --arg ap "$approver" --arg t "$tier" --arg r "$reason" \
         --arg rk "$reason_key" --arg a "$agent" '

@@ -5,8 +5,8 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-05T22:32:10+0200
-implementation-commits: [0d31e3bc]
+updated: 2026-08-05T22:36:19+0200
+implementation-commits: [0d31e3bc, 51db1b8a]
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -108,24 +108,49 @@ every verb obey it.
       — `check_api_running` just answers first. So a caller who typos an
       argument is told *"the API is not reachable"*, which is false and aims
       them at the wrong thing. The third instance is the dispatcher's own
-      `*) Unknown command` arm (`aimaestro-agent.sh:132`): a nonexistent verb
-      also cannot be reported without a live server.
+      `*) Unknown command` arm in `aimaestro-agent.sh::main()`: a nonexistent
+      verb also cannot be reported without a live server. (Cited by function,
+      not by line — the fix below MOVED that arm, so a line number written here
+      would already be pointing at unrelated working code.)
 
-      **Fix shape (not applied — deliberately, see below).** Hoist the
-      *recognition* pass above `check_api_running`, keeping the dispatch below
-      it: verb membership first, then any verb-local argument grammar, then the
-      gate, then execution. The trap to avoid is the obvious implementation —
-      a second `case` listing the verbs above the gate — because that is two
-      enumerations of one fact and they drift the first time a verb is added.
-      It needs ONE list consulted twice, and that is a real restructure of
-      `main()`, not a move. It was NOT attempted at the end of a session with
-      little context left: a half-landed dispatcher rewrite is worse than a
-      recorded finding, and this card's whole subject is CLIs that mislead
-      their callers.
+      **HALF DONE — the verb half is fixed and pinned (`51db1b8a`).** `main()`
+      now runs `dispatch check "$@"` BEFORE `check_api_running`, so an unknown
+      verb is reported locally: `aimaestro-agent.sh nonsense` exits 1 with
+      `Unknown command`, zero mentions of the server, **with no credential and
+      no live API**. Verified through the bare command name after deploying to
+      `~/.local/bin` (backup `cli-backup-20260805_223553+0200`), not only from
+      the repo path.
 
-      Once hoisted, the box becomes checkable offline and needs no
-      authenticated run at all — which is the second reason to prefer the fix
-      over chasing a live session to observe the current shape.
+      ONE verb list, consulted twice: `dispatch()` takes a mode — `check`
+      answers "is this a verb?" and runs nothing, `run` executes — and both read
+      the same case arms. This is the whole design constraint. A second `case`
+      above the gate would be two statements of one fact, and they drift the
+      first time someone adds a verb to only one: then either a real verb is
+      rejected as unknown, or an unknown one reaches the gate and gets the
+      misleading message back.
+
+      Two implementation traps, both hit: the arms must be
+      `[ "$mode" = check ] || cmd_x "$@"`, never `&& return 0` — `set -euo
+      pipefail` is on, and a bare `cond && return 0` whose condition FAILS makes
+      the statement's status 1 and kills the shell, breaking every run-mode
+      dispatch. And the test must assert the server is **not blamed**, not
+      merely that the command failed: exit 1 was already correct before the fix
+      (the gate exits 1 too), so a status-only assertion passes either way and
+      pins nothing.
+
+      Neuter OBSERVED (`scripts/dev/neuter`, restore blob-verified): putting the
+      gate back in front of recognition →
+      **1 red / 56 green — `an UNKNOWN VERB is reported locally, without blaming
+      the server`, and only it.**
+
+      **STILL OPEN — the `--status` half.** The same hoist has not been done for
+      verb-local *argument* grammar, so `list --status hibernated` is still
+      unobservable from outside. It is not a repeat of the above: the valid-value
+      set lives inside `cmd_list`'s parsing loop, so hoisting it means extracting
+      the value check into one function that both `cmd_list` and a pre-gate pass
+      call — otherwise the valid set is enumerated twice and drifts, which is the
+      exact trap the verb half was designed around. Once that lands, this box is
+      checkable offline and needs no authenticated run at all.
 - [x] A regression test asserts exit status, not just output, for at least
       the sampled verbs. — `tests/unit/cli-help-exit-contract.test.ts`, **56
       tests** (was 28 when this box was first ticked; the EHT's fix moved 27

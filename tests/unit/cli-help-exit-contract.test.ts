@@ -161,6 +161,11 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
     // fix — the gate exits 1 too — so a test asserting only the status passes either way
     // and pins nothing. What changed is WHICH failure is reported, and the only way to see
     // that is to assert the server is NOT blamed.
+    //
+    // NEUTER RUN (2026-08-05 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+    //   s/^    dispatch check /    check_api_running || exit 1; dispatch check / if $. == 172
+    //   (i.e. put the gate back in front of recognition — the pre-fix ordering)
+    //   → 1 red / 56 green: this test, and ONLY this test.
     let status = 0
     let output = ''
     try {

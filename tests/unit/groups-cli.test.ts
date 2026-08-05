@@ -33,6 +33,13 @@
  *     The verb closures call `cmd_notify` directly and never traverse the dispatch. That closure
  *     exists *because* the equivalent hole was found unpinned in `teams-stats-verb.test.ts` one
  *     commit earlier: a verb can be defined, correct, and unreachable, with every other test green.
+ *
+ * Both predictions held. A first attempt at the update neuter was DISCARDED rather than reported:
+ * an unescaped `$d` in the perl replacement produced `+ {description: }`, a jq SYNTAX error rather
+ * than the semantic mutation intended. It reddened the same single closure, so its verdict looked
+ * identical to the real run — which is exactly why it had to be redone rather than accepted. That
+ * is the third time this session an unescaped `$` has quietly changed what a neuter measured; in a
+ * perl `s///` the replacement side interpolates, so every `$` in it needs escaping.
  */
 
 import { describe, it, expect } from 'vitest'

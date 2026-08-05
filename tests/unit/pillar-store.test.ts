@@ -54,7 +54,10 @@ describe('SPEC — N clauses per document, id in the body', () => {
     // per-FILE blob sha, never the branch commit sha, which moves on every unrelated commit
     // and so reports "current" over a 13-day-stale document)
     // (`grep -cE '^\`3P-[A-Z]+-[0-9]{2}\`' design/specs/3-pillars-spec.md` → 68).
-    expect(threeP.length).toBe(68)
+    // 80 re-derived 2026-08-06 with the grep above (spec 1.5.0→1.7.0 added
+    // 3P-KAN-10..16, 3P-VER-05, and the 3P-ZON family) — never copy the number
+    // from a failure output; run the grep.
+    expect(threeP.length).toBe(80)
     expect(threeP.every((r) => /^3P-[A-Z]+-\d{2}$/.test(r.id))).toBe(true)
     // Every record carries the line it was declared on — that is what a lint reports.
     expect(threeP.every((r) => typeof r.line === 'number' && r.line! > 0)).toBe(true)

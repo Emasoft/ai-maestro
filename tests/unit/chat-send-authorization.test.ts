@@ -113,13 +113,18 @@ describe('an agent may not type into another agent\'s terminal via /chat', () =>
     as({ agentId: MEMBER, governanceTitle: 'member', teamId: null })
     const res = await chat(MEMBER)
     expect(res.status).toBe(200)
-    expect(mockChat.sendChatMessage).toHaveBeenCalledWith(MEMBER, 'echo hi')
+    // ai-maestro#117: an agent-driven send is MARKED injected, so the presence
+    // tracker never mistakes it for the human typing.
+    expect(mockChat.sendChatMessage).toHaveBeenCalledWith(MEMBER, 'echo hi', { markAsInjected: true })
   })
 
   it('the system owner (dashboard chat box) is unaffected', async () => {
     as({})
     const res = await chat(TARGET)
     expect(res.status).toBe(200)
+    // ai-maestro#117, the other half of the discriminator: the human cookie is
+    // NOT marked injected — the dashboard chat box is real user presence.
+    expect(mockChat.sendChatMessage).toHaveBeenCalledWith(TARGET, 'echo hi', { markAsInjected: false })
   })
 
   it('a non-owner USER principal is refused', async () => {

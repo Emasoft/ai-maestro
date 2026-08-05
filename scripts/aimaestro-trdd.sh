@@ -25,10 +25,13 @@
 #   aimaestro-trdd.sh search [--column C] [--id I] [--keyword K] [--zone Z] [--agent A]
 #   aimaestro-trdd.sh read <trdd-id> [--agent A]
 #   aimaestro-trdd.sh edit <trdd-id> --set key=value [--set key=value ...] [--agent A]
-#   aimaestro-trdd.sh approve <trdd-id> [--approver W] [--tier N] [--rationale R] [--agent A]
-#   aimaestro-trdd.sh refuse  <trdd-id> [--approver W] [--tier N] --reason R      [--agent A]
+#   aimaestro-trdd.sh approve <trdd-id> [--approver W] [--rationale R] [--agent A]
+#   aimaestro-trdd.sh refuse  <trdd-id> [--approver W] --reason R      [--agent A]
 #       --reason is REQUIRED for refuse (ai-maestro#71): it must name the defect, not the
 #       verdict. A bare "denied" is rejected. `approve` keeps it optional.
+#       --tier is DEPRECATED on both verbs and is NOT sent (ai-maestro#69): the approval
+#       requirement is read from the card's own `min-approval-requirement:`, never from
+#       the approver. Still accepted so existing calls keep working.
 #   aimaestro-trdd.sh promote <trdd-id> --column C [--note N] [--approver W]      [--agent A]
 #   aimaestro-trdd.sh archive <trdd-id> --state completed|cancelled|superseded
 #       [--reason R] [--superseded-by ID] [--approver W] [--agent A]
@@ -131,10 +134,10 @@ Commands:
                                  EXIT 0 = verified · 2 = NOT verified · 1 = error.
   edit <trdd-id> --set k=v ...   Edit frontmatter fields IN PLACE (no folder move)
   approve <trdd-id>              proposal → planned, git mv proposals/ → tasks/
-      --approver W --tier N --rationale R
+      --approver W --rationale R
   refuse <trdd-id> --reason R    proposal → refused, git mv → refused/
                                  --reason REQUIRED and must name the defect (ai-maestro#71)
-      --approver W --tier N --reason R
+      --approver W --reason R
   promote <trdd-id> --column C   Advance `column` forward inside tasks/ (in place)
       --note N --approver W
   archive <trdd-id> --state S    Terminal move → archived/ (S = completed |
@@ -146,6 +149,15 @@ Commands:
 Global flag:
   --agent <uuid|name>            Operate on that agent's <workdir>/design corpus
                                  (default: the server's own repo)
+
+Deprecated:
+  --tier                         Still accepted on approve/refuse, but IGNORED and NOT
+                                 sent — the server retired it. The approval requirement
+                                 is the CARD's, not the approver's: it is read from its
+                                 own `min-approval-requirement:`, whose ladder is
+                                 none < orchestrator < chief-of-staff < manager < user.
+                                 Set it with:
+                                   aimaestro-trdd.sh edit <id> --set min-approval-requirement=<name>
 
 Mutating verbs are strict routes: AIMAESTRO_SUDO_TOKEN for USER callers; agent
 callers authorize by AID_AUTH + governance title. Nothing is committed for you.
@@ -313,8 +325,48 @@ _gate_verb() {
             *) echo "Error: unknown flag for '${verb}': $1" >&2; return 1 ;;
         esac
     done
-    if [ -n "$tier" ] && [[ ! "$tier" =~ ^[0-9]+$ ]]; then
-        echo "Error: --tier must be a number (0-3)" >&2; return 1
+    # --tier IS A DEAD FLAG. Kept accepted, and made honest (ai-maestro#69 item 2).
+    #
+    # THREE defects met on this one flag. (a) The server RETIRED the numeric tier body field
+    # (ai-maestro#66 Q9): `approve/route.ts` reads only {approver, rationale, agentId} and
+    # `refuse/route.ts` only {approver, reason, agentId} — neither has EVER read `tier`. So the
+    # value was serialised into a body that silently dropped it and the caller got a success,
+    # believing they had set the approval requirement. (b) The validator demanded a NUMBER, so
+    # the five canonical ladder NAMES — which docs/SCRIPT-MANIFEST.md publishes in this very
+    # section — were rejected outright, and the error taught the wrong vocabulary to exactly the
+    # reader who had just read the ladder. (c) It accepted any number, so `--tier 9` passed.
+    #
+    # NOT FIXED BY WIRING IT UP. The requirement is the CARD's property, decided by the D3
+    # objective floor; letting the approver pass it would let them lower the bar they must
+    # clear — a governance hole, not a convenience. So the honest fix is to refuse to pretend.
+    #
+    # KEPT ACCEPTED rather than deleted because the skill-facing CLI is frozen (R23): every
+    # previously-valid call still works, with identical stdout and exit code and one added
+    # stderr line. What DOES now fail is an unmatchable value, on the ai-maestro#114 precedent
+    # — a value that silently does nothing is indistinguishable from one that worked.
+    if [ -n "$tier" ]; then
+        local tier_norm="" tier_extra=""
+        case "$tier" in
+            none|orchestrator|chief-of-staff|manager|user) tier_norm="$tier" ;;
+            0) tier_norm="none" ;;
+            2) tier_norm="manager" ;;
+            3) tier_norm="user" ;;
+            # The legacy numeric ladder cannot express this rung: tier 1 is chief-of-staff
+            # OR orchestrator depending on whether the scope is dispatch-only. That
+            # ambiguity is itself a reason the numeric form is retired.
+            1) tier_norm="chief-of-staff"
+               tier_extra="      (legacy '1' is AMBIGUOUS — it means 'orchestrator' when the scope is dispatch-only)" ;;
+            *)
+                echo "Error: invalid --tier '${tier}'." >&2
+                echo "       The ladder is: none < orchestrator < chief-of-staff < manager < user" >&2
+                echo "       (retired numeric form: 0=none, 1=chief-of-staff|orchestrator, 2=manager, 3=user)" >&2
+                return 1 ;;
+        esac
+        echo "Note: --tier is DEPRECATED and is NOT sent to the server (ai-maestro#69)." >&2
+        echo "      The approval requirement is read from the card's own 'min-approval-requirement:'," >&2
+        echo "      never from the approver. You named '${tier_norm}'; to set it on the card:" >&2
+        [ -n "$tier_extra" ] && echo "$tier_extra" >&2
+        echo "      aimaestro-trdd.sh edit ${id} --set min-approval-requirement=${tier_norm}" >&2
     fi
 
     # A REFUSAL MUST NAME ITS DEFECT (ai-maestro#71 — the USER-ratified refusal protocol,
@@ -363,12 +415,14 @@ MSG
         fi
     fi
 
+    # `tier` is deliberately ABSENT from this body — see the --tier block above. Both routes
+    # discard it, so sending it is the silent lie the fix removes. (It could not have carried a
+    # name either: the old `$t | tonumber` would have died on one.)
     local body
-    body="$(jq -nc --arg ap "$approver" --arg t "$tier" --arg r "$reason" \
+    body="$(jq -nc --arg ap "$approver" --arg r "$reason" \
         --arg rk "$reason_key" --arg a "$agent" '
         {}
         + (if $ap != "" then {approver: $ap} else {} end)
-        + (if $t  != "" then {tier: ($t | tonumber)} else {} end)
         + (if $r  != "" then {($rk): $r} else {} end)
         + (if $a  != "" then {agentId: $a} else {} end)')"
     _api POST "/api/trdd/${id}/${verb}" "$body"

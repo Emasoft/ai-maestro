@@ -153,8 +153,8 @@ HTML is capped at 2 MB; `javascript:` / `file:` / `data:` URLs are rejected 400.
 | `read <id>` | — |
 | `verify <id>` | `--json` — **is this card's approval REAL?** exit `0` verified · **`2` NOT verified** · `1` error |
 | `edit <id>` | `--set k=v` (repeatable) — frontmatter in place, no folder move |
-| `approve <id>` | `--approver W` `--tier N` `--rationale R` — proposal → planned, `git mv` proposals/ → tasks/ |
-| `refuse <id>` | **`--reason R` (REQUIRED)** · `--approver W` `--tier N` — → refused/ |
+| `approve <id>` | `--approver W` `--rationale R` — proposal → planned, `git mv` proposals/ → tasks/ |
+| `refuse <id>` | **`--reason R` (REQUIRED)** · `--approver W` — → refused/ |
 | `promote <id> --column C` | `--note N` `--approver W` — advance in place |
 | `archive <id> --state S` | `--reason R` `--superseded-by ID` `--approver W` |
 
@@ -166,6 +166,14 @@ re-propose. **`approve` is deliberately exempt** — an approval that says nothi
 refusal that says nothing is the failure the protocol was ratified from. This is an ADDITIVE
 tightening of a required-argument rule, not an interface change: every previously-valid `refuse`
 call that named its defect still works.
+
+**`--tier` is DEPRECATED on `approve`/`refuse` and is NOT sent** (ai-maestro#69). It is still
+accepted, so every previously-valid call still works — but it now takes the five ladder NAMES
+below (the numeric form `0..3` is decoded for compatibility) and REJECTS an unmatchable value
+instead of accepting it silently. It was dead in both directions: the server retired the field
+(#66 Q9) so the value was discarded, while the CLI demanded a number and so rejected the very
+names this section publishes. The approval requirement is the CARD's, not the approver's — set
+it with `edit <id> --set min-approval-requirement=<name>`.
 
 Global: `--agent <uuid\|name>` operates on that agent's `<workdir>/design` corpus.
 `archive --state` accepts `completed`, `cancelled`, `superseded` — and **refuses `failed`**

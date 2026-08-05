@@ -11,7 +11,12 @@ import { withAuthorizedTrdd } from '@/lib/trdd-authz'
  * design/proposals/ → design/refused/ (the overlay's refusal protocol; a refused
  * proposal is terminal and never re-approved).
  *
- * Body (all optional): `{approver?, tier?, reason?, agentId?}`. STRICT.
+ * Body (all optional): `{approver?, reason?, agentId?}`. STRICT.
+ *
+ * `tier` is NOT in that list and never was — this docstring advertised it until ai-maestro#69,
+ * while the handler below has only ever read approver/reason/agentId. It is the same retired
+ * numeric field `approve` dropped in ai-maestro#66 Q9: the approval requirement is the card's
+ * own `min-approval-requirement:`, not something the refuser supplies.
  */
 export async function POST(
   request: NextRequest,

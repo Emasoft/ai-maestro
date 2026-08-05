@@ -1,7 +1,8 @@
 ---
 trdd-id: TCKNOA72
 title: Add a live JANITOR REPORT section to the settings page
-column: todo
+column: blocked
+pre-block-column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200

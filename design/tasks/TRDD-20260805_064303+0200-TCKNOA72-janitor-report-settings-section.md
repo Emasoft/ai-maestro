@@ -6,7 +6,7 @@ pre-block-column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T08:04:53+0200
+updated: 2026-08-05T09:06:01+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -79,6 +79,32 @@ is still open, so the field is not currently false, and whether a real dependenc
 judgement about what this section should show — not something to decide from the artifact alone.
 The `⚑ status`, `armed`, `active` and `cron` columns are per-instance janitor health, which is
 where `hibernated` vs `crashed` belongs, and that half now exists (see `14HI8ZPR` slice 3).
+
+### The MARKUP option is closed by the artifact — measured 2026-08-05, not argued
+
+Open question (a) below asks whether *"that exact html table"* means the same INFORMATION or the
+same MARKUP. **The markup option is not a preference we get to weigh — the artifact forecloses it.**
+Measured on the 16 KB sample:
+
+| property | value | why it forecloses embedding |
+|---|---|---|
+| document shape | full standalone `<!doctype html><html><head>` | a document, not a fragment — nothing to drop into a React tree |
+| theme | hard-coded dark (`background:#0d1117`, `color:#c9d1d9`), **no** `prefers-color-scheme` | cannot follow the settings page's own theme; it would fight it |
+| behaviour | **7 inline `onclick=`** handlers + its own `<style>` and `<script>` | inline handlers and global styles leak into the host page |
+| tables | 2 | (same as the 26 MB sample — the size difference is the KB blob, not content) |
+
+And there is **nothing to proxy even if we wanted to**: both rescued samples are one-shot OS temp
+files with random suffixes (`…-ylwdoxug`, `…-rfgj5x5r`), written six minutes apart, so each janitor
+invocation emits a NEW file rather than maintaining one at a stable path.
+
+So (a) resolves to **same INFORMATION** — the 23 columns and their status-glyph semantics,
+re-rendered by us from data — on evidence rather than on taste. What still needs the USER is only
+whether they are content with that, given they asked for "that exact table" after looking at the
+janitor's own report.
+
+⚠ Instrument note, since it is the classic false-absence: `grep -c '<!DOCTYPE'` returns **0** on
+this file, which reads as "it is a fragment". The file opens `<!doctype html>` — lowercase. Match
+case-insensitively, or confirm the shape by reading the head bytes.
 
 ## The ORIGINAL blocking rationale — superseded, kept for the audit trail
 

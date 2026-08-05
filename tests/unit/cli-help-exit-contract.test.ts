@@ -237,8 +237,19 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
     // Every arm but `list` is `[ "$mode" != run ] || cmd_x "$@"`. The guard tests `!= run`
     // rather than `= check` precisely so a third mode is INERT by default; with `= check`,
     // adding `validate` would have made every other verb execute during validation.
+    //
+    // ASSERTING `BLAMES_SERVER` HERE WAS VACUOUS, and the neuter is what said so — reverting
+    // the polarity reddened NOTHING. `cmd_show` executing ALSO fails with 401, so a pattern
+    // matching any 401 cannot tell "fell through to the gate" from "ran the command and it
+    // failed at the same server". Measured under the reverted guard, the output is
+    // `Search agents failed (HTTP 401)` / `Get agent by ID failed` — cmd_show's OWN
+    // diagnostics, which the gate never emits. Those strings are the discriminator.
     const { output } = runAgentCli(['show', 'some-agent'])
-    expect(output, 'it must fall through to the gate, not run the command').toMatch(BLAMES_SERVER)
+    expect(output, 'the validate pass must not run cmd_show — these are ITS diagnostics').not.toMatch(
+      /Search agents failed|Get agent by ID failed|Agent not found/i,
+    )
+    // Non-vacuity: a purely negative assertion also passes when nothing ran at all.
+    expect(output, 'it must still reach the gate').toMatch(BLAMES_SERVER)
   })
 
   it('every listed violator still exists (no stale names hiding a deleted script)', () => {

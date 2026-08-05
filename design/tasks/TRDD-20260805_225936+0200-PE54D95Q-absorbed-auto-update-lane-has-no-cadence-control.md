@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:18:46+0200
+updated: 2026-08-05T23:20:58+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -341,9 +341,50 @@ read did not yield the expected shape, rather than treating an unparseable file 
 one. Backing it up first is not sufficient and not the point: the write must not happen.
 
 Compounded by the lost-update race already recorded above — 13 sessions each hold and rewrite
-their boot-time copy. So the safe shape is: establish authority, prefer the machine registry
-over the human's settings file, refuse-on-unexpected-shape, write when the fleet is quiet,
-and **verify the flag survived** rather than assume the write took.
+their boot-time copy.
+
+#### CORRECTION — the safe writer already exists; I was re-deriving it
+
+USER: *"you forgot that we created a special safe function to edit the settings.json,
+because it ends corrupted most of the time (multiple actors try to update it, including each
+claude code itself)"* — and *"all the functions in ai-maestro MUST use that safe-editor."*
+
+It is **`lib/settings-gate.ts::editSettings`** (TRDD-RYFP030K), whose own header calls it
+*"the ONE transport-agnostic entry point"* and *"the ONE gate between a caller outside
+`lib/json-io.ts`'s own module and the settings file on disk"*. It takes a serialisable
+**ops grammar** (`set` / `delete` on a nested key path) precisely so an HTTP body or a shell
+argv can carry the edit across a process boundary — which a raw mutator function cannot.
+Both `app/api/settings/edit/route.ts` and `scripts/aimaestro-settings-cli.mjs` already route
+through it, and ~30 call sites were migrated onto it.
+
+So the paragraph above was re-specifying requirements a solved component already meets. **The
+requirement collapses to one line: the daemon calls `editSettings` with a `set` op** — it
+does not touch `fs`, does not call `updateJson`, does not implement its own guard. This is
+now a standing invariant for every ai-maestro function, not advice for this card.
+
+#### But the gate covers only ONE of the two files — and that decides the design
+
+`resolveSettingsPath` refuses any path whose basename is not `settings.json` /
+`settings.local.json`, AND whose parent directory is not `.claude`:
+
+| file | through the gate? |
+|---|---|
+| `~/.claude/settings.json` | **accepted** |
+| `~/.claude/plugins/known_marketplaces.json` | **REFUSED** — wrong basename *and* parent is `plugins/` |
+
+So the "which file is authoritative" fork now has a sharp consequence:
+
+- **If `settings.json` is authoritative** → the work is small and fully sanctioned: one
+  `editSettings` `set` op per marketplace entry, done.
+- **If `known_marketplaces.json` is authoritative** → **there is no sanctioned writer for it
+  at all**, and the USER's invariant cannot be satisfied without either extending the gate to
+  cover it or ruling the file off-limits as harness-owned. Note the shape of the risk: that
+  file is written by Claude Code itself (its `lastUpdated` timestamps prove it), so it is the
+  same multi-actor corruption problem the gate was built for — arriving at a file the gate
+  deliberately excludes.
+
+**Resolve the authority question first.** It is no longer a detail: one branch is a
+half-hour's work, the other is a governance decision about a file we may not own.
 
 ## Non-goals
 

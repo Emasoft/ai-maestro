@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# neuter-pair — run TWO neuters and print which tests each one reddens.
+#
+# THE ERROR THIS EXISTS TO STOP. A test asserting a CONJUNCTION — "filter A and filter B both
+# narrow the result" — is vacuous unless the fixture distinguishes them, and a single neuter
+# cannot tell you that. Measured 2026-08-05 on the #53 parentTask+q filters:
+#
+#   draft 1: compose used `q=logout`, which alone identifies one task
+#            → neuter A (disable parentTask) left compose GREEN. Vacuous.
+#   draft 2: fixed A's direction by adding a task matching q under a DIFFERENT parent
+#            → neuter B (disable q) left compose GREEN. Still half vacuous, the other way.
+#   draft 3: added a task under THIS parent that does NOT match q
+#            → both neuters red it. Only now does it assert composition.
+#
+# Two rounds of a real fixture bug, and NEITHER was visible from a green run. The only thing that
+# exposed them was running the COMPLEMENTARY neuter and noticing an asymmetry. That is a
+# procedure, and procedures get skipped, so this makes it one command.
+#
+# WHAT IT DOES NOT DO — deliberately. It does not guess which of your tests "is a composition
+# test" from its name. A name heuristic would be a check that fires on the wrong rows and stays
+# silent on the right ones. It prints the MATRIX and marks the asymmetries; deciding whether an
+# asymmetric row is a bug or is correct (a test that legitimately depends on only one of the two)
+# is a judgement, and the matrix is what makes that judgement possible in one glance.
+#
+#   scripts/dev/neuter-pair -f app/api/x/route.ts \
+#     -a '$_ = "    if (false) {\n" if $. == 90;' \
+#     -b '$_ = "    if (false) {\n" if $. == 97;' \
+#     -t tests/unit/x.test.ts
+#
+# EXIT: 0 = ran (read the matrix) · 2 = could not run. It is an instrument, not a gate: a
+# non-zero exit for "found an asymmetry" would invite `|| true` at the first legitimate one.
+
+set -uo pipefail
+
+FILE=""; EXPR_A=""; EXPR_B=""; TESTS=""; PASS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -f|--file)  FILE="$2";  shift 2 ;;
+    -a)         EXPR_A="$2"; shift 2 ;;
+    -b)         EXPR_B="$2"; shift 2 ;;
+    -t|--tests) TESTS="$2"; shift 2 ;;
+    --allow-dollar) PASS+=(--allow-dollar); shift ;;
+    --expect-lines) PASS+=(--expect-lines "$2"); shift 2 ;;
+    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+    *) echo "neuter-pair: unknown argument '$1'" >&2; exit 2 ;;
+  esac
+done
+[ -n "$FILE" ] && [ -n "$EXPR_A" ] && [ -n "$EXPR_B" ] && [ -n "$TESTS" ] || {
+  echo "neuter-pair: need -f FILE -a EXPR_A -b EXPR_B -t 'TESTS'" >&2; exit 2; }
+
+cd "$(git rev-parse --show-toplevel)" || exit 2
+NEUTER="scripts/dev/neuter"
+[ -x "$NEUTER" ] || [ -f "$NEUTER" ] || { echo "neuter-pair: $NEUTER not found" >&2; exit 2; }
+
+# Delegate to neuter rather than re-implementing it: it owns the committed-clean check, the
+# site-count assertion, the output parsing and the blob-verified restore. Duplicating any of that
+# here would mean two copies drifting, and the restore is the half you cannot afford to get wrong.
+run_one() {
+  local expr="$1" out
+  out="$(bash "$NEUTER" -f "$FILE" -e "$expr" -t "$TESTS" "${PASS[@]+"${PASS[@]}"}" 2>&1)" || {
+    echo "neuter-pair: the mutation FAILED to run — neuter said:" >&2
+    printf '%s\n' "$out" | sed 's/^/    /' >&2
+    return 1; }
+  printf '%s\n' "$out" | grep -E '^    RED: ' | sed 's/^    RED: //'
+}
+
+echo "=== A: $EXPR_A"
+RED_A="$(run_one "$EXPR_A")" || exit 2
+echo "=== B: $EXPR_B"
+RED_B="$(run_one "$EXPR_B")" || exit 2
+
+ALL="$(printf '%s\n%s\n' "$RED_A" "$RED_B" | grep -v '^$' | sort -u)"
+if [ -z "$ALL" ]; then
+  echo
+  echo "NEITHER mutation reddened anything. That is a finding about the TESTS, not a clean bill:"
+  echo "both guards are unpinned, or both mutations missed the branch under test."
+  exit 0
+fi
+
+echo
+printf '%-6s %-6s %s\n' "A" "B" "test"
+printf '%-6s %-6s %s\n' "-----" "-----" "----"
+ASYM=0
+while IFS= read -r t; do
+  a="·"; b="·"
+  printf '%s\n' "$RED_A" | grep -qxF "$t" && a="RED"
+  printf '%s\n' "$RED_B" | grep -qxF "$t" && b="RED"
+  printf '%-6s %-6s %s\n' "$a" "$b" "$t"
+  [ "$a" != "$b" ] && ASYM=$((ASYM + 1))
+done <<< "$ALL"
+
+echo
+if [ "$ASYM" -gt 0 ]; then
+  echo "${ASYM} ASYMMETRIC row(s) — red under one mutation but not the other."
+  echo "If any of those asserts a CONJUNCTION, it is half vacuous: it passes with one of the two"
+  echo "guards disabled, so it is not testing composition. Fix the FIXTURE (it needs a case in"
+  echo "each of the four quadrants), not the assertion. If a row legitimately depends on only one"
+  echo "guard, it is correct as-is — the matrix is here so you can tell those apart."
+else
+  echo "No asymmetry: every reddened test reds under BOTH mutations."
+fi
+exit 0

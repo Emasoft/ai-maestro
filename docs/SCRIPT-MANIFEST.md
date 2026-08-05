@@ -88,7 +88,8 @@ Frozen subcommands (19):
 
 ```
 list · show · config · resolve · create · delete · update · rename · session
-hibernate · wake · restart · skill · plugin · export · import · presence · help
+hibernate · wake · restart · skill · plugin · export · import · presence
+hibernation · subconscious · help
 ```
 
 - `create <name> [--dir <path>] [options] [-- <program-args>…]` — `--dir` is OPTIONAL and
@@ -98,6 +99,15 @@ hibernate · wake · restart · skill · plugin · export · import · presence 
 - `resolve <name> | --cwd <dir>` → the agent's tmux session name
 - `config <agent>` → consolidated config (teams, repo, docker, tasks, AID)
 - `presence` → the human user's last input + idle window
+- `hibernation [--json|--table]` → fleet roster: `running | hibernated | crashed | never_woken`
+  per agent (**`hibernated` is HEALTHY — never report it as a fault**), plus persistence rows
+  referencing agents no longer in the registry. Nothing in `Agent['status']`
+  (`active|idle|offline|deleted`) can answer this — all three down-states read `offline`.
+- `subconscious <agent> [--json|--table]` → is that agent's subconscious loop running, and its
+  last run. Thin GET wrapper over `/api/agents/{id}/subconscious` (note: **no `/status`
+  segment** — the memory-search skill cites one that does not exist). An agent may read only
+  its OWN; the system owner may read any. The manual re-index counterpart was removed in
+  TRDD-YEE33F3A and is not coming back — automatic indexing already runs.
 - `session`, `skill`, `plugin` are sub-dispatchers; each takes `--help`.
 
 Shared flag vocabulary (all frozen where they appear):

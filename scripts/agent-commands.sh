@@ -234,6 +234,92 @@ cmd_presence() {
     echo "$response"
 }
 
+# cmd_subconscious — is an agent's subconscious loop running, and when did it last run?
+# (ai-maestro#64 residual 1.)
+#
+# A THIN GET WRAPPER, and deliberately only that. The route already exists and the skill layer
+# already teaches the capability; what was missing was any way to reach it from the frozen CLI,
+# so an agent had to call the HTTP API directly — the R23 bypass the script layer exists to
+# prevent.
+#
+# THE SKILL DOCUMENTS THE WRONG PATH. `skills/memory-search/references/REFERENCE.md:154` cites
+# `GET /api/agents/{id}/subconscious/status`; the real route is
+# `GET /api/agents/{id}/subconscious` — there is no `/status` segment. That is a core-plugin doc
+# fix, not ours, but it is why "the verb is missing" and "the path 404s" looked like one bug.
+#
+# THE OTHER HALF OF residual 1 IS GONE ON PURPOSE, not unbuilt: the manual re-index verb
+# (`POST …/subconscious/index-delta`, REFERENCE.md:170) was REMOVED in TRDD-YEE33F3A because it
+# returned 400 for every possible input once the RAG subsystem was deleted (TRDD-70a521d9) and
+# had zero callers. Do not "restore" it — automatic indexing already runs.
+#
+# AUTHORIZATION IS THE SERVICE'S, NOT OURS: an agent may read only its OWN subconscious status;
+# the system owner may read any (agents-subconscious-service.ts). This wrapper adds no gate of
+# its own and inherits `aimaestro-agent.sh`'s `check_api_running` + AID_AUTH bearer.
+cmd_subconscious() {
+    local agent="" format="table"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --json)  format="json";  shift ;;
+            --table) format="table"; shift ;;
+            -h|--help)
+                cat << 'HELP'
+Usage: aimaestro-agent.sh subconscious <agent> [--json|--table]
+
+Report whether an agent's subconscious loop is running, and its last run.
+
+Options:
+  --table   Human-readable (default)
+  --json    Raw JSON
+
+An agent may read only its OWN status; the system owner may read any.
+HELP
+                return 0 ;;
+            -*) print_error "Unknown option: $1"; return 1 ;;
+            *) agent="$1"; shift ;;
+        esac
+    done
+    [[ -z "$agent" ]] && { print_error "Agent name or ID required"; return 1; }
+
+    resolve_agent "$agent" || return 1
+    local agent_id="$RESOLVED_AGENT_ID"
+
+    local api_base; api_base=$(get_api_base)
+    local -a auth_args=()
+    _build_auth_args auth_args
+    local response
+    response=$(curl -s --max-time 15 "${auth_args[@]}" "${api_base}/api/agents/${agent_id}/subconscious" 2>/dev/null)
+
+    if [[ -z "$response" ]]; then
+        print_error "Failed to fetch subconscious status for ${RESOLVED_ALIAS:-$agent}"
+        return 1
+    fi
+    # A refusal must NOT render as `running: false`. "I could not look" and "it is not running"
+    # are different answers, and collapsing them is how a permissions error gets read as an
+    # unhealthy agent — the same conflation cmd_hibernation guards against.
+    if echo "$response" | jq -e 'has("error")' >/dev/null 2>&1; then
+        print_error "$(echo "$response" | jq -r '.error')"
+        return 1
+    fi
+
+    if [[ "$format" == "json" ]]; then
+        echo "$response"
+        return 0
+    fi
+
+    echo "$response" | jq -r '
+      "Agent:            \(.agentName // .agentId // "unknown")",
+      "Subconscious:     \(if .isRunning then "RUNNING" else "not running" end)",
+      (if .status then
+         "  started:        \(.status.startedAt // "—")",
+         "  last run:       \(.status.lastMessageRun // "never")",
+         "  last result:    \(.status.lastMessageResult // "—")",
+         "  total runs:     \(.status.totalMessageRuns // 0)",
+         "  check interval: \(.status.messageCheckInterval // "—")"
+       else
+         "  (no status record — the loop has never started)"
+       end)'
+}
+
 # cmd_hibernation — is each agent deliberately ASLEEP, or BROKEN? (TRDD-14HI8ZPR)
 #
 # Nothing in the registry answers this: Agent['status'] is active|idle|offline|deleted — four

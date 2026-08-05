@@ -109,6 +109,7 @@ main() {
         import)    shift; cmd_import "$@" ;;
         presence)  shift; cmd_presence "$@" ;;
         hibernation) shift; cmd_hibernation "$@" ;;
+        subconscious) shift; cmd_subconscious "$@" ;;
         help|--help|-h) cmd_help ;;
         --version|-v) echo "aimaestro-agent.sh v1.0.1" ;;
         *) print_error "Unknown command: $1"; echo ""; cmd_help; exit 1 ;;

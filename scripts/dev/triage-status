@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# triage-status — what is the CURRENT state of issue N, from the row that supersedes the others?
+#
+# THE ERROR THIS EXISTS TO STOP. reports/github-issue-triage/TRIAGE.md has two layers that look
+# identical in a grep: a PROGRESS LEDGER at the top (current — one row per issue as it is worked)
+# and the Batch A-E tables below `## Classification key` (the ORIGINAL triage, written once and
+# never revised). A batch row can say `DONE? — verify and close` for an issue that was answered
+# hours later and now needs a BUILD.
+#
+# Measured 2026-08-05: I read #112's BATCH row, wrote "the cheapest — a verify-and-close" into a
+# handoff, and its LEDGER row (TRIAGE.md:26) said it had already been answered that morning and
+# what remained was building the global-chore panel. A false claim, in the one artifact whose job
+# is to orient the next session, caught only because I re-checked on a hunch.
+#
+# `grep '#112' TRIAGE.md` returns BOTH rows and says nothing about which one supersedes the other.
+# That is the whole trap: the instrument is fine, the READER cannot tell the layers apart. So this
+# picks the layer for you, and refuses to hand back a historical row without labelling it.
+#
+#   scripts/dev/triage-status 112
+#
+# EXIT: 0 = a CURRENT ledger row exists · 1 = only a historical row (VERIFY before acting on it)
+#       2 = could not run (no TRIAGE.md, or no row at all — never guess from silence)
+#
+# The ledger lives under gitignored reports/, so this is machine-local by design. That is fine
+# BECAUSE IT IS NOT A GATE: with no document it exits 2 and says so, rather than returning a
+# confident "no rows" that a caller would read as "nothing is known about this issue".
+
+set -uo pipefail
+
+N=""; DOC_OVERRIDE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    # --doc exists so this tool's OWN tests can run against a fixture. The real document is
+    # gitignored evidence, so a test bound to it would pass vacuously in a fresh clone or CI —
+    # a test that silently stops testing is the failure this whole toolchain is about.
+    --doc) DOC_OVERRIDE="$2"; shift 2 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    *) N="$1"; shift ;;
+  esac
+done
+[ -n "$N" ] || { echo "triage-status: need an issue number, e.g. triage-status 112" >&2; exit 2; }
+case "$N" in (*[!0-9]*) echo "triage-status: '$N' is not an issue number" >&2; exit 2 ;; esac
+
+if [ -n "$DOC_OVERRIDE" ]; then
+  DOC="$DOC_OVERRIDE"
+else
+  ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "triage-status: not in a git repo" >&2; exit 2; }
+  DOC="$ROOT/reports/github-issue-triage/TRIAGE.md"
+fi
+[ -f "$DOC" ] || {
+  echo "triage-status: COULD NOT RUN — no $DOC on this machine." >&2
+  echo "triage-status: the triage corpus is gitignored evidence, so a fresh clone has none." >&2
+  echo "               Verdict UNKNOWN — do not read this as 'the issue is untriaged'." >&2
+  exit 2; }
+
+CUT="$(grep -n '^## Classification key' "$DOC" | head -1 | cut -d: -f1)"
+[ -n "$CUT" ] || { echo "triage-status: COULD NOT RUN — no '## Classification key' divider in $DOC;" >&2
+                   echo "               the ledger/batch split cannot be located, so neither layer is trustworthy." >&2
+                   exit 2; }
+
+LEDGER="$(head -n "$CUT" "$DOC" | grep -nE "\*\*#${N}\b" || true)"
+BATCH="$(tail -n "+$CUT" "$DOC" | grep -nE "\*\*#${N}\b" || true)"
+
+if [ -n "$LEDGER" ]; then
+  echo "=== #${N}: CURRENT (progress ledger — this supersedes any batch row below)"
+  printf '%s\n' "$LEDGER" | sed 's/^/  /'
+  if [ -n "$BATCH" ]; then
+    echo
+    echo "  NOTE: a batch row for #${N} also exists. It is the ORIGINAL triage and is SUPERSEDED"
+    echo "        by the above. Do not quote it — that is the exact mistake this tool exists for."
+  fi
+  exit 0
+fi
+
+if [ -n "$BATCH" ]; then
+  echo "=== #${N}: ⚠ HISTORICAL ONLY — original triage, NOT a current status"
+  printf '%s\n' "$BATCH" | sed 's/^/  /'
+  echo
+  echo "  There is NO ledger row for #${N}, so nothing here has been revised since triage."
+  echo "  A row saying 'DONE? — verify and close' may describe work already done, already"
+  echo "  answered, or now needing a BUILD. VERIFY against the code and the issue before acting."
+  exit 1
+fi
+
+echo "triage-status: COULD NOT RUN — no row for #${N} in either layer of $DOC." >&2
+echo "               That means it was never triaged, OR the id is wrong. Both are 'unknown'," >&2
+echo "               not 'nothing to do'." >&2
+exit 2

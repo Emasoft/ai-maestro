@@ -1,11 +1,11 @@
 ---
 trdd-id: 14HI8ZPR
 title: Server suppresses the janitor daemon entirely but absorbs only 5 of its 11 global chores
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T09:03:49+0200
+updated: 2026-08-05T09:59:58+0200
 implementation-commits: [01a56c40c06e4982e70913099e83c580373d12f9]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -383,6 +383,10 @@ act on other sessions, and a bug there is a fleet-wide event rather than a local
 - [x] `yarn build` + restart so the new route is in the running bundle, then verify by EFFECT — slice 5: route present as a dynamic entry in the artifact, publisher wrote a correct envelope whose counts match the independent measurement, `.janitor/` confirmed gitignored, and the containment gate refused all 9 out-of-root workdirs
 - [x] a test that fails when an absorbed chore runs without writing its stamp — plus its complement (the gate refusing must NOT stamp, or an unowned chore would look owned) and an epoch-SECONDS pin, since a milliseconds value parses fine and reads as permanently fresh for ~55 000 years
 - [x] reply on `ai-maestro#111` with the decision, so the janitor can drop its side of the ambiguity — [comment 5187649837](https://github.com/Emasoft/ai-maestro/issues/111#issuecomment-5187649837)
+- [x] **the one ABSORBABLE chore actually absorbed** — USER go-ahead 2026-08-05 ("yes, and even more often — every 4 hours"). `lib/github-config-audit.ts` + `startGithubConfigAuditScheduler` wired in `server.mjs`, `'github-config-audit'` added to `ABSORBED_CHORES`. Read-only `gh api` GETs; it never mutates a repo. Verified LIVE by effect: scheduler logged at startup, **14 repos scanned** (the catalog population, NOT the 15 our constants would give), findings published to `~/.aimaestro/github-config-findings.json`, and `~/.claude/janitor-control/github-config-audit.last-run.ts` stamped
+- [x] the 0-findings result proven to be a CLEAN result rather than a blind probe — traced one repo by hand (`deletion, non_fast_forward, pull_request, required_status_checks`; a tag ruleset present; 6 workflows ⇒ every rule correctly silent), and confirmed **14/14 repos visible as admin**, so nothing was skipped behind the never-nag-on-unverifiable rule
+- [x] the population correction recorded and the wrong VERIFIED superseded — `39c1c07f`. The original claim checked that the server holds *a* repo list, never that it equals the janitor's; the two differ in both directions and an `ecosystem-constants`-driven audit would have covered 10 of 14 while stamping the chore covered
+- [x] cross-repo: ask the janitor to read the server's findings file, completing the absorption through their existing near-free per-session detector — [`ai-maestro-janitor#197`](https://github.com/Emasoft/ai-maestro-janitor/issues/197)
 
 ## Approval log
 

@@ -1,12 +1,11 @@
 ---
 trdd-id: TCKNOA72
 title: Add a live JANITOR REPORT section to the settings page
-column: blocked
-pre-block-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T06:43:03+0200
-updated: 2026-08-05T09:06:01+0200
+updated: 2026-08-05T09:59:58+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,7 +21,7 @@ effort: medium
 relevant-rules: []
 npt: []
 eht: []
-blocked-by: [14HI8ZPR]
+blocked-by: []
 release-via: none
 labels: [janitor, settings-ui, observability]
 external-refs: [Emasoft/ai-maestro#112, Emasoft/ai-maestro#111]
@@ -97,10 +96,34 @@ And there is **nothing to proxy even if we wanted to**: both rescued samples are
 files with random suffixes (`…-ylwdoxug`, `…-rfgj5x5r`), written six minutes apart, so each janitor
 invocation emits a NEW file rather than maintaining one at a stable path.
 
-So (a) resolves to **same INFORMATION** — the 23 columns and their status-glyph semantics,
-re-rendered by us from data — on evidence rather than on taste. What still needs the USER is only
-whether they are content with that, given they asked for "that exact table" after looking at the
-janitor's own report.
+~~So (a) resolves to **same INFORMATION** — the 23 columns and their status-glyph semantics,
+re-rendered by us from data — on evidence rather than on taste.~~
+
+### ⚠ REVERSED BY THE USER, 2026-08-05 — it is the MARKUP
+
+*"no, preserve the rendering exactly as it is. its a document that must be used as audit trail in
+case something goes wrong."*
+
+**Every measurement above is correct and the conclusion drawn from them was wrong**, because they
+answered a question nobody had asked. "Can this be embedded as markup in a React tree?" — no, and
+the table proves it. "What must the settings page SHOW?" — the artifact itself, because it is
+EVIDENCE. An audit artifact that has been through our renderer is no longer the artifact, and the
+23 columns re-drawn by us would be a faithful-looking document that is not the one the janitor
+produced.
+
+The measurements survive as the reason for the SHAPE of the answer: precisely because the document
+is a standalone page with its own theme, inline handlers and scripts, it goes in an **iframe**
+(`sandbox="allow-scripts"`, no `allow-same-origin`) rather than being injected. The "nothing to
+proxy" finding survives too — it is why there is a discovery ARCHIVER rather than a live proxy.
+
+It also removes the honesty problem this card was carrying. The document is a whole-HOST view and
+this server sees only its own registry, so a table we re-derived would silently omit rows we cannot
+even enumerate. Preserving the janitor's own bytes is not merely what was asked for; it is the only
+version of this section that is not quietly incomplete.
+
+**The general lesson, and it cost the advisor consultation too:** I measured the artifact carefully
+and reasoned from the measurements to a conclusion about a requirement I did not have. The USER's
+one-line reason — *audit trail* — was not derivable from any property of the file.
 
 ⚠ Instrument note, since it is the classic false-absence: `grep -c '<!DOCTYPE'` returns **0** on
 this file, which reads as "it is a fragment". The file opens `<!doctype html>` — lowercase. Match
@@ -149,11 +172,16 @@ rather than a nicety.
 ## Acceptance
 
 - [x] the 26 MB sample copied somewhere durable and its real table structure read — BOTH samples rescued to `reports_dev/janitor-report-samples/` (sha256-verified; a second 16 KB one was found alongside it), and the structure read: 2 tables / 14 rows, per-INSTANCE not per-chore, the 26 MB being 99.8% an embedded card-body KB in one <script>
-- [ ] "same information" vs "same markup" resolved with the user
-- [ ] refresh mechanism chosen and justified against the 60 s-6 h cadence range
-- [ ] `JANITOR REPORT` section renders per-chore status from the stamp contract
-- [ ] honest degradation when no janitor is installed on the host
-- [ ] a chore that is running reads as running (the end-to-end check TRDD-14HI8ZPR unblocks)
+- [x] "same information" vs "same markup" resolved with the user — **RULED: the MARKUP, exactly as rendered.** USER 2026-08-05: *"no, preserve the rendering exactly as it is. its a document that must be used as audit trail in case something goes wrong."* That reverses the recommendation this card was carrying, on a requirement neither I nor the advisor had: an audit artifact that has been through our renderer is no longer the artifact
+- [x] refresh mechanism chosen and justified — **no polling at all.** The cadence-spread question dissolved once the document became the unit: a 60 s DISCOVERY archiver (copies only, never generates) plus an explicit **Refresh** button. Each row carries its own capture time and the header shows its age, so the surface is honest that it is the freshest data that EXISTS rather than pretending to be live
+- [x] `JANITOR REPORT` section renders the janitor's own document VERBATIM — ⚠ this box previously read *"renders per-chore status from the stamp contract"*, which the artifact refuted (the report is per-INSTANCE, 23 columns, no chore column at all). Rewritten to what was actually asked for and built, rather than ticked against a premise known to be false
+- [x] **iframe, never a popup** (USER directive) — `sandbox="allow-scripts"` and deliberately NOT `allow-same-origin`, since the document is served from our own origin and its content derives from unaudited card bodies. The generator's unconditional browser-open is suppressed via a PATH shim; verified zero windows opened, twice
+- [x] **Export button** in the container div (USER directive) — streams the same bytes with `Content-Disposition`
+- [x] every document saved with a timestamp so none overwrites the last (USER directive) — for BOTH surfaces: `~/.aimaestro/janitor-reports/` for the global documents, and `.janitor/daemon_responses/archive/` for the per-agent responses (change-detected, so a beat that changes nothing writes nothing)
+- [x] honest degradation when no janitor is installed on the host — the empty state names the cause and points at `/janitor-show-global-status`; an empty frame would read as a fleet outage
+- [x] verified end-to-end on the live server — section renders, both buttons present, archive picker lists both documents, and the iframe's document returns **200 / `text/html` / `nosniff` / 18.5 MB / `<!doctype html` / the janitor's own dark theme / 2 tables**, i.e. byte-faithful. All three routes 401 unauthenticated
+
+> **Not verified by screenshot.** Two `dev-browser` screenshot APIs failed (absolute paths rejected; the helper threw), and I stopped rather than spend more on the tooling. The DOM + network evidence above is the stronger check for what matters here — it proves the served bytes, the content-type and the sandbox attribute, none of which a screenshot shows.
 
 ## Approval log
 

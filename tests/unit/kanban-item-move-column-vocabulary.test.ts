@@ -28,12 +28,23 @@
  * raw id, so it is the one that separates "the mapping is canonical" from "the mapping happens
  * to agree on todo".
  *
- * NEUTER RUN (recorded 2026-08-05, OBSERVED not predicted): restoring the legacy `statusMap`
- * plus its `|| status` fallthrough reddens 6 of the 8 closures below — every canonical-label
- * case except `todo` (which the legacy map also got right, so it cannot discriminate) and
- * except the custom-board case (whose ids the legacy map never had). Both survivors are named
- * here rather than deleted: `todo` is the coincidence that hid the bug, and its presence is
- * what documents why the other five are the real pins.
+ * NEUTER RUNS (2026-08-05 — OBSERVED, not predicted). The file has two independent halves, so
+ * one mutation could only ever certify half of it; these are complementary and every one of the
+ * 11 closures falls to at least one:
+ *
+ *   A. the MAPPING half — `column.label` → `status` (the old `|| status` fallthrough):
+ *      **7 red / 4 green.** All six canonical-label cases plus the custom-board case. The four
+ *      survivors are the legacy-id rejections, which that mutation does not touch.
+ *   B. the REJECTION half — `if (!column)` → `if (false)`:
+ *      **5 red / 6 green.** All four legacy-id cases plus the custom-board case (which asserts
+ *      both halves, so it is the one closure that falls to BOTH).
+ *
+ * A PREDICTION THIS RUN CORRECTED. This comment first claimed `todo` would survive neuter A —
+ * reasoning that the legacy map also mapped `todo` correctly, so it cannot discriminate. That is
+ * true of the ORIGINAL bug and false of the neuter: the fallthrough sends the raw `todo`, and the
+ * canonical label is `To Do`, so it reds like the rest. Both statements matter and they are not
+ * the same statement — `todo` would NOT have caught the shipped defect (which is why the defect
+ * shipped), yet it is not a vacuous assertion. The distinction is only visible by running it.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -131,9 +142,10 @@ describe('the mirror resolves the canonical label, not the raw column id', () =>
     expect(labelSentToGitHub()).toBe('Dev')
   })
 
-  // Kept deliberately, and it is NOT a pin: `todo` is the single id the legacy map also got
-  // right. It survives the neuter, and that is the point — this is the coincidence that hid the
-  // defect from every smoke test, so it is documented rather than removed.
+  // Kept deliberately as the documented coincidence: `todo` is the single id the LEGACY map also
+  // got right, so this case would not have caught the shipped defect — which is precisely how the
+  // defect survived, since it is the first column anyone drags a card into. (It is still a real
+  // assertion: it reds under the fallthrough neuter, because `To Do` is not `todo`.)
   it('todo is sent as "To Do" (the one id the legacy map also got right)', async () => {
     await patch('todo')
     expect(labelSentToGitHub()).toBe('To Do')

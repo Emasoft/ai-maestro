@@ -63,7 +63,7 @@ export default function JanitorReportSection() {
 
   const fetchList = useCallback(async (keepSelection = true) => {
     try {
-      const res = await fetch('/api/janitor/reports')
+      const res = await fetch('/api/janitor/status-archive')
       if (!res.ok) throw new Error(`listing failed (${res.status})`)
       const data = (await res.json()) as { entries: ArchiveEntry[] }
       const list = data.entries ?? []
@@ -86,7 +86,7 @@ export default function JanitorReportSection() {
     setGenerating(true)
     setError(null)
     try {
-      const res = await fetch('/api/janitor/reports/generate', { method: 'POST' })
+      const res = await fetch('/api/janitor/status-archive/generate', { method: 'POST' })
       const body = (await res.json().catch(() => ({}))) as { entry?: ArchiveEntry; error?: string }
       if (!res.ok) throw new Error(body.error || `generation failed (${res.status})`)
       await fetchList(false)
@@ -104,7 +104,7 @@ export default function JanitorReportSection() {
     if (!selected) return
     // The route sets Content-Disposition; letting the browser handle it avoids pulling a 26 MB
     // document through a Blob in the page's own heap just to hand it straight back to the disk.
-    window.open(`/api/janitor/reports/${encodeURIComponent(selected)}?download=1`, '_blank')
+    window.open(`/api/janitor/status-archive/${encodeURIComponent(selected)}?download=1`, '_blank')
   }, [selected])
 
   const current = entries.find(e => e.name === selected) ?? null
@@ -198,7 +198,7 @@ export default function JanitorReportSection() {
         ) : (
           <iframe
             key={`${selected}-${reloadKey}`}
-            src={`/api/janitor/reports/${encodeURIComponent(selected ?? '')}`}
+            src={`/api/janitor/status-archive/${encodeURIComponent(selected ?? '')}`}
             title="Janitor global status"
             className="w-full h-full border-0"
             sandbox="allow-scripts"

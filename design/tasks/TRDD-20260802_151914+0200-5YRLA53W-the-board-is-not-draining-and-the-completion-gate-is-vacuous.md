@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-06T08:49:12+0200
+updated: 2026-08-06T09:02:41+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -464,7 +464,15 @@ Nine of the seventeen cards had a claim that did not survive that.
       the human), and #102's root cause — a reader stat'ing `version-update-request` against a
       writer that writes `version-update-requested.flag` — is fixed in `lib/janitor-control.ts:48`.
       Closing them is an outward-facing action on our own tracker: the human's call, not a
-      housekeeping side effect
+      housekeeping side effect.
+      **RE-VERIFIED 2026-08-06 08:55 (read-only — the assertion, not the action):** both are
+      still `OPEN`, last updated 2026-08-05, with 7 and 12 comments. So this box's claim is
+      CURRENT, not a stale citation, and the item is still live rather than quietly resolved.
+      Deliberately NOT commented on either: a status update is adjacent to the closing this box
+      reserves for the human, and the box is about the decision, not the paperwork. Note #102
+      (*the absorbed version-update chore is not running*) now has substantial new evidence from
+      today's work on that very lane — [[PE54D95Q]] — which is worth carrying into whatever the
+      human decides.
 - [x] `updated:` was NOT bumped by any mechanical/format-only edit — every bump this session
       accompanied a real `column:` change, which does change what the card asserts
 - [x] the census above is re-derived at the end and the deltas recorded — and it reconciles

@@ -60,6 +60,51 @@ Three asks collapse onto that one gap:
    `scripts/ai-maestro-hook.cjs` and answers "what did the hook conclude at the last event",
    never "what is on screen now".
 
+## ⏵ USER DIRECTIVE 2026-08-06 ~12:20 — the shape is DECIDED, and the reason is sharper than "convenience"
+
+> *"it is very important that the MANAGER and the CHIEF-OF-STAFF are able to detect an agent
+> session that is blocked by some AskUser question, and to send the correct answer in the terminal
+> of the agent to make it resume the work, otherwise it will be blocked forever… we need to provide
+> to the MANAGER a way to search the terminal text to understand what it is happening and why it is
+> blocked, so it can send the right answer."*
+
+**MEASURED, and it inverts the priority of this card.** Across **419 live
+`~/.aimaestro/chat-state/*.json` files**:
+
+| signal | files carrying it |
+|---|---|
+| `status: waiting_for_input` | 21 |
+| `notificationType` | 21 |
+| permission `options` | **1** |
+| `question` (AskUserQuestion) | **0 — never** |
+
+So the hook captures PERMISSION prompts (rarely — 1 of 419) and **captures AskUserQuestion not at
+all**. The structured path the MANAGER would prefer *does not exist for the exact case the USER
+names*. Terminal-text search is therefore not a nicer alternative to structured capture — it is the
+**only** mechanism that can unblock an AskUserQuestion today, and it stays the fallback afterwards
+for every prompt shape the hook does not model. That is the argument for building it first.
+
+**Chosen shape** (answers the question this card deliberately left open, and #58 asked the consumer):
+a **structured verdict PLUS a search predicate**, not a raw buffer dump —
+
+- `{ blocked: bool, reason: 'ask_user'|'permission'|'rate_limited'|'api_error'|'idle'|…,
+   fieldVisible: bool, fieldEmpty: bool, fieldText: string, excerpt: string[] }`
+- a `--match <regex>` form that evaluates SERVER-side and returns only matching lines, so a caller
+  can ask *"why is it blocked"* without the whole buffer crossing the boundary;
+- raw-buffer access kept as a separate, more-restricted verb — a pane can hold anything the agent
+  was shown, secrets included, so the default surface must be the narrow one.
+
+**The heuristic is a merge, not a scrape.** The hook's `notificationType` stays the fast path and
+the fallback is the regex over `capturePane`. The classifier regex already exists and is
+field-proven — `scripts/ai-maestro-hook.cjs`:
+`/rate.?limit|temporarily limiting|overloaded|too many requests|quota|\b429\b|\b529\b/` — so the
+red-state half is a REUSE, not a new invention. Reuse it from one shared module rather than
+copying it, or the two copies drift (this repo has that bug already, twice).
+
+**Cross-repo half (theirs):** the hook should ALSO capture AskUserQuestion text + choices into
+chat-state, so the structured path eventually covers the case too. Filed to the plugin repo. Ours
+must not block on it — that is the whole point of the fallback.
+
 ## Why it is not just "add a route"
 
 The verb's SHAPE is the design question, and getting it wrong ships a primitive that does not fit

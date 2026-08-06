@@ -48,6 +48,20 @@ describe('tick-status — writeTickStatus / readTickStatus (PERSIST-THEN-READ, T
   //
   // Hence a round-trip test rather than a write-only one: the failure was not that the value
   // was computed wrong, it was that it never reached disk.
+  //
+  // NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restores blob-verified). Two
+  // mutations, aimed at the gate's two independent halves — WHICH state persists, and WHETHER
+  // its reason rides along:
+  //   s|if \(typeof sk === 'string' && VALID_STUCK\.has\(sk\)\) payload\.stuck = sk as StuckReason|// NEUTERED|
+  //     → 1 red / 12 green:
+  //         carries WHY it is stuck, because the two reasons have opposite remedies
+  //   s|'reauth-needed', 'stuck'\]|'reauth-needed']|
+  //     → 4 red / 9 green:
+  //         carries WHY it is stuck … / DROPS an unrecognised stuck reason … /
+  //         persists a stuck tick AS stuck — never as ok / round-trips each valid cascade state
+  // The second is deliberately coarse: dropping 'stuck' from VALID makes the whole write a
+  // no-op, so every stuck assertion falls. The first isolates the reason alone, which is the
+  // half a reader needs in order to know whether to WAIT or to go re-login.
 
   it('persists a stuck tick AS stuck — never as ok', () => {
     writeTickStatus({ nextAction: 'stuck', stuck: 'all-maxed', switched: false })

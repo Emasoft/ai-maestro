@@ -57,6 +57,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { EventEmitter } from 'events'
 import { Readable } from 'stream'
 
+// MEASURED flake, not a guess (the teams-stats-verb precedent, 71104775): under full-suite load
+// this import-heavy route file blows vitest's 5s default — captured 2026-08-06 (full-suite round
+// 2, 106 `Test timed out in 5000ms` across spawn/import-heavy suites; this file 6/6 red with
+// exactly that signature at r10-restart-manager-gate-parity.test.ts:191). 30s changes nothing
+// when green and absorbs scheduler starvation when loaded.
+vi.setConfig({ testTimeout: 30_000 })
+
 const FIXTURE = vi.hoisted(() => ({
   managerId: null as string | null,
   inTeam: true,

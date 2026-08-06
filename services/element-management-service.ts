@@ -5413,8 +5413,22 @@ export async function UpdateMarketplace(desired: {
  *
  * The timeout is deliberately far larger than the single-name path's 120 s: this is one process
  * doing what were 275 git fetches on this host, and a timeout sized for one of them would kill
- * the call every time and report the refresh as failing.
+ * the call every time and report the refresh as failing. It is SIZED FROM A MEASUREMENT, not
+ * guessed — see `MARKETPLACE_REFRESH_TIMEOUT_MS`.
  */
+/** Wall-clock budget for the argless whole-host marketplace refresh.
+ *
+ *  MEASURED on this host 2026-08-06 (TRDD-PE54D95Q): `claude plugin marketplace update` over 275
+ *  marketplaces ran **1082 s** and exited 0. The previous 900 s cap therefore killed a run that
+ *  was 182 s from success — and because one argless call is ALL-OR-NOTHING, every one of the 275
+ *  results was discarded, every cycle, while the lane reported `failed`.
+ *
+ *  Do not shrink this back toward the single-name 120 s: that path refreshes ONE marketplace.
+ *  Do not treat it as the real fix either — 10 of the 275 repos are GONE (`Repository not found`)
+ *  and account for most of the 1082 s. Pruning them is user-owned config, so it is the USER's
+ *  call, not this constant's job. */
+export const MARKETPLACE_REFRESH_TIMEOUT_MS = 30 * 60 * 1000
+
 export async function RefreshAllMarketplaces(authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
@@ -5428,7 +5442,19 @@ export async function RefreshAllMarketplaces(authContext: AuthContext): Promise<
     const ironErr = assertAgentMayNotUserScope('user', 'update', authContext, ops)
     if (ironErr) { result.error = ironErr; return result }
 
-    await execFileAsync('claude', ['plugin', 'marketplace', 'update'], { timeout: 900000 })
+    // 30 min, not the 900 s this shipped with. MEASURED 2026-08-06 (TRDD-PE54D95Q): the argless
+    // refresh of 275 marketplaces takes **1082 s** and EXITS 0 — so the old cap killed a run that
+    // was 182 s from succeeding, and discarded all 275 results, every cycle. The batch is
+    // all-or-nothing, which is the cost of collapsing the old per-name loop into one call.
+    //
+    // The time is network wait, not work (user+sys ≈ 150 s of 1082 s). It is dominated by
+    // marketplaces whose repo is GONE — 10 of the 275 answer `Repository not found`, and each
+    // burns most of a minute. Pruning those is the real fix and is NOT ours to make: that list is
+    // user-owned config. This cap only stops us from throwing away a refresh that worked.
+    //
+    // Sized from the measurement, not guessed: 1800 s is ~66 % headroom over 1082 s, and still far
+    // below the 3 h cadence, so a slow run can never overlap the next one.
+    await execFileAsync('claude', ['plugin', 'marketplace', 'update'], { timeout: MARKETPLACE_REFRESH_TIMEOUT_MS })
     ops.push('G03: Refreshed EVERY registered marketplace (one argless invocation)')
     result.success = true
     // A catalog refresh changes what is INSTALLABLE, not what is installed — the harness applies

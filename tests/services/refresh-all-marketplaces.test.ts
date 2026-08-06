@@ -22,25 +22,35 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const cli = vi.hoisted(() => ({ calls: [] as string[][], fail: false }))
+// `opts` is recorded, not discarded. It used to be `_opts`, and that is precisely how a 900 s
+// budget shipped against a job measured at 1082 s: the only test that could have seen the timeout
+// threw it away.
+const cli = vi.hoisted(() => ({ calls: [] as string[][], opts: [] as unknown[], fail: false }))
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>()
   return {
     ...actual,
-    execFile: (file: string, args: string[], _opts: unknown, cb: (e: Error | null, r?: unknown) => void) => {
+    execFile: (file: string, args: string[], opts: unknown, cb: (e: Error | null, r?: unknown) => void) => {
       cli.calls.push([file, ...args])
+      cli.opts.push(opts)
       if (cli.fail) { cb(new Error('CLI refused')); return }
       cb(null, { stdout: '', stderr: '' })
     },
   }
 })
 
-import { RefreshAllMarketplaces } from '@/services/element-management-service'
+import { RefreshAllMarketplaces, MARKETPLACE_REFRESH_TIMEOUT_MS } from '@/services/element-management-service'
+
+/** The measured wall-clock of the real argless refresh on this host, 2026-08-06: 275
+ *  marketplaces, exit 0, 1082 s. The budget must exceed it or the run is killed 182 s short and
+ *  ALL 275 results are discarded — which is what happened live at 10:17:31. */
+const MEASURED_REFRESH_SECONDS = 1082
 
 const OWNER = { isSystemOwner: true as const }
 
 beforeEach(() => {
   cli.calls = []
+  cli.opts = []
   cli.fail = false
 })
 
@@ -54,6 +64,15 @@ describe('RefreshAllMarketplaces — the argless refresh', () => {
     // Exact argv. `toEqual` on the whole array is what rejects a trailing name — a
     // `toContain('update')` would pass happily on `[..., 'update', 'some-name']`.
     expect(marketplaceCalls[0]).toEqual(['claude', 'plugin', 'marketplace', 'update'])
+  })
+
+  it('gives the refresh a budget LARGER than the measured 1082 s run', async () => {
+    // The argless call is all-or-nothing: a cap below the real duration does not degrade the
+    // refresh, it voids every one of the 275 results. Asserting "a timeout is present" would pass
+    // over the 900 s that shipped, so the assertion is tied to the MEASUREMENT.
+    await RefreshAllMarketplaces(OWNER)
+    expect(cli.opts[0]).toMatchObject({ timeout: MARKETPLACE_REFRESH_TIMEOUT_MS })
+    expect(MARKETPLACE_REFRESH_TIMEOUT_MS).toBeGreaterThan(MEASURED_REFRESH_SECONDS * 1000)
   })
 
   it('reports failure instead of throwing when the CLI refuses', async () => {

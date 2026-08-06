@@ -37,9 +37,13 @@ function run(args: string[]): { exit: number; out: string } {
 
 describe('scripts/dev/absent', () => {
   it('certifies a TRUE absence only alongside a proven control', () => {
-    // `hibernatedAt` genuinely does not exist (this is the claim published on ai-maestro#113);
-    // `isRunning` genuinely does, in the same paths.
-    const r = run(['-p', 'hibernatedAt', '-c', 'isRunning', '--', 'lib', 'services', 'types'])
+    // `hibernated_at` genuinely does not exist in these paths; `isRunning` genuinely does.
+    // HISTORY: this fixture was `hibernatedAt` (the claim published on ai-maestro#113) until
+    // TRDD-X2JGDOSM's derivation comments made that spelling PRESENT in lib/ — and this test
+    // correctly reddened, which is the tool doing its one job. The snake_case spelling is the
+    // durable choice: tests/governance/no-stored-hibernation-timestamp.test.ts actively keeps
+    // `hibernated_at` out of every scanned file (allowlisted files use only the camel form).
+    const r = run(['-p', 'hibernated_at', '-c', 'isRunning', '--', 'lib', 'services', 'types'])
     expect(r.exit).toBe(0)
     expect(r.out).toMatch(/ABSENT/)
     // The control count is printed because an unproven instrument is the whole failure mode.
@@ -57,7 +61,7 @@ describe('scripts/dev/absent', () => {
     // THE load-bearing case. The pattern really is absent, so a tool that ignored the control
     // would happily print ABSENT here — and that is precisely the false negative this exists to
     // prevent. Exit 2 must not collapse into either 0 or 1.
-    const r = run(['-p', 'hibernatedAt', '-c', 'zzz-not-a-real-symbol-zzz', '--', 'lib'])
+    const r = run(['-p', 'hibernated_at', '-c', 'zzz-not-a-real-symbol-zzz', '--', 'lib'])
     expect(r.exit).toBe(2)
     expect(r.out).toMatch(/COULD NOT RUN/)
     expect(r.out).not.toMatch(/^ABSENT/m)
@@ -66,7 +70,7 @@ describe('scripts/dev/absent', () => {
   it('refuses to run at all without a control', () => {
     // The control cannot be optional: an optional guard is one every caller in a hurry omits,
     // which returns the tool to being a plain grep with a confident label.
-    const r = run(['-p', 'hibernatedAt'])
+    const r = run(['-p', 'hibernated_at'])
     expect(r.exit).toBe(2)
     expect(r.out).toMatch(/the CONTROL is not optional/)
   })

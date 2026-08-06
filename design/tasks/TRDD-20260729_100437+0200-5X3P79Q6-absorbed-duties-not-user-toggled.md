@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:04:37+0200
-updated: 2026-08-06T18:32:20+0200
+updated: 2026-08-06T19:21:03+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -207,6 +207,27 @@ direction — turning on an unattended fleet-wide plugin sweep nobody asked for.
       `(non-vacuity)` markers, which is the discipline applied — but a marker is a claim, and this
       box asks for a RUN. No neuter output is recorded for these guards anywhere I can find, and
       ticking it off the markers would be exactly the substitution this box exists to prevent.
+>
+> **PARTIAL — 1 of N guards now has an OBSERVED neuter (2026-08-06).** The consent gate, run via
+> `scripts/dev/neuter` (one site mutated, `1 ins / 1 del`; restore verified by blob hash):
+>
+> ```
+>   s{const installedAndArmed = \(deps\.isJanitorInstalledAndArmed \?\? realIsJanitorInstalledAndArmed\)\(\)}{const installedAndArmed = true}
+>   → 3 red / 13 green:
+>       does NOT stamp when the gate refused — an unowned chore must not look owned
+>       does nothing at all when the janitor is not installed+armed (the gate, non-vacuity)
+>       when the janitor is NOT installed+armed, no run entries are persisted at all
+> ```
+>
+> Numbers pasted verbatim from the tool, never retyped. The result is what the box wanted: the
+> mutation reddens exactly the tests that NAME this guard and nothing else, so the consent gate
+> is genuinely pinned — and the third red is the one worth noticing, because "no run entries are
+> persisted" is a claim about the STORE, which a gate-only assertion could not have made.
+>
+> **Still owed:** the remaining guards — the machine-wide lock (`is single-executor machine-wide
+> — a tick whose lock is HELD refreshes nothing`), the clear-before-run `consumeWorkRequest`, and
+> the epoch-seconds stamp. Box stays unticked until each has its own run; a box that is 1/4
+> evidenced is not evidenced.
 
 ## Estimated risk
 

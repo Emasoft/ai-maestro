@@ -426,7 +426,10 @@ describe('CreateAgent G08 — R18.3d priority chain', () => {
     // spawn cwd, and must NOT be an argument (`--cwd` is not a claude option — passing one made
     // the CLI print "unknown option" and exit 0, so the adapter reported success having run
     // nothing).
-    const install = g08Cli.calls.find(c => c.args[1] === 'install' && c.args[2] === 'my-plugin')
+    // args[2] is `name@marketplace` — ONE positional (a second was silently dropped by
+    // commander, fixed 2026-08-06). Match on the qualified PREFIX so this keeps finding the
+    // call by plugin name without pinning whichever marketplace the fixture resolves.
+    const install = g08Cli.calls.find(c => c.args[1] === 'install' && /^my-plugin(@|$)/.test(String(c.args[2])))
     expect(install, 'the Claude branch must install through the client protocol').toBeDefined()
     expect(install!.cwd).toMatch(/claude-native/)
     expect(install!.args).not.toContain('--cwd')

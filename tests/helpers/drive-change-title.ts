@@ -339,13 +339,22 @@ case "$2" in install|uninstall) ;; *) exit 0 ;; esac
 # roleMissing and hibernates — is reachable ONLY when the install leaves zero role-plugins active,
 # so without this the gate's undo is unreachable and untestable. Uninstall is deliberately never
 # failed: a rollback has to be able to put the old plugin back.
-if [ "$2" = "install" ] && [ -n "$AIM_SHIM_FAIL_INSTALL" ] && [ "$3" = "$AIM_SHIM_FAIL_INSTALL" ]; then
+# $3 is the WHOLE plugin id, \`name@marketplace\` — \`claude plugin install\` takes ONE positional
+# ("use plugin@marketplace for specific marketplace"). It used to be a bare name with the
+# marketplace as a second positional, which commander silently DROPPED (fixed 2026-08-06).
+# AIM_SHIM_FAIL_INSTALL is written by callers as a bare NAME, so compare against the name part —
+# and accept a qualified value too, so a caller may nominate one marketplace's copy.
+PLUGIN_NAME=$(printf '%s' "$3" | sed 's/@.*//')
+if [ "$2" = "install" ] && [ -n "$AIM_SHIM_FAIL_INSTALL" ] \\
+   && { [ "$PLUGIN_NAME" = "$AIM_SHIM_FAIL_INSTALL" ] || [ "$3" = "$AIM_SHIM_FAIL_INSTALL" ]; }; then
   echo "shim: refusing to install $3" >&2
   exit 1
 fi
-exec python3 - "$2" "$3" "$4" <<'PY'
+# One positional in, one key out — the settings key IS the qualified id, so there is nothing left
+# to join. Passing "$4" here would hand python the literal \`--scope\`.
+exec python3 - "$2" "$3" <<'PY'
 import json, os, sys
-verb, name, marketplace = sys.argv[1], sys.argv[2], sys.argv[3]
+verb, key = sys.argv[1], sys.argv[2]
 path = os.path.join(os.getcwd(), '.claude', 'settings.local.json')
 os.makedirs(os.path.dirname(path), exist_ok=True)
 try:
@@ -354,7 +363,6 @@ try:
 except Exception:
     data = {}
 enabled = data.setdefault('enabledPlugins', {})
-key = '%s@%s' % (name, marketplace)
 if verb == 'install':
     enabled[key] = True
 else:

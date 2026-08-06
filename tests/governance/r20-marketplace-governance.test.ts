@@ -873,7 +873,15 @@ describe('R20.5 / R20.6 — automatic role-plugin assignment on title grant', ()
   function cliPluginOps(): Array<{ verb: string; plugin: string }> {
     return mockExecFileCalls
       .filter((c: ExecCall) => c.cmd === 'claude' && Array.isArray(c.args) && (c.args as string[])[0] === 'plugin')
-      .map((c: ExecCall) => ({ verb: (c.args as string[])[1], plugin: (c.args as string[])[2] }))
+      // argv[2] is `name@marketplace` — ONE positional (a second was silently dropped by
+      // commander; fixed 2026-08-06). Strip the qualifier HERE so every assertion below keeps
+      // asking the question it was written to ask — WHICH PLUGIN — rather than each one
+      // growing a marketplace it never meant to pin. The two assertions that DO care about the
+      // marketplace assert the full argv directly (see the R20.29 cases).
+      .map((c: ExecCall) => ({
+        verb: (c.args as string[])[1],
+        plugin: String((c.args as string[])[2]).split('@')[0],
+      }))
   }
 
   beforeEach(() => {
@@ -982,7 +990,9 @@ describe('R20.29 / R20.31 — install target vs source container', () => {
     const cli = mockExecFileCalls.find((c: ExecCall) => c.cmd === 'claude')
     expect(cli, 'the client’s own install protocol must be invoked').toBeDefined()
     expect(cli!.args).toEqual(
-      expect.arrayContaining(['plugin', 'install', 'ai-maestro-plugin', 'ai-maestro-plugins', '--scope', 'local']),
+      // ONE positional, `name@marketplace` — a second was silently dropped by commander, so
+      // the marketplace never reached the CLI (fixed 2026-08-06).
+      expect.arrayContaining(['plugin', 'install', 'ai-maestro-plugin@ai-maestro-plugins', '--scope', 'local']),
     )
   })
 
@@ -1007,7 +1017,11 @@ describe('R20.29 / R20.31 — install target vs source container', () => {
     const cli = mockExecFileCalls.find((c: ExecCall) => c.cmd === 'claude')
     expect(cli, 'R20.29 names local marketplaces among the sources that ALWAYS use the client protocol').toBeDefined()
     expect(cli!.args).toEqual(
-      expect.arrayContaining(['plugin', 'install', 'authored-plugin', LOCAL_MARKETPLACE_NAME, '--scope', 'local']),
+      // ONE positional — see above. Note this is the LOCAL-CONTAINER source case, where the
+      // marketplace qualifier matters most: the whole point of R20.29 is that a local source
+      // goes through the SAME client protocol, and dropping its marketplace would have let the
+      // CLI resolve the name against a remote marketplace instead.
+      expect.arrayContaining(['plugin', 'install', `authored-plugin@${LOCAL_MARKETPLACE_NAME}`, '--scope', 'local']),
     )
     // The install runs in the AGENT'S workdir, because `--scope local` keys off the
     // process cwd — the directory is NOT an argument (there is no `--cwd` option;

@@ -173,7 +173,10 @@ describe('installPluginLocally — the CLI owns the registry AND the enablement 
     const install = cli.calls.find(c => c[1] === 'plugin' && c[2] === 'install')
     expect(install, 'a local-marketplace install must still go through the client protocol').toBeTruthy()
     expect(install).toEqual([
-      'claude', 'plugin', 'install', SHARED_PLUGIN, LOCAL_MARKETPLACE_NAME, '--scope', 'local',
+      // ONE positional, `name@marketplace`. `claude plugin install` takes `<plugin>` and its
+      // help names the qualified form; a second positional was silently DROPPED by commander,
+      // so the marketplace never reached the CLI (fixed 2026-08-06).
+      'claude', 'plugin', 'install', `${SHARED_PLUGIN}@${LOCAL_MARKETPLACE_NAME}`, '--scope', 'local',
     ])
   })
 
@@ -232,7 +235,8 @@ describe('uninstallPluginLocally — asks the owner, records the fact', () => {
     const uninstall = cli.calls.find(c => c[1] === 'plugin' && c[2] === 'uninstall')
     expect(uninstall, 'a local-marketplace uninstall must also go through the client protocol').toBeTruthy()
     expect(uninstall).toEqual([
-      'claude', 'plugin', 'uninstall', SHARED_PLUGIN, LOCAL_MARKETPLACE_NAME, '--scope', 'local',
+      // ONE positional — see the install assertion above.
+      'claude', 'plugin', 'uninstall', `${SHARED_PLUGIN}@${LOCAL_MARKETPLACE_NAME}`, '--scope', 'local',
     ])
     // …and the ledger entry lands exactly as it does for a remote marketplace: one path, one
     // audit trail. Before the collapse this emitted nothing at all for a local marketplace.

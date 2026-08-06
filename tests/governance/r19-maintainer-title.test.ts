@@ -355,7 +355,16 @@ beforeEach(() => {
       const file = path.join(cwd, '.claude', 'settings.local.json')
       mkdirSync(path.dirname(file), { recursive: true })
       const cur = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {}
-      cur.enabledPlugins = { ...(cur.enabledPlugins ?? {}), [`${argv[2]}@${argv[3]}`]: true }
+      // argv[2] is ALREADY `name@marketplace` — `claude plugin install` takes ONE positional
+      // and its help names the qualified form ("use plugin@marketplace for specific
+      // marketplace"). This line used to build the key as `${argv[2]}@${argv[3]}` because the
+      // caller passed the marketplace as a SECOND positional; commander was silently dropping
+      // it, so the real install resolved against whatever marketplace happened to match
+      // (fixed 2026-08-06). With the caller corrected, argv[3] is `--scope` — joining it here
+      // would key the settings entry `name@marketplace@--scope` and the pipeline's G17 re-scan
+      // would find 0 active role-plugins and take its recovery path, which is exactly the
+      // failure mode the comment above warns about.
+      cur.enabledPlugins = { ...(cur.enabledPlugins ?? {}), [argv[2]]: true }
       writeFileSync(file, JSON.stringify(cur, null, 2))
     }
     return { stdout: '', stderr: '' }
@@ -686,7 +695,11 @@ describe('R19.10 — MAINTAINER is bound to ai-maestro-maintainer-agent (ChangeT
     const calls = installCalls()
     expect(calls).toHaveLength(1)
     const argv = calls[0].args as string[]
-    expect(argv[2]).toBe('ai-maestro-maintainer-agent')
+    // ONE positional, `name@marketplace`. Asserting the qualified PREFIX keeps this test's
+    // claim (the plugin NAME is resolved from the title) and adds one it could not make
+    // before: that the marketplace is actually being passed. The old two-positional form
+    // dropped it silently.
+    expect(argv[2]).toMatch(/^ai-maestro-maintainer-agent@/)
     // Local scope, never user scope: a role-plugin installed globally would bind
     // every agent on this client to the MAINTAINER persona (R17.8 / R20.20).
     expect(argv).toContain('--scope')
@@ -701,7 +714,8 @@ describe('R19.10 — MAINTAINER is bound to ai-maestro-maintainer-agent (ChangeT
     expect(r.success).toBe(true)
     const calls = installCalls()
     expect(calls).toHaveLength(1)
-    expect((calls[0].args as string[])[2]).toBe('ai-maestro-autonomous-agent')
+    // Qualified prefix — see the sibling assertion above.
+    expect((calls[0].args as string[])[2]).toMatch(/^ai-maestro-autonomous-agent@/)
   })
 
   // R20.5's SECOND clause. The rule is "the default role-plugin MUST be installed

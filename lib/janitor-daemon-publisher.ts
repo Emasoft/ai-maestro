@@ -28,12 +28,12 @@ import * as path from 'path'
 import { AGENTS_ROOT, INSTALL_ROOT, isUnder } from '@/lib/workdir-path-policy'
 import { agentScopedView, gatherHibernationRoster } from '@/services/agent-hibernation-service'
 import type { HibernationRoster } from '@/lib/agent-hibernation'
+// The path constants moved to a LEAF module so the hibernation service can read the archive
+// (derived `since`, TRDD-X2JGDOSM) without closing a service → publisher → service import cycle.
+// Re-exported here so existing importers keep working; the on-disk contract is unchanged.
+import { DAEMON_RESPONSES_DIR, HIBERNATION_RESPONSE_FILE, RESPONSE_ARCHIVE_DIR } from '@/lib/daemon-response-paths'
 
-/** Where a janitor looks, relative to its own project root. Inside the project, never /tmp. */
-export const DAEMON_RESPONSES_DIR = path.join('.janitor', 'daemon_responses')
-
-/** The response filename for this query. One file per query kind, so a consumer never parses a mux. */
-export const HIBERNATION_RESPONSE_FILE = 'hibernation.json'
+export { DAEMON_RESPONSES_DIR, HIBERNATION_RESPONSE_FILE, RESPONSE_ARCHIVE_DIR }
 
 /**
  * How stale (SECONDS) a consumer should treat a response before deciding it has no live answer.
@@ -77,9 +77,6 @@ function writeAtomic(dest: string, payload: unknown): void {
   fs.writeFileSync(tmp, JSON.stringify(payload, null, 2))
   fs.renameSync(tmp, dest)
 }
-
-/** Timestamped copies live beside the live file, never replacing it. */
-export const RESPONSE_ARCHIVE_DIR = 'archive'
 
 /** Keep the newest N archived responses per agent (USER decision 2026-08-05, same bound as the
  *  status-document archive). */

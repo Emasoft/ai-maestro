@@ -24,12 +24,18 @@
 // is nothing to validate signatures against, so nothing may execute — and the janitor never needed
 // to call in at all: the daemon publishes to it.
 
+import * as fs from 'fs'
+import * as path from 'path'
 import { listAgents } from '@/lib/agent-registry'
 import { loadPersistedSessions } from '@/lib/session-persistence'
 import { getRuntime } from '@/lib/agent-runtime'
 import { computeSessionName } from '@/types/agent'
+import { INSTALL_ROOT } from '@/lib/workdir-path-policy'
+import { hibernationArchiveDir, HIBERNATION_RESPONSE_FILE } from '@/lib/daemon-response-paths'
 import {
   buildHibernationRoster,
+  withDerivedSince,
+  type ArchivedRosterSnapshot,
   type HibernationRoster,
   type AgentHibernationRecord,
   type HibernationState,
@@ -40,6 +46,53 @@ export interface GatherDeps {
   listAgents?: typeof listAgents
   loadPersistedSessions?: typeof loadPersistedSessions
   listTmuxSessionNames?: () => Promise<string[]>
+  /** The archived roster snapshots `since` is derived from — injected so tests never read the real
+   *  install tree's archive (INSTALL_ROOT resolves at module load, so on a dev machine the default
+   *  reader would read the developer's live archive and the test would be non-deterministic). */
+  readArchivedSnapshots?: () => ArchivedRosterSnapshot[]
+}
+
+/**
+ * Read the INSTALL_ROOT transition archive — the timestamped full-roster copies the daemon
+ * publisher deposits whenever the payload's `data` actually changed. This is the source `since`
+ * (TRDD-X2JGDOSM / ai-maestro#113) is derived from; nothing is ever stored.
+ *
+ * LENIENCY IS SCOPED, deliberately: `since` is a derived, optional field — not a gate — so a
+ * missing archive dir (the daemon has not published yet) or an individual unreadable/foreign file
+ * yields NO observation rather than an error, and the field honestly lands `null`. Only files that
+ * carry the publisher's own envelope (`v: 1`, numeric seconds `ts`, a full-roster `data.agents`
+ * array) contribute; the agent-scoped per-workdir archives have `data.agent` (singular) and are
+ * skipped by the same shape check.
+ */
+export function readInstallRootArchivedSnapshots(): ArchivedRosterSnapshot[] {
+  const dir = hibernationArchiveDir(INSTALL_ROOT)
+  let names: string[]
+  try {
+    names = fs.readdirSync(dir)
+  } catch {
+    return [] // no archive yet — a legal absence, not a fault (the daemon simply has not published)
+  }
+  const snapshots: ArchivedRosterSnapshot[] = []
+  for (const name of names) {
+    if (!name.endsWith(`-${HIBERNATION_RESPONSE_FILE}`)) continue
+    try {
+      const parsed = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')) as {
+        v?: unknown
+        ts?: unknown
+        data?: { agents?: unknown }
+      }
+      if (parsed?.v !== 1 || typeof parsed.ts !== 'number' || !Array.isArray(parsed.data?.agents)) continue
+      snapshots.push({
+        ts: parsed.ts,
+        agents: (parsed.data!.agents as Array<{ agentId?: unknown; state?: unknown }>)
+          .filter((a) => typeof a?.agentId === 'string' && typeof a?.state === 'string')
+          .map((a) => ({ agentId: a.agentId as string, state: a.state as HibernationState })),
+      })
+    } catch {
+      continue // one corrupt archive file must not cost every agent its derivation
+    }
+  }
+  return snapshots
 }
 
 /**
@@ -56,6 +109,7 @@ export async function gatherHibernationRoster(deps: GatherDeps = {}): Promise<Hi
   const list = deps.listAgents ?? listAgents
   const loadPersisted = deps.loadPersistedSessions ?? loadPersistedSessions
   const listTmux = deps.listTmuxSessionNames ?? (async () => (await getRuntime().listSessions()).map((s) => s.name))
+  const readArchive = deps.readArchivedSnapshots ?? readInstallRootArchivedSnapshots
 
   // `false` ⇒ live agents only. A deleted agent is not part of the harness, and reporting one would
   // resurrect it in every consumer's view of the fleet.
@@ -63,7 +117,7 @@ export async function gatherHibernationRoster(deps: GatherDeps = {}): Promise<Hi
   const persisted = loadPersisted()
   const liveTmuxSessions = new Set(await listTmux())
 
-  return buildHibernationRoster({
+  const roster = buildHibernationRoster({
     agents: summaries.map((s) => ({
       id: s.id,
       name: s.name,
@@ -79,6 +133,11 @@ export async function gatherHibernationRoster(deps: GatherDeps = {}): Promise<Hi
     persisted,
     liveTmuxSessions,
   })
+
+  // Derived `since` — every consumer of this gather (the authenticated route, the daemon publisher,
+  // and through them the CLI and the per-workdir response files) gets the field from the ONE
+  // derivation, computed on read from the transition archive, never stored (TRDD-X2JGDOSM).
+  return withDerivedSince(roster, readArchive())
 }
 
 /**

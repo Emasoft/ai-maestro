@@ -19,6 +19,16 @@
  *     `crashed` closures here plus the three pre-existing `dead` closures in fleet-liveness.test.ts
  *     — which is also the proof that the extraction from classifyLiveness is load-bearing rather
  *     than a copy nobody reaches.
+ *
+ * NEUTER RUNS for derived `since` (2026-08-06 — OBSERVED, restore blob-verified; a complementary
+ * pair, each reddening a DIFFERENT subset):
+ *   · A `return obs[i].ts` → `return null` (derivation killed) → exactly 5 red: the three
+ *     transition-stamp deriveSince tests + the withDerivedSince per-agent test + the gather
+ *     decoration test. The null-contract tests stay green.
+ *   · B `if (i === 0) return null` → `if (false) return null` (the never-guess guard removed —
+ *     an all-same-state archive now GUESSES the oldest surviving stamp) → exactly 3 red: the
+ *     whole-archive-already-in-state test, the withDerivedSince per-agent test (a-crash), and the
+ *     gather decoration test (a-run). Empty-archive and archive-lag tests stay green.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -26,6 +36,9 @@ import {
   classifyHibernation,
   buildHibernationRoster,
   isHealthyHibernationState,
+  deriveSince,
+  withDerivedSince,
+  type ArchivedRosterSnapshot,
   type RosterInput,
 } from '@/lib/agent-hibernation'
 import { gatherHibernationRoster, agentScopedView } from '@/services/agent-hibernation-service'
@@ -143,6 +156,9 @@ describe('gatherHibernationRoster (I/O layer, injected)', () => {
     ]) as never,
     loadPersistedSessions: (() => [{ id: 'runner', agentId: 'a-run', name: 'runner' }]) as never,
     listTmuxSessionNames: async () => ['runner', 'aim-kc-watchdog'],
+    // The default reader reads the DEVELOPER'S live INSTALL_ROOT archive (this repo runs the real
+    // server), which would make every assertion here non-deterministic. Injected empty on purpose.
+    readArchivedSnapshots: () => [],
   }
 
   it('classifies from the three injected facts', async () => {
@@ -164,6 +180,105 @@ describe('gatherHibernationRoster (I/O layer, injected)', () => {
   it('a tmux session belonging to no agent is ignored, never invented as one', async () => {
     const r = await gatherHibernationRoster(deps)
     expect(r.agents.map((a) => a.agentId)).not.toContain('aim-kc-watchdog')
+  })
+
+  it('decorates every agent with derived `since` from the injected archive (TRDD-X2JGDOSM)', async () => {
+    // sleeper: archived running@100 then hibernated@200 — the transition is recorded → 200.
+    // runner: every surviving snapshot already shows running — no archived transition → null.
+    const r = await gatherHibernationRoster({
+      ...deps,
+      readArchivedSnapshots: () => [
+        { ts: 100, agents: [{ agentId: 'a-hib', state: 'running' }, { agentId: 'a-run', state: 'running' }] },
+        { ts: 200, agents: [{ agentId: 'a-hib', state: 'hibernated' }, { agentId: 'a-run', state: 'running' }] },
+      ],
+    })
+    expect(r.agents.find((a) => a.agentId === 'a-hib')?.since).toBe(200)
+    expect(r.agents.find((a) => a.agentId === 'a-run')?.since).toBeNull()
+    // never in any snapshot at all → null, pinned not guessed
+    expect(r.agents.find((a) => a.agentId === 'a-new')?.since).toBeNull()
+  })
+})
+
+describe('deriveSince (pure) — TRDD-X2JGDOSM / ai-maestro#113: derived, never stored, never guessed', () => {
+  it('an archived transition into the current state reports since == that transition stamp', () => {
+    // The 300 snapshot exists because ANOTHER agent churned — a same-state repeat must not move it.
+    const since = deriveSince(
+      [
+        { ts: 100, state: 'running' },
+        { ts: 200, state: 'hibernated' },
+        { ts: 300, state: 'hibernated' },
+      ],
+      'hibernated',
+    )
+    expect(since).toBe(200)
+  })
+
+  it('a re-entered state uses the NEWEST transition into it, not the first ever', () => {
+    const since = deriveSince(
+      [
+        { ts: 100, state: 'hibernated' },
+        { ts: 200, state: 'running' },
+        { ts: 300, state: 'hibernated' },
+      ],
+      'hibernated',
+    )
+    expect(since).toBe(300)
+  })
+
+  it('input order is irrelevant — the archive readdir order is POSIX-undefined', () => {
+    const since = deriveSince(
+      [
+        { ts: 300, state: 'hibernated' },
+        { ts: 100, state: 'running' },
+        { ts: 200, state: 'hibernated' },
+      ],
+      'hibernated',
+    )
+    expect(since).toBe(200)
+  })
+
+  it('NO archived observations ⇒ null — pinned, not guessed', () => {
+    expect(deriveSince([], 'hibernated')).toBeNull()
+  })
+
+  it('the whole surviving archive already shows the current state ⇒ null (the transition was pruned or predates the archive)', () => {
+    expect(
+      deriveSince(
+        [
+          { ts: 100, state: 'hibernated' },
+          { ts: 200, state: 'hibernated' },
+        ],
+        'hibernated',
+      ),
+    ).toBeNull()
+  })
+
+  it('the archive lagging a live change ⇒ null (the newest archived state disagrees with the live one)', () => {
+    // The publisher archives up to one beat AFTER the change; until then the transition is simply
+    // not recorded, and a floating "since ≈ now" would be a guess that moves on every read.
+    expect(deriveSince([{ ts: 100, state: 'running' }], 'hibernated')).toBeNull()
+  })
+})
+
+describe('withDerivedSince (pure decoration)', () => {
+  const snapshots: ArchivedRosterSnapshot[] = [
+    { ts: 100, agents: [{ agentId: 'a-hib', state: 'running' }] },
+    { ts: 200, agents: [{ agentId: 'a-hib', state: 'hibernated' }, { agentId: 'a-crash', state: 'crashed' }] },
+  ]
+
+  it('derives per agent; a snapshot that does not mention an agent contributes NO observation', () => {
+    const r = withDerivedSince(buildHibernationRoster(fourStateFixture()), snapshots)
+    const byId = Object.fromEntries(r.agents.map((a) => [a.agentId, a.since]))
+    // a-hib: running@100 → hibernated@200 = archived transition.
+    // a-crash: only ever seen crashed (absence at ts 100 is not a state) → null.
+    // a-run / a-new: never observed → null.
+    expect(byId).toEqual({ 'a-hib': 200, 'a-crash': null, 'a-run': null, 'a-new': null })
+  })
+
+  it('returns a NEW roster — the input is not mutated', () => {
+    const base = buildHibernationRoster(fourStateFixture())
+    withDerivedSince(base, snapshots)
+    expect(base.agents.every((a) => !('since' in a))).toBe(true)
   })
 })
 

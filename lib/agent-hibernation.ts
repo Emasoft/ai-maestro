@@ -147,6 +147,16 @@ export interface AgentHibernationRecord extends HibernationVerdict {
   tmux: boolean
   /** Carried through from the input — see `RosterAgentInput.workingDirectory`. */
   workingDirectory?: string | null
+  /**
+   * Epoch SECONDS of the newest ARCHIVED transition into the current state — i.e. "in this state
+   * since". DERIVED from the daemon's transition archive on every read, NEVER stored
+   * (TRDD-X2JGDOSM / ai-maestro#113): a stored `hibernatedAt` would be a second writer of a fact
+   * the transition archive already owns, and the two would drift. `null` whenever the surviving
+   * archive does not actually record the transition — the archive is pruned to a bounded depth and
+   * lags a live change by up to one publish beat, and in both cases the honest answer is "not
+   * derivable", never a guess.
+   */
+  since?: number | null
 }
 
 /**
@@ -215,4 +225,75 @@ export function buildHibernationRoster(input: RosterInput): HibernationRoster {
   for (const a of agents) counts[a.state] += 1
 
   return { agents, orphanedPersistedSessions, counts }
+}
+
+// ── Derived `since` (TRDD-X2JGDOSM / ai-maestro#113) ──────────────────────────────────────────────
+// "How long has this agent been hibernated?" has NO stored answer anywhere (`hibernatedAt` and
+// friends: zero hits repo-wide, asserted by tests/governance/no-stored-hibernation-timestamp), and
+// must never gain one — the daemon's transition archive already records each real state change as a
+// timestamped file, and a second writer of the same fact would drift from it. So `since` is derived
+// here, purely, from observations a caller extracted from that archive.
+
+/** One archived observation of one agent's state, at the archive file's envelope timestamp. */
+export interface StateObservation {
+  /** Epoch SECONDS (the archive envelope's `ts`). */
+  ts: number
+  state: HibernationState
+}
+
+/** One archived full-roster snapshot, already parsed — the shape the INSTALL_ROOT archive holds. */
+export interface ArchivedRosterSnapshot {
+  /** Epoch SECONDS (the archive envelope's `ts`). */
+  ts: number
+  agents: Array<{ agentId: string; state: HibernationState }>
+}
+
+/**
+ * PURE. The epoch-seconds stamp of the newest archived transition INTO `currentState`, or null.
+ *
+ * Null is deliberate in every ambiguous case — the field's contract is "what the archive RECORDS",
+ * never a guess:
+ *   · no observations — the agent never appears in the surviving archive;
+ *   · the newest observation disagrees with the live state — the archive lags the change by up to
+ *     one publish beat, so the transition is not recorded YET;
+ *   · every surviving observation already shows `currentState` — the transition itself was pruned
+ *     away (the archive keeps a bounded depth) or predates the archive, and "since at least the
+ *     oldest surviving file" is a different claim than the field makes.
+ */
+export function deriveSince(observations: StateObservation[], currentState: HibernationState): number | null {
+  const obs = [...observations].sort((a, b) => a.ts - b.ts)
+  if (obs.length === 0) return null
+  if (obs[obs.length - 1].state !== currentState) return null
+  let i = obs.length - 1
+  while (i > 0 && obs[i - 1].state === currentState) i--
+  if (i === 0) return null
+  return obs[i].ts
+}
+
+/**
+ * PURE decoration: a NEW roster whose agent records carry `since`, derived per agent from the
+ * archived snapshots. A snapshot that does not mention an agent contributes no observation for it
+ * (an absence is not a state). The input roster is not mutated.
+ *
+ * NOTE ON CONVERGENCE, for the publisher path: the archived files themselves now carry `since`
+ * inside `data`, and the publisher archives on any `data` change — so one real transition archives
+ * TWO files (the state change with `since: null`, then the next beat's backfill once the archive
+ * records the transition). That second file IS a real data change, the sequence is stable from the
+ * third beat on, and the alternative — deriving `since` from a file not yet written — would be a
+ * guess. Bounded, honest, deliberate.
+ */
+export function withDerivedSince(roster: HibernationRoster, snapshots: ArchivedRosterSnapshot[]): HibernationRoster {
+  const byAgent = new Map<string, StateObservation[]>()
+  for (const snap of snapshots) {
+    for (const rec of snap.agents) {
+      if (!rec?.agentId) continue
+      const list = byAgent.get(rec.agentId)
+      if (list) list.push({ ts: snap.ts, state: rec.state })
+      else byAgent.set(rec.agentId, [{ ts: snap.ts, state: rec.state }])
+    }
+  }
+  return {
+    ...roster,
+    agents: roster.agents.map((a) => ({ ...a, since: deriveSince(byAgent.get(a.agentId) ?? [], a.state) })),
+  }
 }

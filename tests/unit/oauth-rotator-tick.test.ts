@@ -6,6 +6,7 @@ import {
   blobLocallyExpired,
   isNearLimit,
   isSafeAlternate,
+  isAccountWindowSafe,
   selectDrainFirst,
   autoRotate,
   keepaliveRefresh,
@@ -51,7 +52,7 @@ const blob = (accessToken: string, expiresAt: number, refreshToken = 'r') => ({
 })
 
 /** A fetch stub keyed on the bearer accessToken, returning per-token usage. */
-function stubFetch(usageByToken: Record<string, { fh: number; sd: number } | number>): typeof fetch {
+function stubFetch(usageByToken: Record<string, { fh: number; sd: number; scoped?: number } | number>): typeof fetch {
   return (async (url: unknown, init?: { headers?: Record<string, string> }) => {
     const u = String(url)
     const auth = init?.headers?.Authorization ?? init?.headers?.authorization ?? ''
@@ -60,7 +61,16 @@ function stubFetch(usageByToken: Record<string, { fh: number; sd: number } | num
       const spec = usageByToken[tok]
       if (typeof spec === 'number') return new Response('{}', { status: spec }) // an HTTP status (e.g. 429)
       const body = spec
-        ? { five_hour: { utilization: spec.fh }, seven_day: { utilization: spec.sd } }
+        ? {
+            five_hour: { utilization: spec.fh },
+            seven_day: { utilization: spec.sd },
+            // A MODEL-SCOPED weekly window, in the exact shape `scopedLimits` parses: a `limits[]`
+            // entry carrying `scope.model.display_name` + `percent`. Emitted ONLY when the case
+            // asks for one, so every pre-existing expectation stays byte-identical.
+            ...(spec.scoped === undefined
+              ? {}
+              : { limits: [{ scope: { model: { display_name: 'Fable 5' } }, percent: spec.scoped }] }),
+          }
         : {}
       return new Response(JSON.stringify(body), { status: 200 })
     }
@@ -189,6 +199,67 @@ describe('tick — autoRotate (ROTATE)', () => {
   it('no live credential → no-op false', async () => {
     // No seedLive → readLiveBlobWithSource returns [null,'none'].
     expect(await autoRotate({ fetchImpl: stubFetch({}) })).toBe(false)
+  })
+})
+
+/** The MODEL-SCOPED FALLBACK. Regression cover for a measured incident (2026-08-06): the rotator
+ *  wrote `stuck: "all-maxed"` and refused to move while an account sat at 4% of its 5h window,
+ *  because Fable's model-scoped window was spent on EVERY account and `isSafeAlternate` demands
+ *  every window below SAFE. Eight sessions were pinned on a 99%-used account as a result. */
+describe('tick — autoRotate: model-scoped fallback (all-maxed regression)', () => {
+  it('rotates onto an account blocked ONLY by a spent MODEL window — a total outage beats a partial one', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('alt@x', blob('ALT', H8()))
+    // ALT's ACCOUNT windows are wide open; only its Fable window is spent. Before the fix this
+    // returned false and the tick reported all-maxed while ALT had ~90% of its 5h free.
+    const deps: TickDeps = {
+      fetchImpl: stubFetch({ LIVE: { fh: 98, sd: 50, scoped: 99 }, ALT: { fh: 10, sd: 10, scoped: 95 } }),
+    }
+
+    expect(await autoRotate(deps)).toBe(true)
+    expect(loadState().live_email).toBe('alt@x')
+  })
+
+  it('still PREFERS a fully-safe account when one exists — the fallback is last-resort only', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('scopedbad@x', blob('SCOPEDBAD', H8()))
+    addSlot('fullysafe@x', blob('FULLYSAFE', H8()))
+    // SCOPEDBAD is the DRAIN-FIRST winner on account windows alone (80 > 10), so if the fallback
+    // leaked into the preferred set it would be chosen. It must not be: it is held back entirely
+    // while FULLYSAFE passes the full test.
+    const deps: TickDeps = {
+      fetchImpl: stubFetch({
+        LIVE: { fh: 98, sd: 50 },
+        SCOPEDBAD: { fh: 80, sd: 10, scoped: 95 },
+        FULLYSAFE: { fh: 10, sd: 10, scoped: 10 },
+      }),
+    }
+
+    expect(await autoRotate(deps)).toBe(true)
+    expect(loadState().live_email).toBe('fullysafe@x')
+  })
+
+  it('does NOT rescue an account that is genuinely maxed on its ACCOUNT windows', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('alt@x', blob('ALT', H8()))
+    // ALT fails BOTH tests: 5h spent AND Fable spent. The fallback must not touch it — it exists
+    // to relax the model check, never the account check.
+    const deps: TickDeps = {
+      fetchImpl: stubFetch({ LIVE: { fh: 98, sd: 50 }, ALT: { fh: 99, sd: 10, scoped: 95 } }),
+    }
+
+    expect(await autoRotate(deps)).toBe(false)
+    expect(loadState().live_email).toBe('live@x')
+  })
+
+  it('isAccountWindowSafe: the ACCOUNT half only — a spent model window is not its business', () => {
+    expect(isAccountWindowSafe(10, 10)).toBe(true)
+    expect(isAccountWindowSafe(89, 89)).toBe(true)
+    expect(isAccountWindowSafe(90, 10)).toBe(false)
+    expect(isAccountWindowSafe(10, 95)).toBe(false)
+    // The whole point: identical inputs, opposite verdicts, because one consults the model window.
+    expect(isSafeAlternate(10, 10, 95)).toBe(false)
+    expect(isAccountWindowSafe(10, 10)).toBe(true)
   })
 })
 

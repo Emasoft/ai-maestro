@@ -84,6 +84,14 @@ The hold is REPORTED, not silent (`StuckReason: drain-guard-hold` → `rotator-s
 because `surveyAlternates` skips the LIVE account and the beat would otherwise render a fleet one
 credential from lockout as `nextAction: ok`.
 
+## See also
+
+- [[model-scoped-window-fallback]] — the other half of "the fleet cannot make requests". This page
+  is about the TOKEN (rotate / refresh / reauth); that one is about a MODEL's window being spent
+  while the token is perfectly good, where rotating the credential is the expensive wrong answer.
+  Read it before changing `isSafeAlternate`: that predicate is what turns a model-scoped max into
+  a fleet-wide eviction.
+
 ## Notes and lessons learned
 [^1]: [id:ATOM-R16D-CASC, status:valid, keywords:"rotate_refresh_reauth cascade progressive_fallback the_only_human_step reauth_needs_new_cookie", ocd:2026-07-16, lmd:2026-07-16]
   DO NOT treat rotate/refresh/reauth as three interchangeable "renew" ops, BECAUSE they are an

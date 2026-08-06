@@ -1,0 +1,1363 @@
+{
+  "v": 1,
+  "note": "FROZEN-CLI manifest. verbs/flags are the contract --check diffs; usage is human text, never compared. Regenerate: node scripts/build-script-manifest.mjs",
+  "counts": {
+    "walked": 58,
+    "skillFacing": 48,
+    "excluded": 10
+  },
+  "scripts": {
+    "aid-auth.sh": {
+      "family": "aid",
+      "verbs": [],
+      "flags": [],
+      "usage": [
+        "# Usage:",
+        "#   TOKEN=$(aid-auth.sh)",
+        "#   curl -H \"Authorization: Bearer $TOKEN\" http://localhost:23000/api/...",
+        "#",
+        "# Priority:",
+        "#   1. AID_AUTH env var (AID session secret, set by AI Maestro at launch)",
+        "#   2. aid-maestro-token.sh (AID proof-of-possession, for remote agents)",
+        "#   3. AMP API key from config (legacy fallback)",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aid-init.sh": {
+      "family": "aid",
+      "verbs": [],
+      "flags": [
+        "--auto",
+        "--force",
+        "--help",
+        "--name",
+        "-f",
+        "-h",
+        "-n"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aid-init --auto                  # Auto-detect name from environment",
+        "#   aid-init --name my-agent         # Specify agent name",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aid-maestro-token.sh": {
+      "family": "aid",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--json",
+        "--no-cache",
+        "--quiet",
+        "--scope",
+        "--url",
+        "-h",
+        "-j",
+        "-q",
+        "-s",
+        "-u"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aid-maestro-token.sh                    # Interactive output",
+        "#   aid-maestro-token.sh --quiet            # Token only (for piping)",
+        "#   TOKEN=$(aid-maestro-token.sh --quiet)   # Use in scripts",
+        "#   aid-maestro-token.sh --json             # Full JSON response",
+        "#   aid-maestro-token.sh --no-cache         # Force new token",
+        "#",
+        "# Prerequisites:",
+        "#   - Agent identity initialized (aid-init --auto)",
+        "#   - Agent registered with AI Maestro (amp-register.sh --provider localhost:23000)",
+        "#   - AI Maestro running on localhost:23000",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aid-register.sh": {
+      "family": "aid",
+      "verbs": [],
+      "flags": [
+        "--api-key",
+        "--auth",
+        "--description",
+        "--help",
+        "--lifetime",
+        "--name",
+        "--role-id",
+        "--token",
+        "-a",
+        "-d",
+        "-h",
+        "-k",
+        "-l",
+        "-n",
+        "-r",
+        "-t"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aid-register --auth https://auth.23blocks.com/acme --token <admin_jwt> --role-id 2",
+        "#   aid-register --auth https://auth.23blocks.com/acme --token <admin_jwt> --role-id 2 --api-key pk_live_xxx",
+        "#",
+        "# Prerequisites:",
+        "#   - Agent identity initialized (aid-init --auto)",
+        "#   - Admin JWT token for the target auth server",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aid-status.sh": {
+      "family": "aid",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--json",
+        "-h",
+        "-j"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aid-status              # Human-readable output",
+        "#   aid-status --json       # JSON output",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aid-token.sh": {
+      "family": "aid",
+      "verbs": [],
+      "flags": [
+        "--auth",
+        "--help",
+        "--json",
+        "--no-cache",
+        "--quiet",
+        "--scope",
+        "-a",
+        "-h",
+        "-j",
+        "-q",
+        "-s"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aid-token --auth https://auth.23blocks.com/acme",
+        "#   aid-token --auth https://auth.23blocks.com/acme --scope \"files:read files:write\"",
+        "#   aid-token --auth https://auth.23blocks.com/acme --json",
+        "#",
+        "# Prerequisites:",
+        "#   - Agent identity initialized (aid-init --auto)",
+        "#   - Agent registered with the auth server (aid-register)",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-agent.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "config",
+        "create",
+        "delete",
+        "export",
+        "help",
+        "hibernate",
+        "hibernation",
+        "import",
+        "list",
+        "plugin",
+        "presence",
+        "rename",
+        "resolve",
+        "restart",
+        "session",
+        "show",
+        "skill",
+        "subconscious",
+        "update",
+        "wake"
+      ],
+      "flags": [
+        "--help",
+        "--version",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage: aimaestro-agent.sh <command> [options]",
+        "#",
+        "# Commands:",
+        "#   list        List all agents",
+        "#   show        Show agent details",
+        "#   config      Print an agent's consolidated config (teams, repo, docker, tasks, AID)",
+        "#   resolve     Resolve an agent (by name or --cwd) to its tmux session name",
+        "#   create      Create a new agent",
+        "#   delete      Delete an agent",
+        "#   update      Update agent properties",
+        "#   rename      Rename an agent",
+        "#   session     Manage agent sessions",
+        "#   hibernate   Hibernate an agent (stop session, preserve state)",
+        "#   wake        Wake a hibernated agent",
+        "#   restart     Restart an agent (hibernate + wake with verification)",
+        "#   skill       Manage agent skills",
+        "#   plugin      Manage Claude Code plugins for an agent",
+        "#   export      Export agent to file",
+        "#   import      Import agent from file",
+        "#   presence    Print the human user's presence (last input + idle window)",
+        "#   help        Show this help",
+        "#",
+        "# Version: Sync with bump-version.sh - currently v1.0.1"
+      ]
+    },
+    "aimaestro-check-decoupling.sh": {
+      "family": "aimaestro",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--quiet",
+        "-h"
+      ],
+      "usage": []
+    },
+    "aimaestro-continuity.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "ensure-resume",
+        "help",
+        "restart-self",
+        "status"
+      ],
+      "flags": [
+        "--force",
+        "--help",
+        "--version",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-continuity.sh status <self>",
+        "#   aimaestro-continuity.sh ensure-resume <self>",
+        "#   aimaestro-continuity.sh restart-self [--force]",
+        "#",
+        "# <self> is the caller's own agent UUID, or a name/alias resolved via /api/agents?q=.",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-governance.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "approve",
+        "config",
+        "help",
+        "invalidate-password",
+        "login",
+        "logout",
+        "reject",
+        "request",
+        "requests",
+        "status",
+        "transfer",
+        "whoami"
+      ],
+      "flags": [
+        "--action",
+        "--agent",
+        "--approver",
+        "--from-team",
+        "--help",
+        "--host",
+        "--note",
+        "--password",
+        "--payload-json",
+        "--reason",
+        "--reject-reason",
+        "--rejector",
+        "--requested-by",
+        "--role",
+        "--status",
+        "--target-host",
+        "--team",
+        "--to-team",
+        "--type",
+        "--version",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-governance.sh whoami",
+        "#   aimaestro-governance.sh requests [--status S] [--type T] [--host H] [--agent A]",
+        "#   aimaestro-governance.sh request --type T --password P --target-host H \\",
+        "#       --requested-by RB --role R (--agent A | --payload-json '{...}')",
+        "#   aimaestro-governance.sh approve <id> --password P [--approver UUID]",
+        "#   aimaestro-governance.sh reject  <id> --password P [--rejector UUID] [--reason R]",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-groups.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "create",
+        "delete",
+        "help",
+        "list",
+        "notify",
+        "show",
+        "subscribe",
+        "unsubscribe",
+        "update"
+      ],
+      "flags": [
+        "--description",
+        "--help",
+        "--message",
+        "--name",
+        "--priority",
+        "--subscribers",
+        "--version",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-groups.sh list",
+        "#   aimaestro-groups.sh show <groupId>",
+        "#   aimaestro-groups.sh create --name N [--description D] [--subscribers u1,u2]",
+        "#   aimaestro-groups.sh update <groupId> [--name N] [--description D] [--subscribers u1,u2]",
+        "#   aimaestro-groups.sh delete <groupId>",
+        "#   aimaestro-groups.sh subscribe <groupId> <agentUUID>",
+        "#   aimaestro-groups.sh unsubscribe <groupId> <agentUUID>",
+        "#   aimaestro-groups.sh notify <groupId> --message M [--priority low|normal|high|urgent]",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-hook.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "activity",
+        "check-messages",
+        "help",
+        "notify"
+      ],
+      "flags": [
+        "--cwd",
+        "--end-reason",
+        "--error-type",
+        "--help",
+        "--hook-status",
+        "--json",
+        "--message",
+        "--notification-type",
+        "--status",
+        "--subagent-count",
+        "--version",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-hook.sh activity --cwd <dir> [--status S] [--hook-status H]",
+        "#       [--notification-type NT] [--subagent-count N] [--error-type E] [--end-reason R]",
+        "#   aimaestro-hook.sh notify --cwd <dir> --message <text>",
+        "#   aimaestro-hook.sh check-messages --cwd <dir> [--json]",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-panel.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "close",
+        "feedback",
+        "help",
+        "open",
+        "refresh",
+        "set",
+        "status"
+      ],
+      "flags": [
+        "--help",
+        "--html",
+        "--html-file",
+        "--url",
+        "--version",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-panel.sh open <agent> [--url <https-url>]",
+        "#   aimaestro-panel.sh close <agent>",
+        "#   aimaestro-panel.sh refresh <agent>",
+        "#   aimaestro-panel.sh set <agent> --html-file <path> | --html \"<html>\" | --url <https-url>",
+        "#   aimaestro-panel.sh status <agent>",
+        "#   aimaestro-panel.sh feedback <agent>",
+        "#",
+        "# <agent> is an agent UUID, or a name/alias resolved via /api/agents?q=.",
+        "#",
+        "# NOTE ON `delivered`: the panel is a LIVE surface, not a queue. A response with",
+        "# \"delivered\": 0 means no dashboard currently has that agent's panel channel open",
+        "# — the message was dropped, NOT stored. Check `status` first if that matters.",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-portfolio.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "help",
+        "list",
+        "mint",
+        "revoke",
+        "verify"
+      ],
+      "flags": [
+        "--binds",
+        "--binds-agent",
+        "--binds-team",
+        "--help",
+        "--json",
+        "--kind",
+        "--scope",
+        "--subject",
+        "--token",
+        "--ttl",
+        "--version",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-portfolio.sh mint   --subject <agent> --kind approval|mandate",
+        "#                                 --scope <resource:action>",
+        "#                                 [--binds <trdd-id>] [--binds-agent <id>]",
+        "#                                 [--binds-team <id>] [--ttl <seconds>]",
+        "#   aimaestro-portfolio.sh list   --subject <agent>",
+        "#   aimaestro-portfolio.sh verify --subject <agent> --token <uuid>",
+        "#                                 [--binds <trdd-id>] [--binds-agent <id>]",
+        "#                                 [--binds-team <id>] [--scope <resource:action>]",
+        "#                                 [--json]",
+        "#   aimaestro-portfolio.sh revoke --subject <agent> --token <uuid>",
+        "#",
+        "# `--subject` is the agent whose enclave HOLDS the token (the empowered agent),",
+        "# not the issuer.",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-session.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "answer",
+        "help",
+        "inject",
+        "queue",
+        "queue-cancel",
+        "queue-list",
+        "read-prompt",
+        "slash",
+        "slash-keys",
+        "state"
+      ],
+      "flags": [
+        "--command",
+        "--command-key",
+        "--help",
+        "--no-newline",
+        "--no-require-idle",
+        "--option",
+        "--pane",
+        "--require-idle",
+        "--text",
+        "--version",
+        "--wake-first",
+        "--when",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-session.sh inject <agent> --command \"<text>\" [--no-newline] [--no-require-idle]",
+        "#   aimaestro-session.sh slash <agent> <command-key>",
+        "#   aimaestro-session.sh slash-keys",
+        "#   aimaestro-session.sh state <agent> [--pane]",
+        "#   aimaestro-session.sh read-prompt <agent>",
+        "#   aimaestro-session.sh answer <agent> --option <key> | --text \"<answer>\"",
+        "#   aimaestro-session.sh queue <agent> --command \"<text>\" | --command-key <key>",
+        "#       [--when idle|online|now-if-idle-else-queue] [--wake-first]",
+        "#   aimaestro-session.sh queue-list <agent>",
+        "#   aimaestro-session.sh queue-cancel <agent> <entryId>",
+        "#",
+        "# <agent> is an agent UUID, or a name/alias resolved via /api/agents?q=.",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-settings.sh": {
+      "family": "aimaestro",
+      "verbs": [],
+      "flags": [],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-settings.sh get <path>",
+        "#   aimaestro-settings.sh set <path> --key <dot.path> --value <json-or-string> [--no-create]",
+        "#   aimaestro-settings.sh set <path> --key-json '[\"a\",\"b\"]' --value <json-or-string> [--no-create]",
+        "#   aimaestro-settings.sh delete <path> --key <dot.path> [--no-create]",
+        "#   aimaestro-settings.sh delete <path> --key-json '[\"a\",\"b\"]' [--no-create]",
+        "#   aimaestro-settings.sh edit <path> --ops '<json array of {\"op\":\"set\"|\"delete\",\"keyPath\":[...],\"value\"?:...}>' [--no-create]",
+        "#",
+        "# <path> must be an absolute settings.json or settings.local.json path, living",
+        "# directly inside a \".claude\" directory — see lib/settings-gate.ts. --key is",
+        "# dot-path sugar; a key containing a literal dot needs --key-json instead.",
+        "#",
+        "# ⚠ AND THAT FAILS SILENTLY, WHICH IS WHY IT IS SPELLED OUT RATHER THAN LEFT TO",
+        "# THE LINE ABOVE. Passing such a key to --key does not error — it SPLITS, exit 0,",
+        "# and the file still parses, so the damage surfaces much later as a hook or",
+        "# permission that never fires:",
+        "#",
+        "#   --key 'hooks.Bash(x.y:*)'        →  hooks → \"Bash(x\" → \"y:*)\"     WRONG, silent",
+        "#   --key-json '[\"hooks\",\"Bash(x.y:*)\"]'                              correct",
+        "#",
+        "# This is the COMMON case, not an edge case: Claude Code matchers and permission",
+        "# entries routinely contain dots — Bash(node script.js:*), mcp__srv__tool. Use",
+        "# --key-json for any key that might contain one.",
+        "#",
+        "# (Reported by the CORE plugin's Claude, 2026-08-02, ai-maestro-plugin#31. Their",
+        "# note on HOW they found it is worth as much as the finding: their first probe",
+        "# used `permissions.Bash(ls:*)` and \"passed\" — that key has no dot INSIDE it, so",
+        "# it proved nothing. When a property has a boundary, the fixture must cross it on",
+        "# purpose, never by luck.)",
+        "#",
+        "# WHY BASH, NOT SH/ZSH: it sources scripts/pin-node.sh, which is bash-only",
+        "# (BASH_SOURCE, `local -a`). Sourced from zsh its version gate degrades",
+        "# SILENTLY and can hand back a Node past this repo's <26 engines cap (measured",
+        "# 2026-07-30 on scripts/pillar-cli, the sibling script this one's ROOT/tsx",
+        "# resolution below is deliberately modelled on).",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-statusline-capture.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "help"
+      ],
+      "flags": [
+        "--help",
+        "-h"
+      ],
+      "usage": []
+    },
+    "aimaestro-statusline.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "get",
+        "help",
+        "ingest",
+        "list"
+      ],
+      "flags": [
+        "--file",
+        "--help",
+        "-h"
+      ],
+      "usage": []
+    },
+    "aimaestro-teams.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "add-agent",
+        "create",
+        "delete",
+        "help",
+        "kanban-config",
+        "list",
+        "reassign-cos",
+        "remove-agent",
+        "show",
+        "stats",
+        "tasks",
+        "update"
+      ],
+      "flags": [
+        "--agents",
+        "--cos",
+        "--delete-agents",
+        "--description",
+        "--get",
+        "--gh-owner",
+        "--gh-repo",
+        "--help",
+        "--name",
+        "--orchestrator",
+        "--password",
+        "--remove-cos",
+        "--set",
+        "--set-file",
+        "--type",
+        "--version",
+        "-h",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-teams.sh list",
+        "#   aimaestro-teams.sh show <teamId>",
+        "#   aimaestro-teams.sh create --name N [--description D] [--agents u1,u2]",
+        "#       [--type T] [--cos UUID] [--password P] [--gh-owner O --gh-repo R]",
+        "#   aimaestro-teams.sh update <teamId> [--name N] [--description D]",
+        "#       [--agents u1,u2] [--orchestrator UUID|null] [--gh-owner O --gh-repo R]",
+        "#   aimaestro-teams.sh delete <teamId> [--password P] [--delete-agents]",
+        "#   aimaestro-teams.sh add-agent <teamId> <agentUUID> [--password P]",
+        "#   aimaestro-teams.sh remove-agent <teamId> <agentUUID> [--password P]",
+        "#   aimaestro-teams.sh kanban-config <teamId> --get | --set <columns-json> | --set-file <path>",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "aimaestro-trdd.sh": {
+      "family": "aimaestro",
+      "verbs": [
+        "approve",
+        "archive",
+        "edit",
+        "help",
+        "promote",
+        "read",
+        "refuse",
+        "search",
+        "verify"
+      ],
+      "flags": [
+        "--agent",
+        "--approver",
+        "--column",
+        "--help",
+        "--id",
+        "--json",
+        "--keyword",
+        "--note",
+        "--rationale",
+        "--reason",
+        "--set",
+        "--state",
+        "--superseded-by",
+        "--tier",
+        "--version",
+        "--zone",
+        "-h",
+        "-k",
+        "-q",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   aimaestro-trdd.sh search [--column C] [--id I] [--keyword K] [--zone Z] [--agent A]",
+        "#   aimaestro-trdd.sh read <trdd-id> [--agent A]",
+        "#   aimaestro-trdd.sh edit <trdd-id> --set key=value [--set key=value ...] [--agent A]",
+        "#   aimaestro-trdd.sh approve <trdd-id> [--approver W] [--rationale R] [--agent A]",
+        "#   aimaestro-trdd.sh refuse  <trdd-id> [--approver W] --reason R      [--agent A]",
+        "#       --reason is REQUIRED for refuse (ai-maestro#71): it must name the defect, not the",
+        "#       verdict. A bare \"denied\" is rejected. `approve` keeps it optional.",
+        "#       --tier is DEPRECATED on both verbs and is NOT sent (ai-maestro#69): the approval",
+        "#       requirement is read from the card's own `min-approval-requirement:`, never from",
+        "#       the approver. Still accepted so existing calls keep working.",
+        "#   aimaestro-trdd.sh promote <trdd-id> --column C [--note N] [--approver W]      [--agent A]",
+        "#   aimaestro-trdd.sh archive <trdd-id> --state completed|cancelled|superseded",
+        "#       [--reason R] [--superseded-by ID] [--approver W] [--agent A]",
+        "#",
+        "# <trdd-id> is the 8-char UPPERCASE base36 id (matched case-insensitively).",
+        "#",
+        "# The three lifecycle verbs are NOT interchangeable:",
+        "#   approve  proposal → planned   (design/proposals/ → design/tasks/)",
+        "#   promote  advance `column` forward in place, inside design/tasks/",
+        "#   archive  once-approved → terminal (→ design/archived/); `failed` is retryable",
+        "#            and is deliberately NOT an archive state.",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-clone-repo.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-clone-repo.sh <url> [<localName>]",
+        "#",
+        "# Examples:",
+        "#   amp-clone-repo.sh https://github.com/org/repo.git",
+        "#   amp-clone-repo.sh https://github.com/org/repo.git my-local-name",
+        "#   amp-clone-repo.sh --id <uuid> https://github.com/org/repo.git",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-create-branch.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-create-branch.sh <repo-path> <branch-name>",
+        "#",
+        "# Examples:",
+        "#   amp-create-branch.sh /path/to/repo feature/new-api",
+        "#   amp-create-branch.sh . fix/login-bug",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-create-repo.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--description",
+        "--help",
+        "--id",
+        "--org",
+        "--private",
+        "--team",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-create-repo.sh <name> [--org <org>] [--private] [--description \"...\"]",
+        "#",
+        "# Examples:",
+        "#   amp-create-repo.sh my-new-repo",
+        "#   amp-create-repo.sh my-new-repo --org myorg --private --description \"A cool project\"",
+        "#   amp-create-repo.sh my-new-repo --team <team-id>",
+        "#   amp-create-repo.sh --id <uuid> my-new-repo",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-delete.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--force",
+        "--help",
+        "--id",
+        "--sent",
+        "-f",
+        "-h",
+        "-s"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-delete <message-id>",
+        "#   amp-delete <message-id> --sent",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-download.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--all",
+        "--dest",
+        "--help",
+        "--id",
+        "--name",
+        "--sent",
+        "-d",
+        "-h",
+        "-s"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-download <message-id> [attachment-id|--all] [options]",
+        "#",
+        "# Examples:",
+        "#   amp-download msg_123_abc --all",
+        "#   amp-download msg_123_abc att_456_def",
+        "#   amp-download msg_123_abc --all --dest ~/Downloads",
+        "#   amp-download msg_123_abc att_456_def --sent",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-fetch.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--no-mark",
+        "--provider",
+        "--verbose",
+        "-h",
+        "-p",
+        "-v"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-fetch                    # Fetch from all providers",
+        "#   amp-fetch --provider crabmail.ai   # Fetch from specific provider",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-identity.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--brief",
+        "--help",
+        "--id",
+        "--json",
+        "-b",
+        "-h",
+        "-j"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-identity              # Human-readable output",
+        "#   amp-identity --json       # JSON output for parsing",
+        "#   amp-identity --brief      # One-line summary",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-inbox.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--all",
+        "--count",
+        "--help",
+        "--id",
+        "--json",
+        "--limit",
+        "--name",
+        "--read",
+        "--unread",
+        "-a",
+        "-c",
+        "-h",
+        "-j",
+        "-l",
+        "-r",
+        "-u"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-inbox              # Show unread messages",
+        "#   amp-inbox --all        # Show all messages",
+        "#   amp-inbox --count      # Just show count",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-init.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--auto",
+        "--force",
+        "--help",
+        "--name",
+        "--tenant",
+        "-a",
+        "-f",
+        "-h",
+        "-n",
+        "-t"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-init                     # Interactive mode",
+        "#   amp-init --auto              # Auto-detect name from environment",
+        "#   amp-init --name myagent      # Specify name directly",
+        "#   amp-init --name myagent --tenant mycompany",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-kanban-archive.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--team",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-kanban-archive.sh <task-id> [options]",
+        "#",
+        "# Examples:",
+        "#   amp-kanban-archive.sh abc-123",
+        "#   amp-kanban-archive.sh abc-123 --team <team-id>",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-kanban-create-task.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--assignee",
+        "--attachment",
+        "--description",
+        "--effort",
+        "--eht",
+        "--external-ref",
+        "--help",
+        "--id",
+        "--labels",
+        "--npt",
+        "--parent",
+        "--priority",
+        "--release-via",
+        "--relevant-rules",
+        "--severity",
+        "--status",
+        "--supersedes",
+        "--task-type",
+        "--team",
+        "-a",
+        "-d",
+        "-h",
+        "-l",
+        "-p",
+        "-s"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-kanban-create-task.sh <title> [options]",
+        "#",
+        "# Examples:",
+        "#   amp-kanban-create-task.sh \"Fix login bug\"",
+        "#   amp-kanban-create-task.sh \"Deploy v2\" --assignee <agent-id> --labels \"deploy,urgent\"",
+        "#   amp-kanban-create-task.sh \"Review PR #42\" --team <team-id> --status ai_review",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-kanban-edit.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--set",
+        "--set-json",
+        "--team",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-kanban-edit.sh <task-id> --set key=value [--set-json key=<json>] ... [options]",
+        "#",
+        "# Examples:",
+        "#   amp-kanban-edit.sh abc-123 --set subject=\"Fix the login redirect\"",
+        "#   amp-kanban-edit.sh abc-123 --set status=ai_review --set-json priority=1",
+        "#   amp-kanban-edit.sh abc-123 --set-json 'labels=[\"bug\",\"p0\"]'",
+        "#   amp-kanban-edit.sh abc-123 --set-json 'blockedBy=[]' --set status=dev",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-kanban-get.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--team",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-kanban-get.sh <task-id> [options]",
+        "#",
+        "# Examples:",
+        "#   amp-kanban-get.sh abc-123",
+        "#   amp-kanban-get.sh abc-123 --team <team-id>",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-kanban-list.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--assignee",
+        "--help",
+        "--id",
+        "--label",
+        "--parent",
+        "--query",
+        "--status",
+        "--task-type",
+        "--team",
+        "-a",
+        "-h",
+        "-l",
+        "-q",
+        "-s"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-kanban-list.sh [options]",
+        "#",
+        "# Examples:",
+        "#   amp-kanban-list.sh",
+        "#   amp-kanban-list.sh --status dev",
+        "#   amp-kanban-list.sh --assignee <agent-id> --status ai_review",
+        "#   amp-kanban-list.sh --label bug --team <team-id>",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-kanban-move.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--team",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-kanban-move.sh <task-id> <status> [options]",
+        "#",
+        "# Status values (14 TRDD-v2 pipeline stages + 3 exception states):",
+        "#   backburner, todo, design, dispatch, dev, testing, ai_review, human_review,",
+        "#   complete, publish, published, deploy, live, live_auditing",
+        "#   blocked, failed, superseded",
+        "#",
+        "# Examples:",
+        "#   amp-kanban-move.sh abc-123 dev",
+        "#   amp-kanban-move.sh abc-123 ai_review --team <team-id>",
+        "#   amp-kanban-move.sh abc-123 complete",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-list-local-repos.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-list-local-repos.sh",
+        "#",
+        "# Examples:",
+        "#   amp-list-local-repos.sh",
+        "#   amp-list-local-repos.sh --id <uuid>",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-project-info.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--team",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-project-info.sh [--team <teamId>] [--id <agentUUID>]",
+        "#",
+        "# Examples:",
+        "#   amp-project-info.sh",
+        "#   amp-project-info.sh --team my-team-id",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-project-repos.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--team",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-project-repos.sh [--team <teamId>] [--id <agentUUID>]",
+        "#",
+        "# Examples:",
+        "#   amp-project-repos.sh",
+        "#   amp-project-repos.sh --team my-team-id",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-read.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--download",
+        "--help",
+        "--id",
+        "--json",
+        "--name",
+        "--no-mark-read",
+        "--sent",
+        "-h",
+        "-j",
+        "-n",
+        "-s"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-read <message-id>",
+        "#   amp-read <message-id> --no-mark-read",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-register.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--api-url",
+        "--force",
+        "--help",
+        "--id",
+        "--name",
+        "--provider",
+        "--tenant",
+        "--token",
+        "--user-key",
+        "-a",
+        "-f",
+        "-h",
+        "-k",
+        "-n",
+        "-p",
+        "-t"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-register --provider crabmail.ai --user-key uk_xxx",
+        "#   amp-register --provider crabmail.ai --user-key uk_xxx --name myagent",
+        "#",
+        "# For providers that don't require user key (legacy):",
+        "#   amp-register --provider myprovider.com --tenant mycompany",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-reply.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--attach",
+        "--help",
+        "--id",
+        "--name",
+        "--priority",
+        "--type",
+        "-a",
+        "-h",
+        "-p",
+        "-t"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-reply <message-id> <reply-message>",
+        "#   amp-reply <message-id> <reply-message> --priority high",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-send.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--attach",
+        "--context",
+        "--help",
+        "--id",
+        "--name",
+        "--priority",
+        "--reply-to",
+        "--thread-id",
+        "--type",
+        "-a",
+        "-c",
+        "-h",
+        "-p",
+        "-r",
+        "-t"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-send <recipient> <subject> <message> [options]",
+        "#",
+        "# Examples:",
+        "#   amp-send alice \"Hello\" \"How are you?\"",
+        "#   amp-send backend-api@23blocks.crabmail.ai \"Deploy\" \"Ready for deploy\" --priority high",
+        "#   amp-send bob --type task \"Review PR\" \"Please review PR #42\"",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-status.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--json",
+        "-h",
+        "-j"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-status",
+        "#   amp-status --json",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-statusline.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--install",
+        "--test",
+        "--uninstall",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-statusline.sh --install     # Install into Claude Code settings",
+        "#   amp-statusline.sh --uninstall   # Remove from Claude Code settings",
+        "#   amp-statusline.sh --test        # Test output with current agent",
+        "#   amp-statusline.sh               # Called by Claude Code (reads JSON from stdin)",
+        "#",
+        "# Agent resolution order:",
+        "#   1. AMP_AGENT_ID env var (explicit UUID)",
+        "#   2. CLAUDE_AGENT_NAME env var (AI Maestro sets this)",
+        "#   3. tmux session name",
+        "#   4. Working directory → AI Maestro API lookup",
+        "#   5. Working directory → walk up to .claude/settings.local.json for",
+        "#      CLAUDE_AGENT_NAME hint",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-submit-pr.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--base",
+        "--body",
+        "--help",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-submit-pr.sh <repo-path> <title> [--body \"...\"] [--base main]",
+        "#",
+        "# Examples:",
+        "#   amp-submit-pr.sh /path/to/repo \"Add login feature\"",
+        "#   amp-submit-pr.sh . \"Fix auth bug\" --body \"Fixes #42\" --base develop",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-task-blocked.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-task-blocked.sh <reason> [--id <agent-uuid>]",
+        "#",
+        "# Examples:",
+        "#   amp-task-blocked.sh \"Cannot access staging DB, credentials expired\"",
+        "#   amp-task-blocked.sh \"Dependency conflict blocks build\" --id abc-123-def",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-task-done.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-task-done.sh <message> [--id <agent-uuid>]",
+        "#",
+        "# Examples:",
+        "#   amp-task-done.sh \"API refactor complete, all tests pass\"",
+        "#   amp-task-done.sh \"Deployed v2.1.0 to staging\" --id abc-123-def",
+        "#",
+        "# ============================================================================="
+      ]
+    },
+    "amp-team-members.sh": {
+      "family": "amp",
+      "verbs": [],
+      "flags": [
+        "--help",
+        "--id",
+        "--team",
+        "-h"
+      ],
+      "usage": [
+        "# Usage:",
+        "#   amp-team-members.sh [--team <teamId>] [--id <agentUUID>]",
+        "#",
+        "# Examples:",
+        "#   amp-team-members.sh",
+        "#   amp-team-members.sh --team my-team-id",
+        "#",
+        "# ============================================================================="
+      ]
+    }
+  },
+  "excluded": {
+    "agent-commands.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "agent-core.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "agent-helper.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "agent-plugin.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "agent-session.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "agent-skill.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "aid-helper.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "amp-helper.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "amp-name-resolve.sh": "no top-level dispatch — internal lib/module, not skill-facing",
+    "amp-security.sh": "no top-level dispatch — internal lib/module, not skill-facing"
+  }
+}

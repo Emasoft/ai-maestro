@@ -266,6 +266,19 @@ describe('runAbsorbedDutyTickNow — persistence, independent of settings.enable
     expect(saved.enabled).toBe(false)
     expect(saved.lastRunSummary.length).toBeGreaterThan(0)
     expect(saved.lastRunSummary.some((e: { target: string }) => e.target.startsWith('absorbed:'))).toBe(true)
+
+    // AC5 — THE STATE FILE MUST BE HONEST AS A WHOLE, not merely per-field. Every assertion
+    // above was already true on the day this file reported `enabled: false` + `lastRunAt: null`
+    // while this lane was running hourly and making hundreds of network calls: the only evidence
+    // was the wall-clock buried inside the summary rows, which a reader has to know to dig for.
+    // That is what made a rate-limit investigation take six wrong hypotheses. So the absorbed
+    // lane now stamps its OWN timestamp, and the two lanes stay distinguishable:
+    expect(saved.lastAbsorbedRunAt).toEqual(expect.any(String))
+    expect(Date.parse(saved.lastAbsorbedRunAt)).not.toBeNaN()
+    // ...and `lastRunAt` still belongs to the GATED lane alone, which never ran here. If this
+    // ever starts passing as a string, the two lanes have been conflated and the file is lying
+    // in the other direction.
+    expect(saved.lastRunAt).toBeNull()
   })
 
   it('when the janitor is NOT installed+armed, no run entries are persisted at all', async () => {

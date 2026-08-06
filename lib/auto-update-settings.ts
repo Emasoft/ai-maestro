@@ -87,8 +87,25 @@ export interface AutoUpdateSettings {
   /** Per-category toggles. See AutoUpdateCategories. */
   categories: AutoUpdateCategories
   /** Wall-clock time of the most recent successful tick (any category).
-   *  Null until the scheduler has run at least once. */
+   *  Null until the scheduler has run at least once.
+   *
+   *  ⚠ THIS IS THE GATED LANE ONLY. It says nothing about the absorbed-duty lane, which runs
+   *  UNCONDITIONALLY — see `lastAbsorbedRunAt` below, and read both before concluding that
+   *  nothing is running. */
   lastRunAt: string | null
+  /** Wall-clock time of the most recent absorbed-duty tick (TRDD-PE54D95Q, AC5).
+   *
+   *  WHY THIS FIELD EXISTS. The absorbed lane is deliberately NOT gated on `enabled`, so this
+   *  file could honestly report `enabled: false` and `lastRunAt: null` while that lane had run
+   *  an hour earlier and was making hundreds of network calls. Every field was true on its own
+   *  and the document as a whole was misleading — which is exactly what made a GitHub
+   *  rate-limit investigation take six wrong hypotheses before it looked here. The only
+   *  surviving evidence was the wall-clock inside `lastRunSummary`'s rows, which a reader has
+   *  to know to go digging for.
+   *
+   *  So: the two lanes get two timestamps, and "is anything running?" is answerable by reading
+   *  the file rather than by inferring from a summary. Null until the absorbed lane has run. */
+  lastAbsorbedRunAt: string | null
   /** Outcome of the most recent tick — capped to 200 entries to bound the
    *  file size while still giving the UI a meaningful audit trail. */
   lastRunSummary: AutoUpdateRunEntry[]
@@ -113,6 +130,7 @@ export const DEFAULT_SETTINGS: AutoUpdateSettings = {
     userScopePlugins: false,
   },
   lastRunAt: null,
+  lastAbsorbedRunAt: null,
   lastRunSummary: [],
 }
 
@@ -158,6 +176,9 @@ function normalize(raw: unknown): AutoUpdateSettings {
       userScopePlugins: cats.userScopePlugins === true,  // default-off
     },
     lastRunAt: typeof r.lastRunAt === 'string' ? r.lastRunAt : null,
+    // Additive at version 1: a file written before this field existed simply reads null, which
+    // is the honest answer for it ("the absorbed lane has not run since this field existed").
+    lastAbsorbedRunAt: typeof r.lastAbsorbedRunAt === 'string' ? r.lastAbsorbedRunAt : null,
     lastRunSummary: Array.isArray(r.lastRunSummary)
       ? (r.lastRunSummary.slice(0, 200) as AutoUpdateRunEntry[])
       : [],

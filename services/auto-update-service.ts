@@ -265,6 +265,12 @@ async function runAbsorbedDutyTickSafely(): Promise<{ ran: boolean; entries: Aut
       const s = await loadSettings()
       let next = s
       for (const e of entries) next = appendRunEntry(next, e)
+      // Stamp the absorbed lane's OWN timestamp (TRDD-PE54D95Q, AC5). Without it this file
+      // reports `enabled: false` + `lastRunAt: null` while this lane is running every 3 h, and
+      // the only evidence is the wall-clock buried in the summary rows. `enabled` is still
+      // never touched here — this lane's consent is the janitor's install+arm state, not that
+      // preference.
+      next = { ...next, lastAbsorbedRunAt: nowIso() }
       await saveSettings(next)
     } catch (err) {
       console.error('[auto-update] Failed to persist absorbed-duty run summary:', err)

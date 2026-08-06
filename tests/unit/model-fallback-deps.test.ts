@@ -117,3 +117,24 @@ describe('collectFallbackCandidates', () => {
     expect(out.unreadable).toEqual(['a2'])
   })
 })
+
+/*
+ * NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *
+ *   s/sendKeys\(sessionName, 'Escape'\)/sendKeys(sessionName, 'Escape', { literal: true })/
+ *   → 1 red / 11 green:
+ *       sends ESC as a tmux KEY NAME, not as literal text
+ *
+ *   s/\{ literal: true, enter: true \}/{ literal: true }/
+ *   → 1 red / 11 green:
+ *       resolves the curated key to its command text HERE, and submits it
+ *
+ *   s/if \(!entry\) return/if (false) return/
+ *   → 1 red / 11 green:
+ *       refuses an unknown key and sends NOTHING
+ *
+ * All three mutations are the SILENT kind, which is why each needed its own test: a literal
+ * 'Escape' types six characters into the prompt, a command without `enter` sits unsent, and an
+ * unresolved key throws inside the try and returns ok:false with the WRONG reason. None of the
+ * three raises anything a caller would notice, and all three end with the model unswitched.
+ */

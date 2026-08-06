@@ -186,3 +186,38 @@ describe('stuckSuggestsModelFallback', () => {
     expect(stuckSuggestsModelFallback('stuck', undefined)).toBe(false)
   })
 })
+
+/*
+ * NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *
+ *   s/confirmAfterMs: CONFIRM_DELAY_MS/confirmAfterMs: 0/
+ *   → 1 red / 13 green:
+ *       schedules the confirming ENTER — without it the sweep leaves every agent blocked on a dialog
+ *
+ *   s/\?\? Number\.POSITIVE_INFINITY/?? 0/g          (--expect-lines 2)
+ *   → 1 red / 13 green:
+ *       treats an UNKNOWN account window as exhausted, not as healthy
+ *
+ *   s/input\.startAtMs \+ i \* interval/input.startAtMs/
+ *   → 2 red / 12 green:
+ *       paces from a fixed origin, so a late dispatch cannot compound its own latency
+ *       spaces agents by the USER's 60 seconds, absolute and cumulative
+ *
+ *   s/\[\\s\\-_\/\]\+/ZZZZZ/                          (disables the family split)
+ *   → 6 red / 13 green:
+ *       is not merely lowercasing — a raw compare against the family token would match nothing
+ *       joins two DIFFERENT spellings of one family — the case string equality cannot reach
+ *       reduces a display string to its family, which is the only stable join key to a scoped window
+ *       spaces agents by the USER's 60 seconds, absolute and cumulative
+ *       switches exactly the agents on the exhausted family, and no others
+ *       terminates on the VERSION, not on a space — a 1M model name contains both
+ *
+ * The last one is the finding, and it is recorded because the FIRST run of it was wrong. Against
+ * the original fixture it reddened only 2 — both direct unit tests, not one plan test — because
+ * FLEET and scopedModel both said 'Fable 5', so the filter matched by plain string equality and
+ * the family extraction was never on the path. I had predicted ~8 and read 2 as "the guard is
+ * narrow"; it was the FIXTURE that was narrow. Crossing the spellings ('Fable 5 (1M)' vs
+ * 'Fable 5' — the real 1M pane shape) put family extraction back on the join, and the same
+ * mutation now reddens the plan tests too. A neuter that under-reddens is a measurement of the
+ * fixture, not a verdict on the guard.
+ */

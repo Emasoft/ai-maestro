@@ -146,3 +146,58 @@ describe('tick-status — the reason field (why a reauth-needed is needed)', () 
     expect(readTickStatus()).toBe('ok') // the existing 5-field contract is untouched
   })
 })
+
+describe('tick-status — the persisted WINDOW snapshot (the cross-beat join)', () => {
+  const raw = () => JSON.parse(fs.readFileSync(statePath('oauth-rotator-tick-status.json'), 'utf8'))
+
+  const WINDOWS = { fiveHourPct: 42, sevenDayPct: 60, scopedModel: 'Fable 5', scopedPct: 98 }
+
+  it('persists the windows so a beat with no credential access can see them', () => {
+    // The whole point: the fleet watchdog has agents and no credential data; this tick has
+    // credential data and no agents. Before this the stamp carried neither percentage.
+    writeTickStatus({ nextAction: 'stuck', stuck: 'all-maxed', windows: WINDOWS })
+    expect(raw().windows).toEqual(WINDOWS)
+  })
+
+  it('writes NO windows key when the tick never probed — the old stamp shape is unchanged', () => {
+    writeTickStatus({ nextAction: 'ok' })
+    expect(raw()).not.toHaveProperty('windows')
+  })
+
+  it('voids the snapshot when a scoped percentage names no model', () => {
+    // The sweep JOINS on the model, so a percentage naming nothing cannot reach any agent.
+    writeTickStatus({ nextAction: 'ok', windows: { ...WINDOWS, scopedModel: null } })
+    expect(raw()).not.toHaveProperty('windows')
+  })
+
+  it('voids the snapshot when nothing was measured at all', () => {
+    // A snapshot of nulls would make an unprobed tick look probed.
+    writeTickStatus({
+      nextAction: 'ok',
+      windows: { fiveHourPct: null, sevenDayPct: null, scopedModel: 'Fable 5', scopedPct: null },
+    })
+    expect(raw()).not.toHaveProperty('windows')
+  })
+
+  it('drops an out-of-range or non-numeric percentage to UNKNOWN, keeping the rest', () => {
+    // Safe ONLY because the consumer fails safe on null: planModelFallback treats an unknown
+    // account window as EXHAUSTED and refuses to act, so a half-known snapshot can prevent a
+    // switch but never cause one.
+    writeTickStatus({
+      nextAction: 'ok',
+      windows: { ...WINDOWS, fiveHourPct: 999, sevenDayPct: 'sixty' },
+    })
+    expect(raw().windows).toEqual({
+      fiveHourPct: null,
+      sevenDayPct: null,
+      scopedModel: 'Fable 5',
+      scopedPct: 98,
+    })
+  })
+
+  it('never lets a malformed windows value break the rest of the stamp', () => {
+    writeTickStatus({ nextAction: 'rotating', windows: 'not an object' })
+    expect(readTickStatus()).toBe('rotating')
+    expect(raw()).not.toHaveProperty('windows')
+  })
+})

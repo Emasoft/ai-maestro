@@ -43,7 +43,64 @@ interface TickStatusFile {
    *  `cannot-rotate-offline` means a human is needed. Those are opposite instructions, and before
    *  this field the file carried neither — it carried `"ok"`. */
   stuck?: StuckReason
+  /**
+   * The live account's windows at that tick, when a usage reading was obtained.
+   *
+   * Persisted because the two beats are disjoint: this tick has credential data and no agents,
+   * while the fleet watchdog (which runs the model-fallback sweep) has agents and no credential
+   * data. Before this the stamp carried `{nextAction, at, stuck}` only, so the watchdog could not
+   * see a model-scoped window at all — a Fable window at 98% was invisible to the one subsystem
+   * able to act on it.
+   *
+   * The alternative — having the watchdog probe usage itself — is worse: it duplicates a
+   * rate-limited request this tick already makes, and two callers would then disagree about the
+   * same window.
+   */
+  windows?: PersistedWindows
   at: string
+}
+
+/** Persisted window snapshot. Nullable throughout; null is UNKNOWN, never zero. */
+interface PersistedWindows {
+  fiveHourPct: number | null
+  sevenDayPct: number | null
+  scopedModel: string | null
+  scopedPct: number | null
+}
+
+/** A percentage is written only when it is a real number in range. Anything else is dropped, so
+ *  the stamp never carries a value the reader would have to defend against. */
+function pct(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? v : null
+}
+
+/**
+ * Validate a window snapshot for the stamp, or return null to omit it entirely.
+ *
+ * A malformed percentage becomes `null` (UNKNOWN) rather than voiding the whole snapshot, and
+ * that is safe ONLY because the consumer fails safe on null: `planModelFallback` treats an
+ * unknown account window as EXHAUSTED and refuses to act. So a half-known snapshot cannot cause
+ * a switch — it can only prevent one. **If that consumer ever starts treating null as healthy,
+ * this function must become all-or-nothing**, because then a dropped `sevenDayPct` would read as
+ * "the account has headroom" on no evidence.
+ *
+ * Two cases still void the whole thing, because they are unusable rather than merely partial:
+ *  - `scopedPct` with no `scopedModel` — the sweep JOINS on the model, so a percentage that names
+ *    no model cannot be matched to any agent.
+ *  - all three percentages unknown — nothing was measured, so writing a snapshot of nulls would
+ *    only make an unprobed tick look probed.
+ */
+function windowsFor(v: unknown): PersistedWindows | null {
+  if (!v || typeof v !== 'object') return null
+  const w = v as Record<string, unknown>
+  const fiveHourPct = pct(w.fiveHourPct)
+  const sevenDayPct = pct(w.sevenDayPct)
+  const scopedPct = pct(w.scopedPct)
+  const scopedModel = typeof w.scopedModel === 'string' && w.scopedModel !== '' ? w.scopedModel : null
+  // A scoped percentage without the model naming it is unusable — the sweep joins on the model.
+  if (scopedPct !== null && scopedModel === null) return null
+  if (fiveHourPct === null && sevenDayPct === null && scopedPct === null) return null
+  return { fiveHourPct, sevenDayPct, scopedModel, scopedPct }
 }
 
 /** A stamp older than this is IGNORED. The beat writes every ~60 s while the flag is armed; once
@@ -78,6 +135,8 @@ export function writeTickStatus(result: unknown): void {
     if (typeof rs === 'string' && VALID_REASON.has(rs)) payload.reason = rs as TickReason
     const sk = (result as { stuck?: unknown } | null)?.stuck
     if (typeof sk === 'string' && VALID_STUCK.has(sk)) payload.stuck = sk as StuckReason
+    const win = windowsFor((result as { windows?: unknown } | null)?.windows)
+    if (win) payload.windows = win
     const file = tickStatusPath()
     fs.mkdirSync(path.dirname(file), { recursive: true })
     const tmp = `${file}.tmp`

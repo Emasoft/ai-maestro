@@ -200,9 +200,29 @@ export function deriveDecision(f: {
   return 'no action needed'
 }
 
+/**
+ * The live account's four utilisation numbers at this tick.
+ *
+ * Every field is nullable and null means UNKNOWN, never zero — an unread window must not look
+ * like an empty one. Consumers act on the model-scoped pair only when both the scoped and the
+ * account numbers are known, because "the account has headroom" is exactly the claim a missing
+ * reading cannot support.
+ */
+export interface WindowSnapshot {
+  fiveHourPct: number | null
+  sevenDayPct: number | null
+  /** Display name of the worst model-scoped window, e.g. `Fable 5`. */
+  scopedModel: string | null
+  scopedPct: number | null
+}
+
 export interface TickResult {
   /** The one-line status the continuity CLI surfaces. */
   nextAction: NextAction
+  /** The live account's windows this tick, when a usage reading was obtained. Absent when the
+   *  tick returned before probing (no live credential, offline). Carried so a subsystem with no
+   *  credential access — the fleet watchdog running the model-fallback sweep — can see them. */
+  windows?: WindowSnapshot
   /** Why `nextAction` is `reauth-needed`; absent for `ok` / `rotating`. */
   reason?: TickReason
   /** Set when the tick WANTED to rotate and could not. Absent when no rotation was needed —
@@ -678,7 +698,7 @@ export async function autoRotate(
    *  internal call site, so widening the RETURN type would break every existing caller and test
    *  for a fact only `runTick` consumes. An optional out-param leaves them all untouched: callers
    *  that do not pass it observe byte-identical behaviour. Written ONLY on a stuck path. */
-  out?: { stuck?: StuckReason },
+  out?: { stuck?: StuckReason; windows?: WindowSnapshot },
 ): Promise<boolean> {
   let state = loadState()
   const [liveBlobRaw, liveSrc] = readLiveBlobWithSource()
@@ -715,6 +735,19 @@ export async function autoRotate(
     (w, l) => (l.percent !== null && (w === null || l.percent > w.percent) ? { model: l.model, percent: l.percent } : w),
     null,
   )
+  // Publish the windows to the caller. These four numbers exist ONLY as locals here, so any
+  // other subsystem that needs them has no way to see them — the model-fallback sweep lives in
+  // the fleet watchdog, which has agents but no credential data, and this tick has credential
+  // data but no agents. Writing them on the SAME additive out-param `stuck` uses (TRDD-RFQFCCU4)
+  // keeps every existing caller and test byte-identical.
+  if (out) {
+    out.windows = {
+      fiveHourPct: fh,
+      sevenDayPct: sd,
+      scopedModel: scWorst?.model ?? null,
+      scopedPct: scWorst?.percent ?? null,
+    }
+  }
   const fhS = fh !== null ? `${Math.round(fh)}%` : '?'
   const sdS = sd !== null ? `${Math.round(sd)}%` : '?'
   const scS = scWorst !== null ? ` ${scWorst.model}=${Math.round(scWorst.percent)}%` : ''
@@ -1037,7 +1070,7 @@ export function surveyAlternates(): AlternateSurvey {
 export async function runTick(deps?: TickDeps): Promise<TickResult> {
   const refreshed = await keepaliveRefresh(deps)
   if (refreshed.length) decide(deps, `keepalive: refreshed ${refreshed.join(', ')}`)
-  const rotateOut: { stuck?: StuckReason } = {}
+  const rotateOut: { stuck?: StuckReason; windows?: WindowSnapshot } = {}
   const switched = await autoRotate(deps, rotateOut)
 
   // Derive next_action: a switch happened → rotating; else if the fleet has any account that
@@ -1073,5 +1106,5 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
   // Emit the decision line for a STUCK tick too. Previously only `reason` did, so the most urgent
   // outcome was also the quietest one on the beat's own log surface.
   if (reason || stuck) decide(deps, decision)
-  return { nextAction, reason, stuck, refreshed, switched, decision }
+  return { nextAction, reason, stuck, windows: rotateOut.windows, refreshed, switched, decision }
 }

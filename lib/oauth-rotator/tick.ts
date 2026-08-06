@@ -370,6 +370,31 @@ export function isSafeAlternate(bfh: number, bsd: number, scoped: number | null)
   return bfh < SAFE_5H && bsd < SAFE_7D && (scoped === null || scoped < SAFE_SCOPED)
 }
 
+/** The ACCOUNT-window half of `isSafeAlternate`, without the model-scoped check.
+ *
+ * WHY THIS EXISTS — measured 2026-08-06, and it is a real incident, not a hypothetical. The
+ * rotator wrote `stuck: "all-maxed"` and refused to move while an account sat at **4% of its 5h
+ * window** (independently confirmed via `agentlenspro statusline-history windows`: two account
+ * profiles, one at 5h≈4%/7d=70%, the other at 5h≈99%/7d=20%, with EIGHT sessions pinned on the
+ * exhausted one). Nothing was maxed except **Fable**, whose model-scoped window was spent on BOTH
+ * accounts — so `isSafeAlternate` disqualified every candidate and the rotator chose paralysis.
+ *
+ * The scoped check is still right as the PREFERRED test (TRDD-JI7F1236: rotating onto an account
+ * whose Fable window is spent makes every Fable call fail). What was wrong is treating it as
+ * ABSOLUTE, because the two failures are not the same size:
+ *
+ *   • a 5h/7d-exhausted account blocks **every** request, on every model;
+ *   • a model-exhausted account blocks **only that model**, and the agents can be moved off it
+ *     (that is precisely what the model-fallback lane does).
+ *
+ * So when NO candidate passes the full test, falling back to one that is merely account-safe
+ * trades a total outage for a partial degradation. It can never be worse than staying put: the
+ * live account is already at/above its switch threshold, and the model window is spent everywhere,
+ * so rotating cannot make the model situation worse than it already is. */
+export function isAccountWindowSafe(bfh: number, bsd: number): boolean {
+  return bfh < SAFE_5H && bsd < SAFE_7D
+}
+
 /** DRAIN-FIRST: among healthy candidates `[email, blob, util5h, util7d]`, pick the one closest
  * to its own limit (highest max-of-windows) so partially-spent accounts drain before fresh
  * ones. Stable on ties (first wins). Pure. Returns null when empty. */
@@ -877,6 +902,9 @@ export async function autoRotate(
   // it is DOWN (we are only here because the live token is locally dead) we fall back to LOCAL
   // expiry — any alternate with known future runway, most-runway-first.
   const candidates: Candidate[] = []
+  // Candidates rejected ONLY by the model-scoped check, whose 5h/7d are both healthy. Consulted
+  // solely when `candidates` is empty — see the fallback below `isAccountWindowSafe`.
+  const scopedOnly: Candidate[] = []
   const degraded: Array<[string, CredentialBlob, number]> = [] // (email, blob, expiresInH)
   let indexHealed = false
   for (const email of Object.keys(state.slots ?? {})) {
@@ -930,7 +958,16 @@ export async function autoRotate(
       if (bfh === null || bsd === null) continue // unknown usage → not a safe target
       // Also reject a candidate whose MODEL-SCOPED window is spent: rotating onto it would look
       // like a healthy switch and then fail every call on that model. TRDD-JI7F1236.
-      if (!isSafeAlternate(bfh, bsd, worstScopedPercent(d2))) continue // near a limit → skip
+      if (!isSafeAlternate(bfh, bsd, worstScopedPercent(d2))) {
+        // MODEL-SCOPED-ONLY REJECTS ARE HELD, NOT DROPPED. If this candidate fails ONLY because a
+        // model window is spent — its 5h/7d are both healthy — keep it as a second-choice target.
+        // It is used below only when NOTHING passes the full test, so the preferred behaviour is
+        // bit-for-bit unchanged whenever a fully-safe account exists. See `isAccountWindowSafe`
+        // for the incident this closes: `stuck: "all-maxed"` declared while an account sat at 4%
+        // of its 5h window, because Fable was spent on every account.
+        if (isAccountWindowSafe(bfh, bsd)) scopedOnly.push([email, b, bfh, bsd])
+        continue // near a limit → skip (as a FIRST choice)
+      }
       candidates.push([email, b, bfh, bsd])
     } else {
       const eh = expiresInH(b)
@@ -939,6 +976,16 @@ export async function autoRotate(
     }
   }
   if (indexHealed) saveState(state) // before any switchLiveTo (it re-loads state from disk)
+
+  // MODEL-SCOPED FALLBACK — the fix for `stuck: "all-maxed"` declared over a 4%-used account.
+  // Placed AFTER the probe loop (it needs the final counts) and BEFORE the drain-guard, which
+  // reads `candidates.length` and must see the set we will actually rotate from.
+  //
+  // Strictly last-resort: it fires ONLY when the full test admitted nobody, so whenever a
+  // fully-safe account exists the behaviour is unchanged. Pushing (rather than reassigning) keeps
+  // `candidates` const and keeps ONE list feeding both the guard and `selectDrainFirst`, so the
+  // count the guard sees can never disagree with the set the selection uses.
+  if (candidates.length === 0 && scopedOnly.length > 0) candidates.push(...scopedOnly)
 
   // THE DRAIN-GUARD (TRDD-GY0LJV6S) — the LAST thing before either rotation path, so ONE placement
   // covers BOTH `switchLiveTo` calls below (drain-first and degraded). It has to sit here rather

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T10:32:45+0200
+updated: 2026-08-06T10:45:03+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -205,12 +205,46 @@ discarded — which is why the registry has not been updated since 10:00:31. AC1
 boots for a batch that cannot partially succeed, and the GitHub REQUEST count was never reduced by
 it at all (275 fetches either way; the cadence change is what cut frequency 3×).
 
-**Candidate fixes, none chosen yet** — this needs the USER, because the honest one touches their
-data: (a) prune the dead marketplaces (the actual problem, but it is user-owned config and 275 is
-their list, not ours); (b) return to per-name iteration so failures isolate, accepting the process
-cost; (c) chunk into batches small enough that one stall cannot void everything; (d) leave the
-900 s cap and accept that the refresh is best-effort. Raising the cap alone is (d) wearing a
-disguise.
+### RESOLVED (the half that is ours) — measured 1082 s, budget raised to 30 min, `9a74baca`
+
+The hand-run finished: **`real 1082.26 s` (18.0 min), EXIT 0, `✔ Successfully updated 275
+marketplace(s)`** — `user`+`sys` ≈ 150 s, i.e. **14 % CPU**, confirming network-blocked. So the
+batch is NOT unbounded and the earlier "no timeout value is safe" reading was wrong: it needs
+1082 s and we allowed 900 s, a **182 s shortfall**. We were killing a run that worked.
+
+`MARKETPLACE_REFRESH_TIMEOUT_MS = 30 * 60 * 1000` — sized from the measurement (~66 % headroom,
+still far under the 3 h cadence so a slow run cannot overlap the next). Extracted as an exported
+constant so a test can pin it, and the new assertion is tied to the MEASUREMENT
+(`> 1082 s`) rather than to "a timeout is present", which is what would have passed over the 900 s.
+
+**Why no test caught this.** `refresh-all-marketplaces.test.ts` recorded argv and threw the options
+object away as `_opts`. The one test that could have seen the timeout did not look at it. It now
+records `opts`. Three neuters observed: name-in-argv → 1 red; constant back to `900000` → **1 red,
+exactly the budget test**; drop the option → 3 red (broader, because removing the argument shifts
+promisify's callback position). The stale `$. == 5431` line citation in that file's neuter block
+was removed rather than corrected — the argv line is now 5457, and a coordinate nothing verifies
+rots silently.
+
+### STILL THE USER'S CALL — 10 dead marketplaces are ~80 % of the 18 minutes
+
+Probed all 275 sources with `git ls-remote` (8-way, 12 s), then re-probed the failures at 45 s with
+a positive control. **10 return `rc=128 — Repository not found`**, a definitive GitHub answer, not
+a timeout:
+
+`kreatsaas-marketplace` · `cattoolkit` · `dreamwalker-marketplace` · `pnl-dev-marketplace` ·
+`naw3-skills` · `milo-claudekit` · `expanly-claude-code-agents` · `ccx-arsenal` · `taisun-agent` ·
+`cognitive-mechanisms`
+
+A healthy marketplace refreshes in **0.8 s**, so 265 good ones ≈ 3.5 min and the remaining ~14.5 min
+is those 10. Pruning them would cut the refresh from 18 min to ~4 min and make the 900 s cap
+comfortable again. **I did not prune them: `extraKnownMarketplaces` is user-owned config, and 275
+is the USER's list, not ours.** The raised cap is the safe half; this is the effective half, and it
+needs their word.
+
+Note the earlier framing here was too pessimistic in one respect and too generous in another: the
+worst case is not 9.2 hours (the CLI does not spend a full 120 s on a `Repository not found`), and
+"raising the cap is (d) in disguise" was wrong — it demonstrably rescues a working run. Both
+corrections come from the measurement, which is why it was worth the extra refresh.
 
 **Separately, the card's TITLE half is confirmed still live and untouched.** 199 per-plugin rows,
 73 distinct timestamps spanning 08:10:12 → 10:17:55, every one failing with

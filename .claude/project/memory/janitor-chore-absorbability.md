@@ -1,8 +1,8 @@
 ---
 name: janitor-chore-absorbability
-description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken"
+description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken / auto-update says enabled false and lastRunAt null but something is making hundreds of calls / lastRunSummary shows 38 failed plugin updates that no longer happen / the same plugin appears both failed and updated / is the absorbed lane running at all"
 ocd: 2026-08-05
-lmd: 2026-08-05
+lmd: 2026-08-06
 metadata:
   node_type: memory
   type: project
@@ -160,6 +160,45 @@ PUBLISHES, the janitor CONSUMES** — the same shape as `server-liveness.json`,
 `agent-directory.json` and `<project>/.janitor/daemon_responses/`. When a cross-project handoff
 needs a file, the question is never "may I write into their tree" but "where do I publish so they
 can read it".
+
+
+^ATOM-AL7D-5VUY [desc:"The absorbed auto-update lane is NOT gated on enabled, so the settings file can read enabled:false lastRunAt:null while it is making hundreds of calls — read lastAbsorbedRunAt, and group lastRunSummar", keywords: auto-update_reports_failures_but_plugins_are_current lastRunSummary_shows_38_failed absorbed_lane_observability is_anything_running lastAbsorbedRunAt enabled_false_but_network_calls github_rate_limit_investigation, ocd: 2026-08-06, lmd: 2026-08-06]
+
+`services/auto-update-service.ts` runs **two lanes** against
+`~/.aimaestro/auto-update-settings.json`, and only one of them obeys the master
+toggle:
+
+| lane | gated on `enabled`? | its timestamp |
+|---|---|---|
+| the user-facing scheduler | **yes** | `lastRunAt` |
+| the **absorbed-duty** lane (TRDD-PE54D95Q AC5) | **NO — always runs** | `lastAbsorbedRunAt` |
+
+So the file can honestly report `enabled: false` and `lastRunAt: null` while the
+absorbed lane ran an hour ago and made hundreds of network calls. Every field is
+true on its own and the document as a whole misleads — this is what made a
+GitHub rate-limit investigation take six wrong hypotheses before anyone looked
+here. `lastAbsorbedRunAt` exists so "is anything running?" is answerable by
+READING the file rather than inferring from a summary.
+
+
+^ATOM-5PRK-83BU [desc:"lastRunSummary is a CROSS-TICK rolling trail capped at 200 rows spanning ~3 ticks — counting statuses across the whole array reports failures a clean lane no longer has; group rows by 'at' first", keywords: lastRunSummary_shows_failures_that_no_longer_happen 38_failed_but_the_lane_is_clean same_plugin_both_failed_and_updated auto-update_summary_lies rolling_trail_not_this_run group_by_at, ocd: 2026-08-06, lmd: 2026-08-06]
+
+**`lastRunSummary` is a CROSS-TICK rolling trail, not this run's results**,
+despite the name. `appendRunEntry` PREPENDS and caps at 200, so the array spans
+however many recent ticks fit in 200 rows — three, at the ~80 targets/tick this
+host sees.
+
+Counting statuses across the whole array reports failures for a lane that
+currently has none, and the SAME target legitimately appears as both `failed`
+and `updated` at different timestamps. **Group rows by `at` before drawing any
+conclusion.**
+
+Measured 2026-08-06: 200 rows over 80 distinct targets = one PRE-fix tick (38
+failed) plus two POST-fix ticks (80 updated / 0 failed each). The misread
+happened three times in one afternoon — twice by hand and once by a monitoring
+script — before anyone grouped by `at`. The name is kept because it is a
+PERSISTED field and renaming it needs a migration; the docstring in
+`lib/auto-update-settings.ts` is the cheaper half of that fix.
 
 ## Notes and lessons learned
 

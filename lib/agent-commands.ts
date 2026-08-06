@@ -53,6 +53,39 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
     requiresIdle: true,
     description: 'Compact the conversation to reclaim context window.',
   },
+  // ── Model fallback (USER, 2026-08-06) ───────────────────────────────────────
+  // A model-scoped weekly window (e.g. Fable) can be exhausted while the ACCOUNT
+  // still has most of its 5h/7d capacity. Measured that day: the live account sat
+  // at 5h 42% / 7d 60% with its Fable window at ~98%, and the rotator responded by
+  // evicting the whole fleet onto accounts at 99% (5h) and 87% (7d) — because
+  // `isSafeAlternate` treats "maxed on ANY window" as "unusable for ALL work", so
+  // the healthiest account was disqualified by a limit that binds ONE model.
+  //
+  // Rotating the credential is the expensive answer to that. Switching the MODEL is
+  // the cheap one: the account keeps serving every non-Fable request at full speed.
+  // The owner's words: "fable window limit is not a true limit.. the solution is
+  // simply to fallback to Opus 5".
+  //
+  // Fixed command strings, deliberately — no interpolated model name. A curated key
+  // per target model cannot be steered by a caller, which is the whole point of an
+  // allowlist standing in front of a pane write.
+  //
+  // requiresIdle: a model switch mid-turn would land in whatever the agent is typing.
+  // Not destructive: it changes which model answers next; it wipes nothing.
+  {
+    key: 'model-opus',
+    label: 'Switch model to Opus',
+    command: '/model opus',
+    requiresIdle: true,
+    description: 'Fall back to Opus — use when a model-scoped window is exhausted but the account still has 5h/7d headroom.',
+  },
+  {
+    key: 'model-sonnet',
+    label: 'Switch model to Sonnet',
+    command: '/model sonnet',
+    requiresIdle: true,
+    description: 'Switch to Sonnet — the cheaper fallback when Opus is also constrained.',
+  },
   {
     key: 'clear',
     label: 'Clear context',

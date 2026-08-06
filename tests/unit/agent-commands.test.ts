@@ -33,6 +33,42 @@ describe('agent-commands allowlist (TRDD-TBGGUA2V P2)', () => {
     }
   })
 
+  // ── Model fallback (USER, 2026-08-06) ─────────────────────────────────────────
+  //
+  // WHY THIS IS A CAPABILITY AND NOT A CONVENIENCE. A model-scoped weekly window can be
+  // exhausted while the ACCOUNT still has most of its 5h/7d left. Measured that day: the
+  // live account was at 5h 42% / 7d 60% with Fable at ~98%, and the rotator's response was
+  // to evict the entire fleet onto accounts at 99% (5h) and 87% (7d) — because
+  // `isSafeAlternate` disqualifies an account maxed on ANY window, including one that binds
+  // a single model. The owner had to fix it by hand, and the fix was one keystroke:
+  // "fable window limit is not a true limit.. the solution is simply to fallback to Opus 5".
+  //
+  // Without an allowlist entry there is no path to that at all — the fleet can compact and
+  // clear its context but cannot change which model answers.
+
+  it('offers a model fallback, because a model-scoped limit must not cost the account', () => {
+    const opus = getAgentCommand('model-opus')
+    expect(opus).toBeDefined()
+    expect(opus?.command).toBe('/model opus')
+    // Idle-gated: a model switch mid-turn lands in whatever the agent is typing.
+    expect(opus?.requiresIdle).toBe(true)
+    // NOT destructive — it changes which model answers next; it wipes no context. Marking it
+    // destructive would put a confirmation in front of the one action that relieves pressure.
+    expect(opus?.destructive).toBeFalsy()
+  })
+
+  it('the model target is a FIXED string per key — never interpolated from a caller', () => {
+    // A single `model` key taking an argument would put caller-controlled text into a pane
+    // write. One curated key per target model cannot be steered, which is what the allowlist
+    // is for. Assert the shape rather than just the presence.
+    const models = AGENT_COMMANDS.filter((c) => c.key.startsWith('model-'))
+    expect(models.length).toBeGreaterThanOrEqual(2)
+    for (const m of models) {
+      expect(m.command).toMatch(/^\/model [a-z0-9-]+$/)
+      expect(m.command).not.toMatch(/\$\{|\$[A-Za-z_]/) // no interpolation of any kind
+    }
+  })
+
   it('marks context-wiping commands destructive', () => {
     expect(getAgentCommand('clear')?.destructive).toBe(true)
     // a routine command is not destructive

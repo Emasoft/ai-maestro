@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T10:20:03+0200
+updated: 2026-08-06T10:32:45+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -178,11 +178,39 @@ is the BUDGET: 275 short calls each met their own timeout, and the single call m
 whole job into one. Nothing in the test suite can see this — the CLI is mocked there, so the
 timeout is invisible by construction and only a live run could surface it.
 
-**Do not "fix" this by guessing a larger timeout.** A measurement is in flight — the same argless
-command run by hand with `/usr/bin/time`, un-killed — to establish what it actually needs. Three
-outcomes, three different fixes: it finishes in a few minutes over 15 (raise the budget); it takes
-far longer (the refresh must become incremental/resumable, which is its own TRDD); or it hangs
-indefinitely (a CLI bug, and the timeout is correct to have caught it).
+**DIAGNOSED — and a larger timeout is the WRONG fix.** Three measurements, taken rather than
+assumed:
+
+| measurement | value | what it rules out |
+|---|---|---|
+| one marketplace, per-name form | **0.8 s**, exit 0 | the per-marketplace work is not slow |
+| ⇒ 275 sequential at that rate | **≈3.7 min** | the 900 s budget should be ~4× sufficient |
+| the argless batch, CPU vs elapsed | **19.1 s CPU in 12:56**, 0.7 %, state `S` | it is NOT computing — it is BLOCKED ON NETWORK |
+
+The single-marketplace run printed the mechanism itself: `Refreshing marketplace cache
+(timeout: 120 s)` — a **per-marketplace** 120 s budget. So a handful of dead or unreachable repos
+among the 275 (263 `github`, 10 `git`, 2 `directory`, accumulated over time) dominates the total:
+~8 stalled entries × 120 s ≈ 16 min, which matches what we see. Worst case is 275 × 120 s ≈ **9.2
+hours**, so there is no timeout value that is both safe and meaningful.
+
+**Note what silence did NOT prove.** The batch emitted 30 bytes and nothing more for 13 minutes,
+which looks like a hang — but stdout was redirected to a file, so it is BLOCK-BUFFERED. The
+CPU-vs-elapsed reading is what actually distinguished "blocked" from "hung", and it is the
+instrument to reach for; output volume is not evidence about a redirected process.
+
+**The real regression is failure SEMANTICS, and it is mine.** Under the old per-name loop a dead
+marketplace cost 120 s and the other 274 still landed. Collapsing to one argless call made the
+batch ALL-OR-NOTHING: one stalled entry pushes the whole run past the budget and every result is
+discarded — which is why the registry has not been updated since 10:00:31. AC1 traded 274 process
+boots for a batch that cannot partially succeed, and the GitHub REQUEST count was never reduced by
+it at all (275 fetches either way; the cadence change is what cut frequency 3×).
+
+**Candidate fixes, none chosen yet** — this needs the USER, because the honest one touches their
+data: (a) prune the dead marketplaces (the actual problem, but it is user-owned config and 275 is
+their list, not ours); (b) return to per-name iteration so failures isolate, accepting the process
+cost; (c) chunk into batches small enough that one stall cannot void everything; (d) leave the
+900 s cap and accept that the refresh is best-effort. Raising the cap alone is (d) wearing a
+disguise.
 
 **Separately, the card's TITLE half is confirmed still live and untouched.** 199 per-plugin rows,
 73 distinct timestamps spanning 08:10:12 → 10:17:55, every one failing with

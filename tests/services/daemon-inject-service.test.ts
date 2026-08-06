@@ -18,13 +18,14 @@
  * The runtime and the registry are mocked (they are the service's data sources); the service and
  * the real signature verification run REAL — a mocked verifier would test the mock.
  *
- * NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restore blob-verified):
- *   · A `runtime.sendKeys(sessionName, 'Escape')` → `sendKeys(sessionName, 'Escape', {literal: true})`
+ * NEUTER RUNS (2026-08-06 — all three OBSERVED via scripts/dev/neuter, restore blob-verified):
+ *   · A `runtime.sendKeys(sessionName, 'Escape')` → `sendKeys(…, 'Escape', { literal: true })`
  *     (route the interrupt through the LITERAL path — the regression that types the word)
- *     → 1 red: 'interrupt sends a RAW non-literal key'.
- *   · B delete `injectedPrompts.set(...)` from `interruptSession`
- *     → 1 red: 'interrupt marks the injection (#117)'. sendCommand's own mark is untouched, so
- *       its test stays green — which is what shows the two doors are pinned separately.
+ *     → 2 red: 'interrupt sends a RAW non-literal key' AND 'the interrupt verb dispatches to the
+ *       raw-key primitive' — the primitive and the dispatch are pinned at both altitudes.
+ *   · B `injectedPrompts.set(...)` deleted from `interruptSession`
+ *     → 1 red: 'interrupt marks the injection (#117)'. sendCommand's own mark is untouched and
+ *       its tests stay green — which is what shows the two doors are pinned SEPARATELY.
  *   · C `requireIdle: false` → `requireIdle: true` in the submit-recovery-prompt dispatch
  *     → 1 red: 'a recovery prompt reaches a BUSY session'. This is the #110 trap: with the
  *       default, every recovery 409s exactly when it is needed.

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T08:04:12+0200
+updated: 2026-08-06T09:51:58+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -92,12 +92,51 @@ sync", but it is NOT decisive and must not be recorded as such: a write that onl
 `lastUpdated` is a CATALOG REFRESH, which is a different event from an instance BOOT reading
 `settings.json`. Only the boot re-derives the flag. Do not close AC6 on this.
 
-**The check to run when a session has started after 07:46:** re-read the registry. If its
-entries now carry `autoUpdate: true`, the sync is settings → registry and the flip works; then
-AC6 may proceed. If they do NOT, the registry is authoritative for this flag, it has **no
-sanctioned writer** (the settings gate refuses that path by basename and parent dir), and that
-is a governance decision about a harness-owned file — not a coding task. Do not delete the
-loops until one of those two is established.
+### ⚠ 2026-08-06 09:50 — EVERY MEASUREMENT ABOVE WAS TAKEN AGAINST A SERVER RUNNING PRE-FIX CODE
+
+**None of this card's four commits were deployed.** `.next` was built **07:08:18** and pm2 started
+**07:08:27**; the cadence commit `4e66947e` landed **07:26:25**. So the build predates the first fix
+by 18 minutes, and `services/auto-update-service.ts` is BUNDLED — it does not go live on a restart
+alone. Three independent confirmations, none of them a timestamp:
+
+- `~/.aimaestro/auto-update-settings.json` carried **no `lastAbsorbedRunAt` key** (the field
+  `15f752d3` adds);
+- its `lastRunSummary` held **200 rows of the OLD per-plugin shape**
+  (`claude plugin update <x> <y> --scope user`), not the single `absorbed:marketplace-refresh`
+  row `7c104ba4` emits — and **every one of the 200 was `failed`**, i.e. the rate-limit symptom
+  this card exists to fix was still occurring, live, at 09:10:13;
+- the registry was being stamped **hourly on the `:09:56` mark**, which is the OLD 1-hour cadence.
+
+**The mis-attribution is the reusable part.** The gate above says *"the check to run when a session
+has started after 07:46"* — I was waiting on a Claude Code BOOT to explain the registry writes. The
+writer was **our own undeployed lane**, refreshing catalogs every hour. I had correctly ruled out
+"this is a boot" (lines above) and then never asked *who else it could be*, so the observation was
+filed against the wrong actor and the wait had no end condition. Ruling out one cause is not
+identifying one.
+
+**Deployed 09:50** — `bash scripts/with-node.sh yarn build` (exit 0, 0 errors, 180s) + `pm2 restart`
+(build 09:50:28, pm2 09:50:39, both now after 07:26:25). Verified in the ARTIFACT THAT EXECUTES,
+not by `git log`: `absorbed:marketplace-refresh` and `lastAbsorbedRunAt` are both present in
+`.next` (1 file each, with `absorbed:` as the positive control proving the grep works). Note the
+numeric-constant grep is NOT a valid instrument here — `10800000` and `3600000` both return **0**
+files, because the source writes `3 * 60 * 60 * 1000` and the bundler keeps the expression. All 3
+tmux agents survived (they are independent processes; only the dashboard WebSocket reconnects).
+
+**A NEW fact that weakens the "registry is authoritative" branch below.** Only **15 of 275**
+registry entries carry an `autoUpdate` key AT ALL (all 15 `false`); the other 260 have no such
+key, and the entries also carry `source` / `installLocation` / `lastUpdated`. A field absent from
+260 of 275 entries cannot be the authority for those 260 — that shape reads as a runtime CACHE
+holding an add-time snapshot, not as a declaration. Three marketplaces disagree outright
+(`awesome-claude-code-plugins`, `emasoft-plugins`, `huggingface-skills`: settings `true`, registry
+`false`), and the first two were re-stamped at 07:08:5xZ *after* the flip without adopting it.
+
+**The check to run when a session has started after 09:50** (unchanged in substance, now measurable
+for the first time — the previous attempts were all reading a pre-fix server): re-read the registry.
+If its entries now carry `autoUpdate: true`, the sync is settings → registry and the flip works;
+then AC6 may proceed. If they do NOT, the remaining question is a READ-ORDER question — *which file
+does Claude Code consult at startup* — which static inspection cannot answer and which is a
+governance matter about a harness-owned file with **no sanctioned writer** (the settings gate
+refuses that path by basename and parent dir). Do not delete the loops until one is established.
 
 ## Problem
 

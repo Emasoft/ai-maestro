@@ -27,6 +27,13 @@ import {
   type InboxNudgeResult,
 } from '@/lib/fleet-inbox-nudge'
 import { trackDeadDebounce, type DeadPartition } from '@/lib/fleet-dead-debounce'
+import { readTickWindows } from '@/lib/oauth-rotator/tick-status'
+import { runModelFallbackSweep } from '@/lib/oauth-rotator/model-fallback-sweep'
+import {
+  collectFallbackCandidates,
+  defaultModelFallbackDeps,
+  type FallbackAgentRef,
+} from '@/lib/oauth-rotator/model-fallback-deps'
 import {
   runContinuityTick,
   defaultContinuityDeps,
@@ -83,6 +90,10 @@ export interface FleetLivenessWatchdogOptions {
   nudgeEnabled?: boolean
   /** Injectable inbox-nudge pass for tests; defaults to the real tick over the module store. */
   runNudge?: () => Promise<InboxNudgeResult>
+  /** Model-fallback leg: default-OFF (AIM_FLEET_MODEL_FALLBACK=1 enables). Stays off until one
+   *  switch has been watched end to end on a real pane — no test can prove the confirming ENTER
+   *  actually dismissed Claude Code's dialog. */
+  modelFallbackEnabled?: boolean
   /** Injectable continuity pass for tests; defaults to the real tick over the module store. */
   runContinuity?: () => Promise<ContinuityTickResult>
   /** Boot-debounce for the `dead` class (TRDD-SX593MDG D2); defaults to the real sidecar-backed
@@ -126,6 +137,23 @@ const continuityStore = new Map<string, ContinuityState>()
 /** Clear the continuity state — for tests only. */
 export function resetContinuityStore(): void {
   continuityStore.clear()
+}
+
+/**
+ * The model-fallback leg is OFF by default and must stay that way until one switch has been
+ * watched end to end on a real pane. No test can prove the confirming ENTER actually dismissed
+ * Claude Code's dialog — the tests prove the keystroke is SENT — so arming this is a deliberate
+ * human act. `AIM_FLEET_MODEL_FALLBACK=1` enables it.
+ */
+const DEFAULT_MODEL_FALLBACK = process.env.AIM_FLEET_MODEL_FALLBACK === '1'
+
+/** When this sweep last switched an agent. ONE timestamp, not a Map: the sweep switches at most
+ *  one agent per tick and the interval is fleet-wide, not per agent. */
+const modelFallbackState: { lastSweepAtMs: number | null } = { lastSweepAtMs: null }
+
+/** Clear the model-fallback pacing clock — for tests only. */
+export function resetModelFallbackState(): void {
+  modelFallbackState.lastSweepAtMs = null
 }
 
 /**
@@ -190,6 +218,61 @@ export async function runFleetLivenessTick(
           log(`[FleetLiveness] recovery ESCALATION NEEDED ${e.name || e.agentId}: ${e.reason} — gentle ladder exhausted; human / Phase C`)
       } catch (err) {
         log(`[FleetLiveness] recovery pass failed (non-fatal): ${(err as Error)?.message || err}`)
+      }
+    }
+
+    // Model-fallback leg: when a MODEL-SCOPED window is exhausted but the account still has
+    // headroom, switch the agents on that model instead of rotating the credential. This is the
+    // only subsystem that can: the rotator tick has the window numbers and no agents, this
+    // watchdog has the agents and no credential access, so the two meet at the persisted stamp.
+    //
+    // Own try, like every other leg — a fallback failure must never discard the liveness snapshot.
+    if (opts.modelFallbackEnabled ?? DEFAULT_MODEL_FALLBACK) {
+      try {
+        const windows = readTickWindows()
+        // No stamp, stale stamp, or no scoped window ⇒ nothing to decide on. Silent: this is the
+        // overwhelmingly common case and a line per tick would drown the log a human reads.
+        if (windows?.scopedModel != null && windows.scopedPct != null) {
+          const agents: FallbackAgentRef[] = snap.agents.map((a) => ({ id: a.agentId, name: a.name }))
+          const { candidates, unreadable } = await collectFallbackCandidates(agents)
+          const out = await runModelFallbackSweep(
+            {
+              scopedModel: windows.scopedModel,
+              scopedPct: windows.scopedPct,
+              account5hPct: windows.fiveHourPct,
+              account7dPct: windows.sevenDayPct,
+              candidates,
+              lastSweepAtMs: modelFallbackState.lastSweepAtMs,
+              // The SAME per-agent clock the recovery ladder uses — the cooldown is per agent,
+              // not per subsystem, or two legs each nudging "once per window" double-nudge.
+              lastActuatedAtMs: (id) => recoveryStore.get(id)?.lastActuatedAtMs ?? null,
+            },
+            defaultModelFallbackDeps(true, (id) => agents.find((a) => a.id === id), now),
+          )
+          if (out.acted) {
+            // Stamp the clock ONLY on a real switch. Stamping on a refusal would silence the
+            // sweep for a further interval each tick and it would never make progress.
+            modelFallbackState.lastSweepAtMs = now()
+            recoveryStore.set(out.agentId, {
+              attempt: recoveryStore.get(out.agentId)?.attempt ?? 0,
+              lastActuatedAtMs: now(),
+            })
+            const c = out.decision.fired ? out.decision.confirmed : null
+            log(
+              `[FleetLiveness] model-fallback SWITCHED ${out.agentId} off ${windows.scopedModel} ` +
+                `(${Math.round(windows.scopedPct)}%) — confirmed=${c === null ? 'unknown' : c}`,
+            )
+          } else if (out.reason !== 'paced' && out.reason !== 'no-agents-on-that-model') {
+            // `paced` and the drained state are the healthy quiet cases. Everything else is a
+            // refusal a human may want to know about.
+            log(`[FleetLiveness] model-fallback held off: ${out.reason}${out.detail ? ` (${out.detail})` : ''}`)
+          }
+          if (unreadable.length > 0) {
+            log(`[FleetLiveness] model-fallback could not read ${unreadable.length} pane(s): ${unreadable.join(', ')}`)
+          }
+        }
+      } catch (err) {
+        log(`[FleetLiveness] model-fallback leg failed (non-fatal): ${(err as Error)?.message || err}`)
       }
     }
 

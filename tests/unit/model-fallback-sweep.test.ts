@@ -122,6 +122,39 @@ describe('runModelFallbackSweep — refusals propagate with their reason', () =>
     if (out.acted) throw new Error('unreachable')
     expect(out.detail).toMatch(/cooldown/)
   })
+
+  it('SKIPS a cooled-down agent and switches the next one instead of stalling', async () => {
+    // The first version took actions[0] only, so one agent could block the whole sweep: a switch
+    // that FAILED to take leaves that agent still on the exhausted model, still first, and
+    // holding a 10-minute cooldown — during which no OTHER agent gets switched. Invisible in the
+    // happy case, because a switched agent leaves the candidate list on the next pane read.
+    const { d, sent } = deps()
+    const out = await runModelFallbackSweep(
+      inputs({ lastActuatedAtMs: (id) => (id === 'a1' ? NOW - 1_000 : null) }),
+      d,
+    )
+    expect(out).toMatchObject({ acted: true, agentId: 'a2' })
+    expect(new Set(sent.map(s => s.agentId))).toEqual(new Set(['a2']))
+  })
+
+  it('does NOT skip past a fleet-wide refusal — that would just re-refuse once per agent', async () => {
+    // Cooldown is the only PER-AGENT gate. HID presence, the fire flag, a machine-wide STOP all
+    // apply to every candidate equally, so iterating would report the last one having tried N.
+    const { d, sent } = deps({ hidPresent: () => true })
+    const out = await runModelFallbackSweep(inputs(), d)
+    expect(out).toMatchObject({ acted: false, reason: 'refused' })
+    if (out.acted) throw new Error('unreachable')
+    expect(out.detail).toMatch(/hid_present/)
+    expect(sent).toEqual([])
+  })
+
+  it('reports the last cooldown when EVERY candidate is cooling down', async () => {
+    const { d } = deps()
+    const out = await runModelFallbackSweep(inputs({ lastActuatedAtMs: () => NOW - 1_000 }), d)
+    expect(out).toMatchObject({ acted: false, reason: 'refused' })
+    if (out.acted) throw new Error('unreachable')
+    expect(out.detail).toMatch(/cooldown/)
+  })
 })
 
 /*

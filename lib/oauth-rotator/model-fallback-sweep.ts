@@ -71,13 +71,25 @@ export async function runModelFallbackSweep(
   })
   if (!plan.act) return { acted: false, reason: plan.skip }
 
-  // ONE per invocation. `plan.actions[0]` is always due (dueAtMs === now for i=0); the rest are
-  // deliberately dropped rather than queued — the next sweep re-derives them from the panes, and
-  // by then this agent has left the list.
-  const action = plan.actions[0]!
-  const decision = await actuateModelFallback(action, input.lastActuatedAtMs(action.agentId), deps)
-  if (!decision.fired) {
-    return { acted: false, reason: 'refused', detail: `${decision.reason}${decision.detail ? `: ${decision.detail}` : ''}` }
+  // ONE SWITCH per invocation — but try candidates in order until one is not COOLDOWN-gated.
+  //
+  // Taking only `actions[0]` was the first version and it stalls the whole sweep on one agent:
+  // a switch that FAILED to take leaves that agent still on the exhausted model, still first in
+  // the list, and holding a 10-minute per-agent cooldown — so for ten minutes the sweep refuses
+  // and NO other agent gets switched. In the happy case it is invisible (a switched agent leaves
+  // the list on the next pane read), which is exactly why it needs saying.
+  //
+  // Cooldown is the only PER-AGENT gate, so it is the only one worth skipping past. Every other
+  // refusal — the fire flag, a machine-wide STOP, HID presence, an unknown command key — is
+  // fleet-wide, and trying the next agent would just re-refuse N times and report the last one.
+  let lastRefusal: string | undefined
+  for (const action of plan.actions) {
+    const decision = await actuateModelFallback(action, input.lastActuatedAtMs(action.agentId), deps)
+    if (decision.fired) return { acted: true, agentId: action.agentId, decision }
+    const detail = `${decision.reason}${decision.detail ? `: ${decision.detail}` : ''}`
+    if (decision.reason !== 'cooldown') return { acted: false, reason: 'refused', detail }
+    lastRefusal = detail
   }
-  return { acted: true, agentId: action.agentId, decision }
+  // Every candidate was cooling down. Healthy and temporary — they were all switched recently.
+  return { acted: false, reason: 'refused', detail: lastRefusal ?? 'no actionable candidate' }
 }

@@ -94,6 +94,10 @@ let tickInFlight = false  // prevents two ticks running concurrently if a slow
 // before this server absorbed them — see lib/janitor-presence.ts's module
 // doc for the full "consent-to-add is not consent-to-remove" argument.
 let absorbedTimerHandle: NodeJS.Timeout | null = null
+// One-shot boot catch-up (see scheduleAbsorbedDutyCatchUp). Held separately from the
+// repeating timer so stopAbsorbedDutyScheduler can clear BOTH — otherwise a stopped
+// scheduler still fires once after SIGTERM.
+let absorbedCatchUpHandle: NodeJS.Timeout | null = null
 let absorbedTickInFlight = false
 /** Cadence of the absorbed lane: **3 hours** (USER ruling, 2026-08-05, TRDD-PE54D95Q).
  *
@@ -110,6 +114,11 @@ let absorbedTickInFlight = false
  *  protocol operations count against NO GitHub API quota, so `gh api rate_limit` reads clean
  *  while this lane saturates. Measure it with the lane's own `lastRunSummary`, never a quota. */
 const ABSORBED_DUTY_INTERVAL_MS = 3 * 60 * 60 * 1000
+
+// How long after boot an OVERDUE lane waits before catching up. Not zero: the
+// server is still starting, and a refresh is I/O-heavy. Not long: the whole
+// point is that a host restarted more often than the interval still runs.
+const ABSORBED_DUTY_BOOT_SETTLE_MS = 2 * 60 * 1000
 
 /** Restart-queue notifier — wired by start(). The server.mjs entry point
  *  passes a callback that broadcasts a restart-needed signal to the UI's
@@ -223,6 +232,46 @@ export function startAbsorbedDutyScheduler(notifier?: FleetRestartNotifier): voi
     })
   }, ABSORBED_DUTY_INTERVAL_MS)
   if (typeof absorbedTimerHandle.unref === 'function') absorbedTimerHandle.unref()
+  scheduleAbsorbedDutyCatchUp()
+}
+
+/** A bare `setInterval` fires first at boot+INTERVAL, so a host restarted more often
+ *  than the interval NEVER runs this lane — and raising the cadence 1 h → 3 h
+ *  (TRDD-PE54D95Q) tripled that window. This is the restart-safe half: decide from the
+ *  PERSISTED `lastAbsorbedRunAt`, not from process uptime.
+ *
+ *  Pure on purpose — the decision is pinned by tests without touching a timer, and the
+ *  plumbing below stays thin enough to read in one go.
+ *
+ *  Persistence is also what keeps this safe under a restart LOOP: the first catch-up
+ *  stamps `lastAbsorbedRunAt`, so every reboot inside the interval computes "not
+ *  overdue" and does nothing. At most one run per interval, however often we boot. */
+export function absorbedDutyIsOverdue(lastAbsorbedRunAt: string | null | undefined, nowMs: number): boolean {
+  if (!lastAbsorbedRunAt) return true // never run on this host — the lane owes a first run
+  const last = Date.parse(lastAbsorbedRunAt)
+  if (!Number.isFinite(last)) return true // unparseable stamp: treat as never-run, never as fresh
+  if (last > nowMs) return false // clock moved backwards; wait for the interval rather than storm
+  return nowMs - last >= ABSORBED_DUTY_INTERVAL_MS
+}
+
+/** Fire ONE catch-up tick shortly after boot iff the lane is overdue. Failure here is
+ *  logged and swallowed: a scheduler that cannot read its own settings must still tick
+ *  on the interval. */
+function scheduleAbsorbedDutyCatchUp(): void {
+  if (absorbedCatchUpHandle) return
+  absorbedCatchUpHandle = setTimeout(() => {
+    absorbedCatchUpHandle = null
+    void (async () => {
+      try {
+        const s = await loadSettings()
+        if (!absorbedDutyIsOverdue(s.lastAbsorbedRunAt, Date.now())) return
+        await runAbsorbedDutyTickSafely()
+      } catch (err) {
+        console.error('[auto-update] Absorbed-duty boot catch-up failed:', err)
+      }
+    })()
+  }, ABSORBED_DUTY_BOOT_SETTLE_MS)
+  if (typeof absorbedCatchUpHandle.unref === 'function') absorbedCatchUpHandle.unref()
 }
 
 /** Stop the absorbed-duty scheduler. Idempotent. server.mjs calls this on SIGTERM. */
@@ -230,6 +279,12 @@ export function stopAbsorbedDutyScheduler(): void {
   if (absorbedTimerHandle) {
     clearInterval(absorbedTimerHandle)
     absorbedTimerHandle = null
+  }
+  // Clear the pending catch-up too, or a stopped scheduler still fires one tick
+  // after SIGTERM and every test that starts the scheduler leaks a live timer.
+  if (absorbedCatchUpHandle) {
+    clearTimeout(absorbedCatchUpHandle)
+    absorbedCatchUpHandle = null
   }
 }
 

@@ -85,8 +85,40 @@ curl -s -X POST localhost:23000/api/daemon/inject -d '{}'   # the middleware's a
 ```
 Rebuilt, restarted, health 200. 77 tests green across the surviving session-service suites.
 
+## Acceptance
+
+Added 2026-08-06T08:10 — see the Approval log entry below. This card was closed to `complete`
+with NO checklist at all, which is precisely the false-completion the gate catches: the rule is
+written over boxes that are unchecked, so a card with ZERO boxes passed it vacuously until the
+"≥1 box" half landed (TRDD-9QV4ZCYY). Every item below was in fact done and verified at closing
+time; the boxes record that, they do not claim anything new.
+
+- [x] Both `/api/daemon/*` routes removed — Next routes, headless-router entries, the
+      `security-registry.json` strict entry, `lib/daemon-principal.ts`,
+      `services/daemon-inject-service.ts` and their tests (`c7aaa6ab`).
+- [x] The auth-middleware whitelist entry removed — the load-bearing one, since that list is
+      where a future reader would otherwise re-add it — and replaced with a DO-NOT-ADD note
+      naming this incident.
+- [x] `interruptSession` KEPT as an internal function, with a docstring stating it must never
+      become a route; tests moved to `tests/services/interrupt-session.test.ts`, including a
+      case pinning that an agent may not interrupt a PEER.
+- [x] Verified LIVE, not merely by a green suite: rebuilt (zero `api/daemon` routes in the
+      manifest), restarted, health 200, and `POST /api/daemon/inject` now returns the
+      middleware's `auth_required` with no handler behind it.
+- [x] Public record corrected — `Emasoft/ai-maestro#60` comment 5200624697 retracts the
+      shipped-shape comment and tells the janitor Claude to delete anything built against it;
+      `Emasoft/ai-maestro-janitor#218` carries the full retraction.
+
 ## Approval log
 
 - 2026-08-06T07:09:37+0200 — MANDATE issued by USER (the ruling quoted above). Executed
   immediately: the reverted surface was LIVE on a running server, so leaving it up pending
   discussion was not an option. Supersedes TRDD-APN5WB2L.
+- 2026-08-06T08:10:00+0200 — GATE REPAIR (append-only log, which is exempt from the terminal
+  freeze; the `## Acceptance` section it refers to is the minimum edit that makes this card
+  satisfy the gate it was closed in violation of). `TERMINAL-WITHOUT-CHECKLIST` — closed to
+  `complete` carrying no checklist. No claim changed: every box records work already described
+  in the body and verified at closing. **Worth recording HOW it went unseen for an hour:**
+  `tests/unit/trdd-doctor.test.ts` asserts the corpus has ZERO ERROR-level findings, and that
+  file was already failing on an unrelated uncommitted neuter in `lib/trdd-doctor.ts` — so a
+  red suite masked a NEW red. A pre-existing failure is not a free pass; it is camouflage.

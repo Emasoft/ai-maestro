@@ -39,6 +39,14 @@ const {
     cancelCopyMode: vi.fn().mockResolvedValue(undefined),
     setEnvironment: vi.fn().mockResolvedValue(undefined),
     unsetEnvironment: vi.fn().mockResolvedValue(undefined),
+    // R42.8 Gate 0b's SECOND evidence source (TRDD-89LVZSQ0). The default is an IDLE
+    // pane — an agent that has asked nothing — so the gate's refusal tests refuse for
+    // the honest reason. Leaving it undefined is NOT neutral: the call would throw, the
+    // gate would take its could-not-read branch, and a test named "no prompt is pending"
+    // would pass while never once exercising a pane that shows no question.
+    capturePane: vi.fn().mockResolvedValue(
+      ['✻ Worked for 5m 35s', '❯ ', '  🤖 Opus 5 · 📁 my-agent'].join('\n'),
+    ),
   }
 
   let uuidCounter = 0
@@ -1092,7 +1100,16 @@ describe('sendAgentSessionCommand — R42.8 blocked-only precondition (Gate 0b)'
     governanceTitle: 'manager',
   } as AuthContext
 
-  it('REFUSES an unblock when no prompt is pending', async () => {
+  // `vi.clearAllMocks()` clears CALLS, not IMPLEMENTATIONS, so a `mockResolvedValue`
+  // set inside one test leaks into every test after it. These cases deliberately vary
+  // the pane, so the default has to be restored per test or their ORDER decides their
+  // outcome — and an order-dependent pass is indistinguishable from coverage.
+  const IDLE_PANE = ['✻ Worked for 5m 35s', '❯ ', '  🤖 Opus 5 · 📁 my-agent'].join('\n')
+  beforeEach(() => {
+    mockRuntime.capturePane.mockResolvedValue(IDLE_PANE)
+  })
+
+  it('REFUSES an unblock when neither the hook NOR the pane shows a question', async () => {
     const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockRuntime.sessionExists.mockResolvedValue(true)
@@ -1106,7 +1123,97 @@ describe('sendAgentSessionCommand — R42.8 blocked-only precondition (Gate 0b)'
 
     expect(result.status).toBe(409)
     expect(result.error).toMatch(/no prompt is pending/i)
+    // Refused for the HONEST reason — the pane was read and showed an idle agent. Without
+    // this the test also passes when the pane throws, which is a different outcome with a
+    // different fix, and the two must not share an assertion.
+    expect(result.error).toMatch(/terminal: idle/)
     // The whole point: the keystroke never reached the pane.
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
+  })
+
+  // ── The pane as Gate 0b's second evidence source (TRDD-89LVZSQ0) ──────────
+  //
+  // The gate used to consult the hook's chat-state record ALONE, and that made the
+  // whole R42.8 exception inert for the one prompt shape that blocks forever: across
+  // 419 live chat-state files, AskUserQuestion's `question` field appears in ZERO. So
+  // a genuinely stalled agent produced no pending record, the gate 409'd, and the
+  // refusal read like policy rather than a gap in the evidence. Measured against a
+  // live agent that sat blocked overnight while its MANAGER was refused permission.
+  //
+  // These four pin the resulting two-source gate. The distinction the first three draw
+  // is the load-bearing one: "the pane shows no question", "the pane shows a question",
+  // and "the pane could not be read" must be three different outcomes, because the
+  // middle one is the capability and the last one must never be mistaken for the first.
+
+  it('ALLOWS an unblock when the PANE shows a question the hook never captured', async () => {
+    // The case the whole card exists for. Hook: nothing. Pane: an open AskUserQuestion.
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue(null)
+    mockRuntime.capturePane.mockResolvedValue(
+      [
+        'Proceed now, or hold for your explicit go-ahead?',
+        '',
+        '❯ 1. Proceed now',
+        '  2. Hold for later',
+        '',
+        'Enter to select · ↑/↓ to navigate · Esc to cancel',
+      ].join('\n'),
+    )
+
+    const result = await sendAgentSessionCommand(
+      'agent-1',
+      { command: '1', requireIdle: false, authAction: 'unblock-prompt' },
+      AGENT_CALLER,
+    )
+
+    expect(result.status).toBe(200)
+    expect(result.data?.success).toBe(true)
+    expect(mockRuntime.sendKeys).toHaveBeenCalled()
+  })
+
+  it('REFUSES when the pane is STALLED but asked nothing (rate limit)', async () => {
+    // A rate-limited agent is stuck and has raised no question. Injecting into it is
+    // exactly the plain-injection case Gate 0b exists to refuse, so widening the gate
+    // to a second evidence source must NOT widen it to "any stalled agent".
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue(null)
+    mockRuntime.capturePane.mockResolvedValue(
+      '❯ \nAPI Error: 429 rate limit exceeded, retrying in 60s',
+    )
+
+    const result = await sendAgentSessionCommand(
+      'agent-1',
+      { command: 'do something else entirely', requireIdle: false, authAction: 'unblock-prompt' },
+      AGENT_CALLER,
+    )
+
+    expect(result.status).toBe(409)
+    expect(result.error).toMatch(/rate_limited/)
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
+  })
+
+  it('FAILS CLOSED when the pane cannot be read, and says so', async () => {
+    // "We could not check" must never be reported as "we checked and found nothing" —
+    // and it must not be silently permissive either. The message has to name the
+    // missing evidence or the next reader diagnoses the wrong half.
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue(null)
+    mockRuntime.capturePane.mockRejectedValue(new Error('no server running on /tmp/tmux-501'))
+
+    const result = await sendAgentSessionCommand(
+      'agent-1',
+      { command: '1', requireIdle: false, authAction: 'unblock-prompt' },
+      AGENT_CALLER,
+    )
+
+    expect(result.status).toBe(409)
+    expect(result.error).toMatch(/could not be read/i)
     expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
   })
 

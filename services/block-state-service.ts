@@ -13,6 +13,7 @@ import { getAgentById } from '@/services/agents-core-service'
 import { getRuntime } from '@/lib/agent-runtime'
 import { readPendingPrompt } from '@/services/sessions-service'
 import { resolveBlockState, matchPane, type BlockVerdict } from '@/lib/agent-block-state'
+import { computeSessionName } from '@/types/agent'
 
 /** How much scrollback to read. Enough to hold a long AskUserQuestion, bounded so a huge
  *  buffer cannot be pulled through this surface in one call. */
@@ -22,6 +23,69 @@ export interface BlockStateResult {
   data?: BlockVerdict & { matches?: string[]; sessionName: string }
   error?: string
   status?: number
+}
+
+export type PaneVerdict =
+  | { ok: true; verdict: BlockVerdict; paneText: string; sessionName: string }
+  | { ok: false; error: string; status: number }
+
+/**
+ * Capture and classify ONE agent's pane.
+ *
+ * Exported because two callers must reach the SAME verdict about the same pane: this
+ * service (the read route) and `sendAgentSessionCommand`'s R42.8 blocked-only precondition
+ * (the write gate). If they judged "blocked" differently, a supervisor could be shown a
+ * question it is then refused permission to answer — or, worse, be allowed to answer one it
+ * was never shown.
+ *
+ * THE SESSION NAME IS COMPUTED THE WAY THE WRITE PATH COMPUTES IT, and that is not a style
+ * preference. `sendAgentSessionCommand` addresses `computeSessionName(agent.name, index)`.
+ * An earlier draft here read `agent.session?.tmuxSessionName`, which is a different field
+ * and can hold a different string — so the read and the write could land on DIFFERENT panes,
+ * and a supervisor would answer a question it had not read. Read and write must name the
+ * same pane by construction, not by coincidence.
+ */
+export async function readPaneVerdict(
+  agentName: string | undefined,
+  sessionIndex: number,
+  workingDirectory?: string,
+): Promise<PaneVerdict> {
+  if (!agentName) {
+    return { ok: false, error: 'Agent has no name configured', status: 400 }
+  }
+  const sessionName = computeSessionName(agentName, sessionIndex)
+
+  let paneText: string
+  try {
+    paneText = await getRuntime().capturePane(sessionName, CAPTURE_LINES)
+  } catch (err) {
+    // A capture failure is NOT "not blocked" — reporting a healthy verdict here would tell a
+    // supervisor everything is fine about an agent we could not read at all.
+    return {
+      ok: false,
+      error: `Could not read the agent's pane: ${err instanceof Error ? err.message : String(err)}`,
+      status: 502,
+    }
+  }
+  if (!paneText) {
+    return { ok: false, error: 'Agent pane is empty or unreadable', status: 502 }
+  }
+
+  // The hook's label is a HINT only — measured to mislabel AskUserQuestion as
+  // `permission_prompt`, and to go ~17h stale on a blocked agent (which generates no events).
+  // `readPendingPrompt` is keyed by WORKING DIRECTORY (the chat-state file is
+  // sha256(cwd)[:16]), not by session name — a detail worth stating, because passing the
+  // session name here silently returns null forever and the verdict degrades to pane-only
+  // without anything reporting that the hint was never consulted.
+  let hookType: string | null = null
+  try {
+    const pending = workingDirectory ? readPendingPrompt(workingDirectory) : null
+    hookType = (pending as { notificationType?: string } | null)?.notificationType ?? null
+  } catch {
+    hookType = null
+  }
+
+  return { ok: true, verdict: resolveBlockState(paneText, hookType), paneText, sessionName }
 }
 
 /**
@@ -52,51 +116,13 @@ export async function getBlockState(
   }
   const agent = result.data.agent
 
-  // Resolution order taken from the shipped `aimaestro-session.sh::_resolve_session_name`
-  // (`.agent.session.tmuxSessionName // .agent.name`) rather than invented.
-  //
-  // NOTE for whoever touches this next: that script's jq path is
-  // `.agent.sessions[0].tmuxSessionName`, and the `AgentSession` TYPE declares no such
-  // field — only `LiveAgentSessionStatus` does. So the shipped script reads a property the
-  // type system does not guarantee on that path. It evidently works at runtime, so this is
-  // a type/shape divergence worth its own look, not something to "fix" blind from here.
-  // We read the DECLARED field and fall back to the agent name, which is the same answer in
-  // every case the script handles.
-  const sessionName = agent.session?.tmuxSessionName || agent.name
-  if (!sessionName) {
-    return { error: 'Agent has no session to inspect', status: 409 }
+  // Index 0 is the primary session — the same one `sendAgentSessionCommand` writes to.
+  const primary = agent.sessions?.find(s => s.index === 0)
+  const pane = await readPaneVerdict(agent.name, primary?.index ?? 0, agent.workingDirectory)
+  if (!pane.ok) {
+    return { error: pane.error, status: pane.status }
   }
-
-  let paneText: string
-  try {
-    paneText = await getRuntime().capturePane(sessionName, CAPTURE_LINES)
-  } catch (err) {
-    // A capture failure is NOT "not blocked" — reporting a healthy verdict here would tell a
-    // supervisor everything is fine about an agent we could not read at all.
-    return {
-      error: `Could not read the agent's pane: ${err instanceof Error ? err.message : String(err)}`,
-      status: 502,
-    }
-  }
-  if (!paneText) {
-    return { error: 'Agent pane is empty or unreadable', status: 502 }
-  }
-
-  // The hook's label is a HINT only — measured to mislabel AskUserQuestion as
-  // `permission_prompt`, and to go ~17h stale on a blocked agent (which generates no events).
-  // `readPendingPrompt` is keyed by WORKING DIRECTORY (the chat-state file is
-  // sha256(cwd)[:16]), not by session name — a detail worth stating, because passing the
-  // session name here silently returns null forever and the verdict degrades to pane-only
-  // without anything reporting that the hint was never consulted.
-  let hookType: string | null = null
-  try {
-    const pending = agent.workingDirectory ? readPendingPrompt(agent.workingDirectory) : null
-    hookType = (pending as { notificationType?: string } | null)?.notificationType ?? null
-  } catch {
-    hookType = null
-  }
-
-  const verdict = resolveBlockState(paneText, hookType)
+  const { verdict, paneText, sessionName } = pane
 
   if (opts.match !== undefined) {
     if (!verdict.blocked) {

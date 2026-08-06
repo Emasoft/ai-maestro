@@ -1582,17 +1582,48 @@ export async function sendAgentSessionCommand(
 
     // ── Gate 0b: R42.8 blocked-only precondition ──────────────────
     // An unblock is authorized because the agent ASKED a question and is waiting
-    // on the answer. With no pending prompt there is no question, so the send
-    // would be plain injection wearing the exception's name — refuse it here, in
-    // the service, so no route (present or future) can turn the narrow verb into
-    // a general channel by passing the flag. R42.8(a) + (g).
+    // on the answer. With no such question the send would be plain injection
+    // wearing the exception's name — refuse it here, in the service, so no route
+    // (present or future) can turn the narrow verb into a general channel by
+    // passing the flag. R42.8(a) + (g).
+    //
+    // TWO SOURCES OF EVIDENCE, because one of them cannot see the case that matters.
+    // This gate originally consulted ONLY the hook's chat-state record, and that made
+    // the whole exception INERT for an AskUserQuestion: across 419 live chat-state
+    // files the `question` field appears in ZERO (TRDD-89LVZSQ0). So an agent stalled
+    // on the one prompt shape that blocks forever produced no pending record, this
+    // gate 409'd, and the refusal read like policy — "an unblock may only answer a
+    // question the agent itself raised" — when the truth was that the agent HAD raised
+    // one and the hook had not written it down. A live agent sat blocked overnight
+    // against a MANAGER that was correctly refused permission to help it.
+    //
+    // The pane is the second source and it sees what the hook misses. Note the
+    // precondition is UNCHANGED in meaning: we still demand proof that the agent is
+    // waiting on a question of its own. Only prompt shapes count — a rate-limited or
+    // erroring agent is stalled but has asked nothing, so injecting into it would be
+    // exactly the plain injection this gate exists to refuse.
     if (authAction === 'unblock-prompt' && !authContext.isSystemOwner) {
       const { readPendingPrompt } = await import('@/services/sessions-service')
       const pending = agent.workingDirectory ? readPendingPrompt(agent.workingDirectory) : null
       if (!pending) {
-        return {
-          error: 'R42.8: no prompt is pending for this agent — an unblock may only answer a question the agent itself raised',
-          status: 409,
+        const { readPaneVerdict } = await import('@/services/block-state-service')
+        const primary = agent.sessions?.find(s => s.index === 0)
+        const pane = await readPaneVerdict(agent.name, primary?.index ?? 0, agent.workingDirectory)
+        // A pane we could not READ is not a pane that showed no question. Fail closed and
+        // say which evidence was missing, so "could not check" never reads as "checked".
+        if (!pane.ok) {
+          return {
+            error: `R42.8: no prompt is pending for this agent and its terminal could not be read (${pane.error}) — refusing to inject without proof the agent asked something`,
+            status: 409,
+          }
+        }
+        const asked = pane.verdict.blocked &&
+          (pane.verdict.reason === 'ask_user' || pane.verdict.reason === 'permission')
+        if (!asked) {
+          return {
+            error: `R42.8: no prompt is pending for this agent (hook: none; terminal: ${pane.verdict.reason}) — an unblock may only answer a question the agent itself raised`,
+            status: 409,
+          }
         }
       }
     }

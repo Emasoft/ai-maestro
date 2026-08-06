@@ -1,7 +1,10 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { statePath } from '../ecosystem-constants'
-import type { NextAction, TickReason, StuckReason } from './tick'
+// `WindowSnapshot` is imported rather than re-declared here: an identical second definition is a
+// second source of truth waiting to drift, and the import direction already runs this way
+// (tick-status → tick; tick does not import this module).
+import type { NextAction, TickReason, StuckReason, WindowSnapshot } from './tick'
 
 // The persisted stamp that bridges the OAuth-rotator beat to the continuity `status` verb
 // (TRDD-1GGQ4HWY → TRDD-DXJZM3BW). The beat (server-tick.ts::runOneTick) ACTUATES behind the R16
@@ -56,16 +59,8 @@ interface TickStatusFile {
    * rate-limited request this tick already makes, and two callers would then disagree about the
    * same window.
    */
-  windows?: PersistedWindows
+  windows?: WindowSnapshot
   at: string
-}
-
-/** Persisted window snapshot. Nullable throughout; null is UNKNOWN, never zero. */
-interface PersistedWindows {
-  fiveHourPct: number | null
-  sevenDayPct: number | null
-  scopedModel: string | null
-  scopedPct: number | null
 }
 
 /** A percentage is written only when it is a real number in range. Anything else is dropped, so
@@ -90,7 +85,7 @@ function pct(v: unknown): number | null {
  *  - all three percentages unknown — nothing was measured, so writing a snapshot of nulls would
  *    only make an unprobed tick look probed.
  */
-function windowsFor(v: unknown): PersistedWindows | null {
+function windowsFor(v: unknown): WindowSnapshot | null {
   if (!v || typeof v !== 'object') return null
   const w = v as Record<string, unknown>
   const fiveHourPct = pct(w.fiveHourPct)
@@ -169,4 +164,36 @@ export function readTickStatus(opts?: { now?: () => number }): NextAction | null
   const nowMs = opts?.now ? opts.now() * 1000 : Date.now()
   if ((nowMs - ts) / 1000 > MAX_AGE_S) return null // stale → do not override the live heuristic
   return d.nextAction as NextAction
+}
+
+/**
+ * The last tick's window snapshot, or null when absent, malformed, or STALE.
+ *
+ * Staleness is enforced with the same `MAX_AGE_S` as `readTickStatus`, and it matters more here:
+ * `readTickStatus` degrades to a heuristic when the stamp is old, whereas this feeds a decision
+ * to type into a live pane. An hour-old "Fable 98%" could easily describe a window that has since
+ * reset, and acting on it would switch a fleet that had no reason to move.
+ *
+ * Deliberately NOT derived from `readTickStatus` — that returns only `nextAction`, so reusing it
+ * would mean parsing the file twice and, worse, would tie the windows' validity to whether the
+ * ACTION was recognised. A stamp with an unreadable `nextAction` can still carry usable windows.
+ */
+export function readTickWindows(opts?: { now?: () => number }): WindowSnapshot | null {
+  let data: unknown
+  try {
+    data = JSON.parse(fs.readFileSync(tickStatusPath(), 'utf8'))
+  } catch {
+    return null
+  }
+  if (!data || typeof data !== 'object') return null
+  const d = data as { at?: unknown; windows?: unknown }
+  if (typeof d.at !== 'string') return null
+  const ts = Date.parse(d.at)
+  if (Number.isNaN(ts)) return null
+  const nowMs = opts?.now ? opts.now() * 1000 : Date.now()
+  if ((nowMs - ts) / 1000 > MAX_AGE_S) return null
+  // Re-validate on READ as well as on write. The file is on disk and can be edited, truncated, or
+  // written by an older build whose rules differed; a reader that trusts its own writer is only
+  // correct while exactly one version has ever run.
+  return windowsFor(d.windows)
 }

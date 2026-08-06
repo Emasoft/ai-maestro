@@ -3,7 +3,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
-import { writeTickStatus, readTickStatus } from '@/lib/oauth-rotator/tick-status'
+import { writeTickStatus, readTickStatus, readTickWindows } from '@/lib/oauth-rotator/tick-status'
 
 // 0-IMPACT: HOME → temp so statePath() writes the stamp inside the temp dir; no credential, no
 // network, no real state dir touched. Mirrors oauth-rotator-server-tick.test.ts's HOME guard, and
@@ -199,6 +199,54 @@ describe('tick-status — the persisted WINDOW snapshot (the cross-beat join)', 
     writeTickStatus({ nextAction: 'rotating', windows: 'not an object' })
     expect(readTickStatus()).toBe('rotating')
     expect(raw()).not.toHaveProperty('windows')
+  })
+})
+
+describe('tick-status — readTickWindows (what the fleet watchdog consumes)', () => {
+  const WINDOWS = { fiveHourPct: 42, sevenDayPct: 60, scopedModel: 'Fable 5', scopedPct: 98 }
+  const stampPath = () => statePath('oauth-rotator-tick-status.json')
+  /** Hand-write a stamp with an arbitrary age/shape, bypassing writeTickStatus. Must mkdir: the
+   *  temp HOME starts empty and only writeTickStatus creates the state dir. */
+  const putStamp = (obj: Record<string, unknown>) => {
+    fs.mkdirSync(path.dirname(stampPath()), { recursive: true })
+    fs.writeFileSync(stampPath(), JSON.stringify(obj))
+  }
+
+  it('reads back a fresh snapshot', () => {
+    writeTickStatus({ nextAction: 'stuck', stuck: 'all-maxed', windows: WINDOWS })
+    expect(readTickWindows()).toEqual(WINDOWS)
+  })
+
+  it('REFUSES a stale snapshot — an old "Fable 98%" may describe a window that has since reset', () => {
+    // This matters more than it does for readTickStatus: that one degrades to a heuristic, this
+    // one feeds a decision to type into a live pane.
+    putStamp({ nextAction: 'ok', at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(), windows: WINDOWS })
+    expect(readTickWindows()).toBeNull()
+  })
+
+  it('returns null when the stamp carries no windows at all', () => {
+    writeTickStatus({ nextAction: 'ok' })
+    expect(readTickWindows()).toBeNull()
+  })
+
+  it('RE-VALIDATES on read, not just on write', () => {
+    // The file is on disk: it can be hand-edited, truncated, or written by an older build whose
+    // rules differed. A reader that trusts its own writer is correct only while exactly one
+    // version has ever run. Here: a scoped percentage naming no model, which the sweep cannot join.
+    putStamp({
+      nextAction: 'ok',
+      at: new Date().toISOString(),
+      windows: { ...WINDOWS, scopedModel: null },
+    })
+    expect(readTickWindows()).toBeNull()
+  })
+
+  it('still yields windows when nextAction is UNRECOGNISED', () => {
+    // Pins the decoupling from readTickStatus: tying the windows' validity to whether the ACTION
+    // parsed would discard perfectly good measurements over an unrelated vocabulary mismatch.
+    putStamp({ nextAction: 'a-verb-from-a-future-build', at: new Date().toISOString(), windows: WINDOWS })
+    expect(readTickStatus()).toBeNull()
+    expect(readTickWindows()).toEqual(WINDOWS)
   })
 })
 

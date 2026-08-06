@@ -5,8 +5,8 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T07:57:55+0200
-implementation-commits: [4e66947e, 793b866c, 7c104ba4]
+updated: 2026-08-06T08:04:12+0200
+implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -45,27 +45,21 @@ found none, and concluded UNKNOWN; the caller is the **server itself**, which is
 API-route search could never have found it. **NPT(1) is closed; NPT(2) (a flag written before a
 restart is honoured by the instance that returns) still needs an operator and still gates `dev`.**
 
-**BLOCKER FOUND for AC1 — there is no argless refresh path to call.** The card assumes
-`claude plugin marketplace update` with no arguments is reachable. It is not:
-`UpdateMarketplace` requires `{name: string}` and delegates to `ChangeMarketplace`, whose
-update action hardcodes `execFileAsync('claude', ['plugin','marketplace','update', desired.name])`
-at `services/element-management-service.ts:5690`. Collapsing the 275-iteration loop therefore
-means **adding an argless branch inside the element pipeline**, not editing this service. Sized,
-deliberately not started mid-context. Mitigating: that action has no honest undo anyway ("you
-cannot un-pull a marketplace"), so it is not R51-transaction-wrapped — the branch is contained.
+**6 of 7 acceptance boxes are closed.** AC1 (`7c104ba4`) — the refresh is ONE argless
+`claude plugin marketplace update` via the new `RefreshAllMarketplaces`, down from 275 CLI
+processes per tick; the argless form was verified against the CLI's own `--help` first. The
+autoUpdate flip (`793b866c`) keeps every marketplace in `extraKnownMarketplaces` at
+`autoUpdate: true` through `lib/settings-gate::editSettings`. AC5 (`15f752d3`) gives the lane
+its own `lastAbsorbedRunAt`. AC3 is pinned by driving the lock-CONTENTION case, AC4 and AC7 were
+already satisfied and are now cited rather than assumed. Every guard carries an observed neuter.
 
-**⚠ SEQUENCING HAZARD — do NOT implement AC6 ("`claude plugin update` invocations → 0") next.**
-AC6 means deleting loops 2 and 3 (`version-update`, `user-plugins-update`,
-`auto-update-service.ts:318` and `:360`). Those loops are redundant **only once the harness is
-doing the upgrading for us**, and the card's own measurement says it is not: **0 of 275
-marketplaces carry `autoUpdate: true`**. Delete them today and 42 real updates per pass stop
-happening and nothing replaces them — including the janitor's own self-update. Correct order:
-**AC1 (argless) → the autoUpdate flip → only then AC6.** The 158 failures are real waste, but
-they are the price of the 42 successes until the flip lands.
-
-**AC1 + the autoUpdate flip are DONE** (`7c104ba4`, `793b866c`). The refresh is one argless
-call; every marketplace declared in `extraKnownMarketplaces` is kept `autoUpdate: true` by the
-lane, through `lib/settings-gate::editSettings`.
+**SUPERSEDED — do NOT carry forward:**
+- *"BLOCKER FOUND for AC1 — there is no argless refresh path to call"* — there is now;
+  `RefreshAllMarketplaces` is it. The observation that `ChangeMarketplace` hardcodes the name is
+  still true and is WHY it is a separate function.
+- *"⚠ SEQUENCING HAZARD — do NOT implement AC6 next"* — the hazard was that 0 of 275
+  marketplaces had `autoUpdate` on, so deleting the per-plugin loops would strand everything.
+  The flip closed exactly that. AC6 is now gated on EVIDENCE, not on ordering (below).
 
 **⚠ READ BEFORE TOUCHING THIS LANE — it wrote the USER'S REAL `~/.claude/settings.json` once.**
 `ensureMarketplaceAutoUpdate`'s path argument DEFAULTS to that file, and every absorbed-duty
@@ -77,12 +71,26 @@ sites, and the repo's `guardRealUserSettings` tripwire — which was OPT-IN and 
 assumed (a probe appending one byte reds with `MODIFIED it (51541 → 51542 bytes)`; it is parked
 in `tests_dev/`). Any future step here takes its path as a parameter, never a default.
 
-**NEXT ACTION:** AC6 — remove the two per-plugin loops (`auto-update-service.ts` steps 2 and 3)
-so `claude plugin update` invocations drop to 0. **NOW UNBLOCKED and not before:** the hazard
-recorded below was that deleting them stranded everything because 0 of 275 marketplaces opted
-in; the flip closes exactly that. Confirm on this host first that the harness is actually
-upgrading plugins from the refreshed catalogs — the flag is read at instance LOAD, so it serves
-the NEXT session, and nothing is proven until a restarted session picks it up.
+**NEXT ACTION — AC6, and it is BLOCKED ON EVIDENCE THAT DOES NOT EXIST YET.** Removing the two
+per-plugin loops (`auto-update-service.ts` steps 2 and 3) is only safe once the harness is
+demonstrably upgrading plugins from the refreshed catalogs. Measured 2026-08-06 08:00, and it
+is not yet demonstrable:
+
+| file | `autoUpdate: true` | mtime |
+|---|---|---|
+| `~/.claude/settings.json` → `extraKnownMarketplaces` | **257 / 257** | 07:46 |
+| `~/.claude/plugins/known_marketplaces.json` (runtime registry) | **0 / 275** | **07:08** |
+
+The registry has not been written since BEFORE the flip, because the flag is read at instance
+LOAD and no Claude Code instance has started since. So the card's open question — *which
+direction does the harness sync these two files* — is still unanswered, and AC6 rests on it.
+
+**The check to run when a session has started after 07:46:** re-read the registry. If its
+entries now carry `autoUpdate: true`, the sync is settings → registry and the flip works; then
+AC6 may proceed. If they do NOT, the registry is authoritative for this flag, it has **no
+sanctioned writer** (the settings gate refuses that path by basename and parent dir), and that
+is a governance decision about a harness-owned file — not a coding task. Do not delete the
+loops until one of those two is established.
 
 ## Problem
 
@@ -499,19 +507,38 @@ applies to it, which is now the strongest argument for settling that first.
       a wall-clock test would take 3 h and would still only prove one interval.
       DONE `4e66947e`: `services/auto-update-service.ts:111`, pinned by *"arms its timer at
       exactly 3 hours"*; neuter reds exactly that test (1 red / 13 green), restore blob-verified.
-- [ ] Exactly **one** executor. A test proves N concurrent sessions produce N=1 refresh, not
+- [x] Exactly **one** executor. A test proves N concurrent sessions produce N=1 refresh, not
       N — this is the half that scales into the rate limit and the half a per-session
       implementation passes trivially by testing a single session.
-- [ ] `enabled: false` still does NOT stop the lane (a test pins this — the #102
+      DONE: the mechanism is `withMarketplaceLock` returning null when another process holds
+      it, and the test drives that CONTENTION case (a single-session test does pass trivially,
+      exactly as this box warns). Neuter dropping the lock — `withMarketplaceLock(() => body())`
+      → `body()`, i.e. the per-process regression itself — reds exactly that test (1/16).
+- [x] `enabled: false` still does NOT stop the lane (a test pins this — the #102
       "consent-to-add is not consent-to-remove" rationale is the thing most likely to be
       "simplified" away by someone reading only this card).
-- [ ] A reader of `~/.aimaestro/auto-update-settings.json` can tell that the absorbed lane
+      DONE (pre-existing, verified rather than assumed): *"appends run entries into
+      auto-update-settings.json WITHOUT touching `enabled`"* runs the tick against a settings
+      file at the shipped default (`enabled: false`), asserts `result.ran === true` AND that
+      `enabled` is still false afterwards. The lane never reads that field at all.
+- [x] A reader of `~/.aimaestro/auto-update-settings.json` can tell that the absorbed lane
       ran, without inferring it from `lastRunSummary` timestamps.
+      DONE `15f752d3`: `lastAbsorbedRunAt`, stamped by the absorbed tick, additive at
+      `version: 1`. The test asserts BOTH halves — the new field parses as a timestamp AND
+      `lastRunAt` stays null on an absorbed-only run, because conflating the two lanes would
+      make the file lie in the other direction. Neuter dropping the stamp reds exactly that
+      test (1/15), and the test's pre-existing assertions all survive the drop — which is why
+      they were never sufficient alone.
 - [ ] Measured after the change on this host: `claude plugin update` invocations per hour
       drop from **200** (158 of them failing) to **0**, and marketplace refreshes drop from
       hourly-per-session to one every 3 h machine-wide.
-- [ ] The per-plugin-update question in "One thing to resolve" above is answered by the
+- [x] The per-plugin-update question in "One thing to resolve" above is answered by the
       USER before any code lands, and the answer is recorded here.
+      DONE — answered verbatim in the "RESOLVED — the per-plugin loop is redundant, not merely
+      wasteful" section: the harness upgrades any auto-update-ON plugin whose newer version a
+      refreshed catalog reports, so the loop DUPLICATED work rather than doing work the harness
+      omits. Note the boundary recorded there survives: that holds for auto-update-ON plugins,
+      which is why the flip had to land before AC6 can.
 
 ## Verification
 

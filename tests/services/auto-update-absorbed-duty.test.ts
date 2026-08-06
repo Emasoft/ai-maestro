@@ -171,6 +171,11 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     // per-account-limit error filed as ai-maestro-janitor#215. `withMarketplaceLock` returning
     // null IS that mechanism — it means another process holds it — and a single-session test
     // passes this trivially, which is exactly why the contention case has to be driven.
+    // NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+    //   dropping the lock — `withMarketplaceLock(() => body(...))` → `body(...)` — at line 310
+    //   → 1 red / 15 green: this test. That mutation IS the regression it guards: a lane that
+    //   runs the body without taking the machine-wide lock is per-process, and every live
+    //   session then refreshes on its own schedule.
     withMarketplaceLockMock.mockImplementation(async () => null)
 
     const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T12:47:47+0200
-updated: 2026-08-06T12:54:07+0200
+updated: 2026-08-06T13:00:18+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: user
 approval-datetime: 2026-08-06T12:47:47+0200
 severity: high
 effort: medium
-npt: [89LVZSQ0]
+npt: []
 eht: []
 blocked-by: []
 release-via: none
@@ -47,7 +47,7 @@ would have produced a probe that either duplicates a working tool or breaks one.
 8-priority ladder (`exited / rate_limited / api_error / permission / waiting(±subagents) /
 active / idle / hibernated`). This is the spine the rest hangs off.
 
-**2. The pane — JUST BUILT, this card's NPT.** `GET /api/agents/[id]/block-state`
+**2. The pane — JUST BUILT (TRDD-89LVZSQ0), and already landed.** `GET /api/agents/[id]/block-state`
 (TRDD-89LVZSQ0) returns `{blocked, reason, field{visible,empty,text}, choices[], excerpt[],
 hookDisagreed, sessionName}` and, with `?match=<regex>`, matching lines. Strict, mapped to
 `unblock-prompt`, so MANAGER-any / COS-own-team / never-ASSISTANT / self-always.
@@ -179,6 +179,21 @@ that try the forbidden thing, get a 409, and treat it as a bug to route around.
 MED. No new dangerous primitive — the pane read (the sharp one) is already gated by the NPT.
 The real risk is a plausible-looking WRONG number from a guessed join, which is why the join
 is called out above as a blocker for those fields rather than an implementation detail.
+
+## Why this card has no `npt:`, though it plainly depends on TRDD-89LVZSQ0
+
+It was authored with `npt: [89LVZSQ0]` and that was **wrong twice over**, caught by
+`trdd-corpus-invariants` + `trdd-doctor` as `GRAPH-TWO-PARENTS`.
+
+`npt:`/`eht:` are **DERIVATION** edges — "this TRDD spawned that one" — and they alone establish
+parenthood. 89LVZSQ0 was not spawned by this card; it pre-existed and was already claimed as
+8RVDY7ND's NPT, so a second claim gave it two parents and broke the depth-1 invariant. A pure
+"I need that finished first" relationship is a **runtime** edge, `blocked-by:`.
+
+And here not even that: the dependency is **satisfied** — the route, the service, the Gate 0b fix
+and the `block-state` CLI verb all landed before this card was filed. There is nothing left to
+wait on, so the honest frontmatter is empty and the relationship lives in the prose above, where
+it is a reference rather than a claim on the graph.
 
 ## Approval log
 

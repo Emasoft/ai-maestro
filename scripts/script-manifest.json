@@ -455,6 +455,7 @@
       "family": "aimaestro",
       "verbs": [
         "answer",
+        "block-state",
         "help",
         "inject",
         "queue",
@@ -469,6 +470,7 @@
         "--command",
         "--command-key",
         "--help",
+        "--match",
         "--no-newline",
         "--no-require-idle",
         "--option",
@@ -488,6 +490,7 @@
         "#   aimaestro-session.sh slash-keys",
         "#   aimaestro-session.sh state <agent> [--pane]",
         "#   aimaestro-session.sh read-prompt <agent>",
+        "#   aimaestro-session.sh block-state <agent> [--match \"<regex>\"]",
         "#   aimaestro-session.sh answer <agent> --option <key> | --text \"<answer>\"",
         "#   aimaestro-session.sh queue <agent> --command \"<text>\" | --command-key <key>",
         "#       [--when idle|online|now-if-idle-else-queue] [--wake-first]",

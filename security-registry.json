@@ -68,6 +68,7 @@
     "POST_/api/sessions/[id]/restart": "strict",
     "POST_/api/sessions/[id]/kill": "strict",
     "DELETE_/api/sessions/[id]": "strict",
+    "POST_/api/daemon/enroll": "strict",
     "PATCH_/api/settings/security": "strict",
     "PATCH_/api/settings/auto-update": "strict",
     "POST_/api/settings/auto-update/run": "strict",

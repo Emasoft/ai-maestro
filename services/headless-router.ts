@@ -118,6 +118,12 @@ import {
   broadcastActivityUpdate,
 } from '@/services/sessions-service'
 
+// TRDD-APN5WB2L / #60 — the daemon channel is reachable in BOTH modes by construction: the
+// verification and dispatch live in ONE service, and the two routes are argument-passing shells.
+// Measured while designing this: `POST /api/sessions/me/user-input` exists in Next and in NONE of
+// this router's entries, and that asymmetry is precisely what R10.6's parity test exists to catch.
+import { daemonInject, enrollDaemonPrincipal } from '@/services/daemon-inject-service'
+
 import {
   listHosts,
   addNewHost,
@@ -885,6 +891,21 @@ const routes: Route[] = [
       addNewline: body.addNewline,
       authContext: buildAuthContext(auth),
     }))
+  }},
+  // ── The daemon channel (TRDD-APN5WB2L, #60) ────────────────────────────────────────────────────
+  // The ONLY credential is the Ed25519 signature verified inside the service; there is no session
+  // cookie or bearer to check here, because the janitor daemon is a launchd process that holds
+  // neither. Enrollment is the asymmetric half: it requires the OWNER, so a compromised daemon
+  // cannot rotate a new key in for itself.
+  { method: 'POST', pattern: /^\/api\/daemon\/inject$/, paramNames: [], handler: async (req, res) => {
+    const body = await readJsonBody(req)
+    sendServiceResult(res, await daemonInject(body))
+  }},
+  { method: 'POST', pattern: /^\/api\/daemon\/enroll$/, paramNames: [], handler: async (req, res) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const body = await readJsonBody(req)
+    sendServiceResult(res, await enrollDaemonPrincipal(body, { isSystemOwner: !auth.agentId, agentId: auth.agentId }))
   }},
   { method: 'PATCH', pattern: /^\/api\/sessions\/([^/]+)\/rename$/, paramNames: ['id'], handler: async (req, res, params) => {
     // SVC2-MAJ-12 (2026-05-06): authenticate before renaming a tmux session.

@@ -58,6 +58,39 @@ replay a PRE-CAPTURED SNAPSHOT?* Two undos here rebuild the settings key-by-key 
 deliberately, so a concurrent writer's edit survives the rollback — which makes them
 read-modify-writes and `updateJson`'s job. [^2]
 
+
+^ATOM-KXGA-N0VN [desc:"A test wrote the developer's real ~/.claude/settings.json because a new step's path argument DEFAULTED to it, and the tripwire that exists for exactly this was opt-in on 6 of 385 suites", keywords: a_test_wrote_my_real_settings.json tests_modified_my_global_claude_config suite_green_while_it_edited_settings.json default_argument_points_at_the_real_file guardRealUserSettings_did_not_fire opt-in_tripwire_covered_almost_no_suites containment_for_a_lane_that_writes_user_config, type: feedback, ocd: 2026-08-06, lmd: 2026-08-06]
+
+A step added to the absorbed auto-update lane took `settingsPath` as a DEFAULTED parameter
+(`= ~/.claude/settings.json`). Every absorbed-duty test drives the tick body, so the suite inherited
+that default and rewrote all 257 of the user's marketplace entries — while reporting **35/35 GREEN**,
+because nothing in that file asserts on the settings file. The write itself was well-formed (it went
+through `lib/settings-gate::editSettings`, so atomic + locked + valid); the MECHANISM was the bug, and
+a wrong value would have been just as invisible.
+
+The fix: `settingsPath` is threaded through `AbsorbedDutyDeps` and injected at every call site.
+**Any step in a lane that writes user config takes its path as a PARAMETER, never a default** — a
+default is what silently promotes a unit test into a writer of live state. The tripwire half of the
+story is its own atom (search: opt-in guard adoption rate).
+
+
+^ATOM-24WY-9P6U [desc:"A guard is worth its ADOPTION RATE — an opt-in tripwire protected 6 of 385 suites and missed the only one that needed it, because nobody expects the write it exists to catch", keywords: my_guard_did_not_fire the_tripwire_never_caught_it opt-in_guard_covers_almost_nothing should_this_check_be_global_or_per-suite a_guard_nobody_remembered_to_add prove_a_guard_fires_instead_of_assuming_it, type: feedback, ocd: 2026-08-06, lmd: 2026-08-06]
+
+`guardRealUserSettings` was the RIGHT guard — snapshot-compare, deliberately verb-agnostic so a
+renamed write verb cannot blind it — and it still missed the incident it was built for, because it
+was OPT-IN and only **6 of 385** suites called it.
+
+That is not bad luck, it is the shape of the problem: **a guard against "a write nobody expected" is
+useless precisely in the suites where nobody expected a write.** The suite that needed it was, by
+construction, the one no one had thought to add it to. So for this class of guard the only adoption
+rate that protects the NEXT unforeseen case is 100% — it belongs in `vitest.config` `setupFiles`, not
+in a helper each author must remember.
+
+And prove it fires rather than assuming: a probe appending ONE byte to the real file fails the suite
+with `MODIFIED it (51541 → 51542 bytes)` while the probe's own assertion passes. The test passing
+while the FILE guard fails the suite is the intended shape — a guard that has never fired is
+indistinguishable from one that cannot.
+
 ## Notes and lessons learned
 
 [^1]: [id:ATOM-08VJ-BFMH, status:valid, desc:"A guard flag set by a branch that never read the file makes a blind read reachable — count the writes and check what ELSE sets the flag", keywords:"is_the_destructive_write_even_reachable cleaned_flag_set_by_a_different_branch corrupt_file_plus_stale_cache consolidation_missed_a_local_copy my_change_made_an_old_bug_reachable", ocd:2026-08-01, lmd:2026-08-01] DO NOT clear a "was it a module-level copy?" sweep and call the defect class closed, BECAUSE the copy that survives is the one shaped differently — a LOCAL function inside a route file — and it can feed more write sites than all the module-level ones did (5 here, on the user's own `~/.claude/settings.json`). DO grep for the SHAPE (`readJsonSafe(...) || {}` feeding a write), not for the symbol. AND DO NOT reason "the blind read yields `{}`, so the mutation finds nothing and no write happens" — check what ELSE sets the write's guard: here `cleaned` is set by a `existsSync(cacheDir)` branch that never touched the settings file, so a corrupt settings.json PLUS a stale cache dir writes `{enabledPlugins:{}}` over everything the user had. Found while wiring an unrelated verdict into the same handler — and that wiring made the block MORE reachable (a mismatch now reaches it, where before only a hard failure did), which is what turns an old latent bug into an effect of your change.

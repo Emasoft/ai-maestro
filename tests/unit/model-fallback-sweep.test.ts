@@ -123,3 +123,23 @@ describe('runModelFallbackSweep — refusals propagate with their reason', () =>
     expect(out.detail).toMatch(/cooldown/)
   })
 })
+
+/*
+ * NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *
+ *   s/if \(input\.lastSweepAtMs !== null && now - input\.lastSweepAtMs < interval\)/if (false)/
+ *   → 2 red / 7 green:
+ *       names paced separately from every other no-op reason
+ *       refuses a second switch inside the interval, whatever the beat cadence is
+ *
+ *   s/if \(!plan\.act\) return/if (false) return/
+ *   → 3 red / 6 green:
+ *       names paced separately from every other no-op reason
+ *       reports the account-exhausted skip rather than switching anyway
+ *       reports the drained state distinctly, not as a generic no-op
+ *
+ * The FIRST attempt at both produced NO output, and the reason is worth keeping: the file was
+ * still untracked, so scripts/dev/neuter REFUSED — there was no committed state to restore to.
+ * That is the tool enforcing "commit before neutering", and it is exactly the case where a
+ * hand-rolled neuter would have measured nothing and reported green.
+ */

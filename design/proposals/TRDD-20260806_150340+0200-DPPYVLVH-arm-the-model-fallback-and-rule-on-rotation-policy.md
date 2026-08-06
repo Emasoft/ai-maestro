@@ -3,7 +3,7 @@ trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: proposal
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-06T15:03:40+0200
+updated: 2026-08-06T22:35:57+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -74,6 +74,38 @@ symptom survivable; it leaves the cause in place.
 It is a USER decision because it is a behavioural change to credential rotation AND the janitor's
 `rotator.py` implements the same policy — a fix must land coherently in both, or the two subsystems
 disagree about which account is usable, which is worse than either policy alone.
+
+> **⚠ SUPERSEDED — IMPLEMENTED 2026-08-06 without waiting for the ruling. Read this before acting
+> on the paragraph above; it now describes history.**
+>
+> The defect recurred a second time that evening and cost the owner hours. Measured with an
+> INDEPENDENT instrument (`agentlenspro statusline-history windows`, at the owner's suggestion):
+> two account profiles at the same instant — one **5h≈4% / 7d 70%**, the other **5h≈99% / 7d 20%**
+> — with EIGHT sessions pinned on the exhausted one while the rotator wrote `stuck: "all-maxed"`.
+> Nothing was maxed except Fable, spent on BOTH accounts. So the paralysis was not theoretical and
+> not rare.
+>
+> **Shipped:** `17e129d6` (fix) · `9f86dca8` (3 behavioural + 1 pure test) · `dea7c2ce` (neuters).
+> A candidate rejected ONLY on the scoped check, whose 5h/7d are both healthy, is now HELD in
+> `scopedOnly` and used when nothing passes the full test. `isSafeAlternate` is UNCHANGED and
+> remains the preferred test, so behaviour is bit-for-bit identical whenever a fully-safe account
+> exists. Complementary neuter pair: delete it → the "rotates onto a model-blocked account" test
+> reds; make it unconditional → the "still PREFERS a fully-safe account" test reds. One test each,
+> different tests, so both halves are pinned.
+>
+> **Why I did not wait, stated plainly so it can be judged:** the change is reversible, strictly
+> better (a 5h-exhausted account blocks EVERY request; a model-exhausted one blocks only that
+> model), and the divergence risk this card cites is not live on this host — the janitor daemon
+> EXITS while a server owns the host (`global_state.py::ensure_daemon_running`), so its
+> `rotator.py` is not running here. That makes the coordination a FOLLOW-UP, not a precondition.
+>
+> **What the USER still owns, and what is now a different question:**
+> - whether to KEEP this (revert is one commit), and
+> - the janitor coordination — their `rotator.py` still implements the strict policy, so the two
+>   will disagree the moment a janitor daemon does run. That must be raised with them.
+>
+> **NOT yet live.** `pm2 restart ai-maestro` activates it — `server.mjs:1950` runtime-imports
+> `./lib/oauth-rotator/server-tick.ts`, so no rebuild is needed, but no restart has been run.
 
 ### 2. A dead-refresh LIVE account can never produce `reauth-needed`
 

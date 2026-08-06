@@ -106,8 +106,23 @@ export interface AutoUpdateSettings {
    *  So: the two lanes get two timestamps, and "is anything running?" is answerable by reading
    *  the file rather than by inferring from a summary. Null until the absorbed lane has run. */
   lastAbsorbedRunAt: string | null
-  /** Outcome of the most recent tick — capped to 200 entries to bound the
-   *  file size while still giving the UI a meaningful audit trail. */
+  /**
+   * A ROLLING AUDIT TRAIL ACROSS TICKS — newest first, capped at 200 entries to bound file size.
+   *
+   * **It is NOT "this run's results", despite the name.** `recordRunEntry` PREPENDS
+   * (`[entry, ...s.lastRunSummary].slice(0, 200)`), so the array spans however many recent ticks
+   * fit in 200 rows — three, at the ~80 targets/tick this host sees.
+   *
+   * READ IT PER RUN OR IT WILL LIE TO YOU. Measured 2026-08-06: the file held 200 rows over 80
+   * distinct targets — one PRE-fix tick (38 failed) and two POST-fix ticks (80 updated, 0 failed,
+   * each). Counting statuses across the whole array reports 38 failures for a lane that currently
+   * has none, and the same target legitimately appears as both `failed` and `updated` at different
+   * timestamps. That misread happened three times in one afternoon — twice by hand and once by a
+   * monitoring script — before anyone grouped the rows by `at`.
+   *
+   * The name is kept because it is a PERSISTED field and renaming it needs a migration; this
+   * comment is the cheaper half of that fix. Group by `at` before drawing any conclusion.
+   */
   lastRunSummary: AutoUpdateRunEntry[]
 }
 

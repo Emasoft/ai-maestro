@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T10:45:03+0200
+updated: 2026-08-06T10:53:41+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -224,6 +224,49 @@ exactly the budget test**; drop the option → 3 red (broader, because removing 
 promisify's callback position). The stale `$. == 5431` line citation in that file's neuter block
 was removed rather than corrected — the argv line is now 5457, and a coordinate nothing verifies
 rots silently.
+
+### ⚠ THE TITLE BUG, FOUND AND FIXED — the per-plugin updates were MALFORMED, `a9020b7c`
+
+*"Retries permanent failures hourly"* — and the permanence was **ours**, not the plugins'.
+
+`claude plugin update --help` reads `Usage: claude plugin update [options] <plugin>` — **ONE**
+positional. The user-scope call passed the marketplace as a **second** positional the command does
+not accept, so the CLI resolved the plugin with no marketplace context and answered
+`Plugin "X" not found`. For every plugin, every cycle, forever.
+
+Proven live rather than inferred:
+
+- the lane's own summary holds **138 per-plugin rows, 100 % `failed`**;
+- `ai-maestro-janitor@ai-maestro-plugins` is `enabled: true` AND present on disk at
+  `~/.claude/plugins/cache/ai-maestro-plugins/ai-maestro-janitor` — and the lane's exact command
+  still reported it missing;
+- the single-argument form answers `✔ already at the latest version (2.4.1)` **instantly**.
+
+The correct shape was in this file twice already: `pluginKey` is built as
+`` `${desired.name}@${desired.marketplace}` `` and the sibling `enable`/`disable` calls pass it as
+one argument; line 1170 uses the same form. Only this one call disagreed.
+
+**Ruled out as the cause first, which is why the diagnosis is trustworthy:** none of the failing
+rows involve the 10 dead repos, all 21 referenced marketplaces are registered, and 29 of the 65
+attempted plugins are `enabled: true`. So "dead marketplace" and "not installed" were both
+eliminated before the argv was suspected.
+
+**Deliberately NOT changed:** `install` (4755) and `uninstall` (4763) in the same block pass two
+positionals too, and per `--help` that is the same violation. But install demonstrably WORKS —
+every agent gets its plugins — so the extra argument is evidently tolerated there, while `update`
+needs the marketplace to resolve an ALREADY INSTALLED key. That asymmetry is unverified, those
+calls sit on the agent-creation path, and tests pin their current form. They get their own
+investigation, not a drive-by edit. Recorded in the code comment so the next reader finds the
+reason rather than rediscovering the shape.
+
+**Why no test caught it:** the existing user-scope update test asserts only that the operation was
+PERMITTED. The new one pins the whole array with `toEqual`. Neuter: restoring the two-positional
+form reds exactly that test, 1 red / 10 green.
+
+**This changes AC6's premise.** AC6 defers removing the per-plugin loops until *"the harness is
+demonstrably upgrading plugins from the refreshed catalogs"* — the harness never was, because we
+were asking it wrong. Whether those loops are redundant can only be judged after a cycle runs with
+the corrected command (next lane fire ~14:00).
 
 ### STILL THE USER'S CALL — 10 dead marketplaces are ~80 % of the 18 minutes
 

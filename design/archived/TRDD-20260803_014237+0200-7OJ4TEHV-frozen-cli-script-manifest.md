@@ -1,11 +1,12 @@
 ---
 trdd-id: 7OJ4TEHV
 title: Build the frozen-CLI script manifest from the Usage contract, not from --help
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-03T01:42:37+0200
-updated: 2026-08-05T18:40:00+0200
+updated: 2026-08-06T06:19:47+0200
+implementation-commits: [4fc3796d]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -181,16 +182,30 @@ under-reads, which the non-vacuity floor is there to catch.
 
 ## Acceptance
 
-- [ ] generator parses the `case` dispatch arms of every skill-facing script in all four families
-- [ ] internal libs explicitly excluded, and the exclusion list is data the test asserts
-- [ ] `# Usage:` carried as human text, never diffed
-- [ ] `--check` exits `0` clean / `1` drift / `2` could-not-run, with unreadable-input distinguished from legal absence
-- [ ] non-vacuity floor inside the TOOL, derived by walking the dir, not a hand-written number
-- [ ] a renamed flag reddens `--check`; a reworded `# Usage:` line does not — both pinned, neuter recorded
-- [ ] manifest posted to `#35` / `#56` so the core plugin can run its conformance pass
+- [x] generator parses the `case` dispatch arms of every skill-facing script in all four families
+      (48 included / 10 internal / 58 walked; validated against this card's hand-verified ground
+      truth — exactly the 20 dispatcher verbs incl. the nested `list)` arm, kanban's 25 flags).
+      The STATE's "iff top-level case" discriminator was REFUTED by 4 measured counterexamples and
+      widened to: top-level arg-dispatch ∨ `main "$@"` ∨ unconditional column-0 exit/exec.
+- [x] internal libs explicitly excluded, and the exclusion list is data the test asserts —
+      exactly the 10 (six agent-* modules + amp-helper/amp-security/amp-name-resolve/aid-helper),
+      classified by DISCRIMINATOR; `common.sh` is out of family scope entirely, not "excluded".
+- [x] `# Usage:` carried as human text, never diffed
+- [x] `--check` exits `0` clean / `1` drift / `2` could-not-run — absent/corrupt manifest and
+      unreadable/empty corpus all land on 2, driven end-to-end via the temp-copy fixture harness
+- [x] non-vacuity floor inside the TOOL, derived by walking the dir (every walked file must
+      classify; zero CLIs from a non-empty walk = broken parser = could-not-run)
+- [x] a renamed flag reddens `--check`; a reworded `# Usage:` line does not — both pinned;
+      observed neuter pair with DISJOINT red sets recorded in the test header (incl. the
+      first-aim miss: the projection was shadowed by diffManifests' own kinds list)
+- [x] manifest posted to `#35` / `#56` (comments 5200338854 / 5200338449)
 
 ## Approval log
 
 - 2026-08-03T01:42:37+0200 — SELF-MANDATE (min-approval-requirement: none). Additive infra inside the
   scripts owner's own domain; no frozen interface changed, no cross-team reach, reversible. Sourced
   from the `Emasoft/ai-maestro#35` verification pass; no approval request was sent.
+- 2026-08-06T06:19:47+0200 — COMPLETED by ai-maestro (Tier 0, self-mandate). Implemented in
+  `4fc3796d`; ground-truth-validated discriminator (the STATE's "iff" widened by 4 measured
+  counterexamples); manifest announced on #56 (comment 5200338449) and #35 (5200338854).
+  All boxes checked; NPT/EHT empty → archive.

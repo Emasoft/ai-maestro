@@ -1,8 +1,8 @@
 ---
 name: plugin-abstraction-and-script-layer
-description: "why can't a plugin call the ai-maestro API directly / a hook is calling fetch('/api/...') and breaking on updates / what is the script layer / aimaestro-*.sh amp-*.sh aid-*.sh boundary / decoupling invariant / a plugin element hardcodes an endpoint URL"
+description: "why can't a plugin call the ai-maestro API directly / a hook is calling fetch('/api/...') and breaking on updates / what is the script layer / aimaestro-*.sh amp-*.sh aid-*.sh boundary / decoupling invariant / a plugin element hardcodes an endpoint URL / the CLI says the API is not reachable but my command is simply wrong / a typo'd argument or an unknown verb is blamed on the server / --help asks for a credential"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-08-06
 metadata:
   node_type: memory
   type: reference
@@ -108,5 +108,34 @@ below. Derive the consequence for each element type; do not wait to be told.**
 - [[role-plugins]] — role-plugins are one of the two plugin categories this script-layer boundary governs
 - [[project-long-form-docs]] — `docs/PLUGIN-ABSTRACTION-PRINCIPLE.md` is the full long-form guide
   behind this page; go there for detail beyond what fits here.
+
+
+^ATOM-K0K8-5AR7 [desc:"A gate placed BEFORE recognition answers for questions it cannot answer — an unknown verb, a bad argument and --help are all decidable offline, so gating them on the server returns a FALSE cause", keywords: the_CLI_says_the_API_is_not_reachable_but_my_command_is_just_wrong unknown_verb_reported_as_a_server_error typo_in_an_argument_blamed_on_the_network --help_needs_a_credential gate_runs_before_the_verb_is_recognised offline_operation_gated_on_check_api_running, ocd: 2026-08-06, lmd: 2026-08-06]
+
+**A gate must not run before the thing it gates is recognised.** In
+`aimaestro-agent.sh`, `check_api_running` sat ahead of verb dispatch and argument
+validation, so three operations that are decidable with **no network at all**
+were answered with *"the API is not reachable"* — a false cause that aims the
+caller at the wrong thing:
+
+| operation | decidable offline? | what it used to say |
+|---|---|---|
+| `--help` | yes | needs a credential (29 of 50 CLIs) |
+| an unknown verb | yes | the API is not reachable |
+| `list --status hibernated` (invalid) | yes | the API is not reachable |
+
+Same defect, three sightings, found one at a time over days — which is the tell
+that it is positional, not per-verb. `docs/SCRIPT-MANIFEST.md` §6.4 now states
+it: a LOCAL, OFFLINE operation must not be gated on the server.
+
+**The fix is ONE verb list consulted in several MODES, never a second `case`
+above the gate.** `dispatch()` takes a mode — `check` (is this a verb?),
+`validate` (is its grammar legal?), `run` — and all three read the same arms. A
+duplicated list is two statements of one fact and drifts the first time someone
+adds a verb to only one: then either a real verb is rejected as unknown, or an
+unknown one reaches the gate and gets the misleading message back.
+
+Fixed in `51db1b8a` (verb half) + `f2abd10d` (argument half) under
+`TRDD-T3FXA0Y0`. Cited by FUNCTION, not line — the fix moved the arms.
 
 ## Notes and lessons learned

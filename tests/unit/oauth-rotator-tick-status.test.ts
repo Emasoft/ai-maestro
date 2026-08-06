@@ -201,3 +201,22 @@ describe('tick-status — the persisted WINDOW snapshot (the cross-beat join)', 
     expect(raw()).not.toHaveProperty('windows')
   })
 })
+
+/*
+ * NEUTER RUNS for the window snapshot (2026-08-06 — OBSERVED via scripts/dev/neuter,
+ * restore verified by blob hash):
+ *
+ *   s/if \(scopedPct !== null && scopedModel === null\) return null/if (false) return null/
+ *   → 1 red / 18 green:  voids the snapshot when a scoped percentage names no model
+ *
+ *   s/if \(fiveHourPct === null && sevenDayPct === null && scopedPct === null\) return null/if (false) return null/
+ *   → 1 red / 18 green:  voids the snapshot when nothing was measured at all
+ *
+ *   s/ && v >= 0 && v <= 100//
+ *   → 1 red / 18 green:  drops an out-of-range or non-numeric percentage to UNKNOWN, keeping the rest
+ *
+ * A note on what is NOT pinned here, because it is a property of the CONSUMER and not of this
+ * file: dropping a percentage to null is safe only while `planModelFallback` treats an unknown
+ * account window as EXHAUSTED. Nothing in this file would redden if that changed, so the
+ * requirement is stated in `windowsFor`'s comment rather than claimed as tested.
+ */

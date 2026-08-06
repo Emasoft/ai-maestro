@@ -5389,6 +5389,60 @@ export async function UpdateMarketplace(desired: {
 }
 
 /**
+ * Refresh EVERY registered marketplace in ONE CLI invocation (TRDD-PE54D95Q).
+ *
+ * `claude plugin marketplace update` takes an OPTIONAL name — verified against the CLI's own
+ * help, which reads *"Update marketplace(s) from their source - updates all if no name
+ * specified"*. So refreshing the whole catalog is one process, not one per marketplace.
+ *
+ * WHY THIS IS A SEPARATE FUNCTION RATHER THAN `name?: string` ON `ChangeMarketplace`. That
+ * pipeline's `name` is load-bearing in G01 (name-format validation), in G02, in every ops line
+ * and in its error messages. Making it optional would push an `undefined` through gates whose
+ * entire job is to validate it, so the "no name" case would have to be special-cased inside each
+ * one — more surface, not less. Refreshing ALL catalogs is also a genuinely different operation
+ * from changing ONE marketplace; conflating them is what made the caller loop in the first place.
+ *
+ * SECURITY — it keeps both gates that matter and drops only the two that need a name:
+ *   · G00  `gate0Auth('manage-skills')` — unchanged.
+ *   · G00b `assertAgentMayNotUserScope` — unchanged, and NOT optional here. A marketplace is
+ *          inherently host-wide, so refreshing every one of them is at least as privileged as
+ *          refreshing a single one: every agent that later installs from any of them inherits
+ *          whatever the refresh pulled. Owner-only, exactly as the single-name path.
+ *   · G01/G02 are skipped because they validate a name and a source that this call has neither
+ *          of — not because they were relaxed.
+ *
+ * The timeout is deliberately far larger than the single-name path's 120 s: this is one process
+ * doing what were 275 git fetches on this host, and a timeout sized for one of them would kill
+ * the call every time and report the refresh as failing.
+ */
+export async function RefreshAllMarketplaces(authContext: AuthContext): Promise<ChangeResult> {
+  const ops: string[] = []
+  const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
+  try {
+    if (!authContext) {
+      result.error = 'authContext is mandatory for RefreshAllMarketplaces (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('manage-skills', '', authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+    const ironErr = assertAgentMayNotUserScope('user', 'update', authContext, ops)
+    if (ironErr) { result.error = ironErr; return result }
+
+    await execFileAsync('claude', ['plugin', 'marketplace', 'update'], { timeout: 900000 })
+    ops.push('G03: Refreshed EVERY registered marketplace (one argless invocation)')
+    result.success = true
+    // A catalog refresh changes what is INSTALLABLE, not what is installed — the harness applies
+    // any resulting plugin update at its own next startup. Same answer as the single-name update.
+    result.restartNeeded = false
+    return result
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err)
+    console.error('[RefreshAllMarketplaces] FAILED:', result.error)
+    return result
+  }
+}
+
+/**
  * The CLI argument that RE-ADDS a marketplace, read out of its `extraKnownMarketplaces` entry.
  *
  * This is the rollback substrate for `ChangeMarketplace`'s remove. `claude plugin marketplace add

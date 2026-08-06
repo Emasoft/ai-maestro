@@ -402,7 +402,7 @@ async function runAbsorbedDutyTickBody(
   settingsPath?: string,
 ): Promise<AutoUpdateRunEntry[]> {
   const entries: AutoUpdateRunEntry[] = []
-  const { UpdateMarketplace, ChangePlugin } = await import('@/services/element-management-service')
+  const { RefreshAllMarketplaces, ChangePlugin } = await import('@/services/element-management-service')
 
   // 0. Make the refresh below capable of producing upgrades at all. Ordered FIRST because a
   //    catalog refresh against marketplaces whose autoUpdate is off is pure network cost —
@@ -410,20 +410,28 @@ async function runAbsorbedDutyTickBody(
   //    not the refresh two lines down.
   entries.push(await ensureMarketplaceAutoUpdate(settingsPath))
 
-  // 1. marketplace-refresh — EVERY registered marketplace, argless-equivalent
-  //    (the pre-absorption daemon called `claude plugin marketplace update`
-  //    with no name filter at all).
-  for (const mkt of await listRegisteredMarketplaces(readers)) {
-    try {
-      const r = await UpdateMarketplace({ name: mkt }, SYSTEM_AUTH_CONTEXT)
-      entries.push(entry(
-        `absorbed:marketplace:${mkt}`,
-        r.success ? 'updated' : 'failed',
-        r.success ? 'Refreshed marketplace manifest (absorbed duty)' : (r.error || 'Unknown failure'),
-      ))
-    } catch (err) {
-      entries.push(entry(`absorbed:marketplace:${mkt}`, 'failed', errMsg(err)))
-    }
+  // 1. marketplace-refresh — ONE argless invocation for EVERY registered marketplace.
+  //
+  //    This was a per-marketplace loop calling `UpdateMarketplace({ name })`, i.e. one
+  //    `claude plugin marketplace update <name>` process per entry — 275 of them on this host,
+  //    every tick. The loop's own comment already called itself "argless-equivalent", which it
+  //    was not: `claude plugin marketplace update` takes an OPTIONAL name and its help says
+  //    "updates all if no name specified", so the equivalent was available the whole time and
+  //    the loop was paying 275 process spawns and 275 git fetches to reach the same state.
+  //
+  //    It also collapses the reporting honestly. The loop emitted one entry per marketplace, so
+  //    `lastRunSummary` filled with hundreds of rows and its failures were per-name; there is now
+  //    ONE row, because there is one operation. A future reader wanting per-marketplace outcomes
+  //    should get them from the CLI's own output, not by reinstating the loop.
+  try {
+    const r = await RefreshAllMarketplaces(SYSTEM_AUTH_CONTEXT)
+    entries.push(entry(
+      'absorbed:marketplace-refresh',
+      r.success ? 'updated' : 'failed',
+      r.success ? 'Refreshed every registered marketplace (one invocation)' : (r.error || 'Unknown failure'),
+    ))
+  } catch (err) {
+    entries.push(entry('absorbed:marketplace-refresh', 'failed', errMsg(err)))
   }
   // The janitor cannot see this ran unless we say so. Its daemon is SUPPRESSED on a host we own
   // (one-daemon-per-host), so `<task>.last-run.ts` is the only channel by which a chore we

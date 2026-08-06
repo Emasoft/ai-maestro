@@ -23,11 +23,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const updateMarketplace = vi.fn(async (_arg: { name: string }) => ({ success: true }))
+const refreshAllMarketplaces = vi.fn(async () => ({ success: true }))
 const changePlugin = vi.fn(async (_agentId: unknown, _desired: unknown) => ({ success: true }))
 
 vi.mock('@/services/element-management-service', () => ({
-  UpdateMarketplace: (...args: unknown[]) => (updateMarketplace as any)(...args),
+  RefreshAllMarketplaces: (...args: unknown[]) => (refreshAllMarketplaces as any)(...args),
   ChangePlugin: (...args: unknown[]) => (changePlugin as any)(...args),
 }))
 
@@ -43,7 +43,10 @@ import {
   isAbsorbedDutySchedulerRunning,
   type CandidateReaders,
 } from '@/services/auto-update-service'
-import { MARKETPLACE_NAME, LOCAL_MARKETPLACE_NAME, CUSTOM_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
+// LOCAL_/CUSTOM_MARKETPLACE_NAME are gone with the per-name loop: the refresh no longer takes a
+// name, so there are no per-marketplace assertions left to make. MARKETPLACE_NAME survives for the
+// janitor self-update, which IS still per-name.
+import { MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { readChoreStamp } from '@/lib/janitor-chore-stamp'
 
 const JANITOR = 'ai-maestro-janitor'
@@ -78,9 +81,9 @@ let settingsDir = ''
 const SETTINGS = () => path.join(settingsDir, '.claude', 'settings.json')
 
 beforeEach(() => {
-  updateMarketplace.mockClear()
+  refreshAllMarketplaces.mockClear()
   changePlugin.mockClear()
-  updateMarketplace.mockResolvedValue({ success: true })
+  refreshAllMarketplaces.mockResolvedValue({ success: true })
   changePlugin.mockResolvedValue({ success: true })
   priorControlDir = process.env.JANITOR_CONTROL_DIR
   controlDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-chore-stamp-'))
@@ -136,19 +139,36 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
       settingsPath: SETTINGS(),
     })
     expect(entries).toEqual([])
-    expect(updateMarketplace).not.toHaveBeenCalled()
+    expect(refreshAllMarketplaces).not.toHaveBeenCalled()
     expect(changePlugin).not.toHaveBeenCalled()
   })
 
-  it('refreshes every registered marketplace, argless-equivalent, when installed+armed', async () => {
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+  it('refreshes every marketplace in ONE argless call — the per-name loop is gone', async () => {
+    // COUNTING THE INVOCATIONS IS THE ASSERTION. The previous shape looped
+    // `UpdateMarketplace({ name })` once per registered marketplace — 275 processes and 275 git
+    // fetches per tick on this host — and a test asserting only "it succeeded" passes over that
+    // loop unchanged. So this pins the COUNT, and it pins it against a reader that reports MANY
+    // marketplaces, because a count of 1 taken from a 1-marketplace fixture proves nothing.
+    const readers = fakeReaders()
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers, settingsPath: SETTINGS() })
 
-    const refreshedNames = updateMarketplace.mock.calls.map((c) => (c[0] as { name: string }).name)
-    // The 3 always-registered marketplaces, at minimum — the pre-absorption daemon called
-    // `claude plugin marketplace update` with no name filter at all.
-    expect(refreshedNames).toContain(MARKETPLACE_NAME)
-    expect(refreshedNames).toContain(LOCAL_MARKETPLACE_NAME)
-    expect(refreshedNames).toContain(CUSTOM_MARKETPLACE_NAME)
+    expect(refreshAllMarketplaces).toHaveBeenCalledTimes(1)
+    // Argless: the whole point is that no name narrows it. `RefreshAllMarketplaces` takes only an
+    // auth context, so a regression that reintroduced per-name filtering could not keep this shape.
+    expect(refreshAllMarketplaces.mock.calls[0]).toHaveLength(1)
+  })
+
+  it('emits ONE summary row for the refresh, not one per marketplace', async () => {
+    // The reporting half of the same change: `lastRunSummary` used to fill with hundreds of rows
+    // because the loop emitted one entry per name. One operation ⇒ one row.
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+    // The load-bearing half is the ABSENCE of the old shape: the loop emitted one
+    // `absorbed:marketplace:<name>` row per registered marketplace. Nothing may produce that
+    // shape any more. (Note the colon — `absorbed:marketplace-refresh` and
+    // `absorbed:marketplace-auto-update` both begin with `absorbed:marketplace`, so a
+    // startsWith on that prefix matches the two current rows and asserts nothing.)
+    expect(entries.filter(e => e.target.startsWith('absorbed:marketplace:'))).toHaveLength(0)
+    expect(entries.filter(e => e.target === 'absorbed:marketplace-refresh')).toHaveLength(1)
   })
 
   it('self-updates the janitor plugin specifically, at user scope', async () => {
@@ -173,14 +193,15 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
   })
 
   it('a single failed candidate does not abort the rest of the tick', async () => {
-    updateMarketplace.mockImplementation(async ({ name }: { name: string }) =>
-      name === MARKETPLACE_NAME ? { success: false, error: 'boom' } : { success: true },
-    )
+    // Was a per-NAME injection back when the refresh looped; the argless refresh has one outcome,
+    // so the failure is injected on that one call. The property under test is unchanged and is
+    // the one that matters: a chore that fails must not take the other chores down with it.
+    refreshAllMarketplaces.mockResolvedValue({ success: false, error: 'boom' } as never)
     const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
 
-    const failed = entries.find((e) => e.target === `absorbed:marketplace:${MARKETPLACE_NAME}`)
+    const failed = entries.find((e) => e.target === 'absorbed:marketplace-refresh')
     expect(failed).toMatchObject({ status: 'failed', detail: 'boom' })
-    // The janitor self-update (a DIFFERENT candidate) still ran despite the marketplace failure.
+    // The janitor self-update (a DIFFERENT chore) still ran despite the refresh failing.
     expect(changePlugin).toHaveBeenCalled()
   })
 

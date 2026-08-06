@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   planModelFallback,
   modelFamily,
+  parsePaneModel,
   stuckSuggestsModelFallback,
   FALLBACK_INTERVAL_MS,
   CONFIRM_DELAY_MS,
@@ -16,7 +17,8 @@ const T0 = 1_770_000_000_000
 const FLEET: FallbackCandidate[] = [
   { agentId: 'a1', name: 'alice', model: 'Fable 5' },
   { agentId: 'a2', name: 'bob', model: 'Opus 4.8' },
-  { agentId: 'a3', name: 'carol', model: 'Fable 5' },
+  // The real pane shape for a 1M variant — a model name containing a space AND parentheses.
+  { agentId: 'a3', name: 'carol', model: 'Fable 5 (1M)' },
   { agentId: 'a4', name: 'dave', model: 'Sonnet 5' },
 ]
 
@@ -48,6 +50,45 @@ describe('modelFamily', () => {
     // silently no-op, which is indistinguishable from a healthy fleet.
     expect('Fable 5'.toLowerCase()).not.toBe('fable')
     expect(modelFamily('Fable 5')).toBe('fable')
+  })
+
+  it('joins two DIFFERENT spellings of one family — the case string equality cannot reach', () => {
+    // The first fixture for this compared 'Fable 5' to 'Fable 5', so the filter matched by plain
+    // string equality and the family extraction was never exercised: disabling the split reddened
+    // only the two direct unit tests, not one plan test. These are the spellings that actually
+    // differ across the join — a scoped window naming the family, an agent on the 1M variant.
+    expect(modelFamily('Fable 5 (1M)')).toBe(modelFamily('Fable 5'))
+    expect('Fable 5 (1M)').not.toBe('Fable 5')
+  })
+})
+
+describe('parsePaneModel — the only source that actually reports the running model', () => {
+  // Captured verbatim from the two live agent panes, 2026-08-06.
+  const FRANK = '  🤖 Sonnet 5 v2.1.223 ·xhigh 🧠 | 📁 frank | 📊 488k/1.0m ███░░░░░ 49% | 🔌 0'
+  const TESTBOT = '  🤖 Opus 5 (1M) v2.1.223 ·xhigh 🧠 | 📁 testbot | 📊 400k/1.0m ███░░░░░ 40%'
+
+  it('reads the model from a real captured statusline', () => {
+    expect(parsePaneModel(FRANK)).toBe('Sonnet 5')
+    expect(parsePaneModel(TESTBOT)).toBe('Opus 5 (1M)')
+  })
+
+  it('terminates on the VERSION, not on a space — a 1M model name contains both', () => {
+    // 'Opus 5 (1M)'.split(' ')[0] would be 'Opus', losing the variant; stopping at the first
+    // space after the family would silently truncate every 1M agent's model.
+    expect(parsePaneModel(TESTBOT)).toContain('(1M)')
+    expect(modelFamily(parsePaneModel(TESTBOT)!)).toBe('opus')
+  })
+
+  it('takes the LAST statusline — scrollback holds models the agent has since switched away from', () => {
+    const scrollback = ['🤖 Fable 5 v2.1.220 ·xhigh 🧠 | old', 'some work', FRANK].join('\n')
+    expect(parsePaneModel(scrollback)).toBe('Sonnet 5')
+  })
+
+  it('returns null on an unreadable pane rather than implying a model', () => {
+    // Null must stay distinguishable from "not on the exhausted model", or an unreadable pane
+    // silently drops that agent from the sweep.
+    expect(parsePaneModel('')).toBeNull()
+    expect(parsePaneModel('no statusline here\njust output')).toBeNull()
   })
 })
 

@@ -26,12 +26,50 @@
  */
 import type { NextAction } from './tick'
 
-/** An agent the sweep may act on. `model` is whatever the agent is CURRENTLY running. */
+/**
+ * An agent the sweep may act on.
+ *
+ * `model` is the agent's CURRENTLY RUNNING model, as a display string.
+ *
+ * WHERE IT COMES FROM, and why not from the obvious place. `Agent.model` (types/agent.ts:207)
+ * looks like the field for this and is **not populated** — measured 2026-08-06 against the live
+ * registry: `null` for all 13 agents. `programArgs` carries no `--model`, and the hook's
+ * chat-state files have no `model` key at all (0 hits across 419 files). A sweep joined on any of
+ * those finds nobody, reports `no-agents-on-that-model`, and does nothing — forever, silently,
+ * looking exactly like a healthy fleet.
+ *
+ * The one place the running model is actually observable is the **pane statusline**, which the
+ * server can already read (`readPaneVerdict` / `capturePane`). Hence `parsePaneModel` below.
+ */
 export interface FallbackCandidate {
   agentId: string
   name?: string
-  /** Normalised model family, lowercase (`fable`, `opus`, `sonnet`, …). */
+  /** Display string as rendered, e.g. `Sonnet 5`, `Opus 5 (1M)`, `Fable 5`. */
   model: string
+}
+
+/**
+ * Pull the running model out of a captured pane's statusline.
+ *
+ * Measured shape (live panes, 2026-08-06):
+ *
+ *     🤖 Sonnet 5 v2.1.223 ·xhigh 🧠 | 📁 frank   | 📊 488k/1.0m …
+ *     🤖 Opus 5 (1M) v2.1.223 ·xhigh 🧠 | 📁 testbot | 📊 400k/1.0m …
+ *
+ * The version is the terminator, not a space: `Opus 5 (1M)` contains spaces and parentheses and
+ * is still one model name. Returns null when no statusline is present — an UNREADABLE pane must
+ * not be silently treated as "not on the exhausted model", which would quietly drop that agent
+ * from the sweep.
+ */
+export function parsePaneModel(paneText: string): string | null {
+  // Scan from the end: the statusline is redrawn at the bottom, and scrollback may hold older
+  // ones naming a model the agent has since switched away from.
+  const lines = paneText.split('\n')
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /🤖\s*(.+?)\s+v\d/.exec(lines[i]!)
+    if (m?.[1]) return m[1].trim()
+  }
+  return null
 }
 
 /** One scheduled switch. `dueAtMs` is absolute, so the caller needs no timer arithmetic. */

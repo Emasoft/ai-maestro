@@ -85,6 +85,13 @@ The registry has not been written since BEFORE the flip, because the flag is rea
 LOAD and no Claude Code instance has started since. So the card's open question — *which
 direction does the harness sync these two files* — is still unanswered, and AC6 rests on it.
 
+**Re-measured 08:17 — a data point that NARROWS it without settling it.** The registry's mtime
+had moved to **08:09:56** (from 07:08), i.e. something wrote it AFTER the 07:46 flip, and
+`autoUpdate: true` was still **0 / 275**. That is evidence against "settings.json → registry
+sync", but it is NOT decisive and must not be recorded as such: a write that only refreshes
+`lastUpdated` is a CATALOG REFRESH, which is a different event from an instance BOOT reading
+`settings.json`. Only the boot re-derives the flag. Do not close AC6 on this.
+
 **The check to run when a session has started after 07:46:** re-read the registry. If its
 entries now carry `autoUpdate: true`, the sync is settings → registry and the flip works; then
 AC6 may proceed. If they do NOT, the registry is authoritative for this flag, it has **no

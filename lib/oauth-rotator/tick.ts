@@ -985,6 +985,15 @@ export async function autoRotate(
   // fully-safe account exists the behaviour is unchanged. Pushing (rather than reassigning) keeps
   // `candidates` const and keeps ONE list feeding both the guard and `selectDrainFirst`, so the
   // count the guard sees can never disagree with the set the selection uses.
+  //
+  // NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restores blob-verified). A
+  // COMPLEMENTARY PAIR, because one mutation can only certify half of a conditional: deleting it
+  // proves the fallback FIRES, and making it unconditional proves it stays SUBORDINATE. Each reds
+  // exactly one test, and a different one, so neither half is decorative:
+  //   s{if \(candidates\.length === 0 && scopedOnly\.length > 0\) candidates\.push\(\.\.\.scopedOnly\)}{}
+  //     → 1 red / 22 green:  rotates onto an account blocked ONLY by a spent MODEL window …
+  //   s{…same…}{candidates.push(...scopedOnly)}
+  //     → 1 red / 22 green:  still PREFERS a fully-safe account when one exists — last-resort only
   if (candidates.length === 0 && scopedOnly.length > 0) candidates.push(...scopedOnly)
 
   // THE DRAIN-GUARD (TRDD-GY0LJV6S) — the LAST thing before either rotation path, so ONE placement

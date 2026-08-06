@@ -13,12 +13,20 @@
  * "Usage: claude plugin marketplace update [options] [name]" / "updates all if no name
  * specified" — verified before this function was written.
  *
- * NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
- *   s/'update'\]/'update', 'some-name']/ if $. == 5431
- *   → 1 red / 4 green:
- *       runs `claude plugin marketplace update` with NO name, exactly once
- * i.e. the exact regression this file exists to catch — a name creeping back into the argv —
- * reds this and nothing else.
+ * NEUTER RUNS (all OBSERVED via scripts/dev/neuter, every restore verified by blob hash):
+ *   1. s/'update'\]/'update', 'some-name']/    → 1 red / 4 green:
+ *        runs `claude plugin marketplace update` with NO name, exactly once
+ *      i.e. the exact regression this file exists to catch — a name creeping back into the argv.
+ *   2. s/30 * 60 * 1000/900000/ (the constant)  → 1 red / 5 green:
+ *        gives the refresh a budget LARGER than the measured 1082 s run
+ *      i.e. restoring the cap that shipped reds THAT test and nothing else.
+ *   3. s/, { timeout: … }// (drop the option)   → 3 red / 3 green — broader on purpose: removing
+ *      the argument shifts promisify's callback position, so the mock's argv recording and the
+ *      failure path break too. Removal is caught; run 2 is the one that pins the VALUE.
+ *
+ * Line numbers are deliberately NOT cited here. The previous version of this block named
+ * `$. == 5431`, and the argv line is now 5457 — a coordinate nothing verifies rots silently, and
+ * the mutation text alone is unambiguous.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 

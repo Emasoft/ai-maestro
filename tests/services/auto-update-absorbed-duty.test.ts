@@ -257,10 +257,13 @@ describe('the absorbed lane cadence — 3 hours (TRDD-PE54D95Q, USER ruling 2026
   // regression here is invisible to every meter an operator would think to check. The test is
   // the only instrument that sees it.
   //
-  // NEUTER (observed 2026-08-06): ABSORBED_DUTY_INTERVAL_MS back to `60 * 60 * 1000`
-  //   → red: 'arms its timer at exactly 3 hours'. The `not.toHaveBeenCalledWith(1 h)` line is
-  //   the half that names the specific regression; the exact-equality line above it is what
-  //   rejects any OTHER wrong value, since a bare not-1h would pass at 2 h or 24 h.
+  // NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+  //   s/3 \* 60 \* 60 \* 1000/60 * 60 * 1000/ if $. == 111
+  //   → 1 red / 13 green:
+  //       arms its timer at exactly 3 hours, never the 1 hour it used to use
+  // The `not.toHaveBeenCalledWith(1 h)` line is the half that names that specific regression;
+  // the exact-equality line above it is what rejects any OTHER wrong value, since a bare
+  // not-1h would pass at 2 h or 24 h.
   it('arms its timer at exactly 3 hours, never the 1 hour it used to use', () => {
     const spy = vi.spyOn(global, 'setInterval')
     try {

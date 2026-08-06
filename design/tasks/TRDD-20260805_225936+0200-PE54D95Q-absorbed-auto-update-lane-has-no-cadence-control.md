@@ -1,11 +1,12 @@
 ---
 trdd-id: PE54D95Q
 title: The absorbed auto-update lane has no cadence control and retries permanent failures hourly
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-05T23:38:58+0200
+updated: 2026-08-06T07:27:39+0200
+implementation-commits: [4e66947e]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -26,6 +27,45 @@ labels: [auto-update, github, rate-limit, owner-ours]
 external-refs: [Emasoft/ai-maestro#102]
 ---
 # The absorbed auto-update lane has no cadence control and retries permanent failures hourly
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-06
+
+**LANDED: the cadence only.** `4e66947e` — `ABSORBED_DUTY_INTERVAL_MS` 1 h → **3 h**
+(`services/auto-update-service.ts:111`), pinned by *"arms its timer at exactly 3 hours"* in
+`tests/services/auto-update-absorbed-duty.test.ts`. Neuter observed via `scripts/dev/neuter`:
+reverting the constant reds exactly that one test, 13 green, restore blob-verified. AC2 closed.
+
+**NPT(1) — ANSWERED, and the card's own worry was wrong.** It asked whether any production
+caller reaches `restartHarnessFleet`. Measured: it has ZERO callers outside
+`lib/fleet-restart-fanout.ts`, but that wrapper IS reached — `server.mjs:1824`
+(`restartFleetForSessions`, wired into `startAutoUpdateScheduler`) and `server.mjs:1852`
+(`restartEntireHarnessFleet`, wired into `startAbsorbedDutyScheduler`). So the chain
+server.mjs → fanout → driver is live. The card looked for "an `app/api` route among the hits",
+found none, and concluded UNKNOWN; the caller is the **server itself**, which is why an
+API-route search could never have found it. **NPT(1) is closed; NPT(2) (a flag written before a
+restart is honoured by the instance that returns) still needs an operator and still gates `dev`.**
+
+**BLOCKER FOUND for AC1 — there is no argless refresh path to call.** The card assumes
+`claude plugin marketplace update` with no arguments is reachable. It is not:
+`UpdateMarketplace` requires `{name: string}` and delegates to `ChangeMarketplace`, whose
+update action hardcodes `execFileAsync('claude', ['plugin','marketplace','update', desired.name])`
+at `services/element-management-service.ts:5690`. Collapsing the 275-iteration loop therefore
+means **adding an argless branch inside the element pipeline**, not editing this service. Sized,
+deliberately not started mid-context. Mitigating: that action has no honest undo anyway ("you
+cannot un-pull a marketplace"), so it is not R51-transaction-wrapped — the branch is contained.
+
+**⚠ SEQUENCING HAZARD — do NOT implement AC6 ("`claude plugin update` invocations → 0") next.**
+AC6 means deleting loops 2 and 3 (`version-update`, `user-plugins-update`,
+`auto-update-service.ts:318` and `:360`). Those loops are redundant **only once the harness is
+doing the upgrading for us**, and the card's own measurement says it is not: **0 of 275
+marketplaces carry `autoUpdate: true`**. Delete them today and 42 real updates per pass stop
+happening and nothing replaces them — including the janitor's own self-update. Correct order:
+**AC1 (argless) → the autoUpdate flip → only then AC6.** The 158 failures are real waste, but
+they are the price of the 42 successes until the flip lands.
+
+**NEXT ACTION:** read `services/element-management-service.ts` around `:5690` and add the
+argless branch (`name` optional ⇒ omit it from argv), then a test asserting the exact argv and
+that the per-marketplace loop is gone — per AC1, counting invocations is the assertion.
 
 ## Problem
 
@@ -432,8 +472,10 @@ applies to it, which is now the strongest argument for settling that first.
       no arguments — pinned by a test asserting the exact argv and that the per-target loop
       is gone. Counting invocations is the assertion; asserting "it succeeded" would pass
       over a 200-call loop unchanged.
-- [ ] Cadence is **3 hours**. Pinned against the constant, not against an observed run —
+- [x] Cadence is **3 hours**. Pinned against the constant, not against an observed run —
       a wall-clock test would take 3 h and would still only prove one interval.
+      DONE `4e66947e`: `services/auto-update-service.ts:111`, pinned by *"arms its timer at
+      exactly 3 hours"*; neuter reds exactly that test (1 red / 13 green), restore blob-verified.
 - [ ] Exactly **one** executor. A test proves N concurrent sessions produce N=1 refresh, not
       N — this is the half that scales into the rate limit and the half a per-session
       implementation passes trivially by testing a single session.

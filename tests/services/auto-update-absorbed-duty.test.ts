@@ -246,3 +246,32 @@ describe('startAbsorbedDutyScheduler / stopAbsorbedDutyScheduler — the always-
     expect(isAbsorbedDutySchedulerRunning()).toBe(false)
   })
 })
+
+describe('the absorbed lane cadence — 3 hours (TRDD-PE54D95Q, USER ruling 2026-08-05)', () => {
+  // Pinned against the REGISTERED INTERVAL, deliberately, per the card: a wall-clock test
+  // would take 3 h to run and would still only prove ONE interval. Spying on setInterval
+  // reads the constant the scheduler actually arms itself with, which is the claim.
+  //
+  // WHY THIS MATTERS ENOUGH TO PIN: the lane's traffic is git-protocol, which counts against
+  // NO GitHub API quota — so `gh api rate_limit` reads clean while the lane saturates, and a
+  // regression here is invisible to every meter an operator would think to check. The test is
+  // the only instrument that sees it.
+  //
+  // NEUTER (observed 2026-08-06): ABSORBED_DUTY_INTERVAL_MS back to `60 * 60 * 1000`
+  //   → red: 'arms its timer at exactly 3 hours'. The `not.toHaveBeenCalledWith(1 h)` line is
+  //   the half that names the specific regression; the exact-equality line above it is what
+  //   rejects any OTHER wrong value, since a bare not-1h would pass at 2 h or 24 h.
+  it('arms its timer at exactly 3 hours, never the 1 hour it used to use', () => {
+    const spy = vi.spyOn(global, 'setInterval')
+    try {
+      expect(isAbsorbedDutySchedulerRunning()).toBe(false)
+      startAbsorbedDutyScheduler()
+      expect(isAbsorbedDutySchedulerRunning()).toBe(true) // non-vacuity: it really armed
+      expect(spy).toHaveBeenCalledWith(expect.any(Function), 3 * 60 * 60 * 1000)
+      expect(spy).not.toHaveBeenCalledWith(expect.any(Function), 60 * 60 * 1000)
+    } finally {
+      stopAbsorbedDutyScheduler()
+      spy.mockRestore()
+    }
+  })
+})

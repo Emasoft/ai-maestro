@@ -94,9 +94,21 @@ let tickInFlight = false  // prevents two ticks running concurrently if a slow
 // doc for the full "consent-to-add is not consent-to-remove" argument.
 let absorbedTimerHandle: NodeJS.Timeout | null = null
 let absorbedTickInFlight = false
-/** Mirrors the pre-absorption janitor daemon's own cadence for
- *  `marketplace-refresh` / `user-plugins-update` (3600 s — ai-maestro#102 §2). */
-const ABSORBED_DUTY_INTERVAL_MS = 60 * 60 * 1000
+/** Cadence of the absorbed lane: **3 hours** (USER ruling, 2026-08-05, TRDD-PE54D95Q).
+ *
+ *  It was 3600 s, mirroring the pre-absorption janitor daemon (ai-maestro#102 §2). That
+ *  cadence bought nothing and cost connections: `claude plugin marketplace update` is
+ *  IDEMPOTENT — running it again inside the same window cannot make a catalog fresher than
+ *  the first run already did, it re-asks a question whose answer has not changed and pays a
+ *  git fetch for the answer. So the ONLY thing frequency buys here is latency against
+ *  upstream publishing, and past that point every extra tick is pure waste, not margin.
+ *
+ *  ⚠ DO NOT RAISE THIS "to keep plugins fresher" — it will not. Re-running is idempotent, so
+ *  you would buy zero freshness at N× the connections, which is the exact state this card
+ *  exists to end. The traffic is also invisible to every meter an operator would check: git
+ *  protocol operations count against NO GitHub API quota, so `gh api rate_limit` reads clean
+ *  while this lane saturates. Measure it with the lane's own `lastRunSummary`, never a quota. */
+const ABSORBED_DUTY_INTERVAL_MS = 3 * 60 * 60 * 1000
 
 /** Restart-queue notifier — wired by start(). The server.mjs entry point
  *  passes a callback that broadcasts a restart-needed signal to the UI's

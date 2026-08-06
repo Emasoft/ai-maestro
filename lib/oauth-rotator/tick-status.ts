@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { statePath } from '../ecosystem-constants'
-import type { NextAction, TickReason } from './tick'
+import type { NextAction, TickReason, StuckReason } from './tick'
 
 // The persisted stamp that bridges the OAuth-rotator beat to the continuity `status` verb
 // (TRDD-1GGQ4HWY → TRDD-DXJZM3BW). The beat (server-tick.ts::runOneTick) ACTUATES behind the R16
@@ -15,10 +15,17 @@ import type { NextAction, TickReason } from './tick'
 // cannot actuate anything.
 
 /** The cascade states the tick can conclude — the SAME vocabulary as tick.ts's TickResult. */
-const VALID: ReadonlySet<string> = new Set<NextAction>(['ok', 'rotating', 'reauth-needed'])
+const VALID: ReadonlySet<string> = new Set<NextAction>(['ok', 'rotating', 'reauth-needed', 'stuck'])
 
 /** The reasons a `reauth-needed` can be attributed to — mirrors tick.ts's TickReason. */
 const VALID_REASON: ReadonlySet<string> = new Set<TickReason>(['refresh-dead', 'slot-unreadable'])
+
+/** The reasons a `stuck` can be attributed to — mirrors tick.ts's StuckReason. Same discipline as
+ *  VALID_REASON: this set and that type must be widened together, because an unrecognised value is
+ *  DROPPED on write and REJECTS the whole stamp on read. */
+const VALID_STUCK: ReadonlySet<string> = new Set<StuckReason>([
+  'all-maxed', 'cannot-rotate-offline', 'drain-guard-hold',
+])
 
 /** On-disk shape: the last tick's cascade conclusion, WHY, plus when it was written (ISO 8601).
  *
@@ -30,6 +37,12 @@ const VALID_REASON: ReadonlySet<string> = new Set<TickReason>(['refresh-dead', '
 interface TickStatusFile {
   nextAction: NextAction
   reason?: TickReason
+  /** WHY a `stuck` tick is stuck — same diagnostic role `reason` plays for `reauth-needed`, and
+   *  added for the same reason: a bare `stuck` says rotation is not happening without saying
+   *  whether anyone can do anything about it. `all-maxed` means wait for a window;
+   *  `cannot-rotate-offline` means a human is needed. Those are opposite instructions, and before
+   *  this field the file carried neither — it carried `"ok"`. */
+  stuck?: StuckReason
   at: string
 }
 
@@ -63,6 +76,8 @@ export function writeTickStatus(result: unknown): void {
     // An unrecognised reason is DROPPED, not written: the stamp must never carry a value the
     // reader would reject, or the file becomes its own second vocabulary.
     if (typeof rs === 'string' && VALID_REASON.has(rs)) payload.reason = rs as TickReason
+    const sk = (result as { stuck?: unknown } | null)?.stuck
+    if (typeof sk === 'string' && VALID_STUCK.has(sk)) payload.stuck = sk as StuckReason
     const file = tickStatusPath()
     fs.mkdirSync(path.dirname(file), { recursive: true })
     const tmp = `${file}.tmp`

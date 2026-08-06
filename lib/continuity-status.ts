@@ -34,6 +34,11 @@ export type ContinuityNextAction =
   | 'rotating'
   | 'reauth-needed'
   | 'restoring'
+  /** The tick WANTED to rotate and could not (all accounts maxed / offline / drain-guard hold).
+   *  Added 2026-08-06: this state existed in the tick and was reported only to the log and the
+   *  alert store, so the persisted status said `ok` through a 3.7-day rotation outage. Rotation
+   *  being OFF must never be spelled the same way as rotation being unnecessary. */
+  | 'stuck'
 
 export interface ContinuityStatus {
   /** account identified AND not definitively rate-limited (see agentlens-status). */

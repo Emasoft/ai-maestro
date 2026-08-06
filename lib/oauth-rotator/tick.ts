@@ -102,8 +102,17 @@ const LIVE_429_DEBOUNCE = 2
 /** Freshness window for the session identity beacon; older than this and it is ignored. */
 const BEACON_MAX_AGE_S = 24 * 3600
 
-/** What the tick concluded — feeds DXJZM3BW's `status.next_action`. */
-export type NextAction = 'ok' | 'rotating' | 'reauth-needed'
+/** What the tick concluded — feeds DXJZM3BW's `status.next_action`.
+ *
+ * `stuck` was added 2026-08-06 after a MEASURED outage. See the `stuck` doc block below: that
+ * field already existed and already reached the log and the alert store, but it never reached
+ * THIS type — and `nextAction` is the only value the status FILE persists. So a rotator that
+ * could not rotate persisted as `{"nextAction":"ok"}`, which is what the owner's dashboard and
+ * any script read. Measured that day: the tick had not completed for 3.7 days, the live account's
+ * refresh token was dead, two alternates were healthy, `active-alerts.json` held
+ * `rotator-stuck:all-maxed` with `seen: 5` — and the status file said `ok`. The owner found out by
+ * hitting a rate limit and rotating by hand. */
+export type NextAction = 'ok' | 'rotating' | 'reauth-needed' | 'stuck'
 
 /**
  * WHY `reauth-needed` needs a reason: the same word covers two failures with OPPOSITE owners.
@@ -1050,6 +1059,11 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
     // Precedence: OUR fault before THEIRS — see the TickReason doc comment.
     if (unreadable > 0) { nextAction = 'reauth-needed'; reason = 'slot-unreadable' }
     else if (deadRefresh > 0) { nextAction = 'reauth-needed'; reason = 'refresh-dead' }
+    // A tick that WANTED to rotate and could not is not `ok`. This is last in the chain on
+    // purpose: `reauth-needed` names something a human can act on right now (re-login), while
+    // `stuck` usually means "wait for a window", so the actionable verdict keeps precedence.
+    // But it must beat `ok`, because `ok` is what a reader treats as health.
+    else if (rotateOut.stuck) { nextAction = 'stuck' }
   }
   // The decision line is the beat's only log surface, so it must not say "no action needed" while
   // nextAction is reauth-needed — that reads as health and is how this stayed unexamined. State

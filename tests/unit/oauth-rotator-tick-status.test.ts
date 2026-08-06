@@ -32,10 +32,47 @@ describe('tick-status — writeTickStatus / readTickStatus (PERSIST-THEN-READ, T
   })
 
   it('round-trips each valid cascade state', () => {
-    for (const s of ['ok', 'rotating', 'reauth-needed'] as const) {
+    for (const s of ['ok', 'rotating', 'reauth-needed', 'stuck'] as const) {
       writeTickStatus({ nextAction: s })
       expect(readTickStatus()).toBe(s)
     }
+  })
+
+  // ── `stuck` must SURVIVE the write (measured outage, 2026-08-06) ──────────────
+  //
+  // The tick already computed `stuck`, already logged it, and already raised
+  // `rotator-stuck:all-maxed` in the alert store. What it did NOT do was put it anywhere
+  // the persisted status could carry — so through a 3.7-day rotation outage this file said
+  // `{"nextAction":"ok"}`, which is what the dashboard and any script read. The owner found
+  // out by hitting a rate limit and rotating accounts by hand.
+  //
+  // Hence a round-trip test rather than a write-only one: the failure was not that the value
+  // was computed wrong, it was that it never reached disk.
+
+  it('persists a stuck tick AS stuck — never as ok', () => {
+    writeTickStatus({ nextAction: 'stuck', stuck: 'all-maxed', switched: false })
+    expect(readTickStatus()).toBe('stuck')
+    // The literal the outage produced. Asserting `!== 'ok'` alone would also pass on null.
+    expect(readTickStatus()).not.toBe('ok')
+  })
+
+  it('carries WHY it is stuck, because the two reasons have opposite remedies', () => {
+    // `all-maxed` means wait for a window; `cannot-rotate-offline` means a human is needed.
+    // A bare `stuck` cannot tell a reader which, so the reason rides along like `reason` does
+    // for reauth-needed.
+    const file = statePath('oauth-rotator-tick-status.json')
+    writeTickStatus({ nextAction: 'stuck', stuck: 'cannot-rotate-offline' })
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).stuck).toBe('cannot-rotate-offline')
+  })
+
+  it('DROPS an unrecognised stuck reason rather than writing a value the reader rejects', () => {
+    // Same discipline as `reason`: the stamp must never carry a token the read side would
+    // refuse, or the file becomes a second vocabulary that disagrees with the type.
+    const file = statePath('oauth-rotator-tick-status.json')
+    writeTickStatus({ nextAction: 'stuck', stuck: 'invented-reason' })
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+    expect(parsed.stuck).toBeUndefined()
+    expect(readTickStatus()).toBe('stuck') // the state itself still persists
   })
 
   it('is a no-op on a lock-held null result — the last good value is not clobbered', () => {

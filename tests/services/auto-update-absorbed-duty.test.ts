@@ -31,8 +31,12 @@ vi.mock('@/services/element-management-service', () => ({
   ChangePlugin: (...args: unknown[]) => (changePlugin as any)(...args),
 }))
 
+// A vi.fn rather than a bare passthrough so a test can simulate the lock being HELD by another
+// process — `withMarketplaceLock` returns null in that case, which is the mechanism that makes
+// the refresh single-executor machine-wide (AC3).
+const withMarketplaceLockMock = vi.fn(async (fn: () => Promise<unknown>) => fn())
 vi.mock('@/lib/marketplace-lock', () => ({
-  withMarketplaceLock: async <T>(fn: () => Promise<T>) => fn(),
+  withMarketplaceLock: (...args: unknown[]) => (withMarketplaceLockMock as any)(...args),
 }))
 
 import {
@@ -82,6 +86,8 @@ const SETTINGS = () => path.join(settingsDir, '.claude', 'settings.json')
 
 beforeEach(() => {
   refreshAllMarketplaces.mockClear()
+  withMarketplaceLockMock.mockClear()
+  withMarketplaceLockMock.mockImplementation(async (fn: () => Promise<unknown>) => fn())
   changePlugin.mockClear()
   refreshAllMarketplaces.mockResolvedValue({ success: true })
   changePlugin.mockResolvedValue({ success: true })
@@ -156,6 +162,25 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     // Argless: the whole point is that no name narrows it. `RefreshAllMarketplaces` takes only an
     // auth context, so a regression that reintroduced per-name filtering could not keep this shape.
     expect(refreshAllMarketplaces.mock.calls[0]).toHaveLength(1)
+  })
+
+  it('is single-executor machine-wide — a tick whose lock is HELD refreshes nothing (AC3)', async () => {
+    // THE HALF THAT SCALES INTO THE RATE LIMIT. One refresh per 3 h is only true if exactly one
+    // executor performs it; a per-session implementation multiplies by the number of live
+    // sessions (13 here) and by project count, which is the same per-instance-interval-against-a
+    // per-account-limit error filed as ai-maestro-janitor#215. `withMarketplaceLock` returning
+    // null IS that mechanism — it means another process holds it — and a single-session test
+    // passes this trivially, which is exactly why the contention case has to be driven.
+    withMarketplaceLockMock.mockImplementation(async () => null)
+
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+
+    expect(entries).toEqual([])
+    expect(refreshAllMarketplaces).not.toHaveBeenCalled()
+    expect(changePlugin).not.toHaveBeenCalled()
+    // And the lock was genuinely consulted — without this the assertions above would also pass
+    // for a tick that simply never ran.
+    expect(withMarketplaceLockMock).toHaveBeenCalledTimes(1)
   })
 
   it('emits ONE summary row for the refresh, not one per marketplace', async () => {
@@ -267,6 +292,13 @@ describe('runAbsorbedDutyTickNow — persistence, independent of settings.enable
     expect(saved.lastRunSummary.length).toBeGreaterThan(0)
     expect(saved.lastRunSummary.some((e: { target: string }) => e.target.startsWith('absorbed:'))).toBe(true)
 
+    // NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+    //   s/next = \{ \.\.\.next, lastAbsorbedRunAt: nowIso\(\) \}/next = { ...next }/ if $. == 273
+    //   → 1 red / 14 green:
+    //       appends run entries into auto-update-settings.json WITHOUT touching `enabled`
+    // i.e. dropping the stamp reds this test and nothing else — the older assertions in it all
+    // survive the drop, which is precisely why they were not enough on their own.
+    //
     // AC5 — THE STATE FILE MUST BE HONEST AS A WHOLE, not merely per-field. Every assertion
     // above was already true on the day this file reported `enabled: false` + `lastRunAt: null`
     // while this lane was running hourly and making hundreds of network calls: the only evidence

@@ -1,11 +1,12 @@
 ---
 trdd-id: APN5WB2L
 title: Daemon principal and synchronous interrupt — authenticated janitor recovery injection
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T06:32:35+0200
-updated: 2026-08-06T06:32:35+0200
+updated: 2026-08-06T07:00:02+0200
+implementation-commits: [01747710, aec47b51, edf79ff7, 8df0b4cd, 454b95e1, 31ab0877]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -83,21 +84,32 @@ ruling. Anything that would WIDEN the grant later is a new decision, not this ca
 
 ## Acceptance
 
-- [ ] enrollment: owner-gated, stores pubkey via the amp-keys registration store; a second
-      enrollment attempt without the owner gate is refused
-- [ ] signed-request verification: wrong key / stale issued_at (>60s) / replayed nonce / verb
-      outside the two-verb grant each refused with a DISTINCT pinned reason
-- [ ] `submit-recovery-prompt` delivers a text line with requireIdle:false and the #117 mark
-- [ ] `interrupt` sends non-literal Escape, returns {delivered, interrupted} synchronously, and
-      writes the #117 mark
-- [ ] both server modes reachable (Next route + headless router entry) — pinned by a parity test
-- [ ] neuter runs observed and recorded (auth-bypass neuter reds exactly the refusal tests; mark
-      neuter reds exactly the #117 test)
-- [ ] deployed (build + pm2 restart, health 200); #60 answered with the shipped shape and the
-      synchronous ruling
+- [x] enrollment: owner-gated (strict in security-registry → sudo, AND re-checked in the
+      service), atomic 0600 write. Verified LIVE: `POST /api/daemon/enroll` without a
+      credential answers `auth_required`.
+- [x] signed-request verification: wrong key / tampered field / stale / FUTURE-dated / replayed
+      nonce / ungranted verb / malformed / not-enrolled — each with a DISTINCT pinned reason
+      (13 tests). Ed25519 signing in the tests is REAL, not mocked.
+- [x] `submit-recovery-prompt` delivers with requireIdle:false and the #117 mark
+- [x] `interrupt` sends NON-LITERAL Escape, returns {delivered, interrupted} synchronously
+      (measured, false when nothing broke), writes the #117 mark BEFORE observing
+- [x] both server modes (Next + headless), delegating to ONE service; parity test also asserts
+      neither surface CALLS the verification
+- [x] neuter runs observed, all with disjoint red sets: replay gate→1, freshness→2 (stale +
+      future), grant→2 (incl. the ORDER test), burn-nonce→1, literal-path→2, dropped #117
+      mark→1, requireIdle:true→1, headless-pattern rename→1
+- [x] deployed (build + pm2 restart, health 200) and probed LIVE — which found the one defect
+      no test could: the auth middleware refused before any handler ran, so the channel was
+      correct and UNREACHABLE (`31ab0877` whitelists inject only; enroll stays gated).
+- [x] #60 answered with the shipped shape + the synchronous ruling (comment 5200569302)
 
 ## Approval log
 
 - 2026-08-06T06:32:35+0200 — MANDATE under the USER's standing delegation (2026-08-06, "decide
   by yourself after careful analysis. base your decision on verified facts and tests"). Design
   pre-published on #60 (comment 2026-08-05T14:34Z) without objection; sync-shape ruled here.
+- 2026-08-06T07:00:02+0200 — COMPLETED by ai-maestro (Tier 0, mandate). Six commits
+  (01747710 aec47b51 edf79ff7 8df0b4cd 454b95e1 31ab0877), 32 tests, 8 observed neuters with
+  disjoint red sets, deployed and probed live. The live probe earned its keep: it found that
+  the middleware made the whole channel unreachable, which no test could see. #60 answered
+  (comment 5200569302). All boxes checked; NPT/EHT empty → archive.

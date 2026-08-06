@@ -3,7 +3,7 @@ trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: proposal
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-06T22:35:57+0200
+updated: 2026-08-06T23:06:30+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -117,6 +117,42 @@ account with `refresh_failures: 3` falls through to `stuck: all-maxed`, which te
 The exclusion is deliberate and its rationale has not been read, so this is a question before it is
 a fix: is the live account skipped because refreshing it is unsafe mid-flight, or only because
 nothing needed it before?
+
+> **RATIONALE NOW READ (2026-08-06) — and it answers the question ASKED, in a way that narrows the
+> decision considerably. It is the FIRST of the two options above, but it covers less than it looks.**
+>
+> The skip is a bare `if (email === state.live_email) continue` at `surveyAlternates()` with **no
+> comment at the site** — so "deliberate" could not be settled by reading the function. Provenance
+> settles it. `git log -S` traces the predicate to its ORIGIN, `45725da7` (2026-07-17), whose
+> message states the reason outright:
+>
+> > `keepaliveRefresh()` — RENEW: refresh idle alternate slots within 6h of expiry (**never the
+> > live account; Claude owns its rotating grant**).
+>
+> So the rule is real and load-bearing: **Claude Code owns the live account's rotating grant**, and
+> a second refresher racing it would invalidate the refresh token — the failure mode is losing the
+> credential you were trying to preserve. That commit also records the skip as part of a *"faithful
+> 1:1 port of `rotator.py`'s `cmd_auto`"*, so it is inherited from the Python original, not invented
+> here. (The intermediate commit `511de445` merely carried it through a refactor and never mentions
+> it — which is why reading only recent history would have found nothing.)
+>
+> **THE DISTINCTION THAT DECIDES THIS: the rationale forbids a WRITE, and the fix needs a READ.**
+> "Never refresh the live account" is about mutating a grant Claude owns. `surveyAlternates` does
+> not refresh anything — it reads a slot and reports whether its refresh is dead AND it is expiring.
+> Surveying the live account touches no grant, races nothing, and cannot invalidate a token.
+>
+> So the honest state is no longer "an unread rationale might forbid this". It is: **the documented
+> rationale does not reach the read path**, and no other reason is recorded anywhere. That makes
+> including the live account in the SURVEY (never in `keepaliveRefresh`) a small, well-scoped change
+> rather than an open question.
+>
+> **Still the USER's to rule on**, because it changes what `nextAction` reports on a live host and I
+> have already made one unrequested rotation-policy change tonight. But the research is done: the
+> question is now "do you want `reauth-needed` to fire for a dead-refresh LIVE account?", not "is
+> this even safe to consider?".
+>
+> **What I did NOT verify:** whether `rotator.py` surveys its own live account. If it does, the
+> Python original already answers this and we are simply behind it.
 
 ## Verification
 

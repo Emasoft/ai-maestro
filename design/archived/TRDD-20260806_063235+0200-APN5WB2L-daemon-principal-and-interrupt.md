@@ -1,11 +1,12 @@
 ---
 trdd-id: APN5WB2L
 title: Daemon principal and synchronous interrupt — authenticated janitor recovery injection
-column: complete
+column: superseded
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T06:32:35+0200
-updated: 2026-08-06T07:00:02+0200
+updated: 2026-08-06T07:09:37+0200
+superseded-by: [5H5PBNEB]
 implementation-commits: [01747710, aec47b51, edf79ff7, 8df0b4cd, 454b95e1, 31ab0877]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -113,3 +114,9 @@ ruling. Anything that would WIDEN the grant later is a new decision, not this ca
   disjoint red sets, deployed and probed live. The live probe earned its keep: it found that
   the middleware made the whole channel unreachable, which no test could see. #60 answered
   (comment 5200569302). All boxes checked; NPT/EHT empty → archive.
+- 2026-08-06T07:09:37+0200 — SUPERSEDED by TRDD-5H5PBNEB (USER ruling). The premise was a
+  category error: there is no external daemon to authenticate — the continuity daemon was
+  ABSORBED into this server, and `lib/janitor-daemon-publisher.ts` already stated the rule
+  ("janitor processes never call in"). The inbound channel is reverted in `c7aaa6ab`; only
+  `interruptSession` survives, as an internal function. This card is kept in full because it
+  records the mechanism of the error, which is the part worth not repeating.

@@ -156,6 +156,22 @@ direction — turning on an unattended fleet-wide plugin sweep nobody asked for.
       exactly the trio: `marketplace-refresh`, `version-update`, `user-plugins-update`), but `#99`
       was never read and the pre-absorption gates were never quoted, so the *record* the box asks
       for does not exist. A code shape is not a citation.
+>
+> **AND THE CITATION IS WRONG — measured 2026-08-06, so this box cannot be done as written.**
+> `Emasoft/ai-maestro-janitor#99` is not "the janitor's complete 11-chore spec": it is
+> *"Detector false positives (4 classes): typosquat on famous pkgs; gitignored corpus dirs;
+> id-token-write-unscoped…"*, **CLOSED**, 3813 chars, with **zero** occurrences of
+> `version-update`, `marketplace-refresh` or `user-plugins-update`. The obvious off-by-one
+> `#100` (*"[COORDINATION] ai-maestro absorbs the daemon's functions"*) is also CLOSED with
+> **zero** occurrences of all three. So the source this box sends its reader to does not
+> contain what it promises, and neither does the nearest neighbour.
+>
+> **Box 1 is therefore blocked on identifying the correct source, not on doing the reading** —
+> a distinction worth keeping, because "go read #99" looks actionable forever and silently
+> is not. Do NOT substitute a guessed issue number: this card already spent its credibility
+> on one. The janitor is the authority on where its own chore spec lives; ask, or grep its
+> shipped `scripts/daemon.py` task implementations (which is where TRDD-JANITOR-ABSORB-era
+> work read the chore list from in practice, per [[janitor-chore-absorbability]]).
 - [x] With the master toggle OFF and the janitor armed, a stale janitor plugin is updated within one beat
       — **MET, and measured LIVE on this host 2026-08-06**, which is the only place this box can be
       answered: `~/.aimaestro/auto-update-settings.json` reads `enabled: false`, `lastRunAt: null`,

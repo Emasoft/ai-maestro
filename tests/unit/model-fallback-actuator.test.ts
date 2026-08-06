@@ -158,3 +158,26 @@ describe('actuateModelFallback — the post-condition', () => {
     expect(out).toMatchObject({ fired: true, confirmed: null, detail: 'pane unreadable' })
   })
 })
+
+/*
+ * NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *
+ *   s/if \(!cmdRes\.ok\)/if (false)/          (a failed command gets confirmed anyway)
+ *   → 1 red / 13 green:
+ *       stops after a failed command rather than sending a bare ENTER
+ *
+ *   s/if \(!entry\.ok\) return/if (false) return/
+ *   → 2 red / 12 green:
+ *       refuses and injects NOTHING when a machine-wide STOP is in force
+ *       refuses and injects NOTHING when the master fire flag is off
+ *
+ *   s/const stillAsking = verdict\.blocked/const stillAsking = false && verdict.blocked/
+ *   → 1 red / 13 green:
+ *       reports NOT confirmed when the agent is still parked on the dialog
+ *
+ * FIXTURE NOTE, because it produced two failures that looked like code failures. `deps()` first
+ * spread `over` AFTER `inject`, so a test supplying its own injector replaced the RECORDER and
+ * `sent` stayed empty — which reads exactly like "nothing was injected", i.e. like the guard
+ * under test working. The per-step outcome is now a separate parameter and recording is not
+ * overridable, only its result is.
+ */

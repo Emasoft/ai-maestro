@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T10:09:11+0200
+updated: 2026-08-06T10:20:03+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -152,6 +152,42 @@ catch-up fired; the new single-call refresh replaced the per-name loop (the old 
 shown `… update <name>`); and the scheduler copy is genuinely the new code. The state file is
 written only after the refresh returns, so an early check reads "nothing happened" — a full sweep
 takes minutes (the 07:08 one ran 07:08:39→07:09:56+).
+
+### ⚠ 10:17:31 — THE SINGLE REFRESH **TIMES OUT**. AC1 is structurally right and functionally broken.
+
+The catch-up ran end to end and the lane is now measurable. Four claims proven LIVE, and one
+failure that is mine:
+
+| claim | verdict |
+|---|---|
+| the boot catch-up fires at boot+settle | ✅ started 10:02:31, restart was 10:00:28 |
+| `lastAbsorbedRunAt` is stamped (AC5) | ✅ `2026-08-06T10:17:55+0200` |
+| `enabled` is never touched by this lane | ✅ still `false` |
+| ONE refresh invocation, not 275 (AC1) | ✅ exactly **1** `absorbed:marketplace-refresh` row |
+| …and that invocation SUCCEEDS | ❌ **`status: failed`** |
+
+`absorbed:marketplace-refresh` is stamped **10:17:31**, exactly **900 s** after it started at
+10:02:31 — that is `execFileAsync`'s `timeout: 900000` in `RefreshAllMarketplaces`, not a CLI
+error (`detail` is a bare `Command failed:` with no stderr). The registry's mtime is still
+**10:00:31**, i.e. from before the refresh began, so 15 minutes of work were killed and discarded.
+
+**This is a hole MY change opened, and AC1 must NOT be unchecked for it.** AC1's assertion is
+deliberately "one argless invocation", and it says why: *"asserting it succeeded would pass over a
+200-call loop unchanged."* That reasoning still holds. What collapsing 275 calls into one changed
+is the BUDGET: 275 short calls each met their own timeout, and the single call must now fit the
+whole job into one. Nothing in the test suite can see this — the CLI is mocked there, so the
+timeout is invisible by construction and only a live run could surface it.
+
+**Do not "fix" this by guessing a larger timeout.** A measurement is in flight — the same argless
+command run by hand with `/usr/bin/time`, un-killed — to establish what it actually needs. Three
+outcomes, three different fixes: it finishes in a few minutes over 15 (raise the budget); it takes
+far longer (the refresh must become incremental/resumable, which is its own TRDD); or it hangs
+indefinitely (a CLI bug, and the timeout is correct to have caught it).
+
+**Separately, the card's TITLE half is confirmed still live and untouched.** 199 per-plugin rows,
+73 distinct timestamps spanning 08:10:12 → 10:17:55, every one failing with
+`Failed to update plugin "X": Plugin "X" not found` — permanent failures retried every cycle,
+exactly what the card is named for. That is AC6's territory and remains open.
 
 **A NEW fact that weakens the "registry is authoritative" branch below.** Only **15 of 275**
 registry entries carry an `autoUpdate` key AT ALL (all 15 `false`); the other 260 have no such

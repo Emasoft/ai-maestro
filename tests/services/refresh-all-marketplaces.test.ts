@@ -12,6 +12,13 @@
  * The argless form is not an assumption: `claude plugin marketplace update --help` reads
  * "Usage: claude plugin marketplace update [options] [name]" / "updates all if no name
  * specified" — verified before this function was written.
+ *
+ * NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/'update'\]/'update', 'some-name']/ if $. == 5431
+ *   → 1 red / 4 green:
+ *       runs `claude plugin marketplace update` with NO name, exactly once
+ * i.e. the exact regression this file exists to catch — a name creeping back into the argv —
+ * reds this and nothing else.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 

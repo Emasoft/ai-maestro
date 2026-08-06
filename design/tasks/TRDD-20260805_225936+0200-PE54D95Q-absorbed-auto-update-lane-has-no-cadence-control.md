@@ -5,8 +5,8 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T07:27:39+0200
-implementation-commits: [4e66947e]
+updated: 2026-08-06T07:57:55+0200
+implementation-commits: [4e66947e, 793b866c, 7c104ba4]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -63,9 +63,26 @@ happening and nothing replaces them — including the janitor's own self-update.
 **AC1 (argless) → the autoUpdate flip → only then AC6.** The 158 failures are real waste, but
 they are the price of the 42 successes until the flip lands.
 
-**NEXT ACTION:** read `services/element-management-service.ts` around `:5690` and add the
-argless branch (`name` optional ⇒ omit it from argv), then a test asserting the exact argv and
-that the per-marketplace loop is gone — per AC1, counting invocations is the assertion.
+**AC1 + the autoUpdate flip are DONE** (`7c104ba4`, `793b866c`). The refresh is one argless
+call; every marketplace declared in `extraKnownMarketplaces` is kept `autoUpdate: true` by the
+lane, through `lib/settings-gate::editSettings`.
+
+**⚠ READ BEFORE TOUCHING THIS LANE — it wrote the USER'S REAL `~/.claude/settings.json` once.**
+`ensureMarketplaceAutoUpdate`'s path argument DEFAULTS to that file, and every absorbed-duty
+test drives the tick body, so adding the step made the suite rewrite all 257 of the user's
+marketplace entries while reporting **35/35 GREEN** — nothing there asserts on that file. Fixed
+two ways: `settingsPath` is threaded through `AbsorbedDutyDeps` and injected at all 11 call
+sites, and the repo's `guardRealUserSettings` tripwire — which was OPT-IN and covered **6 of
+385** suites — now runs from `vitest.config` `setupFiles` for all 385. Proven to fire, not
+assumed (a probe appending one byte reds with `MODIFIED it (51541 → 51542 bytes)`; it is parked
+in `tests_dev/`). Any future step here takes its path as a parameter, never a default.
+
+**NEXT ACTION:** AC6 — remove the two per-plugin loops (`auto-update-service.ts` steps 2 and 3)
+so `claude plugin update` invocations drop to 0. **NOW UNBLOCKED and not before:** the hazard
+recorded below was that deleting them stranded everything because 0 of 275 marketplaces opted
+in; the flip closes exactly that. Confirm on this host first that the harness is actually
+upgrading plugins from the refreshed catalogs — the flag is read at instance LOAD, so it serves
+the NEXT session, and nothing is proven until a restarted session picks it up.
 
 ## Problem
 
@@ -468,10 +485,16 @@ applies to it, which is now the strongest argument for settling that first.
 
 ## Acceptance criteria
 
-- [ ] The marketplace refresh is **one** `claude plugin marketplace update` invocation with
+- [x] The marketplace refresh is **one** `claude plugin marketplace update` invocation with
       no arguments — pinned by a test asserting the exact argv and that the per-target loop
       is gone. Counting invocations is the assertion; asserting "it succeeded" would pass
       over a 200-call loop unchanged.
+      DONE `7c104ba4`: new `RefreshAllMarketplaces` (element-management-service), a separate
+      function because `ChangeMarketplace`'s `name` is load-bearing in G01/G02 and its ops
+      lines. **The argless form was VERIFIED against `--help`** (`[name]` optional, "updates
+      all if no name specified"), not assumed. Argv pinned in its OWN file
+      (`tests/services/refresh-all-marketplaces.test.ts`) because the lane's test mocks the
+      module and cannot see argv; neuter adding a name back reds exactly that test (1/5).
 - [x] Cadence is **3 hours**. Pinned against the constant, not against an observed run —
       a wall-clock test would take 3 h and would still only prove one interval.
       DONE `4e66947e`: `services/auto-update-service.ts:111`, pinned by *"arms its timer at

@@ -267,4 +267,19 @@ describe('tick-status — readTickWindows (what the fleet watchdog consumes)', (
  * file: dropping a percentage to null is safe only while `planModelFallback` treats an unknown
  * account window as EXHAUSTED. Nothing in this file would redden if that changed, so the
  * requirement is stated in `windowsFor`'s comment rather than claimed as tested.
+ *
+ * READ SIDE (readTickWindows):
+ *
+ *   s/if \(\(nowMs - ts\) \/ 1000 > MAX_AGE_S\) return null/if (false) return null/   (--expect-lines 2)
+ *   → 2 red / 22 green:
+ *       ignores a STALE stamp (older than the freshness window) but honours a fresh one
+ *       REFUSES a stale snapshot — an old "Fable 98%" may describe a window that has since reset
+ *
+ *   s/return windowsFor\(d\.windows\)/return (d.windows ?? null) as WindowSnapshot | null/
+ *   → 1 red / 23 green:
+ *       RE-VALIDATES on read, not just on write
+ *
+ * The staleness line is BYTE-IDENTICAL in both readers, so that mutation necessarily hits both —
+ * deliberately run at --expect-lines 2 rather than aimed at one. It reddened exactly one test per
+ * reader, which is what makes the pair attributable instead of merely "2 red somewhere".
  */

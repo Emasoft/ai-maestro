@@ -65,6 +65,18 @@ function fakeReaders(userScope: Array<{ name: string; marketplace: string }> = [
 let controlDir = ''
 let priorControlDir: string | undefined
 
+// CONTAINMENT #2, and it is the same lesson a second time. The tick gained a step that keeps
+// `autoUpdate: true` on every marketplace in `~/.claude/settings.json`, and its path argument
+// DEFAULTS to that real file. Every `runAbsorbedDutyTick` call below drives the tick body, so on
+// the day that step landed this suite rewrote all 257 of the developer's marketplace entries —
+// and reported 35/35 GREEN, because nothing here asserts on that file. `settingsPath` must be
+// passed explicitly at every call site; `SETTINGS` below is the tmp path to pass.
+let settingsDir = ''
+/** The tmp settings file every tick call in this file must be pointed at. Deliberately NOT
+ *  created: `ensureMarketplaceAutoUpdate` returns 'skipped' for a missing file and — the part
+ *  that matters — refuses to create one, so this also exercises that refusal on every call. */
+const SETTINGS = () => path.join(settingsDir, '.claude', 'settings.json')
+
 beforeEach(() => {
   updateMarketplace.mockClear()
   changePlugin.mockClear()
@@ -73,19 +85,22 @@ beforeEach(() => {
   priorControlDir = process.env.JANITOR_CONTROL_DIR
   controlDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-chore-stamp-'))
   process.env.JANITOR_CONTROL_DIR = controlDir
+  settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aim-absorbed-settings-'))
+  fs.mkdirSync(path.join(settingsDir, '.claude'), { recursive: true })
 })
 
 afterEach(() => {
   if (priorControlDir === undefined) delete process.env.JANITOR_CONTROL_DIR
   else process.env.JANITOR_CONTROL_DIR = priorControlDir
   fs.rmSync(controlDir, { recursive: true, force: true })
+  fs.rmSync(settingsDir, { recursive: true, force: true })
 })
 
 describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
   it('writes a last-run stamp for each of the three chores this lane owns', async () => {
     // The defect this pins: the server absorbed these chores and never told the janitor, whose
     // daemon it had suppressed. Every one read as dark for weeks while all three ran hourly.
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders() })
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
 
     for (const chore of ['marketplace-refresh', 'version-update', 'user-plugins-update'] as const) {
       expect(readChoreStamp(chore), `${chore} left no stamp`).not.toBeNull()
@@ -95,7 +110,7 @@ describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
   it('stamps EPOCH SECONDS — milliseconds would read as permanently fresh, for ever', async () => {
     // The one wrong answer worse than "stale": a ms value parses fine and lands ~55 000 years
     // out, so every chore would report healthy including the ones that stop running.
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders() })
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
 
     const raw = fs.readFileSync(path.join(controlDir, 'marketplace-refresh.last-run.ts'), 'utf8')
     const secs = Number(raw.trim())
@@ -107,7 +122,7 @@ describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
     // The complement, and the one that makes the two above non-vacuous: if the stamp were written
     // unconditionally, a host where the janitor is uninstalled/disarmed would report every chore
     // fresh while nothing ran.
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => false, readers: fakeReaders() })
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => false, readers: fakeReaders(), settingsPath: SETTINGS() })
 
     expect(readChoreStamp('marketplace-refresh')).toBeNull()
   })
@@ -118,6 +133,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     const entries = await runAbsorbedDutyTick({
       isJanitorInstalledAndArmed: () => false,
       readers: fakeReaders(),
+      settingsPath: SETTINGS(),
     })
     expect(entries).toEqual([])
     expect(updateMarketplace).not.toHaveBeenCalled()
@@ -125,7 +141,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
   })
 
   it('refreshes every registered marketplace, argless-equivalent, when installed+armed', async () => {
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders() })
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
 
     const refreshedNames = updateMarketplace.mock.calls.map((c) => (c[0] as { name: string }).name)
     // The 3 always-registered marketplaces, at minimum — the pre-absorption daemon called
@@ -136,7 +152,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
   })
 
   it('self-updates the janitor plugin specifically, at user scope', async () => {
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders() })
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
 
     const janitorCall = changePlugin.mock.calls.find((c) => (c[1] as { name: string }).name === JANITOR)
     expect(janitorCall).toBeDefined()
@@ -148,7 +164,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
       { name: 'ai-maestro-plugin', marketplace: MARKETPLACE_NAME },
       { name: 'some-other-plugin', marketplace: 'some-marketplace' },
     ])
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers })
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers, settingsPath: SETTINGS() })
 
     const updatedNames = changePlugin.mock.calls.map((c) => (c[1] as { name: string }).name)
     expect(updatedNames).toContain('ai-maestro-plugin')
@@ -160,7 +176,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     updateMarketplace.mockImplementation(async ({ name }: { name: string }) =>
       name === MARKETPLACE_NAME ? { success: false, error: 'boom' } : { success: true },
     )
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders() })
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
 
     const failed = entries.find((e) => e.target === `absorbed:marketplace:${MARKETPLACE_NAME}`)
     expect(failed).toMatchObject({ status: 'failed', detail: 'boom' })
@@ -170,7 +186,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
 
   it('a thrown exception from one candidate is caught and recorded, never propagated', async () => {
     changePlugin.mockRejectedValueOnce(new Error('pipeline exploded'))
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders() })
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
     expect(entries.some((e) => e.status === 'failed' && e.detail === 'pipeline exploded')).toBe(true)
   })
 
@@ -178,7 +194,12 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     // No override at all — must consult the real lib/janitor-presence check, which reads
     // this process's real $HOME. We don't assert a specific outcome (host-dependent); we
     // only assert it does not throw and returns an array either way.
-    const entries = await runAbsorbedDutyTick({ readers: fakeReaders() })
+    // `settingsPath` is still injected, and that is NOT a contradiction of "no override at all":
+    // the override under test is the janitor GATE. This one is host-dependent, so on a machine
+    // where it returns true the tick body runs — and without this line it would run against the
+    // developer's real settings.json. Leaving the gate real while containing the write is the
+    // whole point.
+    const entries = await runAbsorbedDutyTick({ readers: fakeReaders(), settingsPath: SETTINGS() })
     expect(Array.isArray(entries)).toBe(true)
   })
 })

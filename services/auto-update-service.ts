@@ -67,6 +67,7 @@ import { withMarketplaceLock } from '@/lib/marketplace-lock'
 import { isJanitorInstalledAndArmed as realIsJanitorInstalledAndArmed } from '@/lib/janitor-presence'
 import { stampChoreRun } from '@/lib/janitor-chore-stamp'
 import { consumeWorkRequest } from '@/lib/janitor-work-request'
+import { readSettings, editSettings, type SettingsOp } from '@/lib/settings-gate'
 
 /** AuthContext used for every pipeline call this scheduler makes. The
  *  scheduler runs in-process inside the server and has no per-agent
@@ -280,6 +281,13 @@ async function runAbsorbedDutyTickSafely(): Promise<{ ran: boolean; entries: Aut
 export interface AbsorbedDutyDeps {
   isJanitorInstalledAndArmed?: () => boolean
   readers?: CandidateReaders
+  /** Which settings file the auto-update-flag step writes. Defaults to the REAL
+   *  `~/.claude/settings.json`, which is correct in production and catastrophic in a test — a
+   *  suite driving the tick body would edit the developer's own global Claude Code config.
+   *  That is not hypothetical: it happened the hour this step was added, and every existing
+   *  absorbed-duty test passed while it did, because none of them asserts on that file. Tests
+   *  MUST pass a tmp path here. */
+  settingsPath?: string
 }
 
 /** The absorbed-duty tick body. Separated from the safe/scheduled wrapper so
@@ -293,7 +301,7 @@ export async function runAbsorbedDutyTick(deps: AbsorbedDutyDeps = {}): Promise<
     return []
   }
   const readers = deps.readers ?? REAL_CANDIDATE_READERS
-  const result = await withMarketplaceLock(() => runAbsorbedDutyTickBody(readers))
+  const result = await withMarketplaceLock(() => runAbsorbedDutyTickBody(readers, deps.settingsPath))
   if (result === null) {
     console.warn('[auto-update] marketplace-op lock held by another process — skipping absorbed-duty tick')
     return []
@@ -301,9 +309,106 @@ export async function runAbsorbedDutyTick(deps: AbsorbedDutyDeps = {}): Promise<
   return result
 }
 
-async function runAbsorbedDutyTickBody(readers: CandidateReaders): Promise<AutoUpdateRunEntry[]> {
+/** The USER'S OWN global Claude Code settings file. Not a machine registry — 900+ lines of
+ *  their configuration — which is why every write below goes through the settings gate. */
+function userGlobalSettingsPath(): string {
+  return path.join(os.homedir(), '.claude', 'settings.json')
+}
+
+/**
+ * Keep `autoUpdate: true` on every marketplace declared in `extraKnownMarketplaces`
+ * (USER directive, 2026-08-06 — TRDD-PE54D95Q).
+ *
+ * WHY THIS EXISTS AT ALL. Refreshing marketplace catalogs upgrades nothing by itself: Claude
+ * Code auto-updates a marketplace's plugins only when that marketplace's `autoUpdate` is on,
+ * and the default is ON for official Anthropic marketplaces and **OFF for third-party and
+ * local-dev** ones. Measured on this host: 275 registered marketplaces, every one third-party
+ * or local-dev, `autoUpdate: true` on exactly ZERO. So before this, the absorbed lane paid the
+ * entire network cost of the refresh and produced no upgrades at all.
+ *
+ * FOUR SAFETY PROPERTIES, each guarding a failure this repo has already suffered:
+ *
+ *  1. **It REFUSES to write when the read did not yield a usable object.** `readSettings`
+ *     distinguishes `missing` from `unreadable`; on `unreadable` we return a failure and touch
+ *     nothing. A tolerant reader that returns `{}` for a file it cannot parse, followed by a
+ *     writer that serialises it, is exactly how a user's settings file gets replaced by a
+ *     nearly-empty object while the operation reports success.
+ *
+ *  2. **It never emits an op for an entry that is not already a plain object.** This is the
+ *     subtle one. `applySettingsOps`' `set` walks with `create: true`, which REPLACES any
+ *     wrong-shaped intermediate segment with `{}` — so a blind
+ *     `set ['extraKnownMarketplaces', name, 'autoUpdate']` against a malformed entry would
+ *     silently destroy that entry's `source`, and `extraKnownMarketplaces` is the AUTHORITATIVE
+ *     record of where a marketplace comes from. Ops are therefore computed from what is
+ *     actually on disk, and a malformed entry is reported, never rewritten.
+ *
+ *  3. **Zero ops ⇒ zero writes.** The steady state is "already true", and this lane ticks
+ *     every 3 h against a file up to a dozen live Claude sessions each hold in memory and
+ *     write back from their own boot-time copy. Writing unconditionally would bump the file on
+ *     every tick and hand those sessions a lost-update race for no change at all.
+ *
+ *  4. **All N flags in ONE `editSettings` call.** The ops array is applied inside a single
+ *     locked read-modify-write, so this is one transaction, not N chances to lose that race.
+ *
+ * BOUNDARY, stated because a future reader will assume otherwise: this reaches
+ * `extraKnownMarketplaces` in `settings.json` ONLY. The runtime registry
+ * `~/.claude/plugins/known_marketplaces.json` holds entries that are not in settings.json, and
+ * the gate deliberately refuses that path (wrong basename, wrong parent dir) — so those are
+ * NOT covered here. Extending to them is a separate decision about a harness-owned file.
+ *
+ * And the flag is read at instance LOAD, so a flip reaches the NEXT session, never this one.
+ * Do not report it as effective merely because it was written.
+ */
+export async function ensureMarketplaceAutoUpdate(
+  settingsPath: string = userGlobalSettingsPath(),
+): Promise<AutoUpdateRunEntry> {
+  const target = 'absorbed:marketplace-auto-update'
+  const read = await readSettings(settingsPath)
+  if (!read.ok) {
+    return read.reason === 'missing'
+      ? entry(target, 'skipped', 'No user settings.json yet — nothing declares a marketplace')
+      : entry(target, 'failed', `Refusing to write: settings.json is unreadable (${read.error || 'parse failed'})`)
+  }
+  const extra = read.data.extraKnownMarketplaces
+  if (extra === null || typeof extra !== 'object' || Array.isArray(extra)) {
+    // Absent is normal (no marketplaces declared); a non-object is someone else's problem —
+    // creating one here would invent configuration the user never wrote.
+    return entry(target, 'skipped', 'settings.json declares no extraKnownMarketplaces object')
+  }
+
+  const ops: SettingsOp[] = []
+  const malformed: string[] = []
+  for (const [name, value] of Object.entries(extra as Record<string, unknown>)) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      malformed.push(name)
+      continue
+    }
+    if ((value as Record<string, unknown>).autoUpdate === true) continue
+    ops.push({ op: 'set', keyPath: ['extraKnownMarketplaces', name, 'autoUpdate'], value: true })
+  }
+  const note = malformed.length > 0 ? ` (${malformed.length} malformed entr${malformed.length === 1 ? 'y' : 'ies'} left untouched)` : ''
+  if (ops.length === 0) return entry(target, 'already-current', `Every declared marketplace already auto-updates${note}`)
+
+  try {
+    await editSettings(settingsPath, ops)
+    return entry(target, 'updated', `Enabled auto-update on ${ops.length} marketplace(s); takes effect at the next session start${note}`)
+  } catch (err) {
+    return entry(target, 'failed', errMsg(err))
+  }
+}
+
+async function runAbsorbedDutyTickBody(
+  readers: CandidateReaders,
+  settingsPath?: string,
+): Promise<AutoUpdateRunEntry[]> {
   const entries: AutoUpdateRunEntry[] = []
   const { UpdateMarketplace, ChangePlugin } = await import('@/services/element-management-service')
+
+  // 0. Make the refresh below capable of producing upgrades at all. Ordered FIRST because a
+  //    catalog refresh against marketplaces whose autoUpdate is off is pure network cost —
+  //    though note the flag is read at instance load, so today's flip serves tomorrow's boot,
+  //    not the refresh two lines down.
+  entries.push(await ensureMarketplaceAutoUpdate(settingsPath))
 
   // 1. marketplace-refresh — EVERY registered marketplace, argless-equivalent
   //    (the pre-absorption daemon called `claude plugin marketplace update`

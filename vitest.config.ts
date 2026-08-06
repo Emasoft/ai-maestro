@@ -14,7 +14,13 @@ export default defineConfig({
     // `~/.claude/janitor-control/`. The absorbed chores stamp that dir from inside their own code
     // path (TRDD-14HI8ZPR), so containment cannot live at the call sites — one test file already
     // leaked a real stamp before this existed. See the file header for the measurement.
-    setupFiles: ['tests/setup/janitor-control-containment.ts'],
+    // The second entry is the same lesson one file over: a tripwire that must be CALLED protected
+    // 6 of 385 suites, and the write it was built to catch arrived through one of the other 379.
+    // A guard against an UNEXPECTED write is worth only what its adoption rate is, so it is global.
+    setupFiles: [
+      'tests/setup/janitor-control-containment.ts',
+      'tests/setup/real-user-settings-untouched.ts',
+    ],
   },
   // Automatic JSX runtime so .tsx tests need no explicit React import. Affects only files
   // containing JSX; the existing .ts tests transform identically to before.

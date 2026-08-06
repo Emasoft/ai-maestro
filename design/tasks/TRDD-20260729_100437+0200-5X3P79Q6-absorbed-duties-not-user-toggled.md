@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:04:37+0200
-updated: 2026-07-29T21:40:00+0200
+updated: 2026-08-06T18:32:20+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -141,13 +141,56 @@ direction — turning on an unattended fleet-wide plugin sweep nobody asked for.
 
 ## Verification
 
+> **AUDITED 2026-08-06 — this card's work SHIPPED under later TRDDs and nobody ticked its
+> boxes.** The fix landed as the absorbed-duty lane of **TRDD-PE54D95Q** (USER ruling on the 3 h
+> cadence, 2026-08-05) plus the ai-maestro#102 follow-ups, while this card sat at `column: todo`
+> since 07-29 — the "card stalled while the code shipped" failure. Nothing below was implemented
+> by this audit; every tick is evidence of work already on `main`. **5 of 7 are met.**
+>
+> The one worry worth recording because it was WRONG: making the lane ungated could have
+> over-shot into running for a host that never consented (never installed the janitor). It does
+> not — the consent check is real and doubly pinned. Verified, not assumed.
+
 - [ ] `#99` read; each absorbed update chore classified duty-vs-added, with the pre-absorption gate quoted
-- [ ] With the master toggle OFF and the janitor armed, a stale janitor plugin is updated within one beat
-- [ ] With the master toggle OFF and the janitor NOT armed/installed, nothing runs (the consent that gated it before is absent, so the duty is absent too)
-- [ ] The added-behaviour categories remain inert while the master toggle is OFF — proven by a test, since this is the exact regression the split risks
-- [ ] `version-update-requested.flag` is consumed clear-before-run
-- [ ] Concurrent-run test: two processes contend on `marketplace-op.lock`, one runs
+      — **STILL OPEN as written.** The classification is now EXPRESSED IN CODE (the lane owns
+      exactly the trio: `marketplace-refresh`, `version-update`, `user-plugins-update`), but `#99`
+      was never read and the pre-absorption gates were never quoted, so the *record* the box asks
+      for does not exist. A code shape is not a citation.
+- [x] With the master toggle OFF and the janitor armed, a stale janitor plugin is updated within one beat
+      — **MET, and measured LIVE on this host 2026-08-06**, which is the only place this box can be
+      answered: `~/.aimaestro/auto-update-settings.json` reads `enabled: false`, `lastRunAt: null`,
+      `lastAbsorbedRunAt: 2026-08-06T16:52:59+0200`. The gated lane has never run; the absorbed lane
+      ran an hour before the audit. Source side: `services/auto-update-service.ts:92` *"UNCONDITIONALLY
+      at boot (never torn down by the user's `enabled: false`)"*, and the scheduler's own
+      `if (!s.enabled) return` at `:175` still gates the user-facing lane exactly as before.
+- [x] With the master toggle OFF and the janitor NOT armed/installed, nothing runs (the consent that gated it before is absent, so the duty is absent too)
+      — **MET.** The lane calls `isJanitorInstalledAndArmed()` (`:214`, re-checked every tick at
+      `:222`). Pinned twice, and both pins are explicitly non-vacuous:
+      `auto-update-absorbed-duty.test.ts` — *"does nothing at all when the janitor is not
+      installed+armed (the gate, non-vacuity)"* and *"defaults to the REAL
+      isJanitorInstalledAndArmed when no dep is injected (non-vacuity)"*. The second matters more
+      than it looks: without it the injected seam could make every other test pass against a gate
+      production never uses.
+- [x] The added-behaviour categories remain inert while the master toggle is OFF — proven by a test, since this is the exact regression the split risks
+      — **MET.** `auto-update-absorbed-duty.test.ts` — *"appends run entries into
+      auto-update-settings.json WITHOUT touching `enabled`"*. The split writes only the trail; the
+      gated categories keep their own `if (!s.enabled)` return.
+- [x] `version-update-requested.flag` is consumed clear-before-run
+      — **MET.** `services/auto-update-service.ts:516`,
+      `consumeWorkRequest('version-update-requested.flag')` — before the `ChangePlugin` call, with
+      the janitor's rationale inline (`:514`): clearing BEFORE is what lets a request raised
+      mid-run survive to the next pass.
+- [x] Concurrent-run test: two processes contend on `marketplace-op.lock`, one runs
+      — **MET, twice over.** `tests/unit/marketplace-lock.test.ts:60` — *"a second acquire is
+      refused while the first is held, and works after release"* (the release half is the positive
+      control; refusal alone passes for a lock that never grants). And at the lane level,
+      `auto-update-absorbed-duty.test.ts` — *"is single-executor machine-wide — a tick whose lock
+      is HELD refreshes nothing (AC3)"*.
 - [ ] A neuter run per new guard (break it → the NAMED test fails; read the test COUNT, never the exit code)
+      — **NOT EVIDENCED, and deliberately not ticked.** The 16 absorbed-duty tests carry explicit
+      `(non-vacuity)` markers, which is the discipline applied — but a marker is a claim, and this
+      box asks for a RUN. No neuter output is recorded for these guards anywhere I can find, and
+      ticking it off the markers would be exactly the substitution this box exists to prevent.
 
 ## Estimated risk
 

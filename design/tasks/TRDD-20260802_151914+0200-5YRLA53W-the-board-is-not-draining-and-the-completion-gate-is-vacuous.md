@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-02T17:02:58+0200
+updated: 2026-08-06T08:49:12+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -62,6 +62,20 @@ still. The `blocked` column itself is healthy — all 6 name a real blocker.
 ## The mechanical cause, and it is the more useful half
 
 **69 of the 97 open cards (71%) carry NO acceptance checklist — zero `- [ ]` / `- [x]` boxes.**
+
+> **RE-MEASURED 2026-08-06 08:40 — the headline figure in this card's TITLE is now stale, and the
+> direction of travel is the useful part.** Open cards without a checklist: **54 of 111 (48%)**,
+> down from 71%. Terminal archived cards with a checklist carrying an UNCHECKED box: **0 of 221**.
+> Terminal cards with no checklist at all: 120 — all grandfathered, since the gate binds the
+> TRANSITION INTO a terminal column and those predate it. The title is left as written because it
+> records what was true when the card was filed; this note is the correction, not a rewrite.
+>
+> **And the gate is no longer merely enforced on paper — it fired today.** `5H5PBNEB` was closed
+> to `complete` with zero boxes this morning and `TERMINAL-WITHOUT-CHECKLIST` caught it, which is
+> exactly the vacuity TRDD-9QV4ZCYY's "≥1 box" half was added to close. Worth recording how it
+> nearly did not surface: `tests/unit/trdd-doctor.test.ts` holds that corpus assertion and was
+> ALREADY red on an unrelated uncommitted neuter, so the new finding moved only the failure COUNT
+> (5 → 6). A red suite is camouflage for the next red inside it.
 
 ```bash
 # count open cards with no checklist
@@ -394,11 +408,16 @@ Nine of the seventeen cards had a claim that did not survive that.
       so a card cannot be noticed as unblocked. Not closable without a corpus-level answer
 - [x] the completion gate is ENFORCED, not merely written — `TERMINAL-WITHOUT-CHECKLIST` +
       `TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, 15 tests, 6 neuters, 0 findings today
-- [ ] open cards in WORK columns carry a checklist — **17 of 19 done. 2 left, both
-      `human_review` and both therefore already waiting on the human: [[44RGLOO8]] and
-      [[TBGGUA2V]].** Each needs a real read; inventing a checklist from the title is
-      fabrication, the same damage as a scripted sweep. Every one was transcription, not authorship
-      — the cards already stated what they promised.
+- [x] open cards in WORK columns carry a checklist — **19 of 19, then 22 of 22.** Each needed a
+      real read; inventing a checklist from the title is fabrication, the same damage as a
+      scripted sweep. Every one was transcription, not authorship — the cards already stated what
+      they promised.
+      **CLOSED 2026-08-06 08:40, re-measured rather than assumed.** The two that were outstanding
+      ([[44RGLOO8]], [[TBGGUA2V]]) now carry 9 boxes each. Full sweep today: `dev` 1, `testing` 2,
+      `ai_review` 3, `human_review` 16 — **22 cards, ZERO without a checklist** (lowest count is 6
+      boxes). Note the population moved under this box while it was open (19 → 22 as cards entered
+      and left the WORK columns), so "all of them" is the only form of this claim that stays true;
+      a count would have gone stale again.
 
       **AND TRANSCRIBING IS NOT COPYING — six cards' claims did not survive re-running.** The
       checklist is worth writing because writing it forces the check:

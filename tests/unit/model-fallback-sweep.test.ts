@@ -175,4 +175,15 @@ describe('runModelFallbackSweep — refusals propagate with their reason', () =>
  * still untracked, so scripts/dev/neuter REFUSED — there was no committed state to restore to.
  * That is the tool enforcing "commit before neutering", and it is exactly the case where a
  * hand-rolled neuter would have measured nothing and reported green.
+ *
+ *   s/if \(decision\.reason !== 'cooldown'\) return/if (true) return/   (stall instead of skip)
+ *   → 1 red / 11 green:
+ *       SKIPS a cooled-down agent and switches the next one instead of stalling
+ *
+ * That guard exists because a LEG test found the defect, not because it was designed in. The
+ * sweep originally took actions[0] only, and the failing test ("proceeds on a later tick") was
+ * written expecting a second switch. It could not happen: the per-agent cooldown is 10 minutes.
+ * Chasing why exposed the real problem — an agent whose switch FAILED to take stays first in the
+ * list holding that cooldown, and blocks every other agent for the whole window. Invisible on the
+ * happy path, because a switched agent leaves the candidate list on the next pane read.
  */

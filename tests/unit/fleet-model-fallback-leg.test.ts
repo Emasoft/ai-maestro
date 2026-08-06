@@ -147,3 +147,16 @@ describe('fleet watchdog — the model-fallback leg', () => {
     expect(snap).not.toBeNull()
   })
 })
+
+/*
+ * NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *
+ *   s/process\.env\.AIM_FLEET_MODEL_FALLBACK === '1'/true/     (the leg defaults ON)
+ *   → 1 red / 8 green:
+ *       is OFF by default: an exhausted Fable window produces NO keystroke
+ *
+ * That single test is the whole ship-dark guarantee, so it is the one that must never be
+ * vacuous. Note what it can and cannot prove: it proves no keystroke is SENT while the flag is
+ * unset. Nothing here — and nothing anywhere in this repo — can prove the confirming ENTER
+ * actually dismissed Claude Code's dialog, which is why arming the flag stays a human act.
+ */

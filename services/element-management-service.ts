@@ -4796,7 +4796,27 @@ export async function ChangePlugin(
 
     } else if (desired.action === 'update') {
       if (desired.scope === 'user') {
-        await execFileAsync('claude', ['plugin', 'update', desired.name, desired.marketplace, '--scope', 'user'], { timeout: 120000 })
+        // ONE positional, `name@marketplace` — NOT two. `claude plugin update --help` reads
+        // "Usage: claude plugin update [options] <plugin>", and this call passed the marketplace
+        // as a second positional the command does not accept. The CLI then looked the plugin up
+        // with no marketplace context and answered `Plugin "X" not found` — for EVERY plugin,
+        // EVERY cycle. Measured 2026-08-06 (TRDD-PE54D95Q): 138 rows in the absorbed lane's own
+        // summary, 100 % failed, including plugins that are enabled AND present on disk
+        // (`ai-maestro-janitor@ai-maestro-plugins` failed here while its cache dir existed). The
+        // single-argument form succeeds instantly: "already at the latest version (2.4.1)".
+        //
+        // This is the card's title — "retries permanent failures hourly" — and the permanence was
+        // ours, not the plugins'. `pluginKey` is already `${desired.name}@${desired.marketplace}`
+        // and the sibling enable/disable calls below/above use exactly this shape.
+        //
+        // Deliberately NOT changed here: the `install` and `uninstall` calls in this same block
+        // still pass two positionals. They are the same documented shape violation, but install
+        // demonstrably WORKS in practice (every agent gets its plugins), so the extra argument is
+        // evidently tolerated there while `update` needs the marketplace to resolve an ALREADY
+        // INSTALLED key. That asymmetry is unverified, those calls sit on the agent-creation path,
+        // and tests pin their current form — so they get their own investigation, not a
+        // drive-by edit.
+        await execFileAsync('claude', ['plugin', 'update', pluginKey, '--scope', 'user'], { timeout: 120000 })
       } else {
         // Local update = uninstall THEN reinstall, which is the one branch of this pipeline that
         // mutates twice — and it used to run both calls bare. A failure of the reinstall left the

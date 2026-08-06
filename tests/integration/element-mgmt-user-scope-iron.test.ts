@@ -208,6 +208,29 @@ describe('ChangePlugin — IRON rule (never user-scope for agents)', () => {
     expect(opHas(result.operations, /IRON: user-scope enable permitted/)).toBe(true)
     expect(opHas(result.operations, /IRON: DENIED/)).toBe(false)
   })
+
+  // The argv shape, not just the permission. `claude plugin update --help` is
+  // "Usage: claude plugin update [options] <plugin>" — ONE positional. This call used to pass
+  // the marketplace as a SECOND positional, so the CLI resolved the plugin with no marketplace
+  // context and answered `Plugin "X" not found` for every plugin on every cycle — 138 rows,
+  // 100 % failed, including plugins enabled and present on disk (TRDD-PE54D95Q). Asserting only
+  // that the update was PERMITTED passes over that completely, which is how it survived.
+  it('updates at user scope with ONE `name@marketplace` positional, not two', async () => {
+    mockExecFileAsync.mockClear()
+    const result = await ChangePlugin(
+      null,
+      { name: 'my-plugin', marketplace: 'some-mp', action: 'update', scope: 'user' },
+      OWNER_CTX,
+    )
+    expect(result.success).toBe(true)
+    const call = mockExecFileAsync.mock.calls.find(
+      (c: unknown[]) => Array.isArray(c[1]) && (c[1] as string[])[0] === 'plugin' && (c[1] as string[])[1] === 'update',
+    )
+    expect(call).toBeDefined()
+    // toEqual on the whole array is what rejects a marketplace creeping back in as a second
+    // positional — a length check or a "contains the name" check would not.
+    expect(call![1]).toEqual(['plugin', 'update', 'my-plugin@some-mp', '--scope', 'user'])
+  })
 })
 
 // ============================================================================

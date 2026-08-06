@@ -76,22 +76,17 @@ const WHITELIST: ReadonlyArray<RegExp> = [
   // it (`GET /api/statusline*`), which are NOT whitelisted: they serve the fleet and go through
   // normal auth.
   /^\/api\/statusline\/ingest(\/|$)/,
-  // Daemon injection (TRDD-APN5WB2L, ai-maestro#60) — SELF-AUTHENTICATING, exactly like the
-  // password-invalidate and statusline-ingest entries above: its INPUT is the credential. The
-  // janitor's recovery daemon is a machine-wide launchd process with no browser session, no AID
-  // token and no pane — every credential this middleware knows how to check is unavailable to it
-  // BY CONSTRUCTION — so requiring one here would make the route permanently unreachable and the
-  // recovery channel decorative. (Measured: the first live probe after deploy returned this
-  // middleware's 401 before the handler ever ran.)
+  // ⚠ DO NOT ADD A DAEMON INJECTION ENTRY HERE. One existed briefly on 2026-08-06 and was
+  // reverted the same hour by the USER, who identified the category error: there is no external
+  // daemon to admit. The janitor's continuity daemon was ABSORBED INTO THIS SERVER precisely so
+  // that no outside process could ever drive the agents in the harness — the absorbed daemon is
+  // `startFleetLivenessWatchdog` + the fleet-recovery runner/actuator, running IN this process,
+  // and `lib/janitor-daemon-publisher.ts` states the ruling it implements: janitor processes
+  // never call in, they RECEIVE a file the server deposits in their own project folder.
   //
-  // What keeps it from being an open door is that the handler refuses everything that is not an
-  // Ed25519 signature from the ONE enrolled daemon key, over a canonical request whose signed
-  // bytes include the verb and target, inside a 60s two-sided window, with a nonce that cannot be
-  // reused — and even then it grants exactly two verbs. Note the deliberate asymmetry with its
-  // sibling: `/api/daemon/enroll` is NOT whitelisted and is classified `strict`, so the act that
-  // GRANTS this authority still requires the owner and a sudo token. A daemon can use its key; it
-  // cannot install one.
-  /^\/api\/daemon\/inject(\/|$)/,
+  // So an inbound recovery route is not a credential problem to solve — a signature ceremony for
+  // an external caller re-opens, with extra ceremony, exactly the hole the absorption closed.
+  // Recovery actions are INTERNAL FUNCTION CALLS (see `interruptSession`), never routes.
 ]
 
 /**

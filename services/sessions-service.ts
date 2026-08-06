@@ -1358,16 +1358,28 @@ export async function sendCommand(
 }
 
 /**
- * Send a RAW INTERRUPT (Escape) to a session — break a frozen in-flight turn (TRDD-APN5WB2L;
- * ai-maestro#60).
+ * Send a RAW INTERRUPT (Escape) to a session — break a frozen in-flight turn (ai-maestro#60).
  *
- * WHY THIS IS A SEPARATE FUNCTION AND NOT AN OPTION ON `sendCommand`. The capability already
- * exists one layer below: `AgentRuntime.sendKeys` sends a raw tmux key name whenever `literal` is
- * falsy (`lib/agent-runtime.ts:351`), and `prepareShellForLaunch` already uses it to break a stuck
- * child. What was missing is EXPOSURE — `sendCommand` hardcodes `{ literal: true }`, so nothing on
- * the HTTP surface could reach the non-literal path. Adding a `literal: false` flag to
- * `sendCommand` instead would let ANY of its callers turn an arbitrary caller-supplied string into
- * a raw key sequence; a separate function whose payload is fixed cannot.
+ * ⚠ THIS IS AN INTERNAL FUNCTION OF THE ABSORBED DAEMON. Its caller is the server's OWN
+ * fleet-recovery machinery (`startFleetLivenessWatchdog` → the recovery runner/actuator, both
+ * running in this process). It is deliberately NOT exposed as a route, and must not become one.
+ *
+ * The janitor's continuity daemon was absorbed into this server precisely so that no external
+ * process could drive the agents in the harness; `lib/janitor-daemon-publisher.ts` states the
+ * ruling it implements — janitor processes never call in, they RECEIVE a file the server deposits
+ * in their own project folder. An inbound "authenticated daemon injection" route was built on
+ * 2026-08-06 and reverted the same hour by the USER for exactly this reason: authenticating an
+ * external daemon re-opens, with extra ceremony, the hole the absorption closed. There is no
+ * external daemon to admit. The server does not authenticate itself to itself.
+ *
+ * WHY IT IS A SEPARATE FUNCTION AND NOT AN OPTION ON `sendCommand`. The capability already exists
+ * one layer below: `AgentRuntime.sendKeys` sends a raw tmux key name whenever `literal` is falsy
+ * (`lib/agent-runtime.ts:351`), and `prepareShellForLaunch` already uses it to break a stuck
+ * child. What was missing is a caller-facing entry point — `sendCommand` hardcodes
+ * `{ literal: true }`, so no in-process caller could reach the non-literal path either. Adding a
+ * `literal: false` flag to `sendCommand` would let ANY of its callers turn an arbitrary
+ * caller-supplied string into a raw key sequence; a separate function whose payload is FIXED
+ * cannot.
  *
  * IT NEVER REQUIRES IDLE, and that is the entire point rather than an oversight: a frozen agent is
  * BY DEFINITION not idle, so an idle gate here would refuse every recovery exactly when it is
@@ -1396,9 +1408,9 @@ export async function interruptSession(
   if (!authContext) {
     return { error: 'Auth context required for interruptSession', status: 401, data: undefined }
   }
-  // Same authorization shape as sendCommand — the daemon principal reaches this through its own
-  // route, which maps its two-verb grant onto a system-owner-equivalent context for THIS call
-  // only. A non-owner agent still needs `send-command` on the target, i.e. itself (R42).
+  // Same authorization shape as sendCommand. The in-process recovery machinery calls this with a
+  // system-owner context because it IS the server; a non-owner agent still needs `send-command`
+  // on the target, i.e. itself (R42), so an agent cannot interrupt a peer's turn.
   if (!authContext.isSystemOwner) {
     const targetAgent = getAgentBySession(sessionName)
     if (!targetAgent) {

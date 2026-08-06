@@ -435,6 +435,18 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // arbitrary commands (queue at "the next idle window"), so they DRIVE; neither
   // answers a question the agent itself raised.
   'POST /api/agents/[id]/prompt/answer': { action: 'unblock-prompt', targetFromPathId: true },
+  // TRDD-89LVZSQ0 — the READ half of that same capability, and therefore the SAME action.
+  //
+  // Answering a stalled agent requires first seeing WHAT it is stuck on, and the structured
+  // path does not carry that: across 419 live chat-state files, `question` (AskUserQuestion)
+  // appears in ZERO — so `GET …/prompt` cannot serve the case the USER named. The pane can.
+  //
+  // Pairing it with 'unblock-prompt' rather than giving it a policy of its own is the point:
+  // a caller that may not ANSWER a peer must not be able to READ its screen either, and the
+  // R42.8 matrix (MANAGER any / COS own-team / never ASSISTANT / self always) is already
+  // exactly the USER's rule for who may unblock. Two policies for two halves of one
+  // capability is how a gate drifts open on the half nobody re-reads.
+  'GET /api/agents/[id]/block-state': { action: 'unblock-prompt', targetFromPathId: true },
   // #54 (TRDD-ED9A4VVY): the IMMEDIATE twin of `queue` — PATCH …/session types
   // arbitrary text straight into a live pane. Only its arbitrary-`command` branch
   // calls the guard (the curated `commandKey` allowlist branch stays open), so a

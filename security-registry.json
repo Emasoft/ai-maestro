@@ -56,6 +56,7 @@
     "POST_/api/agents/role-plugins/install": "strict",
     "PATCH_/api/agents/[id]": "strict",
     "POST_/api/agents/[id]/ensure-core": "strict",
+    "GET_/api/agents/[id]/block-state": "strict",
     "POST_/api/agents/[id]/prompt/answer": "strict",
     "POST_/api/agents/[id]/queue": "strict",
     "POST_/api/agents/[id]/panel": "strict",

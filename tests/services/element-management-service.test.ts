@@ -283,6 +283,20 @@ describe('element-management-service', () => {
       await expect(installPluginLocally('test-plugin', '/tmp/../etc')).rejects.toThrow('must not contain ".."')
     })
 
+    // ⚠ THE ARGV BELOW IS `name@marketplace`, ONE POSITIONAL — do not "restore" the two-argument
+    // form. Every `plugin install|uninstall|update` assertion in this file asserted
+    // `[..., name, marketplace, ...]` until 2026-08-06, and that was pinning a BUG.
+    //
+    // `claude plugin install|i [options] <plugin>` takes ONE positional, and its help names the
+    // qualified form outright: "use plugin@marketplace for specific marketplace". A second
+    // positional does not error — commander SILENTLY DROPS it. Measured against a nonexistent
+    // plugin so nothing could mutate: `update a@b` echoed `plugin "a@b"`, `update a b` echoed
+    // `plugin "a"`. The marketplace was simply gone.
+    //
+    // So the old form worked by luck whenever a plugin name was unique across marketplaces, and
+    // silently resolved to the WRONG marketplace when it was not — and these assertions made that
+    // look intentional. Found because the same defect had already been fixed at ONE call site (the
+    // user-scope `update`) and the five siblings were never swept.
     it('should use Claude CLI for predefined marketplace plugins', async () => {
       /** Validates that predefined plugins are installed via claude CLI with --scope local */
       const { installPluginLocally } = await import('@/services/element-management-service')
@@ -290,7 +304,7 @@ describe('element-management-service', () => {
 
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
-        ['plugin', 'install', 'ai-maestro-architect-agent', 'ai-maestro-plugins', '--scope', 'local'],
+        ['plugin', 'install', 'ai-maestro-architect-agent@ai-maestro-plugins', '--scope', 'local'],
         expect.objectContaining({ cwd: '/tmp/agent-dir' }),
       )
     })
@@ -309,7 +323,7 @@ describe('element-management-service', () => {
 
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
-        ['plugin', 'install', 'my-custom-plugin', 'ai-maestro-local-roles-marketplace', '--scope', 'local'],
+        ['plugin', 'install', 'my-custom-plugin@ai-maestro-local-roles-marketplace', '--scope', 'local'],
         expect.objectContaining({ cwd: '/tmp/agent-dir' }),
       )
       // …and we no longer hand-write the agent's settings for it: the CLI owns that file now,
@@ -341,7 +355,7 @@ describe('element-management-service', () => {
 
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
-        ['plugin', 'uninstall', 'ai-maestro-architect-agent', 'ai-maestro-plugins', '--scope', 'local'],
+        ['plugin', 'uninstall', 'ai-maestro-architect-agent@ai-maestro-plugins', '--scope', 'local'],
         expect.objectContaining({ cwd: '/tmp/agent-dir' }),
       )
     })
@@ -522,7 +536,7 @@ describe('element-management-service', () => {
 
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
-        ['plugin', 'install', 'my-generic-plugin', 'some-marketplace', '--scope', 'user'],
+        ['plugin', 'install', 'my-generic-plugin@some-marketplace', '--scope', 'user'],
         expect.any(Object),
       )
     })
@@ -552,7 +566,7 @@ describe('element-management-service', () => {
 
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
-        ['plugin', 'uninstall', 'my-plugin', 'some-marketplace', '--scope', 'user'],
+        ['plugin', 'uninstall', 'my-plugin@some-marketplace', '--scope', 'user'],
         expect.any(Object),
       )
     })
@@ -856,7 +870,7 @@ describe('element-management-service', () => {
       expect(result.action).toBe('install')
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
-        ['plugin', 'install', 'my-plugin', 'some-marketplace', '--scope', 'user'],
+        ['plugin', 'install', 'my-plugin@some-marketplace', '--scope', 'user'],
         expect.objectContaining({ timeout: 120000 }),
       )
       expect(result.restartNeeded).toBe(true)
@@ -1073,7 +1087,7 @@ describe('element-management-service', () => {
       expect(result.success).toBe(true)
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
-        ['plugin', 'update', 'my-plugin', 'some-marketplace', '--scope', 'user'],
+        ['plugin', 'update', 'my-plugin@some-marketplace', '--scope', 'user'],
         expect.objectContaining({ timeout: 120000 }),
       )
     })

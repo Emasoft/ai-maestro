@@ -1897,7 +1897,15 @@ export async function installPluginLocally(
       // legitimately-queued second install fails instead of waiting its turn.
       await withSettingsLock(INSTALLED_FILE, async () => {
         await execFileAsync('claude', [
-          'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
+          // `claude plugin install|uninstall|update` take ONE positional: `Usage: claude plugin
+          // install|i [options] <plugin>`, and the help names the qualified form outright —
+          // "use plugin@marketplace for specific marketplace". Passing the marketplace as a
+          // SECOND positional does not error; commander SILENTLY DROPS it. Measured against a
+          // nonexistent plugin so nothing could mutate: `update a@b` echoed
+          // `plugin "a@b"`, while `update a b` echoed `plugin "a"` — the marketplace was gone.
+          // So the two-positional form works by luck whenever a plugin name happens to be
+          // unique across marketplaces, and resolves to the WRONG marketplace when it is not.
+          'plugin', 'install', `${pluginName}@${marketplaceName}`, '--scope', 'local',
         ], { timeout: 120000, cwd: resolvedDir })
       }, { staleMs: 180_000, maxWaitMs: 180_000 })
       if (attempt > 1) {
@@ -1967,7 +1975,8 @@ export async function uninstallPluginLocally(
     // only writer, so there is no longer a hand-edit afterwards to paper over the loss.
     await withSettingsLock(INSTALLED_FILE, async () => {
       await execFileAsync('claude', [
-        'plugin', 'uninstall', pluginName, marketplaceName, '--scope', 'local',
+        // ONE positional — a second is silently dropped (see the install site above).
+        'plugin', 'uninstall', `${pluginName}@${marketplaceName}`, '--scope', 'local',
       ], { timeout: 30000, cwd: resolvedDir })
     }, { staleMs: 180_000, maxWaitMs: 180_000 })
     console.log(`[element-mgmt] Uninstalled ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
@@ -2197,7 +2206,8 @@ export async function installPlugin(
   }
 
   if (options.scope === 'user') {
-    const args = ['plugin', 'install', pluginName, marketplace, '--scope', 'user']
+    // ONE positional — a second is silently dropped (see the local-scope install site above).
+    const args = ['plugin', 'install', `${pluginName}@${marketplace}`, '--scope', 'user']
     if (options.force) args.push('--force')
     await execFileAsync('claude', args, { timeout: 120000 })
     console.log(`[element-mgmt] Installed ${pluginName} from ${marketplace} (scope: user)`)
@@ -2249,7 +2259,8 @@ export async function uninstallPlugin(
 
   if (options.scope === 'user') {
     await execFileAsync('claude', [
-      'plugin', 'uninstall', pluginName, marketplace, '--scope', 'user',
+      // ONE positional — a second is silently dropped (see the local-scope install site above).
+      'plugin', 'uninstall', `${pluginName}@${marketplace}`, '--scope', 'user',
     ], { timeout: 30000 })
     console.log(`[element-mgmt] Uninstalled ${pluginName} from ${marketplace} (scope: user)`)
     return
@@ -4752,7 +4763,10 @@ export async function ChangePlugin(
     // ── G09: Execute action ───────────────────────────────────
     if (desired.action === 'install') {
       if (desired.scope === 'user') {
-        await execFileAsync('claude', ['plugin', 'install', desired.name, desired.marketplace, '--scope', 'user'], { timeout: 120000 })
+        // ONE positional — a second is silently dropped (see the local-scope install site above).
+        // This is the same defect already fixed one branch down at the `update` call, which is
+        // how it was found: the sibling branches were never swept.
+        await execFileAsync('claude', ['plugin', 'install', `${desired.name}@${desired.marketplace}`, '--scope', 'user'], { timeout: 120000 })
       } else {
         await installPluginLocally(desired.name, agentDir!, desired.marketplace)
       }
@@ -4760,7 +4774,8 @@ export async function ChangePlugin(
 
     } else if (desired.action === 'uninstall') {
       if (desired.scope === 'user') {
-        await execFileAsync('claude', ['plugin', 'uninstall', desired.name, desired.marketplace, '--scope', 'user'], { timeout: 30000 })
+        // ONE positional — a second is silently dropped (see the local-scope install site above).
+        await execFileAsync('claude', ['plugin', 'uninstall', `${desired.name}@${desired.marketplace}`, '--scope', 'user'], { timeout: 30000 })
       } else {
         await uninstallPluginLocally(desired.name, agentDir!, desired.marketplace)
       }

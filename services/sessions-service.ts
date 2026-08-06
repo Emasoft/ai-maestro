@@ -1358,6 +1358,101 @@ export async function sendCommand(
 }
 
 /**
+ * Send a RAW INTERRUPT (Escape) to a session — break a frozen in-flight turn (TRDD-APN5WB2L;
+ * ai-maestro#60).
+ *
+ * WHY THIS IS A SEPARATE FUNCTION AND NOT AN OPTION ON `sendCommand`. The capability already
+ * exists one layer below: `AgentRuntime.sendKeys` sends a raw tmux key name whenever `literal` is
+ * falsy (`lib/agent-runtime.ts:351`), and `prepareShellForLaunch` already uses it to break a stuck
+ * child. What was missing is EXPOSURE — `sendCommand` hardcodes `{ literal: true }`, so nothing on
+ * the HTTP surface could reach the non-literal path. Adding a `literal: false` flag to
+ * `sendCommand` instead would let ANY of its callers turn an arbitrary caller-supplied string into
+ * a raw key sequence; a separate function whose payload is fixed cannot.
+ *
+ * IT NEVER REQUIRES IDLE, and that is the entire point rather than an oversight: a frozen agent is
+ * BY DEFINITION not idle, so an idle gate here would refuse every recovery exactly when it is
+ * needed (the #110 trap, in its most acute form).
+ *
+ * SYNCHRONOUS BY RULING (2026-08-06): the result reports whether the turn actually broke, the way
+ * `prepareShellForLaunch` reports `{ready, interrupted}`. A fire-and-forget caller can ignore
+ * `interrupted`; a caller that needs to know cannot recover it after the fact. `interrupted` is
+ * derived from the session going idle within the observation window — the same activity signal the
+ * idle gate uses, so no second notion of "busy" is introduced.
+ *
+ * THE #117 MARK IS MANDATORY HERE TOO. Every server-injected keystroke must be recorded as
+ * INJECTED, or the target's `UserPromptSubmit` hook reports a human at the keyboard and
+ * fleet-recovery stands down — self-defeating for a recovery primitive. An interrupt that skipped
+ * the mark would reintroduce that forgery through a new door.
+ */
+export async function interruptSession(
+  sessionName: string,
+  options: {
+    authContext: import('@/lib/agent-auth').AuthContext
+    /** Observation window for the synchronous `interrupted` report. */
+    observeMs?: number
+  },
+): Promise<ServiceResult<{ success: boolean; sessionName: string; delivered: boolean; interrupted: boolean; method?: string }>> {
+  const authContext = options.authContext
+  if (!authContext) {
+    return { error: 'Auth context required for interruptSession', status: 401, data: undefined }
+  }
+  // Same authorization shape as sendCommand — the daemon principal reaches this through its own
+  // route, which maps its two-verb grant onto a system-owner-equivalent context for THIS call
+  // only. A non-owner agent still needs `send-command` on the target, i.e. itself (R42).
+  if (!authContext.isSystemOwner) {
+    const targetAgent = getAgentBySession(sessionName)
+    if (!targetAgent) {
+      return { error: 'Agent not found for session', status: 404, data: undefined }
+    }
+    const { authorize } = await import('@/lib/authorization')
+    const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+      agentId: authContext.agentId,
+      governanceTitle: authContext.governanceTitle,
+      teamId: authContext.teamId,
+    }
+    const authz = authorize(authResult, 'send-command', targetAgent.id)
+    if (!authz.allowed) {
+      return { error: authz.reason || 'Not authorized to interrupt this session', status: 403, data: undefined }
+    }
+  }
+
+  const runtime = getRuntime()
+  const exists = await runtime.sessionExists(sessionName)
+  if (!exists) {
+    return { error: 'Tmux session not found', status: 404, data: undefined }
+  }
+
+  // Was it busy BEFORE? A session already idle cannot be "interrupted" by this call, and saying it
+  // was would be a false success report — idempotent delivery, honest reporting.
+  const wasBusy = !isSessionIdle(sessionName)
+
+  await runtime.cancelCopyMode(sessionName)
+  await runtime.sendKeys(sessionName, 'Escape')
+
+  // The mark, before the observation: the keystroke is already delivered, so a slow observation
+  // must not leave a window in which the injection looks human.
+  injectedPrompts.set(sessionName, Date.now())
+
+  let interrupted = false
+  if (wasBusy) {
+    const observeMs = options.observeMs ?? 2000
+    const deadline = Date.now() + observeMs
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 200))
+      if (isSessionIdle(sessionName)) {
+        interrupted = true
+        break
+      }
+    }
+  }
+
+  return {
+    data: { success: true, sessionName, delivered: true, interrupted, method: 'tmux-send-keys-raw' },
+    status: 200,
+  }
+}
+
+/**
  * Check if a session is idle and ready for commands.
  */
 export async function checkIdleStatus(sessionName: string): Promise<{

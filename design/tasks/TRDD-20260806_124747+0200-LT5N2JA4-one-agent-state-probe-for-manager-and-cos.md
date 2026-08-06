@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T12:47:47+0200
-updated: 2026-08-06T12:47:47+0200
+updated: 2026-08-06T12:54:07+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -52,34 +52,56 @@ active / idle / hibernated`). This is the spine the rest hangs off.
 hookDisagreed, sessionName}` and, with `?match=<regex>`, matching lines. Strict, mapped to
 `unblock-prompt`, so MANAGER-any / COS-own-team / never-ASSISTANT / self-always.
 
-**3. The ai-maestro-plugin hook — NOT what the directive assumed.** The directive describes it
-as *"parsing the statusline event input json passed to the hook with tons of info"*. Measured:
+**3. The ai-maestro-plugin hook — the statusline is NOT one of its events.**
 `scripts/ai-maestro-hook.cjs` (579 lines) handles **11 Claude Code events** —
 `PermissionRequest`, `Notification`, `Stop`, `StopFailure`, `SessionStart`, `SessionEnd`,
 `SubagentStart`, `SubagentStop`, `PreCompact`, `PostCompact` — and contains **zero**
-statusline handling (`grep -c statusline` → 0). There is no statusline *hook event* in Claude
-Code; the statusline is a single configured COMMAND. See source 4 for who holds that slot.
+statusline handling (`grep -c statusline` → 0). That is correct, not a gap: there is no
+statusline *hook event* in Claude Code. The statusline is a single configured COMMAND, and
+ai-maestro captures it by a different mechanism entirely — source 3b.
 What the hook does write, into `~/.aimaestro/chat-state/<sha256(cwd)[:16]>.json`, is
 `status` / `notificationType` / `options[]` / timestamps — and, measured across 419 live
 files, `question` **never** (0/419). That gap is exactly why TRDD-89LVZSQ0 exists.
 
-**4. agentlenspro — the statusline data, and a slot we MUST NOT take.** Installed at
-`/opt/homebrew/bin/agentlenspro`. It **owns the single `statusLine` slot** in
-`~/.claude/settings.json`, wrapping the user's own inner statusline:
+**3b. ai-maestro's OWN statusline pipeline — BUILT, INSTALLED, and simply NOT IN THE CHAIN.**
+This card's first draft said the statusline data was agentlenspro's alone. That was wrong, and
+the correction matters because it turns "integrate someone else's tool" into "re-attach our
+own". Measured: TRDD-D8OYFG35 already shipped the whole path —
+`scripts/aimaestro-statusline-capture.sh` (a **pass-through wrapper**: reads stdin once, forks
+a detached ingest, relays the identical bytes and exit code to an inner command) and
+`scripts/aimaestro-statusline.sh` (`ingest` / `get <sessionId>` / `list`, the immutable CLI in
+front of the endpoints). **Both are installed at `~/.local/bin/`.** Its own header notes the
+payload carries the **5h and 7d rate-limit windows at ZERO API cost**.
+
+What is missing is only the wiring: the live `statusLine` slot does not include it (source 4),
+so nothing is being ingested and `get` has nothing to serve.
+
+**4. agentlenspro — holds the slot today, and COMPOSES with ours rather than competing.**
+Installed at `/opt/homebrew/bin/agentlenspro`. It currently **owns the single `statusLine`
+slot**, itself wrapping the user's own python statusline:
 
 ```
 "statusLine": {"type":"command","command":"agentlenspro statusline --inner '<user's python>'"}
 ```
 
-Claude Code has **one** statusLine slot. So if ai-maestro installed its own statusline to
-harvest that JSON, it would **evict agentlenspro AND the user's inner statusline**. The
-integration is therefore to READ, never to install. `agentlenspro statusline-history` has
-views `sessions | subagents | windows | peaks | raw`; its own help calls `subagents` *"the
-ONLY source of a live agent's tokenCount vs contextWindowSize (+ effort, model, and the cwd
-that marks a worktree agent)"*, and it reads DISK, so it answers with its server down.
-Sampled live: `subagents` gives `task / model / effort / status / peak tok / fill% / last /
-cwd`; `sessions` gives `session / samples / peak% / peak ctx / cost $ / span / last`, current
-to **1 second**.
+Claude Code has **one** statusLine slot, so a naive "install ours" would **evict agentlenspro
+AND the user's inner statusline** — which is why this was worth measuring before building.
+But both wrappers are pass-through BY DESIGN (`--inner` there, a trailing command here), so
+they chain:
+
+```
+aimaestro-statusline-capture.sh agentlenspro statusline --inner '<user's python>'
+```
+
+That is a change to the USER's own `~/.claude/settings.json`, which our script deliberately
+never edits itself — so it is the USER's call, not ours to make. Propose it; do not do it.
+
+Independently, `agentlenspro statusline-history` is worth READING: views
+`sessions | subagents | windows | peaks | raw`, and its help calls `subagents` *"the ONLY
+source of a live agent's tokenCount vs contextWindowSize (+ effort, model, and the cwd that
+marks a worktree agent)"*. It reads DISK, so it answers with its server down. Sampled live:
+`subagents` gives `task / model / effort / status / peak tok / fill% / last / cwd`; `sessions`
+gives `session / samples / peak% / peak ctx / cost $ / span / last`, current to **1 second**.
 
 **5. The janitor's HTML global report — NOT FOUND, so ASK rather than guess.** The directive
 says the janitor already surfaces last-error information there. Searched

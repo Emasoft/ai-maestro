@@ -13,6 +13,7 @@
 #   inject / slash   — type a command into the agent's tmux pane
 #   state            — the agent's live session + pane status
 #   read-prompt      — the permission / question menu the agent is blocked on
+#   block-state      — is it blocked and WHY, read from the terminal itself
 #   answer           — answer that menu, by option key or free text
 #   queue / queue-*  — enqueue a command to fire when the agent is next idle
 #
@@ -52,6 +53,7 @@
 #   aimaestro-session.sh slash-keys
 #   aimaestro-session.sh state <agent> [--pane]
 #   aimaestro-session.sh read-prompt <agent>
+#   aimaestro-session.sh block-state <agent> [--match "<regex>"]
 #   aimaestro-session.sh answer <agent> --option <key> | --text "<answer>"
 #   aimaestro-session.sh queue <agent> --command "<text>" | --command-key <key>
 #       [--when idle|online|now-if-idle-else-queue] [--wake-first]
@@ -178,6 +180,8 @@ Commands:
   state <agent>                         Session status (online/offline, activity)
       --pane                            Also fetch the live tmux pane status
   read-prompt <agent>                   The pending permission/question prompt, or null
+  block-state <agent>                   Is it BLOCKED, and why — read from the TERMINAL
+      --match "<regex>"                 Search the pane server-side; returns matching lines
   answer <agent> --option <key>         Answer the pending prompt by option key
   answer <agent> --text "<answer>"      Answer the pending prompt with free text
   queue <agent> --command "<text>"      Enqueue a command for the next idle window
@@ -188,15 +192,27 @@ Commands:
   queue-cancel <agent> <entryId>        Cancel one queued entry
   help
 
-Strict routes (answer, queue) require AIMAESTRO_SUDO_TOKEN for USER callers.
-Agent callers authorize by AID_AUTH + governance title and need no sudo token.
+Strict routes (block-state, answer, queue) require AIMAESTRO_SUDO_TOKEN for USER
+callers. Agent callers authorize by AID_AUTH + governance title, no sudo token.
 
 Cross-agent limits (R42 / R42.8) — a title alone is NOT enough:
   inject, slash, queue, state --pane    SELF-ONLY for every title, MANAGER and
                                         CHIEF-OF-STAFF included. Ask by AMP.
-  read-prompt, answer                   MANAGER: any agent. CHIEF-OF-STAFF: its
-                                        own team. Never an ASSISTANT. Requires a
-                                        prompt to actually be pending (else 409).
+  block-state, read-prompt, answer      MANAGER: any agent. CHIEF-OF-STAFF: its
+                                        own team. Never an ASSISTANT. `answer`
+                                        needs the agent to actually be blocked
+                                        (else 409); `--match` likewise.
+
+Why block-state exists next to read-prompt — they are NOT alternatives.
+  read-prompt returns what the plugin HOOK recorded. Measured across 419 live
+  chat-state files: it carries permission prompts, and carries AskUserQuestion
+  NEVER (0/419). So for the one prompt shape that blocks an agent forever, it
+  answers null and the agent looks fine.
+  block-state reads the TERMINAL, which shows what is on screen now. Use it when
+  read-prompt is empty but the agent is not progressing. It also reports
+  hookDisagreed when the two sources conflict — measured to happen (the hook
+  types an AskUserQuestion as `permission_prompt`), so a conflict is a fact to
+  report, not noise to hide.
 
 Environment:
   AID_AUTH               Bearer token for agent callers (REQUIRED — no localhost exemption)
@@ -280,6 +296,31 @@ cmd_read_prompt() {
     _api GET "/api/agents/${id}/prompt"
 }
 
+cmd_block_state() {
+    local ref="${1:-}"; shift || true
+    [ -z "$ref" ] && { echo "Error: agent required" >&2; return 1; }
+    local match=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --match) match="$2"; shift 2 ;;
+            *) echo "Error: unknown flag for 'block-state': $1" >&2; return 1 ;;
+        esac
+    done
+    local id
+    id="$(_resolve_agent_id "$ref")" || return 1
+    if [ -n "$match" ]; then
+        # The regex is evaluated on the SERVER, so the pane text never crosses the boundary —
+        # only the lines that matched come back. URL-encode it: a regex is full of characters
+        # (`+`, `&`, `#`, space) that a raw query string would eat or mis-split, and a silently
+        # truncated pattern matches the WRONG lines rather than erroring.
+        local encoded
+        encoded="$(printf '%s' "$match" | jq -sRr @uri)"
+        _api GET "/api/agents/${id}/block-state?match=${encoded}"
+    else
+        _api GET "/api/agents/${id}/block-state"
+    fi
+}
+
 cmd_answer() {
     local ref="${1:-}"; shift || true
     [ -z "$ref" ] && { echo "Error: agent required" >&2; return 1; }
@@ -357,6 +398,7 @@ case "${1:-help}" in
     slash-keys)   shift; cmd_slash_keys "$@" ;;
     state)        shift; cmd_state "$@" ;;
     read-prompt)  shift; cmd_read_prompt "$@" ;;
+    block-state)  shift; cmd_block_state "$@" ;;
     answer)       shift; cmd_answer "$@" ;;
     queue)        shift; cmd_queue "$@" ;;
     queue-list)   shift; cmd_queue_list "$@" ;;

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T09:51:58+0200
+updated: 2026-08-06T10:09:11+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -121,6 +121,37 @@ not by `git log`: `absorbed:marketplace-refresh` and `lastAbsorbedRunAt` are bot
 numeric-constant grep is NOT a valid instrument here — `10800000` and `3600000` both return **0**
 files, because the source writes `3 * 60 * 60 * 1000` and the bundler keeps the expression. All 3
 tmux agents survived (they are independent processes; only the dashboard WebSocket reconnects).
+
+### CORRECTION to the paragraph above — this module has TWO live copies, with different deploy mechanics
+
+The conclusion ("not deployed") was right; the MECHANISM recorded for it was wrong, and it is
+wrong in `c5fad115`'s commit message too. `services/auto-update-service.ts` is reached two ways:
+
+| copy | who loads it | goes live on |
+|---|---|---|
+| **scheduler** — `startAbsorbedDutyScheduler`, `stopAbsorbedDutyScheduler` | `server.mjs:1813/1845/2305`, via `await import('./services/auto-update-service.ts')` — the **TypeScript source**, transpiled at runtime (tsx headless, Next's transpiler in full mode) | **`pm2 restart` ALONE — no build** |
+| **route** — the same service imported by API routes | bundled into `.next` | **`yarn build` + restart** |
+
+So "`services/*.ts` is BUNDLED, so a restart alone never loads it" is false for the half that
+actually runs this lane. What made the fixes undeployed was simply that the process had imported
+the module at **07:08:27**, before any of them existed — a running process does not re-read source.
+The rebuild was not wasted (it updated the route copy), it just was not what mattered here.
+
+**This also downgrades `c5fad115`'s own verification.** Finding
+`absorbed:marketplace-refresh` + `lastAbsorbedRunAt` in `.next` proved the ROUTE copy was current
+and said nothing about the scheduler copy. Two greps that returned **0** are the tell, and one of
+them was a positive control: `absorbedDutyIsOverdue` (a function NAME — minified away) and
+`'Absorbed-duty tick threw'` (a pre-existing string that is only ever in the scheduler path, hence
+never in `.next` at all). The honest proof for the scheduler half is RUNTIME behaviour, and it now
+exists — see below.
+
+**RUNTIME PROOF (10:02:31).** After the restart at 10:00:28, `ps` showed **one** process,
+`claude plugin marketplace update`, **argless**, started ~10:02:31 — i.e. exactly at
+boot + `ABSORBED_DUTY_BOOT_SETTLE_MS`. That single fact carries three claims at once: the boot
+catch-up fired; the new single-call refresh replaced the per-name loop (the old lane would have
+shown `… update <name>`); and the scheduler copy is genuinely the new code. The state file is
+written only after the refresh returns, so an early check reads "nothing happened" — a full sweep
+takes minutes (the 07:08 one ran 07:08:39→07:09:56+).
 
 **A NEW fact that weakens the "registry is authoritative" branch below.** Only **15 of 275**
 registry entries carry an `autoUpdate` key AT ALL (all 15 `false`); the other 260 have no such

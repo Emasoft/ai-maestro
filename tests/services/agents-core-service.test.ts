@@ -1144,6 +1144,19 @@ describe('sendAgentSessionCommand — R42.8 blocked-only precondition (Gate 0b)'
   // is the load-bearing one: "the pane shows no question", "the pane shows a question",
   // and "the pane could not be read" must be three different outcomes, because the
   // middle one is the capability and the last one must never be mistaken for the first.
+  //
+  // NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restores blob-verified).
+  // Two mutations, deliberately aimed at the gate's two independent halves, because one
+  // coarse neuter (making the whole pane branch refuse) reds all four and proves only
+  // that SOMETHING is load-bearing:
+  //   s|const asked = pane\.verdict\.blocked &&|const asked = false \&\&|
+  //     → 1 red / 98 green:
+  //         ALLOWS an unblock when the PANE shows a question the hook never captured
+  //   s|reason === 'ask_user'|reason !== 'zzz-never'|
+  //     → 1 red / 98 green:
+  //         REFUSES when the pane is STALLED but asked nothing (rate limit)
+  // The refusals staying green under the first mutation is the part worth noting: it
+  // shows they refuse for their own reasons rather than because the allow branch is gone.
 
   it('ALLOWS an unblock when the PANE shows a question the hook never captured', async () => {
     // The case the whole card exists for. Hook: nothing. Pane: an open AskUserQuestion.

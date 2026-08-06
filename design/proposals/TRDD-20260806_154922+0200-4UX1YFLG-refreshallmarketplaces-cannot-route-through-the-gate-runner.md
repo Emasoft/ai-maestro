@@ -1,0 +1,108 @@
+---
+trdd-id: 4UX1YFLG
+title: RefreshAllMarketplaces breaks the AIO-TXN-10 ratchet and cannot route through the gate runner as designed
+column: proposal
+created: 2026-08-06T15:49:22+0200
+updated: 2026-08-06T15:49:22+0200
+current-owner: ai-maestro
+created-by: ai-maestro
+assignee: ai-maestro
+task-type: refactor
+min-approval-requirement: manager
+approved: false
+priority: 1
+severity: medium
+effort: small
+release-via: none
+scope: project
+project-id: ai-maestro
+repo: Emasoft/ai-maestro
+labels: [governance, aio-txn-10, ratchet, regression]
+npt: []
+eht: []
+blocked-by: []
+relevant-rules: []
+---
+
+# RefreshAllMarketplaces breaks the AIO-TXN-10 ratchet
+
+## The regression, and whose it is
+
+`tests/governance/aio-txn-10-runner-coverage.test.ts` fails **deterministically** — 3 of 3 full-suite
+runs, 2026-08-06, identical every time, while all 400 other files pass (5572 tests green):
+
+```
+AIO-TXN-10 violated by 1 pipelines (ratchet allows 0).
+Still hand-rolled:
+  RefreshAllMarketplaces (1 gate ops)
+```
+
+**This is my regression and I mislabelled it repeatedly.** A session handoff recorded it as
+"pre-existing, NOT mine", and I repeated that several times without checking. Git says otherwise:
+
+- `MAX_HANDROLLED = 0` was set on **2026-07-31** (`92c61ca5`).
+- `RefreshAllMarketplaces` was introduced on **2026-08-06 07:57** (`7c104ba4`, TRDD-PE54D95Q AC1).
+- `git merge-base --is-ancestor` confirms the ratchet reached 0 **first**.
+
+So a new hand-rolled pipeline was added against a zero ratchet. The lesson is the one already in
+the rules and it caught me anyway: **a note from an earlier session is a second-hand report** — the
+two commands that settle it cost less than the sentence repeating the claim.
+
+## Why the obvious fix does not work
+
+`RefreshAllMarketplaces` (`services/element-management-service.ts:5467`) is two auth gates and then
+ONE side effect — `claude plugin marketplace update` — with nothing abortable after it. It has no
+rollback window at all.
+
+And `lib/gate-transaction.ts:126` **refuses to start** a sequence containing a mutating gate with no
+`undo`:
+
+> "Refuse to start rather than discover mid-flight that a gate cannot be undone — by then the
+> damage is done and the guarantee is already broken."
+
+A marketplace catalog refresh has no meaningful `undo`: you cannot un-fetch, and there is nothing
+harmful to reverse. So the function **cannot** be wrapped as the runner is designed.
+
+## Three options — and two of them are traps
+
+1. **Declare the exec gate `readOnly: true`.** ✗ It is a lie — the refresh mutates local catalog
+   state — and it defeats the precheck that exists precisely to stop "I'll add the undo later"
+   from becoming permanent.
+2. **Rename or drop the `G03:` op so the detector stops counting it.** ✗ Gaming a name-keyed
+   detector. The offender renames its way out and the rule stops meaning anything.
+3. **Decide what AIO-TXN-10 means for a single-action privileged call**, and make the detector say
+   it. A function with ONE terminal side effect and no window is arguably not a "pipeline" in the
+   sense the rule governs — but narrowing a conformance detector to exclude the function that
+   just violated it is exactly the shape of routing around a rule, so it must be a deliberate,
+   documented decision rather than a quiet edit.
+
+Option 3 is the only honest one, which is why this is a proposal and not a commit.
+
+## Why this needs MANAGER and not a self-mandate
+
+It changes a governance conformance rule (or its detector), which the tier table puts at `manager`.
+An agent narrowing the rule that just caught its own regression is precisely the case the approval
+gate exists for.
+
+## Verification
+
+`bash scripts/with-node.sh npx vitest run tests/governance/aio-txn-10-runner-coverage.test.ts`
+→ must pass with `MAX_HANDROLLED` **still 0** (the ratchet never rises). Whichever option is
+chosen, that command is the acceptance.
+
+## Estimated risk
+
+**LOW as code, MEDIUM as governance.** The failing gate blocks nothing at runtime; the risk is
+setting a precedent that a conformance detector may be narrowed by whoever trips it.
+
+## Acceptance
+
+- [ ] MANAGER rules on which of the three options applies
+- [ ] `aio-txn-10-runner-coverage` passes with `MAX_HANDROLLED` still 0
+- [ ] If option 3: the detector's definition of "pipeline" is stated in the test's own comment, so
+      the next reader learns the boundary rather than re-deriving it
+
+## Approval log
+
+- 2026-08-06T15:49:22+0200 — Authored as a proposal. Not self-mandated: the fix is a governance
+  decision about a conformance rule, and the agent proposing it is the one whose commit broke it.

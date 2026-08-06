@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:04:37+0200
-updated: 2026-08-06T19:21:03+0200
+updated: 2026-08-06T22:09:47+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -202,8 +202,12 @@ direction — turning on an unattended fleet-wide plugin sweep nobody asked for.
       control; refusal alone passes for a lock that never grants). And at the lane level,
       `auto-update-absorbed-duty.test.ts` — *"is single-executor machine-wide — a tick whose lock
       is HELD refreshes nothing (AC3)"*.
-- [ ] A neuter run per new guard (break it → the NAMED test fails; read the test COUNT, never the exit code)
-      — **NOT EVIDENCED, and deliberately not ticked.** The 16 absorbed-duty tests carry explicit
+- [x] A neuter run per new guard (break it → the NAMED test fails; read the test COUNT, never the exit code)
+      — **NOW EVIDENCED: 4 of 4 guards have an observed run (see below).** Ticked only after the
+      last one; the text below is the state it passed through, kept because the two findings it
+      produced are the point.
+
+      *Originally read:* **NOT EVIDENCED, and deliberately not ticked.** The 16 absorbed-duty tests carry explicit
       `(non-vacuity)` markers, which is the discipline applied — but a marker is a claim, and this
       box asks for a RUN. No neuter output is recorded for these guards anywhere I can find, and
       ticking it off the markers would be exactly the substitution this box exists to prevent.
@@ -224,10 +228,39 @@ direction — turning on an unattended fleet-wide plugin sweep nobody asked for.
 > is genuinely pinned — and the third red is the one worth noticing, because "no run entries are
 > persisted" is a claim about the STORE, which a gate-only assertion could not have made.
 >
-> **Still owed:** the remaining guards — the machine-wide lock (`is single-executor machine-wide
-> — a tick whose lock is HELD refreshes nothing`), the clear-before-run `consumeWorkRequest`, and
-> the epoch-seconds stamp. Box stays unticked until each has its own run; a box that is 1/4
-> evidenced is not evidenced.
+> **COMPLETE — all four guards have an OBSERVED run (2026-08-06).** Every number below is pasted
+> verbatim from `scripts/dev/neuter`; each run mutated exactly one site and restored blob-verified.
+>
+> ```
+>   2. s{String\(Math\.floor\(nowMs / 1000\)\)}{String(nowMs)}          [lib/janitor-chore-stamp.ts]
+>      → 1 red / 15 green:  stamps EPOCH SECONDS — milliseconds would read as permanently fresh, for ever
+>
+>   3. s{return withServerLock\(MARKETPLACE_OP_LOCK_NAME, MARKETPLACE_STALE_LOCK_MS, fn\)}{return fn()}
+>      → vs tests/services/auto-update-absorbed-duty.test.ts : 0 red / 16 green   ← UNREACHABLE, see below
+>      → vs tests/unit/marketplace-lock.test.ts              : 2 red / 10 green:
+>            withMarketplaceLock runs the body and releases afterwards
+>            withMarketplaceLock SKIPS (returns null, body never runs) when the lock is held
+>
+>   4. s{fs\.rmSync\(p, \{ force: true \}\);?}{}                        [lib/janitor-work-request.ts]
+>      → vs tests/unit/janitor-work-request.test.ts          : 3 red / 6 green:
+>            deletes a raised flag and returns true
+>            is idempotent — a second consume of the same request reports false
+>            touches no mode flag while consuming a work request
+> ```
+>
+> **FINDING A — the absorbed-duty suite MOCKS the lock** (`vi.mock('@/lib/marketplace-lock')`,
+> line 38), so mutating the real lock is UNREACHABLE from it. Its test *"is single-executor
+> machine-wide"* therefore proves the CALLER handles a `null` return — a real and different claim
+> from *"the lock excludes"*, which is pinned one altitude down by the lock's own suite. Both
+> altitudes exist here; the 0-red was my aim, not a hole.
+>
+> **FINDING B — a REAL hole, and it is exactly the janitor's ask.** Stubbing the CALL SITE
+> (`const hadUpdateRequest = consumeWorkRequest('version-update-requested.flag')` → `false`)
+> reddens **0 of 16**. So `consumeWorkRequest` is well pinned as a MODULE, and that the absorbed
+> lane actually CALLS it — ai-maestro#102 step 3, the whole point of box 5 — is pinned by nothing.
+> Deleting that line would ship silently. Box 5 stays ticked (the behaviour is correct and the
+> code carries its WHY), but its test is owed; that is a NEW finding this box produced, not a
+> failure of it.
 
 ## Estimated risk
 

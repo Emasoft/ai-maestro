@@ -162,6 +162,25 @@ Partial wiring already exists: `lib/agentlens-status.ts`, `lib/token-cost.ts`,
 **Why the USER asked:** `agentlenspro statusline-history windows` is the un-quantized 5 h/7 d
 reading that diagnosed the rotation failure when the server's own numbers did not.
 
+**GAP MEASURED 2026-08-07 — this is half-built, and the missing half is the important one.**
+- **BUILT and wired:** `lib/agentlens-status.ts` already parses `get_account_status --full` for
+  exactly the canonical mapping janitor#100 specifies — `usageWindows.fiveHourPct` /
+  `.sevenDayPct` and `cacheTtl.minutes`. Its one consumer is `lib/continuity-status.ts`.
+- **NOT wired — and it is the safety-critical path:** the ROTATOR (`lib/oauth-rotator/tick.ts`)
+  still takes its windows from its OWN `usageRequest` probe, not from agentlenspro. That is
+  precisely the source whose numbers disagreed with reality during the incident, and the reason
+  the USER named agentlenspro as the source at all.
+- **Live CLI surface confirmed:** `get_account_status` (plan, mode, `usageWindows`, `cacheTtl`,
+  `account.{accountId,label,email}`), `get_burn_status`, `get_account_burners`, plus
+  `statusline-history windows`. Verified answering on this host: `Max 20x · subscription (within
+  plan) · 5h 99% / 7d 50% (cc-rate-limits) · cache TTL 60min`.
+
+**DO NOT start this at the tail of a long session.** Re-pointing the rotator's window source is a
+change to the data path that decides credential rotation for the whole fleet; a half-landed
+version would rotate on numbers nobody has validated. It wants a fresh context, the existing
+`usageRequest` kept as a documented fallback (agentlenspro can be down), and a differential test
+proving the two sources agree on a known fixture before the switch is trusted.
+
 ## Verification
 
 Each item carries its own check above. Nothing here may be ticked from a code shape alone — the

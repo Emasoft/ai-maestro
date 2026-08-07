@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-06T10:53:41+0200
+updated: 2026-08-07T03:36:44+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -750,6 +750,32 @@ applies to it, which is now the strongest argument for settling that first.
 - [ ] Measured after the change on this host: `claude plugin update` invocations per hour
       drop from **200** (158 of them failing) to **0**, and marketplace refreshes drop from
       hourly-per-session to one every 3 h machine-wide.
+      **MEASURED 2026-08-07T03:36 — the box SPLITS: its second half is met, its first half
+      cannot be met yet, exactly as the boundary noted in AC7 predicted.** Instrument: the
+      `lastRunSummary` rolling trail in `~/.aimaestro/auto-update-settings.json`, clustered
+      into fires by a >5 min gap (the trail is CROSS-TICK — grouping by exact `at` fragments
+      it into one row per plugin and reads as ~200 separate fires, which is the false reading
+      that has already cost three wrong conclusions).
+      - **Marketplace refresh — MET.** The last fire (03:14:13→03:17:34) carries exactly
+        **one** marketplace row, whose own detail says `one invocation`. The two singleton
+        `absorbed:marketplace-auto-update` fires sit at 22:21:46 and 02:54:45.
+      - **Failures — MET and then some.** Across all **200** trail rows there are **zero**
+        failures; the only 2 non-`updated` rows are benign `already-current` on the
+        marketplace target. The old shape was 158 failing of 200. This is the `name@marketplace`
+        argv fix (`7c104ba4`) holding under a fourth day of live traffic.
+      - **`claude plugin update` per fire — NOT 0, and correctly so.** The last fire ran **78**
+        per-plugin user-scope updates (`absorbed:<plugin>@<marketplace>`, detail
+        `Updated to latest (user, absorbed duty)`). AC7's recorded boundary is the reason:
+        the per-plugin loop is redundant *for auto-update-ON plugins*, "which is why the flip
+        had to land before AC6 can". The flip has not landed — `categories` still reads
+        `userScopePlugins: false`, `agentLocalScopePlugins: false` — so this half is BLOCKED
+        on that flip, not failing.
+      - **Cadence — NOT cleanly sampled.** Bulk fires at 08-06 19:45:59, 22:49:16 and
+        08-07 03:14:13 give gaps of **3.06 h** (clean ✓) and **4.42 h**. The 4.42 h gap spans
+        the `pm2 restart` at 23:54:34, so it is not evidence against the 3 h constant; a clean
+        second sample needs two consecutive fires with no restart between them.
+      - Live stamp assertion holds in production, both halves: `lastAbsorbedRunAt` =
+        `2026-08-07T03:17:34+0200` and `lastRunAt` = `null` (`15f752d3`).
 - [x] The per-plugin-update question in "One thing to resolve" above is answered by the
       USER before any code lands, and the answer is recorded here.
       DONE — answered verbatim in the "RESOLVED — the per-plugin loop is redundant, not merely

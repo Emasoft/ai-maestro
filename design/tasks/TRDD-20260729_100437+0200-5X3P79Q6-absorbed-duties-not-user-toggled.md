@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:04:37+0200
-updated: 2026-08-07T04:11:28+0200
+updated: 2026-08-07T08:33:55+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -151,7 +151,41 @@ direction — turning on an unattended fleet-wide plugin sweep nobody asked for.
 > over-shot into running for a host that never consented (never installed the janitor). It does
 > not — the consent check is real and doubly pinned. Verified, not assumed.
 
-- [ ] `#99` read; each absorbed update chore classified duty-vs-added, with the pre-absorption gate quoted
+- [x] `#99` read; each absorbed update chore classified duty-vs-added, with the pre-absorption gate quoted
+      **DONE 2026-08-07 — via `#100`, which is the correct citation (`#99` never was; see below).**
+      **CLASSIFICATION: the trio is a LEASE, not a transfer — the janitor remains the OWNER.**
+      `#100` ratifies (both sides, verbatim) a two-family split: *"**Family B — DEV-ENVIRONMENT
+      HYGIENE:** plugin/marketplace/self update, cache-prune, rules-cleanup, OOM guard,
+      github-config audit. **→ STAYS with the janitor. Do NOT absorb these into the server.**"*
+      Our trio IS plugin/marketplace/self-update, so by that text it is **Family B** — and read
+      alone it says we should not have it.
+      What resolves the apparent conflict is LATER IN THE SAME THREAD: *"Owner directive #2
+      (2026-07-17): chore-level coordination between the two daemons"*, whose settled shape is
+      *"a fresh `~/.aimaestro/server-liveness.json` … means the server is **RUNNING** ⇒ the
+      janitor's #N daemon yields **ALL** absorbed chores: `oauth-rotator-tick`,
+      `oauth-rotator-supervisor`, `marketplace-refresh`, `user-plugins-update`, `version-update`."*
+      So the split governs **permanent ownership** (Family B stays janitor-owned, which is what
+      keeps the `#56` mirror true — a machine with no server still gets dev-hygiene); the directive
+      adds a **runtime lease** (the server performs them while alive, the janitor reclaims ALL of
+      them within 90 s of the server going stale). Absorption here is *duty-while-up*, never a
+      transfer of ownership — which is the honest answer to "duty vs added".
+      **Chronology, checked because it decides the reading:** `#100` ran 2026-07-16 → 08-01 and the
+      directive is dated 07-17, i.e. INSIDE the thread — so neither supersedes the other by date;
+      they are different questions, and the thread settles both.
+      **PRE-ABSORPTION GATE, quoted (both halves):** static — `dispatch.py:428-443`
+      `_NON_HARNESS_DETECTORS` (13 entries, containing all three), justified at `:420-427` as
+      anything that *"mutates MACHINE-GLOBAL state … or reads/surfaces the machine's OAuth/keychain
+      posture"*; runtime — `daemon.py:2323-2331`, *"BINARY since TRDD-LU0C5KAR … a running server
+      owns them ALL; its exit … hands them ALL back."*
+      **⚠ ONE RESIDUAL RISK, surfaced not resolved.** `#100` warns that the yield must key on a
+      `singleton-chores` capability, NOT on `family-a`: *"`family-a` means ONLY 'the OAuth tick is
+      live' — it says nothing about marketplace/version chores … the janitor stops
+      marketplace-refresh / user-plugins-update / version-update — chores nothing is running."*
+      That was written when the server did NOT implement them; TRDD-PE54D95Q has since built the
+      lane (measured live 2026-08-07: 5 fires, 78 plugin updates, zero failures, and the janitor
+      logging `chore-coordination: yielding`). So the hazard is not live today — but whether the
+      server actually EMITS `singleton-chores`, rather than the janitor inferring from `family-a`,
+      is unverified here and is the thing that would silently strand all three.
       — **STILL OPEN, but the BLOCKER IS GONE and the remaining ask is much smaller (2026-08-07).**
       The classification is EXPRESSED IN CODE (the lane owns exactly the trio:
       `marketplace-refresh`, `version-update`, `user-plugins-update`), but `#99` was never read and

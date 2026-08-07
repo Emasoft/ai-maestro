@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-07T03:36:44+0200
+updated: 2026-08-07T09:05:46+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -776,6 +776,18 @@ applies to it, which is now the strongest argument for settling that first.
         second sample needs two consecutive fires with no restart between them.
       - Live stamp assertion holds in production, both halves: `lastAbsorbedRunAt` =
         `2026-08-07T03:17:34+0200` and `lastRunAt` = `null` (`15f752d3`).
+      - **CORRECTION 2026-08-07T09:05 — a "contradiction" I raised off this measurement was my
+        misreading, and the code had already anticipated it.** I flagged that the lane runs 78
+        USER-scope updates while `categories.userScopePlugins: false`. Two different things share
+        the noun (`auto-update-service.ts:207-219`): the absorbed duty `user-plugins-update` gates
+        on `isJanitorInstalledAndArmed()` — *"None of them ever had a user-facing category — the
+        janitor being installed+armed WAS the consent"* — while `userScopePlugins` **as a
+        user-facing category** is a genuinely-new broad sweep still gating on `settings.enabled`.
+        No contradiction, and no R17.17 issue either: the lane UPDATES plugins the janitor already
+        updated unconditionally; it installs and enables nothing.
+        What survives is much smaller and is AC5's real edge: a reader of
+        `auto-update-settings.json` **alone** still cannot tell the two apart — only a reader of
+        the code can, which is why that comment shouts `AS A USER-FACING CATEGORY`.
 - [x] The per-plugin-update question in "One thing to resolve" above is answered by the
       USER before any code lands, and the answer is recorded here.
       DONE — answered verbatim in the "RESOLVED — the per-plugin loop is redundant, not merely

@@ -128,6 +128,15 @@ function scanRepo(): { hits: AddressHit[]; scanned: number } {
  *  a scanner that read NOTHING reports — and that failure is invisible without a floor. */
 const MIN_SCANNED = 800
 
+// NEUTER RUN (2026-08-07 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+//   s/^  'me', 'you', 'us',/  'you', 'us',/
+//   → 2 red / 3 green:
+//       ALLOWS the fixture forms the mailer suites legitimately need
+//       contains no address that looks like a real person
+// The second RED is the one that matters: dropping ONE allowlist entry made the REPO SCAN fail on
+// the tree's 38 real `me@gmail.com` fixture uses — so that assertion is reading actual tracked
+// files, not passing on an empty read. The 3 that stayed green are the floor, the synthetic
+// positive control, and the never-print-the-address check, none of which touch the allowlist.
 describe('no personal mail addresses in tracked files — this repo is PUBLIC', () => {
   it('actually scans the tracked corpus (guards against a silently empty scan)', () => {
     const { scanned } = scanRepo()

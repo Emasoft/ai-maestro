@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# git-lock-status — decide, with evidence, whether a .git lock is HELD or STALE.
+#
+# WHY THIS EXISTS (2026-08-07). A 0-byte `.git/index.lock` blocked every commit in this repo for
+# 39 minutes. The lock was not the expensive part — the AMBIGUITY was. `git` says only:
+#
+#     Another git process seems to be running in this repository, or the lock file may be stale
+#
+# ...which is both possibilities in one sentence, and the two have opposite correct responses:
+# WAIT (a real writer is mid-operation; deleting corrupts it) versus REMOVE (an abandoned file
+# blocking everything). An agent under RULE 0 cannot delete an untracked file on a guess, so it
+# must escalate to the human — and without evidence that escalation is "I think it might be
+# stale?", which is not something anyone can act on confidently either.
+#
+# This prints the evidence and a verdict. It NEVER deletes: removal stays a human act, by design.
+# What it removes is the 39 minutes of not knowing.
+#
+# Usage:  scripts/dev/git-lock-status [repo-path]
+# Exit:   0 = no lock · 1 = STALE (safe to remove) · 2 = HELD (wait) · 3 = cannot determine
+
+set -uo pipefail
+
+REPO="${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+GITDIR="$(git -C "$REPO" rev-parse --git-dir 2>/dev/null)" || { echo "not a git repo: $REPO"; exit 3; }
+case "$GITDIR" in /*) ;; *) GITDIR="$REPO/$GITDIR" ;; esac
+
+# Every lock git takes on a write path. index.lock is the common one; the refs/HEAD locks show up
+# when a ref update is interrupted.
+LOCKS=("$GITDIR/index.lock" "$GITDIR/HEAD.lock" "$GITDIR/config.lock" "$GITDIR/shallow.lock")
+while IFS= read -r l; do LOCKS+=("$l"); done < <(find "$GITDIR/refs" -name '*.lock' -type f 2>/dev/null)
+
+found=0; held=0; stale=0
+
+for lock in "${LOCKS[@]}"; do
+  [ -e "$lock" ] || continue
+  found=$((found + 1))
+  rel="${lock#$GITDIR/}"
+
+  size=$(wc -c < "$lock" 2>/dev/null | tr -d ' ')
+  # Portable mtime: GNU stat -c, BSD stat -f. Never assume which coreutils is on PATH.
+  mtime=$(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null)
+  age=$(( $(date +%s) - ${mtime:-0} ))
+
+  # THE decisive check. A lock nobody has open is not protecting an operation — there is no
+  # operation. lsof is the only thing that answers this; mtime alone cannot (a slow fetch can
+  # legitimately hold a lock for minutes while touching nothing).
+  holder=$(lsof -t "$lock" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')
+
+  echo "── $rel"
+  echo "   size    : ${size} bytes"
+  echo "   age     : ${age}s"
+  if [ -n "$holder" ]; then
+    echo "   holder  : PID(s) $holder  ← A PROCESS HAS THIS OPEN"
+    for p in $holder; do
+      cw=$(lsof -a -p "$p" -d cwd -Fn 2>/dev/null | grep '^n' | sed 's/^n//')
+      echo "             pid $p cwd=${cw:-<gone>}  cmd=$(ps -o command= -p "$p" 2>/dev/null | cut -c1-70)"
+    done
+    echo "   VERDICT : HELD — wait. Deleting this corrupts a live operation."
+    held=$((held + 1))
+  else
+    echo "   holder  : none (lsof reports no open handle)"
+    if [ "$age" -lt 30 ]; then
+      # A writer can create the file a moment before opening it. Under 30s, refuse to call it
+      # stale — the cost of being wrong here is corrupting someone's commit.
+      echo "   VERDICT : TOO YOUNG to judge (<30s). Re-run in a moment."
+      held=$((held + 1))
+    else
+      echo "   VERDICT : STALE — no holder, ${age}s old. Safe to remove:"
+      echo "             rm '$lock'"
+      stale=$((stale + 1))
+    fi
+  fi
+done
+
+if [ "$found" -eq 0 ]; then echo "No git locks present in $GITDIR — git writes are unblocked."; exit 0; fi
+echo
+echo "summary: $found lock(s) — $held held/too-young, $stale stale"
+[ "$held" -gt 0 ] && exit 2
+[ "$stale" -gt 0 ] && exit 1
+exit 3

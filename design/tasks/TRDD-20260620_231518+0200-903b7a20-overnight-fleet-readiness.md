@@ -3,7 +3,7 @@ trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-02T15:29:34+0200
+updated: 2026-08-08T00:21:44+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -271,7 +271,7 @@ The USER ruled the governance PR to main PREMATURE. It is gated on ALL of the fo
 - **G1 — plugin fleet ready** (umbrella; G2..G11 are its concrete gates)
 - **G2 — 3-pillars system (TRDD/PRRD/kanban) working across role plugins + GitHub** — DEP overlay shipped (TRDD-DE9757LJ); WAITING on janitor#73 (IND global rules) + orch#27 (kanban script rewire)
 - **G3 — web-scenario-tester plugin published + working + token-frugal** — NOT in the remote marketplace (probe 2026-07-08); plugin work = TRDD-f181a4ae, token restructure = TRDD-74ZS7P9U
-- **G4 — HTML side panel in each agent terminal correctly displays agent-pushed content** (visual-communicator surface)
+- **G4 — DESCOPED 2026-08-08** (was: HTML side panel displays agent-pushed content via the visual-communicator surface). Zero callers of `scripts/aimaestro-panel.sh` in BOTH visualizer plugins (amvcp 0, webdesign 0 — measured by the COS session on tracked source, ai-maestro#132): the wiring is UNBUILT, not untested, so this gate cannot honestly gate. Re-enters as its own card when a visualizer actually wires the CLI; the CLI contract itself is unchanged and immutable.
 - **G5 — all Agent Profile tabs working for each agent**
 - **G6 — global (user-scope) extension install via Settings works flawlessly**
 - **G7 — API ↔ external plugins (pss, cpv, llm-externalizer, visual-communication, web-scenario-tester, …) working + tested**

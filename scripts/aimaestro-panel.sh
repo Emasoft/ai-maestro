@@ -4,9 +4,12 @@
 # =============================================================================
 #
 # Stable command-line wrapper around the AI Maestro dashboard side-panel API.
-# Visualizer plugins (visual-communicator, webdesign, …) call THIS script, never
-# the HTTP API directly: the skill-facing CLI here is immutable, while the server
-# API behind it may change freely.
+# The skill-facing CLI here is IMMUTABLE, while the server API behind it may
+# change freely — that contract is fact and holds regardless of callers.
+# Visualizer plugins (visual-communicator, webdesign, …) are INTENDED to call
+# this script, never the HTTP API directly. As of 2026-08-08 NEITHER plugin has
+# wired it (zero callers in both repos, measured by the COS session — ai-maestro#132);
+# the sentence above states the integration contract, not a shipped integration.
 #
 # Lets an agent push live HTML — or a live URL — into the human's dashboard side
 # panel, open/close/refresh it remotely, and drain the click feedback the human

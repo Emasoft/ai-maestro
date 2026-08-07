@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T11:42:43+0200
+updated: 2026-08-07T12:46:11+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -56,11 +56,11 @@ verbatim from the registry.
 `autoUpdate` disagreements**, so settings.json is the SOURCE and the registry is downstream. We
 never write the harness-owned registry — the settings gate refuses that path and is right to.
 
-### ⚠ DERIVED TASK I MISSED — the 4 h change CREATES a permanent false alarm (found 2026-08-07 13:0x)
+### ⚠ DERIVED TASK I MISSED — the 4 h change CREATES a permanent false alarm (found 2026-08-07 ~12:26)
 
-The janitor's `claimed-chore-stale` detector bounds `user-plugins-update` at **180 m**, which is
-the OLD 3 h cadence. My change makes our cadence **240 m**. So once the restart lands, every
-HEALTHY fire that passes 180 m trips that alert — permanently, on a ~5-minute heartbeat.
+The janitor's `claimed-chore-stale` detector judges `user-plugins-update` stale past **180 m**,
+while my change makes our cadence **240 m**. So once the restart lands, a HEALTHY fire trips that
+alert.
 
 That is precisely the defect class this session spent the day removing (`tick-stalled`,
 `all-maxed`, "Refreshed *every* registered marketplace"): a signal asserting a fault that is not
@@ -68,17 +68,42 @@ there. I would have shipped a new one while fixing three.
 
 **Measured when found:** `lastAbsorbedRunAt` = `2026-08-07T09:17:33+0200`, age **189 m** — LATE
 against 180 m, fine against 240 m. So the alert firing *right now* is CORRECT (the running server
-is still on 3 h and is 9 min late, ordinary jitter, NOT a wedge); it becomes false only after the
+is still on 3 h and is 9 min late, ordinary jitter, NOT a wedge); it becomes false after the
 restart.
 
-**OWED, and it is cross-repo so it is an issue, never an edit to their tree:** tell the janitor the
-absorbed `user-plugins-update` cadence moved 3 h → 4 h so its bound tracks it. Better if their
-bound is DERIVED from something we publish rather than hardcoded on both sides — two copies of one
-cadence is the drift this whole card keeps finding. Reference janitor#221 (a 3.7-day wedge of the
-same detector) so they can tell a real wedge from this.
+#### ✅ CORRECTED + FILED 2026-08-07 — the mechanism above was wrong, and it mattered
 
-**Until that lands, a `claimed-chore-stale` on `user-plugins-update` between 180 m and 240 m is
-EXPECTED and is not a wedge.** Anything past 240 m is real.
+This section first claimed the janitor **hardcodes** 180 m. **It does not.** Verified first-hand
+against cached `2.5.0` before filing anything: the bound is
+`max(3 × cadence, cadence + 600)` where `cadence` comes from **their own** roster
+(`GLOBAL_CHORES["user-plugins-update"]` = 3600 s), so 3 × 3600 = 10800 s = 180 m — numerically
+exact, mechanistically fiction. **There is no duplicated constant**; they derive, which is what my
+own lesson prescribed. Two consequences the wrong story would have gotten wrong:
+
+- **Severity is worse than "late between 180 and 240".** Our 4 h cadence *exceeds* the 3 h
+  threshold outright, so a healthy server reads as wedged for the **last hour of every cycle,
+  permanently**. At the old 3 h it sat exactly on the boundary and fired only on jitter — my edit
+  turned a latent defect into a deterministic one. We are not blameless here.
+- **The ask is not "bump the number".** A chore CLAIMED by another executor has its threshold
+  derived from the **non-executor's** cadence — recurring for every chore any server claims at its
+  own rate. Their `_cadence_of` even carries a soundness proof (the roster is test-asserted against
+  `daemon.py`, "so this can never describe a cadence the daemon does not use") that is **true and
+  about the wrong party**: the detector runs only on chores the daemon is *not* executing. No test
+  on either side can catch it — each repo's tests are individually correct.
+
+**Filed as janitor#225** (cross-repo issue, never an edit to their tree), offering to publish our
+cadence beside the completion stamp they already asked for in `Emasoft/ai-maestro#111`. Referenced
+janitor#221 — a 3.7-day wedge of *this* detector — because a daily false alarm is exactly how the
+next real wedge gets filtered out by the reader.
+
+**Deliberately NOT taken:** `CLAUDE_PLUGIN_OPTION_DAEMON_USER_PLUGINS_UPDATE_INTERVAL=14400`
+silences this today, but it is one knob with two meanings (it retunes their daemon too if the chore
+is ever un-yielded), and quietly erasing a symptom on a shared setting hands the next reader a
+mystery. Offered to them as a stopgap instead.
+
+**Operational rule, unchanged by the correction:** a `claimed-chore-stale` on
+`user-plugins-update` between 180 m and 240 m is **EXPECTED and is not a wedge.** Anything past
+240 m is real.
 
 ## ⏳ 3. The rotator is working — PARTLY VERIFIED
 

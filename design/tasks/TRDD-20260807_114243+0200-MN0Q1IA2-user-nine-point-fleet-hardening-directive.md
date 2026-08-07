@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T15:26:00+0200
+updated: 2026-08-07T17:35:38+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -351,10 +351,27 @@ recovered).
 + 12 under ~/agents + 2 global (~/.claude/settings{,.local}.json)   ⇒  ~32
 ```
 
-*Honest caveat:* 53 of 98 dirs yielded no `cwd` in their first 5 JSONL lines, so the true set may
-be larger — but even 3× is ~100 files, still trivial. And 7 decoded cwds no longer exist, so **the
-set is DYNAMIC** (projects appear and are deleted): the watcher needs a periodic re-scan, not a
-one-shot arm.
+~~*Honest caveat:* 53 of 98 dirs yielded no `cwd` in their first 5 JSONL lines, so the true set may
+be larger — but even 3× is ~100 files, still trivial.~~
+**↑ CAVEAT CLOSED 2026-08-07 by a deeper scan (400 lines/dir instead of 5). The set is NOT larger,
+and the assumed remedy was the wrong one.** Of 97 dirs:
+
+| | |
+|---|---|
+| `cwd` in the first 5 lines | **44** |
+| `cwd` only DEEPER than 5 lines | **3** ← all that deeper scanning buys |
+| **no `.jsonl` file at all** | **49** ← empty project dirs: nothing to decode, nothing to watch |
+| has content but still no `cwd` | **1** (4 lines; its slug happens to be unambiguous) |
+
+So the 53 unknowns were never 53 missing projects — they were **49 empty directories plus 3 that a
+deeper read finds plus 1 edge case**. Scanning deeper is nearly worthless (+3) and scanning DEEP is
+pointless; read to a small bound, and treat a dir with no JSONL as *absent*, not as *undecodable*.
+Final: 46 distinct cwds → 38 still on disk → **18 settings files**, so the ~32 total stands and the
+descriptor-exhaustion premise stays dead.
+
+**Still true and still load-bearing:** 8 decoded cwds no longer exist on disk, so **the set is
+DYNAMIC** (projects appear and are deleted) — the watcher needs a periodic re-scan, not a one-shot
+arm.
 
 **3. NO file-watching exists anywhere in production** — zero hits for `fs.watch` / `watchFile` /
 `chokidar` / `FSWatcher` across `lib services app server.mjs`. This is a new capability class, not

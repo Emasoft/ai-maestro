@@ -177,15 +177,22 @@ direction — turning on an unattended fleet-wide plugin sweep nobody asked for.
       anything that *"mutates MACHINE-GLOBAL state … or reads/surfaces the machine's OAuth/keychain
       posture"*; runtime — `daemon.py:2323-2331`, *"BINARY since TRDD-LU0C5KAR … a running server
       owns them ALL; its exit … hands them ALL back."*
-      **⚠ ONE RESIDUAL RISK, surfaced not resolved.** `#100` warns that the yield must key on a
-      `singleton-chores` capability, NOT on `family-a`: *"`family-a` means ONLY 'the OAuth tick is
-      live' — it says nothing about marketplace/version chores … the janitor stops
-      marketplace-refresh / user-plugins-update / version-update — chores nothing is running."*
-      That was written when the server did NOT implement them; TRDD-PE54D95Q has since built the
-      lane (measured live 2026-08-07: 5 fires, 78 plugin updates, zero failures, and the janitor
-      logging `chore-coordination: yielding`). So the hazard is not live today — but whether the
-      server actually EMITS `singleton-chores`, rather than the janitor inferring from `family-a`,
-      is unverified here and is the thing that would silently strand all three.
+      **RESIDUAL RAISED AND THEN CLOSED, same session — recorded because the closure is the useful
+      part.** `#100` warns the yield must key on a `singleton-chores` capability, NOT on `family-a`:
+      *"`family-a` means ONLY 'the OAuth tick is live' … the janitor stops marketplace-refresh /
+      user-plugins-update / version-update — chores nothing is running."* Verified against our code:
+      **we DO emit it, and correctly.** `lib/server-liveness.ts::currentCapabilities` (`:105-117`)
+      pushes `'singleton-chores'` gated on `isAbsorbedDutySchedulerRunning` — i.e. only while the
+      lane actually runs — and `'family-a'` separately on `oauthTickEnabled`. The two are never
+      conflated, which is exactly what `#100` asked for.
+      **And the reason the hazard cannot bite today is stated in that file's own comment (`:92-104`):
+      the janitor's consumer currently gates on FILE FRESHNESS alone, not on these tokens** — which
+      is why `daemon.py:2325` reads *"BINARY … a running server owns them ALL"*. The tokens are
+      computed anyway, deliberately: *"they are the ecosystem's only machine-readable statement of
+      what the server actually absorbed … and janitor#134 is an OPEN proposal to gate on them again
+      — at which point this warning is what tells you the contract changed back."*
+      So: nothing to fix, and the thing to WATCH is **janitor#134**. If it lands, the yield becomes
+      capability-gated and this emission is what keeps the trio from being stranded.
       — **STILL OPEN, but the BLOCKER IS GONE and the remaining ask is much smaller (2026-08-07).**
       The classification is EXPRESSED IN CODE (the lane owns exactly the trio:
       `marketplace-refresh`, `version-update`, `user-plugins-update`), but `#99` was never read and

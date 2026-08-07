@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T13:36:33+0200
+updated: 2026-08-07T13:55:33+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -376,6 +376,34 @@ directly passes a naive "edit it in place" test and fails on every real write.
 **Design note:** items 8 and 9 are ONE watcher (8 is the 2-file subset of 9's ~32), so build 9 and
 let 8 fall out. The `~/.claude` global pair is the highest-value half — that is where the known
 hazard landed (a test rewrote the USER's real settings.json).
+
+### 🔌 LEDGER INTEGRATION — measured, so the build is mechanical
+
+- **The signed chain is PER FILE.** `lib/agent-registry.ts:31` is
+  `export const registryLedger = new SignedLedger(REGISTRY_FILE)` — the constructor takes the file
+  the chain lives in, and `append(op, target, diff, opts)`'s `target` is metadata *within* that
+  chain. **So do NOT emit settings events into `registryLedger`**: it would interleave unrelated
+  subjects into the registry's own hash chain. Mint a separate `new SignedLedger(<settings-audit
+  path>)` instead.
+- **A new op value is explicitly SUPPORTED**, not a workaround: `types/ledger.ts` states the
+  taxonomy is *"intentionally additive"* and that **`verify()` does NOT enum-check `op`** — it
+  validates the hash chain + signature only, precisely *"so a newer ledger file with an op the
+  current binary doesn't know is still verifiable."* So e.g. `settings_changed_externally` is
+  forward-compatible by design. Every existing op is agent/registry-scoped; this is a new category.
+- **Emit shape to copy** (`lib/ledger-emit.ts`): fire-and-forget, NOT awaited, with the failure
+  logged under the `AUDIT GAP` prefix — an append failure must never take down the watcher.
+- **The diff should be a `JsonPatch`, not "something changed"** — and that falls out of the design
+  for free: the watcher already has to read + hash the file to confirm a real change, so it holds
+  both the previous and current content and can emit a scoped, REPLAYABLE patch. That is the same
+  property that makes per-op registry entries more useful than save-level ones.
+
+⚠ One consequence worth stating: the watcher records changes made by **anyone** — including the
+server itself. Emitting on our OWN writes would double-record every settings edit the server
+already ledgers through `editSettings`. Decide explicitly whether to de-duplicate (e.g. suppress a
+watcher event whose content hash matches the one our own writer just produced) or to keep both and
+let the actor field distinguish them. **The USER's directive — "record any change, even if not done
+by the server" — argues for keeping BOTH**, since a suppression rule is exactly what an attacker or
+a buggy writer would ride in on.
 
 ## ⏳ 10. Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI — NOT STARTED
 

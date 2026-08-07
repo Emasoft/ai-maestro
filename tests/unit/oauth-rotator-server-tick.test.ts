@@ -359,6 +359,13 @@ describe('deriveDecision — a stuck fleet must never report itself healthy', ()
   // MEASURED 2026-08-07: of two slots this message called human-blocked, one held a healthy cookie
   // and minted itself unattended. The same phrase had already been logged 4 506 times over 4 days
   // (see alert-delivery.ts) — a false alarm that frequent stops being read at all.
+  //
+  // NEUTER RUN (2026-08-07 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+  //   s|the OAuth rung is dead, but a live claude\.ai cookie can still mint these with NO human; check the cookie layer before re-logging in|a human must re-login|
+  //   → 1 red / 50 green:
+  //       never claims a human is required — this process cannot see the cookie rung
+  // Exactly this test, and only this test — so the precedence/attribution tests above are NOT
+  // propping it up, and it is not propping them up either.
   it('never claims a human is required — this process cannot see the cookie rung', () => {
     const d = deriveDecision({ ...base, reason: 'refresh-dead', deadRefresh: 2 })
     expect(d).not.toMatch(/human must re-login/i)

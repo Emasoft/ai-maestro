@@ -1,12 +1,13 @@
 ---
 trdd-id: IGCSDTIU
 title: The tick-stalled alert judges our rotator tick by a stamp only the janitor's rotator writes
-column: backburner
+column: testing
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T03:59:29+0200
-updated: 2026-08-07T03:59:29+0200
+updated: 2026-08-07T04:09:20+0200
+implementation-commits: [3e3199c0]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -111,6 +112,28 @@ one file with no lock.
 **LOW.** Alert-only path; `supervisor.ts` heals nothing (`server-supervisor.ts:5`). The failure
 mode of a wrong fix is a *missed* stall alert, which is why the second test above is mandatory
 rather than optional — silencing a false alarm must not silence the true one.
+
+## Acceptance
+
+- [x] `GatherDeps.tickAgeS` added, defaulting to `tickCompletedAgeS` so the JANITOR path is
+      unchanged; the server injects `serverTickAgeS`, reading the stamp its own tick writes.
+      DONE `3e3199c0`. Option 1 of the two above was taken — one writer per file, smaller change.
+- [x] The ms→s conversion is explicit and commented at the site (`readChoreStamp` returns
+      MILLISECONDS, `now` is SECONDS; undivided, every age is ~1000x too large and the alarm
+      returns). Pinned by its own assertion, not just by the comment.
+- [x] **COMPLEMENTARY neuter pair, observed, with DISJOINT red sets** — recorded verbatim at
+      `supervisor.ts`'s `tickCompletedAgeS:` line.
+      Revert the fix → 2 red / 27 green, both the SERVER-half tests.
+      Break the fallback → 2 red / 27 green, both the JANITOR-half tests — one of them
+      **pre-existing**, which is the useful signal: the old path was already covered, so the
+      fallback demonstrably preserves it rather than merely claiming to.
+- [x] The positive control is INSIDE the behavioural test: a genuinely hung tick still alerts.
+      Without it, "no `tick-stalled`" would pass equally against a fix that disabled the alert.
+- [x] `tsc --noEmit` 0 lines; 29/29 in `tests/unit/oauth-rotator-supervisor.test.ts`.
+- [ ] **LIVE:** no `tick-stalled` line for a full hour while the 60 s beat continues. Requires a
+      `pm2 restart ai-maestro` — `server-supervisor.ts` is runtime-imported, so a restart activates
+      it with no rebuild, but the running process still carries the pre-fix module. Not run: the
+      restart bounces the owner's fleet and is theirs to authorise.
 
 ## Approval log
 

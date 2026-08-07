@@ -347,6 +347,22 @@ export function gatherFacts(opts: { root?: string; deps?: GatherDeps } = {}): Fa
     onMacos,
     pinningEnv,
     slots: optIn ? slotFacts(root, now, deps) : [],
+    // TRDD-IGCSDTIU. The `??` is load-bearing in BOTH directions, so it carries a COMPLEMENTARY
+    // neuter pair — one mutation certifies only half a conditional, and the red sets below are
+    // DISJOINT, which is what proves the halves are pinned independently rather than together.
+    //
+    // NEUTER RUN (2026-08-07 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+    //   s/\(deps\.tickAgeS \?\? tickCompletedAgeS\)\(root, now\)/tickCompletedAgeS(root, now)/
+    //     → 2 red / 27 green:  the SERVER half — the false alarm returns
+    //         a frozen janitor stamp no longer alerts, and a genuinely hung tick still does
+    //         gatherFacts CONSULTS an injected tickAgeS instead of tick-completed.ts
+    //   s/\(deps\.tickAgeS \?\? tickCompletedAgeS\)/(deps.tickAgeS ?? (() => null))/
+    //     → 2 red / 27 green:  the JANITOR half — the unchanged path breaks
+    //         gatherFacts still reads tick-completed.ts when NO probe is injected (the janitor path)
+    //         assembles Facts from the root + injected blob reader + daemonAlive + now
+    //
+    // That second red is a PRE-EXISTING test, and it is the useful signal: the janitor path was
+    // already covered, so the fallback demonstrably preserves it rather than merely claiming to.
     tickCompletedAgeS: optIn ? (deps.tickAgeS ?? tickCompletedAgeS)(root, now) : null,
     daemonAlive: optIn ? (deps.daemonAlive ? deps.daemonAlive() : false) : false,
   }

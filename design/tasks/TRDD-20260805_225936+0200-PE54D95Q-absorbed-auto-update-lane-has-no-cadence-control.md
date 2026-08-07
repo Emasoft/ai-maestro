@@ -815,6 +815,36 @@ applies to it, which is now the strongest argument for settling that first.
         loop would silently stop updating at least 5 enabled plugins (the three explicit-`false`
         marketplaces), and 19 if an ABSENT key also means off** — among them `code-review`,
         `code-simplifier`, `claude-code-setup` and four LSPs.
+        **MECHANISM CORRECTED (09:40) — `autoUpdate` does NOT gate the catalog refresh.** Measured
+        via `lastUpdated` in the same registry: the `false` group (n=12) and the `<absent>` group
+        (n=8) have a median age of **0.8h**, statistically identical to the `true` group's **1.0h**.
+        So the argless `claude plugin marketplace update` refreshes EVERY registered marketplace
+        regardless of the flag — exactly as AC1 describes — and `autoUpdate` gates whether that
+        marketplace's PLUGINS are auto-UPGRADED. The loop-deletion conclusion is unaffected (it is
+        the upgrade half that would be lost), but "uncovered" was the wrong word for it throughout.
+
+        **🔴 SEPARATE DEFECT FOUND BY THAT SAME MEASUREMENT — 10 marketplaces are silently NOT
+        refreshing.** All ten carry `autoUpdate: true`, and none has refreshed in 11-155 days while
+        the other 260 refreshed 0.8h ago:
+
+        | days stale | marketplace |
+        |---|---|
+        | 155.5 | `cattoolkit`, `expanly-claude-code-agents` |
+        | 139.7 | `kreatsaas-marketplace`, `dreamwalker-marketplace`, `naw3-skills`, `milo-claudekit`, `taisun-agent` |
+        | 62.0 | `cognitive-mechanisms` |
+        | 18.0 | `ccx-arsenal` |
+        | 11.6 | `pnl-dev-marketplace` |
+
+        Most likely deleted/renamed/private upstream repos — but the lane reports **success** while
+        this happens, which is the part that matters.
+        **AND IT NAMES A BLIND SPOT IN MY OWN AC6 MEASUREMENT ABOVE.** I wrote *"zero failures
+        across all 200 trail rows"*. That is true and it is narrower than it sounds: the trail rows
+        are PER-PLUGIN updates plus ONE aggregate marketplace row (`already-current`). The
+        per-marketplace refresh OUTCOME is not recorded anywhere in `lastRunSummary`, so a
+        marketplace failing to refresh for five months is INVISIBLE to the very evidence AC6 is
+        gated on. Worth its own card: the aggregate row should carry a per-marketplace failure
+        count, or "zero failures" will keep meaning "zero failures of the thing we log".
+
         **This also answers the 5-vs-19 question I had left open**, and not the way I framed it:
         `claude-plugins-official` is NOT a special built-in — it is an ordinary registered
         marketplace (present in the cache, present in the registry) whose `autoUpdate` key is

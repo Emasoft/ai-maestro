@@ -46,7 +46,10 @@ import {
 } from '@/services/auto-update-service'
 import { DEFAULT_SETTINGS } from '@/lib/auto-update-settings'
 
-const THREE_HOURS = 3 * 60 * 60 * 1000
+// 3 h → 4 h by USER directive 2026-08-07. The two tests below straddle the interval BOUNDARY on
+// purpose (exactly-at → overdue; one minute short → not), so the constant must track the real
+// cadence or the pair stops discriminating anything.
+const FOUR_HOURS = 4 * 60 * 60 * 1000
 const SETTLE = 2 * 60 * 1000
 const NOW = Date.parse('2026-08-06T12:00:00+0200')
 
@@ -65,12 +68,12 @@ describe('absorbedDutyIsOverdue — the pure decision', () => {
   })
 
   it('is overdue once a full interval has elapsed', () => {
-    const last = new Date(NOW - THREE_HOURS).toISOString()
+    const last = new Date(NOW - FOUR_HOURS).toISOString()
     expect(absorbedDutyIsOverdue(last, NOW)).toBe(true)
   })
 
   it('is NOT overdue one minute short of the interval — this is the restart-loop guard', () => {
-    const last = new Date(NOW - THREE_HOURS + 60_000).toISOString()
+    const last = new Date(NOW - FOUR_HOURS + 60_000).toISOString()
     expect(absorbedDutyIsOverdue(last, NOW)).toBe(false)
   })
 

@@ -339,7 +339,7 @@ describe('startAbsorbedDutyScheduler / stopAbsorbedDutyScheduler — the always-
   })
 })
 
-describe('the absorbed lane cadence — 3 hours (TRDD-PE54D95Q, USER ruling 2026-08-05)', () => {
+describe('the absorbed lane cadence — 4 hours (USER directive 2026-08-07, supersedes the 3 h of 2026-08-05)', () => {
   // Pinned against the REGISTERED INTERVAL, deliberately, per the card: a wall-clock test
   // would take 3 h to run and would still only prove ONE interval. Spying on setInterval
   // reads the constant the scheduler actually arms itself with, which is the claim.
@@ -355,15 +355,23 @@ describe('the absorbed lane cadence — 3 hours (TRDD-PE54D95Q, USER ruling 2026
   //       arms its timer at exactly 3 hours, never the 1 hour it used to use
   // The `not.toHaveBeenCalledWith(1 h)` line is the half that names that specific regression;
   // the exact-equality line above it is what rejects any OTHER wrong value, since a bare
-  // not-1h would pass at 2 h or 24 h.
-  it('arms its timer at exactly 3 hours, never the 1 hour it used to use', () => {
+  // not-1h would pass at 2 h or 24 h. (That neuter was run against the 3 h constant; the
+  // mutation and its verdict are unchanged in KIND by the 4 h move — the guard is the
+  // exact-equality line, and it is what reddened here when the constant moved.)
+  //
+  // 2026-08-07 — 3 h → 4 h by USER directive. The change is in the direction the constant's own
+  // warning endorses (the refresh is idempotent, so a LONGER interval costs only publishing
+  // latency and buys back a quarter of the connections). This test REDDENED on the change, which
+  // is the point of pinning it: the cadence cannot move without a deliberate edit here.
+  it('arms its timer at exactly 4 hours, never the 1 hour it used to use', () => {
     const spy = vi.spyOn(global, 'setInterval')
     try {
       expect(isAbsorbedDutySchedulerRunning()).toBe(false)
       startAbsorbedDutyScheduler()
       expect(isAbsorbedDutySchedulerRunning()).toBe(true) // non-vacuity: it really armed
-      expect(spy).toHaveBeenCalledWith(expect.any(Function), 3 * 60 * 60 * 1000)
+      expect(spy).toHaveBeenCalledWith(expect.any(Function), 4 * 60 * 60 * 1000)
       expect(spy).not.toHaveBeenCalledWith(expect.any(Function), 60 * 60 * 1000)
+      expect(spy).not.toHaveBeenCalledWith(expect.any(Function), 3 * 60 * 60 * 1000)
     } finally {
       stopAbsorbedDutyScheduler()
       spy.mockRestore()

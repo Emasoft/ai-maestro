@@ -113,7 +113,11 @@ let absorbedTickInFlight = false
  *  exists to end. The traffic is also invisible to every meter an operator would check: git
  *  protocol operations count against NO GitHub API quota, so `gh api rate_limit` reads clean
  *  while this lane saturates. Measure it with the lane's own `lastRunSummary`, never a quota. */
-const ABSORBED_DUTY_INTERVAL_MS = 3 * 60 * 60 * 1000
+const ABSORBED_DUTY_INTERVAL_MS = 4 * 60 * 60 * 1000 // USER directive 2026-08-07: 3h -> 4h.
+// The move is in the direction the warning above endorses (fewer connections, not more): the
+// refresh is idempotent, so a LONGER interval costs only upstream-publishing latency and buys
+// back a quarter of the lane's connections. The one argless `claude plugin marketplace update`
+// invocation is unchanged and is the other half of the same directive — never one call per agent.
 
 // How long after boot an OVERDUE lane waits before catching up. Not zero: the
 // server is still starting, and a refresh is I/O-heavy. Not long: the whole

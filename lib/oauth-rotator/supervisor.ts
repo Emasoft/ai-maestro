@@ -21,7 +21,15 @@ import path from 'path'
 
 import { rotatorRoot, slotKeychainRead, type CredentialBlob } from './slots'
 import { rotatorLogPath } from './decision-log'
-import { DEFAULT_MAX_REFRESH_FAILURES } from './cascade'
+// Consecutive keepalive-refresh failures after which a present-but-FAILING refresh token is
+// treated as DEAD and escalated down the cascade (TRDD-HJGR4I5W). A few ticks: long enough to ride
+// out a transient token-endpoint flake, short enough to surface a truly-dead token within the hour.
+//
+// Moved here 2026-08-07 (TRDD-XV9BLQC5) from the deleted `cascade.ts`, which was a TypeScript port
+// of the janitor's `oauth_rotator/cascade.py` that nothing ever called: 8 of its 10 exports had
+// zero production callers, and this constant — used at the `noUsableRefresh` decision below — was
+// the only thing keeping the module reachable. A constant now lives with its sole consumer.
+export const DEFAULT_MAX_REFRESH_FAILURES = 3
 
 // A pinning env var is read at process start and overrides the keychain, so the live `claude`
 // never sees a swapped credential — rotation is silently defeated.

@@ -112,7 +112,17 @@ function trackedTextFiles(): string[] {
     .filter(f => TEXT_EXT.has(path.extname(f).toLowerCase()))
 }
 
+/**
+ * Memoized. Two assertions consult the scan, and reading ~2 300 tracked files TWICE pushed this
+ * file past vitest's 5 s default under full-suite load (measured 5 178 ms) — so it passed in
+ * isolation and timed out in CI, which is the worst way for a guard to fail: it reads as a real
+ * finding about the repo rather than as a slow test. The corpus cannot change mid-run, so one
+ * scan is also the only self-consistent answer.
+ */
+let cached: { hits: AddressHit[]; scanned: number } | null = null
+
 function scanRepo(): { hits: AddressHit[]; scanned: number } {
+  if (cached) return cached
   const hits: AddressHit[] = []
   let scanned = 0
   for (const rel of trackedTextFiles()) {
@@ -121,7 +131,8 @@ function scanRepo(): { hits: AddressHit[]; scanned: number } {
     scanned++
     hits.push(...findPersonalAddresses(src, rel))
   }
-  return { hits, scanned }
+  cached = { hits, scanned }
+  return cached
 }
 
 /** Measured 2026-08-07: 1 400+ tracked text files. A ratchet, because "0 violations" is also what
@@ -137,7 +148,10 @@ const MIN_SCANNED = 800
 // the tree's 38 real `me@gmail.com` fixture uses — so that assertion is reading actual tracked
 // files, not passing on an empty read. The 3 that stayed green are the floor, the synthetic
 // positive control, and the never-print-the-address check, none of which touch the allowlist.
-describe('no personal mail addresses in tracked files — this repo is PUBLIC', () => {
+// 30 s: this file reads every tracked text file, and the 5 s default made it time out under
+// full-suite load while passing in isolation. A guard that reddens on machine speed instead of on
+// the property it checks gets weakened by the next person who sees it fail.
+describe('no personal mail addresses in tracked files — this repo is PUBLIC', { timeout: 30_000 }, () => {
   it('actually scans the tracked corpus (guards against a silently empty scan)', () => {
     const { scanned } = scanRepo()
     expect(

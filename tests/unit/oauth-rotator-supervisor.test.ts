@@ -20,7 +20,7 @@ import {
   type Facts, type SlotFact,
 } from '@/lib/oauth-rotator/supervisor'
 import { serverTickAgeS } from '@/lib/oauth-rotator/server-supervisor'
-import { DEFAULT_MAX_REFRESH_FAILURES } from '@/lib/oauth-rotator/cascade'
+import { DEFAULT_MAX_REFRESH_FAILURES } from '@/lib/oauth-rotator/supervisor'
 import type { CredentialBlob } from '@/lib/oauth-rotator/slots'
 
 let tmpDir: string

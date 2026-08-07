@@ -148,7 +148,10 @@ describe('no raw NUL byte in any tracked text file', () => {
       '.claude/rules/lessons-verification.md',
       'lib/command-queue.ts',
       'scripts/trdd-doctor.mjs',
-      'tests/unit/oauth-rotator-cookie-vault.test.ts',
+      // `tests/unit/oauth-rotator-cookie-vault.test.ts` was the 4th defect-carrier and was DELETED
+      // 2026-08-07 with its module (TRDD-XV9BLQC5 — 16/16 exports had zero production callers).
+      // Dropped from this pin rather than kept: a pinned path that no longer exists is a stale
+      // assertion that reddens forever and teaches the next reader to weaken the guard.
       'tests/governance/no-nul-bytes-in-tracked-text.test.ts', // this file is in its own scope
     ]) {
       expect(files).toContain(p)

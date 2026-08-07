@@ -37,6 +37,38 @@
  * the one that appears most often, so the bare id UNDER-reported a 1M session
  * as 200K (a 5x understatement of free space) with nothing failing. Measured
  * before the fix: `contextLimitForModel('claude-opus-5')` → 200000.
+ *
+ * ── KNOWN HAZARD: the model id no longer FULLY determines the window ─────
+ * CC 2.1.223 changed `CLAUDE_CODE_DISABLE_1M_CONTEXT` to hold EVERY natively-1M
+ * model to 200K via auto-compaction (previously a fixed list). So a session on
+ * `claude-opus-5` with that var set really runs at 200K while this resolver —
+ * which reads the id and nothing else — answers 1,000,000. That is a 5x
+ * OVER-report of free space: the exact failure the `claude-opus-4*` heuristic
+ * was deleted for, reached through a new door.
+ *
+ * NOT CURRENTLY LIVE, and measured rather than assumed (2026-08-07): the var is
+ * set in no shell env, neither `~/.claude/settings*.json`, no `~/agents/*`
+ * workdir settings, nowhere in this repo, and not in the pm2 env. Left
+ * unimplemented DELIBERATELY, because the obvious fix is wrong twice over:
+ *   1. `process.env` here reads the SERVER's environment, not the AGENT's — a
+ *      per-session variable cannot be resolved from the process doing the
+ *      parsing; and
+ *   2. `services/sessions-browser/local-context-breakdown.ts` calls this from
+ *      the BROWSER, where there is no `process.env` to read at all.
+ * The only sound signal is the agent's OWN spawn environment, which the server
+ * knows per-agent at launch and would have to thread through. Anyone doing that
+ * must also mirror it into `context.rs` (see the sync obligation at the top).
+ *
+ * ── AND ONE THING THE SAME RELEASE TURNED FROM A GUESS INTO AN AGREEMENT ──
+ * The 200K fallback for an UNRECOGNIZED id used to be our own conservative
+ * choice. CC 2.1.223 also made auto-compact keep sessions on unknown model ids
+ * within its assumed window instead of letting them grow past it (escape hatch:
+ * `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1`). So the default is
+ * now the behaviour CC actually ENFORCES, not merely a safe guess — which is
+ * why an unknown id must keep resolving to the default and must never be made
+ * to "optimistically" inherit 1M. (The changelog does not state the assumed
+ * window numerically; that it equals 200K is inferred from the default, so
+ * treat the NUMBER as unconfirmed even though the DIRECTION is not.)
  */
 
 /** Default Claude context window when nothing else matches. */

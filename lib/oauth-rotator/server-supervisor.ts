@@ -23,7 +23,7 @@
 import { gatherFacts, diagnose, apply, optInPresent } from './supervisor'
 import { oauthTickEnabled } from './server-tick'
 import { deliverAlerts } from './alert-delivery'
-import { stampChoreRun } from '../janitor-chore-stamp'
+import { stampChoreRun, readChoreStamp } from '../janitor-chore-stamp'
 
 /** Governance cadence — supervisor.py's 10-minute loop. */
 export const SUPERVISOR_INTERVAL_MS = 600_000
@@ -47,6 +47,29 @@ export interface RunSupervisorBeatDeps {
 }
 
 /**
+ * The SERVER's tick-liveness probe (TRDD-IGCSDTIU) — how old is OUR tick's last attempt?
+ *
+ * The default `tickCompletedAgeS` reads `tick-completed.ts`, which only the JANITOR's rotator
+ * writes; on a server-owned host that file is frozen (the daemon exits), so the default made
+ * `tick-stalled` fire forever while our tick beat normally. We read the stamp OUR OWN tick writes:
+ * `stampChoreRun('oauth-rotator-tick')` at `server-tick.ts:172`, which is unconditional and sits
+ * BEFORE the gates, so it advances on every attempt — exactly the "is the owner beating?" question.
+ *
+ * `root` is ignored ON PURPOSE: the chore stamp is machine-global (it is the janitor's handover
+ * channel), not per-rotator-root, so honouring a caller's root here would look right and read a
+ * file that does not exist. The parameter is kept to satisfy the seam's shared signature.
+ *
+ * Units are the trap. `now` is epoch SECONDS (gatherFacts passes `Date.now() / 1000`, matching
+ * `tick-completed.ts`'s own format) while `readChoreStamp` returns epoch MILLISECONDS. Divide, or
+ * every age lands ~1000x too large and the alert this fix removes comes straight back.
+ */
+export function serverTickAgeS(_root: string, now: number): number | null {
+  const stampMs = readChoreStamp('oauth-rotator-tick')
+  if (stampMs === null) return null // never stamped / unreadable → diagnose treats as stalled
+  return Math.max(0, now - stampMs / 1000)
+}
+
+/**
  * One supervisor beat: gate on the rotator opt-in → gather facts (with the tick-armed state as the
  * beat-owner liveness) → diagnose → surface the alerts. Wrapped so it NEVER throws to its caller.
  * Returns the alert codes it surfaced (empty when opted-out or all clear) so a test can assert
@@ -56,7 +79,8 @@ export function runOneSupervisorBeat(deps: RunSupervisorBeatDeps = {}): string[]
   const optInCheck = deps.optInCheck ?? optInPresent
   const tickArmedCheck = deps.tickArmedCheck ?? oauthTickEnabled
   const gatherFactsImpl =
-    deps.gatherFactsImpl ?? ((daemonAlive: () => boolean) => gatherFacts({ deps: { daemonAlive } }))
+    deps.gatherFactsImpl ??
+    ((daemonAlive: () => boolean) => gatherFacts({ deps: { daemonAlive, tickAgeS: serverTickAgeS } }))
   const log = deps.log ?? ((msg: string) => console.warn(msg))
   // The janitor's handover stamp — see TRDD-14HI8ZPR / ai-maestro#111. Written on ATTEMPT, before
   // the opt-in gate, because a supervisor beat that correctly no-ops is still this chore being

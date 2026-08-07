@@ -19,6 +19,7 @@ import {
   PINNING_ENV, SETUP_REMIND_DAYS, TICK_STALL_ALERT_S, COOKIE_LEG_ALERT_S,
   type Facts, type SlotFact,
 } from '@/lib/oauth-rotator/supervisor'
+import { serverTickAgeS } from '@/lib/oauth-rotator/server-supervisor'
 import { DEFAULT_MAX_REFRESH_FAILURES } from '@/lib/oauth-rotator/cascade'
 import type { CredentialBlob } from '@/lib/oauth-rotator/slots'
 
@@ -267,5 +268,96 @@ describe('supervisor.apply', () => {
 
   it('is a no-op on an empty finding list', () => {
     expect(apply([]).alerts).toEqual([])
+  })
+})
+
+/**
+ * TRDD-IGCSDTIU — the server must judge its OWN tick's liveness, not the janitor's stamp.
+ *
+ * The bug these pin: `tick-completed.ts` is written ONLY by the janitor's rotator, and the janitor
+ * daemon exits while a server owns the host — so on a server-owned host it freezes, `diagnose` reads
+ * "armed + stale", and `tick-stalled` fires forever claiming `rotation is effectively OFF` while the
+ * tick beats every 60 s. Measured on the live host: 368930 s claimed, matching the frozen stamp's
+ * age to the second.
+ *
+ * The pair is deliberately COMPLEMENTARY. One neuter certifies only half a conditional, and this
+ * bug lives entirely in the half nothing exercised — so "the false alarm is gone" is pinned
+ * alongside "a genuinely hung tick STILL alerts". Silencing a false alarm must not silence the
+ * true one; that is the failure mode of a careless fix here.
+ */
+describe('supervisor — server tick-liveness probe (TRDD-IGCSDTIU)', () => {
+  const NOW = 1_800_000_000 // fixed epoch SECONDS
+
+  let savedControlDir: string | undefined
+  beforeEach(() => {
+    savedControlDir = process.env.JANITOR_CONTROL_DIR
+    // Redirect the machine-global chore-stamp dir into the throwaway root: 0-IMPACT, and without
+    // this the probe would read (and the suite would depend on) the developer's real stamp.
+    process.env.JANITOR_CONTROL_DIR = path.join(tmpDir, 'janitor-control')
+    fs.mkdirSync(process.env.JANITOR_CONTROL_DIR, { recursive: true })
+  })
+  afterEach(() => {
+    if (savedControlDir === undefined) delete process.env.JANITOR_CONTROL_DIR
+    else process.env.JANITOR_CONTROL_DIR = savedControlDir
+  })
+
+  function stampOwnTick(epochSeconds: number): void {
+    fs.writeFileSync(
+      path.join(process.env.JANITOR_CONTROL_DIR as string, 'oauth-rotator-tick.last-run.ts'),
+      String(epochSeconds),
+      'utf8',
+    )
+  }
+
+  it('serverTickAgeS reads OUR tick stamp and converts ms→s; absent → null', () => {
+    expect(serverTickAgeS(tmpDir, NOW)).toBeNull() // never stamped
+    stampOwnTick(NOW - 42)
+    // The units trap: readChoreStamp returns MILLISECONDS while `now` is SECONDS. Undivided this
+    // reads ~1.8e12 and every tick looks stalled — the exact alarm this change removes.
+    expect(serverTickAgeS(tmpDir, NOW)).toBe(42)
+  })
+
+  it('gatherFacts CONSULTS an injected tickAgeS instead of tick-completed.ts', () => {
+    fs.writeFileSync(path.join(tmpDir, 'opt-in.flag'), '')
+    fs.writeFileSync(path.join(tmpDir, 'state.json'), JSON.stringify({ slots: {} }))
+    // A deliberately ANCIENT janitor stamp — the live-host condition.
+    fs.writeFileSync(path.join(tmpDir, 'tick-completed.ts'), String(NOW - 400_000))
+    const facts = gatherFacts({
+      root: tmpDir,
+      deps: { daemonAlive: () => true, now: () => NOW, tickAgeS: () => 5 },
+    })
+    // 5, not 400000: the injected probe won. Neuter `(deps.tickAgeS ?? tickCompletedAgeS)` back to
+    // `tickCompletedAgeS` and this is the test that reds.
+    expect(facts.tickCompletedAgeS).toBe(5)
+  })
+
+  it('gatherFacts still reads tick-completed.ts when NO probe is injected (the janitor path)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'opt-in.flag'), '')
+    fs.writeFileSync(path.join(tmpDir, 'state.json'), JSON.stringify({ slots: {} }))
+    fs.writeFileSync(path.join(tmpDir, 'tick-completed.ts'), String(NOW - 120))
+    const facts = gatherFacts({ root: tmpDir, deps: { daemonAlive: () => true, now: () => NOW } })
+    // The complement: drop the `?? tickCompletedAgeS` fallback and this reds while the one above
+    // stays green — which is what proves the two halves are pinned independently.
+    expect(facts.tickCompletedAgeS).toBe(120)
+  })
+
+  it('a frozen janitor stamp no longer alerts, and a genuinely hung tick still does', () => {
+    fs.writeFileSync(path.join(tmpDir, 'opt-in.flag'), '')
+    fs.writeFileSync(path.join(tmpDir, 'state.json'), JSON.stringify({ slots: {} }))
+    fs.writeFileSync(path.join(tmpDir, 'tick-completed.ts'), String(NOW - 400_000)) // frozen, as live
+    const gather = () =>
+      gatherFacts({
+        root: tmpDir,
+        deps: { daemonAlive: () => true, now: () => NOW, tickAgeS: serverTickAgeS },
+      })
+
+    // (a) OUR tick is beating → the false alarm is gone even though the janitor stamp is ancient.
+    stampOwnTick(NOW - 60)
+    expect(diagnose(gather()).map((f) => f.code)).not.toContain('tick-stalled')
+
+    // (b) POSITIVE CONTROL — the same wiring must still catch a real stall, or (a) would pass just
+    // as well against a fix that disabled the alert outright.
+    stampOwnTick(NOW - (TICK_STALL_ALERT_S + 60))
+    expect(diagnose(gather()).map((f) => f.code)).toContain('tick-stalled')
   })
 })

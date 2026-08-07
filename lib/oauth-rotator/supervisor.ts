@@ -248,6 +248,23 @@ export interface GatherDeps {
    *  the caller passes whether the in-process oauth-rotator tick is armed. Defaults to false — the
    *  faithful fail-safe: an unknown liveness SILENCES the tick-stalled alert rather than false-alarm. */
   daemonAlive?: () => boolean
+  /** How OLD is the beat owner's last completed tick, in seconds? Defaults to `tickCompletedAgeS`,
+   *  which reads `tick-completed.ts` — correct in the JANITOR, where the daemon's rotator writes
+   *  that file (`oauth_rotator/rotator.py`).
+   *
+   *  ⚠ IT IS WRONG AS A DEFAULT FOR THE SERVER, which is why this seam exists (TRDD-IGCSDTIU).
+   *  Nothing in this repo writes `tick-completed.ts` — repo-wide the name appears only in the read
+   *  below, its comments, and test fixtures. The janitor daemon EXITS while a server owns the host,
+   *  so on a server-owned host that stamp freezes at whenever the daemon last ran. `diagnose` then
+   *  reads "armed + stale" and concludes the tick is hanging — which is a SOUND inference from a
+   *  FALSE premise, and the loudest possible way to be wrong: it emits `rotation is effectively OFF`
+   *  every beat, forever, beside real alerts that then get discounted with it. Measured 2026-08-07:
+   *  368930 s claimed while the tick was completing every 60 s, matching the frozen stamp's age to
+   *  the second.
+   *
+   *  So the SERVER injects a probe reading the stamp ITS OWN tick writes. The rule this encodes:
+   *  a liveness signal must be written by the thing it is judging. */
+  tickAgeS?: (root: string, now: number) => number | null
   now?: () => number
 }
 
@@ -330,7 +347,7 @@ export function gatherFacts(opts: { root?: string; deps?: GatherDeps } = {}): Fa
     onMacos,
     pinningEnv,
     slots: optIn ? slotFacts(root, now, deps) : [],
-    tickCompletedAgeS: optIn ? tickCompletedAgeS(root, now) : null,
+    tickCompletedAgeS: optIn ? (deps.tickAgeS ?? tickCompletedAgeS)(root, now) : null,
     daemonAlive: optIn ? (deps.daemonAlive ? deps.daemonAlive() : false) : false,
   }
 }

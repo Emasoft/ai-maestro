@@ -93,11 +93,16 @@ describe('settings watch-target discovery', () => {
     expect(hit?.file).toBe(path.join(wd, '.claude', 'settings.json'))
   })
 
-  // NEUTER RUN (2026-08-07, OBSERVED): restoring `if (cwd) { found.add(cwd); break }` in
-  // decodeProjectCwds reds THIS test and only this one — the discovery half returns [root] and the
-  // worktree's settings file never becomes a target. That is the whole defect: with the break,
-  // which cwd survives is decided by FILENAME SORT ORDER. `b-` sorts after `a-`, so the worktree is
-  // the one silently dropped; naming it `a-` would have hidden the bug behind a passing test.
+  // NEUTER RUN (2026-08-07 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+  //   s/if \(cwd\) found\.add\(cwd\)/if (cwd) { found.add(cwd); break }/
+  //   → 1 red / 14 green:
+  //       collects EVERY cwd in a project dir — a worktree session is filed under its parent project
+  // i.e. re-introducing the old `break` reds THIS test and nothing else, which is the shape wanted:
+  // the module has exactly one consumer (this file), so the scope is complete rather than merely
+  // narrow. Under the mutation the discovery half returns [root] and the worktree's settings file
+  // never becomes a target — with the break, which cwd survives is decided by FILENAME SORT ORDER.
+  // `b-` sorts after `a-`, so the worktree is the one dropped; naming it `a-` would have left this
+  // test green against the bug it exists to catch.
   it('collects EVERY cwd in a project dir — a worktree session is filed under its parent project', () => {
     const root = makeWorkdir(path.join(HOME, 'Code', 'repo'), ['settings.json'])
     const wt = makeWorkdir(path.join(HOME, 'Code', 'repo', '.claude', 'worktrees', 'wt-1'), ['settings.json'])

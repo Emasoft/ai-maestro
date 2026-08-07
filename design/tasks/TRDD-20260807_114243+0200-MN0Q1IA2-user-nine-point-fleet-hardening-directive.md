@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T13:13:09+0200
+updated: 2026-08-07T13:17:14+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -278,6 +278,46 @@ ENTER. Tracked in **#128**.
 **Risk to design against:** pressing ENTER on a menu that is NOT AskUser, or on a destructive
 default, is a fleet-wide keystroke injection. It needs the same structure-not-words discipline
 `page-classify.ts` uses, and a positive control proving it declines a non-menu frame.
+
+### 📐 MEASURED 2026-08-07 — detection AND injection already exist; the gap is the DRIVER
+
+- **The state is modelled explicitly.** `lib/agent-block-state.ts` defines
+  `BlockReason = 'ask_user' | 'permission' | 'rate_limited' | 'api_error' | 'idle' | 'active' |
+  'unknown'`, and `'ask_user'` carries the comment *"a selection menu is open — **the case that
+  blocks forever**"*. `resolveBlockState` also returns `choices[]` in screen order and an
+  `excerpt[]` — *"what a supervisor reads to decide the answer."*
+- **Detection is wired** through `services/block-state-service.ts` (`readPaneVerdict`), consumed by
+  4 production files including an API route.
+- **Injection exists and is already governed.** `agents-core-service.ts:~1621` implements an
+  `unblock-prompt` action behind an **R42.8** gate: no pending hook prompt ⇒ read the pane ⇒ require
+  `blocked && (ask_user || permission)` ⇒ otherwise **409**. It **fails CLOSED** on an unreadable
+  pane, with the reason spelled out so *"could not check"* never reads as *"checked"*.
+- **A post-condition already exists** for the sibling lane: `model-fallback-actuator.ts:139`
+  re-reads the pane after its confirming ENTER and reports `confirmed: !stillAsking` — *"without
+  this the subsystem reports success for having sent keystrokes, which is the weakest possible
+  claim."* Reuse this shape; do not invent another.
+
+**⇒ The missing piece is ONLY the automatic driver:** a paced, dark-by-default sweep that finds
+`ask_user` agents and answers them.
+
+### 🛑 SECURITY FINDING — `ask_user` and `permission` MUST NOT be conflated for AUTO-answer
+
+**Every existing site tests them together** (`reason === 'ask_user' || reason === 'permission'`) —
+in `agents-core-service`, in `model-fallback-actuator`. That is CORRECT for the question those
+sites ask (*"is this agent blocked?"*) and **UNSAFE for the question item 5 asks** (*"may I press
+ENTER for it?"*), because **`permission` is a TOOL-PERMISSION prompt**. Auto-answering those with
+the default is **auto-approving tool execution across the whole fleet** — a different capability
+from the one the USER asked for, arriving silently by copying a predicate that reads as
+established practice.
+
+**So the driver must gate on `reason === 'ask_user'` ALONE**, and a test must pin that a
+`permission` verdict is DECLINED — the neuter being "widen it to include `permission`", which must
+redden exactly that test. The USER's words were *"the AskUser menu"*; nothing authorises the other.
+
+**NOT started deliberately** — this is a new keystroke-injecting actuator leg (the comparable
+model-fallback lane was 5 modules / 54 tests / 19 neuters), and starting it at a context tail would
+have it compacted mid-build. The finding above IS the deliverable: it specifies the build and
+forecloses the dangerous version of it.
 
 ## ⏳ 8. Ledger records EVERY change to `~/.claude/settings.json` — NOT STARTED
 

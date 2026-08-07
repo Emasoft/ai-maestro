@@ -185,6 +185,27 @@ describe('stuckSuggestsModelFallback', () => {
     expect(stuckSuggestsModelFallback('ok', 'all-maxed')).toBe(false)
     expect(stuckSuggestsModelFallback('stuck', undefined)).toBe(false)
   })
+
+  // THE REGRESSION THIS EXISTS FOR (measured 2026-08-07 against a live tick status, 12s old):
+  //   nextAction 'reauth-needed' / reason 'refresh-dead' / stuck 'all-maxed',
+  //   account 5h 34% + 7d 78%, scopedModel Fable at 100%.
+  // Two of three credentials were dead, so the rotator reported the reauth problem and
+  // 'reauth-needed' DISPLACED 'stuck' in nextAction while the exhaustion signature stayed in
+  // `stuck`. The old `nextAction === 'stuck'` test returned FALSE here — so wiring the bridge
+  // would have shipped a NO-OP in the exact incident the lane exists to relieve.
+  it('fires on reauth-needed too — the rotator reports the reauth problem while the exhaustion sits in `stuck`', () => {
+    expect(stuckSuggestsModelFallback('reauth-needed', 'all-maxed')).toBe(true)
+    // Still keyed on the signature, not on the verdict: a dead credential alone is not our problem.
+    expect(stuckSuggestsModelFallback('reauth-needed', 'cannot-rotate-offline')).toBe(false)
+    expect(stuckSuggestsModelFallback('reauth-needed', undefined)).toBe(false)
+  })
+
+  // Why an allowlist and not `nextAction !== 'ok'`: the permissive form also admits 'rotating',
+  // which would act WHILE a rotation is in flight that may itself resolve the exhaustion. This is
+  // the assertion that discriminates the two implementations — everything else passes under both.
+  it('does NOT fire while a rotation is in flight, which `!== ok` would have allowed', () => {
+    expect(stuckSuggestsModelFallback('rotating', 'all-maxed')).toBe(false)
+  })
 })
 
 /*

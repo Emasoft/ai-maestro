@@ -213,9 +213,32 @@ export function planModelFallback(input: FallbackInputs): FallbackPlan {
   }
 }
 
+/** The tick verdicts under which an `all-maxed` signature is worth acting on.
+ *
+ *  An ALLOWLIST, deliberately, and not `nextAction !== 'ok'`: `NextAction` is
+ *  `'ok' | 'rotating' | 'reauth-needed' | 'stuck'`, and a permissive test would also fire during
+ *  `'rotating'` — racing a rotation that is in flight and may itself resolve the exhaustion. A new
+ *  verdict added later must stay OUT until someone decides it belongs in, because the action this
+ *  gates injects keystrokes into every agent's pane.
+ *
+ *  `reauth-needed` is here because of a MEASURED incident, not symmetry (2026-08-07, live
+ *  `oauth-rotator-tick-status.json`): `nextAction: 'reauth-needed'`, `reason: 'refresh-dead'`,
+ *  `stuck: 'all-maxed'`, account at 5h 34% / 7d 78% with Fable at 100%. Two of three credentials
+ *  were dead, so the rotator reported the reauth problem and `reauth-needed` DISPLACED `'stuck'` in
+ *  `nextAction` — while the exhaustion signature stayed in `stuck`. Requiring `nextAction ===
+ *  'stuck'` therefore returned FALSE on the exact case this lane exists to relieve. And it is the
+ *  case that matters most: `refresh-dead` means a HUMAN must re-login, which can take hours, and a
+ *  model switch is the only relief that does not wait on them. */
+const FALLBACK_SUGGESTING_ACTIONS: ReadonlySet<NextAction> = new Set(['stuck', 'reauth-needed'])
+
 /** True when a tick verdict indicates the fleet is stuck in a way a model switch could relieve.
  *  `stuck: 'all-maxed'` is the signature: every account failed the target test, which is what a
- *  model-scoped exhaustion looks like from the rotator's side. */
+ *  model-scoped exhaustion looks like from the rotator's side.
+ *
+ *  Widening this is SAFE by construction, which is why the allowlist can afford to admit a verdict
+ *  whose credential story is unresolved: `planModelFallback` independently enforces
+ *  `ACCOUNT_HEADROOM_PCT`, so a genuinely exhausted ACCOUNT is refused downstream no matter what
+ *  this returns. The exposure of a wrong `true` here is a wasted sweep, never a wrong switch. */
 export function stuckSuggestsModelFallback(nextAction: NextAction, stuck?: string): boolean {
-  return nextAction === 'stuck' && stuck === 'all-maxed'
+  return FALLBACK_SUGGESTING_ACTIONS.has(nextAction) && stuck === 'all-maxed'
 }

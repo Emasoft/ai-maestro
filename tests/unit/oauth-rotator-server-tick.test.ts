@@ -290,6 +290,50 @@ describe('deriveDecision — a stuck fleet must never report itself healthy', ()
     expect(d).toContain('all paid accounts maxed')
   })
 
+  // ── all-maxed must not claim an exhaustion that is not there (USER-reported, measured live) ──
+  //
+  // 2026-08-07 11:42, on the owner's host: this printed "live account is exhausted … all paid
+  // accounts maxed" while that account read 5h 8% / 7d 72% and the ONLY spent window was Fable at
+  // 100%. `isNearLimit` trips on ANY window >= SWITCH(97), model-scoped included, so a fleet with
+  // 92% of its 5h free was reported out of capacity. The remedies DIFFER — account-exhausted means
+  // wait/rotate, model-exhausted means move agents off that model and keep working — so this is a
+  // wrong instruction, not just clumsy wording.
+  //
+  // COMPLEMENTARY PAIR, because one mutation certifies half a conditional:
+  //   drop the `accountWindowsOk && modelSpent` branch  -> the first test reds (the lie returns)
+  //   make that branch UNCONDITIONAL                    -> the second reds (a REAL exhaustion
+  //                                                       would be told to switch models instead
+  //                                                       of waiting, which is the mirror defect)
+  const WINDOWS_MODEL_ONLY = { fiveHourPct: 8, sevenDayPct: 72, scopedModel: 'Fable', scopedPct: 100 }
+  const WINDOWS_REALLY_MAXED = { fiveHourPct: 99, sevenDayPct: 98, scopedModel: 'Fable', scopedPct: 100 }
+
+  it('all-maxed with a HEALTHY account says the MODEL is spent, and names the real remedy', () => {
+    const d = deriveDecision({ ...base, stuck: 'all-maxed', windows: WINDOWS_MODEL_ONLY })
+    expect(d).toContain('NOT exhausted') // it must contradict the old claim outright
+    expect(d).toContain('5h 8%')
+    expect(d).toContain('Fable')
+    expect(d).toContain('not to rotate the credential')
+    // The specific false sentence must be GONE, not merely accompanied by a correction.
+    expect(d).not.toContain('live account is exhausted')
+    expect(d).not.toContain('all paid accounts maxed')
+  })
+
+  it('all-maxed with a GENUINELY maxed account still says exhausted — the complement', () => {
+    // Without this, a fix that always blames the model would pass the test above while telling an
+    // operator whose 5h really IS at 99% to go switch models. Same bug, opposite direction.
+    const d = deriveDecision({ ...base, stuck: 'all-maxed', windows: WINDOWS_REALLY_MAXED })
+    expect(d).toContain('all paid accounts maxed')
+    expect(d).not.toContain('NOT exhausted')
+  })
+
+  it('all-maxed with NO windows keeps the original wording — never invents a number', () => {
+    // A message that fabricates "5h undefined%" is worse than one that is merely vague.
+    const d = deriveDecision({ ...base, stuck: 'all-maxed' })
+    expect(d).toContain('all paid accounts maxed')
+    expect(d).not.toContain('undefined')
+    expect(d).not.toContain('null')
+  })
+
   it('cannot-rotate-offline is distinct from all-maxed — the OWNER differs', () => {
     // One waits for a window; the other needs a human. Collapsing them re-creates exactly the
     // ambiguity TickReason already exists to avoid.

@@ -179,6 +179,10 @@ export function deriveDecision(f: {
   unreadable: number
   deadRefresh: number
   refreshedCount: number
+  /** The LIVE account's windows, so `all-maxed` can stop claiming an exhaustion that is not there.
+   *  Optional: absent ⇒ the original wording, because a message that INVENTS a number is worse
+   *  than one that is merely vague. */
+  windows?: { fiveHourPct: number | null; sevenDayPct: number | null; scopedModel: string | null; scopedPct: number | null }
 }): string {
   if (f.switched) return 'rotated the live account'
   if (f.reason === 'slot-unreadable') {
@@ -188,6 +192,26 @@ export function deriveDecision(f: {
     return `reauth-needed: ${f.deadRefresh} alternate slot(s) have a dead refresh and are expiring — a human must re-login`
   }
   if (f.stuck === 'all-maxed') {
+    // ⚠ THIS MESSAGE USED TO ASSERT THE OPPOSITE OF THE STATE, and it cost the owner real hours.
+    // MEASURED 2026-08-07 11:42, live: it printed "live account is exhausted … all paid accounts
+    // maxed" while that account read **5h 8% / 7d 72%** and the ONLY spent window was Fable at
+    // 100%. `isNearLimit` trips on ANY window ≥ SWITCH(97) including a MODEL-scoped one, so a
+    // fleet with 92% of its 5h window free was reported as out of capacity — sending the reader
+    // hunting for headroom that was already in their hand.
+    //
+    // The distinction is not cosmetic, it selects a DIFFERENT REMEDY: a 5h/7d exhaustion means
+    // WAIT (or rotate, if anything healthy exists), while a model-only exhaustion means SWITCH THE
+    // MODEL and keep working on the same account. Same family as the `tick-stalled` false alarm
+    // (TRDD-IGCSDTIU): the failure mode of an alert is not silence, it is confident wrongness.
+    const w = f.windows
+    const accountWindowsOk =
+      typeof w?.fiveHourPct === 'number' && typeof w?.sevenDayPct === 'number' &&
+      w.fiveHourPct < SWITCH_AT_5H && w.sevenDayPct < SWITCH_AT_7D
+    const modelSpent = typeof w?.scopedPct === 'number' && w.scopedPct >= SWITCH_AT_SCOPED
+    if (accountWindowsOk && modelSpent) {
+      const model = w?.scopedModel ?? 'a model'
+      return `STUCK: no alternate is healthy — but the live ACCOUNT is NOT exhausted (5h ${w?.fiveHourPct}% / 7d ${w?.sevenDayPct}%). Only the ${model} window is spent (${w?.scopedPct}%), so the remedy is to move agents OFF ${model}, not to rotate the credential`
+    }
     return 'STUCK: live account is exhausted and no alternate is healthy + below the safe threshold — all paid accounts maxed'
   }
   if (f.stuck === 'cannot-rotate-offline') {
@@ -1158,7 +1182,7 @@ export async function runTick(deps?: TickDeps): Promise<TickResult> {
   // nextAction is reauth-needed — that reads as health and is how this stayed unexamined. State
   // the fault and its scope (counts only; never an email, never a token).
   const stuck = switched ? undefined : rotateOut.stuck
-  const decision = deriveDecision({ switched, reason, stuck, unreadable, deadRefresh, refreshedCount: refreshed.length })
+  const decision = deriveDecision({ switched, reason, stuck, unreadable, deadRefresh, refreshedCount: refreshed.length, windows: rotateOut.windows })
   // Emit the decision line for a STUCK tick too. Previously only `reason` did, so the most urgent
   // outcome was also the quietest one on the beat's own log surface.
   if (reason || stuck) decide(deps, decision)

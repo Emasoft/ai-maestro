@@ -133,10 +133,11 @@ export type NextAction = 'ok' | 'rotating' | 'reauth-needed' | 'stuck'
  * which THIS PROCESS CANNOT SEE. So a dead refresh is evidence about the OAuth layer and evidence
  * about NOTHING ELSE.
  *
- * MEASURED that day: of two slots reported "a human must re-login", `fmuaddib` held a healthy
- * cookie and minted itself unattended; only the other had genuinely lapsed. The message was right
- * about one of two and stated both with equal confidence — the 4th message in one session found
- * asserting the opposite of the truth.
+ * MEASURED that day: of two slots reported "a human must re-login", ONE held a healthy cookie and
+ * minted itself unattended; only the other had genuinely lapsed. The message was right about one of
+ * two and stated both with equal confidence — the 4th message in one session found asserting the
+ * opposite of the truth. (Which account is deliberately not named: this repo is PUBLIC, the slots
+ * are the owner's personal mail accounts, and the identity carries none of the meaning.)
  *
  * The honest report names what we OBSERVED (a dead refresh) and not what we cannot know (whether a
  * human is required). Do NOT "fix" this by teaching tick.ts to read cookies: `cascade.ts` and

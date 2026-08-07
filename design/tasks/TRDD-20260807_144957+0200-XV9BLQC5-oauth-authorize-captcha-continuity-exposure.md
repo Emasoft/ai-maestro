@@ -73,10 +73,11 @@ tick.ts:192    `reauth-needed: … alternate slot(s) have a dead refresh and are
 that a human is required is made **blind to the cookie layer**, by a code path that sits beside a
 correct, tested implementation of exactly that check.
 
-**This is today's false alert, exactly.** `fmuaddib@gmail.com` held a healthy cookie and minted
-itself with **no human involvement** — and the live path would have declared it human-blocked.
-Only `ipazia` had genuinely lapsed. The alert was right about one of two accounts and stated both
-with equal confidence.
+**This is today's false alert, exactly.** Of the two slots it declared human-blocked, ONE held a
+healthy cookie and minted itself with **no human involvement**; only the other had genuinely
+lapsed. The alert was right about one of two accounts and stated both with equal confidence.
+(Accounts deliberately unnamed — this repo is PUBLIC and the slots are the owner's personal mail
+addresses. See `## PII note` at the end.)
 
 **Why this went unnoticed:** a fix landing in an uncalled module is indistinguishable from a fix
 landing in a live one — the tests pass either way, because the tests call the module directly.
@@ -105,10 +106,10 @@ The rotator has **two** token-acquisition legs, using **different grants on diff
 | **RENEW** — every ~8h, unattended, keeps the fleet alive | `refresh_token` | plain `urllib` POST, `rotator.py::_keepalive_refresh` ~:1288-1325 | `platform.claude.com/v1/oauth/token` | **NONE** — no browser is involved at any point |
 | **SEED / re-seed** — rare | `authorization_code` | Playwright/Chrome drives `/oauth/authorize`, `slot_capture_browser.py:341` | `claude.ai` | **YES — this is where the captcha is** |
 
-**POSITIVE CONTROL (the decisive measurement).** Slot `emanuele.sabetta@gmail.com` reads
-`captured=2026-07-23T18:04:32+0200` with `token-expiry=~6.9h`. That slot has been carried **15
-days across ~45 browserless refresh cycles** without ever loading the authorize screen. The
-refresh chain demonstrably works and never meets the captcha.
+**POSITIVE CONTROL (the decisive measurement).** One slot reads `captured=2026-07-23T18:04:32+0200`
+with `token-expiry=~6.9h` — carried **15 days across ~45 browserless refresh cycles** without ever
+loading the authorize screen. The refresh chain demonstrably works and never meets the captcha.
+Reproduce with `rotator.py list`: an old `captured` beside a live `token-expiry` IS the proof.
 
 Seeding was **already** human-only: `CLAUDE_ROTATOR_AUTO_BOOTSTRAP` defaults **OFF**
 (`rotator.py:2361`), so the unattended daemon never reaches the browser path at all.
@@ -174,6 +175,36 @@ a manual call races the daemon and can break the very chain this card is about.
 LOW for this repo (no code change here). The dependency is the janitor's response to the issue.
 Residual risk is item 3 above, which is unmitigated until (b) ships: a Cloudflare tightening on the
 token endpoint would take the fleet down with no diagnostic.
+
+## PII note — the owner's personal email addresses are in this PUBLIC repo (found 2026-08-07)
+
+Surfaced while writing this card, and it is a USER DECISION, not an agent one.
+
+**Measured:** `Emasoft/ai-maestro` and upstream `23blocks-OS/ai-maestro` are both **PUBLIC**
+(`gh repo view --json visibility`). The rotator work necessarily discusses per-account slots, and
+those slots are the owner's personal mail accounts, so account names have been written into TRDDs
+and source comments as ordinary technical detail.
+
+- **Already PUBLIC** on `fork/governance-rules`: **2 tracked files**, carrying **5 distinct**
+  `@gmail.com` addresses. One of them is a *different surname* from the owner's own — i.e.
+  plausibly a **third party**, which is a stronger obligation than the owner's own address.
+- **NOT yet public: 222 local commits**, including today's, which is why redacting forward is
+  worth anything at all.
+
+**Done here:** every account identity this card and today's `tick.ts` edit introduced is removed.
+The identity carried none of the meaning — "one of two slots" says the same thing.
+
+**NOT done, deliberately — this needs the USER:**
+1. The already-pushed occurrences cannot be removed by editing forward. Removal means a history
+   purge plus a force-push, which is RULE 0.6 territory (**forbidden** without the owner's exact
+   written command) — and GitHub retains orphaned commits regardless, so even that is not a
+   complete erasure.
+2. The remaining unpushed commits should be swept BEFORE the next push, which is the one moment
+   this is cheap. Worth doing as its own pass rather than a drive-by.
+3. The third-party address deserves its own decision.
+
+**Going forward:** name a slot by its ROLE (`the live account`, `slot A`) and never by its address.
+An account identity has never once been load-bearing in this corpus.
 
 ## Approval log
 

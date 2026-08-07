@@ -117,6 +117,67 @@ you are judging is not evidence about that process.
 Sibling: ATOM-S7SH-7ZQO covers the opposite error — a DELIBERATE DRAIN-GUARD/HOLDING refusal
 mistaken for a stall. Both failures are "the rotator looks stuck and is not".
 
+
+^ATOM-3XXL-4KCV [desc:"A captcha on claude.ai/oauth/authorize does NOT shorten unattended runtime: the ~8h renew is a browserless refresh_token POST to a different host; only the rare SEED touches that screen.", keywords: captcha_on_the_authorize_screen oauth_authorize_captcha does_a_captcha_break_continuity can_the_fleet_still_run_unattended refresh_token_grant_is_browserless seed_versus_renew_leg platform.claude.com_token_endpoint, ocd: 2026-08-07, lmd: 2026-08-07]
+
+**A captcha on the claude.ai authorize screen does NOT break unattended continuity** — measured
+2026-08-07, when one appeared for the first time and looked like it would cut runtime from the
+~28-day cookie lifetime to the ~8-hour token lifetime.
+
+Two legs, two grants, two HOSTS:
+
+- **RENEW** (every ~8h, unattended, what actually keeps the fleet alive) — `grant_type=refresh_token`,
+  a plain `urllib` POST in the janitor's `rotator.py::_keepalive_refresh`, to
+  `platform.claude.com/v1/oauth/token`. **No browser is involved at any point**, so it can never
+  meet a captcha.
+- **SEED / re-seed** (rare) — `grant_type=authorization_code`, Playwright/Chrome drives
+  `claude.ai/oauth/authorize` in `slot_capture_browser.py`. **The captcha is here**, and this path
+  already required a human (`CLAUDE_ROTATOR_AUTO_BOOTSTRAP` defaults OFF, and the login challenge is
+  an OS-level passkey/2FA prompt no automation can satisfy).
+
+**The positive control is what settles it:** a slot whose `captured` date is WEEKS old while its
+`token-expiry` is a live ~7h has been carried entirely by the browserless chain. On the measured
+day that was 15 days / ~45 refresh cycles with zero authorize-screen visits. Check it with
+`rotator.py list` — an old `captured` beside a fresh `token-expiry` IS the proof.
+
+**The real exposure is one layer down, and it is quieter:** `_keepalive_refresh` returns `None` on
+ANY error, Cloudflare included — and that token endpoint is itself behind Cloudflare (the code
+carries a hand-picked `User-Agent: claude-account-rotator` precisely because urllib's default is
+1010-banned). A tightening there would kill the only unattended path SILENTLY. Filed as
+janitor#228; see [[oauth-rotation-renew-reauth]].
+
+
+^ATOM-2HN8-H8OR [desc:"A dead OAuth refresh is evidence about rung 1 and NOTHING else — a live cookie mints a new one with no human. The correct cookie-aware code exists in ai-maestro and has ZERO production callers.", keywords: a_human_must_re-login_but_the_account_is_fine false_reauth_alert dead_refresh_does_not_mean_a_human_is_needed why_does_it_keep_saying_re-login cascade.ts_is_never_called cookie-vault_has_no_callers the_fix_exists_but_nothing_calls_it, ocd: 2026-08-07, lmd: 2026-08-07]
+
+**`refresh-dead` does not mean a human is required** — it means rung 1 of the ROTATE → RENEW →
+REAUTHENTICATE cascade is exhausted, and nothing more. Rung 2 mints a fresh refresh from a live
+claude.ai session COOKIE with no human at all, and that cookie layer lives in the janitor's
+keychain where the ai-maestro process cannot see it. So a dead refresh is evidence about the OAuth
+rung and about NOTHING ELSE. See [^1] (`ATOM-R16D-CASC`) for the cascade itself.
+
+**Measured 2026-08-07:** of two slots the tick reported as needing a human, one held a healthy
+cookie and minted itself unattended; only the other had genuinely lapsed. Right about one of two,
+stated with equal confidence. The same phrase had already been logged **4 506 times over 4 days**
+(`alert-delivery.ts:10`) — a false alarm at that frequency stops being read at all, which is the
+actual damage.
+
+**THE TRAP, and the reason this took hours to see:** ai-maestro DOES implement the cookie rung,
+correctly, with tests. `lib/oauth-rotator/cascade.ts` has the full 3-rung cascade including
+`RENEW_COOKIE`, added by TRDD-J9TM3WQK *specifically* to stop the jump straight to REAUTH. And it
+has **zero production callers** — as does `lib/oauth-rotator/cookie-vault.ts`, all 11 exports.
+Measured against a 19-caller control so a broken search could not produce the same zero. The LIVE
+path re-derives the taxonomy inline in `tick.ts` and never consults a cookie.
+
+**A fix that lands in an uncalled module is indistinguishable from one that lands in a live
+module**, because the tests call the module directly and pass either way. J9TM3WQK's fix is real,
+correct, and inert — and the two copies had already drifted 3× apart on constants.
+
+**Do NOT repair this by teaching `tick.ts` to read cookies** — that is a THIRD copy of a taxonomy
+the janitor already owns and runs correctly. The fix applied instead (commit `5c5f7cee`) was to
+stop the message asserting what the process cannot know: it now names the observed fact (the OAuth
+rung is dead) and points at the rung it cannot see. Whether to delete the two dead modules is still
+open — TRDD-XV9BLQC5.
+
 ## Notes and lessons learned
 [^1]: [id:ATOM-R16D-CASC, status:valid, keywords:"rotate_refresh_reauth cascade progressive_fallback the_only_human_step reauth_needs_new_cookie", ocd:2026-07-16, lmd:2026-07-16]
   DO NOT treat rotate/refresh/reauth as three interchangeable "renew" ops, BECAUSE they are an

@@ -15,7 +15,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import {
   fingerprintOf, classifyChange, changeToPatch, armSettingsWatchers, recordChange,
-  SETTINGS_LEDGER_OP, DEFAULT_RESCAN_MS, type SettingsChange, type FileFingerprint,
+  SETTINGS_LEDGER_OP, SETTINGS_LEDGER_ANCHOR, DEFAULT_RESCAN_MS, type SettingsChange, type FileFingerprint,
 } from '@/lib/settings-watcher'
 
 let HOME: string
@@ -155,7 +155,7 @@ describe('settings watcher — ledger seam', () => {
     return { ledger: ledger as unknown as Parameters<typeof recordChange>[0], calls }
   }
 
-  it('appends the declared op, the file path, and the fingerprint patch as actor=system', async () => {
+  it('appends the declared op, the chain ANCHOR, and the fingerprint patch as actor=system', async () => {
     const f = writeGlobal('{"v":2}')
     const after = fingerprintOf(f)!
     const change = classifyChange(f, { sha256: 'a'.repeat(64), size: 1 }, after)!
@@ -163,7 +163,12 @@ describe('settings watcher — ledger seam', () => {
     await recordChange(ledger, change)
     expect(calls).toHaveLength(1)
     expect(calls[0].op).toBe('change_settings_file')
-    expect(calls[0].path).toBe(f)
+    // The ANCHOR, not the changed file — the house convention (`emitPortfolioOp` passes
+    // PORTFOLIO_LEDGER_REGISTRY_PATH, not the token id), and `append`'s parameter is named
+    // `registryPath`. The changed file is identified in the diff as `/settings/<file>`, so putting
+    // it here too would make this the one chain whose `path` means something different.
+    expect(calls[0].path).toBe(SETTINGS_LEDGER_ANCHOR)
+    expect(JSON.stringify(calls[0].diff)).toContain(f)
     // 'system' is the honest actor — the watcher observed a write it did not initiate. And there
     // must be NO authAgentId: inventing one attributes the write to an agent nobody observed.
     expect(calls[0].opts).toEqual({ authActor: 'system' })

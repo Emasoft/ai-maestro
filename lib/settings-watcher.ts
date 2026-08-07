@@ -41,6 +41,7 @@
 
 import * as crypto from 'node:crypto'
 import * as fs from 'node:fs'
+import { statePath } from '@/lib/ecosystem-constants'
 import type { JsonPatch } from '@/types/json-patch'
 import type { LedgerOp } from '@/types/ledger'
 import { discoverSettingsTargets, watchDirs, type WatchTarget, type DiscoverOptions } from '@/lib/settings-watch-targets'
@@ -123,6 +124,16 @@ export function changeToPatch(change: SettingsChange): JsonPatch {
 }
 
 /**
+ * The virtual registry path this chain anchors to.
+ *
+ * Settings changes get their OWN chain, following `lib/portfolio-ledger.ts`: they are not registry
+ * mutations, and a fleet writing settings constantly would drown the agent-registry chain in
+ * events nobody querying that chain is looking for. The file need not exist — `SignedLedger`
+ * derives `watched-settings.ledger.json` (and its lock name) from this path.
+ */
+export const SETTINGS_LEDGER_ANCHOR = statePath('settings', 'watched-settings.json')
+
+/**
  * The minimum of `SignedLedger` this module needs.
  *
  * Structural rather than importing the class, for two reasons: the watcher stays dependency-light
@@ -130,7 +141,7 @@ export function changeToPatch(change: SettingsChange): JsonPatch {
  * a plain object instead of a real signing key and an on-disk chain.
  */
 export interface LedgerAppender {
-  append(op: LedgerOp, path: string, diff: JsonPatch, opts?: { authActor?: 'user' | 'agent' | 'system' }): Promise<unknown>
+  append(op: LedgerOp, registryPath: string, diff: JsonPatch, opts?: { authActor?: 'user' | 'agent' | 'system' }): Promise<unknown>
 }
 
 /**
@@ -140,9 +151,16 @@ export interface LedgerAppender {
  * OBSERVES a write that already happened, whoever made it — which is the point, since a change
  * nobody recorded is exactly the one worth having in the chain. Deliberately no `authAgentId`:
  * inventing one would attribute the write to an agent we did not observe making it.
+ *
+ * The second `append` argument is the chain's ANCHOR, not the file that changed — which is the
+ * house convention (`emitPortfolioOp` passes `PORTFOLIO_LEDGER_REGISTRY_PATH`, not the token id),
+ * and the parameter is named `registryPath` for that reason. An earlier draft passed
+ * `change.file`: functionally harmless, since `append` only records the value, but it made this
+ * chain the one whose `path` field meant something different from every other chain's, and the
+ * changed file is already identified in the diff as `/settings/<file>`.
  */
 export async function recordChange(ledger: LedgerAppender, change: SettingsChange): Promise<void> {
-  await ledger.append(SETTINGS_LEDGER_OP, change.file, changeToPatch(change), { authActor: 'system' })
+  await ledger.append(SETTINGS_LEDGER_OP, SETTINGS_LEDGER_ANCHOR, changeToPatch(change), { authActor: 'system' })
 }
 
 export interface WatcherHandle {

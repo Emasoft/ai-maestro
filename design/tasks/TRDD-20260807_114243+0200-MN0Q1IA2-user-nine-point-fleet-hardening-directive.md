@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T12:46:11+0200
+updated: 2026-08-07T13:03:12+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -178,6 +178,33 @@ Foundations exist and must be reused, not rebuilt: `lib/agent-block-state.ts`,
 **The known hard part, recorded so it is not re-discovered:** no test can prove the confirming
 ENTER dismissed Claude Code's dialog — only that the keystroke was sent. First arming must be
 WATCHED on a real pane (TRDD-DPPYVLVH's arming procedure).
+
+### 📐 MEASURED 2026-08-07 ~12:5x — the gap is ONE unwired function, not a feature
+
+"NOT STARTED" understated how much is already live. Measured, not read:
+
+- **The opus-switch half is BUILT *and WIRED*** — `model-fallback` has **6 production callers**,
+  running as a leg of `lib/fleet-liveness-watchdog.ts` (`runModelFallbackSweep`), off by default.
+- **ESC injection exists** — `lib/continuity-registry.ts:27` exports `ESC_KEYSTROKE = '\x1b'`, and
+  `fleet-recovery-actuator.ts` has the gate/inject surface (`checkInjectionGates`, `InjectResult`).
+- **The MISSING link is the ROTATION→FALLBACK bridge**, and it is one already-written function:
+
+  | symbol (both in `lib/oauth-rotator/model-fallback.ts`) | production callers | tests |
+  |---|---|---|
+  | `planModelFallback` (control) | **3** | 18 |
+  | **`stuckSuggestsModelFallback(nextAction, stuck)`** | **0** | **6** |
+
+  A positive control on a sibling symbol from the SAME file proves this zero is real and not a
+  broken search. Six tests describe the behaviour of a function nothing calls — *tests prove
+  behaviour, never reachability.* Corroborating: `grep "stuck"` in `fleet-liveness-watchdog.ts`
+  and `model-fallback-sweep.ts` returns **nothing**, so the sweep is driven by the **liveness
+  cadence and never by a rotation** — which is exactly what the USER's item 4 asks for
+  ("checks automatically **if after the rotation** the client is still blocked").
+
+**So the build is: call `stuckSuggestsModelFallback` with the rotator's own `nextAction`/`stuck`
+after a rotation completes, and trigger the sweep when it returns true.** It ships dark for free —
+the sweep already self-gates on `AIM_FLEET_MODEL_FALLBACK`. Arming stays the USER's (above).
+⚠ Do NOT rebuild any of the four modules; the only thing absent is the call.
 
 ## ⏳ 5. Auto-answer the AskUser menu with the default/first option — NOT STARTED
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T13:05:47+0200
+updated: 2026-08-07T13:13:09+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -235,14 +235,41 @@ Cause: the rotator ALSO cannot reauth (2 of 3 credentials dead, `reason: refresh
 site, and nothing ever firing in the exact incident the USER reported. Tests prove behaviour, never
 that the behaviour matches reality.
 
-**NOT fixed here, because the fix embeds a design choice that deserves its own cycle.** The obvious
-widening (key on `stuck === 'all-maxed'` alone) **breaks an intentional guard** — the test
-`stuckSuggestsModelFallback('ok', 'all-maxed') === false` deliberately refuses to act when the
-rotator says everything is fine. So the candidate is an allowlist
-(`nextAction ∈ {stuck, reauth-needed}`) or `stuck === 'all-maxed' && nextAction !== 'ok'`.
-**Safety already covered downstream:** `planModelFallback` enforces `ACCOUNT_HEADROOM_PCT = 90`, so
-a genuinely maxed account is still refused no matter how the predicate widens — the widening risks
-a *wasted* sweep, never a wrong switch.
+**FIXED `1ffa6d5b` + `30e71141`** — an ALLOWLIST `{stuck, reauth-needed}`, not `nextAction !== 'ok'`
+(which would also fire during `'rotating'`, racing a rotation in flight). Both original guards
+survive. Complementary neuter pair, **disjoint** red sets: reverting to `=== 'stuck'` reds the
+reauth case; substituting `!== 'ok'` reds the rotating case — the second **implements the rival**,
+so it proves the tests discriminate the two designs rather than merely proving something is
+load-bearing. tsc 0, 21/21.
+
+### 🔄 …AND THEN THE WIRING PLAN ITSELF WAS REFUTED — item 4's model half is ALREADY COMPLETE
+
+Read `fleet-liveness-watchdog.ts:224-277` and `planModelFallback` before adding the call, and the
+premise of the whole "one unwired function" framing collapses:
+
+- The leg's architecture is deliberate and documented in place: *"the rotator tick has the window
+  numbers and no agents, this watchdog has the agents and no credential access, so the two meet at
+  the persisted stamp."* The watchdog consumes **WINDOWS**, never the verdict.
+- `planModelFallback` already makes the **entire** decision from those windows:
+  `scopedPct >= 97` · worst account `< ACCOUNT_HEADROOM_PCT (90)` · agents on that model family.
+- **On the live 2026-08-07 state that is already satisfied** — scoped `100 >= 97`, worst account
+  `max(34, 78) = 78 < 90` — so **the sweep would act TODAY if armed.** The verdict adds no reach.
+
+**So wiring `stuckSuggestsModelFallback` as a gate would have been a REGRESSION**, not a feature:
+it NARROWS the trigger (additionally demanding the rotator report stuck/reauth-needed) and creates
+a SECOND source of truth for "is this a scoped exhaustion". The only legitimate shape is an
+off-cadence *trigger* (sweep now rather than at the next liveness tick) — a latency optimisation
+the sweep's own 60 s pacing already bounds. **Recorded in the function's own docstring**, because
+the next reader looks at the code, not at this card.
+
+**ESC is wired too:** `lib/fleet-continuity.ts:193` injects `ESC_KEYSTROKE`, and the fallback
+actions carry `escapeFirst: true`; the recovery ladder's gentle rungs are deliberately *"pure
+idle-drain slashes, no ESC."*
+
+**⇒ Item 4's model-fallback half needs NO further build. It needs ARMING** — which is the USER's,
+and is exactly what TRDD-DPPYVLVH already says. The predicate fix above still earns its keep: it
+was broken for the real incident, and it is exported and tested, so it would have been a live trap
+for whoever wired it later.
 
 ## ⏳ 5. Auto-answer the AskUser menu with the default/first option — NOT STARTED
 

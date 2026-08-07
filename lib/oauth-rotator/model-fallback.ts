@@ -235,6 +235,22 @@ const FALLBACK_SUGGESTING_ACTIONS: ReadonlySet<NextAction> = new Set(['stuck', '
  *  `stuck: 'all-maxed'` is the signature: every account failed the target test, which is what a
  *  model-scoped exhaustion looks like from the rotator's side.
  *
+ *  ⚠ CURRENTLY UNWIRED, AND IT MUST NOT BE ADDED AS A GATE ON THE WATCHDOG'S FALLBACK LEG
+ *  (measured 2026-08-07). `fleet-liveness-watchdog` reads the persisted WINDOWS, and
+ *  `planModelFallback` already makes the whole decision from them — `scopedPct >= threshold`,
+ *  worst account `< ACCOUNT_HEADROOM_PCT`, agents on that family. Gating that leg on this verdict
+ *  would NARROW it (the sweep would additionally require the rotator to be reporting
+ *  stuck/reauth-needed) and would introduce a SECOND source of truth for "is this a scoped
+ *  exhaustion", derived from a different field for a different purpose. On the 2026-08-07 live
+ *  state the windows alone already satisfy the plan (scoped 100 >= 97, worst account 78 < 90), so
+ *  the verdict adds no reach — only a way to lose it.
+ *
+ *  The one shape that WOULD be legitimate is an off-cadence TRIGGER: "the rotator just declared
+ *  all-maxed, run the sweep now instead of waiting for the next liveness tick." That is a latency
+ *  optimisation, never a correctness gate, and the sweep's own 60 s pacing already bounds what it
+ *  can buy. Kept rather than deleted because it encodes which verdicts carry the signature — but
+ *  an unused export with no note is a trap, so this note is the point.
+ *
  *  Widening this is SAFE by construction, which is why the allowlist can afford to admit a verdict
  *  whose credential story is unresolved: `planModelFallback` independently enforces
  *  `ACCOUNT_HEADROOM_PCT`, so a genuinely exhausted ACCOUNT is refused downstream no matter what

@@ -380,7 +380,10 @@ describe('tick — runTick (compose)', () => {
     const res = await runTick({ fetchImpl: stubFetch({ LIVE: { fh: 20, sd: 20 } }) })
     expect(res.nextAction).toBe('reauth-needed')
     expect(res.reason).toBe('refresh-dead')
-    expect(res.decision).toContain('re-login')
+    // Asserts the BRANCH, not the blame — `toContain('re-login')` welded this attribution test to
+    // the claim that a human is required, which is false (rung 2 of the cascade mints from a live
+    // cookie with no human, and this process cannot see that rung). TRDD-XV9BLQC5.
+    expect(res.decision).toContain('dead refresh')
   })
 
   // Precedence is the whole point: with BOTH faults present the verdict must name OURS. Reporting

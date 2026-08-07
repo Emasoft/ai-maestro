@@ -116,13 +116,34 @@ export type NextAction = 'ok' | 'rotating' | 'reauth-needed' | 'stuck'
 
 /**
  * WHY `reauth-needed` needs a reason: the same word covers two failures with OPPOSITE owners.
- *  - `refresh-dead`     — the credential really is unrecoverable; a HUMAN must re-login.
+ *  - `refresh-dead`     — the OAuth refresh token is dead. This does NOT mean a human is needed
+ *                         (see the correction below).
  *  - `slot-unreadable`  — the slot could not be READ from this process at all (keychain ACL,
  *                         locked login keychain, a security session the daemon isn't in). The
  *                         credential may be perfectly healthy; nothing a re-login fixes.
  * Collapsing them sent a human to re-login for a defect on the SERVER's side. `slot-unreadable`
  * therefore takes precedence when both are present: a fault we caused must never be reported as
  * a chore we are handing to the user.
+ *
+ * ⚠ CORRECTED 2026-08-07 — this docstring used to say `refresh-dead` meant "the credential really
+ * is unrecoverable; a HUMAN must re-login". **That is false, and it is the claim that made this
+ * process cry wolf.** Credential recovery is a THREE-rung cascade (ROTATE → RENEW → REAUTHENTICATE)
+ * and a dead refresh only exhausts rung 1. Rung 2 mints a fresh refresh from a live claude.ai
+ * session COOKIE with **no human at all** — and the cookie layer lives in the janitor's keychain,
+ * which THIS PROCESS CANNOT SEE. So a dead refresh is evidence about the OAuth layer and evidence
+ * about NOTHING ELSE.
+ *
+ * MEASURED that day: of two slots reported "a human must re-login", `fmuaddib` held a healthy
+ * cookie and minted itself unattended; only the other had genuinely lapsed. The message was right
+ * about one of two and stated both with equal confidence — the 4th message in one session found
+ * asserting the opposite of the truth.
+ *
+ * The honest report names what we OBSERVED (a dead refresh) and not what we cannot know (whether a
+ * human is required). Do NOT "fix" this by teaching tick.ts to read cookies: `cascade.ts` and
+ * `cookie-vault.ts` already implement that, correctly and with tests, and BOTH have zero
+ * production callers (11/11 and 3/3 exports uncalled, measured against a 19-caller control) — the
+ * janitor owns the live cookie layer, and a second implementation here has already drifted from
+ * it 3× on constants alone. See TRDD-XV9BLQC5.
  */
 export type TickReason = 'refresh-dead' | 'slot-unreadable'
 
@@ -189,7 +210,9 @@ export function deriveDecision(f: {
     return `reauth-needed: ${f.unreadable} alternate slot(s) UNREADABLE from this process — credential access, not a re-login`
   }
   if (f.reason === 'refresh-dead') {
-    return `reauth-needed: ${f.deadRefresh} alternate slot(s) have a dead refresh and are expiring — a human must re-login`
+    // Says what was OBSERVED (the OAuth rung is dead), never that a human is required — this
+    // process cannot see the cookie rung that would answer that. See the TickReason docstring.
+    return `reauth-needed: ${f.deadRefresh} alternate slot(s) have a dead refresh and are expiring — the OAuth rung is dead, but a live claude.ai cookie can still mint these with NO human; check the cookie layer before re-logging in`
   }
   if (f.stuck === 'all-maxed') {
     // ⚠ THIS MESSAGE USED TO ASSERT THE OPPOSITE OF THE STATE, and it cost the owner real hours.

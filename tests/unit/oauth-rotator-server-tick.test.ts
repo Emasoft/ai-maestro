@@ -198,7 +198,9 @@ describe('server-tick — the beat DELIVERS its own alarms (TRDD-RFQFCCU4)', () 
       ...armed,
       runTickImpl: async () => ({
         nextAction: 'reauth-needed', reason: 'refresh-dead', refreshed: [], switched: false,
-        decision: 'reauth-needed: 2 alternate slot(s) have a dead refresh and are expiring — a human must re-login',
+        // Kept byte-identical to what deriveDecision actually emits — a fixture that drifts from
+        // the real message tests a string nothing produces (corrected 2026-08-07, TRDD-XV9BLQC5).
+        decision: 'reauth-needed: 2 alternate slot(s) have a dead refresh and are expiring — the OAuth rung is dead, but a live claude.ai cookie can still mint these with NO human; check the cookie layer before re-logging in',
       }),
       deliverImpl: (f) => { sent.push(f) },
     })
@@ -207,7 +209,7 @@ describe('server-tick — the beat DELIVERS its own alarms (TRDD-RFQFCCU4)', () 
     // so collapsing refresh-dead into a shared code would make a still-dead credential look
     // resolved the moment an unrelated condition cleared.
     expect(sent[0][0].code).toBe('reauth-needed:refresh-dead')
-    expect(sent[0][0].message).toContain('a human must re-login')
+    expect(sent[0][0].message).toContain('dead refresh')
   })
 
   it('delivers when the fleet is STUCK — the state that used to report itself as healthy', async () => {
@@ -344,8 +346,28 @@ describe('deriveDecision — a stuck fleet must never report itself healthy', ()
 
   it('reason OUTRANKS stuck — an actionable chore beats a wait', () => {
     const d = deriveDecision({ ...base, reason: 'refresh-dead', deadRefresh: 2, stuck: 'all-maxed' })
-    expect(d).toContain('a human must re-login')
+    // Asserts the BRANCH, not the blame. This used to read `toContain('a human must re-login')`,
+    // which welded a precedence test to a claim that turned out to be false — so the phrase could
+    // not be corrected without reddening a test about something else entirely.
+    expect(d).toContain('dead refresh')
     expect(d).not.toContain('STUCK')
+  })
+
+  // THE REGRESSION GUARD for TRDD-XV9BLQC5. `refresh-dead` means the OAuth rung is dead and
+  // NOTHING MORE: rung 2 of the cascade mints a fresh refresh from a live claude.ai cookie with no
+  // human, and that cookie lives in the janitor's keychain where this process cannot see it.
+  // MEASURED 2026-08-07: of two slots this message called human-blocked, one held a healthy cookie
+  // and minted itself unattended. The same phrase had already been logged 4 506 times over 4 days
+  // (see alert-delivery.ts) — a false alarm that frequent stops being read at all.
+  it('never claims a human is required — this process cannot see the cookie rung', () => {
+    const d = deriveDecision({ ...base, reason: 'refresh-dead', deadRefresh: 2 })
+    expect(d).not.toMatch(/human must re-login/i)
+    // Positive control: without this the assertion above passes for ANY message, including an
+    // empty one or a message from a branch that never ran.
+    expect(d).toContain('dead refresh')
+    // And it must still say what a human COULD do — silence about the cookie rung is what sent
+    // the owner to a re-login for an account that would have minted itself.
+    expect(d).toMatch(/cookie/i)
   })
 
   it('stuck OUTRANKS refreshed — a rotation that could not happen beats routine upkeep', () => {

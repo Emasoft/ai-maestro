@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T13:23:00+0200
+updated: 2026-08-07T13:36:33+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -331,8 +331,51 @@ Relevant: **#105** (adopt `safe_config_edit` for every settings.json mutation).
 ## ⏳ 9. Ledger monitors `settings.json` + `settings.local.json` in every workdir and every
 `~/.claude/projects/` entry — NOT STARTED
 
-Superset of (8). Note the corpus size before designing: `~/.claude/projects/` holds **172+**
-project dirs, so a naive per-file watcher is a descriptor-exhaustion risk.
+Superset of (8). ~~Note the corpus size before designing: `~/.claude/projects/` holds **172+**
+project dirs, so a naive per-file watcher is a descriptor-exhaustion risk.~~
+**↑ REFUTED 2026-08-07 by measurement — see below. The corpus is ~32 FILES, not 172 descriptors.**
+
+### 📐 MEASURED 2026-08-07 — the feared problem is not the real one
+
+**1. `~/.claude/projects/` contains ZERO settings files.** 98 dirs, `settings*.json` count = **0**.
+Those dirs hold conversation TRANSCRIPTS; the settings live in the WORKDIRS the slugs encode. The
+USER's *"(if present)"* anticipated this. So item 9's target set is the decoded workdirs, and the
+reliable decode is the transcripts' own **`cwd` field** — never slug-un-mangling, which is
+ambiguous (the slug maps every non-alphanumeric to `-`, so a path containing a real `-` cannot be
+recovered).
+
+**2. The real watch set is ~32 files**, so the descriptor-exhaustion premise is gone:
+
+```
+98 project dirs → 43 distinct cwds → 36 still on disk → 18 settings files
++ 12 under ~/agents + 2 global (~/.claude/settings{,.local}.json)   ⇒  ~32
+```
+
+*Honest caveat:* 53 of 98 dirs yielded no `cwd` in their first 5 JSONL lines, so the true set may
+be larger — but even 3× is ~100 files, still trivial. And 7 decoded cwds no longer exist, so **the
+set is DYNAMIC** (projects appear and are deleted): the watcher needs a periodic re-scan, not a
+one-shot arm.
+
+**3. NO file-watching exists anywhere in production** — zero hits for `fs.watch` / `watchFile` /
+`chokidar` / `FSWatcher` across `lib services app server.mjs`. This is a new capability class, not
+an extension of one.
+
+### ⚠ THE REAL TRAP — watch the DIRECTORY, never the FILE
+
+A safe write is `write <path>.tmp.N` then **rename over** the target (our own `saveJsonSafe` does
+exactly this, and `atomic write` is the house pattern). `fs.watch` on a FILE binds the **inode**,
+so after the first atomic write the watcher is holding the ORPHANED old inode: it reports nothing,
+forever, while the file keeps changing. **Silently watching a dead inode is indistinguishable from
+"no changes occurred"** — the exact failure shape this session removed three of.
+
+⇒ Watch the parent DIRECTORY and filter by basename, then hash to confirm a real content change
+(rename storms and editors' scratch files both fire spuriously). A test must pin the atomic-rename
+case specifically: write via a tmp+rename, assert the change IS recorded. Watching the file
+directly passes a naive "edit it in place" test and fails on every real write.
+
+**Design note:** items 8 and 9 are ONE watcher (8 is the 2-file subset of 9's ~32), so build 9 and
+let 8 fall out. The `~/.claude` global pair is the highest-value half — that is where the known
+hazard landed (a test rewrote the USER's real settings.json).
 
 ## ⏳ 10. Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI — NOT STARTED
 

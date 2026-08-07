@@ -25,6 +25,12 @@ const LEDGER_PATHS = [
   // tampered humans.json (which can hold a foreign user's approval state) is
   // caught alongside the rest. Derives humans.ledger.json from this path.
   path.join(AIMAESTRO_DIR, 'humans.json'),
+  // TRDD-MN0Q1IA2: the settings-file watcher chain (lib/settings-watcher.ts)
+  // fingerprints every observed change to watched settings.json files. It must
+  // be boot-verified like the rest, or it would be the ONE chain whose
+  // tampering nothing checks — and a tamper-evidence chain nobody verifies is
+  // decoration. Derives watched-settings.ledger.json from this path.
+  path.join(AIMAESTRO_DIR, 'settings', 'watched-settings.json'),
 ]
 
 let _readOnlyMode = false

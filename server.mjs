@@ -1667,6 +1667,12 @@ async function startServer(handleRequest) {
     console.warn(`[analytics-proxy] not listening on :${ANALYTICS_PROXY_PORT} (${err.code || err.message}) — the Analytics tab will be unavailable`)
   })
 
+  // Settings-watcher handle — declared at this scope so gracefulShutdown (below, outside the
+  // listen callback) can close it. fs.watch handles are OS resources that keep the event loop
+  // alive; unlike the schedulers' timers they cannot be unref'd away one by one, so shutdown
+  // must close them explicitly.
+  let settingsWatchHandle = null
+
   server.listen(port, bindAddress, async () => {
     console.log(`> Ready on http://${hostname}:${port}`)
     if (needsIpFilter && tailscaleIp) {
@@ -1858,6 +1864,35 @@ async function startServer(handleRequest) {
       console.log('[Startup] Absorbed-duty scheduler initialized (always on; gated per-tick on janitor installed+armed)')
     } catch (err) {
       console.warn('[Startup] Absorbed-duty scheduler init failed (non-fatal):', err?.message || err)
+    }
+
+    // ── Settings-file watcher → signed ledger (TRDD-MN0Q1IA2 items 8/9) ─
+    // Fingerprints EVERY change to ~/.claude/settings(.local).json, each agent
+    // workdir's settings, and every workspace decoded from ~/.claude/projects
+    // transcripts, into its own signed chain (settings/watched-settings.ledger.json).
+    // The diff carries {sha256,size} fingerprints ONLY — a settings file
+    // legitimately holds env blocks and tokens, and this ledger is long-lived,
+    // so recording values would republish the secrets it exists to protect.
+    // Unconditional for the same reason the absorbed-duty scheduler is: the
+    // USER asked for every change to be recorded; an opt-in gate would
+    // silently revoke that. authActor is 'system' — the watcher OBSERVES
+    // writes it did not make, whoever made them.
+    try {
+      const { armSettingsWatchers, recordChange, SETTINGS_LEDGER_ANCHOR } =
+        await import('./lib/settings-watcher.ts')
+      const { SignedLedger } = await import('./lib/signed-ledger.ts')
+      const settingsLedger = new SignedLedger(SETTINGS_LEDGER_ANCHOR)
+      settingsWatchHandle = armSettingsWatchers({
+        onChange: (change) => {
+          // A failed append is an AUDIT GAP to report, never a crash: the
+          // watcher must outlive one bad write.
+          recordChange(settingsLedger, change).catch(err =>
+            console.warn('[settings-watch] ledger append failed (audit gap):', err?.message || err))
+        },
+      })
+      console.log(`[Startup] Settings-file watcher armed: ${settingsWatchHandle.armedDirs().length} dirs → signed ledger (fingerprints only)`)
+    } catch (err) {
+      console.warn('[Startup] Settings watcher init failed (non-fatal):', err?.message || err)
     }
 
     // ── Agent-workdir invariants: boot sweep + the ONE watchdog (TRDD-VYQ8N4KR) ──
@@ -2306,6 +2341,10 @@ async function startServer(handleRequest) {
         .then(m => { m.stopAutoUpdateScheduler(); m.stopAbsorbedDutyScheduler() })
         .catch(() => { /* best-effort */ })
     } catch { /* best-effort */ }
+
+    // Close every settings fs.watch handle — they hold the event loop open
+    // and, unlike the scheduler timers, cannot be unref'd collectively.
+    try { settingsWatchHandle?.close() } catch { /* best-effort */ }
 
     // Cancel all auto-continue timers to prevent commands firing during teardown
     if (autoContinueTimers.size > 0) {

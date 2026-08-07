@@ -845,6 +845,23 @@ applies to it, which is now the strongest argument for settling that first.
         gated on. Worth its own card: the aggregate row should carry a per-marketplace failure
         count, or "zero failures" will keep meaning "zero failures of the thing we log".
 
+        **⚠ THE EXPOSURE IS 52, NOT 19 — third correction, and the last map I had not read (10:30).**
+        I measured against `settings.json`'s `enabledPlugins`. The real installed set is
+        **`~/.claude/plugins/installed_plugins.json`** → `.plugins`: **91** entries. (`enabled ⊄
+        installed` is empty, so the two are consistent — settings' 35-true is a SUBSET, not a
+        different answer.) **The per-plugin loop updates INSTALLED plugins, not enabled ones** —
+        the measured fire did **78** updates, which tracks 91, not 35. So the enabled count was
+        the wrong denominator for this question all along.
+        Re-derived over the installed set: **52 installed plugins sit on a marketplace that is not
+        `autoUpdate: true`** — 20 `claude-plugins-official` and 12 `buildwithclaude` (both
+        key-ABSENT), 7 `skills-marketplace`, and 2 each on `claude-dev-skills`,
+        `claude-code-settings`, `geoffjay-claude-plugins`, `GhostScientist-skills`,
+        `claude-code-workflows` (all explicit `false`). Two of those marketplaces
+        (`buildwithclaude`, `claude-code-settings`) never appeared in my earlier analysis at all.
+        **The conclusion hardens: deleting the per-plugin loop would strand up to 52 installed
+        plugins, not 19.** Every earlier count in this card that says 19 is scoped to ENABLED and
+        should be read that way, not as the blast radius.
+
         **This also answers the 5-vs-19 question I had left open**, and not the way I framed it:
         `claude-plugins-official` is NOT a special built-in — it is an ordinary registered
         marketplace (present in the cache, present in the registry) whose `autoUpdate` key is

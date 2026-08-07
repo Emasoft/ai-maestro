@@ -53,6 +53,28 @@ beforeEach(() => {
 })
 afterEach(() => { fs.rmSync(HOME, { recursive: true, force: true }) })
 
+/*
+ * NEUTER RUNS (2026-08-07 — OBSERVED via scripts/dev/neuter, each restore verified by blob hash).
+ * Three guards, three mutations, each reddening the test written for it:
+ *
+ *   1. s/if \(!known\.has\(t\.file\)\) known\.set\(…\)/known.set\(…\)/        → 1 red / 16 green
+ *        does NOT re-seed a baseline on rescan — that would swallow the very edit it must record
+ *
+ *   2. s/…after: change\.after \} \}\]/…, content: fs.readFileSync\(change.file, "utf-8"\) } }]/
+ *                                                                            → 2 red / 15 green
+ *        NEVER puts file content in the ledger patch — fingerprints only     ← the intended pin
+ *        renders add / replace / remove …                                    ← INCIDENTAL
+ *      The second red is NOT a second independent pin and should not be read as one: that test
+ *      uses the synthetic path `/f`, so the injected `readFileSync` throws ENOENT rather than
+ *      leaking anything. Only the first red demonstrates the privacy invariant. Recorded because
+ *      a raw "2 red" would overstate the coverage.
+ *
+ *   3. s/if \(before && after && before\.sha256 === after\.sha256\) return null/if \(false\) …/
+ *                                                                            → 2 red / 15 green
+ *        emits a change when content really moved, and stays silent when it did not
+ *        reports NO change when the file was touched but its content is identical
+ *      Both are genuine here — one drives the pure function, one drives it through the watcher.
+ */
 describe('settings watcher — pure core', () => {
   it('fingerprints a file, and returns null for one that is absent', () => {
     const f = writeGlobal('{"a":1}')

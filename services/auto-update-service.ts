@@ -421,6 +421,25 @@ function userGlobalSettingsPath(): string {
  * the gate deliberately refuses that path (wrong basename, wrong parent dir) — so those are
  * NOT covered here. Extending to them is a separate decision about a harness-owned file.
  *
+ * ── THAT DECISION WAS MADE (USER directive 2026-08-07): "all plugins are always set to
+ * auto-update in the settings.json (remember to use the safe settings editor)". ──────────────
+ *
+ * We still do NOT write the harness-owned registry — the gate's refusal stands and is right.
+ * We write the marketplace's DECLARATION into `settings.json`, which is the lever that actually
+ * moves the registry. Measured 2026-08-07, and this is the whole basis for the approach:
+ *
+ *   - 250 marketplaces appear in BOTH files, with **ZERO `autoUpdate` disagreements** — so
+ *     settings.json is the SOURCE and the registry is downstream of it.
+ *   - 20 appear in the registry and are UNDECLARED in settings.json. Those 20 are exactly the
+ *     12 `autoUpdate:false` + 8 key-absent entries: undeclared ⇒ never enforced ⇒ never true.
+ *   - 52 INSTALLED plugins sit on those 20, so this is the gap with real consequences.
+ *
+ * So an undeclared marketplace is declared here with `autoUpdate: true` and the `source` COPIED
+ * VERBATIM from the registry — never invented. A registry entry with no usable `source` is
+ * skipped and counted, because a declaration without a source is a broken marketplace, which is
+ * worse than an unmanaged one. The registry is read READ-ONLY; if it is missing or unparseable
+ * this half is skipped silently and the declared-but-false half still runs.
+ *
  * And the flag is read at instance LOAD, so a flip reaches the NEXT session, never this one.
  * Do not report it as effective merely because it was written.
  */
@@ -451,14 +470,67 @@ export async function ensureMarketplaceAutoUpdate(
     if ((value as Record<string, unknown>).autoUpdate === true) continue
     ops.push({ op: 'set', keyPath: ['extraKnownMarketplaces', name, 'autoUpdate'], value: true })
   }
-  const note = malformed.length > 0 ? ` (${malformed.length} malformed entr${malformed.length === 1 ? 'y' : 'ies'} left untouched)` : ''
+  const flips = ops.length
+
+  // The UNDECLARED half (USER directive 2026-08-07) — see the boundary note above. Each op sets
+  // the WHOLE entry rather than just the flag: `set ['extraKnownMarketplaces', name]` on a name
+  // that does not exist would otherwise have to vivify the parent, and this way the source and
+  // the flag land as one value that cannot be half-written.
+  // ⚠ ONLY for the machine-global settings file. The registry is machine-global state; pairing it
+  // with a CALLER-SUPPLIED settings path would enrich a temp/project file with this machine's
+  // marketplaces — incoherent, and it broke the idempotence test the moment it was written (a
+  // temp fixture produced 270 add-ops and a write, against a test whose whole claim is "zero ops
+  // ⇒ zero writes"). The test was right; the hidden dependency on `os.homedir()` was the defect.
+  let sourceless = 0
+  const undeclared = settingsPath === userGlobalSettingsPath() ? await readRegistryMarketplaces() : []
+  for (const [name, source] of undeclared) {
+    if (name in (extra as Record<string, unknown>)) continue // declared: handled above
+    if (source === null) { sourceless++; continue }
+    ops.push({ op: 'set', keyPath: ['extraKnownMarketplaces', name], value: { source, autoUpdate: true } })
+  }
+  const adds = ops.length - flips
+
+  const bits: string[] = []
+  if (malformed.length > 0) bits.push(`${malformed.length} malformed entr${malformed.length === 1 ? 'y' : 'ies'} left untouched`)
+  if (sourceless > 0) bits.push(`${sourceless} registry entr${sourceless === 1 ? 'y' : 'ies'} skipped for a missing source`)
+  const note = bits.length > 0 ? ` (${bits.join('; ')})` : ''
   if (ops.length === 0) return entry(target, 'already-current', `Every declared marketplace already auto-updates${note}`)
 
   try {
     await editSettings(settingsPath, ops)
-    return entry(target, 'updated', `Enabled auto-update on ${ops.length} marketplace(s); takes effect at the next session start${note}`)
+    const what = [
+      flips > 0 ? `enabled auto-update on ${flips} declared marketplace(s)` : '',
+      adds > 0 ? `declared ${adds} previously-undeclared marketplace(s) with auto-update on` : '',
+    ].filter(Boolean).join('; ')
+    return entry(target, 'updated', `${what}; takes effect at the next session start${note}`)
   } catch (err) {
     return entry(target, 'failed', errMsg(err))
+  }
+}
+
+/**
+ * Every marketplace the harness registry knows, as `[name, source]` — READ-ONLY, and the source
+ * is returned verbatim so a caller can copy it rather than invent one. `null` source means the
+ * entry is unusable as a declaration (missing/!object), which the caller counts rather than
+ * guessing at.
+ *
+ * Returns `[]` on ANY read/parse failure, deliberately: this is an enrichment pass, and a
+ * harness-owned file we do not write is not something whose absence should fail the enforcement
+ * step that runs beside it.
+ */
+async function readRegistryMarketplaces(): Promise<Array<[string, unknown]>> {
+  try {
+    const p = path.join(os.homedir(), '.claude', 'plugins', 'known_marketplaces.json')
+    const parsed: unknown = JSON.parse(await fs.readFile(p, 'utf8'))
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return []
+    return Object.entries(parsed as Record<string, unknown>).map(([name, e]) => {
+      const src = e !== null && typeof e === 'object' && !Array.isArray(e)
+        ? (e as Record<string, unknown>).source
+        : undefined
+      return [name, src === undefined || src === null ? null : src]
+    })
+  } catch {
+    return []
   }
 }
 

@@ -37,11 +37,55 @@ exposes is the real defect, and it is in the janitor's tree — cross-repo, issu
   (both asks: seed-path challenge DETECTION, and a Cloudflare-vs-dead-token distinction in
   `_keepalive_refresh`). Absence of the guard was proven across **all 13 cached versions**
   (0.60.1 → 2.5.1) before filing, per this session's own cross-repo lesson.
-- **NEXT ACTION:** ai-maestro's own half — its alert must stop claiming a human is required when it
-  cannot see which layer failed. That is the already-owed false-alert card, same root cause
-  (ai-maestro hardcodes the janitor's data dirname, so both write ONE registry with asymmetric
-  knowledge, and the component doing all the talking is the one blind to the cookie layer).
-- Nothing else to build in THIS repo. The rotator is the janitor's; we do not edit its tree.
+- **NEXT ACTION — ai-maestro's own half, and the diagnosis was WRONG until measured.** The false
+  "a human must re-login" alert is NOT because we cannot see the cookie layer. **We can, we
+  implemented it correctly, and we never wired it.** See `## The ai-maestro half` below. The fix is
+  to route the live decision through `cascade.ts` (or delete it), NOT to add a cookie check.
+- The rotator itself is the janitor's; we do not edit its tree. `cascade.ts` and `tick.ts` are OURS.
+
+## The ai-maestro half — a correct fix that was never called (measured 2026-08-07)
+
+`lib/oauth-rotator/cascade.ts` implements the full 3-rung cascade including **`RENEW_COOKIE`**, and
+its own comment records that TRDD-J9TM3WQK added it specifically to stop the jump straight to
+REAUTH: *"live claude.ai cookie mints a fresh refresh with NO human (RENEW_COOKIE); only with NO
+cookie is the human nudged … fixed the earlier jump straight to REAUTH that skipped the cookie
+rung"* (`cascade.ts:110-112`).
+
+**That module has ZERO production callers.** Measured, with a positive control so a broken search
+cannot produce the same zero:
+
+| symbol | production callers |
+|---|---|
+| `cascadePlan` | **0** |
+| `cascadeSummaryLine` | **0** |
+| `classifyCascade` | **0** |
+| `oauthOf` (CONTROL) | **19** |
+
+The LIVE path re-derives the taxonomy inline and never consults a cookie:
+
+```
+tick.ts:1187   else if (deadRefresh > 0) { nextAction = 'reauth-needed'; reason = 'refresh-dead' }
+tick.ts:192    `reauth-needed: … alternate slot(s) have a dead refresh and are expiring —
+                a human must re-login`
+```
+
+`grep cookie lib/oauth-rotator/tick.ts` returns nothing in the decision path. So the live claim
+that a human is required is made **blind to the cookie layer**, by a code path that sits beside a
+correct, tested implementation of exactly that check.
+
+**This is today's false alert, exactly.** `fmuaddib@gmail.com` held a healthy cookie and minted
+itself with **no human involvement** — and the live path would have declared it human-blocked.
+Only `ipazia` had genuinely lapsed. The alert was right about one of two accounts and stated both
+with equal confidence.
+
+**Why this went unnoticed:** a fix landing in an uncalled module is indistinguishable from a fix
+landing in a live one — the tests pass either way, because the tests call the module directly.
+TRDD-J9TM3WQK's fix is real, correct, and inert. Recorded previously that the two copies' constants
+had **already drifted 3× apart**, which is the other cost of the duplication.
+
+**Do NOT "fix" this by adding a cookie check to `tick.ts`.** That would make a THIRD copy of the
+taxonomy. Either route the live decision through `cascade.ts`, or delete `cascade.ts` and own the
+inline copy deliberately — but not both.
 
 ## Problem
 

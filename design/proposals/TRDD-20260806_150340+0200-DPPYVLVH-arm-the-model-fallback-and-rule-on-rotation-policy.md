@@ -117,7 +117,7 @@ disagree about which account is usable, which is worse than either policy alone.
 > `sc` is the LIVE account's worst model-scoped percent and `isNearLimit` trips when ANY window
 > is ≥ SWITCH (97). So a live account at **5h 7% / 7d 71% / Fable 100%** still evicts the fleet
 > over one spent model, with 93% of its 5h window unused. This host's `last_switch_reason` records
-> exactly that: `live fmuaddib@gmail.com 5h=7% 7d=71% Fable=100% -> rotate`.
+> exactly that: `live ACCOUNT-A 5h=7% 7d=71% Fable=100% -> rotate`.
 >
 > Note the reason STRING alone does not prove causation — `liveDesc` (`:866`) is a description of
 > the account at switch time, not the trigger. The causation is `:855` + `:864-865`, read directly.

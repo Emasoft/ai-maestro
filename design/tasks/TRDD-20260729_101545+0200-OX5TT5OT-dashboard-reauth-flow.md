@@ -34,7 +34,7 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/95]
 ## ⏹ TRIAGE 2026-08-02T15:2x+0200 — `dev` → `human_review`, the only step left is the USER's ([[5YRLA53W]])
 
 Re-columned, not closed. 10 of 11 boxes are done; the eleventh says so itself — *"End-to-end on
-`fmuaddib@` … **this is the human's step, at the host**"*. No agent can advance it, so `dev` was
+`ACCOUNT-A` … **this is the human's step, at the host**"*. No agent can advance it, so `dev` was
 claiming work that could not be performed. `human_review` is the column that means "escalated to the
 USER", which is exactly true here. It is NOT `blocked`: `blocked-by:` takes TRDD ids and there is no
 card to name — a human action is not a card.
@@ -51,7 +51,7 @@ forced by the registration, not chosen for convenience.
 
 **NEXT ACTION:** the ONE remaining box is not code — it is the human logging in. Open
 Settings → Hosts → this host → Claude Accounts **on the host itself**, press Re-login on
-`fmuaddib@gmail.com`, and confirm afterwards that its `refresh_failures` is 0 and the beat stops
+`ACCOUNT-A`, and confirm afterwards that its `refresh_failures` is 0 and the beat stops
 reporting `reauth-needed`.
 
 **What shipped:**
@@ -103,7 +103,7 @@ reporting `reauth-needed`.
 
 ## Problem
 
-`fmuaddib@gmail.com`'s refresh token is dead (expired 173 h; 26 consecutive exchange failures while
+`ACCOUNT-A`'s refresh token is dead (expired 173 h; 26 consecutive exchange failures while
 two sibling accounts succeed through the same code, endpoint and UA in the same 25 minutes — so it
 is that token, not our client). A re-login is the only repair.
 
@@ -199,7 +199,7 @@ it now.
 - [x] Unit: `::ffff:127.0.0.1` (the dual-stack form the `::` bind produces) is ACCEPTED — and the probe showed it is the ONLY form loopback takes on this host, so it is the load-bearing branch rather than an edge case
 - [x] 0-IMPACT: every test stubs the token endpoint and redirects HOME to a temp dir — the real keychain is never touched
 - [x] A neuter run per guard — 11 recorded (console gate · replay tombstone · state mismatch · expiry · PKCE hash · verifier-never-emitted · roles-over-hint · slot-entry replacement · strict registration · fingerprint leak · MAESTRO gate), each failing only its NAMED test, each restored byte-clean
-- [ ] End-to-end on `fmuaddib@`: after the flow, `refresh_failures` returns to 0 and the beat stops reporting `reauth-needed` — this is the human's step, at the host
+- [ ] End-to-end on `ACCOUNT-A`: after the flow, `refresh_failures` returns to 0 and the beat stops reporting `reauth-needed` — this is the human's step, at the host
 
 ## Estimated risk
 

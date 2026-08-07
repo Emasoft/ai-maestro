@@ -198,8 +198,8 @@ entire fix, and it is the one thing the system could not do.
 2. **2026-07-11 03:27** — the automated capture ran and got *almost* all the way:
    ```
    [capture] clicked approval button (button:has-text("Authorize")).
-   [capture] NOTE: profile is logged in as ipazia.emasoft@gmail.com, not fmuaddib@gmail.com
-             — filing under the ACTUAL account ipazia.emasoft@gmail.com (authoritative).
+   [capture] NOTE: profile is logged in as ACCOUNT-B, not ACCOUNT-A
+             — filing under the ACTUAL account ACCOUNT-B (authoritative).
    rotator.SlotKeychainWriteError: keychain write failed — refusing to drop a plaintext token
    ```
    Two facts in one log: **the consent is automated**, and **the capture cannot target a
@@ -388,12 +388,17 @@ identities are impossible that way.
 
 What *does* work is addressing the owner's **real Chrome profiles**, which are keyed by account:
 
+> `ACCOUNT-A`…`ACCOUNT-E` are stable per-account labels, redacted 2026-08-07: these are the owner's
+> personal mail addresses and this repo is PUBLIC. The mapping is recoverable at the host from
+> `rotator.py list` / `known-emails`; it is never load-bearing for anything written here, so the
+> label carries the whole meaning. `ACCOUNT-E` is a THIRD PARTY. See TRDD-XV9BLQC5 `## PII note`.
+
 | Chrome profile | account | rotator slot? | claude.ai session (measured headed) |
 |---|---|---|---|
-| `Default` | fmuaddib@gmail.com | **yes — the dead slot**, currently live | **logged OUT** |
-| `Profile 1` | emasoftfloss@gmail.com | no | not tested |
-| `Profile 2` | emanuele.sabetta@gmail.com | yes | **LOGGED IN** — full app UI rendered |
-| `Profile 3` | gaetano.sabetta@gmail.com | no | not tested |
+| `Default` | ACCOUNT-A | **yes — the dead slot**, currently live | **logged OUT** |
+| `Profile 1` | ACCOUNT-C | no | not tested |
+| `Profile 2` | ACCOUNT-D | yes | **LOGGED IN** — full app UI rendered |
+| `Profile 3` | ACCOUNT-E | no | not tested |
 
 `--browser chrome --browser-profile "Profile 2"` returned the authenticated app (Home / Code /
 Chats and tasks / Projects / Recents) where `Default` returned the logged-out landing page. Same
@@ -403,7 +408,7 @@ the owner's real, undetectable Chrome.
 
 **Two gaps this exposes, both concrete:**
 
-1. **`ipazia.emasoft@gmail.com` has NO Chrome profile at all.** One must be created and logged in
+1. **`ACCOUNT-B` has NO Chrome profile at all.** One must be created and logged in
    before its slot can ever be re-captured.
 2. **`Default` (fmuaddib) is not logged into claude.ai** even though fmuaddib is the *live Claude
    Code* account — the OAuth token and the browser session are separate things. So repairing the

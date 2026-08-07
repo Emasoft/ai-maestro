@@ -1,8 +1,8 @@
 ---
 name: server-oauth-token-continuity-design
-description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom"
+description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom / the alert says 'rotation is effectively OFF' or 'the 60s rotator tick has not COMPLETED for N seconds' but the tick is running fine / tick-stalled false alarm / tick-completed.ts stamp frozen for days / an alert reading a stamp the server-side lane never writes"
 ocd: 2026-07-16
-lmd: 2026-08-02
+lmd: 2026-08-07
 metadata:
   node_type: memory
   type: project
@@ -91,6 +91,31 @@ credential from lockout as `nextAction: ok`.
   while the token is perfectly good, where rotating the credential is the expensive wrong answer.
   Read it before changing `isSafeAlternate`: that predicate is what turns a model-scoped max into
   a fleet-wide eviction.
+
+
+^ATOM-UEW8-1AVJ [desc:"A tick-stalled alert can be a FALSE alarm: it reads a stamp the janitor daemon writes, and the server-side lane never writes it.", keywords: rotation_is_effectively_OFF tick-stalled the_60s_rotator_tick_has_not_COMPLETED rotator_alert_says_stalled_but_it_is_ticking alert_reads_a_stamp_the_server_never_writes false_stall_alarm tick-completed.ts_frozen, ocd: 2026-08-07, lmd: 2026-08-07]
+
+The `tick-stalled` alert reads the janitor's `tick-completed.ts` stamp in the shared plugin
+DATA dir. The SERVER-side rotator lane never writes that file, and the janitor daemon EXITS
+while a server owns the host — so on any server-owned host the stamp freezes at the moment
+the daemon last ran, and the alert fires forever claiming `rotation is effectively OFF`.
+
+MEASURED 2026-08-07: the alert claimed `has not COMPLETED for 368930s` while the server tick
+was completing every 60s — 214 consecutive minute-spaced log lines over 3.6h. The stamp read
+2026-08-02 20:55:55; its age at the 03:24:45 alert was 368930s, matching the alert TO THE
+SECOND. That exact match is what proves the attribution rather than merely suggesting it.
+
+WHY IT MATTERS BEYOND THE NOISE: this alert asserts the exact OPPOSITE of the truth on the
+channel that matters most, ~every 10 min forever. It sat alongside a REAL alert in the same
+minute (`reauth-needed`: a dead refresh only a human login can fix), so the false one trains
+the reader to discount the channel that was right.
+
+DO NOT diagnose a rotator stall from this alert alone. Count the lane's own 60s tick lines,
+or read `lastAbsorbedRunAt`/the tick log. A stamp written by a DIFFERENT process than the one
+you are judging is not evidence about that process.
+
+Sibling: ATOM-S7SH-7ZQO covers the opposite error — a DELIBERATE DRAIN-GUARD/HOLDING refusal
+mistaken for a stall. Both failures are "the rotator looks stuck and is not".
 
 ## Notes and lessons learned
 [^1]: [id:ATOM-R16D-CASC, status:valid, keywords:"rotate_refresh_reauth cascade progressive_fallback the_only_human_step reauth_needs_new_cookie", ocd:2026-07-16, lmd:2026-07-16]

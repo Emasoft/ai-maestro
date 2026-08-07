@@ -136,6 +136,14 @@ describe('settings watcher — pure core', () => {
   })
 })
 
+/*
+ * NEUTER RUN (2026-08-07 — OBSERVED, restore verified by blob hash):
+ *   s/changeToPatch\(change\), \{ authActor: 'system' \}/changeToPatch\(change\)/  → 1 red / 18 green
+ *     appends the declared op, the file path, and the fingerprint patch as actor=system
+ * i.e. dropping the actor reds exactly the test that asserts it. Worth pinning because an entry
+ * with no actor is not merely less informative — `LedgerActor` is how an auditor separates a write
+ * a human made from one the system observed, and an unlabelled entry silently joins neither group.
+ */
 describe('settings watcher — ledger seam', () => {
   function fakeLedger() {
     const calls: { op: string; path: string; diff: unknown; opts: unknown }[] = []

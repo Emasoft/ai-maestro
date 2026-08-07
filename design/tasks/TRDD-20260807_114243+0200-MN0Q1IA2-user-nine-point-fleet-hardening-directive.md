@@ -69,6 +69,37 @@ never write the harness-owned registry — the settings gate refuses that path a
   MODEL with 93 % of the 5 h window unused. `AIM_FLEET_MODEL_FALLBACK=1` is the built, tested,
   UNARMED answer (TRDD-DPPYVLVH).
 
+### ⚠ LIVE DIAGNOSIS 2026-08-07 11:47 — the rotator IS working; the `all-maxed` message is not
+
+Caught the exact failure the USER reported, IN PROGRESS, and it is not what the message says.
+
+`oauth-rotator-tick-status.json` at 11:46: `nextAction: reauth-needed`, `reason: refresh-dead`,
+`stuck: all-maxed`, `windows: {fiveHourPct: 8, sevenDayPct: 72, scopedModel: "Fable",
+scopedPct: 100}`. The log says *"live account is exhausted and no alternate is healthy — all paid
+accounts maxed"* at 11:42:52 and 11:44:52.
+
+**The live account is at 5 h 8 % — 92 % FREE.** Nothing is exhausted except **Fable, at 100 %**.
+Slot health: `fmu***` (LIVE) blob EXPIRED 27.1 h, refresh_failures 3 · `ema***` valid +7.9 h,
+refresh_failures 0 · `ipa***` EXPIRED 6.0 h, refresh_failures 3.
+
+**Two independent defects, and neither is "rotation is broken":**
+1. **The message is false in the way that matters.** "live account is exhausted" is emitted when
+   `isNearLimit` trips, which it does on ANY window ≥ SWITCH(97) — here only the model-scoped one.
+   An operator reading it goes looking for capacity that is already there. Same family as the
+   `tick-stalled` false alarm (TRDD-IGCSDTIU): a message asserting the opposite of the state.
+2. **Rotation is the WRONG REMEDY here and there is nothing to rotate to.** 2 of 3 credentials are
+   dead, and the one live account has 92 % of its 5 h window unused. The correct action is the
+   MODEL FALLBACK — move agents off Fable to Opus — which is item 4 of this directive and is built,
+   tested and UNARMED behind `AIM_FLEET_MODEL_FALLBACK=1`.
+
+**So the rotator is working and is correctly reporting an unrotatable state.** The USER's original
+complaint ("the server failed to rotate the account once again") is explained: there was nothing
+healthy to rotate TO, and the thing that would have helped — switching model — was never armed.
+
+Confirming evidence that the rotator is live and converged: it re-stamped `live-identity.json` at
+11:43 to the account the USER's `/login` selected, matching `agentlenspro get_account_status`
+exactly (fp `9bcd944244b01df2`), and its own attempt stamp was 28 s old when checked.
+
 ## ✅ 7. No more headed chrome-for-testing windows — DONE, verified live
 
 **Root cause found and stopped.** `server-tick.ts:225` → `repairOneDeadSlot` → `driveConsent` →

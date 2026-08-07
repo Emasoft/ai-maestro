@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T13:03:12+0200
+updated: 2026-08-07T13:05:47+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -201,10 +201,48 @@ WATCHED on a real pane (TRDD-DPPYVLVH's arming procedure).
   cadence and never by a rotation** — which is exactly what the USER's item 4 asks for
   ("checks automatically **if after the rotation** the client is still blocked").
 
-**So the build is: call `stuckSuggestsModelFallback` with the rotator's own `nextAction`/`stuck`
-after a rotation completes, and trigger the sweep when it returns true.** It ships dark for free —
-the sweep already self-gates on `AIM_FLEET_MODEL_FALLBACK`. Arming stays the USER's (above).
-⚠ Do NOT rebuild any of the four modules; the only thing absent is the call.
+**So the build LOOKED like: call `stuckSuggestsModelFallback` with the rotator's own
+`nextAction`/`stuck` after a rotation, and trigger the sweep when true.** It ships dark for free —
+the sweep already self-gates on `AIM_FLEET_MODEL_FALLBACK`. ⚠ Do NOT rebuild any of the four
+modules; the only thing absent is the call.
+
+### 🛑 BLOCKER found before wiring it — the predicate returns FALSE on the REAL incident
+
+Read the function before wiring it, and it does not do what item 4 needs:
+
+```ts
+export function stuckSuggestsModelFallback(nextAction: NextAction, stuck?: string): boolean {
+  return nextAction === 'stuck' && stuck === 'all-maxed'
+}
+```
+
+**Verified against the LIVE `~/.aimaestro/oauth-rotator-tick-status.json` (12 s old), not the
+card:**
+
+```
+nextAction = 'reauth-needed'    stuck = 'all-maxed'
+windows    = 5h 34% · 7d 78% · scopedModel Fable · scopedPct 100
+⇒ stuckSuggestsModelFallback('reauth-needed', 'all-maxed') === FALSE
+```
+
+The account has **66 % of its 5 h window free** and only **Fable is at 100 %** — the textbook
+model-scoped exhaustion this whole lane exists for — and the predicate meant to detect it says no.
+Cause: the rotator ALSO cannot reauth (2 of 3 credentials dead, `reason: refresh-dead`), so
+`reauth-needed` displaces `'stuck'` in `nextAction`, while the exhaustion signature lives in the
+`stuck` field. **This is the same 11:47 state recorded above, still live hours later.**
+
+**Consequence: wiring the call as-is would have shipped a NO-OP** — six passing tests, a live call
+site, and nothing ever firing in the exact incident the USER reported. Tests prove behaviour, never
+that the behaviour matches reality.
+
+**NOT fixed here, because the fix embeds a design choice that deserves its own cycle.** The obvious
+widening (key on `stuck === 'all-maxed'` alone) **breaks an intentional guard** — the test
+`stuckSuggestsModelFallback('ok', 'all-maxed') === false` deliberately refuses to act when the
+rotator says everything is fine. So the candidate is an allowlist
+(`nextAction ∈ {stuck, reauth-needed}`) or `stuck === 'all-maxed' && nextAction !== 'ok'`.
+**Safety already covered downstream:** `planModelFallback` enforces `ACCOUNT_HEADROOM_PCT = 90`, so
+a genuinely maxed account is still refused no matter how the predicate widens — the widening risks
+a *wasted* sweep, never a wrong switch.
 
 ## ⏳ 5. Auto-answer the AskUser menu with the default/first option — NOT STARTED
 

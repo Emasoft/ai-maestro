@@ -56,6 +56,30 @@ verbatim from the registry.
 `autoUpdate` disagreements**, so settings.json is the SOURCE and the registry is downstream. We
 never write the harness-owned registry — the settings gate refuses that path and is right to.
 
+### ⚠ DERIVED TASK I MISSED — the 4 h change CREATES a permanent false alarm (found 2026-08-07 13:0x)
+
+The janitor's `claimed-chore-stale` detector bounds `user-plugins-update` at **180 m**, which is
+the OLD 3 h cadence. My change makes our cadence **240 m**. So once the restart lands, every
+HEALTHY fire that passes 180 m trips that alert — permanently, on a ~5-minute heartbeat.
+
+That is precisely the defect class this session spent the day removing (`tick-stalled`,
+`all-maxed`, "Refreshed *every* registered marketplace"): a signal asserting a fault that is not
+there. I would have shipped a new one while fixing three.
+
+**Measured when found:** `lastAbsorbedRunAt` = `2026-08-07T09:17:33+0200`, age **189 m** — LATE
+against 180 m, fine against 240 m. So the alert firing *right now* is CORRECT (the running server
+is still on 3 h and is 9 min late, ordinary jitter, NOT a wedge); it becomes false only after the
+restart.
+
+**OWED, and it is cross-repo so it is an issue, never an edit to their tree:** tell the janitor the
+absorbed `user-plugins-update` cadence moved 3 h → 4 h so its bound tracks it. Better if their
+bound is DERIVED from something we publish rather than hardcoded on both sides — two copies of one
+cadence is the drift this whole card keeps finding. Reference janitor#221 (a 3.7-day wedge of the
+same detector) so they can tell a real wedge from this.
+
+**Until that lands, a `claimed-chore-stale` on `user-plugins-update` between 180 m and 240 m is
+EXPECTED and is not a wedge.** Anything past 240 m is real.
+
 ## ⏳ 3. The rotator is working — PARTLY VERIFIED
 
 - The `scopedOnly` fix (`17e129d6`) is LIVE and ticking every 60 s since the 23:54 restart.

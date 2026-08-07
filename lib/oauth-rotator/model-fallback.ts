@@ -24,7 +24,7 @@
  * carrying a curated command KEY rather than a command string, so the pane write stays
  * injection-proof by construction).
  */
-import type { NextAction } from './tick'
+import type { NextAction, StuckReason } from './tick'
 
 /**
  * An agent the sweep may act on.
@@ -228,8 +228,16 @@ export function planModelFallback(input: FallbackInputs): FallbackPlan {
  *  `nextAction` — while the exhaustion signature stayed in `stuck`. Requiring `nextAction ===
  *  'stuck'` therefore returned FALSE on the exact case this lane exists to relieve. And it is the
  *  case that matters most: `refresh-dead` means a HUMAN must re-login, which can take hours, and a
- *  model switch is the only relief that does not wait on them. */
-const FALLBACK_SUGGESTING_ACTIONS: ReadonlySet<NextAction> = new Set(['stuck', 'reauth-needed'])
+ *  model switch is the only relief that does not wait on them.
+ *
+ *  That displacement is not incidental and will not drift back — it is tick.ts's DOCUMENTED
+ *  precedence (`switched > reason > stuck > refreshed > idle`), whose stated rationale is that
+ *  *"`reason` outranks `stuck` where both hold, because a dead credential names an ACTIONABLE human
+ *  chore while `all-maxed` only names a wait."* So whenever a credential is dead AND the model is
+ *  spent — precisely when this lane is most needed — `nextAction` is GUARANTEED to read
+ *  `reauth-needed` and never `'stuck'`. Keying on `'stuck'` alone was therefore not merely unlucky;
+ *  it was unreachable in the intersection that matters. */
+const FALLBACK_SUGGESTING_ACTIONS: ReadonlySet<NextAction> = new Set<NextAction>(['stuck', 'reauth-needed'])
 
 /** True when a tick verdict indicates the fleet is stuck in a way a model switch could relieve.
  *  `stuck: 'all-maxed'` is the signature: every account failed the target test, which is what a
@@ -255,6 +263,6 @@ const FALLBACK_SUGGESTING_ACTIONS: ReadonlySet<NextAction> = new Set(['stuck', '
  *  whose credential story is unresolved: `planModelFallback` independently enforces
  *  `ACCOUNT_HEADROOM_PCT`, so a genuinely exhausted ACCOUNT is refused downstream no matter what
  *  this returns. The exposure of a wrong `true` here is a wasted sweep, never a wrong switch. */
-export function stuckSuggestsModelFallback(nextAction: NextAction, stuck?: string): boolean {
+export function stuckSuggestsModelFallback(nextAction: NextAction, stuck?: StuckReason): boolean {
   return FALLBACK_SUGGESTING_ACTIONS.has(nextAction) && stuck === 'all-maxed'
 }

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T14:17:41+0200
+updated: 2026-08-07T14:21:24+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -432,17 +432,46 @@ for display.
 the LEDGER holds **2** and the surfaced view holds **1**. The neuter — moving the dedupe into the
 append path — must redden the ledger-count assertion, not the view assertion.
 
-**AUDITED 2026-08-07, and the ruling is currently SATISFIED — which is why it is worth writing
-down.** All **9** signed-ledger appends today are UNCONDITIONAL fire-and-forget, with no `if`, no
-dedupe, and no skip guarding any of them: `governance.ts:190` · `agent-registry.ts:298` ·
-`team-registry.ts:290` · `group-registry.ts:263` · `user-registry.ts:102` · `human-directory.ts:111`
-· `foreign-approval-registry.ts:127` · `portfolio-ledger.ts:61` · `ledger-emit.ts:72`.
+### ❌ MY FIRST AUDIT OF THIS WAS WRONG — corrected same session, before anyone built on it
 
-**This ruling is therefore a RATCHET, not a change request** — it binds every future append, not
-just the watcher's. A property that is already true is the one most easily lost, because removing
-it looks like an optimisation ("we're writing the same entry twice, let's skip one") and breaks
-nothing that any test currently asserts. **The scope is every signed ledger in the tree, not
-items 8/9.**
+I wrote (and committed, in `82f8fe14`) that *"all 9 signed-ledger appends are UNCONDITIONAL
+fire-and-forget, with no `if`, no dedupe, and no skip."* **That is false.** Measured properly, by
+walking back from each call site to its nearest enclosing lower-indent conditional:
+
+| | sites |
+|---|---|
+| **GUARDED by `if (diff.length > 0)`** | **7** — `governance:190` · `agent-registry:298` · `team-registry:290` · `group-registry:263` · `user-registry:102` · `human-directory:111` · `foreign-approval-registry:127` |
+| genuinely unconditional | **2** — `ledger-emit:72`, `portfolio-ledger:61` (inside a `try`, which is not a skip) |
+
+The first pass grepped for dedupe-ish WORDS (`dedup|skip|unchanged|already`) three lines above an
+append and found none — which was true and answered the wrong question. `diff.length > 0` contains
+none of those words while being exactly the thing I claimed was absent. **A needle keyed on
+vocabulary cannot find a predicate expressed in arithmetic** — the same class as this session's
+`grep -c FAIL` and `$?`-after-a-pipeline errors: an instrument whose failure mode is a plausible
+answer.
+
+### ✔ …and the corrected finding is BETTER, because it makes the ratchet precisely specifiable
+
+**`if (diff.length > 0)` is NOT deduplication and the ruling does not forbid it.** Dedupe suppresses
+a SECOND entry that duplicates a real first one; this suppresses an EMPTY diff — a non-event. A save
+that changed nothing has nothing to record, and appending "nothing changed" on every save would
+flood the chain with noise until the real entries were unfindable.
+
+So the ratchet is an **ALLOWLIST OF ONE**, which is a far stronger and more testable rule than
+"never conditional":
+
+> **The ONLY predicate that may guard a signed-ledger `append` is an empty-change check
+> (`diff.length > 0`). Any other condition — content-hash comparison, actor check, "we just wrote
+> this", rate limit, sampling — is FORBIDDEN.**
+
+⚠ **Residual risk this exposes, worth stating because it is now load-bearing:** audit completeness
+depends on **diff-computation correctness**. A change whose diff is computed as empty is silently
+unrecorded, and the chain still verifies perfectly — the same "verified chain that proves nothing"
+hazard, arriving by a different route than dedupe. That is an argument for testing the diff
+computation, NOT for removing the guard.
+
+**Scope: every signed ledger in the tree, not items 8/9.** A property that is already true is the
+one most easily lost — removing it looks like an optimisation and breaks no test that exists today.
 
 ## ⏳ 10. Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI — NOT STARTED
 

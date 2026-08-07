@@ -3,7 +3,7 @@ trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: proposal
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-06T23:06:30+0200
+updated: 2026-08-07T03:55:44+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -104,8 +104,30 @@ disagree about which account is usable, which is worse than either policy alone.
 > - the janitor coordination — their `rotator.py` still implements the strict policy, so the two
 >   will disagree the moment a janitor daemon does run. That must be raised with them.
 >
-> **NOT yet live.** `pm2 restart ai-maestro` activates it — `server.mjs:1950` runtime-imports
-> `./lib/oauth-rotator/server-tick.ts`, so no rebuild is needed, but no restart has been run.
+> **NOW LIVE (2026-08-07).** The USER authorised the restart; `pm2 restart ai-maestro` ran at
+> **23:54:34** (pid 74512) and the lane has ticked every 60 s since — 214 consecutive
+> minute-spaced log lines over the first 3.6 h. `server.mjs:1950` runtime-imports
+> `./lib/oauth-rotator/server-tick.ts`, so no rebuild was needed, as predicted.
+>
+> **AND THE MEASUREMENT THAT MATTERS FOR THE ARMING DECISION BELOW: the fix did NOT make the
+> fallback unnecessary. It covers only HALF the defect.** Verified by reading, 2026-08-07:
+> `isSafeAlternate` governs which account may be a rotation TARGET, which is the half `scopedOnly`
+> repairs. The decision to rotate AWAY from the live account is a different predicate —
+> `usageNear = isNearLimit(fh, sd, sc)` at **`tick.ts:855`**, feeding `near` at `:865` — where
+> `sc` is the LIVE account's worst model-scoped percent and `isNearLimit` trips when ANY window
+> is ≥ SWITCH (97). So a live account at **5h 7% / 7d 71% / Fable 100%** still evicts the fleet
+> over one spent model, with 93% of its 5h window unused. This host's `last_switch_reason` records
+> exactly that: `live fmuaddib@gmail.com 5h=7% 7d=71% Fable=100% -> rotate`.
+>
+> Note the reason STRING alone does not prove causation — `liveDesc` (`:866`) is a description of
+> the account at switch time, not the trigger. The causation is `:855` + `:864-865`, read directly.
+>
+> **This is not a new finding and MUST NOT be carded as one.** `lib/oauth-rotator/model-fallback.ts:10-19`
+> already documents this incident as its own reason for existing — *"rotating the CREDENTIAL is the
+> expensive answer to a MODEL limit. Switching the model is the cheap one."* The remedy is this
+> card's arming step. So the arming question is now sharper than when this card was written: the
+> unnecessary-eviction half is **still unmitigated in production**, and `AIM_FLEET_MODEL_FALLBACK=1`
+> is the built, tested answer to it that nobody has switched on.
 
 ### 2. A dead-refresh LIVE account can never produce `reauth-needed`
 

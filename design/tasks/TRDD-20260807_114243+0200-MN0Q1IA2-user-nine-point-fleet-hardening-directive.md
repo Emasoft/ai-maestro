@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T13:55:33+0200
+updated: 2026-08-07T14:17:41+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -397,13 +397,52 @@ hazard landed (a test rewrote the USER's real settings.json).
   both the previous and current content and can emit a scoped, REPLAYABLE patch. That is the same
   property that makes per-op registry entries more useful than save-level ones.
 
-⚠ One consequence worth stating: the watcher records changes made by **anyone** — including the
-server itself. Emitting on our OWN writes would double-record every settings edit the server
-already ledgers through `editSettings`. Decide explicitly whether to de-duplicate (e.g. suppress a
-watcher event whose content hash matches the one our own writer just produced) or to keep both and
-let the actor field distinguish them. **The USER's directive — "record any change, even if not done
-by the server" — argues for keeping BOTH**, since a suppression rule is exactly what an attacker or
-a buggy writer would ride in on.
+### ✅ USER RULING 2026-08-07 — *"deduplicate but never deduplicate the signed ledger"*
+
+The watcher records changes made by **anyone**, including the server itself, so it would
+double-record every settings edit `editSettings` already ledgers. The ruling splits the two layers:
+
+| layer | behaviour |
+|---|---|
+| **the signed ledger** | **RECORDS EVERYTHING. No suppression, ever.** Both entries land — the server's own `editSettings` emit AND the watcher's independent observation of the same write. |
+| **everything downstream** (alerts, drift lines, UI surfacing, notifications, reports) | **DEDUPLICATED**, so an operator is not shown the same change twice. |
+
+**THE ENFORCEABLE FORM — this is the part an implementer must not soften:** deduplication is a
+**READ-TIME function computed OVER the ledger**. It is **never** a write-time gate, and nothing in
+the dedupe path may be able to prevent, delay, or condition an `append`. Concretely: the watcher
+appends on every confirmed content change, full stop; a separate reader collapses adjacent entries
+for display.
+
+**WHY the asymmetry is not fussiness:**
+
+- **A ledger whose contents depend on a predicate is not an audit trail.** You cannot prove what
+  was *not* recorded. The chain would still verify perfectly — hash + signature are intact over
+  whatever was written — so the omission is undetectable by the very mechanism meant to detect
+  tampering. A verified chain over a filtered input set is *worse* than no chain, because it reads
+  as proof.
+- **The dedupe predicate would itself become the bypass.** "Suppress a watcher event whose hash
+  matches what our writer just produced" means anything that can make its write look like ours
+  becomes invisible — and a buggy writer that stamps the wrong hash disappears the same way.
+- **The failure directions are opposite, and only one is acceptable.** A bug in READ-time dedupe
+  produces a noisy display. A bug in WRITE-time dedupe produces a silent hole in the audit record.
+  This session removed three signals that asserted the opposite of the truth; a suppressed audit
+  entry is that same failure with no observer left to catch it.
+
+**Test to pin it:** append two entries with identical content-hashes from different actors, assert
+the LEDGER holds **2** and the surfaced view holds **1**. The neuter — moving the dedupe into the
+append path — must redden the ledger-count assertion, not the view assertion.
+
+**AUDITED 2026-08-07, and the ruling is currently SATISFIED — which is why it is worth writing
+down.** All **9** signed-ledger appends today are UNCONDITIONAL fire-and-forget, with no `if`, no
+dedupe, and no skip guarding any of them: `governance.ts:190` · `agent-registry.ts:298` ·
+`team-registry.ts:290` · `group-registry.ts:263` · `user-registry.ts:102` · `human-directory.ts:111`
+· `foreign-approval-registry.ts:127` · `portfolio-ledger.ts:61` · `ledger-emit.ts:72`.
+
+**This ruling is therefore a RATCHET, not a change request** — it binds every future append, not
+just the watcher's. A property that is already true is the one most easily lost, because removing
+it looks like an optimisation ("we're writing the same entry twice, let's skip one") and breaks
+nothing that any test currently asserts. **The scope is every signed ledger in the tree, not
+items 8/9.**
 
 ## ⏳ 10. Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI — NOT STARTED
 

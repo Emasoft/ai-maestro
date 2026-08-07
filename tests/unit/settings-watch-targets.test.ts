@@ -25,8 +25,16 @@ function makeWorkdir(abs: string, files: readonly string[]): string {
   return abs
 }
 
-/** A `~/.claude/projects/<slug>/` transcript dir. `cwd: null` writes lines carrying no cwd. */
-function makeProjectDir(slug: string, cwd: string | null, opts: { lines?: number; noJsonl?: boolean } = {}): string {
+/**
+ * A `~/.claude/projects/<slug>/` transcript dir. `cwd: null` writes lines carrying no cwd.
+ * `name` lets one slug hold SEVERAL transcripts — the real shape when a worktree session is filed
+ * under its parent project — and the call is idempotent on the directory itself.
+ */
+function makeProjectDir(
+  slug: string,
+  cwd: string | null,
+  opts: { lines?: number; noJsonl?: boolean; name?: string } = {},
+): string {
   const dir = path.join(HOME, '.claude', 'projects', slug)
   fs.mkdirSync(dir, { recursive: true })
   if (opts.noJsonl) return dir
@@ -34,7 +42,7 @@ function makeProjectDir(slug: string, cwd: string | null, opts: { lines?: number
   const rows: string[] = []
   for (let i = 0; i < pad; i++) rows.push(JSON.stringify({ type: 'noise', i }))
   if (cwd !== null) rows.push(JSON.stringify({ type: 'user', cwd }))
-  fs.writeFileSync(path.join(dir, 'session.jsonl'), rows.join('\n'))
+  fs.writeFileSync(path.join(dir, opts.name ?? 'session.jsonl'), rows.join('\n'))
   return dir
 }
 
@@ -83,6 +91,25 @@ describe('settings watch-target discovery', () => {
     const t = discoverSettingsTargets({ home: HOME })
     const hit = t.find(x => x.source === 'project-cwd')
     expect(hit?.file).toBe(path.join(wd, '.claude', 'settings.json'))
+  })
+
+  // NEUTER RUN (2026-08-07, OBSERVED): restoring `if (cwd) { found.add(cwd); break }` in
+  // decodeProjectCwds reds THIS test and only this one — the discovery half returns [root] and the
+  // worktree's settings file never becomes a target. That is the whole defect: with the break,
+  // which cwd survives is decided by FILENAME SORT ORDER. `b-` sorts after `a-`, so the worktree is
+  // the one silently dropped; naming it `a-` would have hidden the bug behind a passing test.
+  it('collects EVERY cwd in a project dir — a worktree session is filed under its parent project', () => {
+    const root = makeWorkdir(path.join(HOME, 'Code', 'repo'), ['settings.json'])
+    const wt = makeWorkdir(path.join(HOME, 'Code', 'repo', '.claude', 'worktrees', 'wt-1'), ['settings.json'])
+    makeProjectDir('-Users-x-Code-repo', root, { name: 'a-session.jsonl' })
+    makeProjectDir('-Users-x-Code-repo', wt, { name: 'b-session.jsonl' })
+
+    expect(decodeProjectCwds(path.join(HOME, '.claude', 'projects'))).toEqual([root, wt])
+
+    // The consequence that actually matters to the ledger: BOTH settings files are watched.
+    const files = discoverSettingsTargets({ home: HOME }).map(t => t.file)
+    expect(files).toContain(path.join(root, '.claude', 'settings.json'))
+    expect(files).toContain(path.join(wt, '.claude', 'settings.json'))
   })
 
   // The measurement that closed this card's open caveat: 49 of 97 project dirs have NO .jsonl at

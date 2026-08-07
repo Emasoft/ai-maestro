@@ -34,6 +34,39 @@
  * Final chain: 46 distinct cwds → 38 still on disk → 18 settings files, plus the agent workdirs and
  * the 2 global files ⇒ ~32 targets. The descriptor-exhaustion fear that shaped the original design
  * does not apply at this scale.
+ *
+ * ── ONE PROJECT DIR CAN SPAN SEVERAL cwds (measured 2026-08-07, after CC 2.1.224) ────────────
+ * A WORKTREE session's transcripts are filed under the PARENT project's directory, so a dir maps
+ * to a SET of cwds, not one. Measured: 1 of 97 dirs holds two — this repo's root and
+ * `.claude/worktrees/vibrant-cohen-0cbd79`. An earlier `break` after the first transcript that
+ * yielded a `cwd` therefore made coverage depend on FILENAME SORT ORDER, which is arbitrary; for a
+ * ledger required to record EVERY change, arbitrary coverage is the defect. Worktrees are getting
+ * MORE common, not less (CC 2.1.221 made `/fork` create one; this repo's own subagent-isolation
+ * rule mandates them), so this grows.
+ *
+ * Cost of reading every top-level transcript instead of one: 182 files, 53.9 MB capped at
+ * BYTE_BUDGET (10.4 MB if ever capped at 64 KiB — 97.8% of transcripts carry `cwd` that early,
+ * 91.8% within 4 KiB). Whoever sets the re-scan cadence should pick the budget against those
+ * tiers; 53.9 MB every few minutes is affordable once and wasteful every 30 s.
+ *
+ * ── WHY WE DELIBERATELY DO NOT DESCEND INTO `<session>/subagents/` ───────────────────────────
+ * Tempting, and measured to be worthless TODAY: those nested transcripts expose **40** further
+ * cwds that no top-level transcript mentions — every one a worktree — of which **3** still exist
+ * and **0** carry a settings file, at a cost of **11 565** extra file reads per re-scan.
+ *
+ * That zero is NOT structural, and the honest reason to skip it is cost, not impossibility: this
+ * repo TRACKS `.claude/settings.json`, so any live worktree of it does carry one. If worktree
+ * settings are ever wanted, enumerate them with `git worktree list --porcelain` from each known
+ * repo root — exact, one subprocess per repo instead of 11 565 reads, and it also finds a worktree
+ * that has no transcript yet. Do not reach for the subagent tree.
+ *
+ * ── AND NEVER DECODE THE SLUG (now measured, not merely argued) ──────────────────────────────
+ * 2 of 97 dir names do not equal `sanitize(cwd)`. One is not a mangling at all: the directory
+ * `-Users-...-Code-EMASOFT-INTEGRATOR-AGENT` holds a session whose `cwd` is
+ * `/Users/.../Code/EMASOFT-ASSISTANT-MANAGER` — a different project. A slug is a HINT, never an
+ * address. (CC 2.1.224 fixed the converse bug — >200-char paths resolving into another project's
+ * dir. Measured here: longest name is 132 chars, so that fix changes nothing for this corpus, and
+ * reading the transcript's own `cwd` is immune to that whole class by construction.)
  */
 
 import * as fs from 'node:fs'
@@ -145,9 +178,12 @@ export function decodeProjectCwds(projectsRoot: string, byteBudget = BYTE_BUDGET
     // No transcript ⇒ ABSENT, not undecodable. 49 of 97 dirs measured are exactly this, and
     // treating them as "unknown" is what inflated the corpus estimate.
     if (jsonl.length === 0) continue
+    // EVERY transcript, not the first that answers: a worktree session is filed under its PARENT
+    // project's dir, so one dir legitimately spans several cwds (measured: 1 of 97). Stopping at
+    // the first would silently pick whichever filename sorts first.
     for (const f of jsonl) {
       const cwd = cwdFromTranscript(path.join(dir, f), byteBudget)
-      if (cwd) { found.add(cwd); break }
+      if (cwd) found.add(cwd)
     }
   }
   return [...found].sort()

@@ -763,13 +763,29 @@ applies to it, which is now the strongest argument for settling that first.
         failures; the only 2 non-`updated` rows are benign `already-current` on the
         marketplace target. The old shape was 158 failing of 200. This is the `name@marketplace`
         argv fix (`7c104ba4`) holding under a fourth day of live traffic.
-      - **`claude plugin update` per fire — NOT 0, and correctly so.** The last fire ran **78**
-        per-plugin user-scope updates (`absorbed:<plugin>@<marketplace>`, detail
-        `Updated to latest (user, absorbed duty)`). AC7's recorded boundary is the reason:
-        the per-plugin loop is redundant *for auto-update-ON plugins*, "which is why the flip
-        had to land before AC6 can". The flip has not landed — `categories` still reads
-        `userScopePlugins: false`, `agentLocalScopePlugins: false` — so this half is BLOCKED
-        on that flip, not failing.
+      - **`claude plugin update` per fire — NOT 0.** The last fire ran **78** per-plugin
+        user-scope updates (`absorbed:<plugin>@<marketplace>`, detail
+        `Updated to latest (user, absorbed duty)`).
+        **⚠ MY FIRST READING OF THIS WAS WRONG, TWICE OVER — corrected 2026-08-07T09:05.** I wrote
+        that it was "BLOCKED on the flip, not failing", because `categories` reads
+        `userScopePlugins: false`. Both halves of that are false:
+        1. **"The flip" is not the `categories` toggles.** It is `793b866c`, the **autoUpdate
+           flip** — keeping every marketplace in `extraKnownMarketplaces` at `autoUpdate: true`
+           (this card's own line 51). I matched on the word, not the referent — the same
+           shared-noun error as the `userScopePlugins` retraction directly above.
+        2. **It has LANDED, and it TOOK.** Measured read-only against the real settings file:
+           **252 of 252** `extraKnownMarketplaces` entries carry `autoUpdate: true`, zero
+           exceptions. And this card already recorded the consequence at line 62: *"The flip
+           closed exactly that. **AC6 is now gated on EVIDENCE, not on ordering.**"*
+        **So AC6's first half is not blocked on anything — it is unstarted WORK.** By AC7's own
+        reasoning (the harness upgrades any auto-update-ON plugin whose newer version a refreshed
+        catalog reports, so the loop DUPLICATES rather than adds) the per-plugin loop is now
+        redundant and is the thing to delete.
+        **NOT done unattended, deliberately.** It is a deletion in a live lane that has already
+        rewritten the user's real `~/.claude/settings.json` once (see the warning at the top of
+        this card), and one assumption behind it is UNVERIFIED: `autoUpdate` is a per-MARKETPLACE
+        flag, and "252/252 marketplaces are on" does not by itself prove every installed PLUGIN
+        is covered by one of them. Verify that before deleting anything.
       - **Cadence — NOT cleanly sampled.** Bulk fires at 08-06 19:45:59, 22:49:16 and
         08-07 03:14:13 give gaps of **3.06 h** (clean ✓) and **4.42 h**. The 4.42 h gap spans
         the `pm2 restart` at 23:54:34, so it is not evidence against the 3 h constant; a clean

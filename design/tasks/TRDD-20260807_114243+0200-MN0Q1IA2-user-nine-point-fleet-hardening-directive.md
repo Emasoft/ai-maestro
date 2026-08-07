@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T13:17:14+0200
+updated: 2026-08-07T13:23:00+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -342,6 +342,44 @@ Partial wiring already exists: `lib/agentlens-status.ts`, `lib/token-cost.ts`,
 **#94** are the standing cross-repo context.
 **Why the USER asked:** `agentlenspro statusline-history windows` is the un-quantized 5 h/7 d
 reading that diagnosed the rotation failure when the server's own numbers did not.
+
+### 📐 MEASURED 2026-08-07 — the request SPLITS, and one half would be a REGRESSION
+
+**The rotator's own design already adjudicates this** (`tick.ts:325-345`, TRDD-GY0LJV6S), and it
+was written for exactly this question about the STATUSLINE:
+
+> *"the one `usageRequest` below supplies **FOUR** things and the statusline can carry **two**. The
+> model-scoped weekly windows (`worstScopedPercent` — Fable 5 has a weekly limit appearing in
+> **NEITHER** top-level bucket, TRDD-JI7F1236) and `liveStatus` (the 429 debounce, the 401/403
+> token-REJECTED branch, `networkUp`) are **ENDPOINT-ONLY**."*
+
+**Agentlenspro is in the statusline's class, measured, not assumed.**
+`AgentlensStatusMetadata` exposes exactly `window5hPct`, `window7dPct`, the subscription plan
+string, and the prompt-cache TTL. **No scoped window. No `liveStatus`.**
+
+So the two halves get OPPOSITE answers:
+
+| half of the USER's ask | verdict |
+|---|---|
+| **usage/costs, accounts, SUBSCRIPTIONS** (reporting) | ✅ **agentlenspro is the right source** — it carries the PLAN string, which the endpoint does not expose at all. This is the half with real value, and it has no rotation blast radius. |
+| **the rotator's ROTATION DECISION** | ❌ **would be a REGRESSION.** Losing `worstScopedPercent` breaks the model-fallback lane outright — that window IS today's incident (Fable 100 % while the account sits at 34 %). Losing `liveStatus` removes how `refresh-dead` is known, i.e. the 2-dead-credential verdict. |
+
+**The safe shape already exists and must be copied, not invented:** `statuslineNear` is a **pure
+disjunct** under the standing rule *"IT MAY ONLY EVER ADD A REASON, NEVER REMOVE ONE"* — `false`
+means "no signal", never "the account is fine". Agentlenspro should enter the rotator the same way,
+if at all, and MUST call `isNearLimit` rather than compare thresholds itself (*"One predicate, never
+two. A second copy of the threshold logic is precisely how a limit gets raised in one place and not
+the other."*).
+
+⚠ **Security note for the reporting half:** `agentlens-status.ts` routes plan detection through a
+`parseSubscriptionType` **choke-point that extracts only the plan string and DROPS THE TOKEN** —
+the CLI's output carries a credential. Any new consumer goes through that choke-point; none may
+read the raw payload.
+
+**⇒ Item 10 is NOT "re-point the rotator". It is "add agentlenspro as the reporting source for
+accounts/subscriptions/costs, and (optionally) as one more pure disjunct".** Recorded before
+building because the naive reading of the directive would have broken the exact lane items 3 and 4
+spent this session fixing.
 
 **GAP MEASURED 2026-08-07 — this is half-built, and the missing half is the important one.**
 - **BUILT and wired:** `lib/agentlens-status.ts` already parses `get_account_status --full` for

@@ -106,6 +106,22 @@ export type LedgerOp =
    *   the chain shows both directions and no mutation of this file escapes the ledger.
    */
   | 'remove_plugin_records' | 'restore_plugin_records'
+  // ── Settings-file watcher (TRDD-MN0Q1IA2 items 8+9) ──────────
+  /**
+   * A `settings.json` / `settings.local.json` changed on disk — global, an agent workdir, or a
+   * workspace decoded from a transcript. Emitted by `lib/settings-watcher.ts` with
+   * `authActor: 'system'`, since no user or agent request initiated it: the watcher OBSERVES a
+   * write that already happened, whoever made it. That is the point — a change nobody recorded
+   * is exactly the one worth having in the chain.
+   *
+   * The diff carries FINGERPRINTS ONLY (`{sha256, size}` before/after) on a path like
+   * `/settings/<absolute file path>` — never file contents. A settings file legitimately holds an
+   * `env` block and tokens, and this ledger is signed and long-lived, so recording the values
+   * would republish the secrets it is meant to protect. A digest proves the change and detects
+   * tampering while revealing nothing; widening it to carry values is a separate decision with a
+   * separate threat model.
+   */
+  | 'change_settings_file'
 
 /**
  * LedgerActor — who initiated the operation.

@@ -124,6 +124,17 @@ const ABSORBED_DUTY_INTERVAL_MS = 4 * 60 * 60 * 1000 // USER directive 2026-08-0
 // point is that a host restarted more often than the interval still runs.
 const ABSORBED_DUTY_BOOT_SETTLE_MS = 2 * 60 * 1000
 
+// How often the repeating timer CHECKS due-ness — distinct from
+// ABSORBED_DUTY_INTERVAL_MS, which is the CADENCE (how often work actually runs,
+// anchored on the persisted lastAbsorbedRunAt stamp). They were one value until
+// 2026-08-08 (task #34): with tick == cadence, setInterval anchored the tick grid on
+// BOOT, so a restart re-phased the lane and a chore due at stamp+interval waited up
+// to a FULL interval — measured live: due 22:43, ran 01:03:50 (boot 21:03:50 + 4h).
+// Polling gated on the stamp caps that latency at the poll period while running the
+// WORK no more often than the cadence — the do-not-raise warning above is about work
+// frequency, and a poll does no work: it reads one local JSON file and returns.
+const ABSORBED_DUTY_POLL_MS = 15 * 60 * 1000
+
 /** Restart-queue notifier — wired by start(). The server.mjs entry point
  *  passes a callback that broadcasts a restart-needed signal to the UI's
  *  useRestartQueue hook, which then drives the actual /restart endpoint
@@ -230,13 +241,33 @@ export async function runTickNow(): Promise<{ ran: boolean; entries: AutoUpdateR
 export function startAbsorbedDutyScheduler(notifier?: FleetRestartNotifier): void {
   if (notifier) fleetRestartNotifier = notifier
   if (absorbedTimerHandle) return
+  // The timer fires at the POLL period and each fire gates on the persisted stamp
+  // (runAbsorbedDutyPoll), so the tick grid is anchored on lastAbsorbedRunAt — never
+  // on boot time. See ABSORBED_DUTY_POLL_MS for the restart-re-phasing defect this ends.
   absorbedTimerHandle = setInterval(() => {
-    runAbsorbedDutyTickSafely().catch(err => {
-      console.error('[auto-update] Absorbed-duty tick threw:', err)
+    runAbsorbedDutyPoll().catch(err => {
+      console.error('[auto-update] Absorbed-duty poll threw:', err)
     })
-  }, ABSORBED_DUTY_INTERVAL_MS)
+  }, ABSORBED_DUTY_POLL_MS)
   if (typeof absorbedTimerHandle.unref === 'function') absorbedTimerHandle.unref()
   scheduleAbsorbedDutyCatchUp()
+}
+
+/** One fire of the repeating timer: read the stamp, run the tick iff the lane is
+ *  overdue. Extracted as a seam (the same deps pattern as runAbsorbedDutyTick) because
+ *  the timer-level happy path is NOT machine-independently testable — the real tick
+ *  gates on `isJanitorInstalledAndArmed()`, a disk read of the host's janitor state.
+ *  Returns whether the tick was run, so tests assert the DECISION, not a log line. */
+export async function runAbsorbedDutyPoll(deps: {
+  loadSettingsFn?: typeof loadSettings
+  nowMs?: number
+  tick?: () => Promise<unknown>
+} = {}): Promise<boolean> {
+  const load = deps.loadSettingsFn ?? loadSettings
+  const s = await load()
+  if (!absorbedDutyIsOverdue(s.lastAbsorbedRunAt, deps.nowMs ?? Date.now())) return false
+  await (deps.tick ?? runAbsorbedDutyTickSafely)()
+  return true
 }
 
 /** A bare `setInterval` fires first at boot+INTERVAL, so a host restarted more often

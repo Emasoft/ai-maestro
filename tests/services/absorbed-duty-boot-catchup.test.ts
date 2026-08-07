@@ -11,8 +11,13 @@
  *   - the DECISION is `absorbedDutyIsOverdue`, pure, pinned exhaustively below;
  *   - the WIRING (a catch-up is armed, it consults the persisted stamp, and `stop()`
  *     clears it) is pinned with fake timers;
+ *   - the REPEATING timer is a fast POLL gated on the same stamp (task #34: a
+ *     boot-anchored tick==cadence grid let a restart delay a due chore by up to a full
+ *     interval — measured 2h21m live). `runAbsorbedDutyPoll` is the seam: its decision
+ *     is pinned with injected deps, and the fake-timer test below pins that the timer
+ *     fires at the POLL period, not the cadence;
  *   - the overdue→actually-refresh path is `runAbsorbedDutyTickSafely`, which is the
- *     same function the interval already calls and which
+ *     same function the poll calls and which
  *     `auto-update-absorbed-duty.test.ts` covers. It is deliberately NOT re-driven here,
  *     because reaching it needs the real `isJanitorInstalledAndArmed()` disk read.
  *
@@ -41,6 +46,7 @@ vi.mock('@/lib/auto-update-settings', async importOriginal => {
 
 import {
   absorbedDutyIsOverdue,
+  runAbsorbedDutyPoll,
   startAbsorbedDutyScheduler,
   stopAbsorbedDutyScheduler,
 } from '@/services/auto-update-service'
@@ -135,5 +141,60 @@ describe('boot catch-up wiring', () => {
     // The scheduler survives its own catch-up failing — the interval is what must not die.
     const { isAbsorbedDutySchedulerRunning } = await import('@/services/auto-update-service')
     expect(isAbsorbedDutySchedulerRunning()).toBe(true)
+  })
+})
+
+// Task #34 — the repeating timer is a POLL gated on the persisted stamp, so the tick grid
+// anchors on lastAbsorbedRunAt, never on boot time. Measured live before the fix: chore due
+// 22:43 (stamp 18:43 + 4h), ran 01:03:50 = boot 21:03:50 + 4h — a 2h21m delay purely from
+// the restart re-phasing a boot-anchored grid.
+describe('interval poll (#34 phase-skew fix)', () => {
+  const POLL = 15 * 60 * 1000
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    loadSettingsMock.mockReset()
+    refreshAllMarketplaces.mockClear()
+  })
+
+  afterEach(() => {
+    stopAbsorbedDutyScheduler()
+    vi.useRealTimers()
+  })
+
+  it('poll decision: a FRESH stamp skips the tick (work never runs faster than the cadence)', async () => {
+    const tick = vi.fn(async () => {})
+    const ran = await runAbsorbedDutyPoll({
+      loadSettingsFn: async () => ({ ...DEFAULT_SETTINGS, lastAbsorbedRunAt: new Date(NOW - 60_000).toISOString() }),
+      nowMs: NOW,
+      tick,
+    })
+    expect(ran).toBe(false)
+    expect(tick).not.toHaveBeenCalled()
+  })
+
+  it('poll decision: an OVERDUE stamp runs the tick', async () => {
+    const tick = vi.fn(async () => {})
+    const ran = await runAbsorbedDutyPoll({
+      loadSettingsFn: async () => ({ ...DEFAULT_SETTINGS, lastAbsorbedRunAt: new Date(NOW - FOUR_HOURS).toISOString() }),
+      nowMs: NOW,
+      tick,
+    })
+    expect(ran).toBe(true)
+    expect(tick).toHaveBeenCalledTimes(1)
+  })
+
+  it('the repeating timer fires at the POLL period, not at the cadence — the #34 neuter target', async () => {
+    // Reverting setInterval to ABSORBED_DUTY_INTERVAL_MS makes this red: at poll+1s the
+    // old grid has not fired yet (its first fire is boot+4h).
+    loadSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, lastAbsorbedRunAt: new Date().toISOString() })
+    startAbsorbedDutyScheduler()
+
+    await vi.advanceTimersByTimeAsync(SETTLE + 1000) // let the boot catch-up consume its read
+    loadSettingsMock.mockClear()
+
+    await vi.advanceTimersByTimeAsync(POLL + 1000)
+    expect(loadSettingsMock).toHaveBeenCalled() // the poll consulted the stamp
+    expect(refreshAllMarketplaces).not.toHaveBeenCalled() // fresh stamp: no work — poll ≠ cadence
   })
 })

@@ -40,6 +40,7 @@ vi.mock('@/lib/marketplace-lock', () => ({
 }))
 
 import {
+  absorbedDutyIsOverdue,
   runAbsorbedDutyTick,
   runAbsorbedDutyTickNow,
   startAbsorbedDutyScheduler,
@@ -339,42 +340,47 @@ describe('startAbsorbedDutyScheduler / stopAbsorbedDutyScheduler — the always-
   })
 })
 
-describe('the absorbed lane cadence — 4 hours (USER directive 2026-08-07, supersedes the 3 h of 2026-08-05)', () => {
-  // Pinned against the REGISTERED INTERVAL, deliberately, per the card: a wall-clock test
-  // would take 3 h to run and would still only prove ONE interval. Spying on setInterval
-  // reads the constant the scheduler actually arms itself with, which is the claim.
-  //
+describe('the absorbed lane cadence — 4 hours (USER directive 2026-08-07), carried by the stamp gate since #34', () => {
   // WHY THIS MATTERS ENOUGH TO PIN: the lane's traffic is git-protocol, which counts against
   // NO GitHub API quota — so `gh api rate_limit` reads clean while the lane saturates, and a
-  // regression here is invisible to every meter an operator would think to check. The test is
-  // the only instrument that sees it.
+  // regression here is invisible to every meter an operator would think to check. These tests
+  // are the only instrument that sees it.
   //
-  // NEUTER RUN (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
-  //   s/3 \* 60 \* 60 \* 1000/60 * 60 * 1000/ if $. == 111
-  //   → 1 red / 13 green:
-  //       arms its timer at exactly 3 hours, never the 1 hour it used to use
-  // The `not.toHaveBeenCalledWith(1 h)` line is the half that names that specific regression;
-  // the exact-equality line above it is what rejects any OTHER wrong value, since a bare
-  // not-1h would pass at 2 h or 24 h. (That neuter was run against the 3 h constant; the
-  // mutation and its verdict are unchanged in KIND by the 4 h move — the guard is the
-  // exact-equality line, and it is what reddened here when the constant moved.)
+  // 2026-08-08 (task #34): the CARRIER of the cadence changed, deliberately. The timer period
+  // used to BE the cadence, and setInterval anchored its grid on BOOT — so a restart re-phased
+  // the lane and a chore due at stamp+interval waited up to a full interval (measured live:
+  // due 22:43, ran 01:03:50 = boot 21:03:50 + 4 h). The timer is now a 15-minute POLL whose
+  // every fire gates on `absorbedDutyIsOverdue(lastAbsorbedRunAt)` — so the WORK cadence
+  // (the thing the connection warning is about) is enforced by the gate + the persisted
+  // stamp, and the poll itself does no network work (one local settings read).
   //
-  // 2026-08-07 — 3 h → 4 h by USER directive. The change is in the direction the constant's own
-  // warning endorses (the refresh is idempotent, so a LONGER interval costs only publishing
-  // latency and buys back a quarter of the connections). This test REDDENED on the change, which
-  // is the point of pinning it: the cadence cannot move without a deliberate edit here.
-  it('arms its timer at exactly 4 hours, never the 1 hour it used to use', () => {
+  // The two halves pinned separately, at their carriers:
+  //   1. the timer is armed at the POLL period — and NOT at 1 h / 3 h / 4 h, so the poll can
+  //      never silently drift back into being a work grid;
+  //   2. the work cadence boundary is exactly 4 h, read through the same gate the poll calls.
+  // (The historical setInterval-equals-4h assertion reddened on the #34 change — exactly as
+  // its comment promised — and was rewritten HERE, deliberately, into this pair.)
+  it('arms its timer at the 15-minute POLL period — never at a work-cadence value', () => {
     const spy = vi.spyOn(global, 'setInterval')
     try {
       expect(isAbsorbedDutySchedulerRunning()).toBe(false)
       startAbsorbedDutyScheduler()
       expect(isAbsorbedDutySchedulerRunning()).toBe(true) // non-vacuity: it really armed
-      expect(spy).toHaveBeenCalledWith(expect.any(Function), 4 * 60 * 60 * 1000)
+      expect(spy).toHaveBeenCalledWith(expect.any(Function), 15 * 60 * 1000)
       expect(spy).not.toHaveBeenCalledWith(expect.any(Function), 60 * 60 * 1000)
       expect(spy).not.toHaveBeenCalledWith(expect.any(Function), 3 * 60 * 60 * 1000)
+      expect(spy).not.toHaveBeenCalledWith(expect.any(Function), 4 * 60 * 60 * 1000)
     } finally {
       stopAbsorbedDutyScheduler()
       spy.mockRestore()
     }
+  })
+
+  it('the WORK cadence boundary is exactly 4 hours, enforced by the gate the poll fires through', () => {
+    const now = Date.parse('2026-08-08T12:00:00+0200')
+    const fourH = 4 * 60 * 60 * 1000
+    // Straddle the boundary so the pair discriminates: exactly-at → due; one minute short → not.
+    expect(absorbedDutyIsOverdue(new Date(now - fourH).toISOString(), now)).toBe(true)
+    expect(absorbedDutyIsOverdue(new Date(now - fourH + 60_000).toISOString(), now)).toBe(false)
   })
 })

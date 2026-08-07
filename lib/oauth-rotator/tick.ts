@@ -203,6 +203,19 @@ export function deriveDecision(f: {
     // WAIT (or rotate, if anything healthy exists), while a model-only exhaustion means SWITCH THE
     // MODEL and keep working on the same account. Same family as the `tick-stalled` false alarm
     // (TRDD-IGCSDTIU): the failure mode of an alert is not silence, it is confident wrongness.
+    // NEUTER PAIR (2026-08-07 — OBSERVED via scripts/dev/neuter, restore verified by blob hash).
+    // Complementary, and the red sets are DISJOINT, which is what proves the two halves are pinned
+    // independently rather than together:
+    //   s/if \(accountWindowsOk && modelSpent\) \{/if (false) {/
+    //     → 1 red / 26 green:  the lie returns
+    //         all-maxed with a HEALTHY account says the MODEL is spent, and names the real remedy
+    //   s/if \(accountWindowsOk && modelSpent\) \{/if (true) {/
+    //     → 3 red / 24 green:  the MIRROR defect — a real exhaustion told to switch models
+    //         all-maxed with a GENUINELY maxed account still says exhausted — the complement
+    //         all-maxed with NO windows keeps the original wording — never invents a number
+    //         THE REGRESSION: all-maxed does NOT say "no action needed"
+    // That last red is a PRE-EXISTING test, and it is the useful signal: the original path was
+    // already covered, so this branch demonstrably preserves it rather than merely claiming to.
     const w = f.windows
     const accountWindowsOk =
       typeof w?.fiveHourPct === 'number' && typeof w?.sevenDayPct === 'number' &&

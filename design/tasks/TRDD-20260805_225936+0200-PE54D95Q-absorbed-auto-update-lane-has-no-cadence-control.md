@@ -781,11 +781,33 @@ applies to it, which is now the strongest argument for settling that first.
         reasoning (the harness upgrades any auto-update-ON plugin whose newer version a refreshed
         catalog reports, so the loop DUPLICATES rather than adds) the per-plugin loop is now
         redundant and is the thing to delete.
-        **NOT done unattended, deliberately.** It is a deletion in a live lane that has already
-        rewritten the user's real `~/.claude/settings.json` once (see the warning at the top of
-        this card), and one assumption behind it is UNVERIFIED: `autoUpdate` is a per-MARKETPLACE
-        flag, and "252/252 marketplaces are on" does not by itself prove every installed PLUGIN
-        is covered by one of them. Verify that before deleting anything.
+        **⛔ AND THE PRECONDITION FAILS — MEASURED 2026-08-07T09:20. DO NOT DELETE THE LOOP.**
+        `autoUpdate` is a per-MARKETPLACE flag, so "252/252 marketplaces on" never implied every
+        installed PLUGIN is covered. Checked read-only against the real settings file:
+        `enabledPlugins` has **77** entries (**35** enabled) across **28** distinct marketplaces,
+        and **19 ENABLED plugins reference a marketplace that is NOT in `extraKnownMarketplaces`**:
+
+        | marketplace | enabled plugins | reading |
+        |---|---|---|
+        | `claude-plugins-official` | 14 | absent from the map — almost certainly the BUILT-IN one ("extra" = the others) |
+        | `skills-marketplace` | 3 | third-party, genuinely absent |
+        | `claude-dev-skills` | 1 | third-party, genuinely absent |
+        | `geoffjay-claude-plugins` | 1 | third-party, genuinely absent |
+
+        `extraKnownMarketplaces` is the ONLY marketplace-holding key in the file, so there is no
+        second map that might cover them. **Deleting the per-plugin loop today would silently stop
+        updating at least 5, and plausibly 19, ENABLED plugins** — among them `code-review`,
+        `code-simplifier`, `claude-code-setup` and four LSPs.
+        **This is the ORIGINAL SEQUENCING HAZARD, not a new one.** The superseded note above records
+        it as *"0 of 275 marketplaces had `autoUpdate` on, so deleting the per-plugin loops would
+        strand everything"*, and says the flip closed it. The flip closed it **for the 252 it
+        touched**; it could not close it for marketplaces that are not in that map at all. So the
+        hazard was narrowed, never eliminated, and the card's "AC6 is now gated on EVIDENCE" is
+        exactly right — this IS the evidence, and it says no.
+        **AC6's first half therefore needs a DIFFERENT change than "delete the loop":** either
+        bring the uncovered marketplaces into the covered set first, or keep a loop scoped to the
+        uncovered remainder. Settle the `claude-plugins-official` built-in question first — it
+        decides whether the residue is 5 plugins or 19.
       - **Cadence — NOT cleanly sampled.** Bulk fires at 08-06 19:45:59, 22:49:16 and
         08-07 03:14:13 give gaps of **3.06 h** (clean ✓) and **4.42 h**. The 4.42 h gap spans
         the `pm2 restart` at 23:54:34, so it is not evidence against the 3 h constant; a clean

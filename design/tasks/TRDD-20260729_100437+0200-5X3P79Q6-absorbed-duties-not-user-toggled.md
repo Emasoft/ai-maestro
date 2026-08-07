@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:04:37+0200
-updated: 2026-08-06T22:09:47+0200
+updated: 2026-08-07T04:11:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -152,10 +152,38 @@ direction — turning on an unattended fleet-wide plugin sweep nobody asked for.
 > not — the consent check is real and doubly pinned. Verified, not assumed.
 
 - [ ] `#99` read; each absorbed update chore classified duty-vs-added, with the pre-absorption gate quoted
-      — **STILL OPEN as written.** The classification is now EXPRESSED IN CODE (the lane owns
-      exactly the trio: `marketplace-refresh`, `version-update`, `user-plugins-update`), but `#99`
-      was never read and the pre-absorption gates were never quoted, so the *record* the box asks
-      for does not exist. A code shape is not a citation.
+      — **STILL OPEN, but the BLOCKER IS GONE and the remaining ask is much smaller (2026-08-07).**
+      The classification is EXPRESSED IN CODE (the lane owns exactly the trio:
+      `marketplace-refresh`, `version-update`, `user-plugins-update`), but `#99` was never read and
+      the pre-absorption gates were never quoted, so the *record* the box asks for does not exist.
+      A code shape is not a citation.
+>
+> **THE CITATION IS `#100`, NOT `#99` — and the janitor's own source says so, so this never needed
+> them to answer.** `dispatch.py:424` (janitor 2.4.1): *"which the ai-maestro SERVER owns for
+> harness agents (**janitor#100** Family-A/B split; `#J` writes only `.janitor/state/`)"*. I had
+> recorded this as blocked pending the janitor telling us where the spec lives; it was one grep of
+> their tree. **A citation being wrong is not the same as the thing being unfindable** — I stopped
+> at "the pointer is broken" instead of looking for the target.
+>
+> **THE PRE-ABSORPTION GATE IS NOW QUOTABLE, in two places, both verbatim:**
+>
+> 1. **Static — who may never run inside a harness agent.** `dispatch.py:428-443` defines
+>    `_NON_HARNESS_DETECTORS`, a 13-entry frozenset containing all three of our trio. Its stated
+>    reason (`:420-427`) is the duty test the box is really asking for: each entry *"either mutates
+>    MACHINE-GLOBAL state (the shared plugin cache / marketplace via `claude plugin ...`, the
+>    global-state request files) or reads/surfaces the machine's OAuth/keychain posture — which the
+>    ai-maestro SERVER owns for harness agents … Everything NOT listed here is workdir-scoped and
+>    keeps running inside."*
+> 2. **Runtime — who yields while we are up.** `daemon.py:2323-2331`: *"while an ACTIVE ai-maestro
+>    server RUNS, yield the absorbed chores — running them here too would be 'doing the same chores
+>    twice'. BINARY since TRDD-LU0C5KAR (owner directive 2026-07-17): a running server owns them
+>    ALL; its exit (the probe file goes stale within 90 s) hands them ALL back."*
+>
+> **What remains, and it is genuinely all that remains:** read `#100`'s Family-A/B framework and
+> classify each of the trio duty-vs-added against it. The gates are quoted; the framework is not
+> yet read, so I am NOT ticking this. Note also, unresolved and worth a look while there: the
+> non-harness set has **13** members and our lane owns **3** — "non-harness" and "absorbed" are
+> different predicates, and I have not checked whether the other 10 are meant to be ours.
 >
 > **AND THE CITATION IS WRONG — measured 2026-08-06, so this box cannot be done as written.**
 > `Emasoft/ai-maestro-janitor#99` is not "the janitor's complete 11-chore spec": it is

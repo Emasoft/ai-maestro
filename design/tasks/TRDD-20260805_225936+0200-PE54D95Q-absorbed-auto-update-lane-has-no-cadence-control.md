@@ -794,10 +794,32 @@ applies to it, which is now the strongest argument for settling that first.
         | `claude-dev-skills` | 1 | third-party, genuinely absent |
         | `geoffjay-claude-plugins` | 1 | third-party, genuinely absent |
 
-        `extraKnownMarketplaces` is the ONLY marketplace-holding key in the file, so there is no
-        second map that might cover them. **Deleting the per-plugin loop today would silently stop
-        updating at least 5, and plausibly 19, ENABLED plugins** — among them `code-review`,
+        **⚠ CORRECTION, same session (09:30): I checked the WRONG MAP, and said so too strongly.**
+        I wrote *"`extraKnownMarketplaces` is the ONLY marketplace-holding key … there is no second
+        map"*. True of `settings.json`; **false of the system.** The authoritative registry is
+        **`~/.claude/plugins/known_marketplaces.json`** — a separate file, **270** entries against
+        settings' 252, carrying its own `autoUpdate` per entry. (Its neighbours
+        `installed_plugins.json` / `plugin-catalog-cache.json` are further state I did not audit.)
+        Re-measured against it, all four ARE known — the defect is not absence, it is the FLAG:
+
+        | marketplace | `autoUpdate` in `known_marketplaces.json` | enabled plugins |
+        |---|---|---|
+        | `skills-marketplace` | **`false`** | 3 |
+        | `claude-dev-skills` | **`false`** | 1 |
+        | `geoffjay-claude-plugins` | **`false`** | 1 |
+        | `claude-plugins-official` | **key ABSENT** | 14 |
+
+        Registry-wide: **250 `true`, 12 explicitly `false`, 8 with no key.** So the flip set 250 on
+        and **20 marketplaces are not auto-updating**, four of which carry enabled plugins.
+        **The conclusion is UNCHANGED and now rests on the right evidence: deleting the per-plugin
+        loop would silently stop updating at least 5 enabled plugins (the three explicit-`false`
+        marketplaces), and 19 if an ABSENT key also means off** — among them `code-review`,
         `code-simplifier`, `claude-code-setup` and four LSPs.
+        **This also answers the 5-vs-19 question I had left open**, and not the way I framed it:
+        `claude-plugins-official` is NOT a special built-in — it is an ordinary registered
+        marketplace (present in the cache, present in the registry) whose `autoUpdate` key is
+        simply missing. So the residue is 19 unless absent-key defaults to ON, which is the one
+        thing still worth confirming in the harness rather than guessed at here.
         **This is the ORIGINAL SEQUENCING HAZARD, not a new one.** The superseded note above records
         it as *"0 of 275 marketplaces had `autoUpdate` on, so deleting the per-plugin loops would
         strand everything"*, and says the flip closed it. The flip closed it **for the 252 it

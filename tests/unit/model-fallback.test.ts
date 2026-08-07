@@ -209,6 +209,24 @@ describe('stuckSuggestsModelFallback', () => {
 })
 
 /*
+ * NEUTER RUNS (2026-08-07 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *
+ * A COMPLEMENTARY PAIR with DISJOINT red sets — one mutation certifies only half a conditional,
+ * so the predicate is neutered in BOTH directions: too narrow, then too wide. B is the more
+ * valuable of the two because it IMPLEMENTS THE RIVAL rather than deleting a guard, which is what
+ * proves these tests DISCRIMINATE the allowlist from `!== 'ok'` instead of merely proving that
+ * something there is load-bearing.
+ *
+ *   A (too NARROW — the shipped-and-broken form this commit replaced):
+ *   s/FALLBACK_SUGGESTING_ACTIONS\.has\(nextAction\)/nextAction === 'stuck'/
+ *   → 1 red / 20 green:
+ *       fires on reauth-needed too — the rotator reports the reauth problem while the exhaustion sits in `stuck`
+ *
+ *   B (too WIDE — the rejected permissive alternative):
+ *   s/FALLBACK_SUGGESTING_ACTIONS\.has\(nextAction\)/nextAction !== 'ok'/
+ *   → 1 red / 20 green:
+ *       does NOT fire while a rotation is in flight, which `!== ok` would have allowed
+ *
  * NEUTER RUNS (2026-08-06 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
  *
  *   s/confirmAfterMs: CONFIRM_DELAY_MS/confirmAfterMs: 0/

@@ -14,7 +14,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import {
-  fingerprintOf, classifyChange, changeToPatch, armSettingsWatchers,
+  fingerprintOf, classifyChange, changeToPatch, armSettingsWatchers, recordChange,
   SETTINGS_LEDGER_OP, DEFAULT_RESCAN_MS, type SettingsChange, type FileFingerprint,
 } from '@/lib/settings-watcher'
 
@@ -133,6 +133,42 @@ describe('settings watcher — pure core', () => {
     // verify() does NOT enum-check `op`, so a bare string would still verify — and be invisible to
     // the audit tools that group by op, which is the only reason the taxonomy is curated.
     expect(SETTINGS_LEDGER_OP).toBe('change_settings_file')
+  })
+})
+
+describe('settings watcher — ledger seam', () => {
+  function fakeLedger() {
+    const calls: { op: string; path: string; diff: unknown; opts: unknown }[] = []
+    const ledger = {
+      async append(op: string, p: string, diff: unknown, opts?: unknown) {
+        calls.push({ op, path: p, diff, opts }); return {}
+      },
+    }
+    return { ledger: ledger as unknown as Parameters<typeof recordChange>[0], calls }
+  }
+
+  it('appends the declared op, the file path, and the fingerprint patch as actor=system', async () => {
+    const f = writeGlobal('{"v":2}')
+    const after = fingerprintOf(f)!
+    const change = classifyChange(f, { sha256: 'a'.repeat(64), size: 1 }, after)!
+    const { ledger, calls } = fakeLedger()
+    await recordChange(ledger, change)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].op).toBe('change_settings_file')
+    expect(calls[0].path).toBe(f)
+    // 'system' is the honest actor — the watcher observed a write it did not initiate. And there
+    // must be NO authAgentId: inventing one attributes the write to an agent nobody observed.
+    expect(calls[0].opts).toEqual({ authActor: 'system' })
+  })
+
+  it('carries no file content into the ledger call', async () => {
+    const secret = '{"env":{"TOKEN":"tok-LEAKME-1234"}}'
+    const f = writeGlobal(secret)
+    const change = classifyChange(f, null, fingerprintOf(f)!)!
+    const { ledger, calls } = fakeLedger()
+    await recordChange(ledger, change)
+    expect(JSON.stringify(calls[0])).not.toContain('LEAKME')
+    expect(JSON.stringify(calls[0])).not.toContain('TOKEN')
   })
 })
 

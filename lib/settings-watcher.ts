@@ -122,6 +122,29 @@ export function changeToPatch(change: SettingsChange): JsonPatch {
   return [{ op: 'replace', path, value: { before: change.before, after: change.after } }]
 }
 
+/**
+ * The minimum of `SignedLedger` this module needs.
+ *
+ * Structural rather than importing the class, for two reasons: the watcher stays dependency-light
+ * and importable without constructing a ledger (it ships dark), and a test can drive the seam with
+ * a plain object instead of a real signing key and an on-disk chain.
+ */
+export interface LedgerAppender {
+  append(op: LedgerOp, path: string, diff: JsonPatch, opts?: { authActor?: 'user' | 'agent' | 'system' }): Promise<unknown>
+}
+
+/**
+ * Record one change to the signed ledger.
+ *
+ * `authActor: 'system'` is the honest actor: no user or agent request initiated this. The watcher
+ * OBSERVES a write that already happened, whoever made it — which is the point, since a change
+ * nobody recorded is exactly the one worth having in the chain. Deliberately no `authAgentId`:
+ * inventing one would attribute the write to an agent we did not observe making it.
+ */
+export async function recordChange(ledger: LedgerAppender, change: SettingsChange): Promise<void> {
+  await ledger.append(SETTINGS_LEDGER_OP, change.file, changeToPatch(change), { authActor: 'system' })
+}
+
 export interface WatcherHandle {
   /** Feed a raw event in. Real `fs.watch` calls this; tests call it directly. */
   onRawEvent(dir: string, basename: string | null): void

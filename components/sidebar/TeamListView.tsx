@@ -204,7 +204,7 @@ export default function TeamListView({ agents, searchQuery, onTeamsChanged }: Te
     name: string,
     description: string,
     agentIds: string[],
-    githubProject: { owner: string; repo: string; number: number } | null | undefined,
+    githubProject: { owner: string; repo?: string; number: number } | null | undefined,
     teamId?: string,
   ): Promise<string | null> => {
     try {
@@ -407,11 +407,12 @@ export default function TeamListView({ agents, searchQuery, onTeamsChanged }: Te
 //   - https://github.com/users/<owner>/projects/<n>     (user-scoped)
 //   - https://github.com/<owner>/<repo>/projects/<n>    (repo-scoped, legacy)
 // For org/user URLs the gh CLI doesn't have a repo concept, but downstream
-// `lib/github-project.ts` requires a `repo` (it's used as `-R owner/repo`
-// in `createTask`); we mirror the wizard's fallback (`repo = owner`) for
-// those cases. Returns null on a URL that doesn't match — the UI then
-// shows an inline "invalid format" message and prevents submission.
-type ParsedGitHubProject = { owner: string; repo: string; number: number }
+// An org/user-scoped URL has no repo, and `repo` stays ABSENT (ai-maestro#133):
+// the kanban is then browse-only. The old fallback (`repo = owner`) fabricated a
+// repo that task CRUD would file issues into — a repo that may not even exist.
+// Returns null on a URL that doesn't match — the UI then shows an inline
+// "invalid format" message and prevents submission.
+type ParsedGitHubProject = { owner: string; repo?: string; number: number }
 function parseGitHubProjectUrl(url: string): ParsedGitHubProject | null {
   const trimmed = url.trim()
   if (!trimmed) return null
@@ -420,14 +421,14 @@ function parseGitHubProjectUrl(url: string): ParsedGitHubProject | null {
   const m = /^https?:\/\/github\.com\/(?:(?:orgs|users)\/)?([^/]+)(?:\/([^/]+))?\/projects\/(\d+)\/?$/i.exec(trimmed)
   if (!m) return null
   const owner = m[1]
-  const repo = m[2] || m[1]  // org/user-scoped projects don't have a repo — fall back to owner.
+  const repo = m[2] || undefined
   const num = Number(m[3])
   if (!Number.isFinite(num) || num < 1) return null
   // Mirror the server-side z.string().regex(/^[a-zA-Z0-9_.-]+$/) check so the
   // user sees the validation error inline instead of after the round-trip.
   const safe = /^[a-zA-Z0-9_.-]+$/
-  if (!safe.test(owner) || !safe.test(repo)) return null
-  return { owner, repo, number: num }
+  if (!safe.test(owner) || (repo !== undefined && !safe.test(repo))) return null
+  return repo ? { owner, repo, number: num } : { owner, number: num }
 }
 
 function TeamFormModal({
@@ -456,8 +457,14 @@ function TeamFormModal({
   // Prefilled from team.githubProject so edit-mode shows the current value.
   // Empty string = no link (or "clear link" in edit mode).
   const [githubProjectUrl, setGithubProjectUrl] = useState(() => {
+    // Build the URL SHAPE the stored link round-trips through: a repo-carrying link
+    // must prefill as /<owner>/<repo>/projects/<n>, or re-parsing the prefill loses
+    // the repo and an untouched save silently rewrites the stored value.
     const ghp = team?.githubProject
-    return ghp ? `https://github.com/orgs/${ghp.owner}/projects/${ghp.number}` : ''
+    if (!ghp) return ''
+    return ghp.repo
+      ? `https://github.com/${ghp.owner}/${ghp.repo}/projects/${ghp.number}`
+      : `https://github.com/orgs/${ghp.owner}/projects/${ghp.number}`
   })
   const initialGithubProject = team?.githubProject ?? null
 

@@ -282,7 +282,10 @@ function findStatusOption(
 
 export interface GitHubProjectConfig {
   owner: string
-  repo: string
+  // Absent = org/user-level board (ai-maestro#133). The board itself is resolved via
+  // organization()/user() GraphQL, so reads (listTasks, kanban columns) never need a
+  // repo — only issue-backed task CRUD does. See requireRepo().
+  repo?: string
   number: number
 }
 
@@ -350,12 +353,29 @@ interface ProjectItem {
 const FIELD_CACHE_TTL = 60 * 60 * 1000 // 1 hour
 const TASK_CACHE_TTL = 10 * 1000        // 10 seconds
 
-// Keyed by `${owner}/${repo}/${number}`
+// Keyed by `${owner}/${repo}/${number}` (repo empty for an org/user-level board —
+// cannot collide with a real repo, which zod requires to be non-empty)
 const metaCache = new Map<string, CachedProjectMeta>()
 const taskCache = new Map<string, CachedTaskList>()
 
 function cacheKey(cfg: GitHubProjectConfig): string {
-  return `${cfg.owner}/${cfg.repo}/${cfg.number}`
+  return `${cfg.owner}/${cfg.repo ?? ''}/${cfg.number}`
+}
+
+// Task CRUD files/edits backing ISSUES, which need a host repo. An org/user-level board
+// link (no repo — ai-maestro#133) is browse-only: fail fast BEFORE any mutation, instead
+// of fabricating a target (the old UI fallback repo=owner aimed `gh issue create -R` at a
+// repo that may not exist). Guard sits at the TOP of each CRUD function so a refusal can
+// never leave a half-applied task (updateTask mutates GraphQL fields before issue edits).
+function requireRepo(cfg: GitHubProjectConfig, op: string): string {
+  if (!cfg.repo) {
+    throw new Error(
+      `${op} needs a repo to host the backing issue, but this team links an org/user-level ` +
+      `project (${cfg.owner}/projects/${cfg.number}) with no repo — the board is browse-only. ` +
+      `Link a repo-scoped project URL (github.com/<owner>/<repo>/projects/<n>) to enable task edits.`,
+    )
+  }
+  return cfg.repo
 }
 
 function invalidateTaskCache(cfg: GitHubProjectConfig): void {
@@ -911,6 +931,7 @@ export async function createTask(
     attachments?: Task['attachments']
   },
 ): Promise<Task> {
+  const issueRepo = requireRepo(cfg, 'createTask')
   const meta = await getProjectMeta(cfg)
 
   // 1. Create GitHub issue
@@ -931,7 +952,7 @@ export async function createTask(
   // Use spawnSync with argument arrays to avoid shell injection risks
   const createArgs = [
     'issue', 'create',
-    '-R', `${cfg.owner}/${cfg.repo}`,
+    '-R', `${cfg.owner}/${issueRepo}`,
     '--title', data.subject,
     '--json', 'number,url,nodeId',
   ]
@@ -1073,6 +1094,9 @@ export async function updateTask(
     attachments?: Task['attachments']
   },
 ): Promise<Task | null> {
+  // Guard BEFORE the GraphQL field updates below, not at the issue-edit half: the field
+  // updates mutate first, so a later refusal would leave a half-applied update.
+  const issueRepoName = requireRepo(cfg, 'updateTask')
   const meta = await getProjectMeta(cfg)
 
   // Find the issue number from the item (need to query it)
@@ -1115,7 +1139,7 @@ export async function updateTask(
 
   // Update issue fields (title, body, labels, assignees) via gh CLI
   // Use spawnSync with argument arrays to avoid shell injection risks
-  const repo = `${cfg.owner}/${cfg.repo}`
+  const repo = `${cfg.owner}/${issueRepoName}`
 
   if (issueNumber) {
     const editArgs = ['issue', 'edit', String(issueNumber), '-R', repo]
@@ -1249,6 +1273,10 @@ export async function deleteTask(
   itemId: string,
   closeIssue = false,
 ): Promise<boolean> {
+  // Guard BEFORE the item removal: the close-issue spawn below sits inside a swallow-all
+  // catch (close is best-effort), so a repo-less refusal there would be silently eaten
+  // AFTER the item was already removed from the board.
+  if (closeIssue) requireRepo(cfg, 'deleteTask(closeIssue)')
   const meta = await getProjectMeta(cfg)
 
   // Get issue number before removing from project
@@ -1277,7 +1305,7 @@ export async function deleteTask(
     try {
       spawnSync('gh', [
         'issue', 'close', String(issueNumber),
-        '-R', `${cfg.owner}/${cfg.repo}`,
+        '-R', `${cfg.owner}/${requireRepo(cfg, 'deleteTask(closeIssue)')}`,
         '--comment', 'Removed from project kanban',
       ], { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] })
     } catch {

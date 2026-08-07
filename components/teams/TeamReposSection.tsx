@@ -2,12 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { GitBranch, ExternalLink, Copy, FolderGit2, Loader2, RefreshCw, Check } from 'lucide-react'
-
-interface GitHubProject {
-  owner: string
-  repo: string
-  number: number
-}
+import type { GitHubProjectLink } from '@/types/team'
 
 interface RepoItem {
   name: string
@@ -18,7 +13,7 @@ interface RepoItem {
 
 interface TeamReposSectionProps {
   teamId: string
-  githubProject?: GitHubProject
+  githubProject?: GitHubProjectLink
 }
 
 export default function TeamReposSection({ teamId, githubProject }: TeamReposSectionProps) {
@@ -79,7 +74,7 @@ export default function TeamReposSection({ teamId, githubProject }: TeamReposSec
         <div>
           <h2 className="text-lg font-semibold text-white">Repositories</h2>
           <p className="text-xs text-gray-500">
-            {githubProject.owner}/{githubProject.repo} &middot; Project #{githubProject.number}
+            {githubProject.repo ? `${githubProject.owner}/${githubProject.repo}` : githubProject.owner} &middot; Project #{githubProject.number}
           </p>
         </div>
         <button

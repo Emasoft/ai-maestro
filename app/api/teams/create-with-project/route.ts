@@ -22,7 +22,8 @@ const CreateWithProjectSchema = z.object({
   password: z.string().max(256).optional(),
   githubProject: z.object({
     owner: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
-    repo: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
+    // Optional: absent = org/user-level board (browse-only kanban) — ai-maestro#133.
+    repo: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-').optional(),
     number: z.number().int().min(1),
   }).strict().optional(),
   chiefOfStaffId: z.string().uuid().optional(),

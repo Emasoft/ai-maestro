@@ -86,7 +86,7 @@ export interface CreateTeamParams {
   // an existing GitHub Projects v2 board. When set, the team's kanban will
   // sync with this project (the pre-existing behaviour for teams that have
   // `team.githubProject` set is preserved). LINK only — no project creation.
-  githubProject?: { owner: string; repo: string; number: number }
+  githubProject?: { owner: string; repo?: string; number: number }
   requestingAgentId?: string
   // LIB2-CRIT-02 follow-up (2026-05-06): callers MUST forward the AuthContext
   // built from authenticateFromRequest(request) so checkTeamAccess can
@@ -107,7 +107,7 @@ export interface UpdateTeamParams {
   type?: TeamType
   chiefOfStaffId?: string | null
   orchestratorId?: string | null
-  githubProject?: { owner: string; repo: string; number: number } | null
+  githubProject?: { owner: string; repo?: string; number: number } | null
   requestingAgentId?: string
   authContext?: AuthContext
 }

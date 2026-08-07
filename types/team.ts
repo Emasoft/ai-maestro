@@ -56,8 +56,12 @@ export const DEFAULT_KANBAN_COLUMNS: KanbanColumnConfig[] = [
 
 /** GitHub Project link — when set, AI Maestro kanban is a live browser of the GitHub Project */
 export interface GitHubProjectLink {
-  owner: string          // Repository owner (user or org), e.g. "23blocks-OS"
-  repo: string           // Repository name, e.g. "ai-maestro"
+  owner: string          // Project owner (user or org), e.g. "23blocks-OS"
+  repo?: string          // Repo that hosts the backing ISSUES, e.g. "ai-maestro". Absent for an
+                         // org/user-level board (orgs/<owner>/projects/<n> — ai-maestro#133):
+                         // the kanban is then browse-only, because task CRUD must file issues
+                         // into a real repo and fabricating one (the old repo=owner fallback)
+                         // filed issues into a repo that may not exist.
   number: number         // GitHub Project number (visible in project URL)
 }
 

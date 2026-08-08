@@ -242,7 +242,13 @@ past that publish is a conformance failure, before it is not.
 
 `RP-SKILL-MENU-01` (added 2026-08-08, `TRDD-0FCR6KOW`) Every role-plugin MAIN agent whose plugin
 ships one or more skills MUST carry a compact **skill menu** in its persona body: one line per
-shipped skill — the skill name plus when to reach for it. Subagents are exempt (they receive
+shipped skill — the skill name plus when to reach for it. **Guard-implementation note (three
+independent failures measured 2026-08-08, from three sessions):** a menu-conformance check must
+scope its matcher to the menu SECTION — not the whole persona (a prose MENTION of a skill counts
+as an entry, so drop-a-listed-skill stays green) and not "any backticked name in any table cell"
+(an unrelated tool table over-counts, fabricating a stale-entry finding against a correct menu).
+A count-only gate fails in BOTH directions; prove the guard by falsifying both
+(add-unlisted-skill AND drop-listed-skill). Subagents are exempt (they receive
 task-scoped prompts). Rationale, from a measured incident: an agent that cannot SEE its skill
 inventory does not reach for it — skill descriptions alone under-trigger for role-specific
 procedures, and the fleet's `disable-model-invocation` preload exclusion (found and fixed

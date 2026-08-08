@@ -217,11 +217,17 @@ client's protocol.
 is `ai-maestro-autonomous-agent` — a plugin `RP-TITLES-02` in this same document calls mandatory —
 pinning `sonnet`. Two further facts moved under the old text: CC 2.1.219 re-pointed the bare
 `opus` token (Opus 5, 1M ctx, different price), so a pinned token's meaning drifts with the
-platform; and subagents already omit `model:` everywhere (that half of the old clause was true and
-stands).
+platform. A second correction, 2026-08-08 (AMAMA counterexample + fleet re-measure): *"subagents
+already omit `model:` everywhere"* was ALSO false — `amama-report-generator` pinned `opus` through
+v2.16.1, and a re-measure at current remote tips (2026-08-08T12:47:50+0200) counts **15 pinned
+subagents**: integrator ×10 (`sonnet` ×8, `opus` ×2), orchestrator ×5 (all `opus`). The ruling
+below binds MAIN agents only; subagent pinning policy is deliberately OPEN — a cheap-tier pin
+(`sonnet` on a bounded mechanical worker) is the delegation-tiering guidance applied, while an
+`opus` subagent pin spends the operator's budget exactly as a main-agent pin does and deserves the
+same scrutiny when the owning plugin next touches the file.
 
 **RULED 2026-08-08 (ai-maestro#136, closing `TRDD-TYB3Q1NJ`): role-plugin MAIN agents OMIT
-`model:`, same as subagents.** ROLE is orthogonal to model (RP-DEF-02's orthogonality extended):
+`model:`.** ROLE is orthogonal to model (RP-DEF-02's orthogonality extended):
 model choice is a cost/capability decision belonging to whoever launches the session — a pin lets
 the role author spend the operator's budget, is the only spelling that silently degrades under an
 org model-restriction, and conflicts with the CPV CA-04 cache-warmth default. The measured table

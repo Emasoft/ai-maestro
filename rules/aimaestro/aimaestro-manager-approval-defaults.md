@@ -133,8 +133,14 @@ condition `ref_name.include: ["~DEFAULT_BRANCH"]`):
   `required_review_thread_resolution:true`) and
   `required_status_checks` (`strict_required_status_checks_policy:true`,
   CI job ids auto-detected at apply time).
+- **`baseline-tag-protect`** — `target: tag`, `bypass_actors: []`.
+  Rules: `deletion`, `update`. (Ratified LATER on janitor#14 as the
+  fleet-wide third ruleset; live on every measured repo. This prose
+  lagged that ratification until 2026-08-08 — ai-maestro#140's
+  verification found the doc drift, not a missing source: janitor#14
+  carries the names and rules verbatim.)
 
-Applying this `baseline-*` pair as-is is EXEMPT. The legacy names
+Applying this `baseline-*` TRIO as-is is EXEMPT. The legacy names
 (`janitor-baseline`, `default-branch-no-force-no-delete`,
 `default-branch-required-checks`) are superseded — re-applying the
 ratified pair deletes the orphaned legacy rulesets by name.

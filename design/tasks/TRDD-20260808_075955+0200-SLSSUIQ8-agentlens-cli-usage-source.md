@@ -3,13 +3,14 @@ trdd-id: SLSSUIQ8
 title: Feed the rotator's usage decisions from the agentlenspro CLI (accounts, usage, costs)
 column: planned
 created: 2026-08-08T07:59:55+0200
-updated: 2026-08-08T07:59:55+0200
+updated: 2026-08-08T10:23:33+0200
 current-owner: ai-maestro-hub-session
 task-type: feature
 min-approval-requirement: none
 mandate: true
 mandated-by: self
 project-id: ai-maestro
+implementation-commits: [b0a842c8, 66b4ec6e]
 labels: [oauth-rotator, agentlenspro, usage]
 relevant-rules: []
 ---
@@ -23,11 +24,19 @@ deliberately: the wiring touches `lib/oauth-rotator/tick.ts` — the subsystem w
 document the account-burning failure mode — and that edit deserves a fresh context, not the tail
 of a twice-compacted session.
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-08
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-08 ~10:45
 
-- **NEXT ACTION**: implement exactly the 4-file plan in `## Design`, in the listed order
-  (pure module first, stamp field second, wiring last), with the test ladder + neuter plan below.
-- Nothing has been implemented yet. All facts below were measured, not inferred.
+- **IMPLEMENTED**: commits `b0a842c8` (feature — all 4 files per the design, plus
+  `types/statusline.ts` gaining the `'agentlens'` source-union member) + `66b4ec6e` (neuter
+  record), both PUSHED on `governance-rules`. tsc 0; directly-affected suites 66/66 green
+  (agentlens-usage, tick-status with its toEqual pins, tick, fallback-leg); neuters n1 (cohort
+  guard) + n2 (s→ms) recorded with clean per-fixture attribution. n3 resolved as named unpinned
+  residue (the wiring try/catch is defense-in-depth over never-throwing callees — measured, named
+  in the test file's trailer, kept).
+- **NEXT ACTION**: confirm the FULL suite run (started ~10:45, backgrounded) is green, then tick
+  the acceptance box. NOT YET DEPLOYED: `lib/*.ts` is bundled — the change goes live on the next
+  `yarn build` + restart cycle, deliberately not forced mid-fleet.
+- Costs remain out of scope per the body's follow-up note.
 
 ## Verified facts (measured 2026-08-08, this host)
 
@@ -105,10 +114,12 @@ choosing. Do NOT block this card on costs; usage attribution is the value.
 
 ## Acceptance
 
-- [ ] `agentlens-usage.ts` lands with the mapper ladder + reader fail-soft tests green
-- [ ] `WindowSnapshot.fiveHourResetsAtSec` persisted by the tick and re-read by `statuslineNear`
-- [ ] All three neuters recorded in the test file (commit-first discipline)
-- [ ] Full suite green; `tsc --noEmit` 0
+- [x] `agentlens-usage.ts` lands with the mapper ladder + reader fail-soft tests green (b0a842c8)
+- [x] `WindowSnapshot.fiveHourResetsAtSec` persisted by the tick and re-read by `statuslineNear`
+- [x] Neuters recorded in the test file, commit-first (66b4ec6e; n3 re-scoped to named
+      unpinned residue — the wiring catch guards never-throwing callees, per the
+      defense-in-depth discipline)
+- [ ] Full suite green (`tsc --noEmit` 0 confirmed; suite run in flight at card-update time)
 - [ ] Session task #27 closed against this card's `implementation-commits:`
 
 ## Approval log

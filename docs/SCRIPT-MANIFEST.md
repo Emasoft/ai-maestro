@@ -20,7 +20,7 @@ fails the build otherwise. Per **R23.8**, announcing a verb is part of shipping 
 verb looks absent, and a plugin that believes the layer lacks what it needs is pushed back toward
 `/api/*`.
 
-- Source of truth: `scripts/*.sh` (**87** files)
+- Source of truth: `scripts/*.sh` (**88** files)
 - Install target: `~/.local/bin/` (via `install-messaging.sh`, by glob)
 - Last reconciled: **2026-08-05** — announced the 7 scripts that were shipping unannounced
   (`aimaestro-settings.sh` → Tier A; `aimaestro-check-decoupling.sh`, `install-boot-persistence.sh`,
@@ -53,10 +53,10 @@ MCP server. That rule has no element-level exception, including the core plugin.
 |---|---|
 | **A — frozen CLI** (§2, 48 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
-| **C — operator/dev** (§4, 27 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
+| **C — operator/dev** (§4, 28 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
-48 + 12 + 27 = **87**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+48 + 12 + 28 = **88**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
 
 ---
 
@@ -474,7 +474,7 @@ API (`ChangePlugin`). It still works; do not build on it.
 
 ---
 
-## 4. Tier C — operator / dev scripts (27) — **not** a plugin API
+## 4. Tier C — operator / dev scripts (28) — **not** a plugin API
 
 `install-messaging.sh` copies `scripts/*.sh` by glob, so these land in `~/.local/bin` too.
 Being on `PATH` does **not** make them a contract. A plugin must never call them.
@@ -484,7 +484,7 @@ Being on `PATH` does **not** make them a contract. A plugin must never call them
 | `remote-install.sh` · `install-code-analysis-tooling.sh` · `distribute-code-analysis-skill.sh` · `install-agentlens.sh` | installers |
 | `setup-tmux.sh` · `setup-tailscale.sh` · `setup-tailscale-serve.sh` · `setup-gateway.sh` · `start-with-ssh.sh` | host setup |
 | `with-node.sh` · `build-jsonl-reader.sh` · `bump-version.sh` | build / release (`bash scripts/with-node.sh <cmd>` — the repo needs Node 22) |
-| `migrate-r20-disk-layout.sh` · `index-all-agents.sh` | one-shot migrations / maintenance |
+| `migrate-r20-disk-layout.sh` · `index-all-agents.sh` · `heal-amp-addresses.sh` | one-shot migrations / maintenance (`heal-amp-addresses.sh` batch-applies the AMP address self-heal to every registered config — TRDD-17K0SHDQ W-A, ai-maestro#46; deliberately named OUTSIDE the frozen `amp-*` family so the manifest builder's by-construction discriminator keeps it out of the skill-facing contract. Exit `0` sweep completed · `2` could not run) |
 | `export-agent.sh` · `import-agent.sh` · `list-agents.sh` | operator equivalents of `aimaestro-agent.sh export/import/list` — **use the CLI subcommands instead** |
 | `test-amp-routing.sh` · `test-amp-cross-host.sh` · `test-amp-local-delivery-sig.sh` · `test-tailscale-access.sh` · `simulate-blackout.sh` | test suites |
 | `install-boot-persistence.sh` · `install-pillar-tooling.sh` · `setup-local-marketplaces.sh` · `distribute-tailscale-skill.sh` | installers / host setup (added 2026-08-05 — previously shipped and unannounced) |
@@ -675,8 +675,8 @@ none matching: a documented check nobody runs is not a check, and R23.8 makes an
 formally nonexistent. The test is what keeps the count honest now; this block is for humans.
 
 ```bash
-# every Tier-A/B/C script this repo ships — must equal 48 + 12 + 27
-ls -1 scripts/*.sh | wc -l                     # 87
+# every Tier-A/B/C script this repo ships — must equal 48 + 12 + 28
+ls -1 scripts/*.sh | wc -l                     # 88
 
 # scripts a plugin calls but this repo does not ship (must be EMPTY — §5 is the debt)
 comm -13 <(ls -1 scripts/*.sh | xargs -n1 basename | sort) \

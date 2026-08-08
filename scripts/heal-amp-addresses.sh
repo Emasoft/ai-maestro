@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# amp-address-heal-sweep.sh — batch repair of stale AMP config addresses.
+# heal-amp-addresses.sh — batch repair of stale AMP config addresses.
 #
 # Context (TRDD-17K0SHDQ, W-A): a registrar bug once stamped
 # `.agent.address` with the REGISTRAR's own cwd-derived name instead of

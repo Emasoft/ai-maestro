@@ -38,7 +38,7 @@ recipe), NOT a resolver change.
 - [ ] **W-A — non-destructive address-heal sweep.** The `load_config()` self-heal is
       reactive; 26/64 on-disk configs still share the byte-identical address
       `ai-maestro@emasoft.aimaestro.local` (measured 2026-08-08, report §4) because dead/stale
-      agents are never used again. Ship `scripts/amp-address-heal-sweep.sh`: walk
+      agents are never used again. Ship `scripts/heal-amp-addresses.sh`: walk
       `~/.agent-messaging/agents/*/config.json`, repair `.agent.address` local-part to the
       registered name using the SAME logic as the fixed self-heal (preserving `id`/`createdAt`
       — the `save_config` regression class from `6c6b75b4` must not recur), report every

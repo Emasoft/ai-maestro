@@ -178,6 +178,28 @@ stop the message asserting what the process cannot know: it now names the observ
 rung is dead) and points at the rung it cannot see. Whether to delete the two dead modules is still
 open — TRDD-XV9BLQC5.
 
+
+^ATOM-QCOD-IPRR [desc:"agentlenspro window rows carry NO account identity — attribute ONLY by exact 5h-reset cohort match; no cohort means emit nothing", keywords: agentlens_rows_wrong_account statusline-history_windows_two_accounts_side_by_side usage_misattribution_rotator agentlenspro_cohort_match resets_5h_attribution_key, ocd: 2026-08-08, lmd: 2026-08-08]
+
+`agentlenspro statusline-history windows --json` rows carry NO account identity, and a live
+measurement (2026-08-08) showed two accounts' rows side by side. The rotator's second usage
+source (`lib/oauth-rotator/agentlens-usage.ts`, TRDD-SLSSUIQ8) therefore attributes a row to the
+live account ONLY on an exact `row.resets_5h === WindowSnapshot.fiveHourResetsAtSec` cohort
+match (the persisted 5h reset instant from the last endpoint probe), plus `row.ts >=
+last_switch_at * 1000` (seconds→ms — the admitSnapshot unit trap). No known cohort ⇒ EMPTY
+output, never a guess: timestamp-only attribution hands the rotator another account's numbers —
+the account-burning loop `statusline-admissible.ts` exists to prevent.
+
+
+^ATOM-U9NL-KBA1 [desc:"gate the agentlens CLI read on the cohort BEFORE spawning — no cohort means the output is discarded by construction", keywords: unit_test_suddenly_slow_timeout statuslineNear_spawns_real_CLI subprocess_spawn_per_call_in_tests cohort_gate_before_read, ocd: 2026-08-08, lmd: 2026-08-08]
+
+The agentlens read in `statuslineNear` is gated on the cohort BEFORE the CLI spawn (77fbe88e):
+with no persisted cohort the mapper drops every row by construction, so an unconditional read
+spawns a subprocess whose output is definitionally discarded — and any test driving
+`statuslineNear` without injecting `readAgentlensRows` spawns the REAL `agentlenspro` per call
+(measured: the disjunct suite went 24.5s with a 5s per-test timeout; 0.36s after the gate).
+Suites about the store source stub `readAgentlensRows: async () => []` explicitly.
+
 ## Notes and lessons learned
 [^1]: [id:ATOM-R16D-CASC, status:valid, keywords:"rotate_refresh_reauth cascade progressive_fallback the_only_human_step reauth_needs_new_cookie", ocd:2026-07-16, lmd:2026-07-16]
   DO NOT treat rotate/refresh/reauth as three interchangeable "renew" ops, BECAUSE they are an

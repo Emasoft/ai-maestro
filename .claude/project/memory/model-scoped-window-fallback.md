@@ -114,4 +114,16 @@ outcome as three states (confirmed / not / **unknown**) and never collapse unkno
   when a MODEL's window is spent while the token is fine. The two beats are disjoint by design and
   meet only at the persisted tick stamp.
 
+
+^ATOM-ZFI2-5LWN [desc:"the AskUser auto-answer watchdog leg — answers ask_user menus ONLY, never permission prompts; dark behind AIM_FLEET_ASKUSER_AUTOANSWER=1", keywords: agent_stuck_on_question_menu auto_answer_AskUserQuestion stalled_ask_user_prompt_fleet AIM_FLEET_ASKUSER_AUTOANSWER, ocd: 2026-08-08, lmd: 2026-08-08]
+
+`lib/fleet-askuser-autoanswer.ts` (8e03e32f + 09a97322) is the watchdog leg that answers a
+fleet agent's stalled `ask_user` menu with the highlighted default (ENTER). Hard invariants:
+it answers ask_user MENUS only and NEVER a `permission` prompt (auto-approving tool permissions
+would bypass the permission system); 2-min dwell then RE-VERIFY the pane immediately before
+ENTER (a bare ENTER on a dismissed menu submits the prompt text); a menu signature is never
+answered twice in 30 min (lockout). Ships DARK behind `AIM_FLEET_ASKUSER_AUTOANSWER=1`
+(mirrors `AIM_FLEET_MODEL_FALLBACK`); shares the recovery clock and gates with the
+model-fallback leg via `fleet-recovery-actuator`.
+
 ## Notes and lessons learned

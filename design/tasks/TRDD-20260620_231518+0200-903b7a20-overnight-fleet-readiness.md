@@ -438,7 +438,7 @@ bump + push approval. **The autonomous-SAFE campaign work is substantially COMPL
 independently verified; the branch is PR-ready modulo the version bump.**
 
 **Load-bearing facts / gotchas:**
-- Every GitHub write self-identifies (R22): `_Posted by the Claude developing **ai-maestro** (via the shared @Emasoft gh auth)._`
+- Every GitHub write self-identifies (R22): `_Posted by the Claude developing **ai-maestro** (via the shared Emasoft gh auth)._` (template carries NO `@` — R22.2, corrected 2026-08-05)
 - Never `git add -A` — stage by name. Commit fixes with WHY + `TRDD-903b7a20`.
 - Memory edits in MAIN context (store outside repo; subagents can't reach it).
 - Workflow fix-agents: `isolation: worktree` + explicit write-scope constraint (project root + /tmp only).

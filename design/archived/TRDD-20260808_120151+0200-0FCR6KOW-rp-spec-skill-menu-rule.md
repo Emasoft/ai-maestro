@@ -1,9 +1,9 @@
 ---
 trdd-id: 0FCR6KOW
 title: RP-spec rule — every role plugin main agent must enumerate its own skill menu
-column: planned
+column: complete
 created: 2026-08-08T12:01:51+0200
-updated: 2026-08-08T12:01:51+0200
+updated: 2026-08-08T12:40:00+0200
 current-owner: ai-maestro-hub-session
 task-type: docs
 min-approval-requirement: none
@@ -40,9 +40,9 @@ exempt (they receive task-scoped prompts).
 
 ## Acceptance
 
-- [ ] RP-SKILL-MENU-01 added to role-plugins-spec.md (version bumped per spec convention)
-- [ ] Conformance suite green after the edit (spec census tests may pin clause counts — re-derive
+- [x] RP-SKILL-MENU-01 added (spec 1.1.0, eaf609ad; programmer row corrected a00e64f6) to role-plugins-spec.md (version bumped per spec convention)
+- [x] Conformance suite green (no census pins this spec — verified by consumer grep before editing) after the edit (spec census tests may pin clause counts — re-derive
       the census by grep, never copy from failure output)
-- [ ] Fleet notified (the live sessions + a line in the next work orders)
+- [x] Fleet notified (6 sessions + maintainer#36, 2026-08-08 ~12:45) (the live sessions + a line in the next work orders)
 
 ## Approval log

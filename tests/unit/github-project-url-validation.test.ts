@@ -17,12 +17,14 @@
  * the minimal ghJson shape getProject parses for step 1 and a fields payload for step 2 — the
  * validator only consumes `.title`, but the real function must survive its own parse.
  *
- * NEUTER RUN (2026-08-08 — fix committed FIRST, mutations reverted to the committed blob):
- *   n1. swap the match order (try the repo shape first, org second) → the org-URL test reds on
- *       owner ("orgs" ≠ "acme") — the ordering guard, unreachable by any end-state-only check
- *       since both orders produce a `valid: true` result.
- *   n2. re-add a fabricated repo on the org branch (`repo: owner`) → the org-URL absence
- *       assertion reds alone — the same guard shape as #137's n2, third repo in one day.
+ * NEUTER RUN (2026-08-08 — fix committed FIRST as 24ea80ec, mutations reverted to that blob):
+ *   n1. swap the match order (try the repo shape first, org second) → 3 red / 2 green: the
+ *       org-URL test (owner "orgs" ≠ "acme"), the users/ test (owner "users"), AND the
+ *       not-accessible test (it too asserts the parsed owner). Every prefixed-URL owner
+ *       assertion is an ordering guard; the repo-scoped and garbage tests stayed green.
+ *   n2. re-add a fabricated repo on the org branch (`repo: owner`) → 2 red: BOTH absence
+ *       assertions (orgs/ and users/), nothing else — the fabrication guard, same shape as
+ *       #137's n2, third repo in one day.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'

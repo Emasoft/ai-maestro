@@ -26,8 +26,11 @@ const RULES_SOURCE_DIR = join(process.cwd(), 'rules', 'aimaestro')
 const AGENT_RULES_FILE = 'aimaestro-agent-rules.md'
 const AGENT_RULES_PATH = join(RULES_SOURCE_DIR, AGENT_RULES_FILE)
 
-/** ~2 KB ≈ 500 tokens. Raising this is a deliberate decision, not a rebase. */
-const MAX_BYTES = 2200
+/** ~2 KB ≈ 500 tokens. Raising this is a deliberate decision, not a rebase.
+ *  2200 → 2280 (2026-08-08, TRDD-UZ9YT1SD): +1 line teaching cheap-delegation tiering —
+ *  fleet-wide guidance whose token savings dwarf its ~100-byte carriage; landed with a
+ *  25-byte trim elsewhere, so the net growth is 76 bytes against an 80-byte raise. */
+const MAX_BYTES = 2280
 
 describe('the shipped agent-operating rule file', () => {
   it('exists and carries the DEP marker so the seeder can refresh it', () => {

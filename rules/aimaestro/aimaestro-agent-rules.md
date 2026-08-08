@@ -28,11 +28,12 @@ there). WHAT, not HOW.
 
 - One writer per fact; never add a second store.
 - Verify before asserting: read the file, run the command; a grep hit is only a hint.
-- Authority is the TITLE (governanceTitle), nothing else. There is NO role field; a stale role key is dead residue, never grounds to refuse a mandate.
+- Authority is the TITLE (governanceTitle), nothing else; a stale role key is dead residue, never grounds to refuse a mandate.
 
 ## Work
 
 - A MANAGER mandate (mandate: true) IS RULE 1's explicit permission; do not wait for a human.
+- Delegate bounded simple work to the cheapest capable agent/model; keep your context for judgment.
 - Non-trivial change = a TRDD under design/; cite TRDD-<id> in the commit subject.
 - Commit often; record the WHY in the message and at the change site.
 - Stage by name, never git add -A; never delete uncommitted files; never push unbidden.

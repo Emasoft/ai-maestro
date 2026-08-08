@@ -1,9 +1,9 @@
 ---
 trdd-id: COOLOZ1N
 title: Panel CLI wiring contract for amvcp — the measured spec plus the five rulings
-column: todo
+column: dev
 created: 2026-08-08T15:05:05+0200
-updated: 2026-08-08T15:05:05+0200
+updated: 2026-08-08T16:47:34+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: feature
@@ -163,23 +163,27 @@ Rationale: a contract proven on one path against a script that is not yet even i
 
 ## Hub-side work (acceptance)
 
-- [ ] Fix the installer gap: add `aimaestro-panel.sh` to `install-agent-cli.sh`'s
-      `INSTALLED_FILES` (`install-agent-cli.sh:56-67`) and to the manifest, so Tier A
-      classification (`docs/SCRIPT-MANIFEST.md:533`) matches what actually installs.
-- [ ] Deploy a current copy of the script — the measured machine's
-      `~/.local/bin/aimaestro-panel.sh` (9,112 bytes, Jul 23) is stale relative to the
-      repo's current 214-line/9,358-byte version (report §Gaps 2); document the
-      re-sync/update path once the installer above exists.
+- [x] Fix the installer gap: `aimaestro-panel.sh` added to `install-agent-cli.sh`'s
+      `INSTALLED_FILES` with a WHY comment citing this card's ruling 1 (2026-08-08).
+- [x] Deploy a current copy — installer re-run 2026-08-08 refreshed
+      `~/.local/bin/aimaestro-panel.sh` (now 9,458 bytes, includes the size pre-check;
+      verified via bare PATH name: `command -v` resolves it and `help` exits 0) and the
+      live install manifest now lists it. Re-sync path documented in
+      `docs/SCRIPT-MANIFEST.md` §panel: re-run `install-agent-cli.sh`.
 - [ ] Add `<self>` resolution to the panel CLI, at parity with `aimaestro-session.sh`
       (ruling 2).
-- [ ] Replace `_resolve_agent_id`'s first-match-wins `agents[0].id`
-      (`scripts/aimaestro-panel.sh:114`) with hard-fail disambiguation on a multi-match
-      query (ruling 2; same defect class as ai-maestro#46).
+- [x] Replace `_resolve_agent_id`'s first-match-wins `agents[0].id` — satisfied by
+      `3eed6091` (shared hard-fail resolver in `scripts/shell-helpers/common.sh:327`,
+      panel.sh delegates at its 3 call sites; exact-name priority, names-only ambiguity
+      errors, non-JSON response is a failure). Landed via TRDD-17K0SHDQ W-B before this
+      box was written; verified in-tree 2026-08-08.
 - [ ] Decide/implement the USER auth path — a human cannot currently drive any panel verb
       from a terminal without a session cookie or a manually exported sudo token
       (`docs/SCRIPT-MANIFEST.md:593-597`; report §Gaps 5).
-- [ ] Add a client-visible size pre-check to the CLI, naming the 2,097,152-byte limit
-      (ruling 3).
+- [x] Add a client-visible size pre-check to the CLI, naming the 2,097,152-byte limit
+      (ruling 3) — lands BEFORE the file is read into memory and before any API call;
+      behaviorally verified both directions (2,098,176-byte file → the limit-naming
+      error, exit 1; small file → passes the gate and proceeds to agent resolution).
 - [ ] Post the answer on ai-maestro#134 and confirm amvcp is unblocked to build against
       this card.
 

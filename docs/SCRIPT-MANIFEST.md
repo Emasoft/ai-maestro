@@ -155,8 +155,12 @@ TRDD-4P1M8I18). `--force` overrides the running-subagents refusal. See SCRIPT-LA
 | `status <agent>` | — |
 | `feedback <agent>` | — (drains: read + clear) |
 
-HTML is capped at 2 MB; `javascript:` / `file:` / `data:` URLs are rejected 400.
-`set` returns `delivered: N` — **`0` means DROPPED, not queued.**
+HTML is capped at 2 MB — enforced server-side (`lib/panel-messages.ts`) AND pre-checked
+client-side before the file is read into memory (`--html-file` fails fast naming the
+2,097,152-byte limit; oversized artifacts use `--url`). `javascript:` / `file:` / `data:`
+URLs are rejected 400. `set` returns `delivered: N` — **`0` means DROPPED, not queued.**
+Installed to `~/.local/bin` by `install-agent-cli.sh` (in `INSTALLED_FILES` since
+TRDD-COOLOZ1N ruling 1 — re-running the installer is the re-sync path for stale copies).
 
 #### `aimaestro-trdd.sh <command> <trdd-id> [flags]` — the 3-pillars task SSOT
 

@@ -157,6 +157,16 @@ _panel_post() {
     fi
     if [ -n "$html_file" ]; then
         [ -f "$html_file" ] || { echo "Error: file not found: $html_file" >&2; return 1; }
+        # Pre-check BEFORE reading the file into memory: the server rejects >2 MB
+        # (PANEL_HTML_MAX_BYTES, lib/panel-messages.ts) — failing fast here names the
+        # limit and avoids shipping megabytes the server will bounce. wc -c, not stat:
+        # stat's flags differ between BSD and GNU and fail silently in the wrong mode.
+        local html_bytes
+        html_bytes="$(wc -c < "$html_file" | tr -d ' ')"
+        if [ "$html_bytes" -gt 2097152 ]; then
+            echo "Error: ${html_file} is ${html_bytes} bytes; the panel html limit is 2097152 bytes (2 MB). Serve it with --url instead." >&2
+            return 1
+        fi
         html="$(cat "$html_file")"
     fi
 

@@ -64,6 +64,10 @@ INSTALLED_FILES=(
     "aimaestro-teams.sh"
     "aimaestro-governance.sh"
     "aimaestro-hook.sh"
+    # Tier A per docs/SCRIPT-MANIFEST.md but was never in this list, so PATH
+    # discovery of the panel CLI failed everywhere by construction (TRDD-COOLOZ1N
+    # ruling 1 — discovery is PATH-based only, nothing else advertises it).
+    "aimaestro-panel.sh"
 )
 
 # Shared helper sourced by the aimaestro-*.sh CLIs — installed to HELPERS_DIR

@@ -791,6 +791,15 @@ export async function runTick(s: AutoUpdateSettings): Promise<AutoUpdateRunEntry
   const candidates = await collectUpdateCandidates(s, marketplacesTouched)
 
   // ── Step 3: run the updates ──────────────────────────────────────────
+  // ⚠ DO NOT DELETE THIS LOOP (TRDD-PE54D95Q AC6). AC6 proposes removing the
+  // per-plugin loops once the harness demonstrably upgrades plugins from the
+  // refreshed catalogs on its own — and that evidence DOES NOT EXIST yet.
+  // Measured 2026-08-06: deleting this loop today would strand up to 52
+  // installed plugins (the harness only auto-updates marketplaces whose
+  // autoUpdate flag is on, and it acts on its own schedule, not ours).
+  // AC6 is gated on EVIDENCE recorded in that card, not on anyone's judgment
+  // that this loop "looks redundant" next to the marketplace refresh above.
+  //
   // Dispatch through ChangePlugin (the AIO pipeline) instead of shelling
   // out to `claude plugin update` directly. Every gate that protects the
   // manual UI Update button — G02 role-plugin guard, G08 core protection,

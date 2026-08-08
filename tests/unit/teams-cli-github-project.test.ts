@@ -23,14 +23,16 @@
  * runs on source, hence the redirect), and the `_api` stub must be installed AFTER the source
  * or the real one overwrites it.
  *
- * NEUTER RUN (2026-08-08 — fix committed FIRST, mutations reverted to the committed blob):
- *   n1. delete `number: ($ghn | tonumber)` from cmd_create's payload → "org-level board" +
- *       "number is a JSON NUMBER" red (schema shape gone), create-side only by construction.
- *   n2. make the create repo conditional unconditional (`+ {repo: $ghr}`) → the org-board
- *       ABSENCE assertion red alone — the fabrication guard, exactly the mutation the card
- *       warned a fields-you-expect test would miss.
- *   Each neuter reds only its named tests; the update-side closures stay green under both
- *   (they drive cmd_update's separate jq expression) and have their own shape assertions.
+ * NEUTER RUN (2026-08-08 — fix committed FIRST as 61d0bf20, mutations reverted to that blob):
+ *   n1. delete `number: ($ghn | tonumber)` from cmd_create's payload → 3 red / 5 green: all
+ *       three create-payload closures ("org-level board", "number is a JSON NUMBER", AND
+ *       "repo-scoped board" — that one also asserts `"number":7`, so its red is legitimate,
+ *       one more than predicted and fully attributed). Update-side stayed green (separate jq).
+ *   n2. make the create repo conditional unconditional (`+ {repo: $ghr}`) → EXACTLY 1 red:
+ *       the org-board ABSENCE assertion alone — the fabrication guard, exactly the mutation
+ *       the card warned a fields-you-expect test would miss.
+ *   The validation closures stayed green under both, correctly: they refuse pre-transport and
+ *   never reach either mutated payload expression.
  */
 
 import { describe, it, expect, vi } from 'vitest'

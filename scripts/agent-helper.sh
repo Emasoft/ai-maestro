@@ -52,8 +52,13 @@ if [ -f "${SCRIPT_DIR}/messaging-helper.sh" ]; then
 elif [ -f "${HOME}/.local/share/aimaestro/shell-helpers/messaging-helper.sh" ]; then
     source "${HOME}/.local/share/aimaestro/shell-helpers/messaging-helper.sh"
 else
-    # Fallback to common.sh directly
-    if [ -f "${HOME}/.local/share/aimaestro/shell-helpers/common.sh" ]; then
+    # Fallback to common.sh directly. The REPO-relative candidate comes FIRST: on a clean
+    # checkout (CI runner, fresh clone) no deployed copy exists, and every dev machine with
+    # an install silently masked its absence — the bug was invisible anywhere but CI
+    # (TRDD-N4SDG0ML class 3, found via the assertion-message harness fix).
+    if [ -f "${SCRIPT_DIR}/shell-helpers/common.sh" ]; then
+        source "${SCRIPT_DIR}/shell-helpers/common.sh"
+    elif [ -f "${HOME}/.local/share/aimaestro/shell-helpers/common.sh" ]; then
         source "${HOME}/.local/share/aimaestro/shell-helpers/common.sh"
     elif [ -f "${SCRIPT_DIR}/../../scripts/shell-helpers/common.sh" ]; then
         # From plugin/scripts/ go up two levels to reach scripts/shell-helpers/

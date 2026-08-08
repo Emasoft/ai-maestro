@@ -26,6 +26,9 @@ WHEN-MEASURED, where the timestamp is PASTED from a clock, never composed.**
   pre-push measurements are still one stale measurement.
 - *Corollary:* for per-file questions use the **blob sha**, never the branch tip — the tip moves
   on unrelated commits, so tip-polling records "checked, current" over byte-identical content.
+  A **version field is equally insufficient**: both failure directions were measured on
+  2026-08-08 alone (tip moved / content byte-identical → false "changed"; content moved /
+  `spec-version` unchanged → false "current"). The blob was the only signal correct in both.
 
 ## 2. Corrections both ways, verified both ways
 
@@ -137,7 +140,11 @@ reporter's own clone while the ledger repeated an inherited claim.**
   blocking authority acts. (COS, on the golden-rule byline.)
 - **Guard the class, not today's instance** — parametrize over every agent/file so the NEXT
   author inherits the rule (the no-pin test, the runtime-assembled-needle handle scan with a
-  population floor, the menu-vs-shipped-count gate proven by negative control).
+  population floor, the menu-vs-shipped-count gate proven by negative control). And **count the
+  shape, not the string**: the same failure wore three costumes in one day — a prose MENTION
+  counting as a menu ENTRY, a mention counting as coverage, a count-only gate passing a menu
+  that quietly lost an entry. Count and coverage are different properties; a guard is proven
+  only by falsifying in BOTH directions (add-unlisted AND drop-listed).
 - **Authority is re-evaluated per item, never inherited from the conversation** — a hub ruling
   Tier-2 questions under an explicit USER grant still routes golden/USER-tier items upward, and
   peers correctly refuse relayed authority (permission laundering) even mid-collaboration.

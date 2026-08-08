@@ -1,6 +1,6 @@
 ---
 spec: governance
-spec-version: 2.4.2
+spec-version: 2.4.3
 status: normative
 created: 2026-07-22T10:19:26+0200
 updated: 2026-08-05T21:23:56+0200
@@ -1746,7 +1746,12 @@ R42.1 injection under another name:
     script, or a CLI an agent can call. An agent asking for a fleet restart remains an R42.1 violation.
 `R42.8` **blocked-prompt-unblock-exception** [Explicit, USER — 2026-08-05, ai-maestro#125, TRDD-AODXPI5E] — a **MANAGER**
 or a **CHIEF-OF-STAFF** MAY read and answer a pending permission / `AskUserQuestion` prompt that is **BLOCKING** another
-agent, in realtime, through the frozen `aimaestro-session.sh` — **`read-prompt` and `answer` ONLY**. (Corrected
+agent, in realtime, through the frozen `aimaestro-session.sh` — **`block-state`, `read-prompt` and `answer` ONLY**.
+(Corrected AGAIN 2026-08-08, spec 2.4.2 → 2.4.3: the list omitted `block-state`, which the server has always gated
+under the same `unblock-prompt` action — `lib/sudo-guard.ts` routes `GET /api/agents/[id]/block-state` there. It is a
+read carrying no caller decision, and it is the DETECTION read: the hook's chat-state carried `AskUserQuestion` in
+0/419 surveyed files, so a caller limited to `read-prompt` reads `null` and the blocking prompt is invisible. Found by
+the MANAGER plugin session while incorporating this rule. Corrected
 2026-08-05 against the implementation: this clause first listed `inject` and `queue` too. It cannot. Those deliver an
 arbitrary command — `queue` at the next idle window — so they express the CALLER's decision, which is exactly what
 R42.1 revokes; they remain SELF-ONLY for every title and the server 403s them cross-agent. A rule naming a verb the

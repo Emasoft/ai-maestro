@@ -40,6 +40,12 @@ import {
   type ContinuityState,
   type ContinuityTickResult,
 } from '@/lib/fleet-continuity'
+import {
+  runAskUserAutoAnswerTick,
+  defaultAskUserAnswerDeps,
+  type AskUserState,
+  type AskUserTickResult,
+} from '@/lib/fleet-askuser-autoanswer'
 
 /** Wire the read-only scanner to the real registry + session substrate. Token-block
  *  detection (`getAccountHealthy`) is intentionally omitted here — it lands with the
@@ -94,6 +100,12 @@ export interface FleetLivenessWatchdogOptions {
    *  switch has been watched end to end on a real pane — no test can prove the confirming ENTER
    *  actually dismissed Claude Code's dialog. */
   modelFallbackEnabled?: boolean
+  /** AskUser auto-answer leg: default-OFF (AIM_FLEET_ASKUSER_AUTOANSWER=1 enables). Ships dark
+   *  for the same reason as the model-fallback leg — no test can prove the ENTER dismissed a
+   *  real menu. Answers `ask_user` menus ONLY, never permission prompts. */
+  askUserAutoAnswerEnabled?: boolean
+  /** Injectable auto-answer pass for tests; defaults to the real tick over the module store. */
+  runAskUser?: (agents: { id: string; name?: string }[]) => Promise<AskUserTickResult>
   /** Injectable continuity pass for tests; defaults to the real tick over the module store. */
   runContinuity?: () => Promise<ContinuityTickResult>
   /** Boot-debounce for the `dead` class (TRDD-SX593MDG D2); defaults to the real sidecar-backed
@@ -146,6 +158,21 @@ export function resetContinuityStore(): void {
  * human act. `AIM_FLEET_MODEL_FALLBACK=1` enables it.
  */
 const DEFAULT_MODEL_FALLBACK = process.env.AIM_FLEET_MODEL_FALLBACK === '1'
+
+/**
+ * The AskUser auto-answer leg is OFF by default for the same reason: its whole effect is one
+ * ENTER into a live pane, and only a human watching a real menu dismiss can prove it correct.
+ * `AIM_FLEET_ASKUSER_AUTOANSWER=1` enables it.
+ */
+const DEFAULT_ASKUSER_AUTOANSWER = process.env.AIM_FLEET_ASKUSER_AUTOANSWER === '1'
+
+/** Per-agent dwell/lockout memory for the auto-answer leg, threaded across ticks. */
+const askUserStore = new Map<string, AskUserState>()
+
+/** Clear the auto-answer state — for tests only. */
+export function resetAskUserStore(): void {
+  askUserStore.clear()
+}
 
 /** When this sweep last switched an agent. ONE timestamp, not a Map: the sweep switches at most
  *  one agent per tick and the interval is fleet-wide, not per agent. */
@@ -273,6 +300,50 @@ export async function runFleetLivenessTick(
         }
       } catch (err) {
         log(`[FleetLiveness] model-fallback leg failed (non-fatal): ${(err as Error)?.message || err}`)
+      }
+    }
+
+    // AskUser auto-answer leg: accept the DEFAULT option of a selection menu an agent has been
+    // parked on past the dwell window. `ask_user` ONLY — a permission prompt is never answered
+    // (that would silently bypass the tool-permission system) and is reported instead. Own try,
+    // like every other leg.
+    if (opts.askUserAutoAnswerEnabled ?? DEFAULT_ASKUSER_AUTOANSWER) {
+      try {
+        const agents = snap.agents.map((a) => ({ id: a.agentId, name: a.name }))
+        const pass =
+          opts.runAskUser ??
+          ((refs: { id: string; name?: string }[]) =>
+            runAskUserAutoAnswerTick(
+              refs,
+              askUserStore,
+              // The SAME per-agent clock the recovery ladder and the fallback leg stamp — the
+              // cooldown is per agent, not per subsystem.
+              defaultAskUserAnswerDeps(true, (id) => recoveryStore.get(id)?.lastActuatedAtMs ?? null, now),
+            ))
+        const ar = await pass(agents)
+        for (const a of ar.answered) {
+          // Stamp the shared clock only on a real keystroke, so the ladder respects this
+          // actuation's cooldown exactly as it respects its own.
+          recoveryStore.set(a.agentId, {
+            attempt: recoveryStore.get(a.agentId)?.attempt ?? 0,
+            lastActuatedAtMs: now(),
+          })
+          log(
+            `[FleetAskUser] answered ${a.name || a.agentId} with default "${a.defaultLabel}" — ` +
+              `confirmed=${a.confirmed === null ? 'unknown' : a.confirmed}${a.detail ? ` (${a.detail})` : ''}`,
+          )
+        }
+        for (const s of ar.skipped) {
+          // `dwell` is the healthy quiet case (every open menu spends ticks there); everything
+          // else is worth a line — especially `permission_menu`, which is a fleet parked on a
+          // prompt this leg is FORBIDDEN to touch.
+          if (s.reason !== 'dwell') {
+            log(`[FleetAskUser] ${s.name || s.agentId}: not answered (${s.reason}${s.detail ? `: ${s.detail}` : ''})`)
+          }
+        }
+        if (ar.blocked) log(`[FleetAskUser] leg blocked: ${ar.blocked}`)
+      } catch (err) {
+        log(`[FleetAskUser] auto-answer pass failed (non-fatal): ${(err as Error)?.message || err}`)
       }
     }
 

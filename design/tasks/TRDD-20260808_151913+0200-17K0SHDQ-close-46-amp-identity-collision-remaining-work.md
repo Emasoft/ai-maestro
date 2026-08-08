@@ -85,7 +85,26 @@ recipe), NOT a resolver change.
       both sides verify board state, then the probe is deleted through the full DeleteAgent
       pipeline + cemetery purge (scenario Rule 1 discipline). Execution deferred to a quieter
       machine window (burn ~$480/hr at decision time) and a fresh hub context — the run is a
-      real orchestration, not a tail-of-session errand.** AMOA confirmation still pending.
+      real orchestration, not a tail-of-session errand.**
+      AMOA accepted the plan (2026-08-08T16:00+0200) and RETRACTED its #40 prerequisite —
+      self-caught stale claim; hub-verified: `types/team.ts:36` carries the 17-column default
+      (14 lifecycle + 3 exception, sync-pinned to `DEFAULT_STATUSES`), and the CLI enumerates
+      the same 17. **The surviving concern becomes the probe's own test, not a delay: a CLI
+      that ACCEPTS 17 and a server that COERCES on persist look identical until read-back.**
+      PROBE TEST PLAN (AMOA-authored, adopted): P1 create card with `TRDD-<id8>` in the title →
+      P2 the discriminating walk design→dispatch→ai_review→live_auditing→blocked→dev with a
+      read-back after EACH move — ASSERT-DISTINCT (six read-backs must be six different
+      strings; any collapse is the coercion FINDING, never a pass) + ASSERT-REJECT
+      (`not_a_column` must fail, else every accept is vacuous) → P3 the ORCH half via
+      `amoa_kanban_manager.py::update_task_status` with the TRDD write-through verified by
+      `read_column` AND `zone_for_column` vs the file's actual folder (a zone-crossing move
+      must have `git mv`'d it) + ASSERT-AUTHORITY (`published` from an ORCH identity must
+      RAISE) → P4 teardown (card, then probe, full pipeline). Report: per phase, exact
+      command + exact read-back — "all green" without the six quoted read-backs is not a
+      verifiable result. AMOA runs the ORCH half given the task-id if the probe has no
+      checkout. SIDE HAZARD to carry forward: the registry does not mark fixture vs live
+      agents, so amp-identity guidance path (1) invites picking a live agent's workdir by
+      mistake — surface when the probe lands.
 
 ## Approval log
 

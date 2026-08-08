@@ -1,9 +1,9 @@
 ---
 trdd-id: 17K0SHDQ
 title: Close ai-maestro#46 — the four remaining work items after the 2026-08-08 defect map
-column: todo
+column: dev
 created: 2026-08-08T15:19:13+0200
-updated: 2026-08-08T15:19:13+0200
+updated: 2026-08-08T15:35:00+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: bugfix
@@ -65,11 +65,16 @@ recipe), NOT a resolver change.
 
 ## Acceptance
 
-- [ ] W-A shipped, run once on this host: collision count 26 → 0, second run reports 0 changes
-- [ ] W-B shipped: one shared helper, 3 call sites converted, N-match hard-fail pinned + neuter observed
-- [ ] W-C shipped: title filter + resolver flag, 0/1/N pinned
-- [ ] W-D posted on #46; #46 closed; AMOA and AMAA notified and unblocked (or their remaining
-      blocker named by them explicitly)
+- [x] W-A shipped (`d84249c9`), run once on this host: collision 26 → 0, second run 0 changes,
+      apply log in reports/fleet-audit/ (2026-08-08T15:28+0200)
+- [x] W-B shipped (`3eed6091`): one shared helper in `shell-helpers/common.sh:327`, 3 call
+      sites converted, 7 tests green run by the hub, neuter red d/e/f recorded in the test
+      file; deployed to `~/.local/share` + `~/.local/bin` copies with timestamped backups
+      and verified on the installed copies (2026-08-08T15:32+0200)
+- [ ] W-C shipped: title filter + resolver flag, 0/1/N pinned (deferred — feature, nobody
+      blocked; machine burn was ~$480/hr at decision time, 2026-08-08T15:30+0200)
+- [ ] W-D posted on #46 ✓ and #46 CLOSED ✓ (comment 5226325800); AMOA and AMAA notified —
+      box closes when each confirms unblocked or names its remaining blocker
 
 ## Approval log
 

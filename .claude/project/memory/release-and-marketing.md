@@ -72,4 +72,14 @@ marketing/
 
 ## See also
 
+
+^ATOM-PTK5-9364 [desc:"git-cliff release notes copy commit subjects verbatim — a bare @word in a subject pages a real account from the release body", keywords: release_notes_paged_someone changelog_mention_notification git-cliff_commit_subject_at-mention release_body_linkifies, ocd: 2026-08-08, lmd: 2026-08-08]
+
+Release notes built by git-cliff copy commit SUBJECTS verbatim into the CHANGELOG, and the
+canonical pipeline uses that section as the GitHub RELEASE BODY — where a word-boundary `@word`
+linkifies and PAGES a live account. Commits about the anti-paging rule itself are the most
+likely carriers. Durable fix: a `cliff.toml` postprocessor backticking word-boundary `@word`
+(a hand edit of CHANGELOG.md is undone by the next git-cliff run). Found by the assistant-role
+session at its v0.3.3 release; filed for the canonical template as CPV#202.
+
 ## Notes and lessons learned

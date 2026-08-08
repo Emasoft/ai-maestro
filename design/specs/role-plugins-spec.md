@@ -243,8 +243,10 @@ procedures, and the fleet's `disable-model-invocation` preload exclusion (found 
 2026-08-08) shipped agents that booted without knowing their own procedures. A STALE menu is
 worse than none: the menu MUST be updated in the same change that adds, renames, or removes a
 skill, and a publish gate SHOULD compare menu entries against shipped `SKILL.md` count. Shipped
-state at ruling time (menus present: COS, AMAMA; partial: AMOA, maintainer, integrator,
-programmer, autonomous) migrates on-next-release, same policy as RP-MODEL-01.
+state at ruling time (menus present: COS, AMAMA, programmer — the programmer row corrected
+2026-08-08 same-day: its 6-for-6 menu table shipped in v2.0.0 at 10:28Z, before this ruling; the
+"partial" reading was measured at v1.4.7, a claim true when taken and stale when cited; partial:
+AMOA, maintainer, integrator, autonomous) migrates on-next-release, same policy as RP-MODEL-01.
 
 ---
 

@@ -46,7 +46,17 @@ sentence (the ASSISTANT's own) decides the ownership question for workdir-contai
       it in the server's provisioning + watchdog path (never in any plugin), with a test that
       deletes the hook from a fixture workdir and asserts re-assertion.
 - [ ] Record the ruling on ai-maestro#127 and #39 so the ownership question is closed on the
-      durable channel too.
+      durable channel too. (Comments posted 2026-08-08 — 5225782466 / 5225782538; box closes
+      when the watchdog items above land.)
+- [ ] SAME PRINCIPLE, SECOND SURFACE (ASSISTANT finding, 2026-08-08): an agent can
+      `claude plugin uninstall` its OWN role plugin locally — removing its own governance —
+      and R9.13 guards only the registry side. Persona instructions forbidding it (the
+      ASSISTANT shipped one as forbidden #12) are defense-in-depth, same status as workdir
+      hooks: the ENFORCING layer is the server — extend the invariants watchdog to detect a
+      registered agent whose required role plugin is absent locally and re-assert it (R17
+      self-heal covers the core plugin; this extends the same mechanism to the ROLE plugin).
+      Fleet check (each repo greps its persona for the instruction) rides the hub's next
+      fleet-wide notice, never a dedicated wave.
 
 ## Approval log
 

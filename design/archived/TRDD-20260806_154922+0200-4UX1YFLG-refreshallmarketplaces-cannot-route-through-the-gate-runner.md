@@ -1,9 +1,10 @@
 ---
 trdd-id: 4UX1YFLG
 title: RefreshAllMarketplaces breaks the AIO-TXN-10 ratchet and cannot route through the gate runner as designed
-column: planned
+column: completed
 created: 2026-08-06T15:49:22+0200
-updated: 2026-08-08T16:22:38+0200
+updated: 2026-08-08T16:24:24+0200
+implementation-commits: [36dcf799]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -99,10 +100,13 @@ setting a precedent that a conformance detector may be narrowed by whoever trips
 
 ## Acceptance
 
-- [ ] MANAGER rules on which of the three options applies
-- [ ] `aio-txn-10-runner-coverage` passes with `MAX_HANDROLLED` still 0
-- [ ] If option 3: the detector's definition of "pipeline" is stated in the test's own comment, so
-      the next reader learns the boundary rather than re-deriving it
+- [x] MANAGER rules on which of the three options applies — option 3, APPROVED 2026-08-08 as an
+      R51.6 limit case (see Approval log; never "exempt")
+- [x] `aio-txn-10-runner-coverage` passes with `MAX_HANDROLLED` still 0 — 5/5 green locally
+      (36dcf799), including the new gate-count companion that voids the entry on a second gate
+- [x] If option 3: the detector's definition of "pipeline" is stated in the test's own comment, so
+      the next reader learns the boundary rather than re-deriving it — the `R516_LIMIT_CASES`
+      docblock carries the ruling's wording and the revisit bar
 
 ## Approval log
 
@@ -125,3 +129,6 @@ setting a precedent that a conformance detector may be narrowed by whoever trips
   MANAGER also ruled option 3 the only defensible one (1 is a lie the detector would believe,
   2 is gaming — both defeat R51.0), and placed on the record that not self-approving one's own
   regression is what makes the approval mean anything.
+- 2026-08-08T16:24:24+0200 — COMPLETED by ai-maestro. Implementation landed as `36dcf799`
+  (R516_LIMIT_CASES allowlist + gate-count companion test); acceptance verified: the ratchet
+  file 5/5 green with MAX_HANDROLLED still 0.

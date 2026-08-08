@@ -177,7 +177,7 @@ optional payload. (The ASSISTANT plugin is exactly this minimum + the two mandat
 ├── .claude-plugin/plugin.json      # name/version/description/author/repository/license
 ├── <P>.agent.toml                  # the role profile (REQUIRED) — RP-TOML
 ├── agents/
-│   ├── <P>-main-agent.md           # quad-id #4 — NOT prefixed; model: opus (see RP-MODEL)
+│   ├── <P>-main-agent.md           # quad-id #4 — NOT prefixed; model policy: see RP-MODEL
 │   └── <pfx>*.md                   # subagents (prefixed; NO model:, NO hooks:)
 ├── skills/<pfx>*/SKILL.md          # + references/ ; user-invocable:false ; agent:<P>-main-agent
 ├── commands/<pfx>*.md              # user-invocable:true ; argument-hint ; allowed-tools
@@ -209,11 +209,20 @@ client's protocol.
 
 ## RP-MODEL — the `model:` pinning convention (flagged inconsistency)
 
-`RP-MODEL-01` Every shipped role-plugin PINS `model: opus` on the main-agent (frontmatter) and in
-the toml, and OMITS `model:` on subagents (they inherit the session model). This contradicts the
-general "omit `model:`, inherit session" guidance (CLAUDE.md distillation / CPV CA-04); it
-validates + installs fine today and is the established pattern. Recorded as a live inconsistency,
-not resolved — a new role-plugin SHOULD copy the pattern (pin on main+toml, omit on subagents).
+`RP-MODEL-01` **CORRECTED 2026-08-08 — the previous universal ("every shipped role-plugin PINS
+`model: opus` on the main-agent") is FALSE, measured against the shipped releases:** `opus` ×4
+(assistant-manager 2.14.3, chief-of-staff 2.21.1, orchestrator 1.9.5, integrator 1.3.7) · **no
+`model:` key** ×2 (architect 2.11.1, programmer 1.4.7) · `inherit` ×1 (maintainer 1.7.21) ·
+`sonnet` ×1 (autonomous 1.5.5). Half the fleet follows the "pattern"; the decisive counterexample
+is `ai-maestro-autonomous-agent` — a plugin `RP-TITLES-02` in this same document calls mandatory —
+pinning `sonnet`. Two further facts moved under the old text: CC 2.1.219 re-pointed the bare
+`opus` token (Opus 5, 1M ctx, different price), so a pinned token's meaning drifts with the
+platform; and subagents already omit `model:` everywhere (that half of the old clause was true and
+stands). WHAT IS NORMATIVE NOW: subagents OMIT `model:` (inherit the session); the main-agent
+pin policy is an OPEN DESIGN QUESTION owned by `TRDD-TYB3Q1NJ` (architect, tier 2 — whether to
+mandate a family alias instead of a movable token). Until that card closes, a new role-plugin
+SHOULD omit `model:` on the main-agent too (the CLAUDE.md / CPV CA-04 default), and MUST NOT cite
+this clause as requiring an `opus` pin.
 
 ---
 
@@ -226,8 +235,9 @@ not resolved — a new role-plugin SHOULD copy the pattern (pin on main+toml, om
 3. `<P>.agent.toml`: `[agent] name=<P>` + **`compatible-titles`** + **`compatible-clients`**
    (RP-TOML-MANDATORY). Pick a body shape (flat or nested — RP-TOML-SHAPE); the flat shape is the
    simplest for a minimal plugin.
-4. `agents/<P>-main-agent.md`: frontmatter `name: <P>-main-agent`, description, `model: opus`,
-   optional `skills:` list, then the persona body.
+4. `agents/<P>-main-agent.md`: frontmatter `name: <P>-main-agent`, description, optional
+   `skills:` list, then the persona body. OMIT `model:` (inherit the session) until
+   `TRDD-TYB3Q1NJ` rules on the pin policy — see the corrected `RP-MODEL-01`.
 5. (optional payload) skills/subagents/commands/hooks per RP-PREFIX.
 6. **VERIFY quad-identity** (RP-QUAD-04) — the #1 rejection cause.
 7. Plugin-abstraction (CLAUDE.md): NO element may call `/api/...` directly — go through the
@@ -247,7 +257,7 @@ USER-provided source) conforms to this SPEC as a **minimum-tree LOCAL/D4** role-
 - **Toml shape** — flat/PSS-derived (RP-TOML-SHAPE), `[dependencies].external_skills` =
   planning / agent-messaging / agent-identity / team-kanban (deliberately NO `team-governance`, R39.8).
 - **Minimum tree ✓** — plugin.json + `.agent.toml` + main-agent only (no bundled payload).
-- **model:** opus on the main-agent (RP-MODEL).
+- **model:** main-agent pin policy is OPEN — omit `model:` pending `TRDD-TYB3Q1NJ` (RP-MODEL).
 - **PUBLISHED** (1.0.1 correction — the 1.0.0 text said "no published GitHub repo; the Emasoft
   404 is by design", stale since 2026-07-22): `Emasoft/ai-maestro-assistant-role-agent` is
   PUBLIC and listed in the `ai-maestro-plugins` marketplace manifest, while remaining absent

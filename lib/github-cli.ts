@@ -82,6 +82,10 @@ export interface GhProjectValidation {
   valid: boolean
   owner: string
   number: number
+  /** Present ONLY when the URL was repo-scoped (github.com/<owner>/<repo>/projects/<n>).
+   *  Absent = org/user-level board (browse-only kanban) — ai-maestro#133/#139. Consumers
+   *  copy this verbatim into GitHubProjectLink; they must never synthesize a repo. */
+  repo?: string
   title?: string
   error?: string
 }
@@ -465,20 +469,37 @@ export function getProject(owner: string, number: number): GhProjectDetail {
   }
 }
 
-/** Validate a GitHub Project URL and return parsed info */
+/** Validate a GitHub Project URL and return parsed info.
+ *
+ *  Accepts BOTH board shapes (ai-maestro#139 — this was org/user-only, so the one
+ *  CRUD-capable shape could never pass the wizard's validate step):
+ *    org/user-level:  https://github.com/orgs/<owner>/projects/<n>   (also users/)
+ *    repo-scoped:     https://github.com/<owner>/<repo>/projects/<n>
+ *
+ *  ORDER IS LOAD-BEARING: the org/user prefix is matched EXPLICITLY FIRST, because
+ *  `orgs/<owner>/projects/<n>` is ALSO four segments with `projects` at index 2 — a
+ *  repo-shaped parse tried first reads it as owner="orgs", repo=<the real owner>: a
+ *  link that validates and points nowhere. (Caught independently in the COS plugin's
+ *  first draft of the same parse; do not reorder.)
+ */
 export function validateProjectUrl(url: string): GhProjectValidation {
-  // Parse: https://github.com/orgs/<owner>/projects/<number>
-  //    or: https://github.com/users/<owner>/projects/<number>
-  const match = url.match(/github\.com\/(?:orgs|users)\/([^/]+)\/projects\/(\d+)/)
-  if (!match) {
+  const orgMatch = url.match(/github\.com\/(?:orgs|users)\/([^/]+)\/projects\/(\d+)/)
+  const repoMatch = orgMatch ? null : url.match(/github\.com\/([^/]+)\/([^/]+)\/projects\/(\d+)/)
+  if (!orgMatch && !repoMatch) {
     return { valid: false, owner: '', number: 0, error: 'Invalid project URL format' }
   }
-  const owner = match[1]
+  const owner = orgMatch ? orgMatch[1] : repoMatch![1]
+  const repo = orgMatch ? undefined : repoMatch![2]
+  const number = parseInt(orgMatch ? orgMatch[2] : repoMatch![3], 10)
   shellSafe(owner)
-  const number = parseInt(match[2], 10)
+  if (repo !== undefined) shellSafe(repo)
   try {
+    // Projects v2 boards live at the OWNER level regardless of URL shape — the repo
+    // segment only decides which repo the kanban's CRUD sync files issues into.
     const project = getProject(owner, number)
-    return { valid: true, owner, number, title: project.title }
+    return repo === undefined
+      ? { valid: true, owner, number, title: project.title }
+      : { valid: true, owner, repo, number, title: project.title }
   } catch (error) {
     return {
       valid: false,

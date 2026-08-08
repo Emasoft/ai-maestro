@@ -55,11 +55,18 @@ interface GitHubRepo {
   description?: string
 }
 
+// The ACTUAL shape GET /api/github/projects?validate= returns (GhProjectValidation from
+// lib/github-cli.ts). The previous local interface claimed {id, title, number, url} — the
+// endpoint has never sent `url`, so handleCreate's re-parse of info.url ran on undefined and
+// the link path silently attached NO board behind a green "Found:" checkmark (ai-maestro#139).
+// A local type that describes what you wish an endpoint returned is how that stays invisible.
 interface GitHubProjectInfo {
-  id: string
-  title: string
+  valid: boolean
+  owner: string
+  /** Present ONLY for repo-scoped board URLs; absent = org/user board (browse-only, #133). */
+  repo?: string
   number: number
-  url: string
+  title?: string
 }
 
 type ProjectChoice = 'create' | 'link' | 'skip'
@@ -375,24 +382,21 @@ export default function TeamCreationWizard({
         payload.orchestratorId = data.orchestratorAgentId
       }
 
-      // GitHub Project — only the "link" path can be mapped to the current
-      // route schema (owner+repo+number tuple). GitHubProjectInfo exposes
-      // a `url` field but no pre-parsed owner/repo, so we extract them from
-      // the URL. Repo selection, new-repo creation, and
-      // createGithubProject=true are not plumbed through yet and are
-      // silently dropped here to keep team creation working.
+      // GitHub Project — copy the VALIDATED fields verbatim (ai-maestro#139). The server's
+      // validateProjectUrl is the ONLY parser; a second regex here is how the link path was a
+      // silent no-op (it re-parsed info.url, a field the endpoint never sent) and, behind that,
+      // fabricated repo=owner for org URLs (`repo: m[2] || m[1]`) — a well-formed link whose
+      // CRUD sync would file issues into a repo the board URL never named. `repo` is copied
+      // ONLY when the URL was repo-scoped; absent = org/user board, browse-only (#133).
+      // Repo selection, new-repo creation, and createGithubProject=true are still not plumbed
+      // through and are dropped here to keep team creation working.
       if (data.projectChoice === 'link' && data.linkedProjectInfo) {
         const info = data.linkedProjectInfo
-        // URL format: https://github.com/<owner>/<repo>/projects/<number>
-        // or https://github.com/orgs/<owner>/projects/<number>
-        const m =
-          /github\.com\/(?:orgs\/)?([^/]+)(?:\/([^/]+))?\/projects\/(\d+)/.exec(info.url || '')
-        if (m && m[1] && m[3]) {
-          const owner = m[1]
-          const repo = m[2] || m[1]
-          const number = Number(m[3])
-          if (Number.isFinite(number) && number > 0) {
-            payload.githubProject = { owner, repo, number }
+        if (Number.isFinite(info.number) && info.number > 0 && info.owner) {
+          payload.githubProject = {
+            owner: info.owner,
+            number: info.number,
+            ...(info.repo ? { repo: info.repo } : {}),
           }
         }
       }
@@ -705,7 +709,7 @@ export default function TeamCreationWizard({
                       update('linkedProjectValid', null)
                       update('linkedProjectInfo', null)
                     }}
-                    placeholder="https://github.com/orgs/.../projects/..."
+                    placeholder="https://github.com/orgs/<owner>/projects/<n> or /<owner>/<repo>/projects/<n>"
                     className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500"
                   />
                   <button

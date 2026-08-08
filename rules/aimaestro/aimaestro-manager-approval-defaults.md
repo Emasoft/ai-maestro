@@ -121,8 +121,14 @@ The two ratified rulesets (both `target: branch`, `enforcement: active`,
 condition `ref_name.include: ["~DEFAULT_BRANCH"]`):
 
 - **`baseline-history-protect`** — `bypass_actors: []` (nobody, incl.
-  admin). Rules: `deletion`, `non_fast_forward`,
-  `required_linear_history`.
+  admin). Rules: `deletion`, `non_fast_forward`.
+  (`required_linear_history` REMOVED by USER ruling 2026-08-08 —
+  "an unrealistic requirement nobody was ever able to follow;
+  development is too complex and articulated, with many faux passes.
+  Non-linear history is allowed in all repos." Stripped from all 8
+  live carriers the same day, per-object verified. The 3-repo "drift"
+  ai-maestro#140 found was this rule failing in practice — the USER's
+  ruling ratifies what the fleet had already converged on.)
 - **`baseline-pr-and-checks`** — `bypass_actors:
   [{actor_id:5, actor_type:RepositoryRole, bypass_mode:always}]`
   (admin direct-push for `publish.py`; outside PRs still gated). Rules:

@@ -73,8 +73,19 @@ recipe), NOT a resolver change.
       and verified on the installed copies (2026-08-08T15:32+0200)
 - [ ] W-C shipped: title filter + resolver flag, 0/1/N pinned (deferred — feature, nobody
       blocked; machine burn was ~$480/hr at decision time, 2026-08-08T15:30+0200)
-- [ ] W-D posted on #46 ✓ and #46 CLOSED ✓ (comment 5226325800); AMOA and AMAA notified —
-      box closes when each confirms unblocked or names its remaining blocker
+- [ ] W-D posted on #46 ✓ and #46 CLOSED ✓ (comment 5226325800); AMOA and AMAA notified.
+      AMAA named its remaining blocker precisely (2026-08-08T15:45+0200): the live round-trip
+      needs (1) a registered TEST agent on shared fleet infrastructure and (2) the ops run
+      from THAT agent's server-spawned session — neither is a peer's to create unilaterally,
+      and AMAA correctly refused to write shared state on a peer's say-so. AMAA also VERIFIED
+      the new refusal text deployed (quoted it back verbatim) and correctly declined the
+      AMP_HOST=1 circumvention. **CLOSURE PLAN (hub-owned): the hub spawns a short-lived
+      registered probe agent (`~/agents/kanban-validation-probe/`), runs AMAA's exact op
+      sequence (op-create-kanban-epic.md / op-query-kanban-progress.md — AMAA hands it over),
+      both sides verify board state, then the probe is deleted through the full DeleteAgent
+      pipeline + cemetery purge (scenario Rule 1 discipline). Execution deferred to a quieter
+      machine window (burn ~$480/hr at decision time) and a fresh hub context — the run is a
+      real orchestration, not a tail-of-session errand.** AMOA confirmation still pending.
 
 ## Approval log
 

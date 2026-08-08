@@ -163,6 +163,38 @@ t_f_case_insensitive_ambiguous() {
         "two names differ only by case, ref matches both ci -> refuse (no unique hit)"
 }
 
+# ============================================================================
+# (g) `self` / `<self>` -> the whoami route's id, verbatim (TRDD-COOLOZ1N
+# ruling 2). The canned body is the /api/agents/me shape ({id,name}), which has
+# NO .agents array — so this also proves the self branch takes the whoami path:
+# fed to the ?q= parser it would count 0 matches and refuse.
+# ============================================================================
+t_g_self_resolves_via_whoami() {
+    CURL_CANNED_JSON='{"id":"eeeeeeee-0000-0000-0000-000000000001","name":"myself"}'
+    run "self"
+    local ok1=$?
+    [ "$R_RC" = "0" ] && [ "$R_OUT" = "eeeeeeee-0000-0000-0000-000000000001" ]
+    ok1=$?
+    run "<self>"
+    [ "$ok1" = "0" ] && [ "$R_RC" = "0" ] && [ "$R_OUT" = "eeeeeeee-0000-0000-0000-000000000001" ]
+    record "self_resolves_via_whoami" "$?" \
+        "self and <self> -> the whoami id (the {id,name} shape proves the me path, not ?q=)"
+}
+
+# ============================================================================
+# (h) `self` without an agent credential -> the route's no_self_agent error is
+# surfaced with the remedy named, exit 1 — never a silent empty id.
+# ============================================================================
+t_h_self_without_aid_refuses() {
+    CURL_CANNED_JSON='{"error":"no_self_agent","message":"me is for agent callers (AID_AUTH)."}'
+    run "self"
+    [ "$R_RC" != "0" ] && [ -z "$R_OUT" ] \
+        && printf '%s' "$R_ERR" | grep -q "could not resolve self" \
+        && printf '%s' "$R_ERR" | grep -q "AID_AUTH"
+    record "self_without_aid_refuses" "$?" \
+        "whoami error body -> refuse, error names no_self_agent + the AID_AUTH remedy"
+}
+
 # --- run all -----------------------------------------------------------------
 t_a_uuid_passthrough
 t_b_zero_matches
@@ -170,6 +202,8 @@ t_c_single_match
 t_d_unique_exact_name
 t_e_no_unique_exact_hard_fails
 t_f_case_insensitive_ambiguous
+t_g_self_resolves_via_whoami
+t_h_self_without_aid_refuses
 
 # --- results table (unicode-bordered, colorized) ----------------------------
 NAME_W=32; STAT_W=6; DESC_W=64

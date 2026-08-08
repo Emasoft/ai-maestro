@@ -328,6 +328,37 @@ _resolve_agent_id() {
     local ref="${1:-}"
     [ -z "$ref" ] && { echo "Error: agent (UUID or name) required" >&2; return 1; }
 
+    # `self` / `<self>` — the CALLER's own agent, derived server-side from its AID
+    # (GET /api/agents/me, self-only-by-construction; TRDD-COOLOZ1N ruling 2). The
+    # bracketed form matches the fleet docs' notation; the bare form is what a hand
+    # types. An agent literally NAMED "self" remains reachable by UUID — the token
+    # takes priority here because "act on myself" must never silently resolve to a
+    # similarly-named stranger.
+    if [ "$ref" = "self" ] || [ "$ref" = "<self>" ]; then
+        local base resp
+        base="$(get_api_base)"
+        local -a auth_args=()
+        get_auth_args auth_args
+        resp="$(curl -s --max-time 30 "${auth_args[@]}" "${base}/api/agents/me")" || {
+            echo "Error: request to /api/agents/me failed (network)" >&2
+            return 1
+        }
+        if ! printf '%s' "$resp" | jq -e . >/dev/null 2>&1; then
+            echo "Error: invalid response from /api/agents/me (not JSON)" >&2
+            return 1
+        fi
+        local self_id
+        self_id="$(printf '%s' "$resp" | jq -r '.id // empty')"
+        if [ -z "$self_id" ]; then
+            local err
+            err="$(printf '%s' "$resp" | jq -r '.error // .message // empty')"
+            echo "Error: could not resolve self${err:+ — ${err}} (self requires AID_AUTH; a human caller names the agent explicitly)" >&2
+            return 1
+        fi
+        printf '%s\n' "$self_id"
+        return 0
+    fi
+
     # Already a UUID — the API's own isValidUuid gate will reject a bad one.
     if [[ "$ref" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
         printf '%s\n' "$ref"

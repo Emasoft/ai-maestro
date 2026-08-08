@@ -120,8 +120,12 @@ Commands:
 
 Content rules (enforced server-side):
   - html and url are mutually exclusive; `set` requires exactly one of them.
-  - html is capped at 2 MB.
+  - html is capped at 2 MB (also pre-checked client-side before the file is read).
   - url must be http(s) — javascript:, file:, data: are rejected.
+
+Agent argument: a UUID, a name/alias, or the literal `self` — an agent caller's
+own identity, derived server-side from AID_AUTH (GET /api/agents/me). A human
+caller has no self and names the agent explicitly.
 
 Strict routes (open, close, refresh, set) require AIMAESTRO_SUDO_TOKEN for USER
 callers. Agent callers authorize by AID_AUTH + governance title.

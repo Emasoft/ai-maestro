@@ -112,3 +112,23 @@ describe('readAgentlensWindowRows — fail-soft reader', () => {
     expect(rows).toEqual([])
   })
 })
+
+/*
+ * NEUTER RUN (2026-08-08 — feature committed as b0a842c8 FIRST, mutations reverted to the
+ * committed blob):
+ *
+ *   1. cohort guard `row.resets_5h !== cohort` → `false && …`
+ *   2. s→ms conversion `opts.lastSwitchAtS * 1000` → `opts.lastSwitchAtS`
+ *
+ *   Combined run → EXACTLY 2 red / 8 green, each attributable to one mutation by fixture
+ *   construction: "DROPS the foreign-cohort row" can only red under 1 (the straddle rows are all
+ *   live-cohort), and the straddle test can only red under 2 (the foreign row is excluded by the
+ *   still-armed age check's fixture instants). These are THE two account-attribution guards —
+ *   the account-burning-loop defense.
+ *
+ * Named unpinned residue, so green is not read as more than it is: the statuslineNear wiring's
+ * outer try/catch is defense-in-depth over callees that do not throw by construction
+ * (readAgentlensWindowRows resolves [] on every failure path — pinned above; readTickWindows
+ * catches its own JSON.parse; the mapper is pure). Per the "defense-in-depth abort is unpinnable
+ * by design" discipline: measured, named, kept.
+ */

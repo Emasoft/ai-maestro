@@ -3,7 +3,7 @@ trdd-id: COOLOZ1N
 title: Panel CLI wiring contract for amvcp — the measured spec plus the five rulings
 column: dev
 created: 2026-08-08T15:05:05+0200
-updated: 2026-08-08T16:47:34+0200
+updated: 2026-08-08T17:00:56+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: feature
@@ -170,8 +170,13 @@ Rationale: a contract proven on one path against a script that is not yet even i
       verified via bare PATH name: `command -v` resolves it and `help` exits 0) and the
       live install manifest now lists it. Re-sync path documented in
       `docs/SCRIPT-MANIFEST.md` §panel: re-run `install-agent-cli.sh`.
-- [ ] Add `<self>` resolution to the panel CLI, at parity with `aimaestro-session.sh`
-      (ruling 2).
+- [x] Add `<self>` resolution — landed BETTER than parity (`cb9b018b`): the fleet's
+      `<self>` was documentation notation ("pass your own UUID"), nothing derived it.
+      Now `GET /api/agents/me` (self-only-by-construction whoami, agent-only, non-strict
+      per R32; 5/5 route tests) + the literals `self`/`<self>` in the SHARED resolver —
+      so session/continuity/panel all gain it at once. Resolver suite 9/9; verified live
+      end-to-end via the deployed CLI (route in the executing bundle, honest AID-less
+      refusal naming the remedy, exit 1).
 - [x] Replace `_resolve_agent_id`'s first-match-wins `agents[0].id` — satisfied by
       `3eed6091` (shared hard-fail resolver in `scripts/shell-helpers/common.sh:327`,
       panel.sh delegates at its 3 call sites; exact-name priority, names-only ambiguity

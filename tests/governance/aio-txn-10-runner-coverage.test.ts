@@ -189,6 +189,27 @@ function analyze(): PipelineInfo[] {
  */
 const MAX_HANDROLLED = 0
 
+/**
+ * R51.6 LIMIT CASES — NOT exemptions (MANAGER ruling 2026-08-08, recorded in
+ * TRDD-4UX1YFLG's Approval log). A pipeline with ONE terminal side effect and no
+ * subsequent abortable work satisfies R51 in its limit: the irreversible effect is last
+ * because it is the only one (R51.6), and R51.4's compensation exists to restore validity
+ * when a LATER gate fails — with no later gate there is no failure path for an undo to
+ * protect. A compensation that cannot actually compensate is worse than none: it fails
+ * silently at 100% and reports success (the R51.5 concealment shape).
+ *
+ * Each entry records the pipeline's EXACT gate count and is SELF-INVALIDATING via the
+ * companion test below: the moment the pipeline gains a second gate, or any abortable work
+ * lands after the terminal one, the count moves off the recorded value, the entry is VOID,
+ * and R51.4 goes live for real — the ruling's revisit bar, made checkable.
+ */
+const R516_LIMIT_CASES: Record<string, number> = {
+  // The argless CLI catalog refresh: one terminal side effect, no rollback window — a
+  // marketplace refresh has no meaningful undo, and runGateSequence refuses a mutating
+  // gate with no compensation, correctly.
+  RefreshAllMarketplaces: 1,
+}
+
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */
 const MIN_TRANSACTIONAL = 19
 
@@ -249,13 +270,29 @@ describe('AIO-TXN-10 — every pipeline routes through lib/gate-transaction.ts',
     ).toBeGreaterThanOrEqual(MIN_TRANSACTIONAL)
   })
 
+  it('every R51.6 limit case still IS one — exact recorded gate count, or the entry is VOID', () => {
+    for (const [name, gates] of Object.entries(R516_LIMIT_CASES)) {
+      const p = pipelines.find(x => x.name === name)
+      expect(p, `${name} is listed as an R51.6 limit case but no longer exists — remove the entry`).toBeTruthy()
+      expect(
+        p!.gateOps,
+        `${name} now has ${p!.gateOps} gate ops (recorded: ${gates}) — the R51.6 limit-case entry ` +
+          `is VOID per the MANAGER ruling's revisit bar: with a second gate (or abortable work ` +
+          `after the terminal one) R51.4 goes live; retrofit it onto runGateSequence.`,
+      ).toBe(gates)
+    }
+  })
+
   it(`has at most ${MAX_HANDROLLED} pipelines still hand-rolling their gates`, () => {
     // Named in full rather than counted: a bare number tells the next session how much is
     // left but not what to pick up, and a silently truncated list reads as "covered".
-    const names = handRolled.map(p => `${p.name} (${p.gateOps} gate ops)`).sort()
+    // R51.6 limit cases are excluded ONLY while the companion test above holds them to their
+    // recorded single-gate shape — the pair, not this filter alone, is the ruling.
+    const handRolledOutside = handRolled.filter(p => !(p.name in R516_LIMIT_CASES))
+    const names = handRolledOutside.map(p => `${p.name} (${p.gateOps} gate ops)`).sort()
     expect(
-      handRolled.length,
-      `AIO-TXN-10 violated by ${handRolled.length} pipelines (ratchet allows ${MAX_HANDROLLED}).\n` +
+      handRolledOutside.length,
+      `AIO-TXN-10 violated by ${handRolledOutside.length} pipelines (ratchet allows ${MAX_HANDROLLED}).\n` +
         `Still hand-rolled:\n  ${names.join('\n  ')}\n` +
         `If you retrofitted one, LOWER MAX_HANDROLLED — it is a ratchet, it never rises.`,
     ).toBeLessThanOrEqual(MAX_HANDROLLED)

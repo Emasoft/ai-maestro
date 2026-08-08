@@ -1,15 +1,17 @@
 ---
 trdd-id: 4UX1YFLG
 title: RefreshAllMarketplaces breaks the AIO-TXN-10 ratchet and cannot route through the gate runner as designed
-column: proposal
+column: planned
 created: 2026-08-06T15:49:22+0200
-updated: 2026-08-06T15:49:22+0200
+updated: 2026-08-08T16:22:38+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: refactor
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: manager (emasoft-assistant-manager, repo Emasoft/ai-maestro-assistant-manager-agent)
+approval-datetime: 2026-08-08T16:22:38+0200
 priority: 1
 severity: medium
 effort: small
@@ -106,3 +108,20 @@ setting a precedent that a conformance detector may be narrowed by whoever trips
 
 - 2026-08-06T15:49:22+0200 — Authored as a proposal. Not self-mandated: the fix is a governance
   decision about a conformance rule, and the agent proposing it is the one whose commit broke it.
+- 2026-08-08T16:22:38+0200 — **APPROVED by MANAGER (min-approval-requirement: manager).** The
+  MANAGER's ruling, recorded verbatim (first delivery ~16:08 was lost to a context compaction;
+  resent on request — the lesson is the methodology's §3, record the decision in the card the
+  moment it arrives, not the moment you act on it):
+  > **APPROVED — TRDD-4UX1YFLG, MANAGER, 2026-08-08.** Not as an exemption: R51 is already
+  > satisfied. R51.0 directs that a case not covered by a clause be derived from the AIM ("an
+  > all-in-one function ALWAYS leaves the system in a valid state"), and R51.6 (irreversible
+  > effects go LAST) is met in its limit case by a single terminal gate — it is last because it
+  > is the only one. R51.4's compensation exists to restore validity when a LATER gate fails;
+  > with no later gate there is no failure path for an undo to protect. The AIM holds, so the
+  > rule is met and the DETECTOR was over-specified — it measured "has a compensation" as a
+  > proxy for "is transactional", and the proxy misfires on the degenerate single-terminal-gate
+  > case. Approved on that basis, with the allowlist worded as a limit case and the gate-count
+  > companion test required, not optional.
+  MANAGER also ruled option 3 the only defensible one (1 is a lie the detector would believe,
+  2 is gaming — both defeat R51.0), and placed on the record that not self-approving one's own
+  regression is what makes the approval mean anything.

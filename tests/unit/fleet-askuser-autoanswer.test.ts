@@ -299,3 +299,24 @@ describe('fleet watchdog — the AskUser auto-answer leg', () => {
     expect(snap).not.toBeNull()
   })
 })
+
+/*
+ * NEUTER RUNS (2026-08-08 — feature committed as 8e03e32f FIRST, each mutation reverted by
+ * AIM_ALLOW_DIRTY_RESTORE checkout to the committed blob):
+ *
+ *   1. s/process.env.AIM_FLEET_ASKUSER_AUTOANSWER === '1'/true/   (leg defaults ON)
+ *      → 1 red / 17 green: "is OFF by default: a fleet parked on a menu produces NO keystroke"
+ *   2. permission guard `=== 'permission'` → `=== 'never-matches'`
+ *      → red: "NEVER answers a permission prompt" (the skip ROW disappears — permission then
+ *        falls through the not-a-menu branch, so the row assertion is what pins the guard)
+ *   3. lockout condition → `false && …`
+ *      → red: "locks out the same menu after answering it"
+ *      (2+3 ran combined; independent by fixture — each test reaches only its own guard)
+ *   4a. re-verify reason check → null-check only   4b. signature check → `false && …`
+ *      → 2 red: "re-verifies immediately before ENTER" (4a — IDLE re-read now injects) and
+ *        "re-verify seeing a DIFFERENT menu" (4b — ASK_OTHER passes the surviving null check)
+ *
+ * What none of this can prove, stated so nobody reads the green as more than it is: that a real
+ * Claude Code menu is DISMISSED by the ENTER. The tests prove the keystroke is sent and every
+ * refusal path refuses. Arming AIM_FLEET_ASKUSER_AUTOANSWER stays a deliberate human act.
+ */

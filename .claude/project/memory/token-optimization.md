@@ -31,6 +31,11 @@ L1 (cheap model for bulk execution) is the one lever this runner CANNOT take: th
 
 `tests/scenarios/state/batch-budget.json` + `tests/scenarios/scripts/lean/batch-budget-guard.sh` (fail-closed): `hard_token_ceiling_per_run: 6000000`, `max_scenarios_per_run: 27`, a `STOP` sentinel file, and `enabled`/`validated` gates that stay closed until a calibration probe measures the real per-scenario cost. The FIRST probe is the exempt calibration run; a batch is sized only after its measured cost is recorded.
 
+
+^ATOM-8PZF-ZT94 [desc:"Concurrent same-block subagent spawns each cold-write the ~650k shared prefix — warm one first, serialize the rest, batch jobs per worker (measured 2026-08-08)", keywords: cache_thrash_fan-out concurrent_subagent_spawn_cold_boot lean_worker_prefix_cache_write_cost FORK_STORM_agentlens_alert parallel_agent_launch_same_block warm_one_agent_before_fanning_out, ocd: 2026-08-08, lmd: 2026-08-08]
+
+DO NOT spawn several subagents in the SAME tool block from a session with a large harness floor, BECAUSE each concurrent spawn cold-boots the full shared prefix (~650k here) before any can cache-hit it — measured 2026-08-08 15:00-15:16 local: 47 full-prefix cache writes (43 fully cold), agentlens FORK_STORM verdict, ~USD 263 window. DO warm ONE agent first (or serialize spawns ~3s apart, per workflows-rules) so later identical spawns cache-READ the shared prefix, and BATCH mechanical jobs (e.g. multiple gh posts) into ONE worker — the boot floor, not the work, dominates a lean worker's cost (240-310k tokens for 2-7 tool calls each).
+
 ## Notes and lessons learned
 
 [^1]: [id:ATOM-MCP-SCHEMA-PER-TURN-COST, status:valid, keywords:"mcp_server_tool_schemas_ride_base_context serena_heavy_use_tldr_instead scoped_read_cheaper_than_mcp long_run_high_turn_count_cost obvious_tool_not_cheapest_tool", ocd:2026-06-24, lmd:2026-06-24] The user named SERENA for technique 3 ("the SERENA MCP can be used to read only the symbols"). Implemented with `tldr` instead, and the user approved ("serena is so heavy? i didn't knew. ok, good choice."). Lesson: an MCP server loaded into a high-turn-count agent is a per-turn cost (its tool schemas ride the base context every turn), so the cheapest scoped-read path for a long run is a plain CLI (`tldr`) + ranged `Read`, NOT an MCP — even when the MCP is the obvious tool for the job.

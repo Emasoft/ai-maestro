@@ -1,9 +1,9 @@
 ---
 trdd-id: O16UGID8
 title: Bring the ARCHITECT and INTEGRATOR plugins onto the async-approval model (mandate fields, D1 never-block, Tier-0 self-mandates)
-column: planned
+column: completed
 created: 2026-08-08T12:01:51+0200
-updated: 2026-08-08T12:01:51+0200
+updated: 2026-08-08T15:20:00+0200
 current-owner: ai-maestro-hub-session
 task-type: docs
 min-approval-requirement: none
@@ -64,8 +64,22 @@ afford.
 
 ## Acceptance
 
-- [ ] Work orders sent to both sessions citing this card (2026-08-08)
-- [ ] Architect repo published with the refresh; verified against its remote tip by me
-- [ ] Integrator repo published with the refresh; verified against its remote tip by me
+- [x] Work orders sent to both sessions citing this card (2026-08-08, morning)
+- [x] Architect repo published with the refresh; verified against its remote tip by me —
+      v2.14.1: `min-approval-requirement`/`mandate` in 7 files (main agent, 5 subagents,
+      amaa-prrd-trdd-kanban SKILL); 9 stall-language grep hits READ individually: 7 are the
+      D1 doctrine itself ("do not spin-wait on an approver"), 2 are legitimately gated
+      transitions (a GitHub required-reviewers comment; a reference example awaiting a
+      genuinely required approval before sending specs). Verified 2026-08-08T15:16+0200.
+- [x] Integrator repo published with the refresh; verified against its remote tip by me —
+      v1.5.0 (published 2026-08-08T10:53:23Z): markers in `amia-prrd-trdd-kanban/SKILL.md` +
+      new `references/async-approval-model.md`, their own card TRDD-2MD3YY57; their 5-hit
+      grep read individually (1 rewritten, 1 deliberately preserved release gate, 3 false
+      positives) with population stated (725 tracked .md). Verified 2026-08-08T15:19+0200.
 
 ## Approval log
+
+- 2026-08-08T15:20:00+0200 — COMPLETED by ai-maestro-hub. Both halves shipped by their owning
+  sessions as their own Tier-0 cards (integrator TRDD-2MD3YY57 · architect v2.13.2-v2.14.1
+  series) and independently verified by the hub at the published tags, per the card's own
+  closure-record requirement.

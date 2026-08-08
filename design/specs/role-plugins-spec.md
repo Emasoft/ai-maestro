@@ -1,6 +1,6 @@
 # SPEC — AI Maestro ROLE-PLUGINS (on-disk structure, `.agent.toml`, quad-identity)
 
-- **spec-version:** 1.0.1
+- **spec-version:** 1.1.0
 - **status:** authoritative
 - **authority:** PRRD ▶ SPEC ▶ TRDD. This SPEC governs the on-disk shape of every role-plugin.
 - **scope:** what makes a Claude Code plugin a *role-plugin*, its file tree, the `.agent.toml`
@@ -218,11 +218,33 @@ is `ai-maestro-autonomous-agent` — a plugin `RP-TITLES-02` in this same docume
 pinning `sonnet`. Two further facts moved under the old text: CC 2.1.219 re-pointed the bare
 `opus` token (Opus 5, 1M ctx, different price), so a pinned token's meaning drifts with the
 platform; and subagents already omit `model:` everywhere (that half of the old clause was true and
-stands). WHAT IS NORMATIVE NOW: subagents OMIT `model:` (inherit the session); the main-agent
-pin policy is an OPEN DESIGN QUESTION owned by `TRDD-TYB3Q1NJ` (architect, tier 2 — whether to
-mandate a family alias instead of a movable token). Until that card closes, a new role-plugin
-SHOULD omit `model:` on the main-agent too (the CLAUDE.md / CPV CA-04 default), and MUST NOT cite
-this clause as requiring an `opus` pin.
+stands).
+
+**RULED 2026-08-08 (ai-maestro#136, closing `TRDD-TYB3Q1NJ`): role-plugin MAIN agents OMIT
+`model:`, same as subagents.** ROLE is orthogonal to model (RP-DEF-02's orthogonality extended):
+model choice is a cost/capability decision belonging to whoever launches the session — a pin lets
+the role author spend the operator's budget, is the only spelling that silently degrades under an
+org model-restriction, and conflicts with the CPV CA-04 cache-warmth default. The measured table
+above stays as the historical record of the pre-ruling drift. **Migration is on-next-release**:
+the six plugins carrying a key (`opus` ×4, `sonnet` ×1, `inherit` ×1 — `inherit` included, since
+omission expresses it without a second spelling) drop it at their next publish; carrying a key
+past that publish is a conformance failure, before it is not.
+
+---
+
+## RP-SKILL-MENU — the main agent enumerates its own skills
+
+`RP-SKILL-MENU-01` (added 2026-08-08, `TRDD-0FCR6KOW`) Every role-plugin MAIN agent whose plugin
+ships one or more skills MUST carry a compact **skill menu** in its persona body: one line per
+shipped skill — the skill name plus when to reach for it. Subagents are exempt (they receive
+task-scoped prompts). Rationale, from a measured incident: an agent that cannot SEE its skill
+inventory does not reach for it — skill descriptions alone under-trigger for role-specific
+procedures, and the fleet's `disable-model-invocation` preload exclusion (found and fixed
+2026-08-08) shipped agents that booted without knowing their own procedures. A STALE menu is
+worse than none: the menu MUST be updated in the same change that adds, renames, or removes a
+skill, and a publish gate SHOULD compare menu entries against shipped `SKILL.md` count. Shipped
+state at ruling time (menus present: COS, AMAMA; partial: AMOA, maintainer, integrator,
+programmer, autonomous) migrates on-next-release, same policy as RP-MODEL-01.
 
 ---
 
@@ -236,8 +258,8 @@ this clause as requiring an `opus` pin.
    (RP-TOML-MANDATORY). Pick a body shape (flat or nested — RP-TOML-SHAPE); the flat shape is the
    simplest for a minimal plugin.
 4. `agents/<P>-main-agent.md`: frontmatter `name: <P>-main-agent`, description, optional
-   `skills:` list, then the persona body. OMIT `model:` (inherit the session) until
-   `TRDD-TYB3Q1NJ` rules on the pin policy — see the corrected `RP-MODEL-01`.
+   `skills:` list, then the persona body. OMIT `model:` (inherit the session) — RULED, see
+   `RP-MODEL-01`. Include the skill menu (`RP-SKILL-MENU-01`).
 5. (optional payload) skills/subagents/commands/hooks per RP-PREFIX.
 6. **VERIFY quad-identity** (RP-QUAD-04) — the #1 rejection cause.
 7. Plugin-abstraction (CLAUDE.md): NO element may call `/api/...` directly — go through the
@@ -257,7 +279,7 @@ USER-provided source) conforms to this SPEC as a **minimum-tree LOCAL/D4** role-
 - **Toml shape** — flat/PSS-derived (RP-TOML-SHAPE), `[dependencies].external_skills` =
   planning / agent-messaging / agent-identity / team-kanban (deliberately NO `team-governance`, R39.8).
 - **Minimum tree ✓** — plugin.json + `.agent.toml` + main-agent only (no bundled payload).
-- **model:** main-agent pin policy is OPEN — omit `model:` pending `TRDD-TYB3Q1NJ` (RP-MODEL).
+- **model:** ✓ conformant with the RULED policy — no `model:` key (RP-MODEL-01, ruled 2026-08-08).
 - **PUBLISHED** (1.0.1 correction — the 1.0.0 text said "no published GitHub repo; the Emasoft
   404 is by design", stale since 2026-07-22): `Emasoft/ai-maestro-assistant-role-agent` is
   PUBLIC and listed in the `ai-maestro-plugins` marketplace manifest, while remaining absent

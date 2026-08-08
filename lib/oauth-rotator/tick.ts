@@ -55,6 +55,14 @@ import {
   type UsageObservation,
 } from '@/lib/statusline-admissible'
 import { listStatuslineSnapshots, STATUSLINE_FRESH_MS } from '@/lib/statusline-store'
+// `readTickWindows` is safe to import at runtime despite tick-status importing FROM this module:
+// that import is `import type` (erased at compile), so no runtime cycle exists.
+import { readTickWindows } from './tick-status'
+import {
+  readAgentlensWindowRows,
+  agentlensObservations,
+  type AgentlensWindowRow,
+} from './agentlens-usage'
 import {
   accountEmail,
   usageRequest,
@@ -64,6 +72,7 @@ import {
   scopedLimits,
   worstScopedPercent,
   earliestResetMs,
+  fiveHourResetSec,
   type NetworkDeps,
 } from './network'
 import * as fs from 'fs'
@@ -275,6 +284,10 @@ export interface WindowSnapshot {
   /** Display name of the worst model-scoped window, e.g. `Fable 5`. */
   scopedModel: string | null
   scopedPct: number | null
+  /** The live account's 5h reset instant, epoch SECONDS — the agentlens account-attribution
+   *  cohort key (TRDD-SLSSUIQ8). OPTIONAL and written only when known, so stamps from before
+   *  this field round-trip byte-identical (the tick-status tests pin them with toEqual). */
+  fiveHourResetsAtSec?: number | null
 }
 
 export interface TickResult {
@@ -327,6 +340,12 @@ export interface TickDeps {
    */
   cooldownStore?: NetworkDeps['cooldownStore']
   probeLock?: NetworkDeps['probeLock']
+  /**
+   * The agentlenspro window rows, injectable so a test can drive the second statusline source
+   * with no subprocess. Defaults to the real CLI reader (which is fail-soft `[]` when the CLI is
+   * absent — an uninstalled agentlenspro is a normal host state, not a fault). (TRDD-SLSSUIQ8)
+   */
+  readAgentlensRows?: () => Promise<AgentlensWindowRow[]>
 }
 
 function nowS(deps?: TickDeps): number {
@@ -378,6 +397,31 @@ export async function statuslineNear(
     // FAIL-SOFT, deliberately. An unreadable statusline store must leave the rotator exactly as it
     // was before this card — never rotate, never block a rotation the endpoint would have made.
     return { near: false, usage: null }
+  }
+
+  // SECOND SOURCE (TRDD-SLSSUIQ8): agentlenspro's un-quantized window rows, mapped into the SAME
+  // UsageObservation shape and re-filtered by the SAME admission machinery below — never a bypass
+  // of it. The mapper only attributes a row to the live account on an EXACT 5h-reset-cohort match
+  // (the persisted `fiveHourResetsAtSec` from the last endpoint probe): rows carry no account
+  // identity, and a live measurement showed two accounts' rows side by side, so timestamp-only
+  // attribution would hand the rotator another account's numbers — the account-burning
+  // misattribution `statusline-admissible.ts` exists to prevent. Its own try: an absent or
+  // erroring CLI must leave this function EXACTLY as it was before the card.
+  try {
+    const rows = deps?.readAgentlensRows ? await deps.readAgentlensRows() : await readAgentlensWindowRows()
+    if (rows.length > 0) {
+      const cohort = readTickWindows()?.fiveHourResetsAtSec ?? null
+      const rawSwitch = state.last_switch_at
+      snapshots = snapshots.concat(
+        agentlensObservations(rows, {
+          liveFp: typeof state.live_fp === 'string' && state.live_fp !== '' ? state.live_fp : null,
+          lastSwitchAtS: typeof rawSwitch === 'number' && Number.isFinite(rawSwitch) ? rawSwitch : null,
+          liveResets5hSec: cohort,
+        }),
+      )
+    }
+  } catch {
+    /* fail-soft: the agentlens source may only ever ADD observations, never break the read */
   }
   // ⚠ MILLISECONDS. `deps.now()` is this module's clock and it returns SECONDS (`nowS` divides
   // Date.now() by 1000, matching Python's time.time() for the janitor daemon), while a snapshot's
@@ -832,6 +876,7 @@ export async function autoRotate(
       sevenDayPct: sd,
       scopedModel: scWorst?.model ?? null,
       scopedPct: scWorst?.percent ?? null,
+      fiveHourResetsAtSec: fiveHourResetSec(liveData),
     }
   }
   const fhS = fh !== null ? `${Math.round(fh)}%` : '?'

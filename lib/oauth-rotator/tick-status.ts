@@ -95,7 +95,13 @@ function windowsFor(v: unknown): WindowSnapshot | null {
   // A scoped percentage without the model naming it is unusable — the sweep joins on the model.
   if (scopedPct !== null && scopedModel === null) return null
   if (fiveHourPct === null && sevenDayPct === null && scopedPct === null) return null
-  return { fiveHourPct, sevenDayPct, scopedModel, scopedPct }
+  const out: WindowSnapshot = { fiveHourPct, sevenDayPct, scopedModel, scopedPct }
+  // The agentlens attribution cohort (TRDD-SLSSUIQ8): written ONLY when valid, so stamps from
+  // before this field round-trip byte-identical (the toEqual pins in this module's tests) and a
+  // malformed value is dropped rather than carried for a reader to defend against.
+  const rs = w.fiveHourResetsAtSec
+  if (typeof rs === 'number' && Number.isFinite(rs) && rs > 0) out.fiveHourResetsAtSec = rs
+  return out
 }
 
 /** A stamp older than this is IGNORED. The beat writes every ~60 s while the flag is armed; once

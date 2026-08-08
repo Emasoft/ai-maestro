@@ -599,6 +599,24 @@ export function worstScopedPercent(usage: unknown): number | null {
  * blindly. `Date.parse` handles both ISO 8601 forms the API is known to emit (with and without
  * fractional seconds), so no format branch is needed.
  */
+/**
+ * The FIVE-HOUR bucket's reset instant as epoch SECONDS, or null. Epoch seconds — not ms —
+ * because its consumer matches it against agentlenspro's `resets_5h` field (epoch sec), where it
+ * is the account-attribution cohort key: two accounts' 5h windows reset at different instants,
+ * so an agentlens row whose `resets_5h` equals the live account's is the live account's row
+ * (TRDD-SLSSUIQ8). Rounding, not truncation, so a fractional-second ISO stamp cannot land one
+ * second off the cohort and silently exclude every row.
+ */
+export function fiveHourResetSec(usage: unknown): number | null {
+  if (!usage || typeof usage !== 'object') return null
+  const b = (usage as Record<string, unknown>).five_hour
+  if (!b || typeof b !== 'object') return null
+  const s = (b as Record<string, unknown>).resets_at
+  if (typeof s !== 'string' || !s) return null
+  const t = Date.parse(s)
+  return Number.isNaN(t) ? null : Math.round(t / 1000)
+}
+
 export function earliestResetMs(usage: unknown): number | null {
   if (!usage || typeof usage !== 'object') return null
   const u = usage as Record<string, unknown>

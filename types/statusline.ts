@@ -20,7 +20,7 @@
  */
 
 /** Which feed produced a rate-limit number. */
-export type StatuslineWindowSource = 'statusline' | 'endpoint'
+export type StatuslineWindowSource = 'statusline' | 'endpoint' | 'agentlens'
 
 /**
  * One rate-limit window.

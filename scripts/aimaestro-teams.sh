@@ -21,9 +21,9 @@
 #   aimaestro-teams.sh list
 #   aimaestro-teams.sh show <teamId>
 #   aimaestro-teams.sh create --name N [--description D] [--agents u1,u2]
-#       [--type T] [--cos UUID] [--password P] [--gh-owner O --gh-repo R]
+#       [--type T] [--cos UUID] [--password P] [--gh-owner O --gh-number N [--gh-repo R]]
 #   aimaestro-teams.sh update <teamId> [--name N] [--description D]
-#       [--agents u1,u2] [--orchestrator UUID|null] [--gh-owner O --gh-repo R]
+#       [--agents u1,u2] [--orchestrator UUID|null] [--gh-owner O --gh-number N [--gh-repo R]]
 #   aimaestro-teams.sh delete <teamId> [--password P] [--delete-agents]
 #   aimaestro-teams.sh add-agent <teamId> <agentUUID> [--password P]
 #   aimaestro-teams.sh remove-agent <teamId> <agentUUID> [--password P]
@@ -115,12 +115,15 @@ Commands:
       --type T
       --cos UUID                chief-of-staff agent UUID
       --password P              governance password (required for agent callers)
-      --gh-owner O --gh-repo R  attach a GitHub project
+      --gh-owner O --gh-number N [--gh-repo R]
+                                attach a GitHub Projects-v2 board (number = the
+                                /projects/<n> segment; repo OPTIONAL — absent =
+                                org/user-level board, browse-only kanban, #133)
   update <teamId> [flags]       Update a team (PUT)
       --name N | --description D | --agents u1,u2
       --orchestrator UUID|null  set/clear the orchestrator slot
       --cos UUID | --remove-cos assign/clear the chief-of-staff (#64; MANAGER by AID, no password)
-      --gh-owner O --gh-repo R
+      --gh-owner O --gh-number N [--gh-repo R]
   delete <teamId> [flags]       Delete a team (governance action)
       --password P              governance password
       --delete-agents           cascade-delete the team's agents
@@ -151,8 +154,28 @@ cmd_show() {
     _api GET "/api/teams/${id}"
 }
 
+# GitHub Projects-v2 flag contract (ai-maestro#137): the board identity is owner + NUMBER —
+# CreateTeamSchema/UpdateTeamSchema require `number` and are .strict(), so a payload without it
+# is rejected on EVERY call (the pre-fix CLI emitted {owner, repo} and could never attach a
+# board). `repo` is OPTIONAL since #133: absent = org/user-level board (browse-only kanban).
+# The number must be a positive integer HERE because jq's `tonumber` would otherwise abort the
+# whole payload build with an opaque error.
+_validate_gh_project_flags() {
+    local gho="$1" ghr="$2" ghn="$3"
+    if [ -z "$gho" ] && [ -z "$ghr" ] && [ -z "$ghn" ]; then return 0; fi
+    if [ -z "$gho" ] || [ -z "$ghn" ]; then
+        echo "Error: --gh-owner and --gh-number must be given together (--gh-repo is optional; absent = org/user-level board)" >&2
+        return 1
+    fi
+    case "$ghn" in
+        ''|*[!0-9]*) echo "Error: --gh-number must be a positive integer (the /projects/<n> segment)" >&2; return 1 ;;
+    esac
+    [ "$ghn" -ge 1 ] || { echo "Error: --gh-number must be >= 1" >&2; return 1; }
+    return 0
+}
+
 cmd_create() {
-    local name="" description="" agents="" type="" cos="" password="" gh_owner="" gh_repo=""
+    local name="" description="" agents="" type="" cos="" password="" gh_owner="" gh_repo="" gh_number=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --name)        name="$2";        shift 2 ;;
@@ -163,13 +186,12 @@ cmd_create() {
             --password)    password="$2";    shift 2 ;;
             --gh-owner)    gh_owner="$2";    shift 2 ;;
             --gh-repo)     gh_repo="$2";     shift 2 ;;
+            --gh-number)   gh_number="$2";   shift 2 ;;
             *) echo "Error: unknown flag for 'create': $1" >&2; return 1 ;;
         esac
     done
     [ -z "$name" ] && { echo "Error: --name required" >&2; return 1; }
-    if { [ -n "$gh_owner" ] && [ -z "$gh_repo" ]; } || { [ -z "$gh_owner" ] && [ -n "$gh_repo" ]; }; then
-        echo "Error: --gh-owner and --gh-repo must be given together" >&2; return 1
-    fi
+    _validate_gh_project_flags "$gh_owner" "$gh_repo" "$gh_number" || return 1
     local agents_json
     agents_json="$(_csv_to_json_array "$agents")"
     # Start from required name, then conditionally add each optional field so the
@@ -178,21 +200,22 @@ cmd_create() {
     body="$(jq -nc \
         --arg name "$name" --arg desc "$description" --argjson agents "$agents_json" \
         --arg type "$type" --arg cos "$cos" --arg password "$password" \
-        --arg gho "$gh_owner" --arg ghr "$gh_repo" '
+        --arg gho "$gh_owner" --arg ghr "$gh_repo" --arg ghn "$gh_number" '
         {name: $name}
         + (if $desc     != "" then {description: $desc} else {} end)
         + (if ($agents | length) > 0 then {agentIds: $agents} else {} end)
         + (if $type     != "" then {type: $type} else {} end)
         + (if $cos      != "" then {chiefOfStaffId: $cos} else {} end)
         + (if $password != "" then {governancePassword: $password} else {} end)
-        + (if $gho      != "" then {githubProject: {owner: $gho, repo: $ghr}} else {} end)')"
+        + (if $gho      != "" then {githubProject: ({owner: $gho, number: ($ghn | tonumber)}
+                                    + (if $ghr != "" then {repo: $ghr} else {} end))} else {} end)')"
     _api POST "/api/teams" "$body"
 }
 
 cmd_update() {
     local id="${1:-}"; shift || true
     [ -z "$id" ] && { echo "Error: teamId required" >&2; return 1; }
-    local name="" description="" agents="" agents_set="false" orchestrator="" orchestrator_set="false" gh_owner="" gh_repo=""
+    local name="" description="" agents="" agents_set="false" orchestrator="" orchestrator_set="false" gh_owner="" gh_repo="" gh_number=""
     local cos="" cos_set="false"
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -202,14 +225,13 @@ cmd_update() {
             --orchestrator) orchestrator="$2"; orchestrator_set="true"; shift 2 ;;
             --gh-owner)     gh_owner="$2";    shift 2 ;;
             --gh-repo)      gh_repo="$2";     shift 2 ;;
+            --gh-number)    gh_number="$2";   shift 2 ;;
             --cos)          cos="$2"; cos_set="true"; shift 2 ;;
             --remove-cos)   cos=""; cos_set="true"; shift ;;
             *) echo "Error: unknown flag for 'update': $1" >&2; return 1 ;;
         esac
     done
-    if { [ -n "$gh_owner" ] && [ -z "$gh_repo" ]; } || { [ -z "$gh_owner" ] && [ -n "$gh_repo" ]; }; then
-        echo "Error: --gh-owner and --gh-repo must be given together" >&2; return 1
-    fi
+    _validate_gh_project_flags "$gh_owner" "$gh_repo" "$gh_number" || return 1
     # --cos routes to the dedicated chief-of-staff route (#64 canonical surface).
     # The team PUT deliberately STRIPS chiefOfStaffId (defense-in-depth), so moving
     # the COS slot MUST go through POST /api/teams/<id>/chief-of-staff. AID-MANAGER
@@ -237,13 +259,14 @@ cmd_update() {
         --arg name "$name" --arg desc "$description" \
         --argjson agents "$agents_json" --arg agents_set "$agents_set" \
         --argjson orch "$orch_json" --arg orch_set "$orchestrator_set" \
-        --arg gho "$gh_owner" --arg ghr "$gh_repo" '
+        --arg gho "$gh_owner" --arg ghr "$gh_repo" --arg ghn "$gh_number" '
         {}
         + (if $name != "" then {name: $name} else {} end)
         + (if $desc != "" then {description: $desc} else {} end)
         + (if $agents_set == "true" then {agentIds: $agents} else {} end)
         + (if $orch_set == "true" then {orchestratorId: $orch} else {} end)
-        + (if $gho != "" then {githubProject: {owner: $gho, repo: $ghr}} else {} end)')"
+        + (if $gho != "" then {githubProject: ({owner: $gho, number: ($ghn | tonumber)}
+                               + (if $ghr != "" then {repo: $ghr} else {} end))} else {} end)')"
     # Only PUT team fields when at least one non-COS field was given. When --cos
     # was the ONLY flag, the body is "{}" and the chief-of-staff POST above already
     # did the work — skip the redundant empty PUT.

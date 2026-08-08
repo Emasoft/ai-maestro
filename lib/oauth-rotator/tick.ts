@@ -408,17 +408,25 @@ export async function statuslineNear(
   // misattribution `statusline-admissible.ts` exists to prevent. Its own try: an absent or
   // erroring CLI must leave this function EXACTLY as it was before the card.
   try {
-    const rows = deps?.readAgentlensRows ? await deps.readAgentlensRows() : await readAgentlensWindowRows()
-    if (rows.length > 0) {
-      const cohort = readTickWindows()?.fiveHourResetsAtSec ?? null
-      const rawSwitch = state.last_switch_at
-      snapshots = snapshots.concat(
-        agentlensObservations(rows, {
-          liveFp: typeof state.live_fp === 'string' && state.live_fp !== '' ? state.live_fp : null,
-          lastSwitchAtS: typeof rawSwitch === 'number' && Number.isFinite(rawSwitch) ? rawSwitch : null,
-          liveResets5hSec: cohort,
-        }),
-      )
+    // Cohort FIRST, CLI second. With no persisted live cohort the mapper drops every row by
+    // construction (unknown identity is never guessed), so reading the CLI would spawn a
+    // subprocess whose output is definitionally discarded — a wasted spawn on every beat until
+    // the first endpoint probe stamps the cohort, and a REAL agentlenspro spawn inside any test
+    // that drives statuslineNear with default deps (measured: 24s + a 5s-timeout flake in the
+    // disjunct suite before this gate was hoisted).
+    const cohort = readTickWindows()?.fiveHourResetsAtSec ?? null
+    if (cohort !== null) {
+      const rows = deps?.readAgentlensRows ? await deps.readAgentlensRows() : await readAgentlensWindowRows()
+      if (rows.length > 0) {
+        const rawSwitch = state.last_switch_at
+        snapshots = snapshots.concat(
+          agentlensObservations(rows, {
+            liveFp: typeof state.live_fp === 'string' && state.live_fp !== '' ? state.live_fp : null,
+            lastSwitchAtS: typeof rawSwitch === 'number' && Number.isFinite(rawSwitch) ? rawSwitch : null,
+            liveResets5hSec: cohort,
+          }),
+        )
+      }
     }
   } catch {
     /* fail-soft: the agentlens source may only ever ADD observations, never break the read */

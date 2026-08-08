@@ -45,6 +45,11 @@ const obs = (
 const deps = (snapshots: UsageObservation[] | (() => Promise<never>)) => ({
   now: () => NOW_S,
   readSnapshots: typeof snapshots === 'function' ? snapshots : async () => snapshots,
+  // Isolation for the SECOND source (TRDD-SLSSUIQ8): without this stub, statuslineNear falls back
+  // to the real agentlenspro CLI on a host that has it installed — one subprocess spawn PER CALL
+  // (this file measured 24.5s under full-suite load, tripping the 5s per-test timeout). This
+  // suite is about the statusline-STORE source only; the agentlens source has its own suite.
+  readAgentlensRows: async () => [],
 })
 
 describe('statuslineNear — a positive signal trips, everything else is silent', () => {

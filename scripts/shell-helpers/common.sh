@@ -303,6 +303,105 @@ lookup_agent_by_directory() {
     return 1
 }
 
+# Resolve an agent ref (UUID, name, or alias) to its UUID via GET /api/agents?q=.
+# Prints the UUID and returns 0, or prints an "Error: ..." to stderr and returns 1.
+#
+# WHY THIS IS SHARED (TRDD-17K0SHDQ, ai-maestro#46 defect class; also flagged as
+# TRDD-COOLOZ1N hub box 4): this used to be pasted byte-identical into
+# aimaestro-panel.sh, aimaestro-session.sh, and aimaestro-continuity.sh, and its
+# multi-match branch was `jq -r '.agents[0].id // empty'` — SILENT FIRST-MATCH-WINS
+# over an unsorted substring search. A ref that happened to match more than one
+# agent resolved to WHICHEVER agent the server listed first, with no warning to
+# the caller and no way to tell it had happened. Three copies meant the fix had to
+# land three times (and be kept in sync forever); one shared definition means it
+# lands once.
+#
+# The new contract: 0 matches -> refuse. 1 match -> use it. N>1 matches -> use it
+# ONLY when exactly one candidate's `.name` equals the ref EXACTLY (case-sensitive
+# first; if none match case-sensitively, fall back to a case-insensitive compare
+# and accept it only if that too is unique). Anything else is a HARD FAIL that
+# lists every candidate's NAME — never its uuid. Printing a stranger's uuid in an
+# error message is the exact impersonation-invitation defect commit 1af95d49
+# ("the identity refusal must not hand the caller a peer's uuid", ai-maestro#46)
+# removed from amp-helper.sh; this resolver must not reintroduce it here.
+_resolve_agent_id() {
+    local ref="${1:-}"
+    [ -z "$ref" ] && { echo "Error: agent (UUID or name) required" >&2; return 1; }
+
+    # Already a UUID — the API's own isValidUuid gate will reject a bad one.
+    if [[ "$ref" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+        printf '%s\n' "$ref"
+        return 0
+    fi
+
+    # Reject anything that is not a plain tmux-safe name before it reaches a URL.
+    if [[ ! "$ref" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo "Error: invalid agent identifier '${ref}'" >&2
+        return 1
+    fi
+
+    local base encoded
+    base="$(get_api_base)"
+    encoded="$(printf '%s' "$ref" | jq -sRr @uri)"
+    local -a auth_args=()
+    get_auth_args auth_args
+
+    local resp
+    resp="$(curl -s --max-time 30 "${auth_args[@]}" "${base}/api/agents?q=${encoded}")" || {
+        echo "Error: request to /api/agents failed (network)" >&2
+        return 1
+    }
+
+    # A non-JSON response (proxy error page, HTML 502) must be a FAILURE, never
+    # "agent not found" — collapsing could-not-run into no-findings is the exact
+    # conflation the repo's three-exit-code discipline exists to prevent.
+    if ! printf '%s' "$resp" | jq -e . >/dev/null 2>&1; then
+        echo "Error: invalid response from /api/agents (not JSON)" >&2
+        return 1
+    fi
+
+    local count
+    count="$(printf '%s' "$resp" | jq '.agents | length' 2>/dev/null)"
+    [ -z "$count" ] && count=0
+
+    if [ "$count" -eq 0 ]; then
+        echo "Error: agent not found: ${ref}" >&2
+        return 1
+    fi
+
+    if [ "$count" -eq 1 ]; then
+        printf '%s' "$resp" | jq -r '.agents[0].id'
+        return 0
+    fi
+
+    # N>1: only trust an unambiguous EXACT name match — never the unsorted
+    # search's first hit.
+    local exact_ids exact_count
+    exact_ids="$(printf '%s' "$resp" | jq -r --arg r "$ref" '[.agents[] | select(.name == $r)] | .[].id')"
+    exact_count="$(printf '%s' "$exact_ids" | grep -c . || true)"
+    if [ "$exact_count" -eq 1 ]; then
+        printf '%s\n' "$exact_ids"
+        return 0
+    fi
+
+    if [ "$exact_count" -eq 0 ]; then
+        local ci_ids ci_count
+        ci_ids="$(printf '%s' "$resp" | jq -r --arg r "$ref" \
+            '[.agents[] | select((.name | ascii_downcase) == ($r | ascii_downcase))] | .[].id')"
+        ci_count="$(printf '%s' "$ci_ids" | grep -c . || true)"
+        if [ "$ci_count" -eq 1 ]; then
+            printf '%s\n' "$ci_ids"
+            return 0
+        fi
+    fi
+
+    local names
+    names="$(printf '%s' "$resp" | jq -r '[.agents[].name] | join(", ")')"
+    echo "Error: ambiguous agent ref '${ref}' — matches ${count} agents: ${names}" >&2
+    echo "Use the exact agent name or its agent id instead." >&2
+    return 1
+}
+
 # Initialize common variables - AGENT-FIRST approach
 # Sets: SESSION (optional), AGENT_ID, HOST_ID
 #

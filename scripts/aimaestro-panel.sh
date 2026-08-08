@@ -99,22 +99,8 @@ _api() {
     printf '%s\n' "$out"
 }
 
-_resolve_agent_id() {
-    local ref="${1:-}"
-    [ -z "$ref" ] && { echo "Error: agent (UUID or name) required" >&2; return 1; }
-    if [[ "$ref" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-        printf '%s\n' "$ref"; return 0
-    fi
-    if [[ ! "$ref" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-        echo "Error: invalid agent identifier '${ref}'" >&2; return 1
-    fi
-    local encoded resp id
-    encoded="$(printf '%s' "$ref" | jq -sRr @uri)"
-    resp="$(_api GET "/api/agents?q=${encoded}")" || return 1
-    id="$(printf '%s' "$resp" | jq -r '.agents[0].id // empty' 2>/dev/null)"
-    [ -z "$id" ] && { echo "Error: agent not found: ${ref}" >&2; return 1; }
-    printf '%s\n' "$id"
-}
+# _resolve_agent_id() is now shared — see scripts/shell-helpers/common.sh
+# (TRDD-17K0SHDQ; was duplicated byte-identical across 3 scripts).
 
 show_help() {
     cat <<'EOF'

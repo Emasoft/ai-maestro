@@ -15,6 +15,12 @@ jobs:
         node-version: [22]
 
     steps:
+      # The decoupling scanner REFUSES to run without ripgrep (exit 2, deliberately —
+      # a partial scan reporting clean is the bug it guards against), and ubuntu-latest
+      # does not ship rg. Without this step 3 tests fail as could-not-run (TRDD-N4SDG0ML).
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:

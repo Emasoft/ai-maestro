@@ -352,12 +352,15 @@ describe('supervisor — server tick-liveness probe (TRDD-IGCSDTIU)', () => {
       })
 
     // (a) OUR tick is beating → the false alarm is gone even though the janitor stamp is ancient.
+    // onMacos is forced (same pattern as the assembled-facts test above): gatherFacts derives it
+    // from os.platform(), so on a Linux CI runner diagnose() short-circuits at the non-macos
+    // branch and 'tick-stalled' is unreachable — the tickAgeS WIRING under test is platform-free.
     stampOwnTick(NOW - 60)
-    expect(diagnose(gather()).map((f) => f.code)).not.toContain('tick-stalled')
+    expect(diagnose({ ...gather(), onMacos: true }).map((f) => f.code)).not.toContain('tick-stalled')
 
     // (b) POSITIVE CONTROL — the same wiring must still catch a real stall, or (a) would pass just
     // as well against a fix that disabled the alert outright.
     stampOwnTick(NOW - (TICK_STALL_ALERT_S + 60))
-    expect(diagnose(gather()).map((f) => f.code)).toContain('tick-stalled')
+    expect(diagnose({ ...gather(), onMacos: true }).map((f) => f.code)).toContain('tick-stalled')
   })
 })

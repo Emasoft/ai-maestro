@@ -55,7 +55,13 @@ const CANDIDATES = existsSync(SCRIPTS)
       .sort()
   : []
 
+// The tail of the last failing --help's output. Carried into the assertion MESSAGE so a
+// red on CI names its cause — an exit code alone made the Linux-runner failures
+// undiagnosable from the log (TRDD-N4SDG0ML class 3: the harness swallowed the reason).
+let lastHelpFailureTail = ''
+
 function helpExitCode(script: string): number {
+  lastHelpFailureTail = ''
   try {
     execFileSync('bash', [join(SCRIPTS, script), '--help'], {
       stdio: 'pipe',
@@ -66,7 +72,8 @@ function helpExitCode(script: string): number {
     })
     return 0
   } catch (err) {
-    const e = err as { status?: number }
+    const e = err as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string }
+    lastHelpFailureTail = `${String(e.stdout ?? '')}\n${String(e.stderr ?? '')}`.trim().slice(-400)
     return typeof e.status === 'number' ? e.status : 1
   }
 }
@@ -85,7 +92,8 @@ describe('SCRIPT-MANIFEST §6.4 — `--help` exits 0 with no server and no crede
   const compliant = CANDIDATES.filter((s) => !KNOWN_VIOLATORS.has(s))
 
   it.each(compliant)('%s --help exits 0', (script) => {
-    expect(helpExitCode(script)).toBe(0)
+    const code = helpExitCode(script)
+    expect(code, lastHelpFailureTail || 'no output captured').toBe(0)
   })
 
   it('the known-violator list may only SHRINK — no new violations', () => {

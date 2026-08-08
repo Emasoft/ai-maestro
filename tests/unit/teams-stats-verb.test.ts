@@ -118,7 +118,11 @@ describe('the dispatch actually routes `stats` to the function', () => {
     const out = `${r.stdout ?? ''}${r.stderr ?? ''}`
     expect(out).not.toMatch(/unknown command/i)
     // Positive half: prove it got as far as the transport, so this cannot pass by the CLI failing
-    // for some third reason before dispatch (the ai-maestro#114 shape).
-    expect(out).toMatch(/HTTP \d{3}|auth_required/i)
+    // for some third reason before dispatch (the ai-maestro#114 shape). The verb-specific
+    // network-failure line also proves dispatch: only cmd_stats builds the /api/teams/stats
+    // request, so "request to /api/teams/stats failed" cannot come from an undispatched verb —
+    // and on a CI runner with NO server listening, that line (not an HTTP status) is what a
+    // correctly-dispatched call produces. The unknown-command discriminator above is untouched.
+    expect(out).toMatch(/HTTP \d{3}|auth_required|request to \/api\/teams\/stats failed/i)
   })
 })

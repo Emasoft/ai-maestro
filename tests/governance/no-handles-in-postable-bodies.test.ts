@@ -94,10 +94,26 @@ function postableSpans(text: string): Array<{ line: number; text: string }> {
 // a slot is a handle about to become real, and templates carry no `@` at all.
 const BODY_MENTION = /(^|[^\w/.@-])@([A-Za-z0-9][A-Za-z0-9-]{0,38}|<[A-Za-z][A-Za-z-]*>)/g
 
+// gh's OWN documented literals for assignee/reviewer flags ("Use \"@me\" to assign yourself";
+// "@copilot" assigns Copilot). The exemption is CONTEXT-SCOPED — the literal is allowed only as
+// the immediate VALUE of an assignee/reviewer flag, by POSITION, never by name — because both
+// naive alternatives fail (AMOA's finding, v1.13.4, 2026-08-08): flagging them reddens correct
+// code and gets the guard muted, while allowlisting the NAMES punches a hole — `me` is a REAL
+// account (registered 2008), and `@me` inside a --body is a plain mention of that person.
+// Any OTHER handle in assignee position stays a finding: `--add-assignee "@dev-alice"` ASSIGNS
+// a real stranger, which is worse than mentioning one.
+const ASSIGNEE_LITERAL = /(--(?:add-|remove-)?(?:assignee|reviewer)|(^|\s)-a)(=|\s+)(["']?)@(me|copilot)\4/g
+
+function blankAssigneeLiterals(span: string): string {
+  return span.replace(ASSIGNEE_LITERAL, (m) => m.replace(/@(me|copilot)/, (h) => ' '.repeat(h.length)))
+}
+
 function findPostableHandles(text: string): Array<{ line: number; handle: string }> {
   const hits: Array<{ line: number; handle: string }> = []
   for (const span of postableSpans(text)) {
-    for (const m of span.text.matchAll(BODY_MENTION)) hits.push({ line: span.line, handle: m[2] })
+    for (const m of blankAssigneeLiterals(span.text).matchAll(BODY_MENTION)) {
+      hits.push({ line: span.line, handle: m[2] })
+    }
   }
   return hits
 }
@@ -135,6 +151,19 @@ describe('no @handle inside a postable body — gh posting commands and their he
   it('does NOT fire on an email local part or a version pin inside a body', () => {
     expect(findPostableHandles('gh issue create --body "mail someone@gmail.com re actions/checkout@v5"'))
       .toEqual([])
+  })
+
+  it('@me is allowed ONLY as an assignee-flag value — the SAME three characters flag inside a body', () => {
+    // Both directions on one literal, per the context-scoped rule: position decides, never name.
+    expect(findPostableHandles('gh issue edit 7 --add-assignee "@me"')).toEqual([])
+    expect(findPostableHandles('gh pr create --assignee "@copilot" --title t --body b')).toEqual([])
+    expect(findPostableHandles('gh issue comment 7 --body "thanks @me, cc @copilot"').map((h) => h.handle))
+      .toEqual(['me', 'copilot'])
+  })
+
+  it('a NON-literal handle in assignee position is still a finding — assignment pages harder than mention', () => {
+    expect(findPostableHandles('gh issue edit 7 --remove-assignee "@old-agent" --add-assignee "@dev-alice"').map((h) => h.handle))
+      .toEqual(['old-agent', 'dev-alice'])
   })
 
   it('extracts a NON-EMPTY set of postable spans from the real corpus (non-vacuity)', () => {

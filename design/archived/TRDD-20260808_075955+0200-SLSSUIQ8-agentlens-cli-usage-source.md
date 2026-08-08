@@ -1,16 +1,16 @@
 ---
 trdd-id: SLSSUIQ8
 title: Feed the rotator's usage decisions from the agentlenspro CLI (accounts, usage, costs)
-column: planned
+column: complete
 created: 2026-08-08T07:59:55+0200
-updated: 2026-08-08T10:23:33+0200
+updated: 2026-08-08T11:52:00+0200
 current-owner: ai-maestro-hub-session
 task-type: feature
 min-approval-requirement: none
 mandate: true
 mandated-by: self
 project-id: ai-maestro
-implementation-commits: [b0a842c8, 66b4ec6e]
+implementation-commits: [b0a842c8, 66b4ec6e, 77fbe88e]
 labels: [oauth-rotator, agentlenspro, usage]
 relevant-rules: []
 ---
@@ -24,18 +24,21 @@ deliberately: the wiring touches `lib/oauth-rotator/tick.ts` — the subsystem w
 document the account-burning failure mode — and that edit deserves a fresh context, not the tail
 of a twice-compacted session.
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-08 ~10:45
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-08 ~11:52
 
-- **IMPLEMENTED**: commits `b0a842c8` (feature — all 4 files per the design, plus
-  `types/statusline.ts` gaining the `'agentlens'` source-union member) + `66b4ec6e` (neuter
-  record), both PUSHED on `governance-rules`. tsc 0; directly-affected suites 66/66 green
-  (agentlens-usage, tick-status with its toEqual pins, tick, fallback-leg); neuters n1 (cohort
-  guard) + n2 (s→ms) recorded with clean per-fixture attribution. n3 resolved as named unpinned
-  residue (the wiring try/catch is defense-in-depth over never-throwing callees — measured, named
-  in the test file's trailer, kept).
-- **NEXT ACTION**: confirm the FULL suite run (started ~10:45, backgrounded) is green, then tick
-  the acceptance box. NOT YET DEPLOYED: `lib/*.ts` is bundled — the change goes live on the next
-  `yarn build` + restart cycle, deliberately not forced mid-fleet.
+- **COMPLETE**: commits `b0a842c8` (feature) + `66b4ec6e` (neuter record) +
+  `77fbe88e` (post-full-suite hardening). The full-suite re-run surfaced ONE real defect in the
+  wiring: the agentlens read ran BEFORE the cohort check, so any statuslineNear caller without an
+  injected `readAgentlensRows` spawned the REAL CLI (24.5s in the disjunct unit suite, one 5s
+  timeout; and a wasted spawn on every production beat until the first endpoint probe stamps a
+  cohort — the mapper drops every row without one). `77fbe88e` hoists the cohort gate above the
+  read and stubs the disjunct suite. Suite 24.5s → 0.36s; tsc 0; 52/52 green isolated.
+- **Full-suite verdict**: 3 failed / 5627 passed on the clean re-run — the two above (mine,
+  fixed) + the pre-existing aio-txn-10 ratchet (TRDD-4UX1YFLG, MANAGER ruling pending). The
+  earlier "36 failed" gate run was load-flake noise; the re-run under proper file capture
+  collapsed it.
+- NOT YET DEPLOYED: `lib/*.ts` is bundled — goes live on the next `yarn build` + restart cycle,
+  deliberately not forced mid-fleet.
 - Costs remain out of scope per the body's follow-up note.
 
 ## Verified facts (measured 2026-08-08, this host)
@@ -119,7 +122,9 @@ choosing. Do NOT block this card on costs; usage attribution is the value.
 - [x] Neuters recorded in the test file, commit-first (66b4ec6e; n3 re-scoped to named
       unpinned residue — the wiring catch guards never-throwing callees, per the
       defense-in-depth discipline)
-- [ ] Full suite green (`tsc --noEmit` 0 confirmed; suite run in flight at card-update time)
-- [ ] Session task #27 closed against this card's `implementation-commits:`
+- [x] Full suite green modulo the pre-existing aio-txn-10 ratchet (TRDD-4UX1YFLG, MANAGER-pending):
+      3 failed on the clean re-run — that ratchet + two regressions of mine, both fixed in
+      `77fbe88e` and re-verified 52/52 isolated; tsc 0
+- [x] Session task #27 closed against this card's `implementation-commits:` (2026-08-08)
 
 ## Approval log

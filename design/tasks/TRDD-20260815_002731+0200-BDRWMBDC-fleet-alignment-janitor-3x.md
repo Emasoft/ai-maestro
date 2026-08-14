@@ -34,7 +34,7 @@ this week). **8 report-backs in, all substantially aligned:**
 
 | Session | Verdict | Notable |
 |---|---|---|
-| agentlens | ALL ALREADY | #108 kept open pending real re-verification (their side) |
+| agentlens | 5/5 DONE | #108 re-verified + CLOSED by them (tools shipped; --all shape frozen; new defects = new issue on Emasoft/AgentlensPro) |
 | ASSISTANT | ALIGNED | #131 fixed bc1435e (persona+README, corpus-scoped guard); #127 ready-to-close, USER-gated; branch-protect NO_TAG_PROTECT USER-gated (TRDD-3W9HE416) |
 | CORE | ALL ALREADY | #131 extended 5e18b80; #107 iron (test-enforced); asks #97/#116 still await HUB answers |
 | webdesign | ALIGNED | #5 was ALREADY closed (v0.1.13, 18 sites fixed); cpv-branch-rules ruleset absent (stale note) |
@@ -42,6 +42,8 @@ this week). **8 report-backs in, all substantially aligned:**
 | amvcp | PARTIAL | 2 board defects found+owner-gated; panel PATH verified; BUILD start is their USER's call — #134 confirm deferred accordingly |
 | CPV | ALIGNED | #141/#142 premise FALSE — fixed v5.4.0 (CPV#169); hub spot-verified live hook; both issues CLOSED with provenance |
 | ORCHESTRATOR | ALIGNED | #131 fixed 3677f4c (local, awaits release); v1.13.4 postable-body fixes intact at v1.13.8 |
+| COS | ALIGNED | #131 fixed v2.32.4/5; closed own hub#132 + janitor#268/#269; found G1.1-vs-R22.3 trailer drift (GOLDEN, USER-only) |
+| AMPA (programmer) | ALIGNED | #131 fixed + RELEASED v2.0.6; board audit closed 1 stale card; fix text offered for copy (§Communication Permissions) |
 
 Hub-owned dispositions: #141+#142 closed · #146 carded (TRDD-AYBAMFN2, priority 2 per
 MANAGER) · #143 surfaced to USER in the campaign report · both hub proposals approved +

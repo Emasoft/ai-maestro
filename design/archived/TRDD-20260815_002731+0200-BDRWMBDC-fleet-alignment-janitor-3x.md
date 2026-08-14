@@ -1,9 +1,9 @@
 ---
 trdd-id: BDRWMBDC
 title: Fleet alignment campaign — janitor 3.x contract + open-issue triage, hub in charge
-column: dev
+column: completed
 created: 2026-08-15T00:27:31+0200
-updated: 2026-08-15T00:27:31+0200
+updated: 2026-08-15T00:39:45+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -46,6 +46,13 @@ this week). **8 report-backs in, all substantially aligned:**
 | AMPA (programmer) | ALIGNED | #131 fixed + RELEASED v2.0.6; board audit closed 1 stale card; fix text offered for copy (§Communication Permissions) |
 | AUTONOMOUS | ALIGNED | #131 residual fixed a4e3210, shipped v1.6.15; closed 18 own janitor issues vs 3.3.0; c2686c04 correctly flagged unverifiable (janitor local-only commit, ships next release) |
 | INTEGRATOR | ALIGNED | #131 fixed (had the DANGEROUS direction: agents believing enforcement is mechanical stop self-policing); board honesty repaired (11 finished cards archived, 1 obsolete superseded); heartbeat output self-corrected; no-@ sweep carded T3CLWN5Y (27 of 172 hits are the live `@claude` trigger — needs the context-scoped port, not a blind sweep); tag-protect question answered: part of the ratified TRIO, Tier-0 (hub §F since 08-08) |
+| MAINTAINER (align-232) | ALIGNED | #131 fixed + RELEASED v1.13.8 today (also CC 2.1.232 alignment + USER's gitleaks ban repo-wide); board drained; own-issues recheck queued next patrol |
+
+**CAMPAIGN COMPLETE 2026-08-15T00:39:45+0200 — all 15 sessions reported/engaged, every
+report substantially ALREADY/DONE; #131 fixed in all 8 role/persona carriers (4 released,
+2 committed-awaiting-release per their publish canons, 2 N-A).** Residual follow-ups live
+on the owning repos' own boards (INTEGRATOR T3CLWN5Y sweep, COS TH95SZFZ on #145
+ratification, amvcp's 2 owner-gated board defects, ASSISTANT's 2 USER-gated closes).
 
 Hub-owned dispositions: #141+#142 closed · #146 carded (TRDD-AYBAMFN2, priority 2 per
 MANAGER) · #143 surfaced to USER in the campaign report · both hub proposals approved +
@@ -105,6 +112,12 @@ ships marked "hub-digested; janitor may amend". Responses tracked here.
       00:26; 15 sends 00:28-00:32, msg ids in session log)
 - [x] Janitor session confirmed/amended the 7-point digest (points 1-7 confirmed; 3
       amendments folded into subsequent sends)
-- [ ] Each session reported DONE or BLOCKED-with-cause on its checklist
-- [ ] Hub-owned items dispositioned: #146 carded, #143 surfaced to USER, #134 thread current
-- [ ] Report-backs recorded on this card; stragglers re-pinged once before being reported
+- [x] Each session reported DONE or BLOCKED-with-cause on its checklist — 13 full reports
+      + janitor (digest confirmation) + MANAGER (approvals) = all 15 engaged; every
+      BLOCKED names its cause (all owner/USER-gated, none technical)
+- [x] Hub-owned items dispositioned: #146 carded (TRDD-AYBAMFN2), #143 surfaced to USER,
+      #134 thread current (amvcp confirm deferred to their USER's build authorization —
+      recorded, not silently dropped); BONUS: #141+#142 closed on CPV's verified fix,
+      #108 closed by agentlens, #132 closed by COS
+- [x] Report-backs recorded on this card (table above); both stragglers re-pinged once
+      and both reported

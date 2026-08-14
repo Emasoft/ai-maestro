@@ -1,9 +1,9 @@
 ---
 trdd-id: 683C7H8E
 title: The ratified GitHub-ruleset baseline has no blob-addressable home in the governance corpus
-column: planned
+column: completed
 created: 2026-08-08T16:26:44+0200
-updated: 2026-08-15T00:32:23+0200
+updated: 2026-08-15T00:44:31+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -67,9 +67,17 @@ the authority question this card exists to settle.
 
 ## Acceptance
 
-- [ ] MANAGER approves the location (governance-spec section vs design/specs file)
-- [ ] The trio's payloads live at that address, citing the janitor code SSOT
-- [ ] Falsified-guard test lands (reds on re-listing required_linear_history)
+- [x] MANAGER approves the location — design/specs file (APPROVED 2026-08-15, see log)
+- [x] The trio's payloads live at `design/specs/baseline-github-rulesets-spec.md`, citing
+      `branch_protection_lib.baseline_ruleset_payloads` as the executable SSOT — and the
+      authoring pass surfaced TWO newer USER Tier-3 rulings (2026-08-13: admin bypass on
+      history-protect; approval count 0 + conditional pull_request/checks rules) that the
+      hub §F prose lacked; spec records them dated, §F synced in the same batch. The
+      drift this card exists to end was live at authoring time.
+- [x] Falsified-guard test lands — `tests/governance/baseline-spec-ratchet.test.ts`, 4/4:
+      positive control proves a live rule-list mention is flagged; trio-membership pin
+      (INTEGRATOR's fail-OPEN lesson, their 69b8173); linear-history only in the dated
+      REMOVED annotation; SSOT citation asserted.
 
 ## Approval log
 
@@ -81,3 +89,6 @@ the authority question this card exists to settle.
   verbatim: cite branch_protection_lib.baseline_ruleset_payloads as the executable SSOT,
   never restate payloads as a second executable source; required_linear_history only inside
   the dated REMOVED-by-USER annotation.
+- 2026-08-15T00:44:31+0200 — COMPLETED by ai-maestro. Spec + guard landed (this batch's
+  implementation commit recorded in a follow-up edit); §F prose synced to the two
+  2026-08-13 rulings the code SSOT carried and the prose lacked.

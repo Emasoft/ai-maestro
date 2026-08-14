@@ -25,6 +25,29 @@ blocked-by: []
 
 # Fleet alignment campaign — janitor 3.x + open issues
 
+## ⏵ STATE — 2026-08-15 00:35 (first wave complete)
+
+Directives sent to all 15 live sessions 00:28-00:32. Janitor CONFIRMED the digest
+(amendments folded into later sends: c2686c04 publish-globally symlinks are sanctioned;
+external idle-clear is opt-in machine-wide for NEW sessions; janitor main-CI-red expected
+this week). **8 report-backs in, all substantially aligned:**
+
+| Session | Verdict | Notable |
+|---|---|---|
+| agentlens | ALL ALREADY | #108 kept open pending real re-verification (their side) |
+| ASSISTANT | ALIGNED | #131 fixed bc1435e (persona+README, corpus-scoped guard); #127 ready-to-close, USER-gated; branch-protect NO_TAG_PROTECT USER-gated (TRDD-3W9HE416) |
+| CORE | ALL ALREADY | #131 extended 5e18b80; #107 iron (test-enforced); asks #97/#116 still await HUB answers |
+| webdesign | ALIGNED | #5 was ALREADY closed (v0.1.13, 18 sites fixed); cpv-branch-rules ruleset absent (stale note) |
+| ARCHITECT | ALIGNED | asked the blocked-on-human-decision card form (answered: in-card STATE note + todo is honest; never fabricate a blocker card) |
+| amvcp | PARTIAL | 2 board defects found+owner-gated; panel PATH verified; BUILD start is their USER's call — #134 confirm deferred accordingly |
+| CPV | ALIGNED | #141/#142 premise FALSE — fixed v5.4.0 (CPV#169); hub spot-verified live hook; both issues CLOSED with provenance |
+| ORCHESTRATOR | ALIGNED | #131 fixed 3677f4c (local, awaits release); v1.13.4 postable-body fixes intact at v1.13.8 |
+
+Hub-owned dispositions: #141+#142 closed · #146 carded (TRDD-AYBAMFN2, priority 2 per
+MANAGER) · #143 surfaced to USER in the campaign report · both hub proposals approved +
+promoted (8648f508, 6a7d406f). Pending report-backs: COS, INTEGRATOR, AUTONOMOUS, AMPA,
+align-232 (busy sessions — one re-ping before reporting stragglers).
+
 USER directive (2026-08-15, verbatim): "using SendMessages and AgentList tools coordinate
 all claude code instances/projects to get the plugin fleet ready and align with the janitor
 recent changes and improvements. you are in charge. read also the issues open on github."
@@ -74,8 +97,10 @@ ships marked "hub-digested; janitor may amend". Responses tracked here.
 
 ## Acceptance
 
-- [ ] Alignment directive sent to every live fleet session (roster snapshot 2026-08-15 00:26)
-- [ ] Janitor session confirmed/amended the 7-point digest
+- [x] Alignment directive sent to every live fleet session (roster snapshot 2026-08-15
+      00:26; 15 sends 00:28-00:32, msg ids in session log)
+- [x] Janitor session confirmed/amended the 7-point digest (points 1-7 confirmed; 3
+      amendments folded into subsequent sends)
 - [ ] Each session reported DONE or BLOCKED-with-cause on its checklist
 - [ ] Hub-owned items dispositioned: #146 carded, #143 surfaced to USER, #134 thread current
 - [ ] Report-backs recorded on this card; stragglers re-pinged once before being reported

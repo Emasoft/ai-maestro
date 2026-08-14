@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T00:40:56+0200
-updated: 2026-08-15T01:11:32+0200
+updated: 2026-08-15T01:17:20+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -54,6 +54,16 @@ Measured absent at plugin v3.0.4 (0 `/dev/null` in `scripts/directory-guard.cjs`
   declined. Nudged the live `ai-maestro-plugin` session directly (SendMessage, msg
   ad2a2c86): land, or record a defect-naming refusal on the issues per R49. The three
   blocked cards stay blocked; this card stays `todo` as the standing watch.
+- 2026-08-15T01:17:20+0200 — CORE ANSWERED (minutes after the nudge; replies on all three
+  issues, plugin commit 6c74ac3 cuts the cards). Hub-verified first-hand, not from the
+  message: #123 confirmed DROPPED → plugin TRDD-4Y2LKKSZ (todo/high); #124 confirmed
+  DROPPED → plugin TRDD-LLSSTD3P + TRDD-SNG93TTD; #125 was NOT dropped — the docs half
+  shipped 2026-08-06 as `ama-unblock` (1f21d6f, live v3.1.0; verified present on the
+  v3.1.23 tag, 229 lines with the three teachings), only the reply was dropped; residual
+  = the §2 behavioural check, folded into SNG93TTD. Drop mechanism named honestly: the
+  orders landed as COMMENTS and CORE's sweeps read new ISSUES — fixed structurally on
+  their board. AODXPI5E's scope narrowed accordingly (note on that card). This watch now
+  waits on the LANDING VERSIONS CORE will post per issue at ship time.
 
 ## The action (runnable when the plugin ships)
 

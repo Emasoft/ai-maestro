@@ -5,7 +5,7 @@ column: blocked
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-06T00:39:08+0200
+updated: 2026-08-15T01:17:20+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -27,6 +27,17 @@ labels: [manager-filed, testbot-session, owner-mixed]
 external-refs: [Emasoft/ai-maestro#125]
 ---
 # Seeded agent rule forbids the terminal-unblock capability the server ships
+
+## ⏵ SCOPE NARROWED — the plugin's docs half SHIPPED; residual is behavioural only (2026-08-15)
+
+CORE's re-triage of ai-maestro#125 (reply 5299086221, hub-verified first-hand on the
+v3.1.23 tag): the #125 DOCS half landed 2026-08-06 as the `ama-unblock` skill (plugin
+commit 1f21d6f, live since v3.1.0 — 229 lines, carries the MANAGER-any-except-ASSISTANT /
+verbs / identity-escalates teachings; `ama-session` delegates to it). Only the REPLY had
+been dropped, not the work. The open residual on the plugin side is the §2 BEHAVIOURAL
+check only, folded into the plugin's TRDD-SNG93TTD (shared harness with #124's twin).
+This card's remaining plugin dependency narrows to that; still `blocked` on [[LBFB7VST]]
+until the plugin posts the landing version of the behavioural check.
 
 ## ⏵ UNBLOCKED — THE USER RULED DIRECTLY, R42.8 IS RATIFIED (2026-08-05T21:05)
 

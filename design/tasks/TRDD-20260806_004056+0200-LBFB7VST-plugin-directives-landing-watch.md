@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T00:40:56+0200
-updated: 2026-08-06T00:40:56+0200
+updated: 2026-08-15T01:11:32+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -43,6 +43,17 @@ and its own work is the verification-and-unblock action, which IS ours.
 
 Measured absent at plugin v3.0.4 (0 `/dev/null` in `scripts/directory-guard.cjs`,
 0 `governanceTitle` in the agent-messaging SKILL.md).
+
+## Watch log
+
+- 2026-08-15T01:11:32+0200 — re-measured against plugin release **v3.1.23** (2026-08-12,
+  via `gh api` on the tag, not the local cache): BOTH absence probes still ZERO
+  (`/dev/null` in scripts/directory-guard.cjs: 0 of 639 lines; `governanceTitle` in
+  skills/agent-messaging/SKILL.md: 0 of 185 lines). No reply on #123/#124/#125 since the
+  work orders — ~20 releases shipped meanwhile, so this reads as dropped-from-queue, not
+  declined. Nudged the live `ai-maestro-plugin` session directly (SendMessage, msg
+  ad2a2c86): land, or record a defect-naming refusal on the issues per R49. The three
+  blocked cards stay blocked; this card stays `todo` as the standing watch.
 
 ## The action (runnable when the plugin ships)
 

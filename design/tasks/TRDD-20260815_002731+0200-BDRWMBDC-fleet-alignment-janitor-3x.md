@@ -45,6 +45,7 @@ this week). **8 report-backs in, all substantially aligned:**
 | COS | ALIGNED | #131 fixed v2.32.4/5; closed own hub#132 + janitor#268/#269; found G1.1-vs-R22.3 trailer drift (GOLDEN, USER-only) |
 | AMPA (programmer) | ALIGNED | #131 fixed + RELEASED v2.0.6; board audit closed 1 stale card; fix text offered for copy (§Communication Permissions) |
 | AUTONOMOUS | ALIGNED | #131 residual fixed a4e3210, shipped v1.6.15; closed 18 own janitor issues vs 3.3.0; c2686c04 correctly flagged unverifiable (janitor local-only commit, ships next release) |
+| INTEGRATOR | ALIGNED | #131 fixed (had the DANGEROUS direction: agents believing enforcement is mechanical stop self-policing); board honesty repaired (11 finished cards archived, 1 obsolete superseded); heartbeat output self-corrected; no-@ sweep carded T3CLWN5Y (27 of 172 hits are the live `@claude` trigger — needs the context-scoped port, not a blind sweep); tag-protect question answered: part of the ratified TRIO, Tier-0 (hub §F since 08-08) |
 
 Hub-owned dispositions: #141+#142 closed · #146 carded (TRDD-AYBAMFN2, priority 2 per
 MANAGER) · #143 surfaced to USER in the campaign report · both hub proposals approved +

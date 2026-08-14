@@ -3,7 +3,7 @@ trdd-id: COOLOZ1N
 title: Panel CLI wiring contract for amvcp — the measured spec plus the five rulings
 column: dev
 created: 2026-08-08T15:05:05+0200
-updated: 2026-08-08T17:00:56+0200
+updated: 2026-08-15T00:25:32+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: feature
@@ -182,9 +182,16 @@ Rationale: a contract proven on one path against a script that is not yet even i
       panel.sh delegates at its 3 call sites; exact-name priority, names-only ambiguity
       errors, non-JSON response is a failure). Landed via TRDD-17K0SHDQ W-B before this
       box was written; verified in-tree 2026-08-08.
-- [ ] Decide/implement the USER auth path — a human cannot currently drive any panel verb
-      from a terminal without a session cookie or a manually exported sudo token
-      (`docs/SCRIPT-MANIFEST.md:593-597`; report §Gaps 5).
+- [x] Decide/implement the USER auth path — the box's premise was HALF-STALE: the auth
+      half shipped 2026-08-02 (TRDD-K2WJH7RF Part 3 — `get_auth_args` resolves
+      `$AID_AUTH` → `$AIMAESTRO_SESSION` → `~/.aimaestro/cli-session` via
+      `aimaestro-governance.sh login`; verified in `common.sh:540-569`), so non-strict
+      verbs already work for a logged-in human. The strict half is DECIDED, not built:
+      NO CLI sudo-mint verb — a scriptable mint defeats R32's one-shot re-confirmation;
+      the dashboard is the human's strict surface, manual `AIMAESTRO_SUDO_TOKEN` the
+      escape hatch. Recorded in `docs/SCRIPT-MANIFEST.md` (whose "Known gap" note was
+      the stale claim and is corrected in the same edit). Adding a mint verb later =
+      security-weakening change, USER-tier.
 - [x] Add a client-visible size pre-check to the CLI, naming the 2,097,152-byte limit
       (ruling 3) — lands BEFORE the file is read into memory and before any API call;
       behaviorally verified both directions (2,098,176-byte file → the limit-naming

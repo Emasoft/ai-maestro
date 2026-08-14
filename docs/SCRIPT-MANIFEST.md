@@ -596,9 +596,17 @@ only the token is, and a token expires and can be revoked. A password can do nei
 **A secret is never an argument.** `aimaestro-governance.sh invalidate-password` prompts on
 the TTY — a password on `argv` leaks through `ps` and shell history (TRDD-E9BZ5P7S).
 
-> **Known gap:** `scripts/shell-helpers/common.sh::get_auth_args` emits only the AID
-> bearer — there is **no USER auth path in the scripts**. A human running
-> `aimaestro-panel.sh status <agent>` from a terminal gets `401 auth_required`. Open work.
+> **The USER auth path (closed 2026-08-02, TRDD-K2WJH7RF Part 3; this note previously
+> claimed no such path existed — that was stale prose beside shipped code):**
+> `get_auth_args` resolves `$AID_AUTH` → `$AIMAESTRO_SESSION` → `~/.aimaestro/cli-session`
+> (the token `aimaestro-governance.sh login` writes), so a logged-in human drives every
+> NON-STRICT verb (`aimaestro-panel.sh status/feedback`, etc.) from a terminal.
+> **Strict verbs from a terminal remain sudo-gated BY DESIGN** (TRDD-COOLOZ1N ruling,
+> 2026-08-08): there is deliberately NO CLI verb that mints a sudo token — a scriptable
+> mint would defeat the one-shot re-confirmation property R32 exists for. A human's
+> strict surface is the dashboard (which presents the sudo modal); a manually exported
+> `AIMAESTRO_SUDO_TOKEN` stays the one-off escape hatch. Adding a mint verb would be a
+> security-weakening change requiring a USER-tier ruling, not a convenience patch.
 
 ### 6.4 Exit status — the contract (TRDD-T3FXA0Y0, ai-maestro#121)
 

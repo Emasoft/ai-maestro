@@ -1,15 +1,17 @@
 ---
 trdd-id: 683C7H8E
 title: The ratified GitHub-ruleset baseline has no blob-addressable home in the governance corpus
-column: proposal
+column: planned
 created: 2026-08-08T16:26:44+0200
-updated: 2026-08-08T16:26:44+0200
+updated: 2026-08-15T00:32:23+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: docs
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: manager (emasoft-assistant-manager)
+approval-datetime: 2026-08-15T00:32:23+0200
 priority: 2
 severity: medium
 effort: small
@@ -73,3 +75,9 @@ the authority question this card exists to settle.
 
 - 2026-08-08T16:26:44+0200 — Authored as a proposal (manager-tier: governance-corpus edit),
   from the INTEGRATOR's ask relayed with the USER's linear-history ruling.
+- 2026-08-15T00:32:23+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
+  manager). Location decided: a spec file under design/specs/ (blob-addressable by path,
+  diffable in isolation, one file for the falsified-guard test to target). Constraint kept
+  verbatim: cite branch_protection_lib.baseline_ruleset_payloads as the executable SSOT,
+  never restate payloads as a second executable source; required_linear_history only inside
+  the dated REMOVED-by-USER annotation.

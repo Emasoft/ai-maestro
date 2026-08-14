@@ -1,15 +1,17 @@
 ---
 trdd-id: XGFJCCJ9
 title: CI mails the USER on every push — notification fatigue makes a real failure invisible
-column: proposal
+column: planned
 created: 2026-08-08T16:33:13+0200
-updated: 2026-08-08T16:33:13+0200
+updated: 2026-08-15T00:32:23+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: infra
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: manager (emasoft-assistant-manager)
+approval-datetime: 2026-08-15T00:32:23+0200
 priority: 3
 severity: low
 effort: small
@@ -62,3 +64,7 @@ Edits `.github/workflows/` triggers — the D3 objective floor puts `.github/` c
 
 - 2026-08-08T16:33:13+0200 — Authored as a proposal from the MANAGER's side note ("a CI
   that mails the USER on every push is itself a defect worth a card").
+- 2026-08-15T00:32:23+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
+  manager). Shape decided: BOTH — option 2 committed (full suite on main + PRs, cheap lint
+  on topic branches) + option 1 as a docs note on owner-side notification settings.
+  Main-branch gate unchanged.

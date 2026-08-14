@@ -39,6 +39,7 @@
     "trdd:doctor": "node --import tsx scripts/trdd-doctor.mjs",
     "trdd:fix": "node --import tsx scripts/trdd-doctor.mjs --fix",
     "trdd:board": "node --import tsx scripts/trdd-doctor.mjs --board",
+    "trdd:watchdog": "node --import tsx scripts/trdd-watchdog.mjs",
     "trddgrep": "node --import tsx scripts/trddgrep.mjs",
     "pillars:lint": "node --import tsx scripts/pillars-lint.mjs",
     "test": "vitest run",

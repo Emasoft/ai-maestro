@@ -2076,6 +2076,23 @@ async function startServer(handleRequest) {
       console.warn('[Startup] GitHub-config audit init failed (non-fatal):', err?.message || err)
     }
 
+    // ── §D4 approval-ladder watchdog (TRDD-AYBAMFN2 / TGNU1EP7, 3P-ZON-11) ────
+    // The TRDD governance sweep's ONE scheduled host — the server owns the
+    // authority-ladder model, so it owns the enforcement (the janitor would be
+    // enforcing a contract it does not own). Reporting-only: logs every run
+    // (the run line IS the liveness evidence) and writes the report the MANAGER
+    // drains to reports/trdd-watchdog/. 6 h cadence; AIM_TRDD_WATCHDOG_INTERVAL_MS
+    // overrides, 0 disables. Do NOT add a second host — two mechanisms with
+    // independent cooldowns defeat each other (ai-maestro#51).
+    try {
+      const { startTrddWatchdogScheduler } = await import('./lib/trdd-watchdog-scheduler.ts')
+      if (startTrddWatchdogScheduler()) {
+        console.log('[Startup] TRDD §D4 watchdog scheduler started (6h, reporting-only)')
+      }
+    } catch (err) {
+      console.warn('[Startup] TRDD §D4 watchdog init failed (non-fatal):', err?.message || err)
+    }
+
     // ── Janitor status-document archiver (TRDD-TCKNOA72) ──────────────────────
     // The janitor's global-status HTML is an AUDIT ARTIFACT, and it is written to
     // the OS temp dir where it is swept — measured 2026-08-05, both of the USER's

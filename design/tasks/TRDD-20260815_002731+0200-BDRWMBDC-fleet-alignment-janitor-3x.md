@@ -44,6 +44,7 @@ this week). **8 report-backs in, all substantially aligned:**
 | ORCHESTRATOR | ALIGNED | #131 fixed 3677f4c (local, awaits release); v1.13.4 postable-body fixes intact at v1.13.8 |
 | COS | ALIGNED | #131 fixed v2.32.4/5; closed own hub#132 + janitor#268/#269; found G1.1-vs-R22.3 trailer drift (GOLDEN, USER-only) |
 | AMPA (programmer) | ALIGNED | #131 fixed + RELEASED v2.0.6; board audit closed 1 stale card; fix text offered for copy (§Communication Permissions) |
+| AUTONOMOUS | ALIGNED | #131 residual fixed a4e3210, shipped v1.6.15; closed 18 own janitor issues vs 3.3.0; c2686c04 correctly flagged unverifiable (janitor local-only commit, ships next release) |
 
 Hub-owned dispositions: #141+#142 closed · #146 carded (TRDD-AYBAMFN2, priority 2 per
 MANAGER) · #143 surfaced to USER in the campaign report · both hub proposals approved +

@@ -120,8 +120,13 @@ pair, agreed byte-identical by both plugins via:
 The two ratified rulesets (both `target: branch`, `enforcement: active`,
 condition `ref_name.include: ["~DEFAULT_BRANCH"]`):
 
-- **`baseline-history-protect`** — `bypass_actors: []` (nobody, incl.
-  admin). Rules: `deletion`, `non_fast_forward`.
+- **`baseline-history-protect`** — `bypass_actors: [{actor_id:5,
+  actor_type:RepositoryRole, bypass_mode:always}]` (the OWNER/admin
+  bypasses — USER Tier-3 ruling 2026-08-13: "allow mutations in history
+  and direct pushing/merging by the owner"; the previous `[]` was a lock
+  with no key on solo-owner repos. Non-admin actors — CI, agents,
+  outside contributors — remain fully bound). Rules: `deletion`,
+  `non_fast_forward`.
   (`required_linear_history` REMOVED by USER ruling 2026-08-08 —
   "an unrealistic requirement nobody was ever able to follow;
   development is too complex and articulated, with many faux passes.
@@ -131,14 +136,19 @@ condition `ref_name.include: ["~DEFAULT_BRANCH"]`):
   ruling ratifies what the fleet had already converged on.)
 - **`baseline-pr-and-checks`** — `bypass_actors:
   [{actor_id:5, actor_type:RepositoryRole, bypass_mode:always}]`
-  (admin direct-push for `publish.py`; outside PRs still gated). Rules:
-  `pull_request` (`required_approving_review_count:1`,
-  `dismiss_stale_reviews_on_push:true`,
-  `require_code_owner_review:false`,
-  `require_last_push_approval:false`,
-  `required_review_thread_resolution:true`) and
-  `required_status_checks` (`strict_required_status_checks_policy:true`,
-  CI job ids auto-detected at apply time).
+  (admin direct-push for `publish.py`; outside PRs still gated). Rules,
+  BOTH CONDITIONAL per the code SSOT: `pull_request`
+  (`required_approving_review_count:0` — USER Tier-3 ruling 2026-08-13:
+  GitHub forbids self-approval, so count 1 was UNSATISFIABLE on every
+  solo-owner repo and branches piled up unmergeable; do NOT restore 1
+  fleet-wide — and the rule is emitted only where a PR reviews anything,
+  i.e. harness workdirs / non-owned repos; `dismiss_stale_reviews_on_push:true`,
+  `require_code_owner_review:false`, `require_last_push_approval:false`,
+  `required_review_thread_resolution:true`) and `required_status_checks`
+  (`strict_required_status_checks_policy:true`, CI job ids auto-detected;
+  OMITTED entirely when none detectable — GitHub 422s an empty list and
+  fails the whole write). Full current record:
+  `design/specs/baseline-github-rulesets-spec.md` (TRDD-683C7H8E).
 - **`baseline-tag-protect`** — `target: tag`, `bypass_actors: []`.
   Rules: `deletion`, `update`. (Ratified LATER on janitor#14 as the
   fleet-wide third ruleset; live on every measured repo. This prose

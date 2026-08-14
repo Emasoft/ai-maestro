@@ -2,9 +2,9 @@
 trdd-id: Z3T7DVL4
 title: Assigned TRDDs are shared objects attached to the message, not copies
 column: proposal
-approval-tier: 2
+min-approval-requirement: user
 created: 2026-07-10T01:40:14+0200
-updated: 2026-07-10T02:34:32+0200
+updated: 2026-08-15T01:02:27+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -468,3 +468,9 @@ What is **no longer** blocking: `manage-trdd` is not an independent unmade decis
 the approval of this proposal, and a nod to the walking-skeleton order in §8 Q1.
 
 ## Approval log
+
+- 2026-08-15T01:02:27+0200 — §D4 watchdog auto-correction (TRDD-AYBAMFN2 sweep): floor
+  raised to `user` and the deprecated `approval-tier: 2` migrated to the named-rung field
+  on this touch. Unambiguous D3 signal: `impacts: [public-api, …]` with
+  `release-via: deploy` is a breaking public-API change (§D3 → user). Still a PENDING
+  proposal — nothing was authorized or un-authorized; only the required approver rose.

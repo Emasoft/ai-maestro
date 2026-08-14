@@ -1,11 +1,12 @@
 ---
 trdd-id: TGNU1EP7
 title: Schedule the D4 watchdog — trdd-doctor runs nowhere today
-column: todo
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T17:35:51+0200
-updated: 2026-08-05T17:35:51+0200
+updated: 2026-08-15T01:12:30+0200
+implementation-commits: [80898e1e]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -73,8 +74,26 @@ LOW to implement, MED to get right: the failure mode is a sweep that runs and re
 looking healthy, which is indistinguishable from a clean corpus. That is the reason the verification
 above asserts the RUN, not the findings.
 
+## Acceptance
+
+- [x] ONE host picked and named: the SERVER-SIDE IDLE SWEEP (candidate 2) —
+      `lib/trdd-watchdog-scheduler.ts`, registered in `server.mjs`. The server owns the
+      authority-ladder model, which is the ownership argument the card itself raised
+      against the janitor host. The module's header forbids adding a second host
+      (ai-maestro#51: independent cooldowns defeat each other), and it is not a nudger —
+      it logs and writes a report, it never touches an agent.
+- [x] Reporting-only on first landing — the beat never fails a build, never edits a card.
+- [x] Verification met: a seeded forged-floor card appears in the sweep report without
+      anyone running a command (tests/unit/trdd-watchdog.test.ts, scheduler describe
+      block), and the run is visible in the sweep's own log — live:
+      `[trdd-watchdog] sweep ran: 439 scanned, 1 error(s), 279 warn(s) → reports/
+      trdd-watchdog/20260814T230516Z-d4-sweep.md` (pm2-error.log, 2026-08-15 01:05:16).
+      The run LINE is asserted, not the findings, exactly as this card's risk note demands.
+
 ## Approval log
 
 - 2026-08-05T17:35:51+0200 — MANDATE issued by USER ("write all the TRDDs and the derived TRDDs").
   Pre-approved: issuer authority >= required approver (floor `none`). Derived NPT of TRDD-8F8PJEXI;
   depth-1 per the derived-TRDD rule, so its own `npt:`/`eht:` are empty.
+- 2026-08-15T01:12:30+0200 — COMPLETED by ai-maestro. Landed in 80898e1e with the parent's
+  objective floor; live-verified on pm2 restart the same night.

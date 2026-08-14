@@ -4,7 +4,8 @@ title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-pl
 column: blocked
 pre-block-column: published
 created: 2026-06-21T22:46:13+0200
-updated: 2026-07-13T10:40:07+0000
+updated: 2026-08-15T01:02:27+0200
+min-approval-requirement: manager
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -229,3 +230,7 @@ consuming project installs. Carry the guard as a TEMPLATE + install instructions
   on the new EHT TRDD-91LLU879 (the post-publish repoint this TRDD deferred), with
   pre-block-column: published. Bookkeeping by ai-maestro-session; no approval was required
   (a mechanical column transition on evidence, EXEMPT category A/E).
+- 2026-08-15T01:02:27+0200 — §D4 watchdog auto-correction (TRDD-AYBAMFN2 sweep): declared
+  floor raised none → manager. Unambiguous D3 signal: `release-via: publish` enters the
+  release pipeline. No un-authorization needed — the card is `blocked` awaiting the USER's
+  publish gate, which already exceeds the manager floor in practice.

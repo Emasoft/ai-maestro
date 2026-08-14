@@ -1,11 +1,12 @@
 ---
 trdd-id: 8F8PJEXI
 title: The mandate check compares a claim to itself — give it an objective floor
-column: todo
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T17:35:51+0200
-updated: 2026-08-05T17:35:51+0200
+updated: 2026-08-15T01:12:30+0200
+implementation-commits: [80898e1e, bcce6e97]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -90,8 +91,33 @@ and read the findings before making it fail a build.
 holds another session's uncommitted neuter (`if (semantic)` → `if (true)`, mtime 2026-08-05 10:58).
 Editing it would braid this change into their measurement. Wait for that tree to clear.
 
+## Acceptance
+
+- [x] The objective floor exists and feeds the mandate comparison — `lib/trdd-watchdog.ts`:
+      the 3P-ZON-11 tier derives the floor from the CHANGED PATHS of the commits in
+      `implementation-commits:` (`git show --name-only`, injectable seam), the one evidence
+      the author does not control, and emits `MANDATE-FORGED` (error) when the issuer's
+      rank is below it. Landed in the watchdog module (reporting-only surface) rather than
+      inside `lintCorpus` — this card's own risk note demanded reporting-only over the live
+      corpus first, and the doctor's findings gate commits; the doctor's declared-vs-declared
+      MANDATE-FORGED stays as the cheap first-line check.
+- [x] Verification met exactly as specified: a seeded `min-approval-requirement: none` +
+      `mandated-by: self` card whose citing commit touches `.github/` produces
+      MANDATE-FORGED (tests/unit/trdd-watchdog.test.ts), and the complementary neuter is
+      encoded AS A TEST — the same fixture is fed to the doctor's declared-floor comparison,
+      which passes it clean (none vs none), proving the objective floor is what catches it.
+- [x] Wall-of-errors risk handled: live corpus measured before landing — 0 MANDATE-FORGED,
+      2 real D3-FLOOR-UNDERCLASSIFIED (both floor-corrected per §D4), 4 warn-tier suspects
+      after suppressing cards whose mandate already outranks the suspected floor.
+- [x] The stale in-practice blocker cleared: the 2026-08-05 uncommitted neuter in
+      `lib/trdd-doctor.ts` is long gone (tree clean at cd8cb63c before this landing), and
+      this landing edits the doctor not at all.
+
 ## Approval log
 
 - 2026-08-05T17:35:51+0200 — MANDATE issued by USER ("write all the TRDDs and the derived TRDDs").
   Pre-approved: issuer authority >= required approver (floor `none`, in-scope tooling work).
   No approval request was sent.
+- 2026-08-15T01:12:30+0200 — COMPLETED by ai-maestro. NPT TGNU1EP7 terminal in the same
+  landing (the scheduler half), so the flock gate is satisfied. 3P-ZON-11's clause is now
+  met on both halves: the floor is objective AND the watchdog is scheduled.

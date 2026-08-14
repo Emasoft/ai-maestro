@@ -1,9 +1,10 @@
 ---
 trdd-id: AYBAMFN2
 title: Build the §D4 approval-ladder watchdog in the hub — ai-maestro owns TRDD enforcement
-column: todo
+column: completed
 created: 2026-08-15T00:32:23+0200
-updated: 2026-08-15T00:32:23+0200
+updated: 2026-08-15T01:12:30+0200
+implementation-commits: [80898e1e, bcce6e97]
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -51,7 +52,22 @@ currently bleeding from its absence.
 
 ## Acceptance
 
-- [ ] Watchdog script exists, exit codes 0/1/2 (clean/findings/could-not-run)
-- [ ] Each §D4 check implemented with a seeded-violation test (one per shape the corpus uses)
-- [ ] Wired to an idle cadence (janitor heartbeat or yarn task), never per-creation
-- [ ] ai-maestro#146 answered with the landing sha
+- [x] Watchdog script exists, exit codes 0/1/2 (clean/findings/could-not-run) —
+      `scripts/trdd-watchdog.mjs` / `yarn trdd:watchdog`, non-vacuity in the tool
+- [x] Each §D4 check implemented with a seeded-violation test — checks 3-6 were ALREADY in
+      `lib/trdd-doctor.ts`/`trdd-graph.ts` (inventoried, reused, not duplicated); the missing
+      checks 1-2+7 land in `lib/trdd-watchdog.ts` with 19 tests incl. positive controls and
+      two recorded neuter runs (each reddened exactly the predicted test)
+- [x] Wired to an idle cadence, never per-creation — STRONGER than this box's "yarn task"
+      option: 3P-ZON-11 says a watchdog scheduled nowhere satisfies nothing, so the sweep is
+      scheduled in the SERVER (lib/trdd-watchdog-scheduler.ts, 6h, reporting-only), the one
+      host that owns the ladder model. Live-verified: `[trdd-watchdog] sweep ran: 439
+      scanned…` in pm2-error.log at 2026-08-15 01:05:16, report written without any command
+- [x] ai-maestro#146 answered with the landing sha (80898e1e + bcce6e97) and closed
+
+## Approval log
+
+- 2026-08-15T01:12:30+0200 — COMPLETED by ai-maestro (self-mandate, floor none — in-scope
+  tooling; the .github/-shaped floors are what the delivered code COMPUTES, not what this
+  card touched). First sweep found and floor-corrected two live under-classified cards
+  (F181A4AE, Z3T7DVL4) per §D4 auto-correct. Closes with siblings 8F8PJEXI + TGNU1EP7.

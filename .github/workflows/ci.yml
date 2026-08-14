@@ -1,5 +1,11 @@
 name: CI
 
+# Triggers are DELIBERATELY main+PR only (TRDD-XGFJCCJ9): every failed run mails the
+# repo owner, and notification fatigue makes the one real failure invisible. Topic
+# branches run nothing — do not "add a quick lint job" for them; that adds a new
+# failure-mail surface, the exact defect the card closed. The owner-side half of the
+# fix is GitHub watch settings: repo → Watch → Custom → untick Actions, or notify
+# on failed workflows only.
 on:
   push:
     branches: [main]

@@ -1,9 +1,9 @@
 ---
 trdd-id: XGFJCCJ9
 title: CI mails the USER on every push — notification fatigue makes a real failure invisible
-column: planned
+column: completed
 created: 2026-08-08T16:33:13+0200
-updated: 2026-08-15T00:32:23+0200
+updated: 2026-08-15T00:48:35+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -56,9 +56,19 @@ Edits `.github/workflows/` triggers — the D3 objective floor puts `.github/` c
 
 ## Acceptance
 
-- [ ] MANAGER picks the shape (trigger scoping vs docs-only vs both)
-- [ ] A push to a topic branch no longer runs the full mail-generating suite (if option 2)
-- [ ] The main-branch gate is unchanged (full suite still required there)
+- [x] MANAGER picks the shape (both halves; APPROVED 2026-08-15, see log)
+- [x] A push to a topic branch no longer runs the full mail-generating suite — MEASURED
+      ALREADY TRUE at implementation time: `ci.yml` triggers were `push: branches:
+      [main]` + `pull_request: branches: [main]`, so topic branches run NOTHING. The
+      approved "cheap lint on topic branches" was NOT added — it would CREATE a new
+      failure-mail surface, against this card's own Problem statement (the approval's
+      shape was decided on the card's stale premise that topic pushes ran the full
+      suite). Instead the scoping is now DELIBERATE and guarded by a WHY comment on the
+      trigger block, so a future editor doesn't "helpfully" widen it. The docs half
+      (owner watch settings: Custom → Actions unticked, or failed-workflows-only) lives
+      in the same comment — the one place a future CI editor certainly reads.
+- [x] The main-branch gate is unchanged (full suite still required there) — trigger
+      block content untouched, comment only.
 
 ## Approval log
 
@@ -68,3 +78,8 @@ Edits `.github/workflows/` triggers — the D3 objective floor puts `.github/` c
   manager). Shape decided: BOTH — option 2 committed (full suite on main + PRs, cheap lint
   on topic branches) + option 1 as a docs note on owner-side notification settings.
   Main-branch gate unchanged.
+- 2026-08-15T00:44:31+0200 — COMPLETED by ai-maestro, with one measured deviation from
+  the approved shape, recorded not hidden: the topic-lint half was DROPPED because the
+  premise was stale — triggers were already main+PR-only, so topic lint would ADD mail
+  surface rather than remove it. The MANAGER's intent (fewer failure mails, main gate
+  unchanged) is served by the deliberate-scoping comment + owner watch-settings note.

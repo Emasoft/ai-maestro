@@ -43,7 +43,10 @@
  *   - The `chief-of-staff` floor ("affects other members of the same team") has no
  *     mechanical signal in a mono-agent corpus — never computed here.
  *   - Supersede attribution needs the introducing commit to carry an `Agent:` trailer
- *     (R22/G1.1). Commits without one are counted in `supersedeUnattributed`, not
+ *     (the commit-authorship self-identification convention — this module CONSUMES the
+ *     trailer, it does not enforce that rule, so no rule id is cited here: the coverage
+ *     scanner classifies a rule cited in lib/ as ENFORCED, and a reader is not an
+ *     enforcer). Commits without one are counted in `supersedeUnattributed`, not
  *     guessed at: we can only see the hand when it signed.
  */
 import { execFileSync } from 'child_process'

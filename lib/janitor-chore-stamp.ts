@@ -40,17 +40,21 @@ import { janitorControlDir } from './janitor-control'
  * another project — they are the janitor's registry names, so they must match it exactly and must
  * not be renamed for our own convenience.
  *
- * The daemon has eleven global chores; the five not listed here are still unowned while the server
- * is up (see TRDD-14HI8ZPR). Adding one to this list is not what absorbs it — running it is.
- * A stamp for a chore nobody runs is worse than no stamp: it reports healthy while nothing happens.
+ * The AUTHORITY on the daemon's chore roster is the janitor's own `GLOBAL_CHORES`
+ * (scripts/lib/harness_backend.py in the installed plugin) — never a count copied here: a
+ * hand count in this comment sat at "eleven" while the real roster grew to 13 (janitor 3.x
+ * added `fleet-plugins-update` and `cold-cache-clear`), and a stale census beside code is
+ * how a drifted number gets believed (measured 2026-08-15, gap survey A6; ai-maestro-janitor#274).
+ * Adding a chore to this list is not what absorbs it — running it is. A stamp for a chore
+ * nobody runs is worse than no stamp: it reports healthy while nothing happens.
  *
- * `github-config-audit` joined on 2026-08-05 (USER go-ahead, 4 h cadence) and is the ONLY one of
- * the six formerly-unowned chores that could join, because it is the only one whose population is
- * DATA the server can hold rather than PROCESSES or SESSIONS on the host. The other five stay with
- * the janitor: `fleet-stop`, `memory-guard`, `cache-prune` and `rules-cleanup` all enumerate live
- * host processes we cannot see, and `session-liveness` is two populations under one name (our half
- * already runs; the host-wide half is not ours). Do not add those here — see
- * `.claude/project/memory/janitor-chore-absorbability.md`.
+ * `github-config-audit` joined on 2026-08-05 (USER go-ahead, 4 h cadence) because its
+ * population is DATA the server can hold rather than PROCESSES or SESSIONS on the host. The
+ * rest stay with the janitor — `fleet-stop`, `memory-guard`, `cache-prune`, `rules-cleanup`
+ * enumerate live host processes we cannot see; `session-liveness` is two populations under
+ * one name (our half already runs); `fleet-plugins-update` and `cold-cache-clear` have not
+ * been through an absorbability review at all. Do not add any of those here without one —
+ * see `.claude/project/memory/janitor-chore-absorbability.md`.
  */
 export const ABSORBED_CHORES = [
   'marketplace-refresh',

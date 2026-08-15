@@ -1,6 +1,6 @@
 ---
 name: model-scoped-window-fallback
-description: "the Fable window is exhausted but the account still has 5h/7d headroom / why did the rotator evict the whole fleet over ONE model / how do agents get switched off an exhausted model automatically / /model opus does not switch the model / an agent is stuck on a model-switch confirmation dialog / which field says what model an agent is running (none of them do)"
+description: "the Fable window is exhausted but the account still has 5h/7d headroom / why did the rotator evict the whole fleet over ONE model / how do agents get switched off an exhausted model automatically / /model opus does not switch the model / an agent is stuck on a model-switch confirmation dialog / which field says what model an agent is running (none of them do) / the rotator rotated over a model-scoped window / rotated onto an account whose Fable window is also spent / why did the rotator refuse to rotate while an account had headroom / ROTATOR_SCOPED_SWITCH_AT / scoped-only wall"
 ocd: 2026-08-06
 lmd: 2026-08-06
 metadata:
@@ -106,6 +106,39 @@ fleet-wide refusal (fire flag, machine-wide STOP, HID presence).
 It **ships dark** (`AIM_FLEET_MODEL_FALLBACK=1`) and that is not caution for its own sake: no test
 can prove the confirming ENTER dismissed the dialog — only that the keystroke was SENT. Report the
 outcome as three states (confirmed / not / **unknown**) and never collapse unknown into success.
+
+
+^ATOM-A4DU-OG9O [desc:"the rotator rotated (or refused to) over a model-scoped window — the scoped-only policy the server and the janitor daemon BOTH implement", keywords: scoped_rotation_policy rotator_ignores_model_window ROTATOR_SCOPED_SWITCH_AT ROTATOR_SCOPED_ACCOUNT_HEADROOM scoped-only_wall model-scoped_rotation_trigger janitor_parity one_policy_two_implementations rotated_onto_a_same-model-spent_account healthiest_account_sidelined, ocd: 2026-08-15, lmd: 2026-08-15]
+
+The ROTATION side of a model-scoped wall follows ONE policy with TWO implementations: the
+janitor's daemon (`scripts/lib/token_burn.py` + `oauth_rotator/rotator.py`, their v3.3.2
+`f185e521`) and this server's `lib/oauth-rotator/tick.ts` (TRDD-IZ6KU37Y, commit `0497a2ba`).
+They share the ENV NAMES, not a mapping: `ROTATOR_SCOPED_SWITCH_AT` and
+`ROTATOR_SCOPED_ACCOUNT_HEADROOM`, both defaulting to **90**, so one override tunes one policy.
+
+The two rules, and why each is the mirror of a measured incident:
+
+1. **Rotate on a scoped wall, but ONLY onto same-model headroom.** A live account whose model
+   window is ≥ 90% while every PROVEN account window is ≤ 90% is walled — even though the
+   rotator's own 97% trigger has not tripped. The veto that picks a target is MODEL-IDENTITY
+   aware (`scopedVetoPct`): a candidate spent on a model the live account never runs is NOT
+   vetoed. The blanket form — any spent scoped window disqualifies an account — is what
+   sidelined the fleet's healthiest account for ~123h (janitor#222).
+2. **No same-model headroom anywhere ⇒ DO NOT ROTATE.** Not onto a scoped-spent target (the
+   `scopedOnly` push is gated by `!scopedWall`), and not degraded either (an explicit stop sits
+   before tier 2). Rotation cannot recover a window that is spent on every account; it burns
+   the dwell window and a healthy account's runway for nothing. The verdict stays `all-maxed`,
+   which is precisely what `stuckSuggestsModelFallback` keys on — so the wall is HANDED to the
+   `/model` lane rather than answered with a credential swap.
+
+Every unknown fails OPEN, deliberately and asymmetrically: no live scoped evidence ⇒ nothing
+can veto; no PROVEN account window ⇒ never claim a scoped-only wall (acting on unproven
+headroom is how "could not measure" silently becomes "measured fine").
+
+`planModelFallback`'s sweep threshold moved 97 → the same shared gate in the same commit. Two
+legs tripping at different numbers would leave a DEAD ZONE: an account walled at 92% refused a
+rotation (scoped-only) and refused the model switch (below 97), which is the fleet stalling
+with both remedies declining to act.
 
 ## See also
 

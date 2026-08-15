@@ -1,9 +1,9 @@
 ---
 trdd-id: IZ6KU37Y
 title: Mirror the janitor's model-scoped-window rotation policy in the server rotator/daemon
-column: todo
+column: dev
 created: 2026-08-15T16:35:41+0200
-updated: 2026-08-15T17:03:28+0200
+updated: 2026-08-15T21:46:48+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -66,9 +66,42 @@ thresholds and on skipping rotation for scoped-only walls.
 
 ## Acceptance
 
-- [ ] Server-side rotation decision implements rules 1-2 with the same thresholds
-      (env-overridable, same names or documented mapping)
-- [ ] Scoped-only wall with no same-model alternate → no rotation, fallback path chosen
-      (test drives both branches)
-- [ ] Parity note recorded in the `model-scoped-window-fallback` memory page + a reply to
+- [x] Server-side rotation decision implements rules 1-2 with the same thresholds
+      (env-overridable, same names or documented mapping) — commit **0497a2ba**. The SAME env
+      names, not a mapping: `ROTATOR_SCOPED_SWITCH_AT` / `ROTATOR_SCOPED_ACCOUNT_HEADROOM`,
+      both defaulting to 90, read in `lib/oauth-rotator/model-fallback.ts` (the leaf module —
+      `tick → model-fallback` is the value edge, the reverse is type-only, so the constants
+      cannot live in tick.ts without a runtime cycle). Three helpers mirror their
+      `token_burn.py` with the same evidence rules and the same fail-open asymmetry:
+      `modelsInUse` (percent>0 is evidence; an explicit `is_active:false` withdraws it, a
+      MISSING field does not — which is why `ScopedLimit.isActive` became tri-state),
+      `scopedVetoPct` (veto only for a model the LIVE account demonstrably runs; a veto
+      DEPRIORITIZES into `scopedOnly`, never drops), `isScopedOnlyWall` (scoped ≥ 90 while
+      every PROVEN account window ≤ 90; headroom must be proven, so an unreadable payload
+      returns false).
+- [x] Scoped-only wall with no same-model alternate → no rotation, fallback path chosen
+      (test drives both branches) — and BOTH suppressions are pinned separately, because they
+      are two different escapes: the `scopedOnly` push is gated by `!scopedWall`, and the
+      DEGRADED tier is skipped by an explicit stop before it. 4 neuters, each reddening a
+      different named test: N1 disable the scoped-only stop → *"only a DEGRADED alternate"*;
+      N2 restore the unconditional push → *"only same-model-spent alternates"*; N3 restore the
+      blanket `worstScopedPercent` veto → *"a candidate spent on a DIFFERENT model"*; N4
+      `scopedWall = false` → the 92%-trigger and the no-rotation tests (2 red). Blob-verified
+      back to HEAD after each. 30/30 green, tsc 0.
+- [x] Parity note recorded in the `model-scoped-window-fallback` memory page + a reply to
       the janitor session confirming the mirror (their follow-up: TRDD-WKTD5JTC Phase 1)
+
+## Outcome — one policy, two implementations
+
+The USER's framing was continuity: *"the rotation system had a flaw … it missed the
+handling/rotation in the case of rate limit reached for special models like Fable … mirror its
+implementation in the ai-maestro version of the global daemon, so it will work even when the
+ai-maestro server is replacing the janitor daemon."* Both halves of that now hold:
+
+- **The trigger** — a scoped wall at 92% rotates, where before only `isNearLimit`'s 97%
+  disjunct could. `planModelFallback`'s sweep threshold moved 97 → the same shared gate, so a
+  92% wall cannot land in a dead zone refused by the rotation leg AND the `/model` leg.
+- **The refusal** — a scoped-only wall with nowhere same-model-clear to go stays put and emits
+  `all-maxed`, which is exactly what `stuckSuggestsModelFallback` keys on. The receiving lane
+  is no longer dark: `AIM_FLEET_MODEL_FALLBACK=1` was armed the same evening (TRDD-DPPYVLVH,
+  USER-approved first-hand; commit 56047fa5, verified on the live process with `ps -E`).

@@ -536,8 +536,13 @@ export interface ScopedLimit {
   /** The SERVER's own classification of the window (e.g. `normal`). Read and logged; our
    *  thresholds still decide. Recorded so a future tuning pass can compare the two. */
   severity: string | null
-  /** Whether the server considers this the currently-binding window. */
-  isActive: boolean
+  /** Whether the server considers this the currently-binding window. TRI-STATE (TRDD-IZ6KU37Y,
+   *  mirroring the janitor's `models_in_use`): `true`/`false` are the server's own words; `null`
+   *  means the payload omitted the field. The distinction is load-bearing for the models-in-use
+   *  evidence rule — an explicit `false` WITHDRAWS the evidence that a model is in use, while a
+   *  missing field does not. Collapsing null into false would silently unveto candidates
+   *  whenever the API drops the field. */
+  isActive: boolean | null
 }
 
 /**
@@ -574,7 +579,7 @@ export function scopedLimits(usage: unknown): ScopedLimit[] {
       percent: typeof e.percent === 'number' ? e.percent : null,
       resetsAt: typeof e.resets_at === 'string' ? e.resets_at : null,
       severity: typeof e.severity === 'string' ? e.severity : null,
-      isActive: e.is_active === true,
+      isActive: typeof e.is_active === 'boolean' ? e.is_active : null,
     })
   }
   return out

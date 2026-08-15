@@ -8,6 +8,9 @@ import {
   isSafeAlternate,
   isAccountWindowSafe,
   selectDrainFirst,
+  modelsInUse,
+  scopedVetoPct,
+  isScopedOnlyWall,
   autoRotate,
   keepaliveRefresh,
   runTick,
@@ -52,7 +55,7 @@ const blob = (accessToken: string, expiresAt: number, refreshToken = 'r') => ({
 })
 
 /** A fetch stub keyed on the bearer accessToken, returning per-token usage. */
-function stubFetch(usageByToken: Record<string, { fh: number; sd: number; scoped?: number } | number>): typeof fetch {
+function stubFetch(usageByToken: Record<string, { fh: number; sd: number; scoped?: number; scopedModel?: string } | number>): typeof fetch {
   return (async (url: unknown, init?: { headers?: Record<string, string> }) => {
     const u = String(url)
     const auth = init?.headers?.Authorization ?? init?.headers?.authorization ?? ''
@@ -69,7 +72,7 @@ function stubFetch(usageByToken: Record<string, { fh: number; sd: number; scoped
             // asks for one, so every pre-existing expectation stays byte-identical.
             ...(spec.scoped === undefined
               ? {}
-              : { limits: [{ scope: { model: { display_name: 'Fable 5' } }, percent: spec.scoped }] }),
+              : { limits: [{ scope: { model: { display_name: spec.scopedModel ?? 'Fable 5' } }, percent: spec.scoped }] }),
           }
         : {}
       return new Response(JSON.stringify(body), { status: 200 })
@@ -227,9 +230,14 @@ describe('tick — autoRotate: model-scoped fallback (all-maxed regression)', ()
     // SCOPEDBAD is the DRAIN-FIRST winner on account windows alone (80 > 10), so if the fallback
     // leaked into the preferred set it would be chosen. It must not be: it is held back entirely
     // while FULLYSAFE passes the full test.
+    //
+    // LIVE carries `scoped: 99` since TRDD-IZ6KU37Y: the veto is now MODEL-IDENTITY-aware and
+    // fails OPEN when the live account shows no model in use (the janitor#222 rule), so this
+    // test's claim — a same-model-spent target is deprioritized — needs the live evidence that
+    // Fable IS the model in use. Without it, SCOPEDBAD legitimately stops being vetoed.
     const deps: TickDeps = {
       fetchImpl: stubFetch({
-        LIVE: { fh: 98, sd: 50 },
+        LIVE: { fh: 98, sd: 50, scoped: 99 },
         SCOPEDBAD: { fh: 80, sd: 10, scoped: 95 },
         FULLYSAFE: { fh: 10, sd: 10, scoped: 10 },
       }),
@@ -260,6 +268,104 @@ describe('tick — autoRotate: model-scoped fallback (all-maxed regression)', ()
     // The whole point: identical inputs, opposite verdicts, because one consults the model window.
     expect(isSafeAlternate(10, 10, 95)).toBe(false)
     expect(isAccountWindowSafe(10, 10)).toBe(true)
+  })
+})
+
+/** THE SCOPED-ONLY ROTATION POLICY (TRDD-IZ6KU37Y — the server-side mirror of the janitor's
+ *  post-#222 rules, their v3.3.2 f185e521): a live account walled SOLELY on a model-scoped
+ *  window rotates ONLY onto an alternate with headroom on that same model; when none exists it
+ *  stays put (no scoped-spent push, no degraded rotation) and the all-maxed verdict hands the
+ *  wall to the model-fallback lane. */
+describe('tick — autoRotate: scoped-only wall (janitor#222 mirror)', () => {
+  it('scoped wall at 92% (below the old 97 trigger) + a scoped-clear alternate → rotates onto it', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('clear@x', blob('CLEAR', H8()))
+    // Accounts healthy (40/50 ≤ 90 headroom), Fable at 92 ≥ the shared 90 gate. `isNearLimit`'s
+    // 97% disjunct does NOT trip — the rotation is triggered by the scoped-only verdict alone,
+    // which is exactly the janitor-parity behaviour this card adds.
+    const deps: TickDeps = {
+      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 92 }, CLEAR: { fh: 20, sd: 20, scoped: 10 } }),
+    }
+    expect(await autoRotate(deps)).toBe(true)
+    expect(loadState().live_email).toBe('clear@x')
+  })
+
+  it('scoped wall + only same-model-spent alternates → NO rotation, verdict all-maxed', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('spent@x', blob('SPENT', H8()))
+    // SPENT is account-healthy (10/10) but Fable-spent (95): before this card the scopedOnly
+    // fallback would have rotated onto it — burning the dwell window and a healthy account for a
+    // model that stays walled either way.
+    const deps: TickDeps = {
+      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 92 }, SPENT: { fh: 10, sd: 10, scoped: 95 } }),
+    }
+    const out: { stuck?: unknown } = {}
+    expect(await autoRotate(deps, out as never)).toBe(false)
+    expect(loadState().live_email).toBe('live@x')
+    expect(out.stuck).toBe('all-maxed') // what hands the wall to the model-fallback lane
+  })
+
+  it('scoped wall + only a DEGRADED alternate → no degraded rotation either', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('deg@x', blob('DEG', H8()))
+    // DEG's probe answers 503, the refresh mints NEW, and NEW's probe answers 503 again — the
+    // exact path that lands a slot in the `degraded` bucket. An ACCOUNT wall rotates onto it
+    // (the tier-2 fallback); a scoped-only wall must NOT — a blind rotation off a healthy
+    // account recovers nothing the /model switch would not.
+    const deps: TickDeps = {
+      fetchImpl: stubFetch({ LIVE: { fh: 40, sd: 50, scoped: 92 }, DEG: 503, NEW: 503 }),
+    }
+    expect(await autoRotate(deps)).toBe(false)
+    expect(loadState().live_email).toBe('live@x')
+  })
+
+  it('veto is MODEL-scoped: a candidate spent on a DIFFERENT model stays a first-choice target', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('other@x', blob('OTHER', H8()))
+    // The live account runs Fable (scoped-only wall); OTHER is spent only on Haiku. The blanket
+    // worstScopedPercent veto would have rejected it (95 ≥ SAFE) — the exact shape that
+    // sidelined the fleet's healthiest account for ~123h (janitor#222). The model-identity veto
+    // lets it through as a FIRST-choice target. The scoped-only wall is what makes this fixture
+    // discriminate: under the blanket veto OTHER lands in `scopedOnly`, the scoped wall blocks
+    // the push, and NO rotation happens — so a regression here reds on the return value, not
+    // merely on which tier rotated.
+    const deps: TickDeps = {
+      fetchImpl: stubFetch({
+        LIVE: { fh: 40, sd: 50, scoped: 99 },
+        OTHER: { fh: 10, sd: 10, scoped: 95, scopedModel: 'Haiku 4.5' },
+      }),
+    }
+    expect(await autoRotate(deps)).toBe(true)
+    expect(loadState().live_email).toBe('other@x')
+  })
+
+  it('modelsInUse: percent>0 is evidence; explicit isActive:false withdraws it; missing does not', () => {
+    const usage = {
+      limits: [
+        { scope: { model: { display_name: 'Fable 5' } }, percent: 42 },
+        { scope: { model: { display_name: 'Opus 5' } }, percent: 3, is_active: false },
+        { scope: { model: { display_name: 'Haiku 4.5' } }, percent: 0 },
+      ],
+    }
+    expect(modelsInUse(usage)).toEqual(new Set(['fable']))
+    expect(modelsInUse(null)).toEqual(new Set()) // no payload → NO EVIDENCE, not "no models"
+  })
+
+  it('scopedVetoPct: fails OPEN on empty evidence and on cross-model spends; reports the in-use worst', () => {
+    const cand = { limits: [{ scope: { model: { display_name: 'Fable 5' } }, percent: 95 }] }
+    expect(scopedVetoPct(new Set(), cand)).toBeNull() // no live evidence → nothing can veto
+    expect(scopedVetoPct(new Set(['opus']), cand)).toBeNull() // spent on a model nobody runs
+    expect(scopedVetoPct(new Set(['fable']), cand)).toBe(95)
+  })
+
+  it('isScopedOnlyWall: 90/90 gates inclusive; headroom must be PROVEN', () => {
+    expect(isScopedOnlyWall(40, 50, 92)).toBe(true)
+    expect(isScopedOnlyWall(90, 90, 90)).toBe(true) // both gates inclusive, per the shared policy
+    expect(isScopedOnlyWall(98, 50, 92)).toBe(false) // the ACCOUNT is (also) the constraint
+    expect(isScopedOnlyWall(40, 50, 89)).toBe(false) // scoped below the gate
+    expect(isScopedOnlyWall(40, 50, null)).toBe(false) // no scoped window at all
+    expect(isScopedOnlyWall(null, null, 92)).toBe(false) // headroom unproven → never claim it
+    expect(isScopedOnlyWall(null, 50, 92)).toBe(true) // one proven window suffices
   })
 })
 

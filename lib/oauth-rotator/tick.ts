@@ -47,6 +47,9 @@ import {
 } from './slots'
 import { readLiveBlobWithSource } from './live'
 import { switchLiveTo } from './rotate'
+// Runtime-safe despite model-fallback importing from this module: that import is `import type`
+// (NextAction/StuckReason, erased at compile), so the value edge below closes no cycle.
+import { modelFamily, SCOPED_SWITCH_AT_PCT, ACCOUNT_HEADROOM_PCT } from './model-fallback'
 // TRDD-GY0LJV6S — the statusline disjunct. `RotatorState` satisfies `RotatorAdmissionView`
 // structurally, so the guard needs no adapter and no second view of "who is live".
 import {
@@ -253,7 +256,11 @@ export function deriveDecision(f: {
     const accountWindowsOk =
       typeof w?.fiveHourPct === 'number' && typeof w?.sevenDayPct === 'number' &&
       w.fiveHourPct < SWITCH_AT_5H && w.sevenDayPct < SWITCH_AT_7D
-    const modelSpent = typeof w?.scopedPct === 'number' && w.scopedPct >= SWITCH_AT_SCOPED
+    // `SCOPED_SWITCH_AT_PCT` (90), not `SWITCH_AT_SCOPED` (97): the scoped-only verdict now
+    // trips at the shared policy gate (TRDD-IZ6KU37Y), so an all-maxed declared over a 92% Fable
+    // window must still NAME the model remedy — testing at 97 here would print the generic
+    // "exhausted" wording for exactly the walls the new gate introduces.
+    const modelSpent = typeof w?.scopedPct === 'number' && w.scopedPct >= SCOPED_SWITCH_AT_PCT
     if (accountWindowsOk && modelSpent) {
       const model = w?.scopedModel ?? 'a model'
       return `STUCK: no alternate is healthy — but the live ACCOUNT is NOT exhausted (5h ${w?.fiveHourPct}% / 7d ${w?.sevenDayPct}%). Only the ${model} window is spent (${w?.scopedPct}%), so the remedy is to move agents OFF ${model}, not to rotate the credential`
@@ -506,6 +513,79 @@ export function isSafeAlternate(bfh: number, bsd: number, scoped: number | null)
  * so rotating cannot make the model situation worse than it already is. */
 export function isAccountWindowSafe(bfh: number, bsd: number): boolean {
   return bfh < SAFE_5H && bsd < SAFE_7D
+}
+
+// ── The model-scoped rotation policy (TRDD-IZ6KU37Y — the janitor#222 mirror) ─────────────────
+//
+// One policy, two implementations (the janitor's `token_burn.py` daemon-side, this file
+// server-side), so the fleet behaves identically whichever process is playing the rotator. The
+// three pieces below mirror their `models_in_use` / `scoped_rotation_veto` /
+// `model_fallback_verdict` — same evidence rules, same fail-open asymmetry, same 90/90 gates
+// (`SCOPED_SWITCH_AT_PCT` / `ACCOUNT_HEADROOM_PCT`, env-overridable via the SHARED names
+// `ROTATOR_SCOPED_SWITCH_AT` / `ROTATOR_SCOPED_ACCOUNT_HEADROOM`).
+
+/** The model FAMILIES this account demonstrably ran work on, read from its own scoped windows.
+ *
+ * Evidence is `percent > 0`: a model's window cannot be consumed without running that model. An
+ * explicit `isActive: false` WITHDRAWS the evidence (the server says the limit is not in
+ * effect); a missing field (`null`) does not. Pure. An EMPTY set means NO EVIDENCE — callers
+ * must read it as "unknown", never as "no model is in use". */
+export function modelsInUse(usage: unknown): Set<string> {
+  const out = new Set<string>()
+  for (const l of scopedLimits(usage)) {
+    if (l.percent === null || l.percent <= 0 || l.isActive === false) continue
+    const family = modelFamily(l.model)
+    if (family) out.add(family)
+  }
+  return out
+}
+
+/** The candidate's scoped percent that matters for THIS live account — the worst window among
+ * models the live account is actually using — or null when nothing vetoes it.
+ *
+ * Both conditions are POSITIVE evidence, so every unknown fails OPEN (no veto): an empty
+ * `inUse` set, a candidate with no scoped entries, or a model the live account never touched.
+ * That asymmetry is the entire design. The mirror image — the blanket `worstScopedPercent`
+ * this replaces in the candidate test — is "any spent scoped window makes an account an
+ * invalid target", which is what sidelined the fleet's healthiest account for ~123h
+ * (janitor#222): its Fable window was spent while the fleet needed no Fable at all. A non-null
+ * return means only "this target does not help THIS model"; it never means "this account is
+ * unhealthy", and the caller DEPRIORITIZES (the `scopedOnly` bucket) rather than drops. */
+export function scopedVetoPct(inUse: ReadonlySet<string>, candUsage: unknown): number | null {
+  if (inUse.size === 0) return null // no evidence about the live models → nothing can veto
+  let worst: number | null = null
+  for (const l of scopedLimits(candUsage)) {
+    if (l.percent === null || !inUse.has(modelFamily(l.model))) continue
+    if (worst === null || l.percent > worst) worst = l.percent
+  }
+  return worst
+}
+
+/** TRUE when the live account's wall is SOLELY model-scoped: some scoped window is at/over
+ * `SCOPED_SWITCH_AT_PCT` while EVERY known account-wide window sits at/below
+ * `ACCOUNT_HEADROOM_PCT` — with at least one account window KNOWN, because headroom must be
+ * PROVEN, never assumed (an unreadable payload yields false: acting on unproven headroom is how
+ * "could not measure" silently becomes "measured fine").
+ *
+ * The consequence of `true` is the two scoped-only rules (the janitor's post-#222 ruling):
+ *   1. rotate ONLY onto an alternate with headroom on the model in use (the veto above), and
+ *   2. when none exists, do NOT rotate at all — not onto a same-model-spent target, not
+ *      degraded. Rotation cannot recover a model window that is spent everywhere; it burns the
+ *      dwell window and a healthy account's runway for nothing. The remedy is the
+ *      model-fallback lane (`/model` switch), which keys on the `all-maxed` verdict this
+ *      branch still emits.
+ *
+ * Unlike the janitor's `model_fallback_verdict` this takes no snapshot-age parameter: it is
+ * only ever computed on the usage payload THIS tick just fetched (freshness by construction).
+ * The 300s age gate lives where staleness is possible — `readTickWindows` (tick-status.ts),
+ * which feeds the watchdog's sweep. */
+export function isScopedOnlyWall(fh: number | null, sd: number | null, scoped: number | null): boolean {
+  if (scoped === null || scoped < SCOPED_SWITCH_AT_PCT) return false
+  if (fh === null && sd === null) return false // headroom unproven → never claim scoped-only
+  return (
+    (fh === null || fh <= ACCOUNT_HEADROOM_PCT) &&
+    (sd === null || sd <= ACCOUNT_HEADROOM_PCT)
+  )
 }
 
 /** DRAIN-FIRST: among healthy candidates `[email, blob, util5h, util7d]`, pick the one closest
@@ -935,6 +1015,10 @@ export async function autoRotate(
   // precisely what makes the escape hatch work: a token that really has died answers 401, lands in
   // a branch this flag never reaches, and rotates. See `drainsLastEscapeHatch`.
   let expiryOnly = false
+  // TRUE only in the 200 arm, for the same reason as `expiryOnly`: "the wall is SOLELY
+  // model-scoped" is a claim about KNOWN account windows. It gates the two scoped-only rules in
+  // the candidate hunt below (TRDD-IZ6KU37Y).
+  let scopedWall = false
   if (liveStatus === 429) {
     const streak = (typeof state.live_429_streak === 'number' ? state.live_429_streak : 0) + 1
     state.live_429_streak = streak
@@ -975,9 +1059,17 @@ export async function autoRotate(
     // "expiry was the sole reason" — which is the claim `drainsLastEscapeHatch` documents and
     // reasons from, and because it becomes load-bearing the moment anyone reorders the two
     // thresholds. Do not read the green suite as cover for deleting it.
-    expiryOnly = liveExpired && !usageNear
-    near = usageNear || liveExpired
-    liveDesc = `5h=${fhS} 7d=${sdS}${scS}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}${slDesc}`
+    // THE SCOPED-ONLY TRIGGER (TRDD-IZ6KU37Y, mirroring the janitor's rotator). A model window
+    // at/over the shared 90% gate while the account has proven headroom is a reason to ACT even
+    // though `isNearLimit`'s 97% disjunct has not tripped — and `scopedWall` is deliberately
+    // computed independently of `usageNear`, because a 98% scoped window with healthy accounts
+    // trips BOTH, and the scoped-only rules must apply there too (rotating away from a healthy
+    // account onto a same-model-spent one is the #222 incident regardless of which threshold
+    // noticed the wall first).
+    scopedWall = isScopedOnlyWall(fh, sd, sc)
+    expiryOnly = liveExpired && !usageNear && !scopedWall
+    near = usageNear || scopedWall || liveExpired
+    liveDesc = `5h=${fhS} 7d=${sdS}${scS}${scopedWall ? ' +SCOPED-WALL' : ''}${liveExpired ? ' +LOCALLY-EXPIRING' : ''}${slDesc}`
   } else if (liveStatus === 401 || liveStatus === 403) {
     near = true
     liveDesc = `token REJECTED (HTTP ${liveStatus}) — expired/invalid`
@@ -1016,6 +1108,9 @@ export async function autoRotate(
   // it is DOWN (we are only here because the live token is locally dead) we fall back to LOCAL
   // expiry — any alternate with known future runway, most-runway-first.
   const candidates: Candidate[] = []
+  // The model families the LIVE account demonstrably runs, from its own scoped windows — the
+  // evidence side of `scopedVetoPct`. Computed ONCE, outside the loop (it reads only liveData).
+  const liveInUse = modelsInUse(liveData)
   // Candidates rejected ONLY by the model-scoped check, whose 5h/7d are both healthy. Consulted
   // solely when `candidates` is empty — see the fallback below `isAccountWindowSafe`.
   const scopedOnly: Candidate[] = []
@@ -1070,9 +1165,12 @@ export async function autoRotate(
       const bfh = util(d2, 'five_hour')
       const bsd = util(d2, 'seven_day')
       if (bfh === null || bsd === null) continue // unknown usage → not a safe target
-      // Also reject a candidate whose MODEL-SCOPED window is spent: rotating onto it would look
-      // like a healthy switch and then fail every call on that model. TRDD-JI7F1236.
-      if (!isSafeAlternate(bfh, bsd, worstScopedPercent(d2))) {
+      // Also reject a candidate whose MODEL-SCOPED window is spent — but only for a model the
+      // LIVE account is actually using (TRDD-JI7F1236, narrowed by TRDD-IZ6KU37Y). The blanket
+      // form (`worstScopedPercent(d2)`) vetoed on ANY spent scoped window, which is the shape
+      // that sidelined the fleet's healthiest account for ~123h (janitor#222). `scopedVetoPct`
+      // fails OPEN on every unknown, so a candidate spent on a model nobody runs stays eligible.
+      if (!isSafeAlternate(bfh, bsd, scopedVetoPct(liveInUse, d2))) {
         // MODEL-SCOPED-ONLY REJECTS ARE HELD, NOT DROPPED. If this candidate fails ONLY because a
         // model window is spent — its 5h/7d are both healthy — keep it as a second-choice target.
         // It is used below only when NOTHING passes the full test, so the preferred behaviour is
@@ -1108,7 +1206,11 @@ export async function autoRotate(
   //     → 1 red / 22 green:  rotates onto an account blocked ONLY by a spent MODEL window …
   //   s{…same…}{candidates.push(...scopedOnly)}
   //     → 1 red / 22 green:  still PREFERS a fully-safe account when one exists — last-resort only
-  if (candidates.length === 0 && scopedOnly.length > 0) candidates.push(...scopedOnly)
+  // `!scopedWall` (TRDD-IZ6KU37Y): when the wall is SOLELY model-scoped, rotating onto a target
+  // whose same-model window is also spent trades nothing — the model stays walled, the dwell
+  // window is burned, and a healthy account was abandoned. The push stays for ACCOUNT walls,
+  // where a total outage genuinely beats a partial (model-only) degradation.
+  if (!scopedWall && candidates.length === 0 && scopedOnly.length > 0) candidates.push(...scopedOnly)
 
   // THE DRAIN-GUARD (TRDD-GY0LJV6S) — the LAST thing before either rotation path, so ONE placement
   // covers BOTH `switchLiveTo` calls below (drain-first and degraded). It has to sit here rather
@@ -1146,6 +1248,21 @@ export async function autoRotate(
     switchLiveTo(targetEmail, targetBlob, reason)
     decide(deps, `auto: switched ${liveEmail ?? '(live)'} -> ${targetEmail} (target 5h=${Math.round(bfh)}% 7d=${Math.round(bsd)}%; ${reason})`)
     return true
+  }
+  // 1b) SCOPED-ONLY STOP (TRDD-IZ6KU37Y — the janitor's post-#222 ruling, mirrored). The wall is
+  // solely model-scoped and no alternate has headroom on the model in use, so there is nothing a
+  // credential rotation can recover: the DEGRADED tier below is skipped ON PURPOSE (a blind
+  // rotation off a healthy account is strictly worse than staying put), and the `all-maxed`
+  // verdict hands the wall to the model-fallback lane — `stuckSuggestsModelFallback` keys on it,
+  // and `deriveDecision`'s healthy-account branch names the `/model` remedy in the status line.
+  if (scopedWall && best === null) {
+    const wallDesc = scWorst !== null ? `${scWorst.model}=${Math.round(scWorst.percent)}%` : 'a model window'
+    decide(
+      deps,
+      `auto: live ${liveEmail ?? '(live)'} ${liveDesc} — model-scoped wall only (${wallDesc}) and no alternate has headroom on that model; staying put. Rotation cannot recover a model window that is spent everywhere — the model-fallback lane (/model switch) is the remedy.`,
+    )
+    if (out) out.stuck = 'all-maxed'
+    return false
   }
   // 2) DEGRADED fallback — no usage-confirmed target, but a structurally-valid alternate exists.
   // Rotating onto the most-runway one beats pinning the user to an exhausted/dead live account.

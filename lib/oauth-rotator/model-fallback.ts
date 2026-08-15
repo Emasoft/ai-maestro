@@ -136,9 +136,34 @@ export function modelFamily(model: string): string {
   return model.trim().split(/[\s\-_/]+/)[0]?.toLowerCase() ?? ''
 }
 
+/** Read a percent-shaped env override, or the default. NaN / non-numeric → the default: a broken
+ *  override must degrade to the ratified policy number, never to 0 (which would trip always) or
+ *  NaN (which every comparison silently fails). */
+function pctEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : fallback
+}
+
+/**
+ * THE ONE POLICY PAIR, shared with the janitor's rotator (janitor#222 / their v3.3.2 f185e521;
+ * our TRDD-IZ6KU37Y). Both sides read the SAME env names so one override tunes one policy:
+ *
+ *   ROTATOR_SCOPED_SWITCH_AT        (default 90) — a model-scoped window at/above this is a WALL.
+ *   ROTATOR_SCOPED_ACCOUNT_HEADROOM (default 90) — the account is "fine" only when EVERY
+ *                                                  account-wide window is at/below this.
+ *
+ * They live HERE (not tick.ts) because tick.ts imports this module for `modelFamily` while this
+ * module imports only TYPES from tick.ts — putting the values in tick.ts would turn that
+ * type-only edge into a runtime import cycle.
+ */
+export const SCOPED_SWITCH_AT_PCT = pctEnv('ROTATOR_SCOPED_SWITCH_AT', 90)
+
 /** Below this the account itself has room, so a model switch is worth doing. At or above it the
- *  account is the constraint and switching model just moves the same pressure to another model. */
-export const ACCOUNT_HEADROOM_PCT = 90
+ *  account is the constraint and switching model just moves the same pressure to another model.
+ *  Same number and same env override as the rotation side's scoped-only verdict — see above. */
+export const ACCOUNT_HEADROOM_PCT = pctEnv('ROTATOR_SCOPED_ACCOUNT_HEADROOM', 90)
 
 export interface FallbackInputs {
   /** The exhausted model family, lowercase (e.g. `fable`). */
@@ -173,7 +198,10 @@ export interface FallbackInputs {
  */
 export function planModelFallback(input: FallbackInputs): FallbackPlan {
   const interval = input.intervalMs ?? FALLBACK_INTERVAL_MS
-  const threshold = input.scopedThresholdPct ?? 97
+  // Was a hardcoded 97 — realigned to the shared policy gate (TRDD-IZ6KU37Y): the tick's
+  // scoped-only rotation verdict and this sweep trip at the SAME number, or an account walled at
+  // 92% would be refused rotation (scoped-only) AND refused the model switch — a dead zone.
+  const threshold = input.scopedThresholdPct ?? SCOPED_SWITCH_AT_PCT
   const target = input.targetCommandKey ?? 'model-opus'
 
   if (!(input.scopedPct >= threshold)) {

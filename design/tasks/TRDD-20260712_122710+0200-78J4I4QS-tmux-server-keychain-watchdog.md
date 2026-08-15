@@ -3,7 +3,7 @@ trdd-id: 78J4I4QS
 title: reliability — detect a keychain-blind tmux server before it silently takes the whole fleet down
 column: ai_review
 created: 2026-07-12T12:27:10+0200
-updated: 2026-08-02T15:53:10+0200
+updated: 2026-08-16T01:23:51+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 1
@@ -162,6 +162,29 @@ STATE block names — not criteria invented at closing time. Re-verified live 20
       self-corrects on the next `pm2 restart ecosystem.config.js --update-env` rather than needing
       a fix of its own — recorded here so the next reader does not go hunting for a config that
       sets it. (`AIM_FLEET_RECOVERY_FIRE=1`, absent on 2026-07-29, IS live now.)
+
+      **⚠ IT DID NOT SELF-CORRECT, AND NOW WE KNOW WHY — measured 2026-08-16T01:23.** The server
+      restarted at **2026-08-15 21:36:10** and the var is STILL on the live process: `ps eww -p
+      50184` reads `AIM_INVARIANTS_WATCHDOG_INTERVAL_MS=15000`. So that restart was a plain
+      `pm2 restart ai-maestro`, which **replays the env pm2 cached at FIRST start** and can never
+      clear a phantom var — only `pm2 restart ecosystem.config.js --update-env` re-reads the file.
+      The box's "self-corrects on the next restart" is therefore too weak: *most* restarts are the
+      plain kind, so the expected self-correction will keep not happening.
+
+      **What it costs, which the original note did not say.** `lib/agent-invariants.ts:290-293`
+      is `Number(process.env.AIM_INVARIANTS_WATCHDOG_INTERVAL_MS) || 300_000`, and `server.mjs:1921`
+      RUNTIME-IMPORTS that module — so the live process reads the phantom at load and the single
+      enforcement loop sweeps every **15 s against a designed 300 s: 20× the intended rate**,
+      continuously, for 20+ days. That is not merely wasted work: this watchdog RESTORES read-only
+      rule files, and to do so it must `chmod` them writable first — so it passes through a weaker
+      state than the one it enforces, and running it 20× more often multiplies how often that
+      window is open.
+
+      **The fix is one command and it is CHEAPER NOW THAN IT HAS EVER BEEN:** `pm2 restart
+      ecosystem.config.js --update-env`. It bounces the fleet — which is why it stayed the owner's
+      call — but the fleet is currently HIBERNATED (3 tmux sessions, none an agent), so tonight it
+      bounces nothing. Still not taken unasked: it is the owner's server and the restart also
+      interrupts the rotator tick.
 
 ## Approval log
 

@@ -3,7 +3,7 @@ trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: dev
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-15T21:39:56+0200
+updated: 2026-08-16T00:50:50+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -228,3 +228,35 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
   ecosystem.config.js --update-env`, verified on the PROCESS (`ps -E`:
   AIM_FLEET_MODEL_FALLBACK=1) — commit 56047fa5. Card → `dev`: the remaining work is the
   human-watched first switch plus the two policy rulings, still open below.
+
+## Live observation 2026-08-16T00:50 — the TRIGGER fired for real, and the lane still could not act
+
+Recorded because it is the first time the exact condition this lane was built for has been
+observed live, and because it sharpens what the first box actually needs.
+
+**The wall is real, right now.** `~/.aimaestro/oauth-rotator-tick-status.json` reads
+`stuck: "all-maxed"`, `scopedModel: "Fable"`, `scopedPct: 100`, with `fiveHourPct: 83` and
+`sevenDayPct: 85` — a textbook scoped-only wall, i.e. precisely the case
+`stuckSuggestsModelFallback` keys on. The rotator log agrees every minute:
+`auto: live … exhausted (5h=83% 7d=85% Fable=100%) but no alternate is healthy`.
+
+**Independent corroboration from a different direction:** two `fable-advisor` sub-agents spawned
+this session (00:12 and 00:40) both stalled at 150 bytes and never took a single tool round. That
+advisor runs on Fable. So the wall is not just a number in a status file — it is denying real
+work on this host tonight.
+
+**And the lane is blind, exactly as this card predicted.** The watchdog beats every 5 min and logs
+`[FleetLiveness] model-fallback could not read 10 pane(s): <10 agent uuids>` at 00:20:53, 00:25:53,
+00:30:53, 00:35:53, 00:40:53, 00:45:53. The fleet is hibernated, so those panes do not exist to be
+read — the message is honest, not a defect.
+
+**What this changes about the first acceptance box.** *"Arm it and wait for a wall"* is not
+sufficient and the wall is not the scarce ingredient — the wall is HERE. **The scarce ingredient is
+a live Fable agent occupying a readable tmux pane.** Until one exists, the lane cannot reach
+`confirmed=true` no matter how walled the account is, and no amount of waiting will produce the
+observation. Whoever attempts the verification should start by launching one Fable agent, not by
+watching the rotator.
+
+**Still NOT verified, and must not be recorded otherwise.** No switch was attempted, so there is
+no `confirmed=true` and no pane flip. This observation raises confidence that the lane is armed
+for the right condition; it is not evidence that the switch works.

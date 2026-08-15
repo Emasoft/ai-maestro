@@ -151,6 +151,47 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
     requiresIdle: true,
     description: 'Author a rich agent handoff to .janitor/state before a delicate compaction.',
   },
+  // ── Externalized compaction (USER, 2026-08-15 — TRDD-IZ6KU37Y's sibling leg) ──────────────
+  // The USER's ask was "implement the externalized-compact, OR make the janitor able to trigger
+  // it from inside the ai-maestro server". This entry is the SECOND, and it is the correct one
+  // — not a shortcut. `/janitor-externalized-compaction` fronts the janitor's
+  // `external_handoff_clear.py`, which composes the handoff OUTSIDE the model (on-disk TRDD
+  // STATE blocks + git log + the findings ledger, optionally upgraded through the llm-ext CLI),
+  // then types `/clear` plus the verified bootstrap chain into THE SESSION'S OWN PANE, matched
+  // by a breadcrumb that session recorded at start.
+  //
+  // WHY THE SERVER MUST NOT RUN THAT SCRIPT ITSELF, even though it could shell out to it:
+  //  1. PANE OWNERSHIP. The script self-targets by the session's own breadcrumb, and its Scope
+  //     is explicit that it never touches another pane — that is what keeps concurrent Claude
+  //     instances safe. A server-run invocation would have to introduce per-agent pane
+  //     targeting into the one tool whose safety rests on not having any.
+  //  2. THE VETOES ARE THE FEATURE. `active-waiting` (a resume or BACKGROUND AGENT is in
+  //     flight), `NO_RECORDED_PANE` (it could not bootstrap back after the clear),
+  //     `HANDOFF_NOT_CONCISE`, the opt-in `CLAUDE_PLUGIN_OPTION_EXTERNAL_IDLE_CLEAR_ENABLED`
+  //     gate. Re-deriving those server-side means re-deriving "is this agent's work running
+  //     right now?" — and getting it wrong STRANDS live work behind a `/clear`. Injecting the
+  //     command instead runs every veto in the one process that can actually answer them.
+  //  3. ZERO NEW TRUST SURFACE. This queue already types curated fixed literals at idle. A key
+  //     is not a command: the caller never supplies text (see the header).
+  //
+  // So the server's contribution is the TRIGGER, and the agent keeps the DECISION. Reachable
+  // from the dashboard, from `POST /api/agents/[id]/session`, and from the internal actuators
+  // that resolve by key (fleet-recovery-actuator / model-fallback-actuator) — so a future
+  // continuity leg can fire it on a context-pressure signal without new plumbing.
+  //
+  // destructive: TRUE. It ends in `/clear`. The composed handoff + bootstrap chain make the
+  // session RECOVERABLE, which is not the same as the clear being reversible — the live
+  // conversation is gone either way, so the UI must ask. Classifying it with `compact` (which
+  // wipes nothing) to avoid a confirmation dialog would be trading the user's data for a click.
+  {
+    key: 'janitor-externalized-compaction',
+    label: 'Janitor: externalized compaction',
+    command: '/janitor-externalized-compaction',
+    requiresIdle: true,
+    destructive: true,
+    description:
+      'Shrink the agent: compose a handoff from on-disk state OUTSIDE the model, then /clear and bootstrap back. Cheaper than /compact (no authoring turn) — but it WIPES the live conversation. The agent keeps every veto: it refuses while background agents are running.',
+  },
   {
     key: 'reload-plugins-force',
     label: 'Reload plugins (force)',

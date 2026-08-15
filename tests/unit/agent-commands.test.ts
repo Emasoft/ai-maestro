@@ -74,4 +74,35 @@ describe('agent-commands allowlist (TRDD-TBGGUA2V P2)', () => {
     // a routine command is not destructive
     expect(getAgentCommand('reload-plugins')?.destructive).toBeFalsy()
   })
+
+  /** EXTERNALIZED COMPACTION (USER, 2026-08-15): the server-side TRIGGER for the janitor's
+   *  `/janitor-externalized-compaction`. The server contributes the trigger; the agent's own
+   *  session keeps the decision (its vetoes are the only place "is this agent's work running
+   *  right now?" can be answered). See the entry's comment in lib/agent-commands.ts. */
+  describe('externalized compaction', () => {
+    it('is reachable by key and sends the exact skill command', () => {
+      const c = getAgentCommand('janitor-externalized-compaction')
+      expect(c).toBeDefined()
+      expect(c?.command).toBe('/janitor-externalized-compaction')
+    })
+
+    it('requires idle — a clear landing mid-turn would cut the work it is meant to preserve', () => {
+      expect(getAgentCommand('janitor-externalized-compaction')?.requiresIdle).toBe(true)
+    })
+
+    it('is DESTRUCTIVE: the handoff makes it recoverable, which is not reversible', () => {
+      // The failure this pins is a plausible one — classifying it beside `compact` (which wipes
+      // nothing) to spare the user a confirmation dialog. It ends in `/clear`.
+      expect(getAgentCommand('janitor-externalized-compaction')?.destructive).toBe(true)
+      expect(getAgentCommand('compact')?.destructive).toBeFalsy() // the contrast that makes it mean something
+    })
+
+    it('carries NO flags or interpolation — the agent decides, the caller cannot steer it', () => {
+      const c = getAgentCommand('janitor-externalized-compaction')
+      // No `--force`: forcing relaxes TRIGGER terms, and a caller that could append it would be
+      // reaching past the vetoes this design exists to keep. The bare command is the whole API.
+      expect(c?.command).not.toMatch(/--/)
+      expect(c?.command).not.toMatch(/\$\{|\$[A-Za-z_]/)
+    })
+  })
 })

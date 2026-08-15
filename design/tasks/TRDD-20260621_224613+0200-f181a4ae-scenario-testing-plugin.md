@@ -4,7 +4,7 @@ title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-pl
 column: blocked
 pre-block-column: published
 created: 2026-06-21T22:46:13+0200
-updated: 2026-08-15T01:02:27+0200
+updated: 2026-08-16T01:47:07+0200
 min-approval-requirement: manager
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -42,6 +42,21 @@ carried the **live governance credential** into a public, installable, tagged
 artifact — `references/SCENARIOS_TESTS_RULES.md` at `v0.1.3`, in the public repo
 `Emasoft/ai-maestro-web-scenario-tester`. The literal is deliberately not quoted
 anywhere in this corpus.
+
+**⚠ THE WORD "LIVE" ABOVE EXPIRED ON 2026-07-17 — noted 2026-08-16T01:47 so the block is judged
+on current facts, not on a month-old one.** Rotation landed that day (`TRDD-E9BZ5P7S`, archived
+`completed`), and the published artifact's repo was last pushed **2026-07-08**, nine days earlier
+— so what sits in `v0.1.3` is a DEAD string. `44RGLOO8`'s stated rationale for holding this card
+was *"calling that publish `completed` while the credential is live would be exactly the false
+completion the flock gate exists to prevent"*, and that sentence no longer describes reality.
+
+**The block itself STAYS, and deliberately — only its reason changed.** `blocked-by:
+[TRDD-44RGLOO8]` still names an OPEN card, which is the only honest licence to sit still, and
+44RGLOO8 is open on two things that are genuinely unfinished: the MANDATE that still tells authors
+to write the literal (so the NEXT scenario publishes the CURRENT credential), and the USER's
+decision on tags `v0.1.1`–`v0.1.3`. **Not unblocked here** — that is a security card and a USER
+decision, neither of which is mine to resolve at a keyboard at 01:47. What is corrected is only
+the premise a future reader would otherwise inherit.
 
 That is a hole this TRDD's own change opened, so it is this TRDD's platelet:
 **`TRDD-44RGLOO8`** (`design/proposals/`, Tier 3, blocked on the USER's rotation via

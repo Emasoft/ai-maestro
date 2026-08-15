@@ -3,7 +3,7 @@ trdd-id: 1ZMEXD9X
 title: Systematic fleet gap survey and remediation campaign — the orchestrator does the orchestrator's job
 column: dev
 created: 2026-08-15T16:16:37+0200
-updated: 2026-08-15T22:47:49+0200
+updated: 2026-08-15T23:26:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -62,14 +62,51 @@ canonical SPEC grammar under-matches 44 live clauses — TERM-xx, RP-ASSISTANT-x
 RP-SKILL-MENU-xx, STS-Rn.n invisible to the store — plus 2 citation conflations) →
 3b) IG1MMYFA (grammar widening, P1 — found work, slots before the detector) → 4) 4EBVIYBA
 → 5) GADPGOIR (drift automation) → 6) synthesis residue: PRRD bootstrap proposal
-(USER-floor — needs the USER: golden G1.1 authoring) + github-config-audit TS-vs-py parity
-check (open question from A6) + the 6 uncached role-plugins' compliance (needs their repos
-or a cache install).
+(USER-floor — needs the USER: golden G1.1 authoring) + ~~github-config-audit TS-vs-py parity
+check (open question from A6)~~ **DONE 2026-08-15 23:2x** + the 6 uncached role-plugins'
+compliance (needs their repos or a cache install).
 
-**NEXT ACTION:** execute plan item 4 (**TRDD-4EBVIYBA** — the R51 ratchet scan surface:
-a detector over `app/api` + `services` that finds the pipelines a transaction should cover,
-with an allowlist carrying REASONS and a seeded positive control) unless the USER
-re-prioritizes.
+**ALL SIX PLAN ITEMS ARE NOW CLOSED OR CORRECTLY BLOCKED.** Item 6's three pieces were never
+equal, and only one was ever actionable here:
+
+| piece | disposition |
+|---|---|
+| PRRD bootstrap (golden G1.1) | **BLOCKED — USER-only.** Tier 3; an agent may not author it. |
+| 6 uncached role-plugins | **BLOCKED — needs their repos or a cache install.** |
+| github-config-audit TS-vs-py parity (A6) | **DONE** — e71af448, 0f72c0fe |
+
+**A6 parity outcome (the actionable piece).** Surveyed `lib/github-config-audit.ts` against the
+janitor's `github_config_audit.py` (3.3.5). The classifier is a faithful port — finding codes and
+blurbs byte-identical, silence rules identical — with **one real behavioural gap**, now fixed:
+
+- **GAP (fixed, `e71af448`).** `fullRulesets` DROPPED any ruleset whose per-ruleset detail fetch
+  failed, converting "I could not read this" into "this does not exist" — the one inference the
+  module forbids everywhere else (its header: *"it never claims a gap it could not prove"*, applied
+  correctly to `admin`, `rulesets`, `classicProtected`, `hasWorkflows`, and violated in this single
+  loop). Two false findings followed; the sharp one is that a repo whose ONLY active branch ruleset
+  failed its detail probe was reported **UNPROTECTED** off one transient 5xx. Now kept as the list
+  summary tagged `_detail_unresolved` — the janitor's own key (their janitor#244), so the two stay
+  interchangeable. **Neuters (complementary pair, run):** reverting the tagging reds exactly 1 test
+  (the `fullRulesets` half); dropping the `!anyUnresolved` gate reds 3 DIFFERENT tests (the
+  classifier half). Zero overlap — each half independently pinned. 25/25 green, tsc 0.
+- **Dead code removed (`0f72c0fe`).** `github-cli.ts::setBranchProtection` — ZERO callers, so it had
+  mis-protected nothing, but it encoded THREE contradictions of ratified governance
+  (`required_approving_review_count: 1` vs the USER's 2026-08-13 ruling of 0; `enforce_admins: true`
+  vs that ruling's added owner bypass; the LEGACY branch-protection API rather than RULESETS). Also
+  `ghApi`, dead before that removal — its only non-definition occurrence was a mention in a COMMENT.
+
+**⚠ ONE FINDING THAT MUST NOT BE "FIXED" LATER.** The survey also found the ratified baseline
+**APPLIER** (the `baseline-*` trio's names, payloads, `bypass_actors`,
+`required_approving_review_count: 0`) exists **only** in the janitor's `branch_protection_lib.py`,
+with no TS port. **That is deliberate and must stay so.** This server AUDITS read-only; the janitor
+APPLIES. Porting the applier here would put one set of ratified constants in two codebases — the
+exact drift that has already bitten this fleet (a peer's cadence constant read 6 h vs 2.0 h across
+two copies). A future reader seeing "no TS applier" should read it as the design, not a gap.
+
+**NEXT ACTION:** nothing in the numbered plan. The two remaining item-6 pieces are blocked on the
+USER and on external repos respectively (see the table above) — do NOT start either. The campaign's
+own open work is done; the remaining fleet-level item is DPPYVLVH's human-watched first switch,
+which needs one live Fable agent and must not be recorded as verified until both signals are seen.
 
 **Items 1-3b are DONE** (each archived `completed`, with recorded neuters):
 `LMAZO2ET` (a084a1d5) · `2R34M8FA` (b3a4ec2b) · `BL0W6LGY` (c29661bb) ·

@@ -1,9 +1,9 @@
 ---
 trdd-id: EZ4B12B9
 title: The only unexposed terminal read is the RAW PANE TEXT — everything semantically useful is already readable
-column: todo
+column: backburner
 created: 2026-08-04T23:34:08+0200
-updated: 2026-08-04T23:39:45+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: governance-rules
 assignee: governance-rules
 created-by: governance-rules
@@ -13,7 +13,6 @@ project-id: ai-maestro
 repo: Emasoft/ai-maestro
 min-approval-requirement: manager
 mandate: false
-approved: false
 derived: false
 npt: []
 eht: []
@@ -125,6 +124,13 @@ first-hand in `scripts/ai-maestro-hook.cjs` and the route files.
 ## Approval log
 
 - 2026-08-04T23:34:08+0200 — FILED as a proposal-tier finding, not self-mandated.
+- 2026-08-15T01:30:26+0200 — manager reviewed 2026-08-15 — build DECLINED absent concrete
+  need, per the card's own recommendation (a raw pane scrape is a wider read than
+  /prompt's argued exposure). Card kept OPEN as the measurement record, moved todo →
+  backburner. Not a refusal of the need: if a concrete need appears, re-propose. The
+  `approved: false` field is REMOVED rather than kept: that value asserts "pending an
+  approval", and per this ruling nothing is pending — a parked measurement record makes
+  no approval claim at all; this log line is the review's record.
 - 2026-08-04T23:39:45+0200 — **CORRECTED after the USER refuted the central claim.** Priority
   2→3, severity medium→low, effort medium→small. The card now records a narrow optional
   enhancement plus the measurement, instead of a defect that does not exist.

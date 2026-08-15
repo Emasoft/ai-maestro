@@ -3,7 +3,8 @@ trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-08T00:21:44+0200
+updated: 2026-08-15T01:30:26+0200
+min-approval-requirement: none
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -519,3 +520,10 @@ B (synthesize) + E (MANAGER coordination #35) complete.
 - #44 (plugin repo): core ai-maestro-plugin publish-pipeline → CPV canonical.
 
 Recommend next: **Phase D scenarios** (dev-browser UI validation — explicitly user-requested; validates the governance/security fixes end-to-end), OR the lower-priority residuals (#3b bearer-downstream deep-validation, #37 decoupling [gated on MANAGER #35], install-messaging --verify drift mode). Service `[janitor-heartbeat]` markers between items.
+
+## Approval log
+
+- 2026-08-15T01:30:26+0200 — §D4 sweep D3-FLOOR-SUSPECT ruled by ASSISTANT-MANAGER: floor
+  stays `none` (auditing governance is read-only; §D3 gates EDITS — naming governance
+  surfaces in an audit is not touching them). Explicit `min-approval-requirement: none`
+  set. CONSTRAINT: any FIX this audit spawns is its own card at the proper floor.

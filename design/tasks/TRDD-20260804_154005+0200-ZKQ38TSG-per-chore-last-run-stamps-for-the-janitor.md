@@ -3,13 +3,15 @@ trdd-id: ZKQ38TSG
 title: Publish per-chore last-run stamps so either side can answer is chore X alive with a stat
 column: backburner
 created: 2026-08-04T15:40:05+0200
-updated: 2026-08-04T15:40:05+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
 task-type: feature
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: manager (emasoft-assistant-manager)
+approval-datetime: 2026-08-15T01:30:26+0200
 mandate: false
 derived: false
 priority: 2
@@ -136,3 +138,6 @@ Found 2026-08-04 while answering `ai-maestro#99`, which had sat 7 days with zero
 add a writer to it — recorded here because the near-miss is the useful part.
 
 ## Approval log
+
+- 2026-08-15T01:30:26+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
+  manager), §D4 APPROVAL-UNAPPROVED-IN-WORK-ZONE drain. Column stays as-is per the ruling.

@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-08-05T00:27:02+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -224,3 +224,9 @@ the bar.
 Each un-gated item lands evidence in `reports/` and, where a real defect is found, a tier-appropriate fix
 TRDD. The mutating items (CI wiring, any enforcement fix) do NOT auto-apply — they wait on the USER's
 confirmation of the bar.
+
+## Approval log
+
+- 2026-08-15T01:30:26+0200 — §D4 sweep D3-FLOOR-SUSPECT ruled by ASSISTANT-MANAGER: floor
+  stays `none` (audit/verification is read-only; naming `.github/` paths in an audit is
+  not touching them). CONSTRAINT: any FIX it spawns is its own card at the proper floor.

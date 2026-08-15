@@ -3,13 +3,15 @@ trdd-id: GADPGOIR
 title: The installed script layer drifts from source with nothing detecting it, and a partial refresh is destructive
 column: backburner
 created: 2026-08-04T15:13:39+0200
-updated: 2026-08-04T15:13:39+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
 task-type: infra
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: manager (emasoft-assistant-manager)
+approval-datetime: 2026-08-15T01:30:26+0200
 mandate: false
 derived: false
 priority: 1
@@ -123,3 +125,6 @@ ORCHESTRATOR had reported 32 agents sharing one AMP address; I diagnosed it, fix
 it would self-heal. Re-verification showed the fix was never installed. Correction posted on `#77`.
 
 ## Approval log
+
+- 2026-08-15T01:30:26+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
+  manager), §D4 APPROVAL-UNAPPROVED-IN-WORK-ZONE drain. Column stays as-is per the ruling.

@@ -5,14 +5,16 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-07-26T09:45:32+0200
-updated: 2026-07-26T09:45:32+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: docs
 min-approval-requirement: manager
 mandate: false
-approved: false
+approved: true
+approval-judge: manager (emasoft-assistant-manager)
+approval-datetime: 2026-08-15T01:30:26+0200
 relevant-rules: [R6, R38]
 blocked-by: []
 npt: []
@@ -96,4 +98,5 @@ guard on the authority of a stale sentence.
 
 ## Approval log
 
-_(empty — awaiting MANAGER)_
+- 2026-08-15T01:30:26+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
+  manager), §D4 APPROVAL-UNAPPROVED-IN-WORK-ZONE drain. Column stays as-is per the ruling.

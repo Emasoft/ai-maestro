@@ -3,7 +3,7 @@ trdd-id: 80557822
 title: R6 Communication Graph Downstream Sync
 column: todo
 created: 2026-04-24T04:08:31+0200
-updated: 2026-07-13T12:40:00+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: main
 assignee: main
 priority: 1
@@ -190,3 +190,10 @@ the moment Phase 2 maestro auth wires H as an AMP recipient.
 
 This MUST ship before any Phase 2 maestro-auth work lands — at that
 point the advisory gate becomes exploitable.
+
+## Approval log
+
+- 2026-08-15T01:30:26+0200 — §D4 sweep D3-FLOOR-SUSPECT ruled by ASSISTANT-MANAGER: floor
+  stays `none` — propagating already-ratified governance downstream is the "apply the
+  baseline as-is" exempt shape, not a governance change. ESCALATION CLAUSE: if the sync
+  ever REWORDS a rule, that edit escalates to the proper floor.

@@ -3,13 +3,15 @@ trdd-id: 9HVPW12Z
 title: The agent-facing governance-request route still demands the governance password after R32 superseded it
 column: backburner
 created: 2026-08-04T15:07:19+0200
-updated: 2026-08-04T15:07:19+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
 task-type: security
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: manager (emasoft-assistant-manager)
+approval-datetime: 2026-08-15T01:30:26+0200
 mandate: false
 derived: false
 priority: 1
@@ -132,3 +134,6 @@ the pre-R32 model. COS did not flag it, and it is not something they can work ar
 Queued onto `#64` (the CORE frozen-CLI build queue) in the same reply.
 
 ## Approval log
+
+- 2026-08-15T01:30:26+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
+  manager), §D4 APPROVAL-UNAPPROVED-IN-WORK-ZONE drain. Column stays as-is per the ruling.

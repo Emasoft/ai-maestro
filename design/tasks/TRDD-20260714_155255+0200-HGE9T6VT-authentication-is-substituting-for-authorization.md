@@ -3,12 +3,14 @@ trdd-id: HGE9T6VT
 title: Authentication is substituting for authorization — the headless router must be driven by the same table as the guard and fail closed
 column: planned
 created: 2026-07-14T15:52:55+0200
-updated: 2026-07-14T17:25:00+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: manager (emasoft-assistant-manager)
+approval-datetime: 2026-08-15T01:30:26+0200
 priority: 1
 severity: high
 effort: medium
@@ -179,3 +181,6 @@ boundary and must land with the parity test, not before it.
 session including the MANAGER's — and via R9.8, thereby hibernate every team agent on the host.
 
 ## Approval log
+
+- 2026-08-15T01:30:26+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
+  manager), §D4 APPROVAL-UNAPPROVED-IN-WORK-ZONE drain. Column stays as-is per the ruling.

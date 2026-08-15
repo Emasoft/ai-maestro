@@ -3,12 +3,13 @@ trdd-id: UZ9YT1SD
 title: One portable cheap-delegation rule in the server-installed layer instead of per-plugin guidance
 column: planned
 created: 2026-08-08T12:01:51+0200
-updated: 2026-08-08T12:01:51+0200
+updated: 2026-08-15T01:30:26+0200
 current-owner: ai-maestro-hub-session
 task-type: feature
-min-approval-requirement: none
-mandate: true
-mandated-by: self
+min-approval-requirement: manager
+approved: true
+approval-judge: manager (emasoft-assistant-manager)
+approval-datetime: 2026-08-15T01:30:26+0200
 project-id: ai-maestro
 labels: [fleet-readiness, token-economy, rules-layer]
 external-refs: []
@@ -53,3 +54,9 @@ charged per-turn).
 - [ ] Verified present in an actual agent workdir's installed copy after the server heals it
 
 ## Approval log
+
+- 2026-08-15T01:30:26+0200 — §D4 sweep D3-FLOOR-SUSPECT ruled by ASSISTANT-MANAGER: floor
+  RAISED to `manager` (this card edits the server-installed rules layer) and APPROVED at
+  that floor in the same ruling. The prior self-mandate is VOID and replaced by this
+  approval record — content judged sound and consistent with the standing token-economy
+  rules.

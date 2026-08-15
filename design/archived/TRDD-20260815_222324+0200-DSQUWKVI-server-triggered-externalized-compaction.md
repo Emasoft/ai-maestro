@@ -1,9 +1,9 @@
 ---
 trdd-id: DSQUWKVI
 title: Server-triggered externalized compaction — run the janitor's zero-turn shrink for a named agent
-column: dev
+column: completed
 created: 2026-08-15T22:23:24+0200
-updated: 2026-08-15T22:45:07+0200
+updated: 2026-08-15T23:58:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,6 +22,7 @@ labels: [continuity, compaction, janitor-parity, fleet]
 npt: []
 eht: []
 blocked-by: []
+implementation-commits: [ac180a83, 2be39063, fcbeb021]
 external-refs: [Emasoft/ai-maestro-janitor#222]
 ---
 
@@ -32,9 +33,15 @@ external-refs: [Emasoft/ai-maestro-janitor#222]
 - **Attended path: DONE** — `janitor-externalized-compaction` added to the curated command
   allowlist (`ac180a83`), auto-reachable from the dashboard listing + `POST
   /api/agents/[id]/session` + the by-key actuators. 4 tests, 1 neuter.
-- **Unattended path: IN PROGRESS** — `lib/external-compaction.ts`, the per-agent subprocess
-  runner. This is the seam the janitor asked for and the one that works on a WEDGED agent.
-- **NEXT ACTION:** finish the runner + tests, wire the route action, then reply to the janitor.
+- **Unattended path: DONE** (`2be39063`, guarded by `fcbeb021`) — `lib/external-compaction.ts`,
+  the per-agent subprocess runner. This is the seam the janitor asked for and the one that works
+  on a WEDGED agent. Reachable at `POST /api/agents/[id]/continuity/compact`; pinned by
+  `tests/unit/external-compaction.test.ts` and
+  `tests/unit/externalized-compaction-not-automatic.test.ts`.
+- **NEXT ACTION:** none — the card is `completed`. (This line read *"finish the runner + tests,
+  wire the route action, then reply to the janitor"* until the closing edit; all four had landed
+  by then, and a STATE block that contradicts its own acceptance boxes is the one thing a
+  resuming session cannot safely trust.)
 
 ## Origin
 
@@ -152,3 +159,14 @@ The live rotator state at that moment read **Fable 100% with 5h=61% / 7d=81%** �
 scoped-only wall, i.e. exactly the case the new policy and the armed lane were built for. So
 **DPPYVLVH's human-watched first switch is still PENDING a live Fable agent**, and must not be
 recorded as verified until the `confirmed=true` line and the pane flip are actually seen.
+
+## Approval log
+
+- 2026-08-15T22:23:24+0200 — MANDATE issued by USER (floor `none`): a direct directive to give
+  the server its own trigger for the janitor's zero-turn shrink. Pre-approved; no request sent.
+- 2026-08-15T23:58:00+0200 — COMPLETED by ai-maestro. All six acceptance boxes checked, no
+  NPT/EHT, work landed as `ac180a83` (attended), `2be39063` (unattended runner + route) and
+  `fcbeb021` (the attended-only guard) — all three now in `implementation-commits:`. Each
+  artifact was verified to exist on disk and in git before closing, not inferred from the
+  checkboxes; the STATE block's stale *"IN PROGRESS / NEXT ACTION"* lines were corrected in the
+  same closing edit. The DPPYVLVH note above is about a DIFFERENT card and does not gate this one.

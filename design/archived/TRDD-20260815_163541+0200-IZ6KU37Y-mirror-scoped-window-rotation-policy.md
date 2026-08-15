@@ -1,9 +1,9 @@
 ---
 trdd-id: IZ6KU37Y
 title: Mirror the janitor's model-scoped-window rotation policy in the server rotator/daemon
-column: dev
+column: completed
 created: 2026-08-15T16:35:41+0200
-updated: 2026-08-15T21:46:48+0200
+updated: 2026-08-15T23:58:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -21,6 +21,7 @@ labels: [continuity, oauth-rotation, model-fallback, janitor-parity]
 npt: []
 eht: []
 blocked-by: []
+implementation-commits: [0497a2ba]
 ---
 
 # Mirror the scoped-window rotation policy (janitor v3.3.2+) server-side
@@ -105,3 +106,12 @@ ai-maestro server is replacing the janitor daemon."* Both halves of that now hol
   `all-maxed`, which is exactly what `stuckSuggestsModelFallback` keys on. The receiving lane
   is no longer dark: `AIM_FLEET_MODEL_FALLBACK=1` was armed the same evening (TRDD-DPPYVLVH,
   USER-approved first-hand; commit 56047fa5, verified on the live process with `ps -E`).
+
+## Approval log
+
+- 2026-08-15T16:35:41+0200 — MANDATE issued by ai-maestro (self, floor `none`): a Tier-0
+  parity mirror inside this server's own rotator. Pre-approved; no request was sent.
+- 2026-08-15T23:58:00+0200 — COMPLETED by ai-maestro. All three acceptance boxes checked, no
+  NPT/EHT, work landed as `0497a2ba` (now recorded in `implementation-commits:`). The card had
+  been sitting in `dev` since the code landed, which made the work column claim an active task
+  that had in fact finished — closed rather than left asserting otherwise.

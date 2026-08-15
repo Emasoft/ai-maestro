@@ -3,7 +3,7 @@ trdd-id: 17K0SHDQ
 title: Close ai-maestro#46 — the four remaining work items after the 2026-08-08 defect map
 column: dev
 created: 2026-08-08T15:19:13+0200
-updated: 2026-08-08T15:35:00+0200
+updated: 2026-08-16T01:04:24+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: bugfix
@@ -35,7 +35,14 @@ recipe), NOT a resolver change.
 
 ## Work items
 
-- [ ] **W-A — non-destructive address-heal sweep.** The `load_config()` self-heal is
+**These four are a SPECIFICATION, not a gate — de-checkboxed 2026-08-16.** They were written as
+`- [ ]` bullets and they duplicate `## Acceptance` below, which tracks what actually shipped. The
+terminal-column gate counts every `- [ ]` in the file, so four permanently-unchecked spec bullets
+made this card **impossible to close even with every acceptance box green** — the exact mirror of
+the vacuous-gate failure (a card with NO boxes passes having proven nothing; a card with SPEC boxes
+can never pass at all). One card, one gate: `## Acceptance` owns it.
+
+- **W-A — non-destructive address-heal sweep.** The `load_config()` self-heal is
       reactive; 26/64 on-disk configs still share the byte-identical address
       `ai-maestro@emasoft.aimaestro.local` (measured 2026-08-08, report §4) because dead/stale
       agents are never used again. Ship `scripts/heal-amp-addresses.sh`: walk
@@ -44,7 +51,7 @@ recipe), NOT a resolver change.
       — the `save_config` regression class from `6c6b75b4` must not recur), report every
       change, DELETE NOTHING (orphan GC is a separate decision, not this card). Idempotent;
       second run reports zero changes.
-- [ ] **W-B — kill silent first-match-wins in `_resolve_agent_id`.** Duplicated byte-identically
+- **W-B — kill silent first-match-wins in `_resolve_agent_id`.** Duplicated byte-identically
       in `aimaestro-panel.sh:102-117`, `aimaestro-session.sh:134-`, `aimaestro-continuity.sh:65-`;
       all take `agents[0].id` from an UNSORTED substring search (`lib/agent-registry.ts::
       searchAgents:1236-1251`) with zero ambiguity handling. Fix: extract ONE shared helper
@@ -52,12 +59,12 @@ recipe), NOT a resolver change.
       substring matches and no unique exact match, HARD FAIL listing candidate NAMES (never
       uuids — the `1af95d49` lesson). Also satisfies TRDD-COOLOZ1N hub box 4. Pin with tests
       driving 0/1/N-match cases; falsify by restoring `agents[0]` and observing the red.
-- [ ] **W-C — role→name resolution.** MAINTAINER's comment #13 gap: "send to the MANAGER on
+- **W-C — role→name resolution.** MAINTAINER's comment #13 gap: "send to the MANAGER on
       this host" has no deterministic answer; zero `governanceTitle`-aware lookups exist in
       `scripts/*.sh`. Add a `?title=<governance-title>` filter to `GET /api/agents` (registry
       already stores it) + a resolver flag; refuse on 0 and on >1 (two MANAGERs is a
       governance anomaly to surface, never to pick from).
-- [ ] **W-D — the fleet validation recipe.** Document (on #46, closing it) how a plugin-dev
+- **W-D — the fleet validation recipe.** Document (on #46, closing it) how a plugin-dev
       session validates kanban ops against a live board: through a REGISTERED test agent
       session (`~/agents/<scen-fixture>/`), never by exporting identity env vars from a dev
       repo (that is the impersonation shape the P4 guard exists to refuse). Notify AMOA
@@ -73,7 +80,19 @@ recipe), NOT a resolver change.
       and verified on the installed copies (2026-08-08T15:32+0200)
 - [ ] W-C shipped: title filter + resolver flag, 0/1/N pinned (deferred — feature, nobody
       blocked; machine burn was ~$480/hr at decision time, 2026-08-08T15:30+0200)
-- [ ] W-D posted on #46 ✓ and #46 CLOSED ✓ (comment 5226325800); AMOA and AMAA notified.
+      **STILL DEFERRED BY DECISION as of 2026-08-16, not stalled.** Re-checked: nothing on the
+      board and nothing on #46 waits for it, and the reason it was deferred — a feature nobody
+      is blocked on — is unchanged. Deliberately left unchecked: a deferred item is not a done
+      one, and ticking it to make the card closable is exactly the dishonesty this gate exists
+      to prevent. If W-C turns out never to be wanted, the honest move is to DROP it from
+      Acceptance with a reason, never to tick it.
+- [x] W-D's RELAY half — the recipe posted on #46, the issue CLOSED, both peers notified.
+      **Split out and ticked 2026-08-16, because this half was DONE on 2026-08-08 and was
+      being held unchecked by the OTHER half below.** Verified rather than assumed: `gh issue
+      view 46` reports `state: CLOSED, closedAt: 2026-08-08T13:32:39Z`, and the recipe is
+      comment 5226325800. Fusing a finished relay with a deferred probe made the whole item
+      read as untouched — the same defect corrected on TRDD-COOLOZ1N the same night.
+- [ ] W-D's PROBE half — the live kanban round-trip, hub-owned, still DEFERRED.
       AMAA named its remaining blocker precisely (2026-08-08T15:45+0200): the live round-trip
       needs (1) a registered TEST agent on shared fleet infrastructure and (2) the ops run
       from THAT agent's server-spawned session — neither is a peer's to create unilaterally,

@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-16T00:10:07+0200
+updated: 2026-08-16T00:29:04+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -942,6 +942,37 @@ applies to it, which is now the strongest argument for settling that first.
         UPGRADES an `autoUpdate: true` marketplace's plugins without a session start. If it only
         does so at session start, the loop is what covers a hibernated fleet, and a host-local
         coverage measurement cannot see that at all.
+
+      **TIMED REPRODUCTION — 2026-08-16T00:09:35 → 00:28:43. It REFUTES my own timeout
+      hypothesis from two hours earlier, and re-sizes the budget.** Ran the exact argless command
+      `RefreshAllMarketplaces` runs, capturing both streams and the exit status:
+
+      | | |
+      |---|---|
+      | wall clock | **1148 s** (19 min 8 s) |
+      | exit status | **0** |
+      | stdout | **74 bytes** — `Updating 260 marketplace(s)...✔ Successfully updated 260 marketplace(s)` |
+      | stderr | **0 bytes** |
+      | after-state | all **260** registered marketplaces refreshed within 0.3 h — the run really did touch every one |
+
+      - **⚠ RETRACTION — the "exactly 1800 s ⇒ timeout" reading above is WITHDRAWN.** A healthy
+        run costs **1148 s against an 1800 s cap**, i.e. 652 s of headroom (36 %), so a normal
+        refresh is nowhere near the kill. And the arithmetic that produced the hypothesis was
+        measuring the wrong interval: 21:42:22 is a **`marketplace-auto-update`** row and 22:12:22
+        a **`marketplace-refresh`** row — two DIFFERENT duties. The trail records no refresh START,
+        so that gap never established when the refresh began, and "exactly 1800 s" was a
+        coincidence between unrelated endpoints. **Cause of the 12 failures: still UNKNOWN.**
+      - **What the run DOES establish: the budget is still adequate and the margin is shrinking.**
+        1082 s at 275 marketplaces (2026-08-06) → **1148 s at 260** (2026-08-16): 6 % slower over
+        ten days on 15 FEWER marketplaces, so per-marketplace cost rose ~12 %. The cap is not at
+        risk today; it is worth re-measuring rather than assuming, because the code comment sizes
+        it as "~66 % headroom over 1082 s" and the real headroom is now 57 %.
+      - **The CLI reports an AGGREGATE, which caps what any diagnosis fix can buy — and is
+        `FXPV7L4D`'s premise, now measured from the CLI side.** The entire successful output is
+        one summary line naming a COUNT. So capturing `err.stdout` (which this lane discards) makes
+        a failure *diagnosable* and still cannot yield per-marketplace outcomes: that would need
+        per-name invocations, i.e. exactly the loop AC1 removed for performance. **Diagnosability
+        and per-item accounting are two different fixes, and only the first is cheap.**
 - [x] The per-plugin-update question in "One thing to resolve" above is answered by the
       USER before any code lands, and the answer is recorded here.
       DONE — answered verbatim in the "RESOLVED — the per-plugin loop is redundant, not merely

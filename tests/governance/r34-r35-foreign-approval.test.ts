@@ -7,17 +7,19 @@ import { NextRequest, NextResponse } from 'next/server'
 /**
  * POST /api/agents/foreign-approvals/[id]/approve — R34.2 + R35.2.
  *
- * Both rules are enforced by the SAME lines (route.ts:46-49), which is why one file pins
+ * Both rules are enforced by the SAME lines (route.ts:35-38), which is why one file pins
  * both. Each rule has THREE clauses, and the enforcement-map citation covers only the first
- * two — the ledger half sits at an uncited site further down the handler, so it is the half
- * a citation-shaped audit cannot see:
+ * two — the ledger half now lives in the R51 transaction the route delegates to
+ * (services/foreign-approval-service.ts, TRDD-LMAZO2ET), so it is the half a
+ * citation-shaped audit cannot see:
  *
- *   R35.2 "only by the MAESTRO user via the UI"          -> enforceMaestro      (:46-47)
- *   R34.2 "requiring a sudo password from the USER (UI)" -> requireSudoToken    (:48-49)
+ *   R35.2 "only by the MAESTRO user via the UI"          -> enforceMaestro      (:35-36)
+ *   R34.2 "requiring a sudo password from the USER (UI)" -> requireSudoToken    (:37-38)
  *   R34.2 "re-issue a NEW AID … recorded in the signed ledger and counts as a verification"
  *   R35.2 "recorded in the signed ledger (which thereafter validates the foreign AID)"
  *                                                        -> recordAidReissue +
- *                                                           recordForeignApproval (:108-109)
+ *                                                           recordForeignApproval
+ *                                                           (foreign-approval-service G05)
  *
  * COMPLEMENTARY FIXTURES — the reason each refusal test is non-vacuous. The two gates run in
  * order, so a "no sudo token" test that also withholds the session would be refused by gate 1
@@ -53,43 +55,73 @@ const deny = (msg: string) => NextResponse.json({ error: msg }, { status: 403 })
 /**
  * `maestro`/`sudo` select which gate REFUSES. Every other collaborator is stubbed to the
  * happy path, so the ONLY thing that can turn the request away is the gate under test.
+ *
+ * The stubs model a small stateful WORLD (agents array, keys map, one approval entry)
+ * rather than returning constants, because the route now delegates to the R51 pipeline in
+ * services/foreign-approval-service.ts, whose snapshots and success-path invariants READ
+ * the stores back (loadAgents, loadKeyPair, getForeignApproval). A constant-returning mock
+ * would fail those invariants and make the happy-path test assert the wrong branch.
  */
 function mockDeps(opts: { maestro: 'allow' | 'deny'; sudo: 'allow' | 'deny' }) {
   const enforceMaestro = vi.fn(() => (opts.maestro === 'deny' ? deny('Forbidden — MAESTRO only') : null))
   const requireSudoToken = vi.fn(() => (opts.sudo === 'deny' ? deny('Sudo token required') : null))
 
-  const updateForeignApproval = vi.fn()
-  const importAgent = vi.fn(async () => ({
-    status: 200,
-    data: { success: true, agent: { id: 'agent-local-new', name: 'imported-bot' }, warnings: [] },
-  }))
-  const generateKeyPair = vi.fn(async () => ({ fingerprint: FRESH_FP, publicKey: 'pub', privateKey: 'priv' }))
-  const saveKeyPair = vi.fn()
-  const markAgentAsAMPRegistered = vi.fn(async () => undefined)
-  const recordAidReissue = vi.fn()
-  const recordForeignApproval = vi.fn()
-
-  vi.doMock('@/lib/route-auth', () => ({ enforceMaestro }))
-  vi.doMock('@/lib/sudo-guard', () => ({ requireSudoToken }))
-  vi.doMock('@/lib/foreign-approval-registry', () => ({
-    getForeignApproval: vi.fn(() => ({
+  type Row = Record<string, unknown>
+  const world = {
+    agents: [] as Row[],
+    keys: {} as Record<string, Row>,
+    approval: {
       id: APPROVAL_ID,
       kind: 'agent',
       status: 'pending',
       fingerprint: FOREIGN_FP,
       sourceHostId: SOURCE_HOST,
+      displayName: 'imported-bot',
       importPayloadPath: payloadPath,
-    })),
-    updateForeignApproval,
-  }))
+    } as Row,
+  }
+
+  const importAgent = vi.fn(async () => {
+    world.agents.push({ id: 'agent-local-new', name: 'imported-bot', metadata: {} })
+    return {
+      status: 200,
+      data: { success: true, agent: { id: 'agent-local-new', name: 'imported-bot' }, warnings: [] },
+    }
+  })
+  const generateKeyPair = vi.fn(async () => ({ fingerprint: FRESH_FP, publicKey: 'pub', privateKey: 'priv' }))
+  const saveKeyPair = vi.fn((agentId: string, kp: Row) => { world.keys[agentId] = kp })
+  const loadKeyPair = vi.fn((agentId: string) => world.keys[agentId] ?? null)
+  const deleteKeyPair = vi.fn((agentId: string) => { delete world.keys[agentId]; return true })
+  const markAgentAsAMPRegistered = vi.fn(async (agentId: string, ampData: { fingerprint: string }) => {
+    const row = world.agents.find(a => a.id === agentId)
+    if (!row) return null
+    row.ampRegistered = true
+    row.metadata = { ...(row.metadata as Row), amp: { fingerprint: ampData.fingerprint } }
+    return row
+  })
+  const loadAgents = vi.fn(() => world.agents)
+  const saveAgents = vi.fn((agents: Row[]) => { world.agents = agents; return true })
+  const getForeignApproval = vi.fn(() => world.approval)
+  const updateForeignApproval = vi.fn((_id: string, patch: Row) => {
+    Object.assign(world.approval, patch)
+    return world.approval
+  })
+  const recordAidReissue = vi.fn()
+  const recordForeignApproval = vi.fn()
+  const recordAidRevocation = vi.fn()
+
+  vi.doMock('@/lib/route-auth', () => ({ enforceMaestro }))
+  vi.doMock('@/lib/sudo-guard', () => ({ requireSudoToken }))
+  vi.doMock('@/lib/foreign-approval-registry', () => ({ getForeignApproval, updateForeignApproval }))
   vi.doMock('@/services/agents-transfer-service', () => ({ importAgent }))
-  vi.doMock('@/lib/amp-keys', () => ({ generateKeyPair, saveKeyPair }))
-  vi.doMock('@/lib/agent-registry', () => ({ markAgentAsAMPRegistered }))
-  vi.doMock('@/lib/aid-ledger-authority', () => ({ recordAidReissue, recordForeignApproval }))
+  vi.doMock('@/lib/amp-keys', () => ({ generateKeyPair, saveKeyPair, loadKeyPair, deleteKeyPair }))
+  vi.doMock('@/lib/agent-registry', () => ({ markAgentAsAMPRegistered, loadAgents, saveAgents }))
+  vi.doMock('@/lib/aid-ledger-authority', () => ({ recordAidReissue, recordForeignApproval, recordAidRevocation }))
 
   return {
     enforceMaestro, requireSudoToken, importAgent, saveKeyPair,
-    recordAidReissue, recordForeignApproval, updateForeignApproval,
+    recordAidReissue, recordForeignApproval, updateForeignApproval, recordAidRevocation,
+    world,
   }
 }
 
@@ -114,7 +146,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-describe('R35.2 — approval is the MAESTRO user\'s alone (route.ts:46-47)', () => {
+describe('R35.2 — approval is the MAESTRO user\'s alone (route.ts:35-36)', () => {
   it('rejects a non-MAESTRO caller, and refuses BEFORE consuming the staged payload', async () => {
     // sudo ALLOWS here, so a 403 can only have come from the MAESTRO gate.
     const m = mockDeps({ maestro: 'deny', sudo: 'allow' })
@@ -133,7 +165,7 @@ describe('R35.2 — approval is the MAESTRO user\'s alone (route.ts:46-47)', () 
   })
 })
 
-describe('R34.2 — a fresh sudo password is required (route.ts:48-49)', () => {
+describe('R34.2 — a fresh sudo password is required (route.ts:37-38)', () => {
   it('rejects a MAESTRO caller without a fresh sudo token', async () => {
     // MAESTRO ALLOWS here, so a 403 can only have come from the sudo gate.
     const m = mockDeps({ maestro: 'allow', sudo: 'deny' })
@@ -179,5 +211,8 @@ describe('R34.2 + R35.2 — the approval re-issues a NEW AID and records it in t
       APPROVAL_ID,
       expect.objectContaining({ status: 'approved', newFingerprint: FRESH_FP }),
     )
+    // A clean run emits NO compensating revoke — the revoke is the rollback's
+    // signature, so its presence here would mean a gate silently failed.
+    expect(m.recordAidRevocation).not.toHaveBeenCalled()
   })
 })

@@ -43,12 +43,14 @@ type AuthorityModule = typeof import('@/lib/aid-ledger-authority')
 type RegistryModule = typeof import('@/lib/agent-registry')
 type ForeignRegModule = typeof import('@/lib/foreign-approval-registry')
 type AmpKeysModule = typeof import('@/lib/amp-keys')
+type ForeignSvcModule = typeof import('@/services/foreign-approval-service')
 
 let transfer: TransferModule
 let authority: AuthorityModule
 let registry: RegistryModule
 let foreignReg: ForeignRegModule
 let ampKeys: AmpKeysModule
+let foreignSvc: ForeignSvcModule
 let foreignFingerprint: string
 let foreignPubPem: string
 let foreignPrivPem: string
@@ -61,6 +63,7 @@ beforeAll(async () => {
   registry = await import('@/lib/agent-registry')
   foreignReg = await import('@/lib/foreign-approval-registry')
   ampKeys = await import('@/lib/amp-keys')
+  foreignSvc = await import('@/services/foreign-approval-service')
   // A "foreign" keypair — the AID the remote host shipped.
   const kp = await ampKeys.generateKeyPair()
   foreignFingerprint = kp.fingerprint
@@ -248,32 +251,16 @@ describe('foreign-import-approval — step 2: MAESTRO approval re-issues a nativ
     expect(staged.status).toBe(202)
     const approvalId = staged.data!.pendingApprovalId!
 
-    // ── The approval (what the approve route does at the service layer) ──
-    // 1. Materialize on the native path. We read the agent from the RESULT (not
-    //    getAgentByName — loadAgents' mtime cache can lag a same-tick re-read).
-    const materialized = await transfer.importAgent(zip, { newId: true }, { bypassForeignApproval: true })
-    expect(materialized.data?.success).toBe(true)
-    const newAgent = materialized.data!.agent!
-    const newAgentId = newAgent.id
-    // The materialize created a registry record (registryImported true).
-    expect(materialized.data!.stats.registryImported).toBe(true)
-    // The materialize did NOT associate the FOREIGN key (bypass path skips it).
-    authority.invalidateRecoveryCache()
-    await registry.registryLedger.verify()
-    expect(authority.isAidAssociated(foreignFingerprint).ok).toBe(false)
-
-    // 2. Re-issue a FRESH native AID (overwrite the imported foreign keys).
-    const fresh = await ampKeys.generateKeyPair()
-    ampKeys.saveKeyPair(newAgentId, fresh)
-    const newFingerprint = fresh.fingerprint
+    // ── The approval — through the REAL service pipeline (TRDD-LMAZO2ET).
+    // This used to hand-replicate the route's sequence at the service layer;
+    // now that approveForeignAgent IS the sequence, calling anything else here
+    // would pin a copy that drifts from the shipped pipeline.
+    const res = await foreignSvc.approveForeignAgent(approvalId)
+    expect(res.error, res.error).toBeUndefined()
+    expect(res.status).toBe(200)
+    const newAgentId = res.data!.newAgentId
+    const newFingerprint = res.data!.newFingerprint
     expect(newFingerprint).not.toBe(foreignFingerprint)
-
-    // 3. reissue (records aid_reissue + associates the new fp) + foreign-approval.
-    authority.recordAidReissue(newAgentId, foreignFingerprint, newFingerprint, 'remote-host', 'user')
-    authority.recordForeignApproval(newFingerprint, 'agent', 'remote-host', 'system-owner', 'user')
-
-    // 4. Mark approved.
-    foreignReg.updateForeignApproval(approvalId, { status: 'approved', decidedBy: 'system-owner', newAgentId, newFingerprint })
 
     await flushLedger('registry')
     authority.invalidateRecoveryCache()
@@ -286,6 +273,8 @@ describe('foreign-import-approval — step 2: MAESTRO approval re-issues a nativ
     expect(newRes.agentId).toBe(newAgentId)
     // (b) the FOREIGN fingerprint is NEVER backed (R34.2 impersonation defense).
     expect(authority.isAidAssociated(foreignFingerprint).ok).toBe(false)
+    // (b2) the on-disk keypair carries the FRESH fingerprint (foreign keys gone).
+    expect(ampKeys.loadKeyPair(newAgentId)?.fingerprint).toBe(newFingerprint)
     // (c) the reissue + foreign-approval ops are present.
     const ops = registry.registryLedger.getEntries().map(e => e.op)
     expect(ops).toContain('aid_reissue')
@@ -294,8 +283,134 @@ describe('foreign-import-approval — step 2: MAESTRO approval re-issues a nativ
     // (d) the chain still verifies (additivity / signatures intact).
     const verify = await registry.registryLedger.verify()
     expect(verify.ok).toBe(true)
-    // (e) the approval entry is approved.
+    // (e) the approval entry is approved and the staged ZIP was consumed.
+    const after = foreignReg.getForeignApproval(approvalId)
+    expect(after?.status).toBe('approved')
+    expect(after?.importPayloadPath).toBeUndefined()
+    // (f) a replayed approval is refused by the pending-check — no duplicate.
+    const replay = await foreignSvc.approveForeignAgent(approvalId)
+    expect(replay.status).toBe(409)
+    expect(registry.loadAgents().filter(a => a.name === 'beta-foreign')).toHaveLength(1)
+  })
+})
+
+describe('foreign-import-approval — R51 rollback: a mid-sequence failure leaves NO residue (TRDD-LMAZO2ET)', () => {
+  /** Stage a fresh pending foreign import and return its approval handle. */
+  async function stagePending(name: string): Promise<{ approvalId: string; zipPath: string }> {
+    const zip = await buildForeignExportZip(name)
+    const staged = await transfer.importAgent(zip)
+    expect(staged.status).toBe(202)
+    const approvalId = staged.data!.pendingApprovalId!
+    const entry = foreignReg.getForeignApproval(approvalId)!
+    return { approvalId, zipPath: entry.importPayloadPath! }
+  }
+
+  /** Every store back to the pre-call state: no agent, approval pending, ZIP intact. */
+  function expectFullRollback(name: string, approvalId: string, zipPath: string): void {
+    expect(registry.loadAgents().filter(a => a.name === name)).toHaveLength(0)
+    const entry = foreignReg.getForeignApproval(approvalId)
+    expect(entry?.status).toBe('pending')
+    expect(entry?.importPayloadPath).toBe(zipPath)
+    expect(fs.existsSync(zipPath)).toBe(true)
+  }
+
+  it('G01 — importAgent fails: nothing is created, the approval stays pending', async () => {
+    const { approvalId, zipPath } = await stagePending('g1-fail')
+    const res = await foreignSvc.approveForeignAgent(approvalId, {
+      importAgent: async () => ({ error: 'seeded import failure', status: 500 }),
+    })
+    expect(res.status).toBe(500)
+    // R51.3 — the exact "no changes were made" wording, and NOT the invalid-state one.
+    expect(res.error).toMatch(/^THE COMMAND FAILED/)
+    expect(res.error).not.toMatch(/INVALID STATE/)
+    expect(res.error).toContain('seeded import failure')
+    expectFullRollback('g1-fail', approvalId, zipPath)
+  })
+
+  it('G02 — saveKeyPair throws: the imported agent is un-imported, no orphan remains', async () => {
+    const { approvalId, zipPath } = await stagePending('g2-fail')
+    const res = await foreignSvc.approveForeignAgent(approvalId, {
+      saveKeyPair: () => { throw new Error('seeded keypair write failure') },
+    })
+    expect(res.status).toBe(500)
+    expect(res.error).toMatch(/^THE COMMAND FAILED/)
+    expect(res.error).not.toMatch(/INVALID STATE/)
+    expectFullRollback('g2-fail', approvalId, zipPath)
+  })
+
+  it('G03 — markAgentAsAMPRegistered throws: agent + keys rolled back, fresh fp not backed', async () => {
+    const { approvalId, zipPath } = await stagePending('g3-fail')
+    const res = await foreignSvc.approveForeignAgent(approvalId, {
+      markAgentAsAMPRegistered: async () => { throw new Error('seeded registry bind failure') },
+    })
+    expect(res.status).toBe(500)
+    expectFullRollback('g3-fail', approvalId, zipPath)
+  })
+
+  it('G04 — updateForeignApproval writes nothing: the already-associated fresh fp is REVOKED', async () => {
+    const { approvalId, zipPath } = await stagePending('g4-fail')
+    let capturedFp: string | undefined
+    const res = await foreignSvc.approveForeignAgent(approvalId, {
+      updateForeignApproval: (_id, patch) => {
+        capturedFp = patch.newFingerprint
+        return null
+      },
+    })
+    expect(res.status).toBe(500)
+    expectFullRollback('g4-fail', approvalId, zipPath)
+    // The rollback must have appended the compensating aid_revoke for the fresh
+    // fp. `revoked: true` (not just `ok: false`) is the non-vacuous half: a bare
+    // ok-false is also satisfied when no association ever landed (in this test
+    // env markAgentAsAMPRegistered's fire-and-forget associate emit fails its
+    // lazy require and logs an AUDIT GAP), whereas revoked-true can ONLY come
+    // from the revoke row the compensation wrote.
+    expect(capturedFp).toBeTruthy()
+    await flushLedger('registry')
+    authority.invalidateRecoveryCache()
+    await registry.registryLedger.verify()
+    const assoc = authority.isAidAssociated(capturedFp!)
+    expect(assoc.ok).toBe(false)
+    expect(assoc.revoked).toBe(true)
+  })
+
+  it('G05 — the final ledger append fails: full rollback, and the RETRY mints no duplicate', async () => {
+    const { approvalId, zipPath } = await stagePending('g5-fail')
+    let capturedFp: string | undefined
+    let capturedAgentId: string | undefined
+    const res = await foreignSvc.approveForeignAgent(approvalId, {
+      recordAidReissue: (agentId, _oldFp, newFp) => {
+        capturedAgentId = agentId
+        capturedFp = newFp
+        throw new Error('seeded ledger append failure')
+      },
+    })
+    expect(res.status).toBe(500)
+    expect(res.error).toMatch(/^THE COMMAND FAILED/)
+    expectFullRollback('g5-fail', approvalId, zipPath)
+    // The agent data dir is gone too, not just the registry row.
+    const dataDir = path.join(TMP_HOME, '.aimaestro', 'agents', capturedAgentId!)
+    expect(fs.existsSync(dataDir)).toBe(false)
+    // After the rollback the fresh fp must not be ledger-backed (the G04 test
+    // pins the stronger revoked-true half; here ok-false is enough because the
+    // retry below re-derives everything from scratch either way).
+    await flushLedger('registry')
+    authority.invalidateRecoveryCache()
+    await registry.registryLedger.verify()
+    expect(authority.isAidAssociated(capturedFp!).ok).toBe(false)
+
+    // THE regression this card exists for: the retry after a failed approve
+    // succeeds and produces exactly ONE agent — no duplicate, no orphan.
+    const retry = await foreignSvc.approveForeignAgent(approvalId)
+    expect(retry.error, retry.error).toBeUndefined()
+    expect(retry.status).toBe(200)
+    expect(registry.loadAgents().filter(a => a.name === 'g5-fail')).toHaveLength(1)
     expect(foreignReg.getForeignApproval(approvalId)?.status).toBe('approved')
+    // The retry minted a DIFFERENT fresh fingerprint, and that one is backed.
+    expect(retry.data!.newFingerprint).not.toBe(capturedFp)
+    await flushLedger('registry')
+    authority.invalidateRecoveryCache()
+    await registry.registryLedger.verify()
+    expect(authority.isAidAssociated(retry.data!.newFingerprint).ok).toBe(true)
   })
 })
 

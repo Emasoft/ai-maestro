@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-16T00:29:04+0200
+updated: 2026-08-16T00:31:56+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -973,6 +973,46 @@ applies to it, which is now the strongest argument for settling that first.
         a failure *diagnosable* and still cannot yield per-marketplace outcomes: that would need
         per-name invocations, i.e. exactly the loop AC1 removed for performance. **Diagnosability
         and per-item accounting are two different fixes, and only the first is cheap.**
+
+      **⚠ THE RETRACTION IS ITSELF RETRACTED — 2026-08-16T00:31, and this time three independent
+      lines converge. The failures ARE timeouts, and the cause underneath them is a DUPLICATED
+      EXECUTOR.** I found the janitor daemon's own log for the same chore, which I had not read:
+
+      1. **The step order makes 21:42:22 a legitimate proxy for the refresh start, so the original
+         arithmetic was right.** `runAbsorbedDuties` (`auto-update-service.ts:575-603`) emits
+         `absorbed:marketplace-auto-update` as **step 0** and calls `RefreshAllMarketplaces` as
+         **step 1**, immediately after. The two rows are different duties — which is what I
+         over-read — but they are ADJACENT IN ONE TICK, so 21:42:22 is the moment before the
+         refresh began and 22:12:22 is exactly **1800 s** later: the cap.
+      2. **The same command, on this host, TODAY, has run OVER the cap — twice.** The janitor's
+         `daemon.log` records its own `marketplace-refresh` durations:
+         `08-14 20:07:01→20:37:16 = **1815 s**` · `08-15 17:43:58→17:45:22 = 84 s` ·
+         `18:45:26→19:04:20 = 1134 s` · `20:04:22→20:25:16 = 1254 s` ·
+         `21:25:23→21:55:31 = **1808 s**`. **Range 84 s to 1815 s; 2 of 5 exceed the 1800 s cap.**
+         My uncontended 1148 s is one draw from a wide distribution, not "the" duration — which is
+         precisely the reasoning error that produced the retraction.
+      3. **The 22:12:22 failure OVERLAPPED a janitor refresh by 13 min 9 s.** The janitor's
+         21:25:23→21:55:31 run was still going when the server started its own at 21:42:22. Two
+         `claude plugin marketplace update` processes, same host, same 260 git remotes, same
+         registry file.
+
+      **Cause chain:** two executors run the same absorbed chore → they sometimes overlap →
+      contention plus slow remotes push wall time past 1800 s → the server's fixed cap kills its
+      run → the failure is recorded with its diagnosis discarded. **Raising the cap alone would
+      paper over the duplication; the duplication is the defect.**
+
+      **The janitor is TRYING not to do this.** It logs `chore-coordination: yielding to active
+      ai-maestro server: ['marketplace-refresh', …]` at 17:30:56, 21:40:05 and 23:14:19 — and yet
+      it RAN refreshes at 18:45:26, 20:04:22 and 21:25:23, all after the first yield. So the yield
+      is evaluated per-fire and does not suppress a run already queued or scheduled after it.
+      **That half is the janitor's tree, not ours** — it goes to them as an issue carrying these
+      timestamps, never as an edit.
+
+      **Two lessons, both about my instruments rather than about the lane.** A single timed sample
+      cannot refute a hypothesis about a VARIABLE-duration job — I let one clean 1148 s run
+      overturn a reading that was correct. And the decisive evidence sat in a peer's log the whole
+      time: I measured this host four different ways without once reading the OTHER executor's
+      record of the same chore.
 - [x] The per-plugin-update question in "One thing to resolve" above is answered by the
       USER before any code lands, and the answer is recorded here.
       DONE — answered verbatim in the "RESOLVED — the per-plugin loop is redundant, not merely

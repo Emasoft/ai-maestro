@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-07T09:05:46+0200
+updated: 2026-08-16T00:10:07+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -895,6 +895,53 @@ applies to it, which is now the strongest argument for settling that first.
         What survives is much smaller and is AC5's real edge: a reader of
         `auto-update-settings.json` **alone** still cannot tell the two apart — only a reader of
         the code can, which is why that comment shouts `AS A USER-FACING CATEGORY`.
+
+      **RE-MEASURED 2026-08-16T00:10, nine days on. Two of the three things this box was waiting
+      on have MOVED, and one of them reverses the blocker. The box still does not close — see the
+      third.** All four numbers below are read-only reads of live files, taken this session.
+
+      - **THE EXPOSURE IS NOW 1, NOT 52 — the loop-deletion blocker has cleared on this host.**
+        Denominator per the correction above: `~/.claude/plugins/installed_plugins.json` →
+        `.plugins`, now **94** keys. Registry: `~/.claude/plugins/known_marketplaces.json`, now
+        **260** entries (was 270) and **260/260 carry `autoUpdate: true`** — the 12 explicit
+        `false` and 8 absent-key entries are gone. So **93 of 94 installed plugins sit on an
+        `autoUpdate: true` marketplace**. The single exception is
+        `ai-maestro-local-marketplace`, which is NOT in the remote registry *by design* — it is
+        a server-managed local marketplace (the out-log shows this server adding and removing
+        `ai-maestro-local-*-marketplace` at 21:39 tonight), so `claude plugin marketplace update`
+        never served it and deleting the loop cannot strand it.
+      - **The 10 months-stale marketplaces are GONE, and that is the same event.** 270 → 260 is
+        exactly the ten; measured now, **zero** registered marketplaces are stale beyond 24 h
+        (stalest 3.8 h, median 0.16 h). Whoever pruned them — USER or janitor — also removed the
+        thing that made `FXPV7L4D`'s premise true here. **`FXPV7L4D` is still worth doing**: its
+        subject is that the lane cannot TELL, and a host that happens to be clean today does not
+        fix an instrument that cannot see dirt.
+      - **⚠ "ZERO FAILURES" NO LONGER HOLDS — and this is the box's new blocker.** The trail now
+        carries a `status: "failed"` row, and `logs/pm2-error.log` carries **12** occurrences of
+        `[RefreshAllMarketplaces] FAILED: Command failed: claude plugin marketplace update`
+        between 2026-08-07 and 2026-08-15 — i.e. the refresh has been failing intermittently for
+        the entire nine days since I recorded "zero failures across all 200 trail rows". That
+        earlier reading was true of its 200 rows and the trail holds only ~14 h at 78 rows a
+        fire, so it could never have seen this. **A bounded trail cannot answer a question about
+        nine days.** The log could, and I had not looked at it.
+      - **The recorded failure is UNDIAGNOSABLE, which is the defect to fix before judging the
+        loop.** The stored string is exactly `Command failed: claude plugin marketplace update\n`
+        with nothing after the newline — for promisified `execFile` that means stderr was EMPTY,
+        and `err.stdout` is never read, so whatever the CLI printed is discarded at
+        `element-management-service.ts:5499-5502`. **Hypothesis, one exact data point:** the last
+        failure is stamped 22:12:22, exactly **1800 s** after that fire's previous row at
+        21:42:22 — precisely `MARKETPLACE_REFRESH_TIMEOUT_MS`, so it reads as a TIMEOUT kill
+        rather than a CLI error. NOT yet confirmed: a timed reproduction is running, and one
+        exact coincidence is not a measurement. Do not act on the hypothesis until a second
+        independent data point agrees.
+      - **What this does NOT license.** The blocker clearing is not permission to delete the
+        per-plugin loop. This exact count has been wrong four times on this card (5 → 19 → 52 →
+        1), always because I read a map that answered me instead of the map that OWNS the fact;
+        and the count is a property of THIS host on THIS night, while the loop is code that ships.
+        The remaining question the card left open is still open: whether the harness actually
+        UPGRADES an `autoUpdate: true` marketplace's plugins without a session start. If it only
+        does so at session start, the loop is what covers a hibernated fleet, and a host-local
+        coverage measurement cannot see that at all.
 - [x] The per-plugin-update question in "One thing to resolve" above is answered by the
       USER before any code lands, and the answer is recorded here.
       DONE — answered verbatim in the "RESOLVED — the per-plugin loop is redundant, not merely

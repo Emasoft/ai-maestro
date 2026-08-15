@@ -3,7 +3,7 @@ trdd-id: RIFM4UXN
 title: COS-reassign route requires the governance password — contradicts R29/R32 and defeats MANAGER ruling #64
 column: testing
 created: 2026-07-16T12:48:13+0200
-updated: 2026-08-05T01:08:00+0200
+updated: 2026-08-16T01:19:34+0200
 current-owner: ai-maestro
 task-type: audit
 scope: project
@@ -169,6 +169,22 @@ live. The last box is CROSS-REPO and belongs to CORE, not to this card.
       gate has TWO conditions and exactly one holds today: `~/.local/bin/aimaestro-teams.sh` is
       byte-identical to the repo copy (installed ✓), but `governance-rules` is unpushed, so the verb
       does not exist for anyone else. Not this card's to close
+
+      **⚠ THAT SECOND CONDITION HAS CLEARED — measured 2026-08-16T01:19, and nobody had looked.**
+      Both of CORE's conditions now hold, verified three ways rather than assumed:
+      `git diff fork/governance-rules HEAD -- scripts/aimaestro-teams.sh` is **EMPTY** (the pushed
+      script is exactly this script, nothing about the verb sits unpushed); the pushed tip carries
+      `--cos UUID | --remove-cos` and the `Alias of \`update --cos\`` line; and `cmp` says
+      `~/.local/bin/aimaestro-teams.sh` is **byte-identical** to the pushed copy, so a deployed host
+      and the branch agree. The 660-commit gap this box measured is now **13, 0 behind** — and all
+      13 are tonight's doc commits, touching no script.
+      **Relayed to CORE on `Emasoft/ai-maestro#69` (`issuecomment-5304702847`)** — still not this
+      card's to close, but the gate CORE named is open and it was owed the notice.
+      **This is the SECOND time on that same thread.** My own comment there on 2026-08-03 reads
+      *"You have been blocked for ~11 days on a condition that was met on 2026-07-23."* The pattern
+      is not the individual miss, it is that **a precondition is recorded as a STATE and nothing
+      ever re-reads it.** Record the COMMAND that tests it instead — here, one `git diff` and one
+      `cmp`, three seconds, definitive.
       **⚠ METRIC CORRECTED 2026-08-05 — this box cited "2517 commits ahead of `origin/main`",
       which is the WRONG DISTANCE and overstates the pending work ~4x.** `origin/main` is the
       UPSTREAM (`23blocks-OS/ai-maestro`), so that number is the fork-vs-upstream gap, not unpushed

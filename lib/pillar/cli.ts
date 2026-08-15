@@ -40,7 +40,7 @@ import type { PillarKind } from './kinds'
 import { corpusRootFor } from './kinds'
 import { assertCorpusRoot, findRecord, walkRecords, type PillarRecord } from './store'
 import { documentLockKeyFor, replaceAtLines, StaleDocumentError, type LineEdit } from './edit'
-import { GuardedEditError, pillarPreWriteCheck } from './edit-guard'
+import { GuardedEditError, lintPillarCorpus, pillarPreWriteCheck } from './edit-guard'
 
 /** Colour, but only for a human. A pipe or a test spawn gets clean bytes. */
 export function palette(useColour: boolean) {
@@ -200,6 +200,29 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
     switch (cmd) {
       case 'edit':
         return await runPillarEdit(kind, root, arg, rawEdits, C, tool)
+
+      // TRDD-BL0W6LGY — the post-write half of the guard: the same predicate set
+      // (lib/pillar/edit-guard), run over the corpus at rest. `validate` is an
+      // alias so the three pillar tools share a verb name with trddgrep.
+      case 'lint':
+      case 'validate': {
+        const { documents, records, findings } = lintPillarCorpus(root, kind)
+        // NON-VACUITY IN THE TOOL: zero documents scanned is a could-not-run (2),
+        // never a clean corpus — "0 errors" must mean "no rule looked" nowhere.
+        if (documents === 0) {
+          return die(`no ${kind.label} documents under ${root} — nothing was linted`, 2)
+        }
+        for (const f of findings) {
+          const where = `${path.relative(root, f.filePath) || path.basename(f.filePath)}:${f.line}`
+          console.log(`${C.r('ERROR')} ${C.d(where.padEnd(28))} ${f.message}`)
+        }
+        if (findings.length) {
+          console.error(`${tool}: ${findings.length} finding(s) across ${documents} document(s)`)
+          return process.exit(1)
+        }
+        console.log(C.g(`${tool}: ${documents} document(s), ${records} record(s) — clean`))
+        return process.exit(0)
+      }
 
       case 'show': {
         if (!arg) throw new UsageError(`show needs an id — try \`${tool} list\``)
@@ -367,6 +390,10 @@ ${C.b(t)} — query and EDIT the ${kind.label} corpus (offline; no server)
       line N the document changed since you read it and the edit is BLOCKED.
       Omit --at-line to target the record's own declaration line.
       Repeat the triple for a batch; a batch is ALL-OR-NOTHING.
+
+  ${C.c(`${t} lint`)}                 grammar + uniqueness over the whole corpus
+      (alias: validate) — the same predicates the edit gate enforces pre-write.
+      0 clean · 1 findings · 2 could not run (an EMPTY corpus is a 2, not a clean).
 
   ${C.c(`${t} env`)}                  which corpus this is, and why
   ${C.d('  --design-dir <p>       point at another project')}

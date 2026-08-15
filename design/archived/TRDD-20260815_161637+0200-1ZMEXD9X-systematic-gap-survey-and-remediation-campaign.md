@@ -1,9 +1,9 @@
 ---
 trdd-id: 1ZMEXD9X
 title: Systematic fleet gap survey and remediation campaign — the orchestrator does the orchestrator's job
-column: dev
+column: completed
 created: 2026-08-15T16:16:37+0200
-updated: 2026-08-15T23:26:00+0200
+updated: 2026-08-15T23:55:59+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -182,3 +182,11 @@ A6), DQ6XN2VP (transactional all-in-one, measured 19 pipelines / 14 remaining �
 - 2026-08-15T16:16:37+0200 — MANDATE issued by USER, in the first person, to the hub session
   ("i left you in charge … do a better job!"). Pre-approved: issuer authority above every
   floor. The survey layer is read-only; each spawned FIX card carries its own floor.
+- 2026-08-15T23:55:59+0200 — COMPLETED by ai-maestro. All five acceptance boxes checked and
+  all five EHTs terminal (`2R34M8FA` `BL0W6LGY` `LMAZO2ET` `4EBVIYBA` `IG1MMYFA`, each
+  `completed` in `design/archived/`), so both closing gates pass. The campaign's own
+  actionable work is finished; the two residual item-6 pieces are NOT this card's to do —
+  the PRRD golden G1.1 bootstrap is Tier-3 USER-only, and the 6 uncached role-plugins need
+  their repos or a cache install. Holding the card open on work an agent may not perform
+  would make `dev` claim activity that cannot happen. `DPPYVLVH`'s human-watched first
+  model-fallback switch is tracked on its own card, not here.

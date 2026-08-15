@@ -125,6 +125,37 @@ describe('D3 objective floor (steps 1-2)', () => {
     expect(rules(r, 'D3-FLOOR-SUSPECT')).toEqual([])
   })
 
+  it('a dated MANAGER drain receipt suppresses the suspect warn — a ruled question never re-fills the queue', () => {
+    // Same prose signal as the DDDDDDDD fixture; the ONLY difference is the approval-log
+    // receipt, so the receipt gate is what this pins.
+    write(
+      'tasks',
+      'TRDD-20260101_000000+0100-QQQQQQQQ-q.md',
+      card(
+        'QQQQQQQQ',
+        {},
+        'Edits `.github/workflows/ci.yml`.\n\n## Approval log\n\n- 2026-01-02 — §D4 sweep D3-FLOOR-SUSPECT ruled by ASSISTANT-MANAGER: floor stays `none`.\n',
+      ),
+    )
+    const r = watchdogSweep(path.join(tmp, 'design'), noGit)
+    expect(r.scanned).toBe(1)
+    expect(rules(r, 'D3-FLOOR-SUSPECT')).toEqual([])
+  })
+
+  it('the receipt does NOT reach the error tier: an unambiguous floor stays flagged through any prose ruling', () => {
+    write(
+      'tasks',
+      'TRDD-20260101_000000+0100-RRRRRRRR-r.md',
+      card(
+        'RRRRRRRR',
+        { 'release-via': 'publish' },
+        'body\n\n## Approval log\n\n- 2026-01-02 — §D4 sweep D3-FLOOR-SUSPECT ruled by ASSISTANT-MANAGER: floor stays `none`.\n',
+      ),
+    )
+    const r = watchdogSweep(path.join(tmp, 'design'), noGit)
+    expect(rules(r, 'D3-FLOOR-UNDERCLASSIFIED')).toEqual(['RRRRRRRR'])
+  })
+
   it('scalar impacts (the scalar-npt lesson) still reaches the user rung', () => {
     expect(
       objectiveFloor({ 'release-via': 'publish', impacts: 'public-api' }, '').floor,

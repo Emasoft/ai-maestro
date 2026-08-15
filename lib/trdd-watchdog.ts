@@ -293,13 +293,21 @@ export function watchdogSweep(
           message: `declares min-approval-requirement '${declared}' but its objective D3 floor is '${computed.floor}' (${computed.signals.join('; ')}) — under-classification dodges the approval queue; raise the floor and, if it sat authorized in design/tasks/, route it back through design/proposals/`,
         })
       } else if (under && computed.ambiguous) {
-        // Noise gate: a card whose mandate CLAIMS an issuer at or above the suspected floor
+        // Noise gate 1: a card whose mandate CLAIMS an issuer at or above the suspected floor
         // dodged nothing — the approval the floor would demand is already asserted. Warn-tier
         // only: the claim itself is audited by the commit-diff check below, so suppressing the
         // consistency nag here re-opens no bypass.
         const by = String(fm['mandated-by'] ?? '').trim().toLowerCase()
         const rankBy = fm['mandate'] === true ? (AUTHORITY_RANK[by === 'self' ? 'none' : by] ?? 0) : 0
-        if (rankBy < rankComputed) {
+        // Noise gate 2: the DRAIN RECEIPT. A suspect is a question for the MANAGER queue; once
+        // the approver RULES it (a dated `D3-FLOOR-SUSPECT ruled by …MANAGER/USER` line in the
+        // approval log), re-flagging the same card every sweep re-fills the queue with items
+        // already answered — a queue that cannot shrink is a report nobody reads. WARN tier
+        // only, deliberately: an UNDERCLASSIFIED error (objective frontmatter signal) is never
+        // ruled away by prose. Forging the receipt is forging the approval log itself, which
+        // is the same audit surface every approval line already relies on.
+        const ruled = /D3-FLOOR-SUSPECT ruled by [A-Z-]*(?:MANAGER|USER)\b/.test(t.body)
+        if (rankBy < rankComputed && !ruled) {
           findings.push({
             rule: 'D3-FLOOR-SUSPECT',
             severity: 'warn',

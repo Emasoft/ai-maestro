@@ -125,6 +125,28 @@ Found 2026-08-04 while re-verifying my own 2026-07-23 answer on `Emasoft/ai-maes
 ORCHESTRATOR had reported 32 agents sharing one AMP address; I diagnosed it, fixed it, and told them
 it would self-heal. Re-verification showed the fix was never installed. Correction posted on `#77`.
 
+## Acceptance
+
+- [x] **A drift detector** comparing every `scripts/{amp,aimaestro}-*.sh` against its
+      `~/.local/bin` counterpart, reporting the differing set (`87e7aa17`)
+- [x] **Surfaced where it will be seen** — `yarn scripts:drift`, runnable in the normal verify
+      loop. A detector nobody runs is not a detector.
+- [x] **The partial-refresh hazard is not silently acceptable** — the report NAMES the
+      all-or-nothing remediation and a test pins that it says *never cherry-pick*
+- [x] **Does NOT auto-install** — nothing in this change writes to `~/.local/bin`
+- [x] **Non-vacuity**: an empty scan exits **2**, never a clean 0 (neuter recorded below)
+
+**Out of scope, and deliberately NOT a box here:** the card's own ✗ NOT AUDITED note — only
+`amp-*` / `aimaestro-*` are covered, and the rest of `~/.local/bin` is still unmeasured. That is
+a WIDER surface than this card promised (its own text says "an EHT should widen the check"), so
+it belongs to a follow-up card rather than to an unchecked box that would keep this one from ever
+closing honestly.
+
+> The checklist above was MISSING from the first close and `yarn trdd:doctor` caught it as
+> `TERMINAL-WITHOUT-CHECKLIST` — a card in a terminal column with no boxes passes the completion
+> gate having proven nothing, which is the vacuous-gate defect that gate was itself repaired to
+> close. Added here rather than argued away.
+
 ## ⏵ OUTCOME — detector shipped 2026-08-15, and the card's own premise had gone stale
 
 **RE-MEASURED BEFORE BUILDING, and the 08-04 census no longer holds.** Today: **45 compared, 44

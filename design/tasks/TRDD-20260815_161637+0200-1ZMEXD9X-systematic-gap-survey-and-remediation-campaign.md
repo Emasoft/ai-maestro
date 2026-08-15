@@ -4,7 +4,6 @@ title: Systematic fleet gap survey and remediation campaign — the orchestrator
 column: dev
 created: 2026-08-15T16:16:37+0200
 updated: 2026-08-15T16:38:00+0200
-eht: [2R34M8FA, BL0W6LGY, LMAZO2ET, 4EBVIYBA]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,7 +22,7 @@ scope: project
 project-id: ai-maestro
 labels: [campaign, survey, governance, orchestration, user-directive]
 npt: []
-eht: []
+eht: [2R34M8FA, BL0W6LGY, LMAZO2ET, 4EBVIYBA]
 blocked-by: []
 ---
 

@@ -1,7 +1,8 @@
 ---
 trdd-id: BL0W6LGY
 title: prrdgrep and specgrep have no lint or validate verb — a malformed document has no detection path
-column: todo
+column: blocked
+pre-block-column: todo
 created: 2026-08-15T16:21:16+0200
 updated: 2026-08-15T16:21:16+0200
 current-owner: ai-maestro

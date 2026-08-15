@@ -100,10 +100,30 @@ was corrected in the same session.
 
 - [x] Attended trigger: curated allowlist key, auto-exposed to UI + API, destructive-flagged
       (`ac180a83`; neuter recorded)
-- [ ] `lib/external-compaction.ts`: per-agent runner — absolute `--project-root`, child-only
+- [x] `lib/external-compaction.ts`: per-agent runner — absolute `--project-root`, child-only
       `CLAUDE_PROJECT_DIR`, no `uv run`, typed outcome parsed from the FIRST WORD of stdout,
-      a decline is never an exception
-- [ ] Tests drive every documented token, including the two that must NOT read as failure
-      (`active-waiting` is the design working; `DISABLED` is an unset opt-in, not a fault),
-      with neuters
-- [ ] Reachable from the server (route action), and the janitor told which seam shipped
+      a decline is never an exception (`2be39063`)
+- [x] Tests drive every documented token, including the two that must NOT read as failure
+      (`active-waiting` is the design working; `DISABLED` is an unset opt-in, not a fault) —
+      21 tests. **Verified LIVE against the real script** (`--dry-run`, mutates nothing):
+      resolved cache **3.3.4** (it had auto-rolled past the 3.3.3 I read the spec from, which
+      is the version sort working on real data), `/opt/homebrew/opt/python@3.14/bin/python3.14`,
+      and parsed a genuine `VERDICT HOLD trigger=- why=idle 11s < 3600s`. A mocked runner could
+      not have shown any of that.
+- [x] Reachable from the server: `POST /api/agents/[id]/continuity/compact` — `strict` in
+      `security-registry.json` and mapped in `STRICT_AGENT_RULES` to `send-command`, whose
+      matrix is already SELF-ONLY and whose own comment names *"an agent enqueuing `/compact`
+      on itself"* as the primary use case. The governance ratchet
+      (`sudo-guard-strict-agent-coverage`) caught the route as undeclared before the mapping
+      existed — working exactly as designed.
+- [ ] Janitor told which seam shipped (their spec asked for the subprocess form; both exist)
+
+## What the live probe also surfaced (2026-08-15 22:2x)
+
+The armed fallback lane IS running and is currently **inert for an honest reason**: it logs
+`model-fallback could not read 10 pane(s)` every pass, and there are only 3 tmux sessions on the
+host, none of them an agent. The fleet is hibernated, so there is no live Fable agent to switch.
+The live rotator state at that moment read **Fable 100% with 5h=61% / 7d=81%** — a textbook
+scoped-only wall, i.e. exactly the case the new policy and the armed lane were built for. So
+**DPPYVLVH's human-watched first switch is still PENDING a live Fable agent**, and must not be
+recorded as verified until the `confirmed=true` line and the pane flip are actually seen.

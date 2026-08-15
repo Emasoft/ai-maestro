@@ -6,7 +6,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-08-05T05:21:53+0200
+updated: 2026-08-16T01:43:20+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 priority: 1
@@ -259,6 +259,26 @@ why it could be written at all (a checklist invented from a title is fabrication
 
 - [ ] the two literal occurrences in `references/SCENARIOS_TESTS_RULES.md` replaced with
       `governancePasswordRef: env:AIM_GOVERNANCE_PASSWORD`
+      **RE-MEASURED 2026-08-16T01:43 — STILL PUBLISHED, and STILL PUBLIC. But the value is DEAD,
+      and that ordering is the whole severity question, so it is proved here rather than assumed.**
+      `Emasoft/ai-maestro-web-scenario-tester` is `visibility: PUBLIC`, and
+      `references/SCENARIOS_TESTS_RULES.md` still carries **1** `governance_password:` line whose
+      value is a NON-env literal, with **0** mentions of `AIM_GOVERNANCE_PASSWORD`. (Checked by
+      SHAPE, never by value — the field's presence and whether its RHS is an env reference; the
+      credential was not read, printed, or compared.)
+      **Proof it is the pre-rotation value, without touching either string:** that repo's
+      `pushedAt` is **2026-07-08T16:48Z** and rotation landed **2026-07-17** (TRDD-E9BZ5P7S STATE,
+      archived `completed`). The publication PRE-DATES the rotation by 9 days, so what is public
+      cannot be the current credential. A date comparison answers this; a value comparison would
+      have required handling the secret to prove the secret is safe.
+      **So this box is now hygiene + audit trail, not an active leak** — the same conclusion the
+      card's own "Yours alone" tag question rests on ("after rotation they carry a dead string").
+      **THE LIVE RISK IS THE BOX BELOW, NOT THIS ONE.** The mandate still documents the field as
+      *"The actual password value, in quotes"*, so the next scenario authored in that plugin
+      re-publishes the CURRENT credential into a PUBLIC repo. Today's literal is spent; the
+      instruction that produced it is not.
+      Nothing was filed upstream: an issue on a public tracker naming the exposure would point at
+      it, which is the one action that makes a dead-but-public string worse.
 - [ ] **the MANDATE amended** — the frontmatter field documented as *"The actual password value, in
       quotes"* / *"Referenced verbatim in steps"* is the root cause. Scrubbing the two occurrences
       without amending it re-creates the exposure on the next scenario authored, so this box is the

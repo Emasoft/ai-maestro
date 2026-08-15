@@ -2,6 +2,28 @@ import { describe, it, expect } from 'vitest'
 import { runFleetLivenessTick, startFleetLivenessWatchdog } from '@/lib/fleet-liveness-watchdog'
 import type { FleetLivenessSnapshot } from '@/lib/fleet-liveness'
 
+/**
+ * A DETERMINISTIC continuity leg. Without it these tests read the DEVELOPER'S REAL MACHINE:
+ * `runFleetLivenessTick`'s continuity pass defaults to `runContinuityTick(defaultContinuityDeps(…))`,
+ * which enumerates the real agent registry — not the `scan` fixture each test supplies. So a
+ * host that happens to own an agent in the right state contributes an extra log line and every
+ * exact-count assertion in this file fails.
+ *
+ * Measured 2026-08-15: three tests failed IN ISOLATION with a single unexplained line —
+ * `[FleetContinuity] testbot: not actuated (empty-frame)` — where `testbot` appears in no
+ * fixture in this file. It is a real agent in `~/.aimaestro/agents/registry.json`. The failure
+ * had been carried for weeks as a "full-suite load flake"; it was never load-dependent, it was
+ * MACHINE-dependent, and it looked like a flake only because whether it fires depends on what
+ * the host's own fleet is doing at that moment.
+ *
+ * Applied to EVERY call in this file, not only the three that were red: the other seven assert
+ * on returned snapshots today and would acquire the same dependency the moment anyone adds a
+ * log assertion to them.
+ */
+const NO_CONTINUITY = {
+  runContinuity: async () => ({ scanned: 0, fired: [], skipped: [] }),
+}
+
 function snap(over: Partial<FleetLivenessSnapshot> = {}): FleetLivenessSnapshot {
   return {
     scannedAt: 1_000,
@@ -17,6 +39,7 @@ describe('runFleetLivenessTick (read-only)', () => {
   it('logs stalled + token-blocked agents with the detect-only note', async () => {
     const logs: string[] = []
     await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1_000,
       log: (m) => logs.push(m),
       scan: async () =>
@@ -39,6 +62,7 @@ describe('runFleetLivenessTick (read-only)', () => {
   it('reports the actuation-block reason instead of recovery targets under a STOP', async () => {
     const logs: string[] = []
     await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: (m) => logs.push(m),
       scan: async () =>
@@ -55,6 +79,7 @@ describe('runFleetLivenessTick (read-only)', () => {
   it('boot-debounces dead agents: past-window → crashed, within-window → debouncing (D2)', async () => {
     const logs: string[] = []
     await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: (m) => logs.push(m),
       // Inject the partition (0-IMPACT: no real sidecar) — zombie past the boot window, newborn within.
@@ -82,6 +107,7 @@ describe('runFleetLivenessTick (read-only)', () => {
   it('stays silent when the fleet is healthy', async () => {
     const logs: string[] = []
     await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: (m) => logs.push(m),
       scan: async () => snap({ agents: [{ agentId: 'a1', name: 'alpha', class: 'active', recoveryRecommended: false, reason: 'ok' }] }),
@@ -92,6 +118,7 @@ describe('runFleetLivenessTick (read-only)', () => {
   it('a throwing scan is non-fatal — logs and returns null, never throws', async () => {
     const logs: string[] = []
     const r = await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: (m) => logs.push(m),
       scan: async () => {
@@ -114,6 +141,7 @@ describe('runFleetLivenessTick — recovery actuation (D-full, behind the defaul
     const logs: string[] = []
     const calls: FleetLivenessSnapshot[] = []
     const r = await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: (m) => logs.push(m),
       fireEnabled: true,
@@ -132,6 +160,7 @@ describe('runFleetLivenessTick — recovery actuation (D-full, behind the defaul
   it('logs ESCALATION NEEDED lines from the pass', async () => {
     const logs: string[] = []
     await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: (m) => logs.push(m),
       fireEnabled: true,
@@ -144,6 +173,7 @@ describe('runFleetLivenessTick — recovery actuation (D-full, behind the defaul
   it('does NOT run the pass when fireEnabled is false, even with targets', async () => {
     let called = false
     await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: () => {},
       fireEnabled: false,
@@ -159,6 +189,7 @@ describe('runFleetLivenessTick — recovery actuation (D-full, behind the defaul
   it('does NOT run the pass when there are no recovery targets', async () => {
     let called = false
     await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: () => {},
       fireEnabled: true,
@@ -178,6 +209,7 @@ describe('runFleetLivenessTick — recovery actuation (D-full, behind the defaul
   it('a throwing pass is non-fatal — logs and still returns the snapshot', async () => {
     const logs: string[] = []
     const r = await runFleetLivenessTick({
+      ...NO_CONTINUITY,
       now: () => 1,
       log: (m) => logs.push(m),
       fireEnabled: true,

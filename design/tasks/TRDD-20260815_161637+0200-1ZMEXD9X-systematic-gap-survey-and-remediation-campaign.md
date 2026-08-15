@@ -52,13 +52,17 @@ records: janitor msg a64d33e5, CORE msg aefecc5e.
 **SEQUENCED PLAN (execution order):** 1) ~~LMAZO2ET~~ **DONE 2026-08-15 16:53** (commit
 a084a1d5, archived `completed` — 5-gate runGateSequence pipeline in
 services/foreign-approval-service.ts, 5 per-gate failure tests + 2 recorded neuters, 68/68
-affected suites green) → 2) 2R34M8FA → 3) BL0W6LGY → 4) 4EBVIYBA → 5) GADPGOIR (drift
-automation) → 6) synthesis residue: PRRD bootstrap proposal (USER-floor — needs the USER:
-golden G1.1 authoring) + github-config-audit TS-vs-py parity check (open question from A6) +
-the 6 uncached role-plugins' compliance (needs their repos or a cache install).
+affected suites green) → 2) ~~2R34M8FA~~ **DONE 2026-08-15 17:07** (b3a4ec2b, archived
+`completed` — lib/pillar/edit-guard.ts as replaceAtLines' in-lock preWriteCheck, 18 tests,
+2 recorded neuters 10/8 + 1/17, full suite resolved to zero regressions incl. the R50
+category-(c) compensation pin) → 3) BL0W6LGY (UNBLOCKED, in dev) → 4) 4EBVIYBA → 5)
+GADPGOIR (drift automation) → 6) synthesis residue: PRRD bootstrap proposal (USER-floor —
+needs the USER: golden G1.1 authoring) + github-config-audit TS-vs-py parity check (open
+question from A6) + the 6 uncached role-plugins' compliance (needs their repos or a cache
+install).
 
-**NEXT ACTION:** execute plan item 2 (TRDD-2R34M8FA — PRRD/SPEC write-guard predicate module
-+ pillar-edit gate) unless the USER re-prioritizes.
+**NEXT ACTION:** execute plan item 3 (TRDD-BL0W6LGY — lint/validate verbs on the shared
+pillar CLI, sharing the edit-guard's predicates) unless the USER re-prioritizes.
 
 ## The USER's directive (2026-08-15, verbatim complaints — each becomes a survey axis)
 

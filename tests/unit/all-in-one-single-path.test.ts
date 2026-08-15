@@ -86,10 +86,11 @@ const GUARDS: StoreGuard[] = [
 ]
 
 /**
- * KNOWN non-AIO mutation sites as of 2026-07-26. Convergence: TRDD-YB4T4RTL. May only SHRINK.
+ * KNOWN non-AIO mutation sites as of 2026-07-26. Convergence: TRDD-YB4T4RTL. Categories (a) and
+ * (b) may only SHRINK; category (c) below is not backlog and does not count against convergence.
  *
- * TWO CATEGORIES live in this list, and they need different fixes — so do not treat a long list as
- * one backlog:
+ * THREE CATEGORIES live in this list, and they need different treatment — so do not treat a long
+ * list as one backlog:
  *
  *   (a) SECOND PATH — an operation that HAS an all-in-one, performed outside it. Every
  *       agent-registry entry is this: `CreateAgent`/`DeleteAgent`/`ChangeName` exist, and these
@@ -99,6 +100,10 @@ const GUARDS: StoreGuard[] = [
  *       all-in-one. `groups-service`, `teams-service` and the task/team API routes are this. R50
  *       is violated differently here: not "two paths" but "the one path is not a pipeline". Fix =
  *       build the AIO (ChangeGroup / ChangeTeam / ChangeTask), then move the call into it.
+ *
+ *   (c) R51 COMPENSATION — a rollback write inside a runGateSequence pipeline. These are
+ *       CORRECT as primitives (see the category comment in the list) and stay pinned so any
+ *       NEW compensation site is still reviewed here rather than slipping in silently.
  *
  * Naming them apart matters because (b) reads as harmless — "it's the owner, of course it writes"
  * — right up until a second caller appears and turns it into (a) with no gate anywhere in between.
@@ -110,6 +115,15 @@ const GUARDS: StoreGuard[] = [
  * list's existence, and it lived for months in a store nothing was scanning.
  */
 const KNOWN_BYPASSES = [
+  // ── (c) R51 COMPENSATION — permanent BY DESIGN, not convergence backlog. An undo inside a
+  //        runGateSequence pipeline must reverse through the store PRIMITIVE, never through the
+  //        wrapping all-in-one: routing a rollback through DeleteAgent would import gates the
+  //        forward path never ran (cemetery archive, tmux teardown) — the exact bug ChangeTitle's
+  //        G16 undo had when it routed through ChangePlugin. foreign-approval-service's G01/G03
+  //        undos (TRDD-LMAZO2ET) un-import a half-materialized agent and restore a row snapshot;
+  //        both writes exist ONLY on the rollback path of an R51 transaction.
+  'services/foreign-approval-service.ts::saveAgents',
+
   // ── (a) second path — an all-in-one exists and these go around it ──
   'services/agents-core-service.ts::createAgent',
   'services/agents-docker-service.ts::createAgent',

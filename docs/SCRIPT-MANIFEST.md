@@ -699,3 +699,20 @@ comm -13 <(ls -1 scripts/*.sh | xargs -n1 basename | sort) \
 comm -13 <(ls -1 scripts/*.sh | xargs -n1 basename | sort) \
          <(ls -1 ~/.local/bin/*.sh | xargs -n1 basename | sort)
 ```
+
+## Pillar / governance tooling (.mjs — run via yarn or `node --import tsx`)
+
+Added 2026-08-15 (gap survey A4, TRDD-1ZMEXD9X): the manifest previously covered the `.sh`
+surface only, so the governance CLIs agents are told to use were in no contract at all.
+Exit codes for ALL of these are grep's trichotomy — **0 clean/matched · 1 findings/no-match ·
+2 COULD NOT RUN** — so `tool || fallback` is always a bug (it collapses could-not-run into
+findings).
+
+| tool | invocation | verbs / purpose |
+|---|---|---|
+| trddgrep | `yarn trddgrep <verb>` | TRDD corpus: `why unblocks roots next show board doctor lint validate index-verify fix edit env help` |
+| trdd-doctor | `yarn trdd:doctor` / `:fix` / `:board` | lint + safe auto-repair + kanban render |
+| trdd-watchdog | `yarn trdd:watchdog` | the consolidated §D4 approval-ladder sweep (doctor engine + objective-floor/mandate/supersede engine); also scheduled server-side every 6h, report to `reports/trdd-watchdog/` |
+| prrdgrep | `node --import tsx scripts/prrdgrep.mjs <verb>` | PRRD documents: `edit show list` (lint/validate verbs: TRDD-BL0W6LGY, pending) |
+| specgrep | `node --import tsx scripts/specgrep.mjs <verb>` | SPEC documents: same surface as prrdgrep |
+| pillars-lint | `yarn pillars:lint` | cross-pillar reference DAG only (PRRD ← SPECS ← TRDD direction); does NOT validate internal grammar |

@@ -420,6 +420,15 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // the assumption that a downstream pipeline re-runs a finer one.
   'POST /api/agents/[id]/panel': { action: 'send-command', targetFromPathId: true },
   'POST /api/agents/[id]/queue': { action: 'send-command', targetFromPathId: true },
+  // TRDD-DSQUWKVI — externalized compaction (USER directive 2026-08-15). `send-command` is
+  // the RIGHT action and not merely a convenient one: this route drives an agent's own surface
+  // (it ends in `/clear` typed into that agent's pane), and the comment above already names
+  // "an agent enqueuing `/compact` on itself" as the primary use case of this very action.
+  // SELF-ONLY therefore falls out of the existing matrix rather than needing a new rule, and
+  // it is the correct policy here for the same reason R42 gives: a wipe of another agent's
+  // context would be the victim's own action, bypassing its judgment entirely. The route
+  // re-checks self-only itself (belt-and-braces, the `ensure-resume` sibling's pattern).
+  'POST /api/agents/[id]/continuity/compact': { action: 'send-command', targetFromPathId: true },
   // R42.8 (USER ruling, 2026-08-05) — `answer` LEAVES the send-command trio.
   // It is the one verb the ruling carved out: answering the prompt a STALLED
   // agent is blocked on. It therefore declares 'unblock-prompt', whose matrix is

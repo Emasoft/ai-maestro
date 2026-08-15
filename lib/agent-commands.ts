@@ -160,24 +160,28 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
   // then types `/clear` plus the verified bootstrap chain into THE SESSION'S OWN PANE, matched
   // by a breadcrumb that session recorded at start.
   //
-  // WHY THE SERVER MUST NOT RUN THAT SCRIPT ITSELF, even though it could shell out to it:
-  //  1. PANE OWNERSHIP. The script self-targets by the session's own breadcrumb, and its Scope
-  //     is explicit that it never touches another pane — that is what keeps concurrent Claude
-  //     instances safe. A server-run invocation would have to introduce per-agent pane
-  //     targeting into the one tool whose safety rests on not having any.
-  //  2. THE VETOES ARE THE FEATURE. `active-waiting` (a resume or BACKGROUND AGENT is in
-  //     flight), `NO_RECORDED_PANE` (it could not bootstrap back after the clear),
-  //     `HANDOFF_NOT_CONCISE`, the opt-in `CLAUDE_PLUGIN_OPTION_EXTERNAL_IDLE_CLEAR_ENABLED`
-  //     gate. Re-deriving those server-side means re-deriving "is this agent's work running
-  //     right now?" — and getting it wrong STRANDS live work behind a `/clear`. Injecting the
-  //     command instead runs every veto in the one process that can actually answer them.
-  //  3. ZERO NEW TRUST SURFACE. This queue already types curated fixed literals at idle. A key
-  //     is not a command: the caller never supplies text (see the header).
+  // THIS ENTRY IS THE ATTENDED PATH, NOT THE ONLY ONE. Injecting the command makes the AGENT'S
+  // OWN SESSION run the script, so every veto is evaluated by the one process that can answer
+  // them — `active-waiting` (a resume or BACKGROUND AGENT is in flight), `NO_RECORDED_PANE`,
+  // `HANDOFF_NOT_CONCISE`, the opt-in `CLAUDE_PLUGIN_OPTION_EXTERNAL_IDLE_CLEAR_ENABLED` gate.
+  // And it adds no trust surface: the caller supplies a KEY, never text (see the header).
   //
-  // So the server's contribution is the TRIGGER, and the agent keeps the DECISION. Reachable
-  // from the dashboard, from `POST /api/agents/[id]/session`, and from the internal actuators
-  // that resolve by key (fleet-recovery-actuator / model-fallback-actuator) — so a future
-  // continuity leg can fire it on a context-pressure signal without new plumbing.
+  // ⚠ CORRECTED 2026-08-15, and the correction matters. This comment first claimed the server
+  // "must not" run the script itself because it self-targets and could never aim at another
+  // pane. THAT IS FALSE — verified in their shipped code: `external_handoff_clear.py:402` calls
+  // `fleet_restart.recorded_terminal(str(root))`, resolving the pane from the `--project-root`
+  // PASSED IN, via `<root>/.janitor/state/terminal-identity.json`. So a per-agent subprocess is
+  // legitimate, and it is the seam the janitor actually wants (their spec, 2026-08-15).
+  //
+  // The two paths are not rivals, and the difference is the one that matters for continuity:
+  // an INJECTED command needs the agent's REPL to be responsive and at idle to consume the
+  // keystroke — which is precisely what a wedged agent is not, and a wedged agent is exactly
+  // when a shrink is needed. The subprocess path (`lib/external-compaction.ts`) works on an
+  // agent that can no longer act for itself. Keep this key for the human/UI trigger; reach for
+  // the runner for unattended continuity.
+  //
+  // Reachable from the dashboard listing, `POST /api/agents/[id]/session`, and the internal
+  // actuators that resolve by key (fleet-recovery-actuator / model-fallback-actuator).
   //
   // destructive: TRUE. It ends in `/clear`. The composed handoff + bootstrap chain make the
   // session RECOVERABLE, which is not the same as the clear being reversible — the live

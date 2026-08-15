@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-16T00:31:56+0200
+updated: 2026-08-16T00:45:58+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -1013,6 +1013,38 @@ applies to it, which is now the strongest argument for settling that first.
       overturn a reading that was correct. And the decisive evidence sat in a peer's log the whole
       time: I measured this host four different ways without once reading the OTHER executor's
       record of the same chore.
+
+      **⚠ AND THE JANITOR IS NOT AT FAULT — checked BEFORE filing, which is why nothing was
+      filed.** The server logged **zero** lines in hours 18, 19 and 20 that day and booted at
+      **21:36:10**, so the daemon's 18:45:26, 20:04:22 and 21:25:23 refreshes all began while the
+      server was DOWN — precisely when the daemon is supposed to own the chore. It then noticed us
+      at 21:40:05, logged `chore-coordination: yielding to active ai-maestro server`, and
+      correctly did NOT kill its already-running background task. Every party is individually
+      correct. **This would have been the third wrong cross-repo filing this card's family has
+      come close to; the uptime check cost one grep.**
+
+      **THE MECHANISM IS STRUCTURAL AND NOW QUANTIFIED — the collision is OURS, at BOOT.**
+      Constants read from source: `ABSORBED_DUTY_BOOT_SETTLE_MS = 2 * 60 * 1000`
+      (`auto-update-service.ts:295-310` — the catch-up fires **2 minutes** after boot) against a
+      displaced daemon whose in-flight refresh runs **up to 1815 s (~30 min)**. So:
+
+      1. server down → daemon correctly starts a background refresh (21:25:23);
+      2. server boots (21:36:10);
+      3. daemon yields FUTURE work at 21:40:05 but rightly lets its in-flight task finish;
+      4. our catch-up fires at boot+2 min and starts OUR refresh (~21:42:22);
+      5. 13 min 9 s overlap → contention → our run passes 1800 s → killed at 22:12:22.
+
+      **The settle is ~15× too short to cover the handover.** That is a far better statement of
+      the defect than "boot is risky", and it names a candidate the earlier framing missed:
+      lengthen the settle past the observed max refresh, which needs no process inspection, no
+      TOCTOU race, and no coupling to the janitor's private files.
+
+      **One measured caveat against that candidate, recorded so nobody adopts it blind:** a long
+      settle re-introduces the exact failure the interval's own comment exists to prevent — a host
+      restarted more often than the timer NEVER runs the lane. Measured here: `pm2` reports **25**
+      restarts total and the current log holds **2** boots **20.6 h apart**, so this host is
+      nowhere near that regime. The risk is real and not this host's; whichever candidate wins must
+      say so explicitly rather than inherit the assumption.
 - [x] The per-plugin-update question in "One thing to resolve" above is answered by the
       USER before any code lands, and the answer is recorded here.
       DONE — answered verbatim in the "RESOLVED — the per-plugin loop is redundant, not merely

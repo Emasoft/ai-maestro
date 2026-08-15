@@ -72,12 +72,15 @@ describe('SPEC — N clauses per document, id in the body', () => {
     // quietly stops meaning "more than one file's worth" — which is exactly what had
     // happened: the floor still read 55 while the biggest file had grown past it, so a
     // single-file read would have satisfied it. Re-derive it through THIS extractor, not
-    // by grepping the specs: a hand regex counts a different set (it read governance-spec
-    // as 49 and role-plugins as 29, where walkRecords sees 36 and 27), so a floor taken
-    // from grep would be a number about a different population. Per file, biggest-first:
-    //   3-pillars 60, all-in-one 60, governance 36, role-plugins 27, scenario-tests 14
-    //   (total 197). Biggest = 60.
-    expect(recs.length).toBeGreaterThan(60)
+    // by grepping the specs: a hand regex counts a different set, so a floor taken from
+    // grep would be a number about a different population. Per file, biggest-first,
+    // re-derived 2026-08-15 after TRDD-IG1MMYFA widened the declaration grammar (the
+    // old shape under-matched 44+ live clauses — TERM/COMM two-segment, RP long/4-segment,
+    // STS-Rn.n dotted, RP-TOML word-tail) and the bold-preferred pick stopped line-leading
+    // citations double-counting:
+    //   3-pillars 80, all-in-one 59, governance 48, scenario-tests 43, role-plugins 33
+    //   (total 263). Biggest = 80.
+    expect(recs.length).toBeGreaterThan(80)
   })
 
   it('DECLARATION is line-anchored — a citation inside prose is NOT a record', () => {
@@ -103,6 +106,88 @@ describe('SPEC — N clauses per document, id in the body', () => {
   it('skips README.md, which is documentation about the specs rather than a spec', () => {
     fs.writeFileSync(path.join(tmp, 'README.md'), '`3P-KAN-01` not a real clause\n')
     expect(listDocuments(tmp, SPEC_KIND, '')).toEqual([])
+  })
+})
+
+describe('SPEC — the widened declaration grammar + the declaration-vs-citation pick (TRDD-IG1MMYFA)', () => {
+  function specRecordsOf(body: string) {
+    const file = path.join(tmp, 'x-spec.md')
+    fs.writeFileSync(file, body, 'utf-8')
+    const doc = readDocument(file, SPEC_KIND, '')!
+    return [...recordsOf(doc, SPEC_KIND)]
+  }
+
+  it('yields a record for EVERY measured id family the old grammar under-matched', () => {
+    // One line per family from the 2026-08-15 full-corpus inventory. The old
+    // `{2,4}-{2,8}-\d{2}` shape matched only the 3P control.
+    const recs = specRecordsOf(
+      [
+        '`3P-KAN-06` **control** — the shape the old grammar already matched.',
+        '`TERM-01` **two-segment** — governance-spec terminology family.',
+        '`RP-SKILL-MENU-01` four segments, no bold name in the live corpus.',
+        '`RP-ASSISTANT-01` nine-char middle segment.',
+        '`STS-R0.1` **dotted-tail** — scenario-tests rule family.',
+        '`RP-TOML-SHAPE` word tail, no digits at all.',
+      ].join('\n') + '\n',
+    )
+    expect(recs.map((r) => r.id)).toEqual([
+      '3P-KAN-06',
+      'TERM-01',
+      'RP-SKILL-MENU-01',
+      'RP-ASSISTANT-01',
+      'STS-R0.1',
+      'RP-TOML-SHAPE',
+    ])
+  })
+
+  it('still EXCLUDES the measured non-clause shapes', () => {
+    const recs = specRecordsOf(
+      [
+        '`R17.1` a GOVERNANCE-RULES id — a different namespace, cited not declared.',
+        '`STS-<FAMILY>-NN` the template meta-token.',
+        '`yarn build` ordinary prose in backticks.',
+        '`3-pillars-spec.md` a filename.',
+        'prose citing `3P-KAN-06` mid-line yields nothing.',
+      ].join('\n') + '\n',
+    )
+    expect(recs).toEqual([])
+  })
+
+  it('the bold-named declaration WINS over an EARLIER line-leading citation (the GOV-INV-16 case)', () => {
+    const recs = specRecordsOf(
+      [
+        '`GOV-INV-16` core-plugin-currency and others are upheld through the sweep.',
+        '',
+        '`GOV-INV-16` **core-plugin-currency** — the real declaration, later in the file.',
+      ].join('\n') + '\n',
+    )
+    expect(recs).toHaveLength(1)
+    expect(recs[0].line).toBe(3)
+  })
+
+  it('the bold-named declaration wins over a LATER citation (the AIO-RULE-01 case)', () => {
+    const recs = specRecordsOf(
+      [
+        '`AIO-RULE-01` **one-function** — the declaration.',
+        '`AIO-RULE-01` is the only path.',
+      ].join('\n') + '\n',
+    )
+    expect(recs).toHaveLength(1)
+    expect(recs[0].line).toBe(1)
+  })
+
+  it('with no bold form anywhere, the FIRST match is the record (single and multiple)', () => {
+    const recs = specRecordsOf(
+      [
+        '`RP-SKILL-MENU-01` an unnamed single-occurrence declaration.',
+        '`AIO-CHK-01` first unnamed occurrence.',
+        '`AIO-CHK-01` second unnamed occurrence — the lint reports this as ambiguous.',
+      ].join('\n') + '\n',
+    )
+    expect(recs.map((r) => [r.id, r.line])).toEqual([
+      ['RP-SKILL-MENU-01', 1],
+      ['AIO-CHK-01', 2],
+    ])
   })
 })
 

@@ -98,12 +98,30 @@ describe('lintPillarCorpus — SPEC', () => {
     expect(res.findings[0].message).toContain('malformed clause declaration')
   })
 
-  it('flags an in-file duplicate clause id at the second declaration', () => {
+  it('flags an in-file duplicate clause id at the second BOLD declaration', () => {
     writeCorpus({ specB: CLEAN_SPEC_B + '`3P-BBB-01` **gamma-again** — duplicate.\n' })
     const res = lintPillarCorpus(corpusRootFor(designDir, SPEC_KIND), SPEC_KIND)
     expect(res.findings).toHaveLength(1)
     expect(res.findings[0].line).toBe(2)
     expect(res.findings[0].message).toContain('already declared at line 1')
+  })
+
+  it('does NOT flag a line-leading CITATION beside the bold declaration (TRDD-IG1MMYFA)', () => {
+    // The live-corpus case that produced 2 false dups on the lint's first run:
+    // `AIO-RULE-01` is the only path. / `GOV-INV-16` core-plugin-currency, …
+    writeCorpus({ specB: CLEAN_SPEC_B + '`3P-BBB-01` is cited at line start, legally.\n' })
+    const res = lintPillarCorpus(corpusRootFor(designDir, SPEC_KIND), SPEC_KIND)
+    expect(res.findings).toEqual([])
+  })
+
+  it('flags AMBIGUITY when several lines match and NONE carries the bold-named form', () => {
+    writeCorpus({
+      specB: '`3P-BBB-01` unnamed first occurrence.\n`3P-BBB-01` unnamed second occurrence.\n',
+    })
+    const res = lintPillarCorpus(corpusRootFor(designDir, SPEC_KIND), SPEC_KIND)
+    expect(res.findings).toHaveLength(1)
+    expect(res.findings[0].line).toBe(2)
+    expect(res.findings[0].message).toContain('ambiguous')
   })
 
   it('flags a cross-file duplicate clause id (both documents report it)', () => {

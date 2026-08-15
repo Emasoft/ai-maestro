@@ -98,19 +98,51 @@ function prrdNumberLines(kind: PillarKind, lines: readonly string[]): Map<number
   return byNumber
 }
 
-/** SPEC normalized clause id → the 1-based lines declaring it in THIS document. */
-function specIdLines(kind: PillarKind, lines: readonly string[]): Map<string, number[]> {
+/**
+ * SPEC normalized clause id → every 1-based line matching the declaration grammar in
+ * THIS document, each flagged with whether it carries the PREFERRED (bold-named)
+ * declaration form. A non-preferred extra line is a line-leading CITATION, which is
+ * legal prose (TRDD-IG1MMYFA) — the dup rules below key on the flags, not the count.
+ */
+function specIdLines(
+  kind: PillarKind,
+  lines: readonly string[],
+): Map<string, { line: number; preferred: boolean }[]> {
   const declIdAt = declIdReader(kind)
-  const byId = new Map<string, number[]>()
+  const prefer = kind.source.mode === 'per-line' ? kind.source.preferDeclaration : undefined
+  const byId = new Map<string, { line: number; preferred: boolean }[]>()
   for (let i = 0; i < lines.length; i++) {
     const id = declIdAt(lines[i])
     if (!id) continue
     const key = kind.normalizeId(id)
     const list = byId.get(key) ?? []
-    list.push(i + 1)
+    list.push({ line: i + 1, preferred: prefer ? prefer.test(lines[i]) : false })
     byId.set(key, list)
   }
   return byId
+}
+
+/** The picked DECLARATION line for one id's matches: first preferred, else first — the
+ * exact rule `recordsOf` applies, restated here so gate, lint and store agree. */
+function pickedLine(matches: readonly { line: number; preferred: boolean }[]): number | null {
+  if (!matches.length) return null
+  return (matches.find((m) => m.preferred) ?? matches[0]).line
+}
+
+/** The duplicate-declaration verdict for one id's matches — shared by gate and lint.
+ * >1 preferred = two real declarations; 0 preferred with >1 matches = ambiguous (nothing
+ * marks which line is THE declaration); one preferred + citations = legal. */
+function specDupOffenders(
+  matches: readonly { line: number; preferred: boolean }[],
+): { offenders: number[]; reason: 'duplicate' | 'ambiguous' } | null {
+  const preferred = matches.filter((m) => m.preferred)
+  if (preferred.length > 1) {
+    return { offenders: preferred.slice(1).map((m) => m.line), reason: 'duplicate' }
+  }
+  if (preferred.length === 0 && matches.length > 1) {
+    return { offenders: matches.slice(1).map((m) => m.line), reason: 'ambiguous' }
+  }
+  return null
 }
 
 /** The one legality rule `status:` actually has — null means legal. */
@@ -203,29 +235,44 @@ export function pillarPreWriteCheck(
       }
 
       if (kind.name === 'spec') {
+        // Declaration-vs-citation scoping (TRDD-IG1MMYFA): a line-leading citation
+        // matches the grammar exactly like the declaration does, so every refusal
+        // below binds only the line the store's pick would treat as THE declaration —
+        // editing citation prose is ordinary editing.
+        const nextById = specIdLines(kind, nextLines)
+        const prevById = specIdLines(kind, prevLines)
         if (nextId) {
-          if (prevId && kind.normalizeId(prevId) !== kind.normalizeId(nextId)) {
+          const key = kind.normalizeId(nextId)
+          const isDeclNext = pickedLine(nextById.get(key) ?? []) === lineNo
+          if (prevId && kind.normalizeId(prevId) !== key) {
+            const wasDecl = pickedLine(prevById.get(kind.normalizeId(prevId)) ?? []) === lineNo
+            if (wasDecl) {
+              violations.push(
+                `line ${lineNo}: clause ids are stable (${prevId} -> ${nextId}) — a rename dangles every ` +
+                  `citation of ${prevId}. Do renames as a deliberate corpus-wide change verified by ` +
+                  `\`yarn pillars:lint\`, not a line edit.`,
+              )
+            }
+          }
+          const dup = specDupOffenders(nextById.get(key) ?? [])
+          if (dup && (isDeclNext || dup.offenders.includes(lineNo))) {
             violations.push(
-              `line ${lineNo}: clause ids are stable (${prevId} -> ${nextId}) — a rename dangles every ` +
-                `citation of ${prevId}. Do renames as a deliberate corpus-wide change verified by ` +
-                `\`yarn pillars:lint\`, not a line edit.`,
+              dup.reason === 'duplicate'
+                ? `line ${lineNo}: clause ${nextId} would carry TWO bold-named declarations in this ` +
+                    `document (offending line(s): ${dup.offenders.join(', ')}) — already declared at ` +
+                    `line ${pickedLine(nextById.get(key) ?? [])}`
+                : `line ${lineNo}: clause ${nextId} would match the declaration grammar on multiple ` +
+                    `lines with NONE carrying the bold-named form — ambiguous which is the declaration ` +
+                    `(lines ${(nextById.get(key) ?? []).map((m) => m.line).join(', ')})`,
             )
           }
-          // Uniqueness inside the resulting document — shared finder, as above.
-          const inFile = specIdLines(kind, nextLines).get(kind.normalizeId(nextId)) ?? []
-          if (inFile.length > 1) {
-            violations.push(
-              `line ${lineNo}: clause ${nextId} would be declared ${inFile.length} times in this document ` +
-                `(lines ${inFile.join(', ')})`,
-            )
-          }
-          // …and across the rest of the corpus (only for a NEW declaration — an
-          // unchanged id IS the record the clash set already contains).
-          if (!prevId || kind.normalizeId(prevId) !== kind.normalizeId(nextId)) {
+          // Cross-file: only a DECLARATION may not collide, and only when this edit
+          // introduces the id (an unchanged id IS the clash set's own record).
+          if (isDeclNext && (!prevId || kind.normalizeId(prevId) !== key)) {
             const clash = opts.corpusRecords.find(
               (r) =>
                 path.resolve(r.filePath) !== path.resolve(opts.filePath) &&
-                kind.normalizeId(r.id) === kind.normalizeId(nextId),
+                kind.normalizeId(r.id) === key,
             )
             if (clash) {
               violations.push(
@@ -235,11 +282,14 @@ export function pillarPreWriteCheck(
             }
           }
         } else if (prevId && SPEC_LOOSE_RE.test(next)) {
-          violations.push(
-            `line ${lineNo}: this line declared clause ${prevId}, and its replacement still opens with a ` +
-              `backtick token but no longer parses as a clause declaration — a malformed id would make ` +
-              `the clause silently vanish from the corpus.`,
-          )
+          const wasDecl = pickedLine(prevById.get(kind.normalizeId(prevId)) ?? []) === lineNo
+          if (wasDecl) {
+            violations.push(
+              `line ${lineNo}: this line declared clause ${prevId}, and its replacement still opens with a ` +
+                `backtick token but no longer parses as a clause declaration — a malformed id would make ` +
+                `the clause silently vanish from the corpus.`,
+            )
+          }
         }
 
         // `status:` legality — only inside the leading frontmatter block. The one
@@ -314,9 +364,20 @@ export function lintPillarLines(
       }
     }
     const byId = specIdLines(kind, lines)
-    for (const [id, declLines] of byId) {
-      for (const dup of declLines.slice(1)) {
-        at(dup, `clause ${id} already declared at line ${declLines[0]}`)
+    for (const [id, matches] of byId) {
+      // One preferred declaration + line-leading citations is LEGAL (the pick rule);
+      // two bold-named declarations, or several matches with none bold, are not.
+      const dup = specDupOffenders(matches)
+      if (dup) {
+        for (const offender of dup.offenders) {
+          at(
+            offender,
+            dup.reason === 'duplicate'
+              ? `clause ${id} already declared at line ${pickedLine(matches)}`
+              : `clause ${id} matches the declaration grammar on multiple lines with none carrying ` +
+                  `the bold-named form — ambiguous which is the declaration (first at line ${matches[0].line})`,
+          )
+        }
       }
       const clash = opts.corpusRecords.find(
         (r) =>
@@ -324,7 +385,7 @@ export function lintPillarLines(
           kind.normalizeId(r.id) === id,
       )
       if (clash) {
-        at(declLines[0], `clause ${id} is also declared in ${path.basename(clash.filePath)}:${clash.line ?? '-'}`)
+        at(pickedLine(matches)!, `clause ${id} is also declared in ${path.basename(clash.filePath)}:${clash.line ?? '-'}`)
       }
     }
     const fmEnd = frontmatterEnd(lines)

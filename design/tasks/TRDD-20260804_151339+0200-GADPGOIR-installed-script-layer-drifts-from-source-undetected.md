@@ -1,9 +1,10 @@
 ---
 trdd-id: GADPGOIR
 title: The installed script layer drifts from source with nothing detecting it, and a partial refresh is destructive
-column: backburner
+column: complete
 created: 2026-08-04T15:13:39+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-15T23:02:54+0200
+implementation-commits: [pending]
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -123,6 +124,46 @@ manual and gated.
 Found 2026-08-04 while re-verifying my own 2026-07-23 answer on `Emasoft/ai-maestro#77`. The
 ORCHESTRATOR had reported 32 agents sharing one AMP address; I diagnosed it, fixed it, and told them
 it would self-heal. Re-verification showed the fix was never installed. Correction posted on `#77`.
+
+## ⏵ OUTCOME — detector shipped 2026-08-15, and the card's own premise had gone stale
+
+**RE-MEASURED BEFORE BUILDING, and the 08-04 census no longer holds.** Today: **45 compared, 44
+identical, 0 drifted, 1 missing.** `amp-helper.sh` now reads `_expected_name` **14 times in BOTH**
+source and installed — an install ran between 08-04 and now, so the 12-day drift is closed and
+this card's verification line *"the detector flags `amp-helper.sh` as drifted on this host TODAY"*
+is **no longer satisfiable**. It is recorded here rather than ticked, because ticking it would
+have meant asserting a measurement I did not take. The card's post-refresh criterion
+(`grep -c _expected_name` = 14) IS met.
+
+**A THIRD STATE the card did not name: MISSING.** `aimaestro-check-decoupling.sh` exists in
+`scripts/` and has NEVER been installed. That is a different fault from drift — a drifted script
+runs the wrong code, a missing one is `command not found` for any agent that calls it — so the
+detector reports the two separately rather than folding them together.
+
+### What shipped
+
+- `lib/installed-script-drift.ts` — pure comparison. **Bytes, not mtime and not a version
+  string**: mtime records when a file was WRITTEN (an install rewrites it even unchanged) and a
+  version string is only as honest as whoever bumped it.
+- `scripts/check-script-drift.mjs` + **`yarn scripts:drift`** — the surfaced entry point, on the
+  grep trichotomy (0 clean · 1 findings · **2 could-not-run**). Live run: exit 1, naming the one
+  missing script.
+- `tests/unit/installed-script-drift.test.ts` — 6 tests, FIXTURE-driven on purpose. A test
+  asserting "this host has zero drift" would pass or fail with whenever someone last ran the
+  installer, which is the machine-dependent shape that made three fleet-liveness tests look like
+  load flakes for weeks. The live scan is the yarn target's job; the logic is pinned here.
+
+**Neuter:** deleting the `scanned === 0 → exit 2` line reds exactly *"AN EMPTY SCAN IS EXIT 2,
+NEVER A CLEAN 0"*, 5 green. That is the card's own failure mode — "clean" and "I looked at
+nothing" print identically, which is how a human check reported in-sync for 12 days.
+
+**NOT DONE, deliberately:** no auto-install, per the card. Remediation stays manual, all-or-nothing
+(`./install-messaging.sh -y`), because a partial refresh activates a self-heal whose sibling commit
+is absent and silently drops every affected agent's `id`. The report NAMES the remedy and a test
+pins that it says *never cherry-pick*.
+
+**Still open (the card's own ✗ NOT AUDITED):** this covers `amp-*` and `aimaestro-*` only. The rest
+of `~/.local/bin` remains unmeasured.
 
 ## Approval log
 

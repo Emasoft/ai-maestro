@@ -42,6 +42,7 @@
     "trdd:watchdog": "node --import tsx scripts/trdd-watchdog.mjs",
     "trddgrep": "node --import tsx scripts/trddgrep.mjs",
     "pillars:lint": "node --import tsx scripts/pillars-lint.mjs",
+    "scripts:drift": "node --import tsx scripts/check-script-drift.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:services": "vitest run tests/services/",

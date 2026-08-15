@@ -3,7 +3,7 @@ trdd-id: COOLOZ1N
 title: Panel CLI wiring contract for amvcp — the measured spec plus the five rulings
 column: dev
 created: 2026-08-08T15:05:05+0200
-updated: 2026-08-15T00:25:32+0200
+updated: 2026-08-16T01:01:20+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: feature
@@ -196,8 +196,21 @@ Rationale: a contract proven on one path against a script that is not yet even i
       (ruling 3) — lands BEFORE the file is read into memory and before any API call;
       behaviorally verified both directions (2,098,176-byte file → the limit-naming
       error, exit 1; small file → passes the gate and proceeds to agent resolution).
-- [ ] Post the answer on ai-maestro#134 and confirm amvcp is unblocked to build against
-      this card.
+- [x] Post the answer on ai-maestro#134.
+      DONE in four comments: the contract itself (2026-08-08 13:12), the two blocker
+      fixes (14:48), `<self>` landing (15:01), and — 2026-08-16 01:01,
+      `#issuecomment-5304641579` — **ruling 5, which had been decided on 08-15 and
+      never relayed**. That last one matters more than a detail: it tells the consumer
+      there will be NO CLI sudo-mint verb, so a panel flow must not be designed
+      assuming one is coming. It also corrects the stale `SCRIPT-MANIFEST` claim that
+      no USER auth path existed, which had been false beside shipped code for six days.
+- [ ] amvcp confirms it is unblocked to build against this card.
+      **NOT MINE TO TICK — split out 2026-08-16 because the original box fused an act I
+      control with a reply I do not.** The relay above is complete; this half waits on
+      the other party, and the issue has been silent since 2026-08-08T15:01Z. A box
+      whose completion depends on someone else's answer can never be honestly checked
+      by me, and fusing the two made the whole card look unstarted while its actual
+      deliverable was already posted three times over.
 
 ## Approval log
 

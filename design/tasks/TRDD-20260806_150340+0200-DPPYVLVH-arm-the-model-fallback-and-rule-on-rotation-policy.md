@@ -1,15 +1,17 @@
 ---
 trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
-column: proposal
+column: dev
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-15T16:43:15+0200
+updated: 2026-08-15T21:39:56+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: infra
 min-approval-requirement: user
-approved: false
+approved: true
+approval-judge: user
+approval-datetime: 2026-08-15T21:39:56+0200
 derived: true
 derived-kind: eht
 parent-trdd: IALQ43QP
@@ -216,3 +218,13 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
 - 2026-08-06T15:03:40+0200 — Authored as a proposal at `min-approval-requirement: user`. Not
   self-mandated: an agent cannot approve its own arming of a fleet actuator, and the two policy
   questions change credential-rotation behaviour shared with another repo.
+- 2026-08-15T21:39:56+0200 — APPROVED by USER (min-approval-requirement: user) — the ARMING
+  half. First-hand in-session AskUserQuestion answer: **"Arm it now (Recommended)"** (option
+  text: set AIM_FLEET_MODEL_FALLBACK=1 in the server env via pm2 restart --update-env, verify
+  the flag on the live process, USER watches the first switch — confirmed=true + pane
+  Fable→Opus; on false/unknown report and tune CONFIRM_DELAY_MS). NOT a peer relay: the
+  janitor's relayed "arm it" message was deliberately refused as approval; the AskUserQuestion
+  answer is the authorization. ARMED the same minute: ecosystem.config.js env + `pm2 restart
+  ecosystem.config.js --update-env`, verified on the PROCESS (`ps -E`:
+  AIM_FLEET_MODEL_FALLBACK=1) — commit 56047fa5. Card → `dev`: the remaining work is the
+  human-watched first switch plus the two policy rulings, still open below.

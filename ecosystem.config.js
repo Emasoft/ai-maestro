@@ -32,6 +32,13 @@ module.exports = {
         // Verify against the PROCESS, never against this file — the whole failure was a config
         // that read as armed while the process was not.
         AIM_FLEET_RECOVERY_FIRE: '1',
+        // TRDD-DPPYVLVH: arm the model-scoped-window fallback (Fable 5h window exhausted while
+        // the ACCOUNT is healthy -> switch Fable agents to Opus via /model instead of rotating
+        // credentials, which cannot help a model-scoped limit). USER approved arming 2026-08-15
+        // (first-hand AskUserQuestion answer: "Arm it now"), with the first switch human-watched:
+        // the watchdog must log `model-fallback SWITCHED <id> ... confirmed=true` and the pane
+        // statusline must flip Fable->Opus. Same pm2-env caveat as above applies.
+        AIM_FLEET_MODEL_FALLBACK: '1',
       },
       env_development: {
         NODE_ENV: 'development',

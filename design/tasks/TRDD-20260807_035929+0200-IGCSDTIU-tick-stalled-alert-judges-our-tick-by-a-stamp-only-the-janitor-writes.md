@@ -1,12 +1,12 @@
 ---
 trdd-id: IGCSDTIU
 title: The tick-stalled alert judges our rotator tick by a stamp only the janitor's rotator writes
-column: testing
+column: ai_review
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T03:59:29+0200
-updated: 2026-08-07T04:09:20+0200
+updated: 2026-08-16T01:14:19+0200
 implementation-commits: [3e3199c0]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -130,10 +130,24 @@ rather than optional — silencing a false alarm must not silence the true one.
 - [x] The positive control is INSIDE the behavioural test: a genuinely hung tick still alerts.
       Without it, "no `tick-stalled`" would pass equally against a fix that disabled the alert.
 - [x] `tsc --noEmit` 0 lines; 29/29 in `tests/unit/oauth-rotator-supervisor.test.ts`.
-- [ ] **LIVE:** no `tick-stalled` line for a full hour while the 60 s beat continues. Requires a
-      `pm2 restart ai-maestro` — `server-supervisor.ts` is runtime-imported, so a restart activates
-      it with no rebuild, but the running process still carries the pre-fix module. Not run: the
-      restart bounces the owner's fleet and is theirs to authorise.
+- [x] **LIVE: SATISFIED — measured 2026-08-16T01:14, and it needed no restart of mine.** The box
+      was waiting on a `pm2 restart` the owner had to authorise; the owner restarted for their own
+      reasons (current process up since 2026-08-15 21:36:10), so the post-fix module has been live
+      for hours and the observation was simply there to be taken.
+
+      **Both halves measured, because silence alone proves nothing:**
+      - **No alert.** `tick-stalled` occurrences in the last hour: **0**. In fact the LAST one ever
+        is `2026-08-07 20:55:20` — **8 days** ago, and the fix (`3e3199c0`) landed 04:08 that
+        morning, so the gap is explained exactly: the alert survived until the first restart after
+        the fix, then stopped. The error log covers `2026-07-11 17:17` → now, so this is real
+        coverage, not a truncated file.
+      - **The beat continues.** **55** `[oauth-rotator] auto:` lines across **56 distinct minutes**
+        in the 00:00-00:59 window — a 60 s beat, present.
+      - **POSITIVE CONTROL, which is what makes the silence mean anything.** **56**
+        `[oauth-supervisor]` lines since boot: the supervisor is running and speaking, so its
+        silence on `tick-stalled` is DISCRIMINATION, not death. Without this, "no alert" and "no
+        supervisor" are the same observation — and this card exists precisely because a supervisor
+        was saying something false, so a mute one would be no better.
 
 ## Approval log
 

@@ -165,26 +165,12 @@ function ghJson<T>(args: string, cwd?: string): T {
   return JSON.parse(raw) as T
 }
 
-/** Run a gh API call via `gh api`. Returns parsed JSON. */
-function ghApi<T>(endpoint: string, method = 'GET', body?: Record<string, unknown>): T {
-  shellSafe(endpoint)
-  shellSafe(method)
-  let cmd = `api "${endpoint}"`
-  if (method !== 'GET') cmd += ` -X "${method}"`
-  if (body) {
-    // Pass body fields as -f flags for simple values
-    for (const [key, value] of Object.entries(body)) {
-      shellSafe(key)
-      if (typeof value === 'string') {
-        shellSafe(value)
-        cmd += ` -f "${key}=${value}"`
-      } else if (typeof value === 'boolean' || typeof value === 'number') {
-        cmd += ` -F ${key}=${value}`
-      }
-    }
-  }
-  return ghJson<T>(cmd)
-}
+// REMOVED 2026-08-15: `ghApi`. Module-private (never exported) and already dead BEFORE the
+// `setBranchProtection` removal above — at that commit's parent its only two occurrences were its
+// own definition and a mention inside setBranchProtection's COMMENT ("because ghApi -f/-F flags
+// cannot express nested objects"). A comment is not a call site, so the sole thing making it look
+// referenced was prose; deleting that prose is what surfaced it. Recover from the same commit's
+// parent if a future caller genuinely needs it — but prefer `ghJson`, which every live caller uses.
 
 /** Run a GraphQL mutation via gh api graphql. Passes variables safely via --input stdin. */
 function ghGraphQL<T>(query: string, variables: Record<string, unknown> = {}): T {
@@ -342,25 +328,26 @@ export function cloneRepo(url: string, targetDir: string): string {
   return targetDir
 }
 
-/** Set branch protection rules on the default branch */
-export function setBranchProtection(owner: string, repo: string, branch: string): void {
-  shellSafe(owner)
-  shellSafe(repo)
-  shellSafe(branch)
-  // Require PR reviews and status checks — use JSON body via stdin
-  // because ghApi -f/-F flags cannot express nested objects or null values
-  const body = JSON.stringify({
-    required_pull_request_reviews: { required_approving_review_count: 1 },
-    enforce_admins: true,
-    required_status_checks: null,
-    restrictions: null,
-  })
-  execSync(`gh api /repos/${owner}/${repo}/branches/${branch}/protection -X PUT --input -`, {
-    encoding: 'utf-8',
-    timeout: 30_000,
-    input: body,
-  })
-}
+// REMOVED 2026-08-15: `setBranchProtection`. It had ZERO callers anywhere (verified across
+// lib/services/app/components/scripts/tests and all prose — its only occurrence was its own
+// definition), so it had mis-protected nothing. But it encoded THREE things that contradict
+// current ratified governance, and would have applied all three the moment anyone wired it up:
+//
+//   · `required_approving_review_count: 1` — the USER's 2026-08-13 Tier-3 ruling set this to 0,
+//     because GitHub forbids self-approval, so 1 is UNSATISFIABLE on a solo-owner repo and
+//     branches pile up unmergeable;
+//   · `enforce_admins: true` — the same ruling did the OPPOSITE, adding an owner/admin bypass
+//     ("allow mutations in history and direct pushing/merging by the owner");
+//   · the LEGACY `/branches/{branch}/protection` API, not the RULESETS API that the ratified
+//     baseline trio (`baseline-history-protect` / `baseline-pr-and-checks` / `baseline-tag-protect`)
+//     is expressed in — so it is not a stale copy of the baseline, it is a different mechanism.
+//
+// Deleted rather than corrected: fixing only the numbers would leave a non-baseline protection
+// shape wearing conformant-looking constants, which is worse than an obviously-legacy function.
+// Applying the baseline is the janitor's job (`branch_protection_lib.py`, the single source of
+// the ratified payloads); the server audits read-only via `lib/github-config-audit.ts`. Keeping a
+// second, divergent applier here is exactly the two-codebases-one-constant drift that has already
+// bitten this fleet. Recovered with `git show <this commit>^:lib/github-cli.ts` if ever needed.
 
 // ============================================================================
 // 3. GitHub Projects v2 Operations

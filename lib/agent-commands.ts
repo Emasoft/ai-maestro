@@ -173,12 +173,25 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
   // PASSED IN, via `<root>/.janitor/state/terminal-identity.json`. So a per-agent subprocess is
   // legitimate, and it is the seam the janitor actually wants (their spec, 2026-08-15).
   //
-  // The two paths are not rivals, and the difference is the one that matters for continuity:
-  // an INJECTED command needs the agent's REPL to be responsive and at idle to consume the
-  // keystroke — which is precisely what a wedged agent is not, and a wedged agent is exactly
-  // when a shrink is needed. The subprocess path (`lib/external-compaction.ts`) works on an
-  // agent that can no longer act for itself. Keep this key for the human/UI trigger; reach for
-  // the runner for unattended continuity.
+  // The two paths are not rivals, and they fail differently:
+  //  - an INJECTED command needs the agent's REPL to be responsive and at idle to consume the
+  //    keystroke — precisely what a wedged agent is not, and a wedged agent is exactly when a
+  //    shrink is needed;
+  //  - the subprocess path (`lib/external-compaction.ts`) works on an agent that can no longer
+  //    act for itself, and spends ZERO model tokens.
+  //
+  // ⚠ ATTENDED USE ONLY — A COST HAZARD, WHICH IS WHY NO SAFETY CHECK WOULD CATCH IT. This is a
+  // SKILL, not a script alias: injecting it makes the target's MODEL read the skill and run the
+  // script, so it costs a full MODEL TURN over whatever context that session is holding. On a
+  // COLD cache with a large context that single turn IS the ~600k cache-creation write the whole
+  // feature exists to avoid — the agent pays exactly the cost it was being shrunk to prevent,
+  // and only then shrinks. So: fine when the session is WARM or already small (a human asking
+  // for a tidy-up, a UI button); NEVER as an automatic response to "this agent is cold and fat".
+  // For that case use the subprocess seam. Raised by the janitor (who owns the skill) and
+  // verified against its shipped SKILL.md, which instructs the MODEL rather than being a direct
+  // invocation. Enforced by `tests/unit/externalized-compaction-not-automatic.test.ts`, because
+  // the way this goes wrong is a future continuity leg resolving the key on a context-pressure
+  // signal — which reads like exactly the right thing to do.
   //
   // Reachable from the dashboard listing, `POST /api/agents/[id]/session`, and the internal
   // actuators that resolve by key (fleet-recovery-actuator / model-fallback-actuator).

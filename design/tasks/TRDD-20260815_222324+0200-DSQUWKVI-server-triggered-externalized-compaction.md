@@ -3,7 +3,7 @@ trdd-id: DSQUWKVI
 title: Server-triggered externalized compaction — run the janitor's zero-turn shrink for a named agent
 column: dev
 created: 2026-08-15T22:23:24+0200
-updated: 2026-08-15T22:23:24+0200
+updated: 2026-08-15T22:45:07+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -116,7 +116,32 @@ was corrected in the same session.
       on itself"* as the primary use case. The governance ratchet
       (`sudo-guard-strict-agent-coverage`) caught the route as undeclared before the mapping
       existed — working exactly as designed.
-- [ ] Janitor told which seam shipped (their spec asked for the subprocess form; both exist)
+- [x] Janitor told which seam shipped (their spec asked for the subprocess form; both exist).
+      **They ruled: KEEP the command key** — their objection had been to a raw `/clear` verb,
+      which is not what was built, and they agreed the fail-differently split is right
+      (injection = human/UI, subprocess = continuity).
+- [x] Their ONE scoping hazard encoded and ENFORCED. Injecting the key costs the target a full
+      MODEL TURN (it is a SKILL, not a script alias — verified against its shipped `SKILL.md`,
+      which instructs the model), so on a COLD cache with a large context that single turn IS
+      the ~600k cache-creation write the feature exists to avoid. Attended use only; never as
+      an automatic response to "cold and fat". A comment cannot enforce that — the failure mode
+      is a future continuity leg resolving the key on a context-pressure signal, which reads
+      like the right thing to do — so `tests/unit/externalized-compaction-not-automatic.test.ts`
+      pins it, with a positive control (`model-opus` IS fired automatically, proving the scan
+      reaches real code) and a neuter: adding the key to `model-fallback-sweep.ts` reds exactly
+      the one test, blob-verified back to HEAD.
+
+## Not building: the cold-resume path
+
+The janitor's `3.3.5` (their `904ddef4`) handles cold-resume autonomously via their SessionStart
+hook on every project — probe abstains → elapsed-time fallback → the blocking hook shrinks
+BEFORE the first turn. The server does not need to drive that. The subprocess seam is for the
+cases their hook cannot see: a wedged agent, or a project whose session never starts.
+
+If the resume gate is ever mirrored here, take BOTH halves of their fix together — the
+probe-abstains→elapsed-time fallback is useless while the CLI still cannot be found, and the
+PATH-resolution fix alone leaves the gate refusing. Either alone reproduces one of their two
+measured dead ends.
 
 ## What the live probe also surfaced (2026-08-15 22:2x)
 

@@ -3,7 +3,7 @@ trdd-id: JT3U4ZVM
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
 column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-08-05T01:08:00+0200
+updated: 2026-08-16T01:32:56+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -324,6 +324,32 @@ card's own record of them.
       declared version unresolvable.
       `ai-maestro-webdesign` (0.1.7) has NO existing tag issue; not filed, as it is not a role-plugin
       and nothing in this fleet installs it — recorded here so the gap is visible rather than lost.
+
+      **✅ RE-MEASURED 2026-08-16T01:32 — THIS BLOCKER HAS CLEARED, and it cleared 8 days ago.**
+      Both upstream issues are now **CLOSED** (`architect#25` 2026-08-08T10:30Z,
+      `integrator#22` 2026-08-08T09:10Z), and the tags they asked for exist:
+
+      | repo | then (2026-08-05) | now |
+      |---|---|---|
+      | `ai-maestro-architect-agent` | **0** prefixed of 20 tags | **33** prefixed of 93 |
+      | `ai-maestro-integrator-agent` | **0** prefixed of 21 tags | **10** prefixed of 42 |
+
+      **And the match is exact where it has to be** — the resolver needs a tag for the version the
+      marketplace DECLARES, not merely some prefixed tag. Read from the live marketplace manifest:
+      architect declares `2.15.24` and `ai-maestro-architect-agent--v2.15.24` exists; integrator
+      declares `1.6.5` and `ai-maestro-integrator-agent--v1.6.5` exists. Both are the newest
+      prefixed tag in their repo, so the backfill the comment asked for was done rather than only
+      the future-only pipeline fix.
+
+      **THE SAME EVIDENCE LIMIT STILL APPLIES, and it is this card's own rule:** I measured TAGS
+      against the documented requirement and did **not** reproduce an install. That bar exists here
+      because 8 cross-repo issues were once filed on an unverified theory — so "the tags are right"
+      is not "the install works", and the first box above (watch G15/G16 report `installed` through
+      the dashboard) is still the one that would settle it.
+
+      **Nothing filed, nothing commented:** the upstream work is done and the issues are closed, so
+      there is no one to notify. Found only by re-running the measurement — the card had recorded a
+      state, and states do not re-read themselves.
 
 ## Notes — the investigation's own post-mortem
 

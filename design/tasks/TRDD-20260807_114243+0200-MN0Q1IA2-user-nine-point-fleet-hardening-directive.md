@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-07T17:35:38+0200
+updated: 2026-08-16T00:55:06+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -555,6 +555,41 @@ change to the data path that decides credential rotation for the whole fleet; a 
 version would rotate on numbers nobody has validated. It wants a fresh context, the existing
 `usageRequest` kept as a documented fallback (agentlenspro can be down), and a differential test
 proving the two sources agree on a known fixture before the switch is trusted.
+
+## Acceptance
+
+**Added 2026-08-16 — this card had NO checklist at all, which made its completion gate vacuous.**
+The gate is stated over boxes that are *unchecked*, so a card with zero boxes passes having proven
+nothing; measured across this repo the same week, 87 of 108 open cards were in that state. The nine
+items already carried their status in their own headings — this section only mirrors them into the
+form the gate can actually read, and adds nothing new. **Ticking is by OBSERVED behaviour, never by
+code shape** (see Verification below).
+
+- [x] **1.** Marketplaces update every 4 h via ONE CLI command — `5438312f`
+- [x] **2.** All plugins auto-update in `settings.json`, through the safe editor — `71b9f796`
+- [ ] **3.** The rotator is working — PARTLY VERIFIED. `scopedOnly` (`17e129d6`) is live and
+      ticking; what remains is the dead-refresh account, which needs the USER's `/login`.
+- [ ] **4.** Post-rotation unblock (ESC to resume, or switch to Opus) — the MODEL half is already
+      complete (`planModelFallback` makes the whole decision from windows; the "one unwired
+      function" framing was refuted in place at §"…AND THEN THE WIRING PLAN ITSELF WAS REFUTED").
+      What is open is the ESC/resume half — and note the model half's own first live switch is
+      tracked separately on `TRDD-DPPYVLVH`, not here.
+- [ ] **5.** Auto-answer the AskUser menu with the default/first option — NOT STARTED, and gated
+      by the security finding recorded above: `ask_user` and `permission` MUST NOT be conflated
+      for auto-answer.
+- [x] **7.** No more headed chrome-for-testing windows — DONE, verified live
+- [ ] **8.** Ledger records EVERY change to `~/.claude/settings.json` — NOT STARTED
+- [ ] **9.** Ledger monitors `settings.json` + `settings.local.json` in every workdir and every
+      `~/.claude/projects/` entry — NOT STARTED (superset of 8; watch the DIRECTORY, never the
+      FILE, per the trap recorded above)
+- [ ] **10.** Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI —
+      NOT STARTED, and the request SPLITS: one half would be a regression, so `usageRequest` stays
+      as a documented fallback behind a differential test
+- [ ] EHT `TRDD-XV9BLQC5` (OAuth-authorize CAPTCHA continuity exposure) is terminal — currently
+      `todo`, so this card cannot reach `complete` regardless of the nine items
+
+**There is no item 6.** The nine points are numbered 1-5 and 7-10; the USER's original list skipped
+it. Recorded so the next reader does not go looking for a tenth item that was never dropped.
 
 ## Verification
 

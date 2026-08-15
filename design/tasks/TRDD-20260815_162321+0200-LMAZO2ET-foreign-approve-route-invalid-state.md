@@ -12,7 +12,7 @@ min-approval-requirement: none
 mandate: true
 mandated-by: self
 derived: true
-derived-kind: npt
+derived-kind: eht
 parent-trdd: 1ZMEXD9X
 priority: 1
 severity: high

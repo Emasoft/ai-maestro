@@ -3,7 +3,8 @@ trdd-id: 1ZMEXD9X
 title: Systematic fleet gap survey and remediation campaign — the orchestrator does the orchestrator's job
 column: dev
 created: 2026-08-15T16:16:37+0200
-updated: 2026-08-15T16:16:37+0200
+updated: 2026-08-15T16:38:00+0200
+eht: [2R34M8FA, BL0W6LGY, LMAZO2ET, 4EBVIYBA]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -27,6 +28,35 @@ blocked-by: []
 ---
 
 # Systematic fleet gap survey and remediation campaign
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-15 16:38
+
+**Surveys: 5/5 DONE + hub-verified** (reports/gap-survey/: A1 161922, A2 162700, A3 170500,
+A5 162320, A6 162141). Verification verdicts: A1/A2 verified; A6's GAP-1 + cadence deficit
+CONFIRMED but its "claimed_chore_watch unwired" claim REFUTED (caller in
+scripts/detectors/claimed-chore-stale.py — flat-glob miss); A5's 1 real leak confirmed
+(janitor 6CRC9SQQ card home path), 4 others are the leak-detector's own fixtures; only 5
+plugins cached locally — 6 role-plugins UNMEASURED (population caveat).
+
+**Gap inventory (new cards, all EHT of this one):** 2R34M8FA (PRRD/SPEC write-guard, P1) →
+BL0W6LGY (prrd/spec lint verbs, P1, blocked-by 2R34M8FA) · LMAZO2ET (foreign-approve
+5-store invalid state, P1) · 4EBVIYBA (R51 ratchet scan surface, P2). **Existing cards
+adopted by the plan (not duplicated):** GADPGOIR (drift automation, approved) · 89LVZSQ0
+(terminal-read verb) · SCLSRS6E (governance script layer, blocked) · 9MZQ4T7E/P7XKV3N9
+(USER-auth verbs, human_review) · DQ6XN2VP (superseded-in-substance: A2 measured 19/19
+wrapped; its residue = InstallElement window + ChangeMarketplace limit-case pinning).
+
+**Delivered:** janitor issue ai-maestro-janitor#274 (3 verified findings) · server
+chore-stamp comment fix f6effa7c · SCRIPT-MANIFEST pillar section f97d3e23 · A4 delivery
+records: janitor msg a64d33e5, CORE msg aefecc5e.
+
+**SEQUENCED PLAN (execution order):** 1) LMAZO2ET (real invalid-state bug, highest harm) →
+2) 2R34M8FA → 3) BL0W6LGY → 4) 4EBVIYBA → 5) GADPGOIR (drift automation) → 6) synthesis
+residue: PRRD bootstrap proposal (USER-floor — needs the USER: golden G1.1 authoring) +
+github-config-audit TS-vs-py parity check (open question from A6) + the 6 uncached
+role-plugins' compliance (needs their repos or a cache install).
+
+**NEXT ACTION:** execute plan item 1 (LMAZO2ET) unless the USER re-prioritizes.
 
 ## The USER's directive (2026-08-15, verbatim complaints — each becomes a survey axis)
 
@@ -77,10 +107,11 @@ A6), DQ6XN2VP (transactional all-in-one, measured 19 pipelines / 14 remaining �
 
 ## Acceptance
 
-- [ ] All 6 survey reports exist and each cites file:line evidence (A1-A6)
-- [ ] Gap inventory written: one TRDD per actionable gap, deduped against the open board
-- [ ] A4 delivered: the command list update reaches the janitor and CORE (message/issue ids recorded)
-- [ ] Sequenced plan recorded in this card's STATE block and reported to the USER
+- [x] All survey reports exist with file:line evidence — 5 reports (A4 was a delivery task,
+      not a report; its record is the manifest commit + the two message ids in STATE)
+- [x] Gap inventory written: 4 new EHT cards + 6 existing cards adopted, deduped (STATE)
+- [x] A4 delivered: manifest f97d3e23; janitor msg a64d33e5; CORE msg aefecc5e; #274 filed
+- [x] Sequenced plan recorded in STATE and reported to the USER (same session)
 - [ ] Execution begun in sequence (first N cards moved, with commits)
 
 ## Approval log

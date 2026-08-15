@@ -31,13 +31,16 @@
  * "no corpus", a retry loop must NOT key on the code alone — the stale block prints
  * `STALE` as its first stderr token precisely so a caller can tell "re-read and retry"
  * from "you are in the wrong directory", which is a distinction no exit code in the
- * trichotomy can carry.
+ * trichotomy can carry. A GRAMMAR refusal (lib/pillar/edit-guard, TRDD-2R34M8FA)
+ * prints `BLOCKED` as its first token — the third exit-2 class: the edit itself is
+ * illegal, so unlike STALE, re-reading and retrying unchanged refuses identically.
  */
 import path from 'path'
 import type { PillarKind } from './kinds'
 import { corpusRootFor } from './kinds'
 import { assertCorpusRoot, findRecord, walkRecords, type PillarRecord } from './store'
 import { documentLockKeyFor, replaceAtLines, StaleDocumentError, type LineEdit } from './edit'
+import { GuardedEditError, pillarPreWriteCheck } from './edit-guard'
 
 /** Colour, but only for a human. A pipe or a test spawn gets clean bytes. */
 export function palette(useColour: boolean) {
@@ -235,6 +238,13 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
       console.error(`STALE ${tool}: ${err.message}`)
       process.exit(2)
     }
+    if (err instanceof GuardedEditError) {
+      // `BLOCKED` is the third exit-2 class, distinct from `STALE` on purpose:
+      // STALE means re-read and retry; BLOCKED means the edit itself is illegal
+      // and retrying unchanged refuses identically.
+      console.error(`BLOCKED ${tool}: ${err.message}`)
+      process.exit(2)
+    }
     console.error(`${tool}: could not run — ${(err as Error)?.message ?? err}`)
     if (process.env.TRDD_DEBUG) console.error((err as Error)?.stack ?? '')
     process.exit(2)
@@ -284,6 +294,15 @@ export async function runPillarEdit(
 
   const result = await replaceAtLines(rec.filePath, edits, {
     lockKey: documentLockKeyFor(root, kind, rec),
+    // TRDD-2R34M8FA — the grammar gate, judged inside the lock on the exact bytes
+    // that would land (rule-id grammar, tier-wide number uniqueness, forward-only
+    // versions, stable clause ids, status: legality). A refusal exits 2 as
+    // `BLOCKED`, which — unlike `STALE` — does NOT mean re-read and retry: the
+    // edit itself is illegal and will refuse identically on every retry.
+    preWriteCheck: pillarPreWriteCheck(kind, {
+      filePath: rec.filePath,
+      corpusRecords: [...walkRecords(root, kind)],
+    }),
   })
 
   console.log(C.g(`edited ${path.relative(root, result.path) || path.basename(result.path)}`))
@@ -353,6 +372,7 @@ ${C.b(t)} — query and EDIT the ${kind.label} corpus (offline; no server)
   ${C.d('  --design-dir <p>       point at another project')}
   ${C.d('  --limit N              cap list/search output (0 = no limit)')}
 
-${C.d('exit: 0 answered · 1 nothing matched · 2 could not run (a BLOCKED edit prints STALE)')}
+${C.d('exit: 0 answered · 1 nothing matched · 2 could not run (a stale edit prints STALE —')}
+${C.d('      re-read and retry; an illegal edit prints BLOCKED — retrying refuses identically)')}
 `)
 }

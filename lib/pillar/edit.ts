@@ -139,6 +139,19 @@ export interface ReplaceOpts extends JsonLockOpts {
    * locked against a peer that used the other path.
    */
   lockKey?: string
+  /**
+   * Pre-write veto (TRDD-2R34M8FA) — runs INSIDE the lock, after the staleness
+   * CAS, on the exact lines the write would persist. Throwing refuses the whole
+   * batch with the file untouched. This is where a pillar's grammar gate lives
+   * (`lib/pillar/edit-guard.ts`): validating outside the lock would check a
+   * snapshot a peer could have replaced between the read and the acquire — the
+   * same TOCTOU window the lock itself exists to close.
+   */
+  preWriteCheck?: (ctx: {
+    prevLines: readonly string[]
+    nextLines: readonly string[]
+    changedLines: readonly number[]
+  }) => void
 }
 
 export interface ReplaceResult {
@@ -238,6 +251,9 @@ export async function replaceAtLines(
 
       // PASS 2 — apply. Ordered by line so `diff` reads top-to-bottom regardless of
       // the order the caller listed them.
+      // Snapshot BEFORE the in-place mutation below: the pre-write check needs the
+      // old lines to tell an id edit from a text edit, and `lines` is about to change.
+      const prevLines = [...lines]
       const ordered = [...edits].sort((a, b) => a.line - b.line)
       const diffParts: string[] = []
       for (const e of ordered) {
@@ -253,6 +269,17 @@ export async function replaceAtLines(
         const after = before.replace(e.expect, () => e.replace)
         lines[e.line - 1] = after
         diffParts.push(`@@ line ${e.line} @@\n-${before}\n+${after}`)
+      }
+
+      // PASS 3 — the pre-write veto, on the exact content that would be persisted.
+      // AFTER the apply (so it judges results, not intentions) and BEFORE the write
+      // (so a refusal leaves the file byte-identical, like every other block here).
+      if (opts.preWriteCheck) {
+        opts.preWriteCheck({
+          prevLines,
+          nextLines: lines,
+          changedLines: ordered.map((e) => e.line),
+        })
       }
 
       const next = lines.join('\n') + (trailingNewline ? '\n' : '')

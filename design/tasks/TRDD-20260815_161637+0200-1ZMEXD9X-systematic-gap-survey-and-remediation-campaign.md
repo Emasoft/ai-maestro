@@ -3,7 +3,7 @@ trdd-id: 1ZMEXD9X
 title: Systematic fleet gap survey and remediation campaign — the orchestrator does the orchestrator's job
 column: dev
 created: 2026-08-15T16:16:37+0200
-updated: 2026-08-15T16:38:00+0200
+updated: 2026-08-15T16:53:26+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -49,13 +49,16 @@ wrapped; its residue = InstallElement window + ChangeMarketplace limit-case pinn
 chore-stamp comment fix f6effa7c · SCRIPT-MANIFEST pillar section f97d3e23 · A4 delivery
 records: janitor msg a64d33e5, CORE msg aefecc5e.
 
-**SEQUENCED PLAN (execution order):** 1) LMAZO2ET (real invalid-state bug, highest harm) →
-2) 2R34M8FA → 3) BL0W6LGY → 4) 4EBVIYBA → 5) GADPGOIR (drift automation) → 6) synthesis
-residue: PRRD bootstrap proposal (USER-floor — needs the USER: golden G1.1 authoring) +
-github-config-audit TS-vs-py parity check (open question from A6) + the 6 uncached
-role-plugins' compliance (needs their repos or a cache install).
+**SEQUENCED PLAN (execution order):** 1) ~~LMAZO2ET~~ **DONE 2026-08-15 16:53** (commit
+a084a1d5, archived `completed` — 5-gate runGateSequence pipeline in
+services/foreign-approval-service.ts, 5 per-gate failure tests + 2 recorded neuters, 68/68
+affected suites green) → 2) 2R34M8FA → 3) BL0W6LGY → 4) 4EBVIYBA → 5) GADPGOIR (drift
+automation) → 6) synthesis residue: PRRD bootstrap proposal (USER-floor — needs the USER:
+golden G1.1 authoring) + github-config-audit TS-vs-py parity check (open question from A6) +
+the 6 uncached role-plugins' compliance (needs their repos or a cache install).
 
-**NEXT ACTION:** execute plan item 1 (LMAZO2ET) unless the USER re-prioritizes.
+**NEXT ACTION:** execute plan item 2 (TRDD-2R34M8FA — PRRD/SPEC write-guard predicate module
++ pillar-edit gate) unless the USER re-prioritizes.
 
 ## The USER's directive (2026-08-15, verbatim complaints — each becomes a survey axis)
 
@@ -111,7 +114,8 @@ A6), DQ6XN2VP (transactional all-in-one, measured 19 pipelines / 14 remaining �
 - [x] Gap inventory written: 4 new EHT cards + 6 existing cards adopted, deduped (STATE)
 - [x] A4 delivered: manifest f97d3e23; janitor msg a64d33e5; CORE msg aefecc5e; #274 filed
 - [x] Sequenced plan recorded in STATE and reported to the USER (same session)
-- [ ] Execution begun in sequence (first N cards moved, with commits)
+- [x] Execution begun in sequence — plan item 1 (LMAZO2ET) executed to `completed` the same
+      day: commit a084a1d5, per-gate failure tests, neuter runs recorded on the card
 
 ## Approval log
 

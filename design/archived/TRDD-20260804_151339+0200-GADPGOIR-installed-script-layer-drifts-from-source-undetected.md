@@ -4,7 +4,7 @@ title: The installed script layer drifts from source with nothing detecting it, 
 column: complete
 created: 2026-08-04T15:13:39+0200
 updated: 2026-08-15T23:02:54+0200
-implementation-commits: [pending]
+implementation-commits: [87e7aa17]
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session

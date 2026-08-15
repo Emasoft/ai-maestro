@@ -3,7 +3,7 @@ trdd-id: IZ6KU37Y
 title: Mirror the janitor's model-scoped-window rotation policy in the server rotator/daemon
 column: todo
 created: 2026-08-15T16:35:41+0200
-updated: 2026-08-15T16:35:41+0200
+updated: 2026-08-15T17:03:28+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -53,6 +53,16 @@ dark behind `AIM_FLEET_MODEL_FALLBACK=1` (see PROJECT memory page
 `model-scoped-window-fallback` and TRDD-DPPYVLVH, which awaits the USER to arm it): rule 2
 above is exactly the case that hands off to that fallback, so the two must agree on the 90%
 thresholds and on skipping rotation for scoped-only walls.
+
+## Status notes
+
+- 2026-08-15 ~16:50: janitor v3.3.2 PUBLISHED (their ping: tag v3.3.2, PUBLISH_EXIT=0,
+  install smoke clean) carrying the scoped-window rotation trigger f185e521 — the policy to
+  mirror is now LIVE on their side; the daemon auto-rolls on its next fire. Their WKTD5JTC
+  Phase 1 wedge recovery (v3.3.1) unchanged.
+- Blocking context: the server's receiving fallback leg is DARK behind
+  AIM_FLEET_MODEL_FALLBACK=1 pending the USER ruling on TRDD-DPPYVLVH (escalated urgent
+  2026-08-15 with the handoff-onto-dark-receiver incident).
 
 ## Acceptance
 

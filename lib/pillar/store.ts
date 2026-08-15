@@ -257,15 +257,34 @@ export function* recordsOf(doc: PillarDocument, kind: PillarKind): Generator<Pil
     if (id) yield { ...base, id, line: null, text: doc.body }
     return
   }
-  const { declarationRe, idFromMatch } = kind.source
+  const { declarationRe, idFromMatch, preferDeclaration } = kind.source
   const lines = doc.body.split('\n')
+  if (!preferDeclaration) {
+    for (let i = 0; i < lines.length; i++) {
+      const m = declarationRe.exec(lines[i])
+      // FILE-relative, never body-relative. `line` is what an editor, `sed -n Np`, and
+      // `replaceAtLines`'s compare-and-swap all mean by a line number, so a body-relative
+      // value here is not an off-by-N in a display string — it aims a WRITE at the wrong
+      // line. It shipped that way and only the CAS refusing an edit exposed it.
+      if (m) yield { ...base, id: idFromMatch(m), line: i + 1 + doc.bodyLineOffset, text: lines[i] }
+    }
+    return
+  }
+  // Declaration-vs-citation pick (TRDD-IG1MMYFA — see the RecordSource field doc): per
+  // normalized id, the first preferDeclaration-shaped line wins; else the first match.
+  // Losing lines are line-leading CITATIONS and yield no record. Yield in line order.
+  const winners = new Map<string, { i: number; id: string; preferred: boolean }>()
   for (let i = 0; i < lines.length; i++) {
     const m = declarationRe.exec(lines[i])
-    // FILE-relative, never body-relative. `line` is what an editor, `sed -n Np`, and
-    // `replaceAtLines`'s compare-and-swap all mean by a line number, so a body-relative
-    // value here is not an off-by-N in a display string — it aims a WRITE at the wrong
-    // line. It shipped that way and only the CAS refusing an edit exposed it.
-    if (m) yield { ...base, id: idFromMatch(m), line: i + 1 + doc.bodyLineOffset, text: lines[i] }
+    if (!m) continue
+    const id = idFromMatch(m)
+    const key = kind.normalizeId(id)
+    const preferred = preferDeclaration.test(lines[i])
+    const prev = winners.get(key)
+    if (!prev || (!prev.preferred && preferred)) winners.set(key, { i, id, preferred })
+  }
+  for (const w of [...winners.values()].sort((a, b) => a.i - b.i)) {
+    yield { ...base, id: w.id, line: w.i + 1 + doc.bodyLineOffset, text: lines[w.i] }
   }
 }
 

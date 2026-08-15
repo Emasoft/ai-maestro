@@ -38,7 +38,25 @@ export type RecordSource =
   /** One record per document; the id is in the FILENAME. (TRDD) */
   | { mode: 'per-document'; idFromFilename: (fileName: string) => string | null }
   /** N records per document; each DECLARATION line yields one. (PRRD, SPEC) */
-  | { mode: 'per-line'; declarationRe: RegExp; idFromMatch: (m: RegExpExecArray) => string }
+  | {
+      mode: 'per-line'
+      declarationRe: RegExp
+      idFromMatch: (m: RegExpExecArray) => string
+      /**
+       * Declaration-vs-citation discriminator (TRDD-IG1MMYFA). A LINE-LEADING
+       * citation (`` `AIO-RULE-01` is the only path. ``) matches `declarationRe`
+       * exactly like the real declaration does, so when several lines of ONE
+       * document match for the SAME normalized id, only one may yield a record:
+       * the first line that ALSO matches this pattern (the bold-named declaration
+       * form), else the first matching line. Measured on the live corpus: the
+       * bold form wins for `AIO-RULE-01` (:91 over the :328 citation) and
+       * `GOV-INV-16` (:2047 over the EARLIER :1387 citation — which is why
+       * first-occurrence alone is not enough), and single-occurrence unnamed
+       * declarations (`RP-SKILL-MENU-01`) still yield. Absent → every match
+       * yields (PRRD keeps duplicates VISIBLE so the lint can report them).
+       */
+      preferDeclaration?: RegExp
+    }
 
 export interface PillarKind {
   name: PillarName
@@ -114,9 +132,22 @@ export const TRDD_KIND: PillarKind = {
 // ── SPEC ─────────────────────────────────────────────────────────────────────
 
 // A clause is DECLARED line-anchored in backticks: `3P-KAN-06` **name** — prose.
-// Verified: 38 such declarations in 3-pillars-spec.md, matching its 38 distinct ids.
-// Families in use across design/specs/: 3P, AIO, GOV, RP, STS.
-const SPEC_DECLARATION_RE = /^`([A-Z0-9]{2,4}-[A-Z]{2,8}-\d{2})`/
+//
+// GRAMMAR RE-DERIVED FROM A FULL-CORPUS MEASUREMENT (TRDD-IG1MMYFA, 2026-08-15 — every
+// line-leading backtick token across design/specs/*.md inventoried and classified; the
+// previous `{2,4}-{2,8}-\d{2}` shape was measured on ONE file and under-matched 44 live
+// clauses). Families measured: `3P-XXX-NN` `AIO-XXXX-NN` `GOV-XXX-NN` `STS-XXX-NN`
+// (three segments) · `TERM-NN` `COMM-NN` `TITLES-NN` `PERM-NN` `OVERVIEW-NN` `BND-NN`
+// (two segments) · `RP-SKILL-MENU-NN` (four) · `RP-ASSISTANT-NN` (9-char middle) ·
+// `STS-R0.1`-style (dotted tail) · `RP-TOML-SHAPE` (word tail, no digits). The covering
+// shape: ALL-CAPS dash-joined segments — first segment 2+ alnum, one or more further
+// segments (dots allowed past the first).
+//
+// DELIBERATELY EXCLUDED, both measured in the same inventory: single-segment dotted
+// governance-rule ids (`R17.1`, `G1.1`, `R41.enf-token`) — those are GOVERNANCE-RULES.md's
+// namespace, CITED by governance-spec, not declared as spec clauses (no dash → no match);
+// and template meta-tokens (`STS-<FAMILY>-NN` — the `<` breaks the segment class).
+const SPEC_DECLARATION_RE = /^`([A-Z0-9]{2,}(?:-[A-Z0-9.]{1,10})+)`/
 
 export const SPEC_KIND: PillarKind = {
   name: 'spec',
@@ -131,8 +162,16 @@ export const SPEC_KIND: PillarKind = {
     mode: 'per-line',
     declarationRe: SPEC_DECLARATION_RE,
     idFromMatch: (m) => m[1].toUpperCase(),
+    // The bold-named form `` `ID` **name** `` wins over a line-leading citation of the
+    // same id; else first occurrence. See the RecordSource field's doc for the measured
+    // cases that force exactly this rule.
+    preferDeclaration: /^`[^`]+` \*\*/,
   },
   normalizeId: (raw) => raw.trim().toUpperCase(),
+  // NOT widened alongside the declaration grammar, deliberately: the generic all-caps
+  // dashed shape as a PROSE-WIDE citation matcher would claim `UTF-8`-class tokens and
+  // flood the DAG lint with unresolvable "citations". Widening this is TRDD-IG1MMYFA's
+  // open tail — it needs its own before/after `yarn pillars:lint` diff, not a ride-along.
   citationRe: /\b([A-Z0-9]{2,4}-[A-Z]{2,8}-\d{2})\b/g,
 }
 

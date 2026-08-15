@@ -3,7 +3,7 @@ trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: proposal
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-07T03:55:44+0200
+updated: 2026-08-15T16:43:15+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -29,7 +29,24 @@ external-refs: [Emasoft/ai-maestro-janitor#222]
 
 # Arm the model-fallback leg, and rule on the rotation policy it routes around
 
-## Why this is its own card
+## ⚠ ESCALATED URGENT — 2026-08-15 incident evidence (read before the body)
+
+Today's Fable-wall produced a TOTAL continuity failure whose root-cause chain (janitor
+Claude's report, cross-session message 2026-08-15) runs straight through this card: every
+hung agent was `server_owned`, so the janitor's shipped retry-wedge ESC recovery (their
+WKTD5JTC Phase 1, in v3.3.1) and its /model-opus fallback detector CORRECTLY handed off to
+the server — and the server's receiving leg is exactly the dark `AIM_FLEET_MODEL_FALLBACK=1`
+switch this card exists to arm. A handoff onto a dark receiver: the janitor stood down,
+nothing acted, agents hung. The janitor fixed their half the same day (scoped-window rotation
+trigger, their f185e521; mirrored here as TRDD-IZ6KU37Y). The USER's directive today ("make
+rotation a perfect mechanism that never fails") is strong evidence FOR arming.
+
+Two decisions for the USER, both on this card:
+1. **Arm** `AIM_FLEET_MODEL_FALLBACK=1` per the watched-first-switch procedure below.
+2. **Or, while it stays dark**: rule on the janitor's proposed interim — the server should
+   NOT be treated as the wedge-recovery/model-fallback owner of harness agents (else the
+   janitor keeps correctly standing down while agents hang). That is a cross-component
+   ownership change; the hub will not adopt it without this ruling.
 
 `TRDD-IALQ43QP` built the model-scoped fallback and landed it **dark**. That work was Tier 0 —
 in-scope, reversible, inert until a flag is set — so it needed no approval and got none.

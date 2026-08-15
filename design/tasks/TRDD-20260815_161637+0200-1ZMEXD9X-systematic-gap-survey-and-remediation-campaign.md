@@ -3,7 +3,7 @@ trdd-id: 1ZMEXD9X
 title: Systematic fleet gap survey and remediation campaign — the orchestrator does the orchestrator's job
 column: dev
 created: 2026-08-15T16:16:37+0200
-updated: 2026-08-15T16:53:26+0200
+updated: 2026-08-15T22:47:49+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -66,8 +66,22 @@ RP-SKILL-MENU-xx, STS-Rn.n invisible to the store — plus 2 citation conflation
 check (open question from A6) + the 6 uncached role-plugins' compliance (needs their repos
 or a cache install).
 
-**NEXT ACTION:** execute plan item 3b (TRDD-IG1MMYFA — SPEC grammar widening from a
-recorded corpus measurement) unless the USER re-prioritizes.
+**NEXT ACTION:** execute plan item 4 (**TRDD-4EBVIYBA** — the R51 ratchet scan surface:
+a detector over `app/api` + `services` that finds the pipelines a transaction should cover,
+with an allowlist carrying REASONS and a seeded positive control) unless the USER
+re-prioritizes.
+
+**Items 1-3b are DONE** (each archived `completed`, with recorded neuters):
+`LMAZO2ET` (a084a1d5) · `2R34M8FA` (b3a4ec2b) · `BL0W6LGY` (c29661bb) ·
+`IG1MMYFA` (1c01e02a + c0609620 — `specgrep lint` now exit 0 clean over 263 records, and
+`yarn pillars:lint` exit 0 over 453 documents).
+
+**Interleaved USER directives, both landed and outside the numbered plan:**
+the scoped-window rotation mirror (`TRDD-IZ6KU37Y`, 0497a2ba) and server-triggered
+externalized compaction (`TRDD-DSQUWKVI`, 2be39063 + fcbeb021). The model-fallback arming
+(`TRDD-DPPYVLVH`, 56047fa5) is live but its human-watched first switch is still PENDING a
+live Fable agent — it must not be recorded verified until `confirmed=true` and the pane flip
+are both observed.
 
 ## The USER's directive (2026-08-15, verbatim complaints — each becomes a survey axis)
 

@@ -1,9 +1,10 @@
 ---
 trdd-id: IG1MMYFA
 title: SPEC declaration grammar under-matches the live corpus — 44 clauses invisible to the store
-column: todo
+column: completed
+implementation-commits: [1c01e02a, c0609620]
 created: 2026-08-15T17:13:32+0200
-updated: 2026-08-15T17:13:32+0200
+updated: 2026-08-15T22:47:09+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -71,8 +72,25 @@ fix the grammar.
 
 ## Acceptance
 
-- [ ] Grammar widened from a recorded corpus measurement; declaration-vs-citation
-      discriminator chosen and documented in kinds.ts
-- [ ] `specgrep show TERM-01` / `STS-R0.1` / `RP-ASSISTANT-01` resolve
-- [ ] Census/conformance tests updated with independently re-derived counts
-- [ ] `yarn pillars:lint` before/after diff reviewed; `specgrep lint` clean or justified
+- [x] Grammar widened from a recorded corpus measurement; declaration-vs-citation
+      discriminator chosen and documented in kinds.ts (`1c01e02a` + `c0609620`). The
+      discriminator is BOLD-PREFERRED: `` `ID` **name** `` is the declaration, everything else
+      is a citation. It was forced by measurement, not taste — `GOV-INV-16`'s citation PRECEDES
+      its declaration, so a first-occurrence rule alone picks the wrong line, while
+      `AIO-RULE-01`'s bold declaration comes first. One rule has to satisfy both.
+- [x] `specgrep show TERM-01` / `STS-R0.1` / `RP-ASSISTANT-01` resolve — verified this session:
+      `governance-spec.md:98`, `scenario-tests-spec.md:80`, `role-plugins-spec.md:288`.
+- [x] Census/conformance tests updated with independently re-derived counts — 263 records
+      (80/59/48/43/33), re-derived through `walkRecords` rather than copied from failure output,
+      which is what stops the count and the code agreeing by construction.
+- [x] `yarn pillars:lint` exit 0 (453 documents, 447 trdd + 6 spec — the reference DAG holds);
+      `specgrep lint` exit 0, 6 documents / 263 records, CLEAN. The 46 findings from the lint's
+      first live run are gone: 44 were the grammar under-match (now parsed) and 2 were the
+      citation conflation (now discriminated).
+
+## Open tail — deliberately NOT done
+
+`citationRe` was left un-widened. Widening it risks UTF-8-class false positives across ordinary
+prose, and it needs its own before/after DAG-lint diff to be judged — which is a different piece
+of work with a different verification, not a same-turn addition. The reason is recorded in
+`kinds.ts` beside the regex so the next reader meets it there rather than inferring an oversight.

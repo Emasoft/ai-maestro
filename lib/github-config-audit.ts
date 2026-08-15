@@ -109,7 +109,10 @@ export interface RepoFacts {
   slug: string
   admin: boolean | null
   defaultBranch?: string | null
-  /** FULL per-ruleset detail objects (with their `rules` array); null = the list probe failed. */
+  /** Per-ruleset detail objects (with their `rules` array); null = the LIST probe failed. An entry
+   *  whose own DETAIL fetch failed is kept as its list summary tagged `_detail_unresolved` (see
+   *  `fullRulesets`): it still carries `target`/`enforcement`, so it counts as protection, but its
+   *  rule set is unknown rather than empty. */
   rulesets?: Array<Record<string, unknown>> | null
   /** true = 200, false = definitive 404, null = indeterminate. */
   classicProtected?: boolean | null
@@ -197,6 +200,16 @@ function ruleTypes(ruleset: Record<string, unknown>): Set<string> {
   return out
 }
 
+/** Tag for a ruleset whose per-ruleset DETAIL fetch failed, so its `rules` array — hence its
+ *  rule-type set — is UNKNOWN rather than empty. Same key as the janitor's
+ *  `github_config_audit._detail_unresolved` (their janitor#244), deliberately: the two sides must
+ *  stay interchangeable, and a facts blob written by one has to mean the same thing to the other. */
+const DETAIL_UNRESOLVED = '_detail_unresolved'
+
+function detailUnresolved(rs: Record<string, unknown>): boolean {
+  return rs[DETAIL_UNRESOLVED] === true
+}
+
 function finding(slug: string, code: FindingCode): Finding {
   return { slug, code, detail: FINDING_BLURB[code] }
 }
@@ -207,6 +220,9 @@ function finding(slug: string, code: FindingCode): Finding {
  *
  *   admin is not true  → []  the viewer cannot fix it, so nagging is pure noise
  *   rulesets is null   → []  we could not read them, so we cannot prove any gap
+ *   a branch ruleset is unresolved → no NO_PR_REVIEW / NO_REQUIRED_CHECKS: those two are inferred
+ *                                    from the UNION of rule types, and a union missing an unread
+ *                                    member is a LOWER BOUND that proves no absence
  */
 export function classifyRepo(facts: RepoFacts): Finding[] {
   if (facts.admin !== true) return []
@@ -221,6 +237,11 @@ export function classifyRepo(facts: RepoFacts): Finding[] {
   const allBranchRuleTypes = new Set<string>()
   for (const rs of branchRs) for (const t of ruleTypes(rs)) allBranchRuleTypes.add(t)
 
+  // A ruleset whose detail we could not read contributes NO rule types, so the union above is a
+  // LOWER BOUND rather than the whole truth. Any finding that means "this type is ABSENT" must
+  // therefore stand down — see the gate below.
+  const anyUnresolved = branchRs.some(detailUnresolved)
+
   const hasBranchProtection = branchRs.length > 0 || facts.classicProtected === true
   const findings: Finding[] = []
 
@@ -231,6 +252,9 @@ export function classifyRepo(facts: RepoFacts): Finding[] {
   }
 
   // LINEAR_HISTORY — independent of everything else: it jams merges even on an otherwise-fine repo.
+  // Deliberately NOT gated on `anyUnresolved`: this fires on a type being PRESENT, so an unread
+  // ruleset can only make us miss one, never invent one. Missing a finding is the safe direction;
+  // claiming a gap we could not prove is the one this file exists to prevent.
   if (allBranchRuleTypes.has('required_linear_history')) {
     findings.push(finding(facts.slug, 'LINEAR_HISTORY'))
   }
@@ -241,7 +265,7 @@ export function classifyRepo(facts: RepoFacts): Finding[] {
   // required_pull_request_reviews / required_status_checks live in the classic protection body,
   // which this audit does not read. Gating on `hasBranchProtection` (which classic satisfies)
   // would false-flag a compliant repo, and the fix skill would then mutate it.
-  if (branchRs.length > 0) {
+  if (branchRs.length > 0 && !anyUnresolved) {
     if (!allBranchRuleTypes.has('pull_request')) {
       findings.push(finding(facts.slug, 'NO_PR_REVIEW'))
     }
@@ -321,21 +345,48 @@ async function detectDefaultBranch(slug: string): Promise<string | null> {
 
 /**
  * Every ruleset for `slug` WITH its `rules` array resolved. The LIST endpoint returns summaries
- * without the rules, so each ruleset's detail is fetched. Returns null if the list probe itself
- * failed (indeterminate → the classifier stays silent); a per-ruleset detail failure drops only
- * that ruleset.
+ * without the rules, so each ruleset's detail is fetched. Returns null if the LIST probe itself
+ * failed (indeterminate → the classifier stays silent).
+ *
+ * A per-ruleset DETAIL failure KEEPS the ruleset, as its list summary tagged `DETAIL_UNRESOLVED`.
+ * This used to `continue` — dropping it — which is the one inference this file forbids everywhere
+ * else: a failed read became "this ruleset does not exist". Two false findings followed from it,
+ * and the second is the sharp one:
+ *
+ *   · its rule types vanish from the union → NO_PR_REVIEW / NO_REQUIRED_CHECKS on a repo that may
+ *     well have both (the union gate above now stands down instead);
+ *   · if it was the repo's ONLY active branch ruleset, `branchRs.length` fell to 0 → UNPROTECTED
+ *     on a PROTECTED repo, from one transient 5xx or secondary rate-limit.
+ *
+ * The summary carries `target` and `enforcement`, so the tagged shell still counts as protection
+ * and still classifies as branch-vs-tag — only its rule set is unknown. Mirrors the janitor's
+ * `_full_rulesets` (their janitor#244), which hit this first.
  */
-async function fullRulesets(slug: string): Promise<Array<Record<string, unknown>> | null> {
-  const [rc, body] = await ghJson(['api', `repos/${slug}/rulesets`])
+export async function fullRulesets(
+  slug: string,
+  // Injected for the same reason `auditFleet` takes `gather`: the TAGGING below is the load-bearing
+  // half of the janitor#244 fix, and a classifier test driving RepoFacts fixtures cannot see it
+  // regress. A fake api drives it without mocking node:child_process internals.
+  api: (apiPath: string) => Promise<[number | null, unknown]> = p => ghJson(['api', p]),
+): Promise<Array<Record<string, unknown>> | null> {
+  const [rc, body] = await api(`repos/${slug}/rulesets`)
   if (rc !== 0 || !Array.isArray(body)) return null
   const detailed: Array<Record<string, unknown>> = []
   for (const rs of body) {
-    const id = (rs as { id?: unknown })?.id
-    if (typeof id !== 'number' && typeof id !== 'string') continue
-    const [drc, detail] = await ghJson(['api', `repos/${slug}/rulesets/${id}`])
-    if (drc === 0 && detail && typeof detail === 'object') {
-      detailed.push(detail as Record<string, unknown>)
+    // A non-object entry is not a ruleset at all — it carries no target/enforcement, so there is
+    // nothing to keep and `activeRulesets` would drop it anyway.
+    if (!rs || typeof rs !== 'object') continue
+    const summary = rs as Record<string, unknown>
+    const id = summary.id
+    if (typeof id === 'number' || typeof id === 'string') {
+      const [drc, detail] = await api(`repos/${slug}/rulesets/${id}`)
+      if (drc === 0 && detail && typeof detail === 'object') {
+        detailed.push(detail as Record<string, unknown>)
+        continue
+      }
     }
+    // Detail unfetchable (bad/missing id, non-zero rc, or a non-object body): unknown, not absent.
+    detailed.push({ ...summary, [DETAIL_UNRESOLVED]: true })
   }
   return detailed
 }

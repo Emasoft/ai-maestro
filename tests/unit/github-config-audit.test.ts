@@ -35,6 +35,7 @@ import path from 'node:path'
 import {
   classifyRepo,
   fleetRepoSlugs,
+  fullRulesets,
   auditFleet,
   runGithubConfigAudit,
   FINDING_BLURB,
@@ -265,5 +266,139 @@ describe('runGithubConfigAudit — the stamp', () => {
     // An empty FleetAudit would serialize as "0 repos scanned, 0 findings" — indistinguishable
     // from a clean fleet.
     expect(await auditFleet({ slugs: [] })).toBeNull()
+  })
+})
+
+/**
+ * THE UNRESOLVED-RULESET TRI-STATE (the janitor's janitor#244, ported here).
+ *
+ * `fullRulesets` used to DROP a ruleset whose per-ruleset detail fetch failed. That is the one
+ * inference this module forbids everywhere else — a failed read became "this ruleset does not
+ * exist" — and two false findings followed, the second being the sharp one: if the dropped
+ * ruleset was the repo's ONLY active branch ruleset, `branchRs.length` fell to 0 and a PROTECTED
+ * repo was reported UNPROTECTED off one transient 5xx.
+ *
+ * These tests come in POSITIVE-CONTROL PAIRS on purpose. Each "stays silent" assertion is `[]` or
+ * a missing code, which is equally satisfied by a classifier that found nothing for any other
+ * reason — so each is paired with a fixture identical except for the tag, asserting the finding
+ * DOES fire. Without the pair, the gate could be deleted and every assertion would still pass.
+ *
+ * BOTH ALTITUDES are driven, which is the other half of the point: the classifier tests below feed
+ * `RepoFacts` fixtures directly, so they cannot see `fullRulesets` stop TAGGING. The last three
+ * tests drive `fullRulesets` itself through an injected api and hand its real output to
+ * `classifyRepo`, so a regression in either half reddens something.
+ */
+describe('unresolved ruleset detail — unknown is not absent', () => {
+  /** Two active branch rulesets' worth of facts, differing only in whether one is unresolved. */
+  function withBranch(rs: Record<string, unknown>): RepoFacts {
+    return cleanFacts({
+      rulesets: [rs, { target: 'tag', enforcement: 'active', rules: [] }],
+    })
+  }
+
+  it('POSITIVE CONTROL — a RESOLVED branch ruleset carrying neither rule DOES flag both gaps', () => {
+    const codes = classifyRepo(
+      withBranch({ target: 'branch', enforcement: 'active', rules: [] }),
+    ).map(f => f.code)
+    expect(codes).toContain('NO_PR_REVIEW')
+    expect(codes).toContain('NO_REQUIRED_CHECKS')
+  })
+
+  it('stays silent on NO_PR_REVIEW / NO_REQUIRED_CHECKS when a branch ruleset is unresolved', () => {
+    // Byte-for-byte the fixture above except `_detail_unresolved`. Both findings are inferred from
+    // a rule type being ABSENT from the union, and an unread ruleset makes that union a lower
+    // bound — so absence is unproven and the classifier must not claim it.
+    expect(
+      classifyRepo(withBranch({ target: 'branch', enforcement: 'active', _detail_unresolved: true })),
+    ).toEqual([])
+  })
+
+  it('does NOT claim UNPROTECTED when the only branch ruleset is unresolved', () => {
+    // The sharp case. The tagged shell keeps `target`/`enforcement` from the list summary, so it
+    // still counts toward branchRs.length — protection is known to exist, only its rules are not.
+    const codes = classifyRepo(
+      cleanFacts({
+        rulesets: [{ target: 'branch', enforcement: 'active', _detail_unresolved: true }],
+        classicProtected: false,
+      }),
+    ).map(f => f.code)
+    expect(codes).not.toContain('UNPROTECTED')
+    // ...and it is not silent for the wrong reason: the missing TAG ruleset is still reported.
+    expect(codes).toEqual(['NO_TAG_PROTECT'])
+  })
+
+  it('POSITIVE CONTROL — a repo with genuinely NO rulesets is still UNPROTECTED', () => {
+    expect(
+      classifyRepo(cleanFacts({ rulesets: [], classicProtected: false })).map(f => f.code),
+    ).toContain('UNPROTECTED')
+  })
+
+  it('still reports LINEAR_HISTORY beside an unresolved ruleset — presence, not absence', () => {
+    // Deliberately NOT gated: this fires on a type being PRESENT, so an unread ruleset can only
+    // make us MISS one, never invent one. The same fixture pins both halves of that decision.
+    const codes = classifyRepo(
+      cleanFacts({
+        rulesets: [
+          { target: 'branch', enforcement: 'active', rules: [{ type: 'required_linear_history' }] },
+          { target: 'branch', enforcement: 'active', _detail_unresolved: true },
+          { target: 'tag', enforcement: 'active', rules: [] },
+        ],
+      }),
+    ).map(f => f.code)
+    expect(codes).toEqual(['LINEAR_HISTORY'])
+  })
+
+  // ── the TAGGING half: fullRulesets itself, driven through an injected api ──────────────────────
+
+  /** Routes an api path to its canned `[rc, body]`; anything unrouted answers indeterminate. */
+  function fakeApi(routes: Record<string, [number | null, unknown]>) {
+    return async (p: string): Promise<[number | null, unknown]> => routes[p] ?? [null, null]
+  }
+
+  it('KEEPS a ruleset whose detail fetch failed, tagged and still branch-targeted', async () => {
+    const out = await fullRulesets(
+      'Emasoft/x',
+      // The list resolves; the per-ruleset detail is unrouted, i.e. the transient failure.
+      fakeApi({
+        'repos/Emasoft/x/rulesets': [0, [{ id: 7, target: 'branch', enforcement: 'active' }]],
+      }),
+    )
+    expect(out).toHaveLength(1)
+    expect(out![0]._detail_unresolved).toBe(true)
+    // The summary fields must survive — they are what stops the false UNPROTECTED downstream.
+    expect(out![0].target).toBe('branch')
+    expect(out![0].enforcement).toBe('active')
+
+    // Both altitudes joined: the REAL fullRulesets output through the REAL classifier.
+    expect(
+      classifyRepo({
+        slug: 'Emasoft/x',
+        admin: true,
+        rulesets: out,
+        classicProtected: false,
+        hasWorkflows: true,
+      }).map(f => f.code),
+    ).not.toContain('UNPROTECTED')
+  })
+
+  it('POSITIVE CONTROL — returns the resolved detail, untagged, when the fetch succeeds', async () => {
+    const out = await fullRulesets(
+      'Emasoft/x',
+      fakeApi({
+        'repos/Emasoft/x/rulesets': [0, [{ id: 7, target: 'branch', enforcement: 'active' }]],
+        'repos/Emasoft/x/rulesets/7': [
+          0,
+          { id: 7, target: 'branch', enforcement: 'active', rules: [{ type: 'pull_request' }] },
+        ],
+      }),
+    )
+    expect(out).toHaveLength(1)
+    expect(out![0]._detail_unresolved).toBeUndefined()
+    expect(out![0].rules).toEqual([{ type: 'pull_request' }])
+  })
+
+  it('returns null when the LIST probe fails — indeterminate, never an empty fleet', async () => {
+    // Distinct from "this repo has no rulesets": null makes the classifier silent entirely.
+    expect(await fullRulesets('Emasoft/x', fakeApi({}))).toBeNull()
   })
 })

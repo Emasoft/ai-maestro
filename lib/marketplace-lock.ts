@@ -19,8 +19,32 @@
 // "the collision backstop", not the primary mechanism. The residual window is a `#N` standalone
 // daemon running while the server is also live. Closing it properly needs the janitor to move
 // `marketplace-op.lock` into the FIXED control dir (`~/.claude/janitor-control/`), exactly as it
-// already did for `oauth-rotator-tick.lock` — tracked on ai-maestro-janitor#100. Until then this
-// lock is honest about what it covers.
+// already did for `oauth-rotator-tick.lock`. Until then this lock is honest about what it covers.
+//
+// ⚠ THE RESIDUAL WINDOW IS NOT HYPOTHETICAL, AND IT IS NOT TRACKED — both corrected 2026-08-16
+// (TRDD-PE54D95Q). This block used to end "tracked on ai-maestro-janitor#100". That issue is
+// CLOSED and is titled "[COORDINATION] ai-maestro absorbs the daemon's functions … need your
+// daemon inventory"; the nearest same-numbered neighbour, Emasoft/ai-maestro#100, is a closed
+// umbrella list. Measured the same night: TEN open janitor issues, none of them this. So the
+// sentence told every reader the gap was somebody's job when no open issue carried it — worse
+// than silence, because it stops the next reader from filing.
+//
+// MEASURED EVIDENCE that the window bites (all from this host, 2026-08-15):
+//   • `RefreshAllMarketplaces` failed 12 times between 08-06 and 08-15, each recorded as a bare
+//     `Command failed: claude plugin marketplace update` with the CLI's stdout discarded.
+//   • The 22:12:22 failure is exactly 1800 s — the refresh timeout — after its own tick's
+//     preceding step-0 row, i.e. a timeout kill.
+//   • The janitor daemon's own log puts its `marketplace-refresh` at 21:25:23→21:55:31, so it was
+//     still running when the server started one at 21:42:22: a 13 min 9 s overlap.
+//   • Its durations that day: 1815 s · 84 s · 1134 s · 1254 s · 1808 s. TWO exceed the server's
+//     1800 s cap, so contention alone can push a healthy refresh past the kill.
+//
+// AND THE JANITOR IS NOT AT FAULT — check before blaming it. The server logged NOTHING in hours
+// 18, 19 and 20 that day and booted at 21:36:10, so the daemon's 18:45, 20:04 and 21:25 refreshes
+// all began while the server was DOWN, which is exactly when it is supposed to own the chore. The
+// collision is ours: the server's boot catch-up starts a refresh without checking whether the
+// daemon it just displaced is still finishing one. Boot is therefore the HIGHEST-risk moment for
+// this window, not a random one — the daemon is active by definition immediately before we start.
 
 import { tryAcquireServerLock, withServerLock, type ServerLock } from './server-lockfile'
 

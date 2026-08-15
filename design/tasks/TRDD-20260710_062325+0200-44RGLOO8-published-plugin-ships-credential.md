@@ -36,11 +36,28 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-web-scenario-tester", "ht
 
 # TRDD-44RGLOO8 — the publish carried the credential out of the repo
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10, AMENDED 2026-08-16
 
-**Do not act on this without the USER. Do not file a public issue on the plugin repo
-until the credential is rotated** — see "Why no issue yet" below. An agent must never
-rotate a credential.
+**⚠ SUPERSEDED — do NOT carry forward (amended 2026-08-16T01:43, verified, not inferred):**
+
+- **✗ "The credential is confirmed live, not stale."** It WAS, on 2026-07-10. **Rotation landed
+  2026-07-17** (`TRDD-E9BZ5P7S`, archived `completed`), so every copy — the tags, the plugin
+  caches, this one — carries a DEAD string. Proof without touching either value: that repo's
+  `pushedAt` is **2026-07-08T16:48Z**, nine days BEFORE the rotation, so what is public cannot be
+  the current credential. A date comparison settles it; comparing values would mean handling the
+  secret to prove the secret is safe.
+- **✗ "Do not file a public issue until the credential is rotated."** That precondition is now
+  MET, so the card's own disclosure order no longer forbids an issue. I still filed none, for a
+  different and smaller reason: the string is dead, so an issue would add a signpost and buy
+  nothing. That is a judgment call, not the standing prohibition it looks like above.
+- **✓ STILL TRUE, and still the point.** Re-measured today: the repo is `visibility: PUBLIC` and
+  `references/SCENARIOS_TESTS_RULES.md` still carries **1** `governance_password:` line with a
+  NON-env literal and **0** mentions of `AIM_GOVERNANCE_PASSWORD`. **The live risk is the MANDATE,
+  not the literal** — the field is still documented as *"The actual password value, in quotes"*,
+  so the next scenario authored in that plugin publishes the CURRENT credential into a public
+  repo. Today's literal is spent; the instruction that produced it is not.
+
+**Do not act on this without the USER.** An agent must never rotate a credential.
 
 **What was found.** While settling TRDD-91LLU879 part 3 (consume-the-plugin vs
 keep-the-copy), I checked whether the published plugin's copy of the scenario rules

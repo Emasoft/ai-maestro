@@ -97,6 +97,9 @@ hibernation · subconscious · help
   (the Wizard's G03 guard rejects any other, and `DeleteAgent` refuses `alsoDeleteFolder`
   outside it). There is still no way to register an agent WITHOUT a folder.
 - `resolve <name> | --cwd <dir>` → the agent's tmux session name
+- Every `<agent>` argument also accepts the literal `self` / `<self>` — resolved by
+  `scripts/shell-helpers/common.sh::_resolve_agent_id` via `GET /api/agents/me` (the caller's
+  own AID), not only the continuity verbs that spell `<self>` in their usage lines.
 - `config <agent>` → consolidated config (teams, repo, docker, tasks, AID)
 - `presence` → the human user's last input + idle window
 - `hibernation [--json|--table]` → fleet roster: `running | hibernated | crashed | never_woken`

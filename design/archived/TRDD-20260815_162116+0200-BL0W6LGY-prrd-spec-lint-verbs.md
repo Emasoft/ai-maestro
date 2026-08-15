@@ -1,9 +1,10 @@
 ---
 trdd-id: BL0W6LGY
 title: prrdgrep and specgrep have no lint or validate verb — a malformed document has no detection path
-column: dev
+column: completed
 created: 2026-08-15T16:21:16+0200
-updated: 2026-08-15T17:07:15+0200
+updated: 2026-08-15T17:15:20+0200
+implementation-commits: [c29661bb]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -49,7 +50,23 @@ task).
 
 ## Acceptance
 
-- [ ] `prrdgrep lint` + `specgrep lint` exist, share the guard's predicate module
-- [ ] Exit 0/1/2 with non-vacuity in the tool
-- [ ] Seeded-violation test per predicate + neuter runs
-- [ ] SPEC corpus (design/specs/*.md, 4 files) lints clean or its findings are carded
+- [x] `prrdgrep lint` + `specgrep lint` (alias `validate`) exist — `lintPillarLines`/
+      `lintPillarCorpus` in the SAME module as the write gate, running the SAME shared
+      finders (declIdReader, prrdNumberLines, specIdLines, statusTokenViolation —
+      refactored out of the guard in the same commit, c29661bb)
+- [x] Exit 0/1/2 with non-vacuity IN THE TOOL (0 documents scanned → 2; CLI-level test
+      drives all three codes; verified live: `prrdgrep lint` with no PRRD.md → exit 2)
+- [x] Seeded-violation test per predicate — 13 tests in `tests/unit/pillar-lint.test.ts`
+      incl. false-positive controls (digit-free bold bullets, `yarn build` tokens,
+      body-prose status:) and a guard↔lint agreement cross-check. Neuters: N1 (predicates
+      no-op) → exactly the 7 predicate/exit-1 tests red, 6 controls green; N2 (non-vacuity
+      branch removed) → exactly the empty-corpus test red. Both reverted, blobs = HEAD
+- [x] SPEC corpus lint result CARDED — first live run: 46 REAL findings (44 declarations
+      the canonical grammar under-matches + 2 line-leading-citation conflations), every
+      sampled line read first-hand → TRDD-IG1MMYFA (grammar widening). The lint is correct;
+      the grammar is the defect — findings stand until IG1MMYFA lands
+
+## Approval log
+
+- 2026-08-15T17:15:20+0200 — COMPLETED by ai-maestro (self-mandate, min-approval-requirement
+  none). Implementation c29661bb; the corpus findings are owned by TRDD-IG1MMYFA.

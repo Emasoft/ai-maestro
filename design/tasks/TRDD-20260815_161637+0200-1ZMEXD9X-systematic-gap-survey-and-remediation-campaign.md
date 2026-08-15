@@ -22,7 +22,7 @@ scope: project
 project-id: ai-maestro
 labels: [campaign, survey, governance, orchestration, user-directive]
 npt: []
-eht: [2R34M8FA, BL0W6LGY, LMAZO2ET, 4EBVIYBA]
+eht: [2R34M8FA, BL0W6LGY, LMAZO2ET, 4EBVIYBA, IG1MMYFA]
 blocked-by: []
 ---
 
@@ -55,14 +55,19 @@ services/foreign-approval-service.ts, 5 per-gate failure tests + 2 recorded neut
 affected suites green) → 2) ~~2R34M8FA~~ **DONE 2026-08-15 17:07** (b3a4ec2b, archived
 `completed` — lib/pillar/edit-guard.ts as replaceAtLines' in-lock preWriteCheck, 18 tests,
 2 recorded neuters 10/8 + 1/17, full suite resolved to zero regressions incl. the R50
-category-(c) compensation pin) → 3) BL0W6LGY (UNBLOCKED, in dev) → 4) 4EBVIYBA → 5)
-GADPGOIR (drift automation) → 6) synthesis residue: PRRD bootstrap proposal (USER-floor —
-needs the USER: golden G1.1 authoring) + github-config-audit TS-vs-py parity check (open
-question from A6) + the 6 uncached role-plugins' compliance (needs their repos or a cache
-install).
+category-(c) compensation pin) → 3) ~~BL0W6LGY~~ **DONE 2026-08-15 17:15** (c29661bb,
+archived `completed` — lint/validate verbs sharing the guard's finders, 13 tests, neuters
+7/6 + 1/12; FIRST LIVE RUN found 46 real findings → **NEW EHT card TRDD-IG1MMYFA**: the
+canonical SPEC grammar under-matches 44 live clauses — TERM-xx, RP-ASSISTANT-xx,
+RP-SKILL-MENU-xx, STS-Rn.n invisible to the store — plus 2 citation conflations) →
+3b) IG1MMYFA (grammar widening, P1 — found work, slots before the detector) → 4) 4EBVIYBA
+→ 5) GADPGOIR (drift automation) → 6) synthesis residue: PRRD bootstrap proposal
+(USER-floor — needs the USER: golden G1.1 authoring) + github-config-audit TS-vs-py parity
+check (open question from A6) + the 6 uncached role-plugins' compliance (needs their repos
+or a cache install).
 
-**NEXT ACTION:** execute plan item 3 (TRDD-BL0W6LGY — lint/validate verbs on the shared
-pillar CLI, sharing the edit-guard's predicates) unless the USER re-prioritizes.
+**NEXT ACTION:** execute plan item 3b (TRDD-IG1MMYFA — SPEC grammar widening from a
+recorded corpus measurement) unless the USER re-prioritizes.
 
 ## The USER's directive (2026-08-15, verbatim complaints — each becomes a survey axis)
 

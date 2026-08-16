@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:30:24+0200
+updated: 2026-08-16T19:36:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -642,6 +642,34 @@ This is recorded as a finding for Phase 2, in the owning repo, which happens to 
 Phase-1 audit like every other member of the fleet; (2) a spec clause with a `MUST` and no
 enforcing tool is the *"unenforced rule produces a success, not an error"* shape the wiki already
 documents — worth a sweep of ALL `MUST` clauses for tool references, not just this one.
+
+### The `%cpu` correction over-rotating — SUSTAINED is not ILLEGITIMATE
+
+The fabricated lifetime-average mechanism caused two runaway alarms to be dismissed. Both have now
+been re-measured, and the tally that came back to the hub — *"two flagged processes look real, which
+supports your read that the defect was in the REVIEW rather than the detector"* — **is the hub's own
+read returning as consensus, from a holder who learned it from the hub.** It needs splitting:
+
+- **pid 3459** — measured by llm-externalizer as a video encoder under a live 46-min remote-desktop
+  session, memory flat. **Sustained AND legitimate.** The alarm was right that it was sustained and
+  wrong to imply pathology.
+- **agentlenspro's pid 26449** — hub sampled it directly by pid (no pattern, so no self-match
+  possible): `ELAPSED 01:55:14 · TIME 102:43.94 · %CPU 123.9` → lifetime **89.2%**, matching their
+  88.9%, with the ~1-minute figure ABOVE the lifetime average (busier than its own history, not
+  decaying off a burst). Their three methods plus this fourth agree: **~0.9-1.6 cores sustained.**
+  And theirs is the stronger case for a different reason — **the CPU is unexplained by the
+  throughput** (~1 event/sec burning ~1.5 cores). *That gap* is the finding, not the CPU number.
+
+**Honest tally: two dismissals that were under-evidenced (they rested on a mechanism the hub
+invented), one process legitimate on its own merits, one real open question in its owner's
+product.** It does NOT convert every dismissed alarm into a runaway — that would be the mirror
+error, one day after the first.
+
+Worth recording that the owner of 26449 had **publicly excused their own process** on uptime/PPID/RSS
+while never evidencing the CPU half, then went back and measured it once the story it leaned on
+died. They declined to fix it on the same pass: *"it needs a profile, not a hypothesis"* — with two
+plausible suspects that two samples cannot separate, which is precisely where the hub went wrong
+twice tonight on someone else's bug.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

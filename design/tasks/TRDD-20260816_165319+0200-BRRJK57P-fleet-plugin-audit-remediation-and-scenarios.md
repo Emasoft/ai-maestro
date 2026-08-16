@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:12:34+0200
+updated: 2026-08-16T19:13:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -123,7 +123,14 @@ describing a plan that already executed, which makes it the most confidently wro
 
 **Instrument discipline, each of which cost this fleet a real error today:**
 - A convenient ZERO is usually a wrong needle. Echo the resolved path/set; positive-control every
-  search against something you KNOW is present.
+  search against something you KNOW is present — and **pick the control BEFORE the run, then reject
+  the run on the CONTROL, never on the plausibility of the result** (architect: three false zeros
+  in one night, every one plausible at the moment it was produced).
+- **A POSITIVE CONTROL IS NOT ENOUGH WHEN YOU ARE PROPOSING A MECHANISM. Run an input that SHOULD
+  FAIL.** Two parties independently built a syntax rule for GitHub `@mention` rendering out of
+  positive examples only; one nonsense string that should have paged and did not (`gh api /markdown`
+  resolves against REAL ACCOUNTS — it is an existence lookup, not syntax) falsified BOTH at once.
+  Positive examples confirm any mechanism consistent with them, including the wrong one.
 - `grep -r --include=<glob>` does not filter on every toolchain — verify the filter before
   believing a count built on it.
 - `ps %cpu` on macOS is **a decaying average over UP TO A MINUTE of previous real time** (`man ps`),

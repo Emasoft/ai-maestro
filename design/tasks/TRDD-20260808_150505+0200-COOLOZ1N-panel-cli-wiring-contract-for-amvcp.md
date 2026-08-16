@@ -3,7 +3,7 @@ trdd-id: COOLOZ1N
 title: Panel CLI wiring contract for amvcp — the measured spec plus the five rulings
 column: dev
 created: 2026-08-08T15:05:05+0200
-updated: 2026-08-16T01:01:20+0200
+updated: 2026-08-16T11:15:29+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: feature
@@ -207,10 +207,21 @@ Rationale: a contract proven on one path against a script that is not yet even i
 - [ ] amvcp confirms it is unblocked to build against this card.
       **NOT MINE TO TICK — split out 2026-08-16 because the original box fused an act I
       control with a reply I do not.** The relay above is complete; this half waits on
-      the other party, and the issue has been silent since 2026-08-08T15:01Z. A box
-      whose completion depends on someone else's answer can never be honestly checked
-      by me, and fusing the two made the whole card look unstarted while its actual
-      deliverable was already posted three times over.
+      the other party. A box whose completion depends on someone else's answer can never
+      be honestly checked by me, and fusing the two made the whole card look unstarted
+      while its actual deliverable was already posted three times over.
+      **⚠ MEASURED 2026-08-16 — "the issue has been silent since 2026-08-08T15:01Z" was
+      imprecise in the direction that matters.** The ISSUE is not silent; the
+      COUNTERPARTY is, and we have been talking into it. All 6 comments on
+      `Emasoft/ai-maestro#134` carry the same `gh` author (the shared owner identity), so
+      authorship is only readable from the PRRD G1.1 self-ID line in each body — and by
+      that: **amvcp commented exactly ONCE, at 2026-08-08T10:25:38Z. Comments 3-6 are all
+      ours**, the newest 2026-08-15T23:01:17Z. So the true state is **amvcp silent for 8
+      days across FOUR unanswered messages from us**, not "a quiet thread". That changes
+      the decision this box implies: four unanswered pings is evidence the channel may be
+      dead, not that a reply is imminent, so the next reader should consider escalating
+      rather than continuing to wait. Technique worth reusing on any shared-identity
+      thread: **identify parties by the self-ID line, never by `.author.login`.**
 
 ## Approval log
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:28:52+0200
+updated: 2026-08-16T20:31:14+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -920,6 +920,46 @@ it is load-bearing is invisible until you have destroyed the evidence once.** Th
 correct under the corrected three-shape rule (frozen 17:11→19:56, zero bytes written — not growing);
 had those transcripts been at 266 KB and climbing they would have killed live workers and blamed
 the harness for the loss.
+
+### The hub's axis 2 — this repo carries the PRE-RULING baseline on both 2026-08-13 fields
+
+Axis 2 includes conformance to the ratified GitHub baseline. **Name presence is not compliance** —
+my own lessons file records a fleet measurement where *"8 of 9 repos still carried the pre-ruling
+`bypass_actors: []`"* three days after a USER Tier-3 ruling abolished it, with the applier simply
+never re-run. Checked the payloads here, not the names.
+
+**The trio is present, correctly targeted, all `active`** — and two fields are stale:
+
+| ruleset | target | bypass | rules | verdict |
+|---|---|---|---|---|
+| `baseline-history-protect` | branch | **`[]`** | deletion, non_fast_forward | **STALE** — the 2026-08-13 ruling grants the owner/admin (actor_id 5) bypass; `[]` is *"a lock with no key"* on a solo-owner repo |
+| `baseline-pr-and-checks` | branch | `[5]` ✓ | pull_request, required_status_checks, **`approvals=1`** | **STALE** — the same ruling set this to **0** |
+| `baseline-tag-protect` | tag | `[]` ✓ | deletion, update | correct |
+
+**`required_linear_history` is absent everywhere** ✓ — the 2026-08-08 ruling did land. So one of the
+two rulings propagated here and the other did not, which is precisely the failure shape: a closed
+ruling, a merged commit and a green suite are all silent about the deployed surface.
+
+**`approvals=1` is the one that BITES, and it bites this repo now.** GitHub forbids self-approval,
+so on a solo-owner repo a PR can never reach 1 approval and **branches pile up unmergeable** — which
+is the reason the USER set it to 0. There are ~74 unpushed commits on `governance-rules` that will
+eventually want a PR.
+
+**Instrument note, because my first query silently lied.** A single `gh api … --jq` with a
+conditional printed **1 of 3** rulesets — the conditional failed on the two with no `pull_request`
+rule and swallowed their whole rows. A partial result that looks like a complete one. Split the
+queries so a missing key cannot eat a record; the corrected run is the table above.
+
+**NOT applied, and the reason is not only the Phase-1 freeze.** Re-applying the baseline as-is is
+Tier-0 EXEMPT, so the freeze alone would not stop it — but **the machine-global IND rule still
+states the PRE-ruling shape**, so an agent "restoring the ratified baseline" from that prose would
+*re-impose* the lock it is meant to remove. The payload must be built from the code SSOT
+(`branch_protection_lib.baseline_ruleset_payloads`), never from the prose I just read. Recorded, not
+executed.
+
+**Phase-2 candidate, not run:** whether the other 21 fleet repos carry the same two stale fields.
+It is a cross-tree measurement only the hub can take (~66 API calls), and one stale prose source
+feeding every applier is exactly how a fleet drifts together.
 
 ### The hub's axis 1 — every promise in CLAUDE.md resolves, and the two that RUN report findings
 

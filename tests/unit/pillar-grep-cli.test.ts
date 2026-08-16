@@ -259,3 +259,38 @@ describe('prrdgrep resolves a rule by NUMBER, whatever tier it currently sits in
     expect(r.stdout).toContain('S7.4')
   })
 })
+
+/**
+ * TRDD-BRRJK57P — an UNKNOWN OPTION must be a could-not-run (2), on ALL THREE pillar CLIs.
+ *
+ * `prrdgrep` and `specgrep` route through `lib/pillar/cli.ts:193` and always did.
+ * `trddgrep` does NOT route through that core, and had no equivalent: measured 2026-08-16,
+ * `trddgrep validate --min-severity error` printed all 265 findings (264 of them WARN) and
+ * exited 1 — byte-identical to the bare command. That flag does not exist. It was dropped
+ * silently, so the tool answered a DIFFERENT question than the one asked while returning an
+ * exit code that reads as a verdict.
+ *
+ * The three are asserted TOGETHER deliberately: the defect was one sibling diverging from
+ * two, which no per-tool test could have surfaced. A guard on trddgrep alone would let the
+ * same drift reappear in the other direction.
+ *
+ * NEUTER (run 2026-08-16): replacing trddgrep's `unknownFlag` finder with `() => false`
+ * restores exit 1 / 265 lines on `validate --xyzzy` — the exact pre-fix behaviour — and reds
+ * the trddgrep case here and only it.
+ */
+describe('every pillar CLI refuses an unknown option rather than ignoring it', () => {
+  for (const script of ['trddgrep.mjs', 'prrdgrep.mjs', 'specgrep.mjs']) {
+    it(`${script} exits 2 and names the flag`, () => {
+      const r = runCli(script, ['--xyzzy-not-a-flag'])
+      expect(r.status).toBe(2)
+      expect(r.stderr).toMatch(/unknown option --xyzzy-not-a-flag/)
+    })
+  }
+
+  // POSITIVE CONTROL. Without it, a CLI that refused EVERY flag would pass the three cases
+  // above — "exit 2 on a bad flag" is satisfied by a tool that never works at all.
+  it('trddgrep still accepts its real flags (the refusal is selective, not blanket)', () => {
+    const r = runCli('trddgrep.mjs', ['board', '--column', 'dev'])
+    expect(r.status).toBe(0)
+  })
+})

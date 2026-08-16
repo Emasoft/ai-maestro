@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T18:58:06+0200
+updated: 2026-08-16T19:05:50+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -321,6 +321,69 @@ proves the 55 minutes of silence was pure stall and not slow work.
 Their C2 method is the one to copy fleet-wide: **an orphan finding IS a zero**, so it was refused
 until the same grep was first pointed at a known-wired symbol. Without that step the claim rests on
 an instrument never proven able to see anything.
+
+### Three contract upgrades, each supplied by a session and each replacing a weaker hub rule
+
+1. **CONTROL BEFORE RUN (architect).** Replaces the hub's "a zero is not a result without a positive
+   control", which left open WHEN the control is chosen — and that turns out to be the whole thing.
+   Corrected: **pick the control BEFORE running the search, from something you already know exists,
+   and reject the run on the CONTROL, never on the plausibility of the result.** Their evidence is
+   three-for-three: every false zero they produced tonight *looked correct at the moment it was
+   produced*, and none would have been caught by staring harder at the zero. (Depth-4 vs depth-5
+   nesting → 0 parsed; then an off-by-one from `PurePath` stripping `./` → 0 parsed again.)
+
+2. **PATTERN SWEEP, NOT FILE SWEEP (orchestrator).** The hub offered to sweep their two findings
+   across the 22 `publish.py` copies; they measured and declined, with a control (`find` over the
+   same roots returns 72 `publish.py`, so the instrument reaches other trees — their "one hit, mine"
+   is real). Their point generalises the hub's own name-list lesson one level up: **the hazard is
+   not the FILE, it is the SHAPE OF THE PREDICATE**, and that class travels by each plugin
+   independently writing its own guard. Three shapes worth sweeping fleet-wide:
+   - a guard whose regex demands a specific character class right after a sigil — theirs required
+     alphanumeric after `@`, so **`@{{PLACEHOLDER}}` sails through, and a placeholder is exactly
+     what a template contains**;
+   - a guard that SKIPS fenced blocks by infostring where the skipped fence BUILDS a payload that is
+     later posted or executed (theirs skipped ```bash while that block assembled a `--body` arg);
+   - a dedup/idempotence check using substring containment where identity is meant (`if x in line`)
+     — breaks on numeric-suffix collisions, e.g. issue `#5` matching `#50`.
+
+3. **AFTER FOLDING A CORRECTION INTO AN EXISTING MEMORY PAGE, RUN `memgrep recall` WITH THE NEW
+   SYMPTOM PHRASING AND CONFIRM THE PAGE COMES BACK (assistant-role).** The hub was about to write
+   a contract item saying *"extend the page's `description:`, because recall ignores the body"* —
+   and that rule **already exists, verbatim, in `~/.claude/rules/markdown-memory-recall.md`, loaded
+   in every session.** Their correction is the useful one: this is an **ENFORCEMENT gap, not a
+   documentation gap**, and duplicating a rule the fleet already carries makes compliance WORSE,
+   because the copy drifts and then two rules disagree. What actually caught it was `memgrep
+   add-lesson` warning at write time that a keyword shared no word with the description — the tool
+   already enforces; the warning is just easy to scroll past (it printed, the lesson was written,
+   the exit was success). So the contract item is a CHECK that fails loudly when skipped, not a
+   restatement. Their own note is the sharp end: they followed the tool's warning, not the rule
+   from memory, and without it would have written an unfindable correction believing the job done.
+
+### The hub's own error tonight — a fix that RESTATES the bug, and two false refutations of it
+
+The `ps %cpu` mechanism the hub fabricated earlier reached the janitor's shipped code. A session
+reported the correction was not live. **Their conclusion was right, their needle was too specific,
+and both of the hub's instruments were worse.** What is actually in the installed 3.3.11:
+
+- `scripts/lib/daemon_runaway.py:209` — `window = "a lifetime average, not a live sample"`.
+  **Untouched.** This is the string the alarm EMITS, so every session on this host is still handed
+  the retracted mechanism.
+- `:148` — the docstring WAS edited, to *"a decaying average over the process's LIFETIME"*. The word
+  "decaying" was added and **the error was preserved**: per `man ps` it is a decaying average over
+  *up to a minute*, not over the lifetime. **A fix that restates the bug in truer-sounding words.**
+- `tests/test_system_daemon_runaway.py` asserts the retracted string — **3 hits in 3.3.10 AND 3
+  hits in 3.3.11, the CURRENT installed version** (hub first wrote "3.3.10" and the reporting
+  session corrected it upward). So the wrong mechanism is held in place by **tests that pass
+  today**, not by a stale copy: the next person to correct it breaks a test and looks wrong.
+  A confidently-worded wrong line plus a green test is how a false statement acquires tenure —
+  an obviously-wrong line invites correction, and "decaying" made this one harder to challenge
+  without making it truer.
+
+Hub instrument failures on that one question, both plausible: `grep scripts/*.py` does not descend
+into `scripts/lib/` (returned 0 — a false "the retracted text is gone"), then a correct recursive
+grep piped through `head -10`, which truncated before line 209. **Fixed-in-repo is not
+fixed-on-disk — and the installed copy can carry an edit that LOOKS like the fix and is not it.** So
+the check is never "did the edit ship" but "does the shipped text state the correct mechanism".
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

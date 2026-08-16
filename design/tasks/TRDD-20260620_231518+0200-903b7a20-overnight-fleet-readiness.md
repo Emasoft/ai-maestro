@@ -3,7 +3,7 @@ trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-16T11:06:27+0200
 min-approval-requirement: none
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -520,6 +520,47 @@ B (synthesize) + E (MANAGER coordination #35) complete.
 - #44 (plugin repo): core ai-maestro-plugin publish-pipeline → CPV canonical.
 
 Recommend next: **Phase D scenarios** (dev-browser UI validation — explicitly user-requested; validates the governance/security fixes end-to-end), OR the lower-priority residuals (#3b bearer-downstream deep-validation, #37 decoupling [gated on MANAGER #35], install-messaging --verify drift mode). Service `[janitor-heartbeat]` markers between items.
+
+## Acceptance
+
+Added 2026-08-16. This is the **most-referenced card on the board — 20 other cards cite it** — and
+it carried **zero acceptance boxes** across 529 lines, so its gate was VACUOUS and its state was
+only legible by reading the whole file. The gates below are transcribed from this card's OWN gate
+ledger (STATE, 2026-07-09); nothing here was invented.
+
+**⚠ READ THE TICK PROVENANCE.** A `[x]` marked *(card-recorded)* is transcribed from that ledger
+and was **NOT re-verified today**; a `[x]` marked *(measured 2026-08-16)* was checked just now.
+Mixing the two silently is how a month-old ✅ becomes today's fact.
+
+- [x] **G3 · G5 · G6 · G8 · G9 · G11** — *(card-recorded 2026-07-09; not re-verified)*. G11 carries
+      the card's own caveat "modulo plugin#17 e2e" — and **plugin#17 is now CLOSED**, see below.
+- [x] **Every external blocker is CLEARED** — *(measured 2026-08-16, `gh issue view` on each)*. The
+      ledger reads *"all OPEN, each repo's own session executes"*; **all six have since closed**:
+
+      | issue | state | closed |
+      |---|---|---|
+      | `ai-maestro-janitor#73` (G2) | CLOSED | 2026-07-09 |
+      | `ai-maestro-orchestrator-agent#27` (G2) | CLOSED | 2026-07-16 |
+      | `ai-maestro-maintainer-agent#26` (B2) | CLOSED | 2026-07-10 |
+      | `ai-maestro-assistant-manager-agent#24` (B4) | CLOSED | 2026-08-05 |
+      | `ai-maestro-plugin#17` (G11 caveat) | CLOSED | 2026-07-16 |
+      | `ai-maestro-webdesign#1` (G8 residual) | CLOSED | 2026-07-10 |
+
+      So **G2 is unblocked** (both its externals closed) and needs only verification; B2 and B4 are
+      done. Eighth stale blocker found today by re-running a recorded measurement — and the most
+      expensive one, because this card gates a campaign and 20 cards read it.
+- [ ] **G2** — verify now that `janitor#73` + `orch#27` have landed. Unblocked, unverified.
+- [ ] **G4** — visual-communicator side panel.
+- [ ] **G7** — API ↔ external plugins.
+- [ ] **G10** — core-plugin sync sweep.
+- [ ] **The bounded remainder in `## NEXT ACTION`** — `#45 presence` verb, the kanban 6-field
+      remainder, `#2` per-column move-permission, the two SECURITY-MEDIUM items
+      (`TRDD-15ff13ae` AID PoP replay, the federation comm-graph bypass), `#37` decoupling (gated
+      on a tier-2 proposal), Phase D scenarios, the USER-action deploy, and `#44`.
+- [ ] **`column: todo` is HONEST and stays** — the 2026-08-02 triage moved it `dev → todo` because
+      nobody is working it, and that is still true. Do NOT read the ticks above as "nearly done":
+      four internal gates and the whole bounded remainder are open. This box exists so the next
+      reader does not mistake a cleared EXTERNAL queue for a finished campaign.
 
 ## Approval log
 

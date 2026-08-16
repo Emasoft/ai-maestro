@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:08:06+0200
+updated: 2026-08-16T20:09:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -763,6 +763,26 @@ convention (`help` is the real verb). That is the loud failure the contract asks
 COULD-NOT-RUN, and it names the correct spelling — so it is a usability wart, not a silent one.
 Recorded here so nobody "fixes" it into an exit-0 alias later, which would collapse
 *unknown-option* into *ran fine*.
+
+### CONTRACT AMENDMENT — a silent worker and a working worker are indistinguishable from outside
+
+Supplied by visual-comunicator with the measurement attached, and it is the missing DETECTION half
+of the write-early rule. That rule says how to survive a stalled worker; this says how to notice
+one.
+
+**Poll the worker's TRANSCRIPT MTIME. Heartbeat counting cannot tell dead from slow.** Their three
+axis workers went silent; judged by notifications they were working. Measured: transcripts frozen
+at 17:11-17:12, checked at 19:56 — **2h45m of zero writes**, and the mid-flight "write your file
+early" instruction queued at ~17:45 was **never consumed** (independently re-deriving tonight's
+correction: a queued relay needs a tool round a stalled worker will never take). Re-dispatched with
+the report file created on tool call #1 and a ~30-call budget: **100-170 seconds each.**
+
+Same work, same model, ~60×. **The stall was not task size** — which is the part that matters,
+because "it is a big job" is the explanation that makes a dead worker look reasonable for hours.
+
+So the contract now names three things, not two: brief pre-spawn (a relay cannot land later) ·
+create the report file on tool call #1 · **poll the transcript mtime, and treat a frozen one as
+dead rather than busy.**
 
 ### The hub's axis 3, part 2 — 8 executables on PATH that NO repo in the fleet ships
 

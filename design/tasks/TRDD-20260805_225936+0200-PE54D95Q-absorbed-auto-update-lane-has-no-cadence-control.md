@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-16T11:41:50+0200
+updated: 2026-08-16T15:53:34+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -112,6 +112,17 @@ called it a failure.** The lane does not fire at the 4 h mark; it fires at the f
 PASS window is **[due, due + `ABSORBED_DUTY_POLL_MS`]**, i.e. up to 15 minutes late BY DESIGN, and a
 check at 11:41 showing the old stamp is the system working. Do not read a miss inside that window as
 a regression — that is the same false-alarm shape this whole card exists to remove.
+
+**✅ PASS — the first post-fix run happened (measured 2026-08-16T15:53:34+0200):**
+`lastAbsorbedRunAt` = **2026-08-16T12:16:43+0200**, row = `{"status":"updated","at":"2026-08-16T12:13:18+0200","detail":"Refreshed every registered marketplace (one invocation)"}`.
+Past the due time, status `updated`, no bare `Command failed:` — the fix ran and the lane is healthy.
+**One thing the window model did NOT predict:** the run landed at ~12:10 (row `at` 12:13:18, stamp
+12:16:43 ⇒ a ~6 min refresh), not at the 11:55:20 poll. `pm2 jlist` shows **1** restart,
+`up_since` 10:08:20 — so no reboot re-anchored the timer, and by `boot + 2 min settle + 15n` the
+11:55:20 poll should have fired. Unexplained, ~18 min beyond the predicted window, and **not
+evidence of a defect** (the row is a clean `updated`). Recorded rather than explained away: the
+poll-boundary arithmetic here is approximate, so do not use it to *fail* a future check — only a
+row still carrying a bare `Command failed:` does that.
 
 **NOT DEPLOYED** *(superseded by the line above — kept because the reasoning still binds for the
 next change here)*. `services/*.ts` is BUNDLED into `.next` — a `pm2 restart` alone does not load it

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:17:40+0200
+updated: 2026-08-16T19:20:02+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -525,18 +525,38 @@ times tonight and was my first hypothesis: `command -v memgrep` → `~/.cargo/bi
 installed binary finds both the anchor error and the keyword-coverage warning. **The running binary
 is built from current source.**
 
-**MECHANISM, from the source.** `add-lesson` resolves through `locate_atom_body_matching` and
-refuses when the target is not a **BODY** atom — one below the footer sections is not. `add-atom`'s
-insertion point is documented at `memory.rs:2257-2266` as *"the EARLIEST footer-section heading —
-`## Applies to`, `## Governed by`, `## See also`, or `## Notes and lessons learned`"*, attributed to
-**janitor#250**. So the refusal is CORRECT behaviour downstream of a **placement** bug upstream:
-the defect is `add-atom` writing below Notes, not `add-lesson` failing to look. That is why all five
-workarounds failed — every one was aimed at the lookup, and the lookup was working as designed.
+**~~MECHANISM~~ — STRUCK. The hub's first account said the refusal was correct downstream of a
+PLACEMENT bug (`add-atom` writing below the footer boundary documented at `memory.rs:2257-2266`,
+janitor#250). It is FALSIFIED:** the maintainer retried with the atom at line 62, above the first
+footer heading at 78 — unambiguously a body atom by that boundary — and `add-lesson` refused
+identically. **The hub had read the doc comment of a DIFFERENT function (`add-atom`'s insertion
+point) and applied its boundary to `add-lesson`'s lookup. Third induced mechanism of the night,
+committed two commits after writing the rule against it into this card's own contract.**
 
-**Consequence for the report:** janitor#250 is the existing thread for this exact class, and its
-comment records a THIRD reproduction that moved the boundary to include `## See also` — so this is
-plausibly a fourth page shape the boundary still misses, on current code. Not filed: the janitor's
-repo, the maintainer's finding, and filing is outward-facing.
+**THE ACTUAL MECHANISM, read from the functions rather than their neighbours' comments:**
+
+- `locate_atom_body_matching` (`memory.rs:3298`) walks the **WHOLE page** from the end of
+  frontmatter. **There is no footer boundary in it at all** — a `#` heading merely CLOSES the open
+  atom block and scanning continues. So an atom below `## Notes and lessons learned` is perfectly
+  findable, which explains the maintainer's inverse-region observation: the working siblings are not
+  working *despite* sitting below Notes; the section is irrelevant to this function.
+- The real gate is **`first_block_property_marker` (`memory.rs:1512`)**, and it is stricter than the
+  prose implies. A line is a marker only if it is **ANCHORED at the first non-whitespace byte**
+  (only spaces/tabs may precede `^` — a `-` bullet or any other leading character disqualifies it),
+  the `^` is followed by 1+ of `[A-Za-z0-9_-]`, and a bracket-matched `[props]` follows after only
+  spaces. The anchoring is deliberate: its comment records that whole-line scanning made every prose
+  MENTION of the grammar declare an atom, putting **13 phantom atoms** in the index, four sharing
+  one id.
+
+**So the question is not placement — it is whether the marker LINE parses as a marker at all**,
+which is also why five workarounds aimed at the lookup changed nothing: a line that never opens a
+block cannot be reached by any id form, reindex or relocation. Decisive check is a comparison, not a
+judgement: `cat -A` the atom's marker line against a working sibling's. If `add-atom` EMITTED a
+non-conforming line, the writer and the parser disagree about the grammar — a far more precise
+defect than "the read verb cannot find the write verb's atom".
+
+Not filed: the janitor's repo, the maintainer's finding, filing is outward-facing, and neither
+party has the owner's say-so.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

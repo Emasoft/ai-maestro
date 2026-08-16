@@ -185,12 +185,13 @@ describe('findForeignMarketplaceRefresh — the pure predicate', () => {
   })
 
   it('requires the three words CONSECUTIVE — a line that merely contains all of them is not a refresh', () => {
-    // Without this, any command line mentioning the words in any order matches: a log tail, a
-    // grep, an editor session. Skipping on those would stall the lane for reasons that are not
-    // contention at all.
+    // The fixture carries all three as BARE words, just not adjacent — so relaxing the check to
+    // "contains each of them" matches this line and the test reds. A fixture spelling them
+    // `plugin.log marketplace.log update.log` would pin nothing: `plugin.log` is not `plugin`, so
+    // it fails the very first comparison and passes with the guard relaxed.
     const snap = [
       psHeader,
-      ' 5150 tail -f plugin.log marketplace.log update.log',
+      ' 5150 node scripts/reindex.js plugin marketplace --mode update',
     ].join('\n')
     expect(findForeignMarketplaceRefresh(snap, 999)).toBeNull()
   })

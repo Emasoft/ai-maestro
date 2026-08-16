@@ -145,11 +145,49 @@ The real hazard is a payload built from stale prose (above) or a `jq`-selected a
 wrong ruleset — `baseline-tag-protect`'s ratified bypass is **nobody**, so a fix shaped for the PR
 ruleset would silently *weaken* it while printing a clean result.
 
+## MEASURED 2026-08-16 — it is not one repo. It is the fleet, and ONE repo of 22 is current.
+
+The question below is answered. **The population was DISCOVERED, not assumed**: 47 repos found from
+git remotes under `~/Code`, of which **21 carry both baseline branch rulesets** — corroborated
+independently by the 22 `publish.py` hits (21 + this repo). 12 carry no rulesets at all; **3 are
+404** (`emasoft-chief-of-staff`, `mesh-vectorizer`, `xls-cross-platform`) and a 404 is *"could not
+read"*, **not** *"no rulesets"* — my first pass conflated the two states and the classification was
+split before any number was read.
+
+| field | ratified | stale across the 21 | with this repo |
+|---|---|---|---|
+| `baseline-history-protect` → `bypass_actors` | `[5]` | **18** carry `[]` | **19 of 22** |
+| `baseline-pr-and-checks` → `required_approving_review_count` | `0` | **20** carry `1` | **21 of 22** |
+
+**Exactly ONE repo of 22 carries the complete current payload: `Emasoft/perfect-skill-suggester`.**
+
+**The odd-repo-out trap fired, and checking the second field is what caught it.** Three repos carry
+the ratified `bypass=[5]` and would each have read as "already current" on that field alone —
+`AgentlensPro` and `llm-externalizer-plugin` are both still `approvals=1`. The two rulesets drifted
+**independently**, so no single field identifies a compliant repo.
+
+**`perfect-skill-suggester`'s `approvals=ABSENT` is genuine, not a query artifact.** Its
+`baseline-pr-and-checks` carries only `required_status_checks` — no `pull_request` rule — while a
+control repo under the identical query returns both types. That matches the code SSOT, where the PR
+rule is emitted **conditionally**. So it was applied by a newer applier, which is why it is the one
+current repo.
+
+**The consequence is the severe part.** GitHub forbids self-approval, so `approvals=1` is
+**unsatisfiable** on a solo-owner repo: **21 of 22 fleet repos currently cannot merge a PR.** That
+is precisely the deadlock the USER's 2026-08-13 ruling abolished, still standing on all but one.
+
+**Two further gaps, named rather than folded in:** `Emasoft/ai-maestro-plugins` and
+`Emasoft/talk-to-claude` carry **no `baseline-tag-protect`** at all.
+
+**Still not applied, and the reasoning is unchanged and stronger at 21 repos than at one:** this is
+an outward-facing mutation of repository protection settings across the fleet, made unattended.
+Recorded as its own card rather than executed here — one card, one repo.
+
 ## Open, and NOT assumed
 
-Whether the other 21 fleet repos carry the same two stale fields. ~66 API calls, hub-only work, and
-one stale prose source feeding every applier is how a fleet drifts together. Not part of this card;
-named on the parent so it is not lost.
+~~Whether the other 21 fleet repos carry the same two stale fields.~~ **ANSWERED above.** The
+fleet-wide remediation is cross-repo, so the D3 floor puts it at **`manager`**, not `none` — it is a
+separate card, not an extension of this one.
 
 ## Approval log
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T16:53:19+0200
+updated: 2026-08-16T18:49:26+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -40,6 +40,11 @@ remediated yet. Phase 2 (plan) and Phase 3 (scenarios) have not begun.
 finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A peer report is a
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
+
+**3 sessions reported as of 18:49; all their CONFIRMED findings are hub-verified — see the
+verification ledger below.** Outstanding: architect axis 4, assistant-role axis 4, and every
+session that has not yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority
+was correctly refused by three sessions; the hold is endorsed).
 
 ## The USER's mandate, verbatim
 
@@ -155,6 +160,47 @@ them to.
 - [ ] No governance password literal appears anywhere in any artifact this program produced.
 - [ ] `trddgrep` / `prrdgrep` / `specgrep` shortcomings found during the program are recorded and,
       where verified, improved.
+
+## Hub verification ledger — 2026-08-16T18:49+0200
+
+Acceptance box 2 is satisfied per row below. Every command was run by the hub, read-only, in the
+owning repo. **A row marked REFUTED does not kill the finding — it kills the SUPPORTING CLAIM**,
+and the corrected finding is stated beside it.
+
+### ai-maestro-architect-agent (`~/Code/EMASOFT-ARCHITECT-AGENT/…`)
+
+| Finding | Hub verdict | What the hub ran |
+|---|---|---|
+| 10 planning-patterns scripts crash on ANY invocation | **CONFIRMED, count exact** | `--help` on all 15 → 10 fail, 5 pass. `ModuleNotFoundError: No module named 'cross_platform'`. `skills/shared` absent; module is `lib/cross_platform.py`. The 5 passes are the positive control: the harness works. |
+| `lib/report_utils.py` `report_output()` has zero callers | **CONFIRMED** | repo-wide grep minus the defining file → only `:3` docstring + `:15` def. Control `atomic_write_json` = 15 hits. |
+| 8 docstring usage lines cite hyphenated filenames | **CONFIRMED, 8/8** | per name: citedIn=1, fileExists=0. |
+| 2 archived cards carry `column: complete` | **CONFIRMED, and the population is 9** | 2 `complete` · 4 `completed` · 3 `published`. |
+| `archived` is unreachable and "nothing else writes it" | **SUPPORTING CLAIM REFUTED** | `scripts/amaa_design_lifecycle.py:189` writes `status: archived` by regex; `amaa_github_sync_status.py:49,95` map it. The cited grep (`grep -rn "archiv" --include='*.py' scripts skills`) MUST return :189 — the reported output was not that command's output. **Corrected finding, still real and sharper:** two writers, one gated by `VALID_TRANSITIONS` (which has NO edge into `archived`) and one bypassing it entirely. Doc drift confirmed separately: README/SKILL promise `implementing`/`completed`, code has `implemented`. |
+| 2 legacy lowercase-hex TRDD ids | **CONFIRMED as fact, REFUTED as a defect** | ids are full v1 UUIDs (`536c42e3-2a21-…`). Both cards are ARCHIVED, i.e. FROZEN by the IND base (terminal cards: only `updated:`/`superseded-by:` may change), and v1→v2 migration is explicitly "on next touch". Renumbering them would break every citation to them. Record, do not migrate. |
+| `baseline-tag-protect` filed as a Tier-2 deviation, then self-downgraded | **DOWNGRADE CORRECT; the stated reason is WRONG** | It is not merely "outside the default-branch gate" — it is a RATIFIED baseline member: `rules/aimaestro/aimaestro-manager-approval-defaults.md:152`, `design/specs/baseline-github-rulesets-spec.md:62`, and `tests/governance/baseline-spec-ratchet.test.ts:20` pins the TRIO by name. So the repo carrying it with `bypass_actors: []` is baseline COMPLIANCE. There is no unowned "wording gap": the machine-global orphan `~/.claude/rules/manager-approval-defaults.md` has **0** hits for it, and that file is already surfaced to the USER as stale (handoff blocker 1). |
+
+### ai-maestro-assistant-role-agent (`~/Code/ai-maestro-assistant-role-agent` — flat, NOT `<UPPER>/<name>`)
+
+| Finding | Hub verdict | What the hub ran |
+|---|---|---|
+| Workflow comments say `@v3.1.0`; invocations say `@v5.5.0` | **CONFIRMED verbatim** | `ci.yml:170` / `release.yml:57` comments vs `ci.yml:196` / `release.yml:85` invocations. Pin inventory re-derived independently: 7 sites, all `@v5.5.0` (`publish.py` ×5 + 2 workflows) — matches. |
+| "that grep returns exactly those two lines and nothing else" | **REFUTED (population, not finding)** | unbounded `git grep -n "v3\.1\.0"` returns **10** lines. The other 8 are legitimate: 4 TRDD cards recording the bump, 1 memory note, **and 2 TEST FIXTURES** — `tests/test_no_bare_github_mentions.py:56,145` embed the exact string `PINNED to @v3.1.0` as the guard's own fixture. **A blanket replace of `@v3.1.0` breaks that test.** Fix the 2 comments by hand. |
+
+### ai-maestro-maintainer-agent — the CPV writer
+
+| Finding | Hub verdict | What the hub ran |
+|---|---|---|
+| CPV 5.5.0 PUTs `bypass_actors: []` over `baseline-history-protect` | **CONFIRMED end-to-end, in the INSTALLED copy** | `…/claude-plugins-validation/5.5.0/scripts/setup_branch_rules.py` (mtime Aug 15 16:36): `:807` `"bypass_actors": []` → `:948-956` `action="UPDATE"` when it already exists → `:964-978` `apply_ruleset()` POST-or-**PUT**. |
+| The builder docstring asserts its own currency | **CONFIRMED — and it is the worst part** | `:783-791` defends the empty bypass as "the point of the ruleset", states `--adopt-bypass-actors` "deliberately cannot reach this payload" (the operator escape hatch is closed BY DESIGN), and then warns that *other* prose is stale about `required_linear_history`. A fixer who trusts that docstring concludes the payload is deliberate and leaves it. It is right about linear-history and wrong about the bypass, in the same paragraph. |
+| Phase-2 ordering: CPV's payload must land before/with the janitor gate fix | **ACCEPTED as a constraint, recorded** | With the janitor's gate unable to reach a converged repo, CPV's script is the only tool in the fleet that CAN move these rulesets. Fixing the janitor first, while CPV still writes `[]`, hands the fleet a working writer aimed at the wrong shape. |
+
+### Cross-finding worth keeping (raised by the architect, endorsed)
+
+A single-axis worker can "CONFIRM" against a premise another axis has already destroyed: axis 1
+justified keeping a finding by reasoning that "`cross_platform.py` IS imported by 8+ scripts, so
+the import mechanism clearly works" — axis 3 had already proven those exact imports all crash. The
+conclusion survived on other evidence; the reasoning did not. **Cross-check premises across axes
+before a finding enters the plan.**
 
 ## Approval log
 

@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-16T10:57:17+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -224,6 +224,38 @@ the bar.
 Each un-gated item lands evidence in `reports/` and, where a real defect is found, a tier-appropriate fix
 TRDD. The mutating items (CI wiring, any enforcement fix) do NOT auto-apply — they wait on the USER's
 confirmation of the bar.
+
+## Acceptance
+
+Added 2026-08-16 — this card had **no acceptance boxes at all**, so its completion gate was
+VACUOUS (the gate is "every box checked"; a card with no boxes passes having proven nothing). A
+card whose whole subject is *acceptance criteria* had none of its own. Transcribed from the USER's
+own definition in the STATE block, not invented here.
+
+- [x] **SCEN-031 is AUTHORED and committed** — `4623dc83` (scenario + setup wrapper + sample-zip
+      fixture + `NEXT_SCEN_NUMBER`→32) and `a129a0b1` (the USER's four added requirement sets:
+      NEVER-STOP, derived TRDDs, MAINTAINER-authored CI, MANAGER read-only monitoring).
+- [ ] **The prereq gate passes.** RE-MEASURED 2026-08-16 and **the blocker is REAL, not stale** —
+      `gh repo list Emasoft --json isTemplate` returns **0 template repos**, 25 days after this card
+      recorded the same ✗. The USER must create one, or authorize a public/3rd-party template, or
+      allow from-scratch. (`AIM_GOVERNANCE_PASSWORD` unset *in the shell* is the second ✗; the run
+      resolves it from `.env.local`, so that one is a launch detail, not a design blocker.)
+      Recorded as re-measured because most parked blockers in this corpus turn out to have cleared —
+      this one has not, and saying so is worth as much as finding one that had.
+- [ ] **The critical-path blocker is in the pipeline.** `TRDD-4ALV5ISB` (idle workers never WAKE to
+      process inbound AMP mandates) is what this card names as *"THE next harness-readiness
+      blocker"*, and it sits at **`column: proposal`** — never approved, so it is not being worked
+      by anyone. It is tier-2 (manager) + architectural, so promoting it is not this card's to do;
+      naming the stall is. Without it the fleet self-organizes and then halts at the first handoff,
+      which is a FAIL by the USER's own definition below.
+- [ ] **THE DEFINITION — `SCEN-031` RUNS and PASSES** (USER, 2026-07-22): one directive to the
+      MANAGER, the fleet self-organizes and ships zipsearcher end-to-end. Not attainable
+      unattended: it needs the USER's explicit go-ahead (it creates a REAL public repo, PRs and a
+      release), a live fleet, and the two boxes above. Measured today: `Emasoft/zipsearcher` does
+      not exist, so no run has occurred.
+- [ ] **Every un-gated verification item lands evidence in `reports/`**, and any real defect it
+      finds becomes a tier-appropriate fix TRDD — per `## Verify` above, and per the 2026-08-15
+      ruling in the log below that any FIX spawned is its own card at its own floor.
 
 ## Approval log
 

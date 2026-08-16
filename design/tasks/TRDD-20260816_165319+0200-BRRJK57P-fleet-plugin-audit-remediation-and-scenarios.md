@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:39:22+0200
+updated: 2026-08-16T20:42:41+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -50,10 +50,27 @@ not listed. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was co
 three sessions; the hold is endorsed, and every reporting session has independently confirmed it
 has queued no remediation).
 
-**The hub's own Phase 1 is now underway too** (nobody had audited the hub): axis 3 done — the
-installed CLI family is `38 identical / 0 stale / 21 no-counterpart`, of which **8 are executables
-on PATH that no repo in the fleet ships**, still named in md instructions. Axis 2 found **167 of
-249 archived cards at a column `3P-ZON-05` does not admit, with zero tool references to that MUST**.
+**The hub's own Phase 1 is COMPLETE on all four axes** (nobody had audited the hub), **and its
+findings are now planned work** — 4 cards at `column: todo`, all registered in this card's `eht:`:
+
+| card | finding | pri |
+|---|---|---|
+| `9FBNRW29` | baseline rulesets stale on both 2026-08-13 fields; `approvals=1` makes a PR here unmergeable | 1 |
+| `5TELESBL` | 5 wikimem pages carry no `metadata.topic:` → unreachable from the generated index | 2 |
+| `GIONLYAF` | 8 executables on PATH no repo ships, 5 still named in md instructions | 2 |
+| `36RGLVYH` | 167 of 249 archived cards at a column `3P-ZON-05` does not admit; 0 tool references to that MUST | 3 |
+
+Axis 4 additionally found a skill-name collision with the official HuggingFace plugin — **closed
+without a card**: llm-externalizer measured the resolver state (all four names appear only fully
+qualified, no bare entry) so the mis-resolution case does not obtain, and the surviving
+menu-ambiguity fix is theirs, not the hub's.
+
+**Each card carries the trap that would make a plausible fix wrong**, because in every case the
+obvious fix is the dangerous one: `5TELESBL` verifies by a recall test with symptoms chosen BEFORE
+the run, never a green exit code · `9FBNRW29` builds its payload from the code SSOT, because the
+machine-global prose still states the pre-ruling shape and would re-impose the lock the card
+removes · `GIONLYAF` fixes the instruction surface first and never executes an unknown installed
+script · `36RGLVYH` exists mainly to FORBID scripting it.
 
 **The evening's largest finding is not in any plugin.** Four sessions independently re-derived the
 same worker-liveness rule at ~6 worker-hours, while `ATOM-DXFF-KOY4` already carried half of it in

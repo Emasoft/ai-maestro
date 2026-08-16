@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T23:29:36+0200
+updated: 2026-08-16T23:32:07+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1229,6 +1229,49 @@ independently by their axis-2 worker from the rule text and git, without seeing 
 
 **Not actioned.** These are defects in ANOTHER repo; the hub reads and verifies, it does not edit.
 Their remediation is theirs to author, and Phase-2 dispatch is blocked on the USER regardless.
+
+### COS axis 4 — Phase 1 COMPLETE for that repo · verified 2026-08-16T23:32:07+0200
+
+**Final: 13 CONFIRMED / 25 REFUTED / 2 NOT-VERIFIED across 4 axes.** Both axis-4 citations
+re-verified first-hand by READING THE SPANS, not grepping them with a list I wrote.
+
+**F2 — an agent-held governance password, documented. CONFIRMED, and it is the one to action.**
+`commands/amcos-request-approval.md` documents the flag in the three places that MATTER — the
+`argument-hint` at `:4` (`[--governance-password <PWD>]`, the command's own invocation contract), the
+arguments table at `:52` (*"Manager-provided governance password"*), and a **worked example** at
+`:77`: `--governance-password "$GOV_PWD"`, under the heading *"Critical operation (governance
+password required)"*. Two files in the SAME repo say the opposite:
+`agents/amcos-approval-coordinator.md:18` — *"You never hold or pass a sudo/governance password: a
+sudo password is requested **only of the USER, only via the UI** (R32)"* — and
+`skills/amcos-permission-management/references/governance-details-and-examples.md:39` — *"There is
+**no agent-held governance password** (R32) … the COS never holds, passes, or submits one."*
+
+**One nuance, in the SAFER direction, so their sheet is not carried forward unqualified:** the JSON
+payloads at `:102`/`:125` both show `"governancePassword": null`. The field's presence there is a
+schema artifact and weaker evidence; **the FLAG is the live hazard.** Strongest citations are
+`:4`, `:52`, `:77`.
+
+**Why this is not merely a stale doc.** The parameter's EXISTENCE is the defect, independent of
+whether anyone ever passes a literal — *"a parameter is a value the caller must first possess, which
+is precisely what the caller must not."* Two independent authorities already say so: their own R32
+text, and this project's own scenario rule, which made the helpers take **no** password argument
+after the measured precedent — **197 copies of a live credential across 34 committed files, one of
+which reached a PUBLIC repo** (TRDD-44RGLOO8 / E9BZ5P7S). The format required them. A worked example
+is the template shape that gets copied, and **a template is copied OUT of whatever protects it.**
+
+**F1 — CONFIRMED, plus a third defect in the same docstring they did not flag.** `:5` says *"If any
+CRITICAL issues are found, the push is blocked"*; `main()` at `:299` is
+`if critical or major or minor:` and carries its own comment *"strict mode: block on ALL issues
+including MINOR"* — so the code knows it is strict and the docstring was never updated. Stricter than
+documented ⇒ fails safe. **And the same docstring's install command is `cp scripts/pre-push-hook.py
+.git/hooks/pre-push`, naming a file that does not exist** (0 hits; control `amcos_pre_push_hook.py`
+= 1). Same class as axis 1: a documented invocation that cannot execute.
+
+**Corpus count adjudicated, because their two workers disagreed (23/23 vs 22/22): COS IS RIGHT.**
+Independently: **23 skills** (dirs containing `SKILL.md`), **23 commands**, **10 agents**. The
+axis-4 worker undercounted both by one. **My own first count said 24 skills — it was `.DS_Store`.**
+I quoted a number from a population I had not defined, caught it before publishing, and it is the
+fourth instance tonight of the same family.
 
 ## Approval log
 

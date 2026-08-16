@@ -1,12 +1,12 @@
 ---
 trdd-id: FXPV7L4D
 title: The absorbed refresh claims every registered marketplace from one exit code while ten are months stale
-column: backburner
+column: testing
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T10:20:17+0200
-updated: 2026-08-07T10:20:17+0200
+updated: 2026-08-16T16:12:50+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -103,6 +103,32 @@ AC1 removed.
 unit confusion in the stamp comparison (`lastUpdated` is an ISO-8601 string, not epoch), and a
 wrong comparison would silently report every marketplace as stale — loud, and caught by the
 complementary test above.
+
+## Acceptance
+
+*(Authored 2026-08-16 with the fix — this card shipped with NO boxes, which makes the completion
+gate vacuous: "every box checked" is trivially true of a card with none. Boxes live here and
+nowhere else.)*
+
+- [x] The row's detail is computed from the registry `lastUpdated` stamps either side of the call,
+  never from `r.success` alone — `describeRefreshCoverage` in `services/auto-update-service.ts`,
+  wired at the one `absorbed:marketplace-refresh` success site.
+- [x] A partial refresh is **not** `updated` and **names** its laggards, capped at 10 with the
+  hidden count always printed (a silent truncation is the same class of lie as the old wording).
+- [x] The string "every registered marketplace" is gone from the success path, and a test asserts
+  it cannot come back.
+- [x] An unreadable/empty registry reports coverage **UNKNOWN** rather than "0 of 0" — the read
+  fails open, so an empty map is ambiguous by construction and must not manufacture a failure.
+- [x] Complementary tests, both required: all-advanced (kills an always-report-failure fix) and
+  partial (kills an always-report-success fix). **Neuter run** (`stale` forced to `[]`): exactly
+  **2 of 5** red — the partial and the cap tests, i.e. the two carrying the claim; the other three
+  correctly stayed green, which is what makes them the complement rather than duplicates.
+- [x] Deployed: `yarn build` + `pm2 restart` at 16:12 on 2026-08-16, proven from the ARTIFACT
+  (`grep -rl "registered marketplaces (one invocation)" .next/server` → 1), not from `git log`.
+- [ ] **Live, and it is a PREDICTION this card can be failed by:** the next absorbed fire on this
+  host reports roughly `260 of 270` and names the ten laggards from the table above. Due ~4 h
+  after the last stamp; read it with the PE54D95Q command. If it instead reports *all* refreshed,
+  either the ten started moving (check their stamps before celebrating) or the diff is broken.
 
 ## Approval log
 

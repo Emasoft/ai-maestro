@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T22:38:12+0200
+updated: 2026-08-16T23:27:07+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1172,6 +1172,32 @@ That is a CANDIDATE, not a confirmed defect, and the missing determination is st
 assumed: whether those 21 can even *produce* a duplicate version, given `bump-version.sh` and the
 "every PR bumps" convention, is unmeasured. A pipeline where duplicates are impossible by
 construction needs no G1. Whoever takes it measures that first.
+
+### COS (`emasoft-chief-of-staff-af`) — Phase-1 report, 3 of 4 axes · verified 2026-08-16T23:27:07+0200
+
+**11 CONFIRMED reported; one citation per axis re-verified first-hand. All three hold, and axis1 is
+UNDERSTATED.**
+
+| axis | citation checked | verdict |
+|---|---|---|
+| 1 — missing features | `skills/amcos-agent-coordination/SKILL.md:~92` vs `scripts/amcos_team_registry.py:499-503` | **CONFIRMED, worse than reported.** The doc runs `add-agent --team --name --role --status`; the parser requires `--team --agent-name --plugin --host`. So **two invalid flags AND two missing required args** — `--status` belongs to `update-status` (`:519`), and `--role` is not a flag at all. The reported "wrong flag name" undersells it: the invocation cannot reach the script's body. |
+| 3 — scripts | `skills/amcos-failure-notification/references/design-document-protocol.md:289` | **CONFIRMED.** `amcos_init_design_folders.py` → **0** hits repo-wide; control `amcos_team_registry.py` → 1, so the search reaches the tree. It is cited as a troubleshooting **resolution step**, i.e. the instruction given to someone already stuck. |
+| 2 — governance | `design/archived/TRDD-…-4FH9JP4U-….md` | **CONFIRMED.** `column: complete`, `updated: 2026-08-11`, **0 checkboxes in 143 lines.** Post-boundary (2026-07-31), so the checklist gate binds — the vacuous-gate case: a terminal column with no checklist at all proves nothing, which is exactly why the "≥1 box" half was added. |
+
+**They corrected ME, and they were right.** I advised annotating `562b49e3` (published, 5 boxes
+unchecked). They measured its terminal transition at **2026-06-18** — PRE-boundary — so IND step 12
+freezes it and the annotation would breach the freeze to satisfy a gate that does not bind it. **The
+rule I cited had already answered the question I asked them to work around.** Their card stands
+untouched.
+
+**Their distinction is worth keeping and is not a restatement of mine.** My fleet result (*113
+terminal cards, zero unearned columns*) answers **is the column EARNED**. Theirs answers **does the
+gate BIND at all** — and for 8 of their 9 it does not, because those cards went terminal in June.
+Different questions, different evidence, and the second is why their nine collapse to one. Reached
+independently by their axis-2 worker from the rule text and git, without seeing their conclusion.
+
+**Not actioned.** These are defects in ANOTHER repo; the hub reads and verifies, it does not edit.
+Their remediation is theirs to author, and Phase-2 dispatch is blocked on the USER regardless.
 
 ## Approval log
 

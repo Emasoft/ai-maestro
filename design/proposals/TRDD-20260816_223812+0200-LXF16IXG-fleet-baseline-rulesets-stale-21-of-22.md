@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T22:38:12+0200
-updated: 2026-08-16T22:38:12+0200
+updated: 2026-08-16T22:44:32+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -41,13 +41,40 @@ The USER's Tier-3 ruling of **2026-08-13** set two fields on the ratified baseli
 |---|---|---|---|
 | `baseline-history-protect` → `bypass_actors` | `[5]` | `[]` | **19 of 22** |
 | `baseline-pr-and-checks` → `required_approving_review_count` | `0` | `1` | **21 of 22** |
+| `baseline-pr-and-checks` → `bypass_actors` | `[5]` | — | **0 drifted** (20/21 `[5]`; the 21st has no PR rule) |
+| `baseline-pr-and-checks` → `require_code_owner_review` | `false` | `true` | **1 of 21** (`AgentlensPro`) |
 
 **Exactly one repo carries the complete current payload: `Emasoft/perfect-skill-suggester`.**
 
-**The consequence is not cosmetic.** GitHub forbids self-approval, so on a solo-owner repo
-`approvals=1` is **unsatisfiable** — a PR can never reach one approval. **21 of 22 fleet repos
-currently cannot merge a pull request.** That is the exact deadlock the ruling abolished, still
-standing on all but one repo three days later.
+**Four fields sampled, THREE drifted independently** — bypass, approvals, code-owner — and no two
+of them agree about which repos are compliant. `AgentlensPro` is ratified on history bypass, stale
+on approvals, and the *only* repo stale on code-owner. That is the operational core of this card:
+**a per-field verdict does not compose into a per-repo verdict**, so "is this repo compliant?" has
+no answer short of checking every field the payload sets. The first two fields were found by asking
+what the ruling changed; the third and fourth only by a peer challenging a claim built on the first
+two.
+
+**CORRECTED 2026-08-16T22:44:32+0200 — the consequence above was OVERSTATED, and a field I never sampled
+is what decides it.** This card originally read *"21 of 22 fleet repos currently cannot merge a pull
+request."* **That is wrong.** `agentlenspro-bd` challenged it against their own repo; measured
+fleet-wide, `baseline-pr-and-checks` carries `bypass_actors: [{actor_id 5, RepositoryRole,
+**always**}]` on **20 of 21** repos — so **the owner bypasses the pull-request requirement entirely**
+and can push and merge directly, which is exactly what `publish.py` does. The single exception,
+`perfect-skill-suggester`, has **no `pull_request` rule at all**, so there is nothing to bypass.
+
+**Zero fleet repos are actively blocked.** `approvals=1` is a **latent trap** that fires on the
+first non-owner contributor PR — or the day anyone removes the admin bypass — **not a live
+outage.** The distinction matters operationally: *"cannot merge"* reads as an active blockage and
+sends a reader hunting for a stuck PR that does not exist.
+
+**What remains true and unchanged:** `approvals=1` is not the ratified value, the ruling never
+reached these repos, and GitHub forbids self-approval — so a genuine contributor PR cannot clear the
+gate.
+
+**The error is the same one this card argues against, committed by this card.** I made the
+"one field misleads" point, then built a **two-field** census and asserted a consequence that a
+**third** field determines. Sampling a field is not the same as sampling the field that decides the
+claim.
 
 Nothing is broken in the code. The applier was simply never re-run. That is the whole mechanism, and
 it is why *a closed ruling, a merged commit, an applier's own success line and a green suite are all
@@ -93,6 +120,37 @@ PRE-ruling shape.** An agent "restoring the ratified baseline as-is" from that p
 **Tier-0 EXEMPT**, so nothing would stop it. The SSOT's own module docstring is stale in the same
 way, in the same file as the correct payload (`branch_protection_lib.py:24` vs `:226`).
 
+### The prose defect is a MISSED RULING, not an unmaintained file — and it is one file, not two
+
+Raised by `llm-externalizer-59` and verified here first-hand, with a control they did not run:
+
+| file | `2026-08-13` hits | `bypass_actors` | `approvals` |
+|---|---|---|---|
+| `~/.claude/rules/manager-approval-defaults.md` — **machine-global, loaded into EVERY session on this box** | **0** | `[]` :114 | `1` :125 |
+| `rules/aimaestro/aimaestro-manager-approval-defaults.md` — this repo's DEP overlay | **2** | `[5]` :125 | `0` :141 |
+
+**The same ruling WAS recorded — in one of the two documents.** So this is not "nobody maintains
+governance prose": the machine-global file records the **2026-08-08** ruling at `:116`, dated, with
+an explicit *"do NOT re-add it"* warning. The mechanism demonstrably exists and was run once and not
+the next time. **That makes the remedy small and checkable — one missed ruling in one file — rather
+than a practice to adopt.**
+
+**And it is stale in the most authoritative-sounding place.** A reader who spot-checks the
+careful, dated linear-history line at `:116` concludes the section is current, and reads
+`approvals:1` eleven lines below it as ratified. **That is this card's own partial-compliance
+pattern, one layer up: rulesets, and now the document describing them.**
+
+**Consequence for sequencing:** applying this card's fix **without** correcting the prose leaves the
+next *"restore to baseline as-is"* to silently undo it — Tier-0 EXEMPT the whole way. The prose
+correction is a governance edit in the USER's own `~/.claude/rules/`, so it is **not** in this
+card's scope to make; it is named here so the two are not separated.
+
+**The general property, worth stating because it defeats the obvious sweep:** both reference-layer
+defects found tonight (this file, and a USER-memory page) **fail toward COMPLIANT**. A stale
+artifact eventually produces an error someone trips over; a stale reference produces a **PASS**, and
+nobody investigates a pass. Any sweep that checks artifacts against specs will keep certifying
+this, because the sweep's own ruler is the defect.
+
 **Build every payload from the code, never from prose**, and diff each ruleset against **its own**
 pre-change backup rather than against the intent — a post-condition read from the same idea that
 produced the write cannot see a write aimed at the wrong target.
@@ -109,8 +167,15 @@ Per repo, per ruleset object, with a backup taken first:
 1. `baseline-history-protect` → set `bypass_actors` to `[{actor_id: 5, actor_type: RepositoryRole,
    bypass_mode: always}]`. Rules stay exactly `deletion` + `non_fast_forward`; **`required_linear_history`
    is absent everywhere and stays absent** (the 2026-08-08 ruling).
-2. `baseline-pr-and-checks` → set `required_approving_review_count` to `0`. Bypass unchanged.
-3. `baseline-tag-protect` → **untouched.**
+2. `baseline-pr-and-checks` → set `required_approving_review_count` to `0`. Bypass unchanged (it is
+   already ratified `[5]` on 20 of 21 — **do not "fix" it**).
+3. `baseline-pr-and-checks` → set `require_code_owner_review` to `false` on `AgentlensPro` **only**;
+   the other 19 are already `false` and `perfect-skill-suggester` has no PR rule to set it on.
+4. `baseline-tag-protect` → **untouched.**
+
+**Set the whole payload from the SSOT rather than patching the fields this card names.** Three of
+four sampled fields had drifted independently and the card's first draft knew about one of them; a
+field-by-field patch list is exactly the instrument that missed the other two.
 
 Two further gaps, in scope for the same pass because they are the same baseline:
 `Emasoft/ai-maestro-plugins` and `Emasoft/talk-to-claude` carry **no `baseline-tag-protect` at all**.
@@ -120,8 +185,13 @@ Two further gaps, in scope for the same pass because they are the same baseline:
 - Per object: fetch after, and **diff against its own pre-change backup**, not against the intent.
 - Flag any `0 → non-zero` move on a field whose correct value may be empty — an empty-selection
   filter exits 0 and looks like success.
-- Re-run the fleet census and assert **22 of 22** carry both ratified fields; report the count from
-  the re-run, never by quoting this card's numbers (a census is a snapshot).
+- Re-run the fleet census and assert **22 of 22** carry the ratified payload — **every field the
+  SSOT sets, not the four this card sampled.** A per-field pass does not compose into a per-repo
+  pass; this card proved that twice. Report the count from the re-run, never by quoting this card's
+  numbers (a census is a snapshot).
+- **Assert the prose and the code AGREE** before certifying anything: `grep -c '2026-08-13'` on
+  `~/.claude/rules/manager-approval-defaults.md` currently returns **0**. While it does, any later
+  "restore to baseline as-is" re-imposes what this fix removed.
 - `baseline-tag-protect` bypass is still `[]` on every repo that had one.
 - The three 404 repos (`Emasoft/emasoft-chief-of-staff`, `Emasoft/mesh-vectorizer`,
   `Emasoft/xls-cross-platform`) are **resolved as a separate question** — renamed, deleted, or

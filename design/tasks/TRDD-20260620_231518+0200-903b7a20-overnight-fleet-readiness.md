@@ -3,7 +3,7 @@ trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-16T11:06:27+0200
+updated: 2026-08-16T11:10:25+0200
 min-approval-requirement: none
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -549,7 +549,30 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
       So **G2 is unblocked** (both its externals closed) and needs only verification; B2 and B4 are
       done. Eighth stale blocker found today by re-running a recorded measurement — and the most
       expensive one, because this card gates a campaign and 20 cards read it.
-- [ ] **G2** — verify now that `janitor#73` + `orch#27` have landed. Unblocked, unverified.
+- [ ] **G2** — *(both externals VERIFIED LANDED 2026-08-16; the functional half is NOT verifiable
+      on this host, which is why the box stays open.)*
+      · **`janitor#73` (the 3 IND global rules) — LANDED.** All three are installed here:
+      `~/.claude/rules/trdd-design-tasks.md` (9751 B), `prrd-design-rules.md` (5864 B),
+      `universal-kanban.md` (5329 B), all mtime 2026-08-15, with a negative control (a
+      deliberately-absent rule name) returning absent as expected.
+      · **`orch#27` (kanban aligned to the ratified 17) — LANDED at source.** The orchestrator repo
+      ships a dedicated `shared/amoa_kanban_vocab.py` plus `docs/STATUS_MAPPING.md` and
+      `scripts/amoa_sync_kanban.py`, all carrying the 17-column terms; a `kanban` control search
+      confirms the query reaches the repo. Residue worth one look, NOT a blocker: the legacy
+      `not-started` string survives in two REFERENCE docs
+      (`amoa-agent-replacement/.../op-generate-handoff-document.md`,
+      `amoa-module-lifecycle/references/module-removal-rules.md`) — prose, not the sync path.
+      · **WHY THIS BOX STAYS OPEN:** G2 claims the 3-pillars system *"working across role plugins +
+      GitHub"*, and `ai-maestro-orchestrator-agent` is **neither installed nor cached on this
+      host** (`installed_plugins.json` has no match). The externals it waited on are done; the
+      functional claim needs a host that actually runs the plugin.
+      · **⚠ INSTRUMENT BUG, caught before it became a claim:** my first check used
+      `d=$(ls -d ~/.claude/plugins/cache/*/ai-maestro-orchestrator-agent/*/ | tail -1)`, the glob
+      matched nothing, `d` fell back to `.`, and the grep measured THIS repo — reporting "67 files
+      with 17-column terms, 24 with legacy terms" as if it were the plugin. The tell was the
+      echoed `cached: .`. Same wrong-population error as the `Emasoft`-only template search earlier
+      today; the fix both times is to ECHO the resolved path and treat an unexpected one as the
+      result.
 - [ ] **G4** — visual-communicator side panel.
 - [ ] **G7** — API ↔ external plugins.
 - [ ] **G10** — core-plugin sync sweep.

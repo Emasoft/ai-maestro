@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:12:48+0200
+updated: 2026-08-16T20:14:30+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -41,11 +41,25 @@ finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
 
-**9 sessions reported as of 19:28 (architect, assistant-role, CORE, maintainer, orchestrator, PSS, programmer,
-llm-externalizer); architect and assistant-role are Phase-1 COMPLETE on all four axes; every
-CONFIRMED finding is hub-verified — see the ledger below.** Outstanding: every session that has not
-yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
-correctly refused by three sessions; the hold is endorsed).
+**14 sessions reported as of 20:14** — architect, assistant-role, CORE, maintainer, orchestrator,
+PSS, programmer, llm-externalizer, **visual-comunicator, webdesign, CPV, integrator, autonomous,
+assistant-manager**. Phase-1 COMPLETE on all axes: architect, assistant-role, visual-comunicator,
+webdesign, CPV, integrator, autonomous, assistant-manager. **Every CONFIRMED finding is
+hub-verified** — see the ledger. Outstanding: janitor, chief-of-staff, plugin-94, and any session
+not listed. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was correctly refused by
+three sessions; the hold is endorsed, and every reporting session has independently confirmed it
+has queued no remediation).
+
+**The hub's own Phase 1 is now underway too** (nobody had audited the hub): axis 3 done — the
+installed CLI family is `38 identical / 0 stale / 21 no-counterpart`, of which **8 are executables
+on PATH that no repo in the fleet ships**, still named in md instructions. Axis 2 found **167 of
+249 archived cards at a column `3P-ZON-05` does not admit, with zero tool references to that MUST**.
+
+**The evening's largest finding is not in any plugin.** Four sessions independently re-derived the
+same worker-liveness rule at ~6 worker-hours, while `ATOM-DXFF-KOY4` already carried half of it in
+USER memory and recall fired for none of them. **That is a defect in RECALL, not in knowledge** —
+and this programme's own contract is spread across a TRDD ledger that no `memgrep recall` will ever
+surface. Phase-2 candidate, and it is about the fleet's memory rather than its code.
 
 **TWO TEMPLATE-WIDE DEFECTS have surfaced, and both were invisible from inside any single repo** —
 each was found by a session that had verified its own copy correctly and stopped at its own tree

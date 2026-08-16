@@ -1,12 +1,12 @@
 ---
 trdd-id: GIONLYAF
-title: Eight executables on PATH are shipped by no repo in the fleet and are still named in instructions
+title: Two PATH executables encode the superseded GitHub-as-SSOT kanban model and no repo ships them
 column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-16T21:44:22+0200
+updated: 2026-08-16T22:33:02+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -25,7 +25,7 @@ eht: []
 blocked-by: []
 release-via: none
 priority: 2
-severity: low
+severity: medium
 effort: S
 labels: [scripts, distribution, hub-self-audit]
 external-refs: []
@@ -100,6 +100,56 @@ about:
 missing-uninstall residue (documented as removed), 1 branch-only file, and **3 with provenance still
 unknown** (`aimaestro-agent-bash`, `kanban-sync.py`, `kanban-sync.sh`) — the only open question, and
 the only reason this card stays open rather than closing as refuted. Severity drops accordingly.
+
+## INVESTIGATION 2026-08-16 (cont.) — the last open question, answered. 8 → 7 unowned, and the
+## residue is not litter: two executables encode a SUPERSEDED governance model.
+
+**`aimaestro-agent-bash` was never unowned — it is a SYMLINK** to `aimaestro-agent.sh`, so it
+belongs in the *launcher → target* bucket beside the nine already there (it is a **second** link to
+the same target as `aimaestro-agent`, which is why the first pass caught one and missed this one).
+
+**That is a defect in my own census, and it is the interesting half.** The instrument classified by
+*"no same-named repo file to byte-compare"* — and **a symlink has no bytes of its own to compare**,
+so every symlink whose name differs from its target falls into UNOWNED by construction. `ls -la`
+answers it in one call. The corrected count is **7 unowned, 2 of unknown provenance.**
+
+(`stat -f '%z'` printed filesystem garbage on the same line — the GNU-vs-BSD trap this repo's
+lessons file already records. Only the `|| ls -la` fallback produced the answer, which is the whole
+argument for writing the fallback.)
+
+### The two survivors: `kanban-sync.py` (346 lines) and `kanban-sync.sh` (384 lines)
+
+**Provenance — absent from all fetched history, and the zero is controlled.** `git log --all
+--diff-filter=AD` finds no add and no delete for either (control: `trddgrep.mjs` = 2 history lines);
+`find ~/Code -maxdepth 4` finds neither (control: `publish.py` = 22 hits). Remote-tracking refs ARE
+fetched (238 total, 3 on `origin`) and a known-upstream file resolves, so the search reaches real
+upstream history. **Boundary stated rather than glossed:** only 3 `origin` refs are fetched, so an
+unfetched upstream branch is not excluded.
+
+Both are unambiguously AI Maestro's — they call `http://localhost:23000`, and `kanban-sync.sh`
+self-identifies in its header as *"Part of AI Maestro (https://github.com/23blocks-OS/ai-maestro)"*.
+Both dated **2026-03-15**, half an hour apart: one authoring session.
+
+**They encode the INVERSE of the ratified kanban model, in two mechanically checkable ways:**
+
+| | the script | the ratified rule |
+|---|---|---|
+| source of truth | `kanban-sync.py` docstring: *"GitHub is the sole source of truth."* | `aimaestro-kanban-multiagent.md:129`: *"Sync is **one-way authoritative**: the internal board is truth"* |
+| column vocabulary | `kanban-sync.sh:108` — `local init_status="backlog"` | the ratified 17 columns begin at **`backburner`**; **`backlog` is not among them** |
+
+**They are stale-by-supersession, not rogue.** The overlay was added **2026-07-08** and last revised
+2026-07-18; the scripts are from **2026-03-15** — they predate the ruling by four months and nothing
+removed them when the model changed.
+
+**So the card's hazard survives in a sharper form than its original premise.** The refuted premise
+was *"documentation still points at them"*. The real one is that **the executables themselves are
+the documentation**: an agent that finds `kanban-sync.py` on PATH and reads its docstring learns
+*"GitHub is the sole source of truth"* — the exact inversion of the rule it is meant to obey — and
+`kanban-sync.sh` would write a `backlog` column no consumer admits. That is the
+`check-all-files-after-breaking-change` failure mode one level below prose: **a superseded model
+shipped as a runnable file, where no linter, type-check or test can see it.**
+
+**Neither was executed** to establish any of this, per the standing rule about argv-less scripts.
 
 ## Root cause
 

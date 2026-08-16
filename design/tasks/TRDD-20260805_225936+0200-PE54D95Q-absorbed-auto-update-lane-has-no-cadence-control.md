@@ -5,8 +5,8 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-16T00:45:58+0200
-implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3]
+updated: 2026-08-16T10:03:19+0200
+implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -28,7 +28,71 @@ external-refs: [Emasoft/ai-maestro#102]
 ---
 # The absorbed auto-update lane has no cadence control and retries permanent failures hourly
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-06
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### 2026-08-16 10:03 — THE COLLISION FIX LANDED. `85bf0b02` `fcf19a71` `b7a47a41`
+
+USER authorization, verbatim: *"Clear the phantom env var, Build the refresh fix (i + v), Fix the
+credential mandate, never ask me those obvious things again."* Item 2 of three is this. Two
+defects, both measured, both fixed:
+
+**(i) THE FAILURE HAD NO CAUSE IN IT — closed.** The catch stored `err.message` alone, which for
+promisified `execFile` is `Command failed: <cmd>\n<stderr>`; this CLI writes to **stdout** and
+leaves stderr EMPTY, so all 12 recorded failures 2026-08-06→08-15 read exactly
+`Command failed: claude plugin marketplace update\n` and nothing more — ten days of a recurring
+defect leaving no evidence, while `err.stdout` held the answer and was discarded. New
+`describeRefreshFailure` keeps stdout first, keeps stderr anyway (its emptiness is evidence),
+says so when both were empty, clamps from BOTH ends with the cut marked, and separates a TIMEOUT
+KILL (`killed` + signal, no numeric code) from a non-zero exit — two failures with opposite
+remedies that `err.message` cannot tell apart.
+
+**(ii) SUBSTITUTED FOR (v), and the substitution is the finding.** The USER approved **i + v**,
+where (v) was *lengthen the 2-minute boot settle past the janitor's ~30-minute window*. **(v)
+cannot work, and I did not know that when I recommended it:** `ABSORBED_DUTY_POLL_MS` is
+**15 minutes** (`auto-update-service.ts:136`, used at :246/:251) and is stamp-gated, so the poll
+fires INDEPENDENTLY of the settle timer (:308) and would run the refresh at boot+15 min however
+long the settle is. A longer settle buys nothing.
+
+What landed instead is **(ii) observe-and-skip**, as new gate **G02b** inside
+`RefreshAllMarketplaces` — which is strictly better than (v) even had (v) worked, because it
+guards the SPAWN and therefore covers the settle path, the poll path, and every other caller,
+where (v) guarded only one timer.
+
+- **SKIP, never wait** — the contract `lib/marketplace-lock.ts` already documents for its own
+  lock. The 15-minute poll IS the retry; waiting would hold a call open for up to half an hour.
+- **The TOCTOU window is benign BY DIRECTION.** The observation can only go stale toward *nobody
+  is running*, and the loser SKIPS, so a race degrades to exactly today's behaviour, never worse.
+- **Deliberately NOT a lock.** The kernel `flock(2)` the janitor uses needs a native addon the
+  USER ruled against 2026-07-17; this is the residual-window mitigation that ruling left open.
+- **The needle is the three CONSECUTIVE argv words `plugin marketplace update`, not `claude`** —
+  requiring `claude` would miss a wrapper form, and a MISS re-admits the collision, whereas a
+  false positive costs one skipped round.
+- **FAILS OPEN.** An unreadable `ps` must not turn one broken observer into a permanent outage of
+  the thing observed.
+- **No self-match risk**, the trap this family of checks dies on: node's `execFile` spawns `ps`
+  with NO intermediate shell, so nothing carries the needle as a consequence of looking.
+- A skip is a **THIRD outcome**: `ChangeResult` gained an optional `skipped` and the lane records
+  the `skipped` status (already in that vocabulary). Reporting a skip as `updated` would claim
+  work that never ran; as `failed` it would invent a fault.
+
+**VERIFIED:** `tsc --noEmit` 0 lines · the 5 affected test files **65/65** · the refresh file went
+6 → **20** tests with **six OBSERVED neuters** (4/5/6/9 → 1 red each, 7 → 3 red, 8 → 1 red), every
+restore blob-verified, 0 timeouts. Two asymmetries are recorded in the test file's own header
+because they are the load-bearing part: N4 reds ONLY the skip test (the other two in that describe
+assert the refresh RUNS, which a disarmed guard also produces — hence that test asserts
+`refreshIdx() === -1`, not the result shape), and N7 reds THREE (the clamping and the
+pipeline-wiring tests both reach the CLI output through that one line).
+
+**NOT DEPLOYED.** `services/*.ts` is BUNDLED into `.next` — a `pm2 restart` alone does not load it
+(this card already lost a day to exactly that, §"EVERY MEASUREMENT ABOVE WAS TAKEN AGAINST A SERVER
+RUNNING PRE-FIX CODE"). It needs `yarn build` then a restart, and the server already logs
+`[BUILD] The .next build is 176h+ OLDER than the last commit`. Verify by EFFECT afterwards — a
+recorded failure that carries stdout, or a `skipped` row — never by `git log`.
+
+**The NEXT ACTION below (AC6 / the registry-sync question) is UNCHANGED and still open.** It was
+never what blocked this fix.
+
+---
 
 **LANDED: the cadence only.** `4e66947e` — `ABSORBED_DUTY_INTERVAL_MS` 1 h → **3 h**
 (`services/auto-update-service.ts:111`), pinned by *"arms its timer at exactly 3 hours"* in

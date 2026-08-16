@@ -131,6 +131,39 @@ if (EDIT_FLAGS.has(cmd)) {
   process.exit(2)
 }
 
+// An UNKNOWN OPTION is a could-not-run (2), never a silently-ignored token.
+//
+// The shared core enforces this at `lib/pillar/cli.ts:193` — which is why `prrdgrep --xyzzy`
+// and `specgrep --xyzzy` both exit 2 with "could not run — unknown option" — and trddgrep,
+// which does NOT route through that core, had no equivalent. Measured 2026-08-16:
+// `trddgrep validate --min-severity error` printed all 265 findings (264 of them WARN) and
+// exited 1, exactly as the bare command does. `--min-severity` does not exist. It was not
+// rejected, not warned about, not even mentioned: the flag was dropped on the floor and the
+// tool answered a DIFFERENT question than the one asked, with an exit code that looks like a
+// verdict. A caller filtering for errors gets the unfiltered corpus and no way to tell.
+//
+// That is the same defect class this repo has been finding all day in other tools (a CLI
+// printing `error: unknown option` and exiting 0, so its caller reported success having run
+// nothing) — and finding it in our own governance gate is worse, because `validate` is the
+// tool other tools trust. Two sibling CLIs behaving one way and the third behaving another is
+// also precisely the cross-tool drift the shared core exists to prevent.
+//
+// `edit` is exempt HERE because it owns a stricter check of its own further down (it rejects
+// stray tokens rather than allowlisting, since a mutating verb must never ignore anything).
+const KNOWN_FLAGS = new Set([
+  '--strict',      // validate | lint | doctor
+  '--all',         // index-verify
+  '--repair',      // index-verify
+  '--dry-run',     // fix
+])
+if (cmd !== 'edit') {
+  const unknownFlag = argv.find((t) => t.startsWith('--') && !KNOWN_FLAGS.has(t))
+  if (unknownFlag) {
+    console.error(`trddgrep: could not run — unknown option ${unknownFlag} — see \`trddgrep help\``)
+    process.exit(2)
+  }
+}
+
 // Rows a list-shaped answer prints before it STOPS AND SAYS SO.
 //
 // A silent cap is the same class of bug as a silent empty result, and at 10⁵ these

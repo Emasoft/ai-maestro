@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:20:02+0200
+updated: 2026-08-16T19:21:28+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -548,12 +548,26 @@ committed two commits after writing the rule against it into this card's own con
   MENTION of the grammar declare an atom, putting **13 phantom atoms** in the index, four sharing
   one id.
 
-**So the question is not placement — it is whether the marker LINE parses as a marker at all**,
-which is also why five workarounds aimed at the lookup changed nothing: a line that never opens a
-block cannot be reached by any id form, reindex or relocation. Decisive check is a comparison, not a
-judgement: `cat -A` the atom's marker line against a working sibling's. If `add-atom` EMITTED a
-non-conforming line, the writer and the parser disagree about the grammar — a far more precise
-defect than "the read verb cannot find the write verb's atom".
+**~~So the question is whether the marker LINE parses at all~~ — ALSO STRUCK, within the hour.**
+`cat -A` on the atom's line vs a working sibling's: `^` at the first byte, id in `[A-Za-z0-9-]`,
+one space, depth-matched brackets — **byte-identical in shape**, and all four atoms on the page
+check out. By all three conditions of `first_block_property_marker` the line IS a marker.
+
+**HUB SCORE ON THIS BUG: 0 for 2, twenty minutes, both explanations read from real source.** That
+is the entry worth keeping, and it is now a line in `.claude/rules/lessons-verification.md`:
+**reading the code is necessary and NOT sufficient — a mechanism derived from code you read is
+still an INDUCTION until a case it FORBIDS is tested.** Reading confirms an explanation on the
+examples already in front of you, exactly as positive examples do (same family as the bullet two
+sections up, one layer deeper).
+
+**The maintainer's THIRD measurement narrowed it further than either story:** `add-lesson`
+SUCCEEDED the same session with the same `ATOM-XXXX-XXXX` id form on a different page, plus two
+more against `^name` anchors. **So the verb works and the id form works; the fault is specific to
+that atom or that page.** A measurement, not an inference.
+
+**THEIR STOP RULE IS THE FINDING, recorded as theirs:** at two falsified passes, stop inducing and
+hand over evidence — *"these two plausible explanations are wrong, here is the reproduction"* is
+worth more to the owner than either guess, because it also saves them the two dead ends.
 
 Not filed: the janitor's repo, the maintainer's finding, filing is outward-facing, and neither
 party has the owner's say-so.

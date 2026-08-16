@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:32:44+0200
-updated: 2026-08-16T20:32:44+0200
+updated: 2026-08-16T21:47:33+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -79,6 +79,44 @@ the fields that differ.
 
 Applying the ratified baseline as-is is Tier-0 EXEMPT. **Any deviation from it is Tier 2** and does
 not belong in this card.
+
+## PREPARED 2026-08-16 — payload read from the code SSOT, backups taken, diff computed. NOT applied.
+
+**The SSOT's own prose is stale, exactly as this card predicted — and it is stale IN THE SAME FILE
+as the code.** `branch_protection_lib.py:24` (module docstring) states
+*"`baseline-history-protect` — `bypass_actors: []` (nobody bypasses…)"*, while the payload at
+**`:226`** grants `{actor_id: _ADMIN_REPOSITORY_ROLE_ID, RepositoryRole, always}`. The spec's rule —
+**code beats prose on any disagreement** — is what makes this resolvable. An agent that read only
+the docstring would have "restored the ratified baseline" by re-imposing the very lock the ruling
+abolished, and would have been Tier-0 EXEMPT doing it.
+
+The code also anticipates the other half, at `:299-303`:
+> *"Do NOT 'restore' this to 1 on the theory that review is being skipped. It is the same class of
+> error as `required_linear_history` (janitor#14) — a rule that reads as rigour and functions as a
+> deadlock."*
+
+**Backups taken first** (verification diffs each object against ITS OWN backup, never against the
+intent): `17863667` 633 B · `17863669` 1145 B · `17947120` 670 B.
+
+**The complete diff is TWO fields. Nothing else changes:**
+
+| ruleset | id | field | now → SSOT |
+|---|---|---|---|
+| `baseline-history-protect` | 17863667 | `bypass_actors` | `[]` → `[{actor_id 5, RepositoryRole, always}]` |
+| `baseline-pr-and-checks` | 17863669 | `required_approving_review_count` | `1` → **`0`** |
+| `baseline-tag-protect` | 17947120 | — | **LEAVE UNTOUCHED** (`bypass_actors: []` is its *ratified* value) |
+
+`required_linear_history` is absent everywhere and stays absent. `deletion` + `non_fast_forward`
+continue to bind **every non-admin actor** — CI, agents, outside contributors — so the change
+exempts the owner and no one else.
+
+**NOT APPLIED, deliberately.** Applying the ratified baseline as-is is Tier-0 EXEMPT, so the freeze
+is not what stops it: this is an **outward-facing mutation of repository protection settings**, made
+unattended, and the standing rule is to confirm those rather than assume standing authorization
+covers the moment. Everything that does not require the write is done — so the remaining act is one
+reviewed command per field, against a known-good backup, with `baseline-tag-protect` explicitly out
+of scope (a fix shaped for the PR ruleset applied there would silently *weaken* it, which is the
+hazard this card names).
 
 ## Verification
 

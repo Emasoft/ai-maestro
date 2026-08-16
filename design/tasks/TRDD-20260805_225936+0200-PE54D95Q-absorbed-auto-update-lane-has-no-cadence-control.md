@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-16T10:47:03+0200
+updated: 2026-08-16T11:41:50+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -100,9 +100,18 @@ failure before then as success:**
 node -e 'const j=require(require("os").homedir()+"/.aimaestro/auto-update-settings.json");
 console.log(j.lastAbsorbedRunAt, JSON.stringify((j.lastRunSummary||[]).find(r=>r.target==="absorbed:marketplace-refresh")))'
 ```
-PASS is `lastAbsorbedRunAt` past 11:40 AND the row being one of: `updated`; `skipped` with a pid in
-the detail (G02b fired — also a pass, and the more informative one); or `failed` whose detail
+PASS is `lastAbsorbedRunAt` past the due time AND the row being one of: `updated`; `skipped` with a
+pid in the detail (G02b fired — also a pass, and the more informative one); or `failed` whose detail
 carries `stdout:` / `TIMEOUT after 1800s` rather than a bare `Command failed:` line.
+
+**⚠ THE DUE TIME IS A WINDOW, NOT AN INSTANT — measured 11:41:17, and a naive reading would have
+called it a failure.** The lane does not fire at the 4 h mark; it fires at the first 15-minute POLL
+*after* the stamp goes overdue. With `lastAbsorbedRunAt` = 07:40:36 the stamp turns overdue at
+11:40:36, and the poll boundary (boot 10:08 + a 2-min settle, then every 15 min) lands at 11:40:00 —
+**36 seconds too early**, so that poll correctly skipped and the run moves to ~11:55. So the honest
+PASS window is **[due, due + `ABSORBED_DUTY_POLL_MS`]**, i.e. up to 15 minutes late BY DESIGN, and a
+check at 11:41 showing the old stamp is the system working. Do not read a miss inside that window as
+a regression — that is the same false-alarm shape this whole card exists to remove.
 
 **NOT DEPLOYED** *(superseded by the line above — kept because the reasoning still binds for the
 next change here)*. `services/*.ts` is BUNDLED into `.next` — a `pm2 restart` alone does not load it

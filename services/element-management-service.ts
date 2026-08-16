@@ -5344,6 +5344,15 @@ export interface ChangeResult {
   operations: string[]
   restartNeeded: boolean
   error?: string
+  /** Set when the pipeline deliberately did NOT act, and carries the reason.
+   *
+   *  A skip is a THIRD outcome and neither of the other two describes it: reporting it as a
+   *  failure invents a fault, and reporting it as a plain success claims work that never
+   *  happened — the second being the worse lie, and exactly the shape of the messages
+   *  TRDD-PE54D95Q was opened to remove. `success` stays TRUE (nothing went wrong), so every
+   *  existing consumer keeps behaving correctly; a consumer that wants the distinction reads
+   *  this field. Additive and optional on purpose — no caller is obliged to know about it. */
+  skipped?: string
 }
 
 // ── Path safety helper ───────────────────────────────────────
@@ -5477,6 +5486,34 @@ export async function RefreshAllMarketplaces(authContext: AuthContext): Promise<
     const ironErr = assertAgentMayNotUserScope('user', 'update', authContext, ops)
     if (ironErr) { result.error = ironErr; return result }
 
+    // G02b — do not start a refresh while another process is already running one.
+    //
+    // MEASURED (TRDD-PE54D95Q): this host has TWO executors of the same chore — this lane and the
+    // ai-maestro-janitor daemon — and they share no lock. Uncontended the command runs ~1148 s;
+    // the janitor logged 84 / 1134 / 1254 / 1808 / 1815 s for it, so 2 of 5 crossed the 1800 s cap
+    // above. Two concurrent runs contend on the same git fetches and push each other past the cap,
+    // where the all-or-nothing batch discards EVERY result. Skipping costs one round; colliding
+    // costs both rounds.
+    //
+    // SKIP, never wait — the same contract `lib/marketplace-lock.ts` documents for its own lock.
+    // The absorbed lane re-polls every ABSORBED_DUTY_POLL_MS (15 min), which is the retry, so a
+    // skip is a deferral of minutes and a wait would hold a request open for up to half an hour.
+    //
+    // The TOCTOU window is benign BY DIRECTION: the observation can only be stale toward "nobody
+    // is running", and the loser SKIPS rather than proceeding — so a race degrades to the exact
+    // behaviour we already have today, never to something worse. It is deliberately NOT a lock:
+    // the kernel-level `flock(2)` the janitor uses needs a native addon the USER ruled against on
+    // 2026-07-17, and this is the residual-window mitigation that ruling left available.
+    const foreignPid = await foreignMarketplaceRefreshPid()
+    if (foreignPid !== null) {
+      const why = `another process (pid ${foreignPid}) is already running a marketplace refresh`
+      ops.push(`G02b: SKIPPED — ${why}`)
+      result.skipped = why
+      result.success = true
+      result.restartNeeded = false
+      return result
+    }
+
     // 30 min, not the 900 s this shipped with. MEASURED 2026-08-06 (TRDD-PE54D95Q): the argless
     // refresh of 275 marketplaces takes **1082 s** and EXITS 0 — so the old cap killed a run that
     // was 182 s from succeeding, and discarded all 275 results, every cycle. The batch is
@@ -5497,10 +5534,131 @@ export async function RefreshAllMarketplaces(authContext: AuthContext): Promise<
     result.restartNeeded = false
     return result
   } catch (err) {
-    result.error = err instanceof Error ? err.message : String(err)
+    result.error = describeRefreshFailure(err)
     console.error('[RefreshAllMarketplaces] FAILED:', result.error)
     return result
   }
+}
+
+/** Budget for the `ps` snapshot that answers "is a refresh already running?". Small on purpose —
+ *  `ps` is a local read that returns in milliseconds, and this guard must never become a second
+ *  way for the refresh lane to hang. */
+const PS_SNAPSHOT_TIMEOUT_MS = 10 * 1000
+
+/**
+ * Find a marketplace refresh already running in a `ps` snapshot, or null.
+ *
+ * PURE, and separated from the snapshot so it can be tested against real `ps` text without
+ * spawning anything.
+ *
+ * THE NEEDLE is the three CONSECUTIVE argv words `plugin marketplace update`, not the string
+ * `claude`. Requiring `claude` would miss every wrapper form the janitor might use (a shell line,
+ * an absolute path to a differently-named launcher), and a MISS is the expensive direction: it
+ * re-admits the collision this guard exists to prevent. A false POSITIVE costs one skipped round,
+ * which the 15-minute poll retries. So the match is deliberately biased toward skipping.
+ * Consecutive rather than merely-present, so an unrelated command line that happens to contain all
+ * three words scattered across it does not match.
+ *
+ * SELF-MATCH — the trap this whole family of checks dies on — cannot happen here: the snapshot is
+ * taken by node's `execFile` with NO intermediate shell, so nothing on the machine carries the
+ * needle in its argv as a consequence of us looking, and `ps -eo pid,command` names only itself.
+ * The `selfPid` exclusion is therefore belt-and-braces, and it deliberately does NOT exclude our
+ * own children: a refresh WE started and left running is precisely the overlap worth catching.
+ */
+export function findForeignMarketplaceRefresh(psSnapshot: string, selfPid: number): number | null {
+  for (const line of psSnapshot.split('\n')) {
+    const m = /^\s*(\d+)\s+(.+)$/.exec(line)
+    if (!m) continue                        // the `PID COMMAND` header and blank lines
+    const pid = Number(m[1])
+    if (pid === selfPid) continue
+    const words = m[2].trim().split(/\s+/)
+    for (let i = 0; i + 2 < words.length; i++) {
+      if (words[i] === 'plugin' && words[i + 1] === 'marketplace' && words[i + 2] === 'update') return pid
+    }
+  }
+  return null
+}
+
+/** Take the `ps` snapshot and ask {@link findForeignMarketplaceRefresh} about it.
+ *
+ *  FAILS OPEN — a snapshot we could not take must not block the chore forever, so an unreadable
+ *  `ps` degrades to exactly today's behaviour (refresh anyway) rather than to a lane that never
+ *  runs again. The opposite choice would turn one broken observer into a permanent outage of the
+ *  thing being observed. */
+async function foreignMarketplaceRefreshPid(): Promise<number | null> {
+  try {
+    const { stdout } = await execFileAsync('ps', ['-eo', 'pid,command'], {
+      timeout: PS_SNAPSHOT_TIMEOUT_MS,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    return findForeignMarketplaceRefresh(String(stdout ?? ''), process.pid)
+  } catch {
+    return null
+  }
+}
+
+/** How much of the CLI's own output to keep in the recorded failure. The whole SUCCESSFUL output
+ *  is 74 bytes (measured 2026-08-16: `Updating 260 marketplace(s)...✔ Successfully updated 260
+ *  marketplace(s)`), so this is ~26x the normal volume — generous for a failure while still
+ *  bounding what lands in a log line and in the persisted `lastRunSummary` trail. */
+export const REFRESH_OUTPUT_KEEP_BYTES = 2000
+
+/** Keep BOTH ends when truncating, never just the tail.
+ *
+ *  A CLI prints its DIAGNOSIS first and the raw underlying error last, so `tail` keeps exactly the
+ *  wrong end and `head` loses the cause — the only safe bounded capture is head + tail with the
+ *  cut marked, so a reader can see that something was dropped rather than silently reading a
+ *  fragment as the whole. */
+function clampBothEnds(s: string, keep: number): string {
+  const t = s.trim()
+  if (t.length <= keep) return t
+  const half = Math.floor(keep / 2)
+  return `${t.slice(0, half)}\n…[${t.length - keep} bytes elided]…\n${t.slice(-half)}`
+}
+
+/**
+ * Build the recorded failure string for the argless refresh.
+ *
+ * WHY THIS EXISTS (TRDD-PE54D95Q, measured 2026-08-16). The catch used to store `err.message`
+ * alone. For promisified `execFile` that is `Command failed: <cmd>\n<stderr>` — and this CLI
+ * writes everything to **stdout**, leaving stderr EMPTY. So all 12 recorded failures between
+ * 2026-08-06 and 2026-08-15 read exactly `Command failed: claude plugin marketplace update\n`
+ * with nothing after the newline: a defect that recurred for ten days and left no cause behind.
+ * `err.stdout` held whatever the CLI had managed to print and was discarded.
+ *
+ * It ALSO distinguishes a timeout kill from a non-zero exit, because they have opposite remedies
+ * and the bare message cannot tell them apart. Node marks the timeout path with `killed: true`
+ * plus the signal it sent; a real CLI refusal carries an exit `code` instead. On this host the
+ * refresh is genuinely near its cap — measured 1148 s uncontended, while the janitor daemon logged
+ * 84/1134/1254/1808/1815 s for the same command, so 2 of 5 exceeded the 1800 s budget.
+ */
+export function describeRefreshFailure(err: unknown): string {
+  if (!(err instanceof Error)) return String(err)
+  const e = err as Error & {
+    killed?: boolean
+    signal?: string | null
+    code?: number | string
+    stdout?: string
+    stderr?: string
+  }
+
+  // `killed` is what node sets when ITS timeout fires; the signal is reported alongside it. Treat
+  // killed-without-an-exit-code as the timeout, and name the budget so the reader can judge whether
+  // the cap is wrong or the run is genuinely hung — the two answers this string has to separate.
+  const timedOut = e.killed === true && typeof e.code !== 'number'
+  const head = timedOut
+    ? `TIMEOUT after ${MARKETPLACE_REFRESH_TIMEOUT_MS / 1000}s (killed${e.signal ? ` with ${e.signal}` : ''}): claude plugin marketplace update`
+    : e.message
+
+  // stdout FIRST: this CLI reports through it, so it is where the cause is. stderr is kept anyway
+  // because "it was empty" is itself evidence, and a future CLI version may start using it.
+  const parts: string[] = [head]
+  const out = (e.stdout ?? '').trim()
+  const errOut = (e.stderr ?? '').trim()
+  if (out) parts.push(`stdout: ${clampBothEnds(out, REFRESH_OUTPUT_KEEP_BYTES)}`)
+  if (errOut) parts.push(`stderr: ${clampBothEnds(errOut, REFRESH_OUTPUT_KEEP_BYTES)}`)
+  if (!out && !errOut) parts.push('(the CLI produced no output on either stream)')
+  return parts.join('\n')
 }
 
 /**

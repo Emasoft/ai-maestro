@@ -33,7 +33,22 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 // `opts` is recorded, not discarded. It used to be `_opts`, and that is precisely how a 900 s
 // budget shipped against a job measured at 1082 s: the only test that could have seen the timeout
 // threw it away.
-const cli = vi.hoisted(() => ({ calls: [] as string[][], opts: [] as unknown[], fail: false }))
+//
+// The mock DISPATCHES ON `file`, because the pipeline now runs two different commands: a `ps`
+// snapshot (the G02b in-flight guard) and then the refresh itself. A mock that answered both the
+// same way would make `cli.opts[0]` the SNAPSHOT's options while a test named it the refresh's —
+// a fixture silently measuring the wrong call.
+const cli = vi.hoisted(() => ({
+  calls: [] as string[][],
+  opts: [] as unknown[],
+  fail: false,
+  /** The error the fake CLI raises. Defaults to a bare Error; the failure-shape tests replace it
+   *  with the object node actually produces (stdout/stderr/killed/signal/code). */
+  failErr: null as Error | null,
+  /** What the fake `ps` prints. Empty ⇒ nobody is refreshing. */
+  ps: '',
+  psFail: false,
+}))
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>()
   return {
@@ -41,13 +56,24 @@ vi.mock('child_process', async (importOriginal) => {
     execFile: (file: string, args: string[], opts: unknown, cb: (e: Error | null, r?: unknown) => void) => {
       cli.calls.push([file, ...args])
       cli.opts.push(opts)
-      if (cli.fail) { cb(new Error('CLI refused')); return }
+      if (file === 'ps') {
+        if (cli.psFail) { cb(new Error('ps: command not found')); return }
+        cb(null, { stdout: cli.ps, stderr: '' })
+        return
+      }
+      if (cli.fail) { cb(cli.failErr ?? new Error('CLI refused')); return }
       cb(null, { stdout: '', stderr: '' })
     },
   }
 })
 
-import { RefreshAllMarketplaces, MARKETPLACE_REFRESH_TIMEOUT_MS } from '@/services/element-management-service'
+import {
+  RefreshAllMarketplaces,
+  MARKETPLACE_REFRESH_TIMEOUT_MS,
+  REFRESH_OUTPUT_KEEP_BYTES,
+  describeRefreshFailure,
+  findForeignMarketplaceRefresh,
+} from '@/services/element-management-service'
 
 /** The measured wall-clock of the real argless refresh on this host, 2026-08-06: 275
  *  marketplaces, exit 0, 1082 s. The budget must exceed it or the run is killed 182 s short and
@@ -56,10 +82,17 @@ const MEASURED_REFRESH_SECONDS = 1082
 
 const OWNER = { isSystemOwner: true as const }
 
+/** Index of the REFRESH call inside the recorded stream, so an options assertion can never end up
+ *  reading the `ps` snapshot's options instead. `-1` when the refresh never ran. */
+const refreshIdx = () => cli.calls.findIndex(c => c[0] === 'claude' && c[1] === 'plugin' && c[2] === 'marketplace')
+
 beforeEach(() => {
   cli.calls = []
   cli.opts = []
   cli.fail = false
+  cli.failErr = null
+  cli.ps = ''
+  cli.psFail = false
 })
 
 describe('RefreshAllMarketplaces — the argless refresh', () => {
@@ -79,7 +112,8 @@ describe('RefreshAllMarketplaces — the argless refresh', () => {
     // refresh, it voids every one of the 275 results. Asserting "a timeout is present" would pass
     // over the 900 s that shipped, so the assertion is tied to the MEASUREMENT.
     await RefreshAllMarketplaces(OWNER)
-    expect(cli.opts[0]).toMatchObject({ timeout: MARKETPLACE_REFRESH_TIMEOUT_MS })
+    expect(refreshIdx()).toBeGreaterThanOrEqual(0) // the options below belong to the REFRESH call
+    expect(cli.opts[refreshIdx()]).toMatchObject({ timeout: MARKETPLACE_REFRESH_TIMEOUT_MS })
     expect(MARKETPLACE_REFRESH_TIMEOUT_MS).toBeGreaterThan(MEASURED_REFRESH_SECONDS * 1000)
   })
 
@@ -110,5 +144,169 @@ describe('RefreshAllMarketplaces — the gates it keeps', () => {
     const r = await RefreshAllMarketplaces({ isSystemOwner: false, agentId: 'some-agent' } as never)
     expect(r.success).toBe(false)
     expect(cli.calls).toHaveLength(0)
+  })
+})
+
+// ── G02b: the in-flight guard ────────────────────────────────────────────────
+//
+// WHY IT EXISTS (TRDD-PE54D95Q, measured). Two executors run this same chore on this host — this
+// server and the ai-maestro-janitor daemon — and they share no lock. Uncontended the command runs
+// ~1148 s; the janitor logged 84 / 1134 / 1254 / 1808 / 1815 s for it, so 2 of 5 crossed the
+// 1800 s cap, and the batch is all-or-nothing: a run killed at the cap discards EVERY result.
+//
+// NEUTER RUNS for this section (each restore verified by blob hash):
+//   4. delete the whole `if (foreignPid !== null)` block  → reds ONLY the two skip tests below.
+//   5. s/words[i + 1] === 'marketplace' && words[i + 2] === 'update'/words.includes('marketplace')
+//      && words.includes('update')/  (drop consecutiveness) → reds the scattered-words test.
+//   6. `catch { return 999 }` in foreignMarketplaceRefreshPid (fail CLOSED) → reds the fail-open
+//      test, i.e. an unreadable `ps` would have silently stopped the lane forever.
+
+/** Real `ps -eo pid,command` shape: a header line, right-aligned pids, then the full argv. */
+const psHeader = '  PID COMMAND'
+
+describe('findForeignMarketplaceRefresh — the pure predicate', () => {
+  it('returns the pid of a marketplace refresh that is already running', () => {
+    const snap = [
+      psHeader,
+      '    1 /sbin/launchd',
+      ' 4242 /opt/homebrew/bin/node /opt/homebrew/bin/claude plugin marketplace update',
+    ].join('\n')
+    expect(findForeignMarketplaceRefresh(snap, 999)).toBe(4242)
+  })
+
+  it('returns null when nothing is refreshing — the header and unrelated processes are not matches', () => {
+    const snap = [
+      psHeader,
+      '    1 /sbin/launchd',
+      ' 7777 node /Users/x/ai-maestro/server.mjs',
+      ' 8888 ps -eo pid,command',
+    ].join('\n')
+    expect(findForeignMarketplaceRefresh(snap, 7777)).toBeNull()
+  })
+
+  it('requires the three words CONSECUTIVE — a line that merely contains all of them is not a refresh', () => {
+    // Without this, any command line mentioning the words in any order matches: a log tail, a
+    // grep, an editor session. Skipping on those would stall the lane for reasons that are not
+    // contention at all.
+    const snap = [
+      psHeader,
+      ' 5150 tail -f plugin.log marketplace.log update.log',
+    ].join('\n')
+    expect(findForeignMarketplaceRefresh(snap, 999)).toBeNull()
+  })
+
+  it('matches a wrapper form that never mentions `claude` — the needle is the argv, not the binary name', () => {
+    // Deliberate: requiring `claude` would MISS a wrapper the janitor might use, and a miss
+    // re-admits the collision. A false positive only costs one skipped round.
+    const snap = [psHeader, ' 6060 /bin/sh -c cc plugin marketplace update'].join('\n')
+    expect(findForeignMarketplaceRefresh(snap, 999)).toBe(6060)
+  })
+
+  it('never reports OUR OWN process, even when its argv carries the needle', () => {
+    // The fixture puts the needle on selfPid on purpose — with the exclusion removed this line
+    // matches and the test reds, so the guard is pinned rather than merely present.
+    const snap = [psHeader, ' 4242 claude plugin marketplace update'].join('\n')
+    expect(findForeignMarketplaceRefresh(snap, 4242)).toBeNull()
+  })
+})
+
+describe('RefreshAllMarketplaces — G02b skips rather than collides', () => {
+  it('SKIPS, spawning no refresh at all, when another process is already running one', async () => {
+    cli.ps = [psHeader, ' 4242 claude plugin marketplace update'].join('\n')
+    const r = await RefreshAllMarketplaces(OWNER)
+
+    // No refresh was spawned — the whole point. Asserting only on the result would pass over a
+    // guard that reported a skip AND ran the command anyway.
+    expect(refreshIdx()).toBe(-1)
+    // A skip is neither a failure nor a plain success: `success` stays true (nothing went wrong)
+    // and `skipped` carries the reason, so the caller can report it honestly.
+    expect(r.success).toBe(true)
+    expect(r.skipped).toMatch(/4242/)
+    expect(r.operations.join('\n')).toMatch(/G02b: SKIPPED/)
+  })
+
+  it('proceeds normally when the snapshot shows nobody refreshing', async () => {
+    cli.ps = [psHeader, ' 7777 node server.mjs'].join('\n')
+    const r = await RefreshAllMarketplaces(OWNER)
+    expect(r.success).toBe(true)
+    expect(r.skipped).toBeUndefined()
+    expect(cli.calls[refreshIdx()]).toEqual(['claude', 'plugin', 'marketplace', 'update'])
+  })
+
+  it('FAILS OPEN when `ps` itself is unusable — an unreadable observer must not stop the chore', async () => {
+    // The opposite choice turns one broken observer into a permanent outage of the thing observed:
+    // the lane would skip forever and nothing would say why.
+    cli.psFail = true
+    const r = await RefreshAllMarketplaces(OWNER)
+    expect(r.skipped).toBeUndefined()
+    expect(cli.calls[refreshIdx()]).toEqual(['claude', 'plugin', 'marketplace', 'update'])
+    expect(r.success).toBe(true)
+  })
+})
+
+// ── describeRefreshFailure: the recorded cause ───────────────────────────────
+//
+// WHY (measured 2026-08-16). The catch stored `err.message` alone. For promisified `execFile`
+// that is `Command failed: <cmd>\n<stderr>` — and this CLI writes to **stdout**, leaving stderr
+// EMPTY. So all 12 recorded failures between 2026-08-06 and 2026-08-15 read exactly
+// `Command failed: claude plugin marketplace update\n` and nothing else: a defect that recurred
+// for ten days and left no cause behind, while `err.stdout` held the answer and was discarded.
+//
+// NEUTER RUNS:
+//   7. delete the `if (out) parts.push(...)` line       → reds the stdout test (and the wiring test).
+//   8. s/const timedOut = .../const timedOut = false/   → reds the TIMEOUT test only.
+
+/** The error object node actually hands you — not a bare `new Error()`. */
+const execFileError = (over: Record<string, unknown>) =>
+  Object.assign(new Error('Command failed: claude plugin marketplace update\n'), over) as Error
+
+describe('describeRefreshFailure', () => {
+  it('keeps stdout, because this CLI reports there and stderr is empty', () => {
+    const s = describeRefreshFailure(execFileError({
+      code: 1,
+      stdout: 'Repository not found: some/marketplace',
+      stderr: '',
+    }))
+    expect(s).toMatch(/Repository not found: some\/marketplace/)
+  })
+
+  it('names a TIMEOUT and its budget when node killed the process', () => {
+    // A timeout and a refusal have opposite remedies (raise the cap vs fix the config), and
+    // `err.message` is identical for both — so the string has to separate them.
+    const s = describeRefreshFailure(execFileError({ killed: true, signal: 'SIGTERM' }))
+    expect(s).toMatch(/^TIMEOUT after 1800s/)
+    expect(s).toMatch(/SIGTERM/)
+  })
+
+  it('does NOT call a non-zero exit a timeout', () => {
+    const s = describeRefreshFailure(execFileError({ code: 1, killed: false, stdout: 'nope' }))
+    expect(s).not.toMatch(/TIMEOUT/)
+  })
+
+  it('says so explicitly when the CLI printed nothing at all', () => {
+    // "no output" is itself evidence. A bare message leaves the reader unable to tell that from
+    // "we threw the output away", which is the bug this function was written for.
+    expect(describeRefreshFailure(execFileError({ code: 1 }))).toMatch(/produced no output on either stream/)
+  })
+
+  it('clamps from BOTH ends and marks the cut, never keeping only the tail', () => {
+    // A CLI prints its DIAGNOSIS first and the raw error last, so `tail` keeps exactly the wrong
+    // end and `head` loses the cause.
+    const big = `HEAD-MARKER${'x'.repeat(REFRESH_OUTPUT_KEEP_BYTES * 2)}TAIL-MARKER`
+    const s = describeRefreshFailure(execFileError({ code: 1, stdout: big }))
+    expect(s).toMatch(/HEAD-MARKER/)
+    expect(s).toMatch(/TAIL-MARKER/)
+    expect(s).toMatch(/bytes elided/)
+    expect(s.length).toBeLessThan(big.length)
+  })
+
+  it('is WIRED — a real pipeline failure carries the CLI output into result.error', async () => {
+    // Testing the helper alone would leave "is it actually used?" unasked; the catch used to
+    // build this string inline and drop exactly this field.
+    cli.fail = true
+    cli.failErr = execFileError({ code: 1, stdout: 'Repository not found: gone/marketplace' })
+    const r = await RefreshAllMarketplaces(OWNER)
+    expect(r.success).toBe(false)
+    expect(r.error).toMatch(/Repository not found: gone\/marketplace/)
   })
 })

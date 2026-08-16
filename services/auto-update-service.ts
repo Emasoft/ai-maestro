@@ -593,11 +593,20 @@ async function runAbsorbedDutyTickBody(
   //    should get them from the CLI's own output, not by reinstating the loop.
   try {
     const r = await RefreshAllMarketplaces(SYSTEM_AUTH_CONTEXT)
-    entries.push(entry(
-      'absorbed:marketplace-refresh',
-      r.success ? 'updated' : 'failed',
-      r.success ? 'Refreshed every registered marketplace (one invocation)' : (r.error || 'Unknown failure'),
-    ))
+    //    THREE outcomes, three statuses. `r.skipped` is set when the pipeline deliberately did
+    //    not act because another process was already refreshing (G02b). Recording that as
+    //    `updated` would claim a refresh that never ran; recording it as `failed` would invent a
+    //    fault and pollute the failure trail this card exists to make readable. `skipped` is
+    //    already in the entry vocabulary, so the honest answer needs no new type.
+    entries.push(
+      r.skipped
+        ? entry('absorbed:marketplace-refresh', 'skipped', r.skipped)
+        : entry(
+          'absorbed:marketplace-refresh',
+          r.success ? 'updated' : 'failed',
+          r.success ? 'Refreshed every registered marketplace (one invocation)' : (r.error || 'Unknown failure'),
+        ),
+    )
   } catch (err) {
     entries.push(entry('absorbed:marketplace-refresh', 'failed', errMsg(err)))
   }

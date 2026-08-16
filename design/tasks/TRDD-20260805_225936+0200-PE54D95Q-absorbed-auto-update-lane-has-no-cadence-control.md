@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-16T10:03:19+0200
+updated: 2026-08-16T10:47:03+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -83,7 +83,29 @@ assert the refresh RUNS, which a disarmed guard also produces — hence that tes
 `refreshIdx() === -1`, not the result shape), and N7 reds THREE (the clamping and the
 pipeline-wiring tests both reach the CLI output through that one line).
 
-**NOT DEPLOYED.** `services/*.ts` is BUNDLED into `.next` — a `pm2 restart` alone does not load it
+**▶ DEPLOYED 2026-08-16 10:08, AND ITS FIRST LIVE EXERCISE IS STILL PENDING — the check, dated.**
+`yarn build` ran and the boot at 10:10:17 emitted NO `[BUILD]` staleness warning (the last one is
+09:48, pre-build), and `grep -rl "G02b: SKIPPED" .next/server` → **1**, so the fix is in the
+artifact that executes. What has NOT happened yet is the lane RUNNING with it:
+`lastAbsorbedRunAt` = **2026-08-16T07:40:36**, i.e. before the deploy, and the cadence is **4 h**
+with a stamp-gated 15-min poll — so **the first post-fix refresh is due ~11:40**. The last three
+recorded failures (08-13, 08-14, 08-15 22:12) all still carry the bare
+`Command failed: claude plugin marketplace update` with nothing after it, which is exactly the
+defect this card fixed; a fourth one in that shape after 11:40 would mean the fix did not take.
+
+**So the effect-level check is ONE command, runnable after ~11:40 — do not read the absence of a
+failure before then as success:**
+
+```bash
+node -e 'const j=require(require("os").homedir()+"/.aimaestro/auto-update-settings.json");
+console.log(j.lastAbsorbedRunAt, JSON.stringify((j.lastRunSummary||[]).find(r=>r.target==="absorbed:marketplace-refresh")))'
+```
+PASS is `lastAbsorbedRunAt` past 11:40 AND the row being one of: `updated`; `skipped` with a pid in
+the detail (G02b fired — also a pass, and the more informative one); or `failed` whose detail
+carries `stdout:` / `TIMEOUT after 1800s` rather than a bare `Command failed:` line.
+
+**NOT DEPLOYED** *(superseded by the line above — kept because the reasoning still binds for the
+next change here)*. `services/*.ts` is BUNDLED into `.next` — a `pm2 restart` alone does not load it
 (this card already lost a day to exactly that, §"EVERY MEASUREMENT ABOVE WAS TAKEN AGAINST A SERVER
 RUNNING PRE-FIX CODE"). It needs `yarn build` then a restart, and the server already logs
 `[BUILD] The .next build is 176h+ OLDER than the last commit`. Verify by EFFECT afterwards — a

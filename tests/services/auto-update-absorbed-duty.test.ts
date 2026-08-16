@@ -41,6 +41,7 @@ vi.mock('@/lib/marketplace-lock', () => ({
 
 import {
   absorbedDutyIsOverdue,
+  describeRefreshCoverage,
   runAbsorbedDutyTick,
   runAbsorbedDutyTickNow,
   startAbsorbedDutyScheduler,
@@ -382,5 +383,66 @@ describe('the absorbed lane cadence — 4 hours (USER directive 2026-08-07), car
     // Straddle the boundary so the pair discriminates: exactly-at → due; one minute short → not.
     expect(absorbedDutyIsOverdue(new Date(now - fourH).toISOString(), now)).toBe(true)
     expect(absorbedDutyIsOverdue(new Date(now - fourH + 60_000).toISOString(), now)).toBe(false)
+  })
+})
+
+/**
+ * TRDD-FXPV7L4D — the refresh row must describe what was COVERED, not what the process exited.
+ *
+ * The two halves are deliberately complementary, and neither is sufficient alone: without the
+ * all-advanced test, an implementation that reports failure unconditionally passes; without the
+ * partial test, one that reports success unconditionally passes. Both were run against the
+ * seeded-diff neuter (make `stale` always `[]`): only the partial half reds, which is what proves
+ * that half is the one carrying the claim.
+ */
+describe('describeRefreshCoverage (TRDD-FXPV7L4D)', () => {
+  const m = (o: Record<string, string>) => new Map(Object.entries(o))
+
+  it('every stamp advanced — a clean success naming the total it actually checked', () => {
+    const before = m({ a: '2026-08-01T00:00:00.000Z', b: '2026-08-01T00:00:00.000Z' })
+    const after = m({ a: '2026-08-16T00:00:00.000Z', b: '2026-08-16T00:00:00.000Z' })
+    expect(describeRefreshCoverage(before, after)).toEqual({
+      ok: true,
+      detail: 'Refreshed all 2 registered marketplaces (one invocation)',
+    })
+  })
+
+  it('K stamps did not advance — not `ok`, counts both sides, and NAMES the laggards', () => {
+    const before = m({ a: 'T1', gone: 'T0', alsogone: 'T0' })
+    const after = m({ a: 'T2', gone: 'T0', alsogone: 'T0' })
+    const got = describeRefreshCoverage(before, after)
+    expect(got.ok).toBe(false)
+    expect(got.detail).toBe(
+      'Refreshed 1 of 3 registered marketplaces (one invocation); 2 did not advance: alsogone, gone',
+    )
+    // The old wording asserted the OPPOSITE of the truth; it must not survive anywhere.
+    expect(got.detail).not.toMatch(/every registered marketplace/)
+  })
+
+  it('caps the named laggards at 10 but always prints the count it hid', () => {
+    const names = Array.from({ length: 14 }, (_, i) => `mk${String(i).padStart(2, '0')}`)
+    const stamps = m(Object.fromEntries(names.map((n) => [n, 'T0'])))
+    const got = describeRefreshCoverage(stamps, new Map(stamps))
+    expect(got.ok).toBe(false)
+    expect(got.detail).toMatch(/Refreshed 0 of 14 /)
+    expect(got.detail).toMatch(/\(\+4 more not shown\)$/)
+    expect(got.detail).toContain('mk09')
+    expect(got.detail).not.toContain('mk10') // capped — and the +4 above is what says so
+  })
+
+  it('an entry absent from the BEFORE snapshot counts as advanced, not as a laggard', () => {
+    // A marketplace registered between the two reads has no prior stamp; treating a missing
+    // baseline as "did not move" would invent a failure on every newly-added marketplace.
+    const got = describeRefreshCoverage(m({}), m({ fresh: '2026-08-16T00:00:00.000Z' }))
+    expect(got).toEqual({ ok: true, detail: 'Refreshed all 1 registered marketplaces (one invocation)' })
+  })
+
+  it('an unreadable/empty registry reports coverage UNKNOWN — it never claims 0 of 0', () => {
+    // `readMarketplaceStamps` fails open, so an empty map is ambiguous by construction. Inventing
+    // a failure from a missing instrument is the mirror image of the bug this card fixes.
+    const got = describeRefreshCoverage(m({}), m({}))
+    expect(got.ok).toBe(true)
+    expect(got.detail).toMatch(/coverage UNKNOWN/)
+    expect(got.detail).not.toMatch(/0 of 0/)
   })
 })

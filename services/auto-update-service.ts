@@ -565,6 +565,73 @@ async function readRegistryMarketplaces(): Promise<Array<[string, unknown]>> {
   }
 }
 
+/**
+ * `name -> lastUpdated` from the registry. Same file and same fail-open contract as
+ * `readRegistryMarketplaces` above: an unreadable harness-owned file must not fail the tick.
+ * An empty map is therefore AMBIGUOUS by construction (no marketplaces vs unreadable), which is
+ * exactly why `describeRefreshCoverage` refuses to claim coverage from one — see TRDD-FXPV7L4D.
+ */
+async function readMarketplaceStamps(): Promise<Map<string, string>> {
+  const stamps = new Map<string, string>()
+  try {
+    const p = path.join(os.homedir(), '.claude', 'plugins', 'known_marketplaces.json')
+    const parsed: unknown = JSON.parse(await fs.readFile(p, 'utf8'))
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return stamps
+    for (const [name, e] of Object.entries(parsed as Record<string, unknown>)) {
+      const lu = e !== null && typeof e === 'object' && !Array.isArray(e)
+        ? (e as Record<string, unknown>).lastUpdated
+        : undefined
+      stamps.set(name, typeof lu === 'string' ? lu : '')
+    }
+  } catch {
+    return stamps
+  }
+  return stamps
+}
+
+/** Cap on named laggards. The count of the rest is ALWAYS printed, so the cap cannot read as
+ *  completeness — a silent truncation is the failure this whole card is about. */
+const REFRESH_LAGGARDS_SHOWN = 10
+
+/**
+ * What the argless `claude plugin marketplace update` ACTUALLY covered, from the registry stamps
+ * either side of it — never from its exit code.
+ *
+ * TRDD-FXPV7L4D: the row used to read "Refreshed every registered marketplace" whenever the
+ * process exited 0, which is a claim about ~270 marketplaces derived from ONE status. A
+ * per-marketplace failure inside a single invocation cannot move that status, so ten entries were
+ * months stale while the lane logged success — and "zero failures across all trail rows" (the
+ * evidence TRDD-PE54D95Q's AC6 was gated on) meant "zero failures OF THE THING WE LOG".
+ */
+export function describeRefreshCoverage(
+  before: Map<string, string>,
+  after: Map<string, string>,
+): { ok: boolean; detail: string } {
+  const total = after.size
+  // Not "0 of 0 refreshed": an empty map is equally "the registry is unreadable", and inventing a
+  // failure from a missing instrument is the mirror of the bug being fixed.
+  if (total === 0) {
+    return {
+      ok: true,
+      detail: 'Refreshed (one invocation) — per-marketplace coverage UNKNOWN: registry unreadable or empty',
+    }
+  }
+  const stale = [...after.entries()]
+    .filter(([name, ts]) => ts === (before.get(name) ?? ''))
+    .map(([name]) => name)
+    .sort()
+  if (stale.length === 0) {
+    return { ok: true, detail: `Refreshed all ${total} registered marketplaces (one invocation)` }
+  }
+  const shown = stale.slice(0, REFRESH_LAGGARDS_SHOWN)
+  const hidden = stale.length - shown.length
+  return {
+    ok: false,
+    detail: `Refreshed ${total - stale.length} of ${total} registered marketplaces (one invocation); `
+      + `${stale.length} did not advance: ${shown.join(', ')}${hidden > 0 ? ` (+${hidden} more not shown)` : ''}`,
+  }
+}
+
 async function runAbsorbedDutyTickBody(
   readers: CandidateReaders,
   settingsPath?: string,
@@ -592,21 +659,28 @@ async function runAbsorbedDutyTickBody(
   //    ONE row, because there is one operation. A future reader wanting per-marketplace outcomes
   //    should get them from the CLI's own output, not by reinstating the loop.
   try {
+    const stampsBefore = await readMarketplaceStamps()
     const r = await RefreshAllMarketplaces(SYSTEM_AUTH_CONTEXT)
     //    THREE outcomes, three statuses. `r.skipped` is set when the pipeline deliberately did
     //    not act because another process was already refreshing (G02b). Recording that as
     //    `updated` would claim a refresh that never ran; recording it as `failed` would invent a
     //    fault and pollute the failure trail this card exists to make readable. `skipped` is
     //    already in the entry vocabulary, so the honest answer needs no new type.
-    entries.push(
-      r.skipped
-        ? entry('absorbed:marketplace-refresh', 'skipped', r.skipped)
-        : entry(
-          'absorbed:marketplace-refresh',
-          r.success ? 'updated' : 'failed',
-          r.success ? 'Refreshed every registered marketplace (one invocation)' : (r.error || 'Unknown failure'),
-        ),
-    )
+    //    On success the row is no longer written from `r.success` alone: the exit code says the
+    //    PROCESS worked, and the registry stamps say which marketplaces it actually refreshed
+    //    (TRDD-FXPV7L4D). A partial refresh is downgraded out of `updated` and names its
+    //    laggards, because a marketplace that has not moved in months is a finding for a human —
+    //    it almost always means the upstream repo is gone, which no retry will fix.
+    let row = entry('absorbed:marketplace-refresh', 'skipped', r.skipped)
+    if (!r.skipped) {
+      if (!r.success) {
+        row = entry('absorbed:marketplace-refresh', 'failed', r.error || 'Unknown failure')
+      } else {
+        const cov = describeRefreshCoverage(stampsBefore, await readMarketplaceStamps())
+        row = entry('absorbed:marketplace-refresh', cov.ok ? 'updated' : 'failed', cov.detail)
+      }
+    }
+    entries.push(row)
   } catch (err) {
     entries.push(entry('absorbed:marketplace-refresh', 'failed', errMsg(err)))
   }

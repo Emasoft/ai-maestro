@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:25:55+0200
+updated: 2026-08-16T20:28:52+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -920,6 +920,45 @@ it is load-bearing is invisible until you have destroyed the evidence once.** Th
 correct under the corrected three-shape rule (frozen 17:11→19:56, zero bytes written — not growing);
 had those transcripts been at 266 KB and climbing they would have killed live workers and blamed
 the harness for the loss.
+
+### The hub's axis 1 — every promise in CLAUDE.md resolves, and the two that RUN report findings
+
+Axis 1 is *capability the docs PROMISE but that is absent or non-functional*. This repo's CLAUDE.md
+is loaded into every session on this machine, so a promise it makes is a promise made ~19 times an
+hour. Checked existence first, then execution — because presence is not function and only the
+second half can find a non-functional promise.
+
+**Existence: clean.** All 9 named `package.json` scripts resolve (`trdd:doctor`/`:fix`/`:board`,
+`pillars:lint`, `test`, `build`, `dev`, `start`, `headless`); all 6 named files exist
+(`wikimem-index.mjs`, `bump-version.sh`, `with-node.sh`, `ecosystem-config.sh`,
+`ecosystem-constants.ts`, `server.mjs`); `memgrep` is on PATH.
+
+**Execution: all three run, and two report findings — exit 1 = FINDINGS, not could-not-run**, which
+is the trichotomy CLAUDE.md documents and the reason it forbids `trddgrep validate || …`:
+
+- `node scripts/wikimem-index.mjs --check` → **exit 1, 5 pages missing `metadata.topic:`** —
+  `janitor-chore-absorbability`, `model-scoped-window-fallback`, `public-repo-personal-data`,
+  `settings-file-watcher-ledger`, `trdd-d4-watchdog`.
+  **This is tonight's recall theme again, in my own repo.** The topic index in CLAUDE.md is
+  GENERATED from that field, so these five pages exist, hold real knowledge, and **cannot be
+  reached by anyone navigating from the index** — the same shape as `ATOM-DXFF-KOY4` sitting
+  unreachable in USER memory while four sessions re-derived it at ~6 worker-hours. A page that
+  cannot be found has the availability of a page that does not exist.
+- `yarn pillars:lint` → **exit 0, clean.**
+- `yarn trdd:doctor` → **exit 1: 450 scanned · 1 error · 262 warn.** The 1 error is the known
+  pre-existing `BODY-STATE-CLAIM` on `7123D51A`. The warnings are dominated by
+  **`META-MISSING ×152` — no `created-by:`**, which the doctor's own text explains is load-bearing:
+  *"mandate provenance and the derived-TRDD invariant both read authorship, and neither can resolve
+  it from any other field."*
+
+**Candidate, unconfirmed:** the doctor's output lists `2K08IAPV` and `HUSKG52P` **twice each on the
+same path**. Either two distinct findings collapse to one displayed line, or the scan double-counts
+— which would make the 262 an overcount. Not chased; noted so the number is not quoted as exact
+before someone checks it.
+
+**Nothing fixed.** The 5 topic fields are a two-minute edit and Phase 1 is discovery-only by a
+contract I wrote; fixing during discovery destroys the evidence the plan is built from. It also
+would have been the third time tonight a session was tempted to repair its own finding mid-audit.
 
 ### THE `%cpu` ARGUMENT SETTLED BY ONE ROW — and the detector fired the retracted text at me in the same minute
 

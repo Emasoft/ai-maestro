@@ -31,7 +31,35 @@ labels: [scripts, distribution, hub-self-audit]
 external-refs: []
 ---
 
-# Eight executables nobody ships, that documentation still tells agents to run
+# Two executables encoding a superseded model, that no repo ships
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16T22:33
+
+**Investigation COMPLETE. Steps 1-3 done. Only step 4 (disposal) remains, and it is not mine.**
+
+| component | state |
+|---|---|
+| the census | **CORRECTED: 7 unowned, not 8** — `aimaestro-agent-bash` is a symlink (launcher bucket) |
+| the "instructions still point at them" premise | **REFUTED** — both live docs are correct as written |
+| provenance of the 2 unknowns | **ANSWERED** — AI Maestro's own, absent from all fetched history + the fleet, both zeros controlled |
+| the real hazard | **FOUND and it is not litter** — they encode the pre-2026-07-08 GitHub-as-SSOT model |
+| disposal (step 4) | **BLOCKED — USER's call.** See below |
+
+**NEXT ACTION — none available to this session.** Every target lives in `~/.local/bin`, i.e.
+**outside any project tree**, so `/janitor-safe-delete` refuses them and no recoverable in-repo path
+exists. That is the same constraint as the `temp_git_*` cache checkouts, and it is why this stops
+here rather than proceeding: the card's own step 4 names the risk plainly — *"removing an executable
+another session is invoking breaks that session with an error that will look like something else
+entirely"* — and an unattended removal outside the project tree is not recoverable by `git`.
+
+**SUPERSEDED — do NOT carry forward:**
+- *"eight unowned executables"* → **seven**.
+- *"instructions still point at them"* → refuted for every live doc; the surviving hazard is that
+  **the executables themselves are the documentation**.
+- *"3 with provenance still unknown"* → **2**, and both are answered.
+
+**Read first on resume:** the two INVESTIGATION sections below, in order — the second corrects the
+first's count and reframes the finding.
 
 ## Problem
 

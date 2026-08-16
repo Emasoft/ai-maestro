@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:15:44+0200
+updated: 2026-08-16T19:17:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -512,6 +512,31 @@ full report to disk and then never returned a result — held in context, the sw
 the empty file was the only thing distinguishing a 2-hour stall from work in progress. Relaunched
 with the amendments **baked into the brief rather than relayed mid-flight**: *2 hours-and-nothing
 became 3 minutes-and-a-verified-bug.* Fourth independent confirmation of the stall pattern.
+
+### A fleet-TOOLING defect, and the answer I expected was ruled out
+
+The maintainer hit `memgrep add-lesson --atom <id>` failing to find an atom `memgrep add-atom` had
+just written — across both id forms, after a `reindex`, after relocating it, after normalising its
+`desc:`. Hub chased it into the janitor's source instead of reproducing it blind.
+
+**RULED OUT — it is NOT the fixed-in-repo/stale-install pattern**, which had been the answer three
+times tonight and was my first hypothesis: `command -v memgrep` → `~/.cargo/bin/memgrep`, mtime
+**Aug 16 02:25**, identical to `memgrep/src/memory.rs` in the janitor tree, and `strings` on the
+installed binary finds both the anchor error and the keyword-coverage warning. **The running binary
+is built from current source.**
+
+**MECHANISM, from the source.** `add-lesson` resolves through `locate_atom_body_matching` and
+refuses when the target is not a **BODY** atom — one below the footer sections is not. `add-atom`'s
+insertion point is documented at `memory.rs:2257-2266` as *"the EARLIEST footer-section heading —
+`## Applies to`, `## Governed by`, `## See also`, or `## Notes and lessons learned`"*, attributed to
+**janitor#250**. So the refusal is CORRECT behaviour downstream of a **placement** bug upstream:
+the defect is `add-atom` writing below Notes, not `add-lesson` failing to look. That is why all five
+workarounds failed — every one was aimed at the lookup, and the lookup was working as designed.
+
+**Consequence for the report:** janitor#250 is the existing thread for this exact class, and its
+comment records a THIRD reproduction that moved the boundary to include `## See also` — so this is
+plausibly a fourth page shape the boundary still misses, on current code. Not filed: the janitor's
+repo, the maintainer's finding, and filing is outward-facing.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

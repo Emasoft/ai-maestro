@@ -3,7 +3,7 @@ trdd-id: CQD0EP6R
 title: A scenario runner must never wait — the orchestrator owns the clock, the runner owns bounded UI bursts
 column: design
 created: 2026-07-23T17:16:52+0200
-updated: 2026-07-23T17:16:52+0200
+updated: 2026-08-16T10:52:12+0200
 current-owner: ai-maestro-dev-session
 task-type: infra
 scope: project
@@ -105,6 +105,40 @@ it, at any transcript size.
 MEDIUM. It changes how scenarios are authored, so every long-observation scenario needs
 its phase files reshaped. It does not change what is being tested — only who holds the
 clock.
+
+## Acceptance
+
+Added 2026-08-16 — this card had **no acceptance boxes at all** for 24 days, which makes its
+completion gate VACUOUS: the gate is "every box checked", and a card with no boxes passes it
+having proven nothing. Transcribed from this card's OWN `## Verification` and `## Proposed fix`
+lists, not invented at closing time.
+
+- [x] **Rule 15 (`THE-RUNNER-NEVER-WAITS`) is shipped as normative text**, not left as a design
+      note — `tests/scenarios/SCENARIOS_TESTS_RULES.md` carries it, and it cites this card by id
+      so the reasoning is traceable from the rule.
+- [x] **The prohibition is stated so the corpus can actually satisfy it.** It first read *"no step
+      may contain 'wait for', 'poll until', 'watch until', or a `sleep`"*. Measured against the
+      corpus — **40 scenario files, 1043 `Action` lines, 22 carrying one of those verbs, of which
+      about 18 are BENIGN** bounded UI waits (*"wait for the sidebar to render"*, *"Wait for the
+      session to start (max 30s)"*, *"Wait for Claude Code idle prompt"*). A rule that flags 18
+      things nobody considers wrong is a rule readers learn to skip, which is the failure mode
+      this project has already recorded for linters. Reworded to name the real discriminator —
+      **does the wait END THE RUNNER'S TURN or span fleet-time** — with the measurement kept in
+      the rule so the next editor does not re-broaden it.
+- [ ] **No runner invocation waits on the fleet.** MEASURED 2026-08-16 and **2 genuine violations
+      remain**, both in `tests/scenarios/SCEN-014_manager-poem-translation-mobile.scen.md` and both
+      as step TITLES, i.e. the step's entire purpose is the wait: **S020** *"Wait for the poet to
+      write the poem and send it back"* and **S024** *"Wait for the translator to send the Italian
+      version back"*. Recorded in Rule 15 rather than silently rewritten — reshaping a scenario's
+      phase split is its own task, and a half-edited scenario is worse than a known-nonconforming
+      one (Rule 6 invalidates a partially-run scenario anyway).
+- [ ] **Re-run SCEN-031 with the split; every runner invocation returns within a bounded number of
+      turns with a report, or an explicit `BLOCKED`.** NEEDS A LIVE FLEET — not attainable while
+      the fleet is hibernated, and this is the box that would settle the design rather than the
+      prose.
+- [ ] **The orchestrator's probe cost per milestone stays in the ~1k-token range.** Never measured;
+      the figure in `## Verification` is an estimate, and it is recorded as one here rather than
+      ticked off as if it had been observed.
 
 ## Approval log
 

@@ -1591,9 +1591,32 @@ cannot do, because its cost is its whole transcript re-read on every resume.
    burst of UI steps whose precondition is **already true at spawn time**.
 2. **Every burst file states its PRECONDITION at the top**, in a form the runner can
    check in one cheap call, plus the exact `BLOCKED:` string to return if it is unmet.
-3. **No step may contain "wait for", "poll until", "watch until", or a `sleep`.** A step
-   that says *"Observe — the MANAGER hands the TRDD to the dev"* is really *"verify the
-   handoff ALREADY happened"*. Write it that way.
+3. **No step may WAIT ON THE FLEET.** A step that says *"Observe — the MANAGER hands the
+   TRDD to the dev"* is really *"verify the handoff ALREADY happened"*. Write it that way.
+
+   **The test is whether the wait ENDS THE RUNNER'S TURN or spans fleet-time — not whether
+   the words "wait for" appear.** This clause used to read *"no step may contain 'wait for',
+   'poll until', 'watch until', or a `sleep`"*, and that is over-broad in the direction that
+   gets a rule ignored. Measured across the corpus (40 scenario files, 1043 `Action` lines):
+   **22 lines carry one of those verbs and about 18 are BENIGN** — *"wait for the sidebar to
+   render"*, *"wait for the team dashboard to render"*, *"Wait for the session to start
+   (max 30s)"*, *"Wait for Claude Code idle prompt"*, *"Wait for TOML to appear in the preview
+   panel"*. Those are bounded waits INSIDE one tool call; they never end the turn, so they
+   cannot kill a runner, and forbidding them teaches the reader that this rule flags things
+   nobody thinks are wrong — which is how a rule stops being read.
+
+   **What the clause actually forbids, and the two live examples:** a step whose subject is an
+   AGENT producing something on its own schedule. Both are step TITLES, i.e. the step's whole
+   purpose is the wait — `tests/scenarios/SCEN-014_manager-poem-translation-mobile.scen.md`
+   **S020** *"Wait for the poet to write the poem and send it back"* and **S024** *"Wait for the
+   translator to send the Italian version back"*. Those are unbounded fleet-time inside a
+   subagent, which is precisely the shape that killed three consecutive SCEN-031 runners. They
+   are recorded here rather than silently rewritten: reshaping a scenario's phase split is its
+   own task, and a half-edited scenario is worse than a known-nonconforming one.
+
+   So: bounded UI wait with a stated cap ⇒ fine. Waiting on an agent, a merge, a release, a CI
+   run, or anything whose clock the fleet owns ⇒ the orchestrator's job, and the runner returns
+   `BLOCKED: <precondition>` instead.
 4. **The orchestrator gates the spawns.** It polls for the milestone, then spawns the
    burst that verifies it.
 5. **A stale runner heartbeat is a RUNNER failure, never a fleet failure.** These were

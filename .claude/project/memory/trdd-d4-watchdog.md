@@ -2,11 +2,13 @@
 name: trdd-d4-watchdog
 description: "why does the server log [trdd-watchdog] sweep ran / what is the D3 objective floor / a MANDATE-FORGED or D3-FLOOR-UNDERCLASSIFIED finding raised my card's approval floor / where does the trdd governance sweep run and where is its report"
 ocd: 2026-08-14
-lmd: 2026-08-14
+lmd: 2026-08-16
 metadata:
   node_type: memory
   type: project
   tier: component
+  topic: design-system
+publish-globally: false
 ---
 
 # trdd-d4-watchdog

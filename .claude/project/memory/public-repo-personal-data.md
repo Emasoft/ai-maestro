@@ -2,11 +2,13 @@
 name: public-repo-personal-data
 description: "this repo is PUBLIC and a personal email / account name reached a tracked file — how it happens without anyone deciding to, what the gate is, and why the fix is a role label not an ignore list"
 ocd: 2026-08-07
-lmd: 2026-08-07
+lmd: 2026-08-16
 metadata:
   node_type: memory
   type: project
   tier: aspect
+  topic: security-and-auth
+publish-globally: false
 ---
 
 # public-repo-personal-data

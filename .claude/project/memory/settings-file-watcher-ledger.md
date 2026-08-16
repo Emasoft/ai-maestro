@@ -2,11 +2,13 @@
 name: settings-file-watcher-ledger
 description: "who changed my settings.json / a settings file changed and nothing recorded it / where is the audit trail for settings.local.json edits / settings watcher armed dirs / watched-settings ledger chain"
 ocd: 2026-08-07
-lmd: 2026-08-07
+lmd: 2026-08-16
 metadata:
   node_type: memory
   type: project
   tier: component
+  topic: reliability-patterns
+publish-globally: false
 ---
 
 # settings-file-watcher-ledger

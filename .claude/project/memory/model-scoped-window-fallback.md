@@ -2,12 +2,14 @@
 name: model-scoped-window-fallback
 description: "the Fable window is exhausted but the account still has 5h/7d headroom / why did the rotator evict the whole fleet over ONE model / how do agents get switched off an exhausted model automatically / /model opus does not switch the model / an agent is stuck on a model-switch confirmation dialog / which field says what model an agent is running (none of them do) / the rotator rotated over a model-scoped window / rotated onto an account whose Fable window is also spent / why did the rotator refuse to rotate while an account had headroom / ROTATOR_SCOPED_SWITCH_AT / scoped-only wall"
 ocd: 2026-08-06
-lmd: 2026-08-06
+lmd: 2026-08-16
 metadata:
   node_type: memory
   type: project
   tier: component
+  topic: reliability-patterns
   globs: [lib/oauth-rotator/model-fallback*.ts, tests/unit/model-fallback*.test.ts]
+publish-globally: false
 ---
 
 # model-scoped-window-fallback

@@ -195,20 +195,25 @@ Editing between the fences is pointless; the next run overwrites it.
 - **`env-vars-and-the-governance-password`** — which env vars does ai-maestro actually read
 - **`governance-password-invalidation`** — how does the user rotate / revoke
 - **`network-security-tailscale-bind`** — why does a LAN IP get dropped / 192.168.x.x cannot reach the dashboard
+- **`public-repo-personal-data`** — this repo is PUBLIC and a personal email
 
 ### Design System
 
 - **`pillar-tooling-scale-and-index`** — trddgrep / trdd-doctor got slow or ran out of memory on a big corpus
 - **`three-pillars-conformance-spec`** — where is the 3-pillars (TRDD / PRRD
 - **`trdd-conventions`** — How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) —…
+- **`trdd-d4-watchdog`** — why does the server log [trdd-watchdog] sweep ran
 
 ### Reliability Patterns
 
 - **`agent-claims-the-api-was-never-delivered`** — a capability is reported MISSING (an agent says 'the verbs were never delivered', or an issue asks to build…
 - **`aio-pipeline-rollback-transactions`** — a pipeline failed halfway and left two stores disagreeing
 - **`family-a-continuity-absorption-plan`** — the implementation decomposition (NPT map) for absorbing the janitor's continuity daemon into the ai-maestro…
+- **`janitor-chore-absorbability`** — can the ai-maestro server take over this janitor chore
 - **`lenient-json-reader-destroys-the-file`** — my settings.json / registry / config got replaced by a nearly-empty object
+- **`model-scoped-window-fallback`** — the Fable window is exhausted but the account still has 5h
 - **`server-oauth-token-continuity-design`** — how does the ai-maestro server keep agents running across OAuth
+- **`settings-file-watcher-ledger`** — who changed my settings.json / a settings file changed and nothing recorded it
 
 ### Tooling and Testing
 

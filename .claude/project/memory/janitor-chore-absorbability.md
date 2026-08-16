@@ -2,11 +2,13 @@
 name: janitor-chore-absorbability
 description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken / auto-update says enabled false and lastRunAt null but something is making hundreds of calls / lastRunSummary shows 38 failed plugin updates that no longer happen / the same plugin appears both failed and updated / is the absorbed lane running at all"
 ocd: 2026-08-05
-lmd: 2026-08-06
+lmd: 2026-08-16
 metadata:
   node_type: memory
   type: project
   tier: aspect
+  topic: reliability-patterns
+publish-globally: false
 ---
 
 # janitor-chore-absorbability

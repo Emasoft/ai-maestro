@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T18:01:54+0200
-updated: 2026-08-16T18:08:00+0200
+updated: 2026-08-16T18:33:47+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -217,8 +217,16 @@ weakens a repo it never meant to touch (recorded in `lessons-verification.md` �
       lines, the 9-repo live table, the two stale prose sites).
 - [ ] `baseline-history-protect` carries the admin bypass on all 9 fleet repos, verified by a
       live `gh api` read — not by a commit, an issue state, or an applier's own success line.
-- [ ] `baseline-pr-and-checks` carries `required_approving_review_count: 0` on all 9, same
-      standard of proof.
+- [ ] `baseline-pr-and-checks` matches what **`require_pull_request_for(slug)` decides for that
+      repo at apply time** — and where the `pull_request` rule IS emitted, the count is `0`,
+      never `1`. **Do NOT hardcode 0.** *(Corrected 2026-08-16: this box originally read
+      "carries `required_approving_review_count: 0` on all 9", which prescribes one branch of a
+      conditional as if it were the only one. `require_pull_request_for` L111-155 returns TRUE
+      only inside the ai-maestro harness backend OR on a repo owned by someone else; all 9 are
+      Emasoft-owned, so on a standalone apply the `pull_request` rule should not be emitted AT
+      ALL — a fixer reading my original box would have set 0 where the rule should be absent,
+      and silently decided a governance question. Caught by the maintainer session correcting
+      its own earlier phrasing, which had made the same over-specification from the other side.)*
 - [ ] A non-admin actor is confirmed still bound by `deletion` + `non_fast_forward`.
 - [ ] **The gate-6 short-circuit is fixed** — `baselines_present` compares PAYLOAD, not names,
       or the short-circuit is dropped so the already-correct PATCH path becomes reachable.

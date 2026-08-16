@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-16T00:55:06+0200
+updated: 2026-08-16T10:20:38+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -578,10 +578,44 @@ code shape** (see Verification below).
       by the security finding recorded above: `ask_user` and `permission` MUST NOT be conflated
       for auto-answer.
 - [x] **7.** No more headed chrome-for-testing windows — DONE, verified live
-- [ ] **8.** Ledger records EVERY change to `~/.claude/settings.json` — NOT STARTED
-- [ ] **9.** Ledger monitors `settings.json` + `settings.local.json` in every workdir and every
-      `~/.claude/projects/` entry — NOT STARTED (superset of 8; watch the DIRECTORY, never the
-      FILE, per the trap recorded above)
+- [x] **8.** Ledger records EVERY change to `~/.claude/settings.json` —
+      **DONE. The box said "NOT STARTED" and it had THREE commits behind it**
+      (`bbd18e3b` the watcher half, `816a582c` the `recordChange(ledger, change)` seam,
+      `4b1811ff` anchoring the entry path to the chain). Sixth of seven parked/stale premises this
+      week — verify before building, or you re-implement what shipped.
+      **VERIFIED BY EFFECT on the live server, not by code shape:**
+      - armed at boot, unconditionally — `[Startup] Settings-file watcher armed: 28 dirs → signed
+        ledger (fingerprints only)` at **10:10:12** (and again at 09:48:29, i.e. every boot);
+      - it has actually RECORDED: `~/.aimaestro/settings/watched-settings.ledger.json` holds **29**
+        `change_settings_file` entries spanning 2026-08-07 → 2026-08-15, each carrying
+        `seq/prevHash/signature/signerKeyFingerprint/authActor`;
+      - the chain is BOOT-VERIFIED like every other — `[SECURITY] All ledger chains verified` at
+        **10:09:54** (94 occurrences in the log; `verifyOnStartup` defaults true and no
+        `security-config.json` overrides it), so it is not the one chain nobody checks;
+      - `0` `ledger append failed` audit-gap lines since boot;
+      - `tests/unit/settings-watcher.test.ts` + `settings-watch-targets.test.ts` → **34/34**.
+      The diff records `{sha256,size}` FINGERPRINTS only — a settings file legitimately holds env
+      blocks and tokens, and a long-lived ledger of values would republish the secrets it exists to
+      protect.
+- [x] **9.** Ledger monitors `settings.json` + `settings.local.json` in every workdir and every
+      `~/.claude/projects/` entry — **DONE, same three commits.** Measured coverage — re-derive it
+      with a read-only probe calling `watchDirs(discoverSettingsTargets())` and bucketing by prefix
+      (mine is gitignored at `scripts_dev/probe-settings-watch-coverage.ts`; run it with
+      `bash scripts/with-node.sh npx tsx <path>`, and note it must be `.ts`, NOT `.mts` — the repo
+      transpiles to CJS under tsx, so an `.mts` probe sees only a `default` export and its named
+      imports fail): **28 watch dirs** = `~/.claude`
+      (1) + **12** agent workdirs + **15** decoded project cwds. The watcher watches
+      `<workdir>/.claude`, and discovery emits a target only where a settings file ALREADY EXISTS,
+      so the 11 agent workdirs and 24 decoded cwds not in the set are the ones carrying no settings
+      file at all — not a coverage hole.
+      **The residual, stated rather than hidden:** a settings file CREATED in a previously-empty
+      workdir is not seen at the instant of creation; it is picked up by the next re-scan
+      (`DEFAULT_RESCAN_MS = 5 min`), so the create event is missed and every change from then on is
+      recorded. That is deliberate and the module says so at the gate.
+      **⚠ MY FIRST READING OF THIS WAS WRONG and would have filed a false gap** — the probe first
+      compared `~/agents/<name>` against the watch set and reported **23 of 23 workdirs and 39 of
+      39 decoded cwds "MISSING"**, because the watched dir is the `.claude` SUBDIRECTORY. A
+      comparison whose two sides are different kinds of path can only ever report a total miss.
 - [ ] **10.** Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI —
       NOT STARTED, and the request SPLITS: one half would be a regression, so `usageRequest` stays
       as a documented fallback behind a differential test

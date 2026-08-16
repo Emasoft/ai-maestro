@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:47:24+0200
+updated: 2026-08-16T19:54:29+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -736,6 +736,33 @@ justified keeping a finding by reasoning that "`cross_platform.py` IS imported b
 the import mechanism clearly works" — axis 3 had already proven those exact imports all crash. The
 conclusion survived on other evidence; the reasoning did not. **Cross-check premises across axes
 before a finding enters the plan.**
+
+### The hub's axis 3 — the instrument I quoted all session is measuring THIS tree
+
+The contract makes every session prove its own tooling before quoting it: *"does the INSTALLED copy
+on PATH match the repo copy (`cmp`, not `grep`); are its flags real; does an unknown flag fail
+loudly rather than exit 0?"* I had been quoting `trddgrep validate` in the ledger for hours without
+running that check on myself. It passes, on all three:
+
+| check | result |
+|---|---|
+| `command -v trddgrep` | `~/.local/bin/trddgrep` — a 105-line bash launcher, not the mjs |
+| the launcher's recorded root (`${XDG_DATA_HOME:-$HOME/.local/share}/aimaestro/install-root`) | `/Users/emanuelesabetta/ai-maestro` — **this repo** |
+| `cmp` launcher target vs `scripts/trddgrep.mjs` | **IDENTICAL** (mtimes also equal, `Aug 16 17:47`) |
+| unknown flag `--help` | `exit=2`, `trddgrep: could not run — unknown option --help — see \`trddgrep help\`` |
+| verb dispatch shape | an explicit `switch` allowlist (`lint`/`validate`/`fix`/`env`, `trddgrep.mjs:600-844`) — an unrecognised verb cannot fall through into `fix` |
+
+So the session's `trddgrep validate` results measured the tree they claimed to, and the "fixed in
+the repo is not fixed on disk" trap — which cost the fleet a whole finding class tonight — does not
+apply to this instrument. **This is a negative result and it is the point of running it**: an
+unchecked instrument and a checked-and-correct one produce identical output, so only the check
+distinguishes them.
+
+Worth one NIT, not a defect: `--help` is *rejected* rather than accepted, against near-universal CLI
+convention (`help` is the real verb). That is the loud failure the contract asks for — exit 2 is
+COULD-NOT-RUN, and it names the correct spelling — so it is a usability wart, not a silent one.
+Recorded here so nobody "fixes" it into an exit-0 alias later, which would collapse
+*unknown-option* into *ran fine*.
 
 ## Approval log
 

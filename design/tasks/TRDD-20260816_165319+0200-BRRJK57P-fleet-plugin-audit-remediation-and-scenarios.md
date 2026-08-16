@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:06:18+0200
+updated: 2026-08-16T19:09:35+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -41,7 +41,7 @@ finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
 
-**6 sessions reported as of 19:06 (architect, assistant-role, CORE, maintainer, orchestrator,
+**7 sessions reported as of 19:12 (architect, assistant-role, CORE, maintainer, orchestrator,
 llm-externalizer); architect and assistant-role are Phase-1 COMPLETE on all four axes; every
 CONFIRMED finding is hub-verified — see the ledger below.** Outstanding: every session that has not
 yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
@@ -391,6 +391,42 @@ into `scripts/lib/` (returned 0 — a false "the retracted text is gone"), then 
 grep piped through `head -10`, which truncated before line 209. **Fixed-in-repo is not
 fixed-on-disk — and the installed copy can carry an edit that LOOKS like the fix and is not it.** So
 the check is never "did the edit ship" but "does the shipped text state the correct mechanism".
+
+### ai-maestro-maintainer-agent — Phase 1 COMPLETE, and two reusable measurements
+
+12 candidates → 6 CONFIRMED / 3 REFUTED / 3 DOWNGRADED, plus one defect found by MEASUREMENT
+rather than by any candidate, and 3 items carried as NOT VERIFIED — including the one the hub
+flagged as the more interesting (whether any live repo was written into the locked shape by THEIR
+plugin rather than the janitor's applier). Still unmeasured, and correctly not recorded as absent.
+
+**1. The `@handle` mention rules — hub re-measured all six forms first-hand via
+`gh api -X POST /markdown -f mode=gfm`, grepping for `class="user-mention"`:**
+
+| rendered form | mention? |
+|---|---|
+| `@v2` | **YES — pages a real account** |
+| `@v2.152.1` | no — a dotted version tag is INERT |
+| `actions/checkout@v4` | no |
+| `@janitor` · `@janitor.` | **YES** (trailing dot does not protect) |
+| `[@janitor](https://example.com)` | no — an `@handle` as markdown LINK TEXT is INERT |
+
+Their two claims CONFIRMED, and both are genuine ADDITIONS to `~/.claude/rules/github-mentions.md`,
+which currently says nothing about either. **Consequence for the fleet: any mention-audit flagging
+version tags or linked credit lines is producing FALSE POSITIVES** — and the trap runs the other
+way too, since bare `@v2` DOES page. The hub has not edited that rule: it is a machine-global file
+outside any repo, so the refinement is surfaced to the USER rather than applied.
+
+**2. The write-early rule needs its CONTENT clause, not just its timing clause.** Their first four
+falsification workers ran **1h45m and produced ZERO files**; they recovered the prompts verbatim
+before stopping them, re-dispatched, and the replacements finished in **2-3 minutes each**. The one
+instruction the originals lacked: *"write your output file even if incomplete, marking unfinished
+items NOT VERIFIED."* **A stall that produces no artifact is the only outcome that teaches
+nothing** — so the contract clause is not "write early" but "write early, incomplete, and mark the
+gaps", which also makes the artifact self-describing when it IS truncated by a stall.
+
+Third independent confirmation of the stall pattern tonight (CORE 65 min / 0 files, orchestrator
+55 min / 0 files, maintainer 4 workers / 1h45m / 0 files), and the third where the replacement
+finished in minutes — which is what establishes the silence as stall rather than slow work.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

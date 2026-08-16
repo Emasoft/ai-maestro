@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:45:48+0200
+updated: 2026-08-16T19:47:24+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -642,6 +642,22 @@ This is recorded as a finding for Phase 2, in the owning repo, which happens to 
 Phase-1 audit like every other member of the fleet; (2) a spec clause with a `MUST` and no
 enforcing tool is the *"unenforced rule produces a success, not an error"* shape the wiki already
 documents — worth a sweep of ALL `MUST` clauses for tool references, not just this one.
+
+**(2) SWEPT — 66 of 80 spec clauses carry NO clause-id reference in code or tests; 27 of those are
+`MUST`.** `3P-ZON-05` is one of the 27, and it is the one with 167 live violations under a clean
+validator, so for at least that member "no reference" really does mean unenforced.
+
+**Stated at the strength the instrument supports:** the measurement is *no clause-id reference*,
+which is WEAKER than *unenforced* — a rule can be enforced by code that never cites its id. It
+matters here because this repo's enforcement-map/ratchet convention is built on those citations, so
+an uncited clause is invisible to the very map that is supposed to prove coverage.
+
+**And the arithmetic did not close, which caught a false positive before it became a finding:** 80
+declared − 22 referenced ≠ 66, because only **14** of the 22 referenced ids are declared anywhere in
+the specs. The 8 extras looked like code citing nonexistent clauses — a good finding, and wrong:
+they are `3P-AAA-01/02/99`, `3P-BBB-01`, `3P-KAN-98/99`, `3P-XXX-01` (plus `3P-XXX-` from my own
+regex over-matching), i.e. **TEST FIXTURES for the clause-parsing machinery.** The naming was the
+tell. Reading what the hits ARE, before reporting the count, is what stopped it.
 
 ### The `%cpu` correction over-rotating — SUSTAINED is not ILLEGITIMATE
 

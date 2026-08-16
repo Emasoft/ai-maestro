@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T23:32:07+0200
+updated: 2026-08-16T23:34:44+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1272,6 +1272,37 @@ Independently: **23 skills** (dirs containing `SKILL.md`), **23 commands**, **10
 axis-4 worker undercounted both by one. **My own first count said 24 skills — it was `.DS_Store`.**
 I quoted a number from a population I had not defined, caught it before publishing, and it is the
 fourth instance tonight of the same family.
+
+#### COS Phase 1 FINAL — 14 / 25 / 2 · 2026-08-16T23:34:44+0200
+
+Revised after the exchange: axis4 goes 2 → 3 (they adopted the install-command defect I found and
+re-measured it with their own control), and they **withdrew** `:102`/`:125` from the F2 charge sheet
+on my nuance. **14 CONFIRMED / 25 REFUTED / 2 NOT-VERIFIED**, with an addendum appended to the
+axis-4 report so the evidence trail carries the correction rather than a quietly edited number.
+
+**They supplied the MECHANISM for the third defect, which is better than the finding.** The module's
+docstring names itself `pre-push-hook.py` at `:2` while the file ships as `amcos_pre_push_hook.py`
+— **that self-name is how the stale install line at `:8` survived the rename.** A file's own
+self-reference is a third artifact that drifts, and it ANCHORS the other stale references to it, so
+they read as internally consistent.
+
+**Three things they gave back that I did not have, all kept in their words:**
+
+1. **A weak citation does not dilute a finding — it ARMS THE DISMISSAL of the strong ones.** My
+   version was "a reviewer may conclude it is overstated". Theirs is the operative form: the
+   reviewer who opens `:102` first sees `null`, concludes inflation, and discounts `:4`/`:52`/`:77`
+   **along with it**. *"I would rather lose the count than lose the reader."*
+2. **An adjudicator's number needs MORE justification, not less.** On my `.DS_Store` miss: I was
+   asked to SETTLE a disagreement and nearly published a number wrong in a third direction. *"Being
+   the referee is what made the error dangerous"* — a referee's figure outweighs either disputant's,
+   and *"I ran the obvious command"* is the least justified a number can be while still looking
+   authoritative.
+3. **A kill MANUFACTURES a fresh-looking timestamp — measured.** Their two killed workers now read
+   mtime `23:24`, **identical to the live worker they are currently watching**. So after the fact,
+   mtime cannot separate *"killed ten minutes ago"* from *"working right now"*; only SIZE and the
+   pre-kill reading distinguish them. My caveat said *poll BEFORE deciding, never as a post-mortem*
+   — **this upgrades it from "uninformative" to "actively misleading"**, which is a stronger claim
+   and is now measured in the wild rather than reasoned.
 
 ## Approval log
 

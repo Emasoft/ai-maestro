@@ -3,7 +3,7 @@ trdd-id: JT3U4ZVM
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
 column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-08-16T01:32:56+0200
+updated: 2026-08-16T10:42:05+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -301,8 +301,25 @@ card's own record of them.
       rather than a fallen-back `zsh`) but the pipeline observation itself was never recorded, and
       that is what this box asks for
 
-- [ ] **THE BLOCKER IS NOT FULLY RESOLVED — measured 2026-08-05, and this is bigger than the box
-      above.** Audited all 10 ecosystem repos for the `{plugin-name}--v{version}` tag prefix the
+- [x] **CLOSED 2026-08-16T10:42:05+0200 — the box, not the finding. The body below had already recorded
+      this blocker as CLEARED at 01:32 today and left the box unticked**, so every reader — me
+      included, twenty minutes ago — opened this card and saw a CRITICAL fleet blocker still open.
+      That is the done-but-unclosed defect, and it is worse than an unstarted box because it looks
+      handled while sending the next reader to re-measure what is already measured.
+      **Independently re-verified before ticking** (9 h after the 01:32 pass, from the live GitHub
+      API and the live `Emasoft/ai-maestro-plugins` manifest — same numbers, so this is a second
+      observation and not a re-reading of the first):
+      architect **33** prefixed of 93, declares `2.15.24`, tag `ai-maestro-architect-agent--v2.15.24`
+      exists · integrator **10** prefixed of 42, declares `1.6.5`, tag
+      `ai-maestro-integrator-agent--v1.6.5` exists. The pairing is what decides it — "the repo has
+      prefixed tags now" is necessary and not sufficient, because the resolver matches the version
+      the MARKETPLACE DECLARES.
+      The evidence limit the body states still binds: tags are not an install, and the box above is
+      the one that would settle that.
+
+      <details><summary>The 2026-08-05 finding and its 01:32 re-measurement, kept as the audit trail</summary>
+
+      Audited all 10 ecosystem repos for the `{plugin-name}--v{version}` tag prefix the
       resolver requires (the spec point the USER's *"read the specs"* correction established — see
       [[plugin-install-no-git-tag-satisfying]]). **8 of 10 carry it; TWO carry NONE:**
       · `ai-maestro-architect-agent` — **0 prefixed of 20 tags**, marketplace declares `2.11.1`
@@ -350,6 +367,7 @@ card's own record of them.
       **Nothing filed, nothing commented:** the upstream work is done and the issues are closed, so
       there is no one to notify. Found only by re-running the measurement — the card had recorded a
       state, and states do not re-read themselves.
+      </details>
 
 ## Notes — the investigation's own post-mortem
 

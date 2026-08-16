@@ -3,7 +3,7 @@ trdd-id: 78J4I4QS
 title: reliability — detect a keychain-blind tmux server before it silently takes the whole fleet down
 column: ai_review
 created: 2026-07-12T12:27:10+0200
-updated: 2026-08-16T09:49:24+0200
+updated: 2026-08-16T10:36:32+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 1
@@ -155,13 +155,19 @@ STATE block names — not criteria invented at closing time. Re-verified live 20
       for the false `blind` alarm the first live sweep raised)
 - [ ] the dashboard banner off `getTmuxServerKeychainAlarm()` — the state is exported and
       queryable, the UI is not wired. The card calls this **explicitly not gating**
-- [ ] the leftover `AIM_INVARIANTS_WATCHDOG_INTERVAL_MS=15000` — **still live 20 days on**,
-      verified on the process itself (`ps eww -p <pid>`), i.e. the sweep runs every 15 s against a
-      code default of 5 min. It is sourced from **no file**: `ecosystem.config.js` does not define
-      it and cites this very variable as its evidence that pm2's cached env is stale. So it
-      self-corrects on the next `pm2 restart ecosystem.config.js --update-env` rather than needing
-      a fix of its own — recorded here so the next reader does not go hunting for a config that
-      sets it. (`AIM_FLEET_RECOVERY_FIRE=1`, absent on 2026-07-29, IS live now.)
+- [x] the leftover `AIM_INVARIANTS_WATCHDOG_INTERVAL_MS=15000` — **CLEARED 2026-08-16 (`4982a3f1`),
+      and the remedy this box named DOES NOT WORK.** Verified on the live process (pid 78342,
+      started 10:08:20): `ps eww -p <pid>` → **0** occurrences, with `NODE_ENV`/`PATH` present in
+      the same snapshot as the positive control proving the snapshot really carries this process's
+      environment. `AIM_FLEET_RECOVERY_FIRE=1` is still live, as recorded.
+      **⚠ THE CORRECTION, which is the part worth keeping.** This box said it *"self-corrects on
+      the next `pm2 restart ecosystem.config.js --update-env`"*. It does not, and that was measured
+      this morning: **`--update-env` MERGES the config's env over the cached one — it cannot DELETE
+      a key the config never defines.** There are THREE copies of the env (the live process,
+      `ecosystem.config.js`, and `~/.pm2/dump.pm2`), and the phantom survived in the dump. Only
+      `pm2 delete` → `pm2 start ecosystem.config.js` → `pm2 save` clears it. The variable had
+      therefore been making the invariants sweep run every 15 s against a 300 s design — **20× for
+      20+ days** — through every restart anyone performed believing this box's remedy.
 
       **⚠ IT DID NOT SELF-CORRECT, AND NOW WE KNOW WHY — measured 2026-08-16T01:23.** The server
       restarted at **2026-08-15 21:36:10** and the var is STILL on the live process: `ps eww -p

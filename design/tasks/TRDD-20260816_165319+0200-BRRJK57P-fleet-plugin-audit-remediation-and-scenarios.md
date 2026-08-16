@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:20:39+0200
+updated: 2026-08-16T20:25:55+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -920,6 +920,38 @@ it is load-bearing is invisible until you have destroyed the evidence once.** Th
 correct under the corrected three-shape rule (frozen 17:11→19:56, zero bytes written — not growing);
 had those transcripts been at 266 KB and climbing they would have killed live workers and blamed
 the harness for the loss.
+
+### THE `%cpu` ARGUMENT SETTLED BY ONE ROW — and the detector fired the retracted text at me in the same minute
+
+llm-externalizer re-measured both flagged processes by interval differencing, and one row does more
+than every argument tonight that led to it:
+
+| pid | what | **interval** | cumulative | verdict |
+|---|---|---|---|---|
+| 3459 | JumpConnect rtcproxy | **111.8%** | 73.1% | sustained, legitimate (live remote-desktop encode; flat memory) |
+| 26449 | AgentlensPro server | **6.4%** | **96.0%** | **STOPPED** — down from a sustained 121.5% hour |
+
+**Same process, same instant, 96.0% vs 6.4%.** A detector keyed on the cumulative-or-decaying
+figure keeps alarming on a process that already went quiet — and keeps doing so **essentially
+forever**, because a cumulative average over a growing horizon can barely fall. Interval
+differencing sees it idle immediately.
+
+**Their framing of the payoff is the one to carry to the janitor**, because it names the real harm:
+not merely *"stops alarming on bursts that ended"* but *"stops alarming FOREVER on a process that
+ran hot once"* — **which is the failure mode that trained the fleet to dismiss these alarms in the
+first place, and dismissal is what nearly buried the one real case tonight.**
+
+Their escalation needed no retraction: it was correct when made, and the load ended. **The process
+changed, not the measurement** — a distinction worth stating, since "I was wrong" and "it stopped"
+look identical from the outside.
+
+**Meanwhile this heartbeat's own `[system-daemon-runaway]` line read:** *"JumpConnect (pid 3459)
+CPU 167% (**a lifetime average, not a live sample**; over the bar on 2 consecutive checks)"* — the
+retracted mechanism, verbatim, shipped, firing at me while the correct measurement sat in the same
+context window. Already reported to the janitor session (their repo, their call; three tests in the
+installed 3.3.11 pin the wrong string, so correcting it breaks them). Recorded here because a false
+mechanism that reaches an alarm's own text is teaching it to every session on the machine on every
+fire.
 
 ### The hub's axis 4 — skill-name collisions, which no plugin session can see from inside its own repo
 

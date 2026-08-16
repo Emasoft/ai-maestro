@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T18:56:22+0200
+updated: 2026-08-16T18:58:06+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -41,10 +41,18 @@ finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
 
-**3 sessions reported as of 18:49; all their CONFIRMED findings are hub-verified — see the
-verification ledger below.** Outstanding: architect axis 4, assistant-role axis 4, and every
-session that has not yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority
-was correctly refused by three sessions; the hold is endorsed).
+**4 sessions reported as of 18:56 (architect, assistant-role, CORE, maintainer); every CONFIRMED
+finding is hub-verified — see the ledger below.** Outstanding: architect axis 4, and every session
+that has not yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
+correctly refused by three sessions; the hold is endorsed).
+
+**TWO TEMPLATE-WIDE DEFECTS have surfaced, and both were invisible from inside any single repo** —
+each was found by a session that had verified its own copy correctly and stopped at its own tree
+boundary. Crossing that boundary is the one thing the hub can do that no session can, so the
+22-copy sweep is now ROUTINE for any finding in a file the fleet shares:
+(1) the `--atomic` release push cannot retry — 12 of 22 `publish.py`;
+(2) 21 of 22 release tools cannot emit the `Agent:` trailer their own GOLDEN PRRD rule mandates.
+**Each is ONE canonical-pipeline card, never twelve or twenty-one.**
 
 ## The USER's mandate, verbatim
 
@@ -285,6 +293,34 @@ distribution gap is real.
 CORE has an unpushed docs commit that can only reach the remote through `publish.py`. **Every
 release cut before the canonical-pipeline card lands runs its final atomic push with zero retries.**
 That is the cost of the wait, stated so whoever sequences Phase 2 can weigh it.
+
+### CONTRACT CORRECTION — the write-early rule CANNOT be delivered mid-flight (orchestrator)
+
+**The hub was propagating advice that cannot work against the failure it addresses, and told three
+sessions to apply it that way.** A queued cross-session message is delivered at the receiving
+worker's next TOOL ROUND. **A stalled worker takes no tool rounds.** So "relay the write-early
+instruction to your still-running worker" is structurally impossible precisely when the worker is
+stalled — the only case that matters. It appeared to work once (assistant-role) solely because that
+worker had already written its file and was hung AFTER finishing.
+
+**Corrected contract: the write-early rule is a PRE-SPAWN BRIEF item, never a mid-flight relay.**
+And the diagnostic that does work mid-flight is the one the assistant-role session named: read the
+FILE, never the process state. The orchestrator's own recovery is the pattern — kill the stalled
+worker, and its DYING LINE carries the lead it had been working on; put that lead in the
+replacement's brief as *"verify, do not trust"*. Its replacement finished in ~6 minutes, which
+proves the 55 minutes of silence was pure stall and not slow work.
+
+### ai-maestro-orchestrator-agent — 10 confirmed; 3 axis-3 citations hub-verified
+
+| Finding | Hub verdict |
+|---|---|
+| C1 duplicate basename `amoa_register_agent.py` | **CONFIRMED** — `./scripts/` and `./skills/amoa-remote-agent-coordinator/scripts/`, skill-local copy invoked by nothing executable |
+| C2 `scripts/gitignore_filter.py` orphan | **CONFIRMED with control** — 200 lines, 0 referencing files; control `amoa_stop_check` = 20 files, so the instrument demonstrably sees references |
+| C5 `hooks/hooks.json:12` wires `python3 -m amoa_stop_check.main` while `scripts/amoa_orchestrator_stop_check.py` still exists | **CONFIRMED** — docs point at a dead entry point |
+
+Their C2 method is the one to copy fleet-wide: **an orphan finding IS a zero**, so it was refused
+until the same grep was first pointed at a known-wired symbol. Without that step the claim rests on
+an instrument never proven able to see anything.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

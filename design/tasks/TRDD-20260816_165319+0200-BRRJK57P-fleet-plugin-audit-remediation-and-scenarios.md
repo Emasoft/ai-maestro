@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:05:50+0200
+updated: 2026-08-16T19:06:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -41,9 +41,10 @@ finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
 
-**5 sessions reported as of 18:58 (architect, assistant-role, CORE, maintainer, orchestrator);
-every CONFIRMED finding is hub-verified — see the ledger below.** Outstanding: architect axis 4,
-and every session that has not yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
+**6 sessions reported as of 19:06 (architect, assistant-role, CORE, maintainer, orchestrator,
+llm-externalizer); architect and assistant-role are Phase-1 COMPLETE on all four axes; every
+CONFIRMED finding is hub-verified — see the ledger below.** Outstanding: every session that has not
+yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
 correctly refused by three sessions; the hold is endorsed).
 
 **TWO TEMPLATE-WIDE DEFECTS have surfaced, and both were invisible from inside any single repo** —
@@ -125,8 +126,14 @@ describing a plan that already executed, which makes it the most confidently wro
   search against something you KNOW is present.
 - `grep -r --include=<glob>` does not filter on every toolchain — verify the filter before
   believing a count built on it.
-- `ps` `%CPU` is a LIFETIME AVERAGE, not a live sample. Two sessions independently raised a false
-  runaway from it today.
+- `ps %cpu` on macOS is **a decaying average over UP TO A MINUTE of previous real time** (`man ps`),
+  NOT a live sample and **NOT a lifetime average**. A burst that ended minutes ago still reads high;
+  a `top -l 2` delta samples ~1 s, so 146% and 39.6% can both be true of one bursty process.
+  **CORRECTED 2026-08-16 — this line previously said "a LIFETIME average", which is the fabricated
+  mechanism this very card's ledger documents. It sat in the contract every session reads, three
+  paragraphs above the section explaining that the same false claim reached a shipped alarm, a
+  passing test and three releases.** Nobody consulted `man ps` before building on it, for hours,
+  including the author of the correction.
 - Never report a count from a truncated or capped command. A negative claim needs an UNBOUNDED
   instrument.
 

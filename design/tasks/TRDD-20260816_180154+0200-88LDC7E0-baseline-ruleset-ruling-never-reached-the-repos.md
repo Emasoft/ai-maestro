@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T18:01:54+0200
-updated: 2026-08-16T18:05:00+0200
+updated: 2026-08-16T18:08:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -118,6 +118,69 @@ independent versions, never one. A repo can be half-migrated in either direction
    defect class the fleet audit has been finding all day: correct code under stale prose,
    where the prose is what a reader consults.
 
+## THE MECHANISM — found by the janitor session, verified here first-hand
+
+This is **not** "the applier never re-ran". It is a code defect that makes the baseline
+**unmaintainable after first creation**, and it explains all nine repos with one cause.
+
+`scripts/guard/branch_protection_apply.py` L152-163:
+
+```python
+present = bpl.baselines_present(slug)
+if present is None: ... return 0
+if present:
+    ledger = state.state_dir() / _LEDGER_FILE
+    if not ledger.is_file(): _ledger_append(slug, default_branch, "already-present")
+    return 0          # ← silent, before Gate 7 and before apply_baseline_rulesets
+```
+
+and `branch_protection_lib.baselines_present` L460-466:
+
+```python
+names = {r.get("name") for r in rulesets if isinstance(r, dict)}
+return (HISTORY_RULESET_NAME in names and PR_CHECKS_RULESET_NAME in names
+        and TAG_PROTECT_RULESET_NAME in names)
+```
+
+**It compares NAMES ONLY, never payload content.** `apply_baseline_rulesets` is written
+correctly and *does* `_post_or_patch_ruleset(..., by_name.get(name))` — it PATCHes drift
+properly, and the comment above it at L173-174 says so. **That PATCH path is UNREACHABLE on
+any repo that already carries the three names.** The janitor proved it rather than inferred
+it: all four upstream gates evaluate True on its repo, it ran the applier directly, output
+was EMPTY, and the live API was byte-identical afterwards.
+
+**Consequence far larger than this ruling:** no baseline change of any kind — this one, or any
+future one — can ever reach any repo that already has the three rulesets. Every ruleset is
+frozen at whatever payload created it. The 2026-08-13 ruling is simply the first change big
+enough to make the freeze visible.
+
+**This supersedes my AgentlensPro reasoning and improves it.** I said the two rulesets "drifted
+independently"; nothing drifted. Nothing was ever RE-applied anywhere once created, so each
+ruleset is pinned to its own creation-time payload — which is exactly why one repo can carry a
+new bypass beside an old approval count. The autonomous session's "per-repo state is a PAIR of
+independent versions" still holds and is now explained rather than merely observed.
+
+## Ownership of the stale IND rule — measured, not assumed
+
+The janitor session asked me to route `~/.claude/rules/manager-approval-defaults.md`, reporting
+its repo does not ship it. Confirmed, and the file is an **ORPHAN shipped by nobody**:
+
+- `find ~/.claude/plugins/cache -name 'manager-approval-defaults.md'` → **0 hits**, against a
+  positive control (`janitor-footprint.md`) returning **13**. The search works; nothing ships it.
+- Census of all 41 global rules: **9 carry `<!-- ai-maestro-janitor:rule-stamp -->` at mode 600**;
+  the other 32 are unstamped at 644/664. This file is unstamped, 644, mtime 2026-08-08.
+
+That is the same three-tell signature already recorded in `lessons-verification.md` for
+`trdd-approval-tiers.md` — *"a superseded predecessor that nobody deleted reads exactly like a
+peer authority"*. Both are orphans; both are superseded by this repo's DEP overlay. Nothing
+updates them **because nothing owns them**, which is why it went stale and why it will go stale
+again after any future ruling.
+
+**Not edited, deliberately.** It is a machine-global file in the USER's `~/.claude/rules/`,
+governing every project on this host, and it is in no git repo — so a "significant content
+change" there is the USER's call, not mine, and RULE 0 forbids me treating an untracked file
+outside the project as freely editable. Surfaced for the USER instead.
+
 ## Why this was invisible
 
 Every instrument reported clean. A closed ruling is not an applied ruling; the code carries
@@ -157,11 +220,20 @@ weakens a repo it never meant to touch (recorded in `lessons-verification.md` �
 - [ ] `baseline-pr-and-checks` carries `required_approving_review_count: 0` on all 9, same
       standard of proof.
 - [ ] A non-admin actor is confirmed still bound by `deletion` + `non_fast_forward`.
-- [ ] `~/.claude/rules/manager-approval-defaults.md` no longer states `bypass_actors: []`
-      (janitor-owned edit).
-- [ ] The `branch_protection_lib` module docstring agrees with its own payload builder on both
-      `bypass_actors` and the approval count (janitor-owned edit).
-- [ ] Re-measured AFTER the janitor acts, by me, from the live API.
+- [ ] **The gate-6 short-circuit is fixed** — `baselines_present` compares PAYLOAD, not names,
+      or the short-circuit is dropped so the already-correct PATCH path becomes reachable.
+      Janitor-owned; deliberately left as a decision, not prescribed here.
+- [ ] **A test that FAILS on a name-present/content-stale repo exists** — the case that has
+      never been covered, and the reason a names-only check survived. Without it the next
+      baseline ruling re-freezes exactly the same way.
+- [ ] `~/.claude/rules/manager-approval-defaults.md` no longer states `bypass_actors: []`.
+      **USER-owned, not janitor-owned** (measured: shipped by no plugin — see above).
+- [x] The `branch_protection_lib` module docstring agrees with its own payload builder on both
+      `bypass_actors` and the approval count. **Done in the janitor's tree 2026-08-16**, on its
+      own initiative, before I asked for it.
+- [ ] Re-measured AFTER the janitor acts, by me, from the live API — not from a commit, a closed
+      issue, or an applier success line. **This defect IS a success line that meant nothing**, so
+      that standard of proof is not pedantry here, it is the whole lesson.
 
 ## Approval log
 
@@ -183,3 +255,13 @@ weakens a repo it never meant to touch (recorded in `lessons-verification.md` �
   **Three sessions have now been told not to hand-apply and all three declined independently** —
   recorded because a fix everyone agrees is obvious, applied by four parties at once to nine
   public repos, is the failure mode this card is one step away from.
+- 2026-08-16T18:08:00+0200 — **The janitor session found the MECHANISM** (gate-6 names-only
+  short-circuit) and proved it by running its own applier to empty output against an unchanged
+  live API. I re-read both sites first-hand before rewriting this card: `baselines_present`
+  L460-466 and the applier L152-163. It also fixed its module docstring unprompted, and declined
+  to fix gate 6 at speed inside a discovery pass — correctly, since the fix needs a decision and
+  a test for a case that has never been covered.
+  **This upgrades the card from "a ruling did not propagate" to "the baseline cannot be
+  maintained at all after first creation".** The maintainer session separately found a FOURTH
+  stale prose site in its own memory corpus and repaired it non-destructively, which is what
+  prompted the memory-scope sweep recorded below.

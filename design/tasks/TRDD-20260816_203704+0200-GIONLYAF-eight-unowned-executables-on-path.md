@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-16T20:37:04+0200
+updated: 2026-08-16T21:44:22+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -25,8 +25,8 @@ eht: []
 blocked-by: []
 release-via: none
 priority: 2
-severity: medium
-effort: M
+severity: low
+effort: S
 labels: [scripts, distribution, hub-self-audit]
 external-refs: []
 ---
@@ -57,6 +57,49 @@ alone**, so the real instruction surface is materially larger than the local cou
 
 That is the `check-all-files-after-breaking-change` failure mode: prose naming a removed thing still
 executes, and neither tsc nor lint nor any test can see it, because it is prose.
+
+## INVESTIGATION (steps 1-3 done 2026-08-16) — the premise is REFUTED for the live surface
+
+Steps 1-3 were ordered before disposal precisely so the facts could change the plan. They did.
+
+**Step 1 — provenance, from git history rather than assumption.** The 8 split three ways:
+
+| class | n | files | fact |
+|---|---|---|---|
+| **deleted here, never uninstalled** | 3 | `docs-helper.sh` `graph-helper.sh` `memory-helper.sh` | all added `bbe4fc77` 2026-03-26 and all deleted `b862c6b0` 2026-04-18 — one feature added and removed together; the installed copies survived |
+| **on a branch, not HEAD** | 1 | `aimaestro-agent.py` | added `c31cfe56` 2026-02-01, last seen `6d8c00b3`, absent from the HEAD tree |
+| **never in this repo** | 4 | `aimaestro-agent-bash` `kanban-sync.py` `kanban-sync.sh` `watch-inbox.sh` | no add, no delete, ever |
+
+**Step 3 — READ the two live docs, and neither is a defect:**
+
+- **`docs/AGENT-COMMUNICATION-GUIDELINES.md:748`** — *"**Create** `~/.local/bin/watch-inbox.sh`:"*,
+  followed by the script's contents in a fenced block. **The doc tells the reader to create it.**
+  So `watch-inbox.sh` on PATH is the *product of following current documentation*, not orphan
+  litter — no repo ships it because no repo is supposed to. **Correct behaviour; nothing to fix.**
+- **`docs/SCRIPT-MANIFEST.md:520-529`** — the table sits under a heading stating these were
+  *"Removed in `b862c6b0` … TRDD-70a521d9 — the RAG/CozoDB removal"* and that *"the plugin skills
+  were never updated"*. **It is a table OF REMOVED SCRIPTS documenting a known gap** — the
+  "deliberately historical" case the breaking-change rule explicitly preserves. **Correct as
+  written.**
+
+**So the card's premise — *"instructions still point at them"* — is REFUTED for every live doc.**
+
+**And my own reference count was inflated three ways**, each of which this programme has a lesson
+about:
+
+1. **By my own documents.** Every one of the 8 appears in `GIONLYAF` and `BRRJK57P` *because I wrote
+   the names into them tonight*. The observer modified the observed — third time in one evening.
+2. **By a broken filter.** `grep -rl --include=*.md` returned `install-agent-cli.sh`, a `.sh` file.
+   The known toolchain bug where `--include` silently does not filter, hit live.
+3. **By an undecoded population.** The honest `find`-based sweep returns ~50 files, of which
+   **~25 are chat-history archives, ~13 are dated `docs_dev/` audit reports, and 1 is a frozen
+   archived TRDD** — text that *should* name a since-removed script, because it records history.
+   **Two files are live instruction. Not seventeen.**
+
+**Revised scope.** No documentation fix is needed. What remains is 3 files of genuine
+missing-uninstall residue (documented as removed), 1 branch-only file, and **3 with provenance still
+unknown** (`aimaestro-agent-bash`, `kanban-sync.py`, `kanban-sync.sh`) — the only open question, and
+the only reason this card stays open rather than closing as refuted. Severity drops accordingly.
 
 ## Root cause
 

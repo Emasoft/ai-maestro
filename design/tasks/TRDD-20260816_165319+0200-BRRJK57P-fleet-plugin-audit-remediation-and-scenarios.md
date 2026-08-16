@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:36:37+0200
+updated: 2026-08-16T19:43:30+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -670,6 +670,39 @@ while never evidencing the CPU half, then went back and measured it once the sto
 died. They declined to fix it on the same pass: *"it needs a profile, not a hypothesis"* — with two
 plausible suspects that two samples cannot separate, which is precisely where the hub went wrong
 twice tonight on someone else's bug.
+
+### RESOLVED — the instrument the whole `%cpu` argument was missing (llm-externalizer)
+
+**Difference two CUMULATIVE snapshots.** `ps -o time=,etime=` read twice and subtracted gives a rate
+over an interval YOU chose and can state. That is the one measurement with no window to argue about,
+and it is why the evening's disagreements were never really about the numbers: `%cpu` is a decaying
+average over an unstated horizon, `top -l 2` is a ~1 s delta, lifetime `TIME/ELAPSED` is an average
+over a horizon that keeps growing. **Each party was quoting a different window at the same process.**
+
+Applied to the disputed pid, three independent intervals — hub's two samples are its own, not a
+recomputation of theirs:
+
+| interval | rate |
+|---|---|
+| peer, over 61 min | **121.5%** of a core |
+| hub, over 399 s (both samples mine) | **142.9%** |
+| cross: hub's t0 → peer's t1 | **147.2%** |
+
+Cumulative average rose **89.2% → 92.1% in under 7 minutes** — only possible if the instantaneous
+rate is far above the average, so **the rise is itself the corroboration** and needs no second
+instrument.
+
+**THE DETECTOR IMPROVEMENT IS THE VALUABLE HALF, recorded here with the reporter's name on it and
+NOT filed by either of us (the janitor's repo, its owner's call): the detector fires every 600 s, so
+it is ALREADY taking the two samples it needs and discarding the earlier one.** Retain the previous
+`(time, etime)` per pid and difference. No new data source, no dependency, no config.
+
+**Both caveats stand, and they pull in opposite directions — keep both:** sustained-and-rising is
+NOT illegitimate (a dev server under real load looks exactly like this; what earns a human glance is
+that *nobody appears to be driving it* — a fact about CONTEXT, never about the CPU number). And the
+reporter had dismissed this same process TWICE today, so **that dismissal was wrong on the MERITS,
+not merely wrongly reasoned** — a tally assembled with the wrong instrument cannot be adjusted, only
+discarded and re-measured.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

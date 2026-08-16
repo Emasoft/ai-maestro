@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:54:29+0200
+updated: 2026-08-16T20:08:06+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -763,6 +763,65 @@ convention (`help` is the real verb). That is the loud failure the contract asks
 COULD-NOT-RUN, and it names the correct spelling — so it is a usability wart, not a silent one.
 Recorded here so nobody "fixes" it into an exit-0 alias later, which would collapse
 *unknown-option* into *ran fine*.
+
+### The hub's axis 3, part 2 — 8 executables on PATH that NO repo in the fleet ships
+
+Extending the `trddgrep` check to the whole installed family (`~/.local/bin/*` whose content
+mentions aimaestro — 59 files) re-runs the deployment census the standing lesson says never to
+quote from memory. **The recorded tally was `55 identical / 25 stale / 7 never-deployed`; measured
+now it is `38 identical / 0 DIFFERS / 21 no-counterpart`.** Nothing is stale. That supersedes the
+recorded number, which is the whole reason the lesson says to re-run it.
+
+The 21 without a `scripts/<same-name>` resolve into three buckets, and only the third is a finding:
+
+| bucket | n | what |
+|---|---|---|
+| launcher → target | 9 | `trddgrep`/`prrdgrep`/`specgrep` → `.mjs`; `aimaestro-agent` + 5 `amp-*` → `.sh`. Correct by design. |
+| `.bak-20260808_153204+0200` | 3 | backups of `aimaestro-continuity/panel/session.sh` sitting **on PATH**. Inert (nothing invokes a `.bak` name) but they make any future census ambiguous. |
+| **UNOWNED** | **8** | `aimaestro-agent-bash`, `aimaestro-agent.py`, `docs-helper.sh`, `graph-helper.sh`, `kanban-sync.py`, `kanban-sync.sh`, `memory-helper.sh`, `watch-inbox.sh` |
+
+The 8 are absent from this repo **and from every repo under `~/Code` at depth 4** (positive
+controls: `trddgrep.mjs` found here; `publish.py` found in two repos at two different nesting
+depths, so the depth covers both shapes). They date from Dec 2025 to Aug 2026 — `aimaestro-agent.py`
+is 47 KB from **Feb 2026**. Executable, on PATH, maintained by nothing.
+
+**They are not merely litter: instructions still point at them.** Bounded to this repo +
+`~/.claude/rules`, 5 of the 8 are still named in md files (`memory-helper.sh` twice). The
+unbounded `~/Code` sweep timed out at 8m20s having returned **17 md files for
+`aimaestro-agent-bash` alone**, so the real instruction surface is much larger than the local
+count — an agent following those docs invokes a script no repo owns. That is the
+`check-all-files-after-breaking-change` failure mode: prose naming a deleted thing still executes.
+
+Phase-2 work, this repo. Deliberately not repaired here (deleting an executable other sessions may
+be invoking is not a Phase-1 act, and RULE 0 wants them committed or trashcanned, not `rm`-ed).
+
+### visual-comunicator's G1 — hub-verified CONFIRMED, and the fleet sweep inverted the finding
+
+The peer nominated one citation as the one to check if I check only one. Both halves verified
+first-hand in `~/Code/visual-comunicator/scripts/publish.py`:
+
+- `:164-183` — `_read_remote_latest_tag()` returns `None` on **any** non-zero exit, with a comment
+  that says so outright (*"Network failure / no remote — caller treats as 'no remote tag known'"*).
+- `:255-268` — `_gate_version_bump()`: `if remote is None: PASS (no remote tag yet); return True`.
+- `:170-172` — the docstring states the retry wrapper exists so a glitch *"shouldn't make G1
+  falsely think there's no remote tag (which would let a duplicate-version push slip through)"*.
+
+So on a **persistent** outage the retries exhaust, `None` is returned, and the gate passes for
+exactly the reason its own docstring names as the thing to prevent. Their report is verbatim
+correct.
+
+**The fleet sweep then inverted it into a bigger finding.** I expected a third template-wide
+defect and got the opposite: **only 1 of 22 `publish.py` copies has this function — and only 1 of
+22 has a version-bump gate of any kind.** I broadened past the function NAME deliberately (the
+standing lesson that a name-keyed needle goes blind after a rename) to `_gate_version_bump|def
+.*version_bump|G1: version`, and to how each learns the remote version (`ls-remote` / `gh release`
+/ `git tag -l` / `describe --tags`) — same answer, and the needle finds the one that has it, so the
+control holds. **21 of 22 carry no duplicate-version guard at all.**
+
+That is a CANDIDATE, not a confirmed defect, and the missing determination is stated rather than
+assumed: whether those 21 can even *produce* a duplicate version, given `bump-version.sh` and the
+"every PR bumps" convention, is unmeasured. A pipeline where duplicates are impossible by
+construction needs no G1. Whoever takes it measures that first.
 
 ## Approval log
 

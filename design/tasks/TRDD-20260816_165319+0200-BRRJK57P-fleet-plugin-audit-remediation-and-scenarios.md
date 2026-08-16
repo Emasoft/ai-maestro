@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:14:30+0200
+updated: 2026-08-16T20:15:55+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -898,6 +898,28 @@ the two cases are already distinguishable, and the current code throws that away
 into one `None`. The shape: reserve `None` for *read succeeded, zero tags* (→ PASS, first publish
 works) and give *read failed* a distinct value G1 treats as **FAIL CLOSED**. First-ever publishes
 are unaffected.
+
+**Gap I flagged, and they closed it rather than taking my table on report.** My case C was a *local*
+unreachable path, not a network partition; I said so and said I had not run the network case.
+visual-comunicator ran it: `https://no-such-host.invalid/x.git` → **exit 128**, `fatal: … Could not
+resolve host`. Same code as the local failure, so the transport-failure class is now measured on
+both sides of the distinction the fix turns on. Closed on `TRDD-YY5ISKCJ` (commit `8e283ec`) as
+*"Blocking question — ANSWERED"*, with case B written up as the positive control — which is what
+makes A's empty result a real zero rather than a dead instrument.
+
+They deliberately did **not** bump that card's `updated:`, and said so in the commit body so it
+would not read as an oversight. Correct, and a subtle application: the card now KNOWS more but
+ASSERTS nothing different — same defect, severity, column — so bumping would have reordered the
+whole board on a research note. That is the mechanical-repair rule (bump only what changes what the
+card asserts) applied to a case its own wording does not obviously cover.
+
+**Ordering sharpened, from their post-mortem on their own kill.** They polled before killing — but
+in their words, *"only because I wanted to justify the kill, not because I understood that killing
+first makes the question permanently unanswerable."* **The ordering is load-bearing, and the reason
+it is load-bearing is invisible until you have destroyed the evidence once.** Their kill was still
+correct under the corrected three-shape rule (frozen 17:11→19:56, zero bytes written — not growing);
+had those transcripts been at 266 KB and climbing they would have killed live workers and blamed
+the harness for the loss.
 
 ### The hub's axis 3, part 2 — 8 executables on PATH that NO repo in the fleet ships
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:17:42+0200
+updated: 2026-08-16T20:20:39+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -951,6 +951,35 @@ skills are namespaced `plugin:skill`, so both are *addressable* — what is unme
 bare-name invocation or the skills listing can resolve to the wrong one, and that is the whole
 severity question. Whoever takes it measures that first rather than renaming four skills on the
 strength of a collision count.
+
+**ANSWERED by llm-externalizer, and the answer changes the action.** I logged the resolution
+question as unmeasured; they had the instrument I did not — **their own skill listing IS the
+resolver state.** All four colliding names appear there **only fully qualified**
+(`huggingface-skills:hf-cli` / `llm-externalizer:hf-cli`, and so on), with **no bare entry for any
+of them**. I verified the other half myself, from my own Skill tool's contract: *"Plugin skills use
+`plugin:skill`."* So a bare-name invocation has **no target at all** and cannot silently land on
+the wrong plugin. **My worst case does not obtain.** Not a mis-resolution bug.
+
+**What survives is a MENU-AMBIGUITY bug, and namespacing does nothing to it.** Both descriptions
+cover the same ground in near-identical words — select GGUF/quantization for llama.cpp on CPU / Mac
+Metal / CUDA / ROCm, quant trade-offs, serving, conversion. A model choosing from the listing has no
+principled basis to prefer either, so it is a coin flip between two skills whose *content* differs.
+**Namespacing makes both ADDRESSABLE; it does not make the choice INFORMED.**
+
+Action revised accordingly: **do NOT rename the four skills.** Renaming is a breaking change for
+anyone invoking `llm-externalizer:hf-cli` today, and it would be four renames aimed at a resolution
+bug that measurement says does not exist. The cheap correct fix is to **differentiate the
+DESCRIPTIONS** so the choice is informed — and only our side can move, since the official plugin is
+not ours. Whether this plugin should ship four HF skills at all is a Phase-2 scope decision; nobody
+is making it in discovery.
+
+**The generalization is worth more than the finding, and it indicts my own scan.** I keyed on
+**NAME** and the real defect is in **DESCRIPTION**. Two skills with *different* names and
+near-identical descriptions produce the identical coin-flip — and a name-collision scan is blind to
+every one of them. So this was found by luck: the name collision was a symptom that happened to sit
+beside the defect. **The general form needs a description-similarity sweep, which nobody has run.**
+Same family as the standing lesson that a detector keyed on a symbol NAME goes blind the moment
+something is renamed — here it was never able to see the class at all.
 
 **Not ours, recorded for completeness:** `GhostScientist-skills/design-skills` and
 `.../research-skills` ship **11 identical skill names** between two sibling plugins of one

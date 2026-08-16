@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:15:55+0200
+updated: 2026-08-16T20:17:42+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -920,6 +920,42 @@ it is load-bearing is invisible until you have destroyed the evidence once.** Th
 correct under the corrected three-shape rule (frozen 17:11→19:56, zero bytes written — not growing);
 had those transcripts been at 266 KB and climbing they would have killed live workers and blamed
 the harness for the loss.
+
+### The hub's axis 4 — skill-name collisions, which no plugin session can see from inside its own repo
+
+Axis 4 names *"conflicts with other plugins (same command name, same file, same settings key)"*.
+That is unmeasurable from inside one repo by construction, so it is hub work. Scanned all installed
+plugin skills in `~/.claude/plugins/cache`.
+
+**The first run was wrong and its own output said so.** It reported `janitor-memory-harvest (13)`
+and 51 other "collisions" — but the cache nests `<marketplace>/<plugin>/<VERSION>/`, so **13 cached
+VERSIONS of one plugin inflate every skill it ships into a 13-way collision.** It measured version
+multiplicity, not conflict. Deduped by `(skill, marketplace/plugin)`: **596 distinct pairs across
+39 plugins**, and the picture changes completely.
+
+**Finding 1 — three `temp_git_*` / `temp_github_*` checkouts are living in the plugin cache.** One
+is dated **today 17:52**, holds **29 `SKILL.md` files**, and has **no `.claude-plugin/` manifest**.
+They duplicate the full skill sets of `ai-maestro-plugin` and `code-auditor-agent`. Manifest-less,
+so probably not loaded — *probably* is doing work there and I have not measured it — but they are
+install scratch in a shared cache, and they inflate every cache-based measurement anyone takes
+(they produced 39 "plugins" against the reload's 38). Cache hygiene is the janitor's.
+
+**Finding 2 — OURS: `emasoft-plugins/llm-externalizer` collides with `claude-plugins-official/huggingface-skills` on 4 skill names.**
+`hf-cli` · `huggingface-best` · `huggingface-community-evals` · `huggingface-local-models`.
+Verified first-hand rather than counted: both `huggingface-local-models/SKILL.md` files exist and
+`cmp` says **DIFFERENT content** — 3780 bytes (official 1.0.23) vs 4071 (ours 13.5.1 and 13.5.2),
+with different `description:` lines. **Two distinct skills, same name, both installed.**
+
+Recorded as a CANDIDATE with the unmeasured part named, per this programme's own rule: plugin
+skills are namespaced `plugin:skill`, so both are *addressable* — what is unmeasured is whether a
+bare-name invocation or the skills listing can resolve to the wrong one, and that is the whole
+severity question. Whoever takes it measures that first rather than renaming four skills on the
+strength of a collision count.
+
+**Not ours, recorded for completeness:** `GhostScientist-skills/design-skills` and
+`.../research-skills` ship **11 identical skill names** between two sibling plugins of one
+marketplace (a third-party packaging defect); `skill-creator` appears in 3 plugins; `nanobanana-skill`
+and `morning-ai` in 2 each.
 
 ### The hub's axis 3, part 2 — 8 executables on PATH that NO repo in the fleet ships
 

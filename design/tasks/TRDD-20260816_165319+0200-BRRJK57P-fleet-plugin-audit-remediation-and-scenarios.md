@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:13:18+0200
+updated: 2026-08-16T19:15:44+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -41,7 +41,7 @@ finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
 
-**7 sessions reported as of 19:09 (architect, assistant-role, CORE, maintainer, orchestrator,
+**8 sessions reported as of 19:15 (architect, assistant-role, CORE, maintainer, orchestrator, PSS,
 llm-externalizer); architect and assistant-role are Phase-1 COMPLETE on all four axes; every
 CONFIRMED finding is hub-verified — see the ledger below.** Outstanding: every session that has not
 yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
@@ -466,6 +466,52 @@ gaps", which also makes the artifact self-describing when it IS truncated by a s
 Third independent confirmation of the stall pattern tonight (CORE 65 min / 0 files, orchestrator
 55 min / 0 files, maintainer 4 workers / 1h45m / 0 files), and the third where the replacement
 finished in minutes — which is what establishes the silence as stall rather than slow work.
+
+### perfect-skill-suggester — 10 confirmed; the best finding is a GREEN TEST ON A DEAD PATH
+
+Hub re-derived the headline finding and its coverage claim first-hand.
+
+**AX4-1 CONFIRMED, `rust/negation-detector/src/pattern_detector.rs:494`:**
+`let effective_end = if is_avoidance { sentence.tokens.len() - 1 } else { scope_end };` — the
+`find_clause_boundary()` result computed one line above is DISCARDED for avoidance verbs, so the
+negation scope runs to end-of-sentence. Their runtime demo: *"avoid react, use vue for the
+frontend"* → **`'avoid' negates: [vue, frontend]`** — react, the rejected term, is NOT negated, and
+vue, the WANTED one, IS. End-to-end that suggests `react-performance-optimization` at HIGH 0.98 and
+no Vue agent. Their control (*"I do not want to use React…"*) is correct, which is what makes it a
+scope bug rather than a broken detector.
+
+**And the part that makes it a lesson rather than a bug report — CONFIRMED, and it is amendment 3
+one layer deeper, INSIDE a test suite.** The Phase-1 regex at `:104` is
+`\b(avoid|skip|exclude|omit|ignore)\b[^.!?]*\blike\s+(.+?)…` — it requires the literal **`like`**,
+and it INTERCEPTS before rule 3 ever executes. Every test of the avoidance path uses the
+`avoid X like Y` construction. So `test_avoidance_like_pattern` **sits green while exercising a
+different code path**, and the rule that misfires on `avoid X, use Y instead` has ZERO coverage.
+
+Hub verification of that coverage claim, with the instrument widened after the first pass:
+an anchored `'"avoid [^"]*"'` grep would only have caught strings STARTING with `avoid `. Widened
+to any quoted string containing an avoidance verb: **12 unique, 6 contain `like` (the test
+sentences), the other 6 are bare verb literals** (`"avoid"`, `"skip"`, … — the `AVOIDANCE_VERBS`
+constant and a marker assertion, not sentences). **No test sentence exercises the non-`like`
+construction.** Claim holds.
+
+**A new false-clean shape, theirs, recorded as MEASURED-BY-THEM (hub has not re-derived it):**
+`git log -S` run from a repo root **silently returns nothing for SUBMODULE paths** — so for any
+repo with submodules, a root-level history search over submodule source is a guaranteed false
+clean. Their refuter hit it while tracing intentionality and read "no history" as a fact about the
+code. Belongs beside the argv-blind `--help` in the false-clean catalogue.
+
+**Their axis-1 zero is filed NOT-VERIFIED, not clean** — the worker stopped at time budget with the
+section uninvestigated. Their `refuted: 0` is a *tried-and-failed* zero, evidenced: the refuter
+positive-controlled its own method, attempted to kill a finding and documented the failure, and
+**corrected AX4-3's citation** (`load_ownership_columns` → `load_noninvocable_ids` at
+`main.rs:4366`) — substance held, citation was wrong, which is precisely what the re-verify step
+exists to catch.
+
+**Amendment 2 measured twice in one session:** it SAVED a completed sweep (the worker wrote its
+full report to disk and then never returned a result — held in context, the sweep was lost), and
+the empty file was the only thing distinguishing a 2-hour stall from work in progress. Relaunched
+with the amendments **baked into the brief rather than relayed mid-flight**: *2 hours-and-nothing
+became 3 minutes-and-a-verified-bug.* Fourth independent confirmation of the stall pattern.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

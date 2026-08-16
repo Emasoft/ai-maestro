@@ -194,6 +194,62 @@ and the corrected finding is stated beside it.
 | The builder docstring asserts its own currency | **CONFIRMED — and it is the worst part** | `:783-791` defends the empty bypass as "the point of the ruleset", states `--adopt-bypass-actors` "deliberately cannot reach this payload" (the operator escape hatch is closed BY DESIGN), and then warns that *other* prose is stale about `required_linear_history`. A fixer who trusts that docstring concludes the payload is deliberate and leaves it. It is right about linear-history and wrong about the bypass, in the same paragraph. |
 | Phase-2 ordering: CPV's payload must land before/with the janitor gate fix | **ACCEPTED as a constraint, recorded** | With the janitor's gate unable to reach a converged repo, CPV's script is the only tool in the fleet that CAN move these rulesets. Fixing the janitor first, while CPV still writes `[]`, hands the fleet a working writer aimed at the wrong shape. |
 
+### ai-maestro-plugin (CORE) — 6 confirmed, and one is the same error the architect made
+
+| Finding | Hub verdict | Note |
+|---|---|---|
+| `publish.py:2216` retry defeat | **CONFIRMED end-to-end** | see the fleet section below — it is not CORE's bug, it is the template's |
+| 3 GitHub rulesets vs "ratified baseline is 2" ⇒ Tier-2 deviation | **REFUTED — it is COMPLIANCE** | The ratified set is a **TRIO**; `baseline-tag-protect` is its third member (`rules/aimaestro/aimaestro-manager-approval-defaults.md:152`, `design/specs/baseline-github-rulesets-spec.md:62`, `tests/governance/baseline-spec-ratchet.test.ts:20`). CORE's own grep returning 0 is TRUE and is about CORE's repo, which does not carry the fleet spec. **Two sessions reached this same wrong conclusion independently today** — that is not two careless workers, it is a DISTRIBUTION defect: the ratified trio is documented in `ai-maestro` and reachable from no plugin repo. Worth its own card. |
+| `exempt-operations.md:133-135` carries `bypass_actors: []` AND `required_linear_history` | **CONFIRMED class** | Both abolished (2026-08-08 and 2026-08-13 USER rulings). CORE's classification is the right one: it is DOCUMENTATION, nothing machine-reads it — but it is a skill reference an AGENT loads to decide EXEMPT vs NON-EXEMPT, so it misleads an agent, not a human. Sixth known stale carrier of that abolished pair. |
+| `publish.py:814` `--install-hook` discards `check=False` result, prints success unconditionally | **plausible, hub has not re-derived** | A failed write leaves pushes unguarded, silently. Same family as the retry defect: the process ran, the control did not. |
+| `plugin.json` advertises "code graph"/"docs search"; 30 skill dirs, 0 match | not re-derived | pre-install marketplace listing |
+| `TRDD-…LLSSTD3P:3` `column: complete` with an open EHT | not re-derived | TRDD rule 9 |
+
+CORE's refusal to accept a hub-relayed USER delegation for its two parked `human_review` cards is
+**CORRECT and endorsed**. A file the hub authored quoting the USER is still the hub's report of what
+the USER said. It waits for its own USER confirmation; nothing else is blocked on it.
+
+### ai-maestro-assistant-role-agent — Phase 1 complete, 4 confirmed
+
+`publish.py:1950` retry defeat (fleet, below) · `publish.py:578,641` doubled backslash printing a
+literal `\n` where siblings use `\n` · the CPV pin-comment drift already verified above. Their axis-3
+recount from 7 to **0** (all seven were compliance PASSES) is accepted. Their axis-4 worker had
+written a COMPLETE report at 17:12 and then hung for 1h38m while `running` — the file was finished
+and the process was not. **Promoted to contract: check the FILE, never the process state.**
+
+### FLEET-WIDE — the retry budget is defeated on the release push, in 12 repos
+
+**Found independently by two sessions in their own copies (`ai-maestro-plugin` `publish.py:2216`,
+`ai-maestro-assistant-role-agent` `publish.py:1950`). Hub verified the chain end-to-end in CORE and
+then swept the fleet — it is a defect of the CANONICAL `publish.py` TEMPLATE, not a per-repo slip.**
+
+Chain (verified in CORE, read-only):
+`publish.py:2216` `git_with_retry([… push --atomic …], capture_output=False)` → `subprocess.run`
+gets `capture_output=False` (`cpv_network_resilience.py:215`) so `result.stderr is None` → `:242`
+`stderr = result.stderr or ""` → `""` → `:116-117` `if not stderr: return False` classifies EVERY
+failure PERMANENT → `:243-244` `break  # permanent failure — don't waste retries`. The documented
+retry budget never runs, and the failure is byte-identical to a genuine permanent one. That call is
+the atomic push that makes a release public. `2216` is the ONLY `capture_output=False` in CORE's
+`publish.py`; the other 26 sites are all `=True`, which is what makes it a slip and not a design.
+
+Fleet population (`find ~/Code -maxdepth 4 -path '*/scripts/publish.py'`): **22 copies · 12 carry
+`capture_output=False` · 14 sites total · 13 of the 14 are `git_with_retry` on a push, 12 of those
+on `--atomic`.** Affected: ai-maestro-plugin, ai-maestro-janitor, claude-plugins-validation,
+ai-maestro-maintainer-agent, ai-maestro-integrator-agent, ai-maestro-orchestrator-agent,
+ai-maestro-assistant-role-agent, ai-maestro-web-scenario-tester, claude-voice-loop,
+claude-menu-system, AI-MAESTRO-WEBDESIGN-AGENT, visual-comunicator (×3 — one site at `:1016` is
+NOT a `*_with_retry` call and is unclassified). Clean or no resilience module: the other 10.
+
+**Instrument note, because it nearly produced the wrong number:** the first sweep ran at
+`-maxdepth 3` and found **7** copies with a plausible-looking control. Repos nest at
+`~/Code/<UPPER>/<name>`, so depth 3 missed every nested one — the true population is 22. Same trap
+as the `$TMPDIR` depth-4 case in the lessons file.
+
+**Scope of the hub's claim, stated so nobody over-reads it:** the CHAIN is verified end-to-end only
+in CORE. For the other 11 repos the hub verified the SHAPE (a `git_with_retry` push with
+`capture_output=False`, alongside a `cpv_network_resilience.py` carrying the `if not stderr` guard).
+Each owning session re-derives its own before it becomes a card.
+
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 
 A single-axis worker can "CONFIRM" against a premise another axis has already destroyed: axis 1

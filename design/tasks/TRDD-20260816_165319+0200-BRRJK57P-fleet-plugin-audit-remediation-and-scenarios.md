@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T23:27:07+0200
+updated: 2026-08-16T23:29:36+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1180,12 +1180,43 @@ UNDERSTATED.**
 
 | axis | citation checked | verdict |
 |---|---|---|
-| 1 — missing features | `skills/amcos-agent-coordination/SKILL.md:~92` vs `scripts/amcos_team_registry.py:499-503` | **CONFIRMED, worse than reported.** The doc runs `add-agent --team --name --role --status`; the parser requires `--team --agent-name --plugin --host`. So **two invalid flags AND two missing required args** — `--status` belongs to `update-status` (`:519`), and `--role` is not a flag at all. The reported "wrong flag name" undersells it: the invocation cannot reach the script's body. |
+| 1 — missing features | `skills/amcos-agent-coordination/SKILL.md:~92` vs `scripts/amcos_team_registry.py:499-504` | **CONFIRMED, worse than reported** — see the CORRECTED charge sheet below; my first count of it was wrong. |
 | 3 — scripts | `skills/amcos-failure-notification/references/design-document-protocol.md:289` | **CONFIRMED.** `amcos_init_design_folders.py` → **0** hits repo-wide; control `amcos_team_registry.py` → 1, so the search reaches the tree. It is cited as a troubleshooting **resolution step**, i.e. the instruction given to someone already stuck. |
 | 2 — governance | `design/archived/TRDD-…-4FH9JP4U-….md` | **CONFIRMED.** `column: complete`, `updated: 2026-08-11`, **0 checkboxes in 143 lines.** Post-boundary (2026-07-31), so the checklist gate binds — the vacuous-gate case: a terminal column with no checklist at all proves nothing, which is exactly why the "≥1 box" half was added. |
 
-**They corrected ME, and they were right.** I advised annotating `562b49e3` (published, 5 boxes
-unchecked). They measured its terminal transition at **2026-06-18** — PRE-boundary — so IND step 12
+#### CORRECTED — axis1 charge sheet, after COS re-verified MY verification
+
+I wrote *"`--role` is not a flag at all"*. **It is `:501`, `required=True`.** COS caught it; verified
+verbatim here. The corrected sheet for the documented
+`add-agent --team X --name Y --role Z --status running`:
+
+| flag | verdict |
+|---|---|
+| `--team` | valid |
+| `--name` | **INVALID** — the parser wants `--agent-name` (`:500`) |
+| `--role` | **VALID and required** (`:501`) — my "upgrade" was wrong here |
+| `--status` | **INVALID on this subcommand** — it exists only on `update-status` (`:519`) |
+| missing | **3 required absent**: `--agent-name`, `--plugin` (`:502`), `--host` (`:503`) |
+
+**2 invalid / 3 missing — not 3 invalid / 2 missing.** The CONCLUSION survives unchanged (the
+invocation cannot reach the script body under any argv ordering, so "wrong flag name" undersells it
+and the severity does go up), but **a remediation card built from my version would have "fixed" a
+flag that is already correct.**
+
+**The mechanism is mine and it is a needle built from the hypothesis.** My check was
+`grep -iE 'agent-name|--name|--status|--plugin|--host|--team'` — an alternation assembled from the
+flags the DOC used plus the flags I expected. It contains **zero** instances of `role`, so `:501`
+was filtered out of my own output and I read its absence from my FILTERED VIEW as absence from the
+parser. A needle whose terms come from the hypothesis can only ever confirm the hypothesis; the one
+flag present in BOTH doc and parser was the one it could not see. Eight lines of `sed -n '498,506p'`
+answered it. **Read the span; do not grep it with a list you wrote.**
+
+**They were one grep from carrying my error forward with a corroborating citation** — they had seen
+`--role` in the script's own usage docstring and let it pass without checking the parser, which is a
+third artifact that can drift from both.
+
+**They corrected ME, twice, and they were right both times.** I advised annotating `562b49e3`
+(published, 5 boxes unchecked). They measured its terminal transition at **2026-06-18** — PRE-boundary — so IND step 12
 freezes it and the annotation would breach the freeze to satisfy a gate that does not bind it. **The
 rule I cited had already answered the question I asked them to work around.** Their card stands
 untouched.

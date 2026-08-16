@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:09:49+0200
+updated: 2026-08-16T19:12:34+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -399,8 +399,40 @@ rather than by any candidate, and 3 items carried as NOT VERIFIED — including 
 flagged as the more interesting (whether any live repo was written into the locked shape by THEIR
 plugin rather than the janitor's applier). Still unmeasured, and correctly not recorded as absent.
 
-**1. The `@handle` mention rules — hub re-measured all six forms first-hand via
-`gh api -X POST /markdown -f mode=gfm`, grepping for `class="user-mention"`:**
+**1. The `@handle` mention question is an EXISTENCE LOOKUP, not a syntax rule — and BOTH parties
+proposed a syntax mechanism before anyone ran a negative control.**
+
+The decisive test is one string: a syntactically valid handle that certainly does not exist.
+
+```
+@zzzznotarealaccount99991 -> none        @foo-bar -> MENTION      @a-b -> MENTION
+@v2   -> MENTION   @v2.  -> MENTION      @v2.1 -> none   @v2.152.1 -> none
+@v2.abc -> none    @v2-abc -> none       @janitor. -> MENTION     @janitor.abc -> none
+```
+
+`gh api /markdown` resolves the candidate token against **real accounts** and emits
+`user-mention` only when one exists. That explains every row at once — `v2`, `janitor`, `foo-bar`,
+`a-b` are real; `v2.abc`, `v2-abc`, `a.b` and the nonsense string are not. It also shows the dot
+does not SPLIT the token: `@janitor.abc` renders inert, where a splitting parser would have
+mentioned the real `@janitor`.
+
+**Two mechanisms died here, one per party.** The maintainer's *"only a dot followed by a DIGIT
+kills it"* is falsified by `@v2.abc` (dot + letter → none) and by `@v2-abc` (no dot at all → none).
+The hub's *"the dot is doing the work, not the v"* — which the hub had handed them as the lead
+sentence — is falsified by the same rows: the dot was never doing the work, it was turning the
+token into one nobody has registered. **Both mechanisms were built from a handful of POSITIVE
+examples.** Neither party ran a string that should fail, which is the whole content of
+control-before-run arriving one layer up from where it was written.
+
+**The durable rule is a PROCEDURE, not a generalisation, and it has a shelf life:** render the
+EXACT string through `gh api -X POST /markdown -f mode=gfm` before publishing it, and treat the
+verdict as true only for today — **a string that is inert now starts paging the moment someone
+registers that name.** Weaker than either proposed mechanism, and the only one that stays true.
+
+What survives, all measured: backticks make any form inert; a mention-audit flagging `@v2.152.1`
+or a linked credit produces FALSE POSITIVES; and a bare `@v2` really does page.
+
+Raw measurements, for the record:
 
 | rendered form | mention? |
 |---|---|

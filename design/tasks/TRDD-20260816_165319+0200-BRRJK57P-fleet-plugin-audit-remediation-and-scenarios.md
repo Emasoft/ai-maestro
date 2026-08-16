@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:21:28+0200
+updated: 2026-08-16T19:28:10+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -41,7 +41,7 @@ finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
 
-**8 sessions reported as of 19:15 (architect, assistant-role, CORE, maintainer, orchestrator, PSS,
+**9 sessions reported as of 19:28 (architect, assistant-role, CORE, maintainer, orchestrator, PSS, programmer,
 llm-externalizer); architect and assistant-role are Phase-1 COMPLETE on all four axes; every
 CONFIRMED finding is hub-verified — see the ledger below.** Outstanding: every session that has not
 yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
@@ -571,6 +571,41 @@ worth more to the owner than either guess, because it also saves them the two de
 
 Not filed: the janitor's repo, the maintainer's finding, filing is outward-facing, and neither
 party has the owner's say-so.
+
+### ai-maestro-programmer-agent — 8 confirmed; two contributions bigger than the findings
+
+Hub re-derived three citations first-hand: **a1** `README.md:266` says *"Review error logs in
+`tests/logs/`"*, `find -type d -name logs` = **0**, and that README line is the ONLY occurrence of
+the path tree-wide. **a2-C2** their PRRD defines exactly **8** rules (`G1 G2 S3 S4 S5 S6 S7 S8`) and
+three archived cards cite `relevant-rules: [1, 15]` — **rule 15 does not exist**. **a3-C1**
+`scripts/pre-push-hook.py:4-11` documents `validate_plugin.py` and a four-way exit contract
+including *"3 = MINOR, push allowed"*; **`validate_plugin.py` does not exist**, and `:217-224`
+returns 1 for ANY non-zero. All three confirmed.
+
+**1. THEY DOWNGRADED THEIR OWN STRONGEST-SOUNDING RESULT, and the downgrade is the better finding.**
+Offered "17 guards reddened / 0 vacuous", they reported instead: *"a neuter proves the predicate
+matches what its AUTHOR imagined, never that it covers the SHIPPED SHAPE."* Strictly weaker and
+strictly true — and it generalises the rename-blind-detector lesson: a guard keyed on the shape its
+author pictured goes green over every shape they did not, and its neuter reddens all the same.
+
+**2. A SECOND-ORDER DEFECT IN THE RESPAWN CLAUSE, found by using it.** The maintainer's clause is
+*recover the dying worker's ORIGINAL PROMPT VERBATIM and point the replacement at it* — correct,
+because paraphrase silently drops load-bearing adversarial wording (*"default to REFUTED when
+uncertain"*). But their axis-2 worker's stored prompt still asserted a premise **the hub's own
+archive ruling created and both parties later retracted**. A verbatim respawn would have handed a
+fresh worker a KNOWN-FALSE premise and invited it to certify the wrong archival as compliant.
+
+**Both clauses are right and they collide, so the resolution has to be stated:** respawn VERBATIM,
+then **re-read the recovered prompt against everything retracted since it was written**. Verbatim
+protects the adversarial wording; the re-read protects against a stored premise that has since
+died. The blast radius here is the hub's: a wrong ruling of mine from earlier today was still
+sitting in a third party's worker prompt hours later, ready to be re-issued as fact.
+
+**Amendment 4 also cut both ways for them, which is the sign it is working:** axis 2 UPGRADED a
+prior NOT-VERIFIED to complies (finding `publish.py:606` invoking the exact gate) instead of letting
+the unknown decay into a pass — and their own first positive control was WRONG (grepped `publish`
+against a file containing `push`), so they re-controlled before crediting it. *A coordinator's
+convenient zero is no better than a worker's.*
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

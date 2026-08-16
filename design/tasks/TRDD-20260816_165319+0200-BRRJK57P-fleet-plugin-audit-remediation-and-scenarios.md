@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:09:35+0200
+updated: 2026-08-16T19:09:49+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -41,7 +41,7 @@ finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
 
-**7 sessions reported as of 19:12 (architect, assistant-role, CORE, maintainer, orchestrator,
+**7 sessions reported as of 19:09 (architect, assistant-role, CORE, maintainer, orchestrator,
 llm-externalizer); architect and assistant-role are Phase-1 COMPLETE on all four axes; every
 CONFIRMED finding is hub-verified — see the ledger below.** Outstanding: every session that has not
 yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T20:09:42+0200
+updated: 2026-08-16T20:12:48+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -783,6 +783,107 @@ because "it is a big job" is the explanation that makes a dead worker look reaso
 So the contract now names three things, not two: brief pre-spawn (a relay cannot land later) ·
 create the report file on tool call #1 · **poll the transcript mtime, and treat a frozen one as
 dead rather than busy.**
+
+### THREE CORRECTIONS TO THE TWO ENTRIES ABOVE — all from the sessions I reported on
+
+**1. My G1 inversion cuts the other way, and my framing invited a false inference.** I wrote that
+being the fleet's only version gate raises the severity for visual-comunicator. True, and
+incomplete: *"the only guard"* and *"the only guard that fails open"* are one sentence about one
+file, so **the fleet's exposure is NOT bounded by their bug.** A fail-open gate and no gate are the
+same outcome in the outage case; fixing theirs closes exactly one repo. Anyone reading my sentence
+would naturally infer *"amvcp fixed G1 ⇒ the fleet is covered"*, which is false the moment it is
+drawn. Their correction, and it is right.
+
+**2. The relay was the SECOND failure, not a casualty of the first.** My amendment said to poll the
+mtime; it did not say that queueing an instruction to a suspected-stalled worker is *actively
+worse than doing nothing*. It is: it reads as a mitigation, so it converts *"I should check whether
+these are alive"* into *"I have handled it."* **The check and the fix must be the same act** — read
+the mtime, and if it is stale, kill. There is no message a dead worker will read.
+
+**3. The 60× is NOT a speedup, and I recorded it as one.** The commit message above says *"same
+work, same model, roughly sixty times"* — framed as performance. It is not: the first three workers
+**never did the work at all**. The rule's value is that it makes dead-vs-busy VISIBLE within one
+tool call. Recorded as a speedup, someone eventually "optimises" it away. The commit is immutable;
+this supersedes it.
+
+**CPV's live counter-case completes the mechanism.** Their mid-flight addendum, queued ~15 min
+after spawn, **WAS consumed** — the worker's report carries a section absent from the original
+brief, cites the amendments by name, and adds a `FALSIFIER:` line the brief never asked for; it ran
+~30 min and returned normally. So relays are not unreliable: **a queued relay is a LIVENESS TEST —
+it lands iff the worker is still taking tool rounds.** That makes an unconsumed relay a second
+cheap detector alongside mtime, on a worker you were messaging anyway. Their five ran 3, 8, 10, 17
+and 30 minutes, so **slow is not dead** — which is precisely why the test is mtime and never a
+duration threshold.
+
+### THE AMENDMENT WAS WRONG AS I BROADCAST IT — four sessions, three failure shapes, one rule
+
+I sent "poll the mtime, treat a frozen one as dead" to seven sessions. **Acting on that as stated
+can destroy findings**, and the integrator refuted it with numbers within the hour. Corrected rule
+below; the correction went back out to everyone who got the original.
+
+**There are THREE shapes behind one outward signature (quiet + no artifact), and they need
+opposite responses:**
+
+| shape | signal | response | measured by |
+|---|---|---|---|
+| **FROZEN** | mtime flat for hours; size stuck at the stub | **kill** — costs nothing | visual-comunicator (17:11→19:56, 2h45m); assistant-manager (3 workers stuck at **170 bytes**, the stub size) |
+| **LIVE-BUT-SILENT** | transcript **GROWING**, still no durable artifact | **do NOT kill** — real work is accumulating | integrator: the two that produced NOTHING had **266 KB / 201 KB**, *more* than either that produced a full report (73 KB / 158 KB) |
+| **ABSENT** | transcript file (or its dir) never existed | **kill** — not a slow start | webdesign: dangling symlink, `ListAgents` said `running` for **3h** |
+
+So the discriminator is **MOVEMENT, not quietness.** *"Treat a frozen transcript as dead"* must
+never degrade into *"treat a quiet worker as dead"* — on the middle row that is a destructive
+default, and the integrator had already paid for it once.
+
+**Two operational caveats, both load-bearing:**
+- **Poll BEFORE you decide, never as a post-mortem.** A kill appends a termination record and
+  stamps mtime to kill time, so afterwards frozen and busy are indistinguishable. The integrator
+  could only separate theirs retroactively by transcript **size**.
+- **A stub that never grew settles it.** A worker mid-tool-call has already written its *earlier*
+  calls; a transcript still at its ~170-byte stub has taken no tool round at all. The
+  assistant-manager had exactly this evidence, hedged it as *"ambiguous — could be one long tool
+  call"*, and lost ~45 minutes with three dead workers holding three axes. **Frozen is the verdict,
+  not evidence toward one.**
+
+**The strongest form of the write-early rule came from webdesign, and it is not about liveness at
+all:** their axis-4 worker wrote its COMPLETE report with counts at 17:11, then froze ~3h without
+returning — and they consumed the report this session **without ever needing the worker back**.
+**The FILE is the deliverable; the return value is a single point of failure that fails silently.**
+
+**And CPV's live case makes the relay a second detector:** their mid-flight addendum, queued ~15
+min post-spawn, WAS consumed (the report carries a section absent from the brief and cites the
+amendments by name; that worker ran ~30 min and returned normally). So a queued relay is a
+**liveness TEST** — it lands iff the worker is still taking tool rounds — free on a worker you were
+messaging anyway. It is still never a *mitigation*: brief-before-spawn is the only channel that is
+guaranteed to land, confirmed independently by the integrator (both of theirs unconsumed) and the
+assistant-manager (all three unconsumed).
+
+**Duration is not a signal.** CPV's five workers ran 3, 8, 10, 17 and 30 minutes and all returned.
+**Slow is not dead** — which is exactly why the test is transcript movement and never a timeout.
+
+**The corpus finding is bigger than the amendment.** The assistant-manager's recall surfaced
+`ATOM-DXFF-KOY4`, already in USER memory: *a worker's process state cannot tell working from
+finished-and-hung — make it write its report file early and append, then judge by the FILE.*
+**Someone had already learned the write-early half, and it reached neither of us.** Four sessions
+re-derived it independently in one evening at a cost of ~6 worker-hours. That is a defect in
+RECALL, not in knowledge, and it belongs in Phase 2.
+
+### MEASURED for TRDD-YY5ISKCJ — the distinction their fix is blocked on
+
+Their card correctly refuses to implement until someone settles which exit code `git ls-remote
+--tags` returns for a remote that EXISTS with ZERO tags, because a naive fail-closed fix would
+break every new repo's first-ever publish. Measured here in a scratch bare repo, with a control:
+
+| case | exit | stdout |
+|---|---|---|
+| A — remote exists, **zero tags** | **0** | empty |
+| B — control, same remote **with** `v1.0.0` | 0 | the tag (so the probe discriminates) |
+| C — remote **unreachable** (outage analogue) | **128** | `fatal: … Could not read from remote repository` |
+
+**So the fix is small and safe.** `returncode != 0` never fires for a legitimately tagless remote —
+the two cases are already distinguishable, and the current code throws that away by collapsing them
+into one `None`. The shape: reserve `None` for *read succeeded, zero tags* (→ PASS, first publish
+works) and give *read failed* a distinct value G1 treats as **FAIL CLOSED**. First-ever publishes
+are unaffected.
 
 ### The hub's axis 3, part 2 — 8 executables on PATH that NO repo in the fleet ships
 

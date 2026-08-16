@@ -3,7 +3,7 @@ trdd-id: QXRWQ232
 title: Bootstrap the Codex marketplace manifest file when absent
 column: planned
 created: 2026-07-07T12:41:00+0200
-updated: 2026-07-07T21:56:19+0200
+updated: 2026-08-16T16:49:08+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -122,6 +122,13 @@ addresses AI Maestro's OWN marketplace-add UI, which is a different
 manifest/flow than Codex's own repo-scoped marketplace.json — no direct
 code dependency, but both surface as gaps in the same Codex plugin
 install/uninstall test path (SCEN-026 Phases 4-5).
+
+## Acceptance
+
+- [ ] Every Codex-targeted write site in `services/plugin-storage-service.ts` that currently targets `<root>/marketplace.json` is redirected to `<repo-root>/.agents/plugins/marketplace.json`, confirmed against a live Codex CLI / the `github.com/hon454/codex-marketplace` template before finalizing.
+- [ ] A bootstrap helper ensures the manifest's containing directory + a minimal valid manifest exist before any read-modify-write, and is idempotent (repeated calls do not corrupt an existing manifest).
+- [ ] Deleting the target manifest path + parent directory, then triggering an AI Maestro flow that installs/registers a Codex plugin/marketplace, recreates both and the new entry is present in the manifest.
+- [ ] `lib/client-capabilities.ts:72-75`'s "Known gap" comment is removed or updated to reflect the migrated path.
 
 ## Approval log
 

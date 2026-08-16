@@ -3,7 +3,7 @@ trdd-id: A1019073
 title: Controlled execution environment for AI Maestro agents — UID separation, host sandboxing, supply-chain controls
 column: todo
 created: 2026-05-22T11:15:03+0200
-updated: 2026-07-13T12:40:00+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: main
 assignee: main
 priority: 1
@@ -557,3 +557,12 @@ plugin repo, not edited here.
 - Existing signed ledger: `lib/signed-ledger.ts` (do not rebuild).
 - Directory guard (cross-repo): `Emasoft/ai-maestro-plugin` →
   `scripts/directory-guard.cjs` (allowlist flip + registry anchor, §11.2).
+
+## Acceptance
+
+- [ ] M-A: service-user provisioning (`aimaestro` UID, `0700` secret/ledger dirs, tightened human-home read perms) lands in the installer.
+- [ ] M-A2: dedicated immutable toolchain (`node`/`git`/`claude`/`codex`/`uv` under `/opt/aimaestro/toolchain`, root/`aimaestro`-owned) wired as the agent `PATH`, with no fallback to human-writable Homebrew/`~/.local`.
+- [ ] M-D2: temp redirect closes A1 — `TMPDIR` points inside the ai-maestro space, world `/tmp` writes are forbidden, and a janitor purge detector exists for the in-space temp folder.
+- [ ] M-E/M-F: a dependency-scan interceptor gates package-manager installs, and plugin/MCP installs go through a security-scan gate (extends CPV) before enable.
+- [ ] The `directory-guard.cjs` allowlist flip (forbid `/tmp`, registry-backed fallback anchor, §11.2) is filed and landed as a cross-repo change in `Emasoft/ai-maestro-plugin`.
+- [ ] §11.1's `validateCwd` bridge carries the required loud comment referencing this TRDD, so it is not mistaken for a permanent posture.

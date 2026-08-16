@@ -4,7 +4,7 @@ title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-pl
 column: blocked
 pre-block-column: published
 created: 2026-06-21T22:46:13+0200
-updated: 2026-08-16T01:47:07+0200
+updated: 2026-08-16T16:40:46+0200
 min-approval-requirement: manager
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -237,6 +237,17 @@ consuming project installs. Carry the guard as a TEMPLATE + install instructions
 - Approach B (no 7 MB vendoring) unless the USER explicitly chooses A.
 - Do NOT break the existing in-repo scenario flow during extraction (repoint, don't delete).
 - Publish is a separate, USER-gated step (release-via: publish).
+
+## Acceptance
+
+- [ ] `TRDD-44RGLOO8` reaches a terminal column (its mandate fix + the USER's tag decision on
+      `v0.1.1`-`v0.1.3` are both resolved), clearing `blocked-by:`.
+- [ ] `tests/scenarios/` is repointed to CONSUME the published plugin instead of the local
+      harness copy (per the deferred `TRDD-91LLU879` follow-up named in the STATE block).
+- [ ] `scenarios.config.json` exists at the project root with `scenariosDir` set.
+- [ ] `fixture-helpers.sh:21` no longer hardcodes an absolute working directory.
+- [ ] `column:` is restored to `published` (per `pre-block-column:`) once the flock (both
+      `eht:` entries) is terminal, and the card archives as `completed`.
 
 ## Approval log
 

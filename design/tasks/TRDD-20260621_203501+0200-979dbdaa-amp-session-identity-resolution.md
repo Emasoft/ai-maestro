@@ -3,7 +3,7 @@ trdd-id: 979DBDAA
 title: AMP sessions self-resolve identity from CWD — fix #46 (keystone, unblocks all amp-* coordination)
 column: design
 created: 2026-06-21T20:35:01+0200
-updated: 2026-07-13T10:40:07+0000
+updated: 2026-08-16T16:40:46+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -229,3 +229,18 @@ the impersonation bar from "know a uuid" to "type a workdir name." Built into th
    (`~/agents/` ABSENT + 1 indexed agent → still resolves via P4) PLUS a P2.5 test
    (`AIM_AGENT_ID` set, no `AMP_DIR` → resolves) PLUS a cross-validation test (CWD name ≠
    `AIM_AGENT_NAME` → refuses).
+
+## Acceptance
+
+- [ ] The layered resolver decision (env-first P2.5, then CWD-fallback P3.5, both additive)
+      is recorded as the AUTHORITATIVE design, superseding the CWD-only P3.5 draft above.
+- [ ] Q1 is resolved to `AGENT_WORK_DIR`-first / `$PWD`-fallback (not `CLAUDE_PROJECT_DIR`,
+      which AI Maestro never sets).
+- [ ] The NPT — reproduce a failing `amp-*` env and confirm which layer (P2.5 or P3.5)
+      actually fires for it — is identified and its finding recorded here.
+- [ ] The MANAGER scope-check on Q3 (does closing #46 require only self-resolution, or also
+      a push/poll delivery loop) is recorded, with the answer split into a follow-up TRDD if
+      delivery is out of scope.
+- [ ] The spoofing-hardening rule (CWD-derived name MUST agree with `AIM_AGENT_ID`/`_NAME`
+      when both are present, else refuse) is confirmed as part of the frozen design, not an
+      open option.

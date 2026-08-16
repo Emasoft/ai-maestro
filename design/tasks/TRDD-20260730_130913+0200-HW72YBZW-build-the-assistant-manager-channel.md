@@ -6,7 +6,7 @@ project-id: ai-maestro
 repo: Emasoft/ai-maestro
 column: todo
 created: 2026-07-30T13:09:14+0200
-updated: 2026-08-02T15:33:21+0200
+updated: 2026-08-16T16:51:06+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -123,6 +123,14 @@ SAME commit must delete the lock test and re-upgrade the CONTRADICTED R39.5/R39.
 MED-HIGH. This is a comm-graph edge on a security boundary; the failure mode of getting the gate
 wrong is an agent commanding a user's ASSISTANT. Mitigated by the branch being unreachable today, so
 the change starts from deny-all rather than from a live edge.
+
+## Acceptance
+- [ ] A persistence model exists for the assistant→user binding (`recipientIsOwnUser`/`boundUser`/`ownAssistant` has a real, non-test production reference)
+- [ ] `userPermitsManagerCollaboration` (R39.9 standing permission) is persisted somewhere, with a stated default and revocation path
+- [ ] A surface exists for the user to GRANT/revoke the MANAGER-collaboration permission (route, setting, or UI)
+- [ ] A production caller wires the `assistantSender` block, so `tests/unit/communication-graph-user-routing.test.ts`'s "NO PRODUCTION CALLER" lock is deleted in the same commit
+- [ ] The contradicted R39.5/R39.7 rows in `docs/GOVERNANCE-ENFORCEMENT-MAP.md` are re-upgraded with the new citation
+- [ ] A new test proves ASSISTANT → MANAGER is allowed only with the USER-gated flag set, denied without it, via a neuter of the gate (not the edge)
 
 ## Approval log
 

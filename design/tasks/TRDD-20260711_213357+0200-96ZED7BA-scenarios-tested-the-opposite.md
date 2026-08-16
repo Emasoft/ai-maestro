@@ -3,7 +3,7 @@ trdd-id: 96ZED7BA
 title: The scenario suite was testing the opposite of what matters — it puppeted the agents
 column: todo
 created: 2026-07-11T21:33:57+0200
-updated: 2026-08-02T15:29:34+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: main
 assignee: main
 priority: 0
@@ -147,6 +147,14 @@ scenario can now, for the first time, detect all three.
 - **S018, S020-S027** — loosen the assertions: they hard-code `amp-send`/`amp-download`
   as the only acceptable observation, so a different-but-valid mechanism would read as a
   mismatch once the directive stops dictating one.
+
+## Acceptance
+
+- [ ] SCEN-014 S017: shell line, skill names, and the 3-step org chart removed; directive states only the outcome; the "Type and send" instruction targets the chat section, never the terminal.
+- [ ] SCEN-014 S019/S023: "If idle, type `/amp-inbox`" removed — a stalled agent is recorded as a finding, never nudged.
+- [ ] SCEN-014 S018, S020-S027: assertions loosened so a valid mechanism other than `amp-send`/`amp-download` is not scored as a mismatch.
+- [ ] SCEN-009, SCEN-011, SCEN-022, SCEN-014 all re-run end to end (009 → 011 → 022 → 014) after the fixes, and their reports show no puppeting-shaped intervention.
+- [ ] `SCENARIOS_TESTS_RULES.md` no longer contains any "you are the manager of the test" / nudge-the-agent language anywhere outside Rule 0's historical citation of the old text.
 
 ## Notes and lessons learned
 

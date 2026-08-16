@@ -3,7 +3,7 @@ trdd-id: HGE9T6VT
 title: Authentication is substituting for authorization — the headless router must be driven by the same table as the guard and fail closed
 column: planned
 created: 2026-07-14T15:52:55+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-16T16:49:08+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -179,6 +179,15 @@ boundary and must land with the parity test, not before it.
 
 **Blast radius today:** any authenticated agent, on a headless host, can stop or restart any
 session including the MANAGER's — and via R9.8, thereby hibernate every team agent on the host.
+
+## Acceptance
+
+- [ ] `authorize()` is called in both `services/headless-router.ts` stop/restart handlers before any `tmux send-keys` (landed `6dcc57fd`, TRDD-BF3JN4TL, after R42 — verify still current before ticking).
+- [ ] `services/headless-router.ts` is driven by the same declarative table the Next.js guard uses (`STRICT_AGENT_RULES` in `lib/sudo-guard.ts` / `security-registry.json`), applied in `handle()` before any handler runs.
+- [ ] A route present in `security-registry.json` as `strict` with no authorization decision recorded on the request is refused (fail closed), not served.
+- [ ] The coverage guardrail test (TRDD-6A2I6ZO0) is extended to assert every strict route served headless applies its AuthAction.
+- [ ] The exploit test — headless mode + an AUTONOMOUS agent's valid bearer + `POST /api/sessions/<manager-session>/stop` — returns 403, not 200.
+- [ ] A parity test asserts headless and full-mode responses agree for the same caller, for every route in `security-registry.json` marked `strict`.
 
 ## Approval log
 

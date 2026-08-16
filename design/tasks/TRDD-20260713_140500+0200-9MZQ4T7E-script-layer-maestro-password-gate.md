@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-13T14:05:00+0200
-updated: 2026-07-13T14:05:00+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -81,6 +81,15 @@ One principal, one secret, one prompt:
 - The password never appears in `history`, in `ps aux`, or in any argv.
 - An agent-authenticated call is unchanged (no regression in the AID path).
 - A wrong password is rejected and consumes no sudo token.
+
+## Acceptance
+
+- [ ] The `~/.local/bin/aimaestro-*.sh` verbs that hit a `strict` route are enumerated from `security-registry.json` (not guessed) and each carries the shared MAESTRO-password prompt step.
+- [ ] The password is read from a TTY prompt only — never accepted as an argument or env var, never echoed.
+- [ ] A strict-route script invoked with no TTY and no token exits non-zero and performs nothing (fail-closed).
+- [ ] A wrong password is rejected by the shared step and consumes no sudo token.
+- [ ] `history`, `ps aux`, and argv are checked and show no trace of the password after a real invocation.
+- [ ] An agent-authenticated (AID) call through the same scripts is unaffected — no regression in the AID path.
 
 ## Approval log
 

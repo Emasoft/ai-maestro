@@ -3,7 +3,7 @@ trdd-id: 9HVPW12Z
 title: The agent-facing governance-request route still demands the governance password after R32 superseded it
 column: backburner
 created: 2026-08-04T15:07:19+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-16T16:50:04+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -132,6 +132,16 @@ down and on **our** side: the request-**creation** path COS actually needs is it
 the pre-R32 model. COS did not flag it, and it is not something they can work around.
 
 Queued onto `#64` (the CORE frozen-CLI build queue) in the same reply.
+
+## Acceptance
+
+- [ ] `POST /api/v1/governance/requests` accepts `AID_AUTH` and resolves identity + title + portfolio/mandate token server-side via the R28 three-check (`route.ts` diff).
+- [ ] The password path stays intact for USER/UI callers only — the dashboard flow is unaffected (regression check).
+- [ ] `scripts/aimaestro-governance.sh request` drops `--password` and sends `AID_AUTH` instead, matching the shipped pattern in `scripts/aimaestro-teams.sh`.
+- [ ] A negative test pins that a caller with **neither** AID nor password is refused *by the R28 check specifically* (not an earlier missing-field 400) — per the Verification section's explicit warning.
+- [ ] `approve`/`reject` are asserted to still refuse without `--password` (explicit test), proving the widening did not silently spread to them.
+- [ ] The EHT sweep of other agent-facing routes for the same pre-R32 password-residue shape (per "Scope boundary — NOT AUDITED") is filed or completed before this card is called closed.
+- [ ] A human confirms live: an agent with a valid AID and no password files a governance request successfully against the running server.
 
 ## Approval log
 

@@ -3,7 +3,7 @@ trdd-id: 70BMNPMZ
 title: SCEN-031 S002 preconditions should assert the gh token carries delete_repo scope
 column: planned
 created: 2026-07-23T12:51:14+0200
-updated: 2026-07-23T12:51:14+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -61,6 +61,13 @@ during cleanup after real GitHub state has already been created.
 
 LOW. Test-infrastructure-only change (a scenario `.scen.md` precondition step); no production code
 touched, no dependencies on other open TRDDs.
+
+## Acceptance
+
+- [ ] `tests/scenarios/SCEN-031_*.scen.md` S002 asserts the `gh` token's scopes include `delete_repo` (via `gh auth status` or the `X-OAuth-Scopes` response header) before any repo is created.
+- [ ] The step FAILS setup with a remediation message naming `gh auth refresh -h github.com -s delete_repo` when the scope is absent.
+- [ ] Simulated absence of `delete_repo` (or a scopes-check dry-run) shows the check fails fast, before S003/repo-creation runs.
+- [ ] The check does not false-fail against the current host's token (which carries `delete_repo` as of 2026-07-23).
 
 ## Approval log
 

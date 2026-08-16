@@ -3,7 +3,7 @@ trdd-id: 40CUZA1Z
 title: Unified cross-host sidebar — all users and agents in one list; user and paired agent both shown (R46)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-16T09:47:54+0200
+updated: 2026-08-16T16:49:08+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [46, 43, 39, 36, 37]
@@ -65,6 +65,15 @@ the ASSISTANT role (W9FA6ACZ) for the normal-user pairing rows.
 Siblings: TRDD-OEG0V589 (migration R44) · TRDD-W9FA6ACZ (ASSISTANT R39) · TRDD-QR9FSL3Q (groups
 R45) · TRDD-HR8CES7H (usernames R47) · TRDD-PLOVIPZE (console gates R48) · TRDD-OC9ELGSO (transport,
 #40). §0 mirror-sync rides each TRDD's Verification.
+
+## Acceptance
+
+- [ ] A unified data source merges local agents (`lib/agent-registry.ts`), cross-host peer agents (`lib/agent-directory.ts`), and users (local + peer), each tagged with its host id.
+- [ ] `components/AgentList.tsx` renders a user and its paired agent as two distinct rows (MAESTRO user + MANAGER agent; normal user + ASSISTANT agent).
+- [ ] Grouping is by team (same-host) / group (cross-host) only; host is shown as a badge, not a top-level divider.
+- [ ] The sidebar shows local + at least one peer host's agents AND users in one list.
+- [ ] Renders correctly at smartphone/tablet/desktop viewport widths.
+- [ ] The transition-phase hold is explicitly lifted (by the USER or a superseding TRDD) before implementation starts.
 
 ## Approval log
 - 2026-07-16T09:47:54+0200 — MANDATE issued by USER (min-approval-requirement: manager;

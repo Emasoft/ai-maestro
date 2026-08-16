@@ -4,7 +4,7 @@ title: Account switcher — passive rotation to a fresh account/token on 429 / d
 column: blocked
 pre-block-column: planned
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-17T06:34:21+0200
+updated: 2026-08-16T16:40:46+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -70,6 +70,18 @@ this NPT.
   no token appears in any log.
 - All-windowed: the switcher waits the shortest window and resumes, never busy-loops.
 - Concurrent-write safety inherited from [[1GGQ4HWY]]'s mutex (no second writer introduced).
+
+## Acceptance
+
+- [ ] `TRDD-1GGQ4HWY` (the OAuth manager it reuses for custody + the write mutex) reaches a
+      terminal column, clearing `blocked-by:`.
+- [ ] A pool of ≥2 accounts/tokens exists in keychain custody, indexed via 1GGQ4HWY's
+      `safe_storage` slots.
+- [ ] The switcher detects all three triggers (429, dead-refresh, network interruption) and
+      marks a healthy account active without opening a second write path.
+- [ ] `status.next_action` / `account_healthy` reflect the switch state (via `TRDD-DXJZM3BW`).
+- [ ] Every case listed under `## Verification` above passes: no token in any log, no
+      busy-loop when all accounts are windowed, no second writer introduced.
 
 ## Approval log
 

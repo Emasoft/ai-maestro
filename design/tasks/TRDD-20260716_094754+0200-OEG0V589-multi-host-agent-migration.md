@@ -3,7 +3,7 @@ trdd-id: OEG0V589
 title: Cross-host agent migration — export bundle + dual-MANAGER approval + automated transfer (R44)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-16T09:47:54+0200
+updated: 2026-08-16T16:48:46+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [43, 44, 35, 5, 37]
@@ -85,6 +85,23 @@ TRDD-HR8CES7H (VPN-unique usernames, R47) · TRDD-40CUZA1Z (unified sidebar, R46
 TRDD-PLOVIPZE (MAESTRO console gates, R48) · TRDD-OC9ELGSO (Tailscale HTTPS + per-host RP_ID —
 transport/identity substrate, task #40). §0 mirror-sync rides each TRDD's Verification
 (staged-rollout: the doc mirrors update as each behavior ships).
+
+## Acceptance
+- [ ] `MigrateAgentCrossHost` pipeline built on the existing cross-host governance-request rail
+      (`app/api/v1/governance/requests/*`, `approveCrossHostRequest`, `lib/manager-trust.ts`,
+      `lib/governance-peers.ts`) — no second peer channel invented.
+- [ ] Export bundle packages all FOUR parts (conversation JSONL, workdir extensions, managed
+      Docker container if present, zipped workdir) plus a manifest (agent id, AID public key,
+      source host id, checksums).
+- [ ] Dual-MANAGER approval enforced: a single MANAGER approval does NOT permit start; both
+      source and destination MANAGER approvals are required before transfer begins.
+- [ ] Round-trip verified: export→transfer→import preserves conversation, workdir files, local
+      extensions, and (if present) the managed container.
+- [ ] Destination R35 foreign-accept gate fires correctly with `enforceAidAssociation` ON and
+      no-ops cleanly with it OFF.
+- [ ] New `interhosts: true` scenario (SCEN-0NN) drives the full migration through the UI.
+- [ ] §0 mirror-sync done: GOVERNANCE-RULES R44, `docs/API-CHANGES.md`, comm-graph confirmed
+      unchanged.
 
 ## Approval log
 - 2026-07-16T09:47:54+0200 — MANDATE issued by USER (min-approval-requirement: user).

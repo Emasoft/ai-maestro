@@ -5,7 +5,7 @@ column: planned
 pre-block-column: null
 approval-tier: 2
 created: 2026-06-16T23:38:54+0200
-updated: 2026-07-13T10:40:07+0000
+updated: 2026-08-16T16:49:08+0200
 current-owner: ai-maestro-session
 blocked-by: []
 implementation-commits: []
@@ -59,6 +59,16 @@ Three whole capability surfaces in the CLI never reach `app/api/**` — they do 
 ## Risk / blast radius
 
 High — these are behavior changes to widely-used CLI verbs and the hook/agent flows that depend on them. Sequence carefully: ship the server endpoints + user-scope refusal first, then flip each CLI verb, then deprecate the local-CLI/local-FS code paths. The amp-send local→API change must preserve same-host delivery latency.
+
+## Acceptance
+
+- [ ] `agent-plugin.sh install/uninstall/update/enable/disable/reinstall` route through `PATCH /api/agents/{id}` (ChangePlugin / InstallElement) instead of shelling out to local `claude plugin …` (`scripts/agent-plugin.sh:183,314,366,385,1136`).
+- [ ] `agent-plugin.sh marketplace add/remove/update` route through ChangeMarketplace with `source` validated server-side.
+- [ ] `agent-skill.sh install/uninstall` route through a server endpoint (extend `/install-skills` or add a generic skill route) instead of writing directly to `~/.claude/skills/` (`scripts/agent-skill.sh:205-483`).
+- [ ] `amp-send.sh` same-host `.local` delivery POSTs to `/api/v1/route` so `validateMessageRoute` + `checkMessageAllowed` run for same-host pairs, instead of writing straight to the recipient inbox (`scripts/amp-send.sh:485-509,666-690`).
+- [ ] The server install endpoint FORBIDS `--scope user` for agent callers (IRON rule) — an agent CLI `plugin install … --scope user` (or skill install at user scope) is refused server-side; only the human via Settings → Plugins installs user-scope.
+- [ ] `agent-skill.sh install --name "../../x"` cannot write outside the resolved skills dir, and `uninstall` cannot traverse outside it via `../`.
+- [ ] Tests cover each routed path, the user-scope refusal, and the traversal rejection; plugin/skill/marketplace mutations appear in the server's element-management audit trail.
 
 ## Approval log
 

@@ -3,7 +3,7 @@ trdd-id: HR8CES7H
 title: VPN-unique user names + remote normal-user registration and password change (R47)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-16T09:47:54+0200
+updated: 2026-08-16T16:49:08+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [47, 43, 38, 40, 48]
@@ -68,6 +68,14 @@ cohort. Depends on a cross-host user directory + the R48 MAESTRO/normal password
 Siblings: TRDD-OEG0V589 (migration R44) · TRDD-W9FA6ACZ (ASSISTANT R39) · TRDD-QR9FSL3Q (groups
 R45) · TRDD-40CUZA1Z (sidebar R46) · TRDD-PLOVIPZE (console gates R48) · TRDD-OC9ELGSO (transport,
 #40). §0 mirror-sync rides each TRDD's Verification.
+
+## Acceptance
+
+- [ ] A user name already taken on a peer host is rejected at registration on any host (VPN-wide uniqueness check against every peer's user directory).
+- [ ] Concurrent same-name registration on two hosts resolves to exactly one winner via a claim/confirm handshake or deterministic tiebreak.
+- [ ] A normal user can register remotely over a Tailscale browser and change their own password remotely.
+- [ ] The shared password-change route branches on caller title, and a MAESTRO caller's remote password-change is refused (positive console path deferred to TRDD-PLOVIPZE).
+- [ ] The transition-phase hold is explicitly lifted before implementation starts.
 
 ## Approval log
 - 2026-07-16T09:47:54+0200 — MANDATE issued by USER (min-approval-requirement: user).

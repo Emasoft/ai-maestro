@@ -3,7 +3,7 @@ trdd-id: OC9ELGSO
 title: Tailscale-native HTTPS + host-derived WebAuthn RP_ID for cross-device passkeys
 column: planned
 created: 2026-07-16T08:26:32+0200
-updated: 2026-07-16T08:32:00+0200
+updated: 2026-08-16T16:49:08+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 min-approval-requirement: user
@@ -248,6 +248,14 @@ but has an external dependency (office IT / DNS policy on the Windows PC) outsid
 Builds ON TRDD-7U927FCM / TRDD-P7XKV3N9 (the passkey factor + multi-channel recovery) — it makes
 that factor usable beyond localhost. It is NOT a derived task of them (they are shipped and do not
 depend on it). Standalone feature, USER-mandated.
+
+## Acceptance
+
+- [ ] P1: TLS terminates in `server.mjs` using a `tailscale cert`-issued cert for `<host>.ts.net`; `curl https://<host>.ts.net:23000/api/sessions` from a tailnet peer returns 401; localhost plain-HTTP dev is unaffected.
+- [ ] P2: `lib/webauthn-server.ts` derives `{rpID, origin}` from the request `Host` header via a strict allow-list; unit tests cover an allow-listed host (accept) and an unknown host (reject, anti RP-spoof).
+- [ ] P3: a passkey registered on the Mac authenticates on the iPad, then Android, then Windows (three live checks), per the device MagicDNS runbook.
+- [ ] P4: cert renewal is automated before ~90-day expiry; a forced cert-expiry test degrades to password login, never a hard lockout.
+- [ ] The existing `isAllowedSource` Tailscale IP filter and the WebSocket upgrade handler are preserved after the HTTPS change.
 
 ## Approval log
 - 2026-07-16T08:26:32+0200 — MANDATE issued by USER (min-approval-requirement: user).

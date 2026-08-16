@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: todo
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-02T15:33:21+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -178,6 +178,15 @@ not drive another, R42). This is the actuation half of `ensure-resume`.
   authenticated path (#60); a token-blocked agent is healed by [[1GGQ4HWY]] first, then resumed.
 - No cross-agent script surface added (only [[DXJZM3BW]]'s self-scoped `ensure-resume`).
 - `tsc` clean; liveness/actuation unit tests green.
+
+## Acceptance
+
+- [ ] Phase C step (b): `lib/fleet-hard-recovery.ts` exists, gated behind a default-off `AIM_FLEET_HARD_RECOVERY` flag, reusing the stop/restart substrate (`relaunch` first via `claude --continue`, escalate to external kill only on failure).
+- [ ] Phase C step (b): per-instance cooldown + crash-loop-page-once + HID-presence defer + `fleetActuationBlocked()` are all wired into the hard actuator.
+- [ ] Phase C step (c): `dead` classification flips to `recoveryRecommended:true`, mapped to the hard entry rung, with the boot-overcomplete DEBOUNCE (fires only after N consecutive dead scans / a grace period past boot).
+- [ ] `actuateRecovery` is confirmed to still refuse hard rungs on the gentle path (no regression once hard actuation lands).
+- [ ] A deliberately-dead test agent (persisted, tmux gone) is relaunched via the authenticated path with no loss of a live frozen agent's work.
+- [ ] `tsc` clean; new hard-recovery unit tests green; full suite unaffected.
 
 ## Approval log
 

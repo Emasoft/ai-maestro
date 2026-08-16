@@ -3,7 +3,7 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-07-21T20:20:00+0200
+updated: 2026-08-16T16:40:46+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -173,6 +173,21 @@ USER: HOLD all daemon-mirror work until the janitor's consolidated reply. Backgr
 - Phase 3/4: `tsc`/`yarn test`/`yarn build` green; the CLI help block re-verified against source
   (per the kanban-contract memory lesson — verify the DEPLOYED verb, not memory).
 - Do NOT push (app + rules); the janitor proposal is coordinated, not pushed unilaterally.
+
+## Acceptance
+
+- [ ] `Emasoft/ai-maestro-janitor#103` (the IND-base coordination proposal: `scope:user` +
+      `project-id`/`host-id`/`repo` field definitions) reaches co-ratification and ships in a
+      janitor plugin release.
+- [ ] Phase 3 EHT (server + `amp-kanban-create-task` gain `--project`/`--repo`; TRDD frontmatter
+      schema in `lib/trdd-store.ts` parses the new fields) is authored as its own TRDD once
+      #103 ships.
+- [ ] Phase 4 EHT (routing lint: unresolvable `project-id`, unlisted `repo`, or a `user`/`local`
+      TRDD carrying `project-id`) is authored as its own TRDD once #103 ships.
+- [ ] `ai-maestro-plugin#31` (the core-plugin skill-sync heads-up) is closed once the deployed
+      CLI help-block text is pinged to it, per the STANDING RULE in the STATE block.
+- [ ] The A1 "which store is canonical?" open assumption is confirmed dissolved (recorded above
+      as "the query is canonical, every store is a cache of it") with no outstanding objection.
 
 ## Approval log
 

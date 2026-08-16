@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-08-02T16:08:14+0200
+updated: 2026-08-16T16:40:46+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -394,6 +394,19 @@ ADDED to ai-maestro (these two verbs), never reached past.
 - Resurrection soak: reboot / mid-turn 429 / network drop → the fleet resumes from durable state
   with no manual step.
 - `bash scripts/with-node.sh yarn test` + `yarn build` green at each NPT.
+
+## Acceptance
+
+- [ ] Each of the 6 scope-decomposition items is authored as its own NPT TRDD under this
+      card's `npt:`, per the "to become NPTs in plan mode" process gate.
+- [ ] The `#J → server` contract (`aimaestro-continuity.sh` + its two verbs, the 5-field
+      `status` surface) is recorded as the sole new script surface, per R23.
+- [ ] The daemon coordination model (once-per-machine vs per-population) decision is recorded
+      and cross-referenced from the OAuth-manager and account-switcher NPTs.
+- [ ] `TRDD-H24DF6ZC` (the R16 design gate) is cited as the blocker on NPT #2 (OAuth manager)
+      and NPT #3 (account switcher), and its sign-off status is current here.
+- [ ] The security guardrails section (R16/R42/R23 + the AgentlensPro observe-only boundary)
+      is confirmed as binding on every NPT authored from this decomposition.
 
 ## Approval log
 

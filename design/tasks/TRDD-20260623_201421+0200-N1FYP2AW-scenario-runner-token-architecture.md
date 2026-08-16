@@ -3,7 +3,7 @@ trdd-id: N1FYP2AW
 title: Token-optimized scenario-runner — Sonnet[1m] executor + Opus screenshot-interpreter
 column: backburner
 created: 2026-06-23T20:14:21+0200
-updated: 2026-08-02T15:29:34+0200
+updated: 2026-08-16T16:42:05+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -366,6 +366,16 @@ The plugin is the place where L2 can go past the harness-injection limit.
 - **1M-context availability for Sonnet subagents:** confirm `sonnet[1m]` is a
   valid `model:` for a project agent in this Claude Code build; fall back to the
   highest-context Sonnet variant available if not.
+
+## Acceptance
+
+- [ ] Phase 2 single-scenario A/B is run (only on explicit user go, per Rule 13 hard caps) on a self-contained scenario (e.g. SCEN-002 or SCEN-003) with `scenario-runner.md` as curated (`model: sonnet[1m]`, no MCP tools).
+- [ ] The executor's subagent `usage` is extracted from its transcript per the §7 method and compared cost-weighted against the §1 Opus baseline for the same scenario class.
+- [ ] Cost-weighted tokens (executor + interpreter combined) are **≤ ~1/8** of the Opus baseline for the same scenario, per the §7 acceptance bar.
+- [ ] The scenario still PASSes end-to-end (FIX-AS-YOU-GO intact) under the new architecture — not just cheaper, still correct.
+- [ ] Turn-1 base context of the curated executor is measured and confirmed well under the ~213K Opus baseline (validates the L2 no-MCP win, per §9's open question).
+- [ ] If Phase 2 passes, Phase 3 (wiring `run-scenarios-batch` / Rule 13 cron to spawn the curated executor) is completed and the batch runner references the curated agent, not the old Opus one.
+- [ ] Results (before/after cost-weighted numbers) are recorded in this TRDD's §7, and a human confirms live that a real overnight batch run under the new architecture stays within the token budget it was designed to hit.
 
 ## Approval log
 - 2026-06-23T20:14:21+0200 — Authored by the Opus session under /go-on-yourself

@@ -3,7 +3,7 @@ trdd-id: U49TYPNI
 title: avatar-grid sidebar view — agent card clicks unreliable, delete flow only reliable in compact view
 column: planned
 created: 2026-07-23T12:51:14+0200
-updated: 2026-07-23T12:51:14+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: session
 task-type: bugfix
 scope: project
@@ -68,6 +68,14 @@ destructive-action risk in production UI, not just test tooling.
 MEDIUM. Touches a shared sidebar rendering component used across the whole dashboard; must verify no
 regression in compact view or other card interactions (rename, profile-open, drag-and-drop where
 applicable). No dependency on other open TRDDs.
+
+## Acceptance
+
+- [ ] Root cause identified in the avatar-grid card component (pointer-events / overlay interception / stale scroll coordinates) — cite file:line.
+- [ ] The entire card surface (label + footer overlay) is a single clickable target, consistent with the div+cursor-pointer convention (no overlapping click targets).
+- [ ] Screenshot/UI check: driving agent selection + Delete Agent entirely from avatar-grid view (no switch to compact) targets the correct agent every time, including a card requiring scroll.
+- [ ] The placeholder-identity confirmation guard in the Delete Agent dialog is confirmed still present (defense-in-depth retained, not removed by this fix).
+- [ ] No regression in compact view or other card interactions (rename, profile-open, drag-and-drop) after the fix.
 
 ## Approval log
 

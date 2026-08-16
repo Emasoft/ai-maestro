@@ -4,7 +4,7 @@ title: Successful sudo-token mints consume a global 5-per-minute bucket
 column: planned
 approval-tier: 2
 created: 2026-07-09T16:42:56+0200
-updated: 2026-07-10T00:11:36+0200
+updated: 2026-08-16T16:49:08+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -140,6 +140,15 @@ LOW-MEDIUM. Resetting on success weakens nothing an attacker can exploit — an
 attacker supplying the correct governance password is already authenticated. The
 per-key change must keep a global backstop so an attacker cannot mint unbounded
 buckets by rotating sessions.
+
+## Acceptance
+
+- [ ] `POST /api/auth/sudo-password` calls `resetRateLimit(rateKey)` on a successful mint, mirroring `/api/auth/login`.
+- [ ] The mint is charged against two buckets: `sudo-password:global` (cap 200, charged pre-auth, never reset) and `sudo-password:<subject>` (cap 5, charged post-auth, reset on success).
+- [ ] Five successful mints followed by a sixth succeed; five failed password attempts followed by a sixth 429s.
+- [ ] Two distinct sessions do not share a per-subject bucket.
+- [ ] Removing `resetRateLimit(rateKey)` reds exactly the success-path tests in `tests/api/auth-sudo-password.test.ts` while every brute-force / per-subject-isolation / global-flood test stays green.
+- [ ] Manual: deleting six agents in a row from the UI completes without a 429.
 
 ## Approval log
 

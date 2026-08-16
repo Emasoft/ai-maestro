@@ -3,7 +3,7 @@ trdd-id: H18PO5YJ
 title: Finalize ai-maestro to a 3-role-plugin governance model (MANAGER/MAINTAINER/AUTONOMOUS) for the PR
 column: todo
 created: 2026-07-21T21:45:10+0200
-updated: 2026-07-22T00:32:28+0200
+updated: 2026-08-16T16:51:06+0200
 current-owner: ai-maestro
 task-type: refactor
 scope: project
@@ -140,6 +140,14 @@ first code edit.
 - `bash scripts/with-node.sh yarn test` + `tsc --noEmit` green after each phase.
 - Wizard/marketplace/API expose exactly 3 role-plugins; the 1 architect agent reconciled; a MANAGER exists.
 - No comm-graph route wrongly 403s a MANAGER/MAINTAINER/AUTONOMOUS message.
+
+## Acceptance
+- [ ] USER clarification obtained on what "ready" concretely requires for MANAGER/MAINTAINER/AUTONOMOUS (server-side work vs cross-repo role-plugin work) — the STATE block records this as still open
+- [ ] A MANAGER agent exists in the live fleet (0 today per the FACTS section)
+- [ ] The single legacy `architect` live agent is reconciled to a title consistent with the clarified scope
+- [ ] `bash scripts/with-node.sh yarn test` and `tsc --noEmit` green
+- [ ] No comm-graph route incorrectly 403s a legitimate MANAGER/MAINTAINER/AUTONOMOUS message
+- [ ] Branch-litter cleanup (P3) and the `governance-rules → main` PR are either explicitly deferred with USER go recorded, or completed — not silently dropped
 
 ## Approval log
 - 2026-07-21T21:45:10+0200 — MANDATE (goal user-directed). The 3 SHAPE forks await USER confirm before

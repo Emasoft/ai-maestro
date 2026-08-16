@@ -3,7 +3,7 @@ trdd-id: B6XN2VKD
 title: Block agents from executing the claude CLI, via settings.local.json deny permissions
 column: backburner
 created: 2026-07-09T17:51:47+0200
-updated: 2026-07-09T17:51:47+0200
+updated: 2026-08-16T16:45:09+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 3
@@ -184,3 +184,13 @@ The API-level invariant and the shell-level invariant are different invariants.
 `authorize()` can be perfect and an agent still reconfigures itself, because the
 shell is a second, wider door into the same room. Any claim of the form "an agent
 cannot X" must name WHICH doors were checked.
+
+## Acceptance
+
+- [ ] The evasion-shape experiment (open question 1) is run against a candidate deny rule — absolute path, shell alias, `env claude`, `sh -c 'claude …'`, and a wrapper script — and the result (which shapes the rule catches vs misses) is recorded in this TRDD before any seeder code is written.
+- [ ] A subagent's Bash calls are confirmed to inherit (or not inherit) the workdir's `settings.local.json` deny rule — the exact case that produced one of the two real invocations in evidence.
+- [ ] `ensureAgentRules` / `ensureCorePluginInstalled` seed a marker-guarded deny block into `settings.local.json` that never overwrites a user's own `permissions` stanza (unit test).
+- [ ] E2E: a live agent with the rule seeded attempts each evasion shape and is refused every time — asserted on the explicit refusal, not on the absence of a side effect.
+- [ ] Regression: an agent's normal DEP rules, core plugin, and AMP/AID CLI wrappers are unaffected by the deny rule.
+- [ ] The MAINTAINER carve-out question (open question 5) is resolved — either a container-scoped carve-out is implemented, or it is confirmed and documented that no host-side carve-out is needed.
+- [ ] A human confirms live: a real agent workdir with the seeded rule cannot run `claude plugin install …` in any of the tested evasion shapes.

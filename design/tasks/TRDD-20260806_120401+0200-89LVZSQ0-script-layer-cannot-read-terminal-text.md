@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T12:04:01+0200
-updated: 2026-08-06T12:04:01+0200
+updated: 2026-08-16T16:51:06+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -140,6 +140,15 @@ empty-field and live-red-state verbs from it. Shape and split await plugin#58.
 
 MED. New route reaching a dangerous primitive (pane contents). Depends on no other work; blocks
 ai-maestro#110 and the janitor's injection-rule compliance.
+
+## Acceptance
+- [ ] `AgentRuntime.capturePane` is reachable from at least one authorization-gated API route (verified by grep — no route calls it today)
+- [ ] The route returns the structured verdict `{blocked, reason, fieldVisible, fieldEmpty, fieldText, excerpt}`, not a raw buffer, as the default surface
+- [ ] A `--match <regex>` form evaluates server-side and returns only matching lines
+- [ ] The route is registered in `STRICT_AGENT_RULES` (or the human-only set), asserted by `tests/unit/sudo-guard-strict-agent-coverage.test.ts`
+- [ ] A neuter of the authorization gate reds a named test
+- [ ] The red-state classifier regex is reused from one shared module (not copied) between `scripts/ai-maestro-hook.cjs` and the new route
+- [ ] `aimaestro-session.sh` exposes the capability so a plugin-side skill answers "is the input field empty?" / "is there a red error on screen?" with zero `/api/*` calls
 
 ## Approval log
 

@@ -3,7 +3,7 @@ trdd-id: PLOVIPZE
 title: MAESTRO console-presence gates — registration + first login + password change are local-only (R48)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-16T09:47:54+0200
+updated: 2026-08-16T16:48:46+0200
 current-owner: opus-governance-rules-session
 task-type: security
 relevant-rules: [48, 16, 47, 36, 37]
@@ -78,6 +78,20 @@ remote peer. Preserve ordinary remote login (the NUANCE).
 Siblings: TRDD-OEG0V589 (migration R44) · TRDD-W9FA6ACZ (ASSISTANT R39) · TRDD-QR9FSL3Q (groups
 R45) · TRDD-HR8CES7H (usernames R47) · TRDD-40CUZA1Z (sidebar R46) · TRDD-OC9ELGSO (transport,
 #40). §0 mirror-sync rides each TRDD's Verification.
+
+## Acceptance
+- [ ] MAESTRO registration route rejects a genuinely remote caller (real Tailscale IP, not
+      loopback) with 403, reusing `isConsolePeer()` from `lib/peer-address.mjs`; allowed from
+      the host console.
+- [ ] A spoofed `x-forwarded-for: 127.0.0.1` header from a real remote peer does NOT satisfy
+      `isConsolePeer` (server re-stamp verified, not the client-supplied header).
+- [ ] MAESTRO first login requires OS presence verification (`lib/setup-bootstrap.ts`); a LATER
+      remote MAESTRO login by password alone still succeeds (the NUANCE — not gated every login).
+- [ ] MAESTRO password-change route branches on caller title: MAESTRO → console-only (403 remote);
+      normal user → remote allowed (meets TRDD-HR8CES7H).
+- [ ] The recovery-optout route remains NON-console-gated (owner-gated only) — unmodified by this
+      work (per the 7U927FCM correction).
+- [ ] §0 mirror-sync done: GOVERNANCE-RULES R48, `docs/API-CHANGES.md`.
 
 ## Approval log
 - 2026-07-16T09:47:54+0200 — MANDATE issued by USER (min-approval-requirement: user).

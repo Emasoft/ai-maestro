@@ -3,7 +3,7 @@ trdd-id: F1D89143
 title: Deep-validate Bearer credentials at the downstream WS and pty handler — not the pre-handshake gate
 column: backburner
 created: 2026-06-21T03:15:13+0200
-updated: 2026-07-13T10:40:07+0000
+updated: 2026-08-16T16:37:17+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 3
@@ -118,6 +118,16 @@ Plus `tsc --noEmit` clean and the full suite green.
 - A legitimate agent's Bearer still works, and its one-shot AID token is consumed
   exactly once (no "token already used" regression for the real consumer).
 - The cookie path is unchanged; unit suite covers the new bearer validator.
+
+## Acceptance
+
+- [ ] A `.ts` downstream Bearer validator exists (`tests/unit/<bearer-downstream-validate>.test.ts`'s subject) and is called from the post-handshake WS handlers for `/term`, `/status`, `/v1/ws`, `/companion-ws`, plus `/api/internal/pty-sessions`.
+- [ ] A forged/malformed/missing Bearer is rejected at all 4 WS surfaces and at `/api/internal/pty-sessions`, and the pre-handshake cookie deep-validation from `ba9d6df2` is unchanged.
+- [ ] A live AID token (`aim_tk_*`) validates and is consumed **exactly once** — no double-consume, no consume-at-gate — asserted against the post-validate `active-tokens.json` store state.
+- [ ] A live `amp_live_sk_*` AMP key validates via the canonical `validateApiKey`; a forged one is rejected.
+- [ ] `tests/unit/<bearer-downstream-validate>.test.ts` covers: live AMP key pass, forged AMP key reject, live AID consumed-once, expired/forged AID rejected-and-not-consumed, no-Bearer/malformed-Bearer rejected.
+- [ ] `tsc --noEmit` is clean and the full unit suite is green.
+- [ ] A human confirms live: an agent's real Bearer still opens a `/term` WS session end-to-end, and a hand-forged Bearer against the same endpoint is refused.
 
 ## Approval
 

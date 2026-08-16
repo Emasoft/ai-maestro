@@ -3,7 +3,7 @@ trdd-id: 80557822
 title: R6 Communication Graph Downstream Sync
 column: todo
 created: 2026-04-24T04:08:31+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-16T16:51:06+0200
 current-owner: main
 assignee: main
 priority: 1
@@ -190,6 +190,14 @@ the moment Phase 2 maestro auth wires H as an AMP recipient.
 
 This MUST ship before any Phase 2 maestro-auth work lands — at that
 point the advisory gate becomes exploitable.
+
+## Acceptance
+- [ ] `skills/agent-messaging/SKILL.md` and `skills/team-governance/SKILL.md` in `Emasoft/ai-maestro-plugin` mirror the tightened + v2-expanded graph, published via `publish.py`
+- [ ] Each of the 8 role-plugin repos' main-agent "Communication Permissions" section is aligned with the current graph (per the per-repo table in §2.B), published independently
+- [ ] `isReplyToInbound(messageId, senderAgentId, humanUserId)` is implemented and called from both `send-message-service.ts` G06 and `amp-service.ts` at the reply-only branch of `validateMessageRoute`
+- [ ] A reply-only message marks the original inbound message `replied=true` atomically, and a second reply to the same inbound id is rejected
+- [ ] The "ADVISORY ONLY" comment in `lib/communication-graph.ts::validateMessageRoute` and the "(enforcement partial)" note in `docs/GOVERNANCE-RULES.md` §R6.10 are removed once R6.10 is fully enforced
+- [ ] A test/scenario exercises an inter-title message on a tightened edge and confirms the API accepts/rejects per the current graph
 
 ## Approval log
 

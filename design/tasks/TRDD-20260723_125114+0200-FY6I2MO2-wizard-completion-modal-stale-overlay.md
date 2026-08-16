@@ -3,7 +3,7 @@ trdd-id: FY6I2MO2
 title: agent-creation wizard completion modal can persist and overlay the dashboard, blocking Delete
 column: planned
 created: 2026-07-23T12:51:14+0200
-updated: 2026-07-23T12:51:14+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: session
 task-type: bugfix
 scope: project
@@ -67,6 +67,14 @@ explicitly clicking through it.
 
 LOW. Confined to a single wizard-completion component; no data-model or governance implications.
 No dependencies on other open TRDDs.
+
+## Acceptance
+
+- [ ] The Wizard completion step's "Let's Go!" click handler closes the modal (unmounts it, not just navigates behind it) — verified by reading the component.
+- [ ] A dismiss-on-navigate safeguard force-closes the completion modal if the user navigates away (selects another agent/tab) without clicking through.
+- [ ] Screenshot/UI check: after clicking "Let's Go!", no residual modal DOM node exists (not just `display:none`), and the Profile panel's Danger Zone Delete control is clickable immediately after.
+- [ ] Screenshot/UI check: switching agents/tabs right after wizard completion, without clicking "Let's Go!", leaves no stale overlay blocking the dashboard.
+- [ ] SCEN-031 (or a lighter wizard-focused scenario) re-run shows no ISSUE-001/ISSUE-002-shaped finding about the completion modal.
 
 ## Approval log
 

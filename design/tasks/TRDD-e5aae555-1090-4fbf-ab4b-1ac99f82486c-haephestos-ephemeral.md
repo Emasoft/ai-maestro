@@ -3,7 +3,7 @@ trdd-id: E5AAE555
 title: Haephestos ephemeral-session hardening
 column: todo
 created: 2026-04-20T07:00:21+0200
-updated: 2026-07-13T12:40:00+0200
+updated: 2026-08-16T16:51:06+0200
 current-owner: main
 assignee: main
 priority: 3
@@ -227,6 +227,15 @@ Estimated LOC: ~200 added + ~20 modified.
 
 - `#244` Phase 0.D-derived — Haephestos for non-Claude clients (Codex, Gemini, Kiro adapters) when future need arises.
 - `#245` Phase 0.D-derived — Smarter availability: if user installs Claude mid-session, refresh HELPERS without reload (websocket push from system-level tracker).
+
+## Acceptance
+
+**FLAG (see report): most of §3's ADD list is already implemented** — `app/api/system/client-availability/route.ts`, `hooks/useClientAvailability.ts`, and the `AgentList.tsx` gate (`claudeProbe`/`handleHaephestosClick`) all exist, and the persona doc already carries "ephemeral"/"fresh"/no-`--continue" language. The two regression tests (§3.3/§3.4) do not exist under those names — `tests/integration/haephestos-pipeline.test.ts` exists but asserts neither the launch-args invariant nor the cleanup-purge invariant.
+
+- [ ] `tests/haephestos-launch.test.ts` (or equivalent) asserts the launch args never include `--continue` and do include `--agent haephestos-creation-helper`
+- [ ] `tests/haephestos-cleanup.test.ts` (or equivalent) pre-seeds `~/agents/haephestos/fakeartifact.txt`, calls the cleanup route, and asserts the folder exists and is empty afterward
+- [ ] `implementation-commits:` in frontmatter is populated with the landing commit SHAs for the already-shipped client-availability endpoint/hook/gate (currently empty despite apparent implementation)
+- [ ] E2E smoke on a machine WITHOUT Claude confirms the HELPERS section hides the Haephestos card entirely
 
 ## 11. Tracked in session todo list
 

@@ -3,7 +3,7 @@ trdd-id: 8K68E16G
 title: A CHIEF-OF-STAFF may delete agents of its own team with MANAGER approval
 column: blocked
 created: 2026-07-14T15:30:55+0200
-updated: 2026-07-14T17:05:00+0200
+updated: 2026-08-16T16:40:46+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: feature
@@ -160,6 +160,19 @@ the risk down: the deletion is **soft** (cemetery archive written before cleanup
 it is **team-scoped**, and it requires a **host-signed, ledger-anchored, revocable** mandate
 that did not exist a day ago. The real risk is shipping the *power* before the *condition* —
 which is exactly what `blocked-by: F1SL03CK` prevents.
+
+## Acceptance
+
+- [ ] `TRDD-F1SL03CK` reaches a terminal column (approved into `design/tasks/` and shipped, or
+      refused), clearing `blocked-by:`.
+- [ ] `lib/authorization.ts`'s `delete-agent` rule allows a `chief-of-staff` caller targeting a
+      member of its own team, subject to a valid `agent:delete` portfolio token.
+- [ ] `OPERATIONS_REQUIRING_TOKEN` in `lib/portfolio-check.ts` gains `DeleteAgent: 'agent:delete'`.
+- [ ] `services/element-management-service.ts::DeleteAgent` calls `matchPortfolioToken` for a
+      COS caller; a MANAGER caller short-circuits per R29.
+- [ ] `?hard=true` remains refused for a COS caller (403), soft-delete only.
+- [ ] `docs/GOVERNANCE-RULES.md` R30 is extended with the deletion clause so rule and code agree.
+- [ ] Every verification case listed under `## Verification` above passes.
 
 ## Approval log
 

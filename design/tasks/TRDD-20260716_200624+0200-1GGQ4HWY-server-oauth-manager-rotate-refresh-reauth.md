@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: backburner
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-04T23:57:41+0200
+updated: 2026-08-16T16:47:37+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -255,6 +255,15 @@ daemon (Python) uses, so the two coordinate rather than fight:
 - ROTATE→REFRESH escalation fires only on the specific failure reason; REAUTH surfaces the nudge
   and stops (never automates re-auth with stored material).
 - validate-then-backup: a failed probe never overwrites the last-known-good.
+
+## Acceptance
+
+- [ ] Phase F (REAUTH browser tier — `reauth.py`/`slot_capture_browser.py`/`cookie_vault.py` ported via Node CDP/tmux) is implemented and its `/login` nudge is verified against `lib/setup-bootstrap.ts`'s presence channel.
+- [ ] The cascade never surfaces token material in any log/transcript — grepped clean per the Verification section (the detached process output + the `status` verb).
+- [ ] Concurrent-write test proves the server and a simulated `#N` janitor-daemon holder cannot both write the live credential (mutex proven mutually exclusive, not merely unlikely).
+- [ ] validate-then-backup holds: a failed probe never overwrites the last-known-good slot — pinned by a test that forces the probe to fail and asserts the prior slot survives.
+- [ ] The open janitor#82 keychain-reprompt issue is confirmed handled — either resolved in this port or spun out as its own EHT sibling under `[[KCRMSNL7]]` per the "Open issue this NPT must honor" note, and NOT silently dropped.
+- [ ] A human confirms live (with awareness this touches the real credential): a forced ROTATE on the running server correctly swaps to a spare slot without corrupting `Claude Code-credentials`, and REAUTH correctly surfaces the human `/login` nudge instead of auto-authenticating.
 
 ## Approval log
 

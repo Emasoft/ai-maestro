@@ -3,7 +3,7 @@ trdd-id: 1EE4A3C1
 title: Self-contained portable agents — workdir .aimaestro mirror, sessions.json reconcile, orphan revival
 column: todo
 created: 2026-05-22T12:14:11+0200
-updated: 2026-07-13T12:40:00+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: main
 assignee: main
 priority: 2
@@ -185,6 +185,15 @@ an **orphan to surface** (revivable), never as cruft to silently destroy.
   inside it.
 - Do not make `<workdir>/.aimaestro/` a second runtime authority (§3).
 - Phase 3/4 are explicitly future; Phase 1 is the only pre-restart work.
+
+## Acceptance
+
+- [ ] Phase 1 item 1: `sessions.json` bootstrap-if-missing synthesizes from the registry with `existsSync(workingDirectory)` validation, and never prunes an existing entry (D1).
+- [ ] Phase 1 item 2: `boot-restore-service.ts` skips + records agents whose `workingDirectory` no longer exists, rather than spawning a guard-disabled session in a dead dir.
+- [ ] Phase 1 item 3/4: orphan detection reuses the existing `unregisteredSessions`/"Dead Sessions" API; boot-restore and orphan detection stay disjoint by construction (no auto-revival by boot-restore).
+- [ ] Phase 2: `<workdir>/.aimaestro/` mirror is written by `createPersona()` and dual-written on every registry/session mutation for that agent (one-way registry → mirror).
+- [ ] Phase 3: `exportAgentZip()`/`importAgent()` handle a workdir-zip bundle — recreate `~/agents/<name>/`, promote the mirror to authoritative on import, remap `workingDirectory` to the new host's path.
+- [ ] The shell-guard allowlist is confirmed unchanged (still `$AGENT_WORK_DIR/**` + temp dirs) — `<workdir>/.aimaestro/` requires no guard modification.
 
 ## 7. References
 

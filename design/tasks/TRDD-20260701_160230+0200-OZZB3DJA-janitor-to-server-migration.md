@@ -3,7 +3,7 @@ trdd-id: OZZB3DJA
 title: Migrate janitor functions into the ai-maestro server as script-wrapped APIs
 column: backburner
 created: 2026-07-01T16:02:30+0200
-updated: 2026-07-01T16:02:30+0200
+updated: 2026-08-16T16:43:45+0200
 current-owner: main
 assignee: main
 priority: 5
@@ -119,13 +119,14 @@ subconscious background system; per-heartbeat token cost goes to ~zero.
 - **Fail-fast:** server chores propagate errors; no silent fallbacks.
 - **Commit-only until USER approves a push** (ai-maestro is the app, USER-gated).
 
-## Acceptance (when built)
+## Acceptance
 
-- Each finalized janitor function has an ai-maestro server equivalent + a script wrapper.
-- The janitor's deterministic heartbeat work runs server-side (no per-heartbeat agent turn
-  for those chores); intelligence-required passes remain subconscious-agent tasks.
-- Parity tests show behavior matches the janitor original.
-- Per-session token cost of the janitor heartbeat is eliminated for deterministic chores.
+- [ ] The finalized janitor function inventory (post the janitor repo's finalization) is read and each function is partitioned as deterministic vs needs-agent-intelligence, per §Design step 2.
+- [ ] Each deterministic janitor function has an ai-maestro server equivalent (server module + subconscious-scheduler tick), and each intelligence-required function stays a subconscious background-agent task.
+- [ ] Every migrated function is reachable ONLY through a CLI script in `~/.local/bin/` (e.g. `aimaestro-janitor-*.sh`) — no plugin/hook calls `/api/...` directly, per the decoupling invariant.
+- [ ] Each new server API is verified working in BOTH full and headless server modes (headless-router parity).
+- [ ] Parity tests exist and pass showing each migrated function behaves identically to its janitor original.
+- [ ] After cutover, a real janitor heartbeat cycle shows zero per-heartbeat agent turns fired for the migrated deterministic chores — confirmed by a human reading a live session's turn log.
 
 ## Open questions (resolve when the gate clears)
 

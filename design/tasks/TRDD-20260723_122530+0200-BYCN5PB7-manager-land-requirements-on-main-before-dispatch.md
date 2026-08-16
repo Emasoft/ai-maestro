@@ -3,7 +3,7 @@ trdd-id: BYCN5PB7
 title: MANAGER must land the requirements on main (or an already-merged base) before dispatching the dev — never leave them in an unmerged PR that gates the NPT
 column: planned
 created: 2026-07-23T12:25:30+0200
-updated: 2026-07-23T15:17:26+0200
+updated: 2026-08-16T16:48:46+0200
 current-owner: session
 task-type: docs
 scope: project
@@ -94,6 +94,24 @@ no requirements-only PR sits unmerged while the dev waits.
 
 LOW. Persona-sequencing clarification; no code, no weakening of any gate. It makes the MANAGER's own
 NPT contract self-consistent (do not declare a prerequisite you then leave unmet on the base).
+
+## Acceptance
+- [ ] In-repo governance-overlay half landed: the dispatch-precondition rule added to
+      `rules/aimaestro/aimaestro-trdd-approval.md` Part B2, generalized to ANY dispatching agent
+      (MANAGER/COS/ORCHESTRATOR), commit `276cef26` (STATE block claims done — re-verify: text is
+      present in the current file and `git show 276cef26` touches it before ticking).
+- [ ] Deployment verified live without rebuild/republish: `lib/agent-rules-seed.ts` reads
+      `rules/aimaestro/*.md` from `process.cwd()` and seeds it read-only into agent workdirs
+      (STATE block claims validated live in the SCEN-031 re-run — re-verify against that run's
+      report before ticking).
+- [ ] SCEN-031 re-run confirms the pass criterion: at the moment the MANAGER dispatches the dev,
+      the dev's NPT gate is satisfiable from `main` (requirements present on the base) with no
+      requirements-only PR left unmerged while the dev waits.
+- [ ] Cross-repo persona half (`Emasoft/ai-maestro-assistant-manager-agent` PR #33 — "sequence
+      project-bootstrap NPT + delegate repo creation to MAINTAINER") merged or explicitly
+      resolved — tracked here but actioned only in its own repo, never merged/tagged from here.
+- [ ] §0 mirror-sync: `docs/API-CHANGES.md` / governance docs reflect the landed dispatch
+      precondition, if applicable.
 
 ## Approval log
 - 2026-07-23 — MANDATE by USER (improvement series, "write a series of TRDDs with all the

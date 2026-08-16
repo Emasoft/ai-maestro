@@ -3,7 +3,7 @@ trdd-id: ZKQ38TSG
 title: Publish per-chore last-run stamps so either side can answer is chore X alive with a stat
 column: backburner
 created: 2026-08-04T15:40:05+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-16T16:52:01+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session
@@ -136,6 +136,16 @@ detail.
 Found 2026-08-04 while answering `ai-maestro#99`, which had sat 7 days with zero CORE comments. The
 `lib/janitor-control.ts` NEVER-WRITE rule was found by reading the module header *after* deciding to
 add a writer to it — recorded here because the near-miss is the useful part.
+
+## Acceptance
+
+- [ ] The stamp field is written into `server-liveness.json` (via `writeServerLiveness`), never into `lib/janitor-control.ts`'s foreign NEVER-WRITE path.
+- [ ] Option 2 (`started_at` published alongside the stamps) is implemented, so a consumer can distinguish "no stamp yet, server is N minutes old" from "no stamp, server has been up for hours".
+- [ ] Only the third `runAbsorbedDutyTick` path (body ran, whether or not it produced entries) writes a stamp — the `!installedAndArmed` skip and the held-lock skip leave the stamp unchanged.
+- [ ] A skip-path test seeds a prior stamp value and asserts it is unchanged after a skipped tick (non-vacuity: the test must fail if the stamp is written unconditionally, per the Verification section).
+- [ ] All three server-run absorbed duties (`marketplace-refresh`, `version-update`, `user-plugins-update`) carry a last-run epoch after a tick.
+- [ ] The OAuth-chore scoping question (whether `oauth-rotator-supervisor`/`oauth-rotator-tick` also stamp) is resolved — either included here or spun out as its own EHT, not silently dropped.
+- [ ] A human confirms live: reading `server-liveness.json` on a running server after a real tick answers "is chore X alive" without a round-trip to the janitor.
 
 ## Approval log
 

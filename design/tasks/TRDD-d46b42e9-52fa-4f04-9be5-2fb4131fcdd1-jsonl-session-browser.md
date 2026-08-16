@@ -3,7 +3,7 @@ trdd-id: D46B42E9
 title: JSONL Session Browser (Rust streaming reader + chat transcript UI)
 column: todo
 created: 2026-04-20T22:31:54+0200
-updated: 2026-07-13T12:40:00+0200
+updated: 2026-08-16T16:51:06+0200
 current-owner: main
 assignee: main
 priority: 3
@@ -435,3 +435,14 @@ When all 4 phases are PASS, the orchestrator opens a draft PR from `feature/json
 - Context: a 67% main-context checkpoint before auto-compaction; this TRDD is the durable spec the post-compaction orchestrator reads to start Phase 1.
 - Operational handoff (ephemeral, not tracked): `docs_dev/2026-04-20-post-compaction-handoff.md` — explains how the fresh session resumes both workstreams (the 25-scenario long batch on the parent branch + Phase 1 of this TRDD on the sibling branch). Gitignored by convention (`docs_dev/` is a `_dev` folder); survives on disk per the IRON `_dev`-never-delete rule in the user's CLAUDE.md.
 - Related TRDDs: none — this is a net-new feature. The Subconscious Self-Change Tracker (TRDD-7123d51a) touches the same files (`~/.claude/projects/*/*.jsonl`) read-only but the two subsystems do not share code or state.
+
+## Acceptance
+
+**FLAG (see report): the code for all 4 phases appears already landed on this branch** — `rust-tools/aim-jsonl-reader`, `scripts/aim-jsonl-reader`, `app/api/sessions-browser/**` (agents/sessions, range, search, context-breakdown, timelines, lifeline), and `components/agent-profile/sessions/ChatTranscript.tsx` all exist, with commit history (`c003168f`..`f4d23bd9`) spanning Rust + API + UI + security hardening. Boxes below are left unchecked pending a from-scratch acceptance pass against the spec, since `implementation-commits:` is empty and `column:` is still `todo`.
+
+- [ ] Phase 1: the Rust crate builds for arm64+x86_64 macOS and passes `cargo test`
+- [ ] Phase 2: the 4 Node API routes (`sessions`, `range`, `search`, `context-breakdown`) pass `yarn test`
+- [ ] Phase 3: the Sessions tab UI renders a session as a virtualized chat transcript with per-message token counts
+- [ ] Phase 4: a new scenario + docs + README link exist, and the RSS integration test proves the Node process stays memory-bounded on a large `.jsonl`
+- [ ] The context-breakdown panel's 7 categories match Claude Code's own `/context` schema (per the fixture test in §7)
+- [ ] `implementation-commits:` in frontmatter is populated with the landing commit SHAs (currently empty despite apparent implementation)

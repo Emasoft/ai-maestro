@@ -3,7 +3,7 @@ trdd-id: FZRTRCGL
 title: a package-manager safety knob is disabled in package-manager config — 1 gap(s)
 column: planned
 created: 2026-07-16T03:17:19+0200
-updated: 2026-07-21T21:20:57+0200
+updated: 2026-08-16T16:49:08+0200
 current-owner: janitor
 task-type: bugfix
 severity: medium
@@ -54,5 +54,12 @@ scheduler dispatches **janitor-security-agent** to fix it at the next free heart
 The dispatched agent is fail-safe: it fixes what is safe and FLAGS what needs a human (it never
 rotates credentials, never force-pushes, never pushes to `main`). It returns one line plus a report
 path, and closes the ticket with an explicit status.
+
+## Acceptance
+
+- [ ] An `.npmrc` file exists at the repo root setting the supply-chain safeguards named in the finding (`minimum-release-age=7200`, `trust-policy=no-downgrade`, `block-exotic-subdeps=true`), or the finding is explicitly refuted with the reason recorded here.
+- [ ] `yarn install` (or `npm install`) still succeeds after the safeguard is restored, confirming no existing dependency relied on it being off.
+- [ ] If a dependency DID depend on the safeguard being off, that dependency is named as the real finding and handled separately.
+- [ ] Support ticket `T-A1EHL7K6` is closed with an explicit status (fixed / flagged for human).
 
 ## Notes and lessons learned

@@ -3,7 +3,7 @@ trdd-id: D9C27OQ0
 title: Fleet deadlock detector — a worker acknowledged a mandate but took 0 project actions for N minutes
 column: planned
 created: 2026-07-23T11:15:46+0200
-updated: 2026-07-23T11:15:46+0200
+updated: 2026-08-16T16:48:46+0200
 current-owner: session
 task-type: feature
 scope: project
@@ -58,6 +58,20 @@ unblock: (a) set `worktree.baseRef: head` — but weigh the scenario-runner's re
 origin/main base first (a deliberate, USER-facing config call, not an autonomous flip); or (b) implement
 without worktree isolation, under an explicit repo-root write-scope guard. Not re-attempted: off the
 SCEN-031 critical path, and burn was flagged at the time.
+
+## Acceptance
+- [ ] Worktree-baseRef blocker resolved or worked around: either `worktree.baseRef` config
+      decision made explicitly with the USER, or the detector is implemented without worktree
+      isolation under an explicit repo-root write-scope guard.
+- [ ] Detector logic lands as a leg of the server fleet-liveness watchdog or a janitor sweep,
+      flagging an agent that AMP-acknowledged a mandate but produced 0 project-file/git-commit/
+      PR/branch actions for N configurable minutes.
+- [ ] The finding is a non-actuating capability finding (logged + optionally AMP to the
+      MANAGER / a report) — never a kill, matching the stated risk mitigation.
+- [ ] Unit test on a synthetic "acknowledged-but-idle" fixture: 0 git/PR activity for > N min
+      after an AMP mandate reply → finding emitted.
+- [ ] No false positive: an agent producing commits/PRs, or one still within its configured
+      first-think window, produces no finding.
 
 ## Approval log
 - 2026-07-23 — MANDATE by USER (improvement series, "you have my trust").

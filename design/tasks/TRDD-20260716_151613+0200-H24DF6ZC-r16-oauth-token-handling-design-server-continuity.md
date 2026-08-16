@@ -3,7 +3,7 @@ trdd-id: H24DF6ZC
 title: R16 OAuth token-handling design for server-side continuity (USER sign-off gates implementation)
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-07-16T19:21:48+0200
+updated: 2026-08-16T16:40:46+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -172,3 +172,14 @@ KCRMSNL7 #2/#3. Until then this stays in `design` and no token code is written.
 - 2026-07-16T19:21:48+0200 — **✅ ALL FOUR (D1–D4) SIGNED OFF by USER — the implement gate is
   CLEARED.** The token-touching NPTs under KCRMSNL7 (#2 OAuth manager, #3 account switcher) are
   UNBLOCKED and must be built to THIS signed design.
+
+## Acceptance
+
+- [ ] D1-D4 are each recorded in `## Approval log` with a judge and datetime (custody, the
+      one-writer lock mechanism, the auto/human cascade boundary, the 5-field `status` ceiling).
+- [ ] A schema test exists that fails CI if a sixth, token-adjacent field is ever added to
+      `aimaestro-continuity.sh status`'s output.
+- [ ] `column:` advances past `design` (e.g. to `complete`) now that all four sign-offs are
+      recorded, since this NPT's deliverable is the signed design itself, not implementation.
+- [ ] The dependent NPTs (`TRDD-KCRMSNL7` #2 OAuth manager, #3 account switcher) reference this
+      card's signed design in their own STATE blocks as the design they are built to.

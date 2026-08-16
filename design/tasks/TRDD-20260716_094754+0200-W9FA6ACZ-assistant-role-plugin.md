@@ -3,7 +3,7 @@ trdd-id: W9FA6ACZ
 title: ASSISTANT role-plugin — ai-maestro-assistant-role-agent (MANAGER+AUTONOMOUS, ungoverned, user-bound) (R39)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-22T12:23:03+0200
+updated: 2026-08-16T16:48:46+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [39, 46, 41, 26, 6, 11]
@@ -164,6 +164,23 @@ decision gates the profile-panel field locks — resolve it before that sub-task
 Siblings: TRDD-OEG0V589 (migration R44) · TRDD-QR9FSL3Q (groups R45) · TRDD-HR8CES7H (usernames
 R47) · TRDD-40CUZA1Z (sidebar R46) · TRDD-PLOVIPZE (console gates R48) · TRDD-OC9ELGSO (transport,
 #40). §0 mirror-sync rides each TRDD's Verification.
+
+## Acceptance
+- [ ] R39.4 KEEP-vs-STRIP decision confirmed explicitly by the USER (currently only a
+      recommendation) before the profile-panel field locks are built.
+- [ ] R39.1 built: creating a normal user auto-creates exactly one ASSISTANT agent.
+- [ ] R39.3 built: the ASSISTANT UI exposes no other-agent terminal/messaging surface — the
+      no-terminal / no-other-agent-access UI is in place, not merely the server-side 403.
+- [ ] R39.4 built: NAME/TITLE/ROLE-PLUGIN/TEAM fields are read-only to the bound user and
+      changeable only by the MAESTRO (sudo, per R26) — matching the confirmed KEEP/STRIP ruling.
+- [ ] Enforcement verified, not just persona text: ASSISTANT → any other agent messaging is
+      403 in `lib/communication-graph.ts` (rule text alone is a suggestion — cite the guard
+      line, e.g. the `AssistantSenderContext` block, that actually refuses it).
+- [ ] ASSISTANT is never delivered as a mandate target (R41) and acts without MANAGER/COS/MAESTRO
+      approval on its own TRDDs — verified via a self-mandated TRDD needing no approval log entry
+      beyond the ASSISTANT itself.
+- [ ] §0 mirror-sync done: comm-graph adjacency matrix (CLAUDE.md + GOVERNANCE-RULES), personas,
+      GOVERNANCE-RULES R39 text all agree with the shipped MANAGER+AUTONOMOUS composition.
 
 ## Approval log
 - 2026-07-16T09:47:54+0200 — MANDATE issued by USER (min-approval-requirement: manager;

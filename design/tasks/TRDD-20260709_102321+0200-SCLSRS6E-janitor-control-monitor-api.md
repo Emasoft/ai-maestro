@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: blocked
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-10T09:12:23+0200
+updated: 2026-08-16T16:40:46+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -396,5 +396,21 @@ panel's push/callback round-trip are tested against the real code paths.
 - `reports/api-gap-analysis/20260709_101109+0200-html-side-panel.md`
 - `reports/api-gap-analysis/20260709_101133+0200-task-system-api.md`
 - `reports/api-gap-analysis/20260709_101857+0200-cli-layer-devbrowser-coredeps.md`
+
+## Acceptance
+
+- [ ] The agent authorization policy for the ten remaining strict routes
+      (`TRDD-K2WJH7RF`) is decided and reaches a terminal column, clearing
+      `blocked-by:`.
+- [ ] Every strict route this epic shipped (`panel`, `queue`, `prompt/answer`, the
+      five `/api/trdd/*` verbs) is added to `STRICT_AGENT_RULES` per the decided
+      policy, so `lib/sudo-guard.ts::requireAidTitle` no longer refuses the janitor
+      with `403 aid_title_forbidden` on every call.
+- [ ] `Emasoft/ai-maestro-janitor#76` (the command reference) is corrected to match
+      the decided policy.
+- [ ] The `AGENT_POLICY_PENDING` coverage guardrail (from `TRDD-6A2I6ZO0`) reports
+      zero pending strict routes for the 8 routes this epic introduced.
+- [ ] Every entry in `eht:` reaches a terminal column, and this card's `column:`
+      restores to `pre-block-column: complete` (then archives per the flock gate).
 
 ## Approval log

@@ -3,7 +3,7 @@ trdd-id: WLWHVMKT
 title: External workdir adoption is broken — one authority for agent-workdir policy
 column: todo
 created: 2026-07-11T13:10:06+0200
-updated: 2026-08-02T15:29:34+0200
+updated: 2026-08-16T16:43:00+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 priority: 0
@@ -241,6 +241,15 @@ exact coverage whose absence caused this bug:
   held to the least-weakening form (authorization check, not a blanket widening);
   residual risk recorded above. No approval request was sent — the mandate is the
   approval.
+
+## Acceptance
+
+- [ ] `lib/agent-workdir-policy.ts` exists as the single authority (`isAuthorizedAgentWorkdir` / `assertAuthorizedAgentWorkdir`), used by all 4+ call sites (createSession, boot-restore, browse-dir, ChangeFolder, importAgent).
+- [ ] E2E: a MAINTAINER agent adopting a repo genuinely outside `~/agents/` gets a starting tmux session (not just a registry write) — re-confirm on a fresh run.
+- [ ] Follow-up TRDD filed and landed for blocker (1): CreateAgent leaving an agent with zero role-plugins (R9.13 hard-reject or auto-assign).
+- [ ] Follow-up TRDD filed and landed for blocker (2): registry `status`/`sessions` never updating for a created agent (the general boot-restore-breaking bug).
+- [ ] Boot-restore across a real server restart is proven end-to-end for an adopted agent, once blocker (2) is fixed.
+- [ ] `SCENARIOS_TESTS_RULES.md` Rule 0 / the scenario fixture rules permit an out-of-`~/agents/` fixture, so external adoption is scenario-testable going forward.
 
 ## Notes and lessons learned
 

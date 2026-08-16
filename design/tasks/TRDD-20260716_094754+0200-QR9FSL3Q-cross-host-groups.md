@@ -3,7 +3,7 @@ trdd-id: QR9FSL3Q
 title: Cross-host groups — broadcast chat rooms spanning hosts; teams stay same-host (R45)
 column: planned
 created: 2026-07-16T09:47:54+0200
-updated: 2026-07-16T09:47:54+0200
+updated: 2026-08-16T16:48:46+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 relevant-rules: [45, 43, 12]
@@ -61,6 +61,18 @@ reliability, not new protocol.
 Siblings: TRDD-OEG0V589 (migration R44) · TRDD-W9FA6ACZ (ASSISTANT R39) · TRDD-HR8CES7H (usernames
 R47) · TRDD-40CUZA1Z (sidebar R46) · TRDD-PLOVIPZE (console gates R48) · TRDD-OC9ELGSO (transport,
 #40). §0 mirror-sync rides each TRDD's Verification.
+
+## Acceptance
+- [ ] `types/group.ts` `subscriberIds` accepts `agentId@hostId` cross-host addresses; a bare
+      local id still resolves (host defaults to self).
+- [ ] `POST /api/groups/{id}/notify` fans out to local subscribers via the existing local path
+      and to remote subscribers via the cross-host peer directory (`lib/agent-directory.ts`).
+- [ ] A group with agents on 2 hosts: a broadcast reaches subscribers on both hosts.
+- [ ] An offline peer's subscriber receives the message on reconnect (AMP relay
+      `/api/v1/messages/pending`) rather than the broadcast blocking.
+- [ ] Team creation / add-member REJECTS a cross-host agent with a clear message pointing at
+      R44 migration (`lib/team-registry.ts`) — teams stay same-host (R45.1).
+- [ ] §0 mirror-sync done: GOVERNANCE-RULES R45 marked built.
 
 ## Approval log
 - 2026-07-16T09:47:54+0200 — MANDATE issued by USER (min-approval-requirement: manager;

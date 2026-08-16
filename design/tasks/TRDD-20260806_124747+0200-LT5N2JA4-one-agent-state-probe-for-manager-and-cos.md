@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T12:47:47+0200
-updated: 2026-08-06T13:00:18+0200
+updated: 2026-08-16T16:51:06+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -194,6 +194,15 @@ And here not even that: the dependency is **satisfied** — the route, the servi
 and the `block-state` CLI verb all landed before this card was filed. There is nothing left to
 wait on, so the honest frontmatter is empty and the relationship lives in the prose above, where
 it is a reference rather than a claim on the graph.
+
+## Acceptance
+- [ ] `GET /api/agents/[id]/probe` exists, aggregating registry status + block-state + hook chat-state + (where the join key is proven) agentlenspro usage
+- [ ] MANAGER (and own-team COS) can answer "what is agent X doing, and if it is stuck, why" in one script-layer call, with zero `/api/*` calls from the plugin
+- [ ] Every unavailable/stale source is NAMED in the `sources` field of the response, never silently defaulted or dropped
+- [ ] The join key for any agentlenspro `sessions`-derived field is either PROVEN (mapping to an ai-maestro agent id) or that field is omitted from the response
+- [ ] An ASSISTANT-titled agent is refused by the probe route; a COS is refused when probing outside its own team
+- [ ] The two-source Gate 0b keeps refusing an inject at a stalled-but-asked-nothing agent (regression check on already-pinned behavior)
+- [ ] `aimaestro-agent.sh` wraps the probe and ships as a skill to the MANAGER and CHIEF-OF-STAFF role-plugins
 
 ## Approval log
 

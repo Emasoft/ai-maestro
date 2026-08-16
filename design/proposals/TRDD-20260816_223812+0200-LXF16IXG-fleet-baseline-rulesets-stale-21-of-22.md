@@ -1,6 +1,6 @@
 ---
 trdd-id: LXF16IXG
-title: Twenty-one of twenty-two fleet repos cannot merge a PR because the 2026-08-13 ruling never reached them
+title: Three baseline ruleset fields drifted independently across the fleet and one repo of 22 is current
 column: proposal
 scope: project
 project-id: ai-maestro
@@ -30,6 +30,11 @@ external-refs: []
 ---
 
 # The ruling landed in code, shipped in eleven releases, and reached one repo
+
+> **This card's original title and headline claim — *"21 of 22 fleet repos cannot merge a PR"* — are
+> RETRACTED.** They rested on a two-field census; the deciding field was a third one, unsampled.
+> **Zero repos are actively blocked.** See the CORRECTED block below. The drift itself is real and
+> unchanged; only its stated consequence was wrong.
 
 ## Problem
 

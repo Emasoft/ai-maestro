@@ -6,7 +6,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-08-16T01:43:20+0200
+updated: 2026-08-16T10:15:44+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 priority: 1
@@ -37,6 +37,66 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-web-scenario-tester", "ht
 # TRDD-44RGLOO8 — the publish carried the credential out of the repo
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10, AMENDED 2026-08-16
+
+### 2026-08-16 10:15 — THE MANDATE IS FIXED. PR opened, awaiting review + release
+
+USER authorization, verbatim: *"Clear the phantom env var, Build the refresh fix (i + v), **Fix
+the credential mandate**, never ask me those obvious things again."* Item 3 of three.
+
+**Method: cross-repo, so clone → branch → PR, never a direct edit of that tree**
+(`~/.claude/rules/how-to-fix-issues-of-other-projects.md`). No fork step — the repo is ours, so
+the discipline that remains is *no push to `master`*.
+**PR: `Emasoft/ai-maestro-web-scenario-tester` #4**, branch
+`fix/credential-mandate-in-scenario-rules`, commits `825a209` + `88436d3`. Docs only.
+
+**What the fix actually is — and the framing that makes it obvious.** The repo ALREADY ships the
+secret-free mechanism: `scenarios.config.README.md` defines `governancePasswordRef` as *"A
+REFERENCE to the test login/sudo password — never the literal secret"* (`env:` / `file:` /
+`keychain:`). So this was never a missing capability. **Two docs in one repo said opposite
+things, and the one scenario authors copy from was the one requiring the literal.** Landed:
+
+- the frontmatter example and the field-table row now carry the env var **NAME**, and point at
+  `governancePasswordRef` as the better option that lets the field be omitted entirely;
+- the Rule 12 worked example no longer spells a credential — it calls `<prefix>_sudo_modal`;
+- a new Rule 12 subsection **"THE PASSWORD NEVER PASSES THROUGH A MODEL (hard invariant)"**: the
+  credential travels ref → shell variable → the helper's stdin, the runner NAMES a helper and
+  never handles the value, a step that tells the runner to type a password is a BUG, and an
+  unresolvable ref FAILS FAST (a default would itself be a secret in a committed file);
+- `scenario-runner-protocol.md` Phase E and `amwst-phase-execute` §7 route it the same way;
+- the `amwst-scenarios-rules` one-line summary said *"Re-enter the credential"* — the short form
+  an agent reads first, implying the runner types it. Now it points at the helper too.
+
+**The literals were removed WITHOUT reproducing them**, by scripts anchored on SHAPE (never on the
+value). The one remaining hit for *"actual password value"* in that repo is the new rationale
+paragraph QUOTING the mandate it removed, which is deliberate.
+
+**⚠ AND THE FIRST PASS MISSED ONE — read this before trusting any "it's clean" in this card.**
+I removed the Rule 12 example, ran `grep -c "and click Confirm"` → 0, and called the file clean.
+That grep can only see the block I had just edited; it answered a question about that block and I
+read it as a verdict about the file. The card's own "2 occurrences" was RIGHT and I had written
+into this STATE block that it was off by one. The survivor (`d51e040`, line 620) was the WORSE of
+the two — the step-format field table's `Action` row, mandating *"Never write \"enter password\" —
+write `enter password <literal>`"*: the instruction that PRODUCES the exposure, in the table an
+author consults while writing every step. **The instrument that settles it** extracts the token
+from the pre-fix blob BY SHAPE and counts occurrences across every tracked file — never reading or
+printing it — and now reads **0 in the file, 0 repo-wide**.
+
+**⚠ ONE ACCEPTANCE BOX BELOW HAD A STALE PREMISE — the sweep's finding again, now 5 of 6.**
+*"the SECOND shipped copy at `skills/amwst-scenarios-rules/references/` converged — it diverges
+from the first, so fixing one leaves the other mandating the literal"*. **It does not diverge.**
+It is a **33-line, 1037-byte POINTER STUB** whose own text reads *"This skill does **not** carry
+its own copy of the rules doc"* and defers to the plugin-root canonical file. Converged already,
+by someone, at some point after this card recorded the divergence — and `ls -la` + `cmp` settled
+it in one call, where believing the card would have produced a phantom edit.
+
+**NOT DONE, and deliberately so:** the re-publish box. Merging a PR and re-publishing to a
+marketplace is a release transition (NON-EXEMPT, `aimaestro-manager-approval-defaults.md` §Y).
+The USER authorized fixing the mandate, not shipping it. The PR is open for review.
+
+**Still unchanged:** the tags `v0.1.1`–`v0.1.3` decision is the USER's and is what keeps this card
+in `human_review`.
+
+---
 
 **⚠ SUPERSEDED — do NOT carry forward (amended 2026-08-16T01:43, verified, not inferred):**
 
@@ -296,13 +356,44 @@ why it could be written at all (a checklist invented from a title is fabrication
       instruction that produced it is not.
       Nothing was filed upstream: an issue on a public tracker naming the exposure would point at
       it, which is the one action that makes a dead-but-public string worse.
-- [ ] **the MANDATE amended** — the frontmatter field documented as *"The actual password value, in
+      **DONE 2026-08-16 in PR #4 (`825a209` + `d51e040`) — and THE BOX'S COUNT OF 2 WAS RIGHT;
+      my first pass removed ONE and reported the file clean.** The instrument was the bug:
+      `grep -c "and click Confirm"` can only see the block I had just edited, so it answered a
+      question about that block while I read it as a verdict about the file. Counted properly —
+      extracting the token from the pre-fix blob BY SHAPE and counting occurrences, never reading
+      or printing it — the file carried **2**, and the survivor was the WORSE one: the step-format
+      field table's `Action` row read *"Never write \"enter password\" — write `enter password
+      <literal>`"*, i.e. the instruction that PRODUCES the exposure, in the table an author
+      consults while writing every step. Both removed WITHOUT reproducing the value (scripts
+      anchored on SHAPE), and verified at **0 in that file and 0 across every tracked file**.
+- [x] **the MANDATE amended** — the frontmatter field documented as *"The actual password value, in
       quotes"* / *"Referenced verbatim in steps"* is the root cause. Scrubbing the two occurrences
       without amending it re-creates the exposure on the next scenario authored, so this box is the
       one that actually closes the defect; the one above only closes today's instance
-- [ ] the SECOND shipped copy at `skills/amwst-scenarios-rules/references/` converged — it
+      **DONE 2026-08-16 in PR #4 (`825a209`, `88436d3`).** Both sites now carry the env var NAME
+      and point at `governancePasswordRef` — which the repo ALREADY shipped, documented in its own
+      `scenarios.config.README.md` as *"a REFERENCE … never the literal secret"*. So the defect was
+      never a missing mechanism: **two docs in one repo said opposite things, and the one scenario
+      authors copy from was the one requiring the literal.** Plus a new hard-invariant subsection
+      ("THE PASSWORD NEVER PASSES THROUGH A MODEL"), the same routing in
+      `scenario-runner-protocol.md` Phase E and `amwst-phase-execute` §7, and the
+      `amwst-scenarios-rules` one-liner that said *"Re-enter the credential"* — the short form an
+      agent reads first.
+- [x] the SECOND shipped copy at `skills/amwst-scenarios-rules/references/` converged — it
       diverges from the first, so fixing one leaves the other mandating the literal
+      **THE PREMISE WAS STALE — nothing to do (measured 2026-08-16).** That path is a **33-line,
+      1037-byte POINTER STUB** whose own text reads *"This skill does **not** carry its own copy of
+      the rules doc"*, deferring to the plugin-root canonical file. `ls -la` + `cmp` settled it in
+      one call; believing the card would have produced a phantom edit to a file that does not
+      contain what the box says it contains. Fifth of six parked cards whose blocker had already
+      changed — write the COMMAND that tests a blocker, never the state.
 - [ ] re-published (`publish.py --patch`) so the marketplace resolves a clean version
+      **BLOCKED ON THE PR, and deliberately not self-served.** Merging and re-publishing is a
+      release transition (NON-EXEMPT — `aimaestro-manager-approval-defaults.md` §Y). The USER
+      authorized fixing the mandate, not shipping it. PR #4 is open for review; the merge is now
+      mechanically possible (the ratified baseline sets `required_approving_review_count: 0`
+      because GitHub forbids self-approval), which is exactly why the gate here has to be the
+      RULE rather than the tooling.
 
 **Yours alone:**
 

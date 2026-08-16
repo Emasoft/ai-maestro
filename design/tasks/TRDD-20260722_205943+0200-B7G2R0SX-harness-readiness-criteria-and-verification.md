@@ -3,7 +3,7 @@ trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
 column: design
 created: 2026-07-22T20:59:43+0200
-updated: 2026-08-16T10:57:17+0200
+updated: 2026-08-16T10:58:10+0200
 current-owner: session
 task-type: audit
 scope: project
@@ -235,13 +235,19 @@ own definition in the STATE block, not invented here.
 - [x] **SCEN-031 is AUTHORED and committed** — `4623dc83` (scenario + setup wrapper + sample-zip
       fixture + `NEXT_SCEN_NUMBER`→32) and `a129a0b1` (the USER's four added requirement sets:
       NEVER-STOP, derived TRDDs, MAINTAINER-authored CI, MANAGER read-only monitoring).
-- [ ] **The prereq gate passes.** RE-MEASURED 2026-08-16 and **the blocker is REAL, not stale** —
-      `gh repo list Emasoft --json isTemplate` returns **0 template repos**, 25 days after this card
-      recorded the same ✗. The USER must create one, or authorize a public/3rd-party template, or
-      allow from-scratch. (`AIM_GOVERNANCE_PASSWORD` unset *in the shell* is the second ✗; the run
-      resolves it from `.env.local`, so that one is a launch detail, not a design blocker.)
-      Recorded as re-measured because most parked blockers in this corpus turn out to have cleared —
-      this one has not, and saying so is worth as much as finding one that had.
+- [x] **The prereq gate passes.** BOTH ✗ items were resolved by the USER on 2026-07-22 and the card
+      says so further down its own STATE block: the template is **`fannijako/repo_template`**
+      (verified today: PUBLIC, `isTemplate: true`, wired into SCEN-031 at 4 sites by commit
+      `04a3c8e1`), and `AIM_GOVERNANCE_PASSWORD` is present in `.env.local`, which the forked runner
+      sources.
+      **⚠ I FIRST TICKED THIS THE OTHER WAY, WRONGLY, AND PUBLISHED IT.** I read the 2026-07-22 ✗,
+      ran `gh repo list Emasoft --json isTemplate` → **0**, and wrote *"the blocker is REAL and
+      still standing 25 days later"* into this box and into commit `4b704709`. Two errors, one
+      cause: I stopped reading the STATE block at the first ✗ and never reached the ▶ entry that
+      resolves it, and my instrument was scoped to the WRONG POPULATION — the resolution names a
+      THIRD-PARTY owner, so a search of `Emasoft` could only ever return 0 and that 0 read exactly
+      like a standing blocker. Corrected in `9b1e33c1`. The general form is the one this repo keeps
+      relearning: **a query scoped to the wrong population returns a confident, plausible number.**
 - [ ] **The critical-path blocker is in the pipeline.** `TRDD-4ALV5ISB` (idle workers never WAKE to
       process inbound AMP mandates) is what this card names as *"THE next harness-readiness
       blocker"*, and it sits at **`column: proposal`** — never approved, so it is not being worked

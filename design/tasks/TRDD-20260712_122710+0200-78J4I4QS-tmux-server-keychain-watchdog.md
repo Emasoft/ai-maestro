@@ -3,7 +3,7 @@ trdd-id: 78J4I4QS
 title: reliability — detect a keychain-blind tmux server before it silently takes the whole fleet down
 column: ai_review
 created: 2026-07-12T12:27:10+0200
-updated: 2026-08-16T01:23:51+0200
+updated: 2026-08-16T09:49:24+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 1
@@ -185,6 +185,22 @@ STATE block names — not criteria invented at closing time. Re-verified live 20
       call — but the fleet is currently HIBERNATED (3 tmux sessions, none an agent), so tonight it
       bounces nothing. Still not taken unasked: it is the owner's server and the restart also
       interrupts the rotator tick.
+
+      **✅ CLEARED 2026-08-16T09:49, USER-authorized — and `--update-env` was NOT enough, which is
+      the finding.** Ran it first as prescribed: the var SURVIVED (`ps eww -p 4737` still read
+      `=15000`). **The real source is a THIRD copy nobody had named: `~/.pm2/dump.pm2`**, the saved
+      process list, which carried `"AIM_INVARIANTS_WATCHDOG_INTERVAL_MS":"15000"`.
+      `--update-env` MERGES the config's env over the running one; it cannot DELETE a key the
+      config does not mention, so a phantom var is exactly the case it cannot fix.
+      **What actually cleared it:** `pm2 delete ai-maestro` → `pm2 start ecosystem.config.js` →
+      `pm2 save` (dump backed up to `/tmp/` first). Verified on the new process (pid 9409):
+      `AIM_INVARIANTS_WATCHDOG_INTERVAL_MS` **ABSENT**, `~/.pm2/dump.pm2` grep count **0**, and the
+      two INTENDED vars survived (`AIM_FLEET_MODEL_FALLBACK=1`, `AIM_FLEET_RECOVERY_FIRE=1`) — so
+      the sweep now runs at the code default 300 s instead of 15 s. Server healthy: full `[Startup]`
+      sequence at 09:48:31, `/api/sessions` answering 401 (the auth middleware, i.e. serving —
+      a dead server gives connection-refused).
+      **`ecosystem.config.js` was never the culprit:** its only match is the COMMENT at line 26
+      that cites this very variable as evidence pm2's cache was stale. It was right.
 
 ## Approval log
 

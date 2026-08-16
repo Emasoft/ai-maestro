@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:28:10+0200
+updated: 2026-08-16T19:30:24+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -606,6 +606,42 @@ prior NOT-VERIFIED to complies (finding `publish.py:606` invoking the exact gate
 the unknown decay into a pass — and their own first positive control was WRONG (grepped `publish`
 against a file containing `push`), so they re-controlled before crediting it. *A coordinator's
 convenient zero is no better than a worker's.*
+
+### THE HUB NEVER AUDITED ITSELF — and doing so found 167 violations of an unenforced MUST
+
+**A gap in the hub's own programme:** every plugin session was told to audit its own repo; nobody
+was assigned `ai-maestro`. Found only by running the sweep my own lesson prescribes (*"when you find
+one stale copy of a rule, sweep for the others"*) after the maintainer reported auditing their own
+stored prompts and finding them clean.
+
+**Measured in THIS repo, and the zero is positive-controlled:**
+
+| fact | measurement |
+|---|---|
+| archived cards total | **249** |
+| `column: complete` (NOT in the eligible set) | **167** |
+| `completed` / `cancelled` / `superseded` | 74 / 5 / 3 |
+| tool references to `3P-ZON-05` | **0** |
+| control — tool references to sibling `3P-ZON-11` | **8** (and `3P-AAA-01` ×10, `3P-TRDD-10` ×8) |
+
+`3P-ZON-05` is a **`MUST`**: *"only `completed | cancelled | superseded | published | live` may
+enter `archived/`"*. **67% of the archive violates it, and no tool checks it** — the instrument
+demonstrably resolves clause ids, so that 0 is real. `trddgrep validate` reports its usual single
+unrelated ERROR, because this clause was never wired.
+
+**Same defect the programmer-agent reported as their a2-C1 (4 cards that "never got the Archival
+protocol's complete→completed edit") — at 167.** So it is a third fleet-wide pattern, and the
+largest instance is the hub's own board.
+
+**NOT REPAIRED, and the restraint is the point.** Archived cards are FROZEN (IND base step 12);
+the repair is a per-card judgement; and **the last time I made a confident mass-archive ruling
+without evidence I mis-archived 8 cards** — a scripted sweep here would be that error at 167×.
+This is recorded as a finding for Phase 2, in the owning repo, which happens to be this one.
+
+**Two derived observations worth their own cards when Phase 2 opens:** (1) the hub repo needs a
+Phase-1 audit like every other member of the fleet; (2) a spec clause with a `MUST` and no
+enforcing tool is the *"unenforced rule produces a success, not an error"* shape the wiki already
+documents — worth a sweep of ALL `MUST` clauses for tool references, not just this one.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

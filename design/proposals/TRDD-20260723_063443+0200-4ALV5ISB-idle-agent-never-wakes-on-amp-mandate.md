@@ -3,7 +3,7 @@ trdd-id: 4ALV5ISB
 title: An idle agent never wakes to process an inbound AMP mandate — the fleet delegation chain breaks at the worker
 column: proposal
 created: 2026-07-23T06:34:43+0200
-updated: 2026-07-23T06:34:43+0200
+updated: 2026-08-16T11:00:24+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
@@ -22,10 +22,27 @@ external-refs:
 # Idle agent never wakes to process an inbound AMP mandate
 
 > **Canonical mechanism (2026-07-24):** tracked at **ai-maestro#51** (active idle-agent wake) and
-> implemented server-side by the terminal-continuity automaton's *idle-with-inbox wake* event —
+> ROUTED TO the terminal-continuity automaton's *idle-with-inbox wake* event —
 > [[TRDD-9DYUI97S]] under parent [[TRDD-5CIL7A07]]: the server detects an online-but-idle pane with a
 > pending AMP inbox and injects a turn-trigger so the agent drains it. The worker-side half (drain
 > the inbox and act on the mandate when woken) routes as a plugin issue (Flock C, [[TRDD-H4L3HHKX]]).
+>
+> **⚠ MEASURED 2026-08-16 — "implemented" is NOT true, and the word was doing real damage.** This
+> line read *"**implemented** server-side by …"*, which any triager reads as *handled*. It is not:
+>
+> | card | zone / column | boxes | implementation-commits |
+> |---|---|---|---|
+> | `TRDD-9DYUI97S` (the wake event itself) | archived / **superseded** | 0 of 1 | **none** |
+> | `TRDD-5CIL7A07` (its parent, the automaton) | tasks / `design` | **0 of 6** | **none** |
+> | `TRDD-H4L3HHKX` (the routing card only) | archived / complete | 4 of 4 | — |
+> | `Emasoft/ai-maestro#51` | — | — | **OPEN** |
+>
+> So the only thing that finished is the card that decided WHERE the work goes. The mechanism has
+> never been built, its own card is superseded with zero commits, and its parent sits unstarted.
+> `TRDD-B7G2R0SX` calls this defect *"THE next harness-readiness blocker"*, so the chain that is
+> actually stalled is **5CIL7A07 (0/6, `design`) → this proposal (awaiting MANAGER) → SCEN-031
+> passing → harness ready**. Reworded to ROUTED TO; the state table above is what makes the
+> rewording checkable rather than a matter of taste.
 
 ## Problem
 SCEN-031 re-run (2026-07-23): with the launch-args fix (TRDD-GZ1KOHNR) live, the MANAGER

@@ -1,12 +1,12 @@
 ---
 trdd-id: IGCSDTIU
 title: The tick-stalled alert judges our rotator tick by a stamp only the janitor's rotator writes
-column: ai_review
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T03:59:29+0200
-updated: 2026-08-16T01:14:19+0200
+updated: 2026-08-16T10:32:15+0200
 implementation-commits: [3e3199c0]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -156,3 +156,17 @@ rather than optional — silencing a false alarm must not silence the true one.
   authoring is EXEMPT per the approval defaults (category B). Recorded because the finding was
   verified first-hand — to the second — and a verified defect left only in prose or memory is
   knowledge nobody will ever act on.
+- 2026-08-16T10:32:15+0200 — COMPLETED by ai-maestro (reviewer, `ai_review → complete`;
+  `min-approval-requirement: none`, `release-via: none`, so the pipeline terminal is `complete`
+  and the transition is the reviewer's, not an escalation gate).
+  **Every box RE-VERIFIED at close rather than read off its tick** — the whole point of a
+  checklist gate is defeated if the closing pass trusts the marks:
+  - `tsc --noEmit` → **0 lines** (re-run this session);
+  - `tests/unit/oauth-rotator-supervisor.test.ts` → **29/29**, re-run at close;
+  - **the LIVE claim, independently:** the last `tick-stalled` in `logs/pm2-error.log` is
+    **2026-08-07 20:55:20**, against **1730** occurrences historically — so the alarm has been
+    silent for 9 days across many restarts, including two today (09:48 and 10:10). Silence here is
+    evidence and not merely absence, because the same log shows the alarm firing 1730 times before
+    the fix: the channel is demonstrably able to speak.
+  - gate: 6 of 6 boxes checked with the list non-empty, `npt: []` and `eht: []`, so both the
+    checklist gate and the flock gate pass.

@@ -154,12 +154,20 @@ describe('RefreshAllMarketplaces — the gates it keeps', () => {
 // ~1148 s; the janitor logged 84 / 1134 / 1254 / 1808 / 1815 s for it, so 2 of 5 crossed the
 // 1800 s cap, and the batch is all-or-nothing: a run killed at the cap discards EVERY result.
 //
-// NEUTER RUNS for this section (each restore verified by blob hash):
-//   4. delete the whole `if (foreignPid !== null)` block  → reds ONLY the two skip tests below.
+// NEUTER RUNS for this section — all OBSERVED at 20 tests, every restore verified by blob hash:
+//   4. s/if (foreignPid !== null) {/if (false) {/   (disarm the guard)   → 1 red / 19 green:
+//        SKIPS, spawning no refresh at all, when another process is already running one
+//      Note it reds ONLY that one: "proceeds normally" and "FAILS OPEN" both assert that the
+//      refresh RUNS, which a disarmed guard also produces. That asymmetry is expected, and it is
+//      why the skip test asserts `refreshIdx() === -1` rather than merely reading the result.
 //   5. s/words[i + 1] === 'marketplace' && words[i + 2] === 'update'/words.includes('marketplace')
-//      && words.includes('update')/  (drop consecutiveness) → reds the scattered-words test.
-//   6. `catch { return 999 }` in foreignMarketplaceRefreshPid (fail CLOSED) → reds the fail-open
-//      test, i.e. an unreadable `ps` would have silently stopped the lane forever.
+//      && words.includes('update')/  (drop consecutiveness)             → 1 red / 19 green:
+//        requires the three words CONSECUTIVE …
+//   6. `} catch { return -1 }` in foreignMarketplaceRefreshPid (fail CLOSED) → 1 red / 19 green:
+//        FAILS OPEN when `ps` itself is unusable …
+//      i.e. without it an unreadable `ps` silently stops the lane forever.
+//   9. s/if (pid === selfPid) continue/if (false) continue/             → 1 red / 19 green:
+//        never reports OUR OWN process, even when its argv carries the needle
 
 /** Real `ps -eo pid,command` shape: a header line, right-aligned pids, then the full argv. */
 const psHeader = '  PID COMMAND'
@@ -253,9 +261,16 @@ describe('RefreshAllMarketplaces — G02b skips rather than collides', () => {
 // `Command failed: claude plugin marketplace update\n` and nothing else: a defect that recurred
 // for ten days and left no cause behind, while `err.stdout` held the answer and was discarded.
 //
-// NEUTER RUNS:
-//   7. delete the `if (out) parts.push(...)` line       → reds the stdout test (and the wiring test).
-//   8. s/const timedOut = .../const timedOut = false/   → reds the TIMEOUT test only.
+// NEUTER RUNS — OBSERVED, every restore verified by blob hash:
+//   7. s/if (out) parts.push/if (false) parts.push/  (discard stdout again) → 3 red / 17 green:
+//        keeps stdout, because this CLI reports there and stderr is empty
+//        clamps from BOTH ends and marks the cut, never keeping only the tail
+//        is WIRED — a real pipeline failure carries the CLI output into result.error
+//      Three, because the clamping and the wiring both reach the CLI's output through this line —
+//      i.e. re-introducing the exact ten-day defect reds the helper AND the pipeline test.
+//   8. s/const timedOut = e.killed === true && typeof e.code !== 'number'/const timedOut = false/
+//                                                                        → 1 red / 19 green:
+//        names a TIMEOUT and its budget when node killed the process
 
 /** The error object node actually hands you — not a bare `new Error()`. */
 const execFileError = (over: Record<string, unknown>) =>

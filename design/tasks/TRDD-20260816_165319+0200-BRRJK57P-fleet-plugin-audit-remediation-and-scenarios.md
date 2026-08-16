@@ -41,9 +41,9 @@ finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A
 hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
 sessions and had to retract it.
 
-**4 sessions reported as of 18:56 (architect, assistant-role, CORE, maintainer); every CONFIRMED
-finding is hub-verified — see the ledger below.** Outstanding: architect axis 4, and every session
-that has not yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
+**5 sessions reported as of 18:58 (architect, assistant-role, CORE, maintainer, orchestrator);
+every CONFIRMED finding is hub-verified — see the ledger below.** Outstanding: architect axis 4,
+and every session that has not yet reported. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was
 correctly refused by three sessions; the hold is endorsed).
 
 **TWO TEMPLATE-WIDE DEFECTS have surfaced, and both were invisible from inside any single repo** —

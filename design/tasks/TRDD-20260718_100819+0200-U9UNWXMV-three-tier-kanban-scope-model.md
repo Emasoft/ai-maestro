@@ -3,13 +3,15 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-08-16T16:40:46+0200
+updated: 2026-08-16T17:46:11+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
 min-approval-requirement: user
 mandate: false
-approved: false
+approved: true
+approval-judge: user
+approval-datetime: 2026-07-18T10:08:19+0200
 relevant-rules: []
 labels: [governance, trdd, kanban, scope, three-tier, ind-base, dep-overlay, cross-repo]
 external-refs: []
@@ -195,3 +197,8 @@ USER: HOLD all daemon-mirror work until the janitor's consolidated reply. Backgr
   to implement: min-approval-requirement is `user` (governance change spanning the IRON/IND base), and
   the rule edits + the cross-repo janitor proposal await the USER's explicit go + the A1 confirmation.
   Authoring this design doc is the reversible plan step ("plan and build are separate").
+- 2026-08-16T17:46:11+0200 — `approved` corrected true (was stale `false`): the card's own STATE block
+  records "USER GAVE THE GO (2026-07-18): implement", and Phase 1a/1b already landed under that go
+  (`06d9f439`, `ab749309`). `approval-judge: user`, `approval-datetime` set to the card's own
+  `created:` timestamp (the only ISO datetime on record for that day's go — no finer-grained time is
+  recorded anywhere on the card).

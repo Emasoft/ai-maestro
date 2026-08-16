@@ -105,10 +105,12 @@ function takeFlag(list, name) {
   return [value, [...list.slice(0, i), ...list.slice(i + 2)]]
 }
 
-let designDirVal, limitVal, columnVal
+let designDirVal, limitVal, columnVal, minSeverityVal, ruleVal
 ;[designDirVal, rest] = takeFlag(rest, '--design-dir')
 ;[limitVal, rest] = takeFlag(rest, '--limit')
 ;[columnVal, rest] = takeFlag(rest, '--column')
+;[minSeverityVal, rest] = takeFlag(rest, '--min-severity')
+;[ruleVal, rest] = takeFlag(rest, '--rule')
 
 const designDir = path.resolve(designDirVal ?? path.join(process.cwd(), 'design'))
 const argv = rest
@@ -187,6 +189,34 @@ const droppedNote = (list, hint) =>
   limit > 0 && list.length > limit
     ? `  ${C.y(`… +${list.length - limit} more not shown`)} ${C.d(hint)}`
     : null
+
+// `--min-severity` / `--rule` — real filters for `validate`/`lint`/`doctor`, replacing the
+// flag that used to be typed and silently dropped (see the KNOWN_FLAGS comment above).
+//
+// FILTER AT THE PRINT SITE, not in `lib/trdd-doctor.ts::lintCorpus` — that function is the
+// one producer for both this CLI and the vitest suite's own non-vacuity assertions
+// (`scanned > 100`), and neither of those callers wants a pre-filtered result. Narrowing
+// what is SHOWN is this tool's job; narrowing what is FOUND would be a second, silent
+// question asked of the corpus.
+//
+// `--rule` is comma-separated rather than repeatable: `takeFlag` takes exactly one
+// occurrence of a name out of argv (see its own comment above on why flags are stripped
+// structurally), so a repeated `--rule` would silently keep only the LAST one — worse than
+// not supporting repetition at all. A comma list needs no second mechanism.
+const SEVERITY_RANK = { warn: 0, error: 1 }
+if (minSeverityVal !== undefined && !(minSeverityVal in SEVERITY_RANK)) {
+  console.error(`trddgrep: --min-severity takes warn|error, not ${JSON.stringify(minSeverityVal)}`)
+  process.exit(2)
+}
+const minSeverityRank = minSeverityVal === undefined ? SEVERITY_RANK.warn : SEVERITY_RANK[minSeverityVal]
+const ruleFilter = ruleVal === undefined ? null : new Set(ruleVal.split(',').map((s) => s.trim()).filter(Boolean))
+if (ruleFilter && ruleFilter.size === 0) {
+  console.error(`trddgrep: --rule needs at least one rule code`)
+  process.exit(2)
+}
+/** Findings this run is willing to SHOW — the corpus itself is never narrowed. */
+const filterFindings = (findings) =>
+  findings.filter((f) => SEVERITY_RANK[f.severity] >= minSeverityRank && (!ruleFilter || ruleFilter.has(f.rule)))
 
 // `env` is EXEMPT, and this is the one exemption that matters: it is the verb whose whole
 // job is to explain what this tool concluded about where it is running, so gating it on a
@@ -582,25 +612,34 @@ switch (cmd) {
       process.exit(2)
     }
     const strict = argv.includes('--strict')
+    // The exit code answers "did what was ASKED FOR turn up anything", not "is the whole
+    // corpus clean" — `--min-severity error` with zero errors present exits 0, same as a
+    // clean corpus, because from that query's point of view nothing was found. Recomputed
+    // from the FILTERED set for exactly that reason: the unfiltered `report.errors` would
+    // report exit 1 for a query that printed nothing, which is the silent-drop bug this
+    // whole flag exists to fix, wearing a different hat.
+    const shown = filterFindings(report.findings)
+    const shownErrors = shown.filter((f) => f.severity === 'error').length
+    const shownWarnings = shown.length - shownErrors
 
     if (cmd === 'validate') {
       // SEV ⇥ CODE ⇥ id ⇥ path ⇥ message. No colour: this is piped, not read.
-      for (const f of report.findings) {
+      for (const f of shown) {
         console.log([f.severity.toUpperCase(), f.rule, f.id, path.relative(process.cwd(), f.filePath), f.message].join('\t'))
       }
-      process.exit(report.errors > 0 || (strict && report.warnings > 0) ? 1 : 0)
+      process.exit(shownErrors > 0 || (strict && shownWarnings > 0) ? 1 : 0)
     }
 
-    if (report.findings.length === 0) {
-      console.log(C.g(`✓ ${report.scanned} TRDDs — corpus is clean`))
+    if (shown.length === 0) {
+      console.log(C.g(`✓ ${report.scanned} TRDDs — ${minSeverityVal || ruleFilter ? 'no findings match the filter' : 'corpus is clean'}`))
       process.exit(0)
     }
     const byRule = new Map()
-    for (const f of report.findings) {
+    for (const f of shown) {
       if (!byRule.has(f.rule)) byRule.set(f.rule, [])
       byRule.get(f.rule).push(f)
     }
-    console.log(C.b(`\n${report.scanned} scanned · ${C.r(`${report.errors} error`)} · ${C.y(`${report.warnings} warn`)}\n`))
+    console.log(C.b(`\n${report.scanned} scanned · ${C.r(`${shownErrors} error`)} · ${C.y(`${shownWarnings} warn`)}\n`))
     // Errors first, then by volume: a single ERROR outranks ninety warnings, because the
     // error is what a gate refuses on and the warnings are a migration chore.
     const order = [...byRule].sort((a, b) =>
@@ -613,7 +652,7 @@ switch (cmd) {
       if (fs_.length > 6) console.log(C.d(`      … and ${fs_.length - 6} more`))
       console.log()
     }
-    process.exit(report.errors > 0 || (strict && report.warnings > 0) ? 1 : 0)
+    process.exit(shownErrors > 0 || (strict && shownWarnings > 0) ? 1 : 0)
   }
 
   // ---- the INDEX's own health (TRDD-C4YJAUD9) ----
@@ -832,6 +871,8 @@ ${C.b('trddgrep')} — query AND validate the TRDD corpus (offline; no server)
   ${C.c('trddgrep lint')}             every finding, grouped by rule (errors first)
   ${C.c('trddgrep validate')}         the WRITE GATE — TAB rows: SEV⇥CODE⇥id⇥path⇥msg
   ${C.d('  … add --strict to either to fail on warnings too (exit 1)')}
+  ${C.d('  … --min-severity warn|error and --rule CODE[,CODE…] narrow what is SHOWN; exit')}
+  ${C.d('    reflects the shown set, so a filter matching nothing exits 0')}
   ${C.c('trddgrep fix')}              write the mechanically-derivable repairs (--dry-run first)
 
   ${C.c('trddgrep edit <id> --at-line N --expect X --replace Y')}

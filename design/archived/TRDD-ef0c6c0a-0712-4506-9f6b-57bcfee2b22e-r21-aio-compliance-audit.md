@@ -163,3 +163,7 @@ Out-of-scope follow-ups identified during migration (each is its own future TRDD
 ## Approval log
 
 - 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.
+- 2026-08-16T17:39:02+0200 — Audit (worker-3, colony pillar-run): `BODY-STATE-CLAIM` (WARN)
+  reviewed. The flagged body line ("Done — all 10 audit items migrated…") is a duplicate of, not
+  a contradiction of, `column: completed`. Not eligible for the narrow falsely-contradicts
+  exemption, so not edited under freeze.

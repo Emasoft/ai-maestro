@@ -238,3 +238,11 @@ Todo item `#208`. UUID `7123d51a-9da8-4886-a000-af6359f08e1e` links back.
 ## Approval log
 
 - 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.
+- 2026-08-16T17:39:02+0200 — Audit (worker-3, colony pillar-run): `BODY-STATE-CLAIM` (ERROR)
+  reviewed. Verified TRUE, not false: `git log --follow` on this file shows commit `11516df4
+  feat(subconscious): config-change tracker (TRDD-7123d51a, #250)`, and `startConfigChangeTracker`/
+  `configTrackerInterval` are live in `lib/agent.ts` today. The body's "Implemented 2026-04-20…"
+  claim is consistent with `column: completed`; it is a duplicate, not a contradiction. Not
+  eligible for the narrow falsely-contradicts exemption, so not edited under freeze. (This is a
+  v1-frontmatter-only card with no `implementation-commits:` field — that gap is real but is a
+  META-MISSING class finding, out of this unit's scope.)

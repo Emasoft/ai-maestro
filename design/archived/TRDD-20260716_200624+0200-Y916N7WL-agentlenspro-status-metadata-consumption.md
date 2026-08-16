@@ -96,3 +96,9 @@ that the consumed surface can never carry a credential.
 
 - 2026-07-16T20:06:24+0200 — Tier-0 self-mandate (derived NPT of [[KCRMSNL7]], observe-only,
   in-scope dev). Authored directly as `planned`.
+- 2026-08-16T17:39:02+0200 — Audit (worker-3, colony pillar-run): `MANDATE-UNKNOWN-AUTHORITY`
+  reviewed. `mandated-by: ai-maestro` at `min-approval-requirement: none` is this card's own
+  Tier-0 self-mandate (entry above), i.e. the value the ladder grammar spells `self`. Frontmatter
+  is frozen on a terminal card (rule 12 — only `updated:` may change), so not corrected here; this
+  line records the diagnosis for whoever widens the validator's ladder to recognize the
+  agent-session-name spelling.

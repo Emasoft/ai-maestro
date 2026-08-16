@@ -6,7 +6,7 @@ project-id: ai-maestro
 repo: Emasoft/ai-maestro
 column: todo
 created: 2026-07-30T13:09:14+0200
-updated: 2026-08-16T16:51:06+0200
+updated: 2026-08-16T17:46:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -15,6 +15,8 @@ min-approval-requirement: manager
 mandate: true
 mandated-by: user
 approved: true
+approval-judge: user
+approval-datetime: 2026-07-31T17:08:43+0200
 derived: true
 derived-kind: eht
 parent-trdd: SPS63XHA

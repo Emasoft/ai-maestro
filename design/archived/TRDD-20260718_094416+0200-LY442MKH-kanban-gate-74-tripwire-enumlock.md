@@ -122,3 +122,9 @@ USER's pick; then implement as a follow-up (its own commit, tests, verify).
   Self-mandate: Tier-0 regression test on the server's own security gate, MANAGER-REQUIRED in
   ai-maestro#74, no product/governance change. The enum hard-lock's mechanism is USER-reserved and is
   NOT executed under this mandate — only surfaced. Pre-approved: issuer authority >= required approver.
+- 2026-08-16T17:39:02+0200 — Audit (worker-3, colony pillar-run): `MANDATE-UNKNOWN-AUTHORITY`
+  reviewed. `mandated-by: ai-maestro` at `min-approval-requirement: none` is this card's own
+  Tier-0 self-mandate (entry above), i.e. the value the ladder grammar spells `self`. Frontmatter
+  is frozen on a terminal card (rule 12 — only `updated:` may change), so not corrected here; this
+  line records the diagnosis for whoever widens the validator's ladder to recognize the
+  agent-session-name spelling.

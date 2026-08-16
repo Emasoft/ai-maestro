@@ -3,7 +3,7 @@ trdd-id: ZUAFN6PB
 title: Central fleet re-sweep for postable-body handles with the context-scoped classifier
 column: backburner
 created: 2026-08-08T16:39:23+0200
-updated: 2026-08-08T16:39:23+0200
+updated: 2026-08-16T17:46:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -12,6 +12,8 @@ min-approval-requirement: none
 mandate: true
 mandated-by: self
 approved: true
+approval-judge: ai-maestro
+approval-datetime: 2026-08-08T16:39:23+0200
 priority: 2
 severity: medium
 effort: small
@@ -54,3 +56,9 @@ literal exemption, both directions pinned); AMOA's Python twin in v1.13.4.
 - [ ] Every fleet role-plugin repo swept with the context-scoped classifier
 - [ ] Each finding verified against the GitHub API before relaying
 - [ ] Per-repo relays sent (issue or live-session message); zero cross-tree edits
+
+## Approval log
+
+- 2026-08-08T16:39:23+0200 — MANDATE, `mandated-by: self` (`min-approval-requirement: none`,
+  Tier 0 — in-scope audit). Pre-approved: issuer authority >= required approver.
+  `approval-judge: ai-maestro`, `approval-datetime` = this card's own `created:` timestamp.

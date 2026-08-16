@@ -127,3 +127,9 @@ is unchanged.
   cross-project reach. Surfaced by [[TRDD-4P1M8I18]] Phase 2b; the injection half is already closed
   (`1fdc3603`), this handles the remaining behavior parity. Pre-approved: issuer authority >= required
   approver. No approval request was sent.
+- 2026-08-16T17:39:02+0200 — Audit (worker-3, colony pillar-run): `MANDATE-UNKNOWN-AUTHORITY`
+  reviewed. `mandated-by: ai-maestro` at `min-approval-requirement: none` is this card's own
+  Tier-0 self-mandate (entry above), i.e. the value the ladder grammar spells `self`. Frontmatter
+  is frozen on a terminal card (rule 12 — only `updated:` may change), so not corrected here; this
+  line records the diagnosis for whoever widens the validator's ladder to recognize the
+  agent-session-name spelling.

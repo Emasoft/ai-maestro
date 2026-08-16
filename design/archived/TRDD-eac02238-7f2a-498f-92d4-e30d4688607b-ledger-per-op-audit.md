@@ -181,3 +181,10 @@ Estimated LOC: ~200 added + ~50 modified.
 ## 12. Tracked in session todo list
 
 Todo item #206 (this task, phase 0.A) created 2026-04-19. Will be reused when implementation begins. For the TRDD-writing phase, UUID `eac02238-7f2a-498f-92d4-e30d4688607b` is the link.
+
+## Approval log
+
+- 2026-08-16T17:39:02+0200 — Audit (worker-3, colony pillar-run): `BODY-STATE-CLAIM` (WARN)
+  reviewed. The flagged body line ("Completed — shipped under follow-up work…") is a duplicate
+  of, not a contradiction of, `column: complete`. Not eligible for the narrow falsely-contradicts
+  exemption, so not edited under freeze.

@@ -174,3 +174,9 @@ be shown green, the route does not ship.
 - 2026-07-17T18:17:58+0200 — MANDATE issued by ai-maestro (min-approval-requirement: none).
   Self-mandate: Tier-0 frozen-layer surface within the server's own scope, reversible, self-only.
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-16T17:39:02+0200 — Audit (worker-3, colony pillar-run): `MANDATE-UNKNOWN-AUTHORITY`
+  reviewed. `mandated-by: ai-maestro` at `min-approval-requirement: none` is this card's own
+  Tier-0 self-mandate (entry above), i.e. the value the ladder grammar spells `self`. Frontmatter
+  is frozen on a terminal card (rule 12 — only `updated:` may change), so not corrected here; this
+  line records the diagnosis for whoever widens the validator's ladder to recognize the
+  agent-session-name spelling.

@@ -146,3 +146,9 @@ work it explicitly disowned — an open box for another card's scope is a perman
   **One finding worth carrying forward:** the writer half of the bridge was pinned by NOTHING —
   deleting `clearBootRestore()` from the `finally` left all 5051 tests green — while the reader
   half had 9 tests. Full coverage on one side is what made the other side's absence invisible.
+- 2026-08-16T17:39:02+0200 — Audit (worker-3, colony pillar-run): `MANDATE-UNKNOWN-AUTHORITY`
+  reviewed. `mandated-by: ai-maestro` at `min-approval-requirement: none` is this card's own
+  Tier-0 self-mandate (see the entry above — "Authored directly as `planned`"), i.e. the value the
+  ladder grammar spells `self`. Frontmatter is frozen on a terminal card (rule 12 — only `updated:`
+  may change), so the field is NOT corrected here; this line records the diagnosis for whoever
+  widens the validator's ladder to recognize the agent-session-name spelling.

@@ -294,3 +294,44 @@ describe('every pillar CLI refuses an unknown option rather than ignoring it', (
     expect(r.status).toBe(0)
   })
 })
+
+/**
+ * TRDD-D7KVF4HQ (Unit 1 follow-up) — `--min-severity` / `--rule` are now REAL filters,
+ * not the silently-dropped flag pinned above. Run against this repo's own `design/`
+ * corpus (no `--design-dir` fixture — same as the positive control two tests up), whose
+ * census was measured before this change: 265 findings, exactly ONE error
+ * (BODY-STATE-CLAIM / 7123D51A) and exactly THREE STALE-COLUMN warnings.
+ *
+ * A fixture corpus would be safer against drift, but the whole point is to pin the LIVE
+ * numbers the ledger cites — a fixture cannot fail if a future card silently breaks the
+ * filter on the real thing.
+ */
+describe('trddgrep validate — --min-severity and --rule actually filter', () => {
+  it('--min-severity error prints ONLY the one ERROR line, not all 265', () => {
+    const r = runCli('trddgrep.mjs', ['validate', '--min-severity', 'error'])
+    const lines = r.stdout.trim().split('\n')
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatch(/^ERROR\tBODY-STATE-CLAIM\t7123D51A\t/)
+    expect(r.status).toBe(1)
+  })
+
+  it('--rule STALE-COLUMN prints exactly the 3 STALE-COLUMN findings and exits 0 (no error among them)', () => {
+    const r = runCli('trddgrep.mjs', ['validate', '--rule', 'STALE-COLUMN'])
+    const lines = r.stdout.trim().split('\n')
+    expect(lines).toHaveLength(3)
+    for (const line of lines) expect(line).toMatch(/^WARN\tSTALE-COLUMN\t/)
+    expect(r.status).toBe(0)
+  })
+
+  it('a filter matching nothing exits 0, not 1 — the exit reflects what was SHOWN', () => {
+    const r = runCli('trddgrep.mjs', ['validate', '--rule', 'NO-SUCH-RULE-EVER'])
+    expect(r.stdout.trim()).toBe('')
+    expect(r.status).toBe(0)
+  })
+
+  it('--min-severity rejects a bad value with exit 2, not a silent no-op', () => {
+    const r = runCli('trddgrep.mjs', ['validate', '--min-severity', 'critical'])
+    expect(r.status).toBe(2)
+    expect(r.stderr).toMatch(/--min-severity takes warn\|error/)
+  })
+})

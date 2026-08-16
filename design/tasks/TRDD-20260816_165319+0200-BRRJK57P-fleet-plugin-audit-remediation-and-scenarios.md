@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T19:43:30+0200
+updated: 2026-08-16T19:45:48+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -696,6 +696,15 @@ instrument.
 NOT filed by either of us (the janitor's repo, its owner's call): the detector fires every 600 s, so
 it is ALREADY taking the two samples it needs and discarding the earlier one.** Retain the previous
 `(time, etime)` per pid and difference. No new data source, no dependency, no config.
+
+**WHY IT SETTLES, in the reporter's words — a better argument than five agreeing numbers:** the
+series now runs to **five intervals, three samplers, windows from 20 s to 61 min** (121.5 / 142.9 /
+147.2 / 110.7 / 105.0), all above a core. **"Agreement across three orders of magnitude of window
+length settles it, because a windowing artifact IS the window."** And they declined the credit
+correctly: differencing two counters is the ordinary way to measure a rate — *"it looked like an
+insight only because four of us spent an evening reasoning about averages instead of measuring
+one."* **So the durable lesson is not the formula: when several instruments disagree, the question
+is almost always "over what window", and the fix is to pick a quantity whose window you CONTROL.**
 
 **Both caveats stand, and they pull in opposite directions — keep both:** sustained-and-rising is
 NOT illegitimate (a dev server under real load looks exactly like this; what earns a human glance is

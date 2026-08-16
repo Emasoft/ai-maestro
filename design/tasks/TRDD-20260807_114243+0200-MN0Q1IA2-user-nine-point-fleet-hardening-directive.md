@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-16T10:20:38+0200
+updated: 2026-08-16T10:27:00+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -319,7 +319,12 @@ model-fallback lane was 5 modules / 54 tests / 19 neuters), and starting it at a
 have it compacted mid-build. The finding above IS the deliverable: it specifies the build and
 forecloses the dangerous version of it.
 
-## ⏳ 8. Ledger records EVERY change to `~/.claude/settings.json` — NOT STARTED
+## ✅ 8. Ledger records EVERY change to `~/.claude/settings.json` — DONE `bbd18e3b` `816a582c` `4b1811ff`
+
+**Verified live 2026-08-16 (see the acceptance box for the full evidence): armed 28 dirs at
+10:10:12, 29 signed entries 08-07 → 08-15, chain boot-verified at 10:09:54, 0 audit gaps, 34/34
+tests.** The heading below said NOT STARTED for nine days while three commits sat behind it — the
+design notes that follow are the record of how it was built, not a plan.
 
 Including changes NOT made by the server or its agents ⇒ this must be FILE monitoring (watch +
 hash), not call-site instrumentation. Existing ledger surfaces: `lib/signed-ledger.ts`,
@@ -328,8 +333,13 @@ Relevant: **#105** (adopt `safe_config_edit` for every settings.json mutation).
 **Known live hazard this would have caught:** a test once rewrote the USER's real settings.json
 (TRDD-PE54D95Q's top warning).
 
-## ⏳ 9. Ledger monitors `settings.json` + `settings.local.json` in every workdir and every
-`~/.claude/projects/` entry — NOT STARTED
+## ✅ 9. Ledger monitors `settings.json` + `settings.local.json` in every workdir and every
+`~/.claude/projects/` entry — DONE, same three commits
+
+**Measured coverage 2026-08-16: 28 watch dirs = `~/.claude` (1) + 12 agent workdirs + 15 decoded
+project cwds.** The rest carry no settings file at all; discovery emits a target only where one
+exists, and a file created later is picked up by the 5-minute re-scan (`DEFAULT_RESCAN_MS`). Full
+evidence, and the probe bug that first reported a false total miss, are on the acceptance box.
 
 Superset of (8). ~~Note the corpus size before designing: `~/.claude/projects/` holds **172+**
 project dirs, so a naive per-file watcher is a descriptor-exhaustion risk.~~

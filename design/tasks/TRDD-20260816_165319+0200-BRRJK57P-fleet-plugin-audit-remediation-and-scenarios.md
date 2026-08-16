@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T18:54:04+0200
+updated: 2026-08-16T18:56:22+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -249,6 +249,42 @@ as the `$TMPDIR` depth-4 case in the lessons file.
 in CORE. For the other 11 repos the hub verified the SHAPE (a `git_with_retry` push with
 `capture_output=False`, alongside a `cpv_network_resilience.py` carrying the `if not stderr` guard).
 Each owning session re-derives its own before it becomes a card.
+
+### FLEET-WIDE #2 — the release tool cannot satisfy its project's own GOLDEN rule, in 21 of 22 repos
+
+Raised by ai-maestro-assistant-role-agent as A2-C2 and swept by the hub. `publish.py:1916` runs
+`run(["git", "commit", "-m", expected_subject], cwd=root)` — subject only. PRRD **G1.1** (that repo's
+`design/requirements/PRRD.md`) says commit messages **MUST** carry an `Agent: <plugin-slug>`
+trailer. GOLDEN means user-set and immutable to MANAGER — so the release tool structurally cannot
+comply, and their measurement shows exactly that signature: **28 of 40 recent commits carry the
+trailer, and the 12 that do not are dominated by `chore: bump version to X`** — the tool's own
+commits, not hand-written ones. Not discipline drift; a tool that cannot obey.
+
+Hub sweep over the same 22 copies: **21 emit ZERO `Agent:` trailer. Exactly one implements it** —
+`ai-maestro-chief-of-staff/scripts/publish.py:208`, via
+`git interpret-trailers --trailer "Agent: ai-maestro-chief-of-staff"`. **That is the reference
+implementation to port**, with the wrinkle the assistant-role session already identified: COS
+hardcodes its slug, and canon cannot — it must derive it, and it already computes exactly that
+value for the dependency tag (`_plugin_name(root)`).
+
+Two template-wide findings now, both invisible from inside any single repo, both found by a session
+that had correctly verified its own copy end-to-end and stopped at its own tree boundary. **That
+boundary is the hub's job, and it is the argument for the sweep being routine rather than clever.**
+
+### The distribution defect, restated by CORE better than the hub had it
+
+CORE's own words, kept because they name a failure mode no control catches: *"a grep returning 0 in
+a repo that does not own the document is not evidence about the document. The needle was fine, the
+repo was simply the wrong haystack."* Both sessions kept their measurement (`grep tag-protect` → 0,
+true) and changed the CLAIM from "this repo deviates" to "the ratified set is not discoverable from
+this repo". Two sessions reaching it independently within an hour is the evidence that the
+distribution gap is real.
+
+### Sequencing consequence flagged by CORE
+
+CORE has an unpushed docs commit that can only reach the remote through `publish.py`. **Every
+release cut before the canonical-pipeline card lands runs its final atomic push with zero retries.**
+That is the cost of the wait, stated so whoever sequences Phase 2 can weigh it.
 
 ### Cross-finding worth keeping (raised by the architect, endorsed)
 

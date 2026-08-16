@@ -1,18 +1,18 @@
 ---
 trdd-id: 36RGLVYH
-title: 167 archived cards sit at a column the eligible set does not admit and no tool enforces the clause
+title: The archive-eligible clause contradicts itself and the corpus split 168 to 74 along it
 column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-16T20:37:04+0200
+updated: 2026-08-16T21:52:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
 task-type: docs
-min-approval-requirement: none
-mandate: true
+min-approval-requirement: manager
+mandate: false
 mandated-by: self
 approved: true
 approval-judge: ai-maestro-hub-session
@@ -45,6 +45,59 @@ than a dead instrument.
 Broadened, the picture is larger than one clause: **80 clauses declared, 14 referenced, 66
 unreferenced — 27 of those `MUST`.** So this is one instance of a general condition, not an isolated
 lapse.
+
+## INVESTIGATION 2026-08-16 — it is NOT 167 violations. The clause contradicts ITSELF.
+
+Track 1 said *enforcement first*. Reading `3P-ZON-05` before encoding it — the discipline that
+exists precisely for this — found that **the clause cannot be encoded as written.**
+
+```
+3P-ZON-05 … only `completed | cancelled | superseded | published | live` may enter archived/.
+          … An absent `release-via:` defaults to `none` (terminal `complete`).
+```
+
+**The admitted set says `completed`. The next sentence, inside the same clause, says the
+`release-via: none` terminal is `complete`.** Two different strings, four lines apart, and a machine
+check must pick one.
+
+It is not a typo — **two vocabularies genuinely coexist across the rule corpus**:
+
+| vocabulary | where | spelling |
+|---|---|---|
+| the ratified **17-column pipeline** | `universal-kanban.md` | `… → **complete** → publish → published → deploy → live` |
+| the **folder-lifecycle** terminals | `trdd-design-tasks.md:109`, this clause's set | `proposal, planned, refused, cancelled, **completed**, superseded` |
+
+**Neither document states the mapping.** A card finishing its pipeline reaches `complete`; the
+archive admits `completed`; nowhere is it written that archival rewrites one to the other. The
+reader has to infer it.
+
+**The corpus shows exactly that split — and it is not 167 to 0:**
+
+```
+168  column: complete        <- including one I archived TONIGHT, hours after filing this card
+ 74  column: completed
+  5  column: cancelled
+  3  column: superseded
+```
+
+**74 cards used the admitted spelling; 168 used the pipeline spelling.** That is not mass
+non-compliance, it is a corpus split down an ambiguity — and it explains the finding this card was
+built on. **No tool references `3P-ZON-05` because the clause disagrees with itself**, so there is
+nothing coherent to encode. The zero was a symptom, not the disease.
+
+**Had I built track 1's check from the admitted set, it would have reddened 168 frozen cards** —
+against a spelling the *same clause* endorses one sentence later. The wall of warnings this card
+warned about, produced by this card's own plan.
+
+**REVISED ACTION, and it is no longer mine to take.** The fix is not a linter, it is a **ruling**:
+which spelling is canonical at archival, and does archival rewrite `complete` → `completed`? That
+is a governance-spec edit — the D3 floor puts a spec/governance change at **`manager`**, not
+`none` — so this card stops at the finding and the question. A check can be written the moment the
+answer exists, and not before; encoding either spelling now would silently ratify one by
+implementation.
+
+**Not repaired, and the frozen cards stay frozen** — including my own `5TELESBL` from tonight, whose
+spelling is precisely what is in question.
 
 ## Root cause
 

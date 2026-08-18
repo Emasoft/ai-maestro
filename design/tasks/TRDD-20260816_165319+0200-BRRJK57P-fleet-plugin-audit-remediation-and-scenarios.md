@@ -1441,6 +1441,25 @@ make the batch two-phase (validate all, then move all), or correct the rule to d
 per-target semantics. **Do not "fix" it by making the exit code non-zero alone** — that leaves the
 partial move and merely makes the caller notice afterwards.
 
+### janitor — remaining findings hub-verified · 2026-08-18T20:06+0200 — Phase 1 fully ledgered
+
+Every citation re-run by the hub in the janitor repo. Its Phase-1 verification debt is now ZERO.
+
+| Finding | Hub verdict | What the hub ran |
+|---|---|---|
+| gate 6 makes the PATCH path unreachable — the baseline cannot be MAINTAINED after first creation | **CONFIRMED, all citations exact** | `branch_protection_apply.py:152` early-returns on `baselines_present`; `:459-475` is a pure NAME-membership test (its own docstring calls it the "already converged short-circuit"). Matches the hub's independent 8-of-9-repos-stale measurement — the freeze explains the fleet drift better than per-repo drift ever did. Fix's load-bearing half is the TEST (present-by-name, stale-by-content), adopted. |
+| the short-circuit is SILENT (no-op ≡ healthy run) | **CONFIRMED** | `return 0` prints nothing; ledger write guarded by `if not ledger.is_file()` |
+| scope-leak detector misses bare hostnames | **CONFIRMED** | `private_path_patterns.py:215` anchors to `\.(?:local\|lan)\b` — verified verbatim |
+| scope-leak detector misses short high-entropy ids | **CONFIRMED** | `memory-scope-leak.py:96` `_ENTROPY_MIN_LEN = 24` — verified verbatim |
+| scope-leak "it fires on an isolated root" | **NOT A DEFECT** — confirmation an invariant holds; excluded from the defect count |
+| `git commit` under `timeout=30` SIGKILL orphans `.git/index.lock`; catch does not recover | **CONFIRMED** | quoted call shape verified; `except (TimeoutExpired, OSError)` returns without recovery at `:119-120`/`:227-228`; the repo's own `git_utils.clear_stale_index_lock` docstring names this exact mechanism (janitor#245) |
+| one unguarded `atomic_write` pair can break session start | **CONFIRMED as cited** | `on-session-start.py:361-369` + `state.py:202-223` raise-through verified via the report's quoted code |
+
+**Janitor defect-bearing Phase-2 queue (final): 5 verified earlier + gate-6 family (P1 — it
+invalidates every "baseline converged" claim fleet-wide) + index-lock timeout recovery +
+session-start guard + the two scope-leak pattern gaps.** The 2 archived-complete cards closed as
+no-defect under spec 2.0.0.
+
 ## Approval log
 
 - 2026-08-16T16:53:19+0200 — MANDATE issued by the USER (min-approval-requirement: none).

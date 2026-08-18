@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T23:37:03+0200
+updated: 2026-08-18T23:39:31+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1481,6 +1481,24 @@ Every citation re-run by the hub in the janitor repo. Its Phase-1 verification d
 invalidates every "baseline converged" claim fleet-wide) + index-lock timeout recovery +
 session-start guard + the two scope-leak pattern gaps.** The 2 archived-complete cards closed as
 no-defect under spec 2.0.0.
+
+### Integrator Phase-2 batch 1 — and two ledger-grade contributions · 2026-08-18T23:39:31+0200
+
+5 cards complete through the full flow, publish deferred until its last card lands (one release).
+Two contributions adopted fleet-wide, relayed to the two sessions still mid-fix (CPV, janitor):
+
+1. **The corroboration trap in its purest form — its ai_review refuted ITS OWN fix.**
+   `gh pr view --json commits` is CHRONOLOGICAL oldest-first (verified live on react#37143 +
+   vscode#200000). The gate's BEHAVIOR was always right; only its COMMENT was wrong, and the fix
+   inverted correct behavior on the comment's premise — four artifacts (comment → audit worker →
+   card → test) sharing ONE unverified premise, with synthetic test inputs derived from the
+   premise "proving" it. **Standing rule: verify the INPUT SHAPE against the REAL producer before
+   any fix built on execution-over-synthetic-inputs.**
+2. **The worker-freeze re-brief that WORKS, measured**: its 4th frozen-at-report-write worker
+   (297 KB transcript, 2-line stub, 3 h) had survived an explicit write-incrementally brief; the
+   re-brief that finished in 117 s put APPEND-AFTER-EVERY-ANGLE as the PRIME DIRECTIVE ABOVE the
+   task itself. Placement, not presence, is what the contract needed — upgrade for the
+   worker-liveness lesson family.
 
 ## Approval log
 

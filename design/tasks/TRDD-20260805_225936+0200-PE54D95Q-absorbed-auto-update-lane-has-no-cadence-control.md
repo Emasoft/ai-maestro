@@ -5,8 +5,8 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-18T23:48:55+0200
-implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41]
+updated: 2026-08-19T00:19:53+0200
+implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41, 5796ef6a]
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -176,6 +176,32 @@ sites, and the repo's `guardRealUserSettings` tripwire — which was OPT-IN and 
 385** suites — now runs from `vitest.config` `setupFiles` for all 385. Proven to fire, not
 assumed (a probe appending one byte reds with `MODIFIED it (51541 → 51542 bytes)`; it is parked
 in `tests_dev/`). Any future step here takes its path as a parameter, never a default.
+
+### 2026-08-19 00:19 — THE AC6 PAIR LANDED. `5796ef6a` (server side complete; janitor side + deploy remain)
+
+The loop-removal + un-claim shipped as ONE commit, exactly as the 23:45 entry required:
+step 3 (the ~80-spawn per-plugin loop) deleted from `runAbsorbedDutyTickBody`;
+`user-plugins-update` removed from `ABSORBED_CHORES` (so the liveness beat stops publishing the
+claim); the now-dead `readers` seam removed from `AbsorbedDutyDeps` end-to-end (a body that never
+reads the plugin list cannot regrow the loop silently); comments updated at all 5 prose sites;
+`docs/claimed-chores-contract.md` row marked un-claimed. Verified: 4 test files / 67 green,
+`tsc --noEmit` 0 lines. NEUTER A (run 00:15, then reverted, tree clean vs commit): re-adding the
+name to `ABSORBED_CHORES` reds exactly `server-liveness.test.ts > publishes absorbed_chores…`
+(1 red / 39 green) — the claim set is pinned by a literal list, not by the constant.
+
+**REMAINING, in order:**
+1. **Janitor side (their repo — message sent to the janitor session):** drop
+   `user-plugins-update` from `harness_backend.SERVER_ABSORBED_TASKS` + reclassify the §9 row.
+   Until their release lands, a server boot would publish no claim while their static roster
+   still lists it — their daemon reads the LIVENESS BEAT per the contract, so expected effect is
+   janitor resumes the chore on first beat without the claim; confirm on their reply.
+2. **Deploy gate (USER's call — server start is deliberately not ours to run):**
+   `bash scripts/with-node.sh yarn build` + `pm2 restart ai-maestro` (services/*.ts is BUNDLED).
+3. **Then measure the still-open box:** per-plugin `claude plugin update` invocations per fire
+   drop 78 → 0 (only the janitor self-update row remains) — read `lastRunSummary` clustered by
+   >5 min gaps, never by exact `at`.
+4. Optional NEUTER B (not yet run): re-add union entry + `stampChoreRun('user-plugins-update')`
+   → predict the stamp-absence line in `auto-update-absorbed-duty.test.ts` reds.
 
 ### 2026-08-18 23:45 — AC6'S EVIDENCE GATE HAS MOVED, decisively on one half
 

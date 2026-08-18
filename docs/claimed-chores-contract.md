@@ -19,7 +19,7 @@ Ratified server-side 2026-08-18 under the USER's direct delegation to the hub se
 | `marketplace-refresh` | `~/.claude/janitor-control/marketplace-refresh.last-run.ts` | 3 600 s | 10 800 s |
 | `user-plugins-update` | `~/.claude/janitor-control/user-plugins-update.last-run.ts` | 3 600 s | 10 800 s |
 | `version-update` | `~/.claude/janitor-control/version-update.last-run.ts` | 21 600 s | 64 800 s |
-| `github-config-audit` | `~/.claude/janitor-control/github-config-audit.last-run.ts` | 14 400 s (4 h, server-declared) | 14 400 s via `claim-bounds.json` (else `max(3×c, c+600)` over the janitor roster value) |
+| `github-config-audit` | `~/.claude/janitor-control/github-config-audit.last-run.ts` | server executes at 14 400 s (4 h) | **64 800 s — the janitor roster default stands.** The server's 14 400 s declaration is BELOW it and widen-only IGNORES a narrowing by design (janitor e630a35c §9.4 note); a faster bound is a janitor-default change to REQUEST, not a declaration to write. *(Corrected 2026-08-18 — the first version of this row recorded the declaration as effective.)* |
 
 ## §9.2 executor-declared bounds — accepted
 

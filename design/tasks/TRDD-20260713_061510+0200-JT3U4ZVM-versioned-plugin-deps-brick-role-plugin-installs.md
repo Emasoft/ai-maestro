@@ -1,9 +1,10 @@
 ---
 trdd-id: JT3U4ZVM
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
-column: ai_review
+column: blocked
+pre-block-column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-08-16T10:42:05+0200
+updated: 2026-08-18T20:19:21+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -23,7 +24,7 @@ derived: false
 parent-trdd: null
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [9Z2P2SDA]
 relevant-rules: []
 release-via: none
 delivery: cross-repo-issues
@@ -271,6 +272,16 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
 - 2026-07-13T06:15:10+0200 — **MANDATE** (Tier 0 authoring: an investigation TRDD in this
   repo's own design corpus; the code fix is delivered as issues on the plugin repos, per
   the cross-project rule). Root cause established empirically before authoring.
+- 2026-08-18T20:19:21+0200 — **ai_review by the hub: PASS for all delivered work; card →
+  `blocked` on TRDD-9Z2P2SDA** (pre-block-column: ai_review). Re-measured live before ruling:
+  PR ai-maestro-plugin#25 is CLOSED unmerged yet six sampled role-plugin repos carry 12–33
+  prefixed tags each — the durability landed via publish.py (v2.9.0 rebase), exactly as the
+  boxes record, and the maintainer's v1.13.9 release pushed its resolver tag atomically live
+  today. The single open box is a live-server dashboard observation (G15/G16 `installed`),
+  impossible while the server is down (curl 000 today); it is now owned by Phase-3 scenario
+  card TRDD-9Z2P2SDA, whose run ticks it and unblocks this card. Not sent back to dev —
+  nothing to rework; not completed — the checklist gate forbids a terminal column with an
+  unchecked box.
 
 ## Acceptance
 

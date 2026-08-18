@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 1.7.0
+spec-version: 2.0.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-08-05T17:34:56+0200
+updated: 2026-08-18T19:53:29+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -294,10 +294,20 @@ be approvable, and an explicit invitation to re-propose. A bare "denied" is malp
 ruling is correct, because the proposer cannot read the approver's mind and will tear out the
 dependent work instead of fixing the named defect.
 
-`3P-ZON-05` **archive-eligible-set** — `MUST`: only `completed | cancelled | superseded | published
-| live` may enter `archived/`. `published` and `live` archive **AS THEMSELVES** — rewriting either
-to `completed` on the way in destroys the fact that it SHIPPED, which is the one fact an archive
-exists to preserve. An absent `release-via:` defaults to `none` (terminal `complete`). Archival
+`3P-ZON-05` **archive-eligible-set** — `MUST`: only `complete | completed | cancelled | superseded
+| published | live` may enter `archived/`. **Every terminal column archives AS ITSELF** — no value
+is rewritten on the way in. The rule's own original rationale decides this: `published`/`live` were
+already exempt from renaming because a rewrite "destroys the fact that it SHIPPED", and the same
+argument covers `complete` — the rename `complete → completed` carries ZERO information (the zone
+is already encoded by the folder, and the `archived:` triple-consistency invariant beside
+3P-ZON-12 holds with the enlarged set), while being a dual-write that was MEASURED drifting: 232 of 579 fleet archived cards
+sat at `complete` across 8 repos on 2026-08-18, against 74 at `completed`, with 0 tool references
+enforcing the old set (TRDD-36RGLVYH). `completed` remains legal — it is the folder-lifecycle
+overlay value and 74 historical cards carry it — but archival `MUST NOT` rename into it; the
+232 pre-amendment cards are conformant under this clause as amended, untouched, which is the only
+remediation compatible with the terminal freeze (3P-ZON-07). *(Amended 2026-08-18 under direct USER
+delegation to the hub session, recorded in TRDD-BRRJK57P's Approval log; spec-version 1.7.0→2.0.0
+per 3P-VER-01, a MUST changed.)* An absent `release-via:` defaults to `none` (terminal `complete`). Archival
 writes all three places (3P-ZON-12): frontmatter gains `archived: true` beside the terminal
 `column:` and a bumped `updated:`; **the body `MUST` record the OUTCOME and WHY it is being
 archived** — what shipped, what was abandoned and on whose call, or which card superseded it. An

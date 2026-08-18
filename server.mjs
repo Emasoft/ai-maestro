@@ -1839,8 +1839,8 @@ async function startServer(handleRequest) {
     }
 
     // ── Absorbed-duty scheduler (ai-maestro#102, TRDD-5X3P79Q6) ─────────
-    // UNCONDITIONAL — never gated on the master toggle above. These three
-    // chores (marketplace-refresh, version-update, user-plugins-update) were
+    // UNCONDITIONAL — never gated on the master toggle above. These
+    // chores (marketplace-refresh, version-update) were
     // absorbed from the janitor daemon, which ran them whenever the janitor
     // was installed+armed — no user-facing preference. Re-gating them behind
     // this server's OWN opt-in toggle would silently revoke a consent the

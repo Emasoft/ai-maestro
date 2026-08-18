@@ -17,7 +17,7 @@ Ratified server-side 2026-08-18 under the USER's direct delegation to the hub se
 | `oauth-rotator-tick` | `~/.claude/janitor-control/oauth-rotator-tick.last-run.ts` | 60 s | 660 s |
 | `oauth-rotator-supervisor` | `~/.claude/janitor-control/oauth-rotator-supervisor.last-run.ts` | 600 s | 1 800 s |
 | `marketplace-refresh` | `~/.claude/janitor-control/marketplace-refresh.last-run.ts` | 3 600 s | 10 800 s |
-| `user-plugins-update` | `~/.claude/janitor-control/user-plugins-update.last-run.ts` | 3 600 s | 10 800 s |
+| `user-plugins-update` | `~/.claude/janitor-control/user-plugins-update.last-run.ts` | 3 600 s | 10 800 s — **NO LONGER SERVER-CLAIMED since 2026-08-19 (TRDD-PE54D95Q AC6):** the per-plugin loop was deleted (the harness upgrades installed plugins itself from the refreshed `autoUpdate: true` catalogs) and the name left `ABSORBED_CHORES` in the same change, so the liveness beat stops publishing the claim and the janitor executes the chore again at its own 3 600 s cadence. Janitor side: remove it from `harness_backend.SERVER_ABSORBED_TASKS` and reclassify the §9 row. |
 | `version-update` | `~/.claude/janitor-control/version-update.last-run.ts` | 21 600 s | 64 800 s |
 | `github-config-audit` | `~/.claude/janitor-control/github-config-audit.last-run.ts` | server executes at 14 400 s (4 h) | **64 800 s — the janitor roster default stands.** The server's 14 400 s declaration is BELOW it and widen-only IGNORES a narrowing by design (janitor e630a35c §9.4 note); a faster bound is a janitor-default change to REQUEST, not a declaration to write. *(Corrected 2026-08-18 — the first version of this row recorded the declaration as effective.)* |
 

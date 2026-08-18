@@ -1,13 +1,16 @@
 /**
- * Tests for the absorbed-duty lane (ai-maestro#102, TRDD-5X3P79Q6): the three
+ * Tests for the absorbed-duty lane (ai-maestro#102, TRDD-5X3P79Q6): the
  * chores the janitor daemon ran unconditionally before this server absorbed
- * them — marketplace-refresh, version-update (self-update the janitor),
- * user-plugins-update — must run regardless of `auto-update-settings.json`'s
- * master `enabled` toggle, gated ONLY on `isJanitorInstalledAndArmed()`.
+ * them — marketplace-refresh and version-update (self-update the janitor) —
+ * must run regardless of `auto-update-settings.json`'s master `enabled`
+ * toggle, gated ONLY on `isJanitorInstalledAndArmed()`.
+ * (`user-plugins-update` was absorbed too until 2026-08-19, then RETURNED to
+ * the janitor with its per-plugin loop deleted — TRDD-PE54D95Q AC6. The tests
+ * below pin the absence of both halves: no loop, no claim stamp.)
  *
  * 0-IMPACT:
- *   - `runAbsorbedDutyTick` takes injected deps (`isJanitorInstalledAndArmed`,
- *     `readers`), so the decision logic under test never touches the real
+ *   - `runAbsorbedDutyTick` takes injected deps (`isJanitorInstalledAndArmed`),
+ *     so the decision logic under test never touches the real
  *     filesystem at all.
  *   - `@/services/element-management-service` is mocked — no real
  *     `ChangePlugin`/`UpdateMarketplace` pipeline call, no real `claude`
@@ -47,7 +50,6 @@ import {
   startAbsorbedDutyScheduler,
   stopAbsorbedDutyScheduler,
   isAbsorbedDutySchedulerRunning,
-  type CandidateReaders,
 } from '@/services/auto-update-service'
 // LOCAL_/CUSTOM_MARKETPLACE_NAME are gone with the per-name loop: the refresh no longer takes a
 // name, so there are no per-marketplace assertions left to make. MARKETPLACE_NAME survives for the
@@ -57,13 +59,9 @@ import { readChoreStamp } from '@/lib/janitor-chore-stamp'
 
 const JANITOR = 'ai-maestro-janitor'
 
-function fakeReaders(userScope: Array<{ name: string; marketplace: string }> = []): CandidateReaders {
-  return {
-    listUserScopePlugins: async () => userScope,
-    listAgentLocalScopePlugins: async () => [],
-    listInstalledPluginsInMarketplace: async () => [],
-  }
-}
+// There is no `readers` fixture any more: `AbsorbedDutyDeps` lost the seam when the
+// user-plugins-update loop left (TRDD-PE54D95Q AC6). The tick body no longer reads any plugin
+// list, which is the strongest form of "no per-plugin loop" — nothing left to iterate.
 
 // CONTAINMENT, added with the janitor chore stamps (TRDD-14HI8ZPR). The tick now writes
 // `<chore>.last-run.ts` into the janitor control dir, so the file-header claim that these tests
@@ -108,20 +106,24 @@ afterEach(() => {
 })
 
 describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
-  it('writes a last-run stamp for each of the three chores this lane owns', async () => {
+  it('writes a last-run stamp for each chore this lane owns — and NOT for the returned one', async () => {
     // The defect this pins: the server absorbed these chores and never told the janitor, whose
-    // daemon it had suppressed. Every one read as dark for weeks while all three ran hourly.
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+    // daemon it had suppressed. Every one read as dark for weeks while all ran hourly.
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
-    for (const chore of ['marketplace-refresh', 'version-update', 'user-plugins-update'] as const) {
+    for (const chore of ['marketplace-refresh', 'version-update'] as const) {
       expect(readChoreStamp(chore), `${chore} left no stamp`).not.toBeNull()
     }
+    // The un-claim half of TRDD-PE54D95Q AC6, checked at the FILE because the chore name has
+    // left the AbsorbedChore union: a tick that stamps `user-plugins-update` claims work the
+    // lane no longer performs, which is the FXPV7L4D lie. Re-adding the stamp reds this line.
+    expect(fs.existsSync(path.join(controlDir, 'user-plugins-update.last-run.ts'))).toBe(false)
   })
 
   it('stamps EPOCH SECONDS — milliseconds would read as permanently fresh, for ever', async () => {
     // The one wrong answer worse than "stale": a ms value parses fine and lands ~55 000 years
     // out, so every chore would report healthy including the ones that stop running.
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
     const raw = fs.readFileSync(path.join(controlDir, 'marketplace-refresh.last-run.ts'), 'utf8')
     const secs = Number(raw.trim())
@@ -133,7 +135,7 @@ describe('the janitor handover stamp (TRDD-14HI8ZPR / ai-maestro#111)', () => {
     // The complement, and the one that makes the two above non-vacuous: if the stamp were written
     // unconditionally, a host where the janitor is uninstalled/disarmed would report every chore
     // fresh while nothing ran.
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => false, readers: fakeReaders(), settingsPath: SETTINGS() })
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => false, settingsPath: SETTINGS() })
 
     expect(readChoreStamp('marketplace-refresh')).toBeNull()
   })
@@ -143,7 +145,6 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
   it('does nothing at all when the janitor is not installed+armed (the gate, non-vacuity)', async () => {
     const entries = await runAbsorbedDutyTick({
       isJanitorInstalledAndArmed: () => false,
-      readers: fakeReaders(),
       settingsPath: SETTINGS(),
     })
     expect(entries).toEqual([])
@@ -155,10 +156,9 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     // COUNTING THE INVOCATIONS IS THE ASSERTION. The previous shape looped
     // `UpdateMarketplace({ name })` once per registered marketplace — 275 processes and 275 git
     // fetches per tick on this host — and a test asserting only "it succeeded" passes over that
-    // loop unchanged. So this pins the COUNT, and it pins it against a reader that reports MANY
-    // marketplaces, because a count of 1 taken from a 1-marketplace fixture proves nothing.
-    const readers = fakeReaders()
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers, settingsPath: SETTINGS() })
+    // loop unchanged. So this pins the COUNT. (The reader that used to feed a per-name loop is
+    // gone from the deps entirely — the count is now the only thing left to pin.)
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
     expect(refreshAllMarketplaces).toHaveBeenCalledTimes(1)
     // Argless: the whole point is that no name narrows it. `RefreshAllMarketplaces` takes only an
@@ -180,7 +180,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     //   session then refreshes on its own schedule.
     withMarketplaceLockMock.mockImplementation(async () => null)
 
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
     expect(entries).toEqual([])
     expect(refreshAllMarketplaces).not.toHaveBeenCalled()
@@ -193,7 +193,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
   it('emits ONE summary row for the refresh, not one per marketplace', async () => {
     // The reporting half of the same change: `lastRunSummary` used to fill with hundreds of rows
     // because the loop emitted one entry per name. One operation ⇒ one row.
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
     // The load-bearing half is the ABSENCE of the old shape: the loop emitted one
     // `absorbed:marketplace:<name>` row per registered marketplace. Nothing may produce that
     // shape any more. (Note the colon — `absorbed:marketplace-refresh` and
@@ -204,24 +204,27 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
   })
 
   it('self-updates the janitor plugin specifically, at user scope', async () => {
-    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+    await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
     const janitorCall = changePlugin.mock.calls.find((c) => (c[1] as { name: string }).name === JANITOR)
     expect(janitorCall).toBeDefined()
     expect(janitorCall![1]).toMatchObject({ name: JANITOR, marketplace: MARKETPLACE_NAME, scope: 'user', action: 'update' })
   })
 
-  it('updates every user-scope plugin (the user-plugins-update duty)', async () => {
-    const readers = fakeReaders([
-      { name: 'ai-maestro-plugin', marketplace: MARKETPLACE_NAME },
-      { name: 'some-other-plugin', marketplace: 'some-marketplace' },
-    ])
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers, settingsPath: SETTINGS() })
+  it('runs NO per-plugin user-scope updates — user-plugins-update returned to the janitor (PE54D95Q AC6)', async () => {
+    // This test used to assert the OPPOSITE (a loop updating every user-scope plugin). The loop
+    // duplicated what the harness does itself once step 0 keeps every marketplace at
+    // `autoUpdate: true` and step 1 refreshes the catalogs — ~80 `claude plugin update` spawns
+    // per fire for upgrades the instance boot already performs. The pin is the CALL SET: the
+    // janitor self-update (step 2, a different chore) must remain the ONLY ChangePlugin call,
+    // so a re-added loop reds this on any fixture — there is no reader left to feed one.
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
-    const updatedNames = changePlugin.mock.calls.map((c) => (c[1] as { name: string }).name)
-    expect(updatedNames).toContain('ai-maestro-plugin')
-    expect(updatedNames).toContain('some-other-plugin')
-    expect(entries.some((e) => e.target.includes('some-other-plugin'))).toBe(true)
+    expect(changePlugin).toHaveBeenCalledTimes(1)
+    expect((changePlugin.mock.calls[0][1] as { name: string }).name).toBe(JANITOR)
+    // And the run summary carries no per-plugin rows beyond the janitor's own.
+    const pluginRows = entries.filter(e => e.target.startsWith('absorbed:') && e.target.includes('@'))
+    expect(pluginRows.map(e => e.target)).toEqual([`absorbed:${JANITOR}@${MARKETPLACE_NAME}`])
   })
 
   it('a single failed candidate does not abort the rest of the tick', async () => {
@@ -229,7 +232,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     // so the failure is injected on that one call. The property under test is unchanged and is
     // the one that matters: a chore that fails must not take the other chores down with it.
     refreshAllMarketplaces.mockResolvedValue({ success: false, error: 'boom' } as never)
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
 
     const failed = entries.find((e) => e.target === 'absorbed:marketplace-refresh')
     expect(failed).toMatchObject({ status: 'failed', detail: 'boom' })
@@ -239,7 +242,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
 
   it('a thrown exception from one candidate is caught and recorded, never propagated', async () => {
     changePlugin.mockRejectedValueOnce(new Error('pipeline exploded'))
-    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, readers: fakeReaders(), settingsPath: SETTINGS() })
+    const entries = await runAbsorbedDutyTick({ isJanitorInstalledAndArmed: () => true, settingsPath: SETTINGS() })
     expect(entries.some((e) => e.status === 'failed' && e.detail === 'pipeline exploded')).toBe(true)
   })
 
@@ -252,7 +255,7 @@ describe('runAbsorbedDutyTick — gated on isJanitorInstalledAndArmed, NOT on se
     // where it returns true the tick body runs — and without this line it would run against the
     // developer's real settings.json. Leaving the gate real while containing the write is the
     // whole point.
-    const entries = await runAbsorbedDutyTick({ readers: fakeReaders(), settingsPath: SETTINGS() })
+    const entries = await runAbsorbedDutyTick({ settingsPath: SETTINGS() })
     expect(Array.isArray(entries)).toBe(true)
   })
 })

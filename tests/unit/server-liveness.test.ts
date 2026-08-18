@@ -83,14 +83,18 @@ describe('writeServerLiveness — atomic write of the 3-field shape', () => {
   // one change that actually breaks the consumer.
   it('publishes absorbed_chores as the exact janitor registry names (ai-maestro#111)', () => {
     writeServerLiveness({ now: () => 1, pid: 1, capabilities: () => [] })
+    // `user-plugins-update` is deliberately ABSENT since 2026-08-19 (TRDD-PE54D95Q AC6): the
+    // per-plugin loop was deleted, so publishing the claim would tell the janitor to yield a
+    // chore nobody performs. The un-claim and the loop removal are one change — a re-add here
+    // without the loop makes this beat lie in the FXPV7L4D direction.
     expect(readLiveness().absorbed_chores).toEqual([
       'marketplace-refresh',
-      'user-plugins-update',
       'version-update',
       'oauth-rotator-supervisor',
       'oauth-rotator-tick',
       'github-config-audit',
     ])
+    expect(readLiveness().absorbed_chores).not.toContain('user-plugins-update')
   })
 
   it('serialises absorbed_chores as a COPY, so a consumer cannot mutate the module constant', () => {

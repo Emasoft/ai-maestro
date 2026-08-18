@@ -55,10 +55,16 @@ import { janitorControlDir } from './janitor-control'
  * one name (our half already runs); `fleet-plugins-update` and `cold-cache-clear` have not
  * been through an absorbability review at all. Do not add any of those here without one —
  * see `.claude/project/memory/janitor-chore-absorbability.md`.
+ *
+ * `user-plugins-update` LEFT this set on 2026-08-19 (TRDD-PE54D95Q AC6), together with the
+ * per-plugin loop that performed it — the two halves of one change. Claiming a chore whose
+ * work was deleted would make the janitor read "owned and healthy" over work nobody does
+ * (the TRDD-FXPV7L4D class), so never re-add the name here without restoring the work, or
+ * vice versa. The janitor executes it again the moment it stops seeing the claim in the
+ * liveness beat's `absorbed_chores`.
  */
 export const ABSORBED_CHORES = [
   'marketplace-refresh',
-  'user-plugins-update',
   'version-update',
   'oauth-rotator-supervisor',
   'oauth-rotator-tick',

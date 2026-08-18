@@ -72,7 +72,7 @@ export interface ServerLiveness {
  *   - `family-a`         → the OAuth rotator tick is ENABLED (the R16 flag file is present). Reuses
  *                          `oauthTickEnabled()` so the flag name is never duplicated. Absent today
  *                          (the flag is USER-held and absent by default — the rotator ships INERT).
- *   - `singleton-chores` → marketplace-refresh / version-update / user-plugins-update absorption is
+ *   - `singleton-chores` → marketplace-refresh / version-update absorption is
  *                          running. Live as of ai-maestro#102 / TRDD-5X3P79Q6 — the absorbed-duty
  *                          scheduler (`services/auto-update-service.ts::startAbsorbedDutyScheduler`)
  *                          is started unconditionally at boot, so its OWN ticking (not the per-host

@@ -221,17 +221,29 @@ export async function runTickNow(): Promise<{ ran: boolean; entries: AutoUpdateR
 
 // ── Absorbed-duty lane (ai-maestro#102, TRDD-5X3P79Q6) ───────────────────
 //
-// The three chores the janitor daemon ran unconditionally BEFORE this server
-// absorbed them: refresh every registered marketplace ("marketplace-refresh"),
-// keep the janitor plugin itself current at user scope ("version-update"),
-// and keep every user-scope plugin current ("user-plugins-update"). None of
-// them ever had a user-facing category — the janitor being installed+armed
-// WAS the consent. So this lane checks `isJanitorInstalledAndArmed()`
-// instead of `settings.enabled`, and its own scheduler is started
-// UNCONDITIONALLY at boot (server.mjs), never torn down by the master
-// toggle. The genuinely-new broad sweeps (`agentLocalScopePlugins`,
-// `userScopePlugins` AS A USER-FACING CATEGORY) are unaffected — they still
-// gate on `settings.enabled` exactly as before, in `runTick` above.
+// The chores the janitor daemon ran unconditionally BEFORE this server
+// absorbed them: refresh every registered marketplace ("marketplace-refresh")
+// and keep the janitor plugin itself current at user scope ("version-update").
+// None of them ever had a user-facing category — the janitor being
+// installed+armed WAS the consent. So this lane checks
+// `isJanitorInstalledAndArmed()` instead of `settings.enabled`, and its own
+// scheduler is started UNCONDITIONALLY at boot (server.mjs), never torn down
+// by the master toggle. The genuinely-new broad sweeps
+// (`agentLocalScopePlugins`, `userScopePlugins` AS A USER-FACING CATEGORY)
+// are unaffected — they still gate on `settings.enabled` exactly as before,
+// in `runTick` above.
+//
+// A third chore, "user-plugins-update", was absorbed 2026-08-05 and RETURNED
+// to the janitor 2026-08-19 (TRDD-PE54D95Q AC6). Its per-plugin loop spawned
+// ~80 `claude plugin update` processes per fire, duplicating what the harness
+// now does itself: step 0 keeps every marketplace at `autoUpdate: true` and
+// step 1 refreshes the catalogs, so Claude Code upgrades installed plugins at
+// instance load (measured: 261/261 registry entries autoUpdate:true, and the
+// janitor plugin rolled 3.3.15→3.3.16 with this server DOWN). The removal and
+// the un-claim (`lib/janitor-chore-stamp.ts::ABSORBED_CHORES`) landed as a
+// PAIR on purpose — a server that stamps a chore it no longer performs makes
+// the janitor read "owned and healthy" over work nobody does (the
+// TRDD-FXPV7L4D class). Do not re-add either half without the other.
 
 /** Start the absorbed-duty scheduler. Idempotent. Ticks unconditionally —
  *  every tick re-checks `isJanitorInstalledAndArmed()` itself, so a host
@@ -376,7 +388,6 @@ async function runAbsorbedDutyTickSafely(): Promise<{ ran: boolean; entries: Aut
  *  real `lib/janitor-presence.ts` check. */
 export interface AbsorbedDutyDeps {
   isJanitorInstalledAndArmed?: () => boolean
-  readers?: CandidateReaders
   /** Which settings file the auto-update-flag step writes. Defaults to the REAL
    *  `~/.claude/settings.json`, which is correct in production and catastrophic in a test — a
    *  suite driving the tick body would edit the developer's own global Claude Code config.
@@ -396,8 +407,10 @@ export async function runAbsorbedDutyTick(deps: AbsorbedDutyDeps = {}): Promise<
     // the next tick re-checks.
     return []
   }
-  const readers = deps.readers ?? REAL_CANDIDATE_READERS
-  const result = await withMarketplaceLock(() => runAbsorbedDutyTickBody(readers, deps.settingsPath))
+  // No `readers` seam any more: the body stopped consuming the plugin lists when the
+  // user-plugins-update loop left with its claim (TRDD-PE54D95Q AC6). Not reading the list at
+  // all is the strongest form of "no per-plugin loop" — there is nothing left to iterate.
+  const result = await withMarketplaceLock(() => runAbsorbedDutyTickBody(deps.settingsPath))
   if (result === null) {
     console.warn('[auto-update] marketplace-op lock held by another process — skipping absorbed-duty tick')
     return []
@@ -633,7 +646,6 @@ export function describeRefreshCoverage(
 }
 
 async function runAbsorbedDutyTickBody(
-  readers: CandidateReaders,
   settingsPath?: string,
 ): Promise<AutoUpdateRunEntry[]> {
   const entries: AutoUpdateRunEntry[] = []
@@ -733,28 +745,12 @@ async function runAbsorbedDutyTickBody(
   }
   stampChoreRun('version-update')
 
-  // 3. user-plugins-update — every plugin currently installed at user scope.
-  for (const p of await readers.listUserScopePlugins()) {
-    const key = `absorbed:${p.name}@${p.marketplace}`
-    try {
-      const r = await ChangePlugin(null, {
-        name: p.name,
-        marketplace: p.marketplace,
-        action: 'update',
-        scope: 'user',
-        rolePluginSwap: true,
-      }, SYSTEM_AUTH_CONTEXT)
-      if (r.success) {
-        entries.push(entry(key, 'updated', 'Updated to latest (user, absorbed duty)'))
-      } else {
-        const msg = r.error || 'Unknown failure'
-        entries.push(entry(key, /idempotent|already.*installed|no.?op/i.test(msg) ? 'already-current' : 'failed', /idempotent|already.*installed|no.?op/i.test(msg) ? undefined : msg))
-      }
-    } catch (err) {
-      entries.push(entry(key, 'failed', errMsg(err)))
-    }
-  }
-  stampChoreRun('user-plugins-update')
+  // There is deliberately NO step 3 here. The `user-plugins-update` per-plugin loop was
+  // removed with its claim (TRDD-PE54D95Q AC6 — see the lane header above): the harness
+  // upgrades installed plugins itself from the catalogs step 1 refreshes, and the chore
+  // is the janitor's again. Re-adding a loop here without re-adding the chore to
+  // `ABSORBED_CHORES` (and the janitor's SERVER_ABSORBED_TASKS) would run work nobody
+  // audits; re-adding the stamp without the loop would report work nobody runs.
 
   // R42.7 — a user-scope plugin that actually CHANGED is a global change: every
   // harness agent loads it at launch, so every one of them is running stale code

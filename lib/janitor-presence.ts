@@ -4,8 +4,9 @@
  *
  * WHY THIS EXISTS
  * ---------------
- * Before this server absorbed three of the janitor daemon's chores
- * (`version-update`, `marketplace-refresh`, `user-plugins-update`), the
+ * Before this server absorbed the janitor daemon's update chores
+ * (`version-update`, `marketplace-refresh` — `user-plugins-update` was also
+ * absorbed until 2026-08-19, then returned per TRDD-PE54D95Q AC6), the
  * janitor kept itself current on its own. The user's act of installing AND
  * arming the janitor WAS their consent for that upkeep to happen. When the
  * server absorbed those chores, it gated them behind this server's OWN

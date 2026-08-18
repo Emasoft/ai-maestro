@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-16T23:34:44+0200
+updated: 2026-08-18T18:00:52+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -45,8 +45,14 @@ sessions and had to retract it.
 PSS, programmer, llm-externalizer, **visual-comunicator, webdesign, CPV, integrator, autonomous,
 assistant-manager**. Phase-1 COMPLETE on all axes: architect, assistant-role, visual-comunicator,
 webdesign, CPV, integrator, autonomous, assistant-manager. **Every CONFIRMED finding is
-hub-verified** — see the ledger. Outstanding: janitor, chief-of-staff, plugin-94, and any session
-not listed. Phase-2 dispatch stays BLOCKED on the USER (relayed authority was correctly refused by
+hub-verified** — see the ledger. Outstanding: plugin-94, and any session not listed.
+**CORRECTED 2026-08-18: janitor and chief-of-staff are DONE and were listed outstanding falsely.**
+COS reported at 23:27 on 08-16 (ledgered the same night). The janitor had *already written 7
+reports* between 17:07 and 18:12 on 08-16 — before this line was authored — and added 2 more on
+08-18; it was never outstanding, it was unread. Re-derive the reported set from DISK
+(`~/Code/**/reports/plugin-self-audit/*.md`), never from this roster: a hand-kept list of who has
+reported goes stale silently and reads as current.
+Phase-2 dispatch stays BLOCKED on the USER (relayed authority was correctly refused by
 three sessions; the hold is endorsed, and every reporting session has independently confirmed it
 has queued no remediation).
 
@@ -1303,6 +1309,85 @@ they read as internally consistent.
    pre-kill reading distinguish them. My caveat said *poll BEFORE deciding, never as a post-mortem*
    — **this upgrades it from "uninformative" to "actively misleading"**, which is a stronger claim
    and is now measured in the wild rather than reasoned.
+
+### ai-maestro-janitor — Phase 1 COMPLETE (it was listed OUTSTANDING for 42h while already done) · verified 2026-08-18T18:00:52+0200
+
+**The STATE block above said "Outstanding: janitor". That was a 42-hour-old snapshot and it was
+wrong on 08-16 as well** — the janitor had already written 7 reports between 17:07 and 18:12 that
+evening, and added 2 more TODAY (11:16, 11:23). Nobody asked it to; nobody read them. Re-derived
+from DISK, not from the list: the "who has reported" set is a query over
+`~/Code/**/reports/plugin-self-audit/*.md`, and it answers a question no hand-kept roster can.
+
+Two instrument corrections the sweep needed, both the same shape — **a needle built from the
+CONTRACT's vocabulary instead of the ARTIFACT's**:
+- `grep -c CONFIRMED` returned **0 across all 9 files** while `REFUTED` matched. The reports write
+  sentence-case `Confirmed: N / Refuted: M`; my uppercase needle matched only the emphatic prose
+  use (*"What would have REFUTED this"*). A convenient zero, again.
+- The re-run anchored `^Confirmed:` and still missed one file, whose counts line is a **`##`
+  heading** (`## Confirmed: 1 / Refuted: 8`). Two misses on nine files of one corpus.
+
+Corrected totals: **Confirmed 27 / Refuted 31 / Uncertain 3** across 9 reports.
+
+**But 27 is not 27 defects, and this is the fleet's recurring counting bug.** Of the 7 "confirmed"
+in the governance report, **4 are confirmations that an invariant HOLDS** (PRRD well-formed; 0
+date/title/column violations in 309 files; every `blocked` card carries `blocked-by:`; no
+future-dated `updated:`). And the 11 "confirmed" in the drift report are confirmed as *expected
+release-lag*, with the report's own bottom line reading **"No genuine drift defect found."** A
+naive roll-up would have carried **11 phantom findings** into Phase 2 from that file alone. The
+defect-bearing count is **≈12, not 27**.
+
+| Finding | Hub verdict | What the hub ran |
+|---|---|---|
+| 4 terminal cards (`cancelled`/`superseded`) sitting in `design/tasks/` | **CONFIRMED 4/4** | `grep -m1 '^column:'` on each of the 4 named paths — all 4 exist and read exactly as cited |
+| 2 cards at `column: complete` inside `design/archived/` | **CONFIRMED 2/2** | same, both present |
+| 58 TRDDs carry a legacy v1 full-UUID `trdd-id` | **CONFIRMED, count EXACT** | independent instrument (regex `^[A-Z0-9]{8}$` over all 4 zones): 311 cards with an id, **58** legacy. Sample `design/tasks/TRDD-20260524_200433+0200-ca754708-…` = `ca754708-7f9a-414f-8e3e-df3b00243644` |
+| `tests/test_external_clear_llm_ext.py` passes only via import-path pollution | **CONFIRMED; SUPPORTING MECHANISM REFUTED** | see below |
+
+**The order-dependent test — finding right, mechanism wrong, and the correction makes it worse.**
+Every static citation holds: `:16` inserts only `scripts/lib`; `:180` and `:199` `import
+clear_trigger`; `scripts/lib/clear_trigger.py` **does not exist** while `scripts/clear_trigger.py`
+does; and both comparison files insert BOTH paths (`:34-35`, `:25-26`). The report explains the
+masking as *"`test_global_state.py` … alphabetically sorts before `test_external_clear_llm_ext.py`"*
+— **`ls` refutes it outright: `external…` < `global…`.** The actual mechanism is visible in the
+INDENTATION of the lines already cited: `test_global_state.py:25` is at **column 0** (module level,
+so it runs at COLLECTION), while `:180`/`:199` are indented **inside test functions** (they run at
+TEST time). pytest collects every module before running any test, so `scripts/` is on `sys.path`
+before any body executes — **regardless of order**. That widens the masking surface: *any*
+invocation that collects either of the two well-formed files hides the bug, not merely the ones
+that sort a particular way. The fix is unchanged; the "when does CI catch it" story is not.
+
+### FLEET-WIDE #3 — 232 archived cards at a column the zone rule does not admit, in 8 repos
+
+The janitor's 2-card version of this is the smallest instance of the largest defect found tonight,
+and **it is invisible from inside any repo** — which is why the 22-copy sweep is routine. One
+instrument (`column:` regex, worktree checkouts excluded, `ANIME2SVG/.claude/worktrees/…` and
+`ANIME2SVG-worktrees/…` dropped as duplicate checkouts of one repo), run over every 3-pillars
+corpus under `~/Code` plus this hub:
+
+| | archived cards | at a column the zone forbids | tasks cards | terminal, should be archived |
+|---|---|---|---|---|
+| 21 repos under `~/Code` | 329 | **64** | 489 | **6** |
+| this hub | 250 | **168** | 129 | 0 |
+| **fleet** | **579** | **232** | **618** | **6** |
+
+**The violating value is `complete` in 232 of 232 cases — one value, no scatter, 8 independent
+repos.** That is a single systematic writer, not sloppiness. And `completed` coexists with it in
+the same corpus (this hub: 74 `completed` beside 168 `complete`), so it is not a vocabulary
+disagreement either — the same corpus spells the same state both ways.
+
+This independently reproduces this card's own `36RGLVYH` (*"167 of 249"*) at **168 of 250** with a
+different instrument — the +1 is one card archived since that measurement, which is the agreement
+you want rather than a discrepancy.
+
+**Diagnosis: an unenforced MUST.** `36RGLVYH` already measured **0 tool references** to the zone
+rule; 232 violations across 8 repos accumulated silently precisely because nothing reads it.
+
+**REMEDIATION IS NOT A SWEEP, and this is the trap.** Terminal cards are FROZEN by the IND base
+(rule 12 — only `updated:`/`superseded-by:` may change), so a script that rewrites 232 archived
+cards violates the freeze in order to satisfy the zone rule. `36RGLVYH` exists mainly to FORBID
+scripting it, and this measurement strengthens that: at 232-vs-74 the de-facto fleet behaviour IS
+`complete`, so the open question is whether the RULE or the WRITER is wrong — a spec decision for
+the USER, not a repair job. Phase-2 candidate, one canonical card, never eight.
 
 ## Approval log
 

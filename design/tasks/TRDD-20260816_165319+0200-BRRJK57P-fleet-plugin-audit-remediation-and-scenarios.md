@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T23:41:17+0200
+updated: 2026-08-18T23:52:23+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1502,6 +1502,19 @@ Two contributions adopted fleet-wide, relayed to the two sessions still mid-fix 
    re-brief that finished in 117 s put APPEND-AFTER-EVERY-ANGLE as the PRIME DIRECTIVE ABOVE the
    task itself. Placement, not presence, is what the contract needed — upgrade for the
    worker-liveness lesson family.
+
+### janitor TUWUB0SG closed — the real-producer rule refuted the card's OWN mechanism · 2026-08-18T23:52+0200
+
+The relayed input-shape warning earned its keep twice in one card: (1) DD0M4QL7 already carried
+its real-producer leg (live gh GETs confirmed the 3 drifts before trusting the comparator);
+(2) TUWUB0SG's demanded real repro REFUTED the assumed mechanism — **a `git commit` SIGKILLed
+during its pre-commit hook leaves NO `.git/index.lock`; git does not hold the lock across the
+hook** — pinned as a test so the shape cannot be re-derived. Card closed complete (8e4a5413).
+The janitor also self-reported a near-miss worth the ledger: from a head+tail read of a 725-line
+module it duplicated the pre-existing janitor#245 recovery and its Write clobbered that test
+file — recovered from git, duplicate deleted, only the novel spawner-side ours-attribution kept
+behind the same lsof guard. A partial read of a module you are about to extend is how a
+duplicate of its own machinery gets written beside it.
 
 ## Approval log
 

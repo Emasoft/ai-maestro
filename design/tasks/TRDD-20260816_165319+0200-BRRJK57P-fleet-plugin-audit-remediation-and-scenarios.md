@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T20:41:31+0200
+updated: 2026-08-18T23:37:03+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -64,8 +64,15 @@ authorized; janitor#279 filed; 40G cache freed), orchestrator 3 cards todo→dev
 wave + publish GO'd, 2 Tier-3 proposals REFUSED per R49 (32cea83e mirror-dual-write;
 30ebf367 re-propose decoupled).
 
-**NOT LIVE, cannot receive dispatch (surfaced to USER):** visual-comunicator, PSS. plugin-94
-never reported Phase 1. ~~CPV~~ **CPV came LIVE 2026-08-18 ~20:30 and was dispatched**: 3 cards —
+**NOT LIVE:** PSS only. plugin-94 never reported Phase 1. ~~visual-comunicator~~ came live ~23:30,
+Phase-2 COMPLETE: YY5ISKCJ fail-closed version gate shipped in v1.5.1; its "21/22 no version gate"
+fleet claim corrected by hub sweep to **14/22 no remote-tag read · 7/22 unaudited · 1/22
+fail-closed** and routed to CPV as the 4th canonical candidate. Also landed since the last
+roll-up: **architect v2.16.0** (5 cards, ruff burn-down done + ratcheted per the phased ruling) ·
+webdesign v0.1.15 · CORE handed its 2 pre-program human_review cards to the hub after its USER's
+in-session grant (ZNGTF0FG approved-conditional on clean boxes; OH3N6OXJ document-only R42.3 fix
+RATIFIED with the NSWPM93D scope note). Hub board: 78J4I4QS ai_review→complete (banner half split
+to GIA2LC83); ai_review column now EMPTY. ~~CPV~~ **CPV came LIVE 2026-08-18 ~20:30 and was dispatched**: 3 cards —
 P1 its own setup_branch_rules.py stale payloads (hub re-verified in its tree: still emits the
 abolished `bypass_actors: []`; lands BEFORE the janitor's TRDD-DD0M4QL7 gate fix), P1 canonical
 atomic-push retry (12/22; assistant-role 7b4e8ba is the reference impl), P2 canonical Agent:
@@ -75,7 +82,9 @@ trailer (21/22). The stale-PAIR constant explicitly excluded (2/22, CORE-local).
 ("go on. permission granted."), resolving the strict-policy hold the clean way; its release item
 closes.** CI was still in_progress at report time; webdesign reports if it reds.
 
-**Releases landed under Phase 2 so far:** maintainer v1.13.9 · AMAMA v2.17.2 · assistant-role
+**Releases landed under Phase 2 so far:** orchestrator v1.13.9 (board all-terminal except the
+server-gated PNIP18BY) · architect v2.16.0 · amvcp v1.5.1 · webdesign v0.1.15 ·
+maintainer v1.13.9 · AMAMA v2.17.2 · assistant-role
 v0.4.0 · autonomous v1.6.19 · programmer v2.0.8 · llm-ext v13.5.6 · orchestrator publishing ·
 janitor absorbed rev 8 (e630a35c) + 4 hub-finding cards (DD0M4QL7/TUWUB0SG/LMLKF0JV/UWBXNJ76) +
 safe-delete and test-order fixes landed. Hub: first Phase-3 scenario card 9Z2P2SDA authored;

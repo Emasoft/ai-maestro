@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-16T15:53:34+0200
+updated: 2026-08-18T23:48:55+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -177,6 +177,37 @@ sites, and the repo's `guardRealUserSettings` tripwire — which was OPT-IN and 
 assumed (a probe appending one byte reds with `MODIFIED it (51541 → 51542 bytes)`; it is parked
 in `tests_dev/`). Any future step here takes its path as a parameter, never a default.
 
+### 2026-08-18 23:45 — AC6'S EVIDENCE GATE HAS MOVED, decisively on one half
+
+Re-measured (12 days and many instance boots after the 08-06 reading):
+
+| file | `autoUpdate: true` | measured |
+|---|---|---|
+| `~/.claude/plugins/known_marketplaces.json` (runtime registry) | **261 / 261** (was 0/275) | 2026-08-18 23:45, mtime 23:43 |
+| `~/.claude/settings.json` → `extraKnownMarketplaces` | **262 / 262** | same |
+
+The settings→registry flag propagation the card was waiting on HAPPENED — the open sync-direction
+question is answered: instance boots re-derive the flag, and the two files now agree.
+
+**Second fact, free tonight:** the janitor plugin rolled **3.3.15 → 3.3.16 during this very
+session with the ai-maestro server DOWN** (the arm skill's own base dir moved mid-session), so a
+NON-server path demonstrably upgrades plugins from the refreshed catalogs. Most likely the
+janitor's `user-plugins-update` chore (which executes when the server does not claim it).
+
+**The sharpened constraint that now gates the implementation, and it is a DESIGN decision, not
+more evidence:** when the server is UP it CLAIMS `user-plugins-update` (rev-8 claimed-chores
+table). If the server deletes its per-plugin loops (AC6) while still claiming that chore, its
+claim stamp asserts work it no longer does — the exact FXPV7L4D class. So AC6's implementation is
+a PAIR that must land together: remove the loops AND stop claiming `user-plugins-update` (drop it
+from the server's claimed set so the janitor executes it), with the rev-8 table + mirror doc
+updated in the same change. Do not land the deletion alone.
+
+**NEXT ACTION (was: blocked on evidence — now implementable):** the loop-removal + un-claim pair
+above, plus its tests (a neuter proving the claim set no longer names the chore), coordinated
+with the janitor session on the table row. Deferred past tonight deliberately: it edits the live
+update lane over the user's real plugin state, which is not a midnight change.
+
+**The ORIGINAL 08-06 blocked-note, kept for the audit trail:**
 **NEXT ACTION — AC6, and it is BLOCKED ON EVIDENCE THAT DOES NOT EXIST YET.** Removing the two
 per-plugin loops (`auto-update-service.ts` steps 2 and 3) is only safe once the harness is
 demonstrably upgrading plugins from the refreshed catalogs. Measured 2026-08-06 08:00, and it

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T20:06:12+0200
+updated: 2026-08-18T20:28:29+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -64,9 +64,18 @@ authorized; janitor#279 filed; 40G cache freed), orchestrator 3 cards todo→dev
 wave + publish GO'd, 2 Tier-3 proposals REFUSED per R49 (32cea83e mirror-dual-write;
 30ebf367 re-propose decoupled).
 
-**NOT LIVE, cannot receive dispatch (surfaced to USER):** CPV (owns the two fleet-wide
-canonical-pipeline cards — atomic-push retry, Agent: trailer — and the setup_branch_rules.py:807
-fix the maintainer sequenced first), visual-comunicator, PSS. plugin-94 never reported Phase 1.
+**NOT LIVE, cannot receive dispatch (surfaced to USER):** visual-comunicator, PSS. plugin-94
+never reported Phase 1. ~~CPV~~ **CPV came LIVE 2026-08-18 ~20:30 and was dispatched**: 3 cards —
+P1 its own setup_branch_rules.py stale payloads (hub re-verified in its tree: still emits the
+abolished `bypass_actors: []`; lands BEFORE the janitor's TRDD-DD0M4QL7 gate fix), P1 canonical
+atomic-push retry (12/22; assistant-role 7b4e8ba is the reference impl), P2 canonical Agent:
+trailer (21/22). The stale-PAIR constant explicitly excluded (2/22, CORE-local).
+
+**Releases landed under Phase 2 so far:** maintainer v1.13.9 · AMAMA v2.17.2 · assistant-role
+v0.4.0 · autonomous v1.6.19 · programmer v2.0.8 · llm-ext v13.5.6 · orchestrator publishing ·
+janitor absorbed rev 8 (e630a35c) + 4 hub-finding cards (DD0M4QL7/TUWUB0SG/LMLKF0JV/UWBXNJ76) +
+safe-delete and test-order fixes landed. Hub: first Phase-3 scenario card 9Z2P2SDA authored;
+JT3U4ZVM parked on it; lessons harvest S97TNMIJ complete per the USER's mid-turn directive.
 
 **14 sessions reported as of 20:14** — architect, assistant-role, CORE, maintainer, orchestrator,
 PSS, programmer, llm-externalizer, **visual-comunicator, webdesign, CPV, integrator, autonomous,

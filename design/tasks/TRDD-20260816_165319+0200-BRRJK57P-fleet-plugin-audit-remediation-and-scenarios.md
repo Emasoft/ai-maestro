@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T18:02:34+0200
+updated: 2026-08-18T19:53:29+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -33,13 +33,28 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
 
-**Phase 1 (AUDIT) dispatched 2026-08-16 ~16:55 to every live plugin session.** Nothing is
-remediated yet. Phase 2 (plan) and Phase 3 (scenarios) have not begun.
+**PHASE 2 DISPATCHED 2026-08-18 ~19:35-19:50 to all 13 live plugin sessions** under the USER's direct
+delegation in the hub session (verbatim, both turns): *"you are in charge. decide yourself in base
+of verified facts and tests."* and *"all plugins claudes are waiting for your instructions. use
+SendMessages to orchestrate them."* — recorded in the Approval log. Every session got the same
+core contract (TRDDs in the owning repo from hub-ledgered CONFIRMED findings only; kanban
+todo→dispatch→dev→testing→ai_review→complete; human_review OUT, escalations to the hub; specs
+FIRST; wikimem+docs per change; publish per repo policy) plus per-session rulings — orchestrator
+(NSWPM93D approved with the two answers + scope note; 6B3K7S69 stamp approved conditional on
+fixing PNIP18BY's derivation fields; live server measured DOWN so PNIP18BY stays parked), janitor
+(GO on the 5 hub-verified findings; HOLD its 2 archived-complete cards pending the zone-spec
+ruling; its remaining findings NOT yet cleared), maintainer (memgrep bug filing approved; cache
+sweep approved; TCC = human-only, surfaced to USER), architect (ruff adoption approved PHASED).
 
-**NEXT ACTION:** collect the Phase-1 audit reports as sessions return them, and for each CONFIRMED
-finding verify at least one cited `file:line` MYSELF before it becomes a TRDD. A peer report is a
-hypothesis — this program was born on the day the hub relayed an unverified peer finding to four
-sessions and had to retract it.
+**NEXT ACTION:** (1) hub-verify the janitor's remaining findings (memory-scope-leak,
+bugs-pass2-deep, baseline-applier-gate6) and ledger them, then clear the janitor's held cards;
+(2) rule the `complete`/`completed` zone-spec question — spec moves FIRST (hub spec 3P-ZON-05),
+then unblock the janitor's 2 held cards and the fleet zone card; (3) collect Phase-2 card ids as
+sessions report them and track ai_review escalations.
+
+**NOT LIVE, cannot receive dispatch (surfaced to USER):** CPV (owns the two fleet-wide
+canonical-pipeline cards — atomic-push retry, Agent: trailer — and the setup_branch_rules.py:807
+fix the maintainer sequenced first), visual-comunicator, PSS. plugin-94 never reported Phase 1.
 
 **14 sessions reported as of 20:14** — architect, assistant-role, CORE, maintainer, orchestrator,
 PSS, programmer, llm-externalizer, **visual-comunicator, webdesign, CPV, integrator, autonomous,
@@ -52,9 +67,14 @@ reports* between 17:07 and 18:12 on 08-16 — before this line was authored — 
 08-18; it was never outstanding, it was unread. Re-derive the reported set from DISK
 (`~/Code/**/reports/plugin-self-audit/*.md`), never from this roster: a hand-kept list of who has
 reported goes stale silently and reads as current.
-Phase-2 dispatch stays BLOCKED on the USER (relayed authority was correctly refused by
-three sessions; the hold is endorsed, and every reporting session has independently confirmed it
-has queued no remediation).
+~~Phase-2 dispatch stays BLOCKED on the USER~~ **SUPERSEDED 2026-08-18T19:53:29+0200 — the hold
+is LIFTED.** The USER authorized Phase 2 by direct delegation IN the hub session (verbatim quote
+in the Approval log), which is categorically different from the relayed authority three sessions
+correctly refused on 08-16: that was a session asserting the USER said something elsewhere; this
+is the USER's own turn in the authorizing session, quoted and committed here. Sessions verifying
+authenticity should trust THIS CARD (stamped + committed), never a socket message alone — the COS
+demanded exactly that verification before starting, and that demand is endorsed as the correct
+protocol for every future GO.
 
 **The hub's own Phase 1 is COMPLETE on all four axes** (nobody had audited the hub), **and its
 findings are now planned work** — 4 cards at `column: todo`, all registered in this card's `eht:`:
@@ -1413,3 +1433,9 @@ partial move and merely makes the caller notice afterwards.
 
 - 2026-08-16T16:53:19+0200 — MANDATE issued by the USER (min-approval-requirement: none).
   Pre-approved: the issuer is the USER, above every agent rung. No approval request was sent.
+- 2026-08-18T19:53:29+0200 — PHASE 2 AUTHORIZED by the USER via direct delegation to the hub,
+  verbatim across two turns: "you are in charge. decide yourself in base of verified facts and
+  tests." and "all plugins claudes are waiting for your instructions. use SendMessages to
+  orchestrate them." The hub dispatched Phase 2 to all 13 live sessions the same hour and rules
+  program decisions under this delegation; Tier-3-classified items are still ruled on the merits
+  and surfaced to the USER in the session summary for override.

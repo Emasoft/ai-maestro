@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T23:39:31+0200
+updated: 2026-08-18T23:41:17+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -64,7 +64,10 @@ authorized; janitor#279 filed; 40G cache freed), orchestrator 3 cards todo→dev
 wave + publish GO'd, 2 Tier-3 proposals REFUSED per R49 (32cea83e mirror-dual-write;
 30ebf367 re-propose decoupled).
 
-**NOT LIVE:** PSS only. plugin-94 never reported Phase 1. ~~visual-comunicator~~ came live ~23:30,
+**NOT LIVE: none — every session is now live.** ~~PSS~~ checked in ~23:40 (scoped by its USER to
+PSS feature requests only — respected: the hub sent one measured feature request, suppress
+suggestions on automation-shaped prompts, plus a no-directive pointer to its 10 hub-ledgered
+findings). plugin-94 never reported Phase 1 and remains the program's only silent party. ~~visual-comunicator~~ came live ~23:30,
 Phase-2 COMPLETE: YY5ISKCJ fail-closed version gate shipped in v1.5.1; its "21/22 no version gate"
 fleet claim corrected by hub sweep to **14/22 no remote-tag read · 7/22 unaudited · 1/22
 fail-closed** and routed to CPV as the 4th canonical candidate. Also landed since the last

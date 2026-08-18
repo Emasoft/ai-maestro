@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T18:00:52+0200
+updated: 2026-08-18T18:02:34+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1388,6 +1388,26 @@ cards violates the freeze in order to satisfy the zone rule. `36RGLVYH` exists m
 scripting it, and this measurement strengthens that: at 232-vs-74 the de-facto fleet behaviour IS
 `complete`, so the open question is whether the RULE or the WRITER is wrong — a spec decision for
 the USER, not a repair job. Phase-2 candidate, one canonical card, never eight.
+
+### janitor's safe-delete finding — CONFIRMED, and it contradicts a rule EVERY session loads · 2026-08-18T18:02:34+0200
+
+`~/.claude/rules/use-safe-delete.md:82` promises *"nothing is moved on partial failure"*.
+`scripts/safe_delete.py` does not honour it, and the exit code hides it:
+`:297` `for arg in args.paths:` → `:331` `shutil.move(...)` executes **inside the loop** (no
+deferral, no rollback), and the terminal gate is `if failed > 0 and moved == 0: return 1` /
+`return 0` — so a batch where 1 of 3 targets moved and 2 failed exits **0**. All three citations
+verified first-hand.
+
+**Why this is worse than doc drift.** That same rule tells every agent on this machine that a
+recoverable delete needs no confirmation (*"Recoverable ⇒ do NOT ask"*) — correct, and it rests on
+the atomicity promised two paragraphs earlier. So an agent batch-deletes on the strength of the
+contract, gets exit 0, and a partial move has happened. The rule is USER-scope: the blast radius
+is every project on the box, not this plugin.
+
+Owner is the janitor's session (hub does not edit plugin code). The fix is a choice, not a patch:
+make the batch two-phase (validate all, then move all), or correct the rule to describe
+per-target semantics. **Do not "fix" it by making the exit code non-zero alone** — that leaves the
+partial move and merely makes the caller notice afterwards.
 
 ## Approval log
 

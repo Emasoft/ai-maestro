@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-16T21:52:15+0200
+updated: 2026-08-18T20:06:12+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,25 @@ external-refs: []
 ---
 
 # A MUST clause with 167 violations and zero enforcement
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-18
+
+**The spec question this card surfaced is RULED: 3-pillars spec 2.0.0 (commit 4cc82d53) amends
+3P-ZON-05 to admit `complete` — every terminal column archives AS ITSELF, no rename on the way
+in.** Authority: direct USER delegation (TRDD-BRRJK57P Approval log). Consequences for this card:
+
+- The 168 hub cards (and 232 fleet-wide, measured 2026-08-18 across 8 repos) are **conformant as
+  they sit** — track 2 (per-card classification of "violations") is VOID; there are no violations
+  to classify. Nothing was scripted, nothing frozen was touched — the rule moved, not the cards.
+- **Track 1 survives and is now the card's whole scope:** wire enforcement of the AMENDED set
+  (`complete|completed|cancelled|superseded|published|live`, plus tasks/-must-not-hold-terminal)
+  into `trddgrep validate` / `trdd:doctor`, failing on a seeded violation, with the boundary
+  stated in the check. The fleet still has 6 real tasks/-zone violations (janitor 4, ANIME2SVG 1,
+  visual-comunicator 1) that this check would have caught.
+
+**NEXT ACTION:** implement track 1 against spec 2.0.0's set; seed one violation per shape
+(archived-at-nonterminal, tasks-at-terminal) and verify the check reddens on both before trusting
+a clean run.
 
 ## Problem
 

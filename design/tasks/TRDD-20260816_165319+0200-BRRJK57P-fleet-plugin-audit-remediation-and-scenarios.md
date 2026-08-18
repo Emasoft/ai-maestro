@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T19:53:29+0200
+updated: 2026-08-18T20:06:12+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -48,9 +48,21 @@ sweep approved; TCC = human-only, surfaced to USER), architect (ruff adoption ap
 
 **NEXT ACTION:** (1) hub-verify the janitor's remaining findings (memory-scope-leak,
 bugs-pass2-deep, baseline-applier-gate6) and ledger them, then clear the janitor's held cards;
-(2) rule the `complete`/`completed` zone-spec question — spec moves FIRST (hub spec 3P-ZON-05),
-then unblock the janitor's 2 held cards and the fleet zone card; (3) collect Phase-2 card ids as
-sessions report them and track ai_review escalations.
+(2) track Phase-2 completions as sessions report; hold hub reviews owed: AMAMA D6H36I26 skill
+(published ahead of review by hub GO — review async).
+
+**RULED / LANDED 2026-08-18 evening (all under the recorded delegation):** zone spec →
+**3-pillars 2.0.0** (4cc82d53): 3P-ZON-05 admits `complete`, terminal columns archive AS
+THEMSELVES; 232 fleet cards conformant untouched; 36RGLVYH rescoped to enforcement-only.
+Claimed-chores contract **rev 8 RATIFIED** (eccbd02a + #126 comment); janitor#274 settled by
+measurement (github-config-audit is server-absorbed since 08-05, stamp fresh today). Phase-2
+completions reported: **autonomous v1.6.19 (4/4), programmer v2.0.8 (8/8), webdesign 6/6 (release
+HELD for the USER's own word per its policy — correctly), llm-ext v13.5.6 (3 fixes + 3 retro-cards
++ 3 cards draining), CORE 3/3 (+1 new local card: its own publish.py PAIR constant — measured
+NOT fleet-wide: 2 of 22 copies, integrator's already TRIO), maintainer 6/6 via 3 cards (release
+authorized; janitor#279 filed; 40G cache freed), orchestrator 3 cards todo→dev, AMAMA propagation
+wave + publish GO'd, 2 Tier-3 proposals REFUSED per R49 (32cea83e mirror-dual-write;
+30ebf367 re-propose decoupled).
 
 **NOT LIVE, cannot receive dispatch (surfaced to USER):** CPV (owns the two fleet-wide
 canonical-pipeline cards — atomic-push retry, Agent: trailer — and the setup_branch_rules.py:807

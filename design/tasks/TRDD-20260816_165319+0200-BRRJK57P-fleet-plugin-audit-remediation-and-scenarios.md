@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T20:28:29+0200
+updated: 2026-08-18T20:41:31+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -70,6 +70,10 @@ P1 its own setup_branch_rules.py stale payloads (hub re-verified in its tree: st
 abolished `bypass_actors: []`; lands BEFORE the janitor's TRDD-DD0M4QL7 gate fix), P1 canonical
 atomic-push retry (12/22; assistant-role 7b4e8ba is the reference impl), P2 canonical Agent:
 trailer (21/22). The stale-PAIR constant explicitly excluded (2/22, CORE-local).
+
+**webdesign v0.1.15 RELEASED 2026-08-18 ~20:40 — the USER authorized directly in its session
+("go on. permission granted."), resolving the strict-policy hold the clean way; its release item
+closes.** CI was still in_progress at report time; webdesign reports if it reds.
 
 **Releases landed under Phase 2 so far:** maintainer v1.13.9 · AMAMA v2.17.2 · assistant-role
 v0.4.0 · autonomous v1.6.19 · programmer v2.0.8 · llm-ext v13.5.6 · orchestrator publishing ·

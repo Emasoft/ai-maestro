@@ -1,9 +1,9 @@
 ---
 trdd-id: 78J4I4QS
 title: reliability — detect a keychain-blind tmux server before it silently takes the whole fleet down
-column: ai_review
+column: complete
 created: 2026-07-12T12:27:10+0200
-updated: 2026-08-16T10:36:32+0200
+updated: 2026-08-18T23:34:36+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 1
@@ -153,8 +153,11 @@ STATE block names — not criteria invented at closing time. Re-verified live 20
 - [x] deployed and live-verified — 3+ silent sweeps, zero leftover `aim-kc-watchdog` sessions,
       after `6eef63fe` (module+wiring+tests) and `fcd0fa5b` (pre-kill the own fixed name, the fix
       for the false `blind` alarm the first live sweep raised)
-- [ ] the dashboard banner off `getTmuxServerKeychainAlarm()` — the state is exported and
-      queryable, the UI is not wired. The card calls this **explicitly not gating**
+- [x] the dashboard banner off `getTmuxServerKeychainAlarm()` — **SPLIT OUT 2026-08-18 to
+      TRDD-GIA2LC83 at the hub's ai_review.** The delivered half (state exported and queryable) is
+      done; the UI wiring was deliberately descoped and now owns its own card, so this checklist
+      truthfully reflects THIS card's scope. A box whose open half belongs to other work is the
+      fused-box defect — split, not left dangling.
 - [x] the leftover `AIM_INVARIANTS_WATCHDOG_INTERVAL_MS=15000` — **CLEARED 2026-08-16 (`4982a3f1`),
       and the remedy this box named DOES NOT WORK.** Verified on the live process (pid 78342,
       started 10:08:20): `ps eww -p <pid>` → **0** occurrences, with `NODE_ENV`/`PATH` present in
@@ -213,3 +216,10 @@ STATE block names — not criteria invented at closing time. Re-verified live 20
 - 2026-07-12T12:27:10+0200 — **MANDATE** issued by USER ("create the TRDD"), authored as
   the EHT of TRDD-CNF1X3J7. `min-approval-requirement: none` (Tier 0 — in-scope dev).
   Pre-approved: issuer authority ≥ required approver.
+- 2026-08-18T23:34:36+0200 — **ai_review by the hub: PASS → complete** (under the USER delegation
+  recorded in TRDD-BRRJK57P). All delivered boxes verified as recorded (live-verification and the
+  pm2 phantom-env clearing both carry their own measurement trails). The one open box — the
+  dashboard banner — was deliberately descoped UI work fused into this card's checklist; split out
+  to TRDD-GIA2LC83 per the fused-box rule so this checklist truthfully reflects this card's scope.
+  Not archived yet: `release-via: none` makes `complete` the terminal column and it archives AS
+  ITSELF (3P-ZON-05 @ 2.0.0) on the next archival pass.

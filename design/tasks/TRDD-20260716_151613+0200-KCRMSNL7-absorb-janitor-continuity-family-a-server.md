@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-08-16T16:40:46+0200
+updated: 2026-08-19T10:32:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -257,6 +257,46 @@ it stays in `design` as the umbrella while the flock executes.
 (**[[TRDD-H24DF6ZC]]**, this TRDD's NPT) must be **explicitly signed off by the USER** first
 (R16). Family A can be built up to — but NOT including — anything that reads, writes, moves,
 or persists live OAuth token material until that sign-off lands.
+
+## ⏱ JANITOR ROSTER DELIVERED 2026-08-19 (USER full-absorption mandate) — the current normative input
+
+The USER's 2026-08-19 orchestration directive WIDENS this card's frame: when the server runs
+it must COMPLETELY replace the janitor's global daemon (not only Family A), with agent-work
+continuity across stops/errors as the design driver. The janitor session delivered the live
+roster the same hour (rev-8 §9 remains its normative table; env knob
+`CLAUDE_PLUGIN_OPTION_DAEMON_<CHORE>_INTERVAL`, defaults in seconds):
+
+| Chore | Default | Class (janitor's own classification) |
+|---|---|---|
+| oauth-rotator-tick | 60 | claim-eligible (absorbed five) |
+| oauth-rotator-supervisor | 600 | claim-eligible |
+| marketplace-refresh | 3600 | claim-eligible |
+| version-update | 21600 | claim-eligible |
+| github-config-audit | 21600 | claim-eligible |
+| memory-guard | 120 | janitor-internal — NEVER yield |
+| cache-prune | 21600 | janitor-internal — never yield |
+| rules-cleanup | 3600 | janitor-internal — never yield |
+| session-liveness | 120 | population-split — needs explicit redesign under full absorption |
+| fleet-stop | 60 | population-split — redesign |
+| cold-cache-clear | 300 | population-split — redesign |
+| fleet-plugins-update | 21600 | population-split — redesign |
+| user-plugins-update | 3600 | de-absorbed per PE54D95Q AC6 — under FULL absorption consider RETIRING (harness self-updates plugins) |
+
+Claim/heartbeat contract the janitor expects: per-chore-exact tokens in
+`server-liveness.json` capabilities (coarse family-a honored) · 90 s staleness window ·
+completion stamps at `~/.claude/janitor-control/<chore>.last-run.ts` · stale bound
+`max(3×cadence, cadence+600)` · `claim-bounds.json` widen-only, fail-open.
+
+Named design requirements from measured incidents (must appear in the NPT decomposition):
+1. **Atomic cache population** — staging dir + rename. The 2026-08-19 morning incident
+   (partial 3.3.16 cache; every session's PreToolUse hooks Errno-2 for ~20 min, machine-wide
+   tool blackout, no in-band recovery possible) is the ACCEPTANCE SCENARIO; janitor
+   post-mortem card TRDD-4OFMHOZ7 (janitor 844683d9).
+2. **Quarantine outside every scanned tree** — the janitor's first mv-aside parked the broken
+   copy inside the marketplace cache and produced 7 load errors.
+3. **Cache-parent root resolution stated explicitly in the design** — the janitor's
+   version-update was silently dead for a MONTH from a wrong-root assumption
+   (janitor TRDD-ZM5LZ24Y, fixed 83cfd3b6); the absorption must not inherit that shape.
 
 ## The aligned architecture (three-Claude consensus, ai-maestro-janitor#100)
 

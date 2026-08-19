@@ -21,6 +21,7 @@ Plugins may call these exactly like the CLIs below. Authoritative contracts:
 |---|---|---|
 | Messaging | amp-send · amp-inbox · amp-init · amp-identity | skills/agent-messaging/reference/detailed-guide.md |
 | Kanban | amp-kanban-list · amp-kanban-get · amp-kanban-create-task · amp-kanban-move · amp-kanban-edit · amp-kanban-archive | skills/team-kanban/SKILL.md |
+| Task signals | amp-task-done · amp-task-blocked · amp-submit-pr · amp-status | contract doc pending (spec-first ask filed with CORE) — verbs verified installed at ~/.local/bin, each --help pairs with its amp-kanban-move half |
 | Identity token | aid-maestro-token.sh (--quiet/--json) | skills/agent-identity/SKILL.md §"Getting an AI Maestro governance token" |
 
 NOTE: teach the CLIs (the .sh form is canonical), never a bare-name `agent-messaging`

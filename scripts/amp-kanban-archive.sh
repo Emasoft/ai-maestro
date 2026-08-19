@@ -32,6 +32,22 @@ unset _amp_prev _amp_arg
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/amp-helper.sh"
 
+# Auth for the ai-maestro API (TRDD-17K0SHDQ probe finding, 2026-08-19): these CLIs sent NO
+# Authorization header at all, so once the server dropped its localhost exemption every kanban
+# verb 401'd for every agent. `get_auth_args` is the ONE resolution order every aimaestro-*
+# CLI uses (AID_AUTH bearer for an agent, aim_session cookie for the human) — never inline a
+# second copy. Expanded with the bash-3.2-safe empty-array idiom (TRDD-ARY3NRFC).
+if [ -f "${SCRIPT_DIR}/shell-helpers/common.sh" ]; then
+    source "${SCRIPT_DIR}/shell-helpers/common.sh"
+elif [ -f "${HOME}/.local/share/aimaestro/shell-helpers/common.sh" ]; then
+    source "${HOME}/.local/share/aimaestro/shell-helpers/common.sh"
+else
+    echo "Error: cannot locate shell-helpers/common.sh (needed for API auth)" >&2
+    exit 2
+fi
+_KANBAN_AUTH=()
+get_auth_args _KANBAN_AUTH
+
 # =============================================================================
 # Arguments
 # =============================================================================
@@ -107,7 +123,7 @@ if [ -z "$TEAM_ID" ]; then
     fi
 
     if [ -n "$AGENT_UUID" ]; then
-        TEAM_ID=$(curl -sf "$API/api/agents/$AGENT_UUID" 2>/dev/null | jq -r '.agent.teamId // empty' 2>/dev/null) || true
+        TEAM_ID=$(curl -sf ${_KANBAN_AUTH[@]+"${_KANBAN_AUTH[@]}"} "$API/api/agents/$AGENT_UUID" 2>/dev/null | jq -r '.agent.teamId // empty' 2>/dev/null) || true
     fi
 
     if [ -z "$TEAM_ID" ]; then
@@ -124,7 +140,7 @@ fi
 # server (curl exit 7) killed it HERE and the "❌ Failed to archive task" branch below never
 # ran — a bare exit 7 with no diagnostic. curl still writes `000` through `-w`, so that
 # branch now reports honestly. Guard only: the branch already ends in `exit 1`.
-RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 \
+RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 5 --max-time 15 ${_KANBAN_AUTH[@]+"${_KANBAN_AUTH[@]}"} \
     -X DELETE "$API/api/teams/$TEAM_ID/tasks/$TASK_ID") || true
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)

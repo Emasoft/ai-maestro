@@ -26,12 +26,18 @@
 //   1. not_a_target — only `dead` enters (the safety invariant above).
 //   2-3. fire_flag_off / actuation_blocked — shared entry gates; flag first ⇒ an OFF
 //        actuator performs no I/O at all.
-//   4. boot_grace — sessions.json is OVERCOMPLETE right after a server restart (persisted
-//        agents are absent from tmux until boot-restore re-creates them), so firing early
-//        would mass-resurrect every persisted agent at once. Refuse until the server has
-//        been up past the grace window.
-//   5. debounce — one scan's `dead` can be a transient read; require N CONSECUTIVE dead
-//        scans (runner-counted) before the first kill-class action.
+//   4. boot_grace — sessions.json is OVERCOMPLETE while boot-restore is still walking the
+//        fleet (persisted agents are absent from tmux until it re-creates them), so firing
+//        then would mass-resurrect every persisted agent at once. The precise signal is the
+//        boot-restore in-flight stamp (lib/boot-restore-status.ts), which heartbeats per
+//        session during the walk and ages out if the restore crashes — NOT a fixed uptime
+//        grace, which would be wrong in both directions on a large/small fleet.
+//   5. debounce — one scan's `dead` can be a freshly-relaunching agent whose pane is not
+//        back yet. The wall-clock dead-since tracker (lib/fleet-dead-debounce.ts, the
+//        TRDD-SX593MDG guard built ahead of this actuator) is the ONE source of truth for
+//        "dead past the boot window"; the runner passes its verdict per agent and this gate
+//        refuses anything the tracker has not confirmed. Duplicating the window here would
+//        be a second debounce that drifts from the first.
 //   6. crash_loop — the ladder is exhausted (relaunch, then external teardowns, all fired
 //        and the agent is still dead): a human must look. Reported BEFORE hid/cooldown so
 //        the terminal condition is never masked by a routine gate — the runner pages ONCE
@@ -48,6 +54,7 @@
 
 import { recoveryRungFor, type RecoveryRung } from '@/lib/fleet-recovery'
 import type { LivenessClass } from '@/lib/fleet-liveness'
+import { isBootRestoreInFlight } from '@/lib/boot-restore-status'
 import {
   checkEntryGates,
   checkInjectionGates,
@@ -62,12 +69,6 @@ export const HARD_RECOVERY_FLAG = 'AIM_FLEET_HARD_RECOVERY'
  *  re-persist before "still dead" means anything. Longer than the gentle 10 min on purpose. */
 export const DEFAULT_HARD_COOLDOWN_MS = 30 * 60_000
 
-/** Consecutive dead scans required before the FIRST hard action (runner-counted). */
-export const DEFAULT_MIN_DEAD_SCANS = 3
-
-/** No hard action until the server has been up this long — the boot-overcomplete window. */
-export const DEFAULT_BOOT_GRACE_MS = 10 * 60_000
-
 /** Fired attempts before the ladder is exhausted: relaunch → force_restart → resurrect. */
 export const DEFAULT_MAX_HARD_ATTEMPTS = 3
 
@@ -79,8 +80,10 @@ export interface HardRecoveryTarget {
   attempt: number
   /** Epoch ms of the last actuation of THIS agent, or null. Runner-owned. */
   lastActuatedAtMs: number | null
-  /** How many CONSECUTIVE scans this agent has classified `dead`. Runner-owned. */
-  consecutiveDeadScans: number
+  /** The dead-since tracker's verdict: true only when this agent has been continuously
+   *  observed dead PAST the boot window (trackDeadDebounce → hardRecoverable). The runner
+   *  supplies it; false is the fail-safe default for anything the tracker has not confirmed. */
+  debouncedDead: boolean
 }
 
 export interface HardRecoveryAction {
@@ -90,12 +93,9 @@ export interface HardRecoveryAction {
 }
 
 export interface HardRecoveryDeps extends GateDeps {
-  /** Ms since the server process started — gates the boot-overcomplete window. */
-  msSinceBoot: () => number
-  /** Override the boot grace window (default DEFAULT_BOOT_GRACE_MS). */
-  bootGraceMs?: number
-  /** Override the consecutive-dead-scan floor (default DEFAULT_MIN_DEAD_SCANS). */
-  minDeadScans?: number
+  /** True while the boot-restore walk is still heartbeating — hard recovery must wait it
+   *  out. Defaults to the real stamp reader (same pattern as actuationBlocked's default). */
+  bootRestoreInFlight?: () => boolean
   /** Override the ladder-exhausted ceiling (default DEFAULT_MAX_HARD_ATTEMPTS). */
   maxAttempts?: number
   /** THE relaunch effect: transcript-preserving wake (wakeAgent + continueConversation in
@@ -141,17 +141,15 @@ export async function actuateHardRecovery(
   const entry = checkEntryGates(deps)
   if (!entry.ok) return { fired: false, reason: entry.reason, detail: entry.detail }
 
-  // 4. boot grace — sessions.json overcomplete right after a restart.
-  const grace = deps.bootGraceMs ?? DEFAULT_BOOT_GRACE_MS
-  const up = deps.msSinceBoot()
-  if (up < grace) {
-    return { fired: false, reason: 'boot_grace', detail: `${Math.round((grace - up) / 1000)}s left` }
+  // 4. boot grace — sessions.json is overcomplete while boot-restore is still walking.
+  if ((deps.bootRestoreInFlight ?? isBootRestoreInFlight)()) {
+    return { fired: false, reason: 'boot_grace', detail: 'boot-restore in flight' }
   }
 
-  // 5. debounce — N consecutive dead scans before the first kill-class action.
-  const minScans = deps.minDeadScans ?? DEFAULT_MIN_DEAD_SCANS
-  if (target.consecutiveDeadScans < minScans) {
-    return { fired: false, reason: 'debounce', detail: `${target.consecutiveDeadScans}/${minScans} scans` }
+  // 5. debounce — only the dead-since tracker's confirmed verdict may pass (one window,
+  //    one owner: lib/fleet-dead-debounce.ts).
+  if (!target.debouncedDead) {
+    return { fired: false, reason: 'debounce', detail: 'within the dead-since boot window' }
   }
 
   // 6. crash loop — the whole hard ladder fired and the agent is still dead. Human needed.

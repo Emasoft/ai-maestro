@@ -6,8 +6,9 @@
 //    a spy on relaunch proves refusal happened before any effect.
 //  - flag-off asserts ZERO I/O (neither actuationBlocked nor relaunch consulted) — the
 //    shared-entry-gate order is what makes an OFF module truly inert.
-//  - boot_grace and debounce each pass at their exact boundary (>=), because the whole point
-//    of both is WHERE the line sits, not that a line exists.
+//  - boot_grace consults the boot-restore in-flight stamp and debounce consults the
+//    dead-since tracker's verdict — both are EXTERNAL single-owner signals, so the tests
+//    pin that the actuator refuses when each says no and fires when both say yes.
 //  - crash_loop must dominate hid/cooldown (reported even while both would also refuse) —
 //    otherwise a terminal "human needed" is masked forever by the routine cooldown.
 //  - the fire tests pin the rung→effect mapping at the injected boundary: attempt 0 =
@@ -19,8 +20,6 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   actuateHardRecovery,
   DEFAULT_HARD_COOLDOWN_MS,
-  DEFAULT_MIN_DEAD_SCANS,
-  DEFAULT_BOOT_GRACE_MS,
   DEFAULT_MAX_HARD_ATTEMPTS,
   type HardRecoveryDeps,
   type HardRecoveryTarget,
@@ -38,7 +37,7 @@ function makeDeps(over: Partial<HardRecoveryDeps> = {}): {
     fireEnabled: true,
     actuationBlocked: () => ({ blocked: false, reason: null }),
     hidPresent: () => false,
-    msSinceBoot: () => DEFAULT_BOOT_GRACE_MS, // exactly at the boundary = past grace
+    bootRestoreInFlight: () => false,
     now: () => 10_000_000,
     relaunch: async (id) => {
       relaunched.push(id)
@@ -60,7 +59,7 @@ function target(over: Partial<HardRecoveryTarget> = {}): HardRecoveryTarget {
     class: 'dead',
     attempt: 0,
     lastActuatedAtMs: null,
-    consecutiveDeadScans: DEFAULT_MIN_DEAD_SCANS,
+    debouncedDead: true,
     ...over,
   }
 }
@@ -98,38 +97,37 @@ describe('gates 2-3 — shared entry gates on the HARD flag', () => {
   })
 })
 
-describe('gate 4 — boot grace (the boot-overcomplete window)', () => {
-  it('refuses while the server is younger than the grace window', async () => {
-    const { deps, relaunched } = makeDeps({ msSinceBoot: () => DEFAULT_BOOT_GRACE_MS - 1 })
+describe('gate 4 — boot grace (the boot-restore in-flight stamp)', () => {
+  it('refuses while boot-restore is still walking the fleet', async () => {
+    const { deps, relaunched } = makeDeps({ bootRestoreInFlight: () => true })
     const d = await actuateHardRecovery(target(), deps)
-    expect(d.fired).toBe(false)
-    if (!d.fired) expect(d.reason).toBe('boot_grace')
+    expect(d).toEqual({ fired: false, reason: 'boot_grace', detail: 'boot-restore in flight' })
     expect(relaunched).toHaveLength(0)
   })
 
-  it('fires exactly AT the grace boundary (>= semantics)', async () => {
-    const { deps, relaunched } = makeDeps({ msSinceBoot: () => DEFAULT_BOOT_GRACE_MS })
+  it('fires once the restore walk is over', async () => {
+    const { deps, relaunched } = makeDeps({ bootRestoreInFlight: () => false })
     const d = await actuateHardRecovery(target(), deps)
     expect(d.fired).toBe(true)
     expect(relaunched).toEqual(['d1'])
   })
 })
 
-describe('gate 5 — consecutive-dead-scan debounce', () => {
-  it('refuses below the floor, naming the count', async () => {
+describe('gate 5 — the dead-since tracker owns the debounce', () => {
+  it('refuses anything the tracker has not confirmed (debouncedDead false)', async () => {
     const { deps, relaunched } = makeDeps()
-    const d = await actuateHardRecovery(target({ consecutiveDeadScans: DEFAULT_MIN_DEAD_SCANS - 1 }), deps)
+    const d = await actuateHardRecovery(target({ debouncedDead: false }), deps)
     expect(d).toEqual({
       fired: false,
       reason: 'debounce',
-      detail: `${DEFAULT_MIN_DEAD_SCANS - 1}/${DEFAULT_MIN_DEAD_SCANS} scans`,
+      detail: 'within the dead-since boot window',
     })
     expect(relaunched).toHaveLength(0)
   })
 
-  it('fires exactly AT the floor (>= semantics)', async () => {
+  it('fires on a tracker-confirmed dead agent', async () => {
     const { deps, relaunched } = makeDeps()
-    const d = await actuateHardRecovery(target({ consecutiveDeadScans: DEFAULT_MIN_DEAD_SCANS }), deps)
+    const d = await actuateHardRecovery(target({ debouncedDead: true }), deps)
     expect(d.fired).toBe(true)
     expect(relaunched).toEqual(['d1'])
   })

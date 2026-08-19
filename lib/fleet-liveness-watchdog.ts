@@ -27,6 +27,13 @@ import {
   type InboxNudgeResult,
 } from '@/lib/fleet-inbox-nudge'
 import { trackDeadDebounce, type DeadPartition } from '@/lib/fleet-dead-debounce'
+import { HARD_RECOVERY_FLAG } from '@/lib/fleet-hard-recovery'
+import {
+  runHardRecoveryPass,
+  defaultHardRecoveryDeps,
+  type HardRecoveryState,
+  type HardRecoveryPassResult,
+} from '@/lib/fleet-hard-recovery-runner'
 import { readTickWindows } from '@/lib/oauth-rotator/tick-status'
 import { runModelFallbackSweep } from '@/lib/oauth-rotator/model-fallback-sweep'
 import {
@@ -111,6 +118,14 @@ export interface FleetLivenessWatchdogOptions {
   /** Boot-debounce for the `dead` class (TRDD-SX593MDG D2); defaults to the real sidecar-backed
    *  tracker. Injected in tests so the partition is deterministic and no sidecar is written. */
   trackDead?: (deadIds: string[], now: number) => DeadPartition
+  /** Phase C: enable the HARD actuator (relaunch a genuinely dead agent). Defaults to
+   *  AIM_FLEET_HARD_RECOVERY=1; OFF otherwise — its OWN switch, independent of the gentle one. */
+  hardRecoveryEnabled?: boolean
+  /** Injectable hard pass for tests; defaults to the real runner over the module store. */
+  runHardPass?: (
+    dead: { agentId: string; name?: string; class: 'dead' }[],
+    debouncedIds: ReadonlySet<string>,
+  ) => Promise<HardRecoveryPassResult>
 }
 
 /** Default 5 min, env-overridable, 0 disables (same knob shape as the invariants watchdog). */
@@ -134,6 +149,18 @@ const inboxNudgeStore = new Map<string, InboxNudgeState>()
 /** Clear the recovery state — for tests only (the running server keeps one store for its life). */
 export function resetRecoveryStore(): void {
   recoveryStore.clear()
+}
+
+/** Phase C: hard recovery is OFF by default — only `AIM_FLEET_HARD_RECOVERY=1` arms it. */
+const DEFAULT_HARD_RECOVERY = process.env[HARD_RECOVERY_FLAG] === '1'
+
+/** Per-agent HARD-ladder state (attempt / cooldown / page-once), threaded across ticks. Its own
+ *  store, not recoveryStore: a dead agent has no pane, so no other leg can double-actuate it. */
+const hardRecoveryStore = new Map<string, HardRecoveryState>()
+
+/** Clear the hard-recovery state — for tests only. */
+export function resetHardRecoveryStore(): void {
+  hardRecoveryStore.clear()
 }
 
 /** Clear the inbox-nudge state — for tests only. */
@@ -201,6 +228,7 @@ export async function runFleetLivenessTick(
     const tokenBlocked = snap.agents.filter((a) => a.class === 'token_blocked')
     const dead = snap.agents.filter((a) => a.class === 'dead')
     const fireEnabled = opts.fireEnabled ?? DEFAULT_RECOVERY_FIRE
+    const hardEnabled = opts.hardRecoveryEnabled ?? DEFAULT_HARD_RECOVERY
     // Boot-debounce the dead set (D2): a dead agent is only a hard-recovery candidate once it has
     // been observed dead PAST the boot window — a freshly-relaunched agent (session registered,
     // tmux not yet back) is still booting and must NOT be hard-recovered. Detection-only here; the
@@ -216,7 +244,7 @@ export async function runFleetLivenessTick(
         const nameOf = (id: string) => dead.find((a) => a.agentId === id)?.name || id
         if (deadPart.hardRecoverable.length)
           parts.push(
-            `${deadPart.hardRecoverable.length} dead (crashed past boot window, Phase C hard-recovery gated): ${deadPart.hardRecoverable.map(nameOf).join(', ')}`,
+            `${deadPart.hardRecoverable.length} dead (crashed past boot window${hardEnabled ? '' : `, hard recovery OFF: ${HARD_RECOVERY_FLAG} not set`}): ${deadPart.hardRecoverable.map(nameOf).join(', ')}`,
           )
         if (deadPart.debouncing.length)
           parts.push(
@@ -245,6 +273,31 @@ export async function runFleetLivenessTick(
           log(`[FleetLiveness] recovery ESCALATION NEEDED ${e.name || e.agentId}: ${e.reason} — gentle ladder exhausted; human / Phase C`)
       } catch (err) {
         log(`[FleetLiveness] recovery pass failed (non-fatal): ${(err as Error)?.message || err}`)
+      }
+    }
+
+    // Phase C: HARD recovery for genuinely dead agents (persisted + tmux gone), behind its OWN
+    // default-OFF flag. Every dead agent is driven through the actuator (so its gates — boot
+    // grace, tracker debounce, cooldown, crash-loop — are the live decision surface); only the
+    // tracker-confirmed set can actually fire. Own try, like every other leg. The machine-wide
+    // STOP is enforced inside the actuator's shared entry gates, so a halted fleet refuses here
+    // even though `dead` agents never appear in recoveryTargets.
+    if (hardEnabled && dead.length > 0 && deadPart) {
+      try {
+        const hardPass =
+          opts.runHardPass ??
+          ((d: { agentId: string; name?: string; class: 'dead' }[], ids: ReadonlySet<string>) =>
+            runHardRecoveryPass(d, ids, defaultHardRecoveryDeps(true, now), hardRecoveryStore, now))
+        const hp = await hardPass(
+          dead.map((a) => ({ agentId: a.agentId, name: a.name, class: 'dead' as const })),
+          new Set(deadPart.hardRecoverable),
+        )
+        for (const f of hp.fired)
+          log(`[FleetLiveness] HARD recovery FIRED ${f.name || f.agentId}: ${f.rung}${f.ok ? '' : ` (wake issue: ${f.detail})`}`)
+        for (const c of hp.crashLooping)
+          log(`[FleetLiveness] HARD recovery CRASH LOOP ${c.name || c.agentId}: ladder exhausted (${c.detail}) — human needed`)
+      } catch (err) {
+        log(`[FleetLiveness] hard-recovery pass failed (non-fatal): ${(err as Error)?.message || err}`)
       }
     }
 

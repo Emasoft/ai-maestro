@@ -98,8 +98,10 @@ describe('runFleetLivenessTick (read-only)', () => {
         }),
     })
     expect(logs).toHaveLength(1)
-    // the genuinely-crashed one is a hard-recovery candidate (still Phase C gated) …
-    expect(logs[0]).toContain('1 dead (crashed past boot window, Phase C hard-recovery gated): zombie')
+    // the genuinely-crashed one is a hard-recovery candidate (flag dark by default) …
+    expect(logs[0]).toContain(
+      '1 dead (crashed past boot window, hard recovery OFF: AIM_FLEET_HARD_RECOVERY not set): zombie',
+    )
     // … the just-relaunched one is suppressed — NOT a recovery target while it may still be booting.
     expect(logs[0]).toContain('1 dead (within boot window — debouncing, NOT a recovery target): newborn')
   })
@@ -220,6 +222,83 @@ describe('runFleetLivenessTick — recovery actuation (D-full, behind the defaul
     })
     expect(r).not.toBeNull()
     expect(logs.some((l) => l.includes('recovery pass failed (non-fatal): queue offline'))).toBe(true)
+  })
+})
+
+describe('runFleetLivenessTick — HARD recovery leg (Phase C, behind AIM_FLEET_HARD_RECOVERY)', () => {
+  const deadSnap = () =>
+    snap({
+      agents: [
+        { agentId: 'a1', name: 'zombie', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
+        { agentId: 'a2', name: 'newborn', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
+      ],
+      recoveryTargets: [],
+    })
+  const partition = (ids: string[]) => ({
+    hardRecoverable: ids.filter((id) => id === 'a1'),
+    debouncing: ids.filter((id) => id === 'a2'),
+    nextFirstSeen: {},
+  })
+
+  it('does NOT run the hard pass by default, even with a confirmed-dead agent', async () => {
+    let called = 0
+    await runFleetLivenessTick({
+      ...NO_CONTINUITY,
+      now: () => 1,
+      log: () => {},
+      trackDead: partition,
+      scan: async () => deadSnap(),
+      runHardPass: async () => {
+        called++
+        return { fired: [], crashLooping: [] }
+      },
+    })
+    expect(called).toBe(0)
+  })
+
+  it('armed: runs the hard pass with the FULL dead set + the tracker-confirmed subset, logs FIRED', async () => {
+    const logs: string[] = []
+    let gotDead: string[] = []
+    let gotConfirmed: string[] = []
+    await runFleetLivenessTick({
+      ...NO_CONTINUITY,
+      now: () => 1,
+      log: (m) => logs.push(m),
+      trackDead: partition,
+      hardRecoveryEnabled: true,
+      scan: async () => deadSnap(),
+      runHardPass: async (dead, confirmed) => {
+        gotDead = dead.map((d) => d.agentId)
+        gotConfirmed = [...confirmed]
+        return {
+          fired: [{ agentId: 'a1', name: 'zombie', rung: 'relaunch', ok: true }],
+          crashLooping: [{ agentId: 'a2', name: 'newborn', detail: 'attempt 3' }],
+        }
+      },
+    })
+    // Every dead agent is driven (the debounce gate stays a live decision surface)…
+    expect(gotDead).toEqual(['a1', 'a2'])
+    // …but only the tracker-confirmed subset can fire.
+    expect(gotConfirmed).toEqual(['a1'])
+    expect(logs.some((l) => l.includes('HARD recovery FIRED zombie: relaunch'))).toBe(true)
+    expect(logs.some((l) => l.includes('HARD recovery CRASH LOOP newborn'))).toBe(true)
+  })
+
+  it('a throwing hard pass is non-fatal — logs and still returns the snapshot', async () => {
+    const logs: string[] = []
+    const r = await runFleetLivenessTick({
+      ...NO_CONTINUITY,
+      now: () => 1,
+      log: (m) => logs.push(m),
+      trackDead: partition,
+      hardRecoveryEnabled: true,
+      scan: async () => deadSnap(),
+      runHardPass: async () => {
+        throw new Error('wake service down')
+      },
+    })
+    expect(r).not.toBeNull()
+    expect(logs.some((l) => l.includes('hard-recovery pass failed (non-fatal): wake service down'))).toBe(true)
   })
 })
 

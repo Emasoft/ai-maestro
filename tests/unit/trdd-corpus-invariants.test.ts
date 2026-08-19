@@ -19,6 +19,9 @@ import os from 'os'
 import path from 'path'
 import {
   checkTrddInvariants,
+  classifyBlockerRef,
+  localRefList,
+  externalRefList,
   loadTrddGraph,
   migrationBacklog,
   normalizeTrddRef,
@@ -42,6 +45,7 @@ function node(id: string, over: Partial<TrddNode> = {}): TrddNode {
     npt: [],
     eht: [],
     blockedBy: [],
+    externalBlockers: [],
     ...over,
   }
 }
@@ -245,5 +249,62 @@ describe('the real design/ corpus', () => {
     // Not an assertion about the count: it shrinks as files are touched, and
     // pinning it would make an unrelated edit fail this test.
     expect(Array.isArray(migrationBacklog(nodes))).toBe(true)
+  })
+})
+
+describe('non-local blocked-by spellings (TRDD-PTFPGSLV)', () => {
+  // The classifier is the ONE owner of "which spellings are non-local"; everything
+  // downstream (graph, index, trddgrep board) inherits its verdict through
+  // `localRefList`/`externalRefList`.
+  it('classifyBlockerRef: the two sanctioned shapes, and nothing else', () => {
+    expect(classifyBlockerRef('gh:Emasoft/ai-maestro#145')).toBe('external-issue')
+    expect(classifyBlockerRef('amama:TRDD-LT5N2JA4')).toBe('cross-project')
+    expect(classifyBlockerRef('TRDD-AAAA1111')).toBe('local')
+    expect(classifyBlockerRef('AAAA1111')).toBe('local')
+    // COS's original spelling is deliberately NOT sanctioned: it stays a local id and
+    // therefore still ERRORs as unknown — the card upgrades the workaround into SYNTAX,
+    // not into "anything with a # is fine".
+    expect(classifyBlockerRef('ai-maestro#145')).toBe('local')
+  })
+
+  it('localRefList drops non-local refs from blocked-by ONLY — an npt gh: ref stays (and still errors)', () => {
+    expect(localRefList('blocked-by', ['gh:Emasoft/ai-maestro#145', 'TRDD-AAAA1111'])).toEqual(['AAAA1111'])
+    // Scoped to blocked-by on purpose: silently dropping a bogus `gh:` from `npt:` would
+    // soften `childMissing` — the parent's completion gate would stop counting it.
+    expect(localRefList('npt', ['gh:Emasoft/ai-maestro#145'])).toEqual(['GH:EMASO'])
+  })
+
+  it('externalRefList keeps the RAW spelling — the raw ref IS the information', () => {
+    expect(externalRefList(['gh:Emasoft/ai-maestro#145', 'AAAA1111'])).toEqual(['gh:Emasoft/ai-maestro#145'])
+    expect(externalRefList('amama:TRDD-LT5N2JA4')).toEqual(['amama:TRDD-LT5N2JA4'])
+  })
+
+  it('externalBlocker: a gh: ref is its own kind carrying the raw ref — never a mangled unknownBlocker', () => {
+    const nodes = [node('CARDAAAA', { column: 'blocked', externalBlockers: ['gh:Emasoft/ai-maestro#145'] })]
+    const vs = checkTrddInvariants(nodes)
+    expect(vs.map((v) => v.kind)).toEqual(['externalBlocker'])
+    // A neuter that routes the ref back through normalizeTrddRef truncates it to
+    // `GH:EMASO` and reds this line — the exact live-corpus symptom the card fixes.
+    expect(vs[0].detail).toContain('gh:Emasoft/ai-maestro#145')
+  })
+
+  it('crossProjectBlocker: a <project-id>:TRDD-<id8> ref is its own kind, raw', () => {
+    const nodes = [node('CARDBBBB', { column: 'blocked', externalBlockers: ['amama:TRDD-LT5N2JA4'] })]
+    const vs = checkTrddInvariants(nodes)
+    expect(vs.map((v) => v.kind)).toEqual(['crossProjectBlocker'])
+    expect(vs[0].detail).toContain('amama:TRDD-LT5N2JA4')
+  })
+
+  it('a bare unknown local id still ERRORs as unknownBlocker — unchanged', () => {
+    const nodes = [node('CARDCCCC', { column: 'blocked', blockedBy: ['ZZZZ9999'] })]
+    expect(kinds(nodes)).toEqual(['unknownBlocker'])
+  })
+
+  it('blockedNotBlocked fires for a working-column card whose ONLY blocker is external', () => {
+    // Without counting externalBlockers, a card blocked solely on a gh: issue could sit at
+    // `dev` claiming to be workable while its blocked-by says otherwise.
+    const nodes = [node('CARDDDDD', { column: 'dev', externalBlockers: ['gh:Emasoft/ai-maestro#9'] })]
+    const vs = checkTrddInvariants(nodes)
+    expect(vs.map((v) => v.kind)).toContain('blockedNotBlocked')
   })
 })

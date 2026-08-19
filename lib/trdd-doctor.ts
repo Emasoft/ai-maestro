@@ -40,6 +40,8 @@ import {
   checkTrddInvariants,
   normalizeTrddRef,
   refList,
+  localRefList,
+  BLOCKER_FIELDS,
   V1_STATUS_TO_COLUMN,
   TERMINAL_DONE as GRAPH_TERMINAL_DONE,
 } from './trdd-graph'
@@ -726,7 +728,15 @@ export function lintCorpus(designDir: string): DoctorReport {
     const CHECKLIST_GATED = ['complete', 'completed', 'published', 'live']
     if (CHECKLIST_GATED.includes(c.column)) {
       const day = frontmatterDay(c.fm['updated'])
-      if (day && day >= CHECKLIST_GATE_SINCE) {
+      // An unparseable `updated:` FAILS OPEN: the boundary cannot be evaluated, and skipping
+      // would silently grandfather the card forever — the gate must flag, never silently
+      // skip, when its own input is garbage (TRDD-PTFPGSLV). The boundary itself is an
+      // approximation: `updated:` stands in for "when it went terminal" (the closing edit
+      // bumps it), and the messages say so via the note below.
+      const boundaryNote = day
+        ? ''
+        : ' (the 2026-07-31 grandfather boundary could not be evaluated: `updated:` is unparseable — failing open; the boundary reads `updated:` as a proxy for the terminal transition)'
+      if (!day || day >= CHECKLIST_GATE_SINCE) {
         const back = String(c.fm['pre-block-column'] ?? '').trim() || 'dev'
         if (c.boxes.total === 0) {
           add({
@@ -734,7 +744,7 @@ export function lintCorpus(designDir: string): DoctorReport {
             severity: 'error',
             id: c.id,
             filePath: c.filePath,
-            message: `is '${c.column}' with NO acceptance checklist — the completion gate is written over boxes that are unchecked, so a card with no boxes passes it having PROVEN NOTHING. Nothing records what this card promised or whether it delivered. Move it back to '${back}', write the checklist, then close it`,
+            message: `is '${c.column}' with NO acceptance checklist — the completion gate is written over boxes that are unchecked, so a card with no boxes passes it having PROVEN NOTHING. Nothing records what this card promised or whether it delivered. Move it back to '${back}', write the checklist, then close it${boundaryNote}`,
             autofixable: false,
           })
         } else if (c.boxes.open > 0) {
@@ -743,7 +753,7 @@ export function lintCorpus(designDir: string): DoctorReport {
             severity: 'error',
             id: c.id,
             filePath: c.filePath,
-            message: `is '${c.column}' with ${c.boxes.open} of ${c.boxes.total} acceptance box(es) still unchecked — a false completion. Either the work is not done (move it back to '${back}') or the box is obsolete and must be struck through with its reason, never silently ticked`,
+            message: `is '${c.column}' with ${c.boxes.open} of ${c.boxes.total} acceptance box(es) still unchecked — a false completion. Either the work is not done (move it back to '${back}') or the box is obsolete and must be struck through with its reason, never silently ticked${boundaryNote}`,
             autofixable: false,
           })
         }
@@ -977,11 +987,14 @@ export function lintCorpus(designDir: string): DoctorReport {
   // Deleting my copies is the fix; this comment is the guardrail against a third.
   // The nodes come from `loadCorpus`'s single read, not from a second
   // `loadTrddGraph(designDir)` walk of the same files (TRDD-BQC8NQSW).
+  // The two non-local-blocker kinds are WARN, not ERROR: the blocker is real and correctly
+  // recorded — the local graph just cannot resolve it (TRDD-PTFPGSLV).
+  const GRAPH_WARN_KINDS = new Set(['externalBlocker', 'crossProjectBlocker'])
   for (const v of checkTrddInvariants(nodes)) {
     const id = normalizeTrddRef(v.id)
     add({
       rule: `GRAPH-${v.kind.replace(/([A-Z])/g, '-$1').toUpperCase()}`,
-      severity: 'error',
+      severity: GRAPH_WARN_KINDS.has(v.kind) ? 'warn' : 'error',
       id,
       filePath: byId.get(id)?.[0]?.filePath ?? '?',
       message: v.detail,
@@ -995,9 +1008,10 @@ export function lintCorpus(designDir: string): DoctorReport {
 
 /** Edges that impose ORDER: this card cannot proceed until those cards do. */
 function orderEdges(c: Card): string[] {
-  return [...asList(c.fm['blocked-by']), ...asList(c.fm['npt'])].map((x) =>
-    normalizeTrddRef(x),
-  )
+  // Through the graph's OWN per-field helper, so a non-local `blocked-by:` spelling is
+  // dropped here exactly as it is by the graph and the index (TRDD-PTFPGSLV) — two feeders
+  // of one ranker must drop the same edge for the same reason.
+  return BLOCKER_FIELDS.flatMap((f) => localRefList(f, c.fm[f]))
 }
 
 export interface ReadyCard {

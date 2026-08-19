@@ -48,7 +48,7 @@ import process from 'process'
 
 const { TRDD_ZONES, listTrddFiles, parseTrddFile, assertDesignDir } =
   await import('../lib/trdd-store.ts')
-const { TERMINAL_DONE, normalizeTrddRef, refList, normalizePriority, BLOCKER_FIELDS } =
+const { TERMINAL_DONE, normalizeTrddRef, localRefList, normalizePriority, BLOCKER_FIELDS } =
   await import('../lib/trdd-graph.ts')
 const { readyQueueFrom } = await import('../lib/trdd-doctor.ts')
 
@@ -261,8 +261,11 @@ function cardFieldsFrom(fm) {
     // reference to `lib/trdd-graph.ts` and to the pillar index but NOT to this file —
     // the same "two consumers of one store, divergent on identical input" bug Phase 1
     // fixed one layer down. This tool owns nothing: `BLOCKER_FIELDS` names the fields
-    // and `refList` reads them, and the INDEX filters its edge rows on the same tuple.
-    blockerRefs: BLOCKER_FIELDS.flatMap((f) => refList(fm[f])),
+    // and `localRefList` reads them, and the INDEX filters its edge rows on the same tuple.
+    // `localRefList` so a non-local `blocked-by:` spelling is dropped here exactly as the
+    // graph and the index drop it (TRDD-PTFPGSLV) — the walk-vs-index differential depends
+    // on the two feeders sharing one notion of an edge.
+    blockerRefs: BLOCKER_FIELDS.flatMap((f) => localRefList(f, fm[f])),
     // Scored only by the default SEARCH, which is walk-only by design — so this is
     // the one card field the index does not carry (see `lib/pillar/index-open.ts`).
     labels: String(fm.labels ?? ''),
@@ -412,6 +415,10 @@ function printChain(c, depth = 0, seen = new Set()) {
     if (c.column === 'human_review' || c.column === 'proposal') {
       console.log(`${pad}       ${C.y('⇒ waiting on a HUMAN decision — no agent work can move this')}`)
     }
+    if (c.column === 'blocked') {
+      // A `blocked` leaf with no local edge is blocked on a non-local ref (TRDD-PTFPGSLV).
+      console.log(`${pad}       ${C.y('⇒ blocked on an EXTERNAL/cross-project ref — see its blocked-by (trddgrep show ' + c.id + ')')}`)
+    }
     return
   }
   console.log(`${pad}${C.d('└─ blocked by')}`)
@@ -438,7 +445,15 @@ switch (cmd) {
     console.log(`\n${fmt(c)}\n`)
     const open = openBlockers(c)
     if (open.length === 0) {
-      console.log(C.g('  READY — every prerequisite is satisfied. Nothing is holding it up.\n'))
+      // A `blocked` card with zero LOCAL edges is blocked on a non-local ref
+      // (`gh:owner/repo#n` or `<project-id>:TRDD-<id8>` — TRDD-PTFPGSLV): the graph has
+      // no edge to walk, but READY would be a lie. Column is the discriminator because it
+      // is the one fact both the walk and the index carry.
+      if (String(c.column) === 'blocked') {
+        console.log(C.y(`  BLOCKED with no locally-resolvable blocker — its blocked-by names an external issue or a cross-project TRDD. Read the card: trddgrep show ${c.id}\n`))
+      } else {
+        console.log(C.g('  READY — every prerequisite is satisfied. Nothing is holding it up.\n'))
+      }
       break
     }
     printChain(c)
@@ -481,8 +496,11 @@ switch (cmd) {
     console.log(C.b('\nROOT BLOCKERS — the critical path. Everything else moves once these do.\n'))
     for (const r of capped(roots)) {
       const human = r.column === 'human_review' || r.column === 'proposal' || r.zone === 'proposals'
+      // Zero local edges + column `blocked` = blocked on a non-local ref (TRDD-PTFPGSLV):
+      // still the local board's root, but moving it means moving the EXTERNAL blocker.
+      const ext = r.column === 'blocked'
       console.log(`  ${fmt(r)}`)
-      console.log(`      ${C.g(`holds up ${blocks.get(r.id)}`)}${human ? '  ' + C.y('⇒ needs a HUMAN decision') : ''}`)
+      console.log(`      ${C.g(`holds up ${blocks.get(r.id)}`)}${human ? '  ' + C.y('⇒ needs a HUMAN decision') : ''}${ext ? '  ' + C.y('⇒ itself blocked on an EXTERNAL/cross-project ref (trddgrep show ' + r.id + ')') : ''}`)
     }
     // Already sorted by how much each root holds up, so a cap keeps the WORST ones —
     // the property that makes truncating this list defensible at all.
@@ -496,7 +514,7 @@ switch (cmd) {
     // Ranked by `lib/trdd-doctor.ts`'s ONE ranker, over the graph this tool already
     // loaded — index-backed when there is an index. `blockerRefs` IS the ranker's
     // `orderEdges`: both are exactly `BLOCKER_FIELDS` (`blocked-by` + `npt`) read
-    // through `refList`, which is why the two feeders can be held byte-identical.
+    // through `localRefList`, which is why the two feeders can be held byte-identical.
     const q = readyQueueFrom(
       cards.map((c) => ({
         id: c.id,

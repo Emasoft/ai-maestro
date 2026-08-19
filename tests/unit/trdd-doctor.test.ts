@@ -1147,3 +1147,74 @@ describe('unparseable frontmatter is REPORTED, not "repaired" (TRDD-5XJWR473)', 
     expect(fs.readFileSync(brokenPath(), 'utf8')).toBe(BROKEN)
   })
 })
+
+describe('non-local blocked-by spellings — end-to-end through lintCorpus (TRDD-PTFPGSLV)', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-extblk-'))
+    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+      fs.mkdirSync(path.join(tmp, z), { recursive: true })
+    }
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  const sevOf = (r: ReturnType<typeof lintCorpus>, rule: string) =>
+    r.findings.filter((f) => f.rule === rule).map((f) => f.severity)
+
+  it('a gh: issue blocker is GRAPH-EXTERNAL-BLOCKER at WARN — and no phantom unknown id', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-GHBLOCK1-x.md',
+      good('GHBLOCK1', { column: 'blocked', 'blocked-by': '[gh:Emasoft/ai-maestro#145]', 'pre-block-column': 'dev' }))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1)
+    expect(idsOf(r, 'GRAPH-EXTERNAL-BLOCKER')).toEqual(['GHBLOCK1'])
+    expect(sevOf(r, 'GRAPH-EXTERNAL-BLOCKER')).toEqual(['warn'])
+    // The live-corpus symptom this card fixes: the ref reached normalizeTrddRef, came out
+    // `GH:EMASO`, and was reported as an unknown local id.
+    expect(idsOf(r, 'GRAPH-UNKNOWN-BLOCKER')).toEqual([])
+  })
+
+  it('a <project-id>:TRDD-<id8> blocker is GRAPH-CROSS-PROJECT-BLOCKER at WARN', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-XPBLOCK1-x.md',
+      good('XPBLOCK1', { column: 'blocked', 'blocked-by': '[amama:TRDD-LT5N2JA4]', 'pre-block-column': 'dev' }))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'GRAPH-CROSS-PROJECT-BLOCKER')).toEqual(['XPBLOCK1'])
+    expect(sevOf(r, 'GRAPH-CROSS-PROJECT-BLOCKER')).toEqual(['warn'])
+    expect(idsOf(r, 'GRAPH-UNKNOWN-BLOCKER')).toEqual([])
+  })
+
+  it('a bare unknown local id is still GRAPH-UNKNOWN-BLOCKER at ERROR — unchanged', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-BAREUNK1-x.md',
+      good('BAREUNK1', { column: 'blocked', 'blocked-by': '[ZZZZ9999]', 'pre-block-column': 'dev' }))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'GRAPH-UNKNOWN-BLOCKER')).toEqual(['BAREUNK1'])
+    expect(sevOf(r, 'GRAPH-UNKNOWN-BLOCKER')).toEqual(['error'])
+  })
+
+  it('BLOCKED-WITHOUT-BLOCKER stays silent when the only blocker is external — the entry counts', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-EXTONLY1-x.md',
+      good('EXTONLY1', { column: 'blocked', 'blocked-by': '[gh:Emasoft/ai-maestro#9]', 'pre-block-column': 'dev' }))
+    const r = lintCorpus(tmp)
+    expect(idsOf(r, 'BLOCKED-WITHOUT-BLOCKER')).toEqual([])
+  })
+})
+
+describe('checklist gate fails OPEN on an unparseable updated: (TRDD-PTFPGSLV)', () => {
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-gateopen-'))
+    for (const z of ['proposals', 'tasks', 'archived', 'refused']) {
+      fs.mkdirSync(path.join(tmp, z), { recursive: true })
+    }
+  })
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+  it('FIRES: terminal, no checklist, garbage updated — skipping would grandfather it forever', () => {
+    write('archived', 'TRDD-20260101_000000+0100-BADDATE1-x.md',
+      good('BADDATE1', { column: 'completed', updated: 'not-a-date' }))
+    const r = lintCorpus(tmp)
+    expect(r.scanned).toBe(1)
+    expect(idsOf(r, 'TERMINAL-WITHOUT-CHECKLIST')).toEqual(['BADDATE1'])
+    // The message says WHY the boundary did not exempt it, so the reader is not sent
+    // hunting for a date comparison that never ran.
+    const f = r.findings.find((x) => x.rule === 'TERMINAL-WITHOUT-CHECKLIST')
+    expect(f?.message).toContain('failing open')
+  })
+})

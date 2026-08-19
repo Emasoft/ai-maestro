@@ -6,14 +6,14 @@
  * is the outage. `syncIndex` therefore re-reads only the files whose identity moved,
  * and a corpus where nothing changed costs two git calls and zero document reads.
  *
- * EDGES ARE DERIVED WITH THE GRAPH'S OWN HELPERS (`refList` / `optionalRef` /
+ * EDGES ARE DERIVED WITH THE GRAPH'S OWN HELPERS (`localRefList` / `optionalRef` /
  * `normalizeTrddRef` from `lib/trdd-graph.ts`), never with a private notion of "what
  * counts as a reference". The index exists to answer the graph's question faster; a
  * reader with its own join key would return confidently different answers, which is
  * strictly worse than having no index at all.
  */
 import type Database from 'better-sqlite3'
-import { normalizeTrddRef, refList, optionalRef, normalizePriority } from '../trdd-graph'
+import { normalizeTrddRef, localRefList, optionalRef, normalizePriority } from '../trdd-graph'
 import type { PillarKind } from './kinds'
 import { listDocuments, readDocument, recordsOf } from './store'
 import { IndexFaultError, isBusyError } from './index-db'
@@ -49,7 +49,10 @@ interface PendingRow {
 function edgesFor(recordId: string, fm: Record<string, unknown>): PendingRow['edges'] {
   const out: PendingRow['edges'] = []
   for (const field of LIST_EDGE_FIELDS) {
-    for (const dst of refList(fm[field])) out.push({ srcId: recordId, field, dstId: dst })
+    // Per-field, so a non-local `blocked-by:` spelling never becomes a mangled edge row —
+    // the walk drops it via the same helper, which is what keeps the two paths comparable
+    // (TRDD-PTFPGSLV).
+    for (const dst of localRefList(field, fm[field])) out.push({ srcId: recordId, field, dstId: dst })
   }
   for (const field of SCALAR_EDGE_FIELDS) {
     const dst = optionalRef(fm[field])

@@ -42,6 +42,12 @@ export interface TrddNode {
   npt: string[]
   eht: string[]
   blockedBy: string[]
+  /**
+   * The RAW non-local `blocked-by:` spellings (`gh:owner/repo#n`, `<project-id>:TRDD-<id8>`)
+   * — real blockers the LOCAL graph cannot resolve, kept un-normalized because the raw
+   * spelling IS the information (TRDD-PTFPGSLV).
+   */
+  externalBlockers: string[]
 }
 
 export type ViolationKind =
@@ -59,6 +65,8 @@ export type ViolationKind =
   | 'blockedNotBlocked'
   | 'danglingBlocker'
   | 'unknownBlocker'
+  | 'externalBlocker'
+  | 'crossProjectBlocker'
 
 export interface TrddViolation {
   kind: ViolationKind
@@ -74,6 +82,51 @@ export interface TrddViolation {
  */
 export function normalizeTrddRef(ref: unknown): string {
   return String(ref).trim().replace(/^TRDD-/i, '').toUpperCase().slice(0, 8)
+}
+
+/**
+ * The two NON-LOCAL `blocked-by:` spellings (TRDD-PTFPGSLV). Each names a REAL blocker the
+ * local graph cannot resolve — a GitHub issue, or a TRDD owned by another project's corpus —
+ * so neither may reach `normalizeTrddRef`, whose 8-char slice would mangle
+ * `gh:Emasoft/ai-maestro#145` into `GH:EMASO` and report a phantom unknown id. Anything
+ * matching NEITHER shape keeps today's behavior: treated as a local id, ERROR when it does
+ * not resolve (`ai-maestro#145` is deliberately not a sanctioned spelling).
+ */
+const EXTERNAL_ISSUE_RE = /^gh:[^\s#]+#\d+$/i
+const CROSS_PROJECT_RE = /^[a-z0-9][a-z0-9-]*:TRDD-[A-Z0-9]{8}$/i
+
+export function classifyBlockerRef(raw: unknown): 'local' | 'external-issue' | 'cross-project' {
+  const s = String(raw ?? '').trim()
+  if (EXTERNAL_ISSUE_RE.test(s)) return 'external-issue'
+  if (CROSS_PROJECT_RE.test(s)) return 'cross-project'
+  return 'local'
+}
+
+/** The raw values of a ref field, before any normalization — shared by the two filters below. */
+function rawRefValues(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean)
+  if (typeof v === 'string' && v.trim() && v.trim() !== 'null') return [v.trim()]
+  return []
+}
+
+/**
+ * The LOCALLY-RESOLVABLE refs of a field. Only `blocked-by:` admits the non-local spellings,
+ * so only there are they filtered out (everywhere else a `gh:` ref stays mangled-and-ERRORed,
+ * exactly as before — silently dropping it from an `npt:` would soften `childMissing`). This
+ * is the ONE owner of that decision: the graph, the pillar index and trddgrep's board must all
+ * drop the same edge for the same reason, or the walk-vs-index differential compares shapes.
+ */
+export function localRefList(field: string, v: unknown): string[] {
+  if (field !== 'blocked-by') return refList(v)
+  return rawRefValues(v)
+    .filter((s) => classifyBlockerRef(s) === 'local')
+    .map(normalizeTrddRef)
+    .filter(Boolean)
+}
+
+/** The RAW non-local refs of a `blocked-by:` value — never normalized. */
+export function externalRefList(v: unknown): string[] {
+  return rawRefValues(v).filter((s) => classifyBlockerRef(s) !== 'local')
 }
 
 /**
@@ -151,7 +204,8 @@ export function toGraphNode(t: ParsedTrdd): TrddNode | null {
     parent: optionalRef(fm['parent-trdd']),
     npt: refList(fm.npt),
     eht: refList(fm.eht),
-    blockedBy: refList(fm['blocked-by']),
+    blockedBy: localRefList('blocked-by', fm['blocked-by']),
+    externalBlockers: externalRefList(fm['blocked-by']),
   }
 }
 
@@ -246,9 +300,9 @@ export function checkTrddInvariants(nodes: TrddNode[]): TrddViolation[] {
       if (open.length) v.push({ kind: 'falseComplete', id: n.id, detail: `column=${n.column} with open children: ${open}` })
     }
 
-    if (n.blockedBy.length) {
+    if (n.blockedBy.length || n.externalBlockers.length) {
       if (!TERMINAL_DONE.has(n.column) && n.column !== 'blocked') {
-        v.push({ kind: 'blockedNotBlocked', id: n.id, detail: `column=${n.column} with blocked-by=[${n.blockedBy}]` })
+        v.push({ kind: 'blockedNotBlocked', id: n.id, detail: `column=${n.column} with blocked-by=[${[...n.blockedBy, ...n.externalBlockers]}]` })
       }
       for (const b of n.blockedBy) {
         const bd = byId.get(b)
@@ -256,6 +310,16 @@ export function checkTrddInvariants(nodes: TrddNode[]): TrddViolation[] {
         else if (TERMINAL_DONE.has(bd.column)) {
           v.push({ kind: 'danglingBlocker', id: n.id, detail: `blocked-by ${b}, which is ${bd.column} — stale` })
         }
+      }
+      // A non-local blocker is a WARN, never an ERROR: the blocker is real, the graph just
+      // carries no edge for it. Removing the entry to silence the tool would blind the board
+      // (TRDD-PTFPGSLV — COS and AMAMA both measured the old mangled-ERROR on live corpora).
+      for (const e of n.externalBlockers) {
+        v.push(
+          classifyBlockerRef(e) === 'external-issue'
+            ? { kind: 'externalBlocker', id: n.id, detail: `blocked-by ${e} — an external issue; the graph carries no edge for it` }
+            : { kind: 'crossProjectBlocker', id: n.id, detail: `blocked-by ${e} — a cross-project TRDD, not locally resolvable; track it in the owning corpus` },
+        )
       }
     }
   }

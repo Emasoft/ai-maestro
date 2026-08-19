@@ -1,9 +1,9 @@
 ---
 trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
-column: dev
+column: human_review
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-16T00:50:50+0200
+updated: 2026-08-19T20:51:30+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -30,6 +30,13 @@ external-refs: [Emasoft/ai-maestro-janitor#222]
 ---
 
 # Arm the model-fallback leg, and rule on the rotation policy it routes around
+
+
+> **2026-08-19T20:51:30+0200 — moved dev → human_review (hub, Phase-2 delegation):** every open box is a USER act
+> (arm `AIM_FLEET_MODEL_FALLBACK=1` + observe one confirmed switch; rule on `isSafeAlternate`;
+> rule on the dead-refresh live account) or follows from them (unblock IALQ43QP). A card in `dev`
+> that nobody is working asserts work that is not happening; `human_review` says what is true —
+> the hub's half is done and the USER's decisions are what remain. Not a verdict on the rulings.
 
 ## ⚠ ESCALATED URGENT — 2026-08-15 incident evidence (read before the body)
 

@@ -39,6 +39,17 @@ Two harms:
    gone returns a second confusing error. This is the same misclassification family as
    CPV's TRDD-WC2GEDOC (a timeout/exit shape collapsing into the wrong verdict).
 
+## Scope addition (2026-08-19 10:15, same e2e session)
+
+`scripts/shell-helpers/common.sh:589` uses `local -n` (nameref, bash ≥4.3) in
+`get_auth_args`. Under macOS default `/bin/bash` 3.2 the CLI dies BEFORE any request
+(`local: -n: invalid option`) — it only works when homebrew bash resolves first on PATH,
+which is per-environment luck. Measured live: the same delete verb worked at 09:28 (homebrew
+bash first) and died at 10:02 (fresh login shell, /bin/bash first). Fix alongside the
+timeout: either a version guard with a clear error, or replace the nameref with a
+bash-3.2-safe return (echo + command substitution), since every plugin agent's PATH is
+uncontrolled.
+
 ## Proposed fix
 
 In `scripts/aimaestro-teams.sh` (and any sibling CLI sharing `_api`):

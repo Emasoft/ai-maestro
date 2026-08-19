@@ -3,7 +3,7 @@ trdd-id: XV9BLQC5
 title: A CAPTCHA appeared on the claude.ai OAuth authorize screen — measure and close the continuity exposure
 column: todo
 created: 2026-08-07T14:49:57+0200
-updated: 2026-08-07T14:49:57+0200
+updated: 2026-08-20T01:46:19+0200
 current-owner: ai-maestro
 project-id: ai-maestro
 task-type: infra
@@ -29,6 +29,22 @@ release-via: none
 # A CAPTCHA appeared on the claude.ai OAuth authorize screen
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-07
+
+- **RE-MEASURED 2026-08-20 01:45 (box 2) — the control NO LONGER HOLDS, and that is the finding:**
+  `rotator.py list` now reads ALL THREE slots with a stale store expiry —
+  fmuaddib captured=08-07 expiry≈−155 h · emanuele.sabetta captured=07-23 expiry≈−201 h ·
+  ipazia (LIVE) captured=08-07 expiry≈−124 h — while the live account demonstrably works (this
+  fleet is running on it) and the server tick beats fresh every 60 s, reporting
+  `reauth-needed / refresh-dead` CONTINUOUSLY since 2026-08-07. Reading: the live credential is
+  kept fresh by Claude Code itself, outside the store; the STORE-level browserless chain the
+  original control proved (45 cycles, 15 days) has stopped for the two alternates because their
+  REFRESH tokens are dead — precisely the state only the unwired cookie rung (RENEW_COOKIE)
+  could repair browserlessly. janitor#228 is CLOSED verified-fixed at their HEAD (challenge
+  detection + Cloudflare-vs-dead-token both landed; installed 3.3.16 may predate the release).
+- **USER ACTION REQUIRED (surfaced in the session summary):** the two alternate slots
+  (fmuaddib, emanuele.sabetta) have dead refresh tokens and need a human re-login
+  (`rotator.py capture` per slot) — no programmatic path exists while no live claude.ai cookie
+  is available; shared-credential work is USER-only by the D3 floor.
 
 **Measured, not inferred. The captcha does NOT break unattended continuity. The detection gap it
 exposes is the real defect, and it is in the janitor's tree — cross-repo, issue only.**
@@ -216,7 +232,8 @@ An account identity has never once been load-bearing in this corpus.
 
 - [x] The janitor issue is filed with both asks (a) and (b), citing the measured evidence above —
       janitor#228, after proving the guard absent in all 13 cached versions (0.60.1 → 2.5.1).
-- [ ] The positive control is re-measured after the janitor responds (a weeks-old `captured` date
-      with a live `token-expiry` still proves the browserless chain).
+- [x] The positive control is re-measured after the janitor responds — 2026-08-20 01:45, ADVERSE:
+      all three slots stale in the store (see STATE); the re-measure ran and its result is recorded,
+      which is what this box asks. The adverse half feeds the box below.
 - [ ] The Cloudflare-vs-dead-token distinction is reflected in ai-maestro's own alert text, or an
       explicit note records that it is blocked on the janitor side.

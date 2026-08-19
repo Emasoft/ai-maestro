@@ -161,3 +161,11 @@ the card already made, not a criterion invented at closing time.
 
 ## Approval log
 - 2026-08-20T00:29:27+0200 — COMPLETED by the hub under the USER's Phase-2 delegation (BRRJK57P approval log): the last box (positive-path live e2e) run for real; it surfaced and fixed four defects (md5/sha256 chat-state mismatch, fire-and-forget force-stop, detector blind on 2.1.235 wording, stale-HIGH counter bricking restart) and every assertion was then measured green on the deployed bundle. Archived as completed.
+- 2026-08-20T00:40:44+0200 — CORRECTION (append-only; CORE's hook-debug.log timeline on plugin#64,
+  issuecomment-5348844383): defect 4's "orphans the counter FOREVER / persisted across a
+  relaunch" overstated — the relaunch's SessionStart DID reset the counter to 0 (22:27:45Z);
+  my "still 1" reading preceded it (timestamp-ordering artifact, the lessons-file class). The
+  REAL gap is force-kill → next SessionStart in that cwd, which is still unbounded when nobody
+  relaunches — and the 409 was blocking exactly the restart that performs the reset, so the
+  5fed79b3 escape remains the fix. plugin#64 downgraded to docs-only (consumer contract: a
+  record whose sessionId has no live session ⇒ treat the count as 0).

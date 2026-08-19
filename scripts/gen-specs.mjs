@@ -46,7 +46,8 @@ function genScriptsSpec() {
   out += `| Family | Verbs | Contract (in the ai-maestro-plugin repo) |\n|---|---|---|\n`
   out += `| Messaging | amp-send · amp-inbox · amp-init · amp-identity | skills/agent-messaging/reference/detailed-guide.md |\n`
   out += `| Kanban | amp-kanban-list · amp-kanban-get · amp-kanban-create-task · amp-kanban-move · amp-kanban-edit · amp-kanban-archive | skills/team-kanban/SKILL.md |\n`
-  out += `| Task signals | amp-task-done · amp-task-blocked · amp-submit-pr · amp-status | contract doc pending (spec-first ask filed with CORE) — verbs verified installed at ~/.local/bin, each --help pairs with its amp-kanban-move half |\n`
+  out += `| Task signals | amp-task-done · amp-task-blocked · amp-submit-pr | skills/agent-repo-workflow/SKILL.md (owns the three verbs; each --help pairs with its amp-kanban-move half) |\n`
+  out += `| Messaging status probe | amp-status | commands/amp-status.md |\n`
   out += `| Identity token | aid-maestro-token.sh (--quiet/--json) | skills/agent-identity/SKILL.md §"Getting an AI Maestro governance token" |\n`
   out += `\nNOTE: teach the CLIs (the .sh form is canonical), never a bare-name \`agent-messaging\`\n`
   out += `skill invocation — plugin skills resolve namespaced, so bare names fail in role agents.\n`

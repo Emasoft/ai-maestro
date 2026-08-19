@@ -287,6 +287,19 @@ Claim/heartbeat contract the janitor expects: per-chore-exact tokens in
 completion stamps at `~/.claude/janitor-control/<chore>.last-run.ts` · stale bound
 `max(3×cadence, cadence+600)` · `claim-bounds.json` widen-only, fail-open.
 
+**OPEN DESIGN DECISION (next on this card):** the USER's directive says the server
+"completely replaces" the janitor's global daemon while running; the janitor's roster marks
+memory-guard/cache-prune/rules-cleanup NEVER-YIELD and four chores population-split. Those
+are not contradictions to bulldoze — the never-yield trio touches janitor-private stores
+(memory corpus, plugin caches, rules dirs) with the janitor's own locks. Resolution path:
+janitor asked 2026-08-19 ~14:05 WHY each is never-yield and what contract would make
+server-hosted execution safe (or what re-scoping makes "complete" true — e.g. the daemon
+process EXITS while server-liveness is fresh, with the trio either absorbed behind the
+janitor's own transaction CLI or re-homed per-session). Population-split four need the
+explicit redesign the janitor named. Full-absorption end state to satisfy the directive:
+**server up ⇒ zero janitor daemon process; server down ⇒ janitor daemon resumes everything
+on stale-liveness** — continuity by claim-heartbeat, never by flag.
+
 Named design requirements from measured incidents (must appear in the NPT decomposition):
 1. **Atomic cache population** — staging dir + rename. The 2026-08-19 morning incident
    (partial 3.3.16 cache; every session's PreToolUse hooks Errno-2 for ~20 min, machine-wide

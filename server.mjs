@@ -2147,6 +2147,23 @@ async function startServer(handleRequest) {
       console.warn('[Startup] rules-cleanup init failed (non-fatal):', err?.message || err)
     }
 
+    // ── absorbed fleet-stop lane (TRDD-9FW92242, parent KCRMSNL7) ──────────────
+    // Kill-switch fan-out: deliver /janitor-disarm to every janitor-armed session
+    // (registered agents via the command queue, non-agent sessions via tmux).
+    // DESTRUCTIVE-ish (types into other sessions) ⇒ dark-shipped: unarmed it only
+    // logs the plans; AIM_FLEET_STOP=1 arms delivery + the chore claim. 60s (the
+    // janitor's cadence); AIM_FLEET_STOP_INTERVAL_MS overrides, 0 disables.
+    try {
+      const { startFleetStopScheduler } = await import('./lib/fleet-stop.ts')
+      if (startFleetStopScheduler()) {
+        console.log(
+          `[Startup] fleet-stop scheduler started (60s, ${process.env.AIM_FLEET_STOP === '1' ? 'ARMED — kill-switch fan-out enabled' : 'detect-only: AIM_FLEET_STOP not set'})`,
+        )
+      }
+    } catch (err) {
+      console.warn('[Startup] fleet-stop init failed (non-fatal):', err?.message || err)
+    }
+
     // ── §D4 approval-ladder watchdog (TRDD-AYBAMFN2 / TGNU1EP7, 3P-ZON-11) ────
     // The TRDD governance sweep's ONE scheduled host — the server owns the
     // authority-ladder model, so it owns the enforcement (the janitor would be

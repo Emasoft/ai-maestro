@@ -94,5 +94,19 @@ export function evaluateExitGate(
  * running/background agents and asks for confirmation.
  */
 export function looksLikeAbandonPrompt(paneText: string): boolean {
-  return /(background|running)\s+(sub)?agents?[\s\S]{0,120}(exit|abandon|are you sure|anyway)|(exit|abandon)[\s\S]{0,80}(background|running)\s+(sub)?agents?/i.test(paneText)
+  // Three families, because the dialog's copy has already changed once and each family was
+  // observed, not guessed:
+  //  1. "background/running (sub)agents … exit/abandon" (and the reverse order) — the
+  //     2.1.203-era wording this function originally targeted;
+  //  2. "Background work is running" — CC 2.1.235's wording, captured LIVE 2026-08-19 from a
+  //     force-stopped session ("Background work is running / The following will stop when you
+  //     exit: / ❯ 1. Exit and stop tasks"). It never says "agents", so family 1 MISSED it and
+  //     both probes (restart's, and the stop path added the same day) were blind on current CC;
+  //  3. the menu line "Exit and stop tasks" — distinctive on its own and likely the most stable
+  //     of the three (it is the dialog's action, not its prose).
+  return (
+    /(background|running)\s+(sub)?agents?[\s\S]{0,120}(exit|abandon|are you sure|anyway)|(exit|abandon)[\s\S]{0,80}(background|running)\s+(sub)?agents?/i.test(paneText) ||
+    /background\s+work\s+is\s+running/i.test(paneText) ||
+    /exit\s+and\s+stop\s+tasks/i.test(paneText)
+  )
 }

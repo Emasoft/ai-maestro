@@ -126,6 +126,20 @@ describe('looksLikeAbandonPrompt', () => {
     expect(looksLikeAbandonPrompt('Exit now? 1 background agent is still running')).toBe(true)
   })
 
+  it("matches CC 2.1.235's ACTUAL dialog (captured live 2026-08-19) — it never says 'agents'", () => {
+    // The wording that made both probes blind until measured: prose family 2 + menu family 3.
+    const live = [
+      'Background work is running',
+      'The following will stop when you exit:',
+      'shell · end=$((SECONDS+170)); until [ $SECONDS -ge $end ]…',
+      '❯ 1. Exit and stop tasks',
+    ].join('\n')
+    expect(looksLikeAbandonPrompt(live)).toBe(true)
+    // each family carries the detection alone (the copy has changed once already):
+    expect(looksLikeAbandonPrompt('Background work is running')).toBe(true)
+    expect(looksLikeAbandonPrompt('❯ 1. Exit and stop tasks')).toBe(true)
+  })
+
   it('does not match ordinary prompts or unrelated output', () => {
     expect(looksLikeAbandonPrompt('❯ ')).toBe(false)
     expect(looksLikeAbandonPrompt('Do you want to allow this tool call?')).toBe(false)

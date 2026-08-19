@@ -20,14 +20,20 @@
  * accidentally rebuild a laxer or less-capable exit.
  */
 
+import { looksLikeAbandonPrompt } from '@/lib/session-safe-state'
+
 export type StopOutcome =
-  | { status: 'ok' }
+  | { status: 'ok'; abandonPromptConfirmed?: boolean }
   | { status: 'error'; detail: string }
 
 /** Injectable seams so the exit sequence is unit-testable with no real tmux/timers. */
 export interface StopSequenceDeps {
   exec?: (bin: string, args: string[]) => void
   sleep?: (ms: number) => Promise<void>
+  /** Pane text probe for the abandon-dialog check (TRDD-O8NCNRWO). */
+  capturePane?: (sessionName: string) => string
+  /** `#{pane_current_command}` probe — a shell name means the program exited. */
+  paneCommand?: (sessionName: string) => string
 }
 
 /**
@@ -37,6 +43,19 @@ export interface StopSequenceDeps {
 function realExec(bin: string, args: string[]): void {
   const { execFileSync } = require('child_process')
   execFileSync(bin, args, { timeout: 5000, stdio: 'ignore' })
+}
+
+function realCapturePane(sessionName: string): string {
+  const { execFileSync } = require('child_process')
+  return execFileSync('tmux', ['capture-pane', '-t', sessionName, '-p'], { timeout: 5000, encoding: 'utf8' })
+}
+
+function realPaneCommand(sessionName: string): string {
+  const { execFileSync } = require('child_process')
+  return execFileSync('tmux', ['display-message', '-p', '-t', sessionName, '#{pane_current_command}'], {
+    timeout: 5000,
+    encoding: 'utf8',
+  })
 }
 
 function realSleep(ms: number): Promise<void> {
@@ -77,14 +96,76 @@ export async function runStopSequence(
       exec('tmux', ['send-keys', '-t', sessionName, 'C-c'])
       await sleep(CODEX_CTRLC_GAP_MS)
       exec('tmux', ['send-keys', '-t', sessionName, 'C-c'])
-    } else {
-      exec('tmux', ['send-keys', '-t', sessionName, 'C-c'])
-      exec('tmux', ['send-keys', '-t', sessionName, '-l', '/exit'])
-      exec('tmux', ['send-keys', '-t', sessionName, 'Enter'])
+      return { status: 'ok' }
     }
-    return { status: 'ok' }
+    exec('tmux', ['send-keys', '-t', sessionName, 'C-c'])
+    exec('tmux', ['send-keys', '-t', sessionName, '-l', '/exit'])
+    exec('tmux', ['send-keys', '-t', sessionName, 'Enter'])
+    // TRDD-O8NCNRWO: with live background subagents (a force-stop, or a stale-low counter that
+    // slipped past the 409 gate), /exit lands on CC's abandon-confirmation dialog instead of
+    // exiting — measured live 2026-08-19: a force-stopped session sat on that dialog for 2.5 h,
+    // because this sequence was fire-and-forget while only the RESTART path carried the probe
+    // (lib/session-restart.ts:233). Same discipline as there: bounded poll, and only a DETECTED
+    // dialog ever gets a keystroke — never blind keys. Early-exit the moment the pane is back at
+    // a shell, so the common no-subagents stop pays one ~1 s probe step, not the full window.
+    const confirmed = await confirmAbandonPromptIfPresent(sessionName, {
+      exec,
+      sleep,
+      capturePane: deps.capturePane ?? realCapturePane,
+      paneCommand: deps.paneCommand ?? realPaneCommand,
+    })
+    return { status: 'ok', abandonPromptConfirmed: confirmed }
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : 'Unknown error'
     return { status: 'error', detail }
   }
 }
+
+// ── The abandon-dialog probe (TRDD-O8NCNRWO, stop-path twin of session-restart.ts:225-244) ──────
+
+// Total window and step for the post-/exit probe. 8 s total: the dialog appears within ~2 s of
+// /exit when subagents are live (measured), and a clean exit reaches the shell in 1-2 steps, so
+// the loop's normal cost is one or two 1 s probes — the window only runs full when the pane is
+// neither exited nor showing the dialog (e.g. a slow teardown), where waiting is correct anyway.
+const ABANDON_PROBE_TOTAL_MS = 8000
+const ABANDON_PROBE_STEP_MS = 1000
+
+/**
+ * After /exit: watch the pane until it reaches a shell (clean exit), confirming CC's
+ * "background agents still running" abandon dialog at most ONCE if it appears (its default
+ * selection is "Exit and stop tasks", so a single Enter confirms). Returns whether the dialog
+ * was detected+confirmed. Never throws — a probe failure ends the watch and the caller keeps
+ * the fire-and-forget contract (a still-exiting pane is not an error).
+ */
+async function confirmAbandonPromptIfPresent(
+  sessionName: string,
+  io: {
+    exec: (bin: string, args: string[]) => void
+    sleep: (ms: number) => Promise<void>
+    capturePane: (sessionName: string) => string
+    paneCommand: (sessionName: string) => string
+  },
+): Promise<boolean> {
+  let confirmed = false
+  try {
+    for (let elapsed = 0; elapsed < ABANDON_PROBE_TOTAL_MS; elapsed += ABANDON_PROBE_STEP_MS) {
+      await io.sleep(ABANDON_PROBE_STEP_MS)
+      const paneCmd = io.paneCommand(sessionName).trim()
+      if (!paneCmd || SHELL_COMMANDS_STOP.has(paneCmd)) return confirmed // exited
+      if (!confirmed) {
+        const tail = io.capturePane(sessionName).split('\n').slice(-14).join('\n')
+        if (looksLikeAbandonPrompt(tail)) {
+          confirmed = true
+          io.exec('tmux', ['send-keys', '-t', sessionName, 'Enter'])
+        }
+      }
+    }
+  } catch {
+    // capture/exec failure is non-fatal: the stop sequence itself already landed.
+  }
+  return confirmed
+}
+
+/** Mirror of session-restart's SHELL_COMMANDS (not imported: that module pulls in the full
+ *  restart machinery + registry; this file must stay a leaf both serving modes can load). */
+const SHELL_COMMANDS_STOP: ReadonlySet<string> = new Set(['zsh', 'bash', 'sh', 'fish', '-zsh', '-bash'])

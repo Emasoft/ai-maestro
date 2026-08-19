@@ -1,9 +1,9 @@
 ---
 trdd-id: COOLOZ1N
 title: Panel CLI wiring contract for amvcp — the measured spec plus the five rulings
-column: dev
+column: completed
 created: 2026-08-08T15:05:05+0200
-updated: 2026-08-16T11:15:29+0200
+updated: 2026-08-19T20:50:21+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: feature
@@ -204,7 +204,14 @@ Rationale: a contract proven on one path against a script that is not yet even i
       there will be NO CLI sudo-mint verb, so a panel flow must not be designed
       assuming one is coming. It also corrects the stale `SCRIPT-MANIFEST` claim that
       no USER auth path existed, which had been false beside shipped code for six days.
-- [ ] amvcp confirms it is unblocked to build against this card.
+- [x] amvcp confirms it is unblocked to build against this card.
+      **CONFIRMED 2026-08-19T20:50:21+0200** — visual-comunicator session: "UNBLOCKED — amvcp confirms it can
+      build against TRDD-COOLOZ1N as ruled (rulings 1-5, no sudo-mint; AID_AUTH+title agent
+      path, per-op USER approval). Target amvcp v1.6.0 (current 1.5.1). Sole call site
+      scripts/amvcp-panel-push.py already uses panel status/set; open/close/refresh/feedback
+      will wire there." Verified first-hand on ai-maestro#134: issuecomment-5346594704,
+      created 2026-08-19T18:49:52Z. The eleven-day silence was the counterparty's, not the
+      issue's — one direct SendMessage closed it in four minutes.
       **NOT MINE TO TICK — split out 2026-08-16 because the original box fused an act I
       control with a reply I do not.** The relay above is complete; this half waits on
       the other party. A box whose completion depends on someone else's answer can never
@@ -228,3 +235,4 @@ Rationale: a contract proven on one path against a script that is not yet even i
 - 2026-08-08T15:05:05+0200 — MANDATE (self, Tier-0): hub-owned integration contract; the
   consumer-side halves are rulings relayed on ai-maestro#134, never edits to the amvcp
   tree.
+- 2026-08-19T20:50:21+0200 — COMPLETED by the hub under the USER's Phase-2 delegation (BRRJK57P approval log): every box ticked, the last one by the counterparty's own confirmation (ai-maestro#134 issuecomment-5346594704). Card archived per the folder lifecycle.

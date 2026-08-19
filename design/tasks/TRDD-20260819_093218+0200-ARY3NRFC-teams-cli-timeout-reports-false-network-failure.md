@@ -4,7 +4,7 @@ title: Teams CLI 30s timeout reports a false network failure while the operation
 column: todo
 created: 2026-08-19T09:32:18+0200
 updated: 2026-08-19T09:32:18+0200
-implementation-commits: []
+implementation-commits: [f244b155]
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -49,6 +49,16 @@ bash first) and died at 10:02 (fresh login shell, /bin/bash first). Fix alongsid
 timeout: either a version guard with a clear error, or replace the nameref with a
 bash-3.2-safe return (echo + command substitution), since every plugin agent's PATH is
 uncontrolled.
+
+**RESOLVED 2026-08-19 14:11 (f244b155):** nameref replaced with a 3.2-safe eval-assign in
+`get_auth_args` (the repo's only `local -n`). Proven under /bin/bash 3.2 AND homebrew bash
+(space-containing token preserved); the two proven bash-caused files (statusline-cli,
+teams-stats-verb) rerun 16/17 green isolated. CORRECTION to f244b155's commit message —
+its "15 of the 16 red files were this line" was an overclaim written before the mode
+split: reading each failure's MODE shows the pillar-* and governance files failed on
+`Test timed out in 5000ms` (loadavg 167-180 contention, the known flake family), not on
+the bash line; the bash-caused set is the CLI-SPAWNING files only. The TIMEOUT half of
+this card (curl --max-time 30 vs ~2-min pipelines, exit-28 classification) remains OPEN.
 
 ## Proposed fix
 

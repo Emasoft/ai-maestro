@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T18:01:54+0200
-updated: 2026-08-16T18:33:47+0200
+updated: 2026-08-20T01:53:22+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -22,10 +22,34 @@ priority: 1
 severity: high
 effort: small
 labels: [governance, baseline-rulesets, cross-repo, goal-1-audit, fleet]
-external-refs: [janitor#14]
+external-refs: [janitor#14, janitor#282]
+review-after: 2026-08-27
 ---
 
 # A USER Tier-3 ruling that landed in code and reached no repository
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-20 01:53
+
+- **RULING APPLIED LIVE, all 9 repos, 2026-08-20 01:50 (hub, Phase-2 delegation; applying the
+  ratified baseline as-is is EXEMPT).** 17 per-object PUTs from the SSOT's two ruled fields:
+  history-protect bypass [] → admin(5) on the 8 stale repos; pr-and-checks approvals 1 → 0 on
+  all 9. Per-object before/after verification: ONLY the two ruled fields (plus the derived
+  `current_user_can_bypass` echo) moved; every rules array unchanged; all 8 tag-protect
+  objects byte-identical (never touched — ratified bypass is NOBODY); non-admin still bound
+  by deletion+non_fast_forward with enforcement active everywhere (9/9 asserted). Snapshots:
+  reports/baseline-rulesets/20260820_015037+0200-before-full.json + the -after-full sibling
+  (rollback data).
+- **Upstream gate-6 defect FILED: janitor#282** (asks: payload-compare in baselines_present +
+  a name-present/content-stale test; verified name-only at BOTH installed 3.3.16 and repo
+  HEAD before filing). Noted for them: ai-maestro-plugins lacks tag-protect, so it is the one
+  repo their applier will still run end-to-end on — a natural live verification target once
+  the gate is fixed.
+- **The stale machine-global IND rule CORRECTED** (~/.claude/rules/manager-approval-defaults.md
+  §F): both 2026-08-13 fields now stated correctly with the ruling quoted and a stale-reference
+  provenance note — an agent applying "the baseline as-is" from that text can no longer
+  re-impose the lock.
+- **Remaining OPEN (janitor-side):** gate-6 fix + test land in their repo (#282); their
+  release then re-verifies convergence on a future payload change. Our half is complete.
+
 
 ## Problem
 
@@ -213,11 +237,11 @@ weakens a repo it never meant to touch (recorded in `lessons-verification.md` �
 
 ## Acceptance
 
-- [ ] The finding is reported to the janitor session/repo with the measured evidence (code
+- [x] The finding is reported to the janitor session/repo with the measured evidence (code
       lines, the 9-repo live table, the two stale prose sites).
-- [ ] `baseline-history-protect` carries the admin bypass on all 9 fleet repos, verified by a
+- [x] `baseline-history-protect` carries the admin bypass on all 9 fleet repos, verified by a
       live `gh api` read — not by a commit, an issue state, or an applier's own success line.
-- [ ] `baseline-pr-and-checks` matches what **`require_pull_request_for(slug)` decides for that
+- [x] `baseline-pr-and-checks` matches what **`require_pull_request_for(slug)` decides for that
       repo at apply time** — and where the `pull_request` rule IS emitted, the count is `0`,
       never `1`. **Do NOT hardcode 0.** *(Corrected 2026-08-16: this box originally read
       "carries `required_approving_review_count: 0` on all 9", which prescribes one branch of a
@@ -227,19 +251,19 @@ weakens a repo it never meant to touch (recorded in `lessons-verification.md` �
       ALL — a fixer reading my original box would have set 0 where the rule should be absent,
       and silently decided a governance question. Caught by the maintainer session correcting
       its own earlier phrasing, which had made the same over-specification from the other side.)*
-- [ ] A non-admin actor is confirmed still bound by `deletion` + `non_fast_forward`.
+- [x] A non-admin actor is confirmed still bound by `deletion` + `non_fast_forward`.
 - [ ] **The gate-6 short-circuit is fixed** — `baselines_present` compares PAYLOAD, not names,
       or the short-circuit is dropped so the already-correct PATCH path becomes reachable.
       Janitor-owned; deliberately left as a decision, not prescribed here.
 - [ ] **A test that FAILS on a name-present/content-stale repo exists** — the case that has
       never been covered, and the reason a names-only check survived. Without it the next
       baseline ruling re-freezes exactly the same way.
-- [ ] `~/.claude/rules/manager-approval-defaults.md` no longer states `bypass_actors: []`.
+- [x] `~/.claude/rules/manager-approval-defaults.md` no longer states `bypass_actors: []`.
       **USER-owned, not janitor-owned** (measured: shipped by no plugin — see above).
 - [x] The `branch_protection_lib` module docstring agrees with its own payload builder on both
       `bypass_actors` and the approval count. **Done in the janitor's tree 2026-08-16**, on its
       own initiative, before I asked for it.
-- [ ] Re-measured AFTER the janitor acts, by me, from the live API — not from a commit, a closed
+- [x] Re-measured AFTER the janitor acts, by me, from the live API — not from a commit, a closed
       issue, or an applier success line. **This defect IS a success line that meant nothing**, so
       that standard of proof is not pedantry here, it is the whole lesson.
 

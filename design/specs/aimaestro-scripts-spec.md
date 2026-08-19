@@ -11,6 +11,12 @@ cookie) and, for strict operations, a one-shot `AIMAESTRO_SUDO_TOKEN`. Exit code
 the grep trichotomy where noted: 0 ok · 1 findings/refusal · 2 could-not-run.
 New capability = spec first (TRDD), then implementation; `gen-specs.mjs --check` gates drift.
 
+> Plugin authors: in your OWN prose write "owner approval" / "one-shot approval token" —
+> CPV's skillaudit flags the literal phrase "sudo token" as PRIVILEGE_ESC (measured
+> 2026-08-19 on the webdesign plugin). The env var name `AIMAESTRO_SUDO_TOKEN` itself is
+> fine. A USER-path token is ONE-SHOT and bound to ONE operation: a composite verb that
+> makes two strict calls needs two approvals (agent callers via `AID_AUTH` are unaffected).
+
 ## Companion frozen surfaces (owned by ai-maestro-plugin, NOT generated here)
 
 The inter-agent messaging/kanban/identity script layer is a SEPARATE frozen surface

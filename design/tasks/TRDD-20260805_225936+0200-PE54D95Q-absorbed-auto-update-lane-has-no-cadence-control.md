@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-19T00:19:53+0200
+updated: 2026-08-19T04:51:19+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41, 5796ef6a]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -29,6 +29,16 @@ external-refs: [Emasoft/ai-maestro#102]
 # The absorbed auto-update lane has no cadence control and retries permanent failures hourly
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### 2026-08-19 04:51 — JANITOR SIDE SHIPPED. `fbed874a` (their repo; rides their next publish)
+
+TRDD-TIZHEPNC landed: `user-plugins-update` removed from
+`harness_backend.SERVER_ABSORBED_TASKS`. Their verification (attributed, their session):
+`unabsorbed_chores()` now includes it (daemon-owned at 3600 s); daemon.py:2731's consume gate
+is runtime-beat-keyed so it resumes cleanly when our beat drops the claim; no operator
+override on this host (env/pm2/ecosystem + daemon pid 64131 env all clean), so live-beat is
+the sole path and ordering stays FREE. 77 tests green their side. **Remaining on this card:
+USER-gated `yarn build` + restart, then the 78→0 per-fire measurement. Nothing else.**
 
 ### 2026-08-16 10:03 — THE COLLISION FIX LANDED. `85bf0b02` `fcf19a71` `b7a47a41`
 

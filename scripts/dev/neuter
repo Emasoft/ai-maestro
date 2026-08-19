@@ -166,7 +166,14 @@ fi
 echo "=== mutated $FILE ($(git diff --numstat -- "$FILE" | awk '{print $1" ins / "$2" del"}'))"
 git --no-pager diff --unified=0 -- "$FILE" | grep -E '^[+-][^+-]' | head -12 | sed 's/^/    /'
 
-LOG="$(mktemp "${TMPDIR:-/tmp}/neuter-tests-XXXXXX.txt")"
+# No suffix after the X's: BSD mktemp (/usr/bin/mktemp, what runs when GNU coreutils is not on
+# PATH) substitutes ONLY a trailing X-run. With `-XXXXXX.txt` it created the LITERAL file
+# `neuter-tests-XXXXXX.txt`, the next run died on "File exists", LOG was empty, and the
+# `sed > "$LOG.clean"` below wrote a stray `.clean` into the repo root — while the summary
+# printed "0 red / 0 green", which reads as an unpinned guard (measured 2026-08-19, n2-n4).
+# GUARD 6: a mktemp failure must abort, never continue with an empty LOG.
+LOG="$(mktemp "${TMPDIR:-/tmp}/neuter-tests-XXXXXX")" || { echo "neuter: mktemp failed" >&2; exit 6; }
+[ -n "$LOG" ] || { echo "neuter: mktemp returned an empty path" >&2; exit 6; }
 # shellcheck disable=SC2086 -- TESTS is a deliberately word-split list of paths
 bash scripts/with-node.sh yarn vitest run $TESTS > "$LOG" 2>&1
 STATUS=$?

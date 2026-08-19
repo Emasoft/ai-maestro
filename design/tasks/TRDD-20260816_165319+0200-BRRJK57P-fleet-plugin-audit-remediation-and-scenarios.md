@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-19T04:49:50+0200
+updated: 2026-08-19T05:05:14+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -48,7 +48,10 @@ external-refs: []
   janitor SSOT), WC2GEDOC `02a6aa5d`+`2fa5b19c` (atomic-push stderr, real-producer fixtures),
   1YNY73NT `9d1f612d` (Agent: trailer, derived slug, @-stripped), 6UW0KZVY `4d4b5854`
   (three-valued remote-tag state). Cold strict self-validate 0/0/0/0, ~800 regressions green.
-  **v5.6.0 publish DEFERRED (their session near usage limit)** — janitor DD0M4QL7 unblocks on it.
+  ~~v5.6.0 publish DEFERRED~~ **SHIPPED 2026-08-19 ~05:00: v5.6.0 released** (their report:
+  release commit 796d9b2a, CI green incl. PyPI + marketplace notify, clean-dir install smoke
+  passed; 4 cards `complete`, moves in 4f2c02fe). **Janitor DD0M4QL7 is UNBLOCKED** (its gate
+  QOZXF6A6 shipped) — janitor pinged 2026-08-19 ~05:05.
 - **AMAMA**: audit pass 1 done (decoupling CLEAN); D1/D2/D3+Q1/Q2 fixes committed, 158/158;
   validate 25→16. **v2.18.0 RELEASED 2026-08-19 ~04:41** (their report): Q2 approval
   rerouting (`trdd.sh approve|refuse`; governance approve/reject = MAESTRO-only), D1

@@ -3,7 +3,7 @@ trdd-id: Z70X3LEW
 title: Normative 3P-TOOL clause family — role plugins bind to the pillar CLIs
 column: proposal
 created: 2026-08-19T04:40:55+0200
-updated: 2026-08-19T04:40:55+0200
+updated: 2026-08-19T04:42:17+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 task-type: docs
@@ -57,6 +57,14 @@ Add a new clause family **`3P-TOOL`** to `design/specs/3-pillars-spec.md` (regis
 > contract's OWNER (the 3-pillars spec in ai-maestro; a plugin's own contract in that
 > plugin's repo). A consumer cites by spec name + `spec-version` (3P-VER-02) and MUST NOT
 > vendor a copy — a copied spec is a second source of truth that drifts.
+>
+> `3P-TOOL-04` **porcelain-mode** — `MUST`: each pillar CLI offers a machine-readable
+> output mode (`--porcelain`: one record per line, stable TAB-separated fields, no ranking
+> prose) so a binding consumer never parses human-oriented output. Until a CLI ships it, a
+> consumer MAY defer migrating the affected call sites — recorded as a deferral, never a
+> silent skip. (Driven by AMOA's F1/F3 declination: `trddgrep show` / `specgrep` today emit
+> ranked human output only, so a library parsing that text is brittle by construction.
+> Implementation: TRDD-IPSNDKGM.)
 
 Version bump: `spec-version` 2.0.0 → **2.1.0** (additive clauses; no existing clause
 changes). If the approver reads 3P-VER-01's "MAJOR = a `MUST` changes" as covering *new*
@@ -69,9 +77,13 @@ so the plugin-quality checklist reaches it. No RP clause duplicates the text (3P
 
 ## Reference implementation
 
-AMOA reports (its Phase-2 session, 2026-08-19 batch — attributed, not yet hub-re-verified)
-voluntary adoption of the three CLIs at **7 sites** in its plugin. On approval, the
-implementer verifies those sites in AMOA's tree and cites them in the spec commit as the
+AMOA reports (its Phase-2 session, 2026-08-19 — attributed, not yet hub-re-verified)
+voluntary adoption of the three CLIs at **5 of 7 planned sites** (landed on its main in
+`eb64ccc`: the F2 trddgrep-validate write gate honouring 0/1/2 with real-condition tests,
+plus F4/F5/F6 teaching sites; 204 tests pass). The remaining 2 sites (F1 `find_trdd`, F3
+`compile_handoff` spec lookup) were DECLINED, not silently skipped, pending 3P-TOOL-04's
+porcelain mode — the honest-deferral shape that clause codifies. On approval, the
+implementer verifies the sites in AMOA's tree and cites them in the spec commit as the
 reference implementation; AMAMA v2.18.0 (D2 pillar-tool adoption) is a second adopter.
 
 ## Verification

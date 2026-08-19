@@ -301,6 +301,9 @@ describe('every pillar CLI refuses an unknown option rather than ignoring it', (
  * corpus (no `--design-dir` fixture — same as the positive control two tests up), whose
  * census was measured before this change: 265 findings, exactly ONE error
  * (BODY-STATE-CLAIM / 7123D51A) and exactly THREE STALE-COLUMN warnings.
+ * Re-measured 2026-08-19 (TRDD-PTFPGSLV session): 262 findings — the zone-repair that
+ * archived 78J4I4QS + S97TNMIJ cleared 2 ZONE-MISMATCH errors and 1 STALE-COLUMN warning,
+ * so the census is now ONE error and TWO STALE-COLUMN warnings (979DBDAA, 2XV78BND).
  *
  * A fixture corpus would be safer against drift, but the whole point is to pin the LIVE
  * numbers the ledger cites — a fixture cannot fail if a future card silently breaks the
@@ -315,10 +318,10 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     expect(r.status).toBe(1)
   })
 
-  it('--rule STALE-COLUMN prints exactly the 3 STALE-COLUMN findings and exits 0 (no error among them)', () => {
+  it('--rule STALE-COLUMN prints exactly the 2 STALE-COLUMN findings and exits 0 (no error among them)', () => {
     const r = runCli('trddgrep.mjs', ['validate', '--rule', 'STALE-COLUMN'])
     const lines = r.stdout.trim().split('\n')
-    expect(lines).toHaveLength(3)
+    expect(lines).toHaveLength(2)
     for (const line of lines) expect(line).toMatch(/^WARN\tSTALE-COLUMN\t/)
     expect(r.status).toBe(0)
   })

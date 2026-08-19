@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-18T23:52:23+0200
+updated: 2026-08-19T04:30:33+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,38 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### 2026-08-19 00:15–04:30 — post-midnight batch: AC6 pair landed, 4 fleet reports ledgered, 3 rulings issued
+
+- **PE54D95Q AC6 pair LANDED server-side** (`5796ef6a`; STATE in `d4252401`). Janitor session
+  CONFIRMED first-hand (daemon.py:2220, harness_backend.py:52-57): yield keys on the LIVE BEAT's
+  `absorbed_chores`, not the static roster ⇒ NO dark window; their `SERVER_ABSORBED_TASKS` removal
+  is accounting-only, queued as their own Tier-0 TRDD. Override knobs
+  (`JANITOR_AIMAESTRO_SERVER_STATE/CHORES`) measured UNSET in shell env + ecosystem.config.js +
+  pm2 dump; daemon's own env left to them (`ps eww`). Remaining on PE54D95Q: USER-gated
+  build+restart, then the 78→0 per-fire measurement.
+- **AMAA**: v2.17.0 published (tag+release live 22:11:58Z, f469c41 atomic); all CONFIRMED findings
+  fixed incl. DMIRQOCD; board clear (ZT5TP8YO backburner). Phase 2 CLOSED for AMAA.
+- **CPV**: 4 canonical cards implemented at ai_review — QOZXF6A6 `24cbf874` (ratified trio from
+  janitor SSOT), WC2GEDOC `02a6aa5d`+`2fa5b19c` (atomic-push stderr, real-producer fixtures),
+  1YNY73NT `9d1f612d` (Agent: trailer, derived slug, @-stripped), 6UW0KZVY `4d4b5854`
+  (three-valued remote-tag state). Cold strict self-validate 0/0/0/0, ~800 regressions green.
+  **v5.6.0 publish DEFERRED (their session near usage limit)** — janitor DD0M4QL7 unblocks on it.
+- **AMAMA**: audit pass 1 done (decoupling CLEAN); D1/D2/D3+Q1/Q2 fixes committed, 158/158;
+  validate 25→16. Hub rulings issued: Q1 review-columns = CONTEXT-SPLIT (team → INTEGRATOR/
+  reviewer per Part B2; no-team repo → MAINTAINER per kanban-multiagent editor authority; a
+  team-wide maintainer ownership claim needs explicit USER confirmation); Q2 = reroute MANAGER
+  approvals from password-gated `aimaestro-governance.sh` to AID-authorized `aimaestro-trdd.sh
+  approve` (verified in both scripts); Q3 = `blocked-by:` holds TRDD ids ONLY (cross-project form
+  `<project-id>:TRDD-<id8>`), non-TRDD blockers → external-refs + review-after/human_review;
+  legacy archived checklist gaps = FROZEN, grandfathered, linter-side boundary.
+- **Orchestrator (AMOA)**: sweeps ledgered on their 8DH44UXH — worst: their
+  `transition_authority()` oracle contradicts Part B2 on SIX transitions + release lane; fix batch
+  planned from B2 (correct direction, endorsed). OPEN question to hub: normative spec clause for
+  trddgrep/prrdgrep/specgrep adoption by role plugins — intended ruling: voluntary adoption now,
+  normative clause via a proposal card (spec bump not to be minted mid-flight). NOT yet answered.
+- Heartbeat marker `[janitor-memory-conflict]` deferred un-claimed (usage-limit checkpoint forbade
+  spawning); it re-fires on a later heartbeat.
 
 **PHASE 2 DISPATCHED 2026-08-18 ~19:35-19:50 to all 13 live plugin sessions** under the USER's direct
 delegation in the hub session (verbatim, both turns): *"you are in charge. decide yourself in base

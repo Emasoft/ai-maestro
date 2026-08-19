@@ -1,9 +1,9 @@
 ---
 trdd-id: CYUCN7Y0
 title: Fleet-wide TRDD query verb and batch approve-refuse surface
-column: todo
+column: dev
 created: 2026-08-19T14:01:56+0200
-updated: 2026-08-19T14:01:56+0200
+updated: 2026-08-19T14:16:00+0200
 implementation-commits: []
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
@@ -37,8 +37,11 @@ WONTFIX explicitly — decide on measurement, not sympathy.
 
 ## Acceptance
 
-- [ ] `search --all-agents` spec'd first, then implemented; returns per-agent-workdir
-      aggregated rows with the same columns as single-agent search
+- [x] `search --all-agents` spec'd first (usage header, regenerated spec), then
+      implemented as a client-side fan-out over GET /api/trdd — one row per registered
+      agent {agent, agentId, result|error}, per-agent failure recorded in-row, never
+      aborting the sweep. LIVE TEST 14:15: 11 agents, 0 errors, /bin/bash 3.2, exit 0.
+      Server-side aggregation stays the recorded upgrade path.
 - [ ] batch approve/refuse: explicit decision recorded (implemented OR WONTFIX with the
       client-side recipe written into the spec), AMAMA notified either way
 

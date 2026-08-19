@@ -23,6 +23,12 @@
 #
 # Usage:
 #   aimaestro-trdd.sh search [--column C] [--id I] [--keyword K] [--zone Z] [--agent A]
+#   aimaestro-trdd.sh search --all-agents [--column C] [--id I] [--keyword K] [--zone Z]
+#       Fleet-wide aggregate (TRDD-CYUCN7Y0, AMAMA board-reporting/D4-watchdog): one JSON
+#       array, one row per registered agent — {agent, agentId, result|error}. A per-agent
+#       failure lands in that row's "error" field; it never aborts the other rows.
+#       Client-side fan-out over GET /api/trdd; a server-side aggregate is the recorded
+#       upgrade path on the card.
 #   aimaestro-trdd.sh read <trdd-id> [--agent A]
 #   aimaestro-trdd.sh edit <trdd-id> --set key=value [--set key=value ...] [--agent A]
 #   aimaestro-trdd.sh approve <trdd-id> [--approver W] [--rationale R] [--agent A]
@@ -173,7 +179,7 @@ EOF
 }
 
 cmd_search() {
-    local column="" id="" keyword="" zone="" agent=""
+    local column="" id="" keyword="" zone="" agent="" all_agents="false"
     while [ $# -gt 0 ]; do
         case "$1" in
             --column)  column="$2";  shift 2 ;;
@@ -181,14 +187,55 @@ cmd_search() {
             --keyword|-k|-q) keyword="$2"; shift 2 ;;
             --zone)    zone="$2";    shift 2 ;;
             --agent)   agent="$2";   shift 2 ;;
+            --all-agents) all_agents="true"; shift ;;
             *) echo "Error: unknown flag for 'search': $1" >&2; return 1 ;;
         esac
     done
+    if [ "$all_agents" = "true" ] && [ -n "$agent" ]; then
+        echo "Error: --all-agents and --agent are mutually exclusive" >&2; return 1
+    fi
     local -a params=()
     [ -n "$column" ]  && params+=("column=$(_urlencode "$column")")
     [ -n "$id" ]      && params+=("id=$(_urlencode "$id")")
     [ -n "$keyword" ] && params+=("keyword=$(_urlencode "$keyword")")
     [ -n "$zone" ]    && params+=("zone=$(_urlencode "$zone")")
+
+    if [ "$all_agents" = "true" ]; then
+        # TRDD-CYUCN7Y0: fleet aggregate = client-side fan-out over the same route.
+        # One row per registered agent; a per-agent failure is RECORDED in that row's
+        # "error" field instead of aborting the sweep — an aggregate that dies on agent
+        # 3 of 40 answers about nobody (this is explicit per-row status, not a silent
+        # fallback). Server-side aggregation is the recorded upgrade path on the card.
+        local roster
+        roster="$(_api GET "/api/agents")" || {
+            echo "Error: could not list registered agents for --all-agents" >&2; return 1
+        }
+        local rows_file
+        rows_file="$(mktemp)" || return 1
+        local base_qs=""
+        if [ ${#params[@]} -gt 0 ]; then
+            local IFS='&'
+            base_qs="&${params[*]}"
+        fi
+        printf '%s' "$roster" | jq -r '.agents[] | "\(.id)\t\(.name)"' | \
+        while IFS=$'\t' read -r aid aname; do
+            [ -z "$aid" ] && continue
+            local r
+            if r="$(_api GET "/api/trdd?agentId=$(_urlencode "$aid")${base_qs}")"; then
+                jq -nc --arg a "$aname" --arg i "$aid" --argjson res "$r" \
+                    '{agent:$a, agentId:$i, result:$res}' >> "$rows_file" 2>/dev/null \
+                  || jq -nc --arg a "$aname" --arg i "$aid" --arg e "unparseable response" \
+                    '{agent:$a, agentId:$i, error:$e}' >> "$rows_file"
+            else
+                jq -nc --arg a "$aname" --arg i "$aid" --arg e "$r" \
+                    '{agent:$a, agentId:$i, error:($e | if . == "" then "request failed" else . end)}' >> "$rows_file"
+            fi
+        done
+        jq -s . "$rows_file"
+        rm -f "$rows_file"
+        return 0
+    fi
+
     [ -n "$agent" ]   && params+=("agentId=$(_urlencode "$agent")")
     local path="/api/trdd"
     if [ ${#params[@]} -gt 0 ]; then

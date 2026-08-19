@@ -650,6 +650,12 @@ AID + governance title (the R32 dual-path) and needs none.
 
 Usage:
   aimaestro-trdd.sh search [--column C] [--id I] [--keyword K] [--zone Z] [--agent A]
+  aimaestro-trdd.sh search --all-agents [--column C] [--id I] [--keyword K] [--zone Z]
+      Fleet-wide aggregate (TRDD-CYUCN7Y0, AMAMA board-reporting/D4-watchdog): one JSON
+      array, one row per registered agent — {agent, agentId, result|error}. A per-agent
+      failure lands in that row's "error" field; it never aborts the other rows.
+      Client-side fan-out over GET /api/trdd; a server-side aggregate is the recorded
+      upgrade path on the card.
   aimaestro-trdd.sh read <trdd-id> [--agent A]
   aimaestro-trdd.sh edit <trdd-id> --set key=value [--set key=value ...] [--agent A]
   aimaestro-trdd.sh approve <trdd-id> [--approver W] [--rationale R] [--agent A]

@@ -137,7 +137,13 @@ export function computeBuildSha(
   try {
     const full = runGit('rev-parse HEAD')
     // A dirty tracked tree means the sha under-describes what is actually running.
-    const dirty = runGit('status --porcelain --untracked-files=no').length > 0
+    // `--no-optional-locks`: a plain `git status` REFRESHES the index and takes `.git/index.lock`
+    // to do it. This runs at server boot, and a boot that is interrupted (pm2 restart racing a
+    // previous start, a crash loop) leaves a 0-byte orphan lock that blocks every later commit in
+    // the checkout until someone removes it by hand — measured twice on 2026-08-19 (19:20, 19:57,
+    // each a 0-byte lock with no holder, each minutes after a server start). A liveness probe must
+    // not hold a write lock on the repo it reports on.
+    const dirty = runGit('--no-optional-locks status --porcelain --untracked-files=no').length > 0
     return { sha: full.slice(0, 12), sha_full: full, dirty }
   } catch {
     return { sha: 'unknown', sha_full: 'unknown', dirty: false }

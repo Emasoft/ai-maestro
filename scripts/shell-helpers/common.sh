@@ -586,16 +586,23 @@ get_auth_header() {
 # Build auth args array for curl calls
 # Usage: local -a auth_args; get_auth_args auth_args; curl "${auth_args[@]}" ...
 get_auth_args() {
-    local -n _arr="$1"
-    _arr=()
+    # NO `local -n` here (TRDD-ARY3NRFC): namerefs need bash >= 4.3, and macOS ships
+    # /bin/bash 3.2 — with the system bash first on PATH every CLI died at this line
+    # BEFORE any request ("local: -n: invalid option"), which also made the test suite
+    # PATH-dependent. eval-assign is 3.2-safe; the single-quoted RHS defers expansion of
+    # the token variables to execution time, so their values are never parsed as code
+    # beyond ordinary double-quote expansion in the caller's own shell.
+    local _arr_name="$1"
     if [ -n "${AID_AUTH:-}" ]; then
-        _arr=(-H "Authorization: Bearer $AID_AUTH")
+        eval "${_arr_name}"'=(-H "Authorization: Bearer ${AID_AUTH}")'
         return 0
     fi
     local _tok
     _tok="$(get_session_token)"
     if [ -n "$_tok" ]; then
-        _arr=(-H "Cookie: aim_session=$_tok")
+        eval "${_arr_name}"'=(-H "Cookie: aim_session=${_tok}")'
+    else
+        eval "${_arr_name}"'=()'
     fi
 }
 

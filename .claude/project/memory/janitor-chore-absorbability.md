@@ -1,8 +1,8 @@
 ---
 name: janitor-chore-absorbability
-description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken / auto-update says enabled false and lastRunAt null but something is making hundreds of calls / lastRunSummary shows 38 failed plugin updates that no longer happen / the same plugin appears both failed and updated / is the absorbed lane running at all"
+description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken / auto-update says enabled false and lastRunAt null but something is making hundreds of calls / lastRunSummary shows 38 failed plugin updates that no longer happen / the same plugin appears both failed and updated / is the absorbed lane running at all / is cache-prune absorbed now or does the table still say no / is there a per-chore handover now or does the daemon still exit wholesale / which chores does the janitor still run while the server is up / is the absorbability table out of date"
 ocd: 2026-08-05
-lmd: 2026-08-16
+lmd: 2026-08-19
 metadata:
   node_type: memory
   type: project
@@ -14,7 +14,7 @@ publish-globally: false
 # janitor-chore-absorbability
 
 
-^ATOM-42IZ-Z6VI [desc:"A chore is absorbable IFF its population is DATA the server already holds — never processes or sessions on the host", keywords: can_the_server_absorb_this_chore which_janitor_chores_are_absorbable should_ai-maestro_take_over_chore_X absorb_all_eleven_chores, ocd: 2026-08-05, lmd: 2026-08-05]
+^ATOM-42IZ-Z6VI [desc:"A chore is absorbable IFF its population is DATA the server holds, or a host observation the server can make with the daemon's own instrument AND safety cutoff (cache-prune absorbed 2026-08-19 on exactly that basis)", keywords: can_the_server_absorb_this_chore which_janitor_chores_are_absorbable should_ai-maestro_take_over_chore_X absorb_all_eleven_chores is_cache-prune_absorbed absorbability_table_out_of_date, ocd: 2026-08-05, lmd: 2026-08-19]
 
 **THE TEST, and it decides every case: a janitor chore is absorbable by the ai-maestro server IFF
 its POPULATION is DATA the server holds. It is NOT absorbable when the population is
@@ -29,33 +29,45 @@ Verdicts for the six unabsorbed chores, read from the janitor's task implementat
 | `session-liveness` | SPLIT — harness agents (ours) + every other claude instance (TTY-reached) | half |
 | `fleet-stop` | every running claude session, via `fleet_scan` + `fleet_inject` | no |
 | `memory-guard` | janitor-owned processes machine-wide — and it SIGKILLs them | no |
-| `cache-prune` | the plugin cache dir, but its safety cutoff comes from the oldest LIVE claude session | no |
+| `cache-prune` | the plugin cache dir; its safety cutoff comes from the oldest LIVE claude session — ported verbatim into `lib/cache-prune.ts` (TRDD-B8B6D56P) | **yes — absorbed 2026-08-19** |
 | `rules-cleanup` | the janitor's own rule files, only once it is fully uninstalled | no (structurally) |
 | `github-config-audit` | an enumerable list of GitHub repos — the server already holds it (`lib/ecosystem-constants.ts`) and has an authenticated `gh` | **yes** |
 
-`cache-prune` is the instructive row: the cache is just a directory, so it LOOKS absorbable — until
-you read what makes it safe. Its cutoff comes from the oldest live `claude` process, and absorbing
-the prune without the cutoff takes the one chore whose failure mode is pulling a plugin out from
-under a running session.
+`cache-prune` is the instructive row in BOTH directions: the cache is just a directory, so it LOOKS
+absorbable — and the 2026-08-05 "no" was an objection to absorbing it WITHOUT the cutoff that makes
+it safe (the oldest live `claude` process). The 2026-08-19 absorption ported that cutoff
+(`pruneCutoff` = min(now−minAge, oldestSessionStart−margin), pinned set, basename-exact `claude`
+match, ps snapshot to file): the population test therefore reads "DATA the server holds, OR a host
+observation the server can make with the SAME instrument and the SAME safety cutoff the daemon
+uses" — the server snapshots ps exactly as the daemon does. The live claim set is
+`lib/janitor-chore-stamp.ts::ABSORBED_CHORES`, never this table; the remaining rows each have an
+absorption NPT under KCRMSNL7 (JBFM8XR0 fleet-plugins-update, 5II83KK4 rules-cleanup, 4QOWVSLU
+memory-guard, 99LV0U4I fleet-scan population → 9FW92242 fleet-stop). [^5]
 
 
-^ATOM-052B-G6FG [desc:"The daemon EXITS wholesale while a server is up, so SERVER_ABSORBED_TASKS is inert and there is no per-chore handover", keywords: SERVER_ABSORBED_TASKS_did_nothing added_a_chore_to_the_absorbed_list_and_nothing_changed why_is_the_janitor_daemon_not_running daemon_exits_when_the_server_is_up who_guards_the_non-harness_claude_sessions, ocd: 2026-08-05, lmd: 2026-08-05]
+^ATOM-052B-G6FG [desc:"The handover is PER CHORE (janitor yields what the server claims in absorbed_chores) and the daemon exits only when the server claims EVERY global chore — the wholesale exit / inert SERVER_ABSORBED_TASKS is superseded", keywords: SERVER_ABSORBED_TASKS_did_nothing added_a_chore_to_the_absorbed_list_and_nothing_changed why_is_the_janitor_daemon_not_running daemon_exits_when_the_server_is_up who_guards_the_non-harness_claude_sessions is_there_a_per-chore_handover which_chores_does_the_janitor_still_run server_owns_every_chore, ocd: 2026-08-05, lmd: 2026-08-19]
 
-**There is no per-chore handover. The daemon EXITS.** `global_state.py::ensure_daemon_running` is
-`if _server_owns_host(): return False` — unconditional, no per-chore granularity — so while an
-ai-maestro server is alive the janitor daemon never spawns at all.
+**The handover is PER CHORE now (since ai-maestro#111 / janitor#134; verified in the installed
+janitor 3.3.16 on 2026-08-19).** `global_state._server_owns_host` delegates to
+`harness_backend.server_owns_every_chore` — the daemon EXITS only when the server's claim covers
+EVERY `GLOBAL_CHORES` entry (13 today) — and `daemon._task_yielded_to_server` yields ANY chore in
+`harness_backend.claimed_chores()`, which reads the per-chore tokens the server publishes in
+`~/.aimaestro/server-liveness.json` `absorbed_chores` (6 today). A claim is added in
+`lib/janitor-chore-stamp.ts::ABSORBED_CHORES` ONLY in the commit that makes the lane live — a
+claim-ahead is the #111 blackout shape (the janitor yields, nobody performs). Completion is
+stamped at `~/.claude/janitor-control/<chore>.last-run.ts` on ATTEMPT; the janitor's stale bound is
+max(3×cadence, cadence+600) of ITS roster cadence, so a slower server cadence must be negotiated
+with the owner, not declared.
 
-So **`SERVER_ABSORBED_TASKS` is INERT in normal operation** and adding a name to it changes nothing;
-the janitor's own PORT NOTE (`scripts/daemon.py`, at `_SERVER_ABSORBED_TASK_NAMES`) says the binary
-exit happens *"BEFORE this per-chore yield is ever evaluated … so this yield yields nothing"*. The
-list governs only the env-override and maintenance-keepalive paths.
+The BINARY suppression this atom used to describe (`if _server_owns_host(): return False` with no
+per-chore granularity) is the SUPERSEDED state — see [^6] for the old body. The end state per the
+owner ruling (janitor#134) is the server claiming ALL chores, at which point the one-daemon-per-host
+exit fires; until then the janitor runs exactly the unclaimed remainder, so "whatever the server
+does not do, nobody does" no longer holds.
 
-**The honest statement of the gap is therefore not "5 of 11 absorbed"** but: **the suppression is
-BINARY and the absorption is PARTIAL — whatever the server does not do, nobody does.** That is why
-the 5-vs-11 arithmetic never balanced.
-
-Tracked on `Emasoft/ai-maestro-janitor#196`. See also [[family-a-continuity-absorption-plan]], which
-owns the SEPARATE Family-A (oauth/continuity) absorption. [^2]
+Tracked on `Emasoft/ai-maestro-janitor#196` (history) and in KCRMSNL7's DESIGN RESOLVED section.
+See also [[family-a-continuity-absorption-plan]], which owns the SEPARATE Family-A
+(oauth/continuity) absorption. [^2] [^6]
 
 
 ^ATOM-VN7A-LW2R [desc:"Hibernation is DERIVED, not stored: Agent['status'] collapses hibernated/crashed/never-woken all into 'offline'", keywords: is_this_agent_hibernated_or_crashed agent_status_says_offline_for_everything hibernated_vs_crashed_vs_never_woken agent_shows_offline_but_is_it_broken Agent_status_enum_has_no_hibernated, ocd: 2026-08-05, lmd: 2026-08-05]
@@ -214,3 +226,5 @@ Since db6cf8f8 (2026-08-08) the absorbed lane's repeating timer is a 15-min POLL
 [^3]: [id:ATOM-ZOTD-QPTN, status:valid, desc:"A zero-findings audit cannot distinguish a clean fleet from a blind probe", keywords:"zero_findings_on_a_live_corpus my_audit_found_nothing_is_that_good clean_result_or_blind_probe audit_reports_no_findings is_the_scan_actually_seeing_anything", ocd:2026-08-05, lmd:2026-08-05] DO NOT report an audit's ZERO FINDINGS as a clean result, BECAUSE zero is exactly what a blind probe returns too — this classifier is silent on every unprovable answer by design, so a missing `gh`, a revoked token, or a non-admin repo yields the same empty findings list as a fully compliant fleet. DO prove the zero is REAL before believing it: check the probe returns live data for at least one repo and hand-trace that repo's verdict, then confirm every repo was actually VISIBLE (here: 14/14 admin, since a non-admin repo is silently skipped). Measured 2026-08-05 — the first live run read 14 repos / 0 findings, and only those two checks separated "the fleet is compliant" from "the sweep saw nothing".
 
 [^4]: [id:ATOM-8QK2-M5XV, status:valid, desc:"An enum quoted from memory in a comment makes the correct argument it supports look wrong", keywords:"comment_lists_the_wrong_enum_values docstring_disagrees_with_the_type Agent_status_enum_missing_idle copied_comment_repeated_across_files stale_enum_in_a_docstring", ocd:2026-08-05, lmd:2026-08-05] DO NOT quote an enum's values from memory into prose that ARGUES from them, BECAUSE the argument then fails its own reader's check: this page, `lib/agent-hibernation.ts`, `app/api/agents/hibernation/route.ts`, `scripts/agent-commands.sh` and a test docstring ALL said `Agent['status']` is `active | offline | deleted`, omitting `idle` — five copies of one sentence, propagated by copy-paste, while the real type (`types/agent.ts:465`) has four values. The CLAIM built on it ("hibernated, crashed and never-woken all read `offline`") was always TRUE and stayed true, which is what made the error survive: nothing behavioural could ever redden, and a reader who verified the enum against the type found a mismatch that discredits a correct argument. Found by ai-maestro#114, fixed 2026-08-05 in four places; the fifth is an archived TRDD, deliberately left because a terminal card is frozen and is the historical record of what was believed then. DO cite the definition site (`types/agent.ts:465`) instead of restating the values, so the reader checks the source rather than a copy — and when a sentence must list them, grep for that sentence before assuming yours is the only copy.
+[^5]: [id: ATOM-R7EO-1EU4, status: valid, supersedes: ATOM-42IZ-Z6VI, desc: "The cache-prune 'no' row was a 2026-08-05 objection to absorbing WITHOUT the cutoff — lib/cache-prune.ts ports the cutoff, so the row is superseded", keywords: "cache-prune_is_absorbed_now cache-prune_row_says_no can_the_server_prune_the_plugin_cache oldest-live-session_cutoff_ported absorbability_table_out_of_date cache-prune_absorbed_2026-08-19 lib/cache-prune.ts", ocd: 2026-08-19, lmd: 2026-08-19] DO NOT read the `cache-prune | no` row of the absorbability table as current, BECAUSE it was an objection to absorbing the prune WITHOUT its oldest-live-session cutoff, and on 2026-08-19 (TRDD-B8B6D56P, parent KCRMSNL7) `lib/cache-prune.ts` ported that cutoff verbatim (`pruneCutoff` = min(now−minAge, oldestSessionStart−margin), pinned versions as a SET, basename-exact `claude` matching, ps snapshot to a file) and `cache-prune` joined `ABSORBED_CHORES` in the same commit as its scheduler — the server snapshots ps exactly as the daemon does (userland), so "processes we cannot see" never applied to this chore. DO treat the population test as "DATA the server holds OR a host observation the server can make with the same instrument and the same safety cutoff", and check `lib/janitor-chore-stamp.ts::ABSORBED_CHORES` + the liveness beat's `absorbed_chores` for what is absorbed TODAY rather than this table. SUPERSEDED BODY: **THE TEST, and it decides every case: a janitor chore is absorbable by the ai-maestro server IFF its POPULATION is DATA the server holds. It is NOT absorbable when the population is PROCESSES or SESSIONS on the host** — the server has no view of those and cannot acquire one without becoming the daemon. Verdicts for the six unabsorbed chores, read from the janitor's task implementations in `daemon.py`, not from the chore names: | chore | its population | absorbable? | |---|---|---| | `session-liveness` | SPLIT — harness agents (ours) + every other claude instance (TTY-reached) | half | | `fleet-stop` | every running claude session, via `fleet_scan` + `fleet_inject` | no | | `memory-guard` | janitor-owned processes machine-wide — and it SIGKILLs them | no | | `cache-prune` | the plugin cache dir, but its safety cutoff comes from the oldest LIVE claude session | no | | `rules-cleanup` | the janitor's own rule files, only once it is fully uninstalled | no (structurally) | | `github-config-audit` | an enumerable list of GitHub repos — the server already holds it (`lib/ecosystem-constants.ts`) and has an authenticated `gh` | **yes** | `cache-prune` is the instructive row: the cache is just a directory, so it LOOKS absorbable — until you read what makes it safe. Its cutoff comes from the oldest live `claude` process, and absorbing the prune without the cutoff takes the one chore whose failure mode is pulling a plugin out from under a running session.
+[^6]: [id: ATOM-E247-QB1U, status: valid, supersedes: ATOM-052B-G6FG, desc: "Superseded: since janitor#111/#134 the daemon yields PER CHORE from the server's absorbed_chores claim and exits only when the server claims every GLOBAL chore", keywords: "is_there_a_per-chore_handover_now daemon_exits_wholesale SERVER_ABSORBED_TASKS_inert janitor_yields_claimed_chores server_owns_every_chore absorbed_chores_in_server-liveness one-daemon-per-host_exit which_chores_does_the_janitor_still_run", ocd: 2026-08-19, lmd: 2026-08-19] DO NOT rely on "the daemon EXITS wholesale while a server is up, so SERVER_ABSORBED_TASKS is inert", BECAUSE that described the binary suppression BEFORE ai-maestro#111: verified in the installed janitor 3.3.16 on 2026-08-19, `global_state._server_owns_host` → `harness_backend.server_owns_every_chore` (full exit only when the server's `absorbed_chores` claim ⊇ GLOBAL_CHORES, 13 today), and `daemon._task_yielded_to_server` yields ANY chore in `harness_backend.claimed_chores()` — the per-chore tokens the server publishes in `~/.aimaestro/server-liveness.json` `absorbed_chores` (6 today: marketplace-refresh, version-update, oauth-rotator-supervisor, oauth-rotator-tick, github-config-audit, cache-prune). Owner ruling janitor#134: the end state is the server claiming ALL chores, at which point the one-daemon-per-host exit fires and sessions' `ensure_daemon_running` respawns nothing. DO read `lib/janitor-chore-stamp.ts::ABSORBED_CHORES` for the live claim set, remember a claim is added ONLY in the commit that makes the lane live (claim-ahead = the #111 blackout shape), and see KCRMSNL7's DESIGN RESOLVED section + its NPT flock (JBFM8XR0, 5II83KK4, 4QOWVSLU, 99LV0U4I, 9FW92242) for the remaining chores. SUPERSEDED BODY: **There is no per-chore handover. The daemon EXITS.** `global_state.py::ensure_daemon_running` is `if _server_owns_host(): return False` — unconditional, no per-chore granularity — so while an ai-maestro server is alive the janitor daemon never spawns at all. So **`SERVER_ABSORBED_TASKS` is INERT in normal operation** and adding a name to it changes nothing; the janitor's own PORT NOTE (`scripts/daemon.py`, at `_SERVER_ABSORBED_TASK_NAMES`) says the binary exit happens *"BEFORE this per-chore yield is ever evaluated … so this yield yields nothing"*. The list governs only the env-override and maintenance-keepalive paths. **The honest statement of the gap is therefore not "5 of 11 absorbed"** but: **the suppression is BINARY and the absorption is PARTIAL — whatever the server does not do, nobody does.** That is why the 5-vs-11 arithmetic never balanced. Tracked on `Emasoft/ai-maestro-janitor#196`. See also [[family-a-continuity-absorption-plan]], which owns the SEPARATE Family-A (oauth/continuity) absorption.

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-19T21:09:51+0200
+updated: 2026-08-20T00:30:01+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1615,6 +1615,31 @@ CORE's disk evidence, refined to bare-name-INVOCATION-teaching (plugin skills re
 namespaced), re-broadcast before any bulk delete — AMPA's own first check would have
 repeated the phantom error and said so. Published 3.3.16 confirmed SAFE (git-URL serving,
 tag complete, 1656 files) — no emergency republish.
+
+## Ledger — window of 2026-08-20T00:30:01+0200
+
+- **FIVE cards closed, one of them by running the e2e everyone had deferred.**
+  **TRDD-O8NCNRWO completed+archived** — the positive-path live e2e (real background subagent on
+  testbot, owner auth) surfaced FOUR live defects, all fixed+pinned in the same loop:
+  (1) the subagent gate NEVER FIRED in production for 3 months — three md5 mirrors of the hook's
+  cwd hash vs the hook's sha256 since 2026-05-08; fixed a97594f8 with `lib/chat-state-path.ts`
+  (resolve via the hook's own index.json — stop mirroring foreign algorithms), which also revives
+  the chat hookState, getHookState/readPendingPrompt and server.mjs AutoContinue;
+  (2) force-stop parked sessions on CC's abandon dialog forever (measured 2.5 h) — stop-path
+  probe added, 44860243; (3) `looksLikeAbandonPrompt` was blind on 2.1.235's actual wording
+  ("Background work is running… Exit and stop tasks", no "agents") — live capture is now the
+  fixture; (4) stale-HIGH: a force-stop orphans the counter at 1 forever and bricked the next
+  restart — `sessionProgramRunning` escape at all six gate sites, 5fed79b3; final measurements
+  all green on the deployed bundle (409 → force-stop to shell ~1 s → un-forced restart 200 over
+  the orphaned counter). Two builds + restarts, verified by effect.
+  **TRDD-FXPV7L4D completed+archived** (d468fd7b) — the live-prediction box resolved by
+  measurement: the ten laggards LEFT the registry (270→261, all ten absent, 0/261 ≥2 d stale).
+  **TRDD-BF3JN4TL completed+archived** (a6d6b41b) — the R42 soak measured over every
+  registered-agent transcript: ONE cross-agent drive attempt in 14 days, the MANAGER's own probe,
+  denied live with 403. **TRDD-RIFM4UXN completed+archived** (f3a4aef9) — last box split
+  hub-half/CORE-half; CORE then shipped v3.1.28 and CLOSED #69 (their message 00:0x, markers
+  gone, tests 106 green). **TRDD-PE54D95Q completed+archived** (0a421458) — sat in dev at 7/7.
+- Board delta: work columns now hold only 17K0SHDQ, MN0Q1IA2 and this card.
 
 ## Ledger — window of 2026-08-19T21:09:51+0200
 

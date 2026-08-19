@@ -1,9 +1,9 @@
 ---
 trdd-id: O8NCNRWO
 title: Harden the stop/restart safe-state gate for CC ≥2.1.198 background subagents
-column: ai_review
+column: completed
 created: 2026-07-08T19:34:50+0200
-updated: 2026-08-02T15:49:10+0200
+updated: 2026-08-20T00:29:27+0200
 current-owner: main-session
 assignee: main-session
 priority: 1
@@ -18,7 +18,7 @@ release-via: none
 test-requirements: [unit, typecheck]
 impacts: []
 relevant-rules: []
-implementation-commits: [47676228, c88ffda8, 3f47dce4]
+implementation-commits: [47676228, c88ffda8, 3f47dce4, a97594f8, 44860243, 5fed79b3]
 external-refs: ["github.com/Emasoft/ai-maestro-plugin/issues/17 (CLOSED 2026-07-16, plugin v2.10.0)"]
 ---
 
@@ -124,9 +124,40 @@ the card already made, not a criterion invented at closing time.
 - [x] 5 — CLAUDE.md's safe-state premise corrected + the compat audit extended to 2.1.204 (`c88ffda8`)
 - [x] 6 — unit tests for the 409 gate (>0 / =0 / absent) and the abandon-prompt branch; tsc 0,
       eslint 0, 26 green
-- [ ] the POSITIVE-path live e2e — with a REAL background subagent: Stop returns 409 without
+- [x] the POSITIVE-path live e2e — with a REAL background subagent: Stop returns 409 without
       `force`, the UI shows the subagents-running flavor, and with `force` the abandon prompt is
       handled. **Unblocked since 2026-07-16**; only the negative path (an unknown counter never
       blocks) is proven today, and that is the half that ships
+      **▶ RUN LIVE 2026-08-19/20 (hub, owner auth, testbot + a real `run_in_background` subagent),
+      and it found FOUR defects — each fixed and re-proven in the same loop:**
+      1. **The gate itself never fired in production** — the three server-side readers of the
+         hook's chat-state derived `md5(cwd)[:16]` while every installed hook since 2026-05-08
+         writes `sha256(cwd)[:16]`, so `readSubagentCount` opened a non-existent file and returned
+         null for THREE MONTHS. Fixed a97594f8 (`lib/chat-state-path.ts` — resolve via the hook's
+         own `index.json`, derive sha256 only for an unindexed cwd); both propped tests re-seated.
+      2. **Force-stop parked the session on the abandon dialog** — `runStopSequence` was
+         fire-and-forget (the probe existed only on the RESTART path): the live session sat on the
+         dialog for 2.5 h. Fixed 44860243 (bounded 8 s probe on the stop path, one Enter only on a
+         DETECTED dialog, +4 tests, neuter 1-red-exact).
+      3. **The detector was blind on current CC** — 2.1.235's dialog says "Background work is
+         running … ❯ 1. Exit and stop tasks", never "agents"; the regex required "agents". Fixed
+         in the same commit (the live capture is now the fixture; each family alone detects; 2
+         neuters 1-red-exact).
+      4. **Stale-HIGH counter bricked restart** — force-stop orphans `subagentCount: 1` forever
+         (SubagentStop never fires), so the NEXT restart 409'd over a bare-shell pane. Fixed
+         5fed79b3 (`sessionProgramRunning` live tmux probe threaded at all six gate sites; only a
+         provably-shell pane bypasses; true/null keep blocking).
+      **The three assertions of this box, as finally measured (post-fix bundle, verified by
+      effect):** (a) un-forced stop → **409 subagents_running, count 1** (rounds 1 and 3);
+      (b) UI flavor → `/api/sessions/activity` served `hookStatus: subagents_running,
+      subagentCount: 1` while the subagent ran (the badge mapping is pinned by the
+      `resolveAgentStatus` tests); (c) forced stop → the session reaches the SHELL in ~1 s
+      (round 3, CC 2.1.236, which exits directly; round 2's parked 2.1.235 dialog was likewise
+      cleared through the new probe path), and the un-forced restart afterwards → **200 over the
+      still-orphaned counter** with the pane at zsh — the stale-HIGH escape observed live.
+      Caveat stated: on 2.1.236 the dialog did not re-present under `force`, so the
+      Enter-confirmation branch is pinned by unit tests against the LIVE-captured 2.1.235 dialog
+      rather than end-to-end.
 
 ## Approval log
+- 2026-08-20T00:29:27+0200 — COMPLETED by the hub under the USER's Phase-2 delegation (BRRJK57P approval log): the last box (positive-path live e2e) run for real; it surfaced and fixed four defects (md5/sha256 chat-state mismatch, fire-and-forget force-stop, detector blind on 2.1.235 wording, stale-HIGH counter bricking restart) and every assertion was then measured green on the deployed bundle. Archived as completed.

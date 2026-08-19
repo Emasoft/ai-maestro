@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-20T00:49:18+0200
+updated: 2026-08-20T00:59:22+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1751,6 +1751,14 @@ tag complete, 1656 files) — no emergency republish.
 - **WEBDESIGN wired panel preview** (their d9743cf) after finding aimaestro-panel.sh already
   covers it — RZTIE0T1 narrowed to the low-priority screenshot verb; their identity ask
   answered NO per R32/6SL6UY6N precedent (dev workdirs get no registered identity).
+
+- **Reload-signal contract SHIPPED + LIVE (2026-08-20 window, e9b1ba5e/0e5e15d2/90e1ae49):**
+  the janitor-named producer (`lib/plugins-updated-signal.ts` — atomic temp+rename to
+  `~/.aimaestro/state/plugins-updated.json`, epoch SECONDS, no-op on empty sweeps, ids deduped
+  at the publish boundary) wired into `runFleetPluginsUpdate` via an injectable `signal` dep;
+  2 neuters exactly-1-red each; first live publish measured 18 s after the sweep
+  (epoch 1787180245, count 15). Janitor peer notified — their [janitor-reload] consumer is
+  now unblocked. JBFM8XR0 STATE updated (reload gap → CLOSED).
 
 ## Approval log
 

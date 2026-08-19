@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-19T04:43:06+0200
+updated: 2026-08-19T04:49:50+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -57,7 +57,10 @@ external-refs: []
   card QX6VFAXS closed + archived. **v2.18.1 follow-up ~04:45**: MANAGER-persona
   job-completion enforcement (board-as-ledger, drain by default), approval-workflows
   degraded mode (server down ⇒ offline Approval-log verdict + queued retry, never silent
-  stall), trddgrep in status checklist; 5 scenario walks clean, 158/158. Their `trddgrep
+  stall), trddgrep in status checklist; 5 scenario walks clean, 158/158. **v2.18.2 ~04:55**
+  closes their systematic-coverage pass: full matrix green (arch/16 scripts/12 skills/2
+  subagents/3 hooks/4 commands/docs; all 51 CLI invocation forms verified verb-by-verb
+  against sources — last miss an examples.md fetch form, fixed). Their `trddgrep
   validate` holds 11 sanctioned residuals that clear to 0 when TRDD-PTFPGSLV ships — ping
   them for the acceptance-box re-run then. Their maintainer-in-team-repos Part B2 question
   stays PENDING with the USER (correctly held).

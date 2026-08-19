@@ -3,7 +3,7 @@ trdd-id: 523V1N4I
 title: Wrap the verified PSS and CPV read surfaces for team configuration
 column: todo
 created: 2026-08-19T04:43:53+0200
-updated: 2026-08-19T04:43:53+0200
+updated: 2026-08-19T04:49:50+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -14,7 +14,7 @@ mandated-by: self
 priority: 2
 project-id: ai-maestro
 labels: [teams, scripts, pss, cpv, decoupling]
-external-refs: [TRDD-BRRJK57P, COS ASK 4 2026-08-19, TRDD-IBKR7F74]
+external-refs: [TRDD-BRRJK57P, COS ASK 4 2026-08-19, TRDD-IBKR7F74, Emasoft/perfect-skill-suggester#15, Emasoft/claude-plugins-validation#212]
 ---
 
 # Wrap the verified PSS and CPV read surfaces for team configuration
@@ -74,7 +74,12 @@ at design.
 - [ ] wrappers for surfaces 1-4 exist in the script layer with exit semantics preserved
 - [ ] R27-stamping design decision recorded (with its re-evaluated floor) before item 1 lands
 - [ ] COS notified of the wrapper names + the stamp-file-vs-exec decision for item 4
-- [ ] upstream filings for 5-6 confirmed on their trackers (links in external-refs)
+- [x] upstream filings for 5-6 confirmed on their trackers — COS filed with byline
+      2026-08-19: perfect-skill-suggester#15 (profile-drift), claude-plugins-validation#212
+      (version-skew); both hub-verified OPEN via gh, both request a distinct documented
+      could-not-run exit value matching this card's verbatim-exit-semantics decision.
+      COS notes PSS's flat stamp file reads cheaper for a server-side wrapper (no exec of a
+      user-scope binary from the server path) — weigh at design; final call there.
 
 ## Approval log
 

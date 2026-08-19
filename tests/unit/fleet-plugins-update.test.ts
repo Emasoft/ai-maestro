@@ -138,13 +138,15 @@ describe('updateTarget — THE fix: cwd is the project', () => {
 describe('runFleetPluginsUpdate — the sweep', () => {
   const t = (n: number): Target => ({ pluginId: `p${n}@m`, scope: 'local', projectPath: `/proj/${n}` })
 
-  it('updates every target under the cap, logs failures, stamps on ATTEMPT even when all fail', async () => {
+  it('updates every target under the cap, logs failures, stamps on ATTEMPT even when all fail — and publishes the reload signal with exactly the updated ids', async () => {
     const logs: string[] = []
     const stamp = vi.fn()
+    const signal = vi.fn()
     const r = await runFleetPluginsUpdate({
       targets: () => [t(1), t(2)],
       update: async (x) => (x.pluginId === 'p1@m' ? { ok: true, detail: '' } : { ok: false, detail: 'nope' }),
       stamp,
+      signal,
       log: (m) => {
         logs.push(m)
       },
@@ -152,15 +154,19 @@ describe('runFleetPluginsUpdate — the sweep', () => {
     expect(r).toEqual({ targets: 2, updated: ['p1@m'], failed: 1, capped: false })
     expect(stamp).toHaveBeenCalledTimes(1)
     expect(logs.some((l) => /p2@m @ \/proj\/2: FAILED nope/.test(l))).toBe(true)
+    // the janitor-named reload contract: the sweep hands its updated set to the publisher
+    expect(signal).toHaveBeenCalledWith(['p1@m'])
 
     const rAllFail = await runFleetPluginsUpdate({
       targets: () => [t(3)],
       update: async () => ({ ok: false, detail: 'x' }),
       stamp,
+      signal,
       log: () => {},
     })
     expect(rAllFail.updated).toEqual([])
     expect(stamp).toHaveBeenCalledTimes(2) // attempted ⇒ owned ⇒ stamped
+    expect(signal).toHaveBeenLastCalledWith([]) // helper no-ops on [] — the file is untouched
   })
 
   it('a capped sweep SAYS so and stops at the cap (no silent truncation)', async () => {
@@ -171,6 +177,7 @@ describe('runFleetPluginsUpdate — the sweep', () => {
       targets: () => many,
       update,
       stamp: () => {},
+      signal: () => {},
       log: (m) => {
         logs.push(m)
       },
@@ -184,11 +191,37 @@ describe('runFleetPluginsUpdate — the sweep', () => {
 })
 
 describe('incident requirements 1+2 — the lane never writes a cache and never quarantines', () => {
-  it('the module source contains no fs write/move/delete primitive (its only mutation channel is the CLI subprocess)', () => {
+  it('the module source contains no fs write/move/delete primitive (its mutation channels are exactly the CLI subprocess and the plugins-updated signal helper — whose one target is our own ~/.aimaestro state root, outside every cache and scanned tree)', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../lib/fleet-plugins-update.ts'), 'utf8')
     const writers = /\bfs\.(writeFileSync|writeFile|appendFile|appendFileSync|renameSync|rename|rmSync|rm\b|rmdirSync|unlinkSync|unlink|mkdirSync|mkdir|cpSync|copyFileSync)\b/g
     expect(src.match(writers) ?? []).toEqual([])
     // positive control: the scanner sees a writer when one exists
     expect('fs.writeFileSync(p, s)'.match(writers)).toHaveLength(1)
+  })
+})
+
+/*
+ * NEUTER RUNS (2026-08-20 — OBSERVED via scripts/dev/neuter, restores verified by blob hash):
+ *   s/ *;\(deps\.signal \?\? writePluginsUpdatedSignal\)\(updated\)/(neutered)/  (lib/fleet-plugins-update.ts)
+ *   → 1 red / 11 green: "updates every target under the cap … and publishes the reload signal"
+ *   s/if \(updated\.length === 0\) return/if (false) return/  (lib/plugins-updated-signal.ts)
+ *   → 1 red / 11 green: "publishes the exact shape atomically, and an empty sweep never touches the file"
+ */
+describe('writePluginsUpdatedSignal — the janitor-named reload contract', () => {
+  it('publishes the exact shape atomically, and an empty sweep never touches the file', async () => {
+    const { writePluginsUpdatedSignal } = await import('@/lib/plugins-updated-signal')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fpu-signal-'))
+    const dest = path.join(dir, 'state', 'plugins-updated.json')
+    writePluginsUpdatedSignal([], 1_787_179_701_000, dest)
+    expect(fs.existsSync(dest)).toBe(false) // empty sweep = no write (consumer semantics)
+    writePluginsUpdatedSignal(['a@m', 'b@m'], 1_787_179_701_000, dest)
+    expect(JSON.parse(fs.readFileSync(dest, 'utf8'))).toEqual({
+      updated_at_epoch: 1_787_179_701, // SECONDS, not ms — the consumer compares epochs
+      updated: ['a@m', 'b@m'],
+      by: 'fleet-plugins-update',
+      count: 2,
+    })
+    // no half-written residue: the temp file was renamed away
+    expect(fs.readdirSync(path.dirname(dest)).filter((f) => f.includes('.tmp.'))).toEqual([])
   })
 })

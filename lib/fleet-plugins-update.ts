@@ -48,6 +48,7 @@ import { promisify } from 'node:util'
 
 import { withMarketplaceLock } from '@/lib/marketplace-lock'
 import { stampChoreRun } from '@/lib/janitor-chore-stamp'
+import { writePluginsUpdatedSignal } from '@/lib/plugins-updated-signal'
 
 const execFileAsync = promisify(execFile)
 
@@ -209,6 +210,7 @@ export interface FleetPluginsUpdateDeps {
   targets?: () => Target[]
   update?: (t: Target) => Promise<{ ok: boolean; detail: string }>
   stamp?: () => void
+  signal?: (updated: readonly string[]) => void
   log?: (msg: string) => void
   maxTargets?: number
 }
@@ -249,6 +251,10 @@ export async function runFleetPluginsUpdate(deps: FleetPluginsUpdateDeps = {}): 
     log(`[fleet-plugins-update] capped at ${maxTargets}/${targets.length} targets — rest next pass`)
   }
   ;(deps.stamp ?? (() => stampChoreRun('fleet-plugins-update')))()
+  // The janitor-named reload contract (lib/plugins-updated-signal.ts): publish the sweep so
+  // their dispatcher can surface [janitor-reload] to every session. The helper no-ops on an
+  // empty list, so an empty sweep never touches the file (the consumer's semantics).
+  ;(deps.signal ?? writePluginsUpdatedSignal)(updated)
   return { targets: targets.length, updated, failed, capped }
 }
 

@@ -3,7 +3,7 @@ trdd-id: 17K0SHDQ
 title: Close ai-maestro#46 — the four remaining work items after the 2026-08-08 defect map
 column: dev
 created: 2026-08-08T15:19:13+0200
-updated: 2026-08-16T01:04:24+0200
+updated: 2026-08-19T20:42:00+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: bugfix
@@ -78,8 +78,12 @@ can never pass at all). One card, one gate: `## Acceptance` owns it.
       sites converted, 7 tests green run by the hub, neuter red d/e/f recorded in the test
       file; deployed to `~/.local/share` + `~/.local/bin` copies with timestamped backups
       and verified on the installed copies (2026-08-08T15:32+0200)
-- [ ] W-C shipped: title filter + resolver flag, 0/1/N pinned (deferred — feature, nobody
-      blocked; machine burn was ~$480/hr at decision time, 2026-08-08T15:30+0200)
+- [ ] ~~W-C shipped: title filter + resolver flag, 0/1/N pinned~~ **DROPPED from Acceptance
+      2026-08-19 (hub, under the Phase-2 delegation) — never wanted:** deferred 2026-08-08 as "a
+      feature nobody is blocked on", re-checked 2026-08-16 (same), re-checked 2026-08-19: #46 is
+      CLOSED, no board card and no peer names it in 11 days. The card's own instruction applies
+      ("if W-C turns out never to be wanted, the honest move is to DROP it with a reason, never to
+      tick it"). If a consumer ever asks, it is a NEW card. Not ticked; struck.
       **STILL DEFERRED BY DECISION as of 2026-08-16, not stalled.** Re-checked: nothing on the
       board and nothing on #46 waits for it, and the reason it was deferred — a feature nobody
       is blocked on — is unchanged. Deliberately left unchecked: a deferred item is not a done
@@ -92,7 +96,25 @@ can never pass at all). One card, one gate: `## Acceptance` owns it.
       view 46` reports `state: CLOSED, closedAt: 2026-08-08T13:32:39Z`, and the recipe is
       comment 5226325800. Fusing a finished relay with a deferred probe made the whole item
       read as untouched — the same defect corrected on TRDD-COOLOZ1N the same night.
-- [ ] W-D's PROBE half — the live kanban round-trip, hub-owned, still DEFERRED.
+- [ ] W-D's PROBE half — the live kanban round-trip, hub-owned. **STARTED 2026-08-19T20:42:00+0200 — P1 ran and
+      found a blocking CORE defect.** Executed inside TestBot's server-spawned session (registered
+      MANAGER fixture, AID_AUTH verified present in its process env via `ps eww`; commands injected
+      with owner auth through aimaestro-session.sh, read-backs from the agent's transcript — no
+      identity borrowed, R32 holds). AMAA's literal op sequence + AMOA's P2/P3 plan adopted.
+      P1 raw: without --team → `Error: Could not determine team ID. Use --team <team-id> to
+      specify.` exit 1 (a MANAGER in no team has no auto team); with `--team e12e0788-…` (Test
+      Kanban Team) → `❌ Failed to create task (HTTP 401)  Error: auth_required` exit 1.
+      **FINDING (the probe's first result):** all six installed `~/.local/bin/amp-kanban-*.sh`
+      (create-task/get/list/move/edit/archive, Aug 4-5 builds) send ONLY Content-Type — zero
+      `Authorization: Bearer` / `AID_AUTH` references (amp-helper.sh has bearer helpers at
+      L2029/2082/2117/2279; the kanban scripts never call them) — and the middleware's
+      `hasCredential` has no localhost exemption, so the whole kanban CLI family 401s for every
+      agent today. Reported to CORE (ai-maestro-plugin-a3) with the fix shape; AMAA + AMOA told.
+      P2 (discriminating walk, ASSERT-DISTINCT/REJECT), P3 (write-through + `transition_authority`
+      per AMOA's precision), P4 teardown are staged and resume on the fixed CLI version.
+      SIDE FINDING on the way: the hub's first inject 500'd — a 13-day-old `injectedPrompts`
+      back-fill gap in shared-state (fixed 87063f36). Carry-forward hazard (AMAA): the registry
+      does not flag fixture vs live agents.
       AMAA named its remaining blocker precisely (2026-08-08T15:45+0200): the live round-trip
       needs (1) a registered TEST agent on shared fleet infrastructure and (2) the ops run
       from THAT agent's server-spawned session — neither is a peer's to create unilaterally,

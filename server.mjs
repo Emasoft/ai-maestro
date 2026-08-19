@@ -2131,6 +2131,22 @@ async function startServer(handleRequest) {
       console.warn('[Startup] fleet-plugins-update init failed (non-fatal):', err?.message || err)
     }
 
+    // ── absorbed rules-cleanup lane (TRDD-5II83KK4, parent KCRMSNL7) ───────────
+    // Post-uninstall orphaned-rule sweep (user scope only, mirroring the janitor
+    // daemon's posture). DESTRUCTIVE ⇒ dark-shipped: unarmed it detects and logs
+    // only; AIM_RULES_CLEANUP=1 arms removal + the chore claim. Hourly (the
+    // janitor's own cadence); AIM_RULES_CLEANUP_INTERVAL_MS overrides, 0 disables.
+    try {
+      const { startRulesCleanupScheduler } = await import('./lib/rules-cleanup.ts')
+      if (startRulesCleanupScheduler()) {
+        console.log(
+          `[Startup] rules-cleanup scheduler started (1h, ${process.env.AIM_RULES_CLEANUP === '1' ? 'ARMED — orphan removal enabled' : 'detect-only: AIM_RULES_CLEANUP not set'})`,
+        )
+      }
+    } catch (err) {
+      console.warn('[Startup] rules-cleanup init failed (non-fatal):', err?.message || err)
+    }
+
     // ── §D4 approval-ladder watchdog (TRDD-AYBAMFN2 / TGNU1EP7, 3P-ZON-11) ────
     // The TRDD governance sweep's ONE scheduled host — the server owns the
     // authority-ladder model, so it owns the enforcement (the janitor would be

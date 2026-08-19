@@ -94,7 +94,7 @@ export const ABSORBED_CHORES = [
  * yields it in the same instant this server starts performing it, and never over a flag that is
  * set but a lane that failed to start. `memory-guard` (TRDD-4QOWVSLU): armed by `AIM_MEMORY_GUARD=1`.
  */
-export const CONDITIONAL_CHORES = ['memory-guard'] as const
+export const CONDITIONAL_CHORES = ['memory-guard', 'rules-cleanup'] as const
 
 export type AbsorbedChore = (typeof ABSORBED_CHORES)[number] | (typeof CONDITIONAL_CHORES)[number]
 

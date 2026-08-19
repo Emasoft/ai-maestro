@@ -82,8 +82,39 @@ export function readHookNotification(
 export function evaluateExitGate(
   count: number | null,
   force: boolean,
+  // The counter can also be stale-HIGH (measured 2026-08-20, TRDD-O8NCNRWO e2e round 3): a
+  // force-stop kills the main session while a subagent runs, so SubagentStop never fires and
+  // the file keeps `subagentCount: 1` FOREVER — every later stop/restart of that agent then
+  // 409s on a pane that is a bare shell, with nothing left to protect. `programRunning` is the
+  // LIVE signal that breaks the loop: pass `false` ONLY when the pane provably is not running
+  // the program (its current command is a shell) — then the gate never blocks. `true`/undefined/
+  // null (running / not checked / tmux unreadable) keep the conservative behavior unchanged.
+  programRunning?: boolean | null,
 ): { blocked: boolean; subagentCount: number | null } {
-  return { blocked: !force && count !== null && count > 0, subagentCount: count }
+  return { blocked: !force && count !== null && count > 0 && programRunning !== false, subagentCount: count }
+}
+
+/**
+ * LIVE probe for the gate's stale-HIGH escape: is the session's pane still running a program
+ * (vs sitting at a bare shell)? Returns:
+ *  - false — the pane's current command IS a shell: nothing to exit, the gate must not block;
+ *  - true  — some non-shell program is in the pane (claude, node, …): gate applies;
+ *  - null  — tmux unreadable / no such session: UNKNOWN, gate applies (conservative).
+ * Same shell set as lib/session-restart.ts::SHELL_COMMANDS (not imported — that module pulls in
+ * the restart machinery; this one stays a leaf both serving modes load).
+ */
+export function sessionProgramRunning(sessionName: string): boolean | null {
+  try {
+    const { execFileSync } = require('child_process') as typeof import('child_process')
+    const cmd = execFileSync('tmux', ['display-message', '-p', '-t', sessionName, '#{pane_current_command}'], {
+      timeout: 5000,
+      encoding: 'utf8',
+    }).trim()
+    if (!cmd) return null
+    return !new Set(['zsh', 'bash', 'sh', 'fish', '-zsh', '-bash']).has(cmd)
+  } catch {
+    return null
+  }
 }
 
 /**

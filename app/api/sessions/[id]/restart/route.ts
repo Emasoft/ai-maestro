@@ -98,9 +98,10 @@ export async function POST(
   // subagents make an idle prompt unsafe; a PROVEN positive counter refuses with
   // 409 (null/0 never blocks — stale-low per plugin#17); ?force=true overrides.
   const force = request.nextUrl.searchParams.get('force') === 'true'
-  const { readSubagentCount, evaluateExitGate } = await import('@/lib/session-safe-state')
+  const { readSubagentCount, evaluateExitGate, sessionProgramRunning } = await import('@/lib/session-safe-state')
   const agentWorkingDir = agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory
-  const gate = evaluateExitGate(readSubagentCount(agentWorkingDir), force)
+  // sessionProgramRunning breaks the stale-HIGH loop (see the stop route / TRDD-O8NCNRWO).
+  const gate = evaluateExitGate(readSubagentCount(agentWorkingDir), force, sessionProgramRunning(sessionName))
   if (gate.blocked) {
     return NextResponse.json(
       {

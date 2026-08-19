@@ -114,6 +114,18 @@ describe('evaluateExitGate', () => {
     expect(evaluateExitGate(null, false).blocked).toBe(false)
   })
 
+  it('programRunning=false (pane provably at a shell) never blocks — the stale-HIGH escape', () => {
+    // Measured 2026-08-20: a force-stop orphans the counter at 1 forever (SubagentStop never
+    // fires), and without this escape every later stop/restart 409s on a dead session.
+    expect(evaluateExitGate(1, false, false)).toEqual({ blocked: false, subagentCount: 1 })
+  })
+
+  it('programRunning true/null/undefined keeps the conservative block on a positive count', () => {
+    expect(evaluateExitGate(1, false, true).blocked).toBe(true)
+    expect(evaluateExitGate(1, false, null).blocked).toBe(true)
+    expect(evaluateExitGate(1, false, undefined).blocked).toBe(true)
+  })
+
   it('force overrides a positive count', () => {
     expect(evaluateExitGate(5, true)).toEqual({ blocked: false, subagentCount: 5 })
   })

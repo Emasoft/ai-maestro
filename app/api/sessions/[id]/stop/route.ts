@@ -83,9 +83,11 @@ export async function POST(
   // (a null/0 counter never blocks — it can be stale-low per plugin#17).
   // ?force=true preserves the old unconditional behavior.
   const force = request.nextUrl.searchParams.get('force') === 'true'
-  const { readSubagentCount, evaluateExitGate } = await import('@/lib/session-safe-state')
+  const { readSubagentCount, evaluateExitGate, sessionProgramRunning } = await import('@/lib/session-safe-state')
   const workingDir = targetAgent?.workingDirectory || targetAgent?.sessions?.[0]?.workingDirectory
-  const gate = evaluateExitGate(readSubagentCount(workingDir), force)
+  // sessionProgramRunning breaks the stale-HIGH loop (a force-stop orphans the counter at >0
+  // forever, and the pane is a bare shell): false = provably nothing to exit, never block.
+  const gate = evaluateExitGate(readSubagentCount(workingDir), force, sessionProgramRunning(sessionName))
   if (gate.blocked) {
     return NextResponse.json(
       {

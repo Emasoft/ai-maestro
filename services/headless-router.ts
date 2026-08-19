@@ -225,7 +225,7 @@ import { getTeam, updateTeam, isAgentInAnyTeam, TeamValidationException } from '
 import { getAgent, getAgentBySession } from '@/lib/agent-registry'
 import { sessionExistsSync } from '@/lib/agent-runtime'
 import { computeSessionName } from '@/types/agent'
-import { evaluateExitGate, readSubagentCount } from '@/lib/session-safe-state'
+import { evaluateExitGate, readSubagentCount, sessionProgramRunning } from '@/lib/session-safe-state'
 import {
   isValidProgramArgs,
   resolveRestartBin,
@@ -930,7 +930,8 @@ const routes: Route[] = [
     // when the hook counter PROVES live subagents (a null/0 counter never blocks —
     // it can be stale-low per plugin#17). ?force=true keeps the old behavior.
     const force = query?.force === 'true'
-    const gate = evaluateExitGate(readSubagentCount(stopTarget?.workingDirectory || stopTarget?.sessions?.[0]?.workingDirectory), force)
+    // sessionProgramRunning breaks the stale-HIGH loop (see the app stop route / TRDD-O8NCNRWO).
+    const gate = evaluateExitGate(readSubagentCount(stopTarget?.workingDirectory || stopTarget?.sessions?.[0]?.workingDirectory), force, sessionProgramRunning(sessionName))
     if (gate.blocked) {
       sendJson(res, 409, { error: 'subagents_running', message: `Refusing to stop: ${gate.subagentCount} background subagent(s) still running. Retry with ?force=true to stop anyway.`, subagentCount: gate.subagentCount })
       return
@@ -978,7 +979,7 @@ const routes: Route[] = [
       return
     }
     const force = query?.force === 'true'
-    const gate = evaluateExitGate(readSubagentCount(agent.workingDirectory || agent.sessions?.[0]?.workingDirectory), force)
+    const gate = evaluateExitGate(readSubagentCount(agent.workingDirectory || agent.sessions?.[0]?.workingDirectory), force, sessionProgramRunning(sessionName))
     if (gate.blocked) {
       sendJson(res, 409, { error: 'subagents_running', message: `Refusing to restart: ${gate.subagentCount} background subagent(s) still running. Retry with ?force=true to restart anyway.`, subagentCount: gate.subagentCount })
       return
@@ -1083,7 +1084,7 @@ const routes: Route[] = [
     // counter refuses with 409; a null/0 counter never blocks (stale-low per
     // plugin#17); ?force=true overrides.
     const force = query?.force === 'true'
-    const gate = evaluateExitGate(readSubagentCount(agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory), force)
+    const gate = evaluateExitGate(readSubagentCount(agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory), force, sessionProgramRunning(sessionName))
     if (gate.blocked) {
       sendJson(res, 409, { error: 'subagents_running', message: `Refusing to restart: ${gate.subagentCount} background subagent(s) still running. Retry with ?force=true to restart anyway.`, subagentCount: gate.subagentCount })
       return

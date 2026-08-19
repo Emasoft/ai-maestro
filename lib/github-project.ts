@@ -367,9 +367,20 @@ function cacheKey(cfg: GitHubProjectConfig): string {
 // of fabricating a target (the old UI fallback repo=owner aimed `gh issue create -R` at a
 // repo that may not exist). Guard sits at the TOP of each CRUD function so a refusal can
 // never leave a half-applied task (updateTask mutates GraphQL fields before issue edits).
+/** Thrown by `requireRepo`: a typed refusal so the service layer can answer 409 (the team's
+ *  board is browse-only — a state of the TEAM, not a server fault) instead of the generic 500/502
+ *  that every other thrown Error becomes. Measured 2026-08-19 (TRDD-17K0SHDQ probe): the refusal
+ *  reached the CLI as "HTTP 500", i.e. as an outage, and the text told the caller what to fix. */
+export class BrowseOnlyBoardError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BrowseOnlyBoardError'
+  }
+}
+
 function requireRepo(cfg: GitHubProjectConfig, op: string): string {
   if (!cfg.repo) {
-    throw new Error(
+    throw new BrowseOnlyBoardError(
       `${op} needs a repo to host the backing issue, but this team links an org/user-level ` +
       `project (${cfg.owner}/projects/${cfg.number}) with no repo — the board is browse-only. ` +
       `Link a repo-scoped project URL (github.com/<owner>/<repo>/projects/<n>) to enable task edits.`,

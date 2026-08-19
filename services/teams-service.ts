@@ -30,6 +30,7 @@ import { loadTeams, createTeam, getTeam, updateTeam, deleteTeam, TeamValidationE
 // Local task-registry removed (governance simplification 2026-03-27) — kanban uses GitHub Projects exclusively
 import { loadDocuments, createDocument, getDocument, updateDocument, deleteDocument } from '@/lib/document-registry'
 import * as ghProject from '@/lib/github-project'
+import { BrowseOnlyBoardError } from '@/lib/github-project'
 import { GATE_CRITICAL_COLUMN_IDS } from '@/lib/kanban-field-authority'
 import type { Task, TaskWithDeps } from '@/types/task'
 import type { Team, KanbanColumnConfig } from '@/types/team'
@@ -1102,6 +1103,9 @@ export async function createTeamTask(teamId: string, params: CreateTaskParams): 
     })
     return { data: { task }, status: 201 }
   } catch (error) {
+    // A browse-only board (org/user-level project, no repo) is a STATE of the team, not a server
+    // fault — 409, never 500: the caller can act on it (link a repo-scoped project).
+    if (error instanceof BrowseOnlyBoardError) return { error: error.message, status: 409 }
     console.error('Failed to create task:', error)
     return { error: error instanceof Error ? error.message : 'Failed to create task', status: 500 }
   }
@@ -1190,6 +1194,7 @@ export async function updateTeamTask(
     return { data: { task, unblocked: [] }, status: 200 }
   } catch (error) {
     console.error('Failed to update task:', error)
+    if (error instanceof BrowseOnlyBoardError) return { error: error.message, status: 409 }
     return { error: error instanceof Error ? error.message : 'GitHub API error', status: 502 }
   }
 }
@@ -1225,6 +1230,7 @@ export async function deleteTeamTask(teamId: string, taskId: string, requestingA
   try {
     deleted = await ghProject.deleteTask(team.githubProject, taskId, true)
   } catch (e) {
+    if (e instanceof BrowseOnlyBoardError) return { error: e.message, status: 409 }
     return { error: e instanceof Error ? e.message : 'GitHub API error', status: 502 }
   }
 
@@ -1502,7 +1508,7 @@ export async function getKanbanConfig(teamId: string, requestingAgentId?: string
       const columns = await ghProject.getKanbanColumns(team.githubProject)
       return { data: { columns }, status: 200 }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : 'GitHub API error', status: 502 }
+    return { error: e instanceof Error ? e.message : 'GitHub API error', status: 502 }
     }
   }
 

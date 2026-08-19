@@ -41,6 +41,10 @@ const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationS
     createTask: vi.fn(),
     updateTask: vi.fn(),
     deleteTask: vi.fn(),
+    // The REAL class, not a stand-in: the service discriminates with `instanceof`, and a mock
+    // module that omits it makes `error instanceof undefined` THROW inside the catch — every
+    // catch-path test would then die on a TypeError that reads like a service bug.
+    BrowseOnlyBoardError: class BrowseOnlyBoardError extends Error {},
   },
   mockDocs: {
     loadDocuments: vi.fn(),
@@ -610,6 +614,22 @@ describe('createTeamTask', () => {
 
     expect(result.status).toBe(201)
     expect(result.data?.task.subject).toBe('Build API')
+  })
+
+  it('answers 409 (not 500) when the board is browse-only — an org/user-level project with no repo (TRDD-17K0SHDQ probe finding)', async () => {
+    // Measured live 2026-08-19: the requireRepo refusal reached the CLI as "HTTP 500", i.e. as an
+    // outage, while its text told the caller exactly what to fix. A state of the TEAM is a 4xx.
+    const team = makeTeam({ id: 'team-1', githubProject: { owner: 'org', number: 1 } } as any)
+    mockTeams.getTeam.mockReturnValue(team)
+    mockGhProject.createTask.mockRejectedValue(
+      new mockGhProject.BrowseOnlyBoardError('createTask needs a repo to host the backing issue, but this team links an org/user-level project (org/projects/1) with no repo — the board is browse-only.'),
+    )
+    const result = await createTeamTask('team-1', { subject: 'probe' })
+    expect(result.status).toBe(409)
+    expect(result.error).toMatch(/browse-only/)
+    // and an UNTYPED failure still reads as the server fault it is
+    mockGhProject.createTask.mockRejectedValue(new Error('gh: network down'))
+    expect((await createTeamTask('team-1', { subject: 'probe' })).status).toBe(500)
   })
 
   it('trims subject whitespace', async () => {

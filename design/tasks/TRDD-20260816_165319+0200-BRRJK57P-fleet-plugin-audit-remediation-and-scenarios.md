@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-19T14:55:13+0200
+updated: 2026-08-19T19:18:24+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1615,6 +1615,25 @@ CORE's disk evidence, refined to bare-name-INVOCATION-teaching (plugin skills re
 namespaced), re-broadcast before any bulk delete — AMPA's own first check would have
 repeated the phantom error and said so. Published 3.3.16 confirmed SAFE (git-URL serving,
 tag complete, 1656 files) — no emergency republish.
+
+## Ledger — window of 2026-08-19T19:18:24+0200
+
+- **Full-absorption design RESOLVED first-hand** (KCRMSNL7 → blocked on its 11-child flock,
+  bb9a1783): the "never-yield" framing dissolved — installed janitor 3.3.16 yields PER CHORE
+  from our `absorbed_chores` claim and full-exits only when the claim covers every GLOBAL chore;
+  6 NPTs authored (JBFM8XR0, B8B6D56P, 5II83KK4, 4QOWVSLU, 99LV0U4I, 9FW92242); janitor
+  confirmed both narrowed asks (user-plugins-update retires in 3.3.18; auto-rolling launcher
+  theirs). First NPT **B8B6D56P cache-prune SHIPPED+CLAIMED** (669966ad, closed 1d00d122):
+  line-faithful port incl. the oldest-live-session cutoff, 18 tests, verified BY EFFECT (liveness
+  sha == HEAD, absorbed_chores = 6, stamp file written, startup log line).
+- **Memory corrected** (befdf21a): janitor-chore-absorbability's cache-prune "no" row + the
+  daemon-exits-wholesale atom superseded via add-lesson --supersedes (old bodies preserved),
+  description extended, recall rank 1 re-verified.
+- **WEBDESIGN panel e2e S1-S9 authed re-run DONE** (hub, owner auth per R32): 8 PASS, 2 doc-level
+  findings sent — composite `show` = 2 strict POSTs vs one-shot USER sudo (403 on the 2nd);
+  `delivered` counts connected panel CHANNELS (agent active in a dashboard), not visible panels,
+  so set-after-close re-opens → 1 and the real 0 is "no dashboard has the agent active" (S8b
+  measured). Report reports/panel-e2e/20260819_191350+0200-*.md; panel closed (iframe absent).
 
 ## Ledger — window of 2026-08-19T14:55:04+0200
 

@@ -75,10 +75,13 @@ import {
   findForeignMarketplaceRefresh,
 } from '@/services/element-management-service'
 
-/** The measured wall-clock of the real argless refresh on this host, 2026-08-06: 275
- *  marketplaces, exit 0, 1082 s. The budget must exceed it or the run is killed 182 s short and
- *  ALL 275 results are discarded — which is what happened live at 10:17:31. */
-const MEASURED_REFRESH_SECONDS = 1082
+/** The measured wall-clock of the real argless refresh on this host. The budget must exceed it
+ *  or the run is killed short and ALL results are discarded — which is what happened live on
+ *  2026-08-06 at 10:17:31 (900 s cap vs 1082 s) and again 3/3 on 2026-08-19 (1800 s cap vs ~1685+ s). */
+// 1082 s on 2026-08-06 (275 marketplaces, cold); 1685 s on 2026-08-19 (261 marketplaces, WARM
+// registry — a cold run is longer). The cap is asserted against the LARGEST measurement, because
+// the 1800 s cap that cleared 1082 s killed the lane 3/3 on the day it measured 1685 s.
+const MEASURED_REFRESH_SECONDS = 1685
 
 const OWNER = { isSystemOwner: true as const }
 
@@ -107,7 +110,7 @@ describe('RefreshAllMarketplaces — the argless refresh', () => {
     expect(marketplaceCalls[0]).toEqual(['claude', 'plugin', 'marketplace', 'update'])
   })
 
-  it('gives the refresh a budget LARGER than the measured 1082 s run', async () => {
+  it('gives the refresh a budget LARGER than the largest measured run (1685 s, 2026-08-19)', async () => {
     // The argless call is all-or-nothing: a cap below the real duration does not degrade the
     // refresh, it voids every one of the 275 results. Asserting "a timeout is present" would pass
     // over the 900 s that shipped, so the assertion is tied to the MEASUREMENT.
@@ -152,7 +155,7 @@ describe('RefreshAllMarketplaces — the gates it keeps', () => {
 // WHY IT EXISTS (TRDD-PE54D95Q, measured). Two executors run this same chore on this host — this
 // server and the ai-maestro-janitor daemon — and they share no lock. Uncontended the command runs
 // ~1148 s; the janitor logged 84 / 1134 / 1254 / 1808 / 1815 s for it, so 2 of 5 crossed the
-// 1800 s cap, and the batch is all-or-nothing: a run killed at the cap discards EVERY result.
+// 3600 s cap, and the batch is all-or-nothing: a run killed at the cap discards EVERY result.
 //
 // NEUTER RUNS for this section — all OBSERVED at 20 tests, every restore verified by blob hash:
 //   4. s/if (foreignPid !== null) {/if (false) {/   (disarm the guard)   → 1 red / 19 green:
@@ -290,7 +293,7 @@ describe('describeRefreshFailure', () => {
     // A timeout and a refusal have opposite remedies (raise the cap vs fix the config), and
     // `err.message` is identical for both — so the string has to separate them.
     const s = describeRefreshFailure(execFileError({ killed: true, signal: 'SIGTERM' }))
-    expect(s).toMatch(/^TIMEOUT after 1800s/)
+    expect(s).toMatch(/^TIMEOUT after 3600s/)
     expect(s).toMatch(/SIGTERM/)
   })
 
@@ -300,7 +303,7 @@ describe('describeRefreshFailure', () => {
     // "killed without an exit code" and recorded three consecutive 30-min timeouts as a bare
     // "Command failed" — which reads as a crash, the opposite remedy.
     const s = describeRefreshFailure(execFileError({ killed: true, code: 1, signal: null, stdout: 'Updating 261 marketplace(s)...' }))
-    expect(s).toMatch(/^TIMEOUT after 1800s/)
+    expect(s).toMatch(/^TIMEOUT after 3600s/)
     expect(s).toMatch(/CLI exited 1/)
     expect(s).toMatch(/Updating 261 marketplace/)
   })

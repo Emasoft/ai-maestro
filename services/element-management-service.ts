@@ -5467,11 +5467,18 @@ export async function UpdateMarketplace(desired: {
  *  was 182 s from success — and because one argless call is ALL-OR-NOTHING, every one of the 275
  *  results was discarded, every cycle, while the lane reported `failed`.
  *
+ *  RE-MEASURED 2026-08-19: the SAME command over 261 marketplaces ran **1685 s** (rc 0) on a WARM
+ *  registry (258 of 261 had been refreshed 12 min earlier by a sibling invocation, so the git
+ *  fetches were near no-ops) — a cold run is longer still. The 1800 s cap that replaced 900 s had
+ *  therefore drifted to within 7 % of a warm run and killed the lane 3/3 that day (each ~31 min
+ *  after the tick), and `describeRefreshFailure` then mislabelled the kills (fixed 1ce63777).
+ *  60 min is ~2.1× the warm measurement and still 4× below the 4 h cadence, so a slow run can
+ *  never overlap the next one. Size this from a measurement, never from the previous value.
+ *
  *  Do not shrink this back toward the single-name 120 s: that path refreshes ONE marketplace.
- *  Do not treat it as the real fix either — 10 of the 275 repos are GONE (`Repository not found`)
- *  and account for most of the 1082 s. Pruning them is user-owned config, so it is the USER's
- *  call, not this constant's job. */
-export const MARKETPLACE_REFRESH_TIMEOUT_MS = 30 * 60 * 1000
+ *  Do not treat it as the real fix either — the gone/slow repos account for most of the wall
+ *  time. Pruning them is user-owned config, so it is the USER's call, not this constant's job. */
+export const MARKETPLACE_REFRESH_TIMEOUT_MS = 60 * 60 * 1000
 
 export async function RefreshAllMarketplaces(authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []

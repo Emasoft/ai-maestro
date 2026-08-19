@@ -11,6 +11,21 @@ cookie) and, for strict operations, a one-shot `AIMAESTRO_SUDO_TOKEN`. Exit code
 the grep trichotomy where noted: 0 ok · 1 findings/refusal · 2 could-not-run.
 New capability = spec first (TRDD), then implementation; `gen-specs.mjs --check` gates drift.
 
+## Companion frozen surfaces (owned by ai-maestro-plugin, NOT generated here)
+
+The inter-agent messaging/kanban/identity script layer is a SEPARATE frozen surface
+shipped by the core plugin (Emasoft/ai-maestro-plugin), installed at ~/.local/bin.
+Plugins may call these exactly like the CLIs below. Authoritative contracts:
+
+| Family | Verbs | Contract (in the ai-maestro-plugin repo) |
+|---|---|---|
+| Messaging | amp-send · amp-inbox · amp-init · amp-identity | skills/agent-messaging/reference/detailed-guide.md |
+| Kanban | amp-kanban-list · amp-kanban-get · amp-kanban-create-task · amp-kanban-move · amp-kanban-edit · amp-kanban-archive | skills/team-kanban/SKILL.md |
+| Identity token | aid-maestro-token.sh (--quiet/--json) | skills/agent-identity/SKILL.md §"Getting an AI Maestro governance token" |
+
+NOTE: teach the CLIs (the .sh form is canonical), never a bare-name `agent-messaging`
+skill invocation — plugin skills resolve namespaced, so bare names fail in role agents.
+
 ---
 
 ## aimaestro-agent.sh  ·  aimaestro-agent.sh v1.0.1
@@ -642,6 +657,9 @@ Usage:
       --tier is DEPRECATED on both verbs and is NOT sent (ai-maestro#69): the approval
       requirement is read from the card's own `min-approval-requirement:`, never from
       the approver. Still accepted so existing calls keep working.
+  aimaestro-trdd.sh verify  <trdd-id>
+      Is this card's approval REAL? Exit 0 verified · non-zero otherwise (the gate
+      consumers rely on; governance-spec R41.enf-verify pins the non-zero contract).
   aimaestro-trdd.sh promote <trdd-id> --column C [--note N] [--approver W]      [--agent A]
   aimaestro-trdd.sh archive <trdd-id> --state completed|cancelled|superseded
       [--reason R] [--superseded-by ID] [--approver W] [--agent A]

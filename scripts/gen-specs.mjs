@@ -36,6 +36,19 @@ function genScriptsSpec() {
   out += `cookie) and, for strict operations, a one-shot \`AIMAESTRO_SUDO_TOKEN\`. Exit codes are\n`
   out += `the grep trichotomy where noted: 0 ok · 1 findings/refusal · 2 could-not-run.\n`
   out += `New capability = spec first (TRDD), then implementation; \`gen-specs.mjs --check\` gates drift.\n`
+  // Companion surfaces are OWNED BY ai-maestro-plugin (a different repo), so this section
+  // is a static pointer maintained spec-first — never generated from machine-local
+  // installs, which would turn CI's --check permanently red (paths differ per machine).
+  out += `\n## Companion frozen surfaces (owned by ai-maestro-plugin, NOT generated here)\n\n`
+  out += `The inter-agent messaging/kanban/identity script layer is a SEPARATE frozen surface\n`
+  out += `shipped by the core plugin (Emasoft/ai-maestro-plugin), installed at ~/.local/bin.\n`
+  out += `Plugins may call these exactly like the CLIs below. Authoritative contracts:\n\n`
+  out += `| Family | Verbs | Contract (in the ai-maestro-plugin repo) |\n|---|---|---|\n`
+  out += `| Messaging | amp-send · amp-inbox · amp-init · amp-identity | skills/agent-messaging/reference/detailed-guide.md |\n`
+  out += `| Kanban | amp-kanban-list · amp-kanban-get · amp-kanban-create-task · amp-kanban-move · amp-kanban-edit · amp-kanban-archive | skills/team-kanban/SKILL.md |\n`
+  out += `| Identity token | aid-maestro-token.sh (--quiet/--json) | skills/agent-identity/SKILL.md §"Getting an AI Maestro governance token" |\n`
+  out += `\nNOTE: teach the CLIs (the .sh form is canonical), never a bare-name \`agent-messaging\`\n`
+  out += `skill invocation — plugin skills resolve namespaced, so bare names fail in role agents.\n`
   for (const f of clis) {
     const text = readFileSync(join(dir, f), 'utf8')
     const lines = text.split('\n')

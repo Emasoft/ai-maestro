@@ -32,6 +32,9 @@
 #       --tier is DEPRECATED on both verbs and is NOT sent (ai-maestro#69): the approval
 #       requirement is read from the card's own `min-approval-requirement:`, never from
 #       the approver. Still accepted so existing calls keep working.
+#   aimaestro-trdd.sh verify  <trdd-id>
+#       Is this card's approval REAL? Exit 0 verified · non-zero otherwise (the gate
+#       consumers rely on; governance-spec R41.enf-verify pins the non-zero contract).
 #   aimaestro-trdd.sh promote <trdd-id> --column C [--note N] [--approver W]      [--agent A]
 #   aimaestro-trdd.sh archive <trdd-id> --state completed|cancelled|superseded
 #       [--reason R] [--superseded-by ID] [--approver W] [--agent A]

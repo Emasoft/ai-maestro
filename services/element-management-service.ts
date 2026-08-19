@@ -5642,12 +5642,18 @@ export function describeRefreshFailure(err: unknown): string {
     stderr?: string
   }
 
-  // `killed` is what node sets when ITS timeout fires; the signal is reported alongside it. Treat
-  // killed-without-an-exit-code as the timeout, and name the budget so the reader can judge whether
-  // the cap is wrong or the run is genuinely hung — the two answers this string has to separate.
-  const timedOut = e.killed === true && typeof e.code !== 'number'
+  // `killed` is what node sets when ITS timeout fires — and ONLY then (a child that dies of its
+  // own accord leaves it false). That alone is the timeout test. It used to also require
+  // `typeof e.code !== 'number'`, and that second half was FALSE exactly when it mattered:
+  // `claude` handles SIGTERM and exits 1, so node reports `killed: true, code: 1, signal: null`,
+  // and three consecutive 30-min timeouts on 2026-08-19 were recorded as the bare
+  // `Command failed: claude plugin marketplace update` — a crash and a cap-too-small have
+  // opposite remedies, and the trail could not tell them apart. Name the budget so the reader
+  // can judge whether the cap is wrong or the run is genuinely hung.
+  const timedOut = e.killed === true
+  const how = e.signal ? `killed with ${e.signal}` : typeof e.code === 'number' ? `sent the kill signal, CLI exited ${e.code}` : 'killed'
   const head = timedOut
-    ? `TIMEOUT after ${MARKETPLACE_REFRESH_TIMEOUT_MS / 1000}s (killed${e.signal ? ` with ${e.signal}` : ''}): claude plugin marketplace update`
+    ? `TIMEOUT after ${MARKETPLACE_REFRESH_TIMEOUT_MS / 1000}s (${how}): claude plugin marketplace update`
     : e.message
 
   // stdout FIRST: this CLI reports through it, so it is where the cause is. stderr is kept anyway

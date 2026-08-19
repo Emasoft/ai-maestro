@@ -294,6 +294,17 @@ describe('describeRefreshFailure', () => {
     expect(s).toMatch(/SIGTERM/)
   })
 
+  it('still names the TIMEOUT when the CLI handled SIGTERM and exited 1 (killed:true, code:1, signal:null)', () => {
+    // The real shape on 2026-08-19: node's timeout sent SIGTERM, `claude` caught it and exited 1,
+    // so node reports killed:true + a NUMERIC code + no signal. The old heuristic required
+    // "killed without an exit code" and recorded three consecutive 30-min timeouts as a bare
+    // "Command failed" — which reads as a crash, the opposite remedy.
+    const s = describeRefreshFailure(execFileError({ killed: true, code: 1, signal: null, stdout: 'Updating 261 marketplace(s)...' }))
+    expect(s).toMatch(/^TIMEOUT after 1800s/)
+    expect(s).toMatch(/CLI exited 1/)
+    expect(s).toMatch(/Updating 261 marketplace/)
+  })
+
   it('does NOT call a non-zero exit a timeout', () => {
     const s = describeRefreshFailure(execFileError({ code: 1, killed: false, stdout: 'nope' }))
     expect(s).not.toMatch(/TIMEOUT/)

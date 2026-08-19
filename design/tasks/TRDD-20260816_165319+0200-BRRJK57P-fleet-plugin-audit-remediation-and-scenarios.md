@@ -1591,6 +1591,31 @@ consideration relayed to Z70X3LEW's owner (the hub): whether 3P-TOOL-03 (specs-l
 owner) should name the module-spec-tree case. IPSNDKGM's last acceptance box is this reply —
 ticked and the card closed complete+archived this entry's hour.
 
+### Scripts-spec dispatch round — 11 replies in ~3 h, NEEDS queue + sweeps · 2026-08-19T14:01+0200
+
+USER orchestration mandate 10:0x → spec published (KC8OCPF0, closed) → 13 sessions
+dispatched → replies, all first-hand-verified where they named facts in this repo:
+
+| Plugin | NEEDS | Compliance | agent-messaging sweep |
+|---|---|---|---|
+| CORE (a3) | amp-*/token in spec → LANDED a24f8726; named the 3 contract docs | complete, v3.1.26 | REFUTED — canonical skill lives there (verified) |
+| MAINTAINER | messaging surface in spec → landed; trdd `verify` header nit → fixed b5d44bef | complete, v1.13.9 | 1 hit = live infra, no fix |
+| INTEGRATOR | GENERATED amp-* section (got static pointer instead — CI determinism) | complete, v1.7.1 | ~38 real files, executing on d5d1588 model |
+| AMPA (programmer) | N1/N2 covered by companion; found 4-verb Task-signals spec omission → landed b5d44bef | complete, v2.0.8 | 14 invocations + 6 pointers classified; sweeping after spec settle (approved) |
+| AMAMA | `trdd search --all-agents`; batch approve/refuse (maybe client-side) | audit skill shipped, RUN PENDING user go | DONE fad2530 (75 refs, 17 files) |
+| AUTONOMOUS | `escalate-user --needs-ack` + ack poll (ties TRDD-1R72424K) | complete, v1.6.19 | DONE dcc1ada (guarded precedent kept) |
+| ASSISTANT-ROLE | covered by companion section | complete, v0.4.0 | DONE 50b3c0e (namespaced + CLI teach) |
+| WEBDESIGN | `aimaestro-browser.sh open/refresh/screenshot` panel-preview verb | complete, v0.1.15 | 0 hits |
+| VISUAL-COMM | none (panel.sh covers) | complete; 6 findings uncarded pending owner | 0 hits |
+| COS | none new (IBKR7F74 / 523V1N4I / #76 already carded) | complete; released v2.32.6 | TRDD-3ICG52TO in dev — 553 invocation lines / 145 files |
+| JANITOR | roster delivered → captured on KCRMSNL7 (b5d44bef); spec NEEDS deferred | 4OFMHOZ7 post-mortem carded | n/a |
+
+Phantom-skill CORRECTION cycle worked as designed: string-presence predicate withdrawn on
+CORE's disk evidence, refined to bare-name-INVOCATION-teaching (plugin skills resolve
+namespaced), re-broadcast before any bulk delete — AMPA's own first check would have
+repeated the phantom error and said so. Published 3.3.16 confirmed SAFE (git-URL serving,
+tag complete, 1656 files) — no emergency republish.
+
 ## Approval log
 
 - 2026-08-16T16:53:19+0200 — MANDATE issued by the USER (min-approval-requirement: none).

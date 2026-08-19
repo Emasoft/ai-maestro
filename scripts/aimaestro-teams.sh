@@ -47,11 +47,20 @@ fi
 check_jq || exit 1
 
 # ---------------------------------------------------------------------------
-# _api METHOD PATH [json_body]  — see aimaestro-governance.sh for full notes.
+# _api METHOD PATH [json_body] [max_time]  — see aimaestro-governance.sh for full notes.
 # Prints body on 2xx; "Error: HTTP <code> — <.error>" + return 1 on >=400.
+#
+# max_time (TRDD-ARY3NRFC): per-call curl --max-time, default 30. Slow verbs
+# (create/delete/assign-cos — the auto-COS pipeline runs ~2 min server-side)
+# pass 300. AIMAESTRO_API_MAX_TIME overrides the default (test seam + operator
+# escape hatch). A curl TIMEOUT (exit 28) is NOT a network failure: the server
+# is still completing the operation, so retrying duplicates it. Timeout gets
+# its own message + exit 124 (timeout(1) convention) so scripted callers can
+# never conflate it with a refusal.
 # ---------------------------------------------------------------------------
 _api() {
     local method="$1" path="$2" body="${3:-}"
+    local max_time="${4:-${AIMAESTRO_API_MAX_TIME:-30}}"
     local base
     base="$(get_api_base)"
     local -a auth_args=()
@@ -61,16 +70,25 @@ _api() {
         sudo_args=(-H "X-Sudo-Token: ${AIMAESTRO_SUDO_TOKEN}")
     fi
 
-    local resp code out
+    local resp code out rc=""
     if [ -n "$body" ]; then
-        resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
+        resp="$(curl -s -w $'\n%{http_code}' --max-time "$max_time" -X "$method" \
             "${auth_args[@]}" "${sudo_args[@]}" \
-            -H "Content-Type: application/json" -d "$body" "${base}${path}")" || {
-            echo "Error: request to ${path} failed (network)" >&2; return 1; }
+            -H "Content-Type: application/json" -d "$body" "${base}${path}")" || rc=$?
     else
-        resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
-            "${auth_args[@]}" "${sudo_args[@]}" "${base}${path}")" || {
-            echo "Error: request to ${path} failed (network)" >&2; return 1; }
+        resp="$(curl -s -w $'\n%{http_code}' --max-time "$max_time" -X "$method" \
+            "${auth_args[@]}" "${sudo_args[@]}" "${base}${path}")" || rc=$?
+    fi
+    if [ -n "$rc" ]; then
+        # curl 28 = --max-time expired. The request REACHED the server, which is
+        # likely still completing it — blaming "the network" here caused the
+        # duplicate-team-on-retry hazard this branch exists to prevent.
+        if [ "$rc" -eq 28 ]; then
+            echo "Error: request to ${path} timed out after ${max_time}s — the operation may still be completing server-side; verify with 'show'/'list' BEFORE retrying" >&2
+            return 124
+        fi
+        echo "Error: request to ${path} failed (network, curl exit ${rc})" >&2
+        return 1
     fi
 
     code="$(printf '%s' "$resp" | tail -n1)"
@@ -143,6 +161,10 @@ Environment:
   AID_AUTH               Bearer token for agent callers (REQUIRED — no localhost exemption)
   AIMAESTRO_SUDO_TOKEN   X-Sudo-Token passthrough for strict routes (optional)
   AIMAESTRO_API_BASE     Override the API base URL (default: this host)
+  AIMAESTRO_API_MAX_TIME Override the default request timeout in seconds (default 30;
+                         slow verbs create/delete/assign-cos use 300 regardless).
+                         On timeout the CLI exits 124 with a verify-before-retry
+                         message — the operation may still complete server-side.
 EOF
 }
 
@@ -209,7 +231,7 @@ cmd_create() {
         + (if $password != "" then {governancePassword: $password} else {} end)
         + (if $gho      != "" then {githubProject: ({owner: $gho, number: ($ghn | tonumber)}
                                     + (if $ghr != "" then {repo: $ghr} else {} end))} else {} end)')"
-    _api POST "/api/teams" "$body"
+    _api POST "/api/teams" "$body" 300  # auto-COS spawn + plugin install ~2 min (TRDD-ARY3NRFC)
 }
 
 cmd_update() {
@@ -245,7 +267,7 @@ cmd_update() {
         else
             cos_body="$(jq -nc '{agentId: null}')"
         fi
-        _api POST "/api/teams/${id}/chief-of-staff" "$cos_body" || return 1
+        _api POST "/api/teams/${id}/chief-of-staff" "$cos_body" 300 || return 1  # COS plugin install (TRDD-ARY3NRFC)
     fi
     # orchestrator: literal "null" clears the slot (JSON null); a UUID sets it.
     local orch_json="null"
@@ -292,7 +314,7 @@ cmd_delete() {
         + (if $p != "" then {password: $p} else {} end)
         + (if $da then {deleteAgents: true} else {} end)')"
     # Always send a body (even "{}") so the route's JSON parse is satisfied.
-    _api DELETE "/api/teams/${id}" "$body"
+    _api DELETE "/api/teams/${id}" "$body" 300  # cascade delete ~2 min (TRDD-ARY3NRFC)
 }
 
 # add-agent / remove-agent: there is no per-agent subroute. Read the team's
@@ -429,7 +451,7 @@ cmd_reassign_cos() {
     else
         body="$(jq -nc --arg a "$agent" '{agentId: $a}')"
     fi
-    _api POST "/api/teams/${id}/chief-of-staff" "$body"
+    _api POST "/api/teams/${id}/chief-of-staff" "$body" 300  # COS plugin install (TRDD-ARY3NRFC)
 }
 
 case "${1:-help}" in

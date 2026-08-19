@@ -97,6 +97,10 @@ describe('writeServerLiveness — atomic write of the 3-field shape', () => {
       // joined 2026-08-19 (TRDD-B8B6D56P): the lane (lib/cache-prune.ts scheduler in
       // server.mjs) landed in the SAME change as this claim — the claim-when-live rule.
       'cache-prune',
+      // joined 2026-08-20 (TRDD-JBFM8XR0): lib/fleet-plugins-update.ts scheduler landed in
+      // the SAME change — non-destructive, ships ON. (memory-guard is CONDITIONAL and never
+      // appears here unarmed — pinned below.)
+      'fleet-plugins-update',
     ])
     expect(readLiveness().absorbed_chores).not.toContain('user-plugins-update')
   })

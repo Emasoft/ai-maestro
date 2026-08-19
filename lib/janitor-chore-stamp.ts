@@ -57,9 +57,13 @@ import { janitorControlDir } from './janitor-control'
  * cutoff verbatim — the server snapshots ps exactly as the daemon does (userland), so
  * "processes we cannot see" never applied to this chore.
  *
+ * `fleet-plugins-update` joined on 2026-08-20 (TRDD-JBFM8XR0): `lib/fleet-plugins-update.ts`
+ * ports the janitor's cwd-per-project sweep verbatim; non-destructive (idempotent CLI updates,
+ * the marketplace-refresh class), so it ships ON and the claim lands in the SAME commit as its
+ * scheduler. `memory-guard` (4QOWVSLU) is CONDITIONAL — see CONDITIONAL_CHORES below.
+ *
  * The rest stay with the janitor FOR NOW, each with an authored absorption NPT under
- * KCRMSNL7 (2026-08-19): `memory-guard` (4QOWVSLU), `rules-cleanup` (5II83KK4),
- * `fleet-plugins-update` (JBFM8XR0), `fleet-stop` (9FW92242, blocked on the 99LV0U4I
+ * KCRMSNL7 (2026-08-19): `rules-cleanup` (5II83KK4), `fleet-stop` (9FW92242, blocked on the 99LV0U4I
  * population extension); `session-liveness` is two populations under one name (our half
  * already runs; 99LV0U4I closes the gap); `cold-cache-clear` is deferred LAST (rides the
  * janitor's auto-rolling shell-out launcher, their commitment 2026-08-19). Add a name here
@@ -80,6 +84,7 @@ export const ABSORBED_CHORES = [
   'oauth-rotator-tick',
   'github-config-audit',
   'cache-prune',
+  'fleet-plugins-update',
 ] as const
 
 /**

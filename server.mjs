@@ -2114,6 +2114,23 @@ async function startServer(handleRequest) {
       console.warn('[Startup] memory-guard init failed (non-fatal):', err?.message || err)
     }
 
+    // ── absorbed fleet-plugins-update lane (TRDD-JBFM8XR0, parent KCRMSNL7) ───
+    // The janitor daemon's fleet-wide per-project plugin sweep, ported line-faithful:
+    // `claude plugin update` resolves WHICH project from the subprocess cwd (it has no
+    // project flag), so a project with no live session is never updated by anyone —
+    // this lane runs the update with cwd=<projectPath> for every enabled local/project
+    // -scope install in the registry. Non-destructive (idempotent CLI updates), ships
+    // ON; claimed in ABSORBED_CHORES in this same change. 6 h per the janitor roster;
+    // AIM_FLEET_PLUGINS_UPDATE_INTERVAL_MS overrides, 0 disables.
+    try {
+      const { startFleetPluginsUpdateScheduler } = await import('./lib/fleet-plugins-update.ts')
+      if (startFleetPluginsUpdateScheduler()) {
+        console.log('[Startup] fleet-plugins-update scheduler started (6h, cwd-per-project sweep)')
+      }
+    } catch (err) {
+      console.warn('[Startup] fleet-plugins-update init failed (non-fatal):', err?.message || err)
+    }
+
     // ── §D4 approval-ladder watchdog (TRDD-AYBAMFN2 / TGNU1EP7, 3P-ZON-11) ────
     // The TRDD governance sweep's ONE scheduled host — the server owns the
     // authority-ladder model, so it owns the enforcement (the janitor would be

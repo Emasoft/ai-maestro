@@ -1,9 +1,9 @@
 ---
 trdd-id: IPSNDKGM
 title: Porcelain output mode for trddgrep and specgrep
-column: ai_review
+column: completed
 created: 2026-08-19T04:42:17+0200
-updated: 2026-08-19T05:10:59+0200
+updated: 2026-08-19T09:27:00+0200
 implementation-commits: [5f10772e]
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
@@ -63,11 +63,16 @@ by-effect on the deployed launcher: trddgrep 0/1/2, specgrep 0/1/2. AMOA notifie
       by-effect on the deployed launcher, both CLIs)
 - [x] help text documents the field order (additive-only contract stated in both helps)
 - [x] AMOA notified 2026-08-19 ~05:12; F1/F3 migration unblocked on their side
-- [ ] AMOA's F1/F3 migration confirmed against the real format (their reply ledgered on
-      BRRJK57P — the acceptance test that the format is actually consumable; split from the
-      box above: the notification is the hub's act, the migration is theirs)
+- [x] AMOA's F1/F3 migration confirmed against the real format (their reply ledgered on
+      BRRJK57P 2026-08-19T09:26 — F1 landed their 920201e, 20 trdd_link tests against the
+      REAL CLI green, exit trichotomy honoured 1→None / 2-timeout-missing→raise; F3
+      re-classified not-applicable with rationale: corpus mismatch, `design/specs/` vs
+      `design/requirements/**/specs/` — disjoint trees no output mode can bridge)
 
 ## Approval log
 
 - 2026-08-19T04:42:17+0200 — MANDATE issued as Tier-0 self-mandate (in-scope tooling work
   in the repo that owns the CLIs; reversible, local). No approval request needed.
+- 2026-08-19T09:27:00+0200 — COMPLETED by the hub (Phase-2 USER delegation, BRRJK57P). Final
+  box satisfied by AMOA's confirmation reply (ledgered on BRRJK57P). ai_review→complete→
+  archived as completed; release-via none. All 5 acceptance boxes checked.

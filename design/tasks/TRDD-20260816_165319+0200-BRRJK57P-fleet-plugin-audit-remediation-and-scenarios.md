@@ -1576,6 +1576,21 @@ file — recovered from git, duplicate deleted, only the novel spawner-side ours
 behind the same lsof guard. A partial read of a module you are about to extend is how a
 duplicate of its own machinery gets written beside it.
 
+### AMOA F1/F3 porcelain adoption confirmed — IPSNDKGM's last box · 2026-08-19T09:26+0200
+
+AMOA (emasoft-orchestrator-agent-ed) replied: **F1 LANDED** (their commit `920201e`, their
+repo — attributed, not hub-re-derived): `find_trdd()` now `trddgrep show <id> --porcelain
+--design-dir`, exit 1→None, exit 2/missing-binary/timeout→raise (never collapsed into
+not-found), dead private filename-regex removed, the 20 existing trdd_link tests run against
+the REAL CLI and pass. **F3 re-classified NOT-APPLICABLE, sharper than "interface gap": a
+CORPUS mismatch** — `specgrep env` corpus = `design/specs/`, while their `compile_handoff`
+searches `design/requirements/**/specs/` module-spec files: disjoint trees, so specgrep cannot
+serve that lookup in any output mode; F3 stays glob-based legitimately unless the module-spec
+tree moves under the spec corpus. Adoption tally 6/7 migrated + 1 n/a-with-rationale. Open
+consideration relayed to Z70X3LEW's owner (the hub): whether 3P-TOOL-03 (specs-live-with-the-
+owner) should name the module-spec-tree case. IPSNDKGM's last acceptance box is this reply —
+ticked and the card closed complete+archived this entry's hour.
+
 ## Approval log
 
 - 2026-08-16T16:53:19+0200 — MANDATE issued by the USER (min-approval-requirement: none).

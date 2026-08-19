@@ -5,7 +5,7 @@ column: dev
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-19T04:51:19+0200
+updated: 2026-08-19T19:45:55+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41, 5796ef6a]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -920,9 +920,21 @@ applies to it, which is now the strongest argument for settling that first.
       make the file lie in the other direction. Neuter dropping the stamp reds exactly that
       test (1/15), and the test's pre-existing assertions all survive the drop — which is why
       they were never sufficient alone.
-- [ ] Measured after the change on this host: `claude plugin update` invocations per hour
+- [x] Measured after the change on this host: `claude plugin update` invocations per hour
       drop from **200** (158 of them failing) to **0**, and marketplace refreshes drop from
       hourly-per-session to one every 3 h machine-wide.
+      **MET 2026-08-19 (measured 2026-08-19T19:45:55+0200, post-5796ef6a deploy via pm2 restart — the scheduler
+      half is runtime-imported).** Today's three fires (09:18, 14:02, 18:45) carry ONLY
+      `absorbed:marketplace-auto-update`, `absorbed:marketplace-refresh` and the janitor
+      self-update row — **0** per-plugin `claude plugin update` rows, against **78** per fire
+      on 2026-08-18. The remaining item below the box (janitor-side retirement of
+      `user-plugins-update`) is their 3.3.18, confirmed by the janitor session 2026-08-19.
+      **NEW FINDING from the same trail, its own fix:** `absorbed:marketplace-refresh` read
+      `failed` 3/3 today, each ~31 min after the tick — the 30-min `MARKETPLACE_REFRESH_TIMEOUT_MS`
+      killing a run that now takes ~27-32 min (261 marketplaces; a sibling invocation completed
+      258/261 at 19:27 local), and the trail said "Command failed" instead of TIMEOUT because
+      `claude` exits 1 on SIGTERM (`killed:true, code:1`). Label fixed 1ce63777 (test + neuter,
+      1 red exactly); the cap is being re-measured before it is raised.
       **MEASURED 2026-08-07T03:36 — the box SPLITS: its second half is met, its first half
       cannot be met yet, exactly as the boundary noted in AC7 predicted.** Instrument: the
       `lastRunSummary` rolling trail in `~/.aimaestro/auto-update-settings.json`, clustered

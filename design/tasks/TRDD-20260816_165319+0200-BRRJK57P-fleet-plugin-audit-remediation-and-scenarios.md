@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-20T00:59:22+0200
+updated: 2026-08-20T01:17:59+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1759,6 +1759,14 @@ tag complete, 1656 files) — no emergency republish.
   2 neuters exactly-1-red each; first live publish measured 18 s after the sweep
   (epoch 1787180245, count 15). Janitor peer notified — their [janitor-reload] consumer is
   now unblocked. JBFM8XR0 STATE updated (reload gap → CLOSED).
+
+- **TRDD-5II83KK4 rules-cleanup lane LANDED, dark-shipped (6262fd97):** marker-gated
+  post-uninstall sweep ported verbatim (BOTH-signals uninstalled predicate cited against
+  rules_installer.py), user scope only = daemon posture; DESTRUCTIVE ⇒ detect-only until
+  AIM_RULES_CLEANUP=1; CONDITIONAL_CHORES gains rules-cleanup (claim follows arming);
+  5 neuters (marker gate 3-red incl. the mandatory unmarked-never-removed pin; 4 others
+  exactly-1-red); verified by effect (startup line 01:15:23, claim correctly absent
+  unarmed). Card → human_review; absorbability memory row superseded via lesson ^8.
 
 ## Approval log
 

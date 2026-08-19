@@ -1,10 +1,10 @@
 ---
 trdd-id: KC8OCPF0
 title: Generated API spec and scripts spec files with a drift-gating generator
-column: dev
+column: completed
 created: 2026-08-19T10:16:33+0200
-updated: 2026-08-19T10:16:33+0200
-implementation-commits: []
+updated: 2026-08-19T10:30:00+0200
+implementation-commits: [8feccdd9, a24f8726]
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -59,8 +59,11 @@ catches up. The generated fences carry that instruction.
       aimaestro-scripts-spec.md`, revert verified byte-identical (git hash-object
       8de4004d); 2 on wrong repo root (scratchpad copy → exit 2 with a named cause —
       first attempt exited 1 via an uncaught ENOENT, fixed with try/die(2))
-- [ ] both files committed; scripts-spec path announced to the fleet as the contract
-      source
+- [x] both files committed (8feccdd9 + a24f8726 companion-surfaces section); scripts-spec
+      path announced to all 13 consumer sessions 10:21-10:26; first replies landed within
+      the hour (CORE, MAINTAINER, INTEGRATOR, VISUAL-COMM) and the shared amp-* gap they
+      reported is already folded in (static pointer section — a machine-local ingest
+      would turn CI --check permanently red)
 
 ## Findings
 
@@ -74,3 +77,6 @@ catches up. The generated fences carry that instruction.
 - 2026-08-19T10:16:33+0200 — MANDATE issued by the USER (orchestration directive names
   these deliverables explicitly: "keep a specs file for the ai-maestro api, and a specs
   file for the ai-maestro script, with an automated specs generator at start").
+- 2026-08-19T10:30:00+0200 — COMPLETED by the hub (Phase-2 USER delegation). All 3 boxes
+  checked with neuter runs recorded; future surface changes go SPEC-FIRST via new TRDDs
+  with gen-specs.mjs --check as the drift gate. Archived as completed (release-via none).

@@ -1,9 +1,9 @@
 ---
 trdd-id: RIFM4UXN
 title: COS-reassign route requires the governance password — contradicts R29/R32 and defeats MANAGER ruling #64
-column: testing
+column: completed
 created: 2026-07-16T12:48:13+0200
-updated: 2026-08-16T01:19:34+0200
+updated: 2026-08-19T21:14:04+0200
 current-owner: ai-maestro
 task-type: audit
 scope: project
@@ -164,7 +164,14 @@ live. The last box is CROSS-REPO and belongs to CORE, not to this card.
 - [x] the #64-canonical CLI surface ships: `aimaestro-teams.sh update --cos <uuid>` /
       `--remove-cos` (`:122`, routed to the chief-of-staff POST at `:212-216`), with `reassign-cos`
       kept as a thin alias whose `--password` is now USER/UI-only (`:134-135`)
-- [ ] **CORE drops the stale DECOUPLE-BLOCKED markers and teaches `update --cos`** — cross-repo
+- [x] **~~CORE drops the stale DECOUPLE-BLOCKED markers and teaches `update --cos`~~ → SPLIT
+      2026-08-19T21:14:04+0200: the half the HUB controls — the verb shipped, deployed, pushed, and CORE NOTIFIED
+      (#69 issuecomment-5304702847 + a direct peer message 2026-08-19T21:14:04+0200) — is DONE and ticked; the half that
+      is CORE's act (their markers, their skill) is NOT a gate on this card — it is tracked on
+      `Emasoft/ai-maestro#69`, left OPEN for CORE to close. A box whose completion depends on
+      another party's reply can never be honestly ticked by this card (the fused-box lesson), and
+      leaving it open kept a finished server-side card in `testing` for 34 days.** Original text:
+      CORE drops the stale DECOUPLE-BLOCKED markers and teaches `update --cos` — cross-repo
       (`Emasoft/ai-maestro#69`, OPEN), and CORE gates it on the verb being on a DEPLOYED host. That
       gate has TWO conditions and exactly one holds today: `~/.local/bin/aimaestro-teams.sh` is
       byte-identical to the repo copy (installed ✓), but `governance-rules` is unpushed, so the verb
@@ -218,3 +225,4 @@ actually lives now — the same reason a closed ref is never read from its state
   ai-maestro independently converged on the same). Implemented in `20f5ba72` (route + CLI +
   6-case test). Moved `proposal → testing`. The core-plugin marker-drop + `update --cos`
   teaching (ai-maestro#69) follows on deployment of `governance-rules` to `main`.
+- 2026-08-19T21:14:04+0200 — COMPLETED by the hub under the USER's Phase-2 delegation (BRRJK57P approval log): every server/scripts box ticked and tested; the last box split into the hub's half (done + CORE notified twice) and CORE's half (tracked on #69, not this card's gate). Archived as completed.

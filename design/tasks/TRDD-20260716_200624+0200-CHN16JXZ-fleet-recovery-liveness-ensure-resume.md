@@ -4,7 +4,7 @@ title: Fleet recovery — server-internal liveness detection + ensure-resume act
 column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-19T14:35:36+0200
+updated: 2026-08-19T15:06:46+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -195,12 +195,38 @@ not drive another, R42). This is the actuation half of `ensure-resume`.
 
 ## Acceptance
 
-- [ ] Phase C step (b): `lib/fleet-hard-recovery.ts` exists, gated behind a default-off `AIM_FLEET_HARD_RECOVERY` flag, reusing the stop/restart substrate (`relaunch` first via `claude --continue`, escalate to external kill only on failure).
-- [ ] Phase C step (b): per-instance cooldown + crash-loop-page-once + HID-presence defer + `fleetActuationBlocked()` are all wired into the hard actuator.
-- [ ] Phase C step (c): `dead` classification flips to `recoveryRecommended:true`, mapped to the hard entry rung, with the boot-overcomplete DEBOUNCE (fires only after N consecutive dead scans / a grace period past boot).
-- [ ] `actuateRecovery` is confirmed to still refuse hard rungs on the gentle path (no regression once hard actuation lands).
-- [ ] A deliberately-dead test agent (persisted, tmux gone) is relaunched via the authenticated path with no loss of a live frozen agent's work.
-- [ ] `tsc` clean; new hard-recovery unit tests green; full suite unaffected.
+- [x] Phase C step (b): `lib/fleet-hard-recovery.ts` exists, gated behind its default-off
+      `AIM_FLEET_HARD_RECOVERY` flag (exported constant), reusing the stop/restart substrate —
+      relaunch = `wakeAgent(continueConversation:true, isSystemOwner)` (the boot-restore shape),
+      escalation rungs add best-effort remnant teardown (33ea9743 decision layer, 02de8959 wiring).
+- [x] Phase C step (b): per-instance cooldown + crash-loop (paged ONCE per dead episode by the
+      runner) + HID defer + `fleetActuationBlocked()` all wired — via the gentle actuator's OWN
+      shared gates, reused not copied (X8801GT4).
+- [x] Phase C step (c) — SHIPPED IN A BETTER SHAPE than this box's letter: `dead` stays
+      `recoveryRecommended:false` in the CLASSIFIER (the gentle path never sees it) and the hard
+      runner drives the dead set SEPARATELY, gated on the SX593MDG wall-clock dead-since tracker
+      (`deadPart.hardRecoverable`) + the boot-restore in-flight stamp — the two REAL single-owner
+      signals, instead of the scan-count debounce this box guessed at authoring time. Intent
+      (dead agents hard-recovered behind the flag, boot-overcomplete debounced) fully met.
+- [x] `actuateRecovery` still refuses hard rungs on the gentle path — whole fleet-recovery
+      family 63/63 including its hard_gated/hard_not_wired pins; gentle runner untouched.
+- [ ] A deliberately-dead test agent (persisted, tmux gone) is relaunched via the authenticated
+      path with no loss of a live frozen agent's work. **USER-GATED**: needs
+      `AIM_FLEET_HARD_RECOVERY=1` armed on the live server — all codeable work is done; this is
+      the arming decision surfaced in the session summaries.
+- [x] `tsc` clean; hard-recovery tests green (19 + 3 watchdog-leg); full suite triaged 2026-08-19:
+      zero failures attributable to this card (the 18 reds were pre-existing bashisms/env/flakes,
+      fixed or attributed under 25a16355 / d55f0c84 / b967bffc).
+
+## Neuter runs (Phase C, 2026-08-19 — fix committed FIRST each time)
+
+- n1 delete the dead-only guard → EXACTLY the safety-invariant sweep red (14 green).
+- n2 swap teardown/wake order → EXACTLY the ordering test red (order-claim neuter; end state
+  identical either way, so only the order assertion could see it).
+- n3 demote crash_loop below the injection gates → EXACTLY the dominance test red.
+- n4 drop the page-once flag write → EXACTLY the page-once runner test red.
+- n5 watchdog hands ALL dead ids as confirmed (debounce bypass at the call site) → EXACTLY
+  the armed watchdog-leg test red (gotConfirmed pin).
 
 ## Approval log
 

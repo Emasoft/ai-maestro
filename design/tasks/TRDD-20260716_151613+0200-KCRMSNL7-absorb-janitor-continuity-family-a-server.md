@@ -325,10 +325,21 @@ janitor for; (2) per-chore claim tokens are ADDED one at a time to `ABSORBED_CHO
 #111 blackout shape; (3) destructive lanes (memory-guard kill, fleet-stop injection) ship
 default-OFF behind their own flags, mirroring the janitor's own posture.
 
-**Janitor's pending answers now needed only for:** the cold-cache-clear shell-out contract
-(question 2) and confirmation that user-plugins-update retires from GLOBAL_CHORES
-(shrinking the full-exit set to 12). Questions 1 and 3 are answered by their own code and
-recorded above.
+**JANITOR ANSWERED BOTH (2026-08-19 15:04, their hub session) — design now FULLY resolved:**
+1. **user-plugins-update RETIRES from GLOBAL_CHORES in janitor 3.3.18** (3.3.17 is
+   content-frozen) — full-exit set becomes 12. Their retirement sweep: drop the Task +
+   roster row, retire the session-side stamp-watch detector, KEEP `_consume_plugin_update_requests`
+   (the per-plugin fast path; its `not in yielded` gate degenerates to always-true, correct
+   once nothing claims the name). They card it when their session un-pauses; commitment stands.
+2. **cold-cache-clear = versioned SHELL-OUT contract (their option a), THEY ship it**: an
+   auto-rolling launcher at a stable DATA-dir path (the dispatcher-stub pattern) that
+   re-resolves the newest C2-clean cached version per invocation and execs
+   `scripts/external_handoff_clear.py` there. The server execs the stable path; their repo
+   owns all /clear logic + gates (43+ tests). Explicitly NOT a version-pinned cache path
+   (today's 4OFMHOZ7 hook-bricking) and NOT a staged DATA copy (ZM5LZ24Y staleness). CLI
+   surface (args + exit codes) versioned in a §9-style table. Our absorption NPT for
+   cold-cache-clear waits on that launcher shipping — deferred-last stands.
+They also confirmed the O-block reading of the yield code ("no dispute").
 
 Named design requirements from measured incidents (must appear in the NPT decomposition):
 1. **Atomic cache population** — staging dir + rename. The 2026-08-19 morning incident

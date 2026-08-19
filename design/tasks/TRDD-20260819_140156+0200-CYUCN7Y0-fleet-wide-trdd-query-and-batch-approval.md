@@ -4,7 +4,7 @@ title: Fleet-wide TRDD query verb and batch approve-refuse surface
 column: dev
 created: 2026-08-19T14:01:56+0200
 updated: 2026-08-19T14:16:00+0200
-implementation-commits: []
+implementation-commits: [647a4ec7]
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2

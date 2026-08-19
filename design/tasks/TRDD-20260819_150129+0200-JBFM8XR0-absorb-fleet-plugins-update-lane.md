@@ -3,7 +3,7 @@ trdd-id: JBFM8XR0
 title: Absorb the fleet-plugins-update chore into the server
 column: human_review
 created: 2026-08-19T15:01:29+0200
-updated: 2026-08-20T00:48:40+0200
+updated: 2026-08-20T00:57:26+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -18,7 +18,7 @@ parent-trdd: KCRMSNL7
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: [f048f9ae]
+implementation-commits: [f048f9ae, e9b1ba5e]
 project-id: ai-maestro
 labels: [family-a, janitor-absorption, npt]
 release-via: none
@@ -26,8 +26,20 @@ release-via: none
 
 # Absorb the fleet-plugins-update chore into the server
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-20 00:50
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-20 00:58
 
+- **Reload gap → CLOSED via the janitor-NAMED contract (e9b1ba5e, 2026-08-20).** The body's
+  "reload gap, stated not hidden" note below is SUPERSEDED: the janitor peer named the contract
+  themselves — the server writes `~/.aimaestro/state/plugins-updated.json`
+  (`{updated_at_epoch (SECONDS), updated[], by: "fleet-plugins-update", count}`, atomic
+  temp+rename, overwritten only on NON-empty sweeps) and THEIR dispatcher compares the epoch to
+  its own last-consumed stamp and surfaces `[janitor-reload]`. Neither side writes the other's
+  files. Producer = `lib/plugins-updated-signal.ts`, kept OUT of the lane module so the
+  zero-fs-write-primitives scan property survives; call sits in `runFleetPluginsUpdate`
+  (injectable `signal` dep — beat is unexported, a text-grep pin would be vacuous). Neuters:
+  wiring dropped → 1 red exactly; empty-sweep gate dropped → 1 red exactly (both blob-verified
+  restores). Semantics are the janitor original's own (fleet_plugin_updates.py:206 bumps reload
+  on a non-empty exit-0 result; their dispatcher dedupes on epoch).
 - **Lane LANDED, LIVE, and CLAIMED** — `lib/fleet-plugins-update.ts` (f048f9ae), scheduler in
   `server.mjs` after memory-guard, 6 h (roster cadence; janitor stale bound 3×). Verified by
   effect after `pm2 restart`: startup line 00:47:23; liveness `sha == HEAD`; `absorbed_chores`

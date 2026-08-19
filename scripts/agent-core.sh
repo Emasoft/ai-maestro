@@ -22,9 +22,12 @@ _AGENT_CORE_LOADED=1
 declare -a _TEMP_FILES=()
 
 cleanup() {
-    # Clean up any temporary files created during execution
+    # Clean up any temporary files created during execution.
+    # ${arr[@]+"${arr[@]}"} not "${arr[@]}": under bash 3.2 + set -u an EMPTY array
+    # expansion is "unbound variable", so the EXIT trap errored and --help exited 1
+    # on a perfectly clean run (TRDD-ARY3NRFC family).
     local f
-    for f in "${_TEMP_FILES[@]}"; do
+    for f in ${_TEMP_FILES[@]+"${_TEMP_FILES[@]}"}; do
         [[ -f "$f" ]] && rm -f "$f" 2>/dev/null || true
     done
     # Reset terminal colors in case of abnormal exit

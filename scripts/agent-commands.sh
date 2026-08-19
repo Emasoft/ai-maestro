@@ -780,7 +780,10 @@ HELP
 
     # Validate program - must be in whitelist
     local allowed_programs="claude-code claude codex aider cursor gemini opencode none terminal"
-    local program_lower="${program,,}"  # lowercase
+    # tr, not ${program,,}: case-conversion expansion is bash >= 4 and macOS /bin/bash 3.2
+    # dies on it with "bad substitution" (TRDD-ARY3NRFC family).
+    local program_lower
+    program_lower="$(printf '%s' "$program" | tr '[:upper:]' '[:lower:]')"
     if [[ ! " $allowed_programs " =~ [[:space:]]"${program_lower}"[[:space:]] ]]; then
         print_error "Invalid program: $program"
         print_error "Allowed programs: $allowed_programs"

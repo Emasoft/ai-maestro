@@ -183,10 +183,14 @@ _api_request() {
 # agent-plugin.sh) call this so every single API call from the agent CLI
 # carries the AID_AUTH bearer token when available.
 _build_auth_args() {
-    local -n _out_array="$1"
-    _out_array=()
+    # NO nameref here (TRDD-ARY3NRFC family, same fix as common.sh f244b155): namerefs
+    # need bash >= 4.3 and macOS /bin/bash is 3.2 — under it the CLI dies BEFORE any
+    # request ("invalid option"), and which bash runs is per-environment PATH luck.
+    local _arr_name="$1"
     if [ -n "${AID_AUTH:-}" ]; then
-        _out_array=(-H "Authorization: Bearer $AID_AUTH")
+        eval "${_arr_name}"'=(-H "Authorization: Bearer ${AID_AUTH}")'
+    else
+        eval "${_arr_name}"'=()'
     fi
 }
 
@@ -593,11 +597,14 @@ print_table_sep() {
 #   RESOLVED_NAME       - Agent display name (for messaging compatibility)
 #
 # Returns: 0 if found, 1 if not found
-declare -g RESOLVED_AGENT_ID=""
-declare -g RESOLVED_ALIAS=""
-declare -g RESOLVED_HOST_ID=""
-declare -g RESOLVED_HOST_URL=""
-declare -g RESOLVED_NAME=""
+# Plain assignment, not `declare -g` (bash >= 4.2 only; macOS /bin/bash is 3.2 and dies
+# with "declare: -g: invalid option" before any verb runs). At file scope the two are
+# identical; keep it this way.
+RESOLVED_AGENT_ID=""
+RESOLVED_ALIAS=""
+RESOLVED_HOST_ID=""
+RESOLVED_HOST_URL=""
+RESOLVED_NAME=""
 
 resolve_agent() {
     local agent_query="${1:-}"
@@ -826,8 +833,10 @@ check_agent_exists() {
     local response
     response=$(_api_request "${api_base}/api/agents?q=${encoded_name}" "Search agents") || return 1
 
-    # Check if any agent matches the name (case-insensitive)
-    local name_lower="${name,,}"
+    # Check if any agent matches the name (case-insensitive).
+    # tr, not ${name,,}: bash >= 4 only; /bin/bash 3.2 dies on it (TRDD-ARY3NRFC family).
+    local name_lower
+    name_lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
     local found
     found=$(echo "$response" | jq -r --arg n "$name_lower" '
         .agents // [] | map(select(

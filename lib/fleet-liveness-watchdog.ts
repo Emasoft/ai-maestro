@@ -14,6 +14,7 @@ import { getAgentSessionStatus } from '@/services/agents-core-service'
 import { readHookNotification } from '@/lib/session-safe-state'
 import { loadPersistedSessions } from '@/lib/session-persistence'
 import { scanFleetLiveness, type FleetScanDeps, type FleetLivenessSnapshot } from '@/lib/fleet-liveness'
+import { gatherJanitorSessions, SESSION_STALE_S } from '@/lib/fleet-session-scan'
 import {
   runRecoveryPass,
   defaultActuatorDeps,
@@ -85,6 +86,10 @@ export function defaultFleetScanDeps(): FleetScanDeps {
     },
     getHookNotification: (wd) => readHookNotification(wd),
     isPersisted: (id) => persisted.has(id),
+    // The second population (TRDD-99LV0U4I): janitor-armed claude sessions that are not
+    // registered agents. The scan hands us its registry-root filter so a registered agent's
+    // session is never double-counted here. Detect-only — nothing downstream actuates on it.
+    listJanitorSessions: (isRegistryRoot) => gatherJanitorSessions({ isRegistryRoot }),
   }
 }
 
@@ -255,6 +260,16 @@ export async function runFleetLivenessTick(
         ? ` (actuation BLOCKED: ${snap.actuationBlockReason})`
         : ` — recovery targets: ${snap.recoveryTargets.length}${fireEnabled ? '' : ' [detect-only: AIM_FLEET_RECOVERY_FIRE not set]'}`
       log(`[FleetLiveness] ${parts.join('; ')}${gate}`)
+    }
+
+    // The non-agent population (TRDD-99LV0U4I) — DETECT-ONLY. Logged only when something is
+    // stale, so a healthy host stays silent; `sessions` is absent when the deps carry no
+    // discoverer (tests, headless callers), which is not a finding either.
+    const staleSessions = (snap.sessions ?? []).filter((s) => s.class === 'stale')
+    if (staleSessions.length) {
+      log(
+        `[FleetLiveness] ${staleSessions.length} janitor-armed non-agent session(s) stale (>${Math.round(SESSION_STALE_S / 60)}min without a transcript write; detect-only, no actuation lane): ${staleSessions.map((s) => `${s.projectRoot} pid=${s.pid}${s.tmuxPane ? ` tmux=${s.tmuxPane}` : ''}`).join(', ')}`,
+      )
     }
 
     // Phase D-full: actuation, behind the default-OFF fire flag. Detection (above) always runs;

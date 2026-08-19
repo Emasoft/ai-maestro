@@ -14,6 +14,7 @@ function snapshot(targets: { agentId: string; name?: string }[], over: Partial<F
   const agents: FleetAgentLiveness[] = targets.map((t) => ({
     agentId: t.agentId,
     name: t.name,
+    origin: 'registry',
     class: 'stalled',
     recoveryRecommended: true,
     reason: 'idle past the stall window',

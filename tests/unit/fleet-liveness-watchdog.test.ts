@@ -45,9 +45,9 @@ describe('runFleetLivenessTick (read-only)', () => {
       scan: async () =>
         snap({
           agents: [
-            { agentId: 'a1', name: 'alpha', class: 'stalled', recoveryRecommended: true, reason: 'x' },
-            { agentId: 'a2', name: 'beta', class: 'token_blocked', recoveryRecommended: false, reason: 'y' },
-            { agentId: 'a3', name: 'gamma', class: 'active', recoveryRecommended: false, reason: 'z' },
+            { agentId: 'a1', name: 'alpha', origin: 'registry', class: 'stalled', recoveryRecommended: true, reason: 'x' },
+            { agentId: 'a2', name: 'beta', origin: 'registry', class: 'token_blocked', recoveryRecommended: false, reason: 'y' },
+            { agentId: 'a3', name: 'gamma', origin: 'registry', class: 'active', recoveryRecommended: false, reason: 'z' },
           ],
           recoveryTargets: ['a1'],
         }),
@@ -57,6 +57,53 @@ describe('runFleetLivenessTick (read-only)', () => {
     expect(logs[0]).toContain('1 token-blocked: beta')
     expect(logs[0]).toContain('recovery targets: 1')
     expect(logs[0]).toContain('detect-only')
+  })
+
+  // TRDD-99LV0U4I: the second population is DETECT-ONLY — one log line when any session is
+  // stale, silence otherwise, and it never enters the recovery pass (the pass is keyed on
+  // recoveryTargets, which the scan builds from the registry population alone).
+  it('logs stale janitor-armed non-agent sessions as detect-only, names no recovery target, and is silent when none are stale', async () => {
+    const logs: string[] = []
+    let passCalls = 0
+    await runFleetLivenessTick({
+      ...NO_CONTINUITY,
+      now: () => 1,
+      log: (m) => logs.push(m),
+      fireEnabled: true,
+      runPass: async () => {
+        passCalls++
+        return { fired: [], escalationNeeded: [] }
+      },
+      scan: async () =>
+        snap({
+          agents: [],
+          recoveryTargets: [],
+          sessions: [
+            { origin: 'janitor-session', pid: 74422, tty: 'ttys017', tmuxPane: null, projectRoot: '/Code/ANIME2SVG', transcriptAgeS: 272_062, class: 'stale' },
+            { origin: 'janitor-session', pid: 92150, tty: 'ttys002', tmuxPane: '%3', projectRoot: '/Code/hub', transcriptAgeS: 9, class: 'active' },
+          ],
+        }),
+    })
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toContain('1 janitor-armed non-agent session(s) stale')
+    expect(logs[0]).toContain('/Code/ANIME2SVG pid=74422')
+    expect(logs[0]).not.toContain('/Code/hub')
+    expect(logs[0]).toContain('detect-only, no actuation lane')
+    expect(passCalls).toBe(0)
+
+    const quiet: string[] = []
+    await runFleetLivenessTick({
+      ...NO_CONTINUITY,
+      now: () => 1,
+      log: (m) => quiet.push(m),
+      scan: async () =>
+        snap({
+          agents: [],
+          recoveryTargets: [],
+          sessions: [{ origin: 'janitor-session', pid: 1, tty: '', tmuxPane: null, projectRoot: '/Code/x', transcriptAgeS: 10, class: 'alive' }],
+        }),
+    })
+    expect(quiet).toEqual([])
   })
 
   it('reports the actuation-block reason instead of recovery targets under a STOP', async () => {
@@ -69,7 +116,7 @@ describe('runFleetLivenessTick (read-only)', () => {
         snap({
           actuationBlocked: true,
           actuationBlockReason: 'kill-switch.flag',
-          agents: [{ agentId: 'a1', name: 'alpha', class: 'stalled', recoveryRecommended: true, reason: 'x' }],
+          agents: [{ agentId: 'a1', name: 'alpha', origin: 'registry', class: 'stalled', recoveryRecommended: true, reason: 'x' }],
           recoveryTargets: [],
         }),
     })
@@ -91,8 +138,8 @@ describe('runFleetLivenessTick (read-only)', () => {
       scan: async () =>
         snap({
           agents: [
-            { agentId: 'a1', name: 'zombie', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
-            { agentId: 'a2', name: 'newborn', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
+            { agentId: 'a1', name: 'zombie', origin: 'registry', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
+            { agentId: 'a2', name: 'newborn', origin: 'registry', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
           ],
           recoveryTargets: [],
         }),
@@ -112,7 +159,7 @@ describe('runFleetLivenessTick (read-only)', () => {
       ...NO_CONTINUITY,
       now: () => 1,
       log: (m) => logs.push(m),
-      scan: async () => snap({ agents: [{ agentId: 'a1', name: 'alpha', class: 'active', recoveryRecommended: false, reason: 'ok' }] }),
+      scan: async () => snap({ agents: [{ agentId: 'a1', name: 'alpha', origin: 'registry', class: 'active', recoveryRecommended: false, reason: 'ok' }] }),
     })
     expect(logs).toHaveLength(0)
   })
@@ -135,7 +182,7 @@ describe('runFleetLivenessTick (read-only)', () => {
 describe('runFleetLivenessTick — recovery actuation (D-full, behind the default-OFF fire flag)', () => {
   const stalledSnap = () =>
     snap({
-      agents: [{ agentId: 'a1', name: 'alpha', class: 'stalled', recoveryRecommended: true, reason: 'x' }],
+      agents: [{ agentId: 'a1', name: 'alpha', origin: 'registry', class: 'stalled', recoveryRecommended: true, reason: 'x' }],
       recoveryTargets: ['a1'],
     })
 
@@ -197,7 +244,7 @@ describe('runFleetLivenessTick — recovery actuation (D-full, behind the defaul
       fireEnabled: true,
       scan: async () =>
         snap({
-          agents: [{ agentId: 'a1', name: 'alpha', class: 'idle_waiting', recoveryRecommended: false, reason: 'ok' }],
+          agents: [{ agentId: 'a1', name: 'alpha', origin: 'registry', class: 'idle_waiting', recoveryRecommended: false, reason: 'ok' }],
           recoveryTargets: [],
         }),
       runPass: async () => {
@@ -229,8 +276,8 @@ describe('runFleetLivenessTick — HARD recovery leg (Phase C, behind AIM_FLEET_
   const deadSnap = () =>
     snap({
       agents: [
-        { agentId: 'a1', name: 'zombie', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
-        { agentId: 'a2', name: 'newborn', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
+        { agentId: 'a1', name: 'zombie', origin: 'registry', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
+        { agentId: 'a2', name: 'newborn', origin: 'registry', class: 'dead', recoveryRecommended: false, reason: 'crashed' },
       ],
       recoveryTargets: [],
     })

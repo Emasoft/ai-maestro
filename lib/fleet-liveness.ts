@@ -23,6 +23,7 @@
 
 import { fleetActuationBlocked } from '@/lib/janitor-control'
 import { classifyHibernation } from '@/lib/agent-hibernation'
+import { makeRegistryRootFilter, type JanitorSession } from '@/lib/fleet-session-scan'
 
 /** Liveness classes, mirroring the janitor's diagnosis in server terms. */
 export type LivenessClass =
@@ -173,11 +174,19 @@ export interface FleetScanDeps {
   actuationBlocked?: () => { blocked: boolean; reason: string | null }
   /** Override the stall window. */
   stallThresholdMs?: number
+  /** Optional SECOND population (TRDD-99LV0U4I): janitor-armed claude sessions that are NOT
+   *  registered agents. Reported in `snapshot.sessions`, tagged `origin: 'janitor-session'`,
+   *  NEVER in `recoveryTargets` — detect-only until a separate lane is armed. Absent ⇒ the
+   *  snapshot carries only the registry population (the pre-99LV0U4I shape). */
+  listJanitorSessions?: (isRegistryRoot: (root: string) => boolean) => Promise<JanitorSession[]>
 }
 
 export interface FleetAgentLiveness extends LivenessVerdict {
   agentId: string
   name?: string
+  /** Population tag. Registry agents are always `registry`; the other population lives in
+   *  `snapshot.sessions` with its own tag, so a consumer can never confuse the two. */
+  origin: 'registry'
 }
 
 export interface FleetLivenessSnapshot {
@@ -186,8 +195,12 @@ export interface FleetLivenessSnapshot {
   actuationBlocked: boolean
   actuationBlockReason: string | null
   agents: FleetAgentLiveness[]
-  /** agentIds that are stalled AND recoverable right now (empty when actuation is blocked). */
+  /** agentIds that are stalled AND recoverable right now (empty when actuation is blocked).
+   *  REGISTRY population only, by construction — `sessions` never contribute. */
   recoveryTargets: string[]
+  /** The janitor-armed non-agent population (TRDD-99LV0U4I). Present only when the deps
+   *  supplied `listJanitorSessions`; detect-only (no actuation path reads it). */
+  sessions?: JanitorSession[]
 }
 
 /**
@@ -203,13 +216,14 @@ export async function scanFleetLiveness(deps: FleetScanDeps, scannedAt: number):
   const gate = actuationBlocked()
 
   const agents: FleetAgentLiveness[] = []
-  for (const ref of deps.listAgents()) {
+  const refs = deps.listAgents()
+  for (const ref of refs) {
     let status: { hasSession: boolean; exists: boolean; timeSinceActivityMs: number | null }
     try {
       status = await deps.getStatus(ref.id)
     } catch {
       // A status read that fails is not proof of a stall — record offline, never recover.
-      agents.push({ agentId: ref.id, name: ref.name, class: 'offline', recoveryRecommended: false, reason: 'status read failed' })
+      agents.push({ agentId: ref.id, name: ref.name, origin: 'registry', class: 'offline', recoveryRecommended: false, reason: 'status read failed' })
       continue
     }
     const hook = deps.getHookNotification(ref.workingDirectory)
@@ -233,10 +247,23 @@ export async function scanFleetLiveness(deps: FleetScanDeps, scannedAt: number):
       },
       stall,
     )
-    agents.push({ agentId: ref.id, name: ref.name, ...verdict })
+    agents.push({ agentId: ref.id, name: ref.name, origin: 'registry', ...verdict })
   }
 
   const recoveryTargets = gate.blocked ? [] : agents.filter((a) => a.recoveryRecommended).map((a) => a.agentId)
+
+  // The second population. A root that belongs to a registered agent is origin `registry` and
+  // is already in `agents`, so it is filtered OUT here — one session, one population. A failing
+  // discovery is not evidence about the sessions: report none rather than throw the whole scan.
+  let sessions: JanitorSession[] | undefined
+  if (deps.listJanitorSessions) {
+    const isRegistryRoot = makeRegistryRootFilter(refs.map((r) => r.workingDirectory))
+    try {
+      sessions = await deps.listJanitorSessions(isRegistryRoot)
+    } catch {
+      sessions = []
+    }
+  }
 
   return {
     scannedAt,
@@ -244,5 +271,6 @@ export async function scanFleetLiveness(deps: FleetScanDeps, scannedAt: number):
     actuationBlockReason: gate.reason,
     agents,
     recoveryTargets,
+    ...(sessions !== undefined && { sessions }),
   }
 }

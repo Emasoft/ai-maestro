@@ -207,7 +207,16 @@ const R516_LIMIT_CASES: Record<string, number> = {
   // The argless CLI catalog refresh: one terminal side effect, no rollback window — a
   // marketplace refresh has no meaningful undo, and runGateSequence refuses a mutating
   // gate with no compensation, correctly.
-  RefreshAllMarketplaces: 1,
+  //
+  // REVISIT PERFORMED 2026-08-19 (the count moved 1 → 2 and this entry went VOID, exactly
+  // as the ruling's bar requires): the second op is G02b (TRDD-PE54D95Q 85bf0b02), a
+  // READ-ONLY foreign-refresh probe — one `ps` snapshot that either early-returns
+  // success:skipped or falls through, mutating NOTHING either way. The property this
+  // entry encodes is UNCHANGED: still exactly one terminal side effect (G03's argless
+  // CLI refresh) with no abortable work after it, so R51.4 still has no failure path to
+  // protect and a retrofit would manufacture the un-compensatable undo the ruling itself
+  // names as the R51.5 concealment shape. Limit case REAFFIRMED at the new exact count.
+  RefreshAllMarketplaces: 2,
 }
 
 /** Floor, so the check cannot pass by discovering nothing (the vacuous-green shape). */

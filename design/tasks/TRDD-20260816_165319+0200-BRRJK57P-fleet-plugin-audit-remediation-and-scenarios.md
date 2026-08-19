@@ -1616,6 +1616,33 @@ namespaced), re-broadcast before any bulk delete — AMPA's own first check woul
 repeated the phantom error and said so. Published 3.3.16 confirmed SAFE (git-URL serving,
 tag complete, 1656 files) — no emergency republish.
 
+## Ledger — window of 2026-08-19T14:55:04+0200
+
+- **TRDD-CYUCN7Y0 CLOSED** (completed+archived, 48c1ea1a): `search --all-agents` shipped
+  647a4ec7 (live: 11 rows, 0 errors, /bin/bash 3.2); batch verb WONTFIX on AMAMA's own
+  measurement (1-5 ids/session, worst <10) — recipe in the trdd CLI header; AMAMA ack'd.
+- **TRDD-ARY3NRFC CLOSED** (completed+archived, 70ae7f16): timeout half 6d60c017 — _api
+  per-call max_time (300s slow verbs), curl-28 → exit 124 verify-before-retry; 2 neuters,
+  each exactly 1 red.
+- **TRDD-CHN16JXZ Phase C SHIPPED DARK** (33ea9743 step b, 02de8959 step c): hard-recovery
+  actuator + runner + watchdog leg behind default-OFF AIM_FLEET_HARD_RECOVERY; gates ride
+  the REAL signals (boot-restore stamp, SX593MDG dead-since tracker); fleet-recovery family
+  63/63; 5 neuters total, each exactly 1 red. Remaining boxes: live dead-agent e2e (needs
+  arming) — surfaced for the USER.
+- **bash-4ism FAMILY purge** (25a16355): f244b155's sweep had searched ONE spelling; the
+  new static guard (no-bash4isms test, per-pattern positive controls) found `declare -g`,
+  a 2nd nameref, 2× `${var,,}`, and the empty-array set -u trap in agent-core's EXIT trap
+  (--help exited 1). agent CLI now proven under /bin/bash 3.2.
+- **Full suite triage**: 18 fails → 10 real (fixed above + manifest regen d55f0c84 +
+  aio-txn-10 R51.6 revisit b967bffc: G02b is read-only, limit case REAFFIRMED at 2 ops);
+  amp-network ×5 = LibreSSL-on-PATH env (ED25519 absent — CORE's CLI dependency, not this
+  repo); rest load flakes (green isolated, timeout mode only).
+- **COS sweep COMPLETE** (TRDD-3ICG52TO): 553 invocation teachings / 145 files converted to
+  frozen amp-* CLIs, 0 bare survivors, v2.32.7 published, 15 per-batch reports.
+- **WEBDESIGN wired panel preview** (their d9743cf) after finding aimaestro-panel.sh already
+  covers it — RZTIE0T1 narrowed to the low-priority screenshot verb; their identity ask
+  answered NO per R32/6SL6UY6N precedent (dev workdirs get no registered identity).
+
 ## Approval log
 
 - 2026-08-16T16:53:19+0200 — MANDATE issued by the USER (min-approval-requirement: none).

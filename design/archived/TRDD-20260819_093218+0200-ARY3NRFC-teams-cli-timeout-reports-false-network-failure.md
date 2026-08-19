@@ -1,10 +1,10 @@
 ---
 trdd-id: ARY3NRFC
 title: Teams CLI 30s timeout reports a false network failure while the operation succeeds
-column: todo
+column: completed
 created: 2026-08-19T09:32:18+0200
-updated: 2026-08-19T09:32:18+0200
-implementation-commits: [f244b155]
+updated: 2026-08-19T14:27:52+0200
+implementation-commits: [f244b155, 6d60c017]
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -79,11 +79,38 @@ In `scripts/aimaestro-teams.sh` (and any sibling CLI sharing `_api`):
 
 ## Acceptance
 
-- [ ] slow verbs no longer time out on the normal auto-COS create/delete path
-- [ ] timeout message names timeout + verify-before-retry; distinct from network refusal
-- [ ] one test pins the exit-28 classification (neuter run recorded)
+- [x] slow verbs no longer time out on the normal auto-COS create/delete path — _api
+      gained a per-call max_time (4th arg, default 30, AIMAESTRO_API_MAX_TIME env seam);
+      create / delete / both chief-of-staff POST sites pass 300 (6d60c017)
+- [x] timeout message names timeout + verify-before-retry; distinct from network refusal —
+      curl exit 28 → exit 124 + "may still be completing server-side; verify with
+      'show'/'list' BEFORE retrying"; every other curl failure keeps exit 1 and now names
+      the curl exit code
+- [x] one test pins the exit-28 classification (neuter runs recorded below) —
+      tests/unit/teams-cli-timeout-classification.test.ts, 4/4 green: real _api + real
+      curl against an accept-and-never-respond socket (genuine exit 28), a
+      refused-connection specificity control (curl 7 must STAY network/exit 1), and the
+      300s wiring pinned at the curl-function boundary
+
+## Neuter runs (2026-08-19 14:26-14:27, fix committed FIRST as 6d60c017)
+
+- n1. delete the `[ "$rc" -eq 28 ]` branch → EXACTLY 1 red: the exit-28 test, failing on
+  the old message `(network, curl exit 28)` + EXIT=1 — the bug's own signature. Control
+  and both wiring tests stayed green. One mutation, one test, clean attribution.
+- n2. revert `--max-time "$max_time"` to literal 30 (both curl branches) → EXACTLY 2 red,
+  both predicted in the test's doc comment: the create-wiring test (shows `--max-time 30`,
+  not 300) and the exit-28 test (the env seam is dead, curl waits 30s > the 20s spawn
+  guard — reds by harness timeout, attributed). Refused control + list-default stayed
+  green.
+- Restored between and after each run via git checkout of the committed fix; final run
+  4/4 green.
 
 ## Approval log
 
 - 2026-08-19T09:32:18+0200 — MANDATE issued as Tier-0 self-mandate (in-scope CLI fix in
   the repo that owns the script; reversible, local). No approval request needed.
+- 2026-08-19T14:27:52+0200 — COMPLETED by hub (standing USER Phase-2 delegation,
+  BRRJK57P). bash-3.2 half f244b155; timeout half 6d60c017 with both neuter runs
+  recorded above. Sibling _api copies (governance/groups/panel/portfolio/session/trdd
+  CLIs) mostly serve fast reads — the exit-28 classification is worth porting there the
+  next time any of those files is touched, not as a mass edit now.

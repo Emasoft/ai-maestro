@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-20T01:17:59+0200
+updated: 2026-08-20T01:27:50+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1767,6 +1767,16 @@ tag complete, 1656 files) — no emergency republish.
   5 neuters (marker gate 3-red incl. the mandatory unmarked-never-removed pin; 4 others
   exactly-1-red); verified by effect (startup line 01:15:23, claim correctly absent
   unarmed). Card → human_review; absorbability memory row superseded via lesson ^8.
+
+- **TRDD-9FW92242 fleet-stop lane LANDED, dark-shipped (0faddaa1):** kill-switch fan-out
+  ported from task_fleet_stop + fleet_stop.py — queue channel for registered agents
+  (enqueueCommand janitor-disarm at idle), soft tmux channel for the 99LV0U4I session
+  population (its named actuation lane); 3 gates verbatim (default-OFF AIM_FLEET_STOP,
+  HID/user-active deferral, dedupe-per-(target,flag) with flag-clear amnesia); pause-is-gone
+  divergence from the card text pinned; 6 neuters, all attributed; review catch: the
+  AgentSummary workingDirectory cast would have left the registry filter inert (fixed to the
+  watchdog's resolution). Card → human_review. Absorption family now COMPLETE except
+  cold-cache-clear (deferred last by design, rides the janitor's launcher commitment).
 
 ## Approval log
 

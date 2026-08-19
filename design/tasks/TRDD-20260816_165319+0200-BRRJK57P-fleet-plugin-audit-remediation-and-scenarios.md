@@ -54,8 +54,13 @@ external-refs: []
   rerouting (`trdd.sh approve|refuse`; governance approve/reject = MAESTRO-only), D1
   transfer verbs, D2 pillar-tool adoption, D3 dep ^3.1.0, Q1 context-dependent review
   routing, D7 Part B2 transition ownership in FULL_PROJECT_WORKFLOW, corpus hygiene per Q3;
-  card QX6VFAXS closed + archived. Their `trddgrep validate` holds 11 sanctioned residuals
-  that clear to 0 when TRDD-PTFPGSLV ships — ping them for the acceptance-box re-run then.
+  card QX6VFAXS closed + archived. **v2.18.1 follow-up ~04:45**: MANAGER-persona
+  job-completion enforcement (board-as-ledger, drain by default), approval-workflows
+  degraded mode (server down ⇒ offline Approval-log verdict + queued retry, never silent
+  stall), trddgrep in status checklist; 5 scenario walks clean, 158/158. Their `trddgrep
+  validate` holds 11 sanctioned residuals that clear to 0 when TRDD-PTFPGSLV ships — ping
+  them for the acceptance-box re-run then. Their maintainer-in-team-repos Part B2 question
+  stays PENDING with the USER (correctly held).
   Hub rulings issued: Q1 review-columns = CONTEXT-SPLIT (team → INTEGRATOR/
   reviewer per Part B2; no-team repo → MAINTAINER per kanban-multiagent editor authority; a
   team-wide maintainer ownership claim needs explicit USER confirmation); Q2 = reroute MANAGER

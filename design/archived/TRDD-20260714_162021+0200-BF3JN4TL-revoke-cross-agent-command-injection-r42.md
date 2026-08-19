@@ -1,9 +1,9 @@
 ---
 trdd-id: BF3JN4TL
 title: Revoke cross-agent command injection entirely (R42) — messaging becomes the only channel
-column: testing
+column: completed
 created: 2026-07-14T16:20:21+0200
-updated: 2026-08-05T01:08:00+0200
+updated: 2026-08-19T21:13:17+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: security
@@ -257,7 +257,7 @@ open box is the SOAK the STATE names as the reason this card is not `complete`.
 - [x] **AUTONOMOUS → headless `/stop` → refused.** See below: the DECISION was pinned and the
       WIRING was not, and the wiring is the half this card exists about. Ratcheted today
       (`42f2c278`)
-- [ ] **THE SOAK — the reason this card is not `complete`, and it was MISSING from this list until
+- [x] **THE SOAK — the reason this card is not `complete`, and it was MISSING from this list until
       2026-08-05.** Owed, in the STATE's own words: *nothing has run against R42 yet (the fleet was
       stopped when the code landed)*, so the operational-risk item stands — **enumerate the flows
       that depended on a MANAGER/COS driving a pane**, and confirm each either survives R42 or has a
@@ -289,6 +289,24 @@ open box is the SOAK the STATE names as the reason this card is not `complete`.
       persona that had *learned* to drive panes leaves no trace in the source, and that is precisely
       what a soak finds and static analysis cannot. So the remaining risk is behavioural, not
       structural — a smaller and better-specified question than the box originally posed.
+
+      **▶ THE BEHAVIOURAL HALF — MEASURED 2026-08-19T21:13:17+0200, and the box is closed on it.** The
+      question was an undocumented HABIT, so the instrument is the registered agents' own
+      transcripts, not the source. Population: every `~/.claude/projects/-Users-…-agents-*/*.jsonl`
+      on this host — 8 transcripts, 9.2 MB: `testbot` (the fleet's only MANAGER, 2 files,
+      2026-08-05 → 08-19), `frank` (AUTONOMOUS, 4 files, 08-15 → 08-19), `jack-bot` (2 files,
+      07-12 → 07-14 — PRE-R42, so it could have driven panes with impunity). Grepped for every
+      cross-agent drive shape (`aimaestro-session.sh inject|queue`, `aimaestro-panel.sh`,
+      `/sessions/<id>/stop|restart`): **exactly ONE occurrence in the whole population**, in the
+      MANAGER's transcript at 2026-08-05T19:03 — a deliberate *"Probe which session routes MANAGER
+      is permitted on"* against `frank`, and R42 denied it LIVE: `queue` → `HTTP 403 —
+      aid_title_forbidden`; `slash` → `HTTP 403 — R42: no agent may send-command on another agent —
+      not even a MANAGER or CHIEF-OF-STAFF. Messaging is the only channel …`. So in 14 days of
+      operation (and in the pre-R42 transcript too) no MANAGER/COS drove a peer's pane as a habit,
+      and the one attempt that exists was R42 being exercised against a REAL manager AID — the
+      behavioural proof the static half could not give. Caveat stated rather than hidden: the fleet
+      carried one MANAGER and no COS in this window; a COS-bearing fleet re-measures by the same
+      grep.
 
 ## ⏱ VERIFIED 2026-08-02 — the headless half was pinned by reading the code, and one claim went stale
 
@@ -326,3 +344,4 @@ nobody deletes the entry that came true.
 - 2026-07-14T16:20:21+0200 — MANDATE issued by USER (maestro) (min-approval-requirement: user).
   Pre-approved; the issuer is the only authority above the tier floor. Verbatim ruling quoted
   above. No approval request was sent.
+- 2026-08-19T21:13:17+0200 — COMPLETED by the hub under the USER's Phase-2 delegation (BRRJK57P approval log): the soak box closed by measurement over every registered-agent transcript (8 files; one cross-agent drive attempt in 14 days, the MANAGER's own probe, denied live by R42 with 403). Archived as completed.

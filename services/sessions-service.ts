@@ -35,8 +35,8 @@ import { parseNameForDisplay } from '@/types/agent'
 import { buildAgentSessionEnv } from '@/lib/session-env'
 import { sessionActivity, injectedPrompts, broadcastStatusUpdate } from '@/services/shared-state'
 import { getRuntime, prepareShellForLaunch, preflightPaneKeychain, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
-import crypto from 'crypto'
 import { statePath } from '@/lib/ecosystem-constants'
+import { chatStateFileFor } from '@/lib/chat-state-path'
 // TRDD-I75EMTK0: shared R17 presence-check + reinstall helper (see
 // agents-core-service.ts for the full rationale — one implementation used
 // by wakeAgent, this defense-in-depth path, and POST /api/agents/[id]/ensure-core).
@@ -166,18 +166,12 @@ async function httpPost(url: string, body: any, timeout = 10000): Promise<any> {
   }
 }
 
-/** Hash working directory to find hook state file */
-function hashCwd(cwd: string): string {
-  return crypto.createHash('md5').update(cwd || '').digest('hex').substring(0, 16)
-}
-
 /** Read hook state for a given working directory */
 function getHookState(workingDir: string): { status: string; notificationType?: string; subagentCount?: number } | null {
   if (!workingDir) return null
 
-  const stateDir = statePath('chat-state')
-  const cwdHash = hashCwd(workingDir)
-  const stateFile = path.join(stateDir, `${cwdHash}.json`)
+  // ONE resolver (lib/chat-state-path): the hook's own index, never a mirrored hash algorithm.
+  const stateFile = chatStateFileFor(workingDir)
 
   try {
     if (fs.existsSync(stateFile)) {
@@ -293,7 +287,7 @@ export function parsePendingPromptState(state: unknown): PendingPrompt | null {
 export function readPendingPrompt(workingDir: string): PendingPrompt | null {
   if (!workingDir) return null
 
-  const stateFile = path.join(statePath('chat-state'), `${hashCwd(workingDir)}.json`)
+  const stateFile = chatStateFileFor(workingDir)
   try {
     if (!fs.existsSync(stateFile)) return null
     return parsePendingPromptState(JSON.parse(fs.readFileSync(stateFile, 'utf-8')))

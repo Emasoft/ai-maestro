@@ -65,8 +65,12 @@ const TEST_AGENT = {
   sessions: [{ status: 'online' as const }],
 }
 
+// The HOOK's derivation (ai-maestro-hook.cjs::hashCwd, sha256 since 2026-05-08) — the fixture
+// must sit where the hook writes, not where a server-side mirror used to look. This test was
+// green for three months with BOTH sides on md5 while production read a non-existent file
+// (fixture built from the same assumption as the code; see lib/chat-state-path.ts).
 function hashCwd(cwd: string): string {
-  return crypto.createHash('md5').update(cwd || '').digest('hex').substring(0, 16)
+  return crypto.createHash('sha256').update(cwd || '').digest('hex').substring(0, 16)
 }
 
 const STATE_FILE_PATH = path.join(

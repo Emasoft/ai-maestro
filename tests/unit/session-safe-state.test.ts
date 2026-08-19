@@ -26,8 +26,13 @@ import { readSubagentCount, evaluateExitGate, looksLikeAbandonPrompt } from '@/l
 
 const WORKDIR = '/Users/someone/agents/test-agent'
 
-function writeState(state: Record<string, unknown>) {
-  const hash = crypto.createHash('md5').update(WORKDIR).digest('hex').substring(0, 16)
+// The HOOK's derivation (sha256 since ai-maestro-plugin 2026-05-08): the fixture sits where the
+// hook writes. This file was green for three months placing fixtures at the md5 path while the
+// reader also used md5 and production read a file that did not exist (lib/chat-state-path.ts).
+const HOOK_HASH = crypto.createHash('sha256').update(WORKDIR).digest('hex').substring(0, 16)
+const MD5_ERA_HASH = crypto.createHash('md5').update(WORKDIR).digest('hex').substring(0, 16)
+
+function writeState(state: Record<string, unknown>, hash: string = HOOK_HASH) {
   const dir = path.join(tmpStateDir, 'chat-state')
   fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(path.join(dir, `${hash}.json`), JSON.stringify(state))
@@ -75,11 +80,26 @@ describe('readSubagentCount', () => {
     expect(readSubagentCount(WORKDIR)).toBeNull()
   })
 
-  it('returns null on malformed JSON instead of throwing', () => {
-    const hash = crypto.createHash('md5').update(WORKDIR).digest('hex').substring(0, 16)
+  it('reads the file the HOOK writes (sha256 path) and NEVER the md5-era path — the 3-month regression', () => {
+    writeState({ subagentCount: 3 }, MD5_ERA_HASH) // only the relic path exists
+    expect(readSubagentCount(WORKDIR)).toBeNull()
+    writeState({ subagentCount: 3 }) // now the hook's path exists too
+    expect(readSubagentCount(WORKDIR)).toBe(3)
+  })
+
+  it("prefers the hook's own index.json mapping over any derivation", () => {
     const dir = path.join(tmpStateDir, 'chat-state')
     fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(path.join(dir, `${hash}.json`), '{not json')
+    fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify({ [WORKDIR]: '0123456789abcdef' }))
+    writeState({ subagentCount: 1 }, '0123456789abcdef')
+    writeState({ subagentCount: 9 }) // a derived-path decoy must lose to the index
+    expect(readSubagentCount(WORKDIR)).toBe(1)
+  })
+
+  it('returns null on malformed JSON instead of throwing', () => {
+    const dir = path.join(tmpStateDir, 'chat-state')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, `${HOOK_HASH}.json`), '{not json')
     expect(readSubagentCount(WORKDIR)).toBeNull()
   })
 })

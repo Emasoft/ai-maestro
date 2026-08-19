@@ -11,9 +11,8 @@ import { injectedPrompts } from '@/services/shared-state'
 import * as fs from 'fs'
 import * as fsp from 'fs/promises'
 import * as path from 'path'
-import * as crypto from 'crypto'
 import os from 'os'
-import { statePath } from '@/lib/ecosystem-constants'
+import { chatStateFileFor } from '@/lib/chat-state-path'
 
 // SF-047: Maximum conversation file size to prevent OOM (50 MB)
 const MAX_CONVERSATION_FILE_SIZE = 50 * 1024 * 1024
@@ -24,10 +23,6 @@ import { ServiceResult } from '@/types/service'
 // NT-006: ServiceResult re-export removed — import directly from @/types/service
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-function hashCwd(cwd: string): string {
-  return crypto.createHash('md5').update(cwd || '').digest('hex').substring(0, 16)
-}
 
 // ── Public Functions ────────────────────────────────────────────────────────
 
@@ -152,9 +147,8 @@ export async function getConversationMessages(
   // Read hook state file
   let hookState: any = null
   if (workingDir) {
-    const stateDir = statePath('chat-state')
-    const cwdHash = hashCwd(workingDir)
-    const stateFile = path.join(stateDir, `${cwdHash}.json`)
+    // ONE resolver (lib/chat-state-path): the hook's own index, never a mirrored hash algorithm.
+    const stateFile = chatStateFileFor(workingDir)
 
     try {
       if (fs.existsSync(stateFile)) {
@@ -293,9 +287,7 @@ async function detectTuiMenu(
   // Layer 1: check the hook's chat-state file
   if (workingDir) {
     try {
-      const stateDir = statePath('chat-state')
-      const cwdHash = hashCwd(workingDir)
-      const stateFile = path.join(stateDir, `${cwdHash}.json`)
+      const stateFile = chatStateFileFor(workingDir)
 
       if (fs.existsSync(stateFile)) {
         const stateContent = fs.readFileSync(stateFile, 'utf-8')

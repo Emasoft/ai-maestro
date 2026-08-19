@@ -455,11 +455,13 @@ function startAutoContinueTimer(sessionName, delayMs) {
         return
       }
 
-      // Re-check the hook state before sending
-      const stateDir = statePath('chat-state')
-      const crypto = await import('crypto')
-      const cwdHash = crypto.createHash('md5').update(agent.workingDirectory || '').digest('hex').substring(0, 16)
-      const stateFile = path.join(stateDir, `${cwdHash}.json`)
+      // Re-check the hook state before sending. ONE resolver (lib/chat-state-path): the hook's
+      // own index, never a mirrored hash — the md5 mirror that lived here opened a file that has
+      // not existed since the hook went sha256 (2026-05-08), so this re-check always took the
+      // "no state file" branch below, i.e. auto-continue stood down on every agent running a sha256 hook
+      // (the path mismatch was measured 2026-08-19; the stand-down is its consequence in the code).
+      const { chatStateFileFor } = await import('./lib/chat-state-path.ts')
+      const stateFile = chatStateFileFor(agent.workingDirectory || '')
 
       if (fs.existsSync(stateFile)) {
         const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'))

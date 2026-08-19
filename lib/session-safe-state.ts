@@ -17,15 +17,8 @@
  * permissive otherwise; the restart poll's abandon-prompt detection is the
  * backstop for the undetectable case.
  */
-import crypto from 'crypto'
 import fs from 'fs'
-import path from 'path'
-import { statePath } from '@/lib/ecosystem-constants'
-
-/** Mirror of the hook's cwd hashing (ai-maestro-hook.cjs / agents-chat-service). */
-function hashCwd(cwd: string): string {
-  return crypto.createHash('md5').update(cwd || '').digest('hex').substring(0, 16)
-}
+import { chatStateFileFor } from '@/lib/chat-state-path'
 
 /**
  * Read the live subagent counter from the hook's chat-state file for a workdir.
@@ -39,7 +32,9 @@ function hashCwd(cwd: string): string {
 export function readSubagentCount(workingDir: string | undefined | null): number | null {
   if (!workingDir) return null
   try {
-    const stateFile = path.join(statePath('chat-state'), `${hashCwd(workingDir)}.json`)
+    // ONE resolver (lib/chat-state-path): the hook's own index, never a mirrored hash algorithm —
+    // the md5 mirror that lived here read a non-existent file for 3 months (see that module).
+    const stateFile = chatStateFileFor(workingDir)
     if (!fs.existsSync(stateFile)) return null
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'))
     const count = state?.subagentCount
@@ -63,7 +58,9 @@ export function readHookNotification(
 ): { status: string | null; notificationType: string | null } | null {
   if (!workingDir) return null
   try {
-    const stateFile = path.join(statePath('chat-state'), `${hashCwd(workingDir)}.json`)
+    // ONE resolver (lib/chat-state-path): the hook's own index, never a mirrored hash algorithm —
+    // the md5 mirror that lived here read a non-existent file for 3 months (see that module).
+    const stateFile = chatStateFileFor(workingDir)
     if (!fs.existsSync(stateFile)) return null
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'))
     return {

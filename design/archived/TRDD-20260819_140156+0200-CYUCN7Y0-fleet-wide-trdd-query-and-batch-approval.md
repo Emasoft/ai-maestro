@@ -1,9 +1,9 @@
 ---
 trdd-id: CYUCN7Y0
 title: Fleet-wide TRDD query verb and batch approve-refuse surface
-column: dev
+column: completed
 created: 2026-08-19T14:01:56+0200
-updated: 2026-08-19T14:16:00+0200
+updated: 2026-08-19T14:21:22+0200
 implementation-commits: [647a4ec7]
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
@@ -42,10 +42,16 @@ WONTFIX explicitly — decide on measurement, not sympathy.
       agent {agent, agentId, result|error}, per-agent failure recorded in-row, never
       aborting the sweep. LIVE TEST 14:15: 11 agents, 0 errors, /bin/bash 3.2, exit 0.
       Server-side aggregation stays the recorded upgrade path.
-- [ ] batch approve/refuse: explicit decision recorded (implemented OR WONTFIX with the
-      client-side recipe written into the spec), AMAMA notified either way
+- [x] batch approve/refuse: WONTFIX by AMAMA's own measurement (2026-08-19 14:20 reply:
+      1-5 ids per screening session, worst <10, 50+ never occurred in the corpus). The
+      client-side per-id loop recipe is written into the aimaestro-trdd.sh header (flows
+      into the generated scripts spec); revisit trigger recorded there: a real session
+      measuring >20 ids. AMAMA notified and ack'd part (a) adoption.
 
 ## Approval log
 
 - 2026-08-19T14:01:56+0200 — MANDATE under the USER's 2026-08-19 orchestration directive.
   Queued at todo; spec-first at design.
+- 2026-08-19T14:21:22+0200 — COMPLETED by hub (standing USER Phase-2 delegation,
+  BRRJK57P). Part (a) shipped 647a4ec7, live-tested (11 rows, 0 errors, bash 3.2).
+  Part (b) WONTFIX on AMAMA's measured screening volume; recipe in the CLI header.

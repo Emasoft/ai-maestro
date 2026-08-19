@@ -665,6 +665,13 @@ Usage:
       --tier is DEPRECATED on both verbs and is NOT sent (ai-maestro#69): the approval
       requirement is read from the card's own `min-approval-requirement:`, never from
       the approver. Still accepted so existing calls keep working.
+      BATCH SCREENING (TRDD-CYUCN7Y0, WONTFIX by measurement — typical session is
+      1-5 ids, never >10 observed): no batch verb; loop the per-id verbs client-side.
+        for id in AAAA1111 BBBB2222; do
+          aimaestro-trdd.sh approve "$id" --approver manager --rationale "batch pass"
+        done
+      Refusals loop the same way (each needs its own --reason naming the defect).
+      Revisit only if a real session measures >20 ids in one screening pass.
   aimaestro-trdd.sh verify  <trdd-id>
       Is this card's approval REAL? Exit 0 verified · non-zero otherwise (the gate
       consumers rely on; governance-spec R41.enf-verify pins the non-zero contract).

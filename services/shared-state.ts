@@ -81,6 +81,15 @@ if (!globalThis._sharedState.panelClients) {
 if (!globalThis._sharedState.panelFeedback) {
   globalThis._sharedState.panelFeedback = new Map<string, PanelFeedbackEntry[]>()
 }
+// ai-maestro#117 back-fill — the SAME failure the panel back-fill above exists for, and it was
+// missed when `injectedPrompts` was added (2026-08-06): in FULL mode the bridge
+// (shared-state-bridge.mjs) initializes `_sharedState` FIRST, so `state.injectedPrompts` was
+// `undefined` here and every `sendAgentSessionCommand` threw on `.set` — 13 days of 500s on
+// every server-side inject (pm2-error.log 2026-08-06 14:16 → 2026-08-19 19:48). Any NEW key on
+// `_sharedState` needs a back-fill in BOTH files, not a slot in one initializer. NT-039 SYNC.
+if (!globalThis._sharedState.injectedPrompts) {
+  globalThis._sharedState.injectedPrompts = new Map<string, number>()
+}
 
 const state = globalThis._sharedState
 

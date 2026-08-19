@@ -18,6 +18,7 @@
 if (!globalThis._sharedState) {
   globalThis._sharedState = {
     sessionActivity: new Map(),      // sessionName -> lastActivityTimestamp (ms)
+    injectedPrompts: new Map(),      // sessionName -> epoch ms of the last SERVER-injected prompt (ai-maestro#117)
     terminalSessions: new Map(),     // sessionName -> { clients, ptyProcess, logStream, ... }
     statusSubscribers: new Set(),    // Set<WebSocket> for /status subscribers
     companionClients: new Map(),     // agentId -> Set<WebSocket> for /companion-ws
@@ -34,6 +35,16 @@ if (!globalThis._sharedState.panelClients) {
 }
 if (!globalThis._sharedState.panelFeedback) {
   globalThis._sharedState.panelFeedback = new Map()
+}
+// ai-maestro#117 back-fill, same shape: this file loads FIRST in FULL mode (server.mjs imports it
+// before any route touches shared-state.ts), so a key this initializer lacks is a key the whole
+// process lacks. `injectedPrompts` was added to shared-state.ts on 2026-08-06 and NOT mirrored
+// here — every `sendAgentSessionCommand` then died on `injectedPrompts.set` ("Cannot read
+// properties of undefined (reading 'set')", pm2-error.log 2026-08-06 14:16 → 2026-08-19 19:48):
+// 13 days of 500s on every server-side inject, USER and agent alike. NT-039 SYNC: mirrored in
+// shared-state.ts.
+if (!globalThis._sharedState.injectedPrompts) {
+  globalThis._sharedState.injectedPrompts = new Map()
 }
 
 const state = globalThis._sharedState

@@ -14,8 +14,6 @@
  *   3. the state was ~17h stale — so nothing here may depend on hook freshness.
  */
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import {
   resolveBlockState,
   detectPromptField,
@@ -128,15 +126,11 @@ describe('red states', () => {
     expect(resolveBlockState(pane, null).blocked).toBe(false)
   })
 
-  it('the classifier is IDENTICAL to the hook\'s — the copy is guarded, not trusted', () => {
-    // The hook is standalone CJS and cannot be imported, so the pattern is duplicated. This
-    // asserts the two literals have not drifted; without it the copy silently rots.
-    const hook = readFileSync(join(process.cwd(), 'scripts/ai-maestro-hook.cjs'), 'utf8')
-    const m = hook.match(/\/rate\.\?limit\|[^/]*\//)
-    expect(m, 'the hook no longer contains a recognisable rate-limit regex').not.toBeNull()
-    const hookBody = m![0].slice(1, -1)
-    expect(RED_STATE_PATTERN.source).toBe(hookBody)
-  })
+  // The drift guard that lived here (comparing RED_STATE_PATTERN against the hook mirror's
+  // regex) is RETIRED WITH ITS REASON, 2026-08-20: the stale mirror scripts/ai-maestro-hook.cjs
+  // was deleted, the live plugin hook no longer carries a classifier at all, and the server-side
+  // classifyStopFailure (lib/agent-block-state) now USES RED_STATE_PATTERN itself — one
+  // definition, so there is no second literal left to drift.
 })
 
 describe('matchPane — the server-side search that keeps the buffer inside', () => {

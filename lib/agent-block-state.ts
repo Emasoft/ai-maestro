@@ -37,14 +37,32 @@ const SELECT_MENU_FOOTER = /Enter to select\b[\s\S]{0,80}?\bEsc to cancel/
 const CHOICE_ROW = /^\s*(?:❯\s*)?(\d{1,2})\.\s+(\S.*)$/
 
 /**
- * Red-state classifier. **This pattern is duplicated from `scripts/ai-maestro-hook.cjs`
- * ON PURPOSE and the duplication is GUARDED** — the hook is a standalone CJS file loaded by
- * Claude Code, not importable from TS, so the choice is a copy or a re-implementation. A
- * copy with a drift test is the lesser evil; `tests/unit/agent-block-state.test.ts` reads
- * the hook and fails if the two literals diverge. Do not "simplify" one side alone.
+ * Red-state pattern — the ONE definition (2026-08-20). It used to be duplicated from the
+ * repo's hook mirror with a drift-guard test; the mirror is deleted, the live plugin hook
+ * carries no classifier, and `classifyStopFailure` below shares THIS regex — so there is no
+ * second literal left to drift and the guard is retired with its reason.
  */
 export const RED_STATE_PATTERN =
   /rate.?limit|temporarily limiting|overloaded|too many requests|quota|\b429\b|\b529\b/i
+
+/** Classify a StopFailure-shaped error record into the two red badge states.
+ *
+ *  HISTORY (why this lives HERE now): the classifier was born in the plugin hook
+ *  (TRDD-TBGGUA2V P3) and wrote `notificationType: 'rate_limited'|'api_error'` directly into
+ *  chat-state. The plugin's hook rewrite (v3.1.x) dropped it — the live hook writes
+ *  `status:'error'` + `errorType`/`lastError` and never a classified type — so the purple/red
+ *  badges were DEAD until the server started classifying on READ (sessions-service
+ *  `hookStateFromChatState`). The pattern is RED_STATE_PATTERN itself — ONE definition, so the
+ *  pane-scan classifier and this one cannot drift (the old test that guarded the hook-copy
+ *  against drift is retired with the copy). */
+export function classifyStopFailure(input: unknown): 'rate_limited' | 'api_error' {
+  const i = (input ?? {}) as Record<string, unknown>
+  const haystack = [i.error, i.message, i.error_type, i.stop_reason]
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .join(' ')
+    .toLowerCase()
+  return RED_STATE_PATTERN.test(haystack) ? 'rate_limited' : 'api_error'
+}
 
 export type BlockReason =
   | 'ask_user'        // a selection menu is open — the case that blocks forever

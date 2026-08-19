@@ -37,6 +37,7 @@ import { sessionActivity, injectedPrompts, broadcastStatusUpdate } from '@/servi
 import { getRuntime, prepareShellForLaunch, preflightPaneKeychain, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
 import { statePath } from '@/lib/ecosystem-constants'
 import { chatStateFileFor } from '@/lib/chat-state-path'
+import { classifyStopFailure } from '@/lib/agent-block-state'
 // TRDD-I75EMTK0: shared R17 presence-check + reinstall helper (see
 // agents-core-service.ts for the full rationale — one implementation used
 // by wakeAgent, this defense-in-depth path, and POST /api/agents/[id]/ensure-core).
@@ -166,6 +167,49 @@ async function httpPost(url: string, body: any, timeout = 10000): Promise<any> {
   }
 }
 
+/** PURE half of the hook-state read (exported for tests, the parsePendingPromptState
+ *  pattern): interpret one parsed chat-state object into the activity-ladder shape. */
+export function hookStateFromChatState(
+  state: { status?: unknown; notificationType?: unknown; subagentCount?: unknown; updatedAt?: unknown; message?: unknown; errorType?: unknown },
+  nowMs: number = Date.now(),
+): { status: string; notificationType?: string; subagentCount?: number } | null {
+  if (typeof state?.status !== 'string') return null
+  // Persistent states never age out: a waiting prompt stands until answered, and an
+  // 'error' stands until the next event — the hook keeps lastError DURABLY for exactly
+  // this (plugin #58: "survives every later event until a handler clears it"; SessionStart
+  // clears it). Aging 'error' out at 60 s (the pre-2026-08-20 behavior) is what killed the
+  // rate-limited badge: a throttled agent sits for minutes-to-hours, so the one state the
+  // badge exists for expired before anyone saw it.
+  const isPersistentState =
+    state.status === 'waiting_for_input' || state.status === 'permission_request' || state.status === 'error'
+  if (!isPersistentState) {
+    const stateAge = nowMs - new Date(String(state.updatedAt)).getTime()
+    if (!(stateAge <= 60000)) return null // NaN updatedAt fails closed to "stale"
+  }
+
+  // TRDD-O8NCNRWO: expose the hook's background-subagent counter so the UI
+  // can distinguish "waiting (safe)" from "waiting with live subagents"
+  // (CC ≥2.1.198 runs subagents in the background by default). Only a
+  // validated number ≥0 is forwarded — the counter can be absent/stale-low
+  // (ai-maestro-plugin#17), so consumers treat undefined as unknown.
+  const rawCount = state.subagentCount
+  const subagentCount =
+    typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : undefined
+
+  // The live hook (ai-maestro-plugin v3.1.x) writes status:'error' + errorType/message and
+  // NO classified type — classification moved SERVER-SIDE (lib/agent-block-state
+  // classifyStopFailure, one pattern with the pane scan). The fields fed here are exactly
+  // the two the hook's StopFailure branch distills from the raw event.
+  const notificationType =
+    state.status === 'error'
+      ? classifyStopFailure({ error: state.message, error_type: state.errorType })
+      : typeof state.notificationType === 'string'
+        ? state.notificationType
+        : undefined
+
+  return { status: state.status, notificationType, subagentCount }
+}
+
 /** Read hook state for a given working directory */
 function getHookState(workingDir: string): { status: string; notificationType?: string; subagentCount?: number } | null {
   if (!workingDir) return null
@@ -175,25 +219,7 @@ function getHookState(workingDir: string): { status: string; notificationType?: 
 
   try {
     if (fs.existsSync(stateFile)) {
-      const content = fs.readFileSync(stateFile, 'utf-8')
-      const state = JSON.parse(content)
-
-      const isWaitingState = state.status === 'waiting_for_input' || state.status === 'permission_request'
-      if (!isWaitingState) {
-        const stateAge = Date.now() - new Date(state.updatedAt).getTime()
-        if (stateAge > 60000) return null
-      }
-
-      // TRDD-O8NCNRWO: expose the hook's background-subagent counter so the UI
-      // can distinguish "waiting (safe)" from "waiting with live subagents"
-      // (CC ≥2.1.198 runs subagents in the background by default). Only a
-      // validated number ≥0 is forwarded — the counter can be absent/stale-low
-      // (ai-maestro-plugin#17), so consumers treat undefined as unknown.
-      const rawCount = state.subagentCount
-      const subagentCount =
-        typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : undefined
-
-      return { status: state.status, notificationType: state.notificationType, subagentCount }
+      return hookStateFromChatState(JSON.parse(fs.readFileSync(stateFile, 'utf-8')))
     }
   } catch {
     // Ignore errors reading state files

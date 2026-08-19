@@ -60,7 +60,7 @@ const DEFAULT_INTERVAL_MS = 60_000 // the janitor's cadence (daemon.py:174, 60 s
 
 /** Master opt-in. DEFAULT-OFF — typing into another session's pane is a powerful capability,
  *  so it ships inert. Same truthy set as the janitor's. */
-export function fleetStopEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function fleetStopEnabled(env: Record<string, string | undefined> = process.env): boolean {
   const raw = (env.AIM_FLEET_STOP ?? '0').trim().toLowerCase()
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
 }

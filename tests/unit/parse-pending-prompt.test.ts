@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { parsePendingPromptState } from '@/services/sessions-service'
 
-// A realistic permission_request chat-state object as the hook (ai-maestro-hook.cjs,
-// PermissionRequest branch) writes it.
+// A realistic permission_request chat-state object as the plugin's hook
+// (ai-maestro-plugin scripts/ai-maestro-hook.cjs, PermissionRequest branch) writes it.
 const permissionState = {
   status: 'permission_request',
   toolName: 'Bash',

@@ -65,7 +65,7 @@ const TEST_AGENT = {
   sessions: [{ status: 'online' as const }],
 }
 
-// The HOOK's derivation (ai-maestro-hook.cjs::hashCwd, sha256 since 2026-05-08) — the fixture
+// The HOOK's derivation (the plugin's ai-maestro-hook.cjs::hashCwd, sha256 since 2026-05-08) — the fixture
 // must sit where the hook writes, not where a server-side mirror used to look. This test was
 // green for three months with BOTH sides on md5 while production read a non-existent file
 // (fixture built from the same assumption as the code; see lib/chat-state-path.ts).

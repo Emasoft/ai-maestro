@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-19T20:51:54+0200
+updated: 2026-08-19T21:09:51+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1615,6 +1615,20 @@ CORE's disk evidence, refined to bare-name-INVOCATION-teaching (plugin skills re
 namespaced), re-broadcast before any bulk delete — AMPA's own first check would have
 repeated the phantom error and said so. Published 3.3.16 confirmed SAFE (git-URL serving,
 tag complete, 1656 files) — no emergency republish.
+
+## Ledger — window of 2026-08-19T21:09:51+0200
+
+- **TRDD-4QOWVSLU SHIPPED → human_review** (e30cf240 lane, 8b618713 card, fb9a2105 memory):
+  `lib/memory-guard.ts` is a line-faithful port of the janitor's Tier-1 OOM guard, every
+  USER-signed Decision 1 constraint cited at its line (D1-a…h). DESTRUCTIVE ⇒ default-OFF:
+  `AIM_MEMORY_GUARD=1` arms the kill; unarmed it runs detect-only (live since 21:06:55,
+  by-effect startup line; liveness sha == HEAD; `absorbed_chores` unchanged). NEW mechanism:
+  the claim is a RUNTIME function of arming — `janitor-chore-stamp.ts::CONDITIONAL_CHORES` +
+  `markChoreLive/activeAbsorbedChores()`, published by the liveness beat — so the janitor
+  yields `memory-guard` in the same instant this server performs it, never over a flag whose
+  lane failed to start. 20 tests + 1 liveness test; neuters N1–N8 each exactly attributed
+  (N6 polarity flip → 4, as expected). **USER-gated: arming** (set the env in
+  ecosystem.config.js + `pm2 restart ecosystem.config.js --update-env`).
 
 ## Ledger — window of 2026-08-19T20:51:54+0200
 

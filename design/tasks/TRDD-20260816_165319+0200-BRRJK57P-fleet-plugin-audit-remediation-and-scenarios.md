@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-19T19:18:24+0200
+updated: 2026-08-19T20:51:54+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1615,6 +1615,38 @@ CORE's disk evidence, refined to bare-name-INVOCATION-teaching (plugin skills re
 namespaced), re-broadcast before any bulk delete — AMPA's own first check would have
 repeated the phantom error and said so. Published 3.3.16 confirmed SAFE (git-URL serving,
 tag complete, 1656 files) — no emergency republish.
+
+## Ledger — window of 2026-08-19T20:51:54+0200
+
+- **TRDD-99LV0U4I SHIPPED → human_review** (f060e7cb + 133f3441, 9ae5e653): the second
+  liveness population — janitor-armed non-agent sessions, detect-only; live-measured 19/21
+  (every plugin-dev Claude present; testbot+frank filtered, positive control held); by-effect
+  log line on the first tick; 4 neuters each exactly attributed. Box 4 (session-liveness
+  claim) USER-gated on AIM_FLEET_RECOVERY_FIRE.
+- **Three LIVE defects fixed the same evening, each found by doing, not by reading:**
+  (a) every server-side inject 500'd for 13 days — `injectedPrompts` missing from the bridge
+  initializer + no TS back-fill (87063f36, production-order test); (b) the absorbed
+  marketplace-refresh was killed 3/3 at the 30-min cap and the trail mislabelled the kills
+  "Command failed" — label fixed 1ce63777, cap re-measured (1685 s warm) and raised to 60 min
+  f0d4d464; (c) the boot-time `git status` took .git/index.lock (two 0-byte orphans today) —
+  `--no-optional-locks` f0b7f1f2. Plus scripts/dev/neuter was BSD-mktemp-broken (133f3441).
+- **TRDD-17K0SHDQ W-D kanban probe STARTED** (with AMAA's ops + AMOA's plan, from TestBot's
+  server-spawned session under owner auth): P1 found that ALL SIX `amp-kanban-*.sh` — ours,
+  CORE confirmed — sent no Authorization header (every verb 401'd for every agent): fixed
+  6698455f + static guard, deployed; then a browse-only board reported as HTTP 500 → typed
+  409 (a9296f19). P2-P4 need a team linked to a REPO-scoped GitHub Project — none exists;
+  outward-facing fixture → USER-gated. W-C DROPPED with reason. CORE shipped v3.1.27 with the
+  two doc lines.
+- **TRDD-COOLOZ1N CLOSED** (completed+archived fb0b4276): amvcp confirmed UNBLOCKED on
+  ai-maestro#134 (issuecomment-5346594704, verified) four minutes after one direct message —
+  the 11-day silence was the counterparty's. **TRDD-PE54D95Q 7/7** (last box measured: 78 → 0
+  per-plugin updates per fire). **MN0Q1IA2 item 5** was SHIPPED DARK (8e03e32f) behind a
+  "NOT STARTED" box — ticked. **DPPYVLVH → human_review** (all USER acts). KCRMSNL7 blockers
+  pruned of the completed child.
+- **Spec**: preamble now warns plugin authors off the literal phrase "sudo token" (CPV
+  PRIVILEGE_ESC, webdesign measurement) and states one-shot-per-op USER tokens (93daa791).
+  Webdesign panel e2e S1-S9 PASS → their v0.1.17 released; janitor post-mortem cross-check
+  folded (our lane's exit-0 self-update overlapped the partial dir; initial truncator unknown).
 
 ## Ledger — window of 2026-08-19T19:18:24+0200
 

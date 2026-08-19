@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-20T01:43:18+0200
+updated: 2026-08-20T01:57:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1794,6 +1794,16 @@ tag complete, 1656 files) — no emergency republish.
   has its enforcement half.
 - **GLOBAL_CHORES 13 → 12** (janitor E39YT9G6 retired user-plugins-update end-to-end);
   KCRMSNL7 STATE corrected with the post-tonight scoreboard (7+3-conditional of 12).
+
+- **2026-08-13 baseline ruling APPLIED FLEET-WIDE (88LDC7E0 + EHT 9FBNRW29 closed):** the
+  ruling had reached ZERO repos (frozen by the janitor applier's names-only convergence gate —
+  filed janitor#282 with the payload-compare + content-stale-test asks). Applied directly from
+  the code SSOT: population re-derived live (86 repos → 24 baseline carriers), 38 objects
+  patched (17 + 21), 47 verified per-object against their own before-snapshots, tag-protect
+  untouched everywhere, non-admin still bound 24/24. FINAL: 0 stale on both ruled fields.
+  The stale machine-global IND rule (manager-approval-defaults.md) corrected — it would have
+  re-imposed the lock via a Tier-0 "restore as-is". Outward-facing apply performed under the
+  08-18 Phase-2 delegation; surfaced for USER override in the session summary.
 
 ## Approval log
 

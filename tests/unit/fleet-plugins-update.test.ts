@@ -214,7 +214,9 @@ describe('writePluginsUpdatedSignal — the janitor-named reload contract', () =
     const dest = path.join(dir, 'state', 'plugins-updated.json')
     writePluginsUpdatedSignal([], 1_787_179_701_000, dest)
     expect(fs.existsSync(dest)).toBe(false) // empty sweep = no write (consumer semantics)
-    writePluginsUpdatedSignal(['a@m', 'b@m'], 1_787_179_701_000, dest)
+    // the sweep's list is per-TARGET (duplicates when one plugin is installed in N projects);
+    // the published field means "which plugins changed" — deduped at this boundary
+    writePluginsUpdatedSignal(['a@m', 'a@m', 'b@m'], 1_787_179_701_000, dest)
     expect(JSON.parse(fs.readFileSync(dest, 'utf8'))).toEqual({
       updated_at_epoch: 1_787_179_701, // SECONDS, not ms — the consumer compares epochs
       updated: ['a@m', 'b@m'],

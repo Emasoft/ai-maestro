@@ -36,13 +36,17 @@ export function writePluginsUpdatedSignal(
   try {
     fs.mkdirSync(path.dirname(dest), { recursive: true })
     const tmp = `${dest}.tmp.${process.pid}`
+    // Dedupe HERE, not in the sweep: the sweep's result is per-TARGET (one row per project
+    // install, faithful to fleet_plugin_updates.py), while this file's `updated` field means
+    // "which plugins changed" — 7 project installs of one plugin are one changed plugin.
+    const distinct = [...new Set(updated)]
     fs.writeFileSync(
       tmp,
       JSON.stringify({
         updated_at_epoch: Math.floor(nowMs / 1000), // SECONDS — the consumer compares epochs
-        updated: [...updated],
+        updated: distinct,
         by: 'fleet-plugins-update',
-        count: updated.length,
+        count: distinct.length,
       }),
       'utf8',
     )

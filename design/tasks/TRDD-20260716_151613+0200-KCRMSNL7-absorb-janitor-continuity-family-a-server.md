@@ -3,7 +3,7 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: design
 created: 2026-07-16T15:16:13+0200
-updated: 2026-08-19T10:32:00+0200
+updated: 2026-08-19T15:02:35+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -16,7 +16,7 @@ approval-datetime: 2026-07-16T15:16:13+0200
 relevant-rules: [16, 23, 42]
 labels: [janitor-absorption, continuity, oauth, resurrection, family-a, server, guardian]
 external-refs: [Emasoft/ai-maestro-janitor#100, Emasoft/ai-maestro#68, Emasoft/ai-maestro#70, Emasoft/AgentlensPro#3]
-npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RPOR5O, 7DRSIKVZ, SX593MDG, YLCTM8EU, S5RUHJRP, A77JBHC9, CPETQBAW, 2X4AYX9T, NIU5RQ1S]
+npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RPOR5O, 7DRSIKVZ, SX593MDG, YLCTM8EU, S5RUHJRP, A77JBHC9, CPETQBAW, 2X4AYX9T, NIU5RQ1S, JBFM8XR0, B8B6D56P, 5II83KK4, 4QOWVSLU, 99LV0U4I, 9FW92242]
 release-via: none
 ---
 
@@ -287,18 +287,46 @@ Claim/heartbeat contract the janitor expects: per-chore-exact tokens in
 completion stamps at `~/.claude/janitor-control/<chore>.last-run.ts` · stale bound
 `max(3×cadence, cadence+600)` · `claim-bounds.json` widen-only, fail-open.
 
-**OPEN DESIGN DECISION (next on this card):** the USER's directive says the server
-"completely replaces" the janitor's global daemon while running; the janitor's roster marks
-memory-guard/cache-prune/rules-cleanup NEVER-YIELD and four chores population-split. Those
-are not contradictions to bulldoze — the never-yield trio touches janitor-private stores
-(memory corpus, plugin caches, rules dirs) with the janitor's own locks. Resolution path:
-janitor asked 2026-08-19 ~14:05 WHY each is never-yield and what contract would make
-server-hosted execution safe (or what re-scoping makes "complete" true — e.g. the daemon
-process EXITS while server-liveness is fresh, with the trio either absorbed behind the
-janitor's own transaction CLI or re-homed per-session). Population-split four need the
-explicit redesign the janitor named. Full-absorption end state to satisfy the directive:
-**server up ⇒ zero janitor daemon process; server down ⇒ janitor daemon resumes everything
-on stale-liveness** — continuity by claim-heartbeat, never by flag.
+**DESIGN RESOLVED 2026-08-19 15:00 (first-hand from the janitor's own 3.3.16 source —
+supersedes the "never-yield" framing above):** the roster message's NEVER-YIELD class does
+not exist in the code. `daemon.py::_task_yielded_to_server` yields ANY chore in
+`harness_backend.claimed_chores()`; the OWNER RULING recorded in that code (2026-08-05,
+janitor#134) says *"the target state is that ALL chores are passed to ai-maestro
+equivalents"*; and the full-exit ALREADY EXISTS janitor-side —
+`server_owns_every_chore` (harness_backend:214, `claimed ⊇ GLOBAL_CHORES`) fires the
+ONE-DAEMON-PER-HOST exit in main(). So the directive's end state needs ZERO janitor-side
+changes: **the server absorbing + claiming all 13 GLOBAL_CHORES ⇒ daemon exits; server
+down/stale ⇒ the sessions' `ensure_daemon_running` respawns it and it resumes everything.**
+Continuity by claim-heartbeat, never by flag — already the shipped mechanism.
+
+**Live measurement:** server claims 5/13 (`~/.aimaestro/server-liveness.json`:
+marketplace-refresh, version-update, oauth-rotator-supervisor, oauth-rotator-tick,
+github-config-audit). Remaining 8, characterized from each `task_*` docstring + body:
+
+| chore (cadence) | what it does | server disposition |
+|---|---|---|
+| user-plugins-update (3600) | legacy user-scope update loop | RETIRE janitor-side (their own roster calls it retire-candidate; our loop+claim already removed, PE54D95Q AC6). Cross-repo ask on the coordination issue — not an NPT here. |
+| fleet-plugins-update (21600) | per-agent local-scope plugin updates across the fleet | ABSORB — server owns the registry + workdirs; an absorbed lane like marketplace-refresh. All 3 measured requirements apply (atomic staging+rename, quarantine outside scanned trees, explicit cache-parent root). |
+| cache-prune (21600) | prune stale plugin-cache version dirs; cardinal safety = cutoff behind the OLDEST live claude session's start | ABSORB — pure reimplementation (process-table snapshot + cache walk); carries the same cardinal-safety cutoff verbatim. |
+| rules-cleanup (3600) | remove the janitor's own provenance-marked orphan rules ONLY after the janitor is CONFIRMED fully uninstalled | ABSORB — small marker-gated sweep, and the server STRICTLY improves it: the daemon survives uninstall ≤7 days (orphaned cache), the server indefinitely. |
+| memory-guard (120) | Tier-1 OOM guard: free-mem probe → kill the single largest janitor-owned RUNAWAY per the USER-signed truth table (TRDD-7100178d; Tier 2 deliberately unimplemented) | ABSORB with the truth table REIMPLEMENTED server-side (signature allowlist + protected pids + claude-session rejection + age gate + one-kill-per-beat). Destructive ⇒ default-OFF flag + the USER-signed constraints carried verbatim; NEVER shell out to the janitor's cache (versions roll — the 4OFMHOZ7 blackout is what a mid-roll cache dependency does). |
+| session-liveness (120) | recover frozen/dead janitor-armed sessions | CORE DONE ([[CHN16JXZ]] gentle+hard, dark). POPULATION GAP is the real remainder: the janitor scans EVERY claude session on the machine; the server scans the REGISTRY. Claiming it while dev-sessions exist un-covers them. NPT: extend the fleet scan to janitor-armed non-agent sessions (read the same janitor-control state + tmux), THEN claim — and claiming also requires arming AIM_FLEET_RECOVERY_FIRE (USER). |
+| fleet-stop (60) | on kill-switch/pause, type STOP into every janitor session (default-OFF, 3 gates, dedupe per (pid,flag)) | ABSORB with the same population extension as session-liveness: registered agents via the authenticated queue; non-agent janitor sessions via the tmux channel. Shares the scan NPT. |
+| cold-cache-clear (300) | shrink cold-prompt-cache sessions BEFORE their next fire pays; delegates to the janitor's external_handoff_clear.py, one candidate/beat | DEFER to LAST — double dependency (whole-machine population + delegation to janitor-owned scripts). Absorbing it means reimplementing the handoff composer or a versioned shell-out contract; park until the other 7 are claimed, daemon keeps running it (correctly — it is unclaimed). |
+
+**The three cross-cutting axes the NPTs must honor:** (1) each new claim ships WITH its
+completion stamp (`janitor-chore-stamp`) and a cadence that respects the janitor's stale
+bound `max(3×cadence, cadence+600)` — the github-config-audit 4h-vs-180m lesson: a
+faster-than-roster cadence is a declaration, a slower one is a default-change to ASK the
+janitor for; (2) per-chore claim tokens are ADDED one at a time to `ABSORBED_CHORES`
+(lib/janitor-chore-stamp.ts) only when the lane is live — claiming ahead of the lane is the
+#111 blackout shape; (3) destructive lanes (memory-guard kill, fleet-stop injection) ship
+default-OFF behind their own flags, mirroring the janitor's own posture.
+
+**Janitor's pending answers now needed only for:** the cold-cache-clear shell-out contract
+(question 2) and confirmation that user-plugins-update retires from GLOBAL_CHORES
+(shrinking the full-exit set to 12). Questions 1 and 3 are answered by their own code and
+recorded above.
 
 Named design requirements from measured incidents (must appear in the NPT decomposition):
 1. **Atomic cache population** — staging dir + rename. The 2026-08-19 morning incident

@@ -2076,6 +2076,22 @@ async function startServer(handleRequest) {
       console.warn('[Startup] GitHub-config audit init failed (non-fatal):', err?.message || err)
     }
 
+    // ── absorbed cache-prune lane (TRDD-B8B6D56P, parent KCRMSNL7) ────────────
+    // The janitor daemon's cache-prune chore, ported with its cardinal safety rule
+    // (never prune a version the oldest LIVE claude session may have loaded — the
+    // cutoff is pulled behind that session's start). Claimed in ABSORBED_CHORES in
+    // the same change, so the daemon yields it only now that the lane runs.
+    // 6 h cadence per the janitor roster; AIM_CACHE_PRUNE_INTERVAL_MS overrides,
+    // 0 disables. Deletes are regeneratable cache dirs only.
+    try {
+      const { startCachePruneScheduler } = await import('./lib/cache-prune.ts')
+      if (startCachePruneScheduler()) {
+        console.log('[Startup] cache-prune scheduler started (6h, oldest-live-session cutoff)')
+      }
+    } catch (err) {
+      console.warn('[Startup] cache-prune init failed (non-fatal):', err?.message || err)
+    }
+
     // ── §D4 approval-ladder watchdog (TRDD-AYBAMFN2 / TGNU1EP7, 3P-ZON-11) ────
     // The TRDD governance sweep's ONE scheduled host — the server owns the
     // authority-ladder model, so it owns the enforcement (the janitor would be

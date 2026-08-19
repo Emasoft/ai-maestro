@@ -93,6 +93,9 @@ describe('writeServerLiveness — atomic write of the 3-field shape', () => {
       'oauth-rotator-supervisor',
       'oauth-rotator-tick',
       'github-config-audit',
+      // joined 2026-08-19 (TRDD-B8B6D56P): the lane (lib/cache-prune.ts scheduler in
+      // server.mjs) landed in the SAME change as this claim — the claim-when-live rule.
+      'cache-prune',
     ])
     expect(readLiveness().absorbed_chores).not.toContain('user-plugins-update')
   })

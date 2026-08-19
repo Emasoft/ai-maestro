@@ -49,11 +49,21 @@ import { janitorControlDir } from './janitor-control'
  * nobody runs is worse than no stamp: it reports healthy while nothing happens.
  *
  * `github-config-audit` joined on 2026-08-05 (USER go-ahead, 4 h cadence) because its
- * population is DATA the server can hold rather than PROCESSES or SESSIONS on the host. The
- * rest stay with the janitor — `fleet-stop`, `memory-guard`, `cache-prune`, `rules-cleanup`
- * enumerate live host processes we cannot see; `session-liveness` is two populations under
- * one name (our half already runs); `fleet-plugins-update` and `cold-cache-clear` have not
- * been through an absorbability review at all. Do not add any of those here without one —
+ * population is DATA the server can hold rather than PROCESSES or SESSIONS on the host.
+ *
+ * `cache-prune` joined on 2026-08-19 (TRDD-B8B6D56P, parent KCRMSNL7's full-absorption
+ * design). The 2026-08-05 review's "no" was an objection to absorbing it WITHOUT its
+ * cardinal-safety cutoff (the oldest-live-session guard); `lib/cache-prune.ts` ports that
+ * cutoff verbatim — the server snapshots ps exactly as the daemon does (userland), so
+ * "processes we cannot see" never applied to this chore.
+ *
+ * The rest stay with the janitor FOR NOW, each with an authored absorption NPT under
+ * KCRMSNL7 (2026-08-19): `memory-guard` (4QOWVSLU), `rules-cleanup` (5II83KK4),
+ * `fleet-plugins-update` (JBFM8XR0), `fleet-stop` (9FW92242, blocked on the 99LV0U4I
+ * population extension); `session-liveness` is two populations under one name (our half
+ * already runs; 99LV0U4I closes the gap); `cold-cache-clear` is deferred LAST (rides the
+ * janitor's auto-rolling shell-out launcher, their commitment 2026-08-19). Add a name here
+ * ONLY in the commit that makes its lane live —
  * see `.claude/project/memory/janitor-chore-absorbability.md`.
  *
  * `user-plugins-update` LEFT this set on 2026-08-19 (TRDD-PE54D95Q AC6), together with the
@@ -69,6 +79,7 @@ export const ABSORBED_CHORES = [
   'oauth-rotator-supervisor',
   'oauth-rotator-tick',
   'github-config-audit',
+  'cache-prune',
 ] as const
 
 export type AbsorbedChore = (typeof ABSORBED_CHORES)[number]

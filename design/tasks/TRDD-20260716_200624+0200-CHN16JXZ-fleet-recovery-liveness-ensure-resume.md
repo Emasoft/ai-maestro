@@ -1,10 +1,10 @@
 ---
 trdd-id: CHN16JXZ
 title: Fleet recovery — server-internal liveness detection + ensure-resume actuation across the fleet
-column: todo
+column: dev
 pre-block-column: null
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-16T16:43:00+0200
+updated: 2026-08-19T14:35:36+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -23,7 +23,7 @@ derived-kind: npt
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049, 0a90648b, a717fc3b, 813e0347]
+implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049, 0a90648b, a717fc3b, 813e0347, 33ea9743]
 release-via: none
 ---
 
@@ -129,17 +129,31 @@ work** — strictly worse than leaving it frozen. So:
 boot-overcomplete DEBOUNCE belongs to step (c)'s ACTUATION, not detection (a report is harmless; a
 resurrection at boot is not).
 
-**NEXT ACTION:** Phase C step (b) — a SEPARATE hard-actuator (`lib/fleet-hard-recovery.ts`) behind its OWN
-default-off flag `AIM_FLEET_HARD_RECOVERY` (mirror janitor `FLEET_HARD_RESTART_ENABLED`), reusing the
-stop/restart substrate (`app/api/sessions/[id]/restart`, `kill`) — relaunch first (`claude --continue`,
-transcript-preserving), escalate to external kill only if it fails; per-instance cooldown +
-crash-loop-page-once + HID + `fleetActuationBlocked()`. THEN step (c): flip `dead` to
-`recoveryRecommended:true`, map `diagnosisForClass('dead')→'dead'`, have the runner call the hard-actuator
-for `dead` targets when the hard flag is on — **WITH the boot-overcomplete DEBOUNCE** (fire only after N
-consecutive dead scans / a grace past boot, else a restart mass-resurrects every persisted agent).
-`actuateRecovery` already REFUSES hard rungs, so the gentle path stays untouched. Read
-`lib/fleet-recovery.ts` (`HARD_RUNGS`) + `lib/fleet-recovery-runner.ts` first. **Phase C stays OPTIONAL** —
-gentle recovery (A/B/D) already closes the core gap; steps (b)/(c) add crashed-process recovery on top.
+**PHASE C STEP (b) ✅ DECISION LAYER DONE (`33ea9743`, 2026-08-19)** — `lib/fleet-hard-recovery.ts`:
+stateless gated actuator mirroring the gentle one; effects INJECTED (`relaunch`, best-effort
+`killRemnant`); the SHARED `checkEntryGates`/`checkInjectionGates` reused (never copied,
+X8801GT4); `fireEnabled` = the HARD flag (constant `HARD_RECOVERY_FLAG='AIM_FLEET_HARD_RECOVERY'`
+exported for step (c)'s wiring). Gate order: dead-only → flag/STOP → boot_grace (10 min default)
+→ debounce (`consecutiveDeadScans >= 3`, runner-counted) → crash_loop (attempt ≥ 3, DOMINATES
+hid/cooldown so the terminal is never masked) → HID/cooldown (30 min hard default) → FIRE.
+Ladder via `recoveryRungFor('dead',…)`: relaunch = wake only; force_restart/resurrect = teardown
+then wake (in the server's context resurrect IS force_restart — the server already is the
+external supervisor the janitor's resurrect spawns). 15 tests, tsc clean. THREE NEUTERS, each
+exactly 1 red, cleanly attributed: n1 delete the dead-only guard → the safety-invariant sweep;
+n2 swap teardown/wake order → the ordering test (order-claim neuter — end state identical);
+n3 demote crash_loop below the injection gates → the dominance test.
+
+**NEXT ACTION:** Phase C step (c) — the REAL wiring: (1) `defaultHardDeps()` — `relaunch` =
+`wakeAgent(agentId, {sessionIndex, startProgram:true, authContext:{isSystemOwner:true},
+continueConversation:true})` (the exact boot-restore relaunch shape, services/boot-restore-service.ts:181);
+`killRemnant` = best-effort tmux-session teardown; flag read from `process.env[HARD_RECOVERY_FLAG]`;
+`msSinceBoot` from a module-load stamp in the WIRING (not the pure module). (2) Runner: count
+consecutive dead scans per agent (reset on any non-dead scan), flip `dead` into the hard path
+when the flag is on, page-ONCE on `crash_loop` (dedupe like escalationNeeded). (3) Keep
+`recoveryRecommended:false` semantics for the GENTLE path untouched — `actuateRecovery` still
+refuses hard rungs (regression box). The two Phase-C acceptance boxes stay OPEN until this
+wiring lands (each fuses the actuator half, now done, with the wiring half). **Phase C stays
+OPTIONAL** — gentle recovery (A/B/D) already closes the core gap.
 
 ## Problem / Goal
 

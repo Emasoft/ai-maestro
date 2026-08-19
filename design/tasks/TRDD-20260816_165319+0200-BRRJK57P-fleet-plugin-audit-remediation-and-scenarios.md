@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-19T04:30:33+0200
+updated: 2026-08-19T04:43:06+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -50,7 +50,13 @@ external-refs: []
   (three-valued remote-tag state). Cold strict self-validate 0/0/0/0, ~800 regressions green.
   **v5.6.0 publish DEFERRED (their session near usage limit)** — janitor DD0M4QL7 unblocks on it.
 - **AMAMA**: audit pass 1 done (decoupling CLEAN); D1/D2/D3+Q1/Q2 fixes committed, 158/158;
-  validate 25→16. Hub rulings issued: Q1 review-columns = CONTEXT-SPLIT (team → INTEGRATOR/
+  validate 25→16. **v2.18.0 RELEASED 2026-08-19 ~04:41** (their report): Q2 approval
+  rerouting (`trdd.sh approve|refuse`; governance approve/reject = MAESTRO-only), D1
+  transfer verbs, D2 pillar-tool adoption, D3 dep ^3.1.0, Q1 context-dependent review
+  routing, D7 Part B2 transition ownership in FULL_PROJECT_WORKFLOW, corpus hygiene per Q3;
+  card QX6VFAXS closed + archived. Their `trddgrep validate` holds 11 sanctioned residuals
+  that clear to 0 when TRDD-PTFPGSLV ships — ping them for the acceptance-box re-run then.
+  Hub rulings issued: Q1 review-columns = CONTEXT-SPLIT (team → INTEGRATOR/
   reviewer per Part B2; no-team repo → MAINTAINER per kanban-multiagent editor authority; a
   team-wide maintainer ownership claim needs explicit USER confirmation); Q2 = reroute MANAGER
   approvals from password-gated `aimaestro-governance.sh` to AID-authorized `aimaestro-trdd.sh
@@ -58,10 +64,17 @@ external-refs: []
   `<project-id>:TRDD-<id8>`), non-TRDD blockers → external-refs + review-after/human_review;
   legacy archived checklist gaps = FROZEN, grandfathered, linter-side boundary.
 - **Orchestrator (AMOA)**: sweeps ledgered on their 8DH44UXH — worst: their
-  `transition_authority()` oracle contradicts Part B2 on SIX transitions + release lane; fix batch
-  planned from B2 (correct direction, endorsed). OPEN question to hub: normative spec clause for
-  trddgrep/prrdgrep/specgrep adoption by role plugins — intended ruling: voluntary adoption now,
-  normative clause via a proposal card (spec bump not to be minted mid-flight). NOT yet answered.
+  `transition_authority()` oracle contradicted Part B2 on SIX transitions + release lane.
+  **Fix batch LANDED on their main 2026-08-19 ~04:42** (their report, attributed): `2711d6d`
+  oracle rewritten FROM B2 + archival AC1-AC5, `bd1ed0b` doc batch + 17-column table + F7
+  trichotomy, `eb64ccc` 3-tools adoption (F2 trddgrep-validate write gate honouring 0/1/2;
+  F4/F5/F6; 204 tests), `f122403` board hygiene. Their F2 gate surfaced 5 real board defects
+  on first run — 4 repaired, 1 deferred per-card (66EA1BB1). **The OPEN question is ANSWERED
+  2026-08-19 04:42**: hub authored proposal **TRDD-Z70X3LEW** (3P-TOOL-01..04 clause text —
+  bind-to-CLIs, 0/1/2 trichotomy, specs-live-with-owner, porcelain-mode; floor `manager`,
+  awaiting the queue) + Tier-0 task **TRDD-IPSNDKGM** (porcelain `--porcelain` mode on
+  trddgrep/specgrep — the blocker behind AMOA's declined F1/F3 sites; adoption stands at
+  5 of 7 until it ships).
 - Heartbeat marker `[janitor-memory-conflict]` deferred un-claimed (usage-limit checkpoint forbade
   spawning); it re-fires on a later heartbeat.
 

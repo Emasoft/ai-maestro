@@ -49,8 +49,12 @@ two expressiveness gaps that force correct corpora to carry sanctioned false pos
    - `gh:<owner>/<repo>#<n>` (external issue) → WARN, graph edge skipped;
    - a bare local id → resolved exactly as today (ERROR when it does not exist stays correct).
    The interim fleet ruling (issued to AMAMA + COS, 2026-08-19) stays valid until this lands:
-   ids-only in blocked-by, external refs in `external-refs:` + STATE, park via review-after or
-   human_review. This card upgrades that workaround into syntax.
+   blocked-by holds LOCAL-corpus ids ONLY — the graph resolves against the local corpus, so a
+   REMOTE TRDD id (e.g. a hub id cited from a plugin repo) ERRORs exactly like an issue ref and
+   belongs in `external-refs:` + STATE too, with the card parked via review-after or
+   human_review. (First issued as "ids-only", which COS correctly refuted by measurement the
+   same night — a hub id in their corpus reproduced GRAPH-UNKNOWN-BLOCKER.) This card upgrades
+   that workaround into syntax.
 2. TERMINAL-WITHOUT-CHECKLIST: suppress for cards whose terminal transition predates 2026-07-31.
    The transition date is not a frontmatter field — derive it honestly: use `updated:` for
    archived/terminal cards (the closing edit bumps it) and state that approximation in the rule's

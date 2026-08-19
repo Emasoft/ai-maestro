@@ -3,7 +3,7 @@ trdd-id: 17K0SHDQ
 title: Close ai-maestro#46 — the four remaining work items after the 2026-08-08 defect map
 column: dev
 created: 2026-08-08T15:19:13+0200
-updated: 2026-08-19T20:42:00+0200
+updated: 2026-08-19T20:48:16+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: bugfix
@@ -110,8 +110,21 @@ can never pass at all). One card, one gate: `## Acceptance` owns it.
       L2029/2082/2117/2279; the kanban scripts never call them) — and the middleware's
       `hasCredential` has no localhost exemption, so the whole kanban CLI family 401s for every
       agent today. Reported to CORE (ai-maestro-plugin-a3) with the fix shape; AMAA + AMOA told.
-      P2 (discriminating walk, ASSERT-DISTINCT/REJECT), P3 (write-through + `transition_authority`
-      per AMOA's precision), P4 teardown are staged and resume on the fixed CLI version.
+      **FIXED SAME HOUR — the CLIs are ours** (CORE confirmed the source is `scripts/amp-kanban-*.sh`
+      in THIS repo): 6698455f wires `get_auth_args` into all six + a static guard test; deployed to
+      `~/.local/bin`. **P1 re-run (2026-08-19T20:48:16+0200) — auth now passes; two more findings, one fixed:**
+      - on "Test Kanban Team" (links `IpaziaSoftware/projects/1`, an ORG-level project, no repo):
+        `❌ Failed to create task (HTTP 500)` + the requireRepo browse-only text → a team STATE
+        reported as an outage. Fixed a9296f19: typed `BrowseOnlyBoardError` → **409** at the three
+        mutating catch sites (create 500 / update+delete 502 before), test pins 409-vs-500.
+      - on `scen003-test-wizard-team` (no GitHub link): `❌ Failed to create task (HTTP 400)
+        Error: Cannot create task: team has no GitHub Project linked` — correct refusal, and it
+        states the probe's real precondition: **the kanban is GitHub-backed; P2-P4 need a team
+        linked to a REPO-scoped GitHub Project** (`github.com/<owner>/<repo>/projects/<n>`). No
+        such team exists on this host. Creating one is OUTWARD-FACING (a GitHub project on a
+        repo) — **USER-gated fixture; surfaced in the session summary.** P2 (walk +
+        ASSERT-DISTINCT/REJECT), P3 (write-through + `transition_authority`), P4 teardown are
+        staged and resume the moment a repo-scoped test board exists.
       SIDE FINDING on the way: the hub's first inject 500'd — a 13-day-old `injectedPrompts`
       back-fill gap in shared-state (fixed 87063f36). Carry-forward hazard (AMAA): the registry
       does not flag fixture vs live agents.

@@ -1,9 +1,9 @@
 ---
 trdd-id: B8B6D56P
 title: Absorb the cache-prune chore into the server
-column: planned
+column: dev
 created: 2026-08-19T15:01:29+0200
-updated: 2026-08-19T15:01:29+0200
+updated: 2026-08-19T15:07:46+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2

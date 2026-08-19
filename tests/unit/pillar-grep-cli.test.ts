@@ -338,3 +338,68 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     expect(r.stderr).toMatch(/--min-severity takes warn\|error/)
   })
 })
+
+/**
+ * TRDD-IPSNDKGM — `--porcelain`: the machine-readable mode library consumers parse instead
+ * of ranked human output (AMOA's F1/F3 declined migrating to the CLIs until it existed).
+ * The field ORDER is the contract and is additive-only; these tests pin it.
+ */
+describe('--porcelain — one TAB-separated record per line, path first', () => {
+  it('specgrep show --porcelain: path (absolute) · id · line · zone, nothing else', () => {
+    const r = runCli('specgrep.mjs', ['show', '3P-AAA-02', '--porcelain', '--design-dir', designDir()])
+    expect(r.status).toBe(0)
+    const lines = r.stdout.trim().split('\n')
+    expect(lines).toHaveLength(1)
+    const f = lines[0].split('\t')
+    expect(f[0]).toBe(specFile())
+    expect(f[1]).toBe('3P-AAA-02')
+    expect(f[2]).toBe('6')
+  })
+
+  it('prrdgrep search --porcelain: one record per hit, same field order', () => {
+    const r = runCli('prrdgrep.mjs', ['silver', '--porcelain', '--design-dir', designDir()])
+    expect(r.status).toBe(0)
+    for (const line of r.stdout.trim().split('\n')) {
+      const f = line.split('\t')
+      expect(f[0]).toBe(prrdFile())
+      expect(f[1]).toMatch(/^[GS]\d+/)
+    }
+  })
+
+  it('porcelain keeps the exit trichotomy: 1 on no match, 2 on a missing corpus', () => {
+    expect(runCli('specgrep.mjs', ['zzz-no-such-thing', '--porcelain', '--design-dir', designDir()]).status).toBe(1)
+    expect(runCli('specgrep.mjs', ['list', '--porcelain', '--design-dir', path.join(fix, 'nowhere')]).status).toBe(2)
+  })
+
+  // POSITIVE CONTROL against the unknown-option refusal two describes up: the flag must be
+  // STRIPPED before that check, or every porcelain call would exit 2.
+  it('--porcelain is a real flag, not an unknown option', () => {
+    const r = runCli('specgrep.mjs', ['list', '--porcelain', '--design-dir', designDir()])
+    expect(r.status).toBe(0)
+    expect(r.stderr).not.toMatch(/unknown option/)
+  })
+
+  it('trddgrep show --porcelain: path (absolute) · id · column · zone · title', () => {
+    fs.mkdirSync(path.join(fix, 'design', 'tasks'), { recursive: true })
+    const card = path.join(fix, 'design', 'tasks', 'TRDD-20260101_000000+0100-PORCCARD-x.md')
+    fs.writeFileSync(card, [
+      '---', 'trdd-id: PORCCARD', 'title: a porcelain fixture card', 'column: dev',
+      'created: 2026-01-01T00:00:00+0100', 'updated: 2026-01-01T00:00:00+0100',
+      'current-owner: t', 'task-type: bugfix', '---', '', '# a porcelain fixture card', 'body', '',
+    ].join('\n'), 'utf-8')
+    const r = runCli('trddgrep.mjs', ['show', 'PORCCARD', '--porcelain', '--design-dir', designDir()])
+    expect(r.status).toBe(0)
+    const f = r.stdout.trim().split('\t')
+    expect(f[0]).toBe(card)
+    expect(f[1]).toBe('PORCCARD')
+    expect(f[2]).toBe('dev')
+    expect(f[3]).toBe('tasks')
+    expect(f[4]).toBe('a porcelain fixture card')
+    // The search path shares the contract, and the trichotomy holds under the flag.
+    const s = runCli('trddgrep.mjs', ['porcelain fixture', '--porcelain', '--design-dir', designDir()])
+    expect(s.status).toBe(0)
+    expect(s.stdout.trim().split('\n')[0].split('\t')[1]).toBe('PORCCARD')
+    expect(runCli('trddgrep.mjs', ['show', 'ZZZZZZZ9', '--porcelain', '--design-dir', designDir()]).status).toBe(1)
+    expect(runCli('trddgrep.mjs', ['show', 'PORCCARD', '--porcelain', '--design-dir', path.join(fix, 'nowhere')]).status).toBe(2)
+  })
+})

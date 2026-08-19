@@ -112,6 +112,14 @@ let designDirVal, limitVal, columnVal, minSeverityVal, ruleVal
 ;[minSeverityVal, rest] = takeFlag(rest, '--min-severity')
 ;[ruleVal, rest] = takeFlag(rest, '--rule')
 
+// `--porcelain` is VALUELESS, so it must not go through `takeFlag` (which would eat the
+// next token as its value). Machine-readable mode for `show` and the default search:
+// one record per line, TAB-separated, path FIRST (TRDD-IPSNDKGM — the mode library
+// consumers parse instead of the ranked human output).
+const porcelainIdx = rest.indexOf('--porcelain')
+const porcelain = porcelainIdx !== -1
+if (porcelain) rest = [...rest.slice(0, porcelainIdx), ...rest.slice(porcelainIdx + 1)]
+
 const designDir = path.resolve(designDirVal ?? path.join(process.cwd(), 'design'))
 const argv = rest
 const cmd = argv[0] ?? 'board'
@@ -541,6 +549,13 @@ switch (cmd) {
 
   case 'show': {
     const c = need(arg)
+    if (porcelain) {
+      // `path<TAB>id<TAB>column<TAB>zone<TAB>title` — path ABSOLUTE (a consumer's cwd is
+      // anywhere), title LAST so a rogue tab in it cannot shift the machine fields. The
+      // field order is the contract (additive-only) — documented in help.
+      console.log([path.resolve(c.filePath), c.id, c.column, c.zone, c.title].join('\t'))
+      break
+    }
     console.log(`\n${fmt(c)}`)
     console.log(C.d(`  ${path.relative(process.cwd(), c.filePath)}`))
     const ob = openBlockers(c)
@@ -891,6 +906,12 @@ ${C.b('trddgrep')} — query AND validate the TRDD corpus (offline; no server)
   ${C.d('  … add --strict to either to fail on warnings too (exit 1)')}
   ${C.d('  … --min-severity warn|error and --rule CODE[,CODE…] narrow what is SHOWN; exit')}
   ${C.d('    reflects the shown set, so a filter matching nothing exits 0')}
+
+  ${C.c('--porcelain')}               machine-readable show and search: one record per
+  ${C.d('    line, TAB-separated, in this order (additive-only contract): path (absolute)')}
+  ${C.d('    · id · column · zone · title (last — a rogue tab in it cannot shift fields).')}
+  ${C.d('    No prose on stdout; a capped search says so on stderr. Exit codes unchanged:')}
+  ${C.d('    0 match · 1 none · 2 could-not-run.')}
   ${C.c('trddgrep fix')}              write the mechanically-derivable repairs (--dry-run first)
 
   ${C.c('trddgrep edit <id> --at-line N --expect X --replace Y')}
@@ -951,6 +972,15 @@ Repair of the mechanically-derivable findings: ${C.c('yarn trdd:fix')}
       // search had MATCHED, which is the collapse in the direction that lies to a caller.
       console.log(C.d(`\nno TRDD matches /${cmd}/i\n`))
       process.exit(1)
+    }
+    if (porcelain) {
+      // Same TAB contract as `show`; the cap note goes to STDERR — stdout is the machine
+      // surface, and a consumer must still learn the listing was capped.
+      for (const h of hits.slice(0, 25)) {
+        console.log([path.resolve(h.c.filePath), h.c.id, h.c.column, h.c.zone, h.c.title].join('\t'))
+      }
+      if (hits.length > 25) console.error(`… and ${hits.length - 25} more (narrow the pattern)`)
+      break
     }
     console.log(C.b(`\n${hits.length} match(es) for /${cmd}/i\n`))
     for (const h of hits.slice(0, 25)) {

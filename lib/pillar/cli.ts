@@ -147,6 +147,15 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
     ;[designDirVal, rest] = takeFlag(rest, '--design-dir')
     ;[limitVal, rest] = takeFlag(rest, '--limit')
 
+    // `--porcelain` is a VALUELESS flag, so it cannot go through `takeFlag` (which would
+    // eat the next token as its value — the exact truncated-flag bug takeFlag's own
+    // comment records). One record per line, TAB-separated, path FIRST, no prose — the
+    // machine-readable mode library consumers parse instead of the ranked human output
+    // (TRDD-IPSNDKGM; AMOA's F1/F3 declined migrating until this existed).
+    const porcelainIdx = rest.indexOf('--porcelain')
+    const porcelain = porcelainIdx !== -1
+    if (porcelain) rest = [...rest.slice(0, porcelainIdx), ...rest.slice(porcelainIdx + 1)]
+
     const designDir = path.resolve(designDirVal ?? path.join(process.cwd(), 'design'))
     const root = corpusRootFor(designDir, kind)
 
@@ -228,7 +237,11 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
         if (!arg) throw new UsageError(`show needs an id — try \`${tool} list\``)
         const rec = findRecord(root, kind, arg)
         if (!rec) return die(`no ${kind.label} record ${JSON.stringify(arg)} under ${root}`, 1)
-        printRecord(rec, root, C)
+        if (porcelain) {
+          console.log(porcelainLine(rec))
+        } else {
+          printRecord(rec, root, C)
+        }
         return process.exit(0)
       }
 
@@ -238,7 +251,7 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
         // real answer, not a fault — but it is `1`, because a caller scripting on
         // this must not read "nothing here" as "here is everything".
         if (all.length === 0) return die(`no ${kind.label} records under ${root}`, 1)
-        printRecords(all, limit, root, C, tool)
+        printRecords(all, limit, root, C, tool, porcelain)
         return process.exit(0)
       }
 
@@ -250,7 +263,7 @@ export async function runPillarCli(kind: PillarKind, argv: string[]): Promise<ne
         if (hits.length === 0) {
           return die(`no ${kind.label} record matches ${JSON.stringify(pattern)}`, 1)
         }
-        printRecords(hits, limit, root, C, tool)
+        printRecords(hits, limit, root, C, tool, porcelain)
         return process.exit(0)
       }
     }
@@ -350,21 +363,39 @@ function search(all: PillarRecord[], pattern: string, kind: PillarKind): PillarR
   return scored.sort((a, b) => b.score - a.score).map((s) => s.rec)
 }
 
+/**
+ * The `--porcelain` record line: `path<TAB>id<TAB>line<TAB>zone`. The field ORDER is the
+ * contract (path FIRST, per TRDD-IPSNDKGM) — documented in help, changed only additively.
+ * The path is ABSOLUTE, because a library consumer's cwd is anywhere.
+ */
+function porcelainLine(rec: PillarRecord): string {
+  return [rec.filePath, rec.id, rec.line ?? '', rec.zone].join('\t')
+}
+
 function printRecords(
   recs: PillarRecord[],
   limit: number,
   root: string,
   C: ReturnType<typeof palette>,
   tool: string,
+  porcelain = false,
 ): void {
   const shown = limit === 0 ? recs : recs.slice(0, limit)
   for (const rec of shown) {
+    if (porcelain) {
+      console.log(porcelainLine(rec))
+      continue
+    }
     const where = `${path.relative(root, rec.filePath) || path.basename(rec.filePath)}:${rec.line ?? '-'}`
     console.log(`${C.c(rec.id.padEnd(10))} ${C.d(where.padEnd(28))} ${rec.text.trim()}`)
   }
   // A silent cap reads as "that was everything". What was dropped, and how to see it.
+  // In porcelain mode the note goes to STDERR: stdout is the machine contract, and a
+  // consumer must still learn the listing was capped.
   if (limit > 0 && recs.length > limit) {
-    console.log(C.y(`  … +${recs.length - limit} more not shown`) + C.d(` (${tool} --limit 0)`))
+    const note = `  … +${recs.length - limit} more not shown (${tool} --limit 0)`
+    if (porcelain) console.error(note)
+    else console.log(C.y(`  … +${recs.length - limit} more not shown`) + C.d(` (${tool} --limit 0)`))
   }
 }
 
@@ -383,6 +414,12 @@ ${C.b(t)} — query and EDIT the ${kind.label} corpus (offline; no server)
   ${C.c(`${t}`)}                      every ${kind.label} record
   ${C.c(`${t} show <id>`)}            one record, with where it lives
   ${C.c(`${t} <pattern>`)}            ranked search over id and text
+
+  ${C.c('--porcelain')}           machine-readable: one record per line, TAB-separated
+      fields, in this order (additive-only contract): path (absolute) · id ·
+      line (empty when per-document) · zone. No prose on stdout; a capped
+      listing says so on stderr. Exit codes unchanged: 0 match · 1 none · 2
+      could-not-run.
 
   ${C.c(`${t} edit <id> --expect X --replace Y`)}
   ${C.c(`${t} edit <id> --at-line N --expect X --replace Y`)}

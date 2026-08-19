@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-16T10:27:00+0200
+updated: 2026-08-19T20:51:18+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -584,9 +584,15 @@ code shape** (see Verification below).
       function" framing was refuted in place at §"…AND THEN THE WIRING PLAN ITSELF WAS REFUTED").
       What is open is the ESC/resume half — and note the model half's own first live switch is
       tracked separately on `TRDD-DPPYVLVH`, not here.
-- [ ] **5.** Auto-answer the AskUser menu with the default/first option — NOT STARTED, and gated
-      by the security finding recorded above: `ask_user` and `permission` MUST NOT be conflated
-      for auto-answer.
+- [x] **5.** Auto-answer the AskUser menu with the default/first option — **SHIPPED DARK** (this
+      box said "NOT STARTED" while `8e03e32f feat(fleet): AskUser auto-answer leg — accept a
+      dwelled menu's default, ships dark` had landed: `lib/fleet-askuser-autoanswer.ts`, wired as
+      the watchdog's `runAskUserAutoAnswerTick` leg behind default-OFF `AIM_FLEET_ASKUSER_AUTOANSWER=1`).
+      The security gate this box named is the module's stated non-tunable invariant — "answers
+      `ask_user` menus ONLY — NEVER a `permission` prompt … hard-refuses the `permission` reason at
+      every layer" — and it accepts the menu's DEFAULT (ENTER), never a digit of our choosing.
+      Seventh parked/stale premise this month. What remains is USER-gated: arm the flag and watch
+      one live answer (recorded 2026-08-19T20:51:18+0200).
 - [x] **7.** No more headed chrome-for-testing windows — DONE, verified live
 - [x] **8.** Ledger records EVERY change to `~/.claude/settings.json` —
       **DONE. The box said "NOT STARTED" and it had THREE commits behind it**

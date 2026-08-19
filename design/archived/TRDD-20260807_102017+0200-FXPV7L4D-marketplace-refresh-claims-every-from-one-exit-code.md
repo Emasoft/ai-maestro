@@ -1,12 +1,12 @@
 ---
 trdd-id: FXPV7L4D
 title: The absorbed refresh claims every registered marketplace from one exit code while ten are months stale
-column: testing
+column: completed
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T10:20:17+0200
-updated: 2026-08-16T16:12:50+0200
+updated: 2026-08-19T21:11:33+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -125,10 +125,18 @@ nowhere else.)*
   correctly stayed green, which is what makes them the complement rather than duplicates.
 - [x] Deployed: `yarn build` + `pm2 restart` at 16:12 on 2026-08-16, proven from the ARTIFACT
   (`grep -rl "registered marketplaces (one invocation)" .next/server` → 1), not from `git log`.
-- [ ] **Live, and it is a PREDICTION this card can be failed by:** the next absorbed fire on this
+- [x] **Live, and it is a PREDICTION this card can be failed by:** the next absorbed fire on this
   host reports roughly `260 of 270` and names the ten laggards from the table above. Due ~4 h
   after the last stamp; read it with the PE54D95Q command. If it instead reports *all* refreshed,
   either the ten started moving (check their stamps before celebrating) or the diff is broken.
+  **MEASURED 2026-08-19T21:11:33+0200 — the third outcome the box did not list: the ten LEFT THE REGISTRY.**
+  `~/.claude/plugins/known_marketplaces.json` holds **261** entries (was 270) and ALL TEN named
+  laggards are ABSENT (`cattoolkit` … `pnl-dev-marketplace`: not a key); staleness census **0 of
+  261 ≥ 2 days**. The fires of 2026-08-18 09:46 and 14:16 reported `Refreshed all 261 registered
+  marketplaces (one invocation)`, which per `describeRefreshCoverage` means every remaining stamp
+  ADVANCED — consistent with the census, so the diff is NOT broken (its complement was proven by
+  the neuter in the box above). The prediction's population was deregistered rather than refreshed;
+  the detector stays live and will name the next laggard by stamp, never by exit code.
 
 ## Approval log
 
@@ -136,3 +144,4 @@ nowhere else.)*
   code, reporting-only, reversible, no baseline/governance/release surface. Filed rather than left
   in a commit message because the defect was found by accident while measuring something else, and
   a defect that only exists in prose is one nobody will act on.
+- 2026-08-19T21:11:33+0200 — COMPLETED by the hub under the USER's Phase-2 delegation (BRRJK57P approval log): every box ticked; the last (the live prediction) resolved by measurement — the ten laggards were deregistered (270 → 261, all ten absent, 0/261 ≥ 2 d stale) and the two subsequent fires' `Refreshed all 261` agree with the stamp census. Archived as completed.

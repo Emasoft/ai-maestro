@@ -1,11 +1,11 @@
 ---
 trdd-id: PTFPGSLV
 title: trddgrep cannot express an external blocker and its checklist lint ignores the grandfather boundary
-column: ai_review
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-19T04:32:22+0200
-updated: 2026-08-19T05:04:34+0200
+updated: 2026-08-19T05:10:59+0200
 implementation-commits: [c242d4ca, d37d73d0]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -45,8 +45,15 @@ PATH `trddgrep`: fixture shows WARN/WARN/ERROR + fail-open note verbatim.
 Side finds, both fixed in-session: 78J4I4QS + S97TNMIJ sat `complete` in the OPEN zone
 (archived, ab3eb598) and the live-census filter test re-pinned 265→262 (d37d73d0).
 
-**NEXT: box 4** — COS + AMAMA corpus re-runs (pinged 2026-08-19 ~05:05; no code change
-needed on their side — the launcher runs this tree).
+**CLOSED 2026-08-19 05:11 — both fleet re-runs CONFIRMED (box 4):** AMAMA: sanctioned-residual
+class 11 → 0 (1 bare hub blocker migrated to `ai-maestro:TRDD-LT5N2JA4` → WARN
+GRAPH-CROSS-PROJECT-BLOCKER exactly as specced, their 5dacf05; the other 10 reclassified as
+TRUE local TERMINAL-WITHOUT-CHECKLIST findings — legacy cards whose `updated:` was
+mechanically bumped past the boundary by their 2026-08-04/05/07 sweeps, correctly refused
+grandfathering; their remediation task, not a parser gap). COS: 2 sanctioned ERRORs → the two
+WARN kinds with sanctioned spellings restored to `blocked-by:` (their 54503c4), `why` reports
+BLOCKED with the external annotation, all 8 KNOWN_UNGATED legacy cards CLEAN under the
+boundary, suite 341 green.
 
 ## Problem
 
@@ -96,5 +103,8 @@ two expressiveness gaps that force correct corpora to carry sanctioned false pos
 - [x] A terminal card with `updated:` < 2026-07-31 and no checklist lints CLEAN; one dated after
       still ERRORs (pre-existing OLDCARD1/NOBOXES1 pair straddles the boundary); NEW: an
       unparseable `updated:` FAILS OPEN (BADDATE1; its neuter reds exactly that test).
-- [ ] COS re-runs on their corpus: their 2 sanctioned ERRORs become WARNs; AMAMA re-runs: 11
-      sanctioned residuals drop to 0 errors.
+- [x] COS re-runs on their corpus: 2 sanctioned ERRORs → WARNs (GRAPH-EXTERNAL-BLOCKER +
+      GRAPH-CROSS-PROJECT-BLOCKER, their 54503c4, suite 341 green); AMAMA re-runs: sanctioned
+      residual class 11 → 0 (1 migrated to the scoped WARN, 10 reclassified as TRUE
+      TERMINAL-WITHOUT-CHECKLIST findings on cards bumped past the boundary — their local
+      remediation, not a parser gap). Both reports ledgered in the STATE above.

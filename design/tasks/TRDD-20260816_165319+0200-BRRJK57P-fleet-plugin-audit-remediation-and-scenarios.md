@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-19T05:05:14+0200
+updated: 2026-08-19T05:11:48+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -85,7 +85,11 @@ external-refs: []
   bind-to-CLIs, 0/1/2 trichotomy, specs-live-with-owner, porcelain-mode; floor `manager`,
   awaiting the queue) + Tier-0 task **TRDD-IPSNDKGM** (porcelain `--porcelain` mode on
   trddgrep/specgrep — the blocker behind AMOA's declined F1/F3 sites; adoption stands at
-  5 of 7 until it ships).
+  5 of 7 until it ships). **BOTH TOOL CARDS LANDED the same night:** PTFPGSLV `complete`
+  (c242d4ca; AMAMA re-run: sanctioned residuals 11→0, their 5dacf05; COS re-run: 2 ERRORs→
+  the two WARN kinds, their 54503c4, 8 legacy cards clean under the boundary) and IPSNDKGM
+  `--porcelain` SHIPPED (5f10772e) — AMOA's F1/F3 unblocked, their migration is the
+  outstanding acceptance.
 - Heartbeat marker `[janitor-memory-conflict]` deferred un-claimed (usage-limit checkpoint forbade
   spawning); it re-fires on a later heartbeat.
 

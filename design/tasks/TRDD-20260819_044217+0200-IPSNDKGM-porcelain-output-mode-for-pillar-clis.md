@@ -1,9 +1,10 @@
 ---
 trdd-id: IPSNDKGM
 title: Porcelain output mode for trddgrep and specgrep
-column: todo
+column: ai_review
 created: 2026-08-19T04:42:17+0200
-updated: 2026-08-19T04:42:17+0200
+updated: 2026-08-19T05:10:59+0200
+implementation-commits: [5f10772e]
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -44,12 +45,27 @@ CLI's help text — the field list IS the contract, so it changes only additivel
   the format is actually consumable.
 - Human output byte-unchanged when the flag is absent.
 
+## ⏵ STATE — 2026-08-19 05:11 — IMPLEMENTED (5f10772e), live via the tsx launcher
+
+Pillar core (`lib/pillar/cli.ts` — specgrep/prrdgrep show/list/search): `path<TAB>id<TAB>
+line<TAB>zone`, path absolute. trddgrep show + default search: `path<TAB>id<TAB>column<TAB>
+zone<TAB>title` (title LAST — a rogue tab in it cannot shift machine fields). Capped
+listings note the cap on STDERR. Flag stripped BEFORE the unknown-option refusal (positive
+control pinned). 6 new tests, 35/35 green; NEUTER RUNS via scripts/dev/neuter: pillar
+field-order swap → 2 red (exact), trddgrep swap → 1 red (exact). Trichotomy demonstrated
+by-effect on the deployed launcher: trddgrep 0/1/2, specgrep 0/1/2. AMOA notified ~05:12.
+
 ## Acceptance
 
-- [ ] `--porcelain` on the verbs AMOA's F1/F3 need, TAB-separated, path-first, no prose
-- [ ] exit trichotomy demonstrated on the porcelain path (0, 1, and 2 each)
-- [ ] help text documents the field order
-- [ ] AMOA notified; F1/F3 migration unblocked (their reply ledgered on BRRJK57P)
+- [x] `--porcelain` on the verbs AMOA's F1/F3 need, TAB-separated, path-first, no prose
+      (stdout pure; cap note on stderr)
+- [x] exit trichotomy demonstrated on the porcelain path (0, 1, and 2 each — in tests AND
+      by-effect on the deployed launcher, both CLIs)
+- [x] help text documents the field order (additive-only contract stated in both helps)
+- [x] AMOA notified 2026-08-19 ~05:12; F1/F3 migration unblocked on their side
+- [ ] AMOA's F1/F3 migration confirmed against the real format (their reply ledgered on
+      BRRJK57P — the acceptance test that the format is actually consumable; split from the
+      box above: the notification is the hub's act, the migration is theirs)
 
 ## Approval log
 

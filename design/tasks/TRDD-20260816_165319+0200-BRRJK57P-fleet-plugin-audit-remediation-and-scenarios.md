@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-20T00:30:01+0200
+updated: 2026-08-20T00:49:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1615,6 +1615,25 @@ CORE's disk evidence, refined to bare-name-INVOCATION-teaching (plugin skills re
 namespaced), re-broadcast before any bulk delete — AMPA's own first check would have
 repeated the phantom error and said so. Published 3.3.16 confirmed SAFE (git-URL serving,
 tag complete, 1656 files) — no emergency republish.
+
+## Ledger — window of 2026-08-20T00:49:18+0200
+
+- **TRDD-JBFM8XR0 SHIPPED → human_review** (f048f9ae): the fleet-plugins-update lane, ported
+  line-faithful (cwd-per-project is THE fix), 3 incident requirements cited at their code sites,
+  claim in the same commit, neuters recorded (dead-path filter measured as defense-in-depth and
+  named). **First live sweep 00:48:21: 15 plugins updated across the fleet** — the exact
+  no-live-session population the chore exists for — and the shared stamp advanced from the
+  janitor's own last run to ours. Server now claims **7 of 13** GLOBAL_CHORES (+ memory-guard
+  conditional on arming). Litter caught pre-ship: two materialized NUL bytes at offset 9081
+  (past git's binary sniff) — purged, amended.
+- **O8NCNRWO post-close correction** (49550f75, append-only Approval log): CORE's hook-debug.log
+  timeline (plugin#64, downgraded to docs-only) shows the relaunch's SessionStart DID reset the
+  counter; my "persisted across a relaunch" was a timestamp-ordering artifact. The real gap —
+  force-kill → next SessionStart — stands, and the 409 was blocking exactly the restart that
+  resets it, so the 5fed79b3 escape remains the fix.
+- Full suite repaired to green modulo the known contention flake (55bd32c1): the me-restart mock
+  factory gained the new export; the amp fixture now resolves an ED25519-capable openssl the way
+  amp-helper's own _detect_openssl does.
 
 ## Ledger — window of 2026-08-20T00:30:01+0200
 

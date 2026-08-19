@@ -23,7 +23,7 @@ derived-kind: npt
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049, 0a90648b, a717fc3b, 813e0347, 33ea9743]
+implementation-commits: [c930a1cc, a7c04017, 70688c00, 3b68005c, 17206049, 0a90648b, a717fc3b, 813e0347, 33ea9743, 02de8959]
 release-via: none
 ---
 
@@ -68,7 +68,7 @@ gated SUB-feature, not a block on fleet recovery. `blocked-by: []`.
   attempt/cooldown PASSED IN (stateless). Hard rungs REFUSED (Phase C owns process-kill). Only
   `stalled`→`frozen`; reload rungs are a genuine plain→forced escalation. **default-OFF fire flag** is
   the master gate (checked before any I/O). 12 tests; tsc clean.
-- **C 🔲 HARD rungs** `relaunch → force_restart → resurrect` behind a **default-OFF** flag +
+- **C ✅ DONE (`33ea9743` + `02de8959`, 2026-08-19)** — HARD rungs `relaunch → force_restart → resurrect` behind default-OFF `AIM_FLEET_HARD_RECOVERY` +
   per-instance cooldown + crash-loop-page-once (mirrors janitor `FLEET_HARD_RESTART_ENABLED`).
 - **D-lite ✅ DONE (`70688c00`)** — READ-ONLY WATCHDOG wiring: `lib/fleet-liveness-watchdog.ts`
   (`defaultFleetScanDeps` wires registry + `getAgentSessionStatus` + `readHookNotification`;

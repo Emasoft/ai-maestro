@@ -17,7 +17,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { execSync } from 'child_process'
 import { statePath } from './ecosystem-constants'
-import { ABSORBED_CHORES } from './janitor-chore-stamp'
+import { activeAbsorbedChores } from './janitor-chore-stamp'
 import { oauthTickEnabled } from './oauth-rotator/server-tick'
 import { isAbsorbedDutySchedulerRunning } from '@/services/auto-update-service'
 
@@ -44,8 +44,9 @@ export interface ServerLiveness {
   /** The chore classes the server owns+runs RIGHT NOW (honest, live-only — see the file header). */
   capabilities: string[]
   /**
-   * The janitor-registry names of the daemon chores THIS server absorbs — `ABSORBED_CHORES`
-   * verbatim (`Emasoft/ai-maestro#111` asks us to "expose which chores the server claims").
+   * The janitor-registry names of the daemon chores THIS server absorbs — `activeAbsorbedChores()`:
+   * the unconditional `ABSORBED_CHORES` plus every default-OFF conditional lane that is armed AND
+   * running right now (TRDD-4QOWVSLU: `memory-guard` under `AIM_MEMORY_GUARD=1`) (`Emasoft/ai-maestro#111` asks us to "expose which chores the server claims").
    *
    * UNLIKE `capabilities`, THIS FIELD IS MEANT TO BE READ. `capabilities` is write-only across the
    * ecosystem (see the long note on `currentCapabilities`); this one exists precisely so the janitor
@@ -195,10 +196,10 @@ export function writeServerLiveness(deps: WriteServerLivenessDeps = {}): void {
     sha_full: build.sha_full,
     dirty: build.dirty,
     capabilities,
-    // Spread into a fresh mutable array: `ABSORBED_CHORES` is `as const`, and handing a frozen
+    // A fresh mutable array per write (`activeAbsorbedChores` builds one): handing a frozen
     // readonly tuple to `JSON.stringify` would serialise identically but lets a future caller of
     // `writeServerLiveness` mutate the module's own constant through the payload it gets back.
-    absorbed_chores: [...ABSORBED_CHORES],
+    absorbed_chores: activeAbsorbedChores(),
   }
   const dest = statePath(path.basename(SERVER_LIVENESS_FILE))
   const tmp = `${dest}.tmp.${pid}`

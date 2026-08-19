@@ -10,6 +10,7 @@ import {
   SERVER_LIVENESS_FILE,
   type ServerLiveness,
 } from '@/lib/server-liveness'
+import { markChoreLive, unmarkChoreLive } from '@/lib/janitor-chore-stamp'
 
 // TRDD-P7RPOR5O — the auth-free liveness+capability probe file both janitor backends read.
 // 0-IMPACT: HOME is repointed at a fresh temp dir per test, so statePath() resolves the file
@@ -98,6 +99,20 @@ describe('writeServerLiveness — atomic write of the 3-field shape', () => {
       'cache-prune',
     ])
     expect(readLiveness().absorbed_chores).not.toContain('user-plugins-update')
+  })
+
+  it('a CONDITIONAL (default-OFF) chore is claimed ONLY while its lane is marked live — memory-guard, TRDD-4QOWVSLU', () => {
+    writeServerLiveness({ now: () => 1, pid: 1, capabilities: () => [] })
+    expect(readLiveness().absorbed_chores).not.toContain('memory-guard')
+    markChoreLive('memory-guard')
+    try {
+      writeServerLiveness({ now: () => 2, pid: 1, capabilities: () => [] })
+      expect(readLiveness().absorbed_chores).toContain('memory-guard')
+    } finally {
+      unmarkChoreLive('memory-guard')
+    }
+    writeServerLiveness({ now: () => 3, pid: 1, capabilities: () => [] })
+    expect(readLiveness().absorbed_chores).not.toContain('memory-guard')
   })
 
   it('serialises absorbed_chores as a COPY, so a consumer cannot mutate the module constant', () => {

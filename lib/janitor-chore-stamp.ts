@@ -82,7 +82,35 @@ export const ABSORBED_CHORES = [
   'cache-prune',
 ] as const
 
-export type AbsorbedChore = (typeof ABSORBED_CHORES)[number]
+/**
+ * Chores whose lane is DESTRUCTIVE and therefore ships default-OFF behind its own flag
+ * (KCRMSNL7 design axis). Such a chore is claimed ONLY while its lane is actually armed and
+ * running — `markChoreLive` at scheduler start, `unmarkChoreLive` at stop — so the janitor daemon
+ * yields it in the same instant this server starts performing it, and never over a flag that is
+ * set but a lane that failed to start. `memory-guard` (TRDD-4QOWVSLU): armed by `AIM_MEMORY_GUARD=1`.
+ */
+export const CONDITIONAL_CHORES = ['memory-guard'] as const
+
+export type AbsorbedChore = (typeof ABSORBED_CHORES)[number] | (typeof CONDITIONAL_CHORES)[number]
+
+const liveConditional = new Set<(typeof CONDITIONAL_CHORES)[number]>()
+
+export function markChoreLive(chore: (typeof CONDITIONAL_CHORES)[number]): void {
+  liveConditional.add(chore)
+}
+
+export function unmarkChoreLive(chore: (typeof CONDITIONAL_CHORES)[number]): void {
+  liveConditional.delete(chore)
+}
+
+/**
+ * The chores this server claims RIGHT NOW — the unconditional set plus every conditional lane
+ * that is live. This, not `ABSORBED_CHORES`, is what the liveness beat publishes as
+ * `absorbed_chores`; a fresh mutable array every call.
+ */
+export function activeAbsorbedChores(): AbsorbedChore[] {
+  return [...ABSORBED_CHORES, ...CONDITIONAL_CHORES.filter((c) => liveConditional.has(c))]
+}
 
 /** Absolute path of one chore's stamp. Exported for the test that pins the filename contract. */
 export function choreStampPath(chore: AbsorbedChore): string {

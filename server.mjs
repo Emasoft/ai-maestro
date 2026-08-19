@@ -2092,6 +2092,26 @@ async function startServer(handleRequest) {
       console.warn('[Startup] cache-prune init failed (non-fatal):', err?.message || err)
     }
 
+    // ── absorbed memory-guard lane (TRDD-4QOWVSLU, parent KCRMSNL7) ───────────
+    // The janitor daemon's Tier-1 OOM guard, ported line-faithful with the USER-signed
+    // Decision 1 constraints (signature allowlist, claude-session safelist, ONE kill
+    // per beat, NO-OP on an unknown reading, Tier 2 absent). DESTRUCTIVE ⇒ the kill is
+    // armed ONLY by AIM_MEMORY_GUARD=1; unarmed it runs detect-only (logs what it
+    // would kill, no stamp, no claim). The claim follows the arming: lib/memory-guard
+    // marks the chore live for the liveness beat only when armed AND started, so the
+    // daemon yields it exactly when this server performs it. 120 s per the janitor
+    // roster; AIM_MEMORY_GUARD_INTERVAL_MS overrides, 0 disables.
+    try {
+      const { startMemoryGuardScheduler, memoryGuardArmed } = await import('./lib/memory-guard.ts')
+      if (startMemoryGuardScheduler()) {
+        console.log(
+          `[Startup] memory-guard scheduler started (120s, ${memoryGuardArmed() ? 'ARMED — Tier-1 kills enabled' : 'detect-only: AIM_MEMORY_GUARD not set'})`,
+        )
+      }
+    } catch (err) {
+      console.warn('[Startup] memory-guard init failed (non-fatal):', err?.message || err)
+    }
+
     // ── §D4 approval-ladder watchdog (TRDD-AYBAMFN2 / TGNU1EP7, 3P-ZON-11) ────
     // The TRDD governance sweep's ONE scheduled host — the server owns the
     // authority-ladder model, so it owns the enforcement (the janitor would be

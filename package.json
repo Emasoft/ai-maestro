@@ -28,6 +28,8 @@
     "macos"
   ],
   "scripts": {
+    "specs:gen": "node scripts/gen-specs.mjs",
+    "specs:check": "node scripts/gen-specs.mjs --check",
     "dev": "node scripts/check-node.mjs && NEXT_PRIVATE_SKIP_LOCKFILE_CHECK=1 tsx server.mjs",
     "dev:linux": "node scripts/check-node.mjs && NEXT_PRIVATE_SKIP_LOCKFILE_CHECK=1 tsx server.mjs",
     "prebuild": "node scripts/check-pm2-mode.mjs",

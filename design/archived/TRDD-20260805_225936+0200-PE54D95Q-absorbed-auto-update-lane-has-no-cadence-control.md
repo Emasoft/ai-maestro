@@ -1,11 +1,11 @@
 ---
 trdd-id: PE54D95Q
 title: The absorbed auto-update lane has no cadence control and retries permanent failures hourly
-column: dev
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T22:59:36+0200
-updated: 2026-08-19T19:45:55+0200
+updated: 2026-08-19T21:14:46+0200
 implementation-commits: [4e66947e, 793b866c, 7c104ba4, 15f752d3, 85bf0b02, fcf19a71, b7a47a41, 5796ef6a]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -1343,3 +1343,6 @@ writer. "Pick the authoritative file" is not available as a strategy; the author
 question is now: what RELATIONSHIP does Claude Code maintain between them, and in which
 direction does it sync? That must be answered empirically (flip one entry in each, restart
 a disposable session, observe) before any bulk flip.
+
+## Approval log
+- 2026-08-19T21:14:46+0200 — COMPLETED by the hub under the USER's Phase-2 delegation (BRRJK57P approval log): 7/7 acceptance boxes ticked, the last measured live 2026-08-19T19:45 (78 → 0 per-plugin updates per fire); the janitor-side retirement (TIZHEPNC, fbed874a) confirmed by the janitor session. The refresh-timeout finding it surfaced shipped separately (1ce63777, f0d4d464). Archived as completed.

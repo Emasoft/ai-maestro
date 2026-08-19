@@ -60,6 +60,34 @@ afterAll(async () => {
  * A self-contained AMP home. `AMP_DIR` is the helper's highest-priority override, so nothing
  * here can touch the developer's real ~/.agent-messaging.
  */
+/**
+ * Resolve an openssl that supports ED25519, the way amp-helper.sh::_detect_openssl does —
+ * macOS's /usr/bin/openssl is LibreSSL, which cannot genpkey ED25519, and a session whose PATH
+ * lacks homebrew (measured 2026-08-20: this suite failed 5/5 under such a shell) would otherwise
+ * red the whole file on an environment fact the production scripts already handle.
+ */
+let _openssl: string | null = null
+function opensslBin(): string {
+  if (_openssl) return _openssl
+  const candidates = [
+    'openssl',
+    '/usr/local/opt/openssl@3/bin/openssl',
+    '/opt/homebrew/opt/openssl@3/bin/openssl',
+    '/usr/local/opt/openssl/bin/openssl',
+    '/opt/homebrew/opt/openssl/bin/openssl',
+    '/home/linuxbrew/.linuxbrew/opt/openssl@3/bin/openssl',
+  ]
+  for (const c of candidates) {
+    try {
+      const v = execFileSync(c, ['version'], { encoding: 'utf8' })
+      if (/^OpenSSL (3\.|1\.1\.1)/.test(v)) return (_openssl = c)
+    } catch {
+      /* try the next */
+    }
+  }
+  return (_openssl = 'openssl') // let the real failure surface with openssl's own message
+}
+
 function ampHome(providers: Record<string, string>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amp-fetch-test-'))
   fs.mkdirSync(path.join(dir, 'registrations'), { recursive: true })
@@ -67,8 +95,8 @@ function ampHome(providers: Record<string, string>): string {
   fs.mkdirSync(path.join(dir, 'inbox'), { recursive: true })
   fs.mkdirSync(path.join(dir, 'sent'), { recursive: true })
   const priv = path.join(dir, 'keys', 'private.pem')
-  execFileSync('openssl', ['genpkey', '-algorithm', 'ED25519', '-out', priv])
-  execFileSync('openssl', ['pkey', '-in', priv, '-pubout', '-out', path.join(dir, 'keys', 'public.pem')])
+  execFileSync(opensslBin(), ['genpkey', '-algorithm', 'ED25519', '-out', priv])
+  execFileSync(opensslBin(), ['pkey', '-in', priv, '-pubout', '-out', path.join(dir, 'keys', 'public.pem')])
   fs.writeFileSync(
     path.join(dir, 'config.json'),
     JSON.stringify({

@@ -24,7 +24,10 @@ const { mockAuth, mockRegistry, mockRuntime, mockRestart, mockGov, mockTeam, moc
   mockRestart: { runRestartSequence: vi.fn() },
   mockGov: { getManagerId: vi.fn() },
   mockTeam: { isAgentInAnyTeam: vi.fn() },
-  mockSafe: { readSubagentCount: vi.fn(), evaluateExitGate: vi.fn() },
+  // sessionProgramRunning joined the module 2026-08-20 (the stale-HIGH escape): the route
+  // destructures it, so a factory lacking it throws at import — return null (unknown) so the
+  // gate mock's own verdict decides, exactly as before.
+  mockSafe: { readSubagentCount: vi.fn(), evaluateExitGate: vi.fn(), sessionProgramRunning: vi.fn(() => null) },
   // TRDD-GZ1KOHNR: default passthrough so these restart-flow tests reach the
   // relaunch path; the --agent enforcement itself is unit-tested separately.
   mockLaunchArgs: {

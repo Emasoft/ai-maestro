@@ -16,7 +16,7 @@
  * installer; this test is the wall in front of that.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync, statSync } from 'fs'
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, statSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -127,7 +127,7 @@ describe('enforceAgentInvariants', () => {
     // core-plugin is wake-only: it must not even be attempted here, or the sweep
     // would try to install a plugin for every agent on every tick.
     expect(periodic.outcomes.map((o) => o.id)).not.toContain('core-plugin')
-    expect(periodic.outcomes.map((o) => o.id).sort()).toEqual(['claude-dir', 'dep-rules', 'git-exclude'])
+    expect(periodic.outcomes.map((o) => o.id).sort()).toEqual(['amp-only-messaging', 'claude-dir', 'dep-rules', 'git-exclude'])
   })
 
   it('is idempotent — a second run reports everything already holding', async () => {
@@ -158,7 +158,7 @@ describe('enforceAgentInvariants', () => {
 
     expect(r.failed.map((o) => o.id)).toContain('claude-dir')
     expect(r.outcomes.map((o) => o.id)).toContain('git-exclude')
-    expect(r.outcomes).toHaveLength(3)
+    expect(r.outcomes).toHaveLength(4)
   })
 })
 
@@ -330,5 +330,62 @@ describe('the single invariants watchdog', () => {
       await stopAgentInvariantsWatchdog()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+// ── amp-only-messaging (USER directive 2026-08-20) ──────────────────────────
+// Inside the harness an agent may only talk over AMP, so the client's own
+// cross-session peer-messaging tool is denied in the workdir's settings.
+describe('the amp-only-messaging invariant', () => {
+  const row = () => AGENT_INVARIANTS.find((i) => i.id === 'amp-only-messaging')!
+  const settingsPath = () => join(workdir, '.claude', 'settings.local.json')
+  const readDeny = () =>
+    JSON.parse(readFileSync(settingsPath(), 'utf8')).permissions?.deny as string[] | undefined
+
+  const seed = (data: unknown) => {
+    mkdirSync(join(workdir, '.claude'), { recursive: true })
+    writeFileSync(settingsPath(), typeof data === 'string' ? data : JSON.stringify(data))
+  }
+
+  it('runs on every trigger — a settings write is safe on the timer', () => {
+    expect(row().triggers).toEqual(['create', 'wake', 'periodic'])
+  })
+
+  it('denies the peer-messaging tool in a workdir that has no settings file yet', async () => {
+    const out = await row().enforce(ctx('create'))
+    expect(out.status).toBe('repaired')
+    expect(readDeny()).toContain('SendMessage')
+  })
+
+  it('UNIONS with the deny entries already there — it never replaces them', async () => {
+    seed({ permissions: { deny: ['Bash(rm:*)'] }, enabledPlugins: { 'a@b': true } })
+
+    const out = await row().enforce(ctx('periodic'))
+
+    expect(out.status).toBe('repaired')
+    // Both survive, and the write did not eat the sibling key.
+    expect(readDeny()).toEqual(['Bash(rm:*)', 'SendMessage'])
+    expect(JSON.parse(readFileSync(settingsPath(), 'utf8')).enabledPlugins).toEqual({ 'a@b': true })
+  })
+
+  it('is a no-op once the entry is present (no churn on every beat)', async () => {
+    seed({ permissions: { deny: ['SendMessage'] } })
+    const before = readFileSync(settingsPath(), 'utf8')
+
+    const out = await row().enforce(ctx('periodic'))
+
+    expect(out.status).toBe('ok')
+    expect(readFileSync(settingsPath(), 'utf8')).toBe(before)
+  })
+
+  it('REFUSES on a corrupt settings file rather than rebuilding it from {}', async () => {
+    seed('{ this is not json')
+
+    const out = await row().enforce(ctx('wake'))
+
+    expect(out.status).toBe('failed')
+    expect(out.detail).toMatch(/unreadable/i)
+    // The whole point: whatever the agent had is still on disk, untouched.
+    expect(readFileSync(settingsPath(), 'utf8')).toBe('{ this is not json')
   })
 })

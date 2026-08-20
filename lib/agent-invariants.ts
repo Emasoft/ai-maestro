@@ -60,6 +60,24 @@ export interface AgentInvariant {
 }
 
 /**
+ * Client tools an agent inside the ai-maestro harness may NOT use (USER directive
+ * 2026-08-20: "inside the ai-maestro harness the SendMessage functionality will be
+ * blocked, and the agents must be forced to only use AMP messaging").
+ *
+ * WHY the client's own cross-session `SendMessage` is not an acceptable second channel:
+ * AMP (`amp-send.sh` → the server's SendMessage AIO pipeline) is gated by the R6
+ * communication graph, carries the sender's verified AID, and is logged. The client tool
+ * is none of those — it addresses another session by NAME, so a MEMBER could message a
+ * MANAGER directly, around its CHIEF-OF-STAFF, with nothing recording that it happened.
+ * Two channels for one thing means the governed one is optional; denying the tool is what
+ * makes AMP the only door.
+ *
+ * This binds AGENT WORKDIRS only. A human's own Claude session (this repo included) is
+ * not a registered agent workdir and keeps the tool.
+ */
+export const HARNESS_DENIED_TOOLS: readonly string[] = ['SendMessage']
+
+/**
  * THE LIST. Everything ai-maestro promises about an agent workdir.
  *
  * To add a guarantee: add a row. Do not add a call site.
@@ -104,6 +122,40 @@ export const AGENT_INVARIANTS: readonly AgentInvariant[] = [
       if (r.created) return { id: 'git-exclude', status: 'repaired', detail: 'created' }
       if (r.updated) return { id: 'git-exclude', status: 'repaired', detail: 'restored' }
       return { id: 'git-exclude', status: 'ok' }
+    },
+  },
+
+  {
+    id: 'amp-only-messaging',
+    // A pure settings write — same class as dep-rules, safe on the timer.
+    description: 'the client peer-messaging tool is DENIED in the workdir — inside the harness agents talk over AMP only',
+    triggers: ['create', 'wake', 'periodic'],
+    async enforce({ workdir }: AgentInvariantContext) {
+      const { readSettings, editSettings } = await import('@/lib/settings-gate')
+      const path = join(workdir, '.claude', 'settings.local.json')
+
+      const read = await readSettings(path)
+      // MISSING is the first-run case and must still be repaired (editSettings creates
+      // it). UNREADABLE must NOT be: a lenient read here would rebuild the file from
+      // `{}` and destroy whatever the agent actually has.
+      if (!read.ok && read.reason === 'unreadable') {
+        return { id: 'amp-only-messaging', status: 'failed', detail: `settings.local.json unreadable: ${read.error ?? 'parse error'}` }
+      }
+
+      const permissions = read.ok ? read.data.permissions : undefined
+      const existing = (permissions && typeof permissions === 'object' && !Array.isArray(permissions))
+        ? (permissions as Record<string, unknown>).deny
+        : undefined
+      const deny = Array.isArray(existing) ? existing.filter((e): e is string => typeof e === 'string') : []
+
+      const missing = HARNESS_DENIED_TOOLS.filter((t) => !deny.includes(t))
+      if (missing.length === 0) return { id: 'amp-only-messaging', status: 'ok' }
+
+      // Read-then-write outside the lock: the write itself is lock-guarded, this
+      // watchdog is the only writer of THIS key, and a lost update is repaired on the
+      // next periodic beat. Not worth a read-modify-write primitive of its own.
+      await editSettings(path, [{ op: 'set', keyPath: ['permissions', 'deny'], value: [...deny, ...missing] }])
+      return { id: 'amp-only-messaging', status: 'repaired', detail: `denied ${missing.join(', ')}` }
     },
   },
 

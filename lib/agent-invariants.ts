@@ -132,6 +132,11 @@ export const AGENT_INVARIANTS: readonly AgentInvariant[] = [
   {
     id: 'amp-only-messaging',
     // A pure settings write — same class as dep-rules, safe on the timer.
+    //
+    // NEUTER RUN (2026-08-20 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+    //   s/value: deny\.filter\(\(e\) => e !== REVERTED_DENY_ENTRY\)/value: deny/
+    //   → 1 red / 21 green:
+    //       REMOVES the pre-correction SendMessage deny and keeps every other deny entry
     description: 'crossSessionInbound=refuse in the workdir settings (AMP is the only cross-session door); a stray SendMessage deny is REMOVED — the tool stays available for subagents',
     triggers: ['create', 'wake', 'periodic'],
     async enforce({ workdir }: AgentInvariantContext) {

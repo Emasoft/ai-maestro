@@ -1,6 +1,6 @@
 ---
 name: plugin-abstraction-and-script-layer
-description: "why can't a plugin call the ai-maestro API directly / a hook is calling fetch('/api/...') and breaking on updates / what is the script layer / aimaestro-*.sh amp-*.sh aid-*.sh boundary / decoupling invariant / a plugin element hardcodes an endpoint URL / the CLI says the API is not reachable but my command is simply wrong / a typo'd argument or an unknown verb is blamed on the server / --help asks for a credential"
+description: "why can't a plugin call the ai-maestro API directly / a hook is calling fetch('/api/...') and breaking on updates / what is the script layer / aimaestro-*.sh amp-*.sh aid-*.sh boundary / decoupling invariant / a plugin element hardcodes an endpoint URL / the CLI says the API is not reachable but my command is simply wrong / a typo'd argument or an unknown verb is blamed on the server / --help asks for a credential / the API returns 401 auth_required with the server online / is auth broken or the server down / my agent cannot call the server / how do agents authenticate"
 ocd: 2026-08-02
 lmd: 2026-08-20
 metadata:
@@ -132,6 +132,13 @@ unknown one reaches the gate and gets the misleading message back.
 
 Fixed in `51db1b8a` (verb half) + `f2abd10d` (argument half) under
 `TRDD-T3FXA0Y0`. Cited by FUNCTION, not line — the fix moved the arms.
+
+
+^ATOM-QGN4-YC69 [desc: "A 401 auth_required from the API with the server online means missing credentials, not a fault; the fix is AID_AUTH for agents / governance login for humans", keywords: 401 auth_required the_API_returns_401 my_agent_cannot_call_the_server is_auth_broken server_is_up_but_every_request_is_refused aimaestro-trdd.sh_401 how_do_agents_authenticate AID_AUTH check_registry.json_for_aid_field, type: reference, ocd: 2026-08-20, lmd: 2026-08-20]
+
+`GET /api/sessions` (and every other route) returns **HTTP 401** with `{"error":"auth_required", ...}` when the caller presents no credentials — this is the API working correctly, not an auth malfunction or a broken server. `pm2` reporting the process `online` and the route responding at all are proof the server is fine; only the request lacked a credential. The 401 body itself names the fix: an AGENT exports `AID_AUTH="$(aid-auth.sh)"` before calling the API or a wrapper script like `aimaestro-trdd.sh`; a HUMAN runs `aimaestro-governance.sh login` once (needs the governance password, so this step can never be done by a model). Strict/destructive routes additionally need `AIMAESTRO_SUDO_TOKEN` (see the sudo-mode page).
+
+Do not try to diagnose an agent's AID by grepping `~/.aimaestro/agents/registry.json` for an `aid`/`aidToken`-shaped key — that record has no such field (checked: none of its ~29 keys name an identity/token concept), so any such grep returns a false "no AID" for every agent regardless of the truth. The AID recovery store is `~/.aimaestro/aid-recovery-cache.json`; active governance tokens are in `~/.aimaestro/governance-tokens/active-tokens.json`.
 
 ## See also
 

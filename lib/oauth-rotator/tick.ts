@@ -693,8 +693,9 @@ async function refreshAndHealSlot(
   state: RotatorState,
   deps?: TickDeps,
 ): Promise<[CredentialBlob | null, boolean]> {
-  const refreshed = await refreshOauthToken(blob, netDeps(deps))
-  if (refreshed === null) return [null, false]
+  const res = await refreshOauthToken(blob, netDeps(deps))
+  if (res.blob === null) return [null, false]
+  const refreshed = res.blob
   try {
     writeSlot(email, refreshed)
   } catch (exc) {
@@ -821,20 +822,36 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
     // blob with a different fp, and this slot must resume refreshing the instant that happens —
     // otherwise the one action that fixes it would be silently ignored.
     const meta0 = slots[email] as Record<string, unknown> | undefined
+    // SELF-HEAL A MIS-BRAND (TRDD-Y1ZWU998). The pre-fix code branded `refresh_dead_fp` on ANY
+    // null return, so a fortnight of network blips had all three live slots carrying the
+    // human-only retry ban over credentials nothing ever judged. A brand standing next to a
+    // last-cause the classifier calls retryable is that bug's residue — clear it, so the slot
+    // re-enters the retry loop. A credential that really is dead re-brands honestly below the
+    // moment the endpoint says so.
+    if (meta0?.refresh_dead_fp !== undefined && meta0?.last_refresh_failure !== 'credential-dead') {
+      delete meta0.refresh_dead_fp
+      changed = true
+    }
     const fails0 = typeof meta0?.refresh_failures === 'number' ? meta0.refresh_failures : 0
     if (fails0 >= MAX_REFRESH_FAILURES && meta0?.refresh_dead_fp === fingerprint(blob)) continue
-    const fresh = await refreshOauthToken(blob, netDeps(deps))
-    if (fresh === null) {
-      // A refresh that keeps failing is dead — count it so the cascade escalates to REAUTH, and
-      // record WHICH credential failed so a replacement is retried rather than inheriting the ban.
+    const res = await refreshOauthToken(blob, netDeps(deps))
+    if (res.blob === null) {
+      // Count EVERY failure (the cascade escalates to REAUTH on the counter), and record the
+      // classifier's cause in the same meta the janitor writes (`last_refresh_failure`) — but
+      // brand `refresh_dead_fp` ONLY when the endpoint actually judged the grant. A transport
+      // failure is retryable; branding it armed a human-only ban over a credential nothing
+      // rejected (TRDD-Y1ZWU998 — measured at 100% of live slots: 775/567/219 consecutive
+      // `network` failures, all three branded dead).
       const meta = slots[email]
       if (meta && typeof meta === 'object') {
         meta.refresh_failures = (typeof meta.refresh_failures === 'number' ? meta.refresh_failures : 0) + 1
-        meta.refresh_dead_fp = fingerprint(blob)
+        meta.last_refresh_failure = res.cause
+        if (res.cause === 'credential-dead') meta.refresh_dead_fp = fingerprint(blob)
         changed = true
       }
       continue
     }
+    const fresh = res.blob
     try {
       writeSlot(email, fresh)
     } catch (exc) {
@@ -879,6 +896,11 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
       if (meta && typeof meta === 'object' && grantRotated) {
         meta.refresh_failures = MAX_REFRESH_FAILURES
         meta.refresh_dead_fp = fingerprint(blob)
+        // The stored credential really is dead (its single-use grant was consumed and the
+        // replacement lost), so record the cause the brand rests on — the mis-brand self-heal
+        // above keys on `last_refresh_failure !== 'credential-dead'` and would otherwise strip
+        // this legitimate brand on the next beat and resume pointless traffic.
+        meta.last_refresh_failure = 'credential-dead'
         changed = true
       }
       const why = exc instanceof SlotKeychainWriteError ? 'keychain write refused' : 'slot write failed'

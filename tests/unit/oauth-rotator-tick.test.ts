@@ -422,6 +422,60 @@ describe('tick — keepaliveRefresh retry ban on a token already classified DEAD
   })
 })
 
+// TRDD-Y1ZWU998: only a verdict FROM THE ENDPOINT (invalid_grant → 400) may brand a credential
+// dead. Measured live 2026-08-20: all three slots on this host carried the human-only retry ban
+// over 775/567/219 consecutive NETWORK failures — credentials nothing had ever rejected.
+describe('tick — keepaliveRefresh never brands a TRANSIENT failure as credential-dead', () => {
+  function countingNetworkDownFetch(): { impl: typeof fetch; calls: () => number } {
+    let n = 0
+    const impl = (async (url: unknown) => {
+      const u = String(url)
+      if (u.includes('/oauth/token')) { n++; throw new Error('network down') }
+      if (u.includes('/oauth/usage')) return new Response('{}', { status: 200 })
+      return new Response('{}', { status: 404 })
+    }) as unknown as typeof fetch
+    return { impl, calls: () => n }
+  }
+
+  it('a network failure increments the counter and records the cause, but sets NO refresh_dead_fp and never arms the ban', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('flaky@x', blob('FLAKY', H1()))
+    const f = countingNetworkDownFetch()
+
+    for (let i = 0; i < 4; i++) await keepaliveRefresh({ fetchImpl: f.impl })
+
+    // 4 beats → 4 attempts: past MAX the slot is STILL retried, because no ban armed.
+    expect(f.calls()).toBe(4)
+    const meta = loadState().slots?.['flaky@x'] as unknown as Record<string, unknown>
+    expect(meta.refresh_failures).toBe(4)
+    expect(meta.last_refresh_failure).toBe('network')
+    expect(meta.refresh_dead_fp).toBeUndefined()
+  })
+
+  it('SELF-HEALS a pre-fix mis-brand: a refresh_dead_fp standing beside a retryable last-cause is cleared and the exchange retried', async () => {
+    seedLive('live@x', blob('LIVE', H8()))
+    addSlot('branded@x', blob('BRANDED', H1()))
+    // Seed the defect state the pre-fix code left on every live slot: banned at MAX with the
+    // janitor's own classifier calling the failures transport-level.
+    const st = loadState()
+    const meta0 = st.slots!['branded@x'] as unknown as Record<string, unknown>
+    meta0.refresh_failures = 567
+    meta0.refresh_dead_fp = fingerprint(blob('BRANDED', H1()))
+    meta0.last_refresh_failure = 'network'
+    saveState(st)
+    const f = countingFailingTokenFetch() // 400 → the endpoint NOW judges it: an honest re-brand
+
+    await keepaliveRefresh({ fetchImpl: f.impl })
+
+    // The mis-brand was cleared, so the exchange was ATTEMPTED (pre-fix: 0 calls, banned forever).
+    expect(f.calls()).toBe(1)
+    const meta = loadState().slots?.['branded@x'] as unknown as Record<string, unknown>
+    // ...and the 400 verdict re-branded it honestly, with the cause recorded.
+    expect(meta.last_refresh_failure).toBe('credential-dead')
+    expect(meta.refresh_dead_fp).toBeDefined()
+  })
+})
+
 describe('tick — keepaliveRefresh (RENEW)', () => {
   it('refreshes an alternate slot within the keepalive window and writes the fresh token back', async () => {
     seedLive('live@x', blob('LIVE', H8()))

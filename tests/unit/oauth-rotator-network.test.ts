@@ -148,7 +148,7 @@ describe('refreshOauthToken (RENEW exchange)', () => {
       refresh_token: 'OLDR',
     })
     expect((captured.init!.headers as Record<string, string>)['User-Agent']).toBe('claude-account-rotator')
-    const inner = (out as { claudeAiOauth: Record<string, unknown> }).claudeAiOauth
+    const inner = (out.blob as { claudeAiOauth: Record<string, unknown> }).claudeAiOauth
     expect(inner.accessToken).toBe('NEW')
     expect(inner.refreshToken).toBe('NEWR')
     expect(inner.keepMe).toBe(1) // other inner fields preserved
@@ -159,17 +159,31 @@ describe('refreshOauthToken (RENEW exchange)', () => {
     const out = await refreshOauthToken(withTok('OLD', { refreshToken: 'OLDR' }), {
       fetchImpl: fakeFetch(200, { access_token: 'NEW' }),
     })
-    expect((out as { claudeAiOauth: Record<string, unknown> }).claudeAiOauth.refreshToken).toBe('OLDR')
+    expect((out.blob as { claudeAiOauth: Record<string, unknown> }).claudeAiOauth.refreshToken).toBe('OLDR')
   })
 
-  it('null when: no refreshToken in the blob, a non-2xx, or a response without an access token', async () => {
-    expect(await refreshOauthToken(withTok('OLD'), { fetchImpl: fakeFetch(200, { access_token: 'x' }) })).toBeNull()
+  // TRDD-Y1ZWU998: the failure CAUSE is the whole point of the discriminated result — a caller
+  // may brand a credential dead ONLY on 'credential-dead'; every other cause is retryable.
+  it('classifies each failure: no-refresh-token and a 400/401 verdict are credential-dead', async () => {
+    expect(await refreshOauthToken(withTok('OLD'), { fetchImpl: fakeFetch(200, { access_token: 'x' }) })).toEqual({
+      blob: null,
+      cause: 'credential-dead',
+    })
+    expect(
+      await refreshOauthToken(withTok('OLD', { refreshToken: 'R' }), { fetchImpl: fakeFetch(400, null) }),
+    ).toEqual({ blob: null, cause: 'credential-dead' })
+  })
+
+  it('classifies a network throw as network, a 403 as transport-refused, a token-less 200 as malformed — all retryable, none may brand', async () => {
+    expect(
+      await refreshOauthToken(withTok('OLD', { refreshToken: 'R' }), { fetchImpl: fakeFetch(0, null, { reject: true }) }),
+    ).toEqual({ blob: null, cause: 'network' })
     expect(
       await refreshOauthToken(withTok('OLD', { refreshToken: 'R' }), { fetchImpl: fakeFetch(403, null) }),
-    ).toBeNull()
+    ).toEqual({ blob: null, cause: 'transport-refused' })
     expect(
       await refreshOauthToken(withTok('OLD', { refreshToken: 'R' }), { fetchImpl: fakeFetch(200, { nope: 1 }) }),
-    ).toBeNull()
+    ).toEqual({ blob: null, cause: 'malformed' })
   })
 })
 

@@ -33,6 +33,9 @@
 import { execFileSync } from 'node:child_process'
 
 import { oauthOf, type CredentialBlob } from './slots'
+// Type-only: the janitor's #228 failure vocabulary, mirrored in supervisor.ts. Erased at
+// runtime, so no import cycle even though supervisor sits above this module conceptually.
+import type { RefreshFailureCause } from './supervisor'
 import {
   backoffMs,
   classify429,
@@ -386,25 +389,40 @@ export async function usageProbe(
   return result
 }
 
+/** A refresh that failed, with WHICH failure the transport saw — the janitor's #228 vocabulary
+ *  (`REFRESH_FAIL_CAUSES`, owned there, mirrored in supervisor.ts). The split that matters is
+ *  who owns the remedy: `credential-dead` → only a human re-login fixes it; every other cause is
+ *  RETRYABLE and must never brand the credential (TRDD-Y1ZWU998 — a fortnight of network blips
+ *  had branded all three live slots dead). */
+export interface RefreshFailed {
+  blob: null
+  cause: RefreshFailureCause
+}
+export type RefreshResult = { blob: CredentialBlob; cause?: undefined } | RefreshFailed
+
 /**
  * Exchange a SLOT's refreshToken for a fresh token pair and return a NEW `{ claudeAiOauth }` blob
- * (accessToken / refreshToken / expiresAt updated, other inner fields kept), or null on any
- * failure. Fail-soft. ONLY ever call on SLOT tokens — the LIVE credential's refresh is owned by
- * Claude Code (refreshing it here would race Claude's single-use rotating grant). Network call (30 s).
+ * (accessToken / refreshToken / expiresAt updated, other inner fields kept), or `{ blob: null,
+ * cause }` naming WHICH failure the exchange saw (TRDD-Y1ZWU998 — callers must brand a credential
+ * dead ONLY on `credential-dead`, never on a transport failure). Fail-soft. ONLY ever call on
+ * SLOT tokens — the LIVE credential's refresh is owned by Claude Code (refreshing it here would
+ * race Claude's single-use rotating grant). Network call (30 s).
  */
 export async function refreshOauthToken(
   blob: CredentialBlob,
   deps?: NetworkDeps,
-): Promise<CredentialBlob | null> {
+): Promise<RefreshResult> {
   const inner = oauthOf(blob)
   const rtok = inner.refreshToken ?? inner.refresh_token
-  if (typeof rtok !== 'string' || !rtok) return null
+  // No refresh token at all: retrying cannot help and only a re-login mints one, which is the
+  // same remedy split as an endpoint rejection — classified dead, not transport.
+  if (typeof rtok !== 'string' || !rtok) return { blob: null, cause: 'credential-dead' }
   const body = JSON.stringify({
     grant_type: 'refresh_token',
     client_id: OAUTH_CLIENT_ID,
     refresh_token: rtok,
   })
-  const { json } = await httpJson(
+  const { status, json } = await httpJson(
     TOKEN_URL,
     {
       method: 'POST',
@@ -415,10 +433,22 @@ export async function refreshOauthToken(
     },
     resolveFetch(deps),
   )
-  if (json === null || typeof json !== 'object') return null
+  if (json === null || typeof json !== 'object') {
+    // 400/401 is the token endpoint JUDGING the grant (invalid_grant rides a 400) — the only
+    // verdict that may brand a credential. Everything else nothing judged: status 0 covers
+    // network/timeout AND a 2xx with an unparseable body (httpJson collapses both to 0 — a
+    // Cloudflare challenge page is the usual unparseable 200), classified `network` because
+    // both are retryable and neither is the endpoint's verdict; any other non-2xx (403/1010,
+    // 429, 5xx) is the transport refusing to carry the question.
+    if (status === 400 || status === 401) return { blob: null, cause: 'credential-dead' }
+    if (status === 0) return { blob: null, cause: 'network' }
+    return { blob: null, cause: 'transport-refused' }
+  }
   const tok = json as Record<string, unknown>
   const access = tok.access_token ?? tok.accessToken
-  if (typeof access !== 'string' || !access) return null
+  // A 2xx that parsed but carries no access token: the endpoint answered garbage, it did not
+  // reject the grant — retryable.
+  if (typeof access !== 'string' || !access) return { blob: null, cause: 'malformed' }
   let expiresAt: unknown = tok.expiresAt
   if (expiresAt === undefined && typeof tok.expires_in === 'number') {
     expiresAt = Math.floor((Date.now() / 1000 + tok.expires_in) * 1000)
@@ -430,7 +460,7 @@ export async function refreshOauthToken(
   const newRefresh = tok.refresh_token ?? tok.refreshToken ?? rtok
   newInner.refreshToken = newRefresh
   if (expiresAt !== undefined && expiresAt !== null) newInner.expiresAt = expiresAt
-  return { claudeAiOauth: newInner }
+  return { blob: { claudeAiOauth: newInner } }
 }
 
 /** The token endpoint accepted the grant and returned a usable access token. */

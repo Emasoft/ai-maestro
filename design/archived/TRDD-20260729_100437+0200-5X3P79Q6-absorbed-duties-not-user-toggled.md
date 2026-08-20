@@ -1,11 +1,11 @@
 ---
 trdd-id: 5X3P79Q6
 title: An absorbed duty must not be gated on a user-facing preference the original owner never had
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:04:37+0200
-updated: 2026-08-07T08:33:55+0200
+updated: 2026-08-20T22:11:59+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -39,7 +39,11 @@ the implementation and ONE unresolved scope question (§Open question).
 for each of the three absorbed UPDATE chores, *what it did before absorption and under what gate*.
 That is the only thing that decides which of our categories must move to the absorbed-duty path.
 Do NOT infer it from our category names; they were written for a user-preference UI, not for a
-duty transfer, and the two vocabularies do not line up (see §Open question).
+duty transfer, and the two vocabularies do not line up (see §Open question). — **SUPERSEDED
+2026-08-20, do NOT carry forward.** This was DONE on 2026-08-07 and the answer is recorded at the
+`## Verification` box below (via `#100`, not `#99` — the card corrects its own citation there).
+Left in place rather than deleted so the audit trail survives, but it is not an action for any
+future reader.
 
 **Load-bearing facts:**
 - Root cause is ONE line: `lib/auto-update-settings.ts:104` — `DEFAULT_SETTINGS.enabled: false`.
@@ -347,3 +351,15 @@ not run it produces a silent, unbounded gap* — and is awaiting the janitor's g
   Pre-approved: issuer authority >= required approver. Standing ruling, 2026-07-29 ~09:20:
   *"the ai-maestro server should do those things automatically by itself. never an user should be
   asked to do these manually."* No approval request was sent.
+- 2026-08-20T22:11:59+0200 — `todo → complete`, archived as itself. This is the card's own
+  diagnosis applied to itself: its 2026-08-06 audit note says "this card's work SHIPPED under
+  later TRDDs and nobody ticked its boxes... the 'card stalled while the code shipped' failure",
+  and it then sat at `todo` for a further two weeks after its last box was ticked on 2026-08-07.
+  Gate verified satisfied 2026-08-20: 7 of 7 boxes checked under `## Verification` (the card has
+  no `## Acceptance` heading; that section is its gate), `blocked-by:` empty, and the `## Open
+  question` resolved and recorded in depth at the `#100` box. The three test files the boxes
+  claim were RUN first-hand — marketplace-lock, janitor-control, janitor-work-request: 3 files,
+  34 tests, all passed, exit 0, with the file count matching the paths passed so nothing was
+  silently skipped. The implementation itself landed under TRDD-PE54D95Q plus the ai-maestro#102
+  follow-ups, as this card records. Closed under the USER's standing rule of 2026-08-20 that a
+  card whose acceptance gate is mechanically satisfied may be closed without a further ruling.

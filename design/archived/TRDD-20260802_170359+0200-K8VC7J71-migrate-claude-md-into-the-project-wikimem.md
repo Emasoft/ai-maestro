@@ -1,11 +1,11 @@
 ---
 trdd-id: K8VC7J71
 title: Migrate CLAUDE.md into the project wikimem — topic pages wikipedia-style, leave only build and overview
-column: human_review
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T17:03:59+0200
-updated: 2026-08-02T17:58:48+0200
+updated: 2026-08-20T21:26:59+0200
 current-owner: ai-maestro
 created-by: user
 assignee: ai-maestro
@@ -349,3 +349,5 @@ Fixed by `project-long-form-docs` (58 docs, ~35 000 lines, naming which subjects
 linked both ways with the overview. **Lesson: a link is CONTENT when it is the last one** — grep
 for each pointer's target before removing the section that carries it. A "migrated" pointer section
 is the one case where verifying the links resolve proves nothing.
+
+- 2026-08-20T21:26:59+0200 — COMPLETED by ai-maestro hub session under the USER's standing rule of 2026-08-20 (acceptance gate mechanically satisfied: 7/7 boxes checked).

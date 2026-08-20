@@ -1,9 +1,9 @@
 ---
 trdd-id: 4QOWVSLU
 title: Absorb the memory-guard Tier-1 OOM lane into the server
-column: human_review
+column: complete
 created: 2026-08-19T15:01:29+0200
-updated: 2026-08-19T21:07:43+0200
+updated: 2026-08-20T21:26:59+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -86,3 +86,4 @@ that FIRST; this card does not restate it.
 - 2026-08-19T15:01:29+0200 — MANDATE issued as Tier-0 self-mandate (derived NPT of [[KCRMSNL7]],
   server-internal, reversible, dark-shipped where destructive). No approval request sent.
 - 2026-08-19T21:07:43+0200 — moved to human_review by hub-session-brrjk57p-phase2: lane landed + live detect-only (e30cf240), all three boxes satisfied on the engineering side; the USER-gated act is ARMING (`AIM_MEMORY_GUARD=1`), recorded as NEXT ACTION. Closes when the USER arms it or declines (then: complete as detect-only, janitor keeps the kill).
+- 2026-08-20T21:26:59+0200 — COMPLETED by ai-maestro hub session under the USER's standing rule of 2026-08-20 (acceptance gate mechanically satisfied: 3/3 boxes checked).

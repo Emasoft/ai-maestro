@@ -1,11 +1,11 @@
 ---
 trdd-id: RTHFRI4P
 title: 33 wiki lessons carry no keywords so recall cannot find them
-column: human_review
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T18:06:52+0200
-updated: 2026-08-20T21:13:22+0200
+updated: 2026-08-20T21:26:59+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -142,3 +142,5 @@ signal that would justify a split. Per-atom:
 
 Verified after: `memgrep lint` on all three roots still reports 0 ERROR (120/133/1 findings resp.,
 all INFO/WARN) — no write was made, so this is a re-confirmation of the pre-existing clean state.
+
+- 2026-08-20T21:26:59+0200 — COMPLETED by ai-maestro hub session under the USER's standing rule of 2026-08-20 (acceptance gate mechanically satisfied: 6/6 boxes checked).

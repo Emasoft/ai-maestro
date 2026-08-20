@@ -1,9 +1,9 @@
 ---
 trdd-id: JBFM8XR0
 title: Absorb the fleet-plugins-update chore into the server
-column: human_review
+column: complete
 created: 2026-08-19T15:01:29+0200
-updated: 2026-08-20T00:57:26+0200
+updated: 2026-08-20T21:26:59+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -96,3 +96,4 @@ that FIRST; this card does not restate it.
 - 2026-08-19T15:01:29+0200 — MANDATE issued as Tier-0 self-mandate (derived NPT of [[KCRMSNL7]],
   server-internal, reversible, dark-shipped where destructive). No approval request sent.
 - 2026-08-20T00:48:40+0200 — moved to human_review by hub-session-brrjk57p-phase2: lane live+claimed (f048f9ae), all boxes satisfied; parked for USER review only (ships ON, nothing USER-gated).
+- 2026-08-20T21:26:59+0200 — COMPLETED by ai-maestro hub session under the USER's standing rule of 2026-08-20 (acceptance gate mechanically satisfied: 4/4 boxes checked).

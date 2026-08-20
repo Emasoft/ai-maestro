@@ -1,9 +1,9 @@
 ---
 trdd-id: ZLBBD4E3
 title: read-only session-activity verb usable on non-self panes for the fleet guardian
-column: dev
+column: complete
 created: 2026-08-20T08:27:07+0200
-updated: 2026-08-20T08:40:52+0200
+updated: 2026-08-20T09:02:49+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -44,9 +44,11 @@ only, never pane text.
 
 - [x] spec section first — generated from the session.sh header, no-content property stated normatively; specs:check green
 - [x] server derivation measured first: hook chat state (chatStateFileFor), lib/user-presence (last_user_input_epoch — the exact signal the ioreg probe approximates), transcript slug mtime. ZERO new collectors. `transcript_advancing` deliberately became `transcript_last_write_epoch`: one sample of a moving quantity licenses nothing, so movement is the CALLER's two-sample derivation — spec'd that way
-- [ ] verb returns correct signals for a busy and an idle pane — UNIT-pinned (in_turn map, null-absence, unreadable-file), LIVE run pending server deploy: the route is under app/api (BUNDLED — needs yarn build + pm2 restart, not restart alone)
-- [ ] janitor notified with the exact invocation; TRDD-D2DD5GO8's consumer unblocked (notify AFTER live verify — a doc naming an undeployed verb fails worse)
+- [x] LIVE-verified post-deploy: busy pane (frank) in_turn=true hook=active, idle pane (testbot) in_turn=false hook=idle, all five fields populated on both; unknown session → 404. Unit-pinned besides (in_turn map, null-absence, unreadable-file)
+- [x] janitor notified with the exact invocation post-verification (2026-08-20)
 
 ## Approval log
 
 - 2026-08-20T08:27:07+0200 — MANDATE issued by the hub (min-approval-requirement: none). No request sent.
+
+- 2026-08-20T09:02:49+0200 — COMPLETED by the hub: shipped, deployed (yarn build + pm2 restart), live-verified by effect; all boxes checked.

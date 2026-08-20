@@ -54,10 +54,14 @@ cmd_update_trail() {
     fi
     local out
     out="$(api_query GET "/api/plugins/update-trail?${qs}")" || return 1
+    # `.rows // []`: an auth/error body has no rows array, and a bare `.rows[]`
+    # would exit 5 with a jq iterate-null error — an instrument failure reading
+    # as data (the PROBE_FAILED lesson). api_query already surfaced the HTTP
+    # error; here we only guard the parse.
     if [ "$as_json" = 1 ]; then
-        printf '%s\n' "$out" | jq '.rows'
+        printf '%s\n' "$out" | jq '.rows // []'
     else
-        printf '%s\n' "$out" | jq -r '.rows[] | [.target, (.ok|tostring), (.start_epoch|tostring), (.end_epoch|tostring), .detail] | @tsv'
+        printf '%s\n' "$out" | jq -r '(.rows // [])[] | [.target, (.ok|tostring), (.start_epoch|tostring), (.end_epoch|tostring), .detail] | @tsv'
     fi
 }
 

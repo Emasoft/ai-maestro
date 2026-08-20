@@ -1,9 +1,9 @@
 ---
 trdd-id: MNN0VAS6
 title: per-target plugin-update trail exposed as a spec'd read verb for the janitor
-column: dev
+column: complete
 created: 2026-08-20T08:27:07+0200
-updated: 2026-08-20T08:45:40+0200
+updated: 2026-08-20T09:02:49+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -37,8 +37,10 @@ start/end epoch + exit code PER `claude plugin update <target>` invocation.
 
 - [x] measured first: NO per-invocation trail existed — only the last-run stamp, the last-sweep signal file, and log lines. Built lib/plugin-update-trail.ts (JSONL, per-EVENT append — never per poll, so the 1000→500 cap holds real history; single writer under the marketplace lock; reader lenient per ROW, write path never rebuilds from a blind read)
 - [x] spec generated from the new CLI header (one contract source); specs:check green
-- [ ] janitor notified with the exact invocation AFTER live verify (route is bundled — needs yarn build + pm2 restart)
+- [x] LIVE-verified post-deploy — and by production itself: the lane fired during the restart window and recorded a REAL row (notebooklm-ai-plugin, ok=true, 6s) which the CLI read back. Janitor notified 2026-08-20
 
 ## Approval log
 
 - 2026-08-20T08:27:07+0200 — MANDATE issued by the hub (min-approval-requirement: none). No request sent.
+
+- 2026-08-20T09:02:49+0200 — COMPLETED by the hub: shipped, deployed (yarn build + pm2 restart), live-verified by effect; all boxes checked.

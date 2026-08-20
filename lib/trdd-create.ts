@@ -6,6 +6,11 @@
  * the frontmatter, and each copy drifted (wrong id alphabet, `ls`-glob collision
  * checks, TYPED timestamps: every one a recorded failure mode of this fleet).
  *
+ * NEUTER RUNS (2026-08-20 — OBSERVED via scripts/dev/neuter, restore blob-verified):
+ *   force isMandate=true → 1 red / 4 green: "an author BELOW the floor lands in proposals/"
+ *   skip the idTaken consult → 1 red / 4 green: "a forced collision RE-ROLLS" (the first
+ *   version of that test reddened NOTHING — RNG luck; hence the injectable mint seam)
+ *
  * ONE function owns all four now, plus the piece a hand-rolled mint always skips:
  * ZONE ROUTING PER THE MANDATE RULE. A card whose `min-approval-requirement` exceeds
  * the author's authority lands in proposals/ as `column: proposal` — enforced AT MINT,

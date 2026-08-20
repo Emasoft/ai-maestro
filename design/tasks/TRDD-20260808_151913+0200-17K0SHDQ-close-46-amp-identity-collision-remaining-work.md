@@ -78,7 +78,7 @@ can never pass at all). One card, one gate: `## Acceptance` owns it.
       sites converted, 7 tests green run by the hub, neuter red d/e/f recorded in the test
       file; deployed to `~/.local/share` + `~/.local/bin` copies with timestamped backups
       and verified on the installed copies (2026-08-08T15:32+0200)
-- [ ] ~~W-C shipped: title filter + resolver flag, 0/1/N pinned~~ **DROPPED from Acceptance
+- ~~W-C shipped: title filter + resolver flag, 0/1/N pinned~~ — **DROPPED 2026-08-20** (not deferred): recorded here rather than deleted; carries no checkbox because a dropped item must not gate the card forever. **DROPPED from Acceptance
       2026-08-19 (hub, under the Phase-2 delegation) — never wanted:** deferred 2026-08-08 as "a
       feature nobody is blocked on", re-checked 2026-08-16 (same), re-checked 2026-08-19: #46 is
       CLOSED, no board card and no peer names it in 11 days. The card's own instruction applies

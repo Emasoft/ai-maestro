@@ -2,7 +2,7 @@
 name: model-scoped-window-fallback
 description: "the Fable window is exhausted but the account still has 5h/7d headroom / why did the rotator evict the whole fleet over ONE model / how do agents get switched off an exhausted model automatically / /model opus does not switch the model / an agent is stuck on a model-switch confirmation dialog / which field says what model an agent is running (none of them do) / the rotator rotated over a model-scoped window / rotated onto an account whose Fable window is also spent / why did the rotator refuse to rotate while an account had headroom / ROTATOR_SCOPED_SWITCH_AT / scoped-only wall"
 ocd: 2026-08-06
-lmd: 2026-08-16
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: project
@@ -13,7 +13,6 @@ publish-globally: false
 ---
 
 # model-scoped-window-fallback
-
 
 ^ATOM-FJIT-3YV9 [desc:"A model-scoped window can be spent while the account is healthy; rotating the credential is the expensive answer to a MODEL limit.", keywords: fable_window_exhausted model_scoped_window account_has_headroom rotator_evicted_the_fleet isSafeAlternate locked_out_123_hours rotating_credential_is_the_expensive_answer, type: project, ocd: 2026-08-06, lmd: 2026-08-06]
 
@@ -27,7 +26,6 @@ Switching the model is the cheap answer; rotating the credential is the expensiv
 fallback subsystem does the former. **It routes AROUND `isSafeAlternate`; it does not fix it** —
 that fix is a rotation-behaviour change the janitor's `rotator.py` mirrors, so it must land in
 both or the two disagree about which account is usable.
-
 
 ^ATOM-APWN-A5H9 [desc:"/model opus raises a confirmation dialog — without the ENTER the agent is left BLOCKED, which is worse than the exhausted window.", keywords: model_opus_does_not_switch_the_model AskUserQuestion_confirmation agent_stuck_on_model_dialog ESC_then_command_then_ENTER confirm_delay, type: project, ocd: 2026-08-06, lmd: 2026-08-06]
 
@@ -45,7 +43,6 @@ being repaired, and it is exactly what `block-state` reports as `reason: 'ask_us
 Consequence for any implementation: **a failed command must NEVER be confirmed.** No command
 landed ⇒ no dialog ⇒ a bare ENTER into a live prompt SUBMITS whatever text sits in it, turning a
 failed model switch into the agent being handed an arbitrary instruction.
-
 
 ^ATOM-UGEX-UXUF [desc:"Nothing in the registry or hook state reports an agent's running model — only the pane statusline does.", keywords: which_field_says_what_model_an_agent_is_running Agent.model_is_null no_model_in_chat-state pane_statusline_is_the_only_source parsePaneModel, type: project, ocd: 2026-08-06, lmd: 2026-08-06]
 
@@ -71,7 +68,6 @@ splitting on the first space truncates every 1M agent), and you must scan from t
 scrollback holds statuslines naming a model the agent has since left. Join on the FAMILY
 (first token, lowercased), never the raw string.
 
-
 ^ATOM-EHU7-1YO2 [desc:"The rotator tick has the window numbers and zero agents; the fleet watchdog has agents and no credential access. They meet at the persisted stamp.", keywords: two_beats_are_disjoint rotator_has_no_agents watchdog_has_no_credential_data persisted_stamp_is_the_join readTickWindows WindowSnapshot, type: project, ocd: 2026-08-06, lmd: 2026-08-06]
 
 `lib/oauth-rotator/tick.ts` has **zero** agent references — it is purely credential-side.
@@ -88,7 +84,6 @@ validated, and is read back by `readTickWindows` — **stale-gated**, because an
 **Do NOT have the watchdog probe usage itself** to avoid the plumbing: that duplicates a
 rate-limited request the tick already makes, and two callers would then disagree about the same
 window.
-
 
 ^ATOM-74ZX-K1YN [desc:"Pacing needs no persisted plan because the list self-drains — and cooldown is the only per-agent gate, so it is the only refusal worth skipping.", keywords: one_agent_blocks_the_whole_sweep cooldown_stall candidate_list_drains_itself pacing_without_persisting_a_plan ships_dark, type: project, ocd: 2026-08-06, lmd: 2026-08-06]
 
@@ -108,7 +103,6 @@ fleet-wide refusal (fire flag, machine-wide STOP, HID presence).
 It **ships dark** (`AIM_FLEET_MODEL_FALLBACK=1`) and that is not caution for its own sake: no test
 can prove the confirming ENTER dismissed the dialog — only that the keystroke was SENT. Report the
 outcome as three states (confirmed / not / **unknown**) and never collapse unknown into success.
-
 
 ^ATOM-A4DU-OG9O [desc:"the rotator rotated (or refused to) over a model-scoped window — the scoped-only policy the server and the janitor daemon BOTH implement", keywords: scoped_rotation_policy rotator_ignores_model_window ROTATOR_SCOPED_SWITCH_AT ROTATOR_SCOPED_ACCOUNT_HEADROOM scoped-only_wall model-scoped_rotation_trigger janitor_parity one_policy_two_implementations rotated_onto_a_same-model-spent_account healthiest_account_sidelined, ocd: 2026-08-15, lmd: 2026-08-15]
 
@@ -142,13 +136,6 @@ legs tripping at different numbers would leave a DEAD ZONE: an account walled at
 rotation (scoped-only) and refused the model switch (below 97), which is the fleet stalling
 with both remedies declining to act.
 
-## See also
-
-- [[server-oauth-token-continuity-design]] — the credential-side half. That page covers rotation,
-  refresh and reauth (what the server does when a TOKEN expires); this one covers what it does
-  when a MODEL's window is spent while the token is fine. The two beats are disjoint by design and
-  meet only at the persisted tick stamp.
-
 
 ^ATOM-ZFI2-5LWN [desc:"the AskUser auto-answer watchdog leg — answers ask_user menus ONLY, never permission prompts; dark behind AIM_FLEET_ASKUSER_AUTOANSWER=1", keywords: agent_stuck_on_question_menu auto_answer_AskUserQuestion stalled_ask_user_prompt_fleet AIM_FLEET_ASKUSER_AUTOANSWER, ocd: 2026-08-08, lmd: 2026-08-08]
 
@@ -160,5 +147,12 @@ ENTER (a bare ENTER on a dismissed menu submits the prompt text); a menu signatu
 answered twice in 30 min (lockout). Ships DARK behind `AIM_FLEET_ASKUSER_AUTOANSWER=1`
 (mirrors `AIM_FLEET_MODEL_FALLBACK`); shares the recovery clock and gates with the
 model-fallback leg via `fleet-recovery-actuator`.
+
+## See also
+
+- [[server-oauth-token-continuity-design]] — the credential-side half. That page covers rotation,
+  refresh and reauth (what the server does when a TOKEN expires); this one covers what it does
+  when a MODEL's window is spent while the token is fine. The two beats are disjoint by design and
+  meet only at the persisted tick stamp.
 
 ## Notes and lessons learned

@@ -2,12 +2,13 @@
 name: repo-file-structure
 description: "where should I put a new component or hook in this repo / what is the source repo directory layout / why is there no server directory / where do api routes live / project folder conventions app components hooks lib types services scripts"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: reference
   tier: component
   topic: architecture-and-runtime
+publish-globally: false
 ---
 
 # repo-file-structure
@@ -102,11 +103,6 @@ server.mjs              - Custom Next.js server (HTTP + WebSocket)
 CLAUDE.md               - This file - guidance for Claude Code
 ```
 
-## See also
-
-- [[runtime-install-tree]] — the runtime data tree (`~/.aimaestro/`, `~/agents/`) this source
-  repo is NOT part of once packaged
-
 
 ^ATOM-CKJ3-GYYA [desc:"Never name a source directory 'reports' — .gitignore's bare 'reports/' matches at ANY depth and silently un-commits source", keywords: git_add_refused_my_file my_source_file_is_gitignored the_routes_were_not_committed hint_use_-f_if_you_really_want_to_add_them fresh_clone_missing_files_that_work_locally never_name_a_source_directory_reports, ocd: 2026-08-05, lmd: 2026-08-05]
 
@@ -130,5 +126,10 @@ widening it to accommodate a URL choice is the wrong trade when the collision is
 route became `/api/janitor/status-archive/`, which is also the more accurate name.
 
 **Check it costs one command:** `git check-ignore -v <path>` names the exact rule and line.
+
+## See also
+
+- [[runtime-install-tree]] — the runtime data tree (`~/.aimaestro/`, `~/agents/`) this source
+  repo is NOT part of once packaged
 
 ## Notes and lessons learned

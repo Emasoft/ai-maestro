@@ -2,12 +2,13 @@
 name: agent-launch-preconditions
 description: "an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in' / 'API Usage Billing' and can do nothing — or its pane falls back to a shell prompt because --agent did not resolve — or it runs a live but GENERIC claude (role persona never loads, e.g. a MANAGER builds solo) because --agent was DROPPED at the launch chokepoint"
 ocd: 2026-07-12
-lmd: 2026-07-30
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: project
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 ^agent-launch-two_silent_failures [desc:"ai_maestro_launches_agent_clients_that_cannot_possibly_work_and_they_look_alive", keywords:"agent_says_not_logged_in_but_dashboard_shows_it_online agent_pane_falls_back_to_zsh claude_--agent_exits_printing_the_available_agents_list agent_looks_alive_but_can_do_nothing", ocd: 2026-07-12, lmd: 2026-07-30]
@@ -74,9 +75,6 @@ turns it from a silent fleet outage into an explicit, diagnosable refusal.
 Related: the general platform knowledge lives in the user-scope notes
 `claude-code-client-authentication` and `macos-keychain-access-inheritance`.
 
-^agent-launch-agent-flag-dropped [status: superseded, superseded-by: agent-launch-agent-flag-dropped-v2, desc:"role_plugin_installed_but_--agent_dropped_at_launch_so_agent_runs_a_live_generic_claude", keywords:"titled_agent_runs_generic_claude_persona_never_loads MANAGER_builds_the_project_solo_instead_of_creating_a_fleet agent_is_logged_in_and_alive_but_not_running_its_role_persona --agent_missing_from_ps_argv_though_registry_programArgs_has_it fresh_Wizard-created_titled_agent_has_no_--agent_in_its_process", ocd:2026-07-22, lmd:2026-07-30]
-⚠ **SUPERSEDED by `^agent-launch-agent-flag-dropped-v2` — do NOT apply; preserved as history.** This block over-generalized ("the launch chokepoints" plural) — only the fresh-CREATE path drops `--agent`; `wakeAgent`/restart read the registry which already carries it. Why it was wrong: `[^6]`.
-
 **Third silent failure — the MOST insidious, because the agent is genuinely ALIVE and
 LOGGED IN** (not "Not logged in" #1, not a shell prompt #2). The role-plugin is installed AND
 enabled — `--agent` WOULD resolve — but the launch command **drops `--agent` entirely**, so
@@ -128,13 +126,6 @@ the transcript). `sanitizeArgs` is NOT the stripper — the fresh-create path si
 be executed without `--agent`". Non-Claude + agentless pass through; no resolvable persona ⇒ REFUSE
 (fail-fast, R9.13). See also `scen031-manager-role-violation-not-substrate`.
 
-## Governed by
-
-General debugging discipline this page's own `[^1]` lesson applies now lives on the
-USER-scope aspect page `debugging-methodology` (cross-scope; referenced in prose,
-not as a `[[wikilink]]`, per the link-hygiene rule).
-
-
 ^ATOM-RQ04-QDMJ [desc:"claude has no --cwd flag and exits 0 when given one, so every local-scope install/uninstall through claudeAdapter silently did nothing; pass the dir as the spawn cwd", keywords: plugin_installed_but_the_agent_does_not_have_it local_scope_install_did_nothing_but_reported_success why_does_the_code_write_settings_local_json_after_calling_the_CLI claude_plugin_install_scope_local belt_and_braces_settings_write_back adapter_returned_success_having_run_nothing unknown_CLI_option_exits_zero, type: project, ocd: 2026-07-30, lmd: 2026-07-30]
 
 `claude` has **no `--cwd` flag**. Given one it prints `error: unknown option '--cwd'` and
@@ -149,6 +140,17 @@ command never runs; without it, from the same cwd, the install lands and the CLI
 `settings.local.json` and its own `installed_plugins.json` row. Fixed in `c898fa90`, pinned by
 `tests/lib/claude-adapter-cli-argv.test.ts` (14 tests) asserting the dir is in the options and
 NOT in the arguments — a fake-adapter test at the boundary cannot see this.
+
+## Superseded
+
+^agent-launch-agent-flag-dropped [status: superseded, superseded-by: agent-launch-agent-flag-dropped-v2, desc:"role_plugin_installed_but_--agent_dropped_at_launch_so_agent_runs_a_live_generic_claude", keywords:"titled_agent_runs_generic_claude_persona_never_loads MANAGER_builds_the_project_solo_instead_of_creating_a_fleet agent_is_logged_in_and_alive_but_not_running_its_role_persona --agent_missing_from_ps_argv_though_registry_programArgs_has_it fresh_Wizard-created_titled_agent_has_no_--agent_in_its_process", ocd:2026-07-22, lmd:2026-07-30]
+⚠ **SUPERSEDED by `^agent-launch-agent-flag-dropped-v2` — do NOT apply; preserved as history.** This block over-generalized ("the launch chokepoints" plural) — only the fresh-CREATE path drops `--agent`; `wakeAgent`/restart read the registry which already carries it. Why it was wrong: `[^6]`.
+
+## Governed by
+
+General debugging discipline this page's own `[^1]` lesson applies now lives on the
+USER-scope aspect page `debugging-methodology` (cross-scope; referenced in prose,
+not as a `[[wikilink]]`, per the link-hygiene rule).
 
 ## Notes and lessons learned
 

@@ -2,7 +2,7 @@
 name: janitor-chore-absorbability
 description: "can the ai-maestro server take over this janitor chore / should we absorb chore X / I added a name to SERVER_ABSORBED_TASKS and nothing changed / why is the janitor daemon not running while the server is up / who guards the non-harness claude sessions / the janitor reports a chore dark but we ARE running it / is a hibernated agent broken / auto-update says enabled false and lastRunAt null but something is making hundreds of calls / lastRunSummary shows 38 failed plugin updates that no longer happen / the same plugin appears both failed and updated / is the absorbed lane running at all / is cache-prune absorbed now or does the table still say no / is there a per-chore handover now or does the daemon still exit wholesale / which chores does the janitor still run while the server is up / is the absorbability table out of date / is memory-guard absorbed or armed / why does the liveness beat not claim memory-guard / detect-only memory guard would kill / AIM_MEMORY_GUARD claim follows arming activeAbsorbedChores CONDITIONAL_CHORES / is rules-cleanup absorbed or does the row still say no / orphaned janitor rules never removed — fixed / AIM_RULES_CLEANUP dark-shipped lib rules-cleanup / is fleet-stop absorbed or does the row still say no / who delivers janitor-disarm on the kill-switch / AIM_FLEET_STOP"
 ocd: 2026-08-05
-lmd: 2026-08-19
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: project
@@ -14,7 +14,7 @@ publish-globally: false
 # janitor-chore-absorbability
 
 
-^ATOM-42IZ-Z6VI [desc:"A chore is absorbable IFF its population is DATA the server holds, or a host observation the server can make with the daemon's own instrument AND safety cutoff (cache-prune absorbed 2026-08-19 on exactly that basis)", keywords: can_the_server_absorb_this_chore which_janitor_chores_are_absorbable should_ai-maestro_take_over_chore_X absorb_all_eleven_chores is_cache-prune_absorbed absorbability_table_out_of_date, ocd: 2026-08-05, lmd: 2026-08-19]
+^ATOM-42IZ-Z6VI [desc:"A chore is absorbable IFF its population is DATA the server holds, or a host observation the server can make with the daemon's own instrument AND safety cutoff", keywords: can_the_server_absorb_this_chore which_janitor_chores_are_absorbable should_ai-maestro_take_over_chore_X absorb_all_eleven_chores is_cache-prune_absorbed absorbability_table_out_of_date, ocd: 2026-08-05, lmd: 2026-08-19]
 
 **THE TEST, and it decides every case: a janitor chore is absorbable by the ai-maestro server IFF
 its POPULATION is DATA the server holds. It is NOT absorbable when the population is
@@ -45,7 +45,7 @@ absorption NPT under KCRMSNL7 (JBFM8XR0 fleet-plugins-update, 5II83KK4 rules-cle
 memory-guard, 99LV0U4I fleet-scan population → 9FW92242 fleet-stop). [^5] [^7] [^8] [^9]
 
 
-^ATOM-052B-G6FG [desc:"The handover is PER CHORE (janitor yields what the server claims in absorbed_chores) and the daemon exits only when the server claims EVERY global chore — the wholesale exit / inert SERVER_ABSORBED_TASKS is superseded", keywords: SERVER_ABSORBED_TASKS_did_nothing added_a_chore_to_the_absorbed_list_and_nothing_changed why_is_the_janitor_daemon_not_running daemon_exits_when_the_server_is_up who_guards_the_non-harness_claude_sessions is_there_a_per-chore_handover which_chores_does_the_janitor_still_run server_owns_every_chore, ocd: 2026-08-05, lmd: 2026-08-19]
+^ATOM-052B-G6FG [desc:"The handover is PER CHORE (janitor yields what the server claims) and the daemon exits only when the server claims EVERY chore — wholesale-exit SERVER_ABSORBED_TASKS is superseded", keywords: SERVER_ABSORBED_TASKS_did_nothing added_a_chore_to_the_absorbed_list_and_nothing_changed why_is_the_janitor_daemon_not_running daemon_exits_when_the_server_is_up who_guards_the_non-harness_claude_sessions is_there_a_per-chore_handover which_chores_does_the_janitor_still_run server_owns_every_chore, ocd: 2026-08-05, lmd: 2026-08-19]
 
 **The handover is PER CHORE now (since ai-maestro#111 / janitor#134; verified in the installed
 janitor 3.3.16 on 2026-08-19).** `global_state._server_owns_host` delegates to

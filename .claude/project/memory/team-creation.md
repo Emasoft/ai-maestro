@@ -2,11 +2,11 @@
 name: team-creation
 description: "how is a team created / who creates the 5 base members — the MANAGER or the COS / what are the 5 required roles / why is my team stuck with only a chief-of-staff / can a COS create agents / how do I add a specialist (e.g. a webdesigner) to a team / is an incomplete team supposed to be frozen"
 ocd: 2026-07-14
-lmd: 2026-07-14
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: project
-  tier: hub
+  tier: component
   topic: teams-and-governance
 globs:
   - services/teams-service.ts
@@ -14,6 +14,7 @@ globs:
   - app/api/teams/**
   - lib/authorization.ts
   - lib/portfolio-check.ts
+publish-globally: false
 ---
 
 # Team creation — who creates whom, and in what order

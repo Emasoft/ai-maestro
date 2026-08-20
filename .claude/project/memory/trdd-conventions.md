@@ -2,7 +2,7 @@
 name: trdd-conventions
 description: "How to author a TRDD in this project: the trdd-id is now an 8-char UPPERCASE base36 id (NOT a UUID) — TRDD-K3QX9P2W style, case-insensitive lookup, create-time collision check. Also: where TRDDs live (design/tasks vs proposals/archived/refused), the canonical authoring snippet, and the zsh gotcha that the shell var must not be named UID. AND: where a TRDD's state lives — a card says `column: complete` while its body says `**Status:** Not started` / a drift detector reported `status='not-started'` but grep found no status field / may I write a Status line in the body / is `status:` a duplicate of `column:` / the linter reports 0 errors on a corpus I know is dirty / which spellings of the state field compete. AND: may I edit the body of an archived / complete / terminal TRDD — the IND §12 freeze and the NARROW janitor#139 carve-out (a VERIFIABLE contradiction may be removed, a line that adds context may not) / trddgrep validate baseline changed from 2 ERRORs to 1 / why is one BODY-STATE-CLAIM error permanent and not a backlog item / a terminal card has no acceptance boxes and the completion gate never caught it / why does a card with a spec-shaped bullet list never close / where must ## Acceptance checkboxes live."
 ocd: 2026-06-23
-lmd: 2026-08-16
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: reference
@@ -93,7 +93,7 @@ So `trddgrep validate` reports **1** ERROR, not the 2 that were called "the base
 TRDD-FKGMNGJB is closed and archived.[^7]
 
 
-^ATOM-8FVL-IV1A [keywords: acceptance_gate_vacuous_no_checkboxes terminal_column_zero_boxes_always_passes card_can_never_close_spec_bullets_counted_as_boxes completion_gate_needs_at_least_one_box where_must_acceptance_boxes_live, ocd: 2026-08-16, lmd: 2026-08-16]
+^ATOM-8FVL-IV1A [desc:"A terminal-column card with zero acceptance checkboxes makes the completion gate vacuous — every box in an empty file is trivially checked; boxes must live under Acceptance", keywords: acceptance_gate_vacuous_no_checkboxes terminal_column_zero_boxes_always_passes card_can_never_close_spec_bullets_counted_as_boxes completion_gate_needs_at_least_one_box where_must_acceptance_boxes_live, ocd: 2026-08-16, lmd: 2026-08-16]
 
 A terminal-column card with NO acceptance checkboxes at all makes the completion gate (verdict G20260731: every box checked before complete/published/live) vacuous — "every box in the file is checked" is trivially true of a file with zero boxes. Measured 2026-08-16: 51 open cards had no checkboxes under ## Acceptance. Fixed in fd5fc4ee: 291 unchecked boxes added, 0 pre-ticked (adding boxes never asserts a check ran). Boxes MUST live under a ## Acceptance heading and nowhere else in the body — a spec-shaped ## bullet list elsewhere gets counted by the naive box-count and can make a card permanently unclosable.
 

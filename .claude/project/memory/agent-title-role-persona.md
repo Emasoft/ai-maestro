@@ -2,12 +2,13 @@
 name: agent-title-role-persona
 description: "TITLE vs ROLE vs PERSONA in ai-maestro / what is governanceTitle vs rolePlugin / can one role-plugin serve multiple titles / why does ChangeTitle reject this plugin / difference between ChangePlugin and ChangeTitle / what determines who an agent can message"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: reference
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 # agent-title-role-persona
@@ -42,8 +43,6 @@ Every AI Maestro agent has exactly **three orthogonal layers**. Do NOT collapse 
 - Do not use "role" to mean "title" — the 2026-03-20 rename made `TitleBadge` / `TitleAssignmentDialog` authoritative. `agent.governanceTitle` is the TITLE; `agent.rolePlugin` (config) is the ROLE; `agent.name` + `agent.label` + `agent.aid` + `agent.workingDirectory` are the PERSONA.
 - When the user says "change the agent's role", clarify whether they mean swap the role-plugin (ROLE) or re-assign the governance level (TITLE) — these are different pipelines (`ChangePlugin` with `rolePluginSwap` vs `ChangeTitle`).
 
-## See also
-
 
 ^ATOM-PNJX-P7AY [desc:"USER ruling 2026-08-06: no role field exists — taxonomy is TITLE + role-plugin; registry role key removed and migration-stripped", keywords: role_field_removed role_is_not_part_of_the_taxonomy agent.role messaging_role role_autonomous_contradiction role_vs_governanceTitle registry_role_key_stripped, type: reference, ocd: 2026-08-05, lmd: 2026-08-05]
 
@@ -62,7 +61,6 @@ with the title, never bare deletion — the one such site (composition-check's
 Messaging authority derives from the TITLE at message time
 (`isManager()`/`isChiefOfStaffAnywhere()`).
 
-
 ^ATOM-XER0-P82F [desc:"title == governanceTitle, ONE concept: TITLE is the taxonomy term, governanceTitle the code/API spelling, governance_title the signed-token wire — bound, not renamed (TRDD-MCKBB117)", keywords: title_vs_governanceTitle why_two_names_for_title rename_governanceTitle governance_title_wire title_naming_binding, type: reference, ocd: 2026-08-05, lmd: 2026-08-05]
 
 `title` and `governanceTitle` are ONE concept (USER, 2026-08-06: "governanceTitle and
@@ -75,5 +73,7 @@ fleet CLIs parse `.governanceTitle`, and signed `aim_tk_*` tokens embed `governa
 — unrewritable, so a rename forces dual-spelling acceptance through rotation (forbidden
 backward-compat). Normative home: governance-spec.md TERM-02 (2.4.2). Re-open only as a
 coordinated flag-day.
+
+## See also
 
 ## Notes and lessons learned

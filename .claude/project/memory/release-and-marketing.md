@@ -2,12 +2,13 @@
 name: release-and-marketing
 description: "do I need to draft an X twitter post when opening a PR / where do marketing files go / marketing folder gitignored / X post template for a release / PR creation checklist marketing"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: reference
   tier: component
   topic: tooling-and-testing
+publish-globally: false
 ---
 
 # release-and-marketing
@@ -70,8 +71,6 @@ marketing/
 - Never create these files in the project root
 - When using the planning skill for marketing tasks, set the output directory to `marketing/`
 
-## See also
-
 
 ^ATOM-PTK5-9364 [desc:"git-cliff release notes copy commit subjects verbatim — a bare @word in a subject pages a real account from the release body", keywords: release_notes_paged_someone changelog_mention_notification git-cliff_commit_subject_at-mention release_body_linkifies, ocd: 2026-08-08, lmd: 2026-08-08]
 
@@ -81,5 +80,7 @@ linkifies and PAGES a live account. Commits about the anti-paging rule itself ar
 likely carriers. Durable fix: a `cliff.toml` postprocessor backticking word-boundary `@word`
 (a hand edit of CHANGELOG.md is undone by the next git-cliff run). Found by the assistant-role
 session at its v0.3.3 release; filed for the canonical template as CPV#202.
+
+## See also
 
 ## Notes and lessons learned

@@ -2,7 +2,7 @@
 name: pillar-tooling-scale-and-index
 description: "trddgrep / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can trddgrep's search be served by FTS5 / the cold index build takes forever and eats gigabytes / the warm query is just over the one-second budget / where does the time in a warm index query actually go / my stage timings do not add up to the total / the probe stats every file and I want to skip it / --min-severity or --rule on trddgrep does nothing / an unknown CLI flag is silently ignored / cmp says the installed pillar CLI differs from the source but I didn't touch it / which file do I diff an installed trddgrep/prrdgrep/specgrep against"
 ocd: 2026-07-28
-lmd: 2026-08-16
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: project
@@ -134,17 +134,17 @@ per file) · `lib/pillar/index-db.ts` (schema, migration ladder, validate, self-
 abstraction fits is that its tests pass unchanged.
 
 
-^ATOM-JJ70-AF5R [keywords: trddgrep_ignores_unknown_flags min-severity_does_nothing exit_code_reads_as_verdict_but_isnt validate_prints_everything_regardless_of_flag cli_flag_silently_dropped, ocd: 2026-08-16, lmd: 2026-08-16]
+^ATOM-JJ70-AF5R [desc:"trddgrep silently ignored unknown CLI flags — --min-severity did nothing and validate printed all findings regardless; fixed to route through the shared CLI router", keywords: trddgrep_ignores_unknown_flags min-severity_does_nothing exit_code_reads_as_verdict_but_isnt validate_prints_everything_regardless_of_flag cli_flag_silently_dropped, ocd: 2026-08-16, lmd: 2026-08-16]
 
 trddgrep silently ignores unknown CLI options (fixed 3a67e675, pinned 9b010fb8): validate --min-severity error printed all 265 findings (264 WARN) and exited 1, byte-identical to the bare command — the flag does not exist and was dropped on the floor. prrdgrep/specgrep always rejected unknown flags via the shared lib/pillar/cli.ts:193 router; trddgrep did not route through that core, so it alone diverged. --min-severity and --rule are now real filters.
 
 
-^ATOM-IWHR-4K9M [keywords: validate_findings_mostly_by_design dont_mass_migrate_approval-tier dont_fabricate_created-by legacy_card_incremental_migration signal_buried_in_noise which_findings_are_actionable, ocd: 2026-08-16, lmd: 2026-08-16]
+^ATOM-IWHR-4K9M [desc:"248 of 265 trddgrep validate findings are BY DESIGN (legacy migration fields), not backlog — only ~17 are actionable; never bulk-migrate approval-tier or fabricate created-by", keywords: validate_findings_mostly_by_design dont_mass_migrate_approval-tier dont_fabricate_created-by legacy_card_incremental_migration signal_buried_in_noise which_findings_are_actionable, ocd: 2026-08-16, lmd: 2026-08-16]
 
 248 of trddgrep validate's 265 findings on this corpus are BY DESIGN, not backlog, and must never be swept in bulk: 152 META-MISSING (no created-by:) and 96 APPROVAL-TIER-DEPRECATED. aimaestro-trdd-approval.md says legacy approval-tier: migrates on next touch, never in a mass rewrite; trdd-design-tasks.md says the discriminator fields are additive, lint-enforced incrementally. Backfilling created-by: on a legacy card would also FABRICATE provenance, since git records only one human author per session. Only the remaining ~17 findings (STALE-COLUMN, APPROVAL-UNAPPROVED-IN-WORK-ZONE, APPROVAL-NO-JUDGE, MANDATE-UNKNOWN-AUTHORITY, BODY-STATE-CLAIM) are actionable; the tool mixing them at a 15:1 ratio is what makes the real signal unreadable.
 
 
-^ATOM-0WFB-7PLK [keywords: cmp_reports_false_differs_on_pillar_cli wrong_cmp_target_scripts_trddgrep.mjs installed_cli_is_shared_launcher_not_per-tool_copy stale_install_false_positive verify_pillar_cli_against_pillar-cli_not_tool_name, ocd: 2026-08-16, lmd: 2026-08-16]
+^ATOM-0WFB-7PLK [desc:"The installed pillar CLIs share one launcher (scripts/pillar-cli); cmp against scripts/<name>.mjs gives a false DIFFERS — verify against pillar-cli, not the tool-named file", keywords: cmp_reports_false_differs_on_pillar_cli wrong_cmp_target_scripts_trddgrep.mjs installed_cli_is_shared_launcher_not_per-tool_copy stale_install_false_positive verify_pillar_cli_against_pillar-cli_not_tool_name, ocd: 2026-08-16, lmd: 2026-08-16]
 
 The installed pillar CLIs (~/.local/bin/trddgrep, prrdgrep, specgrep) are byte-identical to EACH OTHER and to scripts/pillar-cli — comparing an installed CLI against scripts/<name>.mjs (e.g. scripts/trddgrep.mjs) with cmp reports a false DIFFERS, because that per-name .mjs is not what got installed. The correct cmp target for any of the three installed binaries is scripts/pillar-cli, which dispatches on basename $0.
 

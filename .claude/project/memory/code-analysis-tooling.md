@@ -2,12 +2,13 @@
 name: code-analysis-tooling
 description: "what is tldr / fastedit / distill / why don't the tldr hooks fire automatically / how does an agent read only relevant symbol lines instead of whole files / where do the code-analysis skills live for codex or gemini agents / scoped code reads without inflating context"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: reference
   tier: component
   topic: tooling-and-testing
+publish-globally: false
 ---
 
 # code-analysis-tooling
@@ -47,8 +48,6 @@ copies each variant into a detected client's global config dir; github-copilot +
 kilocode are per-workspace, so their placement is printed rather than
 auto-applied.
 
-## See also
-
 
 ^ATOM-OSJ8-5JTF [desc:"git's lock message names BOTH possibilities at once and they have opposite fixes — scripts/dev/git-lock-status decides via lsof (a lock nobody has open protects nothing) and never deletes.", keywords: another_git_process_seems_to_be_running_in_this_repository index.lock_blocks_every_commit cannot_create_.git/index.lock is_the_lock_stale_or_held git_write_blocked, ocd: 2026-08-07, lmd: 2026-08-07]
 
@@ -82,5 +81,7 @@ assuming either one is how a check silently returns garbage.
 against this repo (observed live). It is NOT this repo's hooks, scripts or settings, NOT the
 janitor's scripts, and NOT another Claude session — every candidate was checked by cwd. If stale
 locks recur, that is where to look next.
+
+## See also
 
 ## Notes and lessons learned

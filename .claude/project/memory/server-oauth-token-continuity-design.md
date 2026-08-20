@@ -2,12 +2,13 @@
 name: server-oauth-token-continuity-design
 description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom / the alert says 'rotation is effectively OFF' or 'the 60s rotator tick has not COMPLETED for N seconds' but the tick is running fine / tick-stalled false alarm / tick-completed.ts stamp frozen for days / an alert reading a stamp the server-side lane never writes"
 ocd: 2026-07-16
-lmd: 2026-08-07
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: project
   tier: component
   topic: reliability-patterns
+publish-globally: false
 ---
 
 The ai-maestro server absorbs the janitor's continuity daemon (Family A) — including OAuth
@@ -60,7 +61,6 @@ must replicate, so server + `#N` daemon coordinate not fight):**
   the exact lock-FILE PATH is in the janitor repo (`oauth_rotator/`/`daemon.py`): a CROSS-REPO
   item to obtain, never guessed. See [[family-a-continuity-absorption-plan]] (NPT 1GGQ4HWY).
 
-
 ^ATOM-S7SH-7ZQO [desc:"the rotator can DELIBERATELY refuse a rotation and log DRAIN-GUARD / HOLDING — that is not a stall, do not fix it", keywords: rotator_refuses_to_rotate DRAIN-GUARD_in_the_log HOLDING_not_rotating rotator_stuck_drain-guard-hold is_the_rotator_stalled why_did_it_not_rotate_an_expiring_token rotated_off_an_account_that_still_had_headroom, ocd: 2026-08-02, lmd: 2026-08-02]
 
 The rotator can DELIBERATELY decline a rotation it has already computed as needed, logging
@@ -83,14 +83,6 @@ It counts USAGE-CONFIRMED candidates ONLY, never the `degraded` bucket: "not pro
 The hold is REPORTED, not silent (`StuckReason: drain-guard-hold` → `rotator-stuck:drain-guard-hold`),
 because `surveyAlternates` skips the LIVE account and the beat would otherwise render a fleet one
 credential from lockout as `nextAction: ok`.
-
-## See also
-
-- [[model-scoped-window-fallback]] — the other half of "the fleet cannot make requests". This page
-  is about the TOKEN (rotate / refresh / reauth); that one is about a MODEL's window being spent
-  while the token is perfectly good, where rotating the credential is the expensive wrong answer.
-  Read it before changing `isSafeAlternate`: that predicate is what turns a model-scoped max into
-  a fleet-wide eviction.
 
 
 ^ATOM-UEW8-1AVJ [desc:"A tick-stalled alert can be a FALSE alarm: it reads a stamp the janitor daemon writes, and the server-side lane never writes it.", keywords: rotation_is_effectively_OFF tick-stalled the_60s_rotator_tick_has_not_COMPLETED rotator_alert_says_stalled_but_it_is_ticking alert_reads_a_stamp_the_server_never_writes false_stall_alarm tick-completed.ts_frozen, ocd: 2026-08-07, lmd: 2026-08-07]
@@ -116,7 +108,6 @@ you are judging is not evidence about that process.
 
 Sibling: ATOM-S7SH-7ZQO covers the opposite error — a DELIBERATE DRAIN-GUARD/HOLDING refusal
 mistaken for a stall. Both failures are "the rotator looks stuck and is not".
-
 
 ^ATOM-3XXL-4KCV [desc:"A captcha on claude.ai/oauth/authorize does NOT shorten unattended runtime: the ~8h renew is a browserless refresh_token POST to a different host; only the rare SEED touches that screen.", keywords: captcha_on_the_authorize_screen oauth_authorize_captcha does_a_captcha_break_continuity can_the_fleet_still_run_unattended refresh_token_grant_is_browserless seed_versus_renew_leg platform.claude.com_token_endpoint, ocd: 2026-08-07, lmd: 2026-08-07]
 
@@ -145,7 +136,6 @@ ANY error, Cloudflare included — and that token endpoint is itself behind Clou
 carries a hand-picked `User-Agent: claude-account-rotator` precisely because urllib's default is
 1010-banned). A tightening there would kill the only unattended path SILENTLY. Filed as
 janitor#228; see [[oauth-rotation-renew-reauth]].
-
 
 ^ATOM-2HN8-H8OR [desc:"A dead OAuth refresh is evidence about rung 1 and NOTHING else — a live cookie mints a new one with no human. The correct cookie-aware code exists in ai-maestro and has ZERO production callers.", keywords: a_human_must_re-login_but_the_account_is_fine false_reauth_alert dead_refresh_does_not_mean_a_human_is_needed why_does_it_keep_saying_re-login cascade.ts_is_never_called cookie-vault_has_no_callers the_fix_exists_but_nothing_calls_it, ocd: 2026-08-07, lmd: 2026-08-07]
 
@@ -178,7 +168,6 @@ stop the message asserting what the process cannot know: it now names the observ
 rung is dead) and points at the rung it cannot see. Whether to delete the two dead modules is still
 open — TRDD-XV9BLQC5.
 
-
 ^ATOM-QCOD-IPRR [desc:"agentlenspro window rows carry NO account identity — attribute ONLY by exact 5h-reset cohort match; no cohort means emit nothing", keywords: agentlens_rows_wrong_account statusline-history_windows_two_accounts_side_by_side usage_misattribution_rotator agentlenspro_cohort_match resets_5h_attribution_key, ocd: 2026-08-08, lmd: 2026-08-08]
 
 `agentlenspro statusline-history windows --json` rows carry NO account identity, and a live
@@ -190,7 +179,6 @@ last_switch_at * 1000` (seconds→ms — the admitSnapshot unit trap). No known 
 output, never a guess: timestamp-only attribution hands the rotator another account's numbers —
 the account-burning loop `statusline-admissible.ts` exists to prevent.
 
-
 ^ATOM-U9NL-KBA1 [desc:"gate the agentlens CLI read on the cohort BEFORE spawning — no cohort means the output is discarded by construction", keywords: unit_test_suddenly_slow_timeout statuslineNear_spawns_real_CLI subprocess_spawn_per_call_in_tests cohort_gate_before_read, ocd: 2026-08-08, lmd: 2026-08-08]
 
 The agentlens read in `statuslineNear` is gated on the cohort BEFORE the CLI spawn (77fbe88e):
@@ -199,6 +187,14 @@ spawns a subprocess whose output is definitionally discarded — and any test dr
 `statuslineNear` without injecting `readAgentlensRows` spawns the REAL `agentlenspro` per call
 (measured: the disjunct suite went 24.5s with a 5s per-test timeout; 0.36s after the gate).
 Suites about the store source stub `readAgentlensRows: async () => []` explicitly.
+
+## See also
+
+- [[model-scoped-window-fallback]] — the other half of "the fleet cannot make requests". This page
+  is about the TOKEN (rotate / refresh / reauth); that one is about a MODEL's window being spent
+  while the token is perfectly good, where rotating the credential is the expensive wrong answer.
+  Read it before changing `isSafeAlternate`: that predicate is what turns a model-scoped max into
+  a fleet-wide eviction.
 
 ## Notes and lessons learned
 [^1]: [id:ATOM-R16D-CASC, status:valid, keywords:"rotate_refresh_reauth cascade progressive_fallback the_only_human_step reauth_needs_new_cookie", ocd:2026-07-16, lmd:2026-07-16]

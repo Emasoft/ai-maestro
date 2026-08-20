@@ -1,14 +1,15 @@
 ---
 name: marketplace-manifest-format
 description: "claude plugin install fails 'Plugin not found in marketplace' — marketplace manifest plugin source must be { source: url, url: <git_url> } not { type: git, repo: <git_url> }"
+ocd: 2026-03-29
+lmd: 2026-08-20
 metadata: 
   node_type: memory
-  ocd: 2026-03-29
-  lmd: 2026-07-08
   type: feedback
   tier: component
   topic: plugins-and-marketplaces
   originSessionId: e1b4c900-d366-4fc0-93a4-353bb259fe18
+publish-globally: false
 ---
 
 Marketplace manifest plugin source format must use `{ "source": "url", "url": "<git_url>" }` for external git repos.

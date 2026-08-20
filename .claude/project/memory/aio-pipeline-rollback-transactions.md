@@ -2,12 +2,13 @@
 name: aio-pipeline-rollback-transactions
 description: "a pipeline failed halfway and left two stores disagreeing / should I wrap this whole pipeline in the gate runner / my rollback test passes with the undo deleted / which gates fuse and which stay split"
 ocd: 2026-07-30
-lmd: 2026-07-31
+lmd: 2026-08-20
 metadata:
   node_type: memory
   type: project
   tier: aspect
   topic: reliability-patterns
+publish-globally: false
 ---
 
 # aio-pipeline-rollback-transactions
@@ -48,18 +49,6 @@ throw). [^1] [^4]
 open window left; the remaining nine are conformance-only and retrofitting them buys zero safety.
 [^5] [^6] [^7] [^10]
 
-## Applies to
-
-- [[agent-deletion-all-in-one-pipeline]] — `DeleteAgent`, the pipeline whose stores this rule was
-  first written for.
-
-## See also
-
-- [[governance-enforcement-ratchet]] — the same ratchet pattern applied to rule enforcement.
-- [[lenient-json-reader-destroys-the-file]] — the stores these pipelines mutate are JSON files, and a
-  reader that cannot tell "absent" from "unreadable" makes both the gate's verification vacuous and
-  its compensation destructive.
-
 
 ^ATOM-2U3W-0C2K [desc:"Where the R51 retrofit stands: ChangeTitle is DONE and no pipeline has an open window left — the remaining nine are conformance-only and retrofitting them buys zero safety", keywords: which_pipeline_still_needs_the_runner is_the_R51_retrofit_finished ChangeTitle_window_closed InstallElement_conformance_only compensation_is_forbidden_here retrofit_buys_zero_safety, ocd: 2026-07-31, lmd: 2026-07-31]
 
@@ -88,7 +77,6 @@ lie the characterization exposed is CLOSED (`47feb243`) by a DEFERRED FAIL: the 
 at the terminal while every alignment gate still runs, because an abort at G10 would have been a
 security regression. [^6] [^7] [^8] [^9] [^10]
 
-
 ^ATOM-LF4Q-1PAS [desc:"A pipeline that is ALSO called as an R51 compensation must report a verification verdict as its own field, never fold it into success", keywords: pipeline_is_also_a_compensation verification_wired_to_abort rollback_reports_INVALID_STATE_but_state_is_fine verified_tri_state_not_a_boolean report_the_verdict_do_not_fold_it isCompensation_flag_is_fail_dangerous, ocd: 2026-07-31, lmd: 2026-07-31]
 
 **`ChangePlugin` reports its G11 read-back verdict as `ChangePluginResult.verified?: 'ok' |
@@ -111,6 +99,18 @@ idempotent no-op path (which returns before G11 and leaves the field unset) can 
 violation.
 
 Cards: `TRDD-RO90UCKQ` (the design) and `TRDD-K71FV649` (the violation-vs-unknown split). [^11]
+
+## Applies to
+
+- [[agent-deletion-all-in-one-pipeline]] — `DeleteAgent`, the pipeline whose stores this rule was
+  first written for.
+
+## See also
+
+- [[governance-enforcement-ratchet]] — the same ratchet pattern applied to rule enforcement.
+- [[lenient-json-reader-destroys-the-file]] — the stores these pipelines mutate are JSON files, and a
+  reader that cannot tell "absent" from "unreadable" makes both the gate's verification vacuous and
+  its compensation destructive.
 
 ## Notes and lessons learned
 

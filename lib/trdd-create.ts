@@ -88,6 +88,10 @@ export interface CreateTrddOpts {
   npt?: string[]
   eht?: string[]
   body?: string
+  /** Test seam ONLY: crypto RNG is not seedable, so proving "the mint CONSULTS the
+   *  collision check" needs an injectable generator — a neuter that skipped the
+   *  check reddened NOTHING against the RNG-luck version of the test. */
+  mint?: () => string
 }
 
 export interface CreateTrddResult {
@@ -120,9 +124,10 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   // Mint with a cross-scope collision check; re-roll on a hit. 36^8 makes a loop of
   // more than a couple of iterations a broken RNG, not bad luck — cap it loudly.
   const roots = collisionRoots(designDir)
+  const mint = opts.mint ?? mintTrddId
   let id = ''
   for (let i = 0; i < 10; i++) {
-    const candidate = mintTrddId()
+    const candidate = mint()
     if (!idTaken(candidate, roots)) { id = candidate; break }
   }
   if (!id) throw new Error('could not mint a collision-free id in 10 tries — check the RNG')

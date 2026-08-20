@@ -46,19 +46,22 @@ describe('createTrdd', () => {
     expect(text).not.toMatch(/^mandate: true$/m)
   })
 
-  it('a forced collision re-rolls: the minted id differs from the taken one, nothing is overwritten', () => {
+  it('a forced collision RE-ROLLS: the taken candidate is consulted, rejected, and the next one lands', () => {
     const first = createTrdd(design, {
       title: 'first card', taskType: 'docs', authorAuthority: 'none', author: 'a',
     })
-    // Occupy MOST of the RNG's output: force idTaken to report taken for the first
-    // 3 candidates by seeding files, then mint — statistically impossible to test
-    // directly, so drive the collision path via the exported predicate instead.
     expect(idTaken(first.id, [design])).toBe(true)
-    expect(idTaken('ZZZZZZ99', [design])).toBe(false)
+    // Deterministic collision via the injected mint: offer the TAKEN id twice, then a
+    // fresh one. Only a createTrdd that consults idTaken per candidate can land on the
+    // third — the earlier RNG-luck version of this test passed with the check DELETED.
+    const offers = [first.id, first.id, 'FRESH999']
+    let calls = 0
     const second = createTrdd(design, {
       title: 'second card', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      mint: () => offers[Math.min(calls++, 2)],
     })
-    expect(second.id).not.toBe(first.id)
+    expect(second.id).toBe('FRESH999')
+    expect(calls).toBe(3)
     expect(fs.existsSync(first.file)).toBe(true)
   })
 

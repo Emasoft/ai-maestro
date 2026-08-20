@@ -2164,6 +2164,23 @@ async function startServer(handleRequest) {
       console.warn('[Startup] fleet-stop init failed (non-fatal):', err?.message || err)
     }
 
+    // ── absorbed cold-cache-clear lane (TRDD parent KCRMSNL7; janitor 9ZPU69UC) ─
+    // Shell-out contract: dispatcher-stub.py --run-cold-cache-clear (argv only,
+    // zero janitor imports). Version-gated per beat on the 3.3.19 flag branch in
+    // the NEWEST cached dispatch.py — the lane self-activates when that release
+    // rolls in. AIM_COLD_CACHE_CLEAR=1 arms; unarmed = inert (their beat has no
+    // read-only half to detect with). 5min (their cadence).
+    try {
+      const { startColdCacheClearScheduler } = await import('./lib/cold-cache-clear.ts')
+      if (startColdCacheClearScheduler()) {
+        console.log(
+          `[Startup] cold-cache-clear scheduler started (5m, ${process.env.AIM_COLD_CACHE_CLEAR === '1' ? 'ARMED — claims when the 3.3.19 launcher is cached' : 'inert: AIM_COLD_CACHE_CLEAR not set'})`,
+        )
+      }
+    } catch (err) {
+      console.warn('[Startup] cold-cache-clear init failed (non-fatal):', err?.message || err)
+    }
+
     // ── §D4 approval-ladder watchdog (TRDD-AYBAMFN2 / TGNU1EP7, 3P-ZON-11) ────
     // The TRDD governance sweep's ONE scheduled host — the server owns the
     // authority-ladder model, so it owns the enforcement (the janitor would be

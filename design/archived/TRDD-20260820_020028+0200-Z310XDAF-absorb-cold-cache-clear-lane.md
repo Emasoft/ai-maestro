@@ -1,9 +1,9 @@
 ---
 trdd-id: Z310XDAF
 title: Absorb the cold-cache-clear chore via the janitor shell-out launcher
-column: human_review
+column: complete
 created: 2026-08-20T02:00:28+0200
-updated: 2026-08-20T02:00:28+0200
+updated: 2026-08-20T19:13:01+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -18,7 +18,7 @@ parent-trdd: KCRMSNL7
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: []
+implementation-commits: [ab0f2b9c]
 project-id: ai-maestro
 labels: [family-a, janitor-absorption, npt]
 release-via: none
@@ -58,3 +58,17 @@ release-via: none
 - 2026-08-20T02:00:28+0200 — MANDATE issued as Tier-0 self-mandate (derived NPT of [[KCRMSNL7]], server-internal,
   dark-shipped — inert until armed AND the janitor's own opt-in enables the beat). No approval
   request sent.
+- 2026-08-20T19:13:01+0200 — COMPLETED by hub-session (min-approval-requirement: none). The lane is
+  built and pinned (4/4 acceptance, `ab0f2b9c`); the only open item was the STATE block's optional
+  arm, and it is DECIDED: **do not arm now.** Measured, not assumed: the janitor's inner opt-in
+  `CLAUDE_PLUGIN_OPTION_EXTERNAL_IDLE_CLEAR_ENABLED=true` is LIVE in this environment, so the chore
+  runs today under the janitor daemon — arming transfers OWNERSHIP of a chore that clears live agent
+  SESSIONS (external_clear.py: idle + >=150k context + next fire misses the TTL), it does not enable
+  a new capability, and `lib/cold-cache-clear.ts` states unarmed is a full no-op with the daemon
+  "executing the chore exactly as today". Against that zero behavioural gain stands a
+  `pm2 restart ecosystem.config.js --update-env` (a plain restart replays cached env, so arming
+  cannot take effect without it) across 20 live sessions whose PTY streams this server owns. A
+  latent arm staged in `ecosystem.config.js` was also rejected: it would flip ownership at whatever
+  unrelated restart came next, with nobody able to connect cause to effect. Arm deliberately during
+  a planned restart; the lane self-activates from the cache with no code change (v3.3.19 verified
+  cached).

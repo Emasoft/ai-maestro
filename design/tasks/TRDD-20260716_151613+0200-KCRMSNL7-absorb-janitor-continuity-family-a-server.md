@@ -3,9 +3,9 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: blocked
 pre-block-column: design
-blocked-by: [TRDD-H24DF6ZC, TRDD-DXJZM3BW, TRDD-1GGQ4HWY, TRDD-9ZIF82HI, TRDD-CHN16JXZ, TRDD-JBFM8XR0, TRDD-5II83KK4, TRDD-4QOWVSLU, TRDD-99LV0U4I, TRDD-9FW92242]
+blocked-by: [TRDD-H24DF6ZC, TRDD-DXJZM3BW, TRDD-1GGQ4HWY, TRDD-9ZIF82HI, TRDD-CHN16JXZ, TRDD-99LV0U4I]
 created: 2026-07-16T15:16:13+0200
-updated: 2026-08-20T09:10:13+0200
+updated: 2026-08-20T22:01:57+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -517,3 +517,11 @@ ADDED to ai-maestro (these two verbs), never reached past.
   Pre-approved: issuer authority >= required approver. No approval request was sent. The
   token-handling half is carved out into the NPT [[TRDD-H24DF6ZC]], whose IMPLEMENTATION is a
   separate explicit USER sign-off (R16).
+- 2026-08-20T22:01:57+0200 — `blocked-by:` pruned from 10 entries to 6. Column unchanged; the card
+  is still genuinely `blocked`. Removed `TRDD-JBFM8XR0`, `TRDD-5II83KK4`, `TRDD-4QOWVSLU`,
+  `TRDD-9FW92242` — each re-measured first-hand as `column: complete` in `design/archived/`, so
+  none of them blocks anything. `blocked-by:` is a LIVE dependency list, not a history: a closed
+  card left in it inflates how far this card looks from moving, and `blocked` is only licensed by
+  blockers that are themselves still open. The six that remain were each resolved and are open
+  (`H24DF6ZC` design · `1GGQ4HWY` backburner · `9ZIF82HI` planned · `DXJZM3BW`, `CHN16JXZ`,
+  `99LV0U4I` human_review).

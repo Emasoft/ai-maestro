@@ -1,9 +1,9 @@
 ---
 trdd-id: BGAH6PHP
 title: aimaestro-message.sh replies — ack-poll on a message-id for the approval timeout loop
-column: todo
+column: dev
 created: 2026-08-20T08:30:48+0200
-updated: 2026-08-20T08:30:48+0200
+updated: 2026-08-20T08:54:46+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -35,8 +35,8 @@ the script header first (gen-specs is header-driven), then the verb.
 
 ## Acceptance
 
-- [ ] verify GET /api/messages can filter or return replyTo (measure the route/service first)
-- [ ] header spec + verb; specs:check green
+- [x] measured: the summary DROPPED the reply link (envelope in_reply_to existed, MessageSummary lacked it) and the route had no filter. Added inReplyTo end to end: MessageSummary field + both summary builders + normalized-id filter (dash/underscore variants match, same reason the dedup normalizes) + GetMessagesParams + route param. ALSO fixed a live defect this measurement exposed: cmd_send's --reply-to wrote `replyTo` while the pipeline reads `inReplyTo` — the flag was silently dropped since ship
+- [x] header spec + `replies` verb; specs:check green
 - [ ] live-verified: a real reply row, and exit 4 on an id with none
 - [ ] AUTONOMOUS notified with the invocation
 

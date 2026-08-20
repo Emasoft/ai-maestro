@@ -289,7 +289,7 @@ Usage:
 
 ## aimaestro-message.sh  ·  aimaestro-message.sh v1.0.0
 
-Verbs: send · resolve
+Verbs: send · resolve · replies
 
 ```text
 AI Maestro inter-agent messaging CLI (TRDD-0AB76JG3)
@@ -302,6 +302,14 @@ AIO pipeline — the R6 graph gate, the sender's verified AID, and the message
 log all apply; a refusal is surfaced, never bypassed.
 
 Usage:
+  aimaestro-message.sh replies <message-id> [--limit N] [--agent <name-or-id>]
+      Ack-poll for the approval-timeout loop (TRDD-BGAH6PHP): TSV rows
+      (sender<TAB>message-id<TAB>timestamp<TAB>subject) for inbox messages whose
+      inReplyTo matches <message-id> (dash/underscore id spellings both match).
+      Reads YOUR OWN mailbox only (R28/R38 — an agent's verified identity
+      overrides any agent param; --agent is for the human-owner path). Exit:
+      0 rows on stdout · 3 transport · 4 none yet (stderr says so) · 7 auth.
+
   aimaestro-message.sh resolve <name-pattern>
       Case-insensitive substring match over registered agent names.
       stdout: one TSV row per match:  <name>\t<agent-id>\t<title>

@@ -11,6 +11,14 @@
 # log all apply; a refusal is surfaced, never bypassed.
 #
 # Usage:
+#   aimaestro-message.sh replies <message-id> [--limit N] [--agent <name-or-id>]
+#       Ack-poll for the approval-timeout loop (TRDD-BGAH6PHP): TSV rows
+#       (sender<TAB>message-id<TAB>timestamp<TAB>subject) for inbox messages whose
+#       inReplyTo matches <message-id> (dash/underscore id spellings both match).
+#       Reads YOUR OWN mailbox only (R28/R38 — an agent's verified identity
+#       overrides any agent param; --agent is for the human-owner path). Exit:
+#       0 rows on stdout · 3 transport · 4 none yet (stderr says so) · 7 auth.
+#
 #   aimaestro-message.sh resolve <name-pattern>
 #       Case-insensitive substring match over registered agent names.
 #       stdout: one TSV row per match:  <name>\t<agent-id>\t<title>
@@ -201,7 +209,7 @@ cmd_send() {
     payload="$(jq -n --arg to "$recipient_id" --arg s "$subject" --arg b "$body" \
         --arg p "$priority" --arg r "$reply_to" --arg f "$from" --arg t "$mtype" '
         {to: $to, subject: $s, content: {type: $t, message: $b}, priority: $p}
-        + (if $r != "" then {replyTo: $r} else {} end)
+        + (if $r != "" then {inReplyTo: $r} else {} end)
         + (if $f != "" then {from: $f} else {} end)')"
 
     if ! _api_raw POST "/api/messages" "$payload"; then
@@ -226,13 +234,48 @@ cmd_send() {
     esac
 }
 
+cmd_replies() {
+    local mid="${1:-}"; shift || true
+    [ -z "$mid" ] && { echo "Error: replies requires <message-id>" >&2; exit 2; }
+    local agent="" limit=50
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --agent) agent="$2"; shift 2 ;;
+            --limit) limit="$2"; shift 2 ;;
+            *) echo "Error: unknown option: $1" >&2; exit 2 ;;
+        esac
+    done
+    local qs
+    qs="inReplyTo=$(printf '%s' "$mid" | jq -sRr @uri)&limit=${limit}"
+    # An AGENT caller's mailbox is its verified identity (the route overrides the
+    # agent param — R28/R38); --agent exists for the HUMAN-OWNER path only.
+    [ -n "$agent" ] && qs="${qs}&agent=$(printf '%s' "$agent" | jq -sRr @uri)"
+    if ! _api_raw GET "/api/messages?${qs}"; then
+        echo "Error: transport/server unreachable" >&2; exit 3
+    fi
+    case "$API_CODE" in
+        2*) ;;
+        401|403) echo "Error: auth missing/invalid (AID_AUTH)" >&2; exit 7 ;;
+        *) echo "Error: HTTP ${API_CODE}" >&2; exit 1 ;;
+    esac
+    local rows
+    rows="$(printf '%s' "$API_OUT" | jq -r '(.messages // [])[] | [.from, .id, .timestamp, .subject] | @tsv')"
+    if [ -z "$rows" ]; then
+        echo "No replies yet for ${mid}" >&2
+        exit 4
+    fi
+    printf '%s\n' "$rows"
+    exit 0
+}
+
 show_help() {
-    sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,55p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 case "${1:-help}" in
     send)    shift; cmd_send "$@" ;;
     resolve) shift; cmd_resolve "$@" ;;
+    replies) shift; cmd_replies "$@" ;;
     help|--help|-h) show_help ;;
     --version|-v) echo "aimaestro-message.sh v1.0.0" ;;
     *) echo "Error: unknown command: $1" >&2; show_help >&2; exit 2 ;;

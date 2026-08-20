@@ -3,7 +3,7 @@ trdd-id: 027HZOYN
 title: crossSessionInbound refuse — the inbound half of the AMP-only harness lockdown
 column: dev
 created: 2026-08-20T09:33:40+0200
-updated: 2026-08-20T09:42:09+0200
+updated: 2026-08-20T09:43:24+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 task-type: security
@@ -32,7 +32,7 @@ golden requirements + the governance rules + the specs.
 - **DONE before this card:** the OUTBOUND half — `permissions.deny: ["SendMessage"]` via
   the `amp-only-messaging` workdir invariant (556f340f, neuter-attributed, create/wake/
   periodic, self-repairing).
-- **NEXT ACTION (implementation):** extend the SAME invariant row in
+- **DONE (see boxes). LIVE-VERIFIED 09:42:33: boot pass repaired frank+testbot, jq shows deny [SendMessage] + crossSessionInbound refuse on frank.** Original next action was: extend the SAME invariant row in
   `lib/agent-invariants.ts` to also enforce top-level `crossSessionInbound: "refuse"`
   (read → compare → editSettings set op; keep the union/no-churn/refuse-on-corrupt
   properties; update the 5 tests in tests/unit/agent-invariants.test.ts + neuter runs).
@@ -69,10 +69,9 @@ golden requirements + the governance rules + the specs.
 - [x] invariant enforces crossSessionInbound refuse; properties preserved; 22 tests green; neuter (inboundWrong=false) reddened exactly the 2 inbound tests, outbound tests stayed green
 - [x] governance-spec.md R42.9 + spec-version 2.5.0 + reconciled-with entry (SPEC FIRST)
 - [x] GOVERNANCE-RULES.md R42.9 row + v5.4.0 changelog; enforcement-map row added (the ratchet demanded it — its test caught the missing row immediately, working as designed)
-- [ ] golden-requirements reading recorded (no PRRD.md exists; IRON/USER-set is the tier)
-      and surfaced to the USER
+- [x] golden-requirements reading recorded in the R42.9 commit body + the USER-facing report: NO PRRD.md exists in this repo (design/ has no requirements/); the golden tier IS the IRON/USER-set marking, which R42.9 now carries. PRRD bootstrap = a separate USER decision
 - [x] specs:check green; enforcement ratchet 12/12; invariants 22/22; the 10 other governance reds in the full-dir run were 5000ms load-flake timeouts (0 assertions), the recorded contention signature
-- [ ] fleet relayed the inbound half (one line to the swept sessions)
+- [ ] fleet relayed the inbound half (one line to the swept sessions) — NEXT ACTION post-compaction
 
 ## Approval log
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-19T20:51:18+0200
+updated: 2026-08-20T07:58:20+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -635,8 +635,12 @@ code shape** (see Verification below).
 - [ ] **10.** Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI —
       NOT STARTED, and the request SPLITS: one half would be a regression, so `usageRequest` stays
       as a documented fallback behind a differential test
-- [ ] EHT `TRDD-XV9BLQC5` (OAuth-authorize CAPTCHA continuity exposure) is terminal — currently
-      `todo`, so this card cannot reach `complete` regardless of the nine items
+- [x] EHT `TRDD-XV9BLQC5` (OAuth-authorize CAPTCHA continuity exposure) is terminal — **completed
+      + archived 2026-08-20** (0b7bd799): its box 2 re-measure ran (adverse — the store chain has
+      stopped for both alternates since 08-07, USER re-login owed on those slots) and box 3
+      landed (9793fca6: the `cookie-leg-stuck` alert stopped asserting a cause it never measured).
+      Its own EHT `TRDD-Y1ZWU998` is now the open descendant — a NEW card, so it gates itself,
+      not this one
 
 **There is no item 6.** The nine points are numbered 1-5 and 7-10; the USER's original list skipped
 it. Recorded so the next reader does not go looking for a tenth item that was never dropped.

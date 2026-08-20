@@ -3,7 +3,7 @@ trdd-id: Y1ZWU998
 title: A transient refresh failure brands the credential DEAD and arms a human-only retry ban
 column: todo
 created: 2026-08-20T07:58:02+0200
-updated: 2026-08-20T07:58:02+0200
+updated: 2026-08-20T08:00:01+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,7 +23,7 @@ npt: []
 eht: []
 blocked-by: []
 implementation-commits: []
-priority: 1
+priority: 0
 severity: high
 effort: medium
 labels: [oauth-rotator, continuity, janitor-228-class]
@@ -32,6 +32,42 @@ release-via: none
 ---
 
 # A transient refresh failure brands the credential DEAD and arms a human-only retry ban
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-20 08:00
+
+**MEASURED LIVE, and it is not hypothetical — every slot on this host is in the defect state.**
+Read from the janitor's own `oauth-rotator/state.json` minutes after the XV9BLQC5 alert fix
+deployed (07:51 alert, 08:00 read):
+
+| slot | `refresh_failures` | `last_refresh_failure` (the OWNER's classification) | `refresh_dead_fp` (OURS) |
+|---|---|---|---|
+| fmuaddib | 567 | **`network`** | **SET** |
+| emanuele.sabetta | 219 | **`network`** | **SET** |
+| ipazia (LIVE) | 775 | **`network`** | **SET** |
+
+**Not one slot was ever judged `credential-dead` by the endpoint.** The janitor classifies all
+three as TRANSPORT failures, and our `tick.ts` branded all three DEAD anyway — arming the
+human-only retry ban on credentials nothing has rejected. That is this card's defect, at 100% of
+the population.
+
+**IT ALSO CORRECTS AN EARLIER USER-FACING CLAIM.** TRDD-XV9BLQC5's 2026-08-20 01:45 re-measure
+surfaced *"the two alternate slots have dead refresh tokens and need a human re-login"* — read
+off `nextAction: reauth-needed / reason: refresh-dead`, which is exactly the verdict this defect
+manufactures. Per the owner's own classifier the correct statement is: **the refresh transport is
+failing (network), the credentials were never judged, and a re-login is NOT established as
+necessary.** Surfaced to the USER as a correction.
+
+**`refresh_dead_fp` is OURS — verified first-hand, with a positive control:** 4 write/read sites
+in `lib/oauth-rotator/*.ts`, and **0** hits across all 3 cached janitor versions (3.3.16/17/18)
+while the control string `refresh_failures` returns 17 files in each. So the fix is entirely on
+our side; no upstream dependency.
+
+**A SECOND question this raises, worth its own probe:** 775/567/219 consecutive `network`
+failures is not a blip — something in the refresh transport has been failing persistently
+(possibly since 2026-08-07, when `reauth-needed/refresh-dead` first went continuous). Diagnosing
+THAT is separate from stopping the mis-branding, and the mis-branding is what makes it
+unrecoverable without a human.
+
 
 ## Problem
 

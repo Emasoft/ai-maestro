@@ -24,7 +24,15 @@
 
 # _amp_resolve_name_to_id <name> — resolve an agent NAME to its UUID via
 # .index.json. Prints the UUID on stdout and returns 0 on exactly one match;
-# prints an actionable error (with candidate names) to stderr and returns 1
+# prints an actionable error (with candidate names) to stderr and fails otherwise.
+#
+# STABLE FAILURE CODES (2026-08-20, aligned with aimaestro-message.sh so a
+# scripted caller can branch the same way on either resolver):
+#   0  exactly one match (UUID on stdout)
+#   3  index unavailable (no .index.json — DISTINCT from not-found: degrade
+#      loudly, never conclude the agent does not exist from a missing index)
+#   4  zero matches
+#   5  ambiguous — >1 case-insensitive match (candidates on stderr)
 # on zero or ambiguous matches. Deliberately stricter than amp-helper.sh's
 # own _index_lookup (which silently picks the first case-insensitive match)
 # because --name is an EXPLICIT operator intent — silently picking the wrong
@@ -36,7 +44,7 @@ _amp_resolve_name_to_id() {
     if [ ! -f "$index_file" ]; then
         echo "Error: --name '${name}' cannot be resolved — no agents index found at ${index_file}." >&2
         echo "Use --id <uuid> instead, or run amp-init.sh --name <your-agent-name> first." >&2
-        return 1
+        return 3
     fi
 
     # Exact match first — the common case, and the only match jq's key
@@ -70,7 +78,7 @@ _amp_resolve_name_to_id() {
             printf "  %-30s %s\n" "$cand_name" "$cand_uuid" >&2
         done
         echo "Use --id <uuid> to disambiguate." >&2
-        return 1
+        return 5
     fi
 
     echo "Error: --name '${name}' not found." >&2
@@ -83,5 +91,5 @@ _amp_resolve_name_to_id() {
             echo "  ${cand_name}" >&2
         done
     fi
-    return 1
+    return 4
 }

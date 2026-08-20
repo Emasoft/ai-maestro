@@ -35,7 +35,7 @@ for _amp_arg in "$@"; do
     fi
     if [ "$_amp_prev" = "--name" ]; then
         source "${SCRIPT_DIR}/amp-name-resolve.sh"
-        _amp_resolved_id="$(_amp_resolve_name_to_id "$_amp_arg")" || exit 1
+        _amp_resolved_id="$(_amp_resolve_name_to_id "$_amp_arg")" || exit $?  # propagate 3/4/5 (stable resolver codes, 2026-08-20)
         export CLAUDE_AGENT_ID="$_amp_resolved_id"
         unset _amp_resolved_id
         break

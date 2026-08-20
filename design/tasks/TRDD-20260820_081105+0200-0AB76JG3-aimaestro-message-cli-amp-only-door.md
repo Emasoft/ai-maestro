@@ -3,7 +3,7 @@ trdd-id: 0AB76JG3
 title: aimaestro-message.sh — the AMP CLI that becomes the only messaging door once the client tool is denied
 column: todo
 created: 2026-08-20T08:11:05+0200
-updated: 2026-08-20T08:14:37+0200
+updated: 2026-08-20T08:25:49+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -44,11 +44,13 @@ implementation-commits: [556f340f]
     (AID_AUTH). Any other non-zero = unknown, surfaced raw.
 - **MAINTAINER's own prose sweep: DONE on their side** (their commit 22c1f7d — one real
   instance fixed; the inbound-arrival description correctly left, the deny binds sends).
-- **NEXT ACTION:** write the `aimaestro-message.sh` section into
-  `design/specs/aimaestro-scripts-spec.md` carrying the exit-code table above, then
-  implement against it.
-- **NOT yet done:** the spec section, the CLI, `yarn specs:check`, and the prose sweep of
-  the OTHER plugins (webdesign closed clean; core plugin + team asked, replies pending).
+- **SHIPPED 2026-08-20:** spec section (generated from the script's own header — one
+  contract source), `scripts/aimaestro-message.sh` (send/resolve, full exit-code table),
+  specs:check green. Live-verified with owner auth: resolve 0/4/5/7, send 0/4/7 + a real
+  delivery (message-id on stdout). Exit 6 is a 403 mapping the owner cannot trigger.
+- **REMAINING:** the prose sweep of the OTHER plugins (webdesign/architect/assistant-role/
+  maintainer/agentlenspro closed or in-flight; core plugin + COS team replies pending);
+  MAINTAINER adoption notice.
 
 ## Problem
 
@@ -105,11 +107,11 @@ MAINTAINER is the first consumer and has asked for it.
 ## Acceptance
 
 - [x] MAINTAINER's exact verb shape collected (arguments, output, failure modes)
-- [ ] `aimaestro-message.sh` section written in the scripts spec BEFORE any implementation
-- [ ] CLI implemented as a transport over the existing AIO pipeline, no second delivery path
-- [ ] `resolve` fails distinguishably rather than degrading to a no-op
-- [ ] a forbidden-recipient `send` is refused by the R6 gate, with the reason surfaced
-- [ ] `yarn specs:check` green
+- [x] `aimaestro-message.sh` section written in the scripts spec BEFORE any implementation (drift measured: specs:check exit 1 with the section and no script; green after)
+- [x] CLI implemented as a transport over the existing AIO pipeline, no second delivery path (POST /api/messages → SendMessage AIO; GET /api/agents for resolve)
+- [x] `resolve` fails distinguishably rather than degrading to a no-op (LIVE-VERIFIED: 0 one-match, 4 zero, 5 ambiguous-with-candidates, 7 no-auth)
+- [x] a forbidden-recipient `send` maps the route's 403 to exit 6 with the server hint verbatim on stderr — UNREACHABLE under owner auth (the R6 gate exempts the owner), so the live run pinned 0 (real delivery, message-id msg-1787207089779-7b7ce1adc787 to a test agent), 4 (unknown --id, registry-prevalidated), 7 (no auth); the 403→6 mapping is a case arm over a status the route's own G04/R38 tests pin
+- [x] `yarn specs:check` green (specs regenerated from the script header — one contract source)
 - [ ] plugin prose swept for client-tool instructions; corrections relayed to each session
 
 ## Approval log

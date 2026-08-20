@@ -287,6 +287,58 @@ Usage:
 
 ---
 
+## aimaestro-message.sh  ·  aimaestro-message.sh v1.0.0
+
+Verbs: send · resolve
+
+```text
+AI Maestro inter-agent messaging CLI (TRDD-0AB76JG3)
+
+THE ONLY DOOR: inside the harness the client's own cross-session peer-messaging
+tool is DENIED in every registered agent workdir (USER directive 2026-08-20;
+enforced by the amp-only-messaging workdir invariant). Agents reach each other
+over AMP, and this CLI is the spec'd transport over the server's SendMessage
+AIO pipeline — the R6 graph gate, the sender's verified AID, and the message
+log all apply; a refusal is surfaced, never bypassed.
+
+Usage:
+  aimaestro-message.sh resolve <name-pattern>
+      Case-insensitive substring match over registered agent names.
+      stdout: one TSV row per match:  <name>\t<agent-id>\t<title>
+      Exit codes:
+        0  exactly one match
+        3  registry/transport unavailable (DISTINCT from no-match — degrade
+           loudly, never guess)
+        4  zero matches (stderr says so; stdout empty)
+        5  ambiguous — more than one match; ALL candidates still on stdout
+
+  aimaestro-message.sh send <recipient-name|--id UUID> --subject <S> --body <B|->
+                            [--priority normal|high|urgent] [--reply-to <message-id>]
+                            [--from <sender-name-or-id>] [--type <amp-type>]
+      --type defaults to notification (the full AMP set: request response
+      notification alert task status handoff ack update system).
+      --from is for the HUMAN-OWNER path only (session cookie): the route needs a
+      sender it cannot infer. An AGENT caller must NOT pass it — the server
+      overrides the sender with the AID-verified identity anyway (anti-spoofing).
+      --body - reads the body from stdin (heredoc-friendly for long approval
+      bodies). stdout on success: the message-id (record it in the TRDD
+      Approval log). Exit codes:
+        0  delivered — message-id on stdout
+        3  transport/server unreachable
+        4  recipient not found
+        6  R6 communication-graph REFUSED (403) — the server's routing hint is
+           printed verbatim on stderr; the caller's contract is to FOLLOW the
+           hint (e.g. route via its CHIEF-OF-STAFF), never to retry around it
+        7  auth missing/invalid (AID_AUTH)
+      Any other non-zero is unknown — surface it raw.
+
+Auth: agents export AID_AUTH (Bearer). Recipient-by-name resolves through the
+same registry as `resolve`; `--id` skips resolution. No verb here prints or
+accepts a credential.
+```
+
+---
+
 ## aimaestro-panel.sh  ·  aimaestro-panel.sh v1.0.0
 
 Verbs: status · feedback

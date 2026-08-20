@@ -253,6 +253,26 @@ describe('supervisor.diagnose — cookie-leg-stuck names the CAUSE, not a verdic
     expect(m).toMatch(/cookie/i) // still not a human-only verdict
   })
 
+  /*
+   * NEUTER RUNS on the cookie-leg-stuck correction (2026-08-20 — OBSERVED via scripts/dev/neuter,
+   * restores blob-hash-verified; the fix was committed FIRST):
+   *   stale-cause guard dropped (refreshFailures>0)  → 1 red/38 green (the test right below —
+   *     it reddened NOTHING before that test existed, which is why the test exists)
+   *   vocabulary filter dropped (any string passes)   → 1 red/37 green (the SlotFact carry test)
+   *   'transport-refused' case unreachable            → 1 red/37 green (the RETRYABLE test)
+   */
+  it('a slot WITH a refresh token but ZERO failures ignores a lingering stale cause (the guard the counter is for)', () => {
+    // The stale-cause guard has two halves and only the no-refresh half was pinned; a NEUTER
+    // dropping `refreshFailures > 0` reddened NOTHING (2026-08-20). It is unreachable from a live
+    // tick — this branch is entered at refreshFailures >= DEFAULT_MAX_REFRESH_FAILURES — but the
+    // function is PURE, so any other caller can reach it and the guard is testable rather than
+    // merely "defence in depth". The janitor resets the counter on success and NEVER clears the
+    // cause (rotator.py:2238-2261), so cause-with-zero-failures is exactly the residue case.
+    const m = msg(stuck({ hasRefresh: true, refreshFailures: 0, lastRefreshFailure: 'credential-dead' }))
+    expect(m).toMatch(/UNKNOWN/) // the residue is discarded, not read as a diagnosis
+    expect(m).not.toMatch(/really is dead/i)
+  })
+
   it('NO branch of this alert claims that only a human can renew the slot', () => {
     // The universal negative that pins the correction. Paired with the per-branch positives above
     // so it cannot pass by matching an empty or unrelated message.

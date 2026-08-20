@@ -1,9 +1,9 @@
 ---
 trdd-id: Y0XEEUXN
 title: Give the marketplace-storage layer one owner for manifest read + settings registration
-column: proposal
+column: planned
 created: 2026-07-07T21:56:19+0200
-updated: 2026-07-07T21:56:19+0200
+updated: 2026-08-20T22:20:37+0200
 current-owner: code-review
 assignee: null
 priority: 2
@@ -11,6 +11,7 @@ severity: LOW
 effort: M
 labels: [code-review, review-batch-20260707, reuse, altitude, tech-debt]
 task-type: refactor
+min-approval-requirement: none
 parent-trdd: null
 npt: []
 eht: []
@@ -80,3 +81,5 @@ homogenize them). Land as its own PR with the full plugin-conversion test path
 exercised.
 
 ## Approval log
+
+- 2026-08-20T22:20:37+0200 — classified min-approval-requirement: none (was UNSET) and re-filed design/proposals/ → design/tasks/ as column: planned. Floor is none: deduplicating ~85 near-byte-identical marketplace-storage helpers and giving the settings.json registration one owner is an in-scope, reversible refactor of this project's own source, with zero D3 floor signals. A Tier-0 task does not belong in the proposals folder. Nothing was approved here; a Tier-0 card has no approver.

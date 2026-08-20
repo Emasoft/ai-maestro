@@ -3,7 +3,7 @@ trdd-id: HUSKG52P
 title: Derive strict-route rules from one source instead of 4-way string duplication
 column: proposal
 created: 2026-07-07T21:56:19+0200
-updated: 2026-07-07T21:56:19+0200
+updated: 2026-08-20T22:20:37+0200
 current-owner: code-review
 assignee: null
 priority: 1
@@ -11,6 +11,7 @@ severity: MEDIUM
 effort: L
 labels: [code-review, review-batch-20260707, altitude, tech-debt]
 task-type: refactor
+min-approval-requirement: manager
 parent-trdd: null
 npt: []
 eht: []
@@ -83,3 +84,5 @@ be simplified once the duplication is gone, but need not be removed in the same
 change).
 
 ## Approval log
+
+- 2026-08-20T22:20:37+0200 — classified min-approval-requirement: manager (was UNSET, which made this proposal unroutable — nobody could know who to send it to). Floor computed from content: the card rewires the SINGLE SOURCE OF TRUTH for which routes are sudo-gated, currently spelled out in four hand-synced places. No literal D3 signal fires (it touches only this project's own source), but a mistake here UN-GATES a strict route, so it is taken as architectural / high-blast-radius and escalated one tier under the conservative principle — better safe than sorry. No approval is granted by this edit; the card is now merely routable.

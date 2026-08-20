@@ -1,9 +1,9 @@
 ---
 trdd-id: 2K08IAPV
 title: Add a shared useToast hook to replace the hand-rolled toast in 6+ components
-column: proposal
+column: planned
 created: 2026-07-07T21:56:19+0200
-updated: 2026-07-07T21:56:19+0200
+updated: 2026-08-20T22:20:37+0200
 current-owner: code-review
 assignee: null
 priority: 3
@@ -11,6 +11,7 @@ severity: NIT
 effort: M
 labels: [code-review, review-batch-20260707, reuse, tech-debt, frontend]
 task-type: refactor
+min-approval-requirement: none
 parent-trdd: null
 npt: []
 eht: []
@@ -55,3 +56,5 @@ LOW. Pure UI consolidation, no server/behavior change. Do it as one PR touching
 only the six+ components + the new hook so the diff is reviewable in one pass.
 
 ## Approval log
+
+- 2026-08-20T22:20:37+0200 — classified min-approval-requirement: none (was UNSET) and re-filed design/proposals/ → design/tasks/ as column: planned. Floor is none: a shared useToast() hook replacing six hand-rolled copies is an in-scope, reversible, local refactor of this project's own source, with zero D3 floor signals. Proposals are Tier 1/2/3 BY DEFINITION — a Tier-0 task does not belong in the proposals folder, so this was a filing error, not a pending decision. Nothing was approved here; a Tier-0 card has no approver and needed none. It sat unroutable in the wrong zone for six weeks.

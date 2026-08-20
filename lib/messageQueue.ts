@@ -87,6 +87,8 @@ export interface MessageSummary {
   priority: 'low' | 'normal' | 'high' | 'urgent'
   status: 'unread' | 'read' | 'archived'
   type: 'request' | 'response' | 'notification' | 'alert' | 'task' | 'status' | 'handoff' | 'ack' | 'update' | 'system' // Aligned with Message.content.type
+  /** The message this one replies to (TRDD-BGAH6PHP) - from envelope.in_reply_to / flat inReplyTo. */
+  inReplyTo?: string
   preview: string
   viaSlack?: boolean  // True if message originated from Slack bridge
 }
@@ -316,6 +318,8 @@ async function collectMessagesFromAMPDir(
     priority?: Message['priority']
     from?: string
     to?: string
+    /** Only messages replying to THIS id (normalized compare - dash/underscore variants match). */
+    inReplyTo?: string
     previewLength?: number  // Max chars for preview (default: 100)
   } | undefined,
   results: MessageSummary[],
@@ -381,6 +385,7 @@ async function collectMessagesFromAMPDir(
             priority: msg.priority,
             status: msg.status,
             type: msg.content.type,
+            inReplyTo: msg.inReplyTo,
             preview: msg.content.message.substring(0, maxPreview),
           }
         } else if (ampMsg.id && ampMsg.subject && !ampMsg.envelope) {
@@ -403,6 +408,7 @@ async function collectMessagesFromAMPDir(
             priority: ampMsg.priority || 'normal',
             status: ampMsg.status,
             type: ampMsg.content?.type || 'notification',
+            inReplyTo: typeof ampMsg.inReplyTo === 'string' ? ampMsg.inReplyTo : undefined,
             preview: (ampMsg.content?.message || '').substring(0, maxPreview),
           }
         }
@@ -417,6 +423,13 @@ async function collectMessagesFromAMPDir(
         // Apply filters
         if (filter?.status && summary.status !== filter.status) continue
         if (filter?.priority && summary.priority !== filter.priority) continue
+        // Reply-thread filter: normalize BOTH sides - ids circulate in dash and
+        // underscore spellings, and an exact compare would silently miss half the
+        // replies (the dedup below already normalizes for the same reason).
+        if (filter?.inReplyTo) {
+          if (!summary.inReplyTo) continue
+          if (normalizeMessageId(summary.inReplyTo) !== normalizeMessageId(filter.inReplyTo)) continue
+        }
         if (filter?.from) {
           if (summary.from !== filter.from && summary.fromAlias !== filter.from) continue
         }
@@ -673,6 +686,7 @@ export async function listInboxMessages(
     status?: Message['status']
     priority?: Message['priority']
     from?: string
+    inReplyTo?: string
     limit?: number  // Maximum number of messages to return (default: unlimited)
     previewLength?: number  // Max chars for preview (default: 100)
   }

@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
       priority: searchParams.get('priority'),
       from: searchParams.get('from'),
       to: searchParams.get('to'),
+      inReplyTo: searchParams.get('inReplyTo'),
     }, buildAuthContext(auth))
     // NT-002: Use standard if (result.error) pattern instead of ?? which hides errors when data is {}
     if (result.error) {

@@ -110,6 +110,8 @@ export interface GetMessagesParams {
   priority?: string | null
   from?: string | null
   to?: string | null
+  /** Only messages replying to this id (TRDD-BGAH6PHP - the ack-poll read). */
+  inReplyTo?: string | null
 }
 
 export async function getMessages(
@@ -229,7 +231,8 @@ export async function getMessages(
   const priority = params.priority as 'low' | 'normal' | 'high' | 'urgent' | undefined
   const from = params.from || undefined
 
-  const messages = await listInboxMessages(agentIdentifier, { status, priority, from, limit })
+  const inReplyTo = params.inReplyTo || undefined
+  const messages = await listInboxMessages(agentIdentifier, { status, priority, from, inReplyTo, limit })
   return { data: { messages, limit }, status: 200 }
 }
 

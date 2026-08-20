@@ -1,10 +1,10 @@
 ---
 trdd-id: 5CIL7A07
 title: Programmatic per-client terminal-continuity automaton
-column: design
+column: dispatch
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-07-24T14:55:30+0200
+updated: 2026-08-20T19:33:09+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 task-type: feature
@@ -18,13 +18,19 @@ npt: [6HEF0XLS, X8801GT4]
 eht: [Y8VPE3NS, U6AS2YWB, 9DYUI97S, 8C1Z42GV]
 ---
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-24
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-20
 
 Goal: build a programmatic, always-on, per-client terminal-continuity automaton — ONE injector
 reusing the fleet-recovery-actuator's cooldown, STOP gate, HID-presence, curated-key boundary.
 Depends on Flock D being trustworthy (USER's order) for the ESC-before-rotation ordering, but E1/E2
-detection can start in parallel. NEXT ACTION: execute NPT 6HEF0XLS (xterm/headless reader), then
-X8801GT4 (registry+actuator extension), then the EHT events. Not started.
+detection can start in parallel. **NPT GATE SATISFIED (verified 2026-08-20) — both NPTs are terminal:
+6HEF0XLS (xterm/headless reader) and X8801GT4 (registry+actuator extension) are `complete` in
+`design/archived/`.** This card sat parked behind prerequisites that had already finished. NEXT ACTION:
+build the injector itself, then the EHT events. Not started.
+**EHT gate, for when the build lands:** Y8VPE3NS `todo`, U6AS2YWB `todo`, 9DYUI97S `superseded`
+(terminal — does not gate), 8C1Z42GV `backburner` and GENUINELY BLOCKED: the captured client frames it
+needs exist nowhere in the repo and acquiring them is its whole task. This card therefore cannot reach
+`complete` until 8C1Z42GV is unblocked — sequence the two together.
 
 ## Spec
 

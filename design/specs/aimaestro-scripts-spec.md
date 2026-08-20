@@ -382,6 +382,34 @@ NOTE ON `delivered`: the panel is a LIVE surface, not a queue. A response with
 
 ---
 
+## aimaestro-plugins.sh  ·  aimaestro-plugins.sh v1.0.0
+
+Verbs: update-trail
+
+```text
+AI Maestro plugins CLI (TRDD-MNN0VAS6)
+
+Read-side companion to the server's fleet-plugins-update lane. Plugins (the
+janitor) call THIS script, never the HTTP API directly.
+
+Usage:
+  aimaestro-plugins.sh update-trail [--limit N] [--target <pluginId>] [--json]
+      The per-invocation `claude plugin update` trail: one row per invocation,
+      newest first — {target, scope, project, start_epoch, end_epoch, ok,
+      detail, by}. This is what lets an interrupted cache extraction be
+      attributed to the exact fire that caused it; the last-run stamp alone
+      cannot see earlier fires. Default output is TSV
+      (target<TAB>ok<TAB>start_epoch<TAB>end_epoch<TAB>detail); --json prints
+      the raw rows. --limit caps rows (default 50, max 500). Exit: 0 with rows
+      (possibly zero — an empty trail is a legal fresh state, NOT an error);
+      non-zero only on transport/auth/HTTP failure.
+
+Auth: agents export AID_AUTH (Bearer); the human/UI path uses the aim_session
+cookie. Read-only — no strict token ever needed.
+```
+
+---
+
 ## aimaestro-portfolio.sh  ·  aimaestro-portfolio.sh v1.0.0
 
 Verbs: mint · list · verify · revoke

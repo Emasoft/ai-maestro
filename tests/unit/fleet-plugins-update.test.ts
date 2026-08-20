@@ -142,11 +142,16 @@ describe('runFleetPluginsUpdate — the sweep', () => {
     const logs: string[] = []
     const stamp = vi.fn()
     const signal = vi.fn()
+    // trail MUST be injected in every sweep test: the default appender writes the
+    // developer's REAL ~/.aimaestro (measured 2026-08-20 — 919 bytes of fixture rows
+    // landed there before this spy existed; the recorded lesson, recurring).
+    const trail = vi.fn()
     const r = await runFleetPluginsUpdate({
       targets: () => [t(1), t(2)],
       update: async (x) => (x.pluginId === 'p1@m' ? { ok: true, detail: '' } : { ok: false, detail: 'nope' }),
       stamp,
       signal,
+      trail,
       log: (m) => {
         logs.push(m)
       },
@@ -156,12 +161,17 @@ describe('runFleetPluginsUpdate — the sweep', () => {
     expect(logs.some((l) => /p2@m @ \/proj\/2: FAILED nope/.test(l))).toBe(true)
     // the janitor-named reload contract: the sweep hands its updated set to the publisher
     expect(signal).toHaveBeenCalledWith(['p1@m'])
+    // TRDD-MNN0VAS6: one trail row per INVOCATION, success and failure alike
+    expect(trail).toHaveBeenCalledTimes(2)
+    expect(trail.mock.calls.map((c) => [c[0].target, c[0].ok])).toEqual([['p1@m', true], ['p2@m', false]])
+    expect(trail.mock.calls[0][0].by).toBe('fleet-plugins-update')
 
     const rAllFail = await runFleetPluginsUpdate({
       targets: () => [t(3)],
       update: async () => ({ ok: false, detail: 'x' }),
       stamp,
       signal,
+      trail,
       log: () => {},
     })
     expect(rAllFail.updated).toEqual([])
@@ -178,6 +188,7 @@ describe('runFleetPluginsUpdate — the sweep', () => {
       update,
       stamp: () => {},
       signal: () => {},
+      trail: () => {},
       log: (m) => {
         logs.push(m)
       },

@@ -235,6 +235,7 @@ zod schemas at the top of each source file — the file column is the pointer.
 | GET | `/api/plugin-builder/builds/[id]` |  | app/api/plugin-builder/builds/[id]/route.ts | Plugin Builder - Build Status API |
 | POST | `/api/plugin-builder/push` |  | app/api/plugin-builder/push/route.ts | Plugin Builder - Push to GitHub API |
 | POST | `/api/plugin-builder/scan-repo` |  | app/api/plugin-builder/scan-repo/route.ts | Plugin Builder - Repo Scanner API |
+| GET | `/api/plugins/update-trail` |  | app/api/plugins/update-trail/route.ts | Read-only: the per-invocation `claude plugin update` trail the fleet-plugins-update |
 | GET | `/api/sessions/[id]/activity-signals` |  | app/api/sessions/[id]/activity-signals/route.ts | Read-only derived activity signals for a NON-self pane — the fleet guardian / |
 | POST | `/api/sessions/[id]/command` |  | app/api/sessions/[id]/command/route.ts |  |
 | GET | `/api/sessions/[id]/command` |  | app/api/sessions/[id]/command/route.ts |  |

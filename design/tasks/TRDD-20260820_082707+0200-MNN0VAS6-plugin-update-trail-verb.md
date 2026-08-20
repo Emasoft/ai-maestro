@@ -1,9 +1,9 @@
 ---
 trdd-id: MNN0VAS6
 title: per-target plugin-update trail exposed as a spec'd read verb for the janitor
-column: todo
+column: dev
 created: 2026-08-20T08:27:07+0200
-updated: 2026-08-20T08:27:07+0200
+updated: 2026-08-20T08:45:40+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -35,9 +35,9 @@ start/end epoch + exit code PER `claude plugin update <target>` invocation.
 
 ## Acceptance
 
-- [ ] existing trail store measured first (rows per target? capped how?) — no duplicate store
-- [ ] spec section written before implementation; specs:check red then green
-- [ ] janitor notified with the exact invocation; their 4OFMHOZ7 consumer unblocked
+- [x] measured first: NO per-invocation trail existed — only the last-run stamp, the last-sweep signal file, and log lines. Built lib/plugin-update-trail.ts (JSONL, per-EVENT append — never per poll, so the 1000→500 cap holds real history; single writer under the marketplace lock; reader lenient per ROW, write path never rebuilds from a blind read)
+- [x] spec generated from the new CLI header (one contract source); specs:check green
+- [ ] janitor notified with the exact invocation AFTER live verify (route is bundled — needs yarn build + pm2 restart)
 
 ## Approval log
 

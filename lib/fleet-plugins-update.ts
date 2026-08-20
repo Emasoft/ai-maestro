@@ -49,6 +49,7 @@ import { promisify } from 'node:util'
 import { withMarketplaceLock } from '@/lib/marketplace-lock'
 import { stampChoreRun } from '@/lib/janitor-chore-stamp'
 import { writePluginsUpdatedSignal } from '@/lib/plugins-updated-signal'
+import { appendUpdateTrailRow } from '@/lib/plugin-update-trail'
 
 const execFileAsync = promisify(execFile)
 
@@ -211,6 +212,7 @@ export interface FleetPluginsUpdateDeps {
   update?: (t: Target) => Promise<{ ok: boolean; detail: string }>
   stamp?: () => void
   signal?: (updated: readonly string[]) => void
+  trail?: (row: import('@/lib/plugin-update-trail').UpdateTrailRow) => void
   log?: (msg: string) => void
   maxTargets?: number
 }
@@ -237,7 +239,20 @@ export async function runFleetPluginsUpdate(deps: FleetPluginsUpdateDeps = {}): 
   const updated: string[] = []
   let failed = 0
   for (const target of targets.slice(0, maxTargets)) {
+    const startEpoch = Math.floor(Date.now() / 1000)
     const { ok, detail } = await (deps.update ?? updateTarget)(target)
+    // TRDD-MNN0VAS6: one trail row per INVOCATION — the janitor attributes interrupted
+    // extractions from these, which a last-run-only summary cannot support.
+    ;(deps.trail ?? appendUpdateTrailRow)({
+      target: target.pluginId,
+      scope: target.scope,
+      project: target.projectPath,
+      start_epoch: startEpoch,
+      end_epoch: Math.floor(Date.now() / 1000),
+      ok,
+      detail,
+      by: 'fleet-plugins-update',
+    })
     if (ok) updated.push(target.pluginId)
     else {
       failed++

@@ -45,6 +45,16 @@
 # same registry as `resolve`; `--id` skips resolution. No verb here prints or
 # accepts a credential.
 #
+# RELATION TO amp-send.sh (the core plugin's frozen surface): SAME pipeline, two
+# doors with different contracts — amp-send is the feature-rich agent surface
+# (attachments, --context JSON, native name@host addressing); THIS CLI is the
+# server-owned governance surface whose whole value is the DISTINGUISHABLE exit
+# codes above (a scripted caller can branch on 3/4/5/6/7, which amp-send does not
+# promise). Use amp-send for ordinary agent conversation; use this for gates,
+# approval loops, and any caller that must tell "no match" from "server down".
+# amp-name-resolve's index-file lookup and `resolve` here differ the same way:
+# the index degrades silently when absent, the registry query fails loudly.
+#
 # =============================================================================
 
 set -eo pipefail

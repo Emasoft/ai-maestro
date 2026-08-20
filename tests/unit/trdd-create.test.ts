@@ -80,3 +80,41 @@ describe('createTrdd', () => {
     for (let i = 0; i < 50; i++) expect(mintTrddId()).toMatch(/^[A-Z0-9]{8}$/)
   })
 })
+
+// ── frontmatter injection (commit security review, 2026-08-20) ───────────────
+describe('frontmatter injection guard', () => {
+  it('REFUSES an embedded newline in every frontmatter-bound string — the mandate-forgery vector', () => {
+    // A member forging `mandate: true` through the parent field: without the guard
+    // this writes a self-approved card in tasks/ from an authority of NONE.
+    expect(() => createTrdd(design, {
+      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      parent: 'AAAA1111\nmandate: true',
+    })).toThrow(/8-char base36/)
+    // colon-free, so it reaches the NEWLINE guard (a colon payload dies on the
+    // colon rule first — refused either way, but this pins the newline check)
+    expect(() => createTrdd(design, {
+      title: 'ok\nsecond line', taskType: 'docs', authorAuthority: 'none', author: 'a',
+    })).toThrow(/one line/)
+    expect(() => createTrdd(design, {
+      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'a\napproved: true',
+    })).toThrow(/one-line name/)
+    expect(() => createTrdd(design, {
+      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      eht: ['BBBB2222', 'X\napproved: true'],
+    })).toThrow(/8-char base36/)
+    // nothing written by any refused call
+    for (const z of ['tasks', 'proposals']) {
+      expect(fs.existsSync(path.join(design, z)) ? fs.readdirSync(path.join(design, z)) : []).toEqual([])
+    }
+  })
+
+  it('positive control: clean id-shaped relations still mint', () => {
+    const r = createTrdd(design, {
+      title: 'ok', taskType: 'docs', authorAuthority: 'none', author: 'a',
+      parent: 'AAAA1111', npt: ['BBBB2222'],
+    })
+    const text = fs.readFileSync(r.file, 'utf8')
+    expect(text).toMatch(/^parent-trdd: AAAA1111$/m)
+    expect(text).toMatch(/^npt: \[BBBB2222\]$/m)
+  })
+})

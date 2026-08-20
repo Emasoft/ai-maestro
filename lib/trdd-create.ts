@@ -110,6 +110,20 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   const title = (opts.title ?? '').trim()
   if (!title) throw new Error('title required')
   if (title.includes(':')) throw new Error('title must not contain a colon (grep-first frontmatter rule)')
+  // FRONTMATTER INJECTION GUARD (commit security review, 2026-08-20): every string
+  // interpolated into a `key: value` line below is one embedded newline away from
+  // WRITING ARBITRARY FRONTMATTER — `parent: "X\nmandate: true"` would forge the
+  // exact approval record the zone routing exists to gate. So: no control chars in
+  // any frontmatter-bound string, and relationship ids must BE ids.
+  if (/[\r\n\u0000-\u001f]/.test(title)) throw new Error('title must be one line')
+  const author = (opts.author ?? '').trim()
+  if (!author || /[\r\n\u0000-\u001f:]/.test(author)) throw new Error('author must be a one-line name without a colon')
+  const idShape = /^[A-Za-z0-9]{8}$/
+  for (const [field, val] of [['parent', opts.parent ? [opts.parent] : []], ['npt', opts.npt ?? []], ['eht', opts.eht ?? []]] as const) {
+    for (const v of val) {
+      if (!idShape.test(v)) throw new Error(`${field} entries must be 8-char base36 TRDD ids (got "${String(v).slice(0, 40)}")`)
+    }
+  }
   if (!TASK_TYPES.has(opts.taskType)) throw new Error(`task-type must be one of: ${[...TASK_TYPES].join(', ')}`)
 
   const minApproval = opts.minApproval ?? 'none'
@@ -150,14 +164,14 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
     `column: ${column}`,
     `created: ${iso}`,
     `updated: ${iso}`,
-    `current-owner: ${opts.author}`,
-    `created-by: ${opts.author}`,
+    `current-owner: ${author}`,
+    `created-by: ${author}`,
     `task-type: ${opts.taskType}`,
     `min-approval-requirement: ${minApproval}`,
   ]
   if (isMandate) {
     lines.push('mandate: true', `mandated-by: ${opts.authorAuthority}`, 'approved: true',
-      `approval-judge: ${opts.author}`, `approval-datetime: ${iso}`)
+      `approval-judge: ${author}`, `approval-datetime: ${iso}`)
   } else {
     lines.push('approved: false')
   }
@@ -168,7 +182,7 @@ export function createTrdd(designDir: string, opts: CreateTrddOpts): CreateTrddR
   if (opts.body) lines.push(opts.body.trim(), '')
   lines.push('## Approval log', '')
   if (isMandate) {
-    lines.push(`- ${iso} — MANDATE issued by ${opts.author} (min-approval-requirement: ${minApproval}). ` +
+    lines.push(`- ${iso} — MANDATE issued by ${author} (min-approval-requirement: ${minApproval}). ` +
       'Pre-approved: issuer authority >= required approver. No approval request was sent.', '')
   }
 

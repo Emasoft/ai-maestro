@@ -822,6 +822,13 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
     // blob with a different fp, and this slot must resume refreshing the instant that happens —
     // otherwise the one action that fixes it would be silently ignored.
     const meta0 = slots[email] as Record<string, unknown> | undefined
+    // NEUTER RUNS (2026-08-20 — OBSERVED via scripts/dev/neuter, restore verified by blob hash;
+    // a complementary pair, each reddening exactly its own test):
+    //   s/if \(res\.cause === 'credential-dead'\) meta\.refresh_dead_fp = fingerprint\(blob\)/meta.refresh_dead_fp = fingerprint(blob)/
+    //   → 1 red / 31 green: "a network failure … sets NO refresh_dead_fp and never arms the ban"
+    //   s/if \(meta0\?\.refresh_dead_fp !== undefined && …\) \{/if (false) {/
+    //   → 1 red / 31 green: "SELF-HEALS a pre-fix mis-brand … cleared and the exchange retried"
+    //
     // SELF-HEAL A MIS-BRAND (TRDD-Y1ZWU998). The pre-fix code branded `refresh_dead_fp` on ANY
     // null return, so a fortnight of network blips had all three live slots carrying the
     // human-only retry ban over credentials nothing ever judged. A brand standing next to a

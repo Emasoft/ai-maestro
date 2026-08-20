@@ -1,9 +1,9 @@
 ---
 trdd-id: 0AB76JG3
 title: aimaestro-message.sh — the AMP CLI that becomes the only messaging door once the client tool is denied
-column: todo
+column: dev
 created: 2026-08-20T08:11:05+0200
-updated: 2026-08-20T08:25:49+0200
+updated: 2026-08-20T08:29:47+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -112,7 +112,7 @@ MAINTAINER is the first consumer and has asked for it.
 - [x] `resolve` fails distinguishably rather than degrading to a no-op (LIVE-VERIFIED: 0 one-match, 4 zero, 5 ambiguous-with-candidates, 7 no-auth)
 - [x] a forbidden-recipient `send` maps the route's 403 to exit 6 with the server hint verbatim on stderr — UNREACHABLE under owner auth (the R6 gate exempts the owner), so the live run pinned 0 (real delivery, message-id msg-1787207089779-7b7ce1adc787 to a test agent), 4 (unknown --id, registry-prevalidated), 7 (no auth); the 403→6 mapping is a case arm over a status the route's own G04/R38 tests pin
 - [x] `yarn specs:check` green (specs regenerated from the script header — one contract source)
-- [ ] plugin prose swept for client-tool instructions; corrections relayed to each session
+- [ ] plugin prose swept for client-tool instructions — DONE: webdesign (clean), architect (25 hits, all restriction prose), assistant-role (clean, enforcement test exists), maintainer (1 real instance FIXED, their 22c1f7d), janitor (own-subagent mention only, no change), agentlenspro (sweeping pre-publish), programmer (0 instructing hits + KCX9O26L stragglers in flight). PENDING: core plugin (ai-maestro-plugin-bd) + COS team relay replies
 
 ## Approval log
 

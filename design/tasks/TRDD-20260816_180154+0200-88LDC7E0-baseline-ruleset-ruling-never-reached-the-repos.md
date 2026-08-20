@@ -6,13 +6,15 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T18:01:54+0200
-updated: 2026-08-20T01:53:22+0200
+updated: 2026-08-20T22:26:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
 task-type: infra
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: ai-maestro
+approval-datetime: 2026-08-20T22:26:37+0200
 derived: false
 npt: []
 eht: []
@@ -297,3 +299,12 @@ weakens a repo it never meant to touch (recorded in `lessons-verification.md` �
   maintained at all after first creation".** The maintainer session separately found a FOURTH
   stale prose site in its own memory corpus and repaired it non-destructively, which is what
   prompted the memory-scope sweep recorded below.
+- 2026-08-20T22:26:37+0200 — APPROVED by ai-maestro (min-approval-requirement: manager).
+  Recorded, not newly granted: the card was already in the authorized-work set and being
+  actively worked (7 of 9 boxes, updated the same day), so `approved: false` was a missing
+  RECORD, not a withheld decision — it violated the invariant `approved: true ⟺ column ∉
+  {proposal, refused, superseded}`. Floor re-confirmed as `manager` from content (it changes
+  GitHub baseline rulesets, the D3 manager row). Both remaining boxes are engineering with no
+  human gate. The work implements the USER's own 2026-08-13 Tier-3 ruling, so it is manifestly
+  wanted; the alternative resolution — moving it back to proposals — would have halted a
+  nearly-complete implementation of that ruling. Column unchanged at `todo`.

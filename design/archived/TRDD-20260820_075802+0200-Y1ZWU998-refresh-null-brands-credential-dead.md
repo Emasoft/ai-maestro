@@ -1,9 +1,9 @@
 ---
 trdd-id: Y1ZWU998
 title: A transient refresh failure brands the credential DEAD and arms a human-only retry ban
-column: todo
+column: complete
 created: 2026-08-20T07:58:02+0200
-updated: 2026-08-20T09:10:13+0200
+updated: 2026-08-20T16:41:39+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -113,12 +113,14 @@ a differential test over a known fixture before the switch is trusted.
 
 ## Acceptance
 
-- [ ] `refresh_dead_fp` is written ONLY for a credential the endpoint actually rejected; every other failure class increments the counter and stays retryable
-- [ ] the failure cause reuses `REFRESH_FAIL_CAUSES` (no fifth taxonomy)
-- [ ] a neuter that re-brands any-null-as-dead reds exactly the transient-failure test
-- [ ] the two live `refresh-dead` slots are re-measured after the fix to see which class they actually are
+- [x] `refresh_dead_fp` written ONLY on `credential-dead` (endpoint 400/401 or a refresh-token-less blob); every other class increments + records `last_refresh_failure` and stays retryable. Plus a SELF-HEAL: a brand beside a retryable last-cause is cleared — hoisted ABOVE the slot read so even a keychain-unreadable slot is un-bricked
+- [x] causes are exactly `REFRESH_FAIL_CAUSES` via a type-only import from supervisor.ts (no fifth taxonomy, no runtime cycle); the keychain-write dead-brand records `credential-dead` too so the heal cannot strip it
+- [x] complementary neuter pair OBSERVED: re-brand-any-null → 1 red / 31 green (exactly the transient test); heal-made-inert → 1 red / 31 green (exactly the self-heal test); + a ghost-slot test pins the unreadable-slot heal
+- [x] RE-MEASURED LIVE 2026-08-20 16:43 after deploy: the heal un-bricked both alternates, the exchange was attempted, and the ENDPOINT judged them — fmuaddib 567→568 and emanuele.sabetta 219→220 both flipped `network` → `credential-dead` and re-branded HONESTLY. So the two alternates' refresh tokens really are dead (verdict, no longer inference) and a human re-login IS needed for them. The live slot (ipazia) keeps its stale `network` brand as inert residue — the keepalive loop skips the live account by design; it self-corrects when rotated to alternate
 
 ## Approval log
 
 - 2026-08-20T07:58:02+0200 — MANDATE issued as Tier-0 self-mandate (derived EHT of [[XV9BLQC5]], server-internal).
   No approval request sent.
+
+- 2026-08-20T16:41:39+0200 — COMPLETED by the hub: fix + self-heal deployed (runtime lane, restart 16:41; bundle re-sync building), live re-measure recorded. The persistent-transport question the STATE block raised is ANSWERED by the verdicts: the alternates were credential-dead all along, masked as `network` by a transport that never carried the question to a verdict until now.

@@ -1,9 +1,9 @@
 ---
 trdd-id: XV9BLQC5
 title: A CAPTCHA appeared on the claude.ai OAuth authorize screen — measure and close the continuity exposure
-column: todo
+column: completed
 created: 2026-08-07T14:49:57+0200
-updated: 2026-08-20T01:46:19+0200
+updated: 2026-08-20T07:58:02+0200
 current-owner: ai-maestro
 project-id: ai-maestro
 task-type: infra
@@ -29,6 +29,30 @@ release-via: none
 # A CAPTCHA appeared on the claude.ai OAuth authorize screen
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-07
+
+- **BOX 3 DONE (2026-08-20, 9793fca6 + 5a837221) — and the section below it is STALE PROSE.**
+  `lib/oauth-rotator/cascade.ts` **does not exist**: deleted 13 days ago (b50cf390) resolving
+  this card's own WIRE-or-DELETE decision in the DELETE direction, with
+  `DEFAULT_MAX_REFRESH_FAILURES` rehomed to `supervisor.ts`. `tick.ts`'s alert text was
+  corrected in that same pass. So `## The ai-maestro half` describes a removed module — do NOT
+  act on it; its zero-caller table is a historical measurement, not a live gap.
+- **The live defect was the SECOND copy of the same false claim** (corrected in one place, left
+  standing in the other): `supervisor.ts`'s `cookie-leg-stuck` message asserted *"its refresh
+  path is dead and only a human can renew it"* — self-contradictory in place (the alert CODE
+  names the cookie rung its TEXT denies) and overclaiming on both axes from evidence that
+  establishes neither. Fixed by CONSUMING the janitor's own SSOT: `slotFacts` already parses
+  the object carrying `last_refresh_failure`, so the cause is a field read — no new I/O, no
+  third taxonomy. Per-cause text now says DEAD only for `credential-dead`, RETRYABLE for
+  transport/network/malformed, and UNKNOWN for absent or off-vocabulary values.
+- **Neuters, after the fix was committed:** stale-cause guard → 1 red; vocabulary filter →
+  1 red; transport-refused case → 1 red. The first reddened NOTHING at first (the guard's
+  refresh-token half was unpinned) — a test was added rather than the gap being narrated.
+  39/39, tsc 0, lint 0.
+- **NEW CARD FILED — TRDD-Y1ZWU998 (found, deliberately not fixed here):** `tick.ts:829-836` ports the
+  janitor#228 defect into OUR TypeScript — `refreshOauthToken` returns null for ANY failure
+  (timeout/DNS/Cloudflare/malformed alike), so a transient blip writes `refresh_dead_fp` and
+  arms the retry ban at `:825` that un-gates only on a human re-login. The false claim turned
+  into real behavior: a benign, retryable failure made unrecoverable without a human.
 
 - **RE-MEASURED 2026-08-20 01:45 (box 2) — the control NO LONGER HOLDS, and that is the finding:**
   `rotator.py list` now reads ALL THREE slots with a stale store expiry —
@@ -235,5 +259,7 @@ An account identity has never once been load-bearing in this corpus.
 - [x] The positive control is re-measured after the janitor responds — 2026-08-20 01:45, ADVERSE:
       all three slots stale in the store (see STATE); the re-measure ran and its result is recorded,
       which is what this box asks. The adverse half feeds the box below.
-- [ ] The Cloudflare-vs-dead-token distinction is reflected in ai-maestro's own alert text, or an
-      explicit note records that it is blocked on the janitor side.
+- [x] The Cloudflare-vs-dead-token distinction is reflected in ai-maestro's own alert text —
+      2026-08-20 (9793fca6): per-cause text consuming the janitor's `last_refresh_failure`,
+      DEAD only for `credential-dead`, RETRYABLE for transport/network/malformed, UNKNOWN
+      otherwise. Not blocked on the janitor: #228 shipped their classification.

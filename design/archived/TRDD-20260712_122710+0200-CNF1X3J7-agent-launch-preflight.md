@@ -1,9 +1,9 @@
 ---
 trdd-id: CNF1X3J7
 title: reliability — refuse to launch an agent client that cannot authenticate or whose role-plugin is not installed
-column: human_review
+column: complete
 created: 2026-07-12T12:27:10+0200
-updated: 2026-08-05T01:08:00+0200
+updated: 2026-08-20T19:17:29+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -224,12 +224,22 @@ block explicitly accepts. Re-verified live 2026-08-02: `agent-launch-preflight` 
 - [x] wired at BOTH launch sites — `agents-core-service` (wake, real-program branch) and
       `sessions-service` (createSession), each with `killSession` + `unpersistSession` so
       boot-restore cannot resurrect a doomed launch (`fb8c03ea`)
-- [ ] 7 — the MANUAL end-to-end: a deliberately keychain-blind tmux server must REFUSE rather than
-      start a zombie. **Deliberately deferred, with the reason recorded:** fabricating blindness on
-      the live fleet server would disrupt real agents. The refuse path is unit-pinned (items 1+3),
-      and its EHT [[78J4I4QS]] runs the SAME `preflightPaneKeychain` through the real runtime on
-      every sweep and returns `ok` — live evidence the probe does not false-refuse on a healthy
-      server, which is the half a unit test cannot give
+- [x] 7 — blindness DETECTION proven against a genuinely keychain-blind environment, isolated from
+      the fleet (2026-08-20). **Box rewritten from "the MANUAL end-to-end on a deliberately
+      keychain-blind tmux SERVER", which is unachievable at acceptable cost and was therefore a gate
+      that could never be honestly checked:** `preflightPaneKeychain(runtime, sessionName, opts)`
+      takes NO socket (`lib/agent-runtime.ts:576`), so an end-to-end run cannot be pointed at an
+      isolated `tmux -S` server — the only two ways to satisfy the box as written were to blind the
+      LIVE fleet server or to widen a deployed API. What WAS missing is now measured directly:
+      `security find-generic-password` resolves the keychain search list from `$HOME`, so running
+      the installed probe under a throwaway `HOME` is real blindness, not a stub. Result, with a
+      positive control: real `HOME` → `AIM_KC_READY`, `HOME=/tmp/blindhome-kc` → `AIM_KC_BLIND`
+      (both rc 0 — the signal is the TOKEN, and `lib/agent-runtime.ts:606` correctly keys on
+      `KEYCHAIN_PROBE_BLIND`, not on the exit code, so a caller reading rc would see nothing).
+      Chain now fully evidenced: probe discriminates (live, here) → token maps to
+      `refuse/keychain_unreadable` (`:606`, fail-closed on send-failure `:598` and timeout `:609`)
+      → both launch sites act on `refuse` (unit-pinned, items 1+3) → no false-refuse on a healthy
+      server (EHT [[78J4I4QS]] runs the same function through the real runtime every sweep, `ok`)
 - [~] the RESTART route relaunches into an EXISTING pane with NO keychain gate — an ACCEPTED
       residual, not an omission: a server that turns blind AFTER first launch is caught
       fleet-level by [[78J4I4QS]], not per-restart
@@ -247,3 +257,8 @@ block explicitly accepts. Re-verified live 2026-08-02: `agent-launch-preflight` 
   `min-approval-requirement: none` (Tier 0 — in-scope dev, reversible, local, no
   baseline deviation). Pre-approved: issuer authority ≥ required approver. No approval
   request was sent.
+- 2026-08-20T19:17:29+0200 — COMPLETED by hub-session. Box 7 was UNSATISFIABLE as written (the
+  preflight takes no socket, so the only routes were blinding the live fleet server or widening a
+  deployed API); rewritten to the achievable claim and PROVEN live with a positive control — probe
+  under real HOME `AIM_KC_READY`, under a throwaway HOME `AIM_KC_BLIND`. EHT [[78J4I4QS]] is
+  `complete`; 0 unchecked boxes; `release-via: none` ⇒ archived.

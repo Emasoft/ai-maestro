@@ -60,30 +60,26 @@ export interface AgentInvariant {
 }
 
 /**
- * Client tools an agent inside the ai-maestro harness may NOT use (USER directive
- * 2026-08-20: "inside the ai-maestro harness the SendMessage functionality will be
- * blocked, and the agents must be forced to only use AMP messaging").
+ * The AMP-only harness lockdown is the INBOUND setting alone (USER correction
+ * 2026-08-20: "SendMessage is needed to handle subagents! only crossSessionInbound:
+ * 'refuse' must be added to the settings.local.json"). `crossSessionInbound: "refuse"`
+ * makes an agent's session refuse cross-session delivery, so the only inbound door is
+ * AMP (`amp-send.sh` → the server pipeline) — gated by the R6 communication graph,
+ * carrying the sender's verified AID, and logged.
  *
- * WHY the client's own cross-session `SendMessage` is not an acceptable second channel:
- * AMP (`amp-send.sh` → the server's SendMessage AIO pipeline) is gated by the R6
- * communication graph, carries the sender's verified AID, and is logged. The client tool
- * is none of those — it addresses another session by NAME, so a MEMBER could message a
- * MANAGER directly, around its CHIEF-OF-STAFF, with nothing recording that it happened.
- * Two channels for one thing means the governed one is optional; denying the tool is what
- * makes AMP the only door.
+ * A `permissions.deny: ["SendMessage"]` entry MUST NOT be written: the deny list keys
+ * on the whole TOOL, and the same tool addresses a session's own Agent-tool children —
+ * denying it breaks subagent handling, not just cross-session sends. An earlier version
+ * of this invariant wrote that entry into live workdirs; the enforce below REMOVES it
+ * wherever it finds it (the self-repair of our own wrong write).
  *
  * This binds AGENT WORKDIRS only. A human's own Claude session (this repo included) is
- * not a registered agent workdir and keeps the tool.
- */
-export const HARNESS_DENIED_TOOLS: readonly string[] = ['SendMessage']
-
-/**
- * The INBOUND half (USER directive 2026-08-20, TRDD-027HZOYN): the deny list stops the
- * agent SENDING through the client tool; this setting makes its session REFUSE inbound
- * cross-session delivery. Sub-agent messaging (a session's own Agent-tool children) is
- * untouched — the key governs cross-session edges only.
+ * not a registered agent workdir.
  */
 export const HARNESS_INBOUND_POLICY = 'refuse'
+
+/** The deny entry the pre-correction invariant wrote and this one now removes. */
+export const REVERTED_DENY_ENTRY = 'SendMessage'
 
 /**
  * THE LIST. Everything ai-maestro promises about an agent workdir.
@@ -136,13 +132,7 @@ export const AGENT_INVARIANTS: readonly AgentInvariant[] = [
   {
     id: 'amp-only-messaging',
     // A pure settings write — same class as dep-rules, safe on the timer.
-    //
-    // NEUTER RUNS (2026-08-20 — OBSERVED via scripts/dev/neuter, restore blob-verified):
-    //   s/value: [...deny, ...missing]/value: [...missing]/   → 1 red / 20 green:
-    //       "UNIONS with the deny entries already there — it never replaces them"
-    //   s/if (!read.ok && read.reason === 'unreadable')/if (false)/   → 1 red / 20 green:
-    //       "REFUSES on a corrupt settings file rather than rebuilding it from {}"
-    description: 'the client peer-messaging tool is DENIED in the workdir — inside the harness agents talk over AMP only',
+    description: 'crossSessionInbound=refuse in the workdir settings (AMP is the only cross-session door); a stray SendMessage deny is REMOVED — the tool stays available for subagents',
     triggers: ['create', 'wake', 'periodic'],
     async enforce({ workdir }: AgentInvariantContext) {
       const { readSettings, editSettings } = await import('@/lib/settings-gate')
@@ -162,25 +152,26 @@ export const AGENT_INVARIANTS: readonly AgentInvariant[] = [
         : undefined
       const deny = Array.isArray(existing) ? existing.filter((e): e is string => typeof e === 'string') : []
 
-      const missing = HARNESS_DENIED_TOOLS.filter((t) => !deny.includes(t))
-      // The INBOUND half (USER directive 2026-08-20, TRDD-027HZOYN): denying the tool
-      // stops this agent SENDING; `crossSessionInbound: "refuse"` stops other sessions
-      // DELIVERING into it. Both halves, or the ungoverned channel is only half closed.
-      // A session's OWN sub-agents are unaffected — this key governs cross-session
-      // delivery only, which is exactly the edge the R6 graph owns.
+      // USER correction 2026-08-20: the deny keys on the whole TOOL and would break the
+      // agent's own subagent handling — remove the entry the pre-correction invariant
+      // wrote. Only OUR entry is removed, by exact name; the rest of the list is kept.
+      const denyHasReverted = deny.includes(REVERTED_DENY_ENTRY)
+      // `crossSessionInbound: "refuse"` closes the inbound cross-session edge, so AMP
+      // is the only governed door. A session's OWN sub-agents are unaffected — this key
+      // governs cross-session delivery only, which is exactly the edge the R6 graph owns.
       const inboundWrong = !read.ok || read.data.crossSessionInbound !== HARNESS_INBOUND_POLICY
 
-      if (missing.length === 0 && !inboundWrong) return { id: 'amp-only-messaging', status: 'ok' }
+      if (!denyHasReverted && !inboundWrong) return { id: 'amp-only-messaging', status: 'ok' }
 
       // Read-then-write outside the lock: the write itself is lock-guarded, this
       // watchdog is the only writer of THESE keys, and a lost update is repaired on the
       // next periodic beat. Not worth a read-modify-write primitive of its own.
       const ops: Parameters<typeof editSettings>[1] = []
-      if (missing.length > 0) ops.push({ op: 'set', keyPath: ['permissions', 'deny'], value: [...deny, ...missing] })
+      if (denyHasReverted) ops.push({ op: 'set', keyPath: ['permissions', 'deny'], value: deny.filter((e) => e !== REVERTED_DENY_ENTRY) })
       if (inboundWrong) ops.push({ op: 'set', keyPath: ['crossSessionInbound'], value: HARNESS_INBOUND_POLICY })
       await editSettings(path, ops)
       const did = [
-        ...(missing.length > 0 ? [`denied ${missing.join(', ')}`] : []),
+        ...(denyHasReverted ? [`removed ${REVERTED_DENY_ENTRY} deny`] : []),
         ...(inboundWrong ? ['crossSessionInbound=refuse'] : []),
       ]
       return { id: 'amp-only-messaging', status: 'repaired', detail: did.join('; ') }

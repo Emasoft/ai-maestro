@@ -333,9 +333,10 @@ describe('the single invariants watchdog', () => {
   })
 })
 
-// ── amp-only-messaging (USER directive 2026-08-20) ──────────────────────────
-// Inside the harness an agent may only talk over AMP, so the client's own
-// cross-session peer-messaging tool is denied in the workdir's settings.
+// ── amp-only-messaging (USER directive 2026-08-20, CORRECTED same day) ───────
+// The lockdown is the INBOUND setting alone: crossSessionInbound=refuse. The
+// USER correction ("SendMessage is needed to handle subagents!") forbids the
+// permissions.deny entry an earlier version wrote — the invariant now REMOVES it.
 describe('the amp-only-messaging invariant', () => {
   const row = () => AGENT_INVARIANTS.find((i) => i.id === 'amp-only-messaging')!
   const settingsPath = () => join(workdir, '.claude', 'settings.local.json')
@@ -351,37 +352,38 @@ describe('the amp-only-messaging invariant', () => {
     expect(row().triggers).toEqual(['create', 'wake', 'periodic'])
   })
 
-  it('denies the peer-messaging tool AND refuses cross-session inbound in a fresh workdir', async () => {
+  it('writes ONLY crossSessionInbound=refuse in a fresh workdir — never a SendMessage deny', async () => {
     const out = await row().enforce(ctx('create'))
     expect(out.status).toBe('repaired')
-    expect(readDeny()).toContain('SendMessage')
-    // The INBOUND half (USER directive 2026-08-20, TRDD-027HZOYN)
     expect(JSON.parse(readFileSync(settingsPath(), 'utf8')).crossSessionInbound).toBe('refuse')
+    // USER correction 2026-08-20: the tool must stay available for subagent handling.
+    expect(readDeny() ?? []).not.toContain('SendMessage')
   })
 
-  it('repairs a drifted crossSessionInbound even when the deny list is already correct', async () => {
-    seed({ permissions: { deny: ['SendMessage'] }, crossSessionInbound: 'allow' })
+  it('repairs a drifted crossSessionInbound without touching an unrelated deny list', async () => {
+    seed({ permissions: { deny: ['Bash(rm:*)'] }, crossSessionInbound: 'allow' })
     const out = await row().enforce(ctx('periodic'))
     expect(out.status).toBe('repaired')
     expect(out.detail).toBe('crossSessionInbound=refuse')
     const data = JSON.parse(readFileSync(settingsPath(), 'utf8'))
     expect(data.crossSessionInbound).toBe('refuse')
-    expect(data.permissions.deny).toEqual(['SendMessage']) // untouched — only the drifted key moved
+    expect(data.permissions.deny).toEqual(['Bash(rm:*)']) // untouched — only the drifted key moved
   })
 
-  it('UNIONS with the deny entries already there — it never replaces them', async () => {
-    seed({ permissions: { deny: ['Bash(rm:*)'] }, enabledPlugins: { 'a@b': true } })
+  it('REMOVES the pre-correction SendMessage deny and keeps every other deny entry', async () => {
+    seed({ permissions: { deny: ['Bash(rm:*)', 'SendMessage'] }, crossSessionInbound: 'refuse', enabledPlugins: { 'a@b': true } })
 
     const out = await row().enforce(ctx('periodic'))
 
     expect(out.status).toBe('repaired')
-    // Both survive, and the write did not eat the sibling key.
-    expect(readDeny()).toEqual(['Bash(rm:*)', 'SendMessage'])
+    expect(out.detail).toBe('removed SendMessage deny')
+    // Our entry is gone by exact name; the agent's own deny and sibling keys survive.
+    expect(readDeny()).toEqual(['Bash(rm:*)'])
     expect(JSON.parse(readFileSync(settingsPath(), 'utf8')).enabledPlugins).toEqual({ 'a@b': true })
   })
 
-  it('is a no-op once BOTH halves are present (no churn on every beat)', async () => {
-    seed({ permissions: { deny: ['SendMessage'] }, crossSessionInbound: 'refuse' })
+  it('is a no-op once inbound is refuse and no reverted deny remains (no churn on every beat)', async () => {
+    seed({ permissions: { deny: ['Bash(rm:*)'] }, crossSessionInbound: 'refuse' })
     const before = readFileSync(settingsPath(), 'utf8')
 
     const out = await row().enforce(ctx('periodic'))

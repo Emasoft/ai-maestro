@@ -1,13 +1,14 @@
 ---
 spec: governance
-spec-version: 2.5.0
+spec-version: 2.6.0
 status: normative
 created: 2026-07-22T10:19:26+0200
-updated: 2026-08-20T09:35:23+0200
+updated: 2026-08-20T16:16:40+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a governance rule changes; docs/GOVERNANCE-RULES.md and the code/personas/DEP-overlays are its IMPLEMENTATIONS, authored AFTER it (see `implementations`). Specs come before the implementation (USER, 2026-07-22, TRDD-CJWC3JLU). This spec was previously derived FROM the catalog; that direction is reversed for good."
 reconciled-with:
+  - "2.6.0 (2026-08-20): R42.9 CORRECTED by direct USER directive, same day as its 2.5.0 addition — the outbound half is INVERTED: a permissions.deny SendMessage entry is now FORBIDDEN (the deny keys on the whole client tool and breaks the agent's own subagent handling), and the amp-only-messaging invariant REMOVES the entry it previously wrote. The lockdown is crossSessionInbound refuse alone. Effectively a breaking change to a 12-hour-old rule with no external pinners beyond the invariant corrected in the same commit; recorded as MINOR with this explicit note rather than a major bump."
   - "2.5.0 (2026-08-20): R42.9 ADDED (USER directive, TRDD-027HZOYN) — client-native cross-session messaging structurally denied in harness workdirs, BOTH directions (permissions.deny SendMessage + crossSessionInbound refuse), enforced by the amp-only-messaging workdir invariant; sub-agent messaging explicitly untouched. MINOR: new rule, no existing MUST changed. Catalog row follows in the same commit."
   - "docs/GOVERNANCE-RULES.md v4.7.1 (2026-07-22) — catalog and spec are in sync as of the inversion; henceforth the spec LEADS and the catalog follows it (was: spec derived from catalog v4.5.0)."
   - "Full-fidelity rewrite from docs/GOVERNANCE-RULES.md v4.7.1 — every rule parameter/table/schema captured, nothing omitted (USER, 2026-07-22, TRDD-CJWC3JLU)."
@@ -1797,18 +1798,19 @@ UNBLOCKING and not R42.1 injection renamed:
 > exist for them — so on 2026-08-05 a MANAGER with the authority, the AID and the CLI refused **twice** to unblock a
 > stalled AUTONOMOUS agent and escalated to the human, defeating the automation the product exists to provide. R42
 > protects the comm graph from agents *directing* one another; it was never meant to keep a stalled agent stalled.
-`R42.9` **client-native-cross-session-denied-in-harness** [Explicit, USER — 2026-08-20, TRDD-027HZOYN] — inside the
-harness, an agent's CLIENT-NATIVE cross-session messaging is structurally denied in BOTH directions, enforced by the
-server writing each agent workdir's `.claude/settings.local.json` (the `amp-only-messaging` workdir invariant — on
-create, on wake, and on the periodic sweep, self-repairing if edited back out):
-(a) **outbound** — `permissions.deny` carries `SendMessage`, so the agent cannot address another session by name
-    through the client tool (an ungoverned pipe: no R6 graph, no AID attribution, no log);
-(b) **inbound** — `crossSessionInbound: "refuse"`, so the session refuses delivery FROM other sessions. Half a
-    lockdown is no lockdown: with only (a), a peer that kept the tool could still deliver into this agent.
-EXPLICIT CARVE-OUT (USER, same directive): a session's OWN sub-agents — the Agent tool, background subagents — are
-untouched. The rule binds CROSS-SESSION edges only, because those are the edges the R6 graph governs; R42.3 is the
-rule this enforces, not a new restriction. The server's own SendMessage AIO pipeline (the AMP implementation) shares
-the name and is the OPPOSITE role — never confuse the two when sweeping prose.
+`R42.9` **client-native-cross-session-refused-in-harness** [Explicit, USER — 2026-08-20, TRDD-027HZOYN; CORRECTED by
+USER the same day] — inside the harness, an agent's session REFUSES client-native cross-session delivery, enforced by
+the server writing each agent workdir's `.claude/settings.local.json` (the `amp-only-messaging` workdir invariant — on
+create, on wake, and on the periodic sweep, self-repairing if edited back out): `crossSessionInbound: "refuse"`, and
+NOTHING ELSE. With every harness session refusing inbound, a client-native cross-session send has nowhere to land, so
+AMP (R6-gated, AID-attributed, logged) is the only working channel — the lockdown needs no outbound half.
+**FORBIDDEN (USER correction, 2026-08-20): a `permissions.deny` entry for `SendMessage`.** The deny list keys on the
+whole client TOOL, and the same tool handles a session's OWN sub-agents — denying it breaks subagent handling, not
+just cross-session sends. The invariant REMOVES that entry wherever the pre-correction version wrote it.
+EXPLICIT CARVE-OUT (USER, original directive): a session's OWN sub-agents — the Agent tool, background subagents —
+are untouched. The rule binds CROSS-SESSION edges only, because those are the edges the R6 graph governs; R42.3 is
+the rule this enforces, not a new restriction. The server's own SendMessage AIO pipeline (the AMP implementation)
+shares the name and is the OPPOSITE role — never confuse the two when sweeping prose.
 `R42.super` **superseded-prior-design** [TRDD-BF3JN4TL] — `lib/authorization.ts` `send-command` formerly allowed a
 MANAGER to drive ANY agent and a COS to drive its own team's (`SELF_DRIVE_ACTIONS` permitted self; another agent required
 MANAGER / own-team COS). Six routes carried it: `POST …/[id]/{panel,queue,prompt/answer}`, `PATCH …/[id]/session`

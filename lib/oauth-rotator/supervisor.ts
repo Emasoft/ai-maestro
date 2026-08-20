@@ -56,6 +56,26 @@ export const TICK_STALL_ALERT_S = envNum('ROTATOR_TICK_STALL_ALERT_S', 600)
 // flake self-heals first, short enough to act before the fleet thins out.
 export const COOKIE_LEG_ALERT_S = envNum('ROTATOR_COOKIE_LEG_ALERT_S', 7200)
 
+/**
+ * The janitor's refresh-failure cause vocabulary — `oauth_rotator/rotator.py`'s `REFRESH_FAIL_*`
+ * constants (janitor#228), written into each slot's state-index meta as `last_refresh_failure`.
+ *
+ * OWNED THERE, MERELY CONSUMED HERE. The janitor pins it in its own source ("these four constants
+ * are the classifier's whole output vocabulary; keep them stable, they are logged into slot
+ * state"), and `cascade.ts` was deleted in b50cf390 precisely to stop this repo carrying a second
+ * copy of a taxonomy the janitor already owns — the two copies had drifted 3× on constants alone.
+ * So this list is a MIRROR of a published contract, not a classifier: nothing here decides a cause.
+ *
+ * The split that matters is not the four names, it is WHO OWNS THE REMEDY:
+ *   `credential-dead`                        → the endpoint rejected the token (invalid_grant)
+ *   `transport-refused` / `network` / `malformed` → nothing judged the credential; RETRYABLE
+ * Collapsing them is exactly the defect this alert carried (TRDD-XV9BLQC5): measured 2026-08-20,
+ * all three live slots read `network` — "retryable, benign" by the janitor's own classifier —
+ * while this alert told the owner the refresh path was dead and only a human could fix it.
+ */
+export const REFRESH_FAIL_CAUSES = ['transport-refused', 'credential-dead', 'network', 'malformed'] as const
+export type RefreshFailureCause = (typeof REFRESH_FAIL_CAUSES)[number]
+
 /** Observable, non-secret metadata for one captured account slot. */
 export interface SlotFact {
   email: string
@@ -68,6 +88,17 @@ export interface SlotFact {
    *  refreshFailures ≥ the cascade's max) → it sits in a human/browser-dependent cascade leg.
    *  null = self-renewable. */
   cannotSelfRenewAgeS: number | null
+  /** janitor#228: the CAUSE of the most recent failed keepalive exchange, or null when the rotator
+   *  recorded none — a pre-#228 janitor classifies nothing, and a slot carrying no refresh token is
+   *  deliberately never classified there ("reporting a cause there would invent one").
+   *
+   *  ONLY MEANINGFUL WHILE A FAILURE IS OUTSTANDING. The janitor resets `refresh_failures` to 0 on
+   *  a successful exchange but does NOT clear this field (rotator.py:2238-2261), so it can outlive
+   *  the failure it describes — read it together with `refreshFailures`, never alone.
+   *
+   *  Optional so every existing SlotFact literal stays valid and an older rotator's slot is simply
+   *  uncaused rather than mistyped. */
+  lastRefreshFailure?: RefreshFailureCause | null
 }
 
 /** Everything `diagnose` needs, gathered by `gatherFacts` (the only I/O). */
@@ -93,6 +124,56 @@ export interface Facts {
 export interface Finding {
   code: string
   message: string
+}
+
+/**
+ * PURE. What the cookie-leg alert may HONESTLY say about one slot: the OBSERVED cause and the owner
+ * of the remedy, never a verdict this process cannot reach (TRDD-XV9BLQC5 box 3).
+ *
+ * ⚠ THIS MESSAGE USED TO ASSERT THE OPPOSITE OF THE STATE. It read `its refresh path is dead and
+ * only a human can renew it` for EVERY slot reaching this branch, and both halves overclaim from
+ * evidence that establishes neither:
+ *   - "dead"           — all we saw is N failed exchanges. The janitor classifies the cause
+ *                        (janitor#228); measured 2026-08-20 all three live slots read `network`,
+ *                        i.e. "retryable, benign", while this alert called them dead.
+ *   - "only a human"   — the cookie rung mints a fresh pair with NO human, and that layer lives in
+ *                        the janitor's keychain, which THIS PROCESS CANNOT SEE. `tick.ts` corrected
+ *                        the identical claim on 2026-08-07; it was fixed there and left live here.
+ * The alert CODE stays `cookie-leg-stuck` deliberately: alert-delivery's per-code escalating
+ * backoff keys on it, so renaming would reset the backoff of a condition that holds for many beats.
+ */
+function cookieLegCause(s: SlotFact): string {
+  // Named once: every branch whose remedy involves a human must still say that a cookie makes the
+  // human optional, because that is the half this process cannot observe.
+  const cookieTail =
+    'A live claude.ai cookie can still mint a fresh pair with NO human — that layer lives in the ' +
+    "janitor's keychain and is invisible from this process, so check it before running " +
+    '/janitor-refresh-cc-logins.'
+  if (!s.hasRefresh) {
+    return `the slot carries no refresh token, so nothing here can renew it. ${cookieTail}`
+  }
+  // `refreshFailures > 0` is what keeps a STALE cause out of the message (see the field's docstring:
+  // the janitor clears the counter on success but not the cause). In production a slot with a
+  // refresh token only reaches this branch at refreshFailures ≥ DEFAULT_MAX_REFRESH_FAILURES, so
+  // the guard is defence-in-depth for any other caller of this PURE function rather than a path a
+  // live tick can take — stated plainly instead of claimed as tested.
+  const cause = s.refreshFailures > 0 ? (s.lastRefreshFailure ?? null) : null
+  const failed = `${s.refreshFailures} refresh exchanges failed, the last one`
+  const retryable = 'the credential itself was never judged. Retryable: chase the transport, do not re-login on this evidence.'
+  switch (cause) {
+    case 'credential-dead':
+      return `the endpoint REJECTED the refresh token (invalid_grant) after ${s.refreshFailures} failed exchanges — this credential really is dead. ${cookieTail}`
+    case 'transport-refused':
+      return `${failed} REFUSED IN TRANSPORT (Cloudflare 403/1010) — ${retryable}`
+    case 'network':
+      return `${failed} on the NETWORK (timeout/DNS/connection) — ${retryable}`
+    case 'malformed':
+      return `${failed} MALFORMED (a 200 with no access token) — ${retryable}`
+    default:
+      // Includes a value outside the janitor's vocabulary: state.json is a foreign file, and an
+      // unrecognised string must never reach the operator dressed as a diagnosis.
+      return `${s.refreshFailures} refresh exchanges failed with NO cause recorded, so whether this credential is dead is UNKNOWN from here. ${cookieTail}`
+  }
 }
 
 /**
@@ -151,15 +232,16 @@ export function diagnose(facts: Facts): Finding[] {
         message: `${s.email} is a no-refresh setup-token expiring in ${s.expiresDays.toFixed(0)}d (< ${SETUP_REMIND_DAYS}d) — re-capture a full OAuth login for it.`,
       })
     }
-    // D3 (TRDD-WBYFTU2L): the cascade's RENEW_COOKIE / REAUTH legs are human/browser driven BY
-    // DESIGN — an account stuck there is invisible unless we ALERT.
+    // D3 (TRDD-WBYFTU2L): the RENEW_COOKIE / REAUTH legs are human/BROWSER driven BY DESIGN — an
+    // account stuck there is invisible unless we ALERT. Two legs, two different owners: the wording
+    // is `cookieLegCause`'s job precisely because collapsing them into "only a human" is the defect
+    // TRDD-XV9BLQC5 measured.
     if (s.cannotSelfRenewAgeS !== null && s.cannotSelfRenewAgeS > COOKIE_LEG_ALERT_S) {
       out.push({
         code: 'cookie-leg-stuck',
         message:
-          `${s.email} has needed a one-time login for ${(s.cannotSelfRenewAgeS / 3600.0).toFixed(1)}h ` +
-          `(> ${(COOKIE_LEG_ALERT_S / 3600.0).toFixed(0)}h) — its refresh path is dead and only a human can renew it; ` +
-          `run /janitor-refresh-cc-logins before the fleet runs out of accounts.`,
+          `${s.email}: no usable refresh path for ${(s.cannotSelfRenewAgeS / 3600.0).toFixed(1)}h ` +
+          `(> ${(COOKIE_LEG_ALERT_S / 3600.0).toFixed(0)}h) — ${cookieLegCause(s)}`,
       })
     }
   }
@@ -334,9 +416,18 @@ function slotFacts(root: string, now: number, deps: GatherDeps): SlotFact[] {
       const secs = exp > 1e12 ? exp / 1000 : exp
       days = (secs - now) / 86400.0
     }
-    const meta = idx[email] as { refresh_failures?: number } | undefined
+    const meta = idx[email] as { refresh_failures?: number; last_refresh_failure?: unknown } | undefined
     const rf = typeof meta?.refresh_failures === 'number' ? meta.refresh_failures : 0
-    out.push({ email, hasRefresh, expiresDays: days, refreshFailures: rf, cannotSelfRenewAgeS: null })
+    // janitor#228: the failure CAUSE rides in the SAME meta object we already read the counter
+    // from, so surfacing it costs no extra I/O. VALIDATED rather than passed through — state.json
+    // belongs to another process, and a value outside the janitor's published vocabulary must never
+    // reach the operator as if it were a diagnosis.
+    const rawCause = meta?.last_refresh_failure
+    const cause =
+      typeof rawCause === 'string' && (REFRESH_FAIL_CAUSES as readonly string[]).includes(rawCause)
+        ? (rawCause as RefreshFailureCause)
+        : null
+    out.push({ email, hasRefresh, expiresDays: days, refreshFailures: rf, cannotSelfRenewAgeS: null, lastRefreshFailure: cause })
   }
   return trackCannotSelfRenew(root, out, now)
 }

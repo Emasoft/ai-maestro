@@ -144,7 +144,9 @@ describe('supervisor.diagnose — per-slot credential alerts', () => {
     expect(codes(diagnose(f))).toEqual([])
   })
 
-  it('a slot stuck in the human-only renew leg past COOKIE_LEG_ALERT_S → cookie-leg-stuck', () => {
+  // "human-only" deliberately dropped from this title (TRDD-XV9BLQC5): the leg is human/BROWSER
+  // driven, and a title asserting otherwise is the same false claim the message itself carried.
+  it('a slot stuck in the non-self-renewable leg past COOKIE_LEG_ALERT_S → cookie-leg-stuck', () => {
     const f = baseFacts({ slots: [{ ...healthySlot('c@b.com'), cannotSelfRenewAgeS: COOKIE_LEG_ALERT_S + 1 }] })
     expect(codes(diagnose(f))).toEqual(['cookie-leg-stuck'])
   })
@@ -156,6 +158,110 @@ describe('supervisor.diagnose — per-slot credential alerts', () => {
 
   it('fully healthy opted-in macOS host → no findings', () => {
     expect(diagnose(baseFacts({ slots: [healthySlot()] }))).toEqual([])
+  })
+})
+
+/**
+ * TRDD-XV9BLQC5 box 3 — the cookie-leg-stuck message must name the OBSERVED cause and the OWNER of
+ * the remedy, never assert a cause it cannot see.
+ *
+ * The message used to read `its refresh path is dead and only a human can renew it` for every slot
+ * that reached this branch. Both halves overclaim, and the live state proved it: on 2026-08-20 all
+ * three slots carried `last_refresh_failure: "network"` — "retryable, benign" by the janitor's OWN
+ * classifier — while this alert told the owner the credential was dead and a human was required.
+ *
+ * The cause vocabulary is the janitor's SSOT (`rotator.py` REFRESH_FAIL_*, janitor#228), carried in
+ * the slot meta this module ALREADY parses for `refresh_failures`. It is consumed here, never
+ * re-derived — `cascade.ts` was deleted (b50cf390) precisely to stop a second copy of this taxonomy.
+ */
+describe('supervisor.diagnose — cookie-leg-stuck names the CAUSE, not a verdict it cannot reach', () => {
+  /** A slot past the cookie-leg alert window. `refreshFailures` defaults to the escalation
+   *  threshold because that is the only way a slot WITH a refresh token reaches this branch. */
+  const stuck = (over: Partial<SlotFact> = {}): SlotFact => ({
+    email: 'c@b.com',
+    hasRefresh: true,
+    expiresDays: 0,
+    refreshFailures: DEFAULT_MAX_REFRESH_FAILURES,
+    cannotSelfRenewAgeS: COOKIE_LEG_ALERT_S + 1,
+    ...over,
+  })
+  /** The cookie-leg-stuck message for one slot. SELECTS by code rather than asserting it is the
+   *  only finding: a no-refresh slot in the cookie leg is dying by construction, so it legitimately
+   *  also emits `setup-token-expiring`, and pinning the whole list would fail on that accident
+   *  instead of on the message under test. Presence is still asserted, so the branch must fire. */
+  const msg = (s: SlotFact): string => {
+    const f = diagnose(baseFacts({ slots: [s] }))
+    expect(codes(f)).toContain('cookie-leg-stuck')
+    return f.find((x) => x.code === 'cookie-leg-stuck')!.message
+  }
+
+  it('credential-dead → says the endpoint REJECTED the token, and still names the cookie rung', () => {
+    const m = msg(stuck({ lastRefreshFailure: 'credential-dead' }))
+    expect(m).toMatch(/invalid_grant/)
+    expect(m).toMatch(/dead/i)
+    // Even a genuinely dead refresh does not establish that a HUMAN is needed: a live claude.ai
+    // cookie mints a fresh pair unattended, and that layer is invisible from this process.
+    expect(m).toMatch(/cookie/i)
+    expect(m).toMatch(/NO human/)
+  })
+
+  it('transport-refused (Cloudflare 403/1010) → RETRYABLE, and never calls the credential dead', () => {
+    const m = msg(stuck({ lastRefreshFailure: 'transport-refused' }))
+    expect(m).toMatch(/transport/i)
+    expect(m).toMatch(/retryable/i)
+    expect(m).not.toMatch(/dead/i) // the credential was never judged — only the transport refused
+  })
+
+  it('network (the LIVE 2026-08-20 state) → RETRYABLE, and never calls the credential dead', () => {
+    const m = msg(stuck({ lastRefreshFailure: 'network' }))
+    expect(m).toMatch(/network/i)
+    expect(m).toMatch(/retryable/i)
+    expect(m).not.toMatch(/dead/i)
+  })
+
+  it('malformed → RETRYABLE, and never calls the credential dead', () => {
+    const m = msg(stuck({ lastRefreshFailure: 'malformed' }))
+    expect(m).toMatch(/malformed/i)
+    expect(m).toMatch(/retryable/i)
+    expect(m).not.toMatch(/dead/i)
+  })
+
+  it('no cause recorded → says UNKNOWN rather than picking one', () => {
+    // An older janitor (pre-janitor#228) classifies nothing, so the field is simply absent. Saying
+    // "dead" there is the original defect; saying "retryable" would be the mirror of it.
+    const m = msg(stuck({ lastRefreshFailure: null }))
+    expect(m).toMatch(/UNKNOWN/)
+    expect(m).not.toMatch(/retryable/i)
+  })
+
+  it('a garbage cause is treated as UNRECORDED, not passed through into the alert', () => {
+    // state.json is a foreign file; a value outside the janitor's four-constant vocabulary must
+    // never reach the operator as if it were a diagnosis.
+    const m = msg(stuck({ lastRefreshFailure: 'banana' as never }))
+    expect(m).toMatch(/UNKNOWN/)
+    expect(m).not.toMatch(/banana/)
+  })
+
+  it('NO refresh token at all → names the missing token, and IGNORES a lingering stale cause', () => {
+    // The janitor resets `refresh_failures` on a successful exchange but deliberately does NOT
+    // clear `last_refresh_failure` (rotator.py:2238-2261), and it never classifies a slot that has
+    // no refresh token ("reporting a cause there would invent one"). So a cause sitting on a
+    // no-refresh slot is residue describing a failure that is no longer the state.
+    const m = msg(stuck({ hasRefresh: false, refreshFailures: 0, lastRefreshFailure: 'network' }))
+    expect(m).toMatch(/no refresh token/i)
+    expect(m).not.toMatch(/network/i)
+    expect(m).toMatch(/cookie/i) // still not a human-only verdict
+  })
+
+  it('NO branch of this alert claims that only a human can renew the slot', () => {
+    // The universal negative that pins the correction. Paired with the per-branch positives above
+    // so it cannot pass by matching an empty or unrelated message.
+    for (const cause of ['credential-dead', 'transport-refused', 'network', 'malformed', null] as const) {
+      const m = msg(stuck({ lastRefreshFailure: cause }))
+      expect(m).not.toMatch(/only a human/i)
+      expect(m.length).toBeGreaterThan(40) // non-vacuity: there IS a message to have been wrong
+    }
+    expect(msg(stuck({ hasRefresh: false, refreshFailures: 0 }))).not.toMatch(/only a human/i)
   })
 })
 
@@ -235,6 +341,25 @@ describe('supervisor.gatherFacts — the I/O wiring (injected deps, temp root, 0
     expect(Math.round(facts.slots[0].expiresDays as number)).toBe(10)
     // and the assembled facts drive the expected finding (force onMacos so the test is platform-independent)
     expect(codes(diagnose({ ...facts, onMacos: true }))).toContain('setup-token-expiring')
+  })
+
+  it('carries the janitor\'s last_refresh_failure through to SlotFact, rejecting anything off-vocabulary', () => {
+    // The cause lives in the SAME state-index object this function already reads `refresh_failures`
+    // from, so surfacing it is a field read on an object in hand — no extra I/O (TRDD-XV9BLQC5).
+    armRoot({ 'a@b.com': { refresh_failures: 4, last_refresh_failure: 'transport-refused' } })
+    const blob: CredentialBlob = { claudeAiOauth: { refreshToken: 'r', expiresAt: (NOW + 3600) * 1000 } } as CredentialBlob
+    const facts = gatherFacts({ root: tmpDir, deps: { readSlotBlob: () => blob, daemonAlive: () => true, now: () => NOW } })
+    expect(facts.slots[0].lastRefreshFailure).toBe('transport-refused')
+
+    // A foreign file may hold anything; only the janitor's four constants are a diagnosis.
+    armRoot({ 'a@b.com': { refresh_failures: 4, last_refresh_failure: 'banana' } })
+    const garbage = gatherFacts({ root: tmpDir, deps: { readSlotBlob: () => blob, daemonAlive: () => true, now: () => NOW } })
+    expect(garbage.slots[0].lastRefreshFailure).toBeNull()
+
+    // Absent (a pre-janitor#228 rotator) is null, never undefined-by-accident.
+    armRoot({ 'a@b.com': { refresh_failures: 4 } })
+    const absent = gatherFacts({ root: tmpDir, deps: { readSlotBlob: () => blob, daemonAlive: () => true, now: () => NOW } })
+    expect(absent.slots[0].lastRefreshFailure).toBeNull()
   })
 
   it('opt-in flag ABSENT → no keychain access, empty slots, null tick age, daemonAlive false', () => {

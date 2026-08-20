@@ -5,7 +5,7 @@ column: blocked
 pre-block-column: design
 blocked-by: [TRDD-H24DF6ZC, TRDD-DXJZM3BW, TRDD-1GGQ4HWY, TRDD-9ZIF82HI, TRDD-CHN16JXZ, TRDD-JBFM8XR0, TRDD-5II83KK4, TRDD-4QOWVSLU, TRDD-99LV0U4I, TRDD-9FW92242]
 created: 2026-07-16T15:16:13+0200
-updated: 2026-08-20T01:38:29+0200
+updated: 2026-08-20T02:02:15+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -95,8 +95,10 @@ Surfaced by the external-ref sweep on [[5YRLA53W]]. Two of this card's three ref
   registry row, detector shim, stamp all gone; the harness self-updates user-scope plugins).
   Wherever this card's body says "all 13" read 12. Scoreboard after tonight's three lanes:
   7 unconditional + 3 conditional-when-armed (memory-guard, rules-cleanup, fleet-stop) of 12;
-  remainder = session-liveness's second half (claim rides the recovery arming) and
-  cold-cache-clear (awaits the janitor launcher, their TRDD-9ZPU69UC).
+  remainder = session-liveness's second half (claim rides the recovery arming) ONLY —
+  cold-cache-clear LANDED same-night (TRDD-Z310XDAF, ab0f2b9c) on the launcher the janitor
+  shipped mid-session (9ZPU69UC/1d5a3b16, v3.3.19), version-gated + dynamic-claim, so the
+  family is FULLY BUILT: 7 unconditional + 4 conditional-when-armed of 12.
 **▶ 2026-07-24 — Flock D absorption landed the two biggest token-death levers (D1 + D2 COMPLETE):**
 - **D1 (7DRSIKVZ) COMPLETE** — oauth `supervisor.ts` + `cookie-vault.ts` + the supervisor beat wired
   into the server tick (eb1439d5, b3846e9b, f0c66776); 48 parity tests; live-validated at boot. The

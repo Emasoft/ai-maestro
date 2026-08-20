@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-20T01:57:15+0200
+updated: 2026-08-20T02:02:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -1804,6 +1804,15 @@ tag complete, 1656 files) — no emergency republish.
   The stale machine-global IND rule (manager-approval-defaults.md) corrected — it would have
   re-imposed the lock via a Tier-0 "restore as-is". Outward-facing apply performed under the
   08-18 Phase-2 delegation; surfaced for USER override in the session summary.
+
+- **TRDD-Z310XDAF cold-cache-clear lane LANDED (ab0f2b9c) — the absorption family is now
+  FULLY BUILT:** the janitor shipped their shell-out launcher mid-session (9ZPU69UC/1d5a3b16,
+  v3.3.19) and the lane rode it same-hour: argv-only stub call, per-beat version gate on the
+  newest cached dispatch.py (numeric sort pinned — lexical would invert 3.3.19/3.3.9), claim
+  DYNAMIC so the lane self-activates when 3.3.19 rolls in; unarmed = full no-op by design
+  (their beat has no read-only half). 3 neuters attributed. Startup line verified 02:01:45.
+  Scoreboard: 7 unconditional + 4 conditional-when-armed of 12; only session-liveness's claim
+  remains, riding the AIM_FLEET_RECOVERY_FIRE arming (USER).
 
 ## Approval log
 

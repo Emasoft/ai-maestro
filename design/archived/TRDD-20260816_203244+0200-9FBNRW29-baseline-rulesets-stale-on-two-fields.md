@@ -1,12 +1,12 @@
 ---
 trdd-id: 9FBNRW29
 title: This repo's baseline rulesets carry the pre-ruling shape on both 2026-08-13 fields
-column: todo
+column: completed
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:32:44+0200
-updated: 2026-08-16T21:47:33+0200
+updated: 2026-08-20T01:57:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,28 @@ external-refs: []
 ---
 
 # The baseline is present by name and stale in two fields
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-20 01:56
+
+- **APPLIED + VERIFIED, and not just here (2026-08-20 01:50-01:56, hub, Phase-2 delegation).**
+  This repo's two stale fields fixed in the 88LDC7E0 nine-repo apply; the card's own fleet
+  census then drove the remainder: population RE-DERIVED live (86 Emasoft repos → 24 baseline
+  carriers, not the 08-16 census's 22), 21 more objects patched across 12 repos, 47 objects
+  verified per-object against their own before-snapshots (only the two ruled fields + the
+  derived current_user_can_bypass echo moved; tag-protect never touched anywhere).
+  **FINAL CENSUS: 24/24 carriers current on BOTH 2026-08-13 fields — 0 stale.** Snapshots
+  (rollback data): reports/baseline-rulesets/20260820_*-{before,after}-full.json +
+  *-rest15-{before,after}.json. The "NOT APPLIED, deliberately" note below is SUPERSEDED —
+  authored 08-16, before the USER's 08-18 Phase-2 delegation; the apply is surfaced in the
+  session summary for USER override. Upstream applier freeze filed as janitor#282.
+
+## Acceptance
+
+- [x] `baseline-history-protect` carries the admin bypass on every fleet carrier (24/24, live API, per-object)
+- [x] `required_approving_review_count` is 0 wherever a pull_request rule exists (24/24)
+- [x] `baseline-tag-protect` untouched everywhere (byte-compare vs before-snapshots; ratified bypass stays NOBODY)
+- [x] `required_linear_history` reintroduced NOWHERE (rules arrays proven unchanged)
+- [x] payloads built from the code SSOT, never prose; the stale IND rule that would have re-imposed the lock is corrected (manager-approval-defaults.md, 2026-08-20)
 
 ## Problem
 

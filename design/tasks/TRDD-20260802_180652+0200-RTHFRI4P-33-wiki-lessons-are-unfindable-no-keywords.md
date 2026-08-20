@@ -5,7 +5,7 @@ column: human_review
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T18:06:52+0200
-updated: 2026-08-02T18:41:00+0200
+updated: 2026-08-20T21:13:22+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -93,7 +93,7 @@ dependency. The only way to do harm is to reword a lesson while re-addressing it
 - [x] `memgrep validate` still exits 0
 - [x] recall probed on 3 pages — 2 hit at rank 1, 1 at rank 3 (correct page)
 - [x] no prose reworded — the diff's every deleted line is an old `[^N]: [ocd:` header (34 ins / 33 del)
-- [ ] the 4 `atom-oversized` WARNs are triaged — split or explicitly accepted with a reason
+- [x] the `atom-oversized` WARNs are triaged — split or explicitly accepted with a reason
 
 ## Approval log
 
@@ -113,3 +113,32 @@ not grep hits.
 
 Remaining: the 4 `atom-oversized` WARNs, untouched — splitting an atom changes what a page asserts
 and is a judgement call, not a mechanical pass.
+
+## Outcome — 2026-08-20 (atom-oversized triage)
+
+The "4" above was the count at authoring time; re-measured today across all three scopes it is
+**14** (PROJECT 12, LOCAL 2, USER 0 — `memgrep lint` over each root, `atom-oversized` is INFO-tier,
+`memgrep lint` still exits 0/clean, none is an ERROR). All 14 read and triaged individually —
+**ALL ACCEPTED, ZERO SPLIT.** Every one is a single indivisible narrative (a status/decision, a
+worked root-cause example, a policy with its cases, a verbatim rule quote) whose length comes from
+the fact being genuinely one piece, not from several facts bundled together; splitting any of them
+would fragment context a reader needs together and none showed the "grab-bag of unrelated facts"
+signal that would justify a split. Per-atom:
+
+- PROJECT `agent-launch-preconditions.md:63` (`agent-launch-tmux-server-is-shared-fate`) — ACCEPT: one shared-fate mechanism + implication, indivisible.
+- PROJECT `agent-launch-preconditions.md:103` (`agent-launch-agent-flag-dropped-v2`) — ACCEPT: one root-cause narrative (mechanism + fix), a worked example.
+- PROJECT `aio-pipeline-rollback-transactions.md:53` (`ATOM-2U3W-0C2K`) — ACCEPT: one status snapshot + the durable shape facts it stands on; both needed together to read as current.
+- PROJECT `code-analysis-tooling.md:52` (`ATOM-OSJ8-5JTF`) — ACCEPT: one tool's usage narrative (message, decisive check, exit codes, gotchas).
+- PROJECT `janitor-chore-absorbability.md:17` (`ATOM-42IZ-Z6VI`) — ACCEPT: one test + its verdict table, a single lookup unit.
+- PROJECT `janitor-chore-absorbability.md:48` (`ATOM-052B-G6FG`) — ACCEPT: one mechanism description (per-chore handover), indivisible.
+- PROJECT `model-scoped-window-fallback.md:107` (`ATOM-A4DU-OG9O`) — ACCEPT: one policy explained via its two branches; both branches share the fail-open/dead-zone context.
+- PROJECT `plugin-install-no-git-tag-satisfying.md:13` (`plugin-dep-tags-need-the-name-prefix`) — ACCEPT: one rule (tag-naming) plus its practical corollaries about the SAME mechanism.
+- PROJECT `public-repo-personal-data.md:17` (`ATOM-HPWV-Q73A`) — ACCEPT: one security-policy explainer (how leaks happen → the gate → the fix → the limits of redaction), builds toward one conclusion.
+- PROJECT `server-oauth-token-continuity-design.md:112` (`ATOM-3XXL-4KCV`) — ACCEPT: one narrative (captcha does not break continuity) with its supporting evidence.
+- PROJECT `server-oauth-token-continuity-design.md:140` (`ATOM-2HN8-H8OR`) — ACCEPT: one narrative (dead refresh ≠ human needed, the trap, the fix), indivisible.
+- PROJECT `trdd-d4-watchdog.md:17` (`ATOM-I9YN-ZA5N`) — ACCEPT: one dense paragraph, barely over the threshold (1513 vs 1500 chars); one architectural fact.
+- LOCAL `feedback_mutation_single_authority.md:53` (`9946VD87`) — ACCEPT: a verbatim governance-rule quote kept intact for provenance; splitting it would corrupt the record.
+- LOCAL `install.md:38` (`ATOM-BV6G-4V5W`) — ACCEPT: one decision narrative (why the install is deferred) with its measured evidence.
+
+Verified after: `memgrep lint` on all three roots still reports 0 ERROR (120/133/1 findings resp.,
+all INFO/WARN) — no write was made, so this is a re-confirmation of the pre-existing clean state.

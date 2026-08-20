@@ -474,6 +474,26 @@ describe('tick — keepaliveRefresh never brands a TRANSIENT failure as credenti
     expect(meta.last_refresh_failure).toBe('credential-dead')
     expect(meta.refresh_dead_fp).toBeDefined()
   })
+
+  it('heals a mis-brand even when the slot blob is UNREADABLE from this process', async () => {
+    // Measured live 2026-08-20: the mis-branded slots were exactly the keychain-unreadable ones,
+    // so a heal placed after readSlot's `if (!blob) continue` never reached them. The heal needs
+    // only the meta — seed a slot entry in state with NO slot file behind it.
+    seedLive('live@x', blob('LIVE', H8()))
+    const st = loadState()
+    st.slots!['ghost@x'] = {
+      refresh_failures: 775,
+      refresh_dead_fp: 'fp-of-a-blob-this-process-cannot-read',
+      last_refresh_failure: 'network',
+    } as never
+    saveState(st)
+
+    await keepaliveRefresh({ fetchImpl: countingFailingTokenFetch().impl })
+
+    const meta = loadState().slots?.['ghost@x'] as unknown as Record<string, unknown>
+    expect(meta.refresh_dead_fp).toBeUndefined() // un-bricked despite the unreadable blob
+    expect(meta.refresh_failures).toBe(775) // nothing attempted, nothing re-counted — read still fails
+  })
 })
 
 describe('tick — keepaliveRefresh (RENEW)', () => {

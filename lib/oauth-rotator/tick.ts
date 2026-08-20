@@ -804,6 +804,16 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
   let changed = false
   for (const email of Object.keys(slots)) {
     if (email === liveEmail) continue // never refresh the live account out from under Claude
+    // SELF-HEAL A MIS-BRAND (TRDD-Y1ZWU998) — BEFORE the blob read, deliberately: the heal
+    // needs only the meta (a brand standing beside a last-cause the classifier calls retryable
+    // is the pre-fix bug's residue), and the mis-branded slots measured live were exactly the
+    // ones this process cannot READ (keychain-unreadable ⇒ `readSlot` null ⇒ `continue`), so a
+    // heal placed after the read would never reach the slots it exists to un-brick.
+    const meta0 = slots[email] as Record<string, unknown> | undefined
+    if (meta0?.refresh_dead_fp !== undefined && meta0?.last_refresh_failure !== 'credential-dead') {
+      delete meta0.refresh_dead_fp
+      changed = true
+    }
     const blob = readSlot(email)
     if (!blob) continue
     const inner = oauthOf(blob)
@@ -821,24 +831,12 @@ export async function keepaliveRefresh(deps?: TickDeps): Promise<string[]> {
     // that never un-gates is worse than the retries it replaces: a human re-login writes a NEW
     // blob with a different fp, and this slot must resume refreshing the instant that happens —
     // otherwise the one action that fixes it would be silently ignored.
-    const meta0 = slots[email] as Record<string, unknown> | undefined
     // NEUTER RUNS (2026-08-20 — OBSERVED via scripts/dev/neuter, restore verified by blob hash;
     // a complementary pair, each reddening exactly its own test):
     //   s/if \(res\.cause === 'credential-dead'\) meta\.refresh_dead_fp = fingerprint\(blob\)/meta.refresh_dead_fp = fingerprint(blob)/
     //   → 1 red / 31 green: "a network failure … sets NO refresh_dead_fp and never arms the ban"
     //   s/if \(meta0\?\.refresh_dead_fp !== undefined && …\) \{/if (false) {/
     //   → 1 red / 31 green: "SELF-HEALS a pre-fix mis-brand … cleared and the exchange retried"
-    //
-    // SELF-HEAL A MIS-BRAND (TRDD-Y1ZWU998). The pre-fix code branded `refresh_dead_fp` on ANY
-    // null return, so a fortnight of network blips had all three live slots carrying the
-    // human-only retry ban over credentials nothing ever judged. A brand standing next to a
-    // last-cause the classifier calls retryable is that bug's residue — clear it, so the slot
-    // re-enters the retry loop. A credential that really is dead re-brands honestly below the
-    // moment the endpoint says so.
-    if (meta0?.refresh_dead_fp !== undefined && meta0?.last_refresh_failure !== 'credential-dead') {
-      delete meta0.refresh_dead_fp
-      changed = true
-    }
     const fails0 = typeof meta0?.refresh_failures === 'number' ? meta0.refresh_failures : 0
     if (fails0 >= MAX_REFRESH_FAILURES && meta0?.refresh_dead_fp === fingerprint(blob)) continue
     const res = await refreshOauthToken(blob, netDeps(deps))

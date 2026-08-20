@@ -331,6 +331,7 @@ zod schemas at the top of each source file — the file column is the pointer.
 | GET | `/api/trdd/[id]` |  | app/api/trdd/[id]/route.ts |  |
 | PATCH | `/api/trdd/[id]` | strict | app/api/trdd/[id]/route.ts |  |
 | GET | `/api/trdd/[id]/verify` |  | app/api/trdd/[id]/verify/route.ts |  |
+| POST | `/api/trdd/create` |  | app/api/trdd/create/route.ts | Server-side TRDD minting — the highest-frequency board mutation, previously |
 | GET | `/api/trdd/kanban` |  | app/api/trdd/kanban/route.ts |  |
 | GET | `/api/trdd` |  | app/api/trdd/route.ts |  |
 | GET | `/api/users/me/presence` |  | app/api/users/me/presence/route.ts | Returns the human user's last-input timestamp + the server's |

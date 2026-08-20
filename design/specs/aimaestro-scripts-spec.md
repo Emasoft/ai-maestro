@@ -739,9 +739,9 @@ Usage:
 
 ---
 
-## aimaestro-trdd.sh  ·  aimaestro-trdd.sh v1.0.0
+## aimaestro-trdd.sh  ·  aimaestro-trdd.sh v1.1.0
 
-Verbs: search · read · verify · edit · approve · refuse · promote · archive
+Verbs: create · search · read · verify · edit · approve · refuse · promote · archive
 
 ```text
 AI Maestro TRDD CLI
@@ -765,6 +765,16 @@ a USER caller must supply AIMAESTRO_SUDO_TOKEN, an AGENT caller authorizes by
 AID + governance title (the R32 dual-path) and needs none.
 
 Usage:
+  aimaestro-trdd.sh create --title <t> --type <task-type> [--column C] [--min-approval <title>]
+      [--parent <id8>] [--npt <id8,id8,...>] [--eht <id8,id8,...>] [--body-file <path>|--body -]
+      [--agent A]
+      Server-side minting (TRDD-40DYBI4T): id8 (collision-checked across every scope
+      root), timestamps, minimal v2 frontmatter, and ZONE ROUTING per the mandate
+      rule — a --min-approval above YOUR verified authority lands the card in
+      design/proposals/ as `column: proposal` (the server decides from your AID
+      title, never from a flag). Title must not contain a colon. Prints
+      `TRDD-<id8>\t<zone>\t<column>\t<file>` on success. The file is written but
+      NOT committed — commit it yourself, staged by name.
   aimaestro-trdd.sh search [--column C] [--id I] [--keyword K] [--zone Z] [--agent A]
   aimaestro-trdd.sh search --all-agents [--column C] [--id I] [--keyword K] [--zone Z]
       Fleet-wide aggregate (TRDD-CYUCN7Y0, AMAMA board-reporting/D4-watchdog): one JSON

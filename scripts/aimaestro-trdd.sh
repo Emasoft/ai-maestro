@@ -22,6 +22,16 @@
 # AID + governance title (the R32 dual-path) and needs none.
 #
 # Usage:
+#   aimaestro-trdd.sh create --title <t> --type <task-type> [--column C] [--min-approval <title>]
+#       [--parent <id8>] [--npt <id8,id8,...>] [--eht <id8,id8,...>] [--body-file <path>|--body -]
+#       [--agent A]
+#       Server-side minting (TRDD-40DYBI4T): id8 (collision-checked across every scope
+#       root), timestamps, minimal v2 frontmatter, and ZONE ROUTING per the mandate
+#       rule — a --min-approval above YOUR verified authority lands the card in
+#       design/proposals/ as `column: proposal` (the server decides from your AID
+#       title, never from a flag). Title must not contain a colon. Prints
+#       `TRDD-<id8>\t<zone>\t<column>\t<file>` on success. The file is written but
+#       NOT committed — commit it yourself, staged by name.
 #   aimaestro-trdd.sh search [--column C] [--id I] [--keyword K] [--zone Z] [--agent A]
 #   aimaestro-trdd.sh search --all-agents [--column C] [--id I] [--keyword K] [--zone Z]
 #       Fleet-wide aggregate (TRDD-CYUCN7Y0, AMAMA board-reporting/D4-watchdog): one JSON
@@ -545,7 +555,48 @@ cmd_archive() {
     _api POST "/api/trdd/${id}/archive" "$body"
 }
 
+cmd_create() {
+    local title="" ttype="" column="" minap="" parent="" npt="" eht="" bodyf="" agent=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --title)        title="$2"; shift 2 ;;
+            --type)         ttype="$2"; shift 2 ;;
+            --column)       column="$2"; shift 2 ;;
+            --min-approval) minap="$2"; shift 2 ;;
+            --parent)       parent="$2"; shift 2 ;;
+            --npt)          npt="$2"; shift 2 ;;
+            --eht)          eht="$2"; shift 2 ;;
+            --body-file)    bodyf="$2"; shift 2 ;;
+            --body)         bodyf="$2"; shift 2 ;;
+            --agent)        agent="$2"; shift 2 ;;
+            *) echo "Error: unknown flag for 'create': $1" >&2; return 1 ;;
+        esac
+    done
+    [ -z "$title" ] && { echo "Error: --title required" >&2; return 1; }
+    [ -z "$ttype" ] && { echo "Error: --type required (feature|bugfix|refactor|docs|infra|security|artifact|spike|audit)" >&2; return 1; }
+    local bodytext=""
+    if [ "$bodyf" = "-" ]; then bodytext="$(cat)";
+    elif [ -n "$bodyf" ]; then
+        [ -r "$bodyf" ] || { echo "Error: cannot read --body-file ${bodyf}" >&2; return 1; }
+        bodytext="$(cat "$bodyf")"
+    fi
+    local payload
+    payload="$(jq -n --arg t "$title" --arg y "$ttype" --arg c "$column" --arg m "$minap"         --arg p "$parent" --arg n "$npt" --arg e "$eht" --arg b "$bodytext" --arg a "$agent" '
+        {title: $t, taskType: $y}
+        + (if $c != "" then {column: $c} else {} end)
+        + (if $m != "" then {minApproval: $m} else {} end)
+        + (if $p != "" then {parent: $p} else {} end)
+        + (if $n != "" then {npt: ($n | split(","))} else {} end)
+        + (if $e != "" then {eht: ($e | split(","))} else {} end)
+        + (if $b != "" then {body: $b} else {} end)
+        + (if $a != "" then {agentId: $a} else {} end)')"
+    local out
+    out="$(_api POST "/api/trdd/create" "$payload")" || return 1
+    printf '%s' "$out" | jq -r '["TRDD-" + .id, .zone, .column, .file] | @tsv'
+}
+
 case "${1:-help}" in
+    create)  shift; cmd_create "$@" ;;
     search)  shift; cmd_search "$@" ;;
     read)    shift; cmd_read "$@" ;;
     verify)  shift; cmd_verify "$@" ;;
@@ -555,6 +606,6 @@ case "${1:-help}" in
     promote) shift; cmd_promote "$@" ;;
     archive) shift; cmd_archive "$@" ;;
     help|--help|-h) show_help ;;
-    --version|-v) echo "aimaestro-trdd.sh v1.0.0" ;;
+    --version|-v) echo "aimaestro-trdd.sh v1.1.0" ;;
     *) echo "Error: unknown command: $1" >&2; echo "" >&2; show_help; exit 1 ;;
 esac

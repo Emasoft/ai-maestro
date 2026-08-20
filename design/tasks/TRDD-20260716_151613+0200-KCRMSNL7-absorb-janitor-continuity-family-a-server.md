@@ -5,7 +5,7 @@ column: blocked
 pre-block-column: design
 blocked-by: [TRDD-H24DF6ZC, TRDD-DXJZM3BW, TRDD-1GGQ4HWY, TRDD-9ZIF82HI, TRDD-CHN16JXZ, TRDD-JBFM8XR0, TRDD-5II83KK4, TRDD-4QOWVSLU, TRDD-99LV0U4I, TRDD-9FW92242]
 created: 2026-07-16T15:16:13+0200
-updated: 2026-08-20T02:02:15+0200
+updated: 2026-08-20T09:10:13+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project
@@ -18,7 +18,7 @@ approval-datetime: 2026-07-16T15:16:13+0200
 relevant-rules: [16, 23, 42]
 labels: [janitor-absorption, continuity, oauth, resurrection, family-a, server, guardian]
 external-refs: [Emasoft/ai-maestro-janitor#100, Emasoft/ai-maestro#68, Emasoft/ai-maestro#70, Emasoft/AgentlensPro#3]
-npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RPOR5O, 7DRSIKVZ, SX593MDG, YLCTM8EU, S5RUHJRP, A77JBHC9, CPETQBAW, 2X4AYX9T, NIU5RQ1S, JBFM8XR0, B8B6D56P, 5II83KK4, 4QOWVSLU, 99LV0U4I, 9FW92242]
+npt: [H24DF6ZC, Y916N7WL, DXJZM3BW, 1GGQ4HWY, 9ZIF82HI, CHN16JXZ, JAU1ES1C, P7RPOR5O, 7DRSIKVZ, SX593MDG, YLCTM8EU, S5RUHJRP, A77JBHC9, CPETQBAW, 2X4AYX9T, NIU5RQ1S, JBFM8XR0, B8B6D56P, 5II83KK4, 4QOWVSLU, 99LV0U4I, 9FW92242, Z310XDAF]
 release-via: none
 ---
 

@@ -3,7 +3,7 @@ trdd-id: Y1ZWU998
 title: A transient refresh failure brands the credential DEAD and arms a human-only retry ban
 column: todo
 created: 2026-08-20T07:58:02+0200
-updated: 2026-08-20T08:00:01+0200
+updated: 2026-08-20T09:10:13+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -18,7 +18,7 @@ approval-judge: ai-maestro
 approval-datetime: 2026-08-20T07:58:02+0200
 derived: true
 derived-kind: eht
-parent-trdd: XV9BLQC5
+parent-trdd: MN0Q1IA2
 npt: []
 eht: []
 blocked-by: []

@@ -51,16 +51,16 @@ MCP server. That rule has no element-level exception, including the core plugin.
 
 | Tier | Promise |
 |---|---|
-| **A — frozen CLI** (§2, 48 scripts) | a contract. Call these. |
+| **A — frozen CLI** (§2, 50 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
 | **C — operator/dev** (§4, 28 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
-48 + 12 + 28 = **88**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+50 + 12 + 28 = **90**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
 
 ---
 
-## 2. Tier A — the frozen skill-facing CLI (48 scripts)
+## 2. Tier A — the frozen skill-facing CLI (50 scripts)
 
 ### 2.1 `aimaestro-*` — the server surface (12)
 
@@ -134,6 +134,31 @@ Shared flag vocabulary (all frozen where they appear):
 | `queue-cancel <agent> <entryId>` | — |
 
 `queue` is the reason a hibernated agent is **never waited on** — see SCRIPT-LAYER.md.
+
+#### `aimaestro-message.sh <command> [flags]` — inter-agent messaging (the governance door)
+
+| Subcommand | Flags |
+|---|---|
+| `send <recipient-name\|--id UUID>` | `--subject <S>` `--body <B\|->` (`-` = stdin) `[--priority normal\|high\|urgent]` `[--type <amp-type>]` `[--reply-to <message-id>]` `[--from <sender>]` (owner path ONLY — an agent's sender is AID-overridden) |
+| `resolve <name-pattern>` | — (TSV `name<TAB>id<TAB>title`; exit 0 one / 3 transport / 4 zero / 5 ambiguous / 7 auth) |
+| `replies <message-id>` | `[--limit N]` `[--agent <name-or-id>]` (owner path) — TSV reply rows; exit 4 = none yet |
+
+Thin transport over the SendMessage AIO pipeline (R6-gated, AID-attributed, logged); the
+DISTINGUISHABLE exit codes are the contract — amp-send.sh is the feature-rich sibling on the
+same pipeline (attachments, `--context`), this is the door a scripted gate branches on.
+Exit 6 = R6 REFUSED with the server's routing hint verbatim on stderr: follow it, never
+retry around it. (TRDD-0AB76JG3 / TRDD-BGAH6PHP; shipped 2026-08-20.)
+
+#### `aimaestro-plugins.sh <command> [flags]` — plugin-update observability
+
+| Subcommand | Flags |
+|---|---|
+| `update-trail` | `[--limit N]` `[--target <pluginId>]` `[--json]` |
+
+One row per `claude plugin update` invocation the fleet-plugins-update lane ran
+(`{target, scope, project, start_epoch, end_epoch, ok, detail, by}`, newest first) — the
+per-fire attribution a last-run-only stamp cannot give. Empty trail = exit 0 with zero
+rows (a legal fresh state, not an error). (TRDD-MNN0VAS6; shipped 2026-08-20.)
 
 #### `aimaestro-continuity.sh <command> [args]` — agent-continuity (self-scoped)
 

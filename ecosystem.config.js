@@ -39,6 +39,30 @@ module.exports = {
         // the watchdog must log `model-fallback SWITCHED <id> ... confirmed=true` and the pane
         // statusline must flip Fable->Opus. Same pm2-env caveat as above applies.
         AIM_FLEET_MODEL_FALLBACK: '1',
+        // TRDD-9FW92242: arm the absorbed fleet-stop chore. Effect is confined to this host —
+        // the flag gates a kill-switch fan-out that until now logged "detect-only". Reversible
+        // by deleting this line. USER approved arming 2026-08-20 (AskUserQuestion: "All except
+        // the destructive one").
+        AIM_FLEET_STOP: '1',
+        // TRDD-4QOWVSLU: arm the absorbed memory-guard Tier-1 OOM lane. NOT local-only — armed,
+        // this authorizes the server to SIGKILL a runaway process instead of logging "would kill
+        // ... [detect-only]". Armed under the same 2026-08-20 approval. Tunables exist and are
+        // deliberately left at defaults: AIM_MEMORY_GUARD_MIN_FREE_MB, _RUNAWAY_ETIME_S,
+        // _ALERT_RSS_KB, _INTERVAL_MS.
+        AIM_MEMORY_GUARD: '1',
+        // TRDD-CHN16JXZ: arm the HARD rungs of fleet recovery (relaunch / force_restart /
+        // resurrect). The GENTLE rungs were already live via AIM_FLEET_RECOVERY_FIRE above; this
+        // flag only unlocks the rungs that kill and relaunch a process, which is why it is a
+        // separate switch and not folded into its sibling.
+        AIM_FLEET_HARD_RECOVERY: '1',
+        //
+        // ⚠️ AIM_RULES_CLEANUP (TRDD-5II83KK4) IS DELIBERATELY ABSENT — do not "complete the set".
+        // Its engineering is finished and its card's acceptance boxes are all ticked, so it looks
+        // exactly like the three above. It is not: armed, the rules-cleanup lane calls
+        // fs.unlinkSync on real rule files, and the only recovery is reinstalling the janitor
+        // plugin. That is the single IRREVERSIBLE item in this group, and the USER withheld it
+        // specifically ("All except the destructive one", 2026-08-20) while approving the rest.
+        // Adding it needs its own decision, not a tidy-up.
       },
       env_development: {
         NODE_ENV: 'development',

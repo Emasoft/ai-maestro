@@ -148,6 +148,16 @@ show_help() {
 aimaestro-trdd.sh — AI Maestro TRDD-file CLI (the 3-pillars task SSOT)
 
 Commands:
+  create --title T --type Y      Mint a NEW TRDD server-side (TRDD-40DYBI4T): id8
+      --column C                 (collision-checked), timestamps, minimal v2
+      --min-approval W           frontmatter, and ZONE ROUTING — a --min-approval
+      --parent ID                above YOUR verified authority lands the card in
+      --npt ID,ID                design/proposals/ as `column: proposal` (the
+      --eht ID,ID                server decides from your AID title, never from a
+      --body-file P | --body -   flag). Title must not contain a colon. Prints
+                                 `TRDD-<id8> <zone> <column> <file>` (TSV). The
+                                 file is written but NOT committed — commit it
+                                 yourself, staged by name.
   search [flags]                 Search a project's TRDD corpus
       --column C                 Filter by `column:` (dev, testing, blocked, …)
       --id I                     Filter by 8-char TRDD id
@@ -594,6 +604,12 @@ cmd_create() {
     out="$(_api POST "/api/trdd/create" "$payload")" || return 1
     printf '%s' "$out" | jq -r '["TRDD-" + .id, .zone, .column, .file] | @tsv'
 }
+
+# `<verb> --help` must print usage, not "unknown flag". NO verb's own flag loop
+# recognizes --help, so this is a whole-CLI property, not a per-verb omission —
+# one guard here covers all nine verbs and cannot go stale when a tenth is added.
+# (Reported against `create` by ARCHITECT 2026-08-20; measured across every verb.)
+case "${2:-}" in --help|-h) show_help; exit 0 ;; esac
 
 case "${1:-help}" in
     create)  shift; cmd_create "$@" ;;

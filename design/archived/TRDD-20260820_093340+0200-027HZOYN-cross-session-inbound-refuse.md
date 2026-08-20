@@ -1,9 +1,9 @@
 ---
 trdd-id: 027HZOYN
 title: crossSessionInbound refuse — the inbound half of the AMP-only harness lockdown
-column: dev
+column: complete
 created: 2026-08-20T09:33:40+0200
-updated: 2026-08-20T09:43:24+0200
+updated: 2026-08-20T16:10:29+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 task-type: security
@@ -71,7 +71,7 @@ golden requirements + the governance rules + the specs.
 - [x] GOVERNANCE-RULES.md R42.9 row + v5.4.0 changelog; enforcement-map row added (the ratchet demanded it — its test caught the missing row immediately, working as designed)
 - [x] golden-requirements reading recorded in the R42.9 commit body + the USER-facing report: NO PRRD.md exists in this repo (design/ has no requirements/); the golden tier IS the IRON/USER-set marking, which R42.9 now carries. PRRD bootstrap = a separate USER decision
 - [x] specs:check green; enforcement ratchet 12/12; invariants 22/22; the 10 other governance reds in the full-dir run were 5000ms load-flake timeouts (0 assertions), the recorded contention signature
-- [ ] fleet relayed the inbound half (one line to the swept sessions) — NEXT ACTION post-compaction
+- [x] fleet relayed the inbound half 2026-08-20 to all 10 swept sessions (architect combined with the 40DYBI4T adoption note; COS asked to relay to the team); janitor ACKed both landed verbs in the same window
 
 ## Approval log
 
@@ -80,3 +80,5 @@ golden requirements + the governance rules + the specs.
   agent workdir, and add crossSessionInbound: refuse. Make a TRDD about this, and update
   the golden requirements, the governance rules and the specs." Sub-agent SendMessage
   explicitly still permitted. approval-judge: user (the directive IS the approval).
+
+- 2026-08-20T16:10:29+0200 — COMPLETED by the hub: both lockdown halves live-verified, fleet relay done, all boxes checked.

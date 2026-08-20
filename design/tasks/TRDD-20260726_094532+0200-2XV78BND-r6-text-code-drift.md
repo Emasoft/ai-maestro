@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-07-26T09:45:32+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-20T22:34:07+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -30,7 +30,19 @@ is the dangerous direction, because the next reader "corrects" working code to m
 
 Editing rule text is a governance edit, so this is a proposal rather than a self-mandate.
 
-NEXT ACTION: MANAGER rules on the two text edits below; neither changes behaviour.
+> **SUPERSEDED 2026-08-20 — do NOT carry the sentence above forward as a filing instruction.**
+> It is authoring-time prose from 2026-07-26 and was overtaken on **2026-08-15** by the
+> ASSISTANT-MANAGER's approval (see `## Approval log`): `approved: true`,
+> `min-approval-requirement: manager`, ruled during a §D4 drain with *"Column stays as-is per the
+> ruling."* This card is therefore **authorized work in `design/tasks/`, not a pending proposal** —
+> read literally, the line above invites a reader to move it back to `design/proposals/`, which
+> would REVERSE a MANAGER ruling. A `trdd:doctor` `STALE-COLUMN` warning on this card is a false
+> positive for the same reason: the STATE is older than the ruling, and the doctor's own advice is
+> to verify against git before moving anything.
+
+NEXT ACTION: MANAGER rules on the two text edits below; neither changes behaviour. **(Still open as
+of 2026-08-20 — the 2026-08-15 approval authorized the CARD into the work zone; it did not itself
+adjudicate the two R6 text edits, and all four acceptance boxes remain unchecked.)**
 
 ## Finding 1 — R6.6 says "unconditional"; the code fails closed (and should)
 
@@ -100,3 +112,15 @@ guard on the authority of a stale sentence.
 
 - 2026-08-15T01:30:26+0200 — APPROVED by ASSISTANT-MANAGER (min-approval-requirement:
   manager), §D4 APPROVAL-UNAPPROVED-IN-WORK-ZONE drain. Column stays as-is per the ruling.
+- 2026-08-20T22:34:07+0200 — STATE-block correction only. No column change, no scope change, no
+  approval granted or withdrawn. `trdd:doctor` flagged this card `STALE-COLUMN`; verified against
+  the frontmatter and the log rather than the prose, and the finding is a FALSE POSITIVE — the
+  card is approved authorized work sitting correctly in `design/tasks/`. What is genuinely wrong
+  is that the STATE block still reads *"this is a proposal rather than a self-mandate"*, which is
+  authoring-time prose from 2026-07-26, five days OLDER than the approval that overtook it. Read
+  literally it instructs the next reader to re-file this card into `design/proposals/`, which
+  would reverse a MANAGER's explicit ruling — a hazard measured this session, since acting on
+  that sentence was the move under consideration until the log was read. Marked superseded in
+  place rather than deleted, so the audit trail survives. The NEXT ACTION is annotated as still
+  open: the 2026-08-15 approval authorized the CARD, it did not adjudicate the two R6 text edits,
+  and all four acceptance boxes remain unchecked.

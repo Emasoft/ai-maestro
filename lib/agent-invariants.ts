@@ -128,6 +128,12 @@ export const AGENT_INVARIANTS: readonly AgentInvariant[] = [
   {
     id: 'amp-only-messaging',
     // A pure settings write — same class as dep-rules, safe on the timer.
+    //
+    // NEUTER RUNS (2026-08-20 — OBSERVED via scripts/dev/neuter, restore blob-verified):
+    //   s/value: [...deny, ...missing]/value: [...missing]/   → 1 red / 20 green:
+    //       "UNIONS with the deny entries already there — it never replaces them"
+    //   s/if (!read.ok && read.reason === 'unreadable')/if (false)/   → 1 red / 20 green:
+    //       "REFUSES on a corrupt settings file rather than rebuilding it from {}"
     description: 'the client peer-messaging tool is DENIED in the workdir — inside the harness agents talk over AMP only',
     triggers: ['create', 'wake', 'periodic'],
     async enforce({ workdir }: AgentInvariantContext) {

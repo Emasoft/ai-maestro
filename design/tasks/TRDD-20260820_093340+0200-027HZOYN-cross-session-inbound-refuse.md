@@ -3,7 +3,7 @@ trdd-id: 027HZOYN
 title: crossSessionInbound refuse — the inbound half of the AMP-only harness lockdown
 column: dev
 created: 2026-08-20T09:33:40+0200
-updated: 2026-08-20T09:33:40+0200
+updated: 2026-08-20T09:42:09+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 task-type: security
@@ -66,13 +66,12 @@ golden requirements + the governance rules + the specs.
 
 ## Acceptance
 
-- [ ] invariant also enforces crossSessionInbound refuse; union/no-churn/corrupt-refusal
-      properties preserved; tests extended; neuter run attributed
-- [ ] governance-spec.md R42.9 + spec-version 2.5.0 (SPEC FIRST)
-- [ ] docs/GOVERNANCE-RULES.md R42.9 row (the catalog follows the spec)
+- [x] invariant enforces crossSessionInbound refuse; properties preserved; 22 tests green; neuter (inboundWrong=false) reddened exactly the 2 inbound tests, outbound tests stayed green
+- [x] governance-spec.md R42.9 + spec-version 2.5.0 + reconciled-with entry (SPEC FIRST)
+- [x] GOVERNANCE-RULES.md R42.9 row + v5.4.0 changelog; enforcement-map row added (the ratchet demanded it — its test caught the missing row immediately, working as designed)
 - [ ] golden-requirements reading recorded (no PRRD.md exists; IRON/USER-set is the tier)
       and surfaced to the USER
-- [ ] specs:check green; suite green on the touched files
+- [x] specs:check green; enforcement ratchet 12/12; invariants 22/22; the 10 other governance reds in the full-dir run were 5000ms load-flake timeouts (0 assertions), the recorded contention signature
 - [ ] fleet relayed the inbound half (one line to the swept sessions)
 
 ## Approval log

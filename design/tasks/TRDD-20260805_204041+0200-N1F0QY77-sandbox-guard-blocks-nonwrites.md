@@ -1,11 +1,11 @@
 ---
 trdd-id: N1F0QY77
 title: Sandbox directory guard blocks commands that write nothing
-column: blocked
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-06T00:39:08+0200
+updated: 2026-08-20T19:35:19+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -19,8 +19,7 @@ approval-datetime: 2026-08-05T20:40:41+0200
 derived: false
 npt: []
 eht: []
-blocked-by: [LBFB7VST]
-pre-block-column: todo
+blocked-by: []
 release-via: none
 relevant-rules: []
 labels: [manager-filed, testbot-session, owner-plugin]
@@ -116,3 +115,16 @@ that simply disables the guard cannot pass.
   remaining work lands there (measured absent at plugin v3.0.4); the durable work
   order is posted as `Emasoft/ai-maestro#123` comment 5198192106. Unblock when the plugin
   ships it; restore to `pre-block-column`.
+- 2026-08-20T19:35:19+0200 — **UNBLOCKED `blocked → todo` (mechanical correction, INTEGRATOR).**
+  `LBFB7VST`'s directive-1 absence probe has flipped. It measured ZERO as recently as plugin v3.1.23
+  (2026-08-15). Re-measured against the shipped default branch (latest release **v3.1.31**,
+  2026-08-20T15:16:20Z):
+
+      gh api repos/Emasoft/ai-maestro-plugin/contents/scripts/directory-guard.cjs \
+        --jq '.content' | base64 -d > /tmp/dg.cjs
+      wc -l < /tmp/dg.cjs        # → 879      (was 639)
+      grep -c '/dev/null'   /tmp/dg.cjs   # → 2   (was 0)
+      grep -c scanRedirects /tmp/dg.cjs   # → 2   (was 0)
+
+  Both halves of the directive — `/dev/null` recognised as a sink, and the bare `>` scan replaced by
+  the `scanRedirects` tokenizer — are present on the shipped tree. Unambiguous; no caveat.

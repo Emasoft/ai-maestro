@@ -1,10 +1,9 @@
 ---
 trdd-id: 9ZIF82HI
 title: Account switcher — passive rotation to a fresh account/token on 429 / dead-refresh / network interruption
-column: blocked
-pre-block-column: planned
+column: planned
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-16T16:40:46+0200
+updated: 2026-08-20T19:35:19+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -22,7 +21,7 @@ derived: true
 derived-kind: npt
 npt: []
 eht: []
-blocked-by: [1GGQ4HWY]
+blocked-by: []
 release-via: none
 ---
 
@@ -89,3 +88,29 @@ this NPT.
   absorption ("automatic management of the account in case of api-errors, rate limits, network
   interruptions"); gate cleared by the [[TRDD-H24DF6ZC]] D1-D4 sign-off (#3 account switcher).
   Authored directly as `planned`; issuer authority (user) meets the floor.
+- 2026-08-20T19:35:19+0200 — **UNBLOCKED `blocked → planned` (mechanical correction, INTEGRATOR).**
+  `blocked-by: [1GGQ4HWY]` was unsatisfiable **by construction**: this card waited for 1GGQ4HWY to
+  reach a terminal column, while 1GGQ4HWY's own Approval log (2026-08-04T23:57:41) defers its only
+  remaining phase — Phase F, the REAUTH browser tier — *behind this card*. Neither could ever move; a
+  cycle in `blocked-by:` is a graph defect, not a park. Held 16 days.
+  The substance this card actually waits on (keychain custody + the one-writer mutex) shipped. Proof,
+  run 2026-08-20 in the repo root:
+
+      for s in ddec060f 59ebd182 69ce68cb 699e5f06 67650e06 e963487f 45725da7 1e65a9b3 2b325a11; do
+        printf "%-10s " "$s"; git cat-file -t "$s" 2>/dev/null || echo MISSING
+      done
+      # → all nine: commit   (0 MISSING)
+
+      git show --name-only --format="" ddec060f 59ebd182 69ce68cb 699e5f06 67650e06 \
+                                      e963487f 45725da7 1e65a9b3 2b325a11 | sort -u | grep -v '\.md$'
+      # → lib/oauth-rotator/keychain.ts, safe-storage.ts, slots.ts   (custody)
+      #   lib/oauth-rotator/tick-lock.ts                             (one-writer mutex)
+      #   + cascade/rotate/live/network/integrity/global-state/server-tick/tick/tick-status
+      #   + tests/unit/oauth-rotator-{keychain,cascade,integrity,live}.test.ts
+
+  The design gate was cleared long before: [[TRDD-H24DF6ZC]] `## Approval log`,
+  2026-07-16T19:21:48+0200 — *"ALL FOUR (D1-D4) SIGNED OFF by USER — the implement gate is CLEARED.
+  The token-touching NPTs under KCRMSNL7 (#2 OAuth manager, #3 account switcher) are UNBLOCKED"* — so
+  this card sat parked for 35 days after the authorisation it was waiting for arrived.
+  **1GGQ4HWY is deliberately untouched** — its `backburner` is documented and correct; its disposition
+  is the ARCHITECT's lane, not this correction's.

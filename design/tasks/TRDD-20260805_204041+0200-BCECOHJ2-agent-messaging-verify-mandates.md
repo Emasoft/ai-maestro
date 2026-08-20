@@ -1,11 +1,11 @@
 ---
 trdd-id: BCECOHJ2
 title: agent-messaging skill must document field semantics and sender-authority verification
-column: blocked
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-06T00:39:08+0200
+updated: 2026-08-20T19:35:19+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -19,8 +19,7 @@ approval-datetime: 2026-08-05T20:40:41+0200
 derived: false
 npt: []
 eht: []
-blocked-by: [LBFB7VST]
-pre-block-column: todo
+blocked-by: []
 release-via: none
 relevant-rules: []
 labels: [manager-filed, testbot-session, owner-plugin]
@@ -108,3 +107,22 @@ it does.
   remaining work lands there (measured absent at plugin v3.0.4); the durable work
   order is posted as `Emasoft/ai-maestro#124` comment 5198195161. Unblock when the plugin
   ships it; restore to `pre-block-column`.
+- 2026-08-20T19:35:19+0200 — **UNBLOCKED `blocked → todo` (mechanical correction, INTEGRATOR).
+  NO acceptance box ticked — deliberately.** `LBFB7VST`'s directive-2 probe is `governanceTitle` in
+  `skills/agent-messaging/SKILL.md`, and it **still returns 0**. Measured against the shipped tree
+  (plugin v3.1.31):
+
+      gh api repos/Emasoft/ai-maestro-plugin/contents/skills/agent-messaging/SKILL.md \
+        --jq '.content' | base64 -d > /tmp/am-skill.md
+      wc -l < /tmp/am-skill.md                                 # → 253
+      grep -c governanceTitle                 /tmp/am-skill.md # → 0   ← the literal probe, STILL ABSENT
+      grep -c 'Verifying an inbound mandate'  /tmp/am-skill.md # → 1   ← the sender-authority procedure
+      grep -c 'Field Semantics'               /tmp/am-skill.md # → 2   ← the field semantics
+
+  So the ordered substance (field semantics + a sender-authority procedure) IS present, under wording
+  the probe did not anticipate — the probe was only ever a proxy chosen when the skill taught neither.
+  The block is cleared on that evidence. **The acceptance box is NOT ticked**: rewriting or
+  loosening an acceptance box changes what the card PROMISED and is a larger act than the transition
+  it unblocks. Documented-and-unticked is honest; ticked on a proxy that reads 0 is not. The literal
+  probe's disposition — retire it, or require the token — goes to the owner with the other terminal
+  calls.

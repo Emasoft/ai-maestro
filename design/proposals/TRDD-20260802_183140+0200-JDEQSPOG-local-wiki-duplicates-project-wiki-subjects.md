@@ -1,11 +1,11 @@
 ---
 trdd-id: JDEQSPOG
 title: Twelve LOCAL wiki pages duplicate PROJECT subjects under different names
-column: todo
+column: proposal
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T18:31:40+0200
-updated: 2026-08-02T18:31:40+0200
+updated: 2026-08-20T22:26:37+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -125,3 +125,11 @@ the write gate individually; one leaked home path is pushed to GitHub and inheri
 
 - 2026-08-02T18:31:40+0200 — FILED, not approved. Analysis is Tier 0; promotion is USER-gated
   because it publishes machine-private-scope text to a pushed store.
+- 2026-08-20T22:26:37+0200 — UN-AUTHORIZED `todo` → `proposal`, moved `design/tasks/` →
+  `design/proposals/`. It sat in the authorized-work set for 18 days while asserting
+  `approved: false`, which violates the invariant `approved: true ⟺ column ∉ {proposal, refused,
+  superseded}`. Its floor is `user` and its own final acceptance box requires the USER's explicit
+  word before any promotion, so no agent may authorize it. Zero of its six boxes are checked and
+  its `updated:` had not moved since creation, so nothing was in flight and no work is lost — the
+  card was never being worked, only mis-filed. It now honestly reads as awaiting the USER. No
+  approval was granted or implied by this edit.

@@ -341,7 +341,7 @@ accepts a credential.
 
 ## aimaestro-panel.sh  ·  aimaestro-panel.sh v1.0.0
 
-Verbs: status · feedback
+Verbs: open · close · refresh · set · status · feedback
 
 ```text
 AI Maestro HTML Side-Panel CLI
@@ -434,9 +434,9 @@ not the issuer.
 
 ---
 
-## aimaestro-session.sh  ·  aimaestro-session.sh v1.0.0
+## aimaestro-session.sh  ·  aimaestro-session.sh v1.1.0
 
-Verbs: inject · slash · slash-keys · state · read-prompt · block-state · answer · queue · queue-list · queue-cancel
+Verbs: inject · slash · slash-keys · state · read-prompt · block-state · answer · queue · queue-list · queue-cancel · activity
 
 ```text
 AI Maestro Session Control CLI
@@ -497,6 +497,18 @@ Usage:
       [--when idle|online|now-if-idle-else-queue] [--wake-first]
   aimaestro-session.sh queue-list <agent>
   aimaestro-session.sh queue-cancel <agent> <entryId>
+  aimaestro-session.sh activity <tmux-session>
+      Read-only DERIVED activity signals for a pane you do NOT own (TRDD-ZLBBD4E3) —
+      the fleet-guardian / injection-gate probe. JSON: {in_turn, hook_status,
+      hook_updated_at_epoch, last_user_input_epoch, transcript_last_write_epoch}.
+      Booleans and epochs ONLY — never pane content, never transcript text; that
+      no-content property is what makes a non-self read safe where R42 keeps
+      `state --pane` self-only, and it is NORMATIVE (widening it is a refused
+      design, not an extension). in_turn null = no hook state = UNKNOWN — a gate
+      must not read absence as safety. "Advancing?" is two calls spaced past the
+      tool-call cadence: one epoch sample of a moving quantity licenses nothing.
+      Exit: 0 with JSON · 1 HTTP/arg error (404 = no registered agent for that
+      session) · network per _api.
 
 <agent> is an agent UUID, or a name/alias resolved via /api/agents?q=.
 ```
@@ -683,7 +695,7 @@ Usage:
 
 ## aimaestro-trdd.sh  ·  aimaestro-trdd.sh v1.0.0
 
-Verbs: search · read · verify · edit · promote · archive
+Verbs: search · read · verify · edit · approve · refuse · promote · archive
 
 ```text
 AI Maestro TRDD CLI

@@ -1,9 +1,9 @@
 ---
 trdd-id: ZLBBD4E3
 title: read-only session-activity verb usable on non-self panes for the fleet guardian
-column: todo
+column: dev
 created: 2026-08-20T08:27:07+0200
-updated: 2026-08-20T08:27:07+0200
+updated: 2026-08-20T08:40:52+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -42,11 +42,10 @@ only, never pane text.
 
 ## Acceptance
 
-- [ ] spec section first (with the no-pane-content property stated normatively)
-- [ ] server derivation measured against existing sessions-service state, no new collector
-      unless measured absent
-- [ ] verb returns correct signals for a busy and an idle pane (live-verified both)
-- [ ] janitor notified with the exact invocation; TRDD-D2DD5GO8's consumer unblocked
+- [x] spec section first — generated from the session.sh header, no-content property stated normatively; specs:check green
+- [x] server derivation measured first: hook chat state (chatStateFileFor), lib/user-presence (last_user_input_epoch — the exact signal the ioreg probe approximates), transcript slug mtime. ZERO new collectors. `transcript_advancing` deliberately became `transcript_last_write_epoch`: one sample of a moving quantity licenses nothing, so movement is the CALLER's two-sample derivation — spec'd that way
+- [ ] verb returns correct signals for a busy and an idle pane — UNIT-pinned (in_turn map, null-absence, unreadable-file), LIVE run pending server deploy: the route is under app/api (BUNDLED — needs yarn build + pm2 restart, not restart alone)
+- [ ] janitor notified with the exact invocation; TRDD-D2DD5GO8's consumer unblocked (notify AFTER live verify — a doc naming an undeployed verb fails worse)
 
 ## Approval log
 

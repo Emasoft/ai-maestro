@@ -70,7 +70,13 @@ function genScriptsSpec() {
       break
     }
     const vm = text.match(/--version[^)]*\)\s*echo "([^"]+)"/)
-    const verbs = [...text.matchAll(/^\s{4}([a-z][a-z0-9|_-]*)\)\s+(?:shift; )?cmd_/gm)].map(m => m[1])
+    // Verbs come from the top-level dispatch case. The needle used to require a
+    // `cmd_` handler, which silently dropped every verb routed through a shared
+    // helper — measured 2026-08-20 on aimaestro-panel.sh: open/close/refresh/set
+    // dispatch via `_panel_post` and the spec line under-reported 6 verbs as 2
+    // (caught by the plugin consuming the spec, not by us). `shift` after the
+    // pattern is what separates a dispatch arm from `help)`/`--version)`.
+    const verbs = [...text.matchAll(/^\s{4}([a-z][a-z0-9|_-]*)\)\s+shift\b/gm)].map(m => m[1])
     out += `\n---\n\n## ${f}${vm ? `  ·  ${vm[1]}` : ''}\n\n`
     if (verbs.length) out += `Verbs: ${verbs.join(' · ')}\n\n`
     out += '```text\n' + header.join('\n').replace(/^=+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() + '\n```\n'

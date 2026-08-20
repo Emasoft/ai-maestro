@@ -59,6 +59,18 @@
 #       [--when idle|online|now-if-idle-else-queue] [--wake-first]
 #   aimaestro-session.sh queue-list <agent>
 #   aimaestro-session.sh queue-cancel <agent> <entryId>
+#   aimaestro-session.sh activity <tmux-session>
+#       Read-only DERIVED activity signals for a pane you do NOT own (TRDD-ZLBBD4E3) —
+#       the fleet-guardian / injection-gate probe. JSON: {in_turn, hook_status,
+#       hook_updated_at_epoch, last_user_input_epoch, transcript_last_write_epoch}.
+#       Booleans and epochs ONLY — never pane content, never transcript text; that
+#       no-content property is what makes a non-self read safe where R42 keeps
+#       `state --pane` self-only, and it is NORMATIVE (widening it is a refused
+#       design, not an extension). in_turn null = no hook state = UNKNOWN — a gate
+#       must not read absence as safety. "Advancing?" is two calls spaced past the
+#       tool-call cadence: one epoch sample of a moving quantity licenses nothing.
+#       Exit: 0 with JSON · 1 HTTP/arg error (404 = no registered agent for that
+#       session) · network per _api.
 #
 # <agent> is an agent UUID, or a name/alias resolved via /api/agents?q=.
 #
@@ -367,6 +379,18 @@ cmd_queue_cancel() {
     _api DELETE "/api/agents/${id}/queue/${entry}"
 }
 
+cmd_activity() {
+    local tmux="${1:-}"
+    [ -z "$tmux" ] && { echo "Error: tmux session name required" >&2; return 1; }
+    # Keyed on the tmux SESSION name, not an agent ref — the guardian holds the pane
+    # name, and resolving through /api/agents?q= would add a lookup that can go stale
+    # against the very registry drift this probe exists to survive.
+    if [[ ! "$tmux" =~ ^[a-zA-Z0-9_@.-]+$ ]]; then
+        echo "Error: invalid tmux session name" >&2; return 1
+    fi
+    _api GET "/api/sessions/${tmux}/activity-signals"
+}
+
 case "${1:-help}" in
     inject)       shift; cmd_inject "$@" ;;
     slash)        shift; cmd_slash "$@" ;;
@@ -378,7 +402,8 @@ case "${1:-help}" in
     queue)        shift; cmd_queue "$@" ;;
     queue-list)   shift; cmd_queue_list "$@" ;;
     queue-cancel) shift; cmd_queue_cancel "$@" ;;
+    activity)     shift; cmd_activity "$@" ;;
     help|--help|-h) show_help ;;
-    --version|-v) echo "aimaestro-session.sh v1.0.0" ;;
+    --version|-v) echo "aimaestro-session.sh v1.1.0" ;;
     *) echo "Error: unknown command: $1" >&2; echo "" >&2; show_help; exit 1 ;;
 esac

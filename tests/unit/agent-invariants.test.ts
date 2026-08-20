@@ -351,10 +351,22 @@ describe('the amp-only-messaging invariant', () => {
     expect(row().triggers).toEqual(['create', 'wake', 'periodic'])
   })
 
-  it('denies the peer-messaging tool in a workdir that has no settings file yet', async () => {
+  it('denies the peer-messaging tool AND refuses cross-session inbound in a fresh workdir', async () => {
     const out = await row().enforce(ctx('create'))
     expect(out.status).toBe('repaired')
     expect(readDeny()).toContain('SendMessage')
+    // The INBOUND half (USER directive 2026-08-20, TRDD-027HZOYN)
+    expect(JSON.parse(readFileSync(settingsPath(), 'utf8')).crossSessionInbound).toBe('refuse')
+  })
+
+  it('repairs a drifted crossSessionInbound even when the deny list is already correct', async () => {
+    seed({ permissions: { deny: ['SendMessage'] }, crossSessionInbound: 'allow' })
+    const out = await row().enforce(ctx('periodic'))
+    expect(out.status).toBe('repaired')
+    expect(out.detail).toBe('crossSessionInbound=refuse')
+    const data = JSON.parse(readFileSync(settingsPath(), 'utf8'))
+    expect(data.crossSessionInbound).toBe('refuse')
+    expect(data.permissions.deny).toEqual(['SendMessage']) // untouched — only the drifted key moved
   })
 
   it('UNIONS with the deny entries already there — it never replaces them', async () => {
@@ -368,8 +380,8 @@ describe('the amp-only-messaging invariant', () => {
     expect(JSON.parse(readFileSync(settingsPath(), 'utf8')).enabledPlugins).toEqual({ 'a@b': true })
   })
 
-  it('is a no-op once the entry is present (no churn on every beat)', async () => {
-    seed({ permissions: { deny: ['SendMessage'] } })
+  it('is a no-op once BOTH halves are present (no churn on every beat)', async () => {
+    seed({ permissions: { deny: ['SendMessage'] }, crossSessionInbound: 'refuse' })
     const before = readFileSync(settingsPath(), 'utf8')
 
     const out = await row().enforce(ctx('periodic'))

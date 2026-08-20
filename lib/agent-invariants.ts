@@ -78,6 +78,14 @@ export interface AgentInvariant {
 export const HARNESS_DENIED_TOOLS: readonly string[] = ['SendMessage']
 
 /**
+ * The INBOUND half (USER directive 2026-08-20, TRDD-027HZOYN): the deny list stops the
+ * agent SENDING through the client tool; this setting makes its session REFUSE inbound
+ * cross-session delivery. Sub-agent messaging (a session's own Agent-tool children) is
+ * untouched — the key governs cross-session edges only.
+ */
+export const HARNESS_INBOUND_POLICY = 'refuse'
+
+/**
  * THE LIST. Everything ai-maestro promises about an agent workdir.
  *
  * To add a guarantee: add a row. Do not add a call site.
@@ -155,13 +163,27 @@ export const AGENT_INVARIANTS: readonly AgentInvariant[] = [
       const deny = Array.isArray(existing) ? existing.filter((e): e is string => typeof e === 'string') : []
 
       const missing = HARNESS_DENIED_TOOLS.filter((t) => !deny.includes(t))
-      if (missing.length === 0) return { id: 'amp-only-messaging', status: 'ok' }
+      // The INBOUND half (USER directive 2026-08-20, TRDD-027HZOYN): denying the tool
+      // stops this agent SENDING; `crossSessionInbound: "refuse"` stops other sessions
+      // DELIVERING into it. Both halves, or the ungoverned channel is only half closed.
+      // A session's OWN sub-agents are unaffected — this key governs cross-session
+      // delivery only, which is exactly the edge the R6 graph owns.
+      const inboundWrong = !read.ok || read.data.crossSessionInbound !== HARNESS_INBOUND_POLICY
+
+      if (missing.length === 0 && !inboundWrong) return { id: 'amp-only-messaging', status: 'ok' }
 
       // Read-then-write outside the lock: the write itself is lock-guarded, this
-      // watchdog is the only writer of THIS key, and a lost update is repaired on the
+      // watchdog is the only writer of THESE keys, and a lost update is repaired on the
       // next periodic beat. Not worth a read-modify-write primitive of its own.
-      await editSettings(path, [{ op: 'set', keyPath: ['permissions', 'deny'], value: [...deny, ...missing] }])
-      return { id: 'amp-only-messaging', status: 'repaired', detail: `denied ${missing.join(', ')}` }
+      const ops: Parameters<typeof editSettings>[1] = []
+      if (missing.length > 0) ops.push({ op: 'set', keyPath: ['permissions', 'deny'], value: [...deny, ...missing] })
+      if (inboundWrong) ops.push({ op: 'set', keyPath: ['crossSessionInbound'], value: HARNESS_INBOUND_POLICY })
+      await editSettings(path, ops)
+      const did = [
+        ...(missing.length > 0 ? [`denied ${missing.join(', ')}`] : []),
+        ...(inboundWrong ? ['crossSessionInbound=refuse'] : []),
+      ]
+      return { id: 'amp-only-messaging', status: 'repaired', detail: did.join('; ') }
     },
   },
 

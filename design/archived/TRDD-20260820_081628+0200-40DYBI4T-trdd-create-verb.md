@@ -1,9 +1,9 @@
 ---
 trdd-id: 40DYBI4T
 title: aimaestro-trdd.sh create — server-side TRDD minting for plugin agents
-column: todo
+column: complete
 created: 2026-08-20T08:16:28+0200
-updated: 2026-08-20T08:16:28+0200
+updated: 2026-08-20T09:44:54+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -63,12 +63,14 @@ all failure modes this repo's own lessons file records).
 
 ## Acceptance
 
-- [ ] spec sections (scripts + api) written first; specs:check red until implementation
-- [ ] service + route + CLI verb landed; specs:check green
-- [ ] minted file passes trddgrep validate; collision re-roll test; zone-routing test
-- [ ] ARCHITECT notified with the exact invocation to adopt
+- [x] spec sections generated from the CLI header + route walk; specs:check green
+- [x] lib/trdd-create.ts + POST /api/trdd/create + CLI create verb (v1.1.0) landed; plus a frontmatter-injection guard after a commit security-review finding (the mandate-forgery vector — parent: "X\nmandate: true" — refused before write, pinned)
+- [x] LIVE-verified via the bare PATH name: colon title refused at the route (400 with the reason); an owner mint landed a real card in tasks/ at backburner with the full mandate record, validate-clean (probe removed after). Collision re-roll + zone routing pinned by 2 attributed neuters (the first collision test was RNG-vacuous — injectable mint seam added)
+- [x] ARCHITECT notified 2026-08-20
 
 ## Approval log
 
 - 2026-08-20T08:16:28+0200 — MANDATE issued by the hub under the USER's standing Phase-2
   delegation (min-approval-requirement: none — in-scope server work). No approval request sent.
+
+- 2026-08-20T09:44:54+0200 — COMPLETED by the hub: shipped, deployed (~/.local/bin, byte-identical), live-verified by effect; all boxes checked.

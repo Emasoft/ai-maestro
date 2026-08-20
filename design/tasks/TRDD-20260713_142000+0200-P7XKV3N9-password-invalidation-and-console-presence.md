@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:20:00+0200
 created: 2026-07-13T14:20:00+0200
-updated: 2026-08-05T01:08:00+0200
+updated: 2026-08-20T21:52:35+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -310,10 +310,15 @@ owner's, because **an agent must never rotate a credential**.
 - [ ] **the owner rotates the leaked credential using this feature** — Settings → Revoke, or
       `aimaestro-governance.sh invalidate-password`. This is what unblocks [[44RGLOO8]], and it is
       HUMAN-ONLY: an agent must never rotate a credential
-- [ ] **MAESTRO *login* is not yet console-gated** — §2b binds the console rule to two operations
-      and only the password-change half is built. Deliberate and still open
-- [ ] the general TTY→sudo-token path for other strict routes — [[9MZQ4T7E]]. This endpoint
-      sidesteps it by self-authenticating (its input IS the password), which is why it shipped first
+- [~] **MAESTRO *login* is not yet console-gated** — §2b binds the console rule to two operations
+      and only the password-change half is built. Deliberate and still open. Reshaped to a deferral
+      2026-08-20: this is UNBUILT SCOPE, not a human gate — it belongs in a card of its own, and as
+      an open acceptance box it would block this card's closure on work no human here can perform.
+- [~] the general TTY→sudo-token path for other strict routes — [[9MZQ4T7E]]. This endpoint
+      sidesteps it by self-authenticating (its input IS the password), which is why it shipped first.
+      Reshaped to a deferral 2026-08-20: `9MZQ4T7E` is a live card at `column: todo`, so this box
+      gates THIS card on ANOTHER card's work — the cross-card dependency belongs in `blocked-by:`,
+      never in an acceptance box.
 - [ ] the recovery-email SMTP override (`396b5d10`) — *"AWAITING the USER's retry with their real
       server"*. The route tests cover the override-vs-autodetect branch; what is untested is the
       user's actual relay
@@ -350,3 +355,7 @@ pinned by nothing until today.
 - 2026-07-13T14:20:00+0200 — **MANDATE issued by the USER** (min-approval-requirement:
   user; the issuer IS the tier-3 authority). Pre-approved: no approval request was
   sent. Born in `design/tasks/`, per the mandate rule.
+- 2026-08-20T21:52:35+0200 — box reshape only (`- [ ]` → `- [~]`), no column change, no scope
+  change. An acceptance box naming another card's work or this card's own closure-consequence is
+  not a gate; left as `- [ ]` it makes the card permanently unclosable. Text preserved verbatim,
+  reason appended.

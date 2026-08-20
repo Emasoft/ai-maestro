@@ -3,7 +3,7 @@ trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: human_review
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-19T20:51:30+0200
+updated: 2026-08-20T21:52:35+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -218,7 +218,9 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
 - [ ] USER arms `AIM_FLEET_MODEL_FALLBACK=1` and observes one switch reach `confirmed=true`
 - [ ] USER rules on `isSafeAlternate` (and, if changed, the janitor half is coordinated)
 - [ ] USER rules on the dead-refresh live account
-- [ ] Parent `TRDD-IALQ43QP` unblocked once this is terminal
+- [~] Parent `TRDD-IALQ43QP` unblocked once this is terminal — reshaped to a deferral 2026-08-20:
+      this is a CONSEQUENCE of this card reaching a terminal column, so it is unsatisfiable before
+      closure by construction. `IALQ43QP` verified at `column: blocked`.
 
 ## Approval log
 
@@ -235,6 +237,10 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
   ecosystem.config.js --update-env`, verified on the PROCESS (`ps -E`:
   AIM_FLEET_MODEL_FALLBACK=1) — commit 56047fa5. Card → `dev`: the remaining work is the
   human-watched first switch plus the two policy rulings, still open below.
+- 2026-08-20T21:52:35+0200 — box reshape only (`- [ ]` → `- [~]`), no column change, no scope
+  change. An acceptance box naming another card's work or this card's own closure-consequence is
+  not a gate; left as `- [ ]` it makes the card permanently unclosable. Text preserved verbatim,
+  reason appended.
 
 ## Live observation 2026-08-16T00:50 — the TRIGGER fired for real, and the lane still could not act
 

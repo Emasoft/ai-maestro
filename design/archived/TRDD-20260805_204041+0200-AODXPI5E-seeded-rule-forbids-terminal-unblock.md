@@ -1,11 +1,11 @@
 ---
 trdd-id: AODXPI5E
 title: Seeded agent rule forbids the terminal-unblock capability the server ships
-column: dev
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T20:40:41+0200
-updated: 2026-08-20T19:35:19+0200
+updated: 2026-08-20T22:04:15+0200
 current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
@@ -251,12 +251,33 @@ capability).
 - [x] The identity-vouching carve-out is explicit — and now carries its
       REASON (the server is the sole notary of identity), which is what makes
       it followable rather than a rule to memorise.
-- [ ] `ama-session` documents the cross-agent unblock procedure, including
-      which governance titles may perform it against which targets.
-- [ ] A behavioural check: a MANAGER agent presented with a blocked
+- [x] `ama-session` documents the cross-agent unblock procedure, including
+      which governance titles may perform it against which targets. Verified
+      first-hand 2026-08-20 against the SHIPPED plugin tree, not against this
+      card's prose. The procedure and the title-to-target matrix live in the
+      sibling skill `skills/ama-unblock/SKILL.md` (229 lines / 13881 bytes,
+      fetched via `gh api` from `Emasoft/ai-maestro-plugin`), whose lines 81-82
+      carry the mapping verbatim: *"MANAGER: any agent on the host **except an
+      ASSISTANT**. COS: **its own team only**, same exclusion. Every other
+      title: none."* And `skills/ama-session/SKILL.md`:79-84 performs the
+      delegation this box assumed: *"The one carve-out is R42.8, and it is NOT
+      in this skill... `ama-unblock`. Everything below is the SELF case."*
+      LOCATION CORRECTION recorded rather than smoothed over: the box named
+      `ama-session` as the documenting skill and the content actually shipped
+      in `ama-unblock`, with `ama-session` routing to it. The requirement —
+      that an agent starting from `ama-session` can reach the cross-agent
+      procedure and the title rules — is met; the file name in the box was
+      wrong.
+- [~] A behavioural check: a MANAGER agent presented with a blocked
       subordinate uses the CLI instead of escalating to the human, and the
       same agent escalates rather than answering an identity-vouching
-      prompt.
+      prompt. Reshaped to a deferral 2026-08-20: this is OUT OF THIS CARD'S
+      NARROWED SCOPE and belongs to another project. This card's own approval
+      log (2026-08-20T19:35:19+0200) already states it "remains OPEN in the
+      plugin project as `TRDD-SNG93TTD`... and is NOT claimed done here". Left
+      as `- [ ]` it would gate this card's closure forever on work this repo
+      does not own. The residual has a home and is not lost: it is watched by
+      [[LBFB7VST]] (`column: todo`).
 
 ## Non-goals
 
@@ -290,3 +311,11 @@ whether it still escalates the identity-vouching case.
   `skills/ama-unblock/SKILL.md` shipped 2026-08-06 (commit 1f21d6f, live since v3.1.0) and is intact.
   The residual behavioural check remains OPEN in the plugin project as `TRDD-SNG93TTD` — it is
   outside this card's narrowed scope and is NOT claimed done here.
+- 2026-08-20T22:04:15+0200 — `dev → complete`. Acceptance gate satisfied: 3 of 4 boxes checked, the
+  4th reshaped to an out-of-scope deferral (`- [~]`) that this card's own 19:35 log entry had already
+  declared not-claimed-here. The `ama-session` box was ticked on FIRST-HAND evidence from the shipped
+  plugin tree (`ama-unblock/SKILL.md`:81-82 for the title-to-target matrix, `ama-session/SKILL.md`:79-84
+  for the delegation), re-fetched independently and byte-identical to a separate fetch. Closing under
+  the USER's standing rule of 2026-08-20 that a card whose acceptance gate is mechanically satisfied
+  may be closed without a further ruling. The residual behavioural check stays open in the plugin
+  project as `TRDD-SNG93TTD`, watched here by [[LBFB7VST]].

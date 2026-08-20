@@ -1,9 +1,9 @@
 ---
 trdd-id: BGAH6PHP
 title: aimaestro-message.sh replies — ack-poll on a message-id for the approval timeout loop
-column: dev
+column: complete
 created: 2026-08-20T08:30:48+0200
-updated: 2026-08-20T08:54:46+0200
+updated: 2026-08-20T09:04:11+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -37,9 +37,11 @@ the script header first (gen-specs is header-driven), then the verb.
 
 - [x] measured: the summary DROPPED the reply link (envelope in_reply_to existed, MessageSummary lacked it) and the route had no filter. Added inReplyTo end to end: MessageSummary field + both summary builders + normalized-id filter (dash/underscore variants match, same reason the dedup normalizes) + GetMessagesParams + route param. ALSO fixed a live defect this measurement exposed: cmd_send's --reply-to wrote `replyTo` while the pipeline reads `inReplyTo` — the flag was silently dropped since ship
 - [x] header spec + `replies` verb; specs:check green
-- [ ] live-verified: a real reply row, and exit 4 on an id with none
-- [ ] AUTONOMOUS notified with the invocation
+- [x] live-verified end to end: exit 4 before any reply; a --reply-to send threaded for real (the prior dead-key defect fixed); replies then returned exactly the one row (sender, id, timestamp, subject)
+- [x] AUTONOMOUS notified with the invocation (2026-08-20)
 
 ## Approval log
 
 - 2026-08-20T08:30:48+0200 — MANDATE issued by the hub (min-approval-requirement: none). No request sent.
+
+- 2026-08-20T09:04:11+0200 — COMPLETED by the hub: shipped, deployed, live-verified (4 → threaded send → 0 with the row); all boxes checked.

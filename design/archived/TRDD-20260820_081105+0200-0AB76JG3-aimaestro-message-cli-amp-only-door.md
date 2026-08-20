@@ -1,9 +1,9 @@
 ---
 trdd-id: 0AB76JG3
 title: aimaestro-message.sh — the AMP CLI that becomes the only messaging door once the client tool is denied
-column: dev
+column: complete
 created: 2026-08-20T08:11:05+0200
-updated: 2026-08-20T08:29:47+0200
+updated: 2026-08-20T09:04:11+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -112,10 +112,12 @@ MAINTAINER is the first consumer and has asked for it.
 - [x] `resolve` fails distinguishably rather than degrading to a no-op (LIVE-VERIFIED: 0 one-match, 4 zero, 5 ambiguous-with-candidates, 7 no-auth)
 - [x] a forbidden-recipient `send` maps the route's 403 to exit 6 with the server hint verbatim on stderr — UNREACHABLE under owner auth (the R6 gate exempts the owner), so the live run pinned 0 (real delivery, message-id msg-1787207089779-7b7ce1adc787 to a test agent), 4 (unknown --id, registry-prevalidated), 7 (no auth); the 403→6 mapping is a case arm over a status the route's own G04/R38 tests pin
 - [x] `yarn specs:check` green (specs regenerated from the script header — one contract source)
-- [ ] plugin prose swept for client-tool instructions — DONE: webdesign (clean), architect (25 hits, all restriction prose), assistant-role (clean, enforcement test exists), maintainer (1 real instance FIXED, their 22c1f7d), janitor (own-subagent mention only, no change), agentlenspro (sweeping pre-publish), programmer (0 instructing hits + KCX9O26L stragglers in flight). PENDING: core plugin (ai-maestro-plugin-bd) + COS team relay replies
+- [x] plugin prose swept fleet-wide, CLOSED 2026-08-20: 8 plugin surfaces + 6 team members. Real fixes: maintainer 1 teach-to-use instance (their 22c1f7d); core 3 available-but-unenforced framings (v3.1.29); COS carded its own stale nothing-refuses-you descriptions (their TRDD-P4OB78ST). All others clean, each verified by its own session's grep
 
 ## Approval log
 
 - 2026-08-20T08:11:05+0200 — MANDATE issued by the hub under the USER's standing Phase-2
   delegation (min-approval-requirement: none — in-scope server work on this project).
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+- 2026-08-20T09:04:11+0200 — COMPLETED by the hub: CLI shipped + adopted (MAINTAINER 00a4499), replies verb added under BGAH6PHP, fleet prose sweep closed; all boxes checked.

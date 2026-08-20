@@ -3,7 +3,7 @@ trdd-id: 0AB76JG3
 title: aimaestro-message.sh — the AMP CLI that becomes the only messaging door once the client tool is denied
 column: todo
 created: 2026-08-20T08:11:05+0200
-updated: 2026-08-20T08:11:05+0200
+updated: 2026-08-20T08:14:37+0200
 current-owner: ai-maestro-hub
 task-type: feature
 scope: project
@@ -30,11 +30,25 @@ implementation-commits: [556f340f]
 - **This card is the OTHER half.** With the client tool gone, `amp-send.sh` is the only
   channel — and it is NOT one of the 14 CLIs in `design/specs/aimaestro-scripts-spec.md`,
   so the surface plugins must now depend on is unspecified. That is the gap.
-- **NEXT ACTION:** collect the MAINTAINER's exact verb shape (asked 2026-08-20), write the
-  spec section FIRST, then implement against it. Specs-first is the standing mandate for
-  new capability.
-- **NOT yet done:** the CLI, the spec section, and the sweep of plugin prose that still
-  tells an agent to use the client tool.
+- **VERB SHAPE COLLECTED (MAINTAINER, 2026-08-20 — box 1 done):**
+  - `resolve <name-pattern>` — case-insensitive substring over registered names. stdout: one
+    TSV row per match `<name>\t<agent-id>\t<title>`. Exit 0 = exactly one match; 4 = zero
+    (stderr says so); 5 = ambiguous, >1, candidates still on stdout; 3 = registry/transport
+    UNAVAILABLE (must be distinguishable from no-match). Caller confirmed nothing relies on
+    the old silent no-op — break it with their blessing.
+  - `send <recipient-name|--id UUID> --subject <S> --body <B|-> [--priority normal|high|urgent]
+    [--reply-to <message-id>]` — `--body -` reads stdin (approval bodies are heredocs).
+    stdout on success: the message-id, exit 0. Exit 3 = transport/server unreachable;
+    4 = recipient not found; 6 = R6 REFUSED with the server's routing hint verbatim on
+    stderr (the caller follows the hint — that is the contract); 7 = auth missing/invalid
+    (AID_AUTH). Any other non-zero = unknown, surfaced raw.
+- **MAINTAINER's own prose sweep: DONE on their side** (their commit 22c1f7d — one real
+  instance fixed; the inbound-arrival description correctly left, the deny binds sends).
+- **NEXT ACTION:** write the `aimaestro-message.sh` section into
+  `design/specs/aimaestro-scripts-spec.md` carrying the exit-code table above, then
+  implement against it.
+- **NOT yet done:** the spec section, the CLI, `yarn specs:check`, and the prose sweep of
+  the OTHER plugins (webdesign closed clean; core plugin + team asked, replies pending).
 
 ## Problem
 
@@ -90,7 +104,7 @@ MAINTAINER is the first consumer and has asked for it.
 
 ## Acceptance
 
-- [ ] MAINTAINER's exact verb shape collected (arguments, output, failure modes)
+- [x] MAINTAINER's exact verb shape collected (arguments, output, failure modes)
 - [ ] `aimaestro-message.sh` section written in the scripts spec BEFORE any implementation
 - [ ] CLI implemented as a transport over the existing AIO pipeline, no second delivery path
 - [ ] `resolve` fails distinguishably rather than degrading to a no-op

@@ -251,6 +251,13 @@ An account identity has never once been load-bearing in this corpus.
 - 2026-08-07T14:49:57+0200 — MANDATE issued by ai-maestro (min-approval-requirement: none).
   Pre-approved: Tier-0 derived EHT of TRDD-MN0Q1IA2, within the authoring agent's own scope. No
   approval request was sent.
+- 2026-08-20T08:00:13+0200 — CORRECTION (append-only, the one exempt section). This card's 01:45 re-measure
+  surfaced "the two alternate slots have dead refresh tokens and need a human re-login". MEASURED
+  at 08:00 from the janitor's own state.json, that is WRONG in the direction that costs the USER
+  work: all three slots carry `last_refresh_failure: network` — the owner's classifier never
+  judged any credential dead — while our `refresh_dead_fp` is SET on all three. The re-login
+  claim was read off `reason: refresh-dead`, the verdict TRDD-Y1ZWU998 shows we manufacture from
+  transport failures. No re-login is established as necessary. Tracked on Y1ZWU998 (priority 0).
 
 ## Acceptance
 
@@ -263,10 +270,3 @@ An account identity has never once been load-bearing in this corpus.
       2026-08-20 (9793fca6): per-cause text consuming the janitor's `last_refresh_failure`,
       DEAD only for `credential-dead`, RETRYABLE for transport/network/malformed, UNKNOWN
       otherwise. Not blocked on the janitor: #228 shipped their classification.
-- 2026-08-20T08:00:13+0200 — CORRECTION (append-only, the one exempt section). This card's 01:45 re-measure
-  surfaced "the two alternate slots have dead refresh tokens and need a human re-login". MEASURED
-  at 08:00 from the janitor's own state.json, that is WRONG in the direction that costs the USER
-  work: all three slots carry `last_refresh_failure: network` — the owner's classifier never
-  judged any credential dead — while our `refresh_dead_fp` is SET on all three. The re-login
-  claim was read off `reason: refresh-dead`, the verdict TRDD-Y1ZWU998 shows we manufacture from
-  transport failures. No re-login is established as necessary. Tracked on Y1ZWU998 (priority 0).

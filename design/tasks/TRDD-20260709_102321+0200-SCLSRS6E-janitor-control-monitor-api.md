@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: blocked
 created: 2026-07-09T10:23:21+0200
-updated: 2026-08-21T17:19:22+0200
+updated: 2026-08-21T17:23:49+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -76,8 +76,25 @@ Consequences, all open:
   obvious mapping is wrong: it would deny an agent driving its OWN panel/queue.
 - The USER path is throttled to 5 strict ops/minute machine-wide — proposal
   **TRDD-X8R2HP9D**.
-- The wrapper layer has no USER auth path at all (`get_auth_args` reads only `AID_AUTH`),
-  so `aimaestro-*.sh` returns 401 for a human at a terminal. Folded into D3RP7KQZ.
+- ~~The wrapper layer has no USER auth path at all (`get_auth_args` reads only `AID_AUTH`),
+  so `aimaestro-*.sh` returns 401 for a human at a terminal. Folded into D3RP7KQZ.~~
+  > **⏹ DISPROVED 2026-08-21 — struck HERE, in the authoritative block, not only at the foot of
+  > the card.** `get_auth_args` falls back to a session cookie
+  > (`shell-helpers/common.sh:596-606`), the INSTALLED copy on PATH is byte-identical (`cmp`,
+  > Aug 19), and `aimaestro-governance.sh login` ships it — its `--help` cites `ai-maestro#55`
+  > as its own origin. The capability SHIPPED; what is missing is the CREDENTIAL
+  > (`~/.aimaestro/cli-session` has never been minted, so the fallback yields `()` — no auth
+  > header at all). **Owner-only to clear: `login` prompts on the TTY.** Full trace at the foot
+  > of this card.
+  >
+  > **Why this second strike was needed, and it is the lesson:** the correction was already
+  > written 230 lines below — and TRDD rule 10 makes the STATE block *authoritative and read
+  > first on resume*, so a stale claim HERE silently outranks an accurate one THERE. A
+  > correction filed at the bottom of a long card does not correct the card. Strike the claim
+  > where it is ASSERTED, not only where you happened to discover it was wrong.
+  > (Flagged by the ORCHESTRATOR, whose external-blocker sweep would also have kept reporting
+  > this card as live on `#55`: an unmarked claim is indistinguishable from a current one to any
+  > checker — the correction contract, applied to my own card.)
 
 TRDD-6A2I6ZO0 declared the 14 affected strict routes (8 from this epic + 6 older) in a
 new `AGENT_POLICY_PENDING` ledger with a coverage guardrail, so no strict route can ship
@@ -284,7 +301,10 @@ reference was not enough; I read its tree and the plugin's, which changed the as
 - **BLOCKER, and it is ours.** `queue` maps to `send-command`, which is self-drive only, so an agent
   enqueues only on itself. The janitor's per-project HEARTBEAT holds `AID_AUTH` (inside an agent
   session) and can self-queue today; its machine-wide DAEMON is not a registered agent, holds no
-  AID, and `get_auth_args` emits only the AID bearer — so every verb 401s for it. Fleet-wide arm
+  AID, and ~~`get_auth_args` emits only the AID bearer~~ **[DISPROVED 2026-08-21 — it falls back to
+  a session cookie; see the strike in the STATE block and the trace at the foot. The daemon's
+  problem is that no `~/.aimaestro/cli-session` has been minted, not that the path is absent]** —
+  so every verb 401s for it. Fleet-wide arm
   (**janitor#77**) is therefore blocked on **ai-maestro#55** (filed): session-cookie auth, or a
   MANAGER service identity for the daemon (Tier-2 — a machine-wide daemon with MANAGER authority is
   a large blast radius), or a narrow scoped `fleet-arm` verb. Posted on janitor#77.

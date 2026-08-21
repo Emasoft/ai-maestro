@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-16T22:33:02+0200
+updated: 2026-08-21T16:44:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -33,7 +33,51 @@ external-refs: []
 
 # Two executables encoding a superseded model, that no repo ships
 
+## 🛑 STOP — 2026-08-21T16:4x: `kanban-sync.py` IS OWNED, and step 4 would have BROKEN a shipped skill
+
+**The STATE block below is superseded on its central claim. Do NOT dispose of `kanban-sync.py`.**
+
+It says the *"instructions still point at them"* premise is **REFUTED — both live docs are correct
+as written**. Measured today, that is **wrong**, and the miss is one repo wide: a **LIVE, SHIPPED
+plugin skill** — `ai-maestro-plugin/skills/team-kanban/`, in a plugin released **v3.1.31 on
+2026-08-20** — declares and documents it:
+
+| site | what it says |
+|---|---|
+| `SKILL.md:5` | `allowed-tools: … Bash(kanban-sync.py:*)` — a **declared tool** of the skill |
+| `SKILL.md:34` | *"For GitHub sync: `gh` CLI authenticated, **`kanban-sync.py` at `~/.local/bin/`**"* — names the exact path this card calls unowned |
+| `SKILL.md:36`, `:50` | worked invocations — `kanban-sync.py link <team-id> <owner/repo> <project-number>` |
+| `SKILL.md:11` | *"GitHub-sync (`kanban-sync.py`, `gh`) is **OUT OF SCOPE — keep**"* — a deliberate, recorded decision to retain it |
+| `references/github-sync.md:30,38,57,65,66` | a prerequisites line plus a full command reference |
+
+**So the finding inverts.** `kanban-sync.py` is not litter with no owner; it is a **documented
+dependency of a shipped skill that no repo installs**. "No repo ships it" was read as *nobody wants
+it*; it is in fact an **install gap** — the plugin tells the user the file must be at
+`~/.local/bin/` and ships nothing that puts it there. Deleting it would have broken the skill on
+this machine and left the next reader debugging a missing command the docs promise exists.
+
+**`kanban-sync.sh` is a separate question and may still be disposable** — the same skill calls it
+**"Legacy"** (`SKILL.md:205`, `github-sync.md:20`) rather than declaring it. One of the two is
+owned; the card treated them as one bucket.
+
+**Why the earlier pass missed it, because the mechanism matters more than the miss:** it checked
+"live docs" and found them correct — in a population that did not include another repo's shipped
+skills. The needle was fine; **the corpus was drawn too small**, which is the same failure this
+session hit repeatedly today from four different directions. A grep for the name across `~/Code`
+finds it in seconds; a grep across *this* repo never can.
+
+**Governance tension, recorded rather than resolved:** the skill's comment keeps `kanban-sync.py`
+deliberately, while `universal-kanban.md` ratifies the TRDD corpus as the SSOT with GitHub as a
+**mirror**. This card's title calls that model "superseded". Whether a shipped skill should still
+offer GitHub-sync is a DESIGN question for `ai-maestro-plugin`'s own session — not a disposal
+decision, and **not this repo's to make** (cross-project rule: reads anywhere, writes nowhere).
+
+**REVISED NEXT ACTION:** nothing is deletable here today. The live question is the install gap, and
+it belongs to `ai-maestro-plugin`.
+
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16T22:33
+
+> **⚠ Superseded on the ownership question by the STOP block above. The rest still holds.**
 
 **Investigation COMPLETE. Steps 1-3 done. Only step 4 (disposal) remains, and it is not mine.**
 

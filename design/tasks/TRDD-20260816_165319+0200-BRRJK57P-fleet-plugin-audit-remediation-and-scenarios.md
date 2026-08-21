@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:57:00+0200
+updated: 2026-08-21T16:03:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -412,6 +412,36 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Ledger spot-check — 2026-08-21T16:0x+0200 — acceptance box 2, corroborated but NOT ticked
+
+Two ledger rows re-run from scratch, five days after they were written. **Both hold, and both
+findings turned out to have LANDED remediation** — the full Phase-1 → hub-verify → Phase-2 chain,
+verified end to end without taking anyone's word:
+
+**Row: `lib/report_utils.py::report_output()` has zero callers (architect).** Re-ran it — and the
+symbol now returns **0 hits repo-wide, including the defining file**, which at first read like the
+ledger citing a line that never existed. Two things settled it: the row's own positive control
+(`atomic_write_json` = **15**) reproduced **exactly**, proving I was in the right repo with a
+working instrument; and `git log --diff-filter=D` names the deletion —
+`9d2c936 refactor: delete lib/report_utils.py — a mandate with zero callers (TRDD-HN65IC8P)`,
+2026-08-18. **A cited `file:line` that no longer resolves can mean the finding was FIXED.** That is
+success wearing the costume of citation rot, and only the deletion commit tells them apart.
+
+**Row: the `@v3.1.0` comment/invocation drift (assistant-role).** The two TEST FIXTURES the ledger
+warned about are exactly where it said — `tests/test_no_bare_github_mentions.py:56,145` embed the
+literal string, so a blanket replace still breaks that guard. The remediation landed too:
+`design/archived/…-I42GB55M-update-stale-cpv-pin-comments-v310-to-v550.md`, with `ci.yml` and
+`release.yml` now carrying `v5.5.0`. **One number moved: the ledger's unbounded grep returned 10,
+mine returns 12** — the two extra lines are the card recording the fix. The row was right about the
+moment it was taken; the corpus moved under it, which is what a count does.
+
+**Why the box stays UNTICKED anyway.** The box says *for EVERY confirmed finding*. My sample shows
+the ledger's rows are accurate and its method sound — it is the hub's own contemporaneous record of
+its own commands, not a peer's word. What no sample can show is that **no confirmed finding LACKS a
+row**, and boxes 1 and 3 above establish that enumerating confirmed findings fleet-wide is not
+mechanically possible with the formats the contract permitted. So this box is corroborated, its
+residual is named, and ticking it would certify coverage nothing here measured.
 
 ## Docs and memory — 2026-08-21T15:5x+0200 — acceptance box 6, only half of it is answerable here
 

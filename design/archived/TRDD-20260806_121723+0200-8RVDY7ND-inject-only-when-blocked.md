@@ -1,11 +1,11 @@
 ---
 trdd-id: 8RVDY7ND
 title: The server must REFUSE a governance inject unless the target is actually blocked
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T12:17:23+0200
-updated: 2026-08-21T23:03:31+0200
+updated: 2026-08-21T23:11:04+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -19,10 +19,11 @@ approval-judge: user
 approval-datetime: 2026-08-06T12:17:23+0200
 severity: high
 effort: medium
-npt: [89LVZSQ0]
+npt: []
 eht: []
 blocked-by: []
 release-via: none
+implementation-commits: [97891655]
 labels: [governance, authorization, terminal, amp]
 external-refs: [Emasoft/ai-maestro#125, Emasoft/ai-maestro#110, Emasoft/ai-maestro-plugin#58]
 ---
@@ -91,7 +92,42 @@ NPT 89LVZSQ0 for the state resolution.
 - [x] The system-owner (non-agent) path is proven unaffected by the same suite — `queue-enqueue-authorization.test.ts` "the system owner … may enqueue on any agent".
 - [x] `SELF_DRIVE_ACTIONS` (an agent acting on its own surface) remains untouched by this gate — no new authorization concept added; self-enqueue test proves it.
 
+## Why this card no longer carries `npt: [89LVZSQ0]`, though the body still cites it
+
+Dropped 2026-08-21T23:11 at close, on measurement — and **not** by copying the identical fix made
+to [[LT5N2JA4]] an hour earlier; that one is why I looked, this is why it moved:
+
+1. **It was never a derivation edge.** `npt:`/`eht:` mean *"this TRDD spawned that one"* and they
+   alone establish parenthood. `89LVZSQ0` was created **2026-08-06T12:04:01**; this card at
+   **12:17:23** — **13 minutes later**. A parent cannot spawn a child that predates it. And
+   `89LVZSQ0` declares no `derived:`, no `derived-kind:`, no `parent-trdd:`, so nothing claimed
+   the other end: a one-sided orphan edge. After `LT5N2JA4` was corrected, this card was the last
+   holder of it corpus-wide.
+2. **It was not a completion gate either.** The dependency the body describes is real — the
+   blocked-state ladder in `lib/agent-status.ts` is what `89LVZSQ0` would improve — but this
+   card's own acceptance is met **with the ladder as it stands today**: box 1 refuses a
+   cross-agent inject unless the target is blocked, and box 3 proves it SUCCEEDS at the rungs the
+   gate treats as "asked" (`ask_user`, `permission`), with `rate_limited`/`api_error` deliberately
+   excluded and documented as such. A better resolution is an ENHANCEMENT, not a precondition.
+
+The relationship stays in the prose above, where it is true, instead of in a field that asserts a
+parenthood that never existed. It is not `blocked-by:` either: this card is not waiting on
+anything — its work is done and proven. A runtime edge would have been as false as the derivation
+edge, in the opposite direction.
+
 ## Approval log
+
+- 2026-08-21T23:11:04+0200 — COMPLETED by ai-maestro (hub coordinator). `min-approval-requirement:
+  none`, `mandate: true` / `mandated-by: user` since 2026-08-06, `release-via: none` ⇒ terminal is
+  `complete`. Gate satisfied: checklist EXISTS and is 6/6 `- [x]`; `npt`/`eht` both empty (see the
+  section above for why the one `npt` edge was dropped rather than waited on).
+  **Review was performed, not skipped** — the card went `todo` → `complete` without passing through
+  `testing`/`ai_review` because the work and its review happened in the same pass, so naming what I
+  actually ran matters more than the columns it did not sit in: `npx tsc --noEmit` → exit 0 / 0
+  errors; the full suite → exit 0 / 0 failed; and I ran the **neuter myself** rather than accept
+  the worker's claim — `if (!authz.allowed)` → `if (false)` in `app/api/agents/[id]/queue/route.ts`
+  reddened **3 of 8** tests, and restoring it returned **8/8**, so the test genuinely pins the
+  guard. Implementation: `97891655`.
 
 - 2026-08-06T12:17:23+0200 — MANDATE issued by USER (directive quoted above). Tier 0 — in-scope server work on our own
   tree. The governance RULE TEXT change it implies (#125) is separate and USER-owned.

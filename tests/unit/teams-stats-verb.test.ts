@@ -110,10 +110,19 @@ describe('the dispatch actually routes `stats` to the function', () => {
     // become unreachable from the CLI while every test stayed green — the function still working,
     // and no caller able to get to it.
     //
-    // The discriminator is which ERROR comes back, because this drives the real CLI with no
-    // credentials: a dispatched `stats` reaches the transport and dies at `HTTP 401`, while an
-    // undispatched one dies at `unknown command` before any request. Asserting merely "it failed"
-    // could not tell those apart, which is the whole point.
+    // The discriminator is what comes back FROM THE TRANSPORT: a dispatched `stats` reaches
+    // /api/teams/stats, while an undispatched one dies at `unknown command` before any request.
+    // Asserting merely "it failed" could not tell those apart, which is the whole point.
+    //
+    // This used to assume the CLI could never authenticate, so only an ERROR was expected. That
+    // assumption was itself the 19-day host-wide 401 (TRDD-SCLSRS6E): no session could be minted,
+    // so every verb failed. Once TRDD-A9335BZ6 made unattended login work, this test went red on
+    // a developer box for the best possible reason — the call SUCCEEDED and returned real stats.
+    // A success is a STRICTLY STRONGER proof of dispatch than a 401, so it is admitted below by a
+    // response-shape token, not by relaxing the assertion: `taskCount` is a field only the
+    // /api/teams/stats payload carries, so an undispatched verb still cannot produce it. The
+    // unknown-command discriminator above is untouched, and a CI runner with no server listening
+    // continues to match the network-failure arm.
     const r = spawnSync('bash', [CLI, 'stats'], { encoding: 'utf8', timeout: 60_000 })
     const out = `${r.stdout ?? ''}${r.stderr ?? ''}`
     expect(out).not.toMatch(/unknown command/i)
@@ -123,6 +132,6 @@ describe('the dispatch actually routes `stats` to the function', () => {
     // request, so "request to /api/teams/stats failed" cannot come from an undispatched verb —
     // and on a CI runner with NO server listening, that line (not an HTTP status) is what a
     // correctly-dispatched call produces. The unknown-command discriminator above is untouched.
-    expect(out).toMatch(/HTTP \d{3}|auth_required|request to \/api\/teams\/stats failed/i)
+    expect(out).toMatch(/HTTP \d{3}|auth_required|request to \/api\/teams\/stats failed|taskCount/i)
   })
 })

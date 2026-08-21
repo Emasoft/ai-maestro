@@ -138,10 +138,10 @@ export function parseScript(content) {
     // An arm line may ALSO open a nested case on the same line (`list)  case "$mode" in` — the
     // real shape of aimaestro-agent.sh's dispatch), so arm-harvesting runs BEFORE case-opening
     // and the two are not exclusive: an else-if chain here silently dropped the `list` verb.
-    const arm = caseStack.length ? line.match(ARM_LINE) : null
-    if (arm) {
-      const frame = caseStack[caseStack.length - 1]
-      for (let tok of arm[1].split('|')) {
+    // Shared by the line-anchored arm branch and the one-line `case … esac` branch below, so
+    // the two cannot drift into disagreeing about what a verb is.
+    const harvestArm = (armSrc, frame) => {
+      for (let tok of armSrc.split('|')) {
         tok = tok.replace(/^['"]|['"]$/g, '').replace(/=\*$/, '')
         if (!tok || tok.includes('*') || tok === '--' || tok === '-') continue
         if (tok.startsWith('-')) flags.add(tok)
@@ -152,6 +152,10 @@ export function parseScript(content) {
         else if (frame.isArg && frame.depth === 1 && frame.scope === 'fn') fnVerbs.add(tok)
       }
     }
+
+    const arm = caseStack.length ? line.match(ARM_LINE) : null
+    if (arm) harvestArm(arm[1], caseStack[caseStack.length - 1])
+
     const caseM = line.match(CASE_LINE)
     if (caseM) {
       const subject = caseM[1]
@@ -161,6 +165,26 @@ export function parseScript(content) {
         [...vars].some((v) => subject.includes(`$${v}`) || subject.includes(`\${${v}`))
       caseStack.push({ isArg, scope: topLevel ? 'top' : 'fn', depth: caseStack.length + 1 })
       if (isArg && topLevel) sawTopArgCase = true
+
+      // A ONE-LINE `case X in a|b) …;; esac` opens AND closes on the same line. The `esac`
+      // branch below is an `else if` on this very match and is anchored at column 0, so it can
+      // never see that esac — the frame leaked, every later `case` was pushed one level deeper
+      // than it really was, and the `depth === 1` test above then matched nothing.
+      //
+      // This is not hypothetical: `case "${2:-}" in --help|-h) show_help; exit 0 ;; esac`,
+      // added to aimaestro-trdd.sh so every verb would accept --help, silently emptied that
+      // CLI's whole 10-verb contract in script-manifest.json. The script was correct; the
+      // extractor went blind, and an emptied contract reads exactly like a CLI with no verbs.
+      // Caught by tests/unit/build-script-manifest.test.ts (TRDD-9K33PHOZ).
+      const tail = line.slice(caseM.index + caseM[0].length)
+      if (/\besac\b/.test(tail)) {
+        const frame = caseStack[caseStack.length - 1]
+        for (const seg of tail.split(';;')) {
+          const inlineArm = seg.match(ARM_LINE)
+          if (inlineArm) harvestArm(inlineArm[1], frame)
+        }
+        caseStack.pop()
+      }
     } else if (/^\s*esac\b/.test(line)) {
       caseStack.pop()
     }

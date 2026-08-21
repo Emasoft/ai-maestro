@@ -137,6 +137,10 @@ zod schemas at the top of each source file — the file column is the pointer.
 | POST | `/api/agents/startup` |  | app/api/agents/startup/route.ts |  |
 | GET | `/api/agents/startup` |  | app/api/agents/startup/route.ts |  |
 | GET | `/api/agents/unified` |  | app/api/agents/unified/route.ts |  |
+| GET | `/api/auth/dev-token` |  | app/api/auth/dev-token/route.ts | /api/auth/dev-token (TRDD-A9335BZ6) |
+| POST | `/api/auth/dev-token` | strict | app/api/auth/dev-token/route.ts | /api/auth/dev-token (TRDD-A9335BZ6) |
+| PATCH | `/api/auth/dev-token` | strict | app/api/auth/dev-token/route.ts | /api/auth/dev-token (TRDD-A9335BZ6) |
+| DELETE | `/api/auth/dev-token` | strict | app/api/auth/dev-token/route.ts | /api/auth/dev-token (TRDD-A9335BZ6) |
 | POST | `/api/auth/login` |  | app/api/auth/login/route.ts | User logs in with governance password → gets httpOnly session cookie. |
 | POST | `/api/auth/logout` |  | app/api/auth/logout/route.ts | Invalidates the user session and clears the cookie. |
 | GET | `/api/auth/session` |  | app/api/auth/session/route.ts | Check if the current session cookie is valid. |
@@ -292,6 +296,7 @@ zod schemas at the top of each source file — the file column is the pointer.
 | POST | `/api/system/aid-recover` | strict | app/api/system/aid-recover/route.ts | /api/system/aid-recover — explicit R33 recovery (operations endpoint). |
 | GET | `/api/system/client-availability` |  | app/api/system/client-availability/route.ts | Reports whether a given AI-client binary is installed on PATH. Used |
 | GET | `/api/system/ledger-health` |  | app/api/system/ledger-health/route.ts | Phase 0.A-derived (#234, 2026-04-20). After TRDD-eac02238 shipped per-op |
+| GET | `/api/system/tmux-keychain-alarm` |  | app/api/system/tmux-keychain-alarm/route.ts | (TRDD-GIA2LC83, UI half of TRDD-78J4I4QS). |
 | POST | `/api/teams/[id]/batch-create-agents` |  | app/api/teams/[id]/batch-create-agents/route.ts |  |
 | POST | `/api/teams/[id]/chief-of-staff` |  | app/api/teams/[id]/chief-of-staff/route.ts |  |
 | GET | `/api/teams/[id]/composition-check` |  | app/api/teams/[id]/composition-check/route.ts |  |

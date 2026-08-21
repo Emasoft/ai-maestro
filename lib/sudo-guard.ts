@@ -227,6 +227,19 @@ export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
   'POST /api/settings/auto-update/run',
   'POST /api/agents/import',
 
+  // TRDD-A9335BZ6: the dev-mode token is a credential that logs a caller in with no
+  // TTY and no password. Minting, regenerating or revoking one is therefore a
+  // root-of-trust operation in exactly the sense the routes above are — an agent that
+  // could mint one could authenticate as the owner forever, and revocation is the only
+  // thing standing between a leaked token and permanent access. All three handlers gate
+  // on enforceSystemOwner, so the Risk R-2 superset guardrail requires declaring them
+  // here; without it every agent caller gets a silent, misleading 403 instead of a
+  // stated refusal. Found by the full suite AFTER the feature shipped, which is the
+  // argument for running it before calling a card done.
+  'POST /api/auth/dev-token',
+  'PATCH /api/auth/dev-token',
+  'DELETE /api/auth/dev-token',
+
   // ── TRDD-K2WJH7RF Part 2 (USER-approved 2026-07-09) ──────────────────────
   // These five moved here from AGENT_POLICY_PENDING. NO BEHAVIOUR CHANGES: they
   // refused every agent before and refuse every agent now. What changes is that

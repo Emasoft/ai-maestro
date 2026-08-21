@@ -3,7 +3,7 @@ trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-21T16:45:20+0200
+updated: 2026-08-22T00:50:26+0200
 min-approval-requirement: none
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -273,7 +273,7 @@ The USER ruled the governance PR to main PREMATURE. It is gated on ALL of the fo
 - **G1 — plugin fleet ready** (umbrella; G2..G11 are its concrete gates)
 - **G2 — 3-pillars system (TRDD/PRRD/kanban) working across role plugins + GitHub** — DEP overlay shipped (TRDD-DE9757LJ); ~~WAITING on janitor#73 (IND global rules) + orch#27 (kanban script rewire)~~ — **BOTH CLOSED: janitor#73 on 2026-07-09, orch#27 on 2026-07-16.** Corrected 2026-08-21 (ORCHESTRATOR, hub-authorized stale-blocker sweep): the wait was dead for **43 and 36 days** respectively and nothing reddened, because an external blocker can only live in prose here — see the vocabulary gap in [[5YRLA53W]]. **This gate is no longer waiting on anything external; whether G2 is SATISFIED was not assessed by this sweep and still needs a positive check.**
 - **G3 — web-scenario-tester plugin published + working + token-frugal** — NOT in the remote marketplace (probe 2026-07-08); plugin work = TRDD-f181a4ae, token restructure = TRDD-74ZS7P9U
-- **G4 — DESCOPED 2026-08-08** (was: HTML side panel displays agent-pushed content via the visual-communicator surface). Zero callers of `scripts/aimaestro-panel.sh` in BOTH visualizer plugins (amvcp 0, webdesign 0 — measured by the COS session on tracked source, ai-maestro#132): the wiring is UNBUILT, not untested, so this gate cannot honestly gate. Re-enters as its own card when a visualizer actually wires the CLI; the CLI contract itself is unchanged and immutable.
+- **G4 — RE-SCOPED 2026-08-22; the 2026-08-08 descope's own re-entry condition has FIRED** (HTML side panel displays agent-pushed content via the visual-communicator surface). The descope was correct when written — amvcp had zero callers of `scripts/aimaestro-panel.sh`, so the wiring was UNBUILT and the gate could not honestly gate — and it named its own reversal: *"re-enters when a visualizer actually wires the CLI"*. It has. Measured 2026-08-22 in the installed cache: `scripts/amvcp-panel-push.py` sets `PANEL_CLI = "aimaestro-panel.sh"` (:66) and invokes it (`shutil.which` :82, subprocess with timeout :172), shipped in BOTH v1.5.0 and v1.5.1, with its own `tests/scripts/test-panel-push.py`; amvcp's own TRDD-9GUATJL7 records it as *"the FIRST caller of `aimaestro-panel.sh`"*. Both sides are present: the CLI is in this repo AND deployed to `~/.local/bin/`. **And ai-maestro#132 — the sole issue the descope cites — is CLOSED (2026-08-14, six days after the descope was written).** Nobody re-read the card, so a resolved blocker went on gating: the stale-blocker pattern. The CLI contract itself is unchanged and immutable.
 - **G5 — all Agent Profile tabs working for each agent**
 - **G6 — global (user-scope) extension install via Settings works flawlessly**
 - **G7 — API ↔ external plugins (pss, cpv, llm-externalizer, visual-communication, web-scenario-tester, …) working + tested**
@@ -579,7 +579,38 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
       today; the fix both times is to ECHO the resolved path and treat an unexpected one as the
       result.
 - [ ] **G4** — visual-communicator side panel.
+      **⏹ RE-SCOPED + SPECCED 2026-08-22 (spec only — NOT worked).** Was descoped 2026-08-08 as
+      un-gateable; the descope's own re-entry condition has since fired (see the gate list above
+      for the measurement and the closed ai-maestro#132). It is now the CHEAPEST gate on this
+      card, because the caller ships its own suite. Runnable:
+      1. Run amvcp's `tests/scripts/test-panel-push.py` against the REAL `aimaestro-panel.sh` on
+         PATH. **The failure mode that fakes a pass is a SKIP:** three of its cases self-skip when
+         `shutil.which("aimaestro-panel.sh")` is None or no agent/auth is present, and a suite that
+         skipped every panel case exits 0 exactly like one that passed. Pass = the panel cases RAN;
+         assert on the executed count, never on the exit code.
+      2. Assert the two copies of the CLI agree — `cmp -s scripts/aimaestro-panel.sh "$(command -v
+         aimaestro-panel.sh)"`. A stale deployed copy is the live default here (see G10 part 1).
+      3. Confirm the pushed content actually renders in the panel surface, not merely that the
+         push exited 0. Delivery is the gate; a 0 exit only proves the CLI was reachable.
 - [ ] **G7** — API ↔ external plugins.
+      **⏹ SPECCED 2026-08-22 (spec only — NOT worked).** The box named five plugins
+      (pss, cpv, llm-externalizer, visual-communication, web-scenario-tester) as if all five were
+      gateable. Measured in the installed cache 2026-08-22, needle positive-controlled against
+      `ai-maestro-plugin` (650 hits, so a zero is real absence and not a broken needle):
+      | plugin | integration | gateable |
+      |---|---|---|
+      | ai-maestro-visual-communicator-plugin | REAL — invokes `aimaestro-panel.sh`, ships a test suite | **YES** |
+      | perfect-skill-suggester | MENTIONS ONLY — a schema `description` string + a doc example, 0 invocations | no — unbuilt |
+      | claude-plugins-validation | 0 references | no — unbuilt |
+      | llm-externalizer | 0 references | no — unbuilt |
+      | web-scenario-tester | NOT INSTALLED — never published (G3) | no — does not exist |
+      So **G7 is ONE integration, not five**, and it is the SAME integration as G4 — the two gates
+      converge on `aimaestro-panel.sh`. Work G4; G7 passes with it, and the four non-integrations
+      are recorded here as measured absences rather than as pending work.
+      **The trap, hit while taking this census:** a use-shape needle that permits a leading
+      backtick counts markdown code spans as calls — it scored amvcp at 14 "callers" when 10 were
+      README/CLAUDE.md prose. Re-derive the split per plugin by READING the hits in their source
+      lines; do not quote the table above as a count.
 - [ ] **G10** — core-plugin sync sweep.
       **⏹ SPECCED 2026-08-22T00:1x (spec only — NOT worked).** The box was one line with no
       checkable criterion, which is why it could not be delegated: a worker briefed from
@@ -600,10 +631,25 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
          lines above this gate.
       3. **API** — enumerate the verbs the plugin's scripts call and assert each resolves against
          a live route. Absent verbs are the observable, not "the API looks current".
-      **Overlap to resolve BEFORE working it:** part 1 is largely [[SBJRNYYY]] (*"25 of 87 CLI
-      scripts on PATH are stale, 7 never deployed"*, owner-batch item 9). Doing it here would
-      duplicate that card — check whether G10's script half should simply CITE it rather than
-      re-run it.
+      **Overlap RESOLVED 2026-08-22 — CITE for the decision, RE-RUN for the gate; neither card
+      records a count.** [[SBJRNYYY]] and G10 part 1 look like one measurement and are two
+      different KINDS of thing:
+      - **SBJRNYYY owns the DECISION** — `column: proposal`, `min-approval-requirement: user`,
+        `approved: false`, titled *"order the deploy"*. Its deliverable is the owner authorizing
+        a deployment (owner-batch item 9), and it carries the standing defect list — the
+        undeployed `amp-helper.sh` safety fix, the never-deployed `aimaestro-groups.sh`, the
+        `amp-kanban-*.sh` `|| true` bug. **G10 does not restate any of that; it cites the card.**
+      - **G10 part 1 owns the GATE** — *are they in sync NOW?* Pass/fail, zero differing files,
+        re-derived per file at the moment it runs.
+      So there is no duplicated work, only a duplicated NUMBER — and that is the part to refuse.
+      SBJRNYYY already records its own census drifting (56/24/6 → 55/25/7 in one week), so a count
+      copied into G10 would be stale before anyone read it. **Record the COMMAND, never the
+      count**, on both cards.
+      **Consequence for sequencing:** G10 part 1 cannot pass while SBJRNYYY is unapproved — the
+      whole point of that card is that the deployed copies are stale and only the owner may order
+      the fix. This is a dependency of ONE sub-gate, not of the card, so it is recorded here
+      rather than in `blocked-by:` — flipping the whole card to `column: blocked` over one gate
+      would misstate the other ten.
 - [ ] **The bounded remainder in `## NEXT ACTION`** — `#45 presence` verb, the kanban 6-field
       remainder, `#2` per-column move-permission, the two SECURITY-MEDIUM items
       (`TRDD-15ff13ae` AID PoP replay, the federation comm-graph bypass), `#37` decoupling (gated

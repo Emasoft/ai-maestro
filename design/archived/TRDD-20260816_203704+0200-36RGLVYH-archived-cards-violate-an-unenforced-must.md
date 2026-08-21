@@ -1,12 +1,12 @@
 ---
 trdd-id: 36RGLVYH
 title: The archive-eligible clause contradicts itself and the corpus split 168 to 74 along it
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-18T20:06:12+0200
+updated: 2026-08-21T16:56:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -152,6 +152,30 @@ The wider finding — 66 unreferenced clauses, 27 of them `MUST` — is delibera
 here. It needs its own card and its own instrument, and folding it in would produce exactly the
 kind of unbounded sweep this card forbids.
 
+## Acceptance
+
+> **This section was AUTHORED on 2026-08-21, five days after the card.** The card had **zero**
+> checkboxes, and the ratified gate (D4 §5b) refuses a terminal column to a card whose checklist
+> does not EXIST — the "≥1 box" half, added 2026-07-31 precisely because a gate stated only over
+> *unchecked* boxes passes vacuously on a card with none. So the card could not be closed however
+> finished it was. The boxes below are derived from its own `## Verification` section, not invented.
+
+- [x] The zone check EXISTS and is wired into a gate that actually runs — `expectedZone`
+      (`lib/trdd-doctor.ts:424`) is called by `lintCorpus` (`:692`) and emits `ZONE-MISMATCH`
+      (`:695`); `trddgrep validate` surfaces it (it is what caught my own card earlier today)
+- [x] It implements the AMENDED set, spec 2.0.0 — `completed|cancelled|superseded|published|live`
+      plus `complete` gated on `release-via`, so a card with stages still ahead correctly stays in
+      `tasks/`
+- [x] **It fails on a seeded violation, in BOTH shapes** — `tasks-at-terminal` was already pinned
+      (`trdd-doctor.test.ts:178`); `archived-at-nonterminal` was NOT, and is now (`6897c9e4`).
+      A neuter reddens exactly those two tests and nothing else, so neither is decorative
+- [x] The grandfather boundary is explicit and dated IN THE CHECK — the `complete`/`release-via`
+      carve-out is stated in a comment at the branch itself (`:428-431`), not only in a spec
+- [x] Track 2 (classify the 167) is **VOID, not skipped** — spec 2.0.0 (`4cc82d53`) amended
+      3P-ZON-05 to admit `complete`, so those cards are conformant as they sit. Recorded in the
+      STATE block on 2026-08-18. **The rule moved; the cards were never touched**, which is exactly
+      what this card's `## Proposed fix` demanded
+
 ## Verification
 
 - The new check exists, is wired into a gate that actually runs, and **fails on a seeded
@@ -171,3 +195,12 @@ is written the way it is.
   Pre-approved: Tier-0 — this repo's own governance corpus and its own linters, and the card commits
   to recording rather than mutating frozen cards. Derived (EHT) from TRDD-BRRJK57P's axis-2 pass. No
   approval request was sent.
+
+- 2026-08-21T16:56:00+0200 — COMPLETED by ai-maestro-hub. Track 1 finished: the zone check was
+  already wired and already implemented spec 2.0.0's amended set; what was MISSING was the second
+  seeded shape the card asked for by name — `archived-at-nonterminal` had only a pure-mapping
+  assertion, which proves the mapping and nothing about `lintCorpus` emitting on a real misplaced
+  file. Added (`6897c9e4`) and neuter-verified: mutating the working-column branch reddens exactly
+  2 tests and nothing else. Track 2 was VOID from 2026-08-18 (spec 2.0.0 admitted `complete`).
+  An `## Acceptance` section had to be AUTHORED first — the card carried zero checkboxes, and the
+  ratified gate refuses a terminal column to a checklist that does not exist.

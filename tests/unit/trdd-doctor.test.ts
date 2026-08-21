@@ -185,6 +185,14 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
   // hides live work in the done pile, where nobody reads it. Same rule, opposite direction, and
   // only one of the two directions was pinned: `expectedZone('dev') === 'tasks'` was covered as a
   // pure mapping, which proves nothing about lintCorpus emitting on a real misplaced FILE.
+  //
+  // NEUTER RUN (2026-08-21 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+  //   s/if (WORKING_COLUMNS.includes(column)) return 'tasks'/… return null/
+  //   → 2 red / 82 green:
+  //       expectedZone routes each column to its zone
+  //       ZONE-MISMATCH — a WORKING card parked in design/archived hides live work in the done pile
+  // Both read the same branch, which is the point: the mapping test alone would have stayed the
+  // ONLY guard, and it cannot see whether lintCorpus ever emits.
   it('ZONE-MISMATCH — a WORKING card parked in design/archived hides live work in the done pile', () => {
     write('archived', 'TRDD-20260101_000000+0100-EFEFEFEF-x.md', good('EFEFEFEF', { column: 'dev' }))
     expect(idsOf(lintCorpus(tmp), 'ZONE-MISMATCH')).toContain('EFEFEFEF')

@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T16:36:00+0200
+updated: 2026-08-21T16:57:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -21,7 +21,7 @@ approval-datetime: 2026-08-16T16:53:19+0200
 derived: false
 npt: []
 eht: [5TELESBL, 9FBNRW29, GIONLYAF, 36RGLVYH, LXF16IXG]
-blocked-by: [GIONLYAF, 36RGLVYH, LXF16IXG]
+blocked-by: [GIONLYAF, LXF16IXG]
 release-via: none
 priority: 0
 severity: high

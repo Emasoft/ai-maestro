@@ -72,10 +72,16 @@ The worst instance was not a careless claim — it was a **checked** one. [[5YRL
 > blocked on `janitor#139` — **verified OPEN, 0 comments, untouched since 2026-07-30**
 
 `janitor#139` closed **2026-08-05**, three days after that line was written; the claim then stood
-for 16 more days. A bare "blocked on `janitor#139`" invites the next reader to check. A dated
+for 16 more days. A bare citation of the issue would have invited the next reader to check. A dated
 verification **forecloses** the check — it is trusted *because* it looks checked. **A verification
 claim with no expiry becomes more trusted as it becomes less true.** Any fix here has to handle the
 checked claim, not just the lazy one.
+
+> Phrasing note: this paragraph deliberately does **not** spell out the dead claim in
+> assertion-shaped prose. `scripts_dev/sweep-external-blockers.sh` matches on blocking phrasing near
+> an issue ref, so a card that quotes a dead wait verbatim gets reported as holding one — this card
+> did, on its first run. Struck spans and `>` blockquotes are skipped by the sweep; bare prose is
+> not. Quote a dead claim inside `~~` or a blockquote, or describe it.
 
 Two closures also carried a title saying the *finding itself* was a detector bug (e.g.
 `janitor#283`), so a stale external wait can outlive not only its blocker but the premise the card
@@ -104,16 +110,46 @@ only flag it (auto-move is wrong when the closure is unrelated to why the card c
       still open?" **without a human reading prose**.
 - [ ] The 4 cards corrected on 2026-08-21 (`903B7A20` ×2, `5YRLA53W`, plus `KCRMSNL7` / `SCLSRS6E`
       handed to the hub as out-of-lane) are re-checked under the new mechanism and it finds them.
-- [ ] Re-run the 12-issue sweep after the mechanism lands; a second 75% means the mechanism did not
-      work.
+- [ ] `bash scripts_dev/sweep-external-blockers.sh` exits **0** after the mechanism lands. A second
+      run still scoring ~75% closed means the mechanism did not work.
 - [ ] The dated-verification failure mode is addressed explicitly, not just the bare-citation one.
 
-## Verification
+## Verification — **the re-run IS the acceptance check**
 
-Re-run the read-only sweep in the evidence report: extract every `owner/repo#N` cited in a blocking
-context under `design/tasks/*.md`, resolve each with `gh issue view N --repo <o>/<r> --json state`,
-and report `TRDD-<id8> | blocker | OPEN|CLOSED|MISSING`. Baseline to beat: 9 of 12 closed,
-2026-08-21.
+```bash
+bash scripts_dev/sweep-external-blockers.sh          # read-only; no CLI verb, no card writes
+```
+
+`scripts_dev/` is gitignored, so the script is a local instrument, not a shipped artifact. It emits
+one line per cited blocker — `card | owner/repo#N | OPEN|CLOSED|AMBIGUOUS|UNKNOWN-REPO|MISSING` —
+and exits **0** when every cited blocker is open, **1** when any is CLOSED (a card holds a dead
+claim), **2** when something could not be resolved and nothing is closed.
+
+**A snapshot is what rotted in the first place, so the finding is not allowed to be one.** The
+2026-08-21 manual sweep scored 9 of 12 closed; that number is already history. What the card asserts
+going forward is the script's exit code, not a figure in a report.
+
+Run of 2026-08-21T16:5x, after the four in-lane corrections landed: **2 CLOSED, 5 unresolved,
+exit 1.** The one remaining live dead claim is `SCLSRS6E` → `ai-maestro#55` (hub-owned, out of the
+ORCHESTRATOR's lane). The 5 unresolved are all bare `#N` with no repo — the script reports them as
+`AMBIGUOUS` rather than guessing, which is itself a finding: prose citation has no namespace, so
+even a *human* reader cannot always tell which tracker a wait refers to.
+
+**The script is NARROWER than the manual sweep that produced the 9-of-12 figure, and the two must
+not be conflated.** The manual pass followed refs a human judged to be blockers, wherever they sat;
+the script only matches a ref sitting on a line with blocking phrasing. It therefore resolves 6 refs
+where the manual pass resolved 12, and its `0 OPEN` means *"no blocking-phrased line cites an open
+issue"* — **not** *"no external wait is live"*. `ai-maestro#121`, `#90` and `#76` are cited as real
+constraints by `T3FXA0Y0`, `5CIL7A07` and `IBKR7F74` and are genuinely OPEN; the script does not see
+them, because those cards state the dependency in prose it cannot recognise. That gap is not a bug
+to file against the script — **it is the card's thesis reproducing itself in the instrument**, and it
+is the strongest argument for a real field over better parsing.
+
+Known limits, stated so a later reader does not mistake a clean run for proof:
+- Only lines with blocking phrasing ("blocked/waiting/gated/pending on|by") near a ref are checked.
+  A wait phrased any other way is invisible to it — the same prose-parsing weakness the card is about.
+- `~~struck~~` spans and `>` blockquotes are skipped, so corrected claims stop re-reporting.
+- Unmapped shorthands are reported, never guessed; extend `repo_for()` when a new one appears.
 
 ## Out of scope
 

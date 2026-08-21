@@ -1,9 +1,9 @@
 ---
 trdd-id: A9335BZ6
 title: Unattended dev-mode login via an owner-minted, revocable dev token
-column: dev
+column: human_review
 created: 2026-08-21T17:48:24+0200
-updated: 2026-08-21T18:04:15+0200
+updated: 2026-08-21T18:06:32+0200
 implementation-commits: [ddf18bf7, 2b881dcf, 0f794535]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator

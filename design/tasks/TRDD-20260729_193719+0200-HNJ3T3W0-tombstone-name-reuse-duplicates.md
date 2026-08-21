@@ -1,7 +1,8 @@
 ---
 trdd-id: HNJ3T3W0
 title: A name held by a soft-deleted tombstone can be re-created, producing two registry entries with the same name
-column: planned
+column: blocked
+pre-block-column: planned
 created: 2026-07-29T19:37:19+0200
 updated: 2026-08-21T22:02:08+0200
 approved: true

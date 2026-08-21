@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T16:31:00+0200
+updated: 2026-08-21T16:36:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -21,7 +21,7 @@ approval-datetime: 2026-08-16T16:53:19+0200
 derived: false
 npt: []
 eht: [5TELESBL, 9FBNRW29, GIONLYAF, 36RGLVYH, LXF16IXG]
-blocked-by: [GIONLYAF, 36RGLVYH]
+blocked-by: [GIONLYAF, 36RGLVYH, LXF16IXG]
 release-via: none
 priority: 0
 severity: high
@@ -278,9 +278,11 @@ will otherwise inherit whichever of the two readings it happens to meet first.
 **COLUMN: `dev` → `blocked` at 16:1x, on a MECHANICAL check, not a mood.** The completion gate says
 a parent whose flock is still open is BLOCKED, and this card's `eht:` resolves to **2 terminal**
 (`5TELESBL` complete, `9FBNRW29` completed) and **3 OPEN** — `GIONLYAF` (todo), `36RGLVYH` (todo),
-`LXF16IXG` (proposal, never approved). **`LXF16IXG` was CANCELLED at 16:29 the same session and
-removed from `blocked-by:`** — its drift was re-measured at **19 of 19 repos ratified**, so the
-card was obsolete rather than pending; **2 EHTs remain open.** Those are now its `blocked-by:`, with
+`LXF16IXG` (proposal, never approved). **`LXF16IXG`'s PROBLEM is resolved — re-measured at 19 of 19
+repos ratified — but the card is still OPEN**: I cancelled it at 16:29 and the repo's own linter
+made me put it back at 16:34 (a `manager`-floor card with `approved: false` may not leave the queue
+without that approver, whatever the author thinks). So it stays in `blocked-by:` with a recommended
+disposition attached, and **all three EHTs remain open.** Those three are its `blocked-by:`, with
 `pre-block-column: dev` **read off the card rather than remembered** — the exact field that was 8
 days stale on `TRDD-Y8VPE3NS` and would have silently promoted it on unblock.
 

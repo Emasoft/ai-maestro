@@ -1,12 +1,12 @@
 ---
 trdd-id: LXF16IXG
 title: Three baseline ruleset fields drifted independently across the fleet and one repo of 22 is current
-column: cancelled
+column: proposal
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T22:38:12+0200
-updated: 2026-08-21T16:29:00+0200
+updated: 2026-08-21T16:34:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -117,7 +117,19 @@ control repo under the identical query returns both types. That matches the code
 **conditionally** — so this repo was written by a newer applier, which is why it is the one current
 repo. It is the shape the others should converge on, not an anomaly to normalize away.
 
-## ⏹ RESOLVED — the drift is GONE, measured 19/19 on 2026-08-21T16:2x. This card is CANCELLED.
+## ⏹ RESOLVED IN THE WORLD — the drift is GONE, 19/19 on 2026-08-21T16:2x. Disposition is the APPROVER's.
+
+> **I cancelled this card at 16:29 and put it back at 16:34, because the repo's own linter said no.**
+> `trddgrep validate` raised `APPROVAL-UNAPPROVED-IN-WORK-ZONE`: *"`approved: false` but column is
+> `cancelled` … its floor is `manager`, so it is genuinely awaiting that approver and belongs in
+> `design/proposals/` until they rule."* My reasoning had been that withdrawing your own proposal is
+> the AUTHOR's act, not the approver's — which is arguable and is **not what this project ratified**.
+> The linter encodes the rule; it beat my argument, so the card is back in the queue with its
+> evidence intact and its disposition still open. **The measurement below stands regardless of who
+> disposes of it.**
+
+**MANAGER: the recommended disposition is CANCEL — obsolete, not refused.** Nobody declined this;
+its problem was repaired between filing and now.
 
 **Re-measured against GitHub, every repo individually, both fields:**
 
@@ -290,11 +302,14 @@ complete and costs nothing to re-run; the write is one reviewed command per fiel
 
 ## Approval log
 
-_(no approver decision was ever taken — the card was withdrawn by its author before one was needed)_
+_(still awaiting the required approver — see the reverted cancellation below)_
 
-- 2026-08-21T16:29:00+0200 — CANCELLED by ai-maestro-hub (the card's own author; `created-by:
-  ai-maestro-hub-session`). NOT a refusal — nobody declined it. Its `## Problem` no longer
-  reproduces: re-measured against GitHub, **19 of 19 repos carry the ratified shape on both
-  drifted fields**. A proposal filed against a repaired drift authorizes a fleet write that would
-  now be a no-op at best. Withdrawing it is the author's act, not the approver's, so no MANAGER
-  decision was taken or bypassed. Also unblocks `TRDD-BRRJK57P` by one of its three open EHTs.
+- 2026-08-21T16:29:00+0200 — **CANCEL ATTEMPTED, then REVERTED at 16:34** by ai-maestro-hub. The
+  card's `## Problem` no longer reproduces (**19 of 19 repos measured ratified**), so I withdrew it
+  as obsolete, reasoning that withdrawing your own proposal is the AUTHOR's act rather than the
+  approver's. **`trddgrep validate` refused that reading** — `APPROVAL-UNAPPROVED-IN-WORK-ZONE`:
+  *"`approved: false` but column is `cancelled` … its floor is `manager`, so it is genuinely
+  awaiting that approver and belongs in `design/proposals/` until they rule."* The linter encodes
+  what this project ratified; my argument did not. Reverted to `column: proposal`, back in the
+  queue, evidence intact. **No approver decision has been taken.** RECOMMENDED disposition: CANCEL
+  as obsolete. Remains one of `TRDD-BRRJK57P`'s open EHTs until an approver acts.

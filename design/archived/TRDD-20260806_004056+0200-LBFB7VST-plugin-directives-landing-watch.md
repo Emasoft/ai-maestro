@@ -1,11 +1,11 @@
 ---
 trdd-id: LBFB7VST
 title: Watch the ai-maestro-plugin repo land the three MANAGER directives, then unblock
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T00:40:56+0200
-updated: 2026-08-15T01:17:20+0200
+updated: 2026-08-21T16:20:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -77,11 +77,33 @@ Measured absent at plugin v3.0.4 (0 `/dev/null` in `scripts/directory-guard.cjs`
 
 ## Acceptance criteria
 
-- [ ] Plugin release verified to land directive 1 (#123) — N1F0QY77 unblocked.
-- [ ] Plugin release verified to land directive 2 (#124) — BCECOHJ2 unblocked.
-- [ ] Plugin release verified to land directive 3 residual (#125) — AODXPI5E unblocked.
+- [x] directive 1 (#123) — `scripts/directory-guard.cjs:643` handles `/dev/null`, issue cited at
+      `:636`; 30 tokeniz/quote hits. `N1F0QY77` `blocked-by: []`.
+- [x] directive 2 (#124) — `skills/agent-messaging/SKILL.md:107`, section *"Verifying an inbound
+      mandate — THE sender-authority check (ai-maestro#124)"*. `BCECOHJ2` `blocked-by: []`.
+- [x] directive 3 (#125) — `skills/ama-session/SKILL.md`, 19 cross-agent/unblock hits.
+      `AODXPI5E` already `complete`.
+
+Measured 2026-08-21 at plugin **v3.1.31** (local clone `e4b8b11`, matching the published release —
+checked, because a stale clone reported a 13-plugin marketplace earlier today when the remote had
+15). Baseline was v3.0.4.
+
+**Directive 2 nearly went down as NOT landed.** The card's own recorded needle was `governanceTitle`
+in that SKILL — it returns **0**. The section is there under different words. Checking the CONCEPT
+(`sender.authority`) before declaring absence is what caught it; the needle would have reported a
+false negative against a peer repo that had done the work.
+
+```
+grep -n '/dev/null' scripts/directory-guard.cjs
+grep -niE 'sender.authority' skills/agent-messaging/SKILL.md
+```
 
 ## Approval log
 
 - 2026-08-06T00:40:56+0200 — SELF-MANDATE (Tier 0). A watch-and-verify chore inside
   this repo; the plugin work itself is the other project's, via the posted issues.
+
+- 2026-08-21T16:20:00+0200 — COMPLETED by ai-maestro-hub. All three directives verified landed at
+  plugin v3.1.31 (baseline v3.0.4); all three watched cards carry `blocked-by: []`, and AODXPI5E is
+  already `complete`. The watch is over. Directive 2 was one needle away from a false NOT-LANDED —
+  see the acceptance note.

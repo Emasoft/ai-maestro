@@ -1,12 +1,12 @@
 ---
 trdd-id: DXQNUJII
 title: prrdgrep edit changes a rule's TEXT without bumping its VERSION, which the PRRD format forbids
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T17:55:08+0200
-updated: 2026-08-16T17:55:08+0200
+updated: 2026-08-21T16:22:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -85,6 +85,39 @@ PRRD write path is supposed to be — not assuming.
 **Do not change PRRD edit semantics unilaterally.** The IND base rule is USER-owned; a tool that
 silently starts renumbering rules is worse than one that silently does not.
 
+## ⏹ 2026-08-21T16:22 — DECISION: (b) REFUSE, at the guard seam that already exists
+
+The card's third possibility is the right shape and the card's premise about it is slightly wrong:
+`edit` **is** a generic text primitive, and enforcement **does** already live elsewhere — the seam
+is not missing, it has a HOLE. Measured:
+
+| fact | evidence |
+|---|---|
+| `edit` is kind-agnostic (`AT LINE N REPLACE X WITH Y`) | `lib/pillar/cli.ts:290-346` — one `runPillarEdit` for every pillar |
+| a PRRD-scoped pre-write veto already runs INSIDE the lock | `cli.ts:339` → `pillarPreWriteCheck(kind, …)` |
+| it already judges ids: parse, number globally unique, **number immutable**, **version forward-only** | `lib/pillar/edit-guard.ts:195-224`, all inside `if (kind.name === 'prrd')` |
+| what it does NOT judge | version must ADVANCE when the text changes — it only forbids going BACKWARD |
+
+So the fix is **one clause beside its own mirror** (`parts.version < prevParts.version`), not a new
+mechanism: *same number + same version + `prev !== next` ⇒ refuse.*
+
+Why (b) over (a) AUTO-BUMP: teaching a generic line primitive to rewrite an id the caller never
+typed is a confident write, and the card already names the cost (a whitespace fix inflating a
+public number). Refusing exits **2 BLOCKED**, the guard's documented contract for an illegal edit.
+
+`specgrep` is unaffected **by construction** — the clause sits inside the existing `kind.name ===
+'prrd'` branch — which is stronger than the card's asked-for cross-check test, and cheaper.
+
+**The no-op half needs an explicit `prev !== next`, and this is the trap:** `changedLines` carries
+the lines the caller TARGETED, not the lines that actually moved (`edit.ts:281` —
+`ordered.map(e => e.line)`), so `--expect X --replace X` reaches the guard looking like a change.
+
+```
+sed -n '290,300p;336,343p' lib/pillar/cli.ts   # generic primitive + the veto hook
+sed -n '212,226p' lib/pillar/edit-guard.ts     # the mirror clause this one joins
+sed -n '276,283p' lib/pillar/edit.ts           # changedLines = targeted, not changed
+```
+
 ## Verification
 
 - Unit: a fixture PRRD with `- **G7.4** — <text>`; run `edit` changing the text; assert the id
@@ -97,8 +130,9 @@ silently starts renumbering rules is worse than one that silently does not.
 
 ## Acceptance
 
-- [ ] The design decision (a / b / "enforcement belongs elsewhere") is taken and recorded here with
-      its reason, before any code changes.
+- [x] The design decision (a / b / "enforcement belongs elsewhere") is taken and recorded here with
+      its reason, before any code changes. — **(b) REFUSE at the existing guard seam**, 2026-08-21;
+      see the DECISION section above for the four measurements it rests on.
 - [ ] `prrdgrep edit` on a text-changing edit either bumps the version or refuses — whichever (a)/(b)
       the decision selected — and never silently writes changed text under an unchanged version.
 - [ ] A no-op edit (identical text) does NOT bump, pinned by its own test.

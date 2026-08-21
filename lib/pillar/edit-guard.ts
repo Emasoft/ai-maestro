@@ -180,6 +180,13 @@ export function pillarPreWriteCheck(
 }) => void {
   if (kind.source.mode !== 'per-line') return () => {}
   const declIdAt = declIdReader(kind)
+  // The kind's OWN declaration regex (never a second one — see the file header): it
+  // matches the `- **G7.4**` prefix only, so stripping it leaves the rule's TEXT. That
+  // is what the version-bump clause below compares, and comparing the whole LINE there
+  // would refuse a legal tier PROMOTE (`S2.3 -> G2.3` keeps number+version and changes
+  // only the letter, per the PRRD format).
+  const declRe = kind.source.declarationRe
+  const ruleTextOf = (line: string | undefined): string => (line ?? '').replace(declRe, '')
 
   return ({ prevLines, nextLines, changedLines }) => {
     const violations: string[] = []
@@ -220,6 +227,32 @@ export function pillarPreWriteCheck(
               } else if (parts.version < prevParts.version) {
                 violations.push(
                   `line ${lineNo}: the version moves forward only (${prevId} -> ${nextId})`,
+                )
+              } else if (
+                parts.version === prevParts.version &&
+                ruleTextOf(prev) !== ruleTextOf(next)
+              ) {
+                // TRDD-DXQNUJII — the MIRROR of the clause above, and the half that was
+                // missing: forward-only forbade going BACKWARD but not standing STILL, so
+                // `edit` rewrote a rule's text under an unchanged id and exited 0. A
+                // citation pinned as `PRRD G7.4` then resolves to different text than it
+                // did when it was pinned, which is the one thing the version field exists
+                // to prevent. Refusing (rather than auto-bumping) keeps this a generic
+                // line primitive: a tool that silently renumbers a public id the caller
+                // never typed is a confident write, and a whitespace fix would inflate a
+                // number other documents cite.
+                //
+                // Compare the rule TEXT, never the whole line, and never `prev !== next`:
+                //  - a tier PROMOTE (`S2.3 -> G2.3`) changes the line and keeps number and
+                //    version by design, so a whole-line compare refuses a LEGAL edit — the
+                //    positive control for it is in tests/unit/pillar-edit-guard.test.ts;
+                //  - a NO-OP edit (`--expect X --replace X`) still reaches this guard,
+                //    because `changedLines` carries the lines the caller TARGETED, not the
+                //    ones that moved (edit.ts builds it as `ordered.map(e => e.line)`).
+                violations.push(
+                  `line ${lineNo}: rule ${nextId}'s TEXT changed but its version did not — bump it to ` +
+                    `${parts.letter}${parts.number}.${parts.version + 1}. A citation pinned as ` +
+                    `\`PRRD ${nextId}\` must never resolve to different text than it did when it was pinned.`,
                 )
               }
             }

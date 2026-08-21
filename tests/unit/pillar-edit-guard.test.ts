@@ -85,11 +85,36 @@ async function expectRefusedByteIdentical(
 }
 
 describe('PRRD guard — rule-id grammar, tier-wide numbers, forward-only versions', () => {
-  it('POSITIVE CONTROL — a legal text edit (id unchanged) lands', async () => {
-    await replaceAtLines(prrdPath, [{ line: 5, expect: 'rule seven', replace: 'rule SEVEN, clarified' }], {
+  // TRDD-DXQNUJII. This test previously ran the OPPOSITE assertion, under the name
+  // "POSITIVE CONTROL — a legal text edit (id unchanged) lands": it pinned the very
+  // behaviour the card calls the defect, so leaving it green after the fix would have
+  // silently re-documented the hole. The edit below is byte-for-byte the one it used to
+  // assert lands; only the verdict is inverted.
+  it('refuses a TEXT change under an UNCHANGED version (G7.4 text edited, still .4)', async () => {
+    await expectRefusedByteIdentical(prrdPath, PRRD_KIND, {
+      line: 5, expect: 'rule seven', replace: 'rule SEVEN, clarified',
+    })
+  })
+
+  it('POSITIVE CONTROL — text AND version changed together lands (G7.4 -> G7.5, the correct edit)', async () => {
+    await replaceAtLines(
+      prrdPath,
+      [{ line: 5, expect: '- **G7.4** — golden rule seven.', replace: '- **G7.5** — golden rule SEVEN, clarified.' }],
+      { preWriteCheck: guardFor(PRRD_KIND, prrdPath) },
+    )
+    expect(readFileSync(prrdPath, 'utf-8')).toContain('- **G7.5** — golden rule SEVEN, clarified.')
+  })
+
+  // The mandatory complementary half (TRDD-DXQNUJII): without it, a guard that refuses
+  // whenever the TARGETED line carries an unchanged version passes the test above while
+  // rejecting edits that change nothing. It is reachable because `changedLines` carries
+  // the lines the caller AIMED AT, not the ones that moved — so a no-op reaches the guard.
+  it('ALLOWS a NO-OP edit on a rule line (expect === replace does not trip the bump gate)', async () => {
+    const before = readFileSync(prrdPath, 'utf-8')
+    await replaceAtLines(prrdPath, [{ line: 5, expect: 'rule seven', replace: 'rule seven' }], {
       preWriteCheck: guardFor(PRRD_KIND, prrdPath),
     })
-    expect(readFileSync(prrdPath, 'utf-8')).toContain('- **G7.4** — golden rule SEVEN, clarified.')
+    expect(readFileSync(prrdPath, 'utf-8')).toBe(before)
   })
 
   it('POSITIVE CONTROL — a forward version bump lands (G7.4 -> G7.5)', async () => {

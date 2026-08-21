@@ -115,20 +115,40 @@ describe('prrdgrep edit — AT LINE N REPLACE X WITH Y', () => {
     // blocks unconditionally — which would pass while being useless. It is also the
     // assertion that caught the body-vs-file line defect: it FAILED first, against a
     // tool whose refusal looked perfectly correct.
+    // TRDD-DXQNUJII: the version moves WITH the text. This edit used to change the text
+    // alone and assert `- **S7.4** — REVISED.`, which the guard now refuses — a rule whose
+    // text moves under a pinned id is the defect that card exists to close. The positive
+    // control's own point (the tool is not a wall) is unchanged; only the edit is legal now.
     const r = runCli('prrdgrep.mjs', [
-      'edit', 'S7.4', '--expect', 'the silver rule under test', '--replace', 'REVISED',
+      'edit', 'S7.4',
+      '--expect', '- **S7.4** — the silver rule under test.',
+      '--replace', '- **S7.5** — REVISED.',
       '--design-dir', designDir(),
     ])
     expect(r.status).toBe(0)
-    expect(fs.readFileSync(prrdFile(), 'utf-8')).toContain('- **S7.4** — REVISED.')
+    expect(fs.readFileSync(prrdFile(), 'utf-8')).toContain('- **S7.5** — REVISED.')
   })
 
   it('targets the record own declaration line when --at-line is omitted', () => {
     // The affordance that matters: a caller that had to count lines by hand would
     // eventually count wrong, and a hand-counted line is how you rewrite a NEIGHBOURING
     // rule. `--at-line 8` and no flag must therefore reach the same line.
+    // Both forms are driven, because the claim is that they AGREE. Until TRDD-DXQNUJII
+    // this test passed `--at-line 8` only — so it asserted nothing about the default it is
+    // named for, and would have stayed green with the defaulting deleted.
+    const defaulted = runCli('prrdgrep.mjs', [
+      'edit', 'S7.4',
+      '--expect', '- **S7.4** — the silver rule under test.',
+      '--replace', '- **S7.5** — the silver rule under test, once.',
+      '--design-dir', designDir(),
+    ])
+    expect(defaulted.status).toBe(0)
+    expect(defaulted.stdout).toContain('@@ line 8 @@')
+
     const explicit = runCli('prrdgrep.mjs', [
-      'edit', 'S7.4', '--at-line', '8', '--expect', 'silver rule under test', '--replace', 'X',
+      'edit', 'S7.5', '--at-line', '8',
+      '--expect', '- **S7.5** — the silver rule under test, once.',
+      '--replace', '- **S7.6** — the silver rule under test, twice.',
       '--design-dir', designDir(),
     ])
     expect(explicit.status).toBe(0)
@@ -191,16 +211,20 @@ describe('prrdgrep edit — AT LINE N REPLACE X WITH Y', () => {
   })
 
   it('lands a batch of two VALID edits together (batch positive control)', () => {
+    // TRDD-DXQNUJII: both edits carry their own version bump, so the batch is legal on
+    // every line it touches — the guard judges the whole resulting file, so one unbumped
+    // rule in a batch would refuse the batch.
     const r = runCli('prrdgrep.mjs', [
       'edit', 'S7.4',
-      '--expect', 'the silver rule under test', '--replace', 'TWO-A',
-      '--at-line', '9', '--expect', 'another silver rule', '--replace', 'TWO-B',
+      '--expect', '- **S7.4** — the silver rule under test.', '--replace', '- **S7.5** — TWO-A.',
+      '--at-line', '9',
+      '--expect', '- **S64.134** — another silver rule.', '--replace', '- **S64.135** — TWO-B.',
       '--design-dir', designDir(),
     ])
     expect(r.status).toBe(0)
     const after = fs.readFileSync(prrdFile(), 'utf-8')
-    expect(after).toContain('TWO-A')
-    expect(after).toContain('TWO-B')
+    expect(after).toContain('- **S7.5** — TWO-A.')
+    expect(after).toContain('- **S64.135** — TWO-B.')
   })
 
   it('exits 1 for an edit to an id that does not exist, rather than writing anything', () => {

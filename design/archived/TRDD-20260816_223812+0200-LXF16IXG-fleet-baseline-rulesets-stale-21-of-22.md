@@ -1,12 +1,12 @@
 ---
 trdd-id: LXF16IXG
 title: Three baseline ruleset fields drifted independently across the fleet and one repo of 22 is current
-column: proposal
+column: cancelled
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T22:38:12+0200
-updated: 2026-08-21T16:24:00+0200
+updated: 2026-08-21T16:29:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -116,6 +116,40 @@ control repo under the identical query returns both types. That matches the code
 (`branch_protection_lib.baseline_ruleset_payloads`), where the `pull_request` rule is emitted
 **conditionally** — so this repo was written by a newer applier, which is why it is the one current
 repo. It is the shape the others should converge on, not an anomaly to normalize away.
+
+## ⏹ RESOLVED — the drift is GONE, measured 19/19 on 2026-08-21T16:2x. This card is CANCELLED.
+
+**Re-measured against GitHub, every repo individually, both fields:**
+
+```
+19 of 19 repos:  baseline-history-protect  bypass_actors = [5]     ← ratified
+                 baseline-pr-and-checks    approvals = 0  or  no pull_request rule
+```
+
+`[5]` on **every** repo; the approvals field is either `0` (ratified) or absent-because-no-PR-rule,
+which is the conditional-emission shape this card's own `## Why a per-field check was mandatory`
+section identifies as **"fully current … the shape the others should converge on"**. **Zero stale
+on either field.** They converged.
+
+The `## Problem` above was true when taken (2026-08-16: 19 of 22 and 21 of 22 stale). The applier
+was re-run fleet-wide on **2026-08-20** — `manager-approval-defaults.md` records it as "applied
+live to all 9 fleet repos 2026-08-20, per-object verified" — and this measurement is what confirms
+it landed on the wider set. **A card filed against a drift that has since been repaired is not
+approvable or refusable; it is obsolete.** Cancelled per the archival protocol, not refused: nobody
+declined it, the world moved.
+
+**Population, stated because a count without one is a guess:** the 19 are the 15 marketplace
+plugins plus `ai-maestro`, `ai-maestro-plugins`, `AgentlensPro`, `perfect-skill-suggester` and
+`llm-externalizer-plugin`. This card's own population was **22**, of which **3 returned 404 and
+were unreadable even then**; those 3 are unmeasured here too, so the honest claim is *19 of 19
+measured, 3 never readable*, never "22 of 22".
+
+**And I had to correct my OWN correction, ten minutes old, to write this.** Section 2 below said
+*"the Problem may well stand — an independent sweep on 2026-08-20 still found 8 of 9 repos carrying
+the pre-ruling `[]`"*. That sweep is what triggered the repair; quoting it as evidence the drift
+persists reads a measurement taken **before** a fix as evidence **after** it. I inherited the number
+from a lessons file instead of running the query, which is exactly the failure the same file warns
+about. **~~That sentence is struck.~~** One `gh api` loop, nineteen repos, settled it.
 
 ## ⏹ TWO CORRECTIONS 2026-08-21T16:2x — read these BEFORE approving or refusing this proposal
 
@@ -256,4 +290,11 @@ complete and costs nothing to re-run; the write is one reviewed command per fiel
 
 ## Approval log
 
-_(empty — awaiting the required approver)_
+_(no approver decision was ever taken — the card was withdrawn by its author before one was needed)_
+
+- 2026-08-21T16:29:00+0200 — CANCELLED by ai-maestro-hub (the card's own author; `created-by:
+  ai-maestro-hub-session`). NOT a refusal — nobody declined it. Its `## Problem` no longer
+  reproduces: re-measured against GitHub, **19 of 19 repos carry the ratified shape on both
+  drifted fields**. A proposal filed against a repaired drift authorizes a fleet write that would
+  now be a no-op at best. Withdrawing it is the author's act, not the approver's, so no MANAGER
+  decision was taken or bypassed. Also unblocks `TRDD-BRRJK57P` by one of its three open EHTs.

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-21T21:58:50+0200
+updated: 2026-08-21T23:02:24+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -74,10 +74,45 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 
 ## Acceptance
 
-- [ ] Server-side scheduled keepalive for oauth-rotator-tick actually executes (not just accepted via the absorption contract)
-- [ ] The 2026-08-21 `refresh-dead` misdiagnosis root-caused and fixed
-- [ ] Two janitor-side fixes referenced in the issue ported to the TS daemon
+- [x] Server-side scheduled keepalive for oauth-rotator-tick actually executes (not just accepted via the absorption contract)
+- [x] The 2026-08-21 `refresh-dead` misdiagnosis root-caused and fixed
+- [x] Two janitor-side fixes referenced in the issue ported to the TS daemon
 - [ ] Verified clean across a 48h+ window before the 2026-08-30 deadline
-- [ ] Comment posted on Emasoft/ai-maestro#95 confirming the card and status
+- [x] Comment posted on Emasoft/ai-maestro#95 confirming the card and status
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-21
+
+4/5 boxes closed. Evidence: `reports/colony/unit1-X4RK1NUW.md` (gitignored, not pushed) and
+GitHub comment https://github.com/Emasoft/ai-maestro/issues/95#issuecomment-5375378217.
+
+- Box 1 VERIFIED live: the tick beats on cadence (mtime advanced 60s apart across two reads;
+  rotator.log ONSET/CLEARED cycling through the check).
+- Box 2 VERIFIED + FIXED: the "cascade.ts unreachable -> misdiagnosis" hypothesis from the
+  2026-08-21 issue comment is REFUTED (deliberate design, already documented in tick.ts's own
+  docstring, TRDD-XV9BLQC5). The REAL bug found and fixed: alert CODE selection in
+  `server-tick.ts` used a different precedence (stuck-first) than the message (`deriveDecision`,
+  reason-first), so one unchanged condition flapped between two alert codes
+  (`rotator-stuck:all-maxed` <-> `reauth-needed:refresh-dead`) beat-to-beat. Fixed: code now
+  follows reason>stuck, matching the message. Test added + neuter-verified (1 red / 28 green).
+- Box 3 VERIFIED already-shipped (2026-08-05): `network.ts:15-31` (UA split), `usage-cooldown.ts`
+  (throttled cache). Nothing to port.
+- Box 4 OPEN by construction: needs a real 48h+ observation window, which cannot happen inside one
+  work session. Recovery for the currently-dead refresh tokens (invalid_grant, all 3 slots) needs
+  either a human `/janitor-refresh-cc-logins` or re-arming `reauth-repair`
+  (`~/.aimaestro/oauth-reauth-repair.enabled.DISABLED-20260807-headed-browser-windows` — the owner
+  disabled it 2026-08-07 for opening disruptive headed browser windows). Both are outside this
+  session's scope (credential-affecting / human UX decisions).
+- Box 5 done: comment posted.
+
+**NEXT ACTION for whoever resumes this card:** either (a) wait out the 48h window with the current
+state and re-verify the tick status file / rotator.log stay consistent, or (b) get the USER's
+decision on re-enabling `reauth-repair` (or performing a manual `/janitor-refresh-cc-logins`) to
+actually recover the 2 live-cookie slots before their 2026-08-30 cookie expiry, then start the 48h
+clock. Neither is code work.
+
+**Changed:** `lib/oauth-rotator/server-tick.ts` (alert code precedence fix, TRDD-X4RK1NUW),
+`tests/unit/oauth-rotator-server-tick.test.ts` (new pinning test). Full suite: 6075 passed / 1
+pre-existing unrelated failure (`tests/governance/specs-in-sync.test.ts`, confirmed failing
+identically at HEAD with this change stashed). tsc clean on touched files.
 
 ## Approval log

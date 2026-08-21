@@ -229,6 +229,25 @@ describe('server-tick — the beat DELIVERS its own alarms (TRDD-RFQFCCU4)', () 
     expect(sent[0][0].code).toBe('rotator-stuck:all-maxed')
   })
 
+  it('picks a STABLE code when reason AND stuck are both set (TRDD-X4RK1NUW) — no flapping', async () => {
+    // `runTick` can set BOTH on the same result: a dead-refresh alternate survey and the live-
+    // account exhaustion check run independently inside runTick/autoRotate. `stuck` alone flickers
+    // beat-to-beat near a window threshold; `reason` does not. The code MUST follow `reason` first
+    // (matching deriveDecision's own precedence), or the alert channel toggles between two codes
+    // for one unchanged condition — measured live: 40/46 vs 275/289 ONSET/CLEARED, same message.
+    const sent: Array<ReadonlyArray<{ code: string; message: string }>> = []
+    await runOneTick({
+      ...armed,
+      runTickImpl: async () => ({
+        nextAction: 'reauth-needed', reason: 'refresh-dead', stuck: 'all-maxed', refreshed: [], switched: false,
+        decision: 'reauth-needed: 2 alternate slot(s) have a dead refresh and are expiring — the OAuth rung is dead, but a live claude.ai cookie can still mint these with NO human; check the cookie layer before re-logging in',
+      }),
+      deliverImpl: (f) => { sent.push(f) },
+    })
+    expect(sent).toHaveLength(1)
+    expect(sent[0][0].code).toBe('reauth-needed:refresh-dead')
+  })
+
   it('stays SILENT on a healthy tick — an alert that always fires is furniture', async () => {
     const deliverImpl = vi.fn()
     await runOneTick({

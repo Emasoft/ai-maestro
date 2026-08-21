@@ -204,7 +204,20 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
       // The code carries the SPECIFIC fault, not a generic bucket, because the backoff and the
       // resolve-detection are per code: collapsing `refresh-dead` and `all-maxed` into one would
       // make a still-broken credential look resolved the moment a window freed up.
-      const code = alertable.stuck ? `rotator-stuck:${alertable.stuck}` : `reauth-needed:${alertable.reason ?? 'unknown'}`
+      //
+      // ⚠ MUST MATCH deriveDecision's OWN PRECEDENCE (reason > stuck) — TRDD-X4RK1NUW. `runTick`
+      // can set BOTH `reason` and `stuck` on the SAME result (a dead-refresh alternate survey runs
+      // independently of the live-account exhaustion check inside `autoRotate`), and `stuck` alone
+      // flickers beat-to-beat near a window threshold while `reason` stays constant. Picking `stuck`
+      // first — as this used to — meant the alert CODE toggled between `rotator-stuck:all-maxed` and
+      // `reauth-needed:refresh-dead` beat-to-beat over one unchanged condition, each ONSET clearing
+      // the other's alert entry, while `alertable.decision` (the message) never moved: it always
+      // reported the refresh-dead text, because `deriveDecision` already checks `reason` first.
+      // Measured live 2026-08-21: 40 ONSET/46 CLEARED of `reauth-needed:refresh-dead` interleaved
+      // with 275 ONSET/289 CLEARED of `rotator-stuck:all-maxed` in `rotator.log`, byte-identical
+      // message on every line. Code and message must derive from the SAME precedence, or the alert
+      // channel's own dedup (per-code backoff, resolved-codes-dropped) is defeated by construction.
+      const code = alertable.reason ? `reauth-needed:${alertable.reason}` : alertable.stuck ? `rotator-stuck:${alertable.stuck}` : 'reauth-needed:unknown'
       const deliver = deps.deliverImpl ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
         void deliverAlerts(f, { log: (m: string) => console.warn(m) })
           .catch(() => { /* delivery swallows its own failures; never take the beat down */ })

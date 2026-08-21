@@ -85,6 +85,29 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 4/5 boxes closed. Evidence: `reports/colony/unit1-X4RK1NUW.md` (gitignored, not pushed) and
 GitHub comment https://github.com/Emasoft/ai-maestro/issues/95#issuecomment-5375378217.
 
+> **⛔ 2026-08-21T23:05 — COORDINATOR CHECK: THE BOX-2 FIX IS COMMITTED AND IS *NOT RUNNING*.**
+> This card is titled *"absorbed but not actually run"*, and its own fix is now in exactly that
+> state. Measured, not inferred:
+> - fix commit `1a4b8cdf` authored **23:02:38**;
+> - `pm2 jlist` → `ai-maestro` current instance started **16:29:22 UTC = 18:29:22 local**
+>   (`restarts=27`), i.e. **4½ hours BEFORE the fix**;
+> - `grep -c 'server-tick' server.mjs` → **1**, so `lib/oauth-rotator/server-tick.ts` is
+>   **runtime-imported** by `server.mjs` (transpiled per-boot), NOT bundled — which means it goes
+>   live on a `pm2 restart` ALONE and needs no `yarn build`, and equally means **no restart ⇒ the
+>   old code is still executing**;
+> - the live verdict written **23:03:01** (34 s before this check) still reads
+>   `"reason":"refresh-dead"` — consistent with the pre-fix precedence.
+>
+> So box 2's tick is TRUE of the repo and FALSE of the running system. That distinction is this
+> card's entire subject, which is why it is recorded here rather than quietly restarted away.
+>
+> **I did NOT restart the server, deliberately.** A `pm2 restart` drops the WebSocket/PTY stream
+> for every live agent session (~19 peers were up), so it is disruptive and outward-facing — the
+> owner's call, not a verification side effect. **NEXT ACTION for whoever holds that call:**
+> `pm2 restart ai-maestro`, then confirm the alert CODE and the decision MESSAGE agree by reading
+> `~/.aimaestro/oauth-rotator-tick-status.json` plus `rotator.log` across two beats. Until then,
+> treat box 2 as *landed, undeployed*.
+
 - Box 1 VERIFIED live: the tick beats on cadence (mtime advanced 60s apart across two reads;
   rotator.log ONSET/CLEARED cycling through the check).
 - Box 2 VERIFIED + FIXED: the "cascade.ts unreachable -> misdiagnosis" hypothesis from the

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-20T09:10:13+0200
+updated: 2026-08-21T13:46:53+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -33,8 +33,52 @@ external-refs: [Emasoft/ai-maestro#128, Emasoft/ai-maestro#110, Emasoft/ai-maest
 # USER nine-point fleet-hardening directive (2026-08-07)
 
 Issued verbatim as nine "ensure that" items. A MANDATE: the USER is above the tier, so it is born
-approved and is authored directly in `design/tasks/`. Three items are DONE and VERIFIED; six
-remain. Each item below records what was MEASURED, not what was assumed.
+approved and is authored directly in `design/tasks/`. Each item below records what was MEASURED,
+not what was assumed. (The line that used to sit here — *"Three items are DONE and VERIFIED; six
+remain"* — was a hand-kept tally, and it was wrong by four the day it was read. Counts live in the
+STATE block below, derived from the boxes.)
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-21
+
+**Why this block exists:** this card is 700+ lines and **EIGHT of its items have now been found
+already-shipped while their own text still read "NOT STARTED"** (items 5, 8, 9, 10 among them).
+The failure is structural, not careless — an append-only card surfaces its oldest measurement as
+though it were current. **So: verify every "NOT STARTED" below against the tree before building
+anything. Do not trust this card's prose about the code; trust the code.**
+
+**Item status, derived from the `## Acceptance` boxes (7 of 9 ticked):**
+
+| item | state |
+|---|---|
+| 1 marketplaces 4 h, one CLI command | ✅ `5438312f` |
+| 2 plugins auto-update via the safe editor | ✅ `71b9f796` |
+| **3 rotator working** | ⏳ **OPEN — USER-GATED.** `scopedOnly` (`17e129d6`) is live; what remains is the dead-refresh account, which needs the USER's `/login`. Corroborated live this session: the tick status reads `nextAction: reauth-needed`, `reason: refresh-dead`, `stuck: all-maxed` |
+| **4 post-rotation unblock** | ⏳ **OPEN — the only agent-actionable item left.** The MODEL half is complete (`planModelFallback`); the **ESC/resume half** is open. First live model switch is tracked on `TRDD-DPPYVLVH`, not here |
+| 5 auto-answer the AskUser menu | ✅ shipped dark `8e03e32f` (arming the flag is USER-gated) |
+| — | *there is no item 6 — the USER's list skipped it* |
+| 7 no headed chrome-for-testing windows | ✅ verified live |
+| 8 ledger records every `~/.claude/settings.json` change | ✅ `bbd18e3b` `816a582c` `4b1811ff` |
+| 9 ledger monitors every workdir + project settings file | ✅ same three commits, 28 watch dirs |
+| 10 daemon sources accounts/subscriptions/usage/costs from agentlenspro | ✅ **`TRDD-SLSSUIQ8` (2026-08-08)**, re-measured by observed effect 2026-08-21; COSTS residue named and deliberately not built |
+
+**NEXT ACTION (one step, runnable as written):** item 4's ESC/resume half — read §4
+(*"Post-rotation unblock"*) **and re-verify its premises against the tree before writing a line**,
+because §4's own text already records one refutation in place (*"…AND THEN THE WIRING PLAN ITSELF
+WAS REFUTED"*) and this card's base rate for stale premises is 8.
+
+**SUPERSEDED — do NOT carry forward:**
+- *"Three items are DONE and VERIFIED; six remain"* — a hand tally, wrong by four.
+- §10's *"NOT wired — the ROTATOR still takes its windows from its OWN `usageRequest` probe"*
+  (measured 2026-08-07) — **false since 2026-08-08**; struck in place, not deleted.
+- Any reading of item 10 as *"re-point the rotator at agentlenspro"* — that was always a
+  regression, and what shipped is correctly a fail-soft SECOND source beside `usageRequest`.
+
+**Artifacts to read first:** `~/.aimaestro/oauth-rotator-tick-status.json` (the live tick verdict,
+no auth needed — the API itself is 401 until the USER's governance login), `lib/oauth-rotator/tick.ts:409-439`,
+`lib/oauth-rotator/agentlens-usage.ts`, `lib/agentlens-status.ts`.
+
+**EHTs:** `XV9BLQC5` complete + archived (`0b7bd799`); `Y1ZWU998` is the open descendant and gates
+itself, not this card.
 
 ## ✅ 1. Marketplaces update every 4 h, ONE CLI command — DONE `5438312f`
 
@@ -500,7 +544,7 @@ computation, NOT for removing the guard.
 **Scope: every signed ledger in the tree, not items 8/9.** A property that is already true is the
 one most easily lost — removing it looks like an optimisation and breaks no test that exists today.
 
-## ⏳ 10. Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI — NOT STARTED
+## ✅ 10. Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI — DONE `TRDD-SLSSUIQ8`, costs residue named
 
 Partial wiring already exists: `lib/agentlens-status.ts`, `lib/token-cost.ts`,
 `lib/continuity-status.ts`. Skills on disk: `~/.claude/skills/agentlenspro-diagnostics/SKILL.md`,
@@ -551,10 +595,15 @@ spent this session fixing.
 - **BUILT and wired:** `lib/agentlens-status.ts` already parses `get_account_status --full` for
   exactly the canonical mapping janitor#100 specifies — `usageWindows.fiveHourPct` /
   `.sevenDayPct` and `cacheTtl.minutes`. Its one consumer is `lib/continuity-status.ts`.
-- **NOT wired — and it is the safety-critical path:** the ROTATOR (`lib/oauth-rotator/tick.ts`)
-  still takes its windows from its OWN `usageRequest` probe, not from agentlenspro. That is
-  precisely the source whose numbers disagreed with reality during the incident, and the reason
-  the USER named agentlenspro as the source at all.
+- ~~**NOT wired — and it is the safety-critical path:** the ROTATOR (`lib/oauth-rotator/tick.ts`)
+  still takes its windows from its OWN `usageRequest` probe, not from agentlenspro.~~
+  **⚠ FALSE SINCE 2026-08-08 — struck, not deleted, because the sentence read as current for two
+  weeks.** `TRDD-SLSSUIQ8` ("Feed the rotator's usage decisions from the agentlenspro CLI") is
+  `column: complete`, archived, `updated: 2026-08-08T11:52` — i.e. it landed the DAY AFTER this
+  paragraph was measured. This is the EIGHTH parked/stale premise on this card, and the most
+  expensive one: a worker dispatched against it would have re-implemented a shipped feature
+  *inside the credential-rotation data path* — the exact danger the paragraph below warns about.
+  The 08-07 text stays as the dated guardrail; the re-measurement is below.
 - **Live CLI surface confirmed:** `get_account_status` (plan, mode, `usageWindows`, `cacheTtl`,
   `account.{accountId,label,email}`), `get_burn_status`, `get_account_burners`, plus
   `statusline-history windows`. Verified answering on this host: `Max 20x · subscription (within
@@ -565,6 +614,34 @@ change to the data path that decides credential rotation for the whole fleet; a 
 version would rotate on numbers nobody has validated. It wants a fresh context, the existing
 `usageRequest` kept as a documented fallback (agentlenspro can be down), and a differential test
 proving the two sources agree on a known fixture before the switch is trusted.
+
+### ✅ RE-MEASURED 2026-08-21 — two of three halves are DONE, and one was done before the ink dried
+
+Measured first-hand this session, code path AND live effect. The `agentlenspro` binary is at
+`/opt/homebrew/bin/agentlenspro` and answers (`statusline-history windows --json` → exit 0, 40
+rows).
+
+| half of the USER's ask | verdict | evidence |
+|---|---|---|
+| **accounts + subscriptions** (the PLAN string the endpoint does not expose) | ✅ **DONE** | `lib/agentlens-status.ts` (`get_account_status --full`, plan through the `parseSubscriptionType` token-dropping choke-point) → `lib/continuity-status.ts` → `app/api/agents/[id]/continuity/status/route.ts` + `lib/session-restart.ts` |
+| **usage windows** | ✅ **DONE (TRDD-SLSSUIQ8)**, in exactly the pure-disjunct shape this section prescribed | `lib/oauth-rotator/agentlens-usage.ts` → `tick.ts:409-439`, fail-soft, commented *"may only ever ADD observations, never break the read"*; reachable from the daemon via `server.mjs:1987 → lib/oauth-rotator/server-tick.ts`; both its exports have exactly 1 production caller (tick.ts) plus `tests/unit/agentlens-usage.test.ts` |
+| **costs** | ❌ **NOT sourced from agentlenspro** — stated, not hidden | `get_burn_status` / `get_account_burners`: **0** references in `lib services app components scripts server.mjs` (positive control: `get_account_status` returns real hits). `lib/token-cost.ts` is a LOCAL per-token approximation feeding two React components, and its own header says money here is approximate *by construction* because the plan is flat-rate |
+
+**Ticked by OBSERVED EFFECT, not code shape** (the gate this card's Verification section sets).
+The live tick status `~/.aimaestro/oauth-rotator-tick-status.json`, stamped `2026-08-21T11:44:32Z`
+(≈1 min before the read), carries `sevenDayPct: 93` and `fiveHourResetsAtSec: 1787324400`; the CLI's
+newest row read seconds later carries `pct_7d: 93` and **`resets_5h: 1787324400` — byte-identical**,
+which is precisely the field `network.ts:639-641` uses to attribute a row to the live account
+(*"an agentlens row whose `resets_5h` equals the live account's is the live account's row"*).
+`fiveHourPct` differs by one point (9 vs 8), which is the expected signature of a quantized endpoint
+beside an un-quantized CLI sampled seconds apart — agreement on the reset instant is the identity
+proof, the percentage is not.
+
+**Why the costs half is NOT being built here:** the USER's own stated WHY for item 10 is the
+un-quantized 5 h/7 d reading that diagnosed the rotation failure — the usage half, which is done.
+Wiring `get_burn_status` is a separate, small, unrequested change whose value is unclear against a
+flat-rate plan, so it is a card of its own if it is wanted at all, never a blocker holding a
+nine-point directive open. Item 10's box is ticked with that residue named.
 
 ## Acceptance
 
@@ -632,9 +709,19 @@ code shape** (see Verification below).
       compared `~/agents/<name>` against the watch set and reported **23 of 23 workdirs and 39 of
       39 decoded cwds "MISSING"**, because the watched dir is the `.claude` SUBDIRECTORY. A
       comparison whose two sides are different kinds of path can only ever report a total miss.
-- [ ] **10.** Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI —
-      NOT STARTED, and the request SPLITS: one half would be a regression, so `usageRequest` stays
-      as a documented fallback behind a differential test
+- [x] **10.** Server daemon sources accounts/subscriptions/usage/costs from the agentlenspro CLI —
+      **DONE, and it was done on 2026-08-08 by `TRDD-SLSSUIQ8` while this box read "NOT STARTED"**
+      (eighth parked/stale premise on this card; see §10's `RE-MEASURED 2026-08-21` block).
+      Accounts + subscriptions: `agentlens-status.ts` → `continuity-status.ts` → the continuity
+      route. Usage windows: `agentlens-usage.ts` → `tick.ts:409-439` as a fail-soft SECOND source
+      (never a re-point — `usageRequest` stays, exactly as this card required, so the
+      `worstScopedPercent` / `liveStatus` regression it warned about never happened).
+      **Ticked by observed effect:** the live tick status and the CLI's newest row agree on
+      `resets_5h = 1787324400` — the very field the code uses for account attribution — with
+      `pct_7d` 93 on both, measured ~1 min apart.
+      **Residue, named not hidden:** COSTS are still local — `get_burn_status` /
+      `get_account_burners` have **0** production references. That is a separate small card if
+      wanted; it is not what the USER's stated WHY for this item asked for.
 - [x] EHT `TRDD-XV9BLQC5` (OAuth-authorize CAPTCHA continuity exposure) is terminal — **completed
       + archived 2026-08-20** (0b7bd799): its box 2 re-measure ran (adverse — the store chain has
       stopped for both alternates since 08-07, USER re-login owed on those slots) and box 3

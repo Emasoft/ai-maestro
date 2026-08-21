@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: blocked
 created: 2026-07-09T10:23:21+0200
-updated: 2026-08-16T16:40:46+0200
+updated: 2026-08-21T17:19:22+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -295,7 +295,61 @@ reference was not enough; I read its tree and the plugin's, which changed the as
   **ai-maestro-plugin#23**, with the self-drive rule every such skill must state and the two gaps
   (trdd write verbs 403 for agents; no USER auth path) it must not promise around.
 
-The epic's code is complete; adoption is now tracked on janitor#76/#77, plugin#23, and ai-maestro#55.
+~~The epic's code is complete; adoption is now tracked on janitor#76/#77, plugin#23, and
+ai-maestro#55.~~
+
+> **⏹ DEAD CLAIM, struck 2026-08-21T17:0x — ALL FOUR trackers this card defers to are CLOSED**, and
+> nothing on the board noticed for between 9 and 36 days. Verified first-hand, each individually:
+>
+> | tracker | state | closed |
+> |---|---|---|
+> | `janitor#76` | CLOSED | 2026-08-12 |
+> | `janitor#77` | CLOSED | 2026-08-12 |
+> | `plugin#23` | CLOSED | 2026-07-16 |
+> | `ai-maestro#55` | **CLOSED — `stateReason: COMPLETED`** | 2026-08-02 |
+>
+> The struck sentence is kept, not deleted: its shape is the evidence. "Adoption is now tracked
+> elsewhere" is how a card stops being read — it hands responsibility to four threads and nothing
+> ever checks whether they are still alive.
+>
+> **⏹ AND THE CLAIM IS DOUBLY STALE — I CHECKED, AND THE USER AUTH PATH SHIPPED.** This card, and
+> the STATE block above it, both assert *"`get_auth_args` reads only `AID_AUTH`, so `aimaestro-*.sh`
+> returns 401 for a human at a terminal"*. **That is false today**, verified against the copy that
+> actually runs, not the repo copy and not the issue title:
+>
+> ```
+> scripts/shell-helpers/common.sh:596-606      AID_AUTH bearer, ELSE get_session_token()
+>                                              → -H "Cookie: aim_session=$tok"
+> ~/.local/share/aimaestro/shell-helpers/common.sh   (what the PATH CLI sources, Aug 19)
+>   cmp vs repo → IDENTICAL,  grep -c aim_session → 6
+> aimaestro-governance.sh --help:98-102        "login — stores a SESSION TOKEN at
+>                                              ~/.aimaestro/cli-session (0600) … (ai-maestro#55)"
+> ```
+>
+> The help text cites `ai-maestro#55` by number as its own origin. So #55 did not merely close —
+> it SHIPPED, as `aimaestro-governance.sh login`, and it is live on PATH.
+>
+> **So the host-wide 401 has a DIFFERENT cause than every card says, and it is not a feature gap:**
+> `~/.aimaestro/cli-session` **does not exist on this host** (`ls` — absent; only `sessions.json`
+> and `session-history.json` are there). `get_session_token()` therefore returns empty,
+> `get_auth_args` emits `()` — *no auth header at all* — and every verb 401s. The function's own
+> comment predicts exactly this: *"Empty if neither exists (an unauthenticated human — the caller
+> will get a 401 and a hint)."*
+>
+> **NOBODY HAS LOGGED IN. That is the whole blocker.** And it is the OWNER's to clear, by design:
+> `login` prompts on the TTY, and the help is explicit that the password *"is never an argument,
+> never an env var, and never stored; only the token is"* — so no agent can run it, and no agent
+> should try. One command at a terminal, by the owner, unblocks every `aimaestro-*.sh` verb
+> host-wide, including the ORCHESTRATOR's assignment lane, which has been parked on this since
+> 2026-08-02.
+>
+> **The lesson is the shape, not the fix.** Four cards, two repos and a closed issue all described
+> this as a missing capability. It was a missing *credential*. A blocker phrased as "the feature
+> does not exist" is never re-checked once the feature ships, because nobody re-reads a solved
+> problem — and `stateReason: COMPLETED` on #55 was visible the entire time.
+>
+> **This card's `column: blocked` is UNCHANGED and still correct** — its `blocked-by:` TRDD chain is
+> independently live. Only the cited external rationale was dead.
 
 **PROGRESS — Phase G DONE (2026-07-09). THE EPIC IS COMPLETE.** Filed
 `Emasoft/ai-maestro-janitor` **#76** — the full command reference for the script layer, every verb

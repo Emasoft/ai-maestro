@@ -305,9 +305,21 @@ reference was not enough; I read its tree and the plugin's, which changed the as
   a session cookie; see the strike in the STATE block and the trace at the foot. The daemon's
   problem is that no `~/.aimaestro/cli-session` has been minted, not that the path is absent]** —
   so every verb 401s for it. Fleet-wide arm
-  (**janitor#77**) is therefore blocked on **ai-maestro#55** (filed): session-cookie auth, or a
+  ~~(**janitor#77**) is therefore blocked on **ai-maestro#55** (filed): session-cookie auth, or a
   MANAGER service identity for the daemon (Tier-2 — a machine-wide daemon with MANAGER authority is
-  a large blast radius), or a narrow scoped `fleet-arm` verb. Posted on janitor#77.
+  a large blast radius), or a narrow scoped `fleet-arm` verb. Posted on janitor#77.~~
+  > **⏹ THE CONCLUSION FALLS WITH ITS PREMISE — struck 2026-08-21.** `janitor#77` CLOSED 08-12,
+  > `ai-maestro#55` CLOSED-as-COMPLETED 08-02, and **session-cookie auth is the option that
+  > SHIPPED** — it is the first branch listed here. Nothing is blocked on #55.
+  >
+  > **This is the third clause of the correction contract, and I earned it the hard way:
+  > A STRIKE DOES NOT PROPAGATE TO THE SENTENCE IT LICENSED.** I struck the premise four lines
+  > above and left its inference standing — carried by the word *"therefore"* — so the card went on
+  > asserting a live external wait out of a claim I had just disproved. A premise and its
+  > conclusion are TWO assertion sites. When you strike a premise, follow its inferences.
+  > (Found by the ORCHESTRATOR's sweep, which kept reporting this card as live on `#55` and named
+  > the line: I had guessed the survivor was `:316` and it was `:308` — I marked the sentence I had
+  > been looking at rather than the one a checker actually hits.)
 - **The core plugin ships ZERO skills for the new surface** (verified against the installed v2.8.0,
   not from memory): nothing references `aimaestro-session.sh`, `aimaestro-panel.sh`, or
   `aimaestro-trdd.sh`; `team-kanban` knows `list/create-task/move/archive` but not `get`/`edit`;

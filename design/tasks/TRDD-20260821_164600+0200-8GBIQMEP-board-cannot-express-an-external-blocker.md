@@ -183,11 +183,62 @@ a good correction *quotes the dead claim on purpose* (the wrong claim's shape is
 makes the correction **indistinguishable from the defect to a text matcher**. The requirement that
 produced the correct behaviour also manufactured the false positive.
 
-Skipping `~~struck~~` spans and `>` blockquotes is the fix, and it is really a **contract**: a
-correction has to be marked in a form the checker can recognise, or the checker keeps reporting
-cards that are already right — **and a permanent false positive is how a check dies.** People route
-around a linter that cries about work they have already done. This generalises past this script: it
-is a standing hazard for every honest checker in this repo.
+Skipping `~~struck~~` spans and `>` blockquotes is the fix, and it is really a **contract with two
+halves that must be stated together**:
+
+> **QUOTE the dead claim** — so the record stays honest and the wrong claim's shape survives as
+> evidence — **AND MARK it, at EVERY site where it is asserted** — so neither a checker nor a human
+> reads it as live.
+
+Quote-without-mark leaves the falsehood live. Mark-without-quote destroys the evidence. Requiring
+only the first half is what manufactured this sweep's false positive.
+
+**"At every site" is the half that gets skipped, and it is the expensive one.** Two independent
+instances in one day, from two different sessions:
+
+1. **The sweep re-reported cards that were already corrected** — correction present, mark absent.
+2. **A correction was filed at the FOOT of a 340-line card while the disproved claim stayed
+   unmarked in the card's STATE block.** Per TRDD rule 10 the STATE block is *authoritative and read
+   FIRST on resume*, so the correction was **silently outranked by the very claim it disproved**: a
+   human resuming that card reads the false version and stops there, having never reached the
+   disproof 230 lines below. **A correction filed at the bottom of a long card does not correct the
+   card.** Put the disproof inline at each assertion site, not a pointer to where it lives.
+
+**And a strike does not propagate to the sentence it licensed.** Measured on `SCLSRS6E` after that
+repair: the premise (*"`get_auth_args` emits only the AID bearer"*) was struck at line 304, while
+the conclusion it supported — *"fleet-wide arm (`janitor#77`) is therefore **blocked on
+`ai-maestro#55`**"* — stands unmarked four lines later and still reports as a live external wait.
+The word doing the work is **"therefore"**: an argument's premise and its conclusion are two
+assertion sites, and striking the first does not touch the second. When you strike a premise, follow
+its inferences.
+
+This generalises past this script — it is a standing hazard for every honest checker in this repo.
+**A permanent false positive is how a check dies:** people route around a linter that cries about
+work they have already done.
+
+### The worst case: a stale blocker whose CATEGORY is wrong
+
+A stale blocker wastes the time between the closure and the re-check. **A stale blocker filed under
+the wrong CATEGORY is worse, because even re-checking the right question returns the wrong answer.**
+
+Measured on this board, 2026-08-21, and it is the reason this card's own author sat parked for
+nineteen days. Four cards across two repos plus a closed issue all recorded the CLI's host-wide 401
+as *"the script layer has no USER auth path"* — a **missing capability**. Verified first-hand
+against the copy that actually runs (`~/.local/share/aimaestro/shell-helpers/common.sh`, dated
+2026-08-19, `cmp`-identical to the repo): `get_auth_args` falls back from the AID bearer to a
+`Cookie: aim_session=$tok` header, and `aimaestro-governance.sh --help` cites `ai-maestro#55` as the
+origin of its own `login` verb. The capability **shipped**. What is missing is
+`~/.aimaestro/cli-session` — it does not exist on this host, `get_session_token` returns empty,
+`get_auth_args` emits **no auth header at all**, and every verb 401s including read-only `search`.
+
+It was a **missing credential**, and it had been for the whole nineteen days.
+
+The category error is what made it durable. Nobody re-reads a solved problem, so *"the feature does
+not exist"* is a claim that stops being questioned the moment the feature ships — while
+`stateReason: COMPLETED` sat visible on #55 the entire time. A sweep of the kind this card proposes
+would have flagged #55 as CLOSED, but a reader who then asked *"has the capability shipped?"* would
+still not have found the answer, because that was never the question. **Any mechanism here must
+report the closure as a prompt to re-derive the blocker, not to re-confirm the old one.**
 
 ### Three ways prose-cited state rots (the third was found by accident)
 

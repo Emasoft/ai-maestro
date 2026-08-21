@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:22:00+0200
+updated: 2026-08-21T15:26:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -410,6 +410,26 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Phase-2 locality — 2026-08-21T15:2x+0200 — acceptance box 4, first half only
+
+TRDDs dated on/after the program's start (2026-08-16), counted in each reporting repo's OWN
+`design/`. **Every one of the 14 has them, none is empty:** janitor 38, chief-of-staff 11,
+webdesign 8, programmer 8, maintainer 7, llm-externalizer-plugin 7, integrator 6,
+assistant-role 5, ai-maestro-plugin 5, perfect-skill-suggester 5, architect 4, autonomous 4,
+CPV 4, visual-comunicator 3, assistant-manager 3.
+
+So the box's **locality** half holds — remediation cards live in the owning repos, not here. The
+**citation** half ("each cites its audit finding") is NOT measured: that needs reading the cards,
+not counting them. Box stays open, and the open part is now the specific half rather than the whole.
+
+**Fourth instance of one trap in a single session, so it is stated once here rather than four
+times:** two rows first came back `design=0` — `EMASOFT-ASSISTANT-MANAGER` and `llm-externalizer`
+are CONTAINER dirs that themselves carry a `reports/` tree, so a discovery keyed on that tree
+returns the container while the `design/` sits one level down in the clone. Depth, then name, then
+a typo, now a container that satisfies the discovery predicate without being the repo. **Every one
+produced a plausible number for a set I had not opened, and in three of the four the number was
+zero — which reads as an answer.**
 
 ## Pillar-CLI probe — 2026-08-21T15:2x+0200 — axis 3 applied to this program's own tooling
 

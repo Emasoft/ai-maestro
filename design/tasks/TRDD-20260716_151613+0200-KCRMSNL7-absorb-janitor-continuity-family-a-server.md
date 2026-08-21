@@ -117,7 +117,7 @@ Surfaced by the external-ref sweep on [[5YRLA53W]]. Two of this card's three ref
   loop, which would re-introduce the starvation the daemon's bulk-lane guards against). Box 1 is now
   **7/7** once D4 registered the last two chores; box 2 re-validated live on the D4 build.
 - **D4 (S5RUHJRP) COMPLETE** (`6aac9397`) — **unblocked by reading the janitor SOURCE instead of
-  waiting on #100** (the "port line-by-line" directive is the instruction to do exactly that). It
+  waiting on Emasoft/ai-maestro-janitor#100** (the "port line-by-line" directive is the instruction to do exactly that). It
   corrected TWO errors in this flock's own plan:
   1. **wrong directory** — the lock is `global_state_dir()/marketplace-op.lock`
      (`global_state.py:433`), NOT the control dir. Building as planned = two files, ZERO mutual

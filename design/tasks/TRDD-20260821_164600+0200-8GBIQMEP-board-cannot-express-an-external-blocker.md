@@ -154,6 +154,33 @@ only flag it (auto-move is wrong when the closure is unrelated to why the card c
       handed to the hub as out-of-lane) are re-checked under the new mechanism and it finds them.
 - [ ] `bash scripts_dev/sweep-external-blockers.sh` exits **0** after the mechanism lands. A second
       run still scoring ~75% closed means the mechanism did not work.
+      **⏹ 2026-08-21T23:3x — 6 findings → 3, and the two that CLEARED were a false positive and a
+      concealment, not a fix.** Progress, not closure; exit is now **1** (was 1, via 2), and the
+      convention is `closed>0 ⇒ 1`, `unresolved>0 ⇒ 2`, so 0 needs BOTH empty.
+      1. **A false positive was removed from the SWEEP.** Its strike-stripping was line-wise
+         (`sed 's/~~[^~]*~~//g'`) and its own `ponytail:` note admitted the ceiling. `SCLSRS6E`
+         struck its dead claim across **lines 308-310** and added a `>` note explaining the
+         correction — doing exactly what this card's phrasing guidance says — and was reported
+         anyway. Fixed to `perl -0777 -pe 's/~~.*?~~//gs'` (slurped, non-greedy so two struck
+         spans on one line are not merged). Positive-controlled: a seeded live "blocked on
+         Emasoft/ai-maestro#1" card is still found, so the fix did not blind it. **A linter that
+         reddens on correct authoring is one that gets routed around** — which is the fate this
+         sweep exists to avoid.
+      2. **Two bare refs were qualified from each card's OWN frontmatter** (evidence, not a guess):
+         `17K0SHDQ` `#46` → `ai-maestro#46`, `KCRMSNL7` `#100` →
+         `Emasoft/ai-maestro-janitor#100`. **Both then resolved to CLOSED.** So the bare-number
+         form was not merely unresolvable — it was *concealing two dead waits*, and this card's
+         thesis has a named mechanism: ambiguity is how an external wait hides. Neither card's
+         `updated:` was bumped; qualifying a ref makes the same claim machine-checkable and
+         changes no fact (a mechanical repair must not reorder the board).
+      **Remaining for box 4:** 3 bare refs still unresolvable WITHOUT GUESSING — `903B7A20` `#35`
+      and `#37` (resolve in 5 of 6 known trackers), `U9UNWXMV` `#103` (3 of 6) — plus the two
+      now-revealed stale waits, which need a card-level judgment (is that card actually unblocked
+      now?) and not linter-appeasement.
+      **Also note, because it affects who can ever close this box:** `scripts_dev/` is gitignored
+      (`.gitignore:123`), so this box's named acceptance instrument is not shareable and dies with
+      the working copy. A backup of the pre-fix script is at
+      `reports/colony/sweep-external-blockers.sh.bak-20260821`.
 - [ ] The dated-verification failure mode is addressed explicitly, not just the bare-citation one.
 
 ## Verification — **the re-run IS the acceptance check**

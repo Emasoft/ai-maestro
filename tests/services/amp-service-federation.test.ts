@@ -60,7 +60,17 @@ vi.mock('@/lib/hosts-config-server.mjs', () => ({
   isSelf: vi.fn(() => true),
   getOrganization: vi.fn(() => 'default'),
 }))
-vi.mock('@/lib/ecosystem-constants', () => ({ statePath: (p: string) => p }))
+// statePath is VARIADIC — the real call is statePath('federation', 'delivered'). A
+// single-arg mock silently drops every segment after the first AND returns a RELATIVE
+// path, so `fs.mkdirSync(FEDERATION_DIR, {recursive:true})` created `<repo-root>/federation/`
+// and this suite spooled message files into the repo on every run. Join all segments, and
+// anchor them outside the tree so a leak cannot reach a commit.
+// Only `process.env` is used here: a vi.mock factory is HOISTED above the imports, so it
+// cannot close over an outer const or a module import.
+vi.mock('@/lib/ecosystem-constants', () => ({
+  statePath: (...segments: string[]) =>
+    [process.env.TMPDIR || '/tmp', 'aim-test-federation', ...segments].join('/'),
+}))
 
 import { getAgent } from '@/lib/agent-registry'
 import { resolveAgentIdentifier } from '@/lib/messageQueue'

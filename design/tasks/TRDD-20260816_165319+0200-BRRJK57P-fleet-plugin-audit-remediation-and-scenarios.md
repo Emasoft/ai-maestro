@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T13:56:26+0200
+updated: 2026-08-21T15:06:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -361,9 +361,47 @@ them to.
       not upgraded under this program.
 - [ ] Phase-3 scenarios exist, are multi-phase, and have RUN against the live server with results
       recorded.
-- [ ] No governance password literal appears anywhere in any artifact this program produced.
+- [x] No governance password literal appears anywhere in any artifact this program produced —
+      **measured 2026-08-21T15:0x, 0 hits, positive control passing** (see the sweep ledger below
+      for the population it covers and the two gaps it does not).
 - [ ] `trddgrep` / `prrdgrep` / `specgrep` shortcomings found during the program are recorded and,
       where verified, improved.
+
+## Credential sweep — 2026-08-21T15:0x+0200 — acceptance box 9, measured
+
+Needle taken **by shape, never read or printed**: the value of `AIM_GOVERNANCE_PASSWORD` in the
+gitignored `.env.local`, 20 chars, extracted into a shell variable and used only with `grep -F`.
+Output was filenames and counts only.
+
+| surface | result |
+|---|---|
+| positive control (the file the needle came from) | **1 hit** — the instrument works |
+| this repo, tracked files (`git ls-files`) | **0** |
+| this repo, full history (`git log -S … --all`) | **0** |
+| this repo, on-disk artifacts (`reports/ reports_dev/ docs_dev/ scripts_dev/ tests/`) | **0** |
+| 9 fleet repo clones under `~/Code`, tracked + history | **0 / 0** each |
+
+The 9: `ai-maestro-assistant-role-agent`, `…-autonomous-agent`, `…-janitor`, `…-maintainer-agent`,
+`ai-maestro-plugin`, `ai-maestro-plugins` (marketplace), `ai-maestro-web-scenario-tester`,
+`AI-MAESTRO-WEBDESIGN-AGENT`, `claude-plugins-validation`.
+
+**The needle is the CURRENT credential, and that is the right needle for THIS box.** The literal
+that leaked in `TRDD-44RGLOO8` is the PRE-rotation one (rotation landed 2026-07-30, recorded in
+that card as *"the leak is DEAD"*); this program began 2026-08-16, so every artifact it produced
+could only ever carry the post-rotation value. A 0 against the current literal is therefore an
+answer about this program, not an accidental clean caused by searching for a string that no longer
+exists. The old literal remains 44RGLOO8's business and that card is at `human_review`.
+
+**Two gaps, stated rather than implied:** the sweep covers tracked files and git history in the 9
+clones, NOT their untracked `reports*/` dirs; and the six role-plugin repos are not cloned on this
+machine, so they were not searched at all.
+
+**An instrument bug caught mid-sweep, worth the line:** the first pass enumerated the population as
+`~/Code/ai-maestro*` and reported **6 of 10 as "not a git repo"** — they are CONTAINER dirs holding
+the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six repos went unsearched
+and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
+wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
+mismatch in a population definition produces a clean-looking table about a set you never opened.**
 
 ## Hub verification ledger — 2026-08-16T18:49+0200
 

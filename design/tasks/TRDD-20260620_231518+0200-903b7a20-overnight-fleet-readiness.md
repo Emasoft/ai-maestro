@@ -581,6 +581,29 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
 - [ ] **G4** — visual-communicator side panel.
 - [ ] **G7** — API ↔ external plugins.
 - [ ] **G10** — core-plugin sync sweep.
+      **⏹ SPECCED 2026-08-22T00:1x (spec only — NOT worked).** The box was one line with no
+      checkable criterion, which is why it could not be delegated: a worker briefed from
+      *"core-plugin sync sweep"* must either invent a scope or return something unfalsifiable. The
+      gate's own definition (line 282) is *"all ai-maestro plugin skills/scripts/API in sync + up
+      to date"* — a goal statement. Made runnable, in three parts, cheapest first:
+      1. **Scripts** — for every `scripts/aimaestro-*.sh` in this repo, byte-compare against the
+         copy the caller actually invokes: `command -v <name>` then `cmp -s`. **`cmp`/`diff` is
+         the only instrument that answers "same or not"** — a `grep -c` for a token returns the
+         same count for both copies while they differ by ~100 lines, which has already produced a
+         false "the fix IS deployed" here. Pass = zero differing files, and the count must be
+         re-derived per file, never quoted from a prior census (it read 56/24/6 then 55/25/7 in
+         one week).
+      2. **Skills** — the core plugin owns the skills agents drive the frozen CLI through. Compare
+         the repo's skill set against the installed plugin's, and **echo the resolved cache path**:
+         a `ls -d ~/.claude/plugins/cache/*/…/*/ | tail -1` glob that matches nothing falls back
+         to `.` and silently measures THIS repo — the exact wrong-population error recorded 7
+         lines above this gate.
+      3. **API** — enumerate the verbs the plugin's scripts call and assert each resolves against
+         a live route. Absent verbs are the observable, not "the API looks current".
+      **Overlap to resolve BEFORE working it:** part 1 is largely [[SBJRNYYY]] (*"25 of 87 CLI
+      scripts on PATH are stale, 7 never deployed"*, owner-batch item 9). Doing it here would
+      duplicate that card — check whether G10's script half should simply CITE it rather than
+      re-run it.
 - [ ] **The bounded remainder in `## NEXT ACTION`** — `#45 presence` verb, the kanban 6-field
       remainder, `#2` per-column move-permission, the two SECURITY-MEDIUM items
       (`TRDD-15ff13ae` AID PoP replay, the federation comm-graph bypass), `#37` decoupling (gated

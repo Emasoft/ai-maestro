@@ -181,6 +181,34 @@ only flag it (auto-move is wrong when the closure is unrelated to why the card c
       (`.gitignore:123`), so this box's named acceptance instrument is not shareable and dies with
       the working copy. A backup of the pre-fix script is at
       `reports/colony/sweep-external-blockers.sh.bak-20260821`.
+      **⏹ 2026-08-21T23:4x — NOW `0 OPEN, 0 CLOSED, 3 unresolved` (exit 2), AND EVERY "CLOSED"
+      FINDING TONIGHT TURNED OUT TO BE A FALSE POSITIVE.** Not one card was asserting a live dead
+      wait. Three detector defects, all the same family — *the needle cannot tell an ASSERTED wait
+      from a DISCUSSED or DENIED one*:
+      1. **multi-line strike** (fixed above) — `SCLSRS6E`;
+      2. **negation blindness** — `(blocked|waiting|gated|pending) (on|by)` matched
+         `17K0SHDQ`'s *"a feature **nobody is blocked on**"* and `KCRMSNL7`'s *"unblocked by
+         reading the janitor SOURCE **instead of waiting on** …#100"*. Both say the OPPOSITE of a
+         wait. Fixed by stripping negated spans (`nobody|not|never|no longer|instead of|without|
+         rather than` within 40 chars of the blocking verb) BEFORE extraction;
+      3. **the negation filter had the multi-line bug too** — `KCRMSNL7`'s *"instead of"* ends one
+         line and *"waiting on …#100"* begins the next, so a line-wise `perl -pe` could not see
+         it. I shipped the identical defect I had just fixed one stage upstream, and only the
+         re-run caught it. Fixed with `-0777 …/gis`.
+      **Controlled, not assumed:** a seeded card asserting *"blocked on Emasoft/ai-maestro#1"* is
+      still caught while a line-wrapped *"instead of waiting on Emasoft/ai-maestro#2"* is skipped —
+      so the fixes removed false positives without blinding the detector.
+      **This puts a question mark on this card's own headline measurement.** The Problem section
+      claims *"9 of 12 CLOSED (75%)"* for the prose surface. That figure was produced by a
+      detector that counted negated and struck prose as live waits. Some of the 12 were genuinely
+      corrected since (box 3's four cards), so the delta cannot be attributed cleanly here — but
+      **75% is an upper bound, not a measurement**, and whoever closes this card should re-derive
+      it with the fixed sweep rather than cite the number.
+      **The fixed script is UNCOMMITTABLE** — `scripts_dev/` AND `reports/` are both gitignored, so
+      the fix exists only on this disk (`reports/colony/sweep-external-blockers.sh.fixed-20260821`).
+      Closing box 4 therefore requires promoting the sweep into tracked `scripts/` first. Not done
+      unilaterally: this box names the `scripts_dev/` path, so moving it changes the card's own
+      acceptance and is the next owner's call, not a 23:45 side effect.
 - [ ] The dated-verification failure mode is addressed explicitly, not just the bare-citation one.
 
 ## Verification — **the re-run IS the acceptance check**

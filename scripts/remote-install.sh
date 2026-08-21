@@ -225,7 +225,10 @@ UNINSTALL=false
 NON_INTERACTIVE=false
 IS_UPDATE=false
 SELECTED_GATEWAYS=""
-GATEWAYS_REPO="https://github.com/23blocks-OS/aimaestro-gateways.git"
+# Upstream by default — accepted deliberately (owner ruling 2026-08-21): no fork of
+# aimaestro-gateways exists. Unlike REPO_URL this had no override at all, so a fork could
+# never redirect it. Same env var name as install.sh. TRDD-9K33PHOZ finding 4.
+GATEWAYS_REPO="${AIMAESTRO_GATEWAYS_REPO:-https://github.com/23blocks-OS/aimaestro-gateways.git}"
 
 # Detect if stdin is not a terminal (piped from curl)
 if [ ! -t 0 ]; then

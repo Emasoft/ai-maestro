@@ -12,6 +12,50 @@ elif [ -f "$SCRIPT_DIR/ecosystem-config.sh" ]; then
     source "$SCRIPT_DIR/ecosystem-config.sh"
 fi
 
+# Where the application itself is cloned from. Resolution order (TRDD-9K33PHOZ):
+#   AIMAESTRO_REPO env / --repo   >   AI_MAESTRO_REPO from the SSOT   >   upstream literal.
+# The literal used to be inline at the `git clone`, so the SSOT constant was bypassed and
+# changing the repo in one place changed nothing. The env var name matches the one
+# scripts/remote-install.sh already honours, so both installers take the same override.
+AIMAESTRO_REPO_URL="${AIMAESTRO_REPO:-${AI_MAESTRO_REPO:-https://github.com/23blocks-OS/ai-maestro}}"
+case "$AIMAESTRO_REPO_URL" in *.git|*/) ;; *) AIMAESTRO_REPO_URL="${AIMAESTRO_REPO_URL}.git" ;; esac
+
+# Refuse to delete a directory that holds work no remote has a copy of.
+#
+# Callers already check "is it under $HOME" and "does package.json say ai-maestro". Both
+# PASS for a live development checkout — they exist to avoid deleting an UNRELATED
+# directory, and cannot tell a stale install from the tree someone is working in. Only git
+# can answer that, so ask git. A stale install cloned from a remote has no uncommitted
+# changes and no unpushed commits, so the ordinary reinstall path is unaffected.
+assert_safe_to_delete() {
+    local dir="$1" unpushed
+    git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+
+    if [ -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]; then
+        print_error "Refusing to delete $dir — it has uncommitted or untracked changes."
+        echo "         Commit or move them, or choose a different install directory." >&2
+        exit 1
+    fi
+
+    # Commits reachable from HEAD that are on NO remote-tracking branch. Once the
+    # directory is gone these are unrecoverable, and `git status` says nothing about them.
+    unpushed="$(git -C "$dir" rev-list --count HEAD --not --remotes 2>/dev/null || echo 0)"
+    if [ "${unpushed:-0}" -gt 0 ]; then
+        print_error "Refusing to delete $dir — ${unpushed} commit(s) exist on no remote."
+        echo "         Push them first, or choose a different install directory." >&2
+        exit 1
+    fi
+
+    # .env.local is gitignored, so neither check above can see it, and it is where this
+    # project keeps the governance password and the dev-mode token. Deleting it costs the
+    # owner a re-mint and is invisible until they next try to log in.
+    if [ -f "$dir/.env.local" ]; then
+        print_error "Refusing to delete $dir — it contains .env.local (credentials)."
+        echo "         Move it aside first if you really mean to replace this install." >&2
+        exit 1
+    fi
+}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -744,6 +788,17 @@ if [ -n "$INSTALL_DIR" ]; then
             read -p "Delete and reinstall? (y/n): " DELETE_DIR
         fi
         if [[ "$DELETE_DIR" =~ ^[Yy]$ ]]; then
+            # TRDD-9K33PHOZ. The two checks above (under $HOME, package.json says
+            # ai-maestro) were written to stop this deleting a directory that is NOT an
+            # ai-maestro install. They both PASS for the live development checkout, which
+            # is precisely the tree that must never be removed — and nothing here asked
+            # git anything, so `install.sh -y` from outside a checkout would delete a
+            # working tree holding commits that exist on no remote.
+            #
+            # This runs on BOTH paths deliberately, not just the non-interactive one: a
+            # human answering "y" to a one-line prompt is no more able to see unpushed
+            # work than a script is. "Safe in any case" (owner ruling 2026-08-21).
+            assert_safe_to_delete "$INSTALL_DIR"
             rm -rf "$INSTALL_DIR"
         else
             print_error "Installation cancelled"
@@ -752,8 +807,8 @@ if [ -n "$INSTALL_DIR" ]; then
     fi
 
     if [ "$IN_AI_MAESTRO" = false ]; then
-        print_step "Cloning AI Maestro repository..."
-        git clone https://github.com/23blocks-OS/ai-maestro.git "$INSTALL_DIR"
+        print_step "Cloning AI Maestro repository from ${AIMAESTRO_REPO_URL}..."
+        git clone "$AIMAESTRO_REPO_URL" "$INSTALL_DIR"
         print_success "Repository cloned"
     fi
 
@@ -857,7 +912,10 @@ if [ -n "$INSTALL_DIR" ] && [ "$SKIP_TOOLS" != true ]; then
     INSTALL_GW_DISCORD=false
     INSTALL_GW_EMAIL=false
     INSTALL_GW_WHATSAPP=false
-    GATEWAYS_REPO="https://github.com/23blocks-OS/aimaestro-gateways.git"
+    # Upstream by default — accepted deliberately (owner ruling 2026-08-21): no fork of
+    # aimaestro-gateways exists. Overridable so accepting the default stays a choice
+    # rather than a hardcode nobody can move. TRDD-9K33PHOZ finding 4.
+    GATEWAYS_REPO="${AIMAESTRO_GATEWAYS_REPO:-https://github.com/23blocks-OS/aimaestro-gateways.git}"
 
     # Apply per-component skip flags from CLI arguments
     if [ "$SKIP_HOOKS" = true ]; then INSTALL_HOOKS=false; fi

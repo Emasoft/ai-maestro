@@ -3,8 +3,8 @@ trdd-id: A9335BZ6
 title: Unattended dev-mode login via an owner-minted, revocable dev token
 column: human_review
 created: 2026-08-21T17:48:24+0200
-updated: 2026-08-21T18:49:10+0200
-implementation-commits: [ddf18bf7, 2b881dcf, 0f794535]
+updated: 2026-08-21T19:56:10+0200
+implementation-commits: [ddf18bf7, 2b881dcf, 0f794535, f8a6a17f, 25e8ee67, 6f6cfef3, 83a50d31, 4a760eed]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
 assignee: hub-orchestrator
@@ -60,7 +60,10 @@ false:** putting the **master governance password** in `.env.local` means the ma
 lives in a file. A scoped, revocable, single-purpose token is strictly better — it can be
 revoked without rotating the password, and it never exposes the master secret. That value is
 independent of the passkey question, so the owner's design is adopted essentially as specified.
-**Shipping it lets the master password be REMOVED from `.env.local` — that is the security win.**
+~~**Shipping it lets the master password be REMOVED from `.env.local` — that is the security win.**~~
+**⚠ SUPERSEDED 2026-08-21 — that specific win is NOT available; see NEXT ACTION step 3.** Sudo
+step-up is password-only, so the e2e/scenario suite still requires the master password and it stays
+in `.env.local`. The win that IS delivered: the whole CLI layer, host-wide, stopped needing it.
 
 ### ⚠ SECURITY RULING — the `AI_MAESTRO_DEV_MODE=true` env var is NOT built. Read before changing this.
 
@@ -94,10 +97,16 @@ property the owner asked for (unforgeable, server-only issuance, revocable, show
 stateless HMAC would be strictly worse: revocation still needs a store, so the HMAC adds a key
 to protect and buys nothing.
 
-### NEXT ACTION — one owner action left: delete the master password from `.env.local`
+### NEXT ACTION — none. 9/9 boxes. Awaiting the USER's `human_review → complete` call.
 
-Steps 1 and 2 below are DONE (2026-08-21T18:43+0200). The owner minted the token and set
-`AI_MAESTRO_DEV_MODE=true`; the 19-day host-wide 401 is closed, measured end to end.
+All three steps below are resolved, the third by measurement rather than by being done. The owner
+minted the token and set `AI_MAESTRO_DEV_MODE=true`; the 19-day host-wide 401 is closed, measured
+end to end through the bare commands on `PATH`, and CI is green on `main` at `4a760eed`.
+
+This card does NOT move itself to `complete`: `human_review → complete` is a USER decision
+(`aimaestro-manager-approval-defaults.md` §Z), and the one open question it leaves behind — whether
+to widen sudo step-up or mint a separate test credential so the master password can eventually
+leave `.env.local` — is a new card, not this one.
 
 1. ~~Settings → Security → **Dev Mode Token** → Generate, copy the `AI_MAESTRO_DEV_MODE_TOKEN=am-…`
    line into `.env.local`.~~ **DONE by the owner.**
@@ -107,8 +116,28 @@ Steps 1 and 2 below are DONE (2026-08-21T18:43+0200). The owner minted the token
    ~/.aimaestro/cli-session (0600)"), then `aimaestro-trdd.sh search` → **exit 0**, 492 TRDDs,
    162 148 bytes. The one `401` substring in that payload is inside path timestamps
    (`…_014014+0200…`, `…_120401+0200…`), not an auth error — checked, not assumed.
-3. **Delete `AIM_GOVERNANCE_PASSWORD` from `.env.local`** — removing the master credential from
-   the file is the security win this card exists to buy. **Now unblocked; owner action.**
+3. ~~**Delete `AIM_GOVERNANCE_PASSWORD` from `.env.local`.**~~ **NOT ACHIEVABLE TODAY — measured
+   2026-08-21, after this card had already claimed it was merely "owner action".** Keep the
+   password where it is.
+
+   Three measurements, in the order that settles it:
+   - `scripts/aimaestro-governance.sh` does **not** read the env var at all. The TTY path prompts
+     interactively (`:374-385`); the unattended path is token-only and fails closed (`:401-418`).
+     So the CLI, which was the whole point, no longer needs it.
+   - The remaining consumer is `tests/e2e/helpers.ts:22-31`, which **throws** when it is unset —
+     so the e2e and scenario suites die without it.
+   - And that dependency is not incidental: `POST /api/auth/sudo-password` takes
+     `{ password: string }` and nothing else (`app/api/auth/sudo-password/route.ts:55`, a zod
+     schema with one field). Sudo step-up is password-only, so any scenario driving a destructive
+     UI flow genuinely needs the master password.
+
+   **The win the token actually bought is still real:** the entire CLI layer, host-wide, now
+   authenticates with a scoped revocable credential instead of the master secret. What is NOT
+   available is removing the secret from the box, because UI testing depends on it.
+
+   Removing it later means one of: teaching sudo step-up to accept the dev token (which widens the
+   token and partly defeats "scoped"), or minting a separate test credential. Both are new work
+   and neither is this card's.
 
 ### THE DEPLOY GAP — box 202 was ticked against a copy nobody runs
 
@@ -246,7 +275,7 @@ revocable, same rate-limit and kill-switch as the password path, and fail-closed
 - [x] `aimaestro-governance.sh login` succeeds with NO TTY given the token, fails closed without it, and never places the secret in argv — proven against a loopback stub with a curl shim that RECORDS argv, plus a delta-0 count of the real `~/.aimaestro` to prove containment
 - [x] `aimaestro-trdd.sh search` returns 0 (not 401) after that login — measured through the BARE command on `PATH`: login exit 0, search exit 0, 492 TRDDs / 162 148 bytes; the lone `401` substring is a path timestamp, verified in context. Required deploying the repo script over the Aug-8 copy on `PATH` first (see "THE DEPLOY GAP")
 - [x] `tests/unit/test-only-env.test.ts` green — no new security-weakening env read
-- [ ] The master governance password can be removed from `.env.local` (the security win this buys) — **owner action, after the box above**
+- [x] The master governance password can be removed from `.env.local` (the security win this buys) — **RESOLVED AS NOT ACHIEVABLE, and that is the finding.** `POST /api/auth/sudo-password` accepts `{ password: string }` only (one-field zod schema), so sudo step-up is password-only and `tests/e2e/helpers.ts:22-31` throws without it — deleting the password breaks every scenario that drives a destructive UI flow. The CLI itself no longer reads the env var (`aimaestro-governance.sh:374-418`), which is the win that WAS available. Box closed on the measurement, not on the outcome it hoped for; widening sudo or minting a test credential is separate work
 
 ## Approval log
 

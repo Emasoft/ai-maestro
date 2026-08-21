@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-07-26T09:45:32+0200
-updated: 2026-08-21T17:18:00+0200
+updated: 2026-08-21T18:37:26+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -32,28 +32,69 @@ NEXT ACTION: decide (USER/MANAGER) whether to strengthen the check or to accept 
 expiry tied to the Phase-2 work. Do not "fix" it silently — the current behaviour is what the rule
 text describes, so changing it changes governance.
 
-## ⏹ 2026-08-21 — the "not exploitable today" justification is FALSE at one call site
+## ⏹ 2026-08-21T18:37 — the escalation below is **REFUTED**. Priority is NOT raised.
 
-`recipientIsHuman` is **not** hardwired false. `services/send-message-service.ts:380` derives it
+Kept, not deleted, because the reasoning that produced it is the guardrail: it read ONE line of ONE
+call site and generalised. The full call-site census is four sites, and **no site supplies all three
+things the reply-only branch needs at once** — an AGENT sender title, `recipientIsHuman === true`,
+and a caller-controlled `inReplyTo`.
+
+| gate call site | `recipientIsHuman` comes from | passes `inReplyTo`? | reply-only reachable? |
+|---|---|---|---|
+| `services/send-message-service.ts:388` (agent sender) | REGISTRY — `recipientTitle` is set at `:295` from `agent.governanceTitle`, else `'unknown'` | yes, caller input | **no** — the title can never be `human`/`user` |
+| `services/send-message-service.ts:343` (R38.2 user route) | registry title `\|\| us.recipientIsUser` | yes, caller input | **no** — the branch is `else if (senderTitle === 'user')`; a reply-only edge runs FROM a team title, so a `user` sender never traverses one |
+| `lib/message-send.ts:421` (`forwardFromUI`) | **WIRE** — `recipientAlias === 'user' \|\| 'human'` (`:426`) | **NO** — and its own comment says why: *"A forward is a new message, never a reply"* | **no** — `lib/communication-graph.ts:521` denies a reply-only edge on a missing/empty `inReplyToMessageId` |
+| `services/amp-service.ts:1287` (AMP route) | REGISTRY — `localAgent.governanceTitle` (`:1228`) | yes, body `in_reply_to` | **no** — same title constraint |
+
+**Why a registry-derived title can never be `human`/`user`** — three independent measurements, not
+one reading:
+- `types/agent.ts:485` — `AgentRole` is exactly 9 values; `governanceTitle?: AgentRole | null` (`:217`).
+- `services/element-management-service.ts:2380` — `VALID_TITLES` is a **runtime** allowlist of the
+  same 9, enforced at `:2540` (`Invalid title "…"`). So the type is not the only barrier.
+- Live census of `~/.aimaestro/agents/registry.json`: 13 agents — 11 `null`, 1 `manager`,
+  1 `autonomous`. Zero `human`/`user`.
+
+So `lib/communication-graph.ts:509-512` ("today `recipientIsHuman` is always false") **holds**, and
+the card's original deferral is correct as written. The one wire-fed `isHuman` producer exists, and
+it is on the path that structurally cannot open a reply-only edge.
+
+**RESIDUAL, stated so it is not mistaken for zero:** the guarantee rests on the registry file's
+contents. A process that can write `governanceTitle: "human"` into `registry.json` bypasses
+`VALID_TITLES` (which gates the mutation route, not the read). That process already runs as the
+server's UID, so it is not a new exposure — but it is why the barrier is "three enforcement points"
+and not "impossible".
+
+**Unchanged by this refutation:** the weak check IS still what R6.10's text describes, it IS still
+the largest unreviewed forge surface for Phase-2, and `min-approval-requirement: manager` +
+*do not fix silently* both stand. What changed is only the urgency: this is latent, as originally filed.
+
+```
+grep -rn 'isHuman' --include=*.ts lib services app | grep -v '\.test\.'   # the 4-site census
+sed -n '279,305p' services/send-message-service.ts                        # registry-derived title
+sed -n '405,430p' lib/message-send.ts                                     # wire alias, no inReplyTo
+sed -n '2380,2386p' services/element-management-service.ts                # VALID_TITLES
+```
+
+### ~~2026-08-21T17:18 — the "not exploitable today" justification is FALSE at one call site~~ (SUPERSEDED, see above)
+
+~~`recipientIsHuman` is **not** hardwired false. `services/send-message-service.ts:380` derives it
 from the wire (`recipientTitleStr === 'human' || === 'user'`) and `:391` passes
 `inReplyTo: input.inReplyTo` straight from caller input into the gate. So the reply-only branch is
-reachable with any truthy string, from an agent sender, today.
+reachable with any truthy string, from an agent sender, today.~~
 
-The comment asserting otherwise is `lib/communication-graph.ts:509-512` — *"today `recipientIsHuman`
-is always false … This branch only goes live with Phase 2 maestro auth."* That is the card's whole
-reason to defer, and it does not hold at this call site.
+~~The comment asserting otherwise is `lib/communication-graph.ts:509-512` — "today `recipientIsHuman`
+is always false … This branch only goes live with Phase 2 maestro auth." That is the card's whole
+reason to defer, and it does not hold at this call site.~~
 
-**NOT established by this reading:** whether a message addressed to `user`/`human` is actually
+~~**NOT established by this reading:** whether a message addressed to `user`/`human` is actually
 DELIVERABLE. The gate allows it; delivery is another layer. So this raises priority, it does not by
-itself prove an exploit.
+itself prove an exploit.~~
 
-Unchanged: still `min-approval-requirement: manager`, still *do not fix silently* — the weak check
-is what R6.10's text describes.
-
-```
-sed -n '378,392p' services/send-message-service.ts
-sed -n '505,515p' lib/communication-graph.ts
-```
+**The error, named so it is not repeated:** `:380` does not read the wire. It string-casts
+`recipientTitle`, a local set 85 lines earlier from a registry lookup. Reading the comparison
+without tracing the variable's assignment turned a registry-constrained value into an
+attacker-controlled one — and the "NOT established" hedge made the claim read as careful while its
+premise went unchecked. **Trace the assignment, not the comparison.**
 
 ## Problem
 

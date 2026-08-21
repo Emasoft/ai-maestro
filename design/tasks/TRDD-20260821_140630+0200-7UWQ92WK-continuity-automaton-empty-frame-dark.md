@@ -2,12 +2,12 @@
 trdd-id: 7UWQ92WK
 title: The continuity automaton went dark for two weeks and nothing could tell — a healthy pass logs nothing at all
 column: dev
-implementation-commits: [612e9853, c1f8b8c2]
+implementation-commits: [612e9853, c1f8b8c2, 507bcd39, 8613bdb6]
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T14:06:30+0200
-updated: 2026-08-21T14:26:34+0200
+updated: 2026-08-21T14:53:14+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -185,6 +185,38 @@ yet."
 **Instrument note for whoever greps next:** `[FleetContinuity]` writes to **stderr**
 (`logs/pm2-error.log`), not `pm2-out.log`. Grepping the wrong file returns a confident zero.
 
+## ✅ STEPS 2 + 4 — 2026-08-21 14:5x — the empty case now names itself, and both directions are pinned
+
+`defaultContinuityDeps.captureFrame` asks tmux ONE more time, directly, when the primitive comes
+back empty, and lets that error propagate. The tick's existing `catch` — which measurement 2 above
+proved was UNREACHABLE, because `capturePane`'s inner swallow ate every error first — becomes
+reachable, and renders `error: <what tmux said>` instead of a benign `empty-frame`. The shared
+primitive is untouched, exactly as the revised plan required: ~10 callers, several already carrying
+`.catch(() => '')` at the call site.
+
+**The probe costs an exec only on the already-broken path.** A readable pane returns immediately;
+the second capture happens only for a frame that was already going to be a skip.
+
+**Both directions are pinned, and the pair is what makes that true.** A discriminator that rejects
+EVERY empty pane classifies nothing, so the tests carry a real, really-blank tmux session
+(`new-session -d … 'sleep 30'`, killed in `finally`) as the control:
+
+| neuter | red |
+|---|---|
+| the probe made inert | *REJECTS with a message when … tmux cannot read the session* |
+| degenerate: always reject on empty | *resolves to "" … when the session is REAL and its pane is blank* |
+| emptiness gate trips on a leading blank line | *live-shaped frame … arrives at actuate byte-for-byte* |
+| frame tidied (`frame.trim()`) before `actuate` | same test |
+
+Each mutation reddened exactly ONE test — run through `scripts/dev/neuter`, restore verified by
+blob hash. `npx tsc --noEmit` clean; 38 tests green across the two continuity files plus the
+watchdog. Deployed by `pm2 restart` alone (runtime tsx import, `.next` carries none of it).
+
+**What is still NOT pinned, recorded rather than claimed:** the unit tests fake the runtime seam,
+so "a real blank pane on a real session stays `empty-frame`" is proven for a session the test
+creates, and the *production* pairing of a live agent with a genuinely empty pane is still only
+observed, not asserted.
+
 ## Acceptance
 
 - [x] The continuity leg emits a positive "I ran and I was fine" signal, so silence means NOT
@@ -193,12 +225,13 @@ yet."
       12-tick ceiling; pinned by the throttle test and a neuter pair (`c1f8b8c2`)
 - [x] The historical dark run is confirmed present-or-absent by EFFECT, not inference — absent:
       `skipped 0` on a scan of 2 rendering agents
-- [ ] The empty case says WHY at the layer that knows (`empty-frame` vs a capture that failed),
-      scoped to `captureFrame` — NOT by changing the shared `capturePane` primitive
-- [ ] A regression test proves a live-shaped frame reaches `actuate`, so the automaton cannot go
-      dark again behind a neutral-looking skip
+- [x] The empty case says WHY at the layer that knows (`empty-frame` vs a capture that failed),
+      scoped to `captureFrame` — NOT by changing the shared `capturePane` primitive — landed
+      `507bcd39`, neuter PAIR recorded in `8613bdb6`
+- [x] A regression test proves a live-shaped frame reaches `actuate`, so the automaton cannot go
+      dark again behind a neutral-looking skip — landed `507bcd39`, two neuters in `8613bdb6`
 
-The two open boxes are hardening, not repair: with the heartbeat in place a recurrence is now
+The two boxes above were hardening, not repair: with the heartbeat in place a recurrence is now
 VISIBLE within one tick, which is what made the first one cost two weeks.
 
 ## Verification

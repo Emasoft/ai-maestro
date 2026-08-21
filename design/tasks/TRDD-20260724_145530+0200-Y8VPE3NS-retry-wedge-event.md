@@ -1,12 +1,11 @@
 ---
 trdd-id: Y8VPE3NS
 title: Retry-wedge event the ai-maestro 90 contract
-column: blocked
-pre-block-column: dev
-blocked-by: [7UWQ92WK]
+column: todo
+blocked-by: []
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-21T14:07:18+0200
+updated: 2026-08-21T15:01:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -113,9 +112,24 @@ NEXT ACTION: build the poll site (sibling TRDD under E0), then observe one real 
       be merely waiting, as originally written. **What cannot be determined from the logs is which**,
       because a healthy continuity pass logs NOTHING at all — silence and a dead leg are the same
       observation. Do not tick this box on silence; it needs `7UWQ92WK`'s heartbeat line first.
+      **✅ UNBLOCKED 2026-08-21T15:01 — the heartbeat line exists, twice** (`14:26:10` and
+      `14:58:44`, both `pass ok: scanned 2, fired 0, skipped 0`). `7UWQ92WK` is `complete`, so this
+      box is now genuinely **WAITING**, as originally written — the leg runs, sees both rendering
+      agents, and classifies them healthy; a real wedge would now print `fired 1`. Still not
+      tickable: it needs a natural occurrence, not more code. But the ambiguity that made it
+      *possibly broken* is gone, and silence from here on means "no wedge happened", not "nothing
+      ran".
 
 ## Approval log
 
 - 2026-07-24T14:55:30+0200 — MANDATE issued by USER (min-approval-requirement: none). Pre-approved; born approved to author+execute.
 - 2026-07-24T21:22:02+0200 — PROGRESS by ai-maestro (self-mandate). Detection + decision landed (`8e78c09b`); acceptance boxes 1-4 met by 16 tests. Box 5 (live poll site + the two empirical PTY observations) ADDED rather than silently omitted — the Spec required it and it cannot be met without a real wedged agent. Stays `dev`; the completion gate correctly holds it open.
+- 2026-08-21T15:01:00+0200 — UNBLOCKED by ai-maestro-hub. `blocked-by: [7UWQ92WK]` cleared —
+  that card reached `complete`, and `trddgrep validate` flagged the stale edge
+  (`GRAPH-DANGLING-BLOCKER`) the moment it did. Restored to **`todo`**, NOT to the recorded
+  `pre-block-column: dev`: git says this card was at `column: todo` in the commit before the block
+  (`01ab0ff5^`), so that field had captured a column 8 days stale — it recorded where the card was
+  before the 2026-08-02 triage, not where it was when blocked. Restoring `dev` would have re-asserted
+  active work on a card whose one open box nobody can advance. **A `pre-block-column` written from
+  memory instead of from the card's current column silently promotes a card on unblock.**
 - 2026-07-25T22:18:19+0200 — PROGRESS (self-mandate). The POLL SITE landed (73c9b27c): lib/fleet-continuity.ts, watchdog leg 3, 13 tests. Box 5 SPLIT — the caller half is met; the two empirical PTY observations need a real wedged agent and stay open. Detection+classification had been complete and 0% reachable since 8e78c09b.

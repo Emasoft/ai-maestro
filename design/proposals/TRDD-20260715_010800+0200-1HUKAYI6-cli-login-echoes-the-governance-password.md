@@ -2,7 +2,7 @@
 trdd-id: 1HUKAYI6
 title: aimaestro-governance.sh login echoes the governance password when stdin is not a keyboard
 column: proposal
-approval-tier: 3
+min-approval-requirement: user
 priority: 0
 severity: critical
 effort: small

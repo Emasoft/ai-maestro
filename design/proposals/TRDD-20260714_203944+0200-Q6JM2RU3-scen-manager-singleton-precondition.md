@@ -2,7 +2,7 @@
 trdd-id: Q6JM2RU3
 title: Team-governance scenarios must detect the MANAGER-singleton precondition at setup
 column: proposal
-approval-tier: 2
+min-approval-requirement: none
 priority: 1
 severity: medium
 effort: small

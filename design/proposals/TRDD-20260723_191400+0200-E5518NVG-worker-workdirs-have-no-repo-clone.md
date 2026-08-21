@@ -1,9 +1,12 @@
 ---
 trdd-id: E5518NVG
 title: Newly created worker agents have no clone of their assigned repo in their workdir
-column: proposal
+column: cancelled
 created: 2026-07-23T19:14:00+0200
-updated: 2026-07-23T19:14:00+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: bugfix
 scope: project
@@ -61,4 +64,11 @@ would need its own TRDD and MANAGER-tier review since it changes agent-creation 
 
 ## Approval log
 
-(empty — awaiting screening)
+- 2026-08-21T22:02:08+0200 — CANCELLED (OBSOLETE) by ai-maestro-hub-session (min-approval-requirement:
+  manager). Fix (1), the higher-leverage dispatch-side clone-as-step-0, is delivered and verified
+  against the RELEASED artifact, not just the working tree: `ai-maestro-autonomous-agent#17` closed
+  with `git merge-base --is-ancestor 2dcf7fa v1.5.5` = true and `git show v1.5.5:…-main-agent.md |
+  grep -c "Drain your AMP inbox FIRST"` = 1; `ai-maestro-maintainer-agent#33` closed with the wake
+  behaviour pinned by `tests/test_persona_governance.py` in v1.10.0. Fix (2) (an optional
+  `cloneRepo:` field on `CreateAgent`) was always framed as a "nice-to-have" in this card, not the
+  fix required. Nobody declined this proposal; it was repaired between filing and now.

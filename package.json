@@ -43,6 +43,7 @@
     "trdd:board": "node --import tsx scripts/trdd-doctor.mjs --board",
     "trdd:watchdog": "node --import tsx scripts/trdd-watchdog.mjs",
     "trddgrep": "node --import tsx scripts/trddgrep.mjs",
+    "fleet:asks": "node --import tsx scripts/fleet-asks.mjs",
     "pillars:lint": "node --import tsx scripts/pillars-lint.mjs",
     "scripts:drift": "node --import tsx scripts/check-script-drift.mjs",
     "test": "vitest run",

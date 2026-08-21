@@ -1,9 +1,12 @@
 ---
 trdd-id: HUSKG52P
 title: Derive strict-route rules from one source instead of 4-way string duplication
-column: proposal
+column: planned
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-07T21:56:19+0200
-updated: 2026-08-20T22:20:37+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: code-review
 assignee: null
 priority: 1
@@ -86,3 +89,4 @@ change).
 ## Approval log
 
 - 2026-08-20T22:20:37+0200 — classified min-approval-requirement: manager (was UNSET, which made this proposal unroutable — nobody could know who to send it to). Floor computed from content: the card rewires the SINGLE SOURCE OF TRUTH for which routes are sudo-gated, currently spelled out in four hand-synced places. No literal D3 signal fires (it touches only this project's own source), but a mistake here UN-GATES a strict route, so it is taken as architectural / high-blast-radius and escalated one tier under the conservative principle — better safe than sorry. No approval is granted by this edit; the card is now merely routable.
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured the premise: security-registry.json, lib/sudo-guard.ts's STRICT_AGENT_RULES and STRICT_ROUTE_TO_PORTFOLIO_OP, and each handler's pathTemplate literal are still four independently hand-synced sources (no canonical table exists); the 4-way duplication this card targets is unchanged since filing.

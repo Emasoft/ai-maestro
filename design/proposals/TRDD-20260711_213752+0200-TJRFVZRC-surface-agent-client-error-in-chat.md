@@ -1,9 +1,12 @@
 ---
 trdd-id: TJRFVZRC
 title: A chat message to an agent whose client cannot act must surface an error, not vanish
-column: proposal
+column: planned
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-07-11T21:37:52+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
 assignee: null
 priority: 1
@@ -59,3 +62,5 @@ MED — adds a readback step to a hot path; keep it best-effort and time-boxed
 must be additive (never suppress a real delivery on a false negative).
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: no `agent_not_ready` result type exists anywhere in lib/services/components/app (0 hits) — a chat message to a not-ready client still vanishes silently, same as filed.

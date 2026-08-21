@@ -755,8 +755,14 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
     for script in "$SCRIPTS_DIR"/*.sh; do
         if [ -f "$script" ]; then
             SCRIPT_NAME=$(basename "$script")
-            # Skip old messaging scripts (they're replaced by AMP)
-            if [[ "$SCRIPT_NAME" == *"aimaestro-message"* ]] || \
+            # Skip old messaging scripts (they're replaced by AMP).
+            # NOTE: this used to be a bare substring match on "aimaestro-message",
+            # which also matched (and silently skipped) the current, still-shipped
+            # scripts/aimaestro-message.sh — the old scripts are all
+            # "aimaestro-message-<verb>.sh" (with a hyphen after "message"), so
+            # anchoring the prefix on "aimaestro-message-" excludes exactly those
+            # and leaves the plain aimaestro-message.sh installable (issue #147).
+            if [[ "$SCRIPT_NAME" == "aimaestro-message-"* ]] || \
                [[ "$SCRIPT_NAME" == "check-and-show-messages.sh" ]] || \
                [[ "$SCRIPT_NAME" == "check-new-messages-arrived.sh" ]] || \
                [[ "$SCRIPT_NAME" == "send-tmux-message.sh" ]]; then

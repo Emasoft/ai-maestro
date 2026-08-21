@@ -1,18 +1,20 @@
 ---
 trdd-id: 7J6RIOU1
 title: The interrupt action must carry the injection mark or it reopens the presence forgery
-column: proposal
+column: cancelled
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T17:35:51+0200
-updated: 2026-08-05T17:35:51+0200
-current-owner: ai-maestro
+updated: 2026-08-21T22:00:37+0200
+current-owner: ai-maestro-hub-session
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: bugfix
 min-approval-requirement: manager
 mandate: false
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:00:37+0200
 severity: high
 effort: small
 derived: true
@@ -73,3 +75,16 @@ LOW in code, HIGH if omitted: the failure is silent and global, and its symptom 
 mysteriously declining to act — points at the recovery logic rather than at the mark.
 
 ## Approval log
+
+- 2026-08-21T22:00:37+0200 — **CANCELLED as OBSOLETE (min-approval-requirement: manager)** by
+  ai-maestro-hub-session. Re-measured first-hand: `interruptSession`
+  (`services/sessions-service.ts:1419`, landed in commit `01747710`,
+  "the daemon principal and a synchronous interrupt primitive", 2026-08-06) already sets
+  `injectedPrompts.set(sessionName, Date.now())` **before** the observation window, and does so
+  only on the success path (after `sessionExists`/authz/`sendKeys`), preserving positive-evidence-
+  only. `tests/services/interrupt-session.test.ts` pins it with the exact complementary-neuter
+  pattern this card's `## Verification` prescribed (comment block cites both neuter runs against
+  the pre-revert file: dropping the raw-key send, and dropping the mark, each reddening a
+  different named test). The fix this card asked for shipped one day after filing, under
+  `parent-trdd: GY4CLHCA`'s implementation. Nobody declined the need; it was met. Cancelled per
+  the archival protocol, not refused.

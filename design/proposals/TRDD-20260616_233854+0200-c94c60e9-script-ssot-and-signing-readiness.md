@@ -2,7 +2,7 @@
 trdd-id: C94C60E9
 title: Script SSOT and code-signing readiness — dedupe AMP tree, route hook through CLI, collapse helpers
 column: proposal
-approval-tier: 2
+min-approval-requirement: manager
 created: 2026-06-16T23:38:54+0200
 updated: 2026-07-13T10:40:07+0000
 current-owner: null

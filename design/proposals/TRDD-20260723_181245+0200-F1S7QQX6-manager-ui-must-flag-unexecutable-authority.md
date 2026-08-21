@@ -1,9 +1,12 @@
 ---
 trdd-id: F1S7QQX6
 title: The MANAGER's decision UI must detect an unexecutable authorization up front, not via a live 403
-column: proposal
+column: cancelled
 created: 2026-07-23T18:12:45+0200
-updated: 2026-07-23T18:12:45+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: feature
 scope: project
@@ -75,4 +78,13 @@ option) on uncertainty, not fail closed.
 
 ## Approval log
 
-(empty — awaiting screening)
+- 2026-08-21T22:02:08+0200 — CANCELLED (OBSOLETE) by ai-maestro-hub-session (min-approval-requirement:
+  manager). Re-measured on two independent grounds: (1) `ai-maestro#89` (the specific incident) is
+  CLOSED — the USER auth path was delivered via `#55` and verified live (script emits the human
+  cookie, server accepts it, `authorize(human, 'send-command', 'manager-1').allowed === true`), so
+  the standing authorization this card describes is no longer genuinely unroutable for a human caller.
+  (2) The exact UI fix this proposal asks for is already shipped in the MANAGER role-plugin persona
+  (`ai-maestro-assistant-manager-agent-main-agent.md:296`): *"Pre-flight each option against a real,
+  authenticated path before you present it (or omit it). An option you cannot execute is a trap, not
+  a choice"* — citing this same SCEN-031 phase-1 incident and ai-maestro#89 by name. Nobody declined
+  this proposal; it was repaired between filing and now.

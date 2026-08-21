@@ -1,18 +1,20 @@
 ---
 trdd-id: GY4CLHCA
 title: A non-agent daemon principal and an interrupt action for freeze-recovery
-column: proposal
+column: cancelled
 scope: project
 project-id: ai-maestro
 created: 2026-08-05T17:35:51+0200
-updated: 2026-08-05T17:35:51+0200
-current-owner: ai-maestro
+updated: 2026-08-21T22:00:37+0200
+current-owner: ai-maestro-hub-session
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: feature
 min-approval-requirement: manager
 mandate: false
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:00:37+0200
 severity: medium
 effort: medium
 relevant-rules: [42]
@@ -83,3 +85,21 @@ fire-and-forget enough? That decides one call versus a call plus a poll, and it 
 the shape that cannot be settled from their issue.
 
 ## Approval log
+
+- 2026-08-21T22:00:37+0200 — **CANCELLED as OBSOLETE (min-approval-requirement: manager)** by
+  ai-maestro-hub-session. This card's whole premise — an external janitor daemon calling in
+  through an authenticated server-side channel — was tried under a sibling TRDD
+  (`TRDD-APN5WB2L`, commit `01747710`, same day) and **reverted within the hour by explicit USER
+  ruling** (commit `c7aaa6ab`, "the server does not authenticate itself to itself": the janitor's
+  continuity daemon is ABSORBED into this server, so there is no external daemon to authenticate;
+  recovery actions are in-process function calls made by the server's own
+  `startFleetLivenessWatchdog` / fleet-recovery runner). `TRDD-APN5WB2L` is itself
+  `column: superseded` (`superseded-by: [5H5PBNEB]`). The interrupt CAPABILITY this card asked for
+  does exist — `interruptSession` (`services/sessions-service.ts:1419`) exposes the non-literal
+  `sendKeys` path — but as an in-process function callable only by the server's own recovery
+  machinery, explicitly documented as "not exposed as a route, and must not become one"
+  (`tests/services/interrupt-session.test.ts:4`), the opposite of this card's proposed shape
+  (an enrolled Ed25519 daemon principal + an authenticated route). The need is met; the specific
+  mechanism this card proposed is the one the USER ruled out. Cancelled as obsolete, not refused.
+  Its EHT `[[7J6RIOU1]]` (the injection-mark hole this card would have opened) is independently
+  cancelled as obsolete for the same reason: the mark landed with the shipped `interruptSession`.

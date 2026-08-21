@@ -1,9 +1,12 @@
 ---
 trdd-id: 4ALV5ISB
 title: An idle agent never wakes to process an inbound AMP mandate — the fleet delegation chain breaks at the worker
-column: proposal
+column: planned
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-23T06:34:43+0200
-updated: 2026-08-16T11:00:24+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
@@ -102,3 +105,5 @@ MED. Injecting a turn into an idle pane on message arrival must respect the safe
 Dependencies: KCRMSNL7 (continuity daemon), the core-plugin notification hook.
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: TRDD-9DYUI97S (the wake event) is archived/superseded with no implementation-commits; its parent TRDD-5CIL7A07 (the automaton) is at column: blocked, 3 of 6 boxes checked (progressed from 0/6 as of the 2026-08-16 correction, still incomplete); upstream ai-maestro#51 is still OPEN. The idle-agent-never-wakes gap remains real and unrepaired.

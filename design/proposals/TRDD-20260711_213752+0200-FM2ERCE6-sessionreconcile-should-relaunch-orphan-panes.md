@@ -1,9 +1,12 @@
 ---
 trdd-id: FM2ERCE6
 title: SessionReconcile should relaunch an orphan shell-only pane, not just kill it
-column: proposal
+column: planned
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-07-11T21:37:52+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
 assignee: null
 priority: 2
@@ -57,3 +60,5 @@ so the attempt cap + `client-failed` terminal state are load-bearing, not
 optional. Depends on the shared `prepareShellForLaunch` (landed this run).
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: services/session-reconcile-service.ts:104-116 still only kills the orphan shell-only pane and never relaunches the client; the shared prepareShellForLaunch path (dependency) has landed and is in use elsewhere (services/agents-core-service.ts, services/sessions-service.ts).

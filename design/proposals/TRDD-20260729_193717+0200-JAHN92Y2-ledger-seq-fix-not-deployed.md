@@ -1,9 +1,12 @@
 ---
 trdd-id: JAHN92Y2
 title: The signed-ledger seq fix is committed but the running server still numbers from entries.length
-column: proposal
+column: cancelled
 created: 2026-07-29T19:37:17+0200
-updated: 2026-07-29T19:37:17+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
@@ -72,3 +75,12 @@ backs the file up byte-identically first and is fully reversible. The risk is en
 ordering: applying it before the fixed code is live makes the ledger worse.
 
 ## Approval log
+
+- 2026-08-21T22:02:08+0200 — CANCELLED (OBSOLETE) by ai-maestro-hub-session (min-approval-requirement:
+  manager). Re-measured against the live artifact, not the commit: the running registry ledger
+  (`~/.aimaestro/agents/registry.ledger.json`) holds 9723 entries, seq 5704..15426, fully contiguous
+  (`s == list(range(s[0], s[0]+len(s)))` is True) — thousands of appends past the incident with zero
+  gaps. `lib/signed-ledger.ts:315` `nextSeq()` derives from `entries[entries.length-1].seq + 1`, not
+  `entries.length`. `tests/signed-ledger.test.ts:226` ("keeps seq strictly increasing ACROSS a
+  rotation") pins the exact rotation regression this card describes. All three verification criteria
+  hold. Nobody declined this proposal; it was repaired between filing and now.

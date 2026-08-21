@@ -1,9 +1,12 @@
 ---
 trdd-id: JU6Y2V7X
 title: SCEN-001 carries deprecated chrome-devtools frontmatter and two steps that cannot be run through the UI
-column: proposal
+column: planned
 created: 2026-07-29T19:37:20+0200
-updated: 2026-07-29T19:37:20+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: docs
 min-approval-requirement: chief-of-staff
@@ -67,3 +70,11 @@ LOW for the scenario edits and the overlap fix; LOW-MED for the staged status, w
 progress channel from the create pipeline to the dialog.
 
 ## Approval log
+
+- 2026-08-21T22:02:08+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager;
+  card declares chief-of-staff tier, within delegated manager authority). Re-measured all four: (1)
+  `tests/scenarios/SCEN-001_title-change-lifecycle.scen.md` still declares `required_tools:`, no
+  `browser_stack:`. (2) S014/S032 still present unchanged. (3) `components/teams/TeamCreationWizard.tsx`
+  still shows only a single "Creating..." label, no staged status. (4) no `z-index`/`z-[` styling
+  found in `VersionChecker.tsx`/`SettingsSidebar.tsx` — no evidence of an overlap fix. All four
+  frictions stand unaddressed.

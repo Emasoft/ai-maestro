@@ -2,7 +2,7 @@
 trdd-id: 9YB99SRW
 title: Surface why the governance-title control is inert on a dead-client agent
 column: proposal
-approval-tier: 2
+min-approval-requirement: none
 priority: 2
 severity: low
 effort: small

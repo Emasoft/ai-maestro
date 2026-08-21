@@ -2,7 +2,7 @@
 trdd-id: FDIT83ZH
 title: The scenario write-guard blocks the forgery step, so the fleet-side half of SCEN-029 cannot run
 column: proposal
-approval-tier: 2
+min-approval-requirement: manager
 priority: 2
 severity: medium
 effort: small

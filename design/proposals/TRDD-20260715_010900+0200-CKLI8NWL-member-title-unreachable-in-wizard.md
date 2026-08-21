@@ -2,7 +2,7 @@
 trdd-id: CKLI8NWL
 title: A MEMBER cannot be created in the wizard, and the team dialog cannot add one either
 column: proposal
-approval-tier: 2
+min-approval-requirement: none
 priority: 1
 severity: high
 effort: medium

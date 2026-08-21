@@ -1,9 +1,12 @@
 ---
 trdd-id: 1K2TZVIP
 title: Enforce assignee + blocked-by + column + checklist on every TRDD with a checklist-gated completion
-column: proposal
+column: cancelled
 created: 2026-07-23T18:12:45+0200
-updated: 2026-07-24T14:55:58+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -76,4 +79,10 @@ were completed without a checked checklist — which is the intended tightening,
 
 ## Approval log
 
-(empty — awaiting screening)
+- 2026-08-21T22:02:08+0200 — CANCELLED (OBSOLETE) by ai-maestro-hub-session (min-approval-requirement:
+  manager). Re-measured: the exact invariant this proposal asks for (assignee+column+blocked-by all
+  mandatory and current, checklist-gated completion, terminal-column freeze, GRANDFATHER BOUNDARY) is
+  already shipped verbatim in `rules/aimaestro/aimaestro-trdd-approval.md` §D4 step 5b, carrying the
+  same "USER ruling (2026-07-24)" wording this proposal quotes. Its implementing card
+  TRDD-UCC2QJH9 is `column: complete`, `approved: true`. Nobody declined this proposal; it was
+  repaired between filing and now.

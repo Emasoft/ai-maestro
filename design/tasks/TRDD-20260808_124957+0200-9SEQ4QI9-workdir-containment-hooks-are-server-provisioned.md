@@ -7,6 +7,7 @@ updated: 2026-08-08T12:49:57+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: security
+priority: 1
 min-approval-requirement: none
 mandate: true
 mandated-by: self

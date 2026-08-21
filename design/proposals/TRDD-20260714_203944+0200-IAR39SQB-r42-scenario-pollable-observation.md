@@ -2,7 +2,7 @@
 trdd-id: IAR39SQB
 title: Make SCEN-030's R42 observation pollable and split from fleet-build
 column: proposal
-approval-tier: 2
+min-approval-requirement: none
 priority: 2
 severity: low
 effort: medium

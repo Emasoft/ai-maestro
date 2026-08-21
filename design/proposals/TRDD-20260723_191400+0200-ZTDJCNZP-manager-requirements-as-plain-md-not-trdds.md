@@ -1,9 +1,12 @@
 ---
 trdd-id: ZTDJCNZP
 title: MANAGER writes requirements as ad-hoc markdown never as TRDDs, and never pushes them to the project repo
-column: proposal
+column: planned
 created: 2026-07-23T19:14:00+0200
-updated: 2026-07-23T19:14:00+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: bugfix
 scope: project
@@ -55,4 +58,8 @@ LOW. Plugin-side persona/prompt change only; no schema or API change required.
 
 ## Approval log
 
-(empty — awaiting screening)
+- 2026-08-21T22:02:08+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager).
+  Re-measured: the closed `ai-maestro-assistant-manager-agent#32`/`PR#33` fix landed the NPT-ordering
+  and repo-delegation halves only; neither the closed issue's body nor the live persona's PROJECT
+  BOOTSTRAP section instructs the MANAGER to author requirements AS a project-scope TRDD under
+  `design/tasks/` rather than ad-hoc markdown. The specific defect this card names is unaddressed.

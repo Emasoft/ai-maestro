@@ -1,9 +1,12 @@
 ---
 trdd-id: 1B7FC42W
 title: A MANAGER's AskUserQuestion TUI menu is unanswerable from the dashboard Chat — the user↔agent question channel is broken for menu prompts
-column: proposal
+column: cancelled
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-23T06:34:43+0200
-updated: 2026-07-23T06:55:00+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
@@ -93,3 +96,5 @@ MED. Injecting menu keystrokes must respect the safe-state gate and not race the
 The button-surfacing option is more work but the correct long-term UX.
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — CANCELLED by ai-maestro-hub-session. Obsolete: the card's own root-cause note names commit 8c34d65a as the landed fix; verified `git show 8c34d65a` (subject "fix(terminal): send single-line prompts as plain keystrokes, not bracketed paste (TRDD-1B7FC42W)") and confirmed components/TerminalView.tsx:1305-1360 (handlePromptSubmit) now sends single-line content as plain keystrokes, reserving bracketed paste for multi-line only. Nobody declined this — the work shipped before screening reached it.

@@ -1,9 +1,12 @@
 ---
 trdd-id: P5RB1L01
 title: Agent Online status must reflect the client, not just tmux session existence
-column: proposal
+column: planned
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-07-11T21:37:52+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
 assignee: null
 priority: 1
@@ -70,3 +73,5 @@ the foreground probe behind the same 3s cache the session list already uses so i
 adds no per-render tmux cost. Depends on `getForegroundCommand` (landed this run).
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: `client-not-running`/`client-failed` status values do not exist anywhere in lib/services/hooks/components (0 hits); the dependency `AgentRuntime.getForegroundCommand` has landed (lib/agent-runtime.ts:227) and is already consumed elsewhere, so the fix is buildable now.

@@ -2,7 +2,7 @@
 trdd-id: GFX57106
 title: Nothing keeps the installed script layer in sync, so the fleet cannot reach verify
 column: proposal
-approval-tier: 2
+min-approval-requirement: none
 priority: 1
 severity: high
 effort: small

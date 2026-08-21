@@ -1,14 +1,16 @@
 ---
 trdd-id: F1SL03CK
 title: Decide whether a portfolio token becomes MANDATORY for CreateAgent and CreateTeam
-column: proposal
+column: planned
 created: 2026-07-14T13:57:21+0200
-updated: 2026-07-14T13:57:21+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 priority: 0
 severity: high
 effort: medium
@@ -168,3 +170,5 @@ the fleet, and the failure mode is a 403 in a flow someone depends on. Risk is d
 entirely by the operational question above, not by the code.
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured every claim in the STATE block: OPERATIONS_REQUIRING_TOKEN is still `{}` (lib/portfolio-check.ts:35), no `create-agent` AuthAction exists in lib/authorization.ts's enum, `POST /api/agents` is still absent from security-registry.json, and app/api/agents/route.ts still gates creation with only authenticateFromRequest — no authorize() call. The gap (any authenticated agent of any title can create agents) is unrepaired. Approving the STATE block's NEXT ACTION as scoped: flip the map to the v1 set AND add the missing authorize() gate together, per R30.1/R30.2/R29.3, plus minting standing agent:create mandates to existing COS agents before deploy.

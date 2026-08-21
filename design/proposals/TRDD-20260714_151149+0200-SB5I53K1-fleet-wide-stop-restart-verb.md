@@ -1,14 +1,16 @@
 ---
 trdd-id: SB5I53K1
 title: A fleet-wide stop and restart verb on the script layer so the janitor can cycle every agent
-column: proposal
+column: planned
 created: 2026-07-14T15:11:49+0200
-updated: 2026-08-04T13:15:48+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: feature
 min-approval-requirement: manager
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 priority: 2
 severity: medium
 effort: medium
@@ -210,3 +212,5 @@ denial-of-service against the user's own fleet if it is reachable by anything th
 reach it. Ship the gate before the verb.
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: `grep -c -- '--all' scripts/agent-*.sh scripts/aimaestro-agent.sh` is still 0 — no fleet verb exists. The hold on TRDD-D5XDT49I is confirmed cleared (archived, complete). R42's mid-proposal ruling narrows scope to USER-only invocation (MANAGER and janitor-token paths are REVOKED per the card's own analysis); approving the card as scoped by that ruling — design the verb for USER-only sudo-gated invocation, open questions 2 (no autonomous janitor cycling) and 3 (is stop--all separate from restart--all) to be settled during design, and note the USER-auth-path gap in docs/SCRIPT-LAYER.md is now this card's real prerequisite alongside the already-cleared D5XDT49I dependency.

@@ -1,14 +1,18 @@
 ---
 trdd-id: 2UPK4XZG
 title: A card's wait condition is never re-evaluated after the thing it waits on completes
-column: proposal
+column: planned
 created: 2026-08-20T19:41:31+0200
-updated: 2026-08-20T19:41:31+0200
-current-owner: hub-session
+updated: 2026-08-21T22:00:37+0200
+current-owner: ai-maestro-hub-session
 created-by: architect
+assignee: ai-maestro-hub-session
 task-type: infra
 scope: project
 min-approval-requirement: manager
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:00:37+0200
 release-via: none
 npt: []
 eht: []
@@ -129,3 +133,12 @@ and it answers it by re-running a check instead of trusting a sentence.
 
 ## Approval log
 
+- 2026-08-21T22:00:37+0200 — **APPROVED (min-approval-requirement: manager)** by
+  ai-maestro-hub-session. Re-measured: `unblock-when:` appears in ZERO tracked files other than
+  this proposal (still purely additive, as claimed), and its three evidence cards remain parked
+  exactly as described (`5CIL7A07 → blocked`, `U9UNWXMV → design`, `1GGQ4HWY → backburner`) —
+  nothing here has been superseded by other work. No duplicate proposal exists for this field.
+  The design is fail-closed (rejects unknown probe kinds), report-only (never auto-moves a
+  column), and opt-in (no mass backfill authorized) — approved as written. The open cross-repo
+  question (does this belong upstream in the IND base TRDD format too) is left to whoever
+  implements it, per the card's own framing.

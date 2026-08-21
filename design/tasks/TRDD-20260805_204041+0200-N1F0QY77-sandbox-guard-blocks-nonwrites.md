@@ -10,6 +10,7 @@ current-owner: ai-maestro
 created-by: assistant-manager-agent
 assignee: ai-maestro
 task-type: bugfix
+priority: 1
 min-approval-requirement: none
 mandate: true
 mandated-by: user

@@ -1,9 +1,12 @@
 ---
 trdd-id: Z1VNCV3U
 title: The MANAGER staffs a portfolio correctly but never dispatches — workers created, never woken, never messaged
-column: proposal
+column: planned
 created: 2026-07-23T19:10:18+0200
-updated: 2026-07-23T19:14:00+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: bugfix
 scope: project
@@ -96,4 +99,13 @@ explanation, not merely a hypothesis to confirm.
 
 ## Approval log
 
-(empty — awaiting screening)
+- 2026-08-21T22:02:08+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager).
+  Re-measured against the plugin repo before approving, not just the card's own prose: the two closed
+  issues that could plausibly cover this (`ai-maestro-assistant-manager-agent#32`/`PR#33`) fix
+  NPT-ordering (land requirements before dispatch) and repo-bootstrap delegation to the MAINTAINER —
+  neither instructs the MANAGER to WAKE a newly-created worker or send it the AMP dispatch. The live
+  persona (`ai-maestro-assistant-manager-agent-main-agent.md`) has an explicit wake step ONLY inside
+  the team/COS lifecycle (`Wake the COS via aimaestro-agent.sh wake <cosId>`); no equivalent
+  instruction exists for a directly-created AUTONOMOUS/MAINTAINER pair of the shape this card's
+  portfolio scenario used. The critical defect — worker agents created and never woken, MANAGER doing
+  the implementation itself — is unaddressed.

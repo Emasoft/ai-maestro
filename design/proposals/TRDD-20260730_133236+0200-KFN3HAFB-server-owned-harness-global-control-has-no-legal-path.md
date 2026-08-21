@@ -4,16 +4,18 @@ title: Server-owned GLOBAL control ops for harness agents have no legal implemen
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: proposal
+column: planned
 created: 2026-07-30T13:32:36+0200
-updated: 2026-07-30T13:32:36+0200
-current-owner: ai-maestro
+updated: 2026-08-21T22:00:37+0200
+current-owner: ai-maestro-hub-session
 created-by: ai-maestro
-assignee: ai-maestro
+assignee: ai-maestro-hub-session
 task-type: spike
 min-approval-requirement: manager
 mandate: false
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:00:37+0200
 derived: false
 parent-trdd: KCRMSNL7
 relevant-rules: [42, 17]
@@ -122,3 +124,13 @@ symptom is silence — chores simply stop, and nothing on screen says why.
   unilateral write into a foreign control plane that a prior incident already showed
   ratchets the whole fleet. `min-approval-requirement: manager` because the outcome
   crosses a project boundary.
+- 2026-08-21T22:00:37+0200 — **APPROVED (min-approval-requirement: manager)** by
+  ai-maestro-hub-session. Re-measured: `lib/janitor-control.ts` is still a documented,
+  tested no-writer module ("This module has no writer and exports none. Reads only.");
+  `gh issue list --repo Emasoft/ai-maestro-janitor --search "control plane"` returns none —
+  no issue filed yet, no design decision recorded. Route 2 (R42.1) is unchanged: no R42
+  amendment has landed that would cover injecting a control command. Premise stands
+  unresolved, no legal implementation exists yet, and the card asks for a design decision
+  plus a cross-project negotiation rather than for code — a legitimate spike. Approved as
+  written; the actual design pick (candidate 1/2/3) and the janitor-issue filing are left
+  to whoever picks this up next, per the card's own NEXT ACTION.

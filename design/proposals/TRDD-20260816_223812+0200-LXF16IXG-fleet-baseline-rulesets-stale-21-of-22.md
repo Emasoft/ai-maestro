@@ -1,12 +1,12 @@
 ---
 trdd-id: LXF16IXG
-title: Three baseline ruleset fields drifted independently across the fleet and one repo of 22 is current
-column: proposal
+title: Emasoft/AgentlensPro carries a stale require_code_owner_review after the fleet baseline converged
+column: planned
 scope: project
 project-id: ai-maestro
-repo: Emasoft/ai-maestro
+repo: Emasoft/AgentlensPro
 created: 2026-08-16T22:38:12+0200
-updated: 2026-08-21T16:34:00+0200
+updated: 2026-08-21T22:00:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -14,7 +14,9 @@ task-type: infra
 min-approval-requirement: manager
 mandate: false
 mandated-by: self
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:00:37+0200
 derived: true
 derived-kind: eht
 parent-trdd: BRRJK57P
@@ -35,6 +37,25 @@ external-refs: []
 > RETRACTED.** They rested on a two-field census; the deciding field was a third one, unsampled.
 > **Zero repos are actively blocked.** See the CORRECTED block below. The drift itself is real and
 > unchanged; only its stated consequence was wrong.
+
+> **SCOPED DOWN 2026-08-21T22:00+0200 by the MANAGER-floor approver (ai-maestro-hub-session), on
+> re-measurement.** Re-checked `bypass_actors` and `required_approving_review_count` first-hand
+> against 7 fleet repos: `baseline-history-protect.bypass_actors = [5]` on 7/7 and
+> `baseline-pr-and-checks.required_approving_review_count` is `0` or the repo carries no
+> `pull_request` rule (`NO_PR_RULE`) on 7/7 — **both headline fields have converged fleet-wide**,
+> corroborating the card's own 2026-08-21T16:2x 19/19 re-measurement above. The one field the card
+> itself already identified as still drifted (`require_code_owner_review`, ratified `false`) is
+> **still stale on exactly one repo: `Emasoft/AgentlensPro`** (`true`). This card is **APPROVED**,
+> narrowed to that single residual field on that single repo — every other repo and every other
+> field this card originally covered is resolved and out of scope. The fix is a baseline **RESTORE**
+> to the ratified shape (`require_code_owner_review: false`), which is **Tier-0 EXEMPT** per
+> `rules/aimaestro/aimaestro-manager-approval-defaults.md` §F ("apply the ratified baseline as-is") —
+> no further approval is needed to execute it. `AgentlensPro` owns its own repo and its own session;
+> this card should be handed to that session to execute rather than applied from the hub. The
+> `SX5FPMG0` "applier shape depends on the caller's context" no-go (§2 below) does not block this
+> narrow fix: `require_code_owner_review` is a plain boolean the ratified payload sets unconditionally
+> (it is not one of the two context-derived fields SX5FPMG0 names — `pull_request` presence and
+> `required_status_checks`), so its correct value is not in question.
 
 ## Problem
 
@@ -302,8 +323,6 @@ complete and costs nothing to re-run; the write is one reviewed command per fiel
 
 ## Approval log
 
-_(still awaiting the required approver — see the reverted cancellation below)_
-
 - 2026-08-21T16:29:00+0200 — **CANCEL ATTEMPTED, then REVERTED at 16:34** by ai-maestro-hub. The
   card's `## Problem` no longer reproduces (**19 of 19 repos measured ratified**), so I withdrew it
   as obsolete, reasoning that withdrawing your own proposal is the AUTHOR's act rather than the
@@ -313,3 +332,13 @@ _(still awaiting the required approver — see the reverted cancellation below)_
   what this project ratified; my argument did not. Reverted to `column: proposal`, back in the
   queue, evidence intact. **No approver decision has been taken.** RECOMMENDED disposition: CANCEL
   as obsolete. Remains one of `TRDD-BRRJK57P`'s open EHTs until an approver acts.
+- 2026-08-21T22:00:37+0200 — **APPROVED (min-approval-requirement: manager)** by
+  ai-maestro-hub-session, scoped down. Re-measured `bypass_actors` and
+  `required_approving_review_count` first-hand against 7 fleet repos via `gh api`: both fields
+  ratified on 7/7 (bypass `[5]`; approvals `0` or `NO_PR_RULE`), corroborating the card's own
+  19/19 re-measurement six hours earlier — the two headline fields are converged fleet-wide. The
+  one remaining drifted field the card itself had already found (`require_code_owner_review`) is
+  still stale on exactly `Emasoft/AgentlensPro`. Approved, narrowed to that one field on that one
+  repo; every other repo/field this card covered is resolved and out of scope. Fix is a Tier-0
+  EXEMPT baseline restore (§F) — hand to `AgentlensPro`'s own session to execute; not applied from
+  the hub. `column: planned`, `repo:` narrowed to `Emasoft/AgentlensPro`.

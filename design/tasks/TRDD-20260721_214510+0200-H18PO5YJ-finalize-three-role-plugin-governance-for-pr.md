@@ -6,6 +6,7 @@ created: 2026-07-21T21:45:10+0200
 updated: 2026-08-16T16:51:06+0200
 current-owner: ai-maestro
 task-type: refactor
+priority: 1
 scope: project
 project-id: ai-maestro
 min-approval-requirement: user

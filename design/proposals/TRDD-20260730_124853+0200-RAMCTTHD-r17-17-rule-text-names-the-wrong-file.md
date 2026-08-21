@@ -4,16 +4,18 @@ title: R17.17's rule text names settings.local.json but the guard must target se
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: proposal
+column: planned
 created: 2026-07-30T12:48:53+0200
-updated: 2026-07-30T12:48:53+0200
+updated: 2026-08-21T22:02:08+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: docs
 min-approval-requirement: manager
 mandate: false
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 derived: false
 relevant-rules: [R17]
 blocked-by: []
@@ -86,3 +88,8 @@ LOW. A one-parenthetical doc correction with no code change and an existing test
 the corrected behaviour. The risk of NOT doing it is strictly higher than the risk of doing it.
 
 ## Approval log
+
+- 2026-08-21T22:02:08+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager).
+  Re-measured: `docs/GOVERNANCE-RULES.md:680` (R17.17, line shifted from :672 by unrelated edits) still
+  reads `(~/.claude/settings.local.json)`. `tests/unit/startup-guards.test.ts:85/:99` already asserts
+  the correct target file, unchanged, still green. Trivial, low-risk, one-parenthetical doc fix.

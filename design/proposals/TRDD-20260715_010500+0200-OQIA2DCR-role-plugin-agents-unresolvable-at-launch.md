@@ -2,7 +2,7 @@
 trdd-id: OQIA2DCR
 title: Every titled agent launches with an unresolvable --agent, so a woken agent is dead on arrival
 column: proposal
-approval-tier: 2
+min-approval-requirement: manager
 priority: 0
 severity: critical
 effort: medium

@@ -2,7 +2,7 @@
 trdd-id: 15FF13AE
 title: Make AID proof-of-possession nonce-bound instead of timestamp-windowed
 column: proposal
-approval-tier: 2
+min-approval-requirement: manager
 created: 2026-06-16T23:38:54+0200
 updated: 2026-07-13T10:40:07+0000
 current-owner: null

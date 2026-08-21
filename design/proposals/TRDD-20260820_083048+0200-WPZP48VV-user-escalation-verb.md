@@ -1,17 +1,20 @@
 ---
 trdd-id: WPZP48VV
 title: USER-escalation verb — reach the human owner after an approval timeout
-column: proposal
+column: cancelled
 created: 2026-08-20T08:30:48+0200
-updated: 2026-08-20T08:30:48+0200
-current-owner: ai-maestro-hub
+updated: 2026-08-21T22:00:37+0200
+current-owner: ai-maestro-hub-session
 task-type: feature
 scope: project
 project-id: ai-maestro
 priority: 2
 min-approval-requirement: manager
 mandate: false
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:00:37+0200
+superseded-by: [P9H0Q7SZ]
 ---
 
 # USER-escalation verb (--to-user / escalate)
@@ -45,3 +48,15 @@ refused), delivers to the owner surface, logs the escalation.
 - [ ] spec first, then implementation; specs:check green
 
 ## Approval log
+
+- 2026-08-21T22:00:37+0200 — **CANCELLED as OBSOLETE / duplicate (min-approval-requirement:
+  manager)** by ai-maestro-hub-session. Re-measured: `grep -rl escalat design/tasks/` surfaces
+  `TRDD-20260819_140156+0200-P9H0Q7SZ-escalate-user-verb-with-ack-state.md` — filed **the day
+  before** this card, already `column: design`, self-mandated (`mandate: true, mandated-by:
+  user, min-approval-requirement: none`) so it never needed this queue, and actively worked
+  (`updated: 2026-08-21T18:12`, STATE block records three corrected premises and a shrunk
+  build: an ack record on top of two already-shipped mechanisms —
+  `scripts/aimaestro-panel.sh` + `GET /api/agents/[id]/panel/feedback`, TRDD-229CJGYH,
+  `column: completed`). Same feature (USER-escalation verb), same problem statement
+  (AUTONOMOUS Tier-3 reach-the-owner gap), more advanced. Nobody declined the need; it is
+  already being met by P9H0Q7SZ. Cancelled as obsolete, `superseded-by: [P9H0Q7SZ]`.

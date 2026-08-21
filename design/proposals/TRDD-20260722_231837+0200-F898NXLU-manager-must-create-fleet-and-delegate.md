@@ -6,7 +6,7 @@ created: 2026-07-22T23:18:37+0200
 updated: 2026-07-23T06:35:00+0200
 current-owner: scenario-runner
 task-type: bugfix
-approval-tier: 2
+min-approval-requirement: manager
 priority: 0
 severity: high
 effort: medium

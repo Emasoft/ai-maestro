@@ -1,20 +1,22 @@
 ---
 trdd-id: SX5FPMG0
 title: Branch-protection baseline shape is derived from the APPLIER's ambient context, not from the repo
-column: proposal
+column: planned
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T03:57:52+0200
-updated: 2026-08-21T04:02:10+0200
-current-owner: ai-maestro-hub
+updated: 2026-08-21T22:00:37+0200
+current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub
-assignee: ai-maestro-hub
+assignee: ai-maestro-hub-session
 task-type: infra
 min-approval-requirement: manager
 mandate: false
 mandated-by: none
-approved: false
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:00:37+0200
 derived: false
 npt: []
 eht: []
@@ -153,3 +155,12 @@ same mechanism with a simpler cause.
 - 2026-08-21T03:57:52+0200 — FILED as a proposal at `min-approval-requirement: manager` (§D3
   floor: baseline-ruleset deviation). Discovery only; nothing applied. Authored by the hub, which
   is also the party responsible for the 01:50 apply that produced the divergence.
+- 2026-08-21T22:00:37+0200 — **APPROVED (min-approval-requirement: manager)** by
+  ai-maestro-hub-session. Re-measured against the janitor's local checkout: both linked upstream
+  cards remain open (`R4XC8MV1 → todo`, `Q8ZT5NW3 → human_review`) — the predicate fix has not
+  landed, so this card's premise and its "no fleet-wide apply until 1-3 land" hold both still
+  stand. No duplicate found; this card correctly does not patch the janitor's own repo. Approved
+  as written — this is the standing no-go `LXF16IXG` cites, and it remains the reason a full
+  fleet-wide converge stays deferred while the single-repo `require_code_owner_review` fix on
+  `AgentlensPro` (a plain unconditional boolean, not one of the two context-derived fields named
+  here) proceeds independently.

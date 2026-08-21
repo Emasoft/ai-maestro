@@ -1,9 +1,13 @@
 ---
 trdd-id: HNJ3T3W0
 title: A name held by a soft-deleted tombstone can be re-created, producing two registry entries with the same name
-column: proposal
+column: planned
 created: 2026-07-29T19:37:19+0200
-updated: 2026-07-29T19:37:19+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
+blocked-by: [TRDD-3Q4G9ZK6]
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
@@ -58,3 +62,10 @@ LOW. Blocked by TRDD-3Q4G9ZK6: closing this without it removes the last UI route
 orphaned folder.
 
 ## Approval log
+
+- 2026-08-21T22:02:08+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager).
+  Re-measured: `services/element-management-service.ts:10007` still does
+  `loadAgents().find(a => !a.deletedAt && a.name === name)` — a tombstoned name is unconditionally
+  free again, with no workdir-existence check. Card stays `blocked-by: [TRDD-3Q4G9ZK6]` per its own
+  stated ordering (closing this before 3Q4G9ZK6 ships removes the last UI route to an orphaned
+  folder); TRDD-3Q4G9ZK6 was approved in the same screening pass.

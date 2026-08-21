@@ -1,9 +1,12 @@
 ---
 trdd-id: 3TPWA71L
 title: SCEN-015 frontmatter drift — deprecated chrome-devtools required_tools and cleanup gaps
-column: proposal
+column: planned
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 created: 2026-07-11T21:37:52+0200
-updated: 2026-07-11T21:37:52+0200
+updated: 2026-08-21T21:59:38+0200
 current-owner: scenario-runner
 assignee: null
 priority: 3
@@ -55,3 +58,5 @@ step is read-only.
 LOW — scenario-authoring only, no product code.
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: chief-of-staff). Re-measured: tests/scenarios/SCEN-015_amp-end-to-end-messaging.scen.md still carries `required_tools: [mcp__chrome-devtools__*]` at line 40-46 with no `browser_stack:` field, and steps S161/S214 still call `amp-send.sh` as an Action verb directly — the drift is unrepaired.

@@ -1,14 +1,17 @@
 ---
 trdd-id: WB3K4Y09
 title: The governance rules teach agents to hand-write approvals, so every real mandate is unverifiable
-column: proposal
-approval-tier: 2
+column: planned
+min-approval-requirement: manager
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T21:59:38+0200
 priority: 0
 severity: critical
 effort: medium
 task-type: security
 created: 2026-07-15T01:06:00+0200
-updated: 2026-07-15T01:06:00+0200
+updated: 2026-08-21T21:59:38+0200
 scope: project
 labels: [scenario-improvement, scen-029]
 current-owner: scenario-runner
@@ -99,3 +102,5 @@ LOW to implement (documentation + one rule line), HIGH to leave. Today every
 approval in the fleet is prose, and the fleet obeys prose.
 
 ## Approval log
+
+- 2026-08-21T21:59:38+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager, migrated from legacy approval-tier: 2 on this touch). Re-measured: rules/aimaestro/aimaestro-trdd-approval.md still teaches a hand-written `mandate: true`/`approved: true` block with zero mentions of `approval-token`; no rule anywhere under `rules/` references `aimaestro-trdd.sh verify`. The forgeability gap is unrepaired — a genuine mandate and a forged one remain the same object.

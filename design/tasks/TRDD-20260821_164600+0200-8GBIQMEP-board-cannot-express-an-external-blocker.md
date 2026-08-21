@@ -10,6 +10,7 @@ current-owner: ai-maestro-orchestrator-agent
 created-by: ai-maestro-orchestrator-agent
 assignee: unassigned
 task-type: infra
+priority: 1
 min-approval-requirement: none
 severity: high
 effort: medium

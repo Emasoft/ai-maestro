@@ -1,9 +1,12 @@
 ---
 trdd-id: 3Q4G9ZK6
 title: Purging a cemetery archive orphans the agent workdir with no UI path left to remove it
-column: proposal
+column: planned
 created: 2026-07-29T19:37:18+0200
-updated: 2026-07-29T19:37:18+0200
+updated: 2026-08-21T22:02:08+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:02:08+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
@@ -63,3 +66,8 @@ MED — it makes a purge more destructive than it is today, so the dialog copy a
 only a tombstone as input.
 
 ## Approval log
+
+- 2026-08-21T22:02:08+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager).
+  Re-measured against the live handler: `app/api/agents/cemetery/route.ts` DELETE still does only
+  `fs.unlinkSync(archivePath)` and returns — no tombstone lookup, no DeleteAgent hard-path routing,
+  no `~/agents/` guard, no workdir removal. The defect is unchanged from filing.

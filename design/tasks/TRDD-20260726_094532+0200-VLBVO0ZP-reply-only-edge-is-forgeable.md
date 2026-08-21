@@ -10,6 +10,7 @@ current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
 task-type: security
+priority: 2
 min-approval-requirement: manager
 mandate: false
 approved: true

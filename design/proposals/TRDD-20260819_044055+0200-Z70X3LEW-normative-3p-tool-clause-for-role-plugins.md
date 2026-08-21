@@ -1,13 +1,17 @@
 ---
 trdd-id: Z70X3LEW
 title: Normative 3P-TOOL clause family — role plugins bind to the pillar CLIs
-column: proposal
+column: planned
 created: 2026-08-19T04:40:55+0200
-updated: 2026-08-19T04:42:17+0200
-current-owner: hub-session-brrjk57p-phase2
+updated: 2026-08-21T22:00:37+0200
+current-owner: ai-maestro-hub-session
 created-by: hub-session-brrjk57p-phase2
+assignee: ai-maestro-hub-session
 task-type: docs
 min-approval-requirement: manager
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:00:37+0200
 priority: 2
 project-id: ai-maestro
 labels: [governance, 3-pillars, role-plugins, spec]
@@ -102,3 +106,12 @@ adoption was already dispatched as voluntary under BRRJK57P Phase 2 and the two 
 consumers (AMOA, AMAMA) have adopted.
 
 ## Approval log
+
+- 2026-08-21T22:00:37+0200 — **APPROVED (min-approval-requirement: manager)** by
+  ai-maestro-hub-session. Re-measured: `grep -c 3P-TOOL design/specs/3-pillars-spec.md` = 0 and
+  `spec-version` is still `2.0.0` — the clause has not landed, this is not obsolete. Its two
+  named references check out: `TRDD-IPSNDKGM` (porcelain output mode, cited by 3P-TOOL-04's
+  deferral clause) is `column: completed`, so the CLIs it depends on already exist; the proposal
+  text needs no rewrite since 3P-TOOL-04 is worded as a standing deferral allowance, not a
+  time-bound "not yet" claim. Additive spec clauses, low risk, no code change in this card.
+  Approved as written.

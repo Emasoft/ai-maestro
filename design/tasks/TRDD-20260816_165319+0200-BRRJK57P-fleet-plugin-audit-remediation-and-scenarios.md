@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:53:00+0200
+updated: 2026-08-21T15:57:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -412,6 +412,27 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Docs and memory — 2026-08-21T15:5x+0200 — acceptance box 6, only half of it is answerable here
+
+**Docs: every repo touched them.** All 14 have `.md` commits under `docs/`/`README.md` since
+2026-08-16, from 2 to 21.
+
+**Memory: NOT answerable from the repos, by construction.** Six repos show **0** commits under
+`.claude/project/memory`, and that is not evidence memory went unwritten — of the three memory
+scopes, only PROJECT lives inside a repo. LOCAL (`~/.claude/projects/<slug>/memory/`) and USER (the
+janitor's plugin-data dir) are outside every git tree, so a plugin that recorded its lessons at
+either scope is invisible to any repo-side count. Box 6 stays open on the memory half, and the
+reason is that no repo-side command can close it.
+
+**A finding about `visual-comunicator` EVAPORATED here, which is worth more than the box.** My first
+pass showed it at **0** docs commits — a third damning number for the repo I had already flagged for
+an unremediated audit and a single citing card. It has **no `docs/` directory at all**, and 39 `.md`
+commits since 08-16. The needle assumed a directory layout, for the eighth time today, and this
+time it did so while I was accumulating a case against one repo. **A third data point that agrees
+with two you already have is the one you check hardest, not the one you accept fastest.** The other
+two still stand — the confirmed-count I summed myself, and the card classification from the
+delegated read — but they stand on their own evidence, not on a pattern.
 
 ## Phase-3 status — 2026-08-21T15:5x+0200 — acceptance box 8, measured as NOT STARTED
 

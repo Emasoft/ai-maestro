@@ -366,6 +366,27 @@ describe('startFleetLivenessWatchdog', () => {
  * That made "classifying fine" and "never ran at all" byte-identical observations, and the
  * automaton sat dark from 2026-08-06 to 2026-08-20 (556 consecutive `empty-frame` skips) with no
  * signal anyone could have read. These pin the missing "I ran and I was fine".
+ *
+ * NEUTER RUNS (2026-08-21 — OBSERVED via scripts/dev/neuter, restore verified by blob hash).
+ * A COMPLEMENTARY PAIR, because one mutation cannot reach both halves: the heartbeat's existence
+ * and its `scanned > 0` gate fail in opposite directions, and each neuter leaves the other half's
+ * tests green.
+ *
+ *   s/^        cr\.scanned > 0 &&$/        false && true &&/     (heartbeat made inert)
+ *   → 3 red / 16 green:
+ *       logs a pass-ok line when the leg scanned agents and found nothing to do
+ *       prints immediately when the outcome CHANGES, without waiting for the throttle window
+ *       throttles an unchanged outcome so a steady fleet does not print every tick
+ *
+ *   s/cr\.scanned > 0 &&/cr.scanned >= 0 &&/                     (gate made always-true)
+ *   → 2 red / 17 green:
+ *       stays silent when the leg scanned nothing — an empty host must not print about nothing
+ *       logs stalled + token-blocked agents with the detect-only note
+ *
+ * The second run's OTHER casualty is the point of the gate: every pre-existing test in this file
+ * injects a `scanned: 0` continuity stub, so without the gate the heartbeat prints into all of
+ * them and their exact-count assertions break. The gate is load-bearing for the existing suite,
+ * not only for the new silence test.
  */
 describe('continuity heartbeat', () => {
   it('logs a pass-ok line when the leg scanned agents and found nothing to do', async () => {

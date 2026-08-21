@@ -5,6 +5,7 @@ column: human_review
 created: 2026-08-08T15:45:11+0200
 updated: 2026-08-21T18:09:41+0200
 current-owner: ai-maestro-hub
+created-by: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: infra
 min-approval-requirement: none

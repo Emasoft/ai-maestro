@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-08-18T20:19:21+0200
+updated: 2026-08-22T01:24:59+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -54,6 +54,23 @@ folder deletion, purge cemetery, STATE-WIPE.
 
 - [ ] A `SCEN-XXX_maintainer-title-g16.scen.md` exists, conforms to the 15 rules, and names this
       card.
+      **⚠ VERIFY THE PREMISE BEFORE WRITING IT — measured 2026-08-22, and it does not hold as
+      stated.** This card's title says *"dashboard MAINTAINER **creation** observes **ChangeTitle**
+      G15/G16"*, and those are two different pipelines. `G15`/`G16` are emitted **inside
+      `ChangeTitle`** (`services/element-management-service.ts`: `ChangeTitle` at :2481, the gates
+      at :3851-3881). Wizard **creation** runs `CreateAgent`, which has its own gate series; the
+      only creation-side route into `ChangeTitle` I found is **`PG04`** (:1488), a *repair* for a
+      titled agent that LOST its role-plugin — not the normal path. **So a scenario that merely
+      CREATES a MAINTAINER through the wizard may observe nothing, and would pin nothing** — the
+      exact "test that passes for an unknown reason" failure. Settle it first: either drive a
+      title CHANGE (SCEN-001's shape) so `ChangeTitle` genuinely runs, or prove that creation
+      reaches G15/G16 and record the file:line that shows it.
+      **And do NOT author a new fixture blindly:** `SCEN-018_maintainer-lifecycle` ALREADY stands
+      up a MANAGER plus a MAINTAINER with `ai-maestro-maintainer-agent` through the wizard, and
+      `SCEN-001_title-change-lifecycle` already drives title changes and verifies role-plugin
+      installs via the Config tab. If the observation can be added as a step to one of those, that
+      is a far smaller change than a 41st scenario file — this box's "a new SCEN file exists" was
+      written before either was checked.
 - [ ] The scenario has RUN against the live server; the G15/G16 `installed` observation is
       recorded (report + screenshot), or the failure is a bug card.
 - [ ] TRDD-JT3U4ZVM's last box is ticked citing that run, and that card leaves `blocked`.

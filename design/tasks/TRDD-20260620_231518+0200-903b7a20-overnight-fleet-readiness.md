@@ -3,7 +3,7 @@ trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-22T00:50:26+0200
+updated: 2026-08-22T01:13:55+0200
 min-approval-requirement: none
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -592,6 +592,17 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
          aimaestro-panel.sh)"`. A stale deployed copy is the live default here (see G10 part 1).
       3. Confirm the pushed content actually renders in the panel surface, not merely that the
          push exited 0. Delivery is the gate; a 0 exit only proves the CLI was reachable.
+      **MEASURED 2026-08-22 (parts 1-2 done, part 3 still open — box stays `[ ]`).** Ran the suite:
+      **5 PASS, 1 SKIP**, and the skip is `panel-push-live-delivery`, which needs `$AID_AUTH` plus
+      a real agent and states in its own message that it refuses to fake it (*"a mocked panel would
+      assert nothing about the surface that actually drops messages"*). **So the vacuous-skip trap
+      did NOT fire** — this was a real run, and the suite's honesty about what it cannot test is
+      the reason the result is trustworthy. `cmp -s` repo vs PATH copy → **IDENTICAL**.
+      What that establishes: the integration is wired, both CLI copies agree, and the caller
+      handles every degradation path (missing artifact, absent CLI, no target, `delivered=0`
+      parsing, target precedence). **What it does NOT establish: end-to-end delivery to a live
+      panel**, which is part 3 and needs an operator — the same gate as `96ZED7BA`'s last box.
+      G4 therefore moves from *un-gateable* to *wired and unit-verified, delivery pending*.
 - [ ] **G7** — API ↔ external plugins.
       **⏹ SPECCED 2026-08-22 (spec only — NOT worked).** The box named five plugins
       (pss, cpv, llm-externalizer, visual-communication, web-scenario-tester) as if all five were
@@ -611,6 +622,10 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
       backtick counts markdown code spans as calls — it scored amvcp at 14 "callers" when 10 were
       README/CLAUDE.md prose. Re-derive the split per plugin by READING the hits in their source
       lines; do not quote the table above as a count.
+      **STATUS 2026-08-22: G7 tracks G4 exactly** — its one real integration is the one G4 gates,
+      so G7 is now *wired and unit-verified, delivery pending an operator*, and it closes when G4
+      does. It does not need separate work, and the four non-integrations are measured absences
+      (2 unbuilt, 1 mentions-only, 1 unpublished), not pending items.
 - [ ] **G10** — core-plugin sync sweep.
       **⏹ SPECCED 2026-08-22T00:1x (spec only — NOT worked).** The box was one line with no
       checkable criterion, which is why it could not be delegated: a worker briefed from
@@ -650,10 +665,39 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
       the fix. This is a dependency of ONE sub-gate, not of the card, so it is recorded here
       rather than in `blocked-by:` — flipping the whole card to `column: blocked` over one gate
       would misstate the other ten.
-- [ ] **The bounded remainder in `## NEXT ACTION`** — `#45 presence` verb, the kanban 6-field
-      remainder, `#2` per-column move-permission, the two SECURITY-MEDIUM items
-      (`TRDD-15ff13ae` AID PoP replay, the federation comm-graph bypass), `#37` decoupling (gated
-      on a tier-2 proposal), Phase D scenarios, the USER-action deploy, and `#44`.
+- [ ] **The bounded remainder in `## NEXT ACTION`** — RE-DERIVED 2026-08-22 by a 4-unit colony
+      pass. **The list was mostly stale; 4 of its 8 items were not open work at all.** Measured,
+      per item, rather than inherited:
+      - `#45 presence` verb — **ALREADY SHIPPED.** `presence)` dispatches at
+        `scripts/aimaestro-agent.sh:147`, `cmd_presence()` is at `scripts/agent-commands.sh:255`,
+        and `gh issue view 45` reads **CLOSED**. No code was written; none was needed.
+      - kanban 6-field remainder — **ALREADY SHIPPED.** Verified no-op.
+      - `#2` per-column move-permission — **FIXED** (`1a276db9`). It was inert in TWO independent
+        ways and either alone would have kept it inert: `roles` were validated by the route but
+        silently dropped by the GitHub sync (a Status option carries no per-option metadata), so
+        they were never persisted for exactly the teams that can move tasks; and nothing ever
+        consulted them. Enforcement now sits in `updateTeamTask`, the one place BOTH the Next.js
+        route and the headless router land — guarding the route would have left the headless path
+        open. Pinned by a complementary neuter pair (enforcement and persistence red DIFFERENT
+        tests).
+      - AID PoP replay — **the card it cites, `TRDD-15ff13ae`, is archived at `column: cancelled`.**
+        The work was withdrawn. Whether the cancellation covered only the *approach*
+        (nonce-binding) while the *vulnerability* stands is a governance question, not a
+        remainder item. Not worked; escalated.
+      - federation comm-graph bypass — **REPRODUCED and FIXED** (`097b98a3`), and it turned out to
+        be the sharpest finding on this card. `validateMessageRoute` had exactly ONE call site
+        (`amp-service.ts:1287`); `deliverFederated` had none, so an external federated sender
+        reached any local agent ungated while the same message through the internal mesh was
+        gated. **Read the commit before building on it:** the fix currently denies ALL federated
+        delivery (a federated sender carries no title attestation ⇒ `senderRole` is always null ⇒
+        `communication-graph.ts:449` always denies), and NO test can detect that, because the only
+        federation test asserts a 403 and now passes for every input. Design question escalated to
+        the owner batch.
+      - `#37` decoupling — **NOT THIS CARD'S WORK.** Its gate ("pending proposal `c94c60e9`,
+        tier-2") has CLEARED; `c94c60e9` is `approved: true`, `column: planned`. Reassigned there.
+      - Phase D scenarios and the USER-action deploy — unchanged; the deploy is owner-only and
+        Phase D needs a live operator (same gate as `96ZED7BA`'s last box).
+      - `#44` — cross-repo (`ai-maestro-plugin`); issue/PR only, never a direct edit from here.
 - [ ] **`column: todo` is HONEST and stays** — the 2026-08-02 triage moved it `dev → todo` because
       nobody is working it, and that is still true. Do NOT read the ticks above as "nearly done":
       four internal gates and the whole bounded remainder are open. This box exists so the next

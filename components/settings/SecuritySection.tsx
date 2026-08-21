@@ -191,7 +191,15 @@ function DevModeTokenPanel() {
   }
 
   const generateToken = async () => {
-    if (!password) return
+    // NEVER return silently here. This used to be a bare `if (!password) return`
+    // next to a button disabled on the same condition, so an owner who clicked
+    // Generate without typing the password got NOTHING — no mint, no message, no
+    // way to tell a dead button from a broken server. Minting needs BOTH factors;
+    // if one is missing, say which.
+    if (!password) {
+      setError('Enter the governance password first — minting needs both the password and your passkey.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -313,6 +321,11 @@ function DevModeTokenPanel() {
             </span>
           </div>
 
+          <p className="text-xs text-gray-500">
+            Minting needs <strong className="text-gray-400">both</strong> factors: type the
+            governance password, then Generate will prompt for your passkey.
+          </p>
+
           <div className="flex items-center gap-2">
             <input
               type="password"
@@ -325,7 +338,10 @@ function DevModeTokenPanel() {
             />
             <button
               onClick={generateToken}
-              disabled={busy || !password}
+              // `busy` ONLY — deliberately not `|| !password`. A button disabled on
+              // an empty field is indistinguishable from a broken one; let the click
+              // through so generateToken() can say what is missing.
+              disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white rounded text-xs font-medium flex-shrink-0"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}

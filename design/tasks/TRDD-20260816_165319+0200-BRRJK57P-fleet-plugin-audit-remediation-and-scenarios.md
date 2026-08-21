@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:18:00+0200
+updated: 2026-08-21T15:22:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -410,6 +410,32 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Pillar-CLI probe — 2026-08-21T15:2x+0200 — axis 3 applied to this program's own tooling
+
+All four are on PATH and were exercised **through the bare command name**, not a repo-relative
+entry point:
+
+| cmd | path | `<cmd> help` | unknown flag |
+|---|---|---|---|
+| `trddgrep` | `~/.local/bin/trddgrep` | 0 | **2** |
+| `prrdgrep` | `~/.local/bin/prrdgrep` | 0 | **2** |
+| `specgrep` | `~/.local/bin/specgrep` | 0 | **2** |
+| `memgrep` | `~/.cargo/bin/memgrep` | 0 | **2** |
+
+**The contract that matters holds: an unknown flag fails LOUDLY with exit 2 (could-not-run) on all
+four** — none of them exits 0 on a flag it does not understand, which is the failure mode axis 3
+exists to catch.
+
+**One inconsistency, low severity:** `prrdgrep`/`specgrep`/`memgrep` accept `--help`; `trddgrep`
+rejects it — `could not run — unknown option --help — see trddgrep help`, exit 2. That is loud and
+carries a pointer, so it is defensible rather than broken; the cost is that a user typing `--help`
+gets help from three of four.
+
+**Recorded because I nearly wrote it up as a defect:** my probe called `--help` on all four, saw
+`trddgrep` alone exit 2, and started writing "trddgrep reports could-not-run for a help request".
+Reading the one line it printed showed it says exactly what to type instead, and `trddgrep help`
+exits 0. **A probe that uses the wrong invocation manufactures a finding about the tool.**
 
 ## Phase-1 coverage — 2026-08-21T15:1x+0200 — acceptance box 1, derived from disk
 

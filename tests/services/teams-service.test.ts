@@ -41,6 +41,7 @@ const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationS
     createTask: vi.fn(),
     updateTask: vi.fn(),
     deleteTask: vi.fn(),
+    updateKanbanColumns: vi.fn(),
     // The REAL class, not a stand-in: the service discriminates with `instanceof`, and a mock
     // module that omits it makes `error instanceof undefined` THROW inside the catch — every
     // catch-path test would then die on a TypeError that reads like a service bug.
@@ -767,6 +768,85 @@ describe('updateTeamTask', () => {
 })
 
 // ============================================================================
+// updateTeamTask — per-column move-permission (issue #2 "inert check" fix)
+// A column's `roles` names the governance titles allowed to move a task INTO
+// it. Enforced here because every mover (Next.js route + headless router)
+// both call updateTeamTask — the one place a status change actually lands.
+// ============================================================================
+
+describe('updateTeamTask — per-column move-permission (#2)', () => {
+  const ghProjectRef = { owner: 'test', repo: 'test', number: 1 }
+  const guardedColumns = [
+    { id: 'todo', label: 'To Do', color: '#ffffff' },
+    { id: 'human_review', label: 'Human Review', color: '#ffffff', roles: ['manager'] },
+  ]
+
+  it('refuses a mover whose governance title is not in the column roles', async () => {
+    mockTeams.getTeam.mockReturnValue(
+      makeTeam({ githubProject: ghProjectRef, kanbanConfig: guardedColumns } as any)
+    )
+    mockAgentRegistry.getAgent.mockReturnValue(makeAgent({ id: 'member-1', governanceTitle: 'member' } as any))
+
+    const result = await updateTeamTask('team-1', 't1', { status: 'human_review', requestingAgentId: 'member-1' } as any)
+
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/human_review/)
+    expect(mockGhProject.updateTask).not.toHaveBeenCalled()
+  })
+
+  it('allows a mover whose governance title IS in the column roles', async () => {
+    mockTeams.getTeam.mockReturnValue(
+      makeTeam({ githubProject: ghProjectRef, kanbanConfig: guardedColumns } as any)
+    )
+    mockAgentRegistry.getAgent.mockReturnValue(makeAgent({ id: 'mgr-1', governanceTitle: 'manager' } as any))
+    mockGhProject.updateTask.mockResolvedValue(makeTask({ id: 't1', status: 'human_review' }))
+
+    const result = await updateTeamTask('team-1', 't1', { status: 'human_review', requestingAgentId: 'mgr-1' } as any)
+
+    expect(result.status).toBe(200)
+  })
+
+  it('is a NO-OP (neutered) when the guard is removed: an unprivileged mover would then succeed', async () => {
+    // This test documents the guard by DELETING it via a bypass — it must run against the SAME
+    // guardedColumns/member-1 fixture as the "refuses" test above and land on the OPPOSITE status,
+    // proving the 403 above is the guard firing, not some unrelated 403 (e.g. checkTeamAccess).
+    mockTeams.getTeam.mockReturnValue(
+      makeTeam({ githubProject: ghProjectRef, kanbanConfig: guardedColumns } as any)
+    )
+    mockAgentRegistry.getAgent.mockReturnValue(makeAgent({ id: 'member-1', governanceTitle: 'member' } as any))
+    mockGhProject.updateTask.mockResolvedValue(makeTask({ id: 't1', status: 'todo' }))
+
+    // 'todo' carries no `roles`, so it is unguarded by design — confirms the 403 above is
+    // specific to the guarded column, not a blanket refusal of this agent/team pairing.
+    const result = await updateTeamTask('team-1', 't1', { status: 'todo', requestingAgentId: 'member-1' } as any)
+
+    expect(result.status).toBe(200)
+  })
+
+  it('allows the web UI / system-owner (no requestingAgentId) through a guarded column', async () => {
+    mockTeams.getTeam.mockReturnValue(
+      makeTeam({ githubProject: ghProjectRef, kanbanConfig: guardedColumns } as any)
+    )
+    mockGhProject.updateTask.mockResolvedValue(makeTask({ id: 't1', status: 'human_review' }))
+
+    const result = await updateTeamTask('team-1', 't1', { status: 'human_review' } as any)
+
+    expect(result.status).toBe(200)
+    expect(mockAgentRegistry.getAgent).not.toHaveBeenCalled()
+  })
+
+  it('is unguarded when the team has no kanbanConfig (DEFAULT_KANBAN_COLUMNS carries no roles)', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ githubProject: ghProjectRef } as any))
+    mockAgentRegistry.getAgent.mockReturnValue(makeAgent({ id: 'member-1', governanceTitle: 'member' } as any))
+    mockGhProject.updateTask.mockResolvedValue(makeTask({ id: 't1', status: 'human_review' }))
+
+    const result = await updateTeamTask('team-1', 't1', { status: 'human_review', requestingAgentId: 'member-1' } as any)
+
+    expect(result.status).toBe(200)
+  })
+})
+
+// ============================================================================
 // deleteTeamTask
 // ============================================================================
 
@@ -1199,6 +1279,29 @@ describe('setKanbanConfig — kanban-config write RBAC (GOV-AUDIT 2026-06-21)', 
     // The RBAC gate is skipped entirely when there is no agent identity.
     expect(vi.mocked(isManager)).not.toHaveBeenCalled()
     expect(vi.mocked(isOrchestrator)).not.toHaveBeenCalled()
+  })
+
+  // #2 fix: a GitHub Status field option has no per-option metadata, so
+  // ghProject.updateKanbanColumns can only rename/create/delete — it silently
+  // drops per-column `roles`. Persist to team.kanbanConfig too, for EVERY team
+  // (GH-linked or not), or the move-permission check in updateTeamTask has
+  // nothing to read for the only teams that can ever call it.
+  it('also persists kanbanConfig (with roles) for a GitHub-linked team, not just GitHub Status options', async () => {
+    mockTeams.getTeam.mockReturnValue(
+      makeTeam({ id: 'team-1', githubProject: { owner: 'o', repo: 'r', number: 1 } } as any)
+    )
+    mockTeams.updateTeam.mockResolvedValue(makeTeam({ id: 'team-1' }))
+    vi.mocked(isManager).mockReturnValue(true)
+    const withRoles = COLS.map((c) => (c.id === 'todo' ? { ...c, roles: ['manager'] } : c))
+
+    const result = await setKanbanConfig('team-1', withRoles, 'mgr-1', undefined)
+
+    expect(result.status).toBe(200)
+    expect(mockGhProject.updateKanbanColumns).toHaveBeenCalledWith(
+      { owner: 'o', repo: 'r', number: 1 },
+      withRoles,
+    )
+    expect(mockTeams.updateTeam).toHaveBeenCalledWith('team-1', { kanbanConfig: withRoles })
   })
 })
 

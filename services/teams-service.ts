@@ -1141,6 +1141,26 @@ export async function updateTeamTask(
     return { error: 'Cannot update task: team has no GitHub Project linked', status: 400 }
   }
 
+  // #2 fix: per-column move-permission was accepted+returned by setKanbanConfig
+  // and validated by the route's Zod schema, but nothing ever consulted it — a
+  // MEMBER could move a task into a `roles: ['manager']` column same as anyone
+  // else. Enforce it here, the one place every status change (the Next.js
+  // route AND the headless router both call updateTeamTask) actually lands.
+  // Web-UI/system-owner requests (no requestingAgentId) stay ungated, matching
+  // every other requestingAgentId-conditional check in this file.
+  if (status !== undefined && requestingAgentId) {
+    const targetColumn = (team.kanbanConfig || DEFAULT_KANBAN_COLUMNS).find((c) => c.id === status)
+    if (targetColumn?.roles && targetColumn.roles.length > 0) {
+      const mover = getAgent(requestingAgentId)
+      if (!mover?.governanceTitle || !targetColumn.roles.includes(mover.governanceTitle)) {
+        return {
+          error: `Only agents with governance title in [${targetColumn.roles.join(', ')}] may move a task into column "${status}"`,
+          status: 403,
+        }
+      }
+    }
+  }
+
   // GitHub Project is source of truth — update project item fields
   const ghAuth = ghProject.checkGhAuth()
   if (ghAuth) return { error: ghAuth, status: 503 }
@@ -1582,6 +1602,16 @@ export async function setKanbanConfig(teamId: string, columns: KanbanColumnConfi
       const ghAuth = ghProject.checkGhAuth()
       if (ghAuth) return { error: ghAuth, status: 503 }
       await ghProject.updateKanbanColumns(team.githubProject, columns)
+      // #2 fix (inert move-permission check): a GitHub Status field option has
+      // no per-option metadata, so updateKanbanColumns above can only rename/
+      // create/delete columns — it silently drops `roles`. Every team that can
+      // reach updateTeamTask below (the move path) MUST have a githubProject
+      // (updateTeamTask 400s otherwise), so without this write the roles this
+      // very PUT just validated could never be persisted or enforced for the
+      // only teams that actually move tasks through this service. Persist to
+      // team.kanbanConfig too — updateTeamTask reads that field, never the
+      // GitHub-derived view, to decide who may move a task into a column.
+      await updateTeam(teamId, { kanbanConfig: columns })
       return { data: { columns }, status: 200 }
     }
     await updateTeam(teamId, { kanbanConfig: columns })

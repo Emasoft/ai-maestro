@@ -181,6 +181,25 @@ const continuityStore = new Map<string, ContinuityState>()
 /** Clear the continuity state — for tests only. */
 export function resetContinuityStore(): void {
   continuityStore.clear()
+  continuityHeartbeat.lastSignature = null
+  continuityHeartbeat.ticksSinceLog = 0
+}
+
+/** Heartbeat bookkeeping for the continuity leg (TRDD-7UWQ92WK).
+ *
+ *  WHY THIS EXISTS: the leg logs only `fired` and non-`no_event` skips, so a HEALTHY pass printed
+ *  NOTHING — which made "classifying fine" and "never ran at all" byte-identical observations. The
+ *  automaton then sat dark from 2026-08-06 to 2026-08-20 (556 consecutive `empty-frame` skips) and
+ *  nothing could have told anyone, because the only other state it can be in is also silent. This
+ *  line is the missing "I ran and I was fine": silence now means the leg is NOT RUNNING, full stop.
+ *
+ *  Throttled two ways so it cannot become the per-agent-per-tick spam the quiet design avoided:
+ *  it prints when the outcome SIGNATURE changes, and otherwise at most once every
+ *  `CONTINUITY_HEARTBEAT_EVERY_TICKS` ticks. At the 5-minute default interval that is ~hourly. */
+const CONTINUITY_HEARTBEAT_EVERY_TICKS = 12
+const continuityHeartbeat: { lastSignature: string | null; ticksSinceLog: number } = {
+  lastSignature: null,
+  ticksSinceLog: 0,
 }
 
 /**
@@ -448,6 +467,25 @@ export async function runFleetLivenessTick(
       // Only non-'no_event' skips reach here, so this stays quiet on a healthy fleet instead of
       // printing a line per agent per tick forever.
       for (const s of cr.skipped) log(`[FleetContinuity] ${s.name || s.agentId}: not actuated (${s.reason})`)
+      // The heartbeat (TRDD-7UWQ92WK). Both loops above are silent on a healthy pass, so without
+      // this line "the leg is fine" and "the leg is not running" look identical from the log —
+      // which is how a two-week dark run went unnoticed. Signature-keyed so a steady fleet prints
+      // ~hourly, not every tick, and any CHANGE surfaces immediately.
+      // Gated on `scanned > 0`: with no agents to look at there is nothing this leg could have
+      // detected, and the ambiguity that actually cost two weeks was "N agents scanned, all fine"
+      // vs "the leg is dead" — which this still covers. It also keeps an empty host from printing
+      // a line about nothing forever.
+      const contSig = `${cr.scanned}/${cr.fired.length}/${cr.skipped.length}`
+      continuityHeartbeat.ticksSinceLog += 1
+      if (
+        cr.scanned > 0 &&
+        (contSig !== continuityHeartbeat.lastSignature ||
+          continuityHeartbeat.ticksSinceLog >= CONTINUITY_HEARTBEAT_EVERY_TICKS)
+      ) {
+        log(`[FleetContinuity] pass ok: scanned ${cr.scanned}, fired ${cr.fired.length}, skipped ${cr.skipped.length}`)
+        continuityHeartbeat.lastSignature = contSig
+        continuityHeartbeat.ticksSinceLog = 0
+      }
     } catch (err) {
       log(`[FleetContinuity] continuity pass failed (non-fatal): ${(err as Error)?.message || err}`)
     }

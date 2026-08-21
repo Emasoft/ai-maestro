@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runFleetLivenessTick, startFleetLivenessWatchdog } from '@/lib/fleet-liveness-watchdog'
+import { runFleetLivenessTick, startFleetLivenessWatchdog, resetContinuityStore } from '@/lib/fleet-liveness-watchdog'
 import type { FleetLivenessSnapshot } from '@/lib/fleet-liveness'
 
 /**
@@ -356,5 +356,68 @@ describe('startFleetLivenessWatchdog', () => {
     stop?.()
     expect(startFleetLivenessWatchdog({ intervalMs: 0 })).toBeNull()
     expect(startFleetLivenessWatchdog({ intervalMs: -1 })).toBeNull()
+  })
+})
+
+/**
+ * TRDD-7UWQ92WK — the continuity heartbeat.
+ *
+ * The leg logs only `fired` and non-`no_event` skips, so a HEALTHY pass used to print NOTHING.
+ * That made "classifying fine" and "never ran at all" byte-identical observations, and the
+ * automaton sat dark from 2026-08-06 to 2026-08-20 (556 consecutive `empty-frame` skips) with no
+ * signal anyone could have read. These pin the missing "I ran and I was fine".
+ */
+describe('continuity heartbeat', () => {
+  it('logs a pass-ok line when the leg scanned agents and found nothing to do', async () => {
+    resetContinuityStore()
+    const logs: string[] = []
+    await runFleetLivenessTick({
+      now: () => 1_000,
+      log: (m) => logs.push(m),
+      scan: async () => snap(),
+      runContinuity: async () => ({ scanned: 3, fired: [], skipped: [] }),
+    })
+    // The whole point: a pass with nothing to report is no longer silent.
+    expect(logs.some((l) => l === '[FleetContinuity] pass ok: scanned 3, fired 0, skipped 0')).toBe(true)
+  })
+
+  it('throttles an unchanged outcome so a steady fleet does not print every tick', async () => {
+    resetContinuityStore()
+    const logs: string[] = []
+    const opts = {
+      now: () => 1_000,
+      log: (m: string) => logs.push(m),
+      scan: async () => snap(),
+      runContinuity: async () => ({ scanned: 3, fired: [], skipped: [] }),
+    }
+    await runFleetLivenessTick(opts)
+    await runFleetLivenessTick(opts)
+    await runFleetLivenessTick(opts)
+    // First tick prints (signature changed from nothing); the identical two do not.
+    expect(logs.filter((l) => l.startsWith('[FleetContinuity] pass ok:'))).toHaveLength(1)
+  })
+
+  it('prints immediately when the outcome CHANGES, without waiting for the throttle window', async () => {
+    resetContinuityStore()
+    const logs: string[] = []
+    const base = { now: () => 1_000, log: (m: string) => logs.push(m), scan: async () => snap() }
+    await runFleetLivenessTick({ ...base, runContinuity: async () => ({ scanned: 3, fired: [], skipped: [] }) })
+    await runFleetLivenessTick({
+      ...base,
+      runContinuity: async () => ({ scanned: 3, fired: [], skipped: [{ agentId: 'a1', name: 'alpha', reason: 'empty-frame' }] }),
+    })
+    expect(logs.some((l) => l === '[FleetContinuity] pass ok: scanned 3, fired 0, skipped 1')).toBe(true)
+  })
+
+  it('stays silent when the leg scanned nothing — an empty host must not print about nothing', async () => {
+    resetContinuityStore()
+    const logs: string[] = []
+    await runFleetLivenessTick({
+      now: () => 1_000,
+      log: (m) => logs.push(m),
+      scan: async () => snap(),
+      runContinuity: async () => ({ scanned: 0, fired: [], skipped: [] }),
+    })
+    expect(logs.some((l) => l.startsWith('[FleetContinuity] pass ok:'))).toBe(false)
   })
 })

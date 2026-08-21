@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-21T16:47:00+0200
+updated: 2026-08-21T16:53:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -268,6 +268,37 @@ work.
 - Nothing that was deleted is unrecoverable: each removal is either a `git mv` into `scripts/` or a
   `.trashcan/` entry with its manifest.
 
+## Acceptance
+
+**Added 2026-08-21T16:53 — this card had ZERO checkboxes of either kind and no Acceptance section
+at all, so it could never pass the completion gate, WHILE blocking `TRDD-BRRJK57P`.** Nothing
+below revises the card's scope; it makes the already-decided remaining work expressible. (The gate
+is written over unchecked boxes, so a card with no boxes passes having read nothing — the vacuity
+`TRDD-5YRLA53W` exists to close. Found by the orchestrator's boxless census: 3 of 122 cards, and
+this is the one that matters, because it gates another card.)
+
+- [x] Step 1 — provenance established per file. 2 unknowns ANSWERED: AI Maestro's own, absent from
+      all fetched history and from the fleet, both zeros positive-controlled.
+- [x] Step 2 — each file READ, never executed (the `--help`-performs-its-side-effect rule).
+- [x] Step 3 — instruction surface checked FIRST. Premise **REFUTED**: both live docs are correct
+      as written. The surviving hazard is that **the executables themselves are the documentation**.
+- [x] Census corrected **8 → 7**: `aimaestro-agent-bash` is an 18-byte symlink and belongs in the
+      launcher bucket. A byte-compare census is structurally blind to symlinks — they have no bytes
+      of their own, so they land in the unowned bucket by construction.
+- [ ] **OWNER DECISION 1 — disposal of the 2 superseded executables.** They encode the pre-2026-07-08
+      GitHub-as-SSOT model against the ratified "the internal board is truth", and hardcode a
+      `backlog` column the 17-column vocabulary does not admit. They live in `~/.local/bin`, i.e.
+      **outside any project tree**, so `/janitor-safe-delete` refuses them and `git` cannot undo the
+      removal. **This is the whole of the remaining risk** and it is not this session's to take.
+      NOTE: step 4's own text says *"it is inside a project tree — recoverable, so no approval is
+      needed"* — that premise is FALSE for these files and is superseded by this box.
+- [ ] **OWNER DECISION 2 — the `kanban-sync.py` install gap.** The 🛑 STOP block establishes it is a
+      **declared tool of a shipped skill** (`ai-maestro-plugin` `skills/team-kanban/SKILL.md:5,34`),
+      so step 4 would have broken it. Not litter — an install gap, and the fix belongs in that
+      repo: a cross-repo issue, which needs the owner's word.
+- [ ] Once both are ruled: re-run the byte-compare census (the run, never the earlier figure — a
+      census is a snapshot) and confirm the unowned bucket is empty or deliberately non-empty.
+
 ## Estimated risk
 
 MEDIUM, and concentrated entirely in step 4. Removing an executable another session is invoking
@@ -279,3 +310,6 @@ risk and are most of the value.
 - 2026-08-16T20:37:04+0200 — MANDATE issued by the hub session (min-approval-requirement: none).
   Pre-approved: Tier-0 — this repo's own docs and its own installed scripts, reversible, local.
   Derived (EHT) from TRDD-BRRJK57P's axis-3 pass. No approval request was sent.
+- 2026-08-21T16:53:40+0200 — Acceptance section ADDED (it had none, of either kind).
+  Scope unchanged; the two OWNER decisions that were already the only remaining work are now
+  expressible, so this card can be closed once ruled instead of gating TRDD-BRRJK57P forever.

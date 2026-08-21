@@ -204,3 +204,12 @@ separately rather than folded in here.
 
 - 2026-08-21T16:29:09+0200 — COMPLETED by ai-maestro-hub-session. Decision (b) REFUSE taken on
   four measurements, shipped as `6c510fc7`, two neuters recorded, all six acceptance boxes met.
+- 2026-08-21T16:34:13+0200 — CORRECTION (append-only, the one edit a terminal card admits). This
+  card's shipped section says the pillar cluster reads "117 pass / 120, the 3 reds being
+  pre-existing". Measured on the project's PINNED Node (`bash scripts/with-node.sh`) the true
+  numbers are **119 / 120 and ONE red** — my shell was on Node v26.5.0 against an `engines` cap of
+  `<26`, and two of those three "pre-existing failures" were manufactured by it. The verdict on
+  THIS card is unchanged and is now better supported: the fix is green on the sanctioned harness,
+  and the reverted-at-HEAD comparison that separated mine from pre-existing stays valid because
+  both arms ran in the same environment. Full refutation, and why a wrong harness reads as rigour:
+  TRDD-W636KQBN.

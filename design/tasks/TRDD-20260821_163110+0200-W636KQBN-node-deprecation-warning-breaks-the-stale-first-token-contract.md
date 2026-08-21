@@ -1,12 +1,12 @@
 ---
 trdd-id: W636KQBN
-title: A Node deprecation warning reaches stderr before STALE, breaking the pillar CLIs first-token contract
+title: trddgrep validate --rule STALE-COLUMN returns one finding where its test expects two
 column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T16:31:10+0200
-updated: 2026-08-21T16:31:10+0200
+updated: 2026-08-21T16:34:13+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -23,92 +23,105 @@ eht: []
 blocked-by: []
 release-via: none
 priority: 2
-severity: medium
+severity: low
 effort: small
-labels: [pillar-tooling, cli-contract, toolchain]
+labels: [pillar-tooling, cli-contract, toolchain, harness]
 external-refs: []
 ---
 
-# `STALE` is no longer the first stderr token, and the test that says so is right
+# `trddgrep validate --rule STALE-COLUMN` returns 1 finding, its test expects 2
 
-## Problem — reproduced first-hand, not read off a failing assertion
+## ⏵ STATE — READ THIS FIRST — 2026-08-21T16:34
 
-`tests/unit/pillar-grep-cli.test.ts` asserts that a stale pillar edit prints **`STALE ` as its
-FIRST stderr token**, and the test's own comment says why that matters: *"A retry loop keying on
-the exit code alone would spin forever in the wrong directory. The token is the only thing that
-separates 're-read and retry' from 'you are not where you think you are' — no code in the
-trichotomy can carry it."* Exit 2 means BOTH.
+**THIS CARD WAS FILED ON A REFUTED PREMISE AND HAS BEEN RETITLED. The refutation is the more
+useful half and is kept below, not deleted.** Filed at 16:31 claiming a broken CLI stderr
+contract; refuted at 16:34 by re-running on the project's pinned Node. What survives is one real
+failing test — the STALE-COLUMN count — and one process hazard worth more than it.
 
-Reproduced 2026-08-21 against a throwaway fixture under `mktemp -d` (removed after; no live
-corpus touched):
+NEXT ACTION: reproduce the STALE-COLUMN failure **under `bash scripts/with-node.sh`**, then decide
+whether the fixture drifted (one card no longer produces the finding) or the rule stopped firing.
+
+## The one real defect
+
+Under the pinned toolchain, `tests/unit/pillar-grep-cli.test.ts` fails exactly one test:
 
 ```
-$ npx tsx scripts/prrdgrep.mjs edit S7.4 --expect 'not there' --replace X --design-dir $T/design
+FAIL > trddgrep validate — --min-severity and --rule actually filter
+     > --rule STALE-COLUMN prints exactly the 2 STALE-COLUMN findings and exits 0
+AssertionError: expected [ Array(1) ] to have a length of 2 but got 1
+```
+
+Undiagnosed on purpose. Two shapes, and they are not the same bug: a fixture whose second
+STALE-COLUMN card stopped qualifying (one-line fix) versus the rule itself no longer firing on a
+shape it used to catch (not a one-line fix, and it would mean the linter silently got weaker).
+**Reproduce before guessing** — a count that dropped by one is exactly the kind of finding that
+gets "fixed" by editing the expectation.
+
+## ⏹ REFUTED 2026-08-21T16:34 — there is no stderr-contract break. I measured the wrong Node.
+
+The original claim: *"Node's DEP0205 warning about the tsx loader's `module.register()` reaches
+stderr before `STALE `, so the pillar CLIs' first-token contract is broken."* Reproduced from a
+shell against a `mktemp` fixture, exit code and all — **and the shell was on Node v26.5.0.**
+
+Re-run through the project's own pin:
+
+```
+$ node -v                                   → v26.5.0     ← my shell
+$ bash scripts/with-node.sh node -v         → v22.23.1    ← the project's pin
+
+$ bash scripts/with-node.sh node --import tsx scripts/prrdgrep.mjs edit S7.4 \
+      --expect 'not there' --replace X --design-dir $T/design
 exit=2
-stderr:
-  (node:81088) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
-  (Use `node --trace-deprecation ...` to show where the warning was created)
-  STALE prrdgrep: The content of the TRDD/PRRD/SPEC file changed since your command was enqueued…
+stderr line 1: STALE prrdgrep: The content of the … changed since your command was enqueued.
 ```
 
-**The tool is emitting `STALE ` correctly.** Node's own deprecation warning gets to stderr first,
-so `stderr.startsWith('STALE ')` is false — and so is the same check for any consumer that keys on
-the first token, which is the whole point of having one.
+**`STALE ` is the first token. The contract holds. The tool was never broken.**
 
-**This is a real contract break, not a test that needs relaxing.** A machine consumer reading the
-first stderr token now reads `(node:81088)`.
+| suite | Node 26 (my shell) | Node 22 (`with-node.sh`) |
+|---|---|---|
+| `pillar-grep-cli.test.ts` | 3 failed / 32 passed | **1 failed / 34 passed** |
+| the 6-file pillar cluster | 3 failed / 117 passed | **1 failed / 119 passed** |
 
-## What is and is not explained
+Two of the three "pre-existing failures" I reported were **manufactured by my own shell**.
 
-Three tests fail in `pillar-grep-cli.test.ts` at HEAD (measured with an unrelated change reverted,
-so they are not fallout from it — same three names, same count, before and after):
+### Why this was convincing, and what actually catches it
 
-| test | explained by this card? |
-|---|---|
-| `prrdgrep edit … prints STALE as its FIRST stderr token` | **yes** — reproduced above |
-| `specgrep edit … blocks the same command on its second run` | **yes, by inspection** — the identical `stderr.startsWith('STALE ')` assertion, same shim. Not separately reproduced; say so rather than claim it |
-| `trddgrep validate --rule STALE-COLUMN prints exactly the 2 STALE-COLUMN findings` | **NO** — expects 2 findings, gets 1. A different failure that happens to share the word STALE; undiagnosed, and it needs its own reproduction before anyone guesses at a cause |
+I did the right things and still got it wrong: I split mine from pre-existing by reverting my
+change and re-running at HEAD (correct), and I reproduced from a shell rather than trusting the
+assertion (correct). **Both measurements ran in the same wrong environment, so agreeing with each
+other proved nothing.** The corpus rule is already written — *verify the HARNESS before blaming
+the component* — and rigour inside a wrong harness reads exactly like rigour.
 
-The third is listed because it is in the same red set, not because it belongs to this card. If it
-turns out to be a fixture that drifted, it is a one-line fix; if the rule stopped firing, it is
-not. **Do not fold it in without reproducing it.**
+The tell was in output I had already printed and skimmed past: `node -v` → **v26.5.0**, next to a
+`package.json` whose `engines` caps at `<26`, in a repo whose CLAUDE.md opens by calling Node 22
+*"a hard ABI constraint, not a preference"* and gives the exact prefix to use.
 
-## The likely fix, and the one it must not be
-
-`DEP0205` comes from the `tsx` loader's `module.register()`, on the Node in use — it is not our
-call site. Candidates, cheapest first:
-
-- suppress deprecation noise on the CLI shims (`NODE_OPTIONS=--no-deprecation`, or
-  `process.removeAllListeners('warning')` in the shim before the loader runs) — but a blanket
-  suppression also hides warnings we would want;
-- write the machine-facing diagnostic to a channel Node does not share (stdout is taken by the
-  porcelain contract, so this means fd 3 or a `--porcelain`-style error mode) — bigger, and it
-  changes a published contract;
-- bump/replace the loader once `tsx` moves to `registerHooks()`.
-
-**What it must NOT be: relaxing the assertion to `stderr.includes('STALE ')`.** That is the exact
-shape of a test rewritten to match a defect — `includes` is satisfied by a STALE line buried under
-any amount of noise, which is the condition the contract exists to forbid.
+**The gap is that nothing enforces it at the point of use.** Yarn checks `engines` before running a
+*script*, so `yarn test` is protected — but `npx vitest run <file>`, which is what anyone reaches
+for to run one file, bypasses that entirely and fails in a way that looks like a product bug. That
+is worth its own card if the STALE-COLUMN fix does not already force the habit.
 
 ## Verification
 
-- The reproduction above exits 2 with `STALE ` as the first stderr byte.
-- The three named tests: the two STALE ones green; the third stated explicitly as in or out of
-  scope, never silently left red.
-- **Neuter:** re-introduce the noise (prepend any stderr write before the diagnostic) → exactly the
-  two STALE tests redden.
+- The STALE-COLUMN failure reproduced **under `with-node.sh`**, with the cause named before any
+  edit — fixture drift or rule regression, stated explicitly.
+- If it is the rule: a neuter recorded by name. If it is the fixture: the seeded card is shown to
+  produce the finding, so the count is 2 because two cards qualify, not because the number was
+  edited to match.
+- Every measurement in this card re-run through `bash scripts/with-node.sh`, never a bare `npx`.
 
 ## Acceptance
 
-- [ ] The `STALE ` first-token contract holds under the current toolchain, reproduced from a shell
-      and not only from vitest.
-- [ ] Both STALE tests green, with the assertion still `startsWith`, never widened to `includes`.
-- [ ] The `trddgrep validate --rule STALE-COLUMN` failure is reproduced and either fixed here or
-      given its own card — not left in the red set unexplained.
-- [ ] Neuter run recorded by name.
+- [ ] `pillar-grep-cli.test.ts` is green under `bash scripts/with-node.sh npx vitest run`.
+- [ ] The cause is named (fixture vs rule) and recorded here, from a reproduction, not a guess.
+- [ ] The expectation is NOT edited to match the observed count unless the fixture is shown to be
+      the thing that changed.
+- [ ] Neuter run recorded by name, if the fix touches the rule.
 
 ## Approval log
 
-- 2026-08-21T16:31:10+0200 — MANDATE (self, Tier-0): our own CLI, our own repo, reversible, no
-  baseline/governance/release surface. Found while closing TRDD-DXQNUJII; filed separately rather
-  than folded in, because a red set found during other work is a different card's evidence.
+- 2026-08-21T16:31:10+0200 — MANDATE (self, Tier-0): our own CLI, our own repo, reversible.
+- 2026-08-21T16:34:13+0200 — RETITLED after self-refutation. The stderr-contract premise was an
+  artifact of running on Node 26 instead of the project's pinned Node 22; two of the three
+  failures it was filed for do not exist on the sanctioned harness. The refuted claim is kept in
+  full above, because the reason it was convincing is the transferable part.

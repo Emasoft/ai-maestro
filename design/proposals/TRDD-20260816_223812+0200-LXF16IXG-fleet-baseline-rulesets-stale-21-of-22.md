@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T22:38:12+0200
-updated: 2026-08-16T22:44:32+0200
+updated: 2026-08-21T16:24:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -117,7 +117,43 @@ control repo under the identical query returns both types. That matches the code
 **conditionally** — so this repo was written by a newer applier, which is why it is the one current
 repo. It is the shape the others should converge on, not an anomaly to normalize away.
 
+## ⏹ TWO CORRECTIONS 2026-08-21T16:2x — read these BEFORE approving or refusing this proposal
+
+Neither touches the **Problem**; both change what an approver is deciding. Recorded by the hub
+session, verified first-hand, without approving or executing anything (this card is
+`min-approval-requirement: manager`).
+
+**1. The trap below is CLOSED. Do not act on it.** `~/.claude/rules/manager-approval-defaults.md`
+was repaired on **2026-08-20 01:52** — four days after this card was written. Measured just now:
+`2026-08-13` appears **2×** (was 0), `bypass_actors: [{actor_id:5,` at `:114` (was `[]`), and
+`required_approving_review_count:0` at `:132` (was `1`). So the "an agent restoring the baseline
+as-is would re-impose the lock, Tier-0 EXEMPT, nothing would stop it" hazard no longer exists on
+this machine. **The section is kept verbatim below as the dated record of a real hazard that was
+real when written** — deleting it would erase why the repair happened.
+
+**2. A card filed FIVE DAYS LATER may dissolve this one's diagnosis, and this card cannot know
+it.** `TRDD-SX5FPMG0` (2026-08-21, still `proposal`) — *"Branch-protection baseline shape is derived
+from the APPLIER's ambient context, not from the repo"* — finds that the payload's shape depends on
+**who runs the applier** (`require_pull_request_for()` reads the calling process's env;
+`detect_required_status_checks()` reads the caller's CWD). If that holds, then a fleet scan showing
+three fields "drifted independently" may be measuring **which writer touched each repo last**, not
+staleness — and, worse, *any* conformance check re-deriving the expected payload in its own context
+agrees with whichever writer shares that context. This card cites SX5FPMG0 **0 times**, because it
+predates it.
+
+**Consequence for the decision, stated rather than assumed:** the **Problem** may well stand — an
+independent sweep on 2026-08-20 still found 8 of 9 repos carrying the pre-ruling `bypass_actors:
+[]` — but the **Proposed fix** (a fleet-wide converge) is exactly what the standing no-go forbids
+until SX5FPMG0 pins the evaluation context. **Approving this card as written would authorize a
+fleet write whose target shape is currently undefined.** The honest options for the approver are:
+hold it until SX5FPMG0 resolves, or supersede it with a card that fixes the applier first and the
+fleet second. `blocked-by:` is deliberately NOT set — a non-empty `blocked-by` would move this card
+to `column: blocked` and pull it out of the approval queue, and it is pending a decision, not
+blocked work.
+
 ## The trap any fix must avoid, and it is already live on this machine
+
+> **⚠ CLOSED 2026-08-20 — see correction 1 above. Kept verbatim as the dated record.**
 
 **The machine-global IND rule `~/.claude/rules/manager-approval-defaults.md` still states the
 PRE-ruling shape.** An agent "restoring the ratified baseline as-is" from that prose would

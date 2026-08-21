@@ -1,12 +1,13 @@
 ---
 trdd-id: MN0Q1IA2
 title: USER nine-point fleet-hardening directive — updates cadence, auto-update, rotator, unblock, ledger, agentlenspro
-column: dev
+column: blocked
+pre-block-column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-07T11:42:43+0200
-updated: 2026-08-21T13:46:53+0200
+updated: 2026-08-21T13:49:27+0200
 implementation-commits: [5438312f, 71b9f796]
 current-owner: ai-maestro
 created-by: user
@@ -21,7 +22,7 @@ approval-datetime: 2026-08-07T11:42:43+0200
 derived: false
 npt: []
 eht: [XV9BLQC5, Y1ZWU998]
-blocked-by: []
+blocked-by: [DPPYVLVH]
 release-via: none
 priority: 1
 severity: high
@@ -53,7 +54,7 @@ anything. Do not trust this card's prose about the code; trust the code.**
 | 1 marketplaces 4 h, one CLI command | ✅ `5438312f` |
 | 2 plugins auto-update via the safe editor | ✅ `71b9f796` |
 | **3 rotator working** | ⏳ **OPEN — USER-GATED.** `scopedOnly` (`17e129d6`) is live; what remains is the dead-refresh account, which needs the USER's `/login`. Corroborated live this session: the tick status reads `nextAction: reauth-needed`, `reason: refresh-dead`, `stuck: all-maxed` |
-| **4 post-rotation unblock** | ⏳ **OPEN — the only agent-actionable item left.** The MODEL half is complete (`planModelFallback`); the **ESC/resume half** is open. First live model switch is tracked on `TRDD-DPPYVLVH`, not here |
+| **4 post-rotation unblock** | ⏳ **OPEN — USER-GATED, not agent-actionable.** BOTH halves are built: `planModelFallback` (model) and `lib/fleet-continuity.ts:193` injecting `ESC_KEYSTROKE` (ESC). What is left is ARMING, tracked on `TRDD-DPPYVLVH` (`column: human_review`). Unchecked = awaiting the USER |
 | 5 auto-answer the AskUser menu | ✅ shipped dark `8e03e32f` (arming the flag is USER-gated) |
 | — | *there is no item 6 — the USER's list skipped it* |
 | 7 no headed chrome-for-testing windows | ✅ verified live |
@@ -61,10 +62,19 @@ anything. Do not trust this card's prose about the code; trust the code.**
 | 9 ledger monitors every workdir + project settings file | ✅ same three commits, 28 watch dirs |
 | 10 daemon sources accounts/subscriptions/usage/costs from agentlenspro | ✅ **`TRDD-SLSSUIQ8` (2026-08-08)**, re-measured by observed effect 2026-08-21; COSTS residue named and deliberately not built |
 
-**NEXT ACTION (one step, runnable as written):** item 4's ESC/resume half — read §4
-(*"Post-rotation unblock"*) **and re-verify its premises against the tree before writing a line**,
-because §4's own text already records one refutation in place (*"…AND THEN THE WIRING PLAN ITSELF
-WAS REFUTED"*) and this card's base rate for stale premises is 8.
+**NEXT ACTION — none for an agent. This card is BLOCKED on the USER, and its column now says so.**
+Both remaining items are built and unarmed:
+- **item 3** needs the USER's `/login` on the dead-refresh account (the live tick reads
+  `reason: refresh-dead`, `stuck: all-maxed`);
+- **item 4** needs the model-fallback leg ARMED — `TRDD-DPPYVLVH`, `column: human_review`.
+
+It sat at `column: dev` while nobody was working it, which is the failure the kanban rule names:
+a WORK column asserts someone is on it right now, and an untrue column is worse than an unstarted
+card because it hides the stall from the only view anyone checks. Moved to `blocked` with
+`blocked-by: [DPPYVLVH]` and `pre-block-column: dev`; restore it when the USER arms either leg.
+
+**If you resume anyway, verify before building.** This card's base rate for stale premises is
+NINE, one of them inside the acceptance gate itself.
 
 **SUPERSEDED — do NOT carry forward:**
 - *"Three items are DONE and VERIFIED; six remain"* — a hand tally, wrong by four.
@@ -659,8 +669,16 @@ code shape** (see Verification below).
 - [ ] **4.** Post-rotation unblock (ESC to resume, or switch to Opus) — the MODEL half is already
       complete (`planModelFallback` makes the whole decision from windows; the "one unwired
       function" framing was refuted in place at §"…AND THEN THE WIRING PLAN ITSELF WAS REFUTED").
-      What is open is the ESC/resume half — and note the model half's own first live switch is
-      tracked separately on `TRDD-DPPYVLVH`, not here.
+      ~~What is open is the ESC/resume half~~ — **struck 2026-08-21: this box contradicted its own
+      section, which records `ESC is wired too`. Verified first-hand: `lib/fleet-continuity.ts:193`
+      injects `ESC_KEYSTROKE` (imported from `lib/continuity-registry`). NINTH stale premise, and
+      the first found INSIDE the acceptance gate rather than in the prose above it — the box a
+      reader trusts most was the one asserting work that had already shipped.**
+      **Nothing agent-actionable remains on item 4.** Both halves are built; what is left is
+      ARMING, which is the USER's, and is already tracked on `TRDD-DPPYVLVH`
+      (`column: human_review`, correctly parked). The box stays UNCHECKED on purpose: this card
+      ticks by OBSERVED behaviour, and no live post-rotation unblock has been observed because the
+      leg has never been armed. Unchecked here means *awaiting the USER*, not *awaiting an agent*.
 - [x] **5.** Auto-answer the AskUser menu with the default/first option — **SHIPPED DARK** (this
       box said "NOT STARTED" while `8e03e32f feat(fleet): AskUser auto-answer leg — accept a
       dwelled menu's default, ships dark` had landed: `lib/fleet-askuser-autoanswer.ts`, wired as

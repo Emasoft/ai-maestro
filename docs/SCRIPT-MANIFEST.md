@@ -20,8 +20,33 @@ fails the build otherwise. Per **R23.8**, announcing a verb is part of shipping 
 verb looks absent, and a plugin that believes the layer lacks what it needs is pushed back toward
 `/api/*`.
 
+> ## ⚠ INVOKE EVERY SCRIPT WITH ITS `.sh` SUFFIX — there are no bare-name aliases
+>
+> `aimaestro-trdd` is **`command not found`**. `aimaestro-trdd.sh` works. This holds for all
+> **16** `aimaestro-*` scripts and for every other script in this manifest: **0 of 16 resolve by
+> bare name** in `~/.local/bin`, deliberately and permanently.
+>
+> **Read this before you conclude a tool is missing.** An agent that types the natural name and
+> gets `command not found` concludes the CLI does not exist and reaches for `/api/*` instead —
+> that is the whole reason this warning sits at the top of the file rather than in a footnote
+> (ai-maestro#148).
+>
+> **Why no aliases, and why not even a partial set** (hub ruling 2026-08-21, superseding the
+> 2026-08-20 Option-A comment on #148): `aimaestro-agent` is **already taken on PATH** by an
+> unrelated tool — a shim that `exec`s `aimaestro-agent.py`, a separate Python entry point, not
+> `aimaestro-agent.sh`. Aliasing the family would collide with it. Aliasing only the other 15
+> would be *worse*: bare names would start working everywhere except `aimaestro-agent`, which
+> would then silently run **a different program**. `command not found` is a loud failure; running
+> the wrong tool is a silent one, and the loud failure is the one this manifest can cure with a
+> sentence.
+>
+> Two lookalikes that are **not** counter-examples: `aimaestro-agent` (the Python shim above) and
+> `aimaestro-agent-bash` (a differently-named symlink to `aimaestro-agent.sh`). Neither is a
+> bare-name alias of a `.sh` script.
+
 - Source of truth: `scripts/*.sh` (**88** files)
 - Install target: `~/.local/bin/` (via `install-messaging.sh`, by glob)
+- **Invocation: always with `.sh`.** No bare-name aliases exist or will be added — see the box above.
 - Last reconciled: **2026-08-05** — announced the 7 scripts that were shipping unannounced
   (`aimaestro-settings.sh` → Tier A; `aimaestro-check-decoupling.sh`, `install-boot-persistence.sh`,
   `install-pillar-tooling.sh`, `setup-local-marketplaces.sh`, `distribute-tailscale-skill.sh`,

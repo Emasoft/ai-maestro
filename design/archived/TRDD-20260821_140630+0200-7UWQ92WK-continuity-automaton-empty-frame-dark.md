@@ -1,13 +1,13 @@
 ---
 trdd-id: 7UWQ92WK
 title: The continuity automaton went dark for two weeks and nothing could tell — a healthy pass logs nothing at all
-column: dev
+column: complete
 implementation-commits: [612e9853, c1f8b8c2, 507bcd39, 8613bdb6]
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T14:06:30+0200
-updated: 2026-08-21T14:53:14+0200
+updated: 2026-08-21T14:59:31+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -217,6 +217,31 @@ so "a real blank pane on a real session stays `empty-frame`" is proven for a ses
 creates, and the *production* pairing of a live agent with a genuinely empty pane is still only
 observed, not asserted.
 
+## ✅ CLOSING RE-VERIFICATION 2026-08-21 14:59 — a SECOND heartbeat, 32 minutes after the first
+
+Re-measured first-hand before flipping the column, because a card is closed against the system, not
+against its own record of itself:
+
+```
+2026-08-21 14:26:10 +02:00: [FleetContinuity] pass ok: scanned 2, fired 0, skipped 0
+2026-08-21 14:58:44 +02:00: [FleetContinuity] pass ok: scanned 2, fired 0, skipped 0
+```
+
+The second line is what the first one could not be: **evidence the heartbeat KEEPS beating**, not
+just that it beat once at boot+7min. And it carries the throttle's proof with it — the watchdog
+ticks every 5 min, so ~7 ticks separate these two lines and only one was printed. A per-tick spam
+regression would have written seven. `skipped 0` again, on the same 2 rendering agents.
+
+**Tests re-run at close: 3 files, 38 tests, all green** (`fleet-continuity-tick` 16,
+`fleet-continuity-capture-frame` 3, `fleet-liveness-watchdog` 19) — independently reproducing the
+38 recorded above.
+
+**One instrument note, because it nearly cost the closing check:** the first re-run passed a
+`tests/unit/fleet-liveness-watchdog-continuity-heartbeat.test.ts` path that DOES NOT EXIST (the
+heartbeat tests live inside `fleet-liveness-watchdog.test.ts`). Vitest **silently dropped it and
+exited 0** — `Test Files 2 passed` against three paths handed in. Read the FILE count against the
+number you passed; an exit code cannot tell you a path was ignored.
+
 ## Acceptance
 
 - [x] The continuity leg emits a positive "I ran and I was fine" signal, so silence means NOT
@@ -271,3 +296,8 @@ death are the same observation) — the finding that actually explains the two w
 - 2026-08-21T14:06:30+0200 — MANDATE issued by ai-maestro-hub (min-approval-requirement: none).
   Tier-0 self-mandate: in-scope bugfix in this repo's own tree, reversible, no baseline or
   governance surface touched. Pre-approved; no approval request was sent.
+- 2026-08-21T14:59:31+0200 — COMPLETED by ai-maestro-hub. All 5 acceptance boxes ticked and
+  re-verified first-hand at close, not read back from the card: 38 tests green across the 3 files
+  that actually hold them, and a SECOND live `pass ok` at 14:58:44 proving the heartbeat keeps
+  beating and the throttle holds. `npt`/`eht` both empty, so the completion gate has nothing else
+  to wait on. Archived as `complete` (`release-via: none`).

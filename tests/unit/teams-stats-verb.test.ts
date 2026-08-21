@@ -48,7 +48,18 @@ import * as path from 'path'
 // spawn intermittently exceeds vitest's 5s default — measured 2026-08-06 ("Test timed
 // out in 5000ms", green in isolation, 1 firing in 4 full runs). The subprocess already
 // carries its own 60s guard; the TEST timeout must not be the shorter of the two.
-vi.setConfig({ testTimeout: 30_000 })
+// …and 30_000 still BROKE that rule, because the subprocess guard is 60_000: the outer budget was
+// the shorter of the two, so the inner guard could never be the binding one and a slow spawn was
+// killed by vitest at 30s instead of by its own timeout at 60s. Measured 2026-08-21: the `stats`
+// test died at exactly "Test timed out in 30000ms" in a full run while passing in isolation.
+//
+// The cost is the SPAWN, not the call: measured standalone, `aimaestro-teams.sh stats` returns in
+// under a second, so the earlier guess that authenticating made it slow is wrong and is recorded
+// here as wrong. It is the same contention the 2026-08-06 note above describes — bash spawn plus
+// sourcing the CLI, under full-suite CPU load — which is why it is intermittent and green in
+// isolation. 90_000 puts the outer budget above the inner one so the subprocess's own guard binds,
+// which is what that note always intended.
+vi.setConfig({ testTimeout: 90_000 })
 
 const REPO = path.resolve(__dirname, '../..')
 const CLI = path.join(REPO, 'scripts', 'aimaestro-teams.sh')

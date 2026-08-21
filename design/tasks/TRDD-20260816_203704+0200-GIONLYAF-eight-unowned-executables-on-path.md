@@ -1,12 +1,12 @@
 ---
 trdd-id: GIONLYAF
 title: Two PATH executables encode the superseded GitHub-as-SSOT kanban model and no repo ships them
-column: todo
+column: human_review
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-21T16:44:00+0200
+updated: 2026-08-21T16:47:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -74,6 +74,17 @@ decision, and **not this repo's to make** (cross-project rule: reads anywhere, w
 
 **REVISED NEXT ACTION:** nothing is deletable here today. The live question is the install gap, and
 it belongs to `ai-maestro-plugin`.
+
+**COLUMN: `todo` → `human_review` at 16:47.** `todo` claims a worker could pick this up; after the
+inversion above, none can. What is left needs a person: **(a)** whether `kanban-sync.sh` — the one
+the skill calls *"Legacy"* rather than declaring — may be disposed of, a removal outside any project
+tree that `git` cannot undo and `/janitor-safe-delete` refuses; and **(b)** whether to file the
+install gap on `ai-maestro-plugin`'s tracker, which is outward-facing under the shared owner
+identity and therefore the USER's call, not this session's.
+
+Recorded because the honest column is the whole point of the board: a card parked in `todo` with no
+puller is indistinguishable from one being worked, and this card sat that way for five days while
+its central claim was wrong.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16T22:33
 

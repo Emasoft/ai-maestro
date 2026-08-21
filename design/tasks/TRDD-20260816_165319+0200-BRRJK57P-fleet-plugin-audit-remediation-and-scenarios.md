@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T16:09:00+0200
+updated: 2026-08-21T16:14:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -459,6 +459,47 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Spec ordering — 2026-08-21T16:1x+0200 — acceptance box 5, and the pattern the gate has
+
+**The specs this program touched live HERE, not in the plugins.** Only 3 fleet repos have a
+`design/specs/` at all (janitor 2, CPV 2, assistant-manager) and **none committed a spec change
+since 2026-08-16**. This repo did: **16 commits over 4 specs** — `aimaestro-scripts-spec` 13,
+`aimaestro-api-spec` 4, `governance-spec` 2, `3-pillars-spec` 1. (Positive control for the fleet
+zeros: the identical command against this repo returns 9 specs and 20 spec-file changes, so the
+instrument works and the zeros are real.)
+
+**Split by shape: 14 MIXED (spec + code in ONE commit) · 2 SPEC-ONLY.**
+
+**And that split cannot decide the box.** An atomic spec+code commit proves the spec was never
+stale relative to the code — but it says nothing about which was *authored* first, so it is equally
+consistent with spec-first design and with retrofitting the spec to code already written. The two
+SPEC-ONLY commits are both legitimate governance amendments (`4cc82d53` 3P-ZON-05 admitting
+`complete`; `84a80d59` R42.9), neither a retrofit.
+
+**The one traceable ordering is genuinely ambiguous, and the ambiguity is the honest answer.** For
+`TRDD-027HZOYN` the sequence is card → **`7c9652ea` feat(harness) the CODE** → **`84a80d59`
+docs(governance) the SPEC** → live-verify → archive. The spec document landed *after* the code,
+which is the shape box 5 forbids. But the rule it records came from a **USER directive** that
+predates both commits — so the *authority* was spec-first and only the *text* caught up. Commit
+order cannot separate "implemented against a ratified rule, documented it after" from "wrote code,
+then bent the spec to match", and those are opposite verdicts.
+
+### The pattern, now that all ten boxes have a state
+
+Four of this card's ten boxes — **1, 3, 4, 5** — turn out to be unanswerable by any command,
+each for the same underlying reason: **they are written as claims about EVERY item, or about
+INTENT and ORDER, over a corpus whose form the contract never fixed.** Counting can prove a floor
+("at least one", "12 of 15") and can never prove "each", and no commit graph carries authoring
+order. Two boxes (**7, 9**) fell to a single command each once the right question was asked; two
+more (**2, 8**) reduced to a sound sample and a clean not-started.
+
+**That is a finding about acceptance DESIGN, not about this program's execution.** A gate half
+composed of unfalsifiable boxes cannot close, which is exactly the "the program has no defined end"
+worry the 13:5x STATE entry raised from the other direction. The remedy for the NEXT program is the
+same one the report-format section proposes: state each box so that a command can fail it. "Every
+report carries the line `Counts: confirmed=N refuted=M`" is checkable; "every session returned a
+report with per-axis counts" is not.
 
 ## Ledger spot-check — 2026-08-21T16:0x+0200 — acceptance box 2, corroborated but NOT ticked
 

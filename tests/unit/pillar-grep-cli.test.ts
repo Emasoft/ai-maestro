@@ -1,4 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+// Spawns the real pillar CLI against the live corpus, including a two-run transaction test that
+// pays the cost twice. At vitest's 5_000 default it times out under full-suite CPU load — measured
+// 2026-08-21 alongside its sibling pillar-graph-cli, "Test timed out in 5000ms", zero assertions,
+// green in isolation. Same reasoning as that file: a timeout is not an assertion.
+vi.setConfig({ testTimeout: 60_000 })
 import fs from 'fs'
 import os from 'os'
 import path from 'path'

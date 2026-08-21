@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+// These tests spawn the pillar CLI repeatedly and make it walk the live TRDD corpus (494 cards
+// today), twice per differential — once indexed, once walked. At vitest's 5_000 default that is a
+// coin flip under full-suite CPU load: measured 2026-08-21, three of these died at exactly "Test
+// timed out in 5000ms" with ZERO assertions, in a run whose wall time had roughly doubled, and
+// all three pass in isolation. A timeout is not an assertion, so raising the budget conceals no
+// failure — it stops the harness from being the thing that fails.
+vi.setConfig({ testTimeout: 60_000 })
 import fs from 'fs'
 import os from 'os'
 import path from 'path'

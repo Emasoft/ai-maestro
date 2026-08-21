@@ -19,7 +19,16 @@ import { spawnSync } from 'child_process'
 import { mkdtempSync, rmSync, mkdirSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+// Every test here spawns the real CLI, and the spawn carries its own 120_000 guard — while the
+// TEST ran at vitest's 5_000 default, so the outer budget was 24x SHORTER than the inner one and
+// the subprocess guard could never bind. Measured 2026-08-21: "Test timed out in 5000ms", zero
+// assertions, in a full run whose wall time had roughly doubled under load; green in isolation,
+// which is contention's signature rather than a defect in the code under test. Raising the outer
+// budget past the inner one hides nothing — a timeout is not an assertion, and the subprocess
+// still fails on its own terms at 120s.
+vi.setConfig({ testTimeout: 150_000 })
 import { guardRealUserSettings } from '../helpers/real-home-untouched'
 
 const REPO = path.resolve(__dirname, '..', '..')

@@ -105,10 +105,14 @@ NEXT ACTION: build the poll site (sibling TRDD under E0), then observe one real 
       2026-08-06 are `not actuated (empty-frame)` — every one, both agents, two weeks — while a
       bare `tmux capture-pane -p` on those same live Claude sessions returns 954 / 1005 chars the
       same minute. The classifier has never received a frame, so no natural wedge could have fired
-      it however long we waited. And it stayed invisible because `captureFrame`'s
-      `catch { return '' }` collapses a THROWN capture into the same benign `empty-frame` skip as a
-      genuinely blank pane. **An open box that reads as PATIENCE can be hiding BROKEN, and the card
-      cannot tell you which** — one grep of the runtime logs could, and did.
+      it however long we waited. **An open box that reads as PATIENCE can be hiding BROKEN, and the
+      card cannot tell you which** — one grep of the runtime logs could, and did.
+      **CORRECTED the same hour (see 7UWQ92WK's `## RE-MEASURED`):** that run is **HISTORICAL** —
+      it stops at the 2026-08-20 18:53 log line, the server restarted at 21:24, and the production
+      capture call returns 640/753 chars when probed in-process today. So this box may in fact now
+      be merely waiting, as originally written. **What cannot be determined from the logs is which**,
+      because a healthy continuity pass logs NOTHING at all — silence and a dead leg are the same
+      observation. Do not tick this box on silence; it needs `7UWQ92WK`'s heartbeat line first.
 
 ## Approval log
 

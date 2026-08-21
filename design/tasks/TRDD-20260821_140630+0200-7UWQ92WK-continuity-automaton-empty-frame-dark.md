@@ -1,12 +1,12 @@
 ---
 trdd-id: 7UWQ92WK
-title: The continuity automaton has been dark for two weeks — 556 of 556 observations skipped as empty-frame
+title: The continuity automaton went dark for two weeks and nothing could tell — a healthy pass logs nothing at all
 column: planned
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T14:06:30+0200
-updated: 2026-08-21T14:06:30+0200
+updated: 2026-08-21T14:11:55+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -29,7 +29,14 @@ labels: [bugfix, silent-failure, fleet-continuity, observability]
 external-refs: [Emasoft/ai-maestro#90]
 ---
 
-# The continuity automaton has been dark for two weeks
+# The continuity automaton went dark for two weeks, and nothing could tell
+
+> **⚠ CORRECTED 20 MINUTES AFTER FILING — read `## RE-MEASURED` before the section below it.**
+> The original headline said the automaton *is* dark. Measured properly, the `empty-frame` run is
+> **HISTORICAL** and is **not reproducing now**. The section below is kept verbatim as the dated
+> record of what was seen first; the correction and the sharper defect are further down. Filing a
+> confidently-wrong mechanism is this repo's most expensive recurring mistake, so the near-miss is
+> recorded rather than quietly edited away.
 
 ## Problem
 
@@ -93,14 +100,59 @@ for zero lines. It does not — the parameter becomes `-S -0`, which measured **
 default capture on both live panes (954 / 1005). Recorded because it is the obvious-looking answer
 and the next reader will think of it too.
 
+## RE-MEASURED 2026-08-21 14:0x — the run is historical, and the real defect is worse
+
+Four measurements, in the order they landed. **Two of the three candidates above are now refuted,
+and so is this card's own proposed step 1.**
+
+1. **The production call works RIGHT NOW.** An in-process probe running the exact production
+   expression (`scripts_dev/probe-capture-frame.ts`, `bash scripts/with-node.sh npx tsx …`):
+   `capturePane('frank', 0)` → **640 chars**, `capturePane('testbot', 0)` → **753**. Not empty. So
+   candidate 2 (a non-tmux runtime) is dead — `getRuntime()` returns the local `defaultRuntime` —
+   and so is any story about the target name being unresolvable today.
+2. **No exception can ever reach the tick's `error:` branch.** `capturePane` swallows internally
+   too (`lib/agent-runtime.ts:378-380` — a second `catch { return '' }` after its own fallback), so
+   the outer `catch` in `defaultContinuityDeps.captureFrame` is unreachable in practice. **This
+   card's proposed step 1 — "split `empty-frame` from `capture-failed`" — would therefore have
+   changed NOTHING** if implemented as written: deleting the outer swallow cannot surface an error
+   that the inner one already ate. Two stacked swallows, and only the inner one matters.
+3. **The dark run stops at the server restart.** Last `[FleetContinuity]` line: `2026-08-20
+   18:53:37`. pm2 reports `ai-maestro` up since `2026-08-20 21:24:17` (23 restarts). Since that
+   start — **~17 hours** — the leg has logged **zero** lines, while `[FleetLiveness]` has logged
+   10,331 in the same file.
+4. **…and that silence is AMBIGUOUS, which is the actual bug.** The watchdog logs only `fired` and
+   non-`no_event` skips (`lib/fleet-liveness-watchdog.ts:446-449`, with an explicit comment that it
+   *"stays quiet on a healthy fleet"*). So **a leg that classifies healthily and a leg that never
+   ran at all produce byte-identical output: nothing.** Seventeen hours of silence is equally
+   consistent with "fixed" and "not running", and no amount of reading the log can separate them —
+   it took an in-process probe to learn that capture works, and that still does not prove the
+   *tick* is calling it.
+
+**So the enduring defect is OBSERVABILITY, at two layers, and it is why two weeks passed
+unnoticed:** a failure mode that renders as a benign skip, sitting under a healthy mode that
+renders as nothing at all. The subsystem has no state in which it says *"I ran and I was fine."*
+
 ## Proposed fix
 
-1. **Split the skip reason first** — `empty-frame` (genuinely blank) vs `capture-failed` (threw),
-   carrying the error. One line each, and the next 24 h of logs names the root cause for free.
-   Do this even if the rest waits; it is the change that makes the bug diagnosable at all.
-2. Then fix whichever cause the split reveals.
-3. Add a regression test that a live-shaped frame reaches `actuate`, so the whole automaton cannot
-   go dark again behind a neutral-looking skip.
+~~1. Split the skip reason first — `empty-frame` vs `capture-failed`, carrying the error.~~
+**Struck: measurement 2 above proves this alone changes nothing** — `capturePane`'s own inner
+`catch { return '' }` eats the error before the outer one is reached. Revised, in order:
+
+1. **Give the leg a heartbeat line.** One periodic `[FleetContinuity] scanned N, fired F,
+   skipped S` (throttled — say once per N ticks, or on change) so that **silence stops being
+   ambiguous**. This is the whole reason two weeks passed unnoticed, it is inert, and it is what
+   makes every other step verifiable. Do it first even if nothing else is done.
+2. **Make the empty case say WHY at the layer that knows.** Either have `capturePane` stop
+   swallowing (it has ~10 callers, several of which — `agent-runtime.ts:532,604` — already write
+   `.catch(() => '')` at the call site, so they are expecting it to throw and are already
+   defended), or have `defaultContinuityDeps.captureFrame` do its own capture so the error is
+   local. Prefer the second: it is scoped to this subsystem and touches no shared primitive.
+3. **Only then** chase the historical cause, with the ambiguity gone. The remaining candidate is
+   that tmux genuinely returned empty for those targets in that window (a session-name or
+   render-state condition that the current sessions no longer exhibit) — not a thrown capture, and
+   not a wrong runtime.
+4. Add a regression test that a live-shaped frame reaches `actuate`, so the automaton cannot go
+   dark again behind a neutral-looking skip.
 
 ## Verification
 
@@ -118,9 +170,21 @@ watch a full window of logs before changing what it actuates.
 
 Found while checking whether `TRDD-Y8VPE3NS` was closeable — its one open box says the automaton's
 response *"has still never been watched landing on a real wedge."* That was written as patience.
-It is not: the response **cannot** land, because the classifier has never received a frame. **An
-open box that reads as *waiting* can be hiding *broken*, and the two are indistinguishable from
-the card.** The discriminator was one grep of the runtime logs.
+**An open box that reads as *waiting* can be hiding *broken*, and the two are indistinguishable
+from the card.** The discriminator was one grep of the runtime logs.
+
+**And then the same trap caught the investigation itself, 20 minutes later.** From 556/556 skips I
+wrote *"the automaton IS dark"* and committed it. The skips had **stopped at a server restart 17
+hours earlier**, and the production capture call works today — so the headline was true of a
+window that had already closed. What made it feel verified was that every number in it was real:
+the 556 was real, the byte counts were real, the swallow was real. **A measurement can be
+completely accurate about a period that has ended, and nothing in the measurement says so** — the
+missing question is always *"as of when?"*, and log-derived findings need their newest timestamp
+read as carefully as their count.
+
+The correction was worth more than the original: chasing it produced measurement 2 (which refutes
+this card's own proposed fix) and measurement 4 (that a healthy pass logs nothing, so silence and
+death are the same observation) — the finding that actually explains the two weeks.
 
 ## Approval log
 

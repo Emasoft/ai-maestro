@@ -814,7 +814,15 @@ if [ -n "$INSTALL_DIR" ]; then
 
     cd "$INSTALL_DIR"
 
-    # Initialize git submodules (AMP messaging plugin, etc.)
+    # Initialize git submodules — currently a NO-OP, and the step is kept only so that adding a
+    # submodule later needs no installer change.
+    #
+    # The comment here used to read "(AMP messaging plugin, etc.)", which was false and expensively
+    # so: this repo has no .gitmodules and `git submodule status` is empty, so the step has never
+    # fetched anything, least of all the AMP plugin. That plugin is a MARKETPLACE plugin
+    # (Emasoft/claude-plugin), not a submodule. A comment naming a mechanism that does not exist
+    # sends the next reader hunting for a submodule-sourced messaging plugin — it cost exactly that
+    # during the 2026-08-21 installer audit (TRDD-9K33PHOZ finding 6).
     print_step "Initializing git submodules..."
     git submodule update --init --recursive || print_warning "Some submodules failed to initialize"
     print_success "Git submodules initialized"

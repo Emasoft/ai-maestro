@@ -14,6 +14,8 @@
 // Shape mirrors `fleet-inbox-nudge` exactly — injectable deps, a caller-owned store, a tick that
 // never throws — so it composes into the same watchdog and is tested without a live fleet.
 
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { listAgents, getAgent } from '@/lib/agent-registry'
 import { getRuntime } from '@/lib/agent-runtime'
 import { readHookNotification } from '@/lib/session-safe-state'
@@ -29,6 +31,8 @@ import {
   type ContinuityActuatorDeps,
   type ContinuityTarget,
 } from '@/lib/fleet-recovery-actuator'
+
+const execFileAsync = promisify(execFile)
 
 export interface ContinuityTickDeps {
   /** Online, non-deleted agents with a session to look at. */
@@ -147,11 +151,21 @@ export function defaultContinuityDeps(episodes: Map<string, ContinuityState>, no
     captureFrame: async (sessionName) => {
       // Only the VISIBLE pane (default capture, no -S): the events match on what is on screen NOW.
       // Pulling scrollback would let a retry-wedge banner from an hour ago re-trigger forever.
-      try {
-        return await getRuntime().capturePane(sessionName, 0)
-      } catch {
-        return ''
-      }
+      const frame = await getRuntime().capturePane(sessionName, 0)
+      if (frame.trim()) return frame
+
+      // EMPTY — but WHICH empty? `capturePane` swallows its own errors and returns '' after its
+      // internal fallback (agent-runtime.ts `capturePane`, the trailing `catch { return '' }`), so a
+      // session that cannot be read and a genuinely blank pane arrive here as the SAME value, and
+      // both render as the benign-sounding `empty-frame` skip. That ambiguity is why this leg logged
+      // 556 consecutive total failures that looked exactly like 556 quiet agents for two weeks
+      // (TRDD-7UWQ92WK). So ask tmux ONE more time, directly, and let the error propagate: the tick
+      // turns a throw into an `error: <what tmux said>` skip, which a human can tell apart from a
+      // quiet agent at a glance. The extra exec only ever runs on the already-broken path, and the
+      // shared primitive — ~10 other callers, several already defended with `.catch(() => '')` — is
+      // deliberately left exactly as it is.
+      await execFileAsync('tmux', ['capture-pane', '-t', sessionName, '-p'], { timeout: 3000 })
+      return ''
     },
 
     getHookNotification: (wd) => (wd ? readHookNotification(wd) : null),

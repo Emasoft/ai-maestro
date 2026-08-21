@@ -34,6 +34,30 @@ const FIRED: ContinuityDecision = {
 const NO_EVENT: ContinuityDecision = { fired: false, reason: 'no_event' }
 const COOLDOWN: ContinuityDecision = { fired: false, reason: 'cooldown' }
 
+/** What `tmux capture-pane -p` ACTUALLY hands back for a running client: a blank first line, block
+ *  glyphs, a boxed prompt, a status line, and blank lines at the end. Shaped from a live pane (with
+ *  every real name and path replaced) because the two-week dark run was precisely a fleet of frames
+ *  like this one being classified as nothing at all. */
+const LIVE_FRAME = [
+  '',
+  '           Claude Code v2.1.238',
+  ' ▐▛███▜█   Opus 5 (1M context) with xhigh effort · Claude Max',
+  '▝▘███████  @some-plugin:some-agent',
+  '  ▝▘ ▝▘    ~/…/agent-workdir',
+  '',
+  ' ⚠  1 MCP server needs authentication · run /mcp',
+  '',
+  '❯ /clear',
+  '',
+  '────────────────────────────────────────────',
+  '❯ ',
+  '────────────────────────────────────────────',
+  '  🤖 Opus 5 (1M) v2.1.238 ·xhigh 🧠 | 📁 agent-workdir',
+  '  ⏱️ 5h ░░░░░░ 11% @5:00pm',
+  '',
+  '',
+].join('\n')
+
 type Target = Parameters<ContinuityTickDeps['actuate']>[0]
 
 /** A recording stand-in for the actuator. A plain closure rather than `vi.fn`, because
@@ -186,6 +210,19 @@ describe('continuity tick — one bad agent never stops the sweep', () => {
     const r = await runContinuityTick(deps({ captureFrame: async () => '   \n  ', actuate }), new Map(), 1_000)
     expect(targets).toHaveLength(0)
     expect(r.skipped[0].reason).toBe('empty-frame')
+  })
+})
+
+describe('continuity tick — a LIVE-shaped frame reaches the actuator (TRDD-7UWQ92WK)', () => {
+  // The regression this pins is the two-week dark run: 556 consecutive `empty-frame` skips on
+  // sessions that were rendering the whole time. A real pane is mostly whitespace and glyphs — the
+  // emptiness test must key on there being ANY content, never on the frame looking prose-like.
+  it('is not skipped as empty, and arrives at actuate byte-for-byte', async () => {
+    const { actuate, targets } = recorder()
+    const r = await runContinuityTick(deps({ captureFrame: async () => LIVE_FRAME, actuate }), new Map(), 1_000)
+    expect(r.skipped).toEqual([])
+    expect(targets).toHaveLength(1)
+    expect(targets[0].observation.frame).toBe(LIVE_FRAME)
   })
 })
 

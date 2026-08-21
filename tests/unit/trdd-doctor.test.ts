@@ -180,6 +180,16 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(idsOf(lintCorpus(tmp), 'ZONE-MISMATCH')).toContain('EEEEEEEE')
   })
 
+  // The MIRROR shape of the test above, and the one TRDD-36RGLVYH asked for by name. A terminal
+  // card in tasks/ inflates the OPEN count; a WORKING card in archived/ does the opposite — it
+  // hides live work in the done pile, where nobody reads it. Same rule, opposite direction, and
+  // only one of the two directions was pinned: `expectedZone('dev') === 'tasks'` was covered as a
+  // pure mapping, which proves nothing about lintCorpus emitting on a real misplaced FILE.
+  it('ZONE-MISMATCH — a WORKING card parked in design/archived hides live work in the done pile', () => {
+    write('archived', 'TRDD-20260101_000000+0100-EFEFEFEF-x.md', good('EFEFEFEF', { column: 'dev' }))
+    expect(idsOf(lintCorpus(tmp), 'ZONE-MISMATCH')).toContain('EFEFEFEF')
+  })
+
   it('ZONE-MISMATCH does NOT fire for `complete` with release-via — it still has stages ahead', () => {
     write('tasks', 'TRDD-20260101_000000+0100-FFFFFFFF-x.md',
       good('FFFFFFFF', { column: 'complete', 'release-via': 'publish' }))

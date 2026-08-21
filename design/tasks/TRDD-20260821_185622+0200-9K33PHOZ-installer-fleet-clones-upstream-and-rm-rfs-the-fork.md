@@ -1,10 +1,10 @@
 ---
 trdd-id: 9K33PHOZ
 title: install.sh rm -rfs the live fork checkout in non-interactive mode and reclones from upstream
-column: todo
+column: dev
 created: 2026-08-21T18:56:22+0200
-updated: 2026-08-21T18:56:22+0200
-implementation-commits: []
+updated: 2026-08-21T19:52:44+0200
+implementation-commits: [4d4b72c7, 8b7c7de5, e0e55244, 4a760eed]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
 assignee: hub-orchestrator
@@ -30,8 +30,14 @@ blocked-by: []
 Owner directive 2026-08-21: *"the five installers that install the various parts are also
 installing skills from the original repo instead of Emasoft, and the plugins, and the messaging …
 read all the installers scripts, including the reinstall script."* This card is the result of
-that audit. **Nothing has been changed. No installer was run beyond `install-agent-cli.sh`**
-(see `TRDD-A9335BZ6`). Sibling card `TRDD-0N792LL5` holds the `update-aimaestro.sh` half.
+that audit. Sibling card `TRDD-0N792LL5` holds the `update-aimaestro.sh` half.
+
+**⚠ SUPERSEDED — do NOT carry forward.** This block opened *"Nothing has been changed. No
+installer was run beyond `install-agent-cli.sh`"*. True when written at 18:56; false from 19:0x,
+after the owner ruled on findings 2 and 4 and told me to fix 1 *"safe in any case"*. Findings
+1, 2, 4 and 6 are now LANDED (see NEXT ACTION). Nothing here has been deleted — the findings below
+are the record of what was measured, and they describe the code **as it was**, which is why the
+line numbers in FINDING 1's table no longer resolve: the guard added ~45 lines above them.
 
 Audit surface: 12 installer/updater scripts + both ecosystem SSOTs. Per-file evidence in
 `reports/installer-audit/` (three files, 2026-08-21 18:53-18:54).
@@ -148,23 +154,49 @@ the plugin layer is ours.
 `scripts/install-code-analysis-tooling.sh` (third-party `parcadei/tldr-code` releases +
 `@samuelfaj/distill` — legitimately external) · `scripts/install-boot-persistence.sh` (pm2 only).
 
-### NEXT ACTION
+### NEXT ACTION — five of seven landed; the two that remain are owner decisions
 
-Owner decision on FINDING 4 (fork the gateways repo or accept upstream) and on FINDING 2 (does
-`AI_MAESTRO_REPO` flip to the fork now, which requires pushing the 385 commits first, or stay
-upstream until the merge). FINDING 1 is fixable without either decision and should go first.
+Owner rulings received 2026-08-21 and applied: **FINDING 2** — *"push and merge to main"*, done
+(394 commits on `Emasoft/ai-maestro`, `main` fast-forwarded to `4a760eed`, `0.29.0`, CI green, 0
+unpushed); **FINDING 4** — *"accept upstream for now, it should be configurable anyway"*, done;
+**FINDING 1** — *"find a better solution that is safe in any case, it should be configurable
+anyway"*, done and pinned by tests.
+
+Landed: `4d4b72c7` (guard + both repo sources configurable), `8b7c7de5` (finding 6),
+`e0e55244` (the guard's test), `4a760eed` (the merge).
+
+**Still open, and each needs a ruling rather than work:**
+
+1. **FINDING 5** — the four constants (`AMP_PLUGIN_NAME/REPO`, `AID_PLUGIN_NAME/REPO`) have zero
+   consumers, and re-measuring found no hardcoded literal standing in for them either: quoted
+   `'claude-plugin'` / `'agent-identity'` appear **nowhere** in `app/`, `services/` or `lib/`
+   outside the two SSOT files, and repo-wide only in docs and memory. So **nothing installs the
+   AMP messaging plugin or the Agent Identity plugin.** Deleting the constants and wiring them up
+   are opposite fixes — the first says the capability was abandoned, the second says it was never
+   finished — and choosing wrongly is worse than leaving it measured.
+2. **FINDING 7** — the rename. The owner said *"the name is not clear"*, which is a judgement, not
+   yet an instruction; it touches callers in `remote-install.sh` and `update-aimaestro.sh`.
 
 ## Acceptance
 
-- [ ] `install.sh` refuses to delete any directory that is a git work tree with uncommitted
+- [x] `install.sh` refuses to delete any directory that is a git work tree with uncommitted
       changes or with commits absent from its push remote — naming the count, exiting non-zero.
-      A neuter removing the guard reds a test driving a fixture repo with a seeded unpushed commit
-- [ ] The non-interactive auto-delete cannot select a path that is the caller's own checkout
-- [ ] `install.sh` acquires the app from the SSOT constant rather than a hardcoded URL, so the
-      repo is changed in one place
-- [ ] FINDING 4 resolved by an owner ruling recorded in this card, and applied to both call sites
-- [ ] FINDING 5 resolved: the four constants are either consumed or deleted
-- [ ] FINDING 6: the false submodule comment is corrected or the no-op step removed
-- [ ] FINDING 7: rename decided; if taken, all callers updated in the same commit
+      `tests/unit/install-delete-guard.test.ts`, 7 cases; four neuters measured, each reddening a
+      distinct set (kill the porcelain branch → 2, the rev-list branch → 1, the `.env.local`
+      branch → 1, `exit 1` at the top → 6). The fifth neuter anyone would reach for, `return 1`,
+      is recorded in the file as measuring the WRONG thing: the guard refuses with `exit`, so
+      `return` falls through to the harness's success path and leaves both PERMITs green
+- [x] The non-interactive auto-delete cannot select a path that is the caller's own checkout —
+      satisfied in substance rather than by path-matching: selection is unchanged, and the guard
+      makes selecting it harmless, which is the property that was actually wanted. Two PERMIT
+      cases pin that a clean stale install is still replaceable, so this is not "refuse everything"
+- [x] `install.sh` acquires the app from the SSOT constant rather than a hardcoded URL, so the
+      repo is changed in one place — `AIMAESTRO_REPO` env → `AI_MAESTRO_REPO` → literal
+- [x] FINDING 4 resolved by an owner ruling recorded in this card, and applied to both call sites
+      (`install.sh`, `scripts/remote-install.sh`) via `AIMAESTRO_GATEWAYS_REPO`
+- [ ] FINDING 5 resolved: the four constants are either consumed or deleted — **owner ruling**
+- [x] FINDING 6: the false submodule comment is corrected or the no-op step removed — corrected,
+      step kept so a future submodule needs no installer change (`8b7c7de5`)
+- [ ] FINDING 7: rename decided; if taken, all callers updated in the same commit — **owner ruling**
 
 ## Approval log

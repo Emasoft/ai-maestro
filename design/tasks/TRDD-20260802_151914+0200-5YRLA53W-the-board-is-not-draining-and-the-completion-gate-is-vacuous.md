@@ -406,6 +406,15 @@ Nine of the seventeen cards had a claim that did not survive that.
       and `blocked-by:` takes TRDD ids only, so they sit in `todo` claiming "ready to pull". The
       sweep proved the cost is not cosmetic — an external blocker is checked once and never again,
       so a card cannot be noticed as unblocked. Not closable without a corpus-level answer
+      **⏹ 2026-08-21 — BOTH NAMED INSTANCES ARE RESOLVED, and re-measuring them PROVED the general
+      claim rather than dissolving it.** Neither card sits in `todo` any more: `FKGMNGJB` is
+      `complete` and archived, `35VKIGTC` is `backburner` (an honest resting state, parked for two
+      reasons that do not depend on any issue). **And BOTH external blockers — janitor `#139` and
+      `#167` — are CLOSED, which nothing on the board noticed for weeks.** `35VKIGTC` still carries
+      `external-refs: [janitor#167]` pointing at a closed issue and its STATE still names
+      *"continuing the existing thread"* as the route; the thread is gone. That is this box's own
+      complaint happening again, to the very card it cites, while the box stayed open — so the
+      instances close and **the gap does not.** Still needs the corpus-level answer.
 - [x] the completion gate is ENFORCED, not merely written — `TERMINAL-WITHOUT-CHECKLIST` +
       `TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, 15 tests, 6 neuters, 0 findings today
 - [x] open cards in WORK columns carry a checklist — **19 of 19, then 22 of 22.** Each needed a

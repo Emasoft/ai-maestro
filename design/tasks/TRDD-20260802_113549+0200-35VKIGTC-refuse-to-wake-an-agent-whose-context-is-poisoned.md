@@ -5,7 +5,7 @@ column: backburner
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:35:49+0200
-updated: 2026-08-05T18:28:53+0200
+updated: 2026-08-21T17:02:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -52,6 +52,19 @@ would be the worst outcome available here."
 **Moved `todo → backburner`,** which is an honest resting state rather than a lie: the work is not
 ready and nothing local blocks it, so `blocked` would be wrong too (that requires a non-empty
 `blocked-by:` naming an open card, and the missing capability is not a card in this repo).
+
+> **⏹ 2026-08-21T17:0x — THE ROUTE NAMED BELOW NO LONGER EXISTS. The parking still does.**
+> `Emasoft/ai-maestro-janitor#167` is **CLOSED**, so *"continuing the existing thread at
+> janitor#167"* is not available — a new issue would be needed. **Both reasons to wait are
+> untouched by that**, and neither depends on the issue's state: the fleet-scoped scan is still a
+> capability that repo does not have, and the detector's precision is still inadequate. That second
+> reason was re-measured independently since: the advisory settled at **18 findings / 8 files** with
+> all five named hits verified FALSE — each one a rule *forbidding* the pattern it is accused of
+> performing. So `backburner` remains the honest column; only the ROUTE changed.
+>
+> **A stale external ref is invisible in exactly the way this card's parent card
+> (`TRDD-5YRLA53W`) complains about:** an external blocker is checked once and never again, because
+> nothing on the board can express it. `external-refs:` still points at #167 and nothing reddens.
 
 **WHAT WOULD UNBLOCK IT:** the janitor gaining a fleet-scoped context scan — walking every
 *registered* workdir, including hibernated agents — so a poisoned agent is flagged while it is not

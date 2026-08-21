@@ -1,10 +1,12 @@
 ---
 trdd-id: Y8VPE3NS
 title: Retry-wedge event the ai-maestro 90 contract
-column: todo
+column: blocked
+pre-block-column: dev
+blocked-by: [7UWQ92WK]
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-02T15:25:31+0200
+updated: 2026-08-21T14:07:18+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -98,6 +100,15 @@ NEXT ACTION: build the poll site (sibling TRDD under E0), then observe one real 
       demand; it is armed and waiting for the next natural occurrence. Split from the box above
       rather than ticked with it: the automaton now runs, but its response has still never been
       watched landing on a real wedge.
+      **⚠ 2026-08-21 — this box is not WAITING, it is UNOBSERVABLE. `TRDD-7UWQ92WK` filed.**
+      Measured from the server logs: **556 of 556** `[FleetContinuity]` observations since
+      2026-08-06 are `not actuated (empty-frame)` — every one, both agents, two weeks — while a
+      bare `tmux capture-pane -p` on those same live Claude sessions returns 954 / 1005 chars the
+      same minute. The classifier has never received a frame, so no natural wedge could have fired
+      it however long we waited. And it stayed invisible because `captureFrame`'s
+      `catch { return '' }` collapses a THROWN capture into the same benign `empty-frame` skip as a
+      genuinely blank pane. **An open box that reads as PATIENCE can be hiding BROKEN, and the card
+      cannot tell you which** — one grep of the runtime logs could, and did.
 
 ## Approval log
 

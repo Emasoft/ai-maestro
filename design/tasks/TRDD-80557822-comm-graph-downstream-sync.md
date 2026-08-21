@@ -3,7 +3,7 @@ trdd-id: 80557822
 title: R6 Communication Graph Downstream Sync
 column: todo
 created: 2026-04-24T04:08:31+0200
-updated: 2026-08-16T16:51:06+0200
+updated: 2026-08-22T01:38:38+0200
 current-owner: main
 assignee: main
 priority: 1
@@ -198,6 +198,39 @@ point the advisory gate becomes exploitable.
 - [ ] A reply-only message marks the original inbound message `replied=true` atomically, and a second reply to the same inbound id is rejected
 - [ ] The "ADVISORY ONLY" comment in `lib/communication-graph.ts::validateMessageRoute` and the "(enforcement partial)" note in `docs/GOVERNANCE-RULES.md` §R6.10 are removed once R6.10 is fully enforced
 - [ ] A test/scenario exercises an inter-title message on a tightened edge and confirms the API accepts/rejects per the current graph
+
+**MEASURED 2026-08-22 — box-by-box, replacing a list last touched 2026-08-16 with today's facts.
+This card is GENUINELY OPEN; nothing here is stale.** (Worth stating, because eight stale records
+turned up on this board tonight and the reflex by now is to assume staleness.)
+
+- **Boxes 1-2 are CROSS-REPO and cannot be done from here** — the `agent-messaging` /
+  `team-governance` skills live in `Emasoft/ai-maestro-plugin`, and the "Communication
+  Permissions" sections live in the 8 role-plugin repos. Per the cross-project rule that is an
+  issue or a PR, never a direct edit. They also cannot be verified as *aligned* from this repo
+  without reading each published artifact.
+- **Box 3 is UNBUILT, not partially done.** `isReplyToInbound` has **0 definitions and 0 call
+  sites** across `lib/` and `services/` (measured, both greps). Box 4 depends on it entirely.
+- **Box 5 is correctly still open, and MUST NOT be done first.** Both claims are still present —
+  `ADVISORY ONLY` ×1 in `lib/communication-graph.ts`, "enforcement partial" ×1 in
+  `docs/GOVERNANCE-RULES.md`. Read what that comment actually says before touching it: it is NOT
+  a claim that the comm graph is advisory (the graph IS enforced — `validateMessageRoute` at
+  `amp-service.ts:1287`, and as of `097b98a3` also in `deliverFederated`). It is scoped to
+  **reply-only (`1`) edges**: the layer checks only that `inReplyToMessageId` is a non-empty
+  string, and does not load the referenced message, match the sender/recipient pair, or enforce
+  one-reply-per-inbound. So boxes 3+4+5 are ONE unit. The card already encodes the ordering
+  ("removed once R6.10 is fully enforced") — keep it: removing the comment before the check
+  exists would leave the code asserting a guard it does not have, which is the same defect the
+  queue route shipped (a doc comment reading *"Enqueue is gated"* over an ungated enqueue).
+- **Box 6 is SUBSTANTIALLY COVERED, with one honest gap.** `tests/governance/r6-communication-graph.test.ts`
+  (1020 lines) pins the full **9×9 edge matrix cell-for-cell against `docs/GOVERNANCE-RULES.md`
+  §R6**, asserts every ordered pair resolves to a defined edge, and carries an explicit
+  non-vacuity guard (*"the matrix is genuinely mixed — it is neither all-allow nor all-deny"*).
+  `tests/unit/message-route-gate.test.ts` covers both directions (*"allows an edge the graph
+  allows"*, *"refuses an edge the graph refuses, and surfaces the graph reason"*) plus the
+  fail-closed case. **The gap: those drive `assertAgentRouteAllowed`, the GATE — not the HTTP
+  route.** A gate test cannot see whether the API is still wired to the gate, which is the
+  altitude problem this repo has been bitten by before. Decide whether box 6 wants the API
+  altitude; if it does, the residual work is one route-level test, not a new matrix.
 
 ## Approval log
 

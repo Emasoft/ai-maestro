@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:49:00+0200
+updated: 2026-08-21T15:53:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -412,6 +412,29 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Phase-3 status — 2026-08-21T15:5x+0200 — acceptance box 8, measured as NOT STARTED
+
+The body already says *"PHASE 3 — scenarios (not yet dispatched)"*. That is now measured rather
+than asserted, which matters because "not dispatched" and "dispatched and silent" are the same
+sentence from the card:
+
+- **40 scenario files exist**, and **0** were created or modified since 2026-08-16 (`git log
+  --since --name-only` over `tests/scenarios/SCEN-*.scen.md`).
+- **92 scenario run artifacts exist on disk**, and **none is dated 2026-08**. The newest run is
+  **2026-07-29**; the distinct run dates are 07-14, 07-22, 07-23, 07-29 — every one predating the
+  program by two and a half weeks or more.
+
+So no Phase-3 scenario was authored for this program and none was run under it. Box 8 is open at
+**not started**, not at *unknown*.
+
+**A false zero I caught in passing:** the first look reported `reports/scenarios-runner` as holding
+**0** run reports, which would have read as *the runs never happened*. They happened — the janitor
+archives that directory to `reports_dev/scenarios-runner/` after ~48 h, where **4135** files sit.
+The same command also demonstrated the `ls <glob>` trap this repo's rules already forbid: `ls -1t
+reports/scenarios-runner/*.md` printed `tsconfig.tsbuildinfo`, `lib`, `scripts_dev` — an unmatched
+glob passed through literally, so `ls` listed the CWD and returned a confident, wrong, non-empty
+answer. **Both halves of that step failed toward a plausible reading.**
 
 ## Report-format divergence — 2026-08-21T15:4x+0200 — why boxes 1 and 3 cannot be measured mechanically
 

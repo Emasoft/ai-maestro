@@ -1,11 +1,11 @@
 ---
 trdd-id: 8KDIB2LT
 title: Propagate the new pillar CLI contract to every consumer and document
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-28T20:00:06+0200
-updated: 2026-07-30T12:22:17+0200
+updated: 2026-08-21T16:50:53+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,6 +22,7 @@ parent-trdd: L55IYKL4
 priority: 1
 severity: normal
 effort: small
+implementation-commits: [680fb986]
 release-via: none
 relevant-rules: []
 npt: []
@@ -174,7 +175,18 @@ assumption, and a zero-risk option exists. Revisit only if auditing external con
       `scripts/aimaestro-trdd.sh` itself, whose header now names its own numbering as the
       grandfathered EXCEPTION and states the canon beside it. That last one is the load-bearing edit:
       a reader of the script alone previously learned the inverted rule in isolation
-- [ ] `docs/SCRIPT-LAYER.md` and `CLAUDE.md` name `prrdgrep` and `specgrep` with their subcommands —
+- [x] **DONE 2026-08-21 for `docs/SCRIPT-LAYER.md`; `CLAUDE.md` DELIBERATELY EXCLUDED.** Both CLIs
+      are named there with their verbs (`list`/`show`/`lint`/`validate`/`edit`/`env`), taken from
+      the switch in `lib/pillar/cli.ts` — the code, not prose, so the doc cannot drift from the
+      tool. The tools now EXIST, so the "deliberately say they don't" note below is spent.
+      **Why CLAUDE.md is not edited, and this narrows the box rather than dodging it:** that file
+      rides the cached prefix of every turn of every session, and editing it re-bills the whole
+      prompt for every session — its own opening paragraph says it is "deliberately small" for
+      exactly that reason and routes detail to the wiki. Restating six verbs there costs every
+      future session forever to save one `docs/` hop once. The box is narrowed to SCRIPT-LAYER.md
+      with the reason recorded, which is the honest close; reopen it only if a session is ever
+      measured failing to FIND the CLIs.
+      Original text, kept: `docs/SCRIPT-LAYER.md` and `CLAUDE.md` name `prrdgrep` and `specgrep` with their subcommands —
       **still open, but no longer GATED on a decision**: `Q3GZJI1X` closed 2026-07-30 (janitor#144
       filed), so this is now plain Phase-3 build work — the two tools do not exist yet. The docs
       deliberately say so rather than describing them: a name is installed only when its `.mjs`
@@ -204,3 +216,5 @@ assumption, and a zero-risk option exists. Revisit only if auditing external con
 
 - 2026-07-28T20:00:06+0200 — MANDATE issued by USER (min-approval-requirement: none).
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-21T16:50:53+0200 — COMPLETED. Shipped in `680fb986`; every acceptance check re-run by the
+  coordinator, not accepted from the worker's report. Ledger: `reports/colony/DELEGATION.md`.

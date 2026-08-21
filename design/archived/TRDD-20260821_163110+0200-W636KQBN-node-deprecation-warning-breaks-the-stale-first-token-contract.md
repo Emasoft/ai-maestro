@@ -1,12 +1,12 @@
 ---
 trdd-id: W636KQBN
 title: trddgrep validate --rule STALE-COLUMN returns one finding where its test expects two
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T16:31:10+0200
-updated: 2026-08-21T16:34:13+0200
+updated: 2026-08-21T16:50:53+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -21,6 +21,7 @@ derived: false
 npt: []
 eht: []
 blocked-by: []
+implementation-commits: [680fb986]
 release-via: none
 priority: 2
 severity: low
@@ -152,3 +153,5 @@ extended with the full chain rather than replaced) — no rule-code edit, so no 
   artifact of running on Node 26 instead of the project's pinned Node 22; two of the three
   failures it was filed for do not exist on the sanctioned harness. The refuted claim is kept in
   full above, because the reason it was convincing is the transferable part.
+- 2026-08-21T16:50:53+0200 — COMPLETED. Shipped in `680fb986`; every acceptance check re-run by the
+  coordinator, not accepted from the worker's report. Ledger: `reports/colony/DELEGATION.md`.

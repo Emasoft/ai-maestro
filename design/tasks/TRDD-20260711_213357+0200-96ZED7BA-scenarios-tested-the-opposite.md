@@ -3,7 +3,7 @@ trdd-id: 96ZED7BA
 title: The scenario suite was testing the opposite of what matters — it puppeted the agents
 column: todo
 created: 2026-07-11T21:33:57+0200
-updated: 2026-08-16T16:43:00+0200
+updated: 2026-08-21T22:58:16+0200
 current-owner: main
 assignee: main
 priority: 0
@@ -58,8 +58,10 @@ is the most important test! the user can use the UI and give directives to the
 MANAGER, and stop. nothing else."*
 
 **Landed (rules + harness):** `13d813c8`, `7582465c`, `c304bb5b`, `00b0b43c`.
-**Landed (scenario directives):** SCEN-009 S011, SCEN-011 S015, SCEN-022 (S004/S006/S011).
-**NEXT ACTION:** SCEN-014 — S017, S019, S023 (see §4). Then run 009 → 011 → 022 → 014.
+**Landed (scenario directives):** SCEN-009 S011, SCEN-011 S015, SCEN-022 (S004/S006/S011),
+SCEN-014 S017/S018/S019/S020-S027 (verified 2026-08-21 — see Acceptance).
+**NEXT ACTION:** the sole remaining box is the end-to-end re-run (009 → 011 → 022 → 014)
+under a live browser — that is execution, not authoring, and stays open until someone runs it.
 
 ## 1. The defect
 
@@ -150,11 +152,11 @@ scenario can now, for the first time, detect all three.
 
 ## Acceptance
 
-- [ ] SCEN-014 S017: shell line, skill names, and the 3-step org chart removed; directive states only the outcome; the "Type and send" instruction targets the chat section, never the terminal.
-- [ ] SCEN-014 S019/S023: "If idle, type `/amp-inbox`" removed — a stalled agent is recorded as a finding, never nudged.
-- [ ] SCEN-014 S018, S020-S027: assertions loosened so a valid mechanism other than `amp-send`/`amp-download` is not scored as a mismatch.
-- [ ] SCEN-009, SCEN-011, SCEN-022, SCEN-014 all re-run end to end (009 → 011 → 022 → 014) after the fixes, and their reports show no puppeting-shaped intervention.
-- [ ] `SCENARIOS_TESTS_RULES.md` no longer contains any "you are the manager of the test" / nudge-the-agent language anywhere outside Rule 0's historical citation of the old text.
+- [x] SCEN-014 S017: shell line, skill names, and the 3-step org chart removed; directive states only the outcome; the "Type and send" instruction targets the chat section, never the terminal. **Verified 2026-08-21**: S017 (`tests/scenarios/SCEN-014_manager-poem-translation-mobile.scen.md:209-237`) sends only the outcome sentence into "its **Chat** section (NOT its terminal...)"; no shell line, no skill name, no org chart remain outside the "Up to v1.x..." historical citation.
+- [x] SCEN-014 S019/S023: "If idle, type `/amp-inbox`" removed — a stalled agent is recorded as a finding, never nudged. **Verified 2026-08-21**: S019 (:250-265) and S023 (:296-307) both read "Type NOTHING into this agent" and "never type `/amp-inbox` into the agent to unstick it" — the only surviving occurrences of that phrase are inside "A prior version of this step said..." citations.
+- [x] SCEN-014 S018, S020-S027: assertions loosened so a valid mechanism other than `amp-send`/`amp-download` is not scored as a mismatch. **Verified 2026-08-21**: every Verify line in S018/S020-S027 (:244,258-265,272,283,290,304-307,314,325,332) reads "AMP ... is the expected spontaneous choice and is a PASS; a different mechanism that still delivers ... is a FINDING, not an automatic fail; ... never happening is a FAIL."
+- [ ] SCEN-009, SCEN-011, SCEN-022, SCEN-014 all re-run end to end (009 → 011 → 022 → 014) after the fixes, and their reports show no puppeting-shaped intervention. **NOT DONE** — requires a live browser run against real agents (Rule 6/8), out of scope for a static-file verification pass. Left open deliberately; whoever runs the suite next should close this box with the run's report path.
+- [x] `SCENARIOS_TESTS_RULES.md` no longer contains any "you are the manager of the test" / nudge-the-agent language anywhere outside Rule 0's historical citation of the old text. **Verified 2026-08-21**: `grep -n "manager of the test\|Don't let agents slack\|Push it to act"` returns exactly one hit, at `SCENARIOS_TESTS_RULES.md:1505`, inside the blockquote "**This section previously said the opposite.**" that rescinds it under "Brief the MANAGER — then stop talking" (the section governing Rule 0.b's behaviour).
 
 ## Notes and lessons learned
 

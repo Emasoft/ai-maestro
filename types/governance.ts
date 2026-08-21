@@ -107,6 +107,27 @@ export interface GovernanceConfig {
    * null/absent = not opted out.
    */
   recoveryOptOut?: boolean
+  /**
+   * TRDD-A9335BZ6 — the dev-mode login credential, so development continues
+   * while the owner is away. Absent/null = never configured.
+   *
+   * This is where the ENABLE SWITCH lives, deliberately: it is dashboard-owned
+   * rather than an `AI_MAESTRO_DEV_MODE` env var, because a bare env read that
+   * can weaken authentication is the pattern TRDD-CC9PY337 deletes rather than
+   * gates (a same-UID agent can `export` one into ~/.zshrc). Do not add such a
+   * read — `tests/unit/test-only-env.test.ts` fences it.
+   */
+  devModeLogin?: DevModeLoginConfig | null
+}
+
+/** TRDD-A9335BZ6. Owner-minted dev-login credential; see `lib/dev-mode-token.ts`. */
+export interface DevModeLoginConfig {
+  /** The dashboard-owned switch. False ⇒ even a correct token is refused. */
+  enabled: boolean
+  /** SHA-256 hex of the token. The plaintext is never stored — it is shown once at mint. */
+  tokenHash: string | null
+  createdAt: string | null
+  lastUsedAt: string | null
 }
 
 /** Default governance config for first-time initialization */

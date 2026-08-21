@@ -1,10 +1,12 @@
 ---
 trdd-id: 17K0SHDQ
 title: Close ai-maestro#46 — the four remaining work items after the 2026-08-08 defect map
-column: dev
+column: blocked
+pre-block-column: dev
 created: 2026-08-08T15:19:13+0200
-updated: 2026-08-19T20:48:16+0200
+updated: 2026-08-21T13:51:30+0200
 current-owner: ai-maestro-hub
+created-by: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: bugfix
 min-approval-requirement: none
@@ -13,7 +15,7 @@ mandated-by: self
 project-id: ai-maestro
 labels: [amp, identity, fleet-blocker]
 external-refs: [ai-maestro#46, ai-maestro#40, ai-maestro#47]
-blocked-by: []
+blocked-by: [U4N18CRY]
 ---
 
 # Close ai-maestro#46 — the four remaining work items
@@ -159,6 +161,15 @@ can never pass at all). One card, one gate: `## Acceptance` owns it.
       checkout. SIDE HAZARD to carry forward: the registry does not mark fixture vs live
       agents, so amp-identity guidance path (1) invites picking a live agent's workdir by
       mistake — surface when the probe lands.
+      **BLOCKER FILED 2026-08-21 → `TRDD-U4N18CRY`.** The USER-gated fixture was named only in a
+      session summary, so for two days this card sat at `column: dev` asserting someone was working
+      it while it was in fact waiting on a human — the failure the kanban rule names, where an
+      untrue column hides the stall from the only view anyone checks. Now `column: blocked`,
+      `blocked-by: [U4N18CRY]`, `pre-block-column: dev`. Re-verified first-hand the same day, so
+      the blocker is not itself a stale claim: `~/.aimaestro/teams/teams.json` holds 3 teams, and
+      the only project-linked one is `Test Kanban Team` → `{owner: IpaziaSoftware, number: 1}`,
+      ORG-level with no `repo` — exactly the browse-only case P1 hit. **Restore to `dev` the moment
+      a repo-scoped board exists;** P2-P4 are fully specified above and run unattended.
 
 ## Approval log
 

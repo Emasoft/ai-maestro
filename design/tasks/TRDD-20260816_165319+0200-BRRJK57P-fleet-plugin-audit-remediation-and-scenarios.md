@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-20T02:02:15+0200
+updated: 2026-08-21T03:47:32+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -106,10 +106,13 @@ fixing PNIP18BY's derivation fields; live server measured DOWN so PNIP18BY stays
 ruling; its remaining findings NOT yet cleared), maintainer (memgrep bug filing approved; cache
 sweep approved; TCC = human-only, surfaced to USER), architect (ruff adoption approved PHASED).
 
-**NEXT ACTION:** (1) hub-verify the janitor's remaining findings (memory-scope-leak,
-bugs-pass2-deep, baseline-applier-gate6) and ledger them, then clear the janitor's held cards;
-(2) track Phase-2 completions as sessions report; hold hub reviews owed: AMAMA D6H36I26 skill
-(published ahead of review by hub GO — review async).
+**NEXT ACTION (rewritten 2026-08-21T03:47:32+0200 — item 1 DONE, item 2 half done):**
+(1) ~~hub-verify the janitor's 3 remaining findings and clear its held cards~~ — **DONE
+2026-08-21, see the ledger window of that date.** All 3 verified first-hand; the held cards were
+a NO-OP (already legal under 3P-ZON-05). One new defect only (a rotted citation, janitor's).
+(2) AMAMA `D6H36I26` review — **DISPATCHED 2026-08-21** (was owed since the 2026-08-18
+escalation; the artifact went live hub-unreviewed and nothing recorded the review ever running).
+Awaiting the reviewer. Still open: track Phase-2 completions as sessions report.
 
 **RULED / LANDED 2026-08-18 evening (all under the recorded delegation):** zone spec →
 **3-pillars 2.0.0** (4cc82d53): 3P-ZON-05 admits `complete`, terminal columns archive AS
@@ -1615,6 +1618,67 @@ CORE's disk evidence, refined to bare-name-INVOCATION-teaching (plugin skills re
 namespaced), re-broadcast before any bulk delete — AMPA's own first check would have
 repeated the phantom error and said so. Published 3.3.16 confirmed SAFE (git-URL serving,
 tag complete, 1656 files) — no emergency republish.
+
+## Ledger — window of 2026-08-21T03:47:32+0200
+
+- **The janitor's 3 uncleared findings are now HUB-VERIFIED — first-hand, not relayed.** Evidence:
+  `reports/fleet-audit/20260821_033819+0200-janitor-remaining-findings-verification.md`. The hub
+  independently re-read the two load-bearing artifacts before ledgering anything.
+  - `memory-scope-leak` — **CONFIRMED true today, both halves**, and correctly recorded by the
+    janitor as a DELIBERATE ACCEPT in UWBXNJ76 (`testing`), not an oversight. Ledgered as
+    **DECIDED, not open**. `_LOCAL_HOSTNAME` (`private_path_patterns.py:232-233`) requires a
+    dotted suffix so a BARE hostname never matches; `_ENTROPY_MIN_LEN = 24` misses shorter ids.
+  - **The only NEW defect the whole pass produced: a ROTTED CITATION.** The finding's own
+    `private_path_patterns.py:215` now lands on a comment line; the regex lives at `:232-233`.
+    Janitor's repo, janitor's to fix — flagged, not ordered.
+  - `baseline-applier-gate6` — **STALE as an open finding: fixed in `4d0888fa`**, gate 6 checks
+    name AND content (`baselines_content_current`), drift falls through to apply, and the silent
+    no-op is replaced by an explicit `converged:` log line. Present in source AND in the installed
+    3.3.26 cache.
+  - **The janitor's own conservative caveat is REFUTED — in its favour.** It held that
+    "janitor repairs a drifted repo UNATTENDED" was UNOBSERVED (this host being content-current
+    from the hub's 2026-08-20 `gh api` apply). Its own
+    `.janitor/logs/branch-protection-apply.log` shows otherwise, hub-verified verbatim:
+    `08:21:53 content drift on Emasoft/ai-maestro-janitor …` → `08:21:58  OK  … =updated` — five
+    seconds, one session, and both lines are emitted ONLY by `branch_protection_apply.py`
+    (gate-6 fallthrough, then `_audit_append` after a successful apply), i.e. two steps of ONE
+    execution, which a manual `gh api` session cannot produce. Same pattern independently in
+    `ai-maestro-plugin` (08:38:18→08:38:29) and `ai-maestro-maintainer-agent`
+    (2026-08-19 20:28:29→20:28:34). ⇒ **DD0M4QL7's unattended-repair box is closable on
+    evidence** — janitor's card, janitor's call; the hub does not edit another repo's cards.
+  - `bugs-pass2-deep` — **the label is REAL and it is the JANITOR's**, refuting both the hub's own
+    suspicion that it had invented an unbacked label AND the janitor's "no match anywhere in this
+    repo". It is the filename stem of
+    `<janitor>/reports/plugin-self-audit/20260816_175034+0200-bugs-pass2-deep.md` (Confirmed 2 /
+    Refuted 8). Both its confirmed findings re-verified against current code and both already
+    FIXED (index.lock orphan → retry + `recover_own_index_lock`, TUWUB0SG; unguarded
+    atomic_write → wrapped). Nothing owed.
+  - **THE INSTRUMENT LESSON, and it bit BOTH parties within one hour, in opposite directions:**
+    the janitor grepped file CONTENTS for a label that names a FILE and concluded "not mine"; the
+    hub took that at face value and was ready to record an unbacked-label defect against itself.
+    Neither error was carelessness — both were a wrong needle for the artifact, returning a
+    confident zero. A zero is not a result until a positive control proves the needle can find
+    something known to be present.
+  - **Counting discipline, applied to this very pass.** The verifying agent returned
+    "8 CONFIRMED", which is the known inflation shape: a confirmation that something HOLDS is not
+    a defect. Decomposed honestly: **1 new defect** (the rotted citation), **2 deliberate accepted
+    tradeoffs** (decided, not deferred), **4 confirmations that a fix is present or a claim is
+    true**, **2 peer hypotheses refuted**. Ledgering "8 findings" would have been false.
+- **The janitor's two HELD cards were a NO-OP.** `OR527LNW` and `8IZ8COQ8` were already
+  `column: complete` in `design/archived/` — the legal state under 3P-ZON-05 as amended by
+  `4cc82d53` (hub-verified: `design/specs/3-pillars-spec.md:297`). The hold I placed cost nothing
+  and cleared nothing; recorded as a no-op rather than as work done.
+- **AMAMA `D6H36I26` review DISPATCHED** — owed since the 2026-08-18 escalation and never run;
+  the skill (`amama-governance-self-audit`, v2.17.2 → review at v2.18.2) has been live and
+  hub-unreviewed for 3 days. Two axes: AMAMA's own break-it target (find a governed MANAGER act
+  that walks all 12 questions ALLOWED while a rule forbids it — the ai-maestro#107 shape), and
+  citation integrity of all 12. AMAMA volunteered the strongest candidate against its own
+  artifact unprompted (`f7e239f`, an AMP-only messaging USER directive recorded in persona prose
+  TWO DAYS AFTER the checklist shipped) and a false-rot guard (some of the 12 cite HUB-REPO
+  OVERLAY files by design, `5901f54` — a citation resolving outside its tree is NOT rot).
+  Hub-verified both halves before relaying: `SKILL.md` is byte-identical to its v2.18.2 tag, while
+  HEAD is v2.18.2+4 touching 18 files (+99/-90) across exactly the delegation/approval/messaging
+  surfaces axis 1 compares against. The drift window is real.
 
 ## Ledger — window of 2026-08-20T00:49:18+0200
 

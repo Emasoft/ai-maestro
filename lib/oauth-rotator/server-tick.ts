@@ -94,6 +94,15 @@ export interface RunOneTickDeps {
    *  notifier — the defect being fixed is precisely "the finding was perfect and reached nobody",
    *  which no assertion on the tick's return value could ever have caught. */
   deliverImpl?: (findings: ReadonlyArray<{ code: string; message: string }>) => void
+  /** Default `withTickLock` — the MACHINE-WIDE beat lock. A seam because it is the one
+   *  collaborator here that is shared with processes outside the test runner: on a host where the
+   *  rotator is actually armed, a real 60 s beat holding the lock makes `withTickLock` return null
+   *  without running the body, so `runTickImpl` is never called and a test asserting it ran fails —
+   *  for a reason that has nothing to do with the code under test. Measured 2026-08-21: the full
+   *  suite went red on exactly that, while the same file passed in isolation, which is the
+   *  signature of contention rather than a regression. Tests inject a pass-through; production
+   *  keeps the real lock, so serialisation is unchanged. */
+  lockImpl?: <T>(fn: () => Promise<T>) => Promise<T | null>
 }
 
 /**
@@ -154,6 +163,7 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
   const enabledCheck = deps.enabledCheck ?? oauthTickEnabled
   const claudeRunningCheck = deps.claudeRunningCheck ?? claudeRunning
   const runTickImpl = deps.runTickImpl ?? (() => runTick())
+  const lockImpl = deps.lockImpl ?? withTickLock
   // Stamp BEFORE the gates, so the floor tracks ATTEMPTS rather than beats-that-did-work. The
   // timer's own beats advance it too, which is what makes 60 s a floor for the whole subsystem
   // instead of for the push-trigger alone — otherwise an ingest arriving just after a beat would
@@ -173,7 +183,7 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
   try {
     if (!enabledCheck()) return // R16 default: flag absent → do nothing, write nothing.
     if (!(await claudeRunningCheck())) return // no live client → nobody to keep signed in.
-    const result = await withTickLock(() => runTickImpl()) // serialise; concurrent tick → null.
+    const result = await lockImpl(() => runTickImpl()) // serialise; concurrent tick → null.
     // PERSIST-THEN-READ (TRDD-1GGQ4HWY → DXJZM3BW): stamp the cascade next_action so the continuity
     // `status` verb can READ it without ever running the tick (R16). A null (lock held) / undefined
     // (stub) / shapeless result is a silent no-op inside writeTickStatus — the last good value stays.

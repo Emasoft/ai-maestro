@@ -86,6 +86,13 @@ describe('runOneTick stamps the floor', () => {
       claudeRunningCheck: async () => true,
       runTickImpl,
       deliverImpl: () => {},
+      // The MACHINE-WIDE beat lock, injected. Without this the test contends with a real rotator:
+      // on an armed host a live 60 s beat holds the lock, `withTickLock` returns null WITHOUT
+      // running the body, and `runTickImpl` is never called — so this went red in the full suite
+      // on 2026-08-21 while passing in isolation, which is contention's signature, not a
+      // regression. Injecting a pass-through makes the assertion about the floor, which is what
+      // the test is named for; production still uses the real lock.
+      lockImpl: async (fn) => fn(),
     })
     expect(runTickImpl).toHaveBeenCalledTimes(1)
     expect(lastTickAttemptMs()).toBeGreaterThan(0)

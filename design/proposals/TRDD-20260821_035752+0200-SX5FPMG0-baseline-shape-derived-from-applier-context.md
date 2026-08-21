@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T03:57:52+0200
-updated: 2026-08-21T03:57:52+0200
+updated: 2026-08-21T04:02:10+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -20,7 +20,7 @@ npt: []
 eht: []
 blocked-by: []
 labels: [fleet-blocker, branch-protection, baseline, measured]
-external-refs: [ai-maestro-janitor#282, ai-maestro-janitor#14]
+external-refs: [ai-maestro-janitor#282, ai-maestro-janitor#14, ai-maestro-janitor:TRDD-R4XC8MV1, ai-maestro-janitor:TRDD-Q8ZT5NW3]
 relevant-rules: [22]
 ---
 
@@ -130,7 +130,18 @@ same mechanism with a simpler cause.
 
 ## Acceptance
 
-- [ ] The janitor's caller-context issue exists and is linked here (their repo, their filing)
+- [x] The janitor's caller-context card exists and is linked here (their repo, their filing) —
+      **`ai-maestro-janitor:TRDD-R4XC8MV1`** (high, `design/tasks/`, `todo`, commit `837c1306`).
+      Its acceptance deliberately requires *"the predicate returns the same verdict for a given
+      repo regardless of the calling process's env"* and *"a test pins BOTH caller shapes against
+      one slug and asserts agreement"* — because a fix that merely makes today's two callers agree
+      leaves the NEXT caller free to flip it again. That is the right shape and it is stricter
+      than what this card asked for.
+      Sibling filed the same commit: **`ai-maestro-janitor:TRDD-Q8ZT5NW3`** — the audit line's
+      `verb = "updated"` on an ISSUED (not CHANGED) PUT. One constraint recorded there that this
+      card endorses: the fix must NOT silence the no-op line. `updated` vs **`unchanged`**, never
+      `updated` vs nothing — deleting the line would re-create the silent-no-op ambiguity that
+      DD0M4QL7 added the trace to end.
 - [ ] A fleet-wide apply pins its evaluation context, with the pinned value recorded in the run log
 - [ ] `pull_request` is derived from a repo-scoped fact; the derivation is stated in the SSOT
 - [ ] `required_status_checks` either reads the repo via API or REFUSES rather than silently omitting

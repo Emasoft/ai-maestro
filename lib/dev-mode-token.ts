@@ -33,11 +33,13 @@
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { loadGovernance, saveGovernance } from '@/lib/governance'
 
-/** Every dev token starts with this. Owner-facing, so it is greppable in a .env file. */
-export const DEV_TOKEN_PREFIX = 'am-'
-
-/** The name the owner writes in `.env.local`. Exported so the UI and the CLI cannot drift. */
-export const DEV_TOKEN_ENV_NAME = 'AI_MAESTRO_DEV_MODE_TOKEN'
+// Re-exported from a client-safe module, NOT declared here. A CLIENT component
+// needs DEV_TOKEN_ENV_NAME, and importing it from this file would drag
+// governance.ts -> agent-registry.ts -> `fs`/`child_process` into the browser
+// bundle and fail `yarn build` outright (tsc stays green — only the bundler
+// objects). See lib/dev-mode-token-constants.ts for the full reasoning.
+export { DEV_TOKEN_PREFIX, DEV_TOKEN_ENV_NAME } from '@/lib/dev-mode-token-constants'
+import { DEV_TOKEN_PREFIX } from '@/lib/dev-mode-token-constants'
 
 /** 256 bits of entropy — the whole security of the scheme rests on this being random. */
 const TOKEN_BYTES = 32

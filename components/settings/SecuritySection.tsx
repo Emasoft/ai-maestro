@@ -8,7 +8,10 @@ import {
 } from 'lucide-react'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
-import { DEV_TOKEN_ENV_NAME } from '@/lib/dev-mode-token'
+// From the CONSTANTS module, never from `@/lib/dev-mode-token` — that one pulls
+// governance.ts -> agent-registry.ts -> `fs`/`child_process` into this client
+// bundle and fails `yarn build` with "Module not found: Can't resolve 'fs'".
+import { DEV_TOKEN_ENV_NAME } from '@/lib/dev-mode-token-constants'
 
 interface SecurityConfig {
   keyRotation: { intervalDays: number; overlapDays: number }

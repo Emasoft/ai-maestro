@@ -129,11 +129,36 @@ claim), **2** when something could not be resolved and nothing is closed.
 2026-08-21 manual sweep scored 9 of 12 closed; that number is already history. What the card asserts
 going forward is the script's exit code, not a figure in a report.
 
-Run of 2026-08-21T16:5x, after the four in-lane corrections landed: **2 CLOSED, 5 unresolved,
-exit 1.** The one remaining live dead claim is `SCLSRS6E` → `ai-maestro#55` (hub-owned, out of the
-ORCHESTRATOR's lane). The 5 unresolved are all bare `#N` with no repo — the script reports them as
-`AMBIGUOUS` rather than guessing, which is itself a finding: prose citation has no namespace, so
-even a *human* reader cannot always tell which tracker a wait refers to.
+Run of 2026-08-21T17:0x, after the in-lane corrections landed: **1 CLOSED, 5 unresolved, exit 1.**
+The one remaining live dead claim is `SCLSRS6E` → `ai-maestro#55` (hub-owned, out of the
+ORCHESTRATOR's lane).
+
+### The `AMBIGUOUS` bucket is the sharper half of the evidence
+
+All 5 unresolved are a bare `#N` with no repo. The script reports them as `AMBIGUOUS` rather than
+guessing, and then counts how many known trackers the number actually resolves in:
+
+| card | ref | resolves in |
+|---|---|---|
+| `903B7A20` | `#35` | **5 of 6** |
+| `903B7A20` | `#37` | **5 of 6** |
+| `17K0SHDQ` | `#46` | **4 of 6** |
+| `KCRMSNL7` | `#100` | **3 of 6** |
+| `U9UNWXMV` | `#103` | **3 of 6** |
+
+**Not one of them resolves in exactly one tracker.** And this is not a frequency observation that
+better luck could improve — it is structural: `CLAUDE.md` records that this project spans **two
+remotes on purpose** (`origin` = `23blocks-OS/ai-maestro` upstream, `fork` = `Emasoft/ai-maestro`),
+so for a hub card a bare `#N` is **ambiguous by construction, always, ≥2 by layout**. `gh issue
+view` also resolves PRs, so `#N` does not even separate issue from PR inside a single repo.
+
+**The instance that proves guessing would be worse than not knowing** (surfaced by the plugin
+session, resolved by the hub, verified here 2026-08-21): the same bare `#63` is a **MERGED PR** in
+`23blocks-OS/ai-maestro` ("fix: Add migration support for legacy 'local' host ID") and an **OPEN**
+launch issue in `Emasoft/ai-maestro` ("[LAUNCH] MANAGER needs the launch plan … go/no-go gates").
+A sweep that picked a repo would have returned **the exact opposite of the truth**, in either
+direction. A human reader has no more information than the script does. Reporting `AMBIGUOUS` is not
+caution — it is the only correct answer available, and no amount of parsing changes that.
 
 **The script is NARROWER than the manual sweep that produced the 9-of-12 figure, and the two must
 not be conflated.** The manual pass followed refs a human judged to be blockers, wherever they sat;
@@ -142,14 +167,45 @@ where the manual pass resolved 12, and its `0 OPEN` means *"no blocking-phrased 
 issue"* — **not** *"no external wait is live"*. `ai-maestro#121`, `#90` and `#76` are cited as real
 constraints by `T3FXA0Y0`, `5CIL7A07` and `IBKR7F74` and are genuinely OPEN; the script does not see
 them, because those cards state the dependency in prose it cannot recognise. That gap is not a bug
-to file against the script — **it is the card's thesis reproducing itself in the instrument**, and it
-is the strongest argument for a real field over better parsing.
+to file against the script — **the instrument reproducing the defect it was built to measure is the
+card's evidence, not its bug** — and it is the strongest argument for a real field over better
+parsing.
+
+**Do not widen the needle.** A wider match buys a few more refs and pays in false positives, and
+every step of that trade is itself the argument for the field: you cannot parse your way to a
+dependency graph out of prose, because prose has no schema and no namespace. The `AMBIGUOUS` bucket
+below proves the namespace half independently.
+
+### A correction must be marked in a form the checker can see
+
+The sweep's first run reported the two cards whose dead claims had **just been corrected** — because
+a good correction *quotes the dead claim on purpose* (the wrong claim's shape is the evidence), which
+makes the correction **indistinguishable from the defect to a text matcher**. The requirement that
+produced the correct behaviour also manufactured the false positive.
+
+Skipping `~~struck~~` spans and `>` blockquotes is the fix, and it is really a **contract**: a
+correction has to be marked in a form the checker can recognise, or the checker keeps reporting
+cards that are already right — **and a permanent false positive is how a check dies.** People route
+around a linter that cries about work they have already done. This generalises past this script: it
+is a standing hazard for every honest checker in this repo.
+
+### Three ways prose-cited state rots (the third was found by accident)
+
+1. **The blocker closes** and nothing re-checks the prose — 9 of 12, the original finding.
+2. **The citation cannot be resolved at all** — bare `#N`, ambiguous by layout, above.
+3. **The citing card moves out from under the reader.** `8KDIB2LT` appeared as a hit on one run and
+   was gone at that path on the next; the hub had archived it minutes earlier. A sweep over a live
+   corpus can report a card that no longer exists where it looked — so a stale *result* is a third
+   rot mode, distinct from a stale claim.
 
 Known limits, stated so a later reader does not mistake a clean run for proof:
 - Only lines with blocking phrasing ("blocked/waiting/gated/pending on|by") near a ref are checked.
   A wait phrased any other way is invisible to it — the same prose-parsing weakness the card is about.
 - `~~struck~~` spans and `>` blockquotes are skipped, so corrected claims stop re-reporting.
 - Unmapped shorthands are reported, never guessed; extend `repo_for()` when a new one appears.
+- Sweeping **zero** refs exits 2, not 0 — a typo'd path used to read as "clean". Same family as the
+  vacuous completion gate: `ERROR` vs `no findings` vs `could not run` must never collapse into one
+  exit code. **Every gate in this repo deserves auditing for that collapse.**
 
 ## Out of scope
 

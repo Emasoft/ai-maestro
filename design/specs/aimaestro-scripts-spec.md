@@ -759,7 +759,10 @@ require; they do NOT commit. Commit the result yourself.
 Which project? `--agent <uuid|name>` selects that agent's `<workdir>/design`.
 Omit it and the server's own repo is used.
 
-Auth: agent callers export AID_AUTH (Bearer); the local owner needs none.
+Auth: agent callers export AID_AUTH (Bearer). The local owner is NOT
+exempt from strict routes — run `aimaestro-governance.sh login` once and
+export AIMAESTRO_SUDO_TOKEN, or every mutating verb below 403s
+"sudo_required" (measured; see issue #149). Read-only verbs need no auth.
 Every mutating verb (edit/approve/refuse/promote/archive) hits a strict route:
 a USER caller must supply AIMAESTRO_SUDO_TOKEN, an AGENT caller authorizes by
 AID + governance title (the R32 dual-path) and needs none.

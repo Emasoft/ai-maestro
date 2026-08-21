@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T03:47:32+0200
+updated: 2026-08-21T13:56:26+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -211,6 +211,31 @@ boundary. Crossing that boundary is the one thing the hub can do that no session
 (1) the `--atomic` release push cannot retry — 12 of 22 `publish.py`;
 (2) 21 of 22 release tools cannot emit the `Agent:` trailer their own GOLDEN PRRD rule mandates.
 **Each is ONE canonical-pipeline card, never twelve or twenty-one.**
+
+### 2026-08-21 13:5x — the gate reads 0/10 while this ledger records dozens of landed items
+
+**Measured, not assumed: `checked=0 open=10`.** Every acceptance box on this card is unticked,
+including ones this very ledger supplies the evidence for. That is the MIRROR of the failure the
+fleet spent this week finding — there, prose said NOT STARTED over shipped code; here, a ledger
+records shipping while the gate says nothing has happened. Both make the card unreadable at a
+glance, and the gate half is worse: **a card whose boxes are all open can never be honestly
+closed, so the program has no defined end.**
+
+Not repaired in this fire, deliberately. Ticking is by OBSERVED behaviour, and these ten boxes
+range over ~8 peer repos and their published releases; that is a real orchestration pass with a
+per-box evidence hunt, not a tail-of-session errand — the same judgment `TRDD-17K0SHDQ` made about
+its own probe. Whoever takes it should work the boxes in ledger order, quoting the evidence per
+box, and expect several to already be satisfied.
+
+**One box is NOT verifiable by this session at all, and it is a security box.** Box 339 (*"no
+governance password literal appears anywhere in any artifact this program produced"*) needs the
+literal to grep for, and reading `.env.local` is **refused by a permission guard** — correctly, and
+NOT to be routed around (not by a shell trick, and not by asking a peer session to read it, which
+would launder a denied permission). So it stays open with the reason recorded rather than ticked on
+a check that never ran. The related card is `TRDD-44RGLOO8`.
+
+**Also outstanding from the entry above it:** AMOA's F1/F3 migration onto the shipped
+`--porcelain` (`5f10772e`) — theirs to land, the hub's only to track.
 
 ## The USER's mandate, verbatim
 

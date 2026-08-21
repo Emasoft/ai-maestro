@@ -1679,6 +1679,45 @@ tag complete, 1656 files) — no emergency republish.
   Hub-verified both halves before relaying: `SKILL.md` is byte-identical to its v2.18.2 tag, while
   HEAD is v2.18.2+4 touching 18 files (+99/-90) across exactly the delegation/approval/messaging
   surfaces axis 1 compares against. The drift window is real.
+- **AMAMA `D6H36I26` review LANDED — the author's own challenge has an answer.** Report:
+  `reports/fleet-audit/20260821_034315+0200-amama-D6H36I26-governance-self-audit-review.md`.
+  **Axis 2: 0 rotted citations, 20/20 resolve** including the cross-tree anchors — AMAMA's
+  false-rot guard is the only reason that zero is trustworthy rather than an artifact.
+  **N1: AMAMA's own lead (`f7e239f`, the AMP-only directive) is COVERED by Q12** — it handed over
+  the strongest candidate against its own artifact and the artifact held; recorded as an explicit
+  negative with the catching question quoted.
+  **A1 (PRIMARY, hub-verified first-hand): the MANAGER writes code and all 12 questions answer
+  YES.** A Tier-0 self-mandated card implemented by its own author walks Q1-Q12 green, against
+  `GOV-R13.2` (verdict **Explicit**, *"Does NOT write code"*) and the plugin persona's own
+  *"NO IMPLEMENTATION — THE ONE ABSOLUTE BOUNDARY"*. Measured with a positive control so the zero
+  is a result: `grep -c 'R13' SKILL.md` → 0 while the cited set really present is R6 R12.1 R15.6
+  R23(.1/.2/.4/.5) R26 R28-R32 R41 R42(.8) R49; the reviewer additionally swept all 71 skill files
+  with a CONCEPT needle, not just the id. **A4** on the same measurement: `R22` cited by none.
+  **A2/A3 relayed as UNVERIFIED reviewer candidates and labelled as such** — AMAMA recorded them
+  the same way and declined to act on A3 without a read. Correct on both sides.
+  AMAMA re-verified A1/A4 itself before filing (it did not take the hub's word) and filed
+  **TRDD-ZIH2XUU6** in its own repo; `D6H36I26` stays archived and frozen.
+- **THE GENERALIZATION IS WORTH MORE THAN THE TWO FINDINGS, and it is AMAMA's:** *a checklist
+  built by enumerating POWERS will systematically miss PROHIBITIONS.* The skill's own maintenance
+  rule ("new power ⇒ its question in the SAME change") is what keeps its coverage self-maintaining
+  — and is exactly why R13.2 slipped: a standing prohibition that PREDATES the checklist fires no
+  new-power event, so nothing ever triggered. Q13/Q14 close the two instances; the CLASS stays
+  open until the maintenance rule also covers prohibitions and someone sweeps the standing ones.
+- **A citation with no TREE named is ambiguous by construction** — measured, not theorised. AMAMA
+  cited `GOVERNANCE-RULES.md:581` (read from `fork/main` via `gh api`); the hub cited `:583` (local
+  working tree). `git rev-list --count fork/main..HEAD` → **313**, two of those commits landing
+  above R13.2. Both numbers are correct OF THE TREE THEY WERE TAKEN FROM. The fetchable copy is
+  the better one to put in a card. (Collateral, unacted: this branch is 313 commits ahead of the
+  fork — the USER's to push, not the hub's.)
+- **NEW FLEET FINDING, filed as `TRDD-SX5FPMG0`** (`design/proposals/`, `manager` floor, commit
+  `2cd5dbcc`): the branch-protection baseline's shape is derived from the APPLIER's ambient
+  context, not the repo — `pull_request` from the caller's ENV, `required_status_checks` from the
+  caller's CWD. Six repos carry the hub's 01:50 shape, three the janitor applier's; the split is
+  by WRITER, not by repo. Neither applier is buggy on its own terms, which is worse than a
+  payload disagreement because agreeing payloads cannot fix it. **The hub's half: pin the
+  evaluation context, and run NO further fleet-wide baseline applies until it lands** — the
+  2026-08-20 01:50 hub run is what produced the divergence. Diagnosis credited to the janitor
+  session; the predicate is its code and it files its own caller-context issue.
 
 ## Ledger — window of 2026-08-20T00:49:18+0200
 

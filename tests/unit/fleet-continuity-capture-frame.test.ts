@@ -11,6 +11,19 @@
  * REAL tmux, no mock of it — including a real, really-blank session for the other direction, which
  * is the control that stops "reject whenever the pane is empty" from passing. The only fake is the
  * runtime seam (`setRuntime`), because WHICH empty arrives is the test's INPUT, not its subject.
+ *
+ * NEUTER RUNS (2026-08-21 — OBSERVED via scripts/dev/neuter, restore verified by blob hash).
+ * A COMPLEMENTARY PAIR: the two failure directions cannot be reached by one mutation, and a
+ * discriminator needs both — "always reject on empty" would satisfy the first neuter alone while
+ * classifying nothing.
+ *
+ *   s|await execFileAsync\('tmux'|… && (async()=>'')('tmux'|          (the probe made inert)
+ *   → 1 red / 2 green:
+ *       REJECTS with a message when the pane reads empty and tmux cannot read the session
+ *
+ *   s|await execFileAsync\('tmux', \[|throw new Error(…) \|\| await …|   (degenerate: always reject)
+ *   → 1 red / 2 green:
+ *       resolves to "" — an honest empty-frame — when the session is REAL and its pane is blank
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'child_process'

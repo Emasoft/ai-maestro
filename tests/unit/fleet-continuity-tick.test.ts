@@ -217,6 +217,11 @@ describe('continuity tick — a LIVE-shaped frame reaches the actuator (TRDD-7UW
   // The regression this pins is the two-week dark run: 556 consecutive `empty-frame` skips on
   // sessions that were rendering the whole time. A real pane is mostly whitespace and glyphs — the
   // emptiness test must key on there being ANY content, never on the frame looking prose-like.
+  //
+  // NEUTER RUNS (2026-08-21 — OBSERVED via scripts/dev/neuter, restore verified by blob hash), one
+  // per half, each reddening THIS test and nothing else:
+  //   s|if (!frame.trim()) {|if (!frame.trim() \|\| frame.startsWith('\n')) {|   → 1 red / 15 green
+  //   s|^          frame,$|          frame: frame.trim(),|                       → 1 red / 15 green
   it('is not skipped as empty, and arrives at actuate byte-for-byte', async () => {
     const { actuate, targets } = recorder()
     const r = await runContinuityTick(deps({ captureFrame: async () => LIVE_FRAME, actuate }), new Map(), 1_000)

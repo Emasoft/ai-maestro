@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:33:00+0200
+updated: 2026-08-21T15:37:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -360,8 +360,10 @@ them to.
 - [ ] Phase 2 TRDDs exist in the OWNING repos, not here, and each cites its audit finding.
 - [ ] Specs corrected/expanded BEFORE their dependent changes, with compliance re-verified after.
 - [ ] wikimem and documentation updated for every landed change.
-- [ ] Every user-scope plugin that changed has PUBLISHED a new version; local-scope plugins were
-      not upgraded under this program.
+- [x] Every user-scope plugin that changed has PUBLISHED a new version — **MEASURED against
+      GitHub 2026-08-21T15:3x: 13 of 15 released after the program start; the other 2 have ZERO
+      commits since it began, so no publish was owed.** ~~local-scope plugins were not upgraded
+      under this program~~ — that second clause is NOT measured (see `## Publish coverage`).
 - [ ] Phase-3 scenarios exist, are multi-phase, and have RUN against the live server with results
       recorded.
 - [x] No governance password literal appears anywhere in any artifact this program produced —
@@ -410,6 +412,38 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Publish coverage — 2026-08-21T15:3x+0200 — acceptance box 7, read from GitHub
+
+Latest release per repo, from the API, not from any local clone or tag cache:
+
+**13 released AFTER the 2026-08-16 program start** — janitor `v3.3.26` (08-21), ai-maestro-plugin
+`v3.1.31` (08-20), webdesign `v0.1.17`, chief-of-staff `v2.32.7`, orchestrator `v1.13.11`,
+integrator `v1.7.1`, assistant-manager `v2.18.2` (08-19), architect `v2.17.0`, visual-communicator
+`v1.5.1`, assistant-role `v0.4.0`, programmer `v2.0.8`, maintainer `v1.13.9`, autonomous `v1.6.19`
+(08-18).
+
+**The 2 that did not publish did not CHANGE, so the box does not bind them** — the clause is
+"every plugin *that changed*", and both show **0 commits since 2026-08-16** on their default
+branch:
+
+- **`web-scenario-tester`** — last release `v0.1.3`, **2026-07-08**, five weeks before the program.
+  Its `pushed_at` reads 08-16T08:13Z, which is a BRANCH push, not a default-branch commit — that is
+  PR #4, still open. `pushed_at` counts any ref, so it is not evidence the trunk moved.
+- **`dev-browser`** — 12 tags, **no GitHub Release at all**, last push 2026-07-15. The bare 404 from
+  `releases/latest` is ambiguous between *no repo* and *no release*; querying the repo itself
+  resolved it — public, alive, simply never released.
+
+**`web-scenario-tester` is now the answer to three independent questions**, which is what makes it
+worth naming rather than counting: it is the one plugin with **0 Phase-1 audit reports** (box 1),
+the one that **published nothing** during the program (box 7), and the repo holding the unmerged
+PR #4 that gates `TRDD-44RGLOO8`. Three measurements taken for unrelated reasons converge on one
+repo, and none of them was looking for it.
+
+**The second clause is NOT measured.** "Local-scope plugins were not upgraded under this program"
+is a claim about per-agent install state, not about releases, and nothing above can see it. Ticking
+the box on the publish half alone would have quietly certified a clause no command in this section
+touched.
 
 ## Phase-2 locality — 2026-08-21T15:2x+0200 — acceptance box 4, first half only
 

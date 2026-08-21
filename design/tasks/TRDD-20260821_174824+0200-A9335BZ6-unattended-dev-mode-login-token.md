@@ -3,7 +3,8 @@ trdd-id: A9335BZ6
 title: Unattended dev-mode login via an owner-minted, revocable dev token
 column: dev
 created: 2026-08-21T17:48:24+0200
-updated: 2026-08-21T17:48:24+0200
+updated: 2026-08-21T18:04:15+0200
+implementation-commits: [ddf18bf7, 2b881dcf, 0f794535]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
 assignee: hub-orchestrator
@@ -93,11 +94,38 @@ property the owner asked for (unforgeable, server-only issuance, revocable, show
 stateless HMAC would be strictly worse: revocation still needs a store, so the HMAC adds a key
 to protect and buys nothing.
 
-### NEXT ACTION
+### NEXT ACTION — the owner has to mint one token; nothing else is blocked
 
-Unit 1 (`lib/dev-mode-token.ts`) is the coordinator's and lands FIRST — it is the contract units
-2-5 compile against. Then fan out units 2-5. Ledger:
-`reports/colony/DELEGATION-A9335BZ6.md`.
+All five units are built, verified and committed (`ddf18bf7`, `2b881dcf`, `0f794535`). The two
+remaining acceptance boxes both need a real token, which only the owner can create:
+
+1. Settings → Security → **Dev Mode Token** → Generate (governance password + passkey), copy the
+   `AI_MAESTRO_DEV_MODE_TOKEN=am-…` line into `.env.local`.
+2. Then, unattended: `scripts/aimaestro-governance.sh login </dev/null` → 0, and
+   `scripts/aimaestro-trdd.sh search <anything>` → 0 instead of 401. That closes the
+   19-day host-wide 401 and the ORCHESTRATOR's parked assignment lane.
+3. Then **delete `AIM_GOVERNANCE_PASSWORD` from `.env.local`** — removing the master credential
+   from the file is the security win this card exists to buy.
+
+### THE GAP THIS CARD FOUND IN ITSELF — do not undo it
+
+Neutering the enable flag (`if (!rec || rec.enabled !== true)` → `if (!rec)`) reddened **0 of 14**
+tests. The flag is the ENTIRE security justification for refusing to build `AI_MAESTRO_DEV_MODE`,
+so with nothing pinning it that refusal was decorative — a disabled host would have honoured a
+token anyway. Root cause was structural and the coordinator's: unit 1 was self-assigned with only
+`tsc --noEmit` as acceptance, so the crypto core shipped with no suite while all four DELEGATED
+units got one. `tests/unit/dev-mode-token.test.ts` (`0f794535`) closes it; the same neuter now
+reds exactly 1 of 23. **A brief that omits a check produces a report that cannot mention it.**
+
+### Neuter runs — all OBSERVED by the coordinator via `scripts/dev/neuter`, restores blob-verified
+
+```
+lib/dev-mode-token.ts       enable flag ignored      → 0 red / 14  ← THE GAP (before the fix)
+lib/dev-mode-token.ts       enable flag ignored      → 1 red / 23  ← after
+app/api/auth/login/route.ts accept ANY devToken      → 1 red / 5   "a wrong dev token 401s"
+app/api/auth/dev-token/…    passkey check no-op      → 1 red / 9   "refuses when the assertion
+                                                                    verification fails"
+```
 
 ### Load-bearing gotchas
 
@@ -166,15 +194,15 @@ revocable, same rate-limit and kill-switch as the password path, and fail-closed
 
 ## Acceptance
 
-- [ ] `lib/dev-mode-token.ts` exports the frozen contract; `tsc --noEmit` clean
-- [ ] `POST /api/auth/dev-token` refuses without BOTH a valid password and a verified passkey assertion, and a neuter dropping the passkey check reds its test
-- [ ] The plaintext token is returned exactly once and is unreadable afterwards through any route
-- [ ] `POST /api/auth/login { devToken }` mints a session when enabled+issued, and is refused when the flag is off, when revoked, and on a wrong token
-- [ ] Settings → Security renders status, Generate (password+passkey), show-once + copy, Regenerate, Revoke, and the literal `AI_MAESTRO_DEV_MODE_TOKEN=am-…` line
-- [ ] `aimaestro-governance.sh login` succeeds with NO TTY given the token, fails closed without it, and never places the secret in argv
-- [ ] `aimaestro-trdd.sh search` returns 0 (not 401) after that login
-- [ ] `tests/unit/test-only-env.test.ts` green — no new security-weakening env read
-- [ ] The master governance password can be removed from `.env.local` (the security win this buys)
+- [x] `lib/dev-mode-token.ts` exports the frozen contract; `tsc --noEmit` clean
+- [x] `POST /api/auth/dev-token` refuses without BOTH a valid password and a verified passkey assertion, and a neuter dropping the passkey check reds its test — 9/9 green, neuter 1 red
+- [x] The plaintext token is returned exactly once and is unreadable afterwards through any route — asserted on the status object's exact key set, so a future field cannot leak one silently
+- [x] `POST /api/auth/login { devToken }` mints a session when enabled+issued, and is refused when the flag is off, when revoked, and on a wrong token — 5/5 + 9/9 green; neuters 1 red each
+- [x] Settings → Security renders status, Generate (password+passkey), show-once + copy, Regenerate, Revoke, and the literal `AI_MAESTRO_DEV_MODE_TOKEN=am-…` line — built from the lib's exported const, so the UI and CLI cannot drift; 0 hits for localStorage/sessionStorage/logging
+- [x] `aimaestro-governance.sh login` succeeds with NO TTY given the token, fails closed without it, and never places the secret in argv — proven against a loopback stub with a curl shim that RECORDS argv, plus a delta-0 count of the real `~/.aimaestro` to prove containment
+- [ ] `aimaestro-trdd.sh search` returns 0 (not 401) after that login — **needs the owner to mint one token; nothing else blocks it**
+- [x] `tests/unit/test-only-env.test.ts` green — no new security-weakening env read
+- [ ] The master governance password can be removed from `.env.local` (the security win this buys) — **owner action, after the box above**
 
 ## Approval log
 

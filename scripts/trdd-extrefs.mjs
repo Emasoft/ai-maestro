@@ -89,6 +89,18 @@ function field(text, name) {
 
 // ---- walk the open zones -------------------------------------------------------------
 const cards = []
+// THE BLIND SPOT, COUNTED. This detector reads the `external-refs:` FIELD, so a card that
+// cites its issues only in body prose is invisible to it BY CONSTRUCTION — and a clean run
+// would then read as "the board's citations are current" while saying nothing at all about
+// those cards. That is not hypothetical: TRDD-903B7A20 carried no `external-refs:` line, its
+// sole blocker (ai-maestro#132) sat in prose, and it stayed CLOSED for 8 days while still
+// gating a descoped gate. Nothing here could have seen it. So count them and PRINT the
+// number: a reported blind spot is a different thing from a silent one.
+// Deliberately NOT scanned for findings — a prose ref is ambiguous (a bare "#35" matches
+// ordinary text), and filing off it manufactures false positives. Counting is safe; the
+// count is a floor on what this tool cannot answer, not a finding.
+let fieldlessWithProseRefs = 0
+let fieldlessNoRefs = 0
 for (const zone of ZONES) {
   let names
   try {
@@ -100,7 +112,12 @@ for (const zone of ZONES) {
     if (!n.endsWith('.md')) continue
     const text = readFileSync(join(zone, n), 'utf8')
     const line = extRefsLine(text)
-    if (!line) continue
+    if (!line) {
+      const body = parseRefs(text)
+      if (body.qualified.length || body.bare.length || body.naked.length) fieldlessWithProseRefs++
+      else fieldlessNoRefs++
+      continue
+    }
     const { qualified, bare, naked } = parseRefs(line)
     if (qualified.length === 0 && bare.length === 0 && naked.length === 0) continue
     cards.push({
@@ -176,7 +193,9 @@ const bareCount = new Set(cards.flatMap((c) => c.bare)).size
 const nakedCount = new Set(cards.flatMap((c) => c.naked)).size
 
 if (has('--json')) {
-  console.log(JSON.stringify({ findings, partial, totalRefs, unresolved, bareCount, nakedCount }, null, 2))
+  console.log(JSON.stringify(
+    { findings, partial, totalRefs, unresolved, bareCount, nakedCount,
+      notScanned: { fieldlessWithProseRefs, fieldlessNoRefs } }, null, 2))
 } else {
   console.log(`trdd-extrefs — ${cards.length} open cards cite ${totalRefs} distinct issues ` +
               `across ${repos.length} repos`)
@@ -191,6 +210,13 @@ if (has('--json')) {
     console.log(`  NOTE: ${bareCount} refs are bare (e.g. "janitor#167") and carry no owner/repo. ` +
                 `They are NOT resolved and NOT guessed — a guessed mapping would attribute an ` +
                 `issue to the wrong repo silently.`)
+  }
+  if (fieldlessWithProseRefs > 0) {
+    console.log(`  NOT SCANNED: ${fieldlessWithProseRefs} open cards carry NO external-refs: ` +
+                `line yet cite an issue in body prose (plus ${fieldlessNoRefs} with neither). ` +
+                `This tool reads the FIELD, so those citations are invisible to it — a clean ` +
+                `run above is clean of what it can see, NOT of the board. TRDD-903B7A20 was ` +
+                `one of them: its only blocker sat in prose, closed 8 days, still gating.`)
   }
   console.log()
   if (findings.length === 0) {

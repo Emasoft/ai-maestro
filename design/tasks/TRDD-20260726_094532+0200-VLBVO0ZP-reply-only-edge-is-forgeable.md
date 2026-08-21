@@ -5,7 +5,7 @@ scope: project
 project-id: ai-maestro
 column: todo
 created: 2026-07-26T09:45:32+0200
-updated: 2026-08-15T01:30:26+0200
+updated: 2026-08-21T17:18:00+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -31,6 +31,29 @@ filed now because that deadline is currently recorded nowhere but a code comment
 NEXT ACTION: decide (USER/MANAGER) whether to strengthen the check or to accept it with an explicit
 expiry tied to the Phase-2 work. Do not "fix" it silently — the current behaviour is what the rule
 text describes, so changing it changes governance.
+
+## ⏹ 2026-08-21 — the "not exploitable today" justification is FALSE at one call site
+
+`recipientIsHuman` is **not** hardwired false. `services/send-message-service.ts:380` derives it
+from the wire (`recipientTitleStr === 'human' || === 'user'`) and `:391` passes
+`inReplyTo: input.inReplyTo` straight from caller input into the gate. So the reply-only branch is
+reachable with any truthy string, from an agent sender, today.
+
+The comment asserting otherwise is `lib/communication-graph.ts:509-512` — *"today `recipientIsHuman`
+is always false … This branch only goes live with Phase 2 maestro auth."* That is the card's whole
+reason to defer, and it does not hold at this call site.
+
+**NOT established by this reading:** whether a message addressed to `user`/`human` is actually
+DELIVERABLE. The gate allows it; delivery is another layer. So this raises priority, it does not by
+itself prove an exploit.
+
+Unchanged: still `min-approval-requirement: manager`, still *do not fix silently* — the weak check
+is what R6.10's text describes.
+
+```
+sed -n '378,392p' services/send-message-service.ts
+sed -n '505,515p' lib/communication-graph.ts
+```
 
 ## Problem
 

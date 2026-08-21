@@ -435,7 +435,11 @@ wikimem repaired (3 pages schema-migrated; ~60 backlog drains via the heartbeat 
 cadence). NEXT — all remaining items need the USER or are gated: Phase D scenarios
 (dev-browser UI — risky unattended: live-server restart + real-agent spawning + quota),
 #3b bearer-downstream (now SPECCED → `TRDD-f1d89143`, backburner; implementation
-security-gated on review), Emasoft/ai-maestro#37 decoupling (gated on MANAGER Emasoft/ai-maestro#35), the user's version
+security-gated on review), ~~Emasoft/ai-maestro#37 decoupling (gated on MANAGER
+Emasoft/ai-maestro#35)~~ — **BOTH CLOSED, gate cleared (verified 2026-08-21; the coordination
+issue is titled "Coordinate: MANAGER to ai-maestro" and the decoupling one "land the frozen-CLI
+decoupling rule", and both are CLOSED — issue numbers deliberately omitted here so this
+explanation is not itself parsed as a live citation)** —, the user's version
 bump + push approval. **The autonomous-SAFE campaign work is substantially COMPLETE +
 independently verified; the branch is PR-ready modulo the version bump.**
 
@@ -520,7 +524,7 @@ B (synthesize) + E (MANAGER coordination #35) complete.
 - DEPLOY (USER action): re-run install-messaging.sh (deployed CLI drift: aid-init.sh SH-MAJOR-04 + the new teams verbs); add installer self-heal.
 - #44 (plugin repo): core ai-maestro-plugin publish-pipeline → CPV canonical.
 
-Recommend next: **Phase D scenarios** (dev-browser UI validation — explicitly user-requested; validates the governance/security fixes end-to-end), OR the lower-priority residuals (#3b bearer-downstream deep-validation, #37 decoupling [gated on MANAGER Emasoft/ai-maestro#35], install-messaging --verify drift mode). Service `[janitor-heartbeat]` markers between items.
+Recommend next: **Phase D scenarios** (dev-browser UI validation — explicitly user-requested; validates the governance/security fixes end-to-end), OR the lower-priority residuals (#3b bearer-downstream deep-validation, #37 decoupling [~~gated on MANAGER Emasoft/ai-maestro#35~~ — CLOSED, cleared 2026-08-21], install-messaging --verify drift mode). Service `[janitor-heartbeat]` markers between items.
 
 ## Acceptance
 

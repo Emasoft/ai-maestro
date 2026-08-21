@@ -52,7 +52,8 @@
     "test:lib": "vitest run --exclude 'tests/services/**'",
     "test:e2e": "npx playwright test --config=tests/e2e/playwright.config.ts",
     "build:jsonl-reader": "bash scripts/build-jsonl-reader.sh",
-    "trdd:extrefs": "node --import tsx scripts/trdd-extrefs.mjs"
+    "trdd:extrefs": "node --import tsx scripts/trdd-extrefs.mjs",
+    "trdd:blockers": "bash scripts/sweep-external-blockers.sh"
   },
   "dependencies": {
     "@biscuit-auth/biscuit-wasm": "^0.6.0",

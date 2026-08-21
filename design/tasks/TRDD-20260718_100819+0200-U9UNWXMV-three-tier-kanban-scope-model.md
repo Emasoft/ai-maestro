@@ -3,7 +3,7 @@ trdd-id: U9UNWXMV
 title: three-tier TRDD scope↔kanban model — user/host, project/team (multi-repo), local/agent + per-TRDD project-id & repo
 column: design
 created: 2026-07-18T10:08:19+0200
-updated: 2026-08-16T17:46:11+0200
+updated: 2026-08-21T23:41:57+0200
 current-owner: ai-maestro
 task-type: docs
 scope: project
@@ -105,11 +105,36 @@ types `/reload-plugins --force` into the USER's pane and was corrupting their li
 - ✅ The IND-base kanban proposal is POSTED → **`Emasoft/ai-maestro-janitor#103`**. Awaiting the
   janitor's co-ratification + plugin release of the `scope:user`/`project-id`/`host-id`/`repo` delta.
 
+> **⏹ 2026-08-21T23:41 — THE WAIT BELOW HAS CLEARED, AND NOTHING NOTICED FOR A DAY.** Verified
+> first-hand, not inferred from the issue's state: `janitor#103` is **CLOSED (COMPLETED)**, *and*
+> the delta has actually SHIPPED into the installed IND rule — `~/.claude/rules/trdd-design-tasks.md`
+> (mtime **2026-08-20 07:52**) now carries a `## Cross-project scope discriminators` section at
+> line 131 documenting `project-id:`, `host-id:` and `repo:`, plus `scope: user` as the third
+> scope. Positive control: the same grep style returns 3 hits for `blocked-by` in that file, so a
+> hit here is a real hit. **Closed and shipped are two claims and both were checked** — the card's
+> own condition was *shipped in a plugin release*, which a CLOSED issue does not by itself prove.
+>
+> So **Phase 3/4 EHTs are unblocked as of 2026-08-20.** This card sat at `column: design` with
+> `blocked-by: []` and `updated: 2026-08-16`, asserting a wait that had already ended — found only
+> because `scripts_dev/sweep-external-blockers.sh` surfaced the citation once it was qualified from
+> a bare `#103` (see [[8GBIQMEP]]). That is this fleet's unwatchable-external-wait failure, caught
+> by the mechanism built for it rather than by anyone re-reading the card.
+>
+> **NEXT ACTION is now:** author the Phase 3/4 derived EHTs (CLI `--project`/`--repo`; frontmatter
+> schema in `lib/trdd-store.ts`; routing-lint) against the shipped field set. The card still says
+> *"On the USER's word"* below — that half stands and is unaffected by the gate clearing.
+>
+> **Board hygiene, flagged not fixed:** this card carries NO `priority:`, so it cannot be ordered
+> against anything. I have not invented one — a fabricated priority is worse than an absent one.
+> Whoever pulls it should set it.
+
 **NEXT ACTION:**
-- WAIT for janitor#103 to be co-ratified + shipped in a plugin release (`~/.claude/rules/trdd-design-tasks.md`
-  picks up the delta) — THEN Phase 3/4 EHTs unblock.
+- ~~WAIT for janitor#103 to be co-ratified + shipped in a plugin release (`~/.claude/rules/trdd-design-tasks.md`
+  picks up the delta) — THEN Phase 3/4 EHTs unblock.~~ **CLEARED 2026-08-20 — see the note above.**
 - Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; frontmatter schema in `lib/trdd-store.ts`;
-  routing-lint) — own TRDDs, gated on janitor#103 SHIPPING. On the USER's word.
+  routing-lint) — own TRDDs. The `janitor#103` SHIPPING gate is **CLEARED** (shipped into the
+  installed IND rule 2026-08-20; see the note above). **Still on the USER's word** — that half of
+  the condition is untouched by the gate clearing, and it is now the only thing holding Phase 3/4.
 
 **CORE-PLUGIN SYNC LOOP (USER directive 2026-07-21):** the core plugin `ai-maestro-plugin` owns the
 SKILLS agents use to drive the frozen CLI (`team-kanban`, `ama-kanban-render`, …); ai-maestro owns

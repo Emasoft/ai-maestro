@@ -150,10 +150,31 @@ only flag it (auto-move is wrong when the closure is unrelated to why the card c
 > detector**, which is also where the dated-verification mode (box 5) lives: a card asserting
 > *"re-verified 2026-08-06"* in prose is a claim with a silent timestamp, and no frontmatter reader
 > can see it.
-- [ ] The 4 cards corrected on 2026-08-21 (`903B7A20` ×2, `5YRLA53W`, plus `KCRMSNL7` / `SCLSRS6E`
+- [x] The 4 cards corrected on 2026-08-21 (`903B7A20` ×2, `5YRLA53W`, plus `KCRMSNL7` / `SCLSRS6E`
       handed to the hub as out-of-lane) are re-checked under the new mechanism and it finds them.
-- [ ] `bash scripts_dev/sweep-external-blockers.sh` exits **0** after the mechanism lands. A second
+      **⏹ 2026-08-21T23:45 — IT FOUND ALL OF THEM, and re-checking them is what exposed three
+      detector defects.** `SCLSRS6E` (multi-line strike), `KCRMSNL7` (negation), `903B7A20` ×2
+      (bare `#35`/`#37`, at THREE sites not one) all surfaced; each was then resolved to a verified
+      state rather than waved through. `5YRLA53W` no longer appears because it was corrected
+      earlier tonight and now carries a true `blocked-by: [8GBIQMEP]`.
+- [x] `bash scripts_dev/sweep-external-blockers.sh` exits **0** after the mechanism lands. A second
       run still scoring ~75% closed means the mechanism did not work.
+      **⏹ 2026-08-21T23:45 — EXIT 0.** `-- 0 OPEN, 0 CLOSED, 0 unresolved --` /
+      `clean: 153 cards scanned, no blocking-phrased issue ref found.` Controlled in both
+      directions so a clean board is not confused with a blind one: a bad path still exits **2**,
+      and a seeded card asserting a live wait still exits **1** and is named.
+      **⚠ This box was UNSATISFIABLE BY CONSTRUCTION until the sweep itself was fixed.** Its
+      non-vacuity guard was `[ ! -s "$RESULTS" ]` — it fired when zero refs were FOUND, so a fully
+      cleaned board was indistinguishable from a typo'd path and answered exit **2**. Clearing the
+      last stale ref moved the exit 1 → 2, never to 0. That is this file's own recurring defect
+      pointed the other way: *a condition written over the BAD items alone says nothing on an empty
+      set, and a non-vacuity check written over findings alone fires on success.* Re-keyed on CARDS
+      SCANNED. A second bug surfaced during that fix and shellcheck named it (SC2030/SC2031): the
+      counter was incremented inside the loop, whose body is a pipeline and therefore a SUBSHELL,
+      so every increment was discarded and the count read 0 regardless — producing the exact false
+      "SWEPT NOTHING" the counter existed to prevent. Counted with `find` before the loop instead
+      (never `ls "$DIR"/*.md`: an unmatched glob is passed through literally and `ls` then lists
+      the CWD, giving a plausible non-zero count for the wrong directory).
       **⏹ 2026-08-21T23:3x — 6 findings → 3, and the two that CLEARED were a false positive and a
       concealment, not a fix.** Progress, not closure; exit is now **1** (was 1, via 2), and the
       convention is `closed>0 ⇒ 1`, `unresolved>0 ⇒ 2`, so 0 needs BOTH empty.
@@ -177,10 +198,13 @@ only flag it (auto-move is wrong when the closure is unrelated to why the card c
       and `#37` (resolve in 5 of 6 known trackers), `U9UNWXMV` `#103` (3 of 6) — plus the two
       now-revealed stale waits, which need a card-level judgment (is that card actually unblocked
       now?) and not linter-appeasement.
-      **Also note, because it affects who can ever close this box:** `scripts_dev/` is gitignored
-      (`.gitignore:123`), so this box's named acceptance instrument is not shareable and dies with
-      the working copy. A backup of the pre-fix script is at
-      `reports/colony/sweep-external-blockers.sh.bak-20260821`.
+      **RESOLVED — the instrument is now tracked.** `scripts_dev/` is gitignored
+      (`.gitignore:123`), so ticking box 4 against a script only I can run would have been an
+      acceptance nobody else could reproduce — the "verified by an instrument that does not ship"
+      failure. The fixed sweep is therefore promoted to **`scripts/sweep-external-blockers.sh`**
+      (tracked, executable) and wired as **`yarn trdd:blockers`**; it exits 0 on the same corpus.
+      The `scripts_dev/` copy stays so this box's originally-named path keeps working. Pre-fix
+      backup: `reports/colony/sweep-external-blockers.sh.bak-20260821`.
       **⏹ 2026-08-21T23:4x — NOW `0 OPEN, 0 CLOSED, 3 unresolved` (exit 2), AND EVERY "CLOSED"
       FINDING TONIGHT TURNED OUT TO BE A FALSE POSITIVE.** Not one card was asserting a live dead
       wait. Three detector defects, all the same family — *the needle cannot tell an ASSERTED wait
@@ -213,7 +237,20 @@ only flag it (auto-move is wrong when the closure is unrelated to why the card c
       Closing box 4 therefore requires promoting the sweep into tracked `scripts/` first. Not done
       unilaterally: this box names the `scripts_dev/` path, so moving it changes the card's own
       acceptance and is the next owner's call, not a 23:45 side effect.
-- [ ] The dated-verification failure mode is addressed explicitly, not just the bare-citation one.
+- [x] The dated-verification failure mode is addressed explicitly, not just the bare-citation one.
+      **⏹ 2026-08-21T23:45 — addressed, and by construction rather than by convention.** The mode
+      this card identified is that a *checked* claim is worse than a lazy one: *"blocked on X —
+      verified OPEN, 0 comments, untouched since <date>"* **forecloses** the next reader's check
+      precisely because it looks checked, so it grows more trusted as it grows less true. The sweep
+      **never reads the prose date**. It extracts the ref from any blocking-phrased span and
+      re-queries live state every run, so a dated verification is worth exactly as much as a bare
+      citation — nothing — and the very card that coined this failure (`5YRLA53W`, whose
+      *"verified OPEN"* line was dead within three days) is re-checked on every pass like any
+      other. **The residual, stated so it is not mistaken for coverage:** a stale dated claim that
+      is NOT blocking-phrased is invisible to this sweep, and one in `external-refs:` is covered
+      only by the frontmatter tool. Neither reads dates; both re-derive. That is the right shape —
+      *record the command that re-derives a fact, never the fact's verified-on date* — but it is
+      two detectors' worth of coverage, not one, and that is why box 1's answer was BOTH.
 
 ## Verification — **the re-run IS the acceptance check**
 

@@ -3,7 +3,7 @@ trdd-id: N4SDG0ML
 title: Make main CI green — the fast-forward exposed 3 pre-existing failure classes to GitHub CI
 column: todo
 created: 2026-08-08T15:45:11+0200
-updated: 2026-08-08T15:45:11+0200
+updated: 2026-08-21T17:12:00+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: infra
@@ -39,6 +39,27 @@ tests / 7 files) decomposes into three classes:
    module './agent-registry'`. Diagnose EACH on the runner (do not guess from the log —
    per-file isolation, the suite-interleaving misattribution lesson applies), fix the
    FIXTURES (env-redirect `$HOME`, complete the mock), never weaken the tests.
+
+## ⏹ 2026-08-21 — main CI is down to ONE failing test, and it is not on the class-3 list
+
+Run `32328280362` (main, 2026-08-20): `lint` green, `test (22)` red on **1** test — not the 14/7
+this card was written against.
+
+**`tests/agent-dir-hint.test.ts > is a no-op for root, scratch, empty-name, and missing dirs`**
+— `fs.mkdtempSync('/private/tmp/hint-')`, a **macOS-only path**, ENOENT on the Linux runner.
+
+Fix is `'/tmp/hint-'`: `lib/agent-registry.ts:243` already skips `startsWith('/tmp/')`, and macOS
+`/tmp` symlinks to `/private/tmp`, so one literal covers both. **`os.tmpdir()` is the WRONG fix** —
+on macOS it returns `/var/folders/…`, which that guard does not cover, so the hint would be written
+and the test would fail there instead. Verified: `mkdtempSync('/tmp/hint-')` → `/tmp/hint-FbH869`.
+
+Not applied here: this branch is **3449 ahead / 232 behind** `origin/main` and does not contain the
+file. One-line change, on main, by whoever is there.
+
+```
+gh run view 32328280362 --log-failed | grep -A6 'no-op for root'
+git show origin/main:tests/agent-dir-hint.test.ts | grep -n 'private/tmp'
+```
 
 ## Acceptance
 

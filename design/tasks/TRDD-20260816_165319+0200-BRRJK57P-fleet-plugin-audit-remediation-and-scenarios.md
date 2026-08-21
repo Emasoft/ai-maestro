@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:06:00+0200
+updated: 2026-08-21T15:14:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -392,9 +392,14 @@ could only ever carry the post-rotation value. A 0 against the current literal i
 answer about this program, not an accidental clean caused by searching for a string that no longer
 exists. The old literal remains 44RGLOO8's business and that card is at `human_review`.
 
-**Two gaps, stated rather than implied:** the sweep covers tracked files and git history in the 9
-clones, NOT their untracked `reports*/` dirs; and the six role-plugin repos are not cloned on this
-machine, so they were not searched at all.
+> **⚠ BOTH GAPS BELOW WERE CLOSED 20 MINUTES LATER, AND THE SECOND ONE WAS A FALSE CLAIM.**
+> Struck rather than deleted, because being wrong about a population TWICE in one session — first
+> by depth, then by name — is the finding. See `## Credential sweep — SECOND PASS` below for the
+> complete population and the corrected result.
+>
+> ~~**Two gaps, stated rather than implied:** the sweep covers tracked files and git history in the
+> 9 clones, NOT their untracked `reports*/` dirs; and the six role-plugin repos are not cloned on
+> this machine, so they were not searched at all.~~
 
 **An instrument bug caught mid-sweep, worth the line:** the first pass enumerated the population as
 `~/Code/ai-maestro*` and reported **6 of 10 as "not a git repo"** — they are CONTAINER dirs holding
@@ -402,6 +407,38 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Credential sweep — SECOND PASS 2026-08-21T15:1x+0200 — the population was wrong AGAIN
+
+The first pass got the population wrong by **depth** and fixed it. Twenty minutes later, measuring
+acceptance box 1, `find ~/Code -maxdepth 4 -type d -name plugin-self-audit` surfaced repos the
+corrected pass still had not seen — because the second error was by **NAME**, not depth:
+
+```
+EMASOFT-ARCHITECT-AGENT/ai-maestro-architect-agent
+EMASOFT-ASSISTANT-MANAGER/ai-maestro-assistant-manager-agent
+EMASOFT-CHIEF-OF-STAFF/ai-maestro-chief-of-staff
+EMASOFT-INTEGRATOR-AGENT/ai-maestro-integrator-agent
+EMASOFT-PROGRAMMER-AGENT/ai-maestro-programmer-agent
+llm-externalizer/llm-externalizer-plugin · PERFECT_SKILL_SUGGESTER/… · visual-comunicator
+```
+
+**The five role-plugin repos ARE cloned on this machine** — under `EMASOFT-*` container names, so a
+population globbed as `~/Code/ai-maestro*` can never match them however deep it searches. The
+struck claim above ("not cloned on this machine, so they were not searched at all") was FALSE, and
+it was false in the direction that makes a security box look bounded when it was simply blind.
+
+**Re-run over the complete population — 15 clones plus this repo, and this time including untracked
+`reports*/` dirs. Every cell 0.** Positive control unchanged (1 hit in the file the needle came
+from). So box 9 stands, now on a population that was discovered rather than guessed.
+
+**Why the population kept being wrong, stated once because it is one mistake wearing two costumes:**
+both passes defined the set by a NAME PATTERN I expected the repos to have. The fix that finally
+worked defines it by an ARTIFACT the repos actually contain — `find … -name .git`, then
+`find … -name plugin-self-audit`. **A population globbed from a naming convention is a hypothesis;
+a population discovered from an artifact on disk is a measurement.** The first error printed `-`
+for six repos and the second printed nothing at all for eight — the more complete the table looked,
+the less complete it was.
 
 ## Hub verification ledger — 2026-08-16T18:49+0200
 

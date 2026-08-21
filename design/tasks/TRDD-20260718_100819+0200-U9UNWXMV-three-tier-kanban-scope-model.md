@@ -109,7 +109,7 @@ types `/reload-plugins --force` into the USER's pane and was corrupting their li
 - WAIT for janitor#103 to be co-ratified + shipped in a plugin release (`~/.claude/rules/trdd-design-tasks.md`
   picks up the delta) — THEN Phase 3/4 EHTs unblock.
 - Phase 3/4 — derived EHTs (CLI `--project`/`--repo`; frontmatter schema in `lib/trdd-store.ts`;
-  routing-lint) — own TRDDs, gated on #103 SHIPPING. On the USER's word.
+  routing-lint) — own TRDDs, gated on janitor#103 SHIPPING. On the USER's word.
 
 **CORE-PLUGIN SYNC LOOP (USER directive 2026-07-21):** the core plugin `ai-maestro-plugin` owns the
 SKILLS agents use to drive the frozen CLI (`team-kanban`, `ama-kanban-render`, …); ai-maestro owns

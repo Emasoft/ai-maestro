@@ -9,9 +9,14 @@
  *
  * WHY (TRDD-8GBIQMEP): `blocked-by:` takes TRDD ids only, so a card waiting on a GitHub
  * issue cannot say so there. The board's answer has been `external-refs:` — and NOTHING
- * EVER READ IT BACK. Measured 2026-08-21: 37 open cards cite 79 distinct refs, **48 of
- * the 70 resolvable ones are already CLOSED**, and 14 cards cite ONLY closed issues —
- * two of them sitting in `column: blocked` for reasons that had already evaporated.
+ * EVER READ IT BACK. Measured by this tool on 2026-08-21: **45 open cards cite 70
+ * resolvable issues across 14 repos, 48 of them already CLOSED, and 17 cards cite ONLY
+ * closed issues** — two of those sitting in `column: blocked` for reasons that had
+ * entirely evaporated (`JT3U4ZVM` alone cites 10 closed refs).
+ *
+ * Re-derive rather than trust that paragraph — it has a silent timestamp, and an earlier
+ * draft of this very comment quoted 37/79/14 from a hand-rolled bash pass that never
+ * scanned `design/proposals`. The command IS the tool: `yarn trdd:extrefs`.
  *
  * So the gap was never a missing FIELD (which would be a shared-schema change needing
  * janitor coordination and a MANAGER floor). It was a missing CONSUMER — repo-local

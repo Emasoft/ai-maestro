@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:26:00+0200
+updated: 2026-08-21T15:33:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -419,9 +419,33 @@ webdesign 8, programmer 8, maintainer 7, llm-externalizer-plugin 7, integrator 6
 assistant-role 5, ai-maestro-plugin 5, perfect-skill-suggester 5, architect 4, autonomous 4,
 CPV 4, visual-comunicator 3, assistant-manager 3.
 
-So the box's **locality** half holds — remediation cards live in the owning repos, not here. The
-**citation** half ("each cites its audit finding") is NOT measured: that needs reading the cards,
-not counting them. Box stays open, and the open part is now the specific half rather than the whole.
+> **⚠ CORRECTED 2026-08-21T15:3x — the sentence below overstated what the count proves.** Cards
+> dated since 2026-08-16 are cards created DURING the program, not necessarily cards created BY it.
+> Sampling the newest janitor card (`9T0U3M00`, `tick-stalled` fires on an absorbed chore) found an
+> ordinary bugfix born from live measurement, with no audit link of any kind. **The count proves
+> ACTIVITY, not remediation.** Kept struck rather than deleted because "N cards since the start
+> date" is exactly the proxy that feels like a measurement and answers a different question.
+>
+> ~~So the box's **locality** half holds — remediation cards live in the owning repos, not here.~~
+> The **citation** half is measured separately below.
+
+### The citation half — measured, and it cannot be settled by counting
+
+Needle taken from a real card rather than from the contract's vocabulary: cards whose text carries
+`plugin-self-audit` (a report path) or `BRRJK57P`. Across the 13 clones that have both a
+`plugin-self-audit` dir and a `design/`:
+
+**Every one has at least one citing card** — chief-of-staff 10, programmer 7, webdesign 6,
+ai-maestro-plugin 6, perfect-skill-suggester 5, architect 5, assistant-role 4, CPV 4, janitor 4,
+maintainer 3, integrator 2, visual-comunicator 1, autonomous 1.
+
+**But "at least one" is not "each", and the gap is the finding.** The box asks that *each*
+remediation card cite its finding; this needle counts cards that DO cite, and cannot see a
+remediation card that does not. The two thin rows are the ones to look at — `autonomous` cites in
+**1** card against **9** audit reports, `visual-comunicator` in **1** against **6**. Either those
+audits produced almost no remediation, or their remediation is uncited. **Counting cannot tell
+those apart; only classifying each card can.** Box 4 stays open on that, and it is now a
+two-repo question rather than a fleet-wide one.
 
 **Fourth instance of one trap in a single session, so it is stated once here rather than four
 times:** two rows first came back `design=0` — `EMASOFT-ASSISTANT-MANAGER` and `llm-externalizer`

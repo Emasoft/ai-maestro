@@ -60,14 +60,26 @@ const QUALIFIED = /(?:gh:)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#(\d+)/g
 // A bare `janitor#167` cannot be resolved without a prefix→repo map, and GUESSING one
 // would silently attribute an issue to the wrong repo. Counted and reported, never guessed.
 const BARE = /(?:^|[^\w/:])([A-Za-z][A-Za-z0-9_-]*)#(\d+)/g
+// A NAKED `#46` — no owner, no repo, not even a prefix — is the worst citation shape on the
+// board and was INVISIBLE to this tool until 2026-08-21: `BARE` requires a leading word, so a
+// naked number matched neither pattern and was silently uncounted. Found by running
+// `scripts_dev/sweep-external-blockers.sh` (TRDD-8GBIQMEP's own acceptance check), which scored
+// 5 unresolved where this tool reported none — a needle that cannot see a shape reports clean,
+// which is the exact failure this tool exists to prevent, committed by the tool itself.
+// It is counted and reported, never resolved: `#46` resolves in 4 of 6 known trackers, so any
+// mapping is a guess that would attribute an issue to the wrong repo.
+const NAKED = /(?:^|[^\w/#])#(\d+)/g
 
 function parseRefs(line) {
   const qualified = new Set()
   for (const m of line.matchAll(QUALIFIED)) qualified.add(`${m[1]}#${m[2]}`)
-  const bare = new Set()
   const withoutQualified = line.replace(QUALIFIED, ' ')
+  const bare = new Set()
   for (const m of withoutQualified.matchAll(BARE)) bare.add(`${m[1]}#${m[2]}`)
-  return { qualified: [...qualified], bare: [...bare] }
+  const naked = new Set()
+  const withoutPrefixed = withoutQualified.replace(BARE, ' ')
+  for (const m of withoutPrefixed.matchAll(NAKED)) naked.add(`#${m[1]}`)
+  return { qualified: [...qualified], bare: [...bare], naked: [...naked] }
 }
 
 function field(text, name) {
@@ -89,14 +101,15 @@ for (const zone of ZONES) {
     const text = readFileSync(join(zone, n), 'utf8')
     const line = extRefsLine(text)
     if (!line) continue
-    const { qualified, bare } = parseRefs(line)
-    if (qualified.length === 0 && bare.length === 0) continue
+    const { qualified, bare, naked } = parseRefs(line)
+    if (qualified.length === 0 && bare.length === 0 && naked.length === 0) continue
     cards.push({
       id: field(text, 'trdd-id') || n,
       column: field(text, 'column') || '?',
       title: (field(text, 'title') || '').slice(0, 58),
       qualified,
       bare,
+      naked,
     })
   }
 }
@@ -160,14 +173,20 @@ const totalRefs = new Set(cards.flatMap((c) => c.qualified)).size
 const unresolved = totalRefs - [...state.keys()].filter((k) =>
   cards.some((c) => c.qualified.includes(k))).length
 const bareCount = new Set(cards.flatMap((c) => c.bare)).size
+const nakedCount = new Set(cards.flatMap((c) => c.naked)).size
 
 if (has('--json')) {
-  console.log(JSON.stringify({ findings, partial, totalRefs, unresolved, bareCount }, null, 2))
+  console.log(JSON.stringify({ findings, partial, totalRefs, unresolved, bareCount, nakedCount }, null, 2))
 } else {
   console.log(`trdd-extrefs — ${cards.length} open cards cite ${totalRefs} distinct issues ` +
               `across ${repos.length} repos`)
   console.log(`  resolved=${totalRefs - unresolved}  unresolved=${unresolved}  ` +
-              `repo-query-failures=${queryFailures}  unqualified-refs=${bareCount}`)
+              `repo-query-failures=${queryFailures}  prefixed-refs=${bareCount}  naked-refs=${nakedCount}`)
+  if (nakedCount > 0) {
+    console.log(`  NOTE: ${nakedCount} refs are NAKED (e.g. "#46") — no owner, no repo, no prefix. ` +
+                `Unresolvable BY CONSTRUCTION: "#46" resolves in 4 of 6 known trackers, so any ` +
+                `mapping is a guess. Reported so they cannot be mistaken for "none found".`)
+  }
   if (bareCount > 0) {
     console.log(`  NOTE: ${bareCount} refs are bare (e.g. "janitor#167") and carry no owner/repo. ` +
                 `They are NOT resolved and NOT guessed — a guessed mapping would attribute an ` +

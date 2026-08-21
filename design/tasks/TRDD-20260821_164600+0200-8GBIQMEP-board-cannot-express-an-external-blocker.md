@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-21T16:46:00+0200
-updated: 2026-08-21T22:56:58+0200
+updated: 2026-08-21T23:25:16+0200
 current-owner: ai-maestro-orchestrator-agent
 created-by: ai-maestro-orchestrator-agent
 assignee: unassigned
@@ -116,10 +116,40 @@ only flag it (auto-move is wrong when the closure is unrelated to why the card c
 
 ## Acceptance
 
-- [ ] Decision recorded on which shape is taken (field, detector, or both), with the rejected one's
+- [x] Decision recorded on which shape is taken (field, detector, or both), with the rejected one's
       reason stated.
-- [ ] Whichever is taken, the mechanism can answer "is every externally-cited blocker on this board
+      **⏹ 2026-08-21T23:2x — DETECTOR, not field.** The FIELD was rejected on a measurement:
+      `external-refs:` **already exists and 45 open cards already populate it**, and nothing in
+      `scripts/` or `lib/` had ever read it back (positive control — the same grep finds
+      `blocked-by` in 3 files). So the gap was never expression, it was a MISSING CONSUMER. That
+      also decides the floor, which is why this could be done at all: adding/altering a shared
+      TRDD field is a schema change needing janitor coordination at a `manager` floor, whereas a
+      repo-local consumer of an existing field is floor `none`. Shipped as `yarn trdd:extrefs`
+      (`scripts/trdd-extrefs.mjs`), with a non-vacuity guard and 3 subprocess tests; neutering the
+      guard reds 2 of 3.
+- [x] Whichever is taken, the mechanism can answer "is every externally-cited blocker on this board
       still open?" **without a human reading prose**.
+      **⏹ Yes, for the FRONTMATTER surface.** `yarn trdd:extrefs` → 45 open cards, 70 resolvable
+      refs across 14 repos, **0 unresolved, 0 query failures**, and **17 cards citing ONLY closed
+      issues**. Exit trichotomy 0/1/2, so a blind run cannot render as a clean board. Bare
+      (`janitor#167`, 19 of them) and naked (`#46`) shapes are COUNTED and REPORTED, never guessed
+      — `#46` resolves in 4 of 6 known trackers, so any mapping invents an attribution.
+
+> **⚠ SCOPE OF WHAT LANDED — the two mechanisms measure DIFFERENT SURFACES, and boxes 4-5 below
+> are the half that did NOT land.** `trdd-extrefs` reads the `external-refs:` **frontmatter line**
+> (anchored at line start, so a body that merely DISCUSSES an issue is a mention, not a citation).
+> `scripts_dev/sweep-external-blockers.sh` greps the card **BODY** for prose claims —
+> `(blocked|waiting|gated|pending) (on|by) …#N` — which is a different question about a different
+> surface. Re-run 2026-08-21: the sweep exits **1** with `0 OPEN, 1 CLOSED, 5 unresolved`, every
+> unresolved one a naked prose ref (`#46`, `#35`, `#37`, `#100`, `#103`).
+>
+> So `trdd-extrefs` reporting `naked-refs=0` is **honest, not blind**: no card's `external-refs:`
+> line contains a naked number. It does not and cannot make the sweep exit 0, because the sweep is
+> not measuring frontmatter. Box 1 offered "field, detector, **or both**" — the answer is BOTH
+> DETECTORS, and only the frontmatter one exists. **Whoever takes boxes 4-5 is building the prose
+> detector**, which is also where the dated-verification mode (box 5) lives: a card asserting
+> *"re-verified 2026-08-06"* in prose is a claim with a silent timestamp, and no frontmatter reader
+> can see it.
 - [ ] The 4 cards corrected on 2026-08-21 (`903B7A20` ×2, `5YRLA53W`, plus `KCRMSNL7` / `SCLSRS6E`
       handed to the hub as out-of-lane) are re-checked under the new mechanism and it finds them.
 - [ ] `bash scripts_dev/sweep-external-blockers.sh` exits **0** after the mechanism lands. A second

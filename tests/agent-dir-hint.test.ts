@@ -65,8 +65,12 @@ describe('writeAgentDirHint', () => {
     // root — never write
     writeAgentDirHint('x', '/')
     expect(fs.existsSync('/.claude/settings.local.json')).toBe(false)
-    // scratch under /private/tmp — skipped
-    const scratch = fs.mkdtempSync('/private/tmp/hint-')
+    // scratch under /tmp — skipped. NOT os.tmpdir(): on macOS that is /var/folders/…, which the
+    // guard (lib/agent-registry.ts, the `/claude-501/` + `/private/tmp/` + `/tmp/` prefixes) does
+    // NOT cover, so the hint would be written and this assertion would fail there. `/tmp` is
+    // covered on both, and on macOS it symlinks to /private/tmp. The old literal `/private/tmp`
+    // is macOS-only and ENOENT'd on the Linux CI runner.
+    const scratch = fs.mkdtempSync('/tmp/hint-')
     writeAgentDirHint('x', scratch)
     expect(readSettings(scratch)).toBeNull()
     fs.rmSync(scratch, { recursive: true, force: true })

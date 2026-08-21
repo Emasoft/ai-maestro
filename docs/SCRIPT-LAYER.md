@@ -271,7 +271,7 @@ re-run since that wrapper landed. Re-run `./install-messaging.sh -y`.
 
 ## The pillar CLIs — repo-local, and deliberately NOT on this boundary
 
-Three tools read the 3-pillars corpus (`design/`) **directly off disk, with no
+These tools read the 3-pillars corpus (`design/`) **directly off disk, with no
 server and no API**, so they are not part of the boundary above:
 
 | `yarn` script | What it is |
@@ -279,6 +279,8 @@ server and no API**, so they are not part of the boundary above:
 | `yarn trddgrep` | query + `lint` + `validate` + `fix` + `env` the TRDD corpus (`--help` lists every subcommand) |
 | `yarn trdd:doctor` / `trdd:fix` / `trdd:board` | the 19-rule doctor; `:fix` repairs only the mechanically-derivable findings |
 | `yarn pillars:lint` | the cross-pillar reference DAG (`PRRD ← SPECS ← TRDD`) |
+| `prrdgrep` (no `yarn` wrapper yet) | `list` + `show` + `lint` + `validate` + `edit` the PRRD corpus (`design/requirements/PRRD.md`); `--help`/`env` too. Run in-repo as `node --import tsx scripts/prrdgrep.mjs`, or bare once installed by `install-messaging.sh` |
+| `specgrep` (no `yarn` wrapper yet) | the same subcommands as `prrdgrep` — `list` + `show` + `lint` + `validate` + `edit` + `env` — over the SPEC corpus. Both share one implementation, `lib/pillar/cli.ts`, so the two never drift |
 
 **Exit codes — the trichotomy, and it is `grep`'s own** (`0` found · `1` not found ·
 `2` could not run, verified by running `grep` directly):

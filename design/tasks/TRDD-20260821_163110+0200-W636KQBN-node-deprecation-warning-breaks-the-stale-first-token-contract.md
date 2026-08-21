@@ -110,13 +110,40 @@ is worth its own card if the STALE-COLUMN fix does not already force the habit.
   edited to match.
 - Every measurement in this card re-run through `bash scripts/with-node.sh`, never a bare `npx`.
 
+## RESOLVED 2026-08-21T16:50 — FIXTURE DRIFT, not a rule regression
+
+Reproduced under `bash scripts/with-node.sh node --import tsx scripts/trddgrep.mjs validate --rule
+STALE-COLUMN`: exactly one live WARN, `979DBDAA`. `2XV78BND` (the second card the test's own
+comment names) still exists, still sits in `design/tasks/`, still `column: todo` — but its STATE
+block no longer trips `STATE_READS_DONE`.
+
+Diffed the card's history: commit `bb031694` (2026-08-20T22:35, "mark the STATE line that would
+reverse a MANAGER ruling") appended ~700 chars to the top of its `## STATE` block, for a reason
+unrelated to this rule — documenting that an ASSISTANT-MANAGER approval superseded stale prose.
+`STATE_READS_DONE` (`lib/trdd-doctor.ts:355-356`) scans only the first 1200 chars after the `##
+STATE` heading. Running that same regex against the PRE-commit blob
+(`git show bb031694^:<path>`) found a match at offset 875: the standalone word **"resolved"**
+inside "arrives with neither `isUserMessage` nor **a resolved** `userSender` block" — a
+pre-existing false-positive hit on the rule's own `\bRESOLVED\b` alternative, describing normal
+prose about code, not a finished-work claim. The August 20 insertion pushed that substring past
+the 1200-char cutoff, so the card legitimately stopped qualifying. `979DBDAA`'s STATE is unchanged
+and still qualifies.
+
+So: the corpus changed (an editorial fix, made for an unrelated reason, incidentally cleared a
+pre-existing false positive on this rule); the rule itself was not touched and did not regress.
+Test updated 1:1 with this reproduction (2 → 1 finding, pinned to `979DBDAA` by id, comment
+extended with the full chain rather than replaced) — no rule-code edit, so no neuter is owed.
+
 ## Acceptance
 
-- [ ] `pillar-grep-cli.test.ts` is green under `bash scripts/with-node.sh npx vitest run`.
-- [ ] The cause is named (fixture vs rule) and recorded here, from a reproduction, not a guess.
-- [ ] The expectation is NOT edited to match the observed count unless the fixture is shown to be
-      the thing that changed.
-- [ ] Neuter run recorded by name, if the fix touches the rule.
+- [x] `pillar-grep-cli.test.ts` is green under `bash scripts/with-node.sh npx vitest run` — 35/35.
+- [x] The cause is named (fixture vs rule) and recorded here, from a reproduction, not a guess —
+      FIXTURE DRIFT (see above).
+- [x] The expectation is NOT edited to match the observed count unless the fixture is shown to be
+      the thing that changed — shown via `git show bb031694^:<path>` + a direct regex re-run
+      against the pre-commit blob, both quoted above.
+- [x] Neuter run recorded by name, if the fix touches the rule — N/A, `lib/trdd-doctor.ts` was not
+      touched.
 
 ## Approval log
 

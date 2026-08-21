@@ -3,7 +3,7 @@ trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-16T11:10:25+0200
+updated: 2026-08-21T16:45:20+0200
 min-approval-requirement: none
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -108,7 +108,8 @@ on ([[5YRLA53W]]), so this was judged from the REMAINING list, not from boxes.
   created). Combined with the earlier fleet measurement (no runaway; top consumer was the
   janitor DEV session itself), idle fleet agents are cheap. Heartbeat burn is bounded.
 - Remaining pre-fleet blockers: **B2** (maintainer plugin plugin-root readiness — its own repo)
-  and **B4 fixes** (amama#24, item 7 gated on janitor#73). WS3 real imports still need USER go.
+  and **B4 fixes** (amama#24, ~~item 7 gated on janitor#73~~ — **janitor#73 CLOSED 2026-07-09**;
+  gate corrected 2026-08-21, claim stood dead for 43 days). WS3 real imports still need USER go.
 - 57EBNB72 **completed + archived 18:22** — EHT gate cleared the same day: QH6WD7XI (docs
   alignment) and E6MD2FNX (SCEN-028 folder-adoption regression scenario + permanent fixture
   at `~/agents/scen028-import-fixture`) both completed/archived. WS1 is fully closed.
@@ -270,7 +271,7 @@ The USER ruled the governance PR to main PREMATURE. It is gated on ALL of the fo
 (initial status from 2026-07-08 read-only probes; update in place as each gate is verified):
 
 - **G1 — plugin fleet ready** (umbrella; G2..G11 are its concrete gates)
-- **G2 — 3-pillars system (TRDD/PRRD/kanban) working across role plugins + GitHub** — DEP overlay shipped (TRDD-DE9757LJ); WAITING on janitor#73 (IND global rules) + orch#27 (kanban script rewire)
+- **G2 — 3-pillars system (TRDD/PRRD/kanban) working across role plugins + GitHub** — DEP overlay shipped (TRDD-DE9757LJ); ~~WAITING on janitor#73 (IND global rules) + orch#27 (kanban script rewire)~~ — **BOTH CLOSED: janitor#73 on 2026-07-09, orch#27 on 2026-07-16.** Corrected 2026-08-21 (ORCHESTRATOR, hub-authorized stale-blocker sweep): the wait was dead for **43 and 36 days** respectively and nothing reddened, because an external blocker can only live in prose here — see the vocabulary gap in [[5YRLA53W]]. **This gate is no longer waiting on anything external; whether G2 is SATISFIED was not assessed by this sweep and still needs a positive check.**
 - **G3 — web-scenario-tester plugin published + working + token-frugal** — NOT in the remote marketplace (probe 2026-07-08); plugin work = TRDD-f181a4ae, token restructure = TRDD-74ZS7P9U
 - **G4 — DESCOPED 2026-08-08** (was: HTML side panel displays agent-pushed content via the visual-communicator surface). Zero callers of `scripts/aimaestro-panel.sh` in BOTH visualizer plugins (amvcp 0, webdesign 0 — measured by the COS session on tracked source, ai-maestro#132): the wiring is UNBUILT, not untested, so this gate cannot honestly gate. Re-enters as its own card when a visualizer actually wires the CLI; the CLI contract itself is unchanged and immutable.
 - **G5 — all Agent Profile tabs working for each agent**

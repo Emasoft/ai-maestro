@@ -327,7 +327,17 @@ describe('every pillar CLI refuses an unknown option rather than ignoring it', (
  * (BODY-STATE-CLAIM / 7123D51A) and exactly THREE STALE-COLUMN warnings.
  * Re-measured 2026-08-19 (TRDD-PTFPGSLV session): 262 findings — the zone-repair that
  * archived 78J4I4QS + S97TNMIJ cleared 2 ZONE-MISMATCH errors and 1 STALE-COLUMN warning,
- * so the census is now ONE error and TWO STALE-COLUMN warnings (979DBDAA, 2XV78BND).
+ * so the census was ONE error and TWO STALE-COLUMN warnings (979DBDAA, 2XV78BND).
+ * Re-measured 2026-08-21 (TRDD-W636KQBN) — FIXTURE DRIFT, not a rule regression: commit
+ * bb031694 (2026-08-20) appended a `## Approval log` correction to 2XV78BND's STATE block
+ * for an unrelated reason (documenting a MANAGER ruling). `STATE_READS_DONE` scans only the
+ * first 1200 chars after the `## STATE` heading, and 2XV78BND's old prose happened to contain
+ * the standalone word "resolved" ("neither `isUserMessage` nor a resolved `userSender`
+ * block") inside that window — a pre-existing false-positive match on the rule's own regex,
+ * confirmed by re-running `STATE_READS_DONE` against the pre-commit blob. The August 20 edit
+ * pushed that substring past the 1200-char cutoff, so the card legitimately stopped
+ * qualifying; 979DBDAA is unchanged. The census is now ONE error and ONE STALE-COLUMN
+ * warning (979DBDAA only).
  *
  * A fixture corpus would be safer against drift, but the whole point is to pin the LIVE
  * numbers the ledger cites — a fixture cannot fail if a future card silently breaks the
@@ -342,11 +352,11 @@ describe('trddgrep validate — --min-severity and --rule actually filter', () =
     expect(r.status).toBe(1)
   })
 
-  it('--rule STALE-COLUMN prints exactly the 2 STALE-COLUMN findings and exits 0 (no error among them)', () => {
+  it('--rule STALE-COLUMN prints exactly the 1 STALE-COLUMN finding and exits 0 (no error among them)', () => {
     const r = runCli('trddgrep.mjs', ['validate', '--rule', 'STALE-COLUMN'])
     const lines = r.stdout.trim().split('\n')
-    expect(lines).toHaveLength(2)
-    for (const line of lines) expect(line).toMatch(/^WARN\tSTALE-COLUMN\t/)
+    expect(lines).toHaveLength(1)
+    for (const line of lines) expect(line).toMatch(/^WARN\tSTALE-COLUMN\t979DBDAA\t/)
     expect(r.status).toBe(0)
   })
 

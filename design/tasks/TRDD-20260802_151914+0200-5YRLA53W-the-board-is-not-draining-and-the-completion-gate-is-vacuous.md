@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-06T09:02:41+0200
+updated: 2026-08-21T16:45:20+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -135,7 +135,16 @@ sat in `dev` claiming active work.
 | `DQ6XN2VP` | declare each pipeline's R51.7 invariants | real pending work, nobody on it | `todo` |
 | `Y8VPE3NS` | OBSERVE two empirical PTY unknowns | needs a real wedged agent; armed and waiting | `todo` |
 | `OX5TT5OT` | end-to-end re-login — *"this is the human's step, at the host"* | only the USER can advance it | `human_review` |
-| `FKGMNGJB` | repair 2 archived cards | blocked on `janitor#139` — **verified OPEN, 0 comments, untouched since 2026-07-30** | `todo` + `external-refs` |
+| `FKGMNGJB` | repair 2 archived cards | ~~blocked on `janitor#139` — **verified OPEN, 0 comments, untouched since 2026-07-30**~~ → **#139 CLOSED 2026-08-05; claim written 2026-08-02 and dead 3 days later. Corrected 2026-08-21.** | `todo` + `external-refs` |
+
+⚠ **The row above is the sharpest instance of this card's own thesis, so it is struck rather than
+deleted.** The claim was not lazy — it was *checked*, and it recorded the check ("verified OPEN, 0
+comments, untouched since 2026-07-30"). That is exactly what made it dangerous: a bare "blocked on
+`janitor#139`" invites the next reader to look, while a dated verification **forecloses** the look.
+It went stale 3 days after it was written and survived 16 more. A verification claim with no expiry
+is a claim that gets more trusted as it gets less true. Found by the hub-authorized stale-blocker
+sweep, 2026-08-21 (report: `reports/orchestrator/20260821_164101+0200-blocker-sweep-and-checkbox-census.md`),
+which measured **9 of 12** externally-cited blockers already closed.
 
 **A finding worth more than the four moves:** `FKGMNGJB`'s last box IS the two `BODY-STATE-CLAIM`
 ERRORs that `trddgrep validate` reports on every run and that every session has been calling

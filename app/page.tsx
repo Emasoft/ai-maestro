@@ -16,6 +16,7 @@ import MobileDashboard from '@/components/MobileDashboard'
 import { useDeviceType } from '@/hooks/useDeviceType'
 import { AgentSubconsciousIndicator } from '@/components/AgentSubconsciousIndicator'
 import MigrationBanner from '@/components/MigrationBanner'
+import TmuxKeychainAlarmBanner from '@/components/TmuxKeychainAlarmBanner'
 import { VersionChecker } from '@/components/VersionChecker'
 import AgentSearch from '@/components/AgentSearch'
 import TranscriptExport from '@/components/TranscriptExport'
@@ -694,6 +695,9 @@ export default function DashboardPage() {
 
         {/* Migration Banner */}
         <MigrationBanner />
+
+        {/* Tmux-server keychain alarm — silent when clear (TRDD-GIA2LC83) */}
+        <TmuxKeychainAlarmBanner />
 
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden relative">

@@ -37,7 +37,7 @@ DIM='\033[2m'
 NC='\033[0m'
 
 # Version & config
-VERSION="0.28.0"
+VERSION="0.29.0"
 # Source is overridable via --repo/--branch or the AIMAESTRO_REPO/AIMAESTRO_BRANCH env vars, and
 # --repo accepts owner/repo, a full git URL, OR a local repo path. The DEFAULT stays the official
 # 23blocks-OS/ai-maestro upstream for now; the flip to the Emasoft/ai-maestro fork happens only

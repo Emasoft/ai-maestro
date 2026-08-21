@@ -1,11 +1,12 @@
 ---
 trdd-id: 5YRLA53W
 title: The board is not draining and the completion gate is vacuous on 71 percent of open cards
-column: todo
+column: blocked
+pre-block-column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-21T16:45:20+0200
+updated: 2026-08-21T22:56:58+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -22,7 +23,7 @@ effort: large
 relevant-rules: []
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [8GBIQMEP]
 release-via: none
 labels: [kanban, board-hygiene, trdd-corpus]
 ---
@@ -425,6 +426,17 @@ Nine of the seventeen cards had a claim that did not survive that.
       *"continuing the existing thread"* as the route; the thread is gone. That is this box's own
       complaint happening again, to the very card it cites, while the box stayed open — so the
       instances close and **the gap does not.** Still needs the corpus-level answer.
+      **⏹ 2026-08-21T22:56 — THE CORPUS-LEVEL ANSWER NOW HAS A CARD, AND THIS ONE FINALLY OBEYS
+      ITSELF.** The gap is tracked as [[8GBIQMEP]] (*"the board cannot express an external blocker
+      so external waits go stale unwatched — 9 of 12 cited issues already closed"*), `column: todo`,
+      unblocked. This box demands that **every card sitting still names a TRUE `blocked-by:`** —
+      and until this edit *this card* sat still in `todo` with `blocked-by: []`, waiting on exactly
+      that gap, **naming nothing**. It was its own best counter-example and had been for 19 days.
+      So the box does not close: the gap is real and open. What changes is that the card now
+      declares its blocker (`blocked-by: [8GBIQMEP]`, `column: blocked`, `pre-block-column: todo`),
+      which is the only honest column for *"my remaining work is gated on someone else's card"*.
+      **An untrue column is worse than an unstarted card** — it hides the stall from the one view
+      anyone checks, which is the whole thesis of this TRDD.
 - [x] the completion gate is ENFORCED, not merely written — `TERMINAL-WITHOUT-CHECKLIST` +
       `TERMINAL-WITH-OPEN-BOX` in `lib/trdd-doctor.ts`, 15 tests, 6 neuters, 0 findings today
 - [x] open cards in WORK columns carry a checklist — **19 of 19, then 22 of 22.** Each needed a
@@ -478,7 +490,7 @@ Nine of the seventeen cards had a claim that did not survive that.
       8 cards all depend on: **the yield is BINARY ON LIVENESS, not on capabilities.** A live server
       takes all five absorbed chores; the `capabilities` array we publish is never consulted.
       Verified by effect (the liveness file was 16 s old, so the janitor is yielding right now)
-- [ ] `ai-maestro#95` and `#102` are OPEN and **both are stale** — the rotator tick is armed and
+- [x] `ai-maestro#95` and `#102` are OPEN and **both are stale** — the rotator tick is armed and
       beating (status 27 s old; its verdict is `reauth-needed`/`refresh-dead`, a real state needing
       the human), and #102's root cause — a reader stat'ing `version-update-request` against a
       writer that writes `version-update-requested.flag` — is fixed in `lib/janitor-control.ts:48`.
@@ -492,6 +504,16 @@ Nine of the seventeen cards had a claim that did not survive that.
       (*the absorbed version-update chore is not running*) now has substantial new evidence from
       today's work on that very lane — [[PE54D95Q]] — which is worth carrying into whatever the
       human decides.
+      **⏹ CLOSED 2026-08-21T22:56 — BOTH HALVES RESOLVED, NEITHER BY THIS CARD.** Measured just
+      now, not inherited: `gh issue view` reports **`#102` CLOSED at 2026-08-21T19:59:40Z** — the
+      fleet-recovery ask-queue pass closed it with a citation, which is precisely the "human's
+      call" this box was reserving, taken through the sanctioned route rather than as a
+      housekeeping side effect. **`#95` is still OPEN and is no longer stale**: its title is
+      *"Server absorbs oauth-rotator-tick but does not run it"*, i.e. it is the external tracking
+      issue for [[X4RK1NUW]], which is `todo`/P0/`min-approval-requirement: none` and is being
+      worked **right now** as unit 1 of `reports/colony/DELEGATION-p0-drain.md`. An open issue with
+      live work behind it is a correct open issue. So the box's premise — *both open, both stale* —
+      is false in both halves, and the box closes on evidence rather than on a decision.
 - [x] `updated:` was NOT bumped by any mechanical/format-only edit — every bump this session
       accompanied a real `column:` change, which does change what the card asserts
 - [x] the census above is re-derived at the end and the deltas recorded — and it reconciles

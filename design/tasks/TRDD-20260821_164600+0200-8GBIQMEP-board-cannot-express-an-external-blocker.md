@@ -5,12 +5,12 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-21T16:46:00+0200
-updated: 2026-08-21T16:46:00+0200
+updated: 2026-08-21T22:56:58+0200
 current-owner: ai-maestro-orchestrator-agent
 created-by: ai-maestro-orchestrator-agent
 assignee: unassigned
 task-type: infra
-priority: 1
+priority: 0
 min-approval-requirement: none
 severity: high
 effort: medium
@@ -34,6 +34,17 @@ waiting on a GitHub issue cannot use `column: blocked` without making `blocked-b
 `todo` + `external-refs:` precedent ([[35VKIGTC]] ← `janitor#167`) is also wrong because `todo`
 asserts "ready to be pulled". **This card does not restate that. It adds the consequence and the
 measurement, which are new.**
+
+> **⏹ 2026-08-21T22:56 — THIS CARD NOW GATES A P0, so it was re-prioritised `1` → `0`.**
+> The link above ran one way only: this card cited [[5YRLA53W]] as parent context, and that card
+> named nothing. Its last open acceptance box is *"every card sitting still names a TRUE
+> `blocked-by:`"* and it is **not closable without the corpus-level answer this card owns** — so
+> `5YRLA53W` now carries `blocked-by: [8GBIQMEP]` / `column: blocked`, and the edge is wired at
+> both ends. Consequence worth stating plainly, because it changes what pulling this card is
+> worth: **closing 8GBIQMEP is the single move that unblocks a P0**, and `assignee: unassigned`
+> on a card in that position is itself the stall this card is about. The `priority: 1` was
+> correct when filed and became wrong the moment the P0 declared its dependency; a blocker
+> inherits the urgency of the most urgent thing it blocks, or the board cannot be ordered.
 
 ## Problem
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:44:00+0200
+updated: 2026-08-21T15:49:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -412,6 +412,39 @@ the real clone one level down (`AI-MAESTRO-JANITOR/ai-maestro-janitor/`). Six re
 and the table said `-` rather than `0`, which reads as *not applicable* instead of *I looked in the
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
+
+## Report-format divergence — 2026-08-21T15:4x+0200 — why boxes 1 and 3 cannot be measured mechanically
+
+Trying to verify box 3 ("refuted candidates are recorded with their refutation") across the **101
+audit reports in 15 repos** produced a table that looked like a compliance spread — janitor 9/9 and
+`ai-maestro-plugin` 6/6 stating counts, integrator **0/11** and autonomous **0/9** stating none.
+
+**It was not compliance. It was my needle, for the seventh time today.** Sampling the zero rows
+found three INCOMPATIBLE report shapes, all of them satisfying the contract's prose:
+
+| repo | shape |
+|---|---|
+| `visual-comunicator`, `ai-maestro-janitor` | a counts LINE — `Counts: confirmed=6 refuted=3 uncertain=2` |
+| `ai-maestro-integrator-agent` | **pass1/pass2 FILE PAIRS** plus a `DELEGATION.md` index, per-candidate `CONFIRMED`/`REFUTED` in tables |
+| `ai-maestro-autonomous-agent` | per-candidate prose — `CONFIDENCE: VERIFIED` — closed by a summary sentence (*"5 candidates examined; 0 unresolved defects"*) |
+
+**This is a defect in THIS card's Phase-1 contract, not in the plugins' work.** The contract (see
+`## PHASE 1` above) requires "a Phase-1 audit report with per-axis confirmed/refuted counts and a
+report path" and specifies **no machine-readable form for the counts**. Every plugin complied; each
+complied differently; and so the program's own acceptance boxes 1 and 3 are unverifiable by any
+single command. Worse, the failure is silent and biased toward false alarm — a needle that misses a
+repo's spelling returns a small plausible number that reads as *that repo did not comply*, which is
+precisely the accusation I was one commit from recording against integrator and autonomous.
+
+**The fix belongs to the NEXT program, so it is stated as a contract change rather than a card:**
+require one exact line per report, e.g. `Counts: confirmed=N refuted=M uncertain=K`, in addition to
+whatever prose the auditor prefers. One line, greppable, format-free otherwise. Without it, "every
+session returned a report with counts" is a claim only a human re-reading 101 files can settle.
+
+**Box 3 verdict: NOT measurable as written, and not measured.** What IS true and cheap to state:
+**every one of the 15 repos has reports that mention refutation** (`refuted`/`REFUTED` appears in
+at least 2 and usually most of each repo's reports), so no repo silently dropped the concept. That
+is weaker than the box asks and is recorded as exactly that much.
 
 ## Publish coverage — 2026-08-21T15:3x+0200 — acceptance box 7, read from GitHub
 

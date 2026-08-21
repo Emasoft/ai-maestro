@@ -1,14 +1,17 @@
 ---
 trdd-id: C94C60E9
 title: Script SSOT and code-signing readiness — dedupe AMP tree, route hook through CLI, collapse helpers
-column: proposal
+column: planned
 min-approval-requirement: manager
 created: 2026-06-16T23:38:54+0200
-updated: 2026-07-13T10:40:07+0000
+updated: 2026-08-21T22:36:05+0200
 current-owner: null
 task-type: refactor
 priority: 2
 severity: HIGH
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 relevant-rules: []
 external-refs: ["reports/script-audit/AUDIT-REPORT-20260616_233416+0200.md"]
 ---
@@ -62,3 +65,5 @@ None of these is a runtime security gap (the server enforces regardless — `ser
 Medium-high (broad mechanical refactor across the script layer + a new server endpoint). Sequence: (1) dedupe AMP tree, (2) add the resolve endpoint, (3) route the hook + CLI through it, (4) collapse helpers. Each step independently testable. No server-authority behavior changes — this is consolidation, so the risk is regression, not new exposure.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: PARTIALLY landed since filing. Item 2 (route the production hook through the CLI) is DONE — `scripts/ai-maestro-hook.cjs` no longer exists on disk; only `scripts/aimaestro-hook.sh` remains, so the direct-fetch bypass this item targeted is gone. Item 3 (a single resolve endpoint) is DONE — `GET /api/v1/agents/resolve` exists. NOT done: item 1 — `diff -q scripts/amp-helper.sh plugins/amp-messaging/scripts/amp-helper.sh` still reports the files differ, so the in-repo byte-fork blocking code-signing (L1-A1) is still live; item 5 — 32 of 38 `amp-*.sh`/`aid-*.sh` scripts still do not source `common.sh`; item 4 (helper collapse) unverified. Approved to continue, scope narrowed to items 1, 4, 5 (2 and 3 already shipped under other work).

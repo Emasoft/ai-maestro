@@ -1,15 +1,18 @@
 ---
 trdd-id: OQIA2DCR
 title: Every titled agent launches with an unresolvable --agent, so a woken agent is dead on arrival
-column: proposal
+column: cancelled
 min-approval-requirement: manager
 priority: 0
 severity: critical
 effort: medium
 task-type: bugfix
 created: 2026-07-15T01:05:00+0200
-updated: 2026-07-22T20:13:00+0200
+updated: 2026-08-21T22:36:05+0200
 scope: project
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 labels: [scenario-improvement, scen-029, scen-031]
 current-owner: scenario-runner
 external-refs:
@@ -136,3 +139,5 @@ fail-loudly half (2) is low-risk and can land first; it converts a silent
 fleet-wide failure into a visible one.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — CANCELLED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: TRDD-B7G2R0SX (`column: design`, open, authoritative) explicitly marks this card's root cause SUPERSEDED and states it was ALL WRONG — "a fresh Wizard MANAGER loads its persona fine"; the original "`--agent` unresolvable / scope-is-the-discriminator" diagnosis was a false negative produced by inferring fresh-launch behaviour from 4 stale pre-existing agents (SCEN-031 RUN 1 skipped S004, never actually created a fresh MANAGER). The REAL bug — G11's `createSession` building the launch command from `programArgs` captured before G06 installed the role-plugin and injected `--agent` — was fixed by TRDD-GZ1KOHNR (`column: complete`, commits eff07647+2bd8969c), verified live in the SCEN-031 re-run (fresh MANAGER's `ps` shows `--agent ai-maestro-assistant-manager-agent-main-agent`, self-organized a real fleet). Superseded, not declined.

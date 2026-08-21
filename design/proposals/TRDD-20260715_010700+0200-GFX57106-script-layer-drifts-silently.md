@@ -1,15 +1,18 @@
 ---
 trdd-id: GFX57106
 title: Nothing keeps the installed script layer in sync, so the fleet cannot reach verify
-column: proposal
+column: planned
 min-approval-requirement: none
 priority: 1
 severity: high
 effort: small
 task-type: infra
 created: 2026-07-15T01:07:00+0200
-updated: 2026-07-15T01:07:00+0200
+updated: 2026-08-21T22:36:05+0200
 scope: project
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 labels: [scenario-improvement, scen-029]
 current-owner: scenario-runner
 external-refs:
@@ -82,3 +85,5 @@ the shipped copy and log, don't overwrite blindly, or gate the overwrite on the
 managed-file marker the DEP rules already use.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: none). Re-measured: the SPECIFIC reported symptom is gone on this host — `~/.local/bin/aimaestro-trdd.sh` now has `verify` (someone re-ran the installer since filing) and `aimaestro-portfolio.sh` (mtime Jul 21) is installed too. But the ROOT CAUSE this proposal targets is still unaddressed: `lib/agent-invariants.ts` has no `script-layer` row alongside the existing `dep-rules`/`core-plugin`/`git-exclude` guarantees, so nothing prevents the same silent drift from recurring on this or any other host. Premise still holds at the root-cause level; approved.

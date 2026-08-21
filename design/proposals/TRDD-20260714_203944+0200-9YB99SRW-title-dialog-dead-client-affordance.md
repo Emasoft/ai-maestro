@@ -1,14 +1,17 @@
 ---
 trdd-id: 9YB99SRW
 title: Surface why the governance-title control is inert on a dead-client agent
-column: proposal
+column: planned
 min-approval-requirement: none
 priority: 2
 severity: low
 effort: small
 task-type: bugfix
 created: 2026-07-14T20:39:44+0200
-updated: 2026-07-14T20:39:44+0200
+updated: 2026-08-21T22:36:05+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 current-owner: scenario-runner
 labels: [scenario-improvement, scen-030]
 external-refs: [reports/scenarios-runner/SCEN-030_20260714T181702Z.report.md]
@@ -64,3 +67,5 @@ agents legitimately shouldn't change title mid-transition) — the fix is primar
 about making that state legible, not about forcing the dialog open.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: none). Re-measured: still unresolved. `components/AgentProfile.tsx:827` renders `TitleBadge` with `onClick={() => setShowRoleDialog(true)}`, unconditionally, no guard on session/transition/locked state; `components/governance/TitleBadge.tsx` has no disabled/tooltip variant. Premise still holds; small, low-risk investigation task remains valid.

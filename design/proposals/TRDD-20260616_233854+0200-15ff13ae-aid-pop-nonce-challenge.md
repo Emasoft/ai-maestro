@@ -1,14 +1,17 @@
 ---
 trdd-id: 15FF13AE
 title: Make AID proof-of-possession nonce-bound instead of timestamp-windowed
-column: proposal
+column: cancelled
 min-approval-requirement: manager
 created: 2026-06-16T23:38:54+0200
-updated: 2026-07-13T10:40:07+0000
+updated: 2026-08-21T22:36:05+0200
 current-owner: null
 task-type: security
 priority: 3
 severity: MEDIUM
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 relevant-rules: []
 external-refs: ["reports/script-audit/AUDIT-REPORT-20260616_233416+0200.md"]
 ---
@@ -52,3 +55,5 @@ Interim (if challenge/response is deferred): a consumed-proof cache keyed by `sh
 Medium-high — this is a protocol change touching both the server token route and the `aid-maestro-token.sh` client. Must ship server + client together (or keep the timestamp path as a fallback during rollout). The interim consumed-proof cache is far lower-risk and could land first.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — CANCELLED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: fully implemented under a different implementation — `lib/aid-nonce.ts` (single-use, subject-bound, TTL-capped server nonce), `app/api/v1/auth/challenge/route.ts` (issues the nonce), `app/api/v1/auth/token/route.ts` (authenticates the proof, then `consumeNonce()` — authenticate-before-consume, atomic single-use). Tests: `tests/aid-token-nonce-pop.test.ts`, `tests/unit/aid-nonce.test.ts`. All acceptance criteria (replay-rejected, expired/unknown-nonce → 401, Ed25519+serverUrl-pin retained, rate limits intact) are met by the shipped code. Superseded, not declined.

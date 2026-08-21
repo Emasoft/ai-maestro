@@ -1,15 +1,18 @@
 ---
 trdd-id: F898NXLU
 title: MANAGER role-plugin must mandate create-the-fleet-and-delegate, never build solo with vanilla subagents
-column: proposal
+column: cancelled
 created: 2026-07-22T23:18:37+0200
-updated: 2026-07-23T06:35:00+0200
+updated: 2026-08-21T22:36:05+0200
 current-owner: scenario-runner
 task-type: bugfix
 min-approval-requirement: manager
 priority: 0
 severity: high
 effort: medium
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 labels: [scenario-improvement, scen-031, manager-role-plugin, cross-repo]
 external-refs:
   - reports/scenarios-runner/SCEN-031_20260722T203644Z.report.md
@@ -105,3 +108,5 @@ approach with keeping the REPL boot intact. Depends on: `ai-maestro-assistant-ma
 maintainer accepting the persona change.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — CANCELLED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: this card's own body already recorded (b) as largely resolved by TRDD-GZ1KOHNR. Confirmed: GZ1KOHNR is `column: complete`, fixed the launch chokepoint (implementation-commits eff07647, 2bd8969c) and was verified live in the SCEN-031 re-run — the MANAGER's persona loads and it self-organized a real fleet. (a), the external-repo persona-mandate change, was routed (not re-proposed here) by TRDD-H4L3HHKX (`column: complete`): `ai-maestro-assistant-manager-agent#32` and `#34` already carry the SCEN-031 evidence + normative delegation-mandate enforcement, so no duplicate issue was filed (dedup, per that card's own C2 disposition). The residual downstream gap this card flagged (workers never waking on the AMP mandate) is tracked separately at TRDD-4ALV5ISB, not by this proposal. Superseded, not declined.

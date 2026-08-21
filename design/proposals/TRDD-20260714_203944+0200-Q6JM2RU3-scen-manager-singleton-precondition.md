@@ -1,14 +1,17 @@
 ---
 trdd-id: Q6JM2RU3
 title: Team-governance scenarios must detect the MANAGER-singleton precondition at setup
-column: proposal
+column: planned
 min-approval-requirement: none
 priority: 1
 severity: medium
 effort: small
 task-type: infra
 created: 2026-07-14T20:39:44+0200
-updated: 2026-07-14T20:39:44+0200
+updated: 2026-08-21T22:36:05+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 current-owner: scenario-runner
 labels: [scenario-improvement, scen-030]
 relevant-rules: [7]
@@ -68,3 +71,5 @@ Dependency: agreement on the litter policy (SCENARIOS_TESTS_RULES.md already
 grants standing permission to delete governance litter under `~/agents/`).
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: none). Re-measured: still unimplemented — `tests/scenarios/scripts/scenario-setup.sh` has no pre-existing-MANAGER check, and no `assert-clean-governance.sh` / `list-governance-litter.sh` exists anywhere under `tests/scenarios/scripts/`. Premise still holds; approved.

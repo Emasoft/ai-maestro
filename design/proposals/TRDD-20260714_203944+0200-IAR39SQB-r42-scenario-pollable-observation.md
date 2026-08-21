@@ -1,14 +1,17 @@
 ---
 trdd-id: IAR39SQB
 title: Make SCEN-030's R42 observation pollable and split from fleet-build
-column: proposal
+column: planned
 min-approval-requirement: none
 priority: 2
 severity: low
 effort: medium
 task-type: infra
 created: 2026-07-14T20:39:44+0200
-updated: 2026-07-14T20:39:44+0200
+updated: 2026-08-21T22:36:05+0200
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 current-owner: scenario-runner
 labels: [scenario-improvement, scen-030]
 external-refs: [reports/scenarios-runner/SCEN-030_20260714T181702Z.report.md]
@@ -64,3 +67,5 @@ TRDD-Q6JM2RU3 (clean-environment precondition) should land first, since the buil
 phase presumes a free MANAGER slot.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — APPROVED by ai-maestro-hub-session (min-approval-requirement: none). Re-measured: still unfixed. `tests/scenarios/SCEN-030_r42-manager-must-ask-not-inject.scen.md` S008 still reads "Watch the three terminals ... for up to 10 minutes" — a fixed wall-clock block, no bounded poll against `HELLO-R42.md` / the MANAGER's AMP `sent/` dir. Premise still holds. Note for the implementer: `tests/scenarios/SCENARIOS_TESTS_RULES.md` now carries Rule 15 (THE-RUNNER-NEVER-WAITS), added after this proposal was filed, which generalizes exactly this fix (orchestrator polls cheaply, a spawned runner never blocks) — implement per Rule 15's split rather than this card's original bespoke poll-loop shape.

@@ -1,15 +1,18 @@
 ---
 trdd-id: CKLI8NWL
 title: A MEMBER cannot be created in the wizard, and the team dialog cannot add one either
-column: proposal
+column: cancelled
 min-approval-requirement: none
 priority: 1
 severity: high
 effort: medium
 task-type: bugfix
 created: 2026-07-15T01:09:00+0200
-updated: 2026-07-15T01:09:00+0200
+updated: 2026-08-21T22:36:05+0200
 scope: project
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 labels: [scenario-improvement, scen-029]
 current-owner: scenario-runner
 external-refs:
@@ -76,3 +79,5 @@ are governance-load-bearing. The gates must still refuse a team title for an age
 that ends up in no team.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — CANCELLED by ai-maestro-hub-session (min-approval-requirement: none). Re-measured: option (a) is implemented. `components/AgentCreationWizard.tsx` — picking a team at the team step sets `selectedTeamId`; `handleTeamSelect` then defaults the title to `'member'` (`const defaultTitle: AgentRole = teamId ? 'member' : 'autonomous'`); the title step offers `TEAM_TITLES` (member/chief-of-staff/orchestrator/architect/integrator) whenever a team is selected; the create payload carries `teamId: selectedTeamId`. A MEMBER can now be created into a team in one wizard pass, no third surface required. The "Add Agent" picker bug (BUG-001/`f34432a2`) this card also names was already fixed in the same run per the card's own text. Repaired, not declined.

@@ -1,15 +1,18 @@
 ---
 trdd-id: FDIT83ZH
 title: The scenario write-guard blocks the forgery step, so the fleet-side half of SCEN-029 cannot run
-column: proposal
+column: cancelled
 min-approval-requirement: manager
 priority: 2
 severity: medium
 effort: small
 task-type: infra
 created: 2026-07-15T01:10:00+0200
-updated: 2026-07-15T01:10:00+0200
+updated: 2026-08-21T22:36:05+0200
 scope: project
+approved: true
+approval-judge: ai-maestro-hub-session
+approval-datetime: 2026-08-21T22:36:05+0200
 labels: [scenario-improvement, scen-029]
 current-owner: scenario-runner
 external-refs:
@@ -72,3 +75,5 @@ LOW. (a) adds a verb behind the same strict-route auth as `edit`. (b) is a polic
 change and should not be taken lightly.
 
 ## Approval log
+
+- 2026-08-21T22:36:05+0200 — CANCELLED by ai-maestro-hub-session (min-approval-requirement: manager). Re-measured: option (a) is implemented — `scripts/aimaestro-trdd.sh` now has a `create` verb (`cmd_create`, TRDD-40DYBI4T) accepting `--agent`, posting to `POST /api/trdd/create`, and writing the card server-side. This is the exact server-side card-authoring path this proposal asked for; the scenario's forgery step can now go through the API instead of a filesystem write the subagent write-guard correctly blocks. Repaired, not declined.

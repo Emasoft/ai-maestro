@@ -82,6 +82,9 @@
     "POST_/api/agents/foreign-approvals/[id]/reject": "strict",
     "POST_/api/system/aid-recover": "strict",
     "POST_/api/oauth-rotator/reauth/start": "strict",
-    "POST_/api/oauth-rotator/reauth/complete": "strict"
+    "POST_/api/oauth-rotator/reauth/complete": "strict",
+    "POST_/api/auth/dev-token": "strict",
+    "PATCH_/api/auth/dev-token": "strict",
+    "DELETE_/api/auth/dev-token": "strict"
   }
 }

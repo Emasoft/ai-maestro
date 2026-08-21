@@ -5,9 +5,9 @@
  * This closes SF-058: browser requests without the cookie are now rejected
  * instead of receiving system-owner access.
  *
- * Body: { password: string }
+ * Body: { password: string } XOR { devToken: string } (TRDD-A9335BZ6)
  * Success: 200 + Set-Cookie: aim_session=<token>
- * Failure: 401 { error: "Invalid password" }
+ * Failure: 401 { error: "Invalid password" | "Invalid token" }
  */
 
 import { NextResponse } from 'next/server'
@@ -15,10 +15,12 @@ import { z } from 'zod'
 import { createSession, buildSessionCookie } from '@/lib/session-auth'
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
 import { recordAuthFailure, recordAuthSuccess, isLockedDown } from '@/lib/kill-switch'
+import { verifyDevToken } from '@/lib/dev-mode-token'
 
-const LoginSchema = z.object({
-  password: z.string().min(1).max(256),
-}).strict()
+const LoginSchema = z.union([
+  z.object({ password: z.string().min(1).max(256) }).strict(),
+  z.object({ devToken: z.string().min(1).max(256) }).strict(),
+])
 
 export async function POST(request: Request) {
   try {
@@ -27,7 +29,9 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Password required' }, { status: 400 })
     }
-    const { password } = parsed.data
+    const isDevToken = 'devToken' in parsed.data
+    const devToken = isDevToken ? (parsed.data as { devToken: string }).devToken : null
+    const password = !isDevToken ? (parsed.data as { password: string }).password : null
 
     // Kill switch: reject login attempts during lockdown
     if (isLockedDown()) {
@@ -64,15 +68,18 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verify against governance password
-    const { verifyPassword } = await import('@/lib/governance')
-
-    const valid = await verifyPassword(password)
+    const valid = isDevToken
+      ? await verifyDevToken(devToken as string)
+      : await (await import('@/lib/governance')).verifyPassword(password as string)
     // verifyPassword returns false for both "no password set" and "wrong password".
-    // This is intentional — we don't reveal whether a password exists.
+    // verifyDevToken is fail-closed the same way (disabled/never-minted/mismatch).
+    // This is intentional — we don't reveal whether a password/token exists.
     if (!valid) {
       recordAuthFailure()
-      return NextResponse.json({ error: 'Invalid password' }, { status: 401 })
+      return NextResponse.json(
+        { error: isDevToken ? 'Invalid token' : 'Invalid password' },
+        { status: 401 }
+      )
     }
 
     // Reset rate limit and kill switch counter on successful login.
@@ -82,9 +89,14 @@ export async function POST(request: Request) {
     resetRateLimit(rateLimitKey)
     recordAuthSuccess()
 
-    // Unlock encrypted security config with the plaintext password
-    const { unlockSecurityConfig } = await import('@/lib/security-config')
-    unlockSecurityConfig(password)
+    // Unlock encrypted security config with the plaintext password. Skipped
+    // on the dev-token branch — there is no plaintext password, same as the
+    // WebAuthn branch in app/api/auth/webauthn/authenticate/route.ts, which
+    // relies on the config's default-key fallback for the same reason.
+    if (!isDevToken) {
+      const { unlockSecurityConfig } = await import('@/lib/security-config')
+      unlockSecurityConfig(password as string)
+    }
 
     // Create session
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined

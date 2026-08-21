@@ -367,28 +367,65 @@ cmd_invalidate_password() {
 # resulting TOKEN is stored, 0600, and a token is revocable and expiring; a password is
 # neither.
 cmd_login() {
-    local password resp token file dir
+    local password resp token file dir login_body
 
-    if [ ! -t 0 ]; then
-        echo "Error: login needs a terminal — it prompts for the governance password." >&2
-        echo "       It is never accepted as an argument or an env var (it would leak via ps/history)." >&2
-        exit 1
+    if [ -t 0 ]; then
+        printf 'Governance password: ' >&2
+        read -rs password
+        printf '\n' >&2
+        [ -n "$password" ] || { echo "Error: empty password" >&2; exit 1; }
+        # VIA STDIN, NOT `--arg` (fixed 2026-08-21). `--arg p "$password"` placed the secret
+        # in JQ'S ARGV, which `ps` exposes to every user on the box for the life of that call
+        # — the exact leak this function's own refusal cited as its reason for demanding a
+        # TTY. `-Rn 'input'` reads one raw line from stdin instead, so the secret never
+        # appears in any process's arguments.
+        # Verified: `printf '%s' 'p@ss"with\quotes' | jq -Rnc '{password: input}'` escapes correctly.
+        login_body="$(printf '%s' "$password" | jq -Rnc '{password: input}')"
+        unset password AIM_GOVERNANCE_PASSWORD
+    else
+        # UNATTENDED DEV LOGIN (owner directive 2026-08-21). `.env.local` exists precisely so
+        # development continues while the owner is away — requiring their presence to log in
+        # defeats the reason the file was created. Before this, a non-TTY caller was refused
+        # outright and EVERY aimaestro-*.sh verb 401'd host-wide, because get_auth_args falls
+        # back to a session cookie that nothing could ever mint (TRDD-SCLSRS6E).
+        #
+        # A DEV TOKEN, NOT THE MASTER PASSWORD (TRDD-A9335BZ6). The password unlocks
+        # everything a human can do; the dev token is a scoped, revocable credential minted
+        # once (Settings -> Security) for exactly this purpose. Same resolver shape as the
+        # scenario helpers (tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh
+        # ::aim__password_json): env var first, else source the gitignored `.env.local`. The
+        # secret is read by the script, never by an agent, and never appears in argv.
+        #
+        # FAILS CLOSED: no var and no file ⇒ refuse. On a host without `.env.local` (i.e.
+        # anywhere but a dev box) behaviour is unchanged.
+        if [ -z "${AI_MAESTRO_DEV_MODE_TOKEN:-}" ]; then
+            local _env_file="${CLAUDE_PROJECT_DIR:-$(pwd)}/.env.local"
+            if [ -f "$_env_file" ]; then
+                set -a
+                # shellcheck disable=SC1090
+                . "$_env_file"
+                set +a
+            fi
+        fi
+        if [ -z "${AI_MAESTRO_DEV_MODE_TOKEN:-}" ]; then
+            echo "Error: login has no terminal and no dev-mode token." >&2
+            echo "       Generate one in Settings -> Security -> Dev Mode Token, then set" >&2
+            echo "       AI_MAESTRO_DEV_MODE_TOKEN=am-... in .env.local (gitignored)." >&2
+            echo "       It is NEVER accepted as a command-line argument — argv is world-readable via ps." >&2
+            exit 1
+        fi
+        login_body="$(printf '%s' "$AI_MAESTRO_DEV_MODE_TOKEN" | jq -Rnc '{devToken: input}')"
+        unset AI_MAESTRO_DEV_MODE_TOKEN
     fi
 
-    printf 'Governance password: ' >&2
-    read -rs password
-    printf '\n' >&2
-    [ -n "$password" ] || { echo "Error: empty password" >&2; exit 1; }
-
-    # -i so we can read Set-Cookie. jq --arg escapes the password into the JSON string:
-    # a quote or backslash in it must not be able to break out or forge extra fields.
+    # -i so we can read Set-Cookie.
     local base
     base="$(get_api_base)"
-    resp="$(curl -s -i --max-time 30 -X POST \
+    resp="$(printf '%s' "$login_body" | curl -s -i --max-time 30 -X POST \
         -H "Content-Type: application/json" \
-        -d "$(jq -nc --arg p "$password" '{password:$p}')" \
+        --data-binary @- \
         "${base}/api/auth/login")" || { echo "Error: login request failed (network)" >&2; exit 1; }
-    unset password
+    unset login_body
 
     token="$(printf '%s' "$resp" \
         | tr -d '\r' \

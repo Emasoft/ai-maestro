@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Shield, ChevronDown, ChevronRight, Save, RefreshCw,
   AlertTriangle, CheckCircle, Lock, Key, Clock, Users,
-  Zap, Database, ShieldAlert, RotateCcw
+  Zap, Database, ShieldAlert, RotateCcw, Terminal, Copy, Loader2
 } from 'lucide-react'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
+import { DEV_TOKEN_ENV_NAME } from '@/lib/dev-mode-token'
 
 interface SecurityConfig {
   keyRotation: { intervalDays: number; overlapDays: number }
@@ -126,6 +127,224 @@ function CollapsibleSection({
       </button>
       {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
     </div>
+  )
+}
+
+interface DevTokenStatus {
+  enabled: boolean
+  issued: boolean
+  createdAt: string | null
+  lastUsedAt: string | null
+}
+
+/**
+ * DevModeTokenPanel (TRDD-A9335BZ6) — the owner's only way to mint the
+ * dev-mode login token. Mint requires the governance password AND a fresh
+ * passkey assertion (obtained via the existing unauthenticated WebAuthn
+ * options endpoint, same ceremony as passkey login). The plaintext is shown
+ * exactly once and never persisted client-side.
+ */
+function DevModeTokenPanel() {
+  const { requestSudoToken } = useSudo()
+  const [status, setStatus] = useState<DevTokenStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [password, setPassword] = useState('')
+  const [mintedToken, setMintedToken] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/dev-token')
+      if (res.ok) setStatus(await res.json())
+    } catch { /* network error */ }
+  }, [])
+
+  useEffect(() => {
+    fetchStatus()
+  }, [fetchStatus])
+
+  const toggleEnabled = async () => {
+    if (!status) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await sudoFetch(
+        '/api/auth/dev-token',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: !status.enabled }),
+        },
+        requestSudoToken
+      )
+      if (res.ok) setStatus(await res.json())
+      else setError('Could not update the toggle.')
+    } catch {
+      setError('Connection failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const generateToken = async () => {
+    if (!password) return
+    setBusy(true)
+    setError(null)
+    try {
+      const optRes = await fetch('/api/auth/webauthn/authenticate')
+      const options = await optRes.json().catch(() => null)
+      if (!optRes.ok) {
+        setError(options?.message ?? 'No passkey is registered — register one before minting a dev token.')
+        return
+      }
+      // Dynamic import so @simplewebauthn/browser stays out of the initial bundle.
+      const { startAuthentication } = await import('@simplewebauthn/browser')
+      let assertion: unknown
+      try {
+        assertion = await startAuthentication({ optionsJSON: options })
+      } catch {
+        setError('Passkey authentication was cancelled or no authenticator was available.')
+        return
+      }
+      const res = await sudoFetch(
+        '/api/auth/dev-token',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password, assertion }),
+        },
+        requestSudoToken
+      )
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.token) {
+        setError(data?.error ?? `Could not generate the token (${res.status}).`)
+        return
+      }
+      setMintedToken(data.token as string)
+      setPassword('')
+      fetchStatus()
+    } catch {
+      setError('Connection failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const revokeToken = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await sudoFetch('/api/auth/dev-token', { method: 'DELETE' }, requestSudoToken)
+      if (res.ok) {
+        setMintedToken(null)
+        fetchStatus()
+      } else {
+        setError('Could not revoke the token.')
+      }
+    } catch {
+      setError('Connection failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const copyLine = async (line: string) => {
+    try {
+      await navigator.clipboard.writeText(line)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard unavailable */ }
+  }
+
+  return (
+    <CollapsibleSection title="Dev-mode Login Token" icon={Terminal}>
+      <p className="text-xs text-gray-500 -mt-1 mb-2">
+        A revocable secret that lets a CLI log in as the owner without the governance password.
+        Minting requires the password AND a passkey.
+      </p>
+
+      {error && (
+        <div className="flex items-start gap-1.5 mb-2 text-xs text-red-400">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {mintedToken ? (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-2">
+          <p className="text-xs text-amber-300 font-medium">
+            This token will never be shown again. Save it now.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 min-w-0 truncate text-xs bg-gray-950 px-2 py-1.5 rounded text-gray-200 font-mono">
+              {DEV_TOKEN_ENV_NAME}={mintedToken}
+            </code>
+            <button
+              onClick={() => copyLine(`${DEV_TOKEN_ENV_NAME}=${mintedToken}`)}
+              className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs flex-shrink-0"
+            >
+              <Copy className="w-3 h-3" /> {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <button
+            onClick={() => setMintedToken(null)}
+            className="w-full px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-medium"
+          >
+            Done — I&apos;ve saved it
+          </button>
+        </div>
+      ) : (
+        <>
+          <ToggleInput
+            label="Enabled"
+            value={status?.enabled ?? false}
+            onChange={toggleEnabled}
+          />
+
+          <div className="flex items-center justify-between gap-2 text-xs text-gray-400">
+            <span>
+              {status?.issued
+                ? `Token issued${status.createdAt ? ` on ${new Date(status.createdAt).toLocaleString()}` : ''}${status.lastUsedAt ? `, last used ${new Date(status.lastUsedAt).toLocaleString()}` : ', never used'}.`
+                : 'No token has been generated yet.'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && password && !busy && generateToken()}
+              placeholder="Governance password"
+              disabled={busy}
+              className="flex-1 min-w-0 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={generateToken}
+              disabled={busy || !password}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white rounded text-xs font-medium flex-shrink-0"
+            >
+              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
+              {status?.issued ? 'Regenerate' : 'Generate token'}
+            </button>
+          </div>
+          {status?.issued && (
+            <p className="text-xs text-gray-500">Regenerating invalidates the current token immediately.</p>
+          )}
+
+          {status?.issued && (
+            <button
+              onClick={revokeToken}
+              disabled={busy}
+              className="text-xs text-red-400 hover:text-red-300"
+            >
+              Revoke token
+            </button>
+          )}
+        </>
+      )}
+    </CollapsibleSection>
   )
 }
 
@@ -402,6 +621,8 @@ export default function SecuritySection() {
           <ToggleInput label="Read-Only on Tamper" value={config.ledger.readOnlyOnTamper} onChange={(v) => updateConfig('ledger', 'readOnlyOnTamper', v)} />
           <NumberInput label="Max Entries Per File" value={config.ledger.maxEntriesPerFile} min={100} max={100000} onChange={(v) => updateConfig('ledger', 'maxEntriesPerFile', v)} />
         </CollapsibleSection>
+
+        <DevModeTokenPanel />
       </div>
 
       {/* Save Button */}

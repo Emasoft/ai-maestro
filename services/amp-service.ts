@@ -1991,6 +1991,25 @@ export async function deliverFederated(
       }
     }
 
+    // ── Title-based communication graph ──────────────────────────────────
+    // TRDD-903B7A20: an AMP v1 federation sender carries no governance-title
+    // attestation (unlike the internal mesh protocol's signed role
+    // attestation in routeMessage) — so senderRole is always null here.
+    // validateMessageRoute fails closed on a null senderRole, exactly like
+    // an unattested mesh-forwarded sender in routeMessage. Reusing the same
+    // check keeps external federation from bypassing the comm graph.
+    const recipientTitle = localAgent.governanceTitle || null
+    const recipientTitleStr = String(recipientTitle ?? '')
+    const graphCheck = validateMessageRoute(null, recipientTitle, {
+      recipientIsHuman: recipientTitleStr === 'human' || recipientTitleStr === 'user',
+    })
+    if (!graphCheck.allowed) {
+      return {
+        data: { error: 'title_communication_forbidden', message: graphCheck.reason || 'Federated sender is not permitted to message this recipient' } as AMPError,
+        status: 403
+      }
+    }
+
     // ── Local Delivery ──────────────────────────────────────────────────
     await deliver({
       envelope,

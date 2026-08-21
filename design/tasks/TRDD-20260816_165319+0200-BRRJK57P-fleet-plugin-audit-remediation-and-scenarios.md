@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:37:00+0200
+updated: 2026-08-21T15:44:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -472,6 +472,28 @@ Needle taken from a real card rather than from the contract's vocabulary: cards 
 **Every one has at least one citing card** — chief-of-staff 10, programmer 7, webdesign 6,
 ai-maestro-plugin 6, perfect-skill-suggester 5, architect 5, assistant-role 4, CPV 4, janitor 4,
 maintainer 3, integrator 2, visual-comunicator 1, autonomous 1.
+
+> **⚠ THE NEEDLE WAS BLIND, AND ONE OF THE TWO THIN ROWS IS A REAL PHASE-2 GAP.** Both resolved
+> below by a delegated read of the two repos, then re-verified first-hand. The needle failure is
+> the SIXTH instance of one mistake this session; the gap is a finding this program owes to another
+> repo.
+>
+> **`ai-maestro-autonomous-agent` — NOT thin, my instrument was.** Its remediation cards cite the
+> phrase **"phase-1 audit D#"**, which `plugin-self-audit|BRRJK57P` cannot match. Verified myself:
+> `grep -rli 'phase-1 audit' design` returns **3** archived `completed` cards
+> (`9SIVDRLO`, `D6P88CM1`, `J48IO8F3`) against my needle's 1. All 4 of its confirmed findings are
+> remediated. It should never have been on the thin list.
+>
+> **`visual-comunicator` — genuinely thin, and larger than reported.** Verified first-hand by
+> summing the reports' OWN counts lines (`Counts: confirmed=6 refuted=3 uncertain=2` — a form my
+> `^confirmed:` needle also could not match): **10 confirmed findings across 6 audit reports**, and
+> exactly **1** of its 29 cards matches ANY audit phrasing. The delegated pass classified that one
+> as a plausible-but-uncited remediation and found no card for the rest. **I report 10 where it
+> reported 8** — I did not reconcile the difference, and my number is the one I can show the
+> command for. Either way this is a real Phase-2 gap owed by that repo, not by this one: per the
+> cross-project rule the card belongs in `visual-comunicator`'s own `design/`, authored by its
+> session. Recorded here as the ask.
+> Delegated pass: `reports/fleet-audit/20260821_151816+0200-autonomous-and-visualcom-remediation-classification.md`.
 
 **But "at least one" is not "each", and the gap is the finding.** The box asks that *each*
 remediation card cite its finding; this needle counts cards that DO cite, and cannot see a

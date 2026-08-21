@@ -3,7 +3,7 @@ trdd-id: A9335BZ6
 title: Unattended dev-mode login via an owner-minted, revocable dev token
 column: human_review
 created: 2026-08-21T17:48:24+0200
-updated: 2026-08-21T18:06:32+0200
+updated: 2026-08-21T18:43:41+0200
 implementation-commits: [ddf18bf7, 2b881dcf, 0f794535]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
@@ -94,18 +94,42 @@ property the owner asked for (unforgeable, server-only issuance, revocable, show
 stateless HMAC would be strictly worse: revocation still needs a store, so the HMAC adds a key
 to protect and buys nothing.
 
-### NEXT ACTION — the owner has to mint one token; nothing else is blocked
+### NEXT ACTION — one owner action left: delete the master password from `.env.local`
 
-All five units are built, verified and committed (`ddf18bf7`, `2b881dcf`, `0f794535`). The two
-remaining acceptance boxes both need a real token, which only the owner can create:
+Steps 1 and 2 below are DONE (2026-08-21T18:43+0200). The owner minted the token and set
+`AI_MAESTRO_DEV_MODE=true`; the 19-day host-wide 401 is closed, measured end to end.
 
-1. Settings → Security → **Dev Mode Token** → Generate (governance password + passkey), copy the
-   `AI_MAESTRO_DEV_MODE_TOKEN=am-…` line into `.env.local`.
-2. Then, unattended: `scripts/aimaestro-governance.sh login </dev/null` → 0, and
-   `scripts/aimaestro-trdd.sh search <anything>` → 0 instead of 401. That closes the
-   19-day host-wide 401 and the ORCHESTRATOR's parked assignment lane.
-3. Then **delete `AIM_GOVERNANCE_PASSWORD` from `.env.local`** — removing the master credential
-   from the file is the security win this card exists to buy.
+1. ~~Settings → Security → **Dev Mode Token** → Generate, copy the `AI_MAESTRO_DEV_MODE_TOKEN=am-…`
+   line into `.env.local`.~~ **DONE by the owner.**
+2. ~~Unattended login + an authenticated verb.~~ **DONE, and it exposed a defect this card could
+   not see — see "THE DEPLOY GAP" below.** Measured through the BARE command names on `PATH`:
+   `aimaestro-governance.sh login </dev/null` → **exit 0** ("Session stored in
+   ~/.aimaestro/cli-session (0600)"), then `aimaestro-trdd.sh search` → **exit 0**, 492 TRDDs,
+   162 148 bytes. The one `401` substring in that payload is inside path timestamps
+   (`…_014014+0200…`, `…_120401+0200…`), not an auth error — checked, not assumed.
+3. **Delete `AIM_GOVERNANCE_PASSWORD` from `.env.local`** — removing the master credential from
+   the file is the security win this card exists to buy. **Now unblocked; owner action.**
+
+### THE DEPLOY GAP — box 202 was ticked against a copy nobody runs
+
+Box 202 ("`login` succeeds with NO TTY given the token") was proven against a loopback stub
+driving **`scripts/aimaestro-governance.sh`** — the REPO copy. The copy the owner actually
+invokes, `~/.local/bin/aimaestro-governance.sh`, was the **Aug 8** build carrying **0** hits for
+`AI_MAESTRO_DEV_MODE_TOKEN` against the repo's 5. So the feature was committed, tested, ticked —
+and *absent from the command line anyone types*. Box 203 would have failed for a reason the card
+never named, and the obvious diagnosis ("the token is wrong") would have been aimed at the owner.
+
+Deployed at 18:43 (`cp -p`, byte-identical afterwards); the stale copy is preserved at
+`builds_dev/deployed-cli-backup/aimaestro-governance.sh.20260821_184306+0200` — it matched **no**
+committed blob of that path, so it was not recoverable from git and was backed up before the
+overwrite rather than trusted to history.
+
+**`~/.local/bin/aimaestro-trdd.sh` is ALSO drifted** (Aug 20 vs the repo's Aug 21). It answers
+correctly today, so it is reported, not silently overwritten. `cmp`, never `grep`, is what
+answers "same or not".
+
+This is `~/.claude/rules/cli-verify-on-path.md` verbatim: verify a CLI change through the bare
+command name, because a repo-relative invocation passes happily while `PATH` resolves elsewhere.
 
 ### THE GAP THIS CARD FOUND IN ITSELF — do not undo it
 
@@ -200,7 +224,7 @@ revocable, same rate-limit and kill-switch as the password path, and fail-closed
 - [x] `POST /api/auth/login { devToken }` mints a session when enabled+issued, and is refused when the flag is off, when revoked, and on a wrong token — 5/5 + 9/9 green; neuters 1 red each
 - [x] Settings → Security renders status, Generate (password+passkey), show-once + copy, Regenerate, Revoke, and the literal `AI_MAESTRO_DEV_MODE_TOKEN=am-…` line — built from the lib's exported const, so the UI and CLI cannot drift; 0 hits for localStorage/sessionStorage/logging
 - [x] `aimaestro-governance.sh login` succeeds with NO TTY given the token, fails closed without it, and never places the secret in argv — proven against a loopback stub with a curl shim that RECORDS argv, plus a delta-0 count of the real `~/.aimaestro` to prove containment
-- [ ] `aimaestro-trdd.sh search` returns 0 (not 401) after that login — **needs the owner to mint one token; nothing else blocks it**
+- [x] `aimaestro-trdd.sh search` returns 0 (not 401) after that login — measured through the BARE command on `PATH`: login exit 0, search exit 0, 492 TRDDs / 162 148 bytes; the lone `401` substring is a path timestamp, verified in context. Required deploying the repo script over the Aug-8 copy on `PATH` first (see "THE DEPLOY GAP")
 - [x] `tests/unit/test-only-env.test.ts` green — no new security-weakening env read
 - [ ] The master governance password can be removed from `.env.local` (the security win this buys) — **owner action, after the box above**
 

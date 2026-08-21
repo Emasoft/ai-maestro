@@ -1,11 +1,11 @@
 ---
 trdd-id: 5YRLA53W
 title: The board is not draining and the completion gate is vacuous on 71 percent of open cards
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-21T23:47:14+0200
+updated: 2026-08-21T23:48:59+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -410,7 +410,7 @@ Nine of the seventeen cards had a claim that did not survive that.
 - [x] every `dev` card is either genuinely in progress, or re-columned with a recorded reason —
       all 18, across three passes; reasons in-card for 9, in the log for 9 (debt recorded above)
 - [x] `dev` holds a number of cards consistent with the number of workers — **1 card, 1 worker**
-- [ ] every card sitting still names a TRUE `blocked-by:` (a blocker that is itself still open) —
+- [x] every card sitting still names a TRUE `blocked-by:` (a blocker that is itself still open) —
       the `blocked` column's 6 all do, and all 15 external refs are now verified (2 had cleared).
       **BLOCKED ON THE VOCABULARY GAP** above: [[FKGMNGJB]] and [[35VKIGTC]] wait on GitHub issues
       and `blocked-by:` takes TRDD ids only, so they sit in `todo` claiming "ready to pull". The
@@ -425,6 +425,21 @@ Nine of the seventeen cards had a claim that did not survive that.
       *"continuing the existing thread"* as the route; the thread is gone. That is this box's own
       complaint happening again, to the very card it cites, while the box stayed open — so the
       instances close and **the gap does not.** Still needs the corpus-level answer.
+      **⏹ CLOSED 2026-08-21T23:48 — THE CORPUS-LEVEL ANSWER SHIPPED, and the invariant now
+      MEASURES true rather than being asserted.** [[8GBIQMEP]] is `complete` and archived, having
+      delivered TWO detectors (the surfaces cannot see each other): `yarn trdd:extrefs` for
+      `external-refs:` frontmatter and `yarn trdd:blockers` for blocking PROSE. Measured just now:
+      **0** cards in `blocked` with an empty `blocked-by:`; **0** `blocked-by:` entries pointing at
+      a terminal or missing card; prose sweep **exit 0** (`153 cards scanned`). So every card
+      sitting still names a blocker that is itself still open.
+      **The residual, named so this tick is not read as more than it is:** 17 open cards still
+      carry `external-refs:` whose cited issues have all closed (`yarn trdd:extrefs`, exit 1).
+      That is stale *context*, not a false wait-claim — the two `blocked` cards among them
+      (`JT3U4ZVM`, `IALQ43QP`) were checked individually and both have live TRDD blockers, so
+      their columns are honest. **What changed is not that the board became clean; it is that this
+      class became VISIBLE and RE-DERIVABLE on demand**, which is exactly what this box was
+      waiting for. An external wait can now be noticed when it clears — and the first thing the
+      mechanism did was catch one that had (`U9UNWXMV`, waiting on a delta that shipped 08-20).
       **⏹ 2026-08-21T22:56 — THE CORPUS-LEVEL ANSWER NOW HAS A CARD, AND THIS ONE FINALLY OBEYS
       ITSELF.** The gap is tracked as [[8GBIQMEP]] (*"the board cannot express an external blocker
       so external waits go stale unwatched — 9 of 12 cited issues already closed"*), `column: todo`,
@@ -518,6 +533,19 @@ Nine of the seventeen cards had a claim that did not survive that.
 - [x] the census above is re-derived at the end and the deltas recorded — and it reconciles
 
 ## Approval log
+
+- 2026-08-21T23:48:59+0200 — COMPLETED by ai-maestro (hub). `min-approval-requirement: none`,
+  `release-via: none` ⇒ terminal is `complete`. Gate satisfied: **10/10** boxes, `npt`/`eht`/
+  `blocked-by` all empty.
+  **This card was its own best counter-example for 19 days and closing it required fixing that
+  first.** It sat in `todo` with `blocked-by: []` while its last open box demanded that *every card
+  sitting still name a TRUE blocker* — gated on a corpus-level answer it did not own. Tonight it
+  was moved to `blocked` naming [[8GBIQMEP]] (obeying itself), that card was built and closed, and
+  the box then MEASURED true rather than being asserted: 0 `blocked` cards with an empty
+  `blocked-by`, 0 pointing at a terminal or missing card, prose sweep exit 0 over 153 cards.
+  **Residual, stated so the tick is not over-read:** 17 open cards still carry `external-refs:`
+  whose issues have all closed. That is stale context, not a false wait — and it is now visible on
+  demand (`yarn trdd:extrefs`) instead of invisible, which is what the box required.
 
 - 2026-08-02T15:19:14+0200 — SELF-MANDATE (Tier 0). Board hygiene inside this project's own scope;
   no baseline, governance, release or cross-team surface.

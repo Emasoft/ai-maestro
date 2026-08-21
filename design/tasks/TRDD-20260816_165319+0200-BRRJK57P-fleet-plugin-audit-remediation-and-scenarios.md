@@ -1,12 +1,13 @@
 ---
 trdd-id: BRRJK57P
 title: USER fleet program — every plugin self-audits twice, remediates via TRDDs, and is proven by new scenario tests
-column: dev
+column: blocked
+pre-block-column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T16:14:00+0200
+updated: 2026-08-21T16:19:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -20,7 +21,7 @@ approval-datetime: 2026-08-16T16:53:19+0200
 derived: false
 npt: []
 eht: [5TELESBL, 9FBNRW29, GIONLYAF, 36RGLVYH, LXF16IXG]
-blocked-by: []
+blocked-by: [GIONLYAF, 36RGLVYH, LXF16IXG]
 release-via: none
 priority: 0
 severity: high
@@ -274,8 +275,21 @@ as well, in which case box 9 reverts to unverifiable-here and the sweep must mov
 never surfaces the value at all. Recorded rather than quietly enjoyed, because the next session
 will otherwise inherit whichever of the two readings it happens to meet first.
 
-**NEXT ACTION for whoever resumes:** box 5 is the only one nobody has looked at (specs corrected
-BEFORE their dependents). Boxes 1 and 3 should NOT be re-attempted with a new needle — the
+**COLUMN: `dev` → `blocked` at 16:1x, on a MECHANICAL check, not a mood.** The completion gate says
+a parent whose flock is still open is BLOCKED, and this card's `eht:` resolves to **2 terminal**
+(`5TELESBL` complete, `9FBNRW29` completed) and **3 OPEN** — `GIONLYAF` (todo), `36RGLVYH` (todo),
+`LXF16IXG` (proposal, never approved). Those three are now its `blocked-by:`, with
+`pre-block-column: dev` **read off the card rather than remembered** — the exact field that was 8
+days stale on `TRDD-Y8VPE3NS` and would have silently promoted it on unblock.
+
+It also stops the card lying. `dev` asserts someone is working it right now; when this session ends
+nobody is, and its remaining work needs three things this session cannot supply: other repos'
+sessions, two USER decisions, and those three EHTs.
+
+**NEXT ACTION for whoever resumes:** box 5 is now measured too — **all ten boxes have a state**, so
+there is no measurement left to do. What remains is the flock (the 3 open EHTs) and the two USER
+decisions below. Do NOT re-attempt boxes 1, 3, 4 or 5 with a better needle: `## Spec ordering`
+explains why all four are unfalsifiable as written. Boxes 1 and 3 should NOT be re-attempted with a new needle — the
 `## Report-format divergence` section explains why no needle can settle them, and proposes the
 one-line contract fix for the NEXT program rather than a retroactive amendment to this one.
 

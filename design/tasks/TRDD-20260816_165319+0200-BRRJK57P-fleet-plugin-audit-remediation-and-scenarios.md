@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T15:14:00+0200
+updated: 2026-08-21T15:18:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -350,7 +350,10 @@ them to.
 ## Acceptance
 
 - [ ] Every live plugin session has returned a Phase-1 audit report with per-axis confirmed/refuted
-      counts and a report path.
+      counts and a report path. **MEASURED 2026-08-21T15:1x — 12 of 15, and the 3 outstanding are
+      NAMED** (see `## Phase-1 coverage` below): `ai-maestro-orchestrator-agent`,
+      `web-scenario-tester`, `dev-browser`. Stays open, but it is now a list of three parties
+      instead of an unmeasured claim.
 - [ ] For every CONFIRMED finding, the hub has re-verified at least one cited `file:line` itself
       before it becomes a TRDD — no finding enters the plan on a peer's word alone.
 - [ ] Refuted candidates are recorded with their refutation, not silently dropped.
@@ -408,6 +411,44 @@ and the table said `-` rather than `0`, which reads as *not applicable* instead 
 wrong place*. Re-discovering by `find -maxdepth 3 -type d -name .git` found all 9. **A depth
 mismatch in a population definition produces a clean-looking table about a set you never opened.**
 
+## Phase-1 coverage — 2026-08-21T15:1x+0200 — acceptance box 1, derived from disk
+
+**Reported-set derived from DISK, not from a roster** — `find ~/Code -maxdepth 4 -type d -name
+plugin-self-audit`, counting `*.md` inside each. This card's own 2026-08-18 ledger already records
+why: a hand-kept "who has reported" list called the janitor outstanding for 42 hours while seven of
+its reports sat on disk.
+
+**Expected population = the marketplace manifest, read from the GitHub SSOT: 15 plugins.**
+
+| reported (12) | files | |
+|---|---|---|
+| ai-maestro-plugin | 6 | ai-maestro-integrator-agent · 11 |
+| ai-maestro-assistant-manager-agent | 5 | ai-maestro-programmer-agent · 5 |
+| ai-maestro-assistant-role-agent | 5 | ai-maestro-maintainer-agent · 11 |
+| ai-maestro-chief-of-staff | 7 | ai-maestro-autonomous-agent · 9 |
+| ai-maestro-architect-agent | 5 | ai-maestro-janitor · 9 |
+| ai-maestro-visual-communicator-plugin | 6 | ai-maestro-webdesign · 5 |
+
+**Outstanding (3), named rather than counted:**
+
+- **`ai-maestro-orchestrator-agent`** — 0 Phase-1 reports and **50 reports in total**. This is the
+  informative one: the session is demonstrably ACTIVE and simply never ran the audit. "Silent" and
+  "busy elsewhere" are different states and only the second number separates them.
+- **`web-scenario-tester`** — 0 Phase-1, 2 reports total.
+- **`dev-browser`** — in the manifest, **no clone on this machine**, so it was never reachable by
+  any local sweep. Not audited and not sweepable from here.
+
+**A near-miss that changed the answer, recorded because I was one commit from filing it as a
+finding:** the LOCAL marketplace clone's manifest lists **13** plugins and omits
+`ai-maestro-assistant-role-agent` — which contradicts `CLAUDE.md`, and I had the contradiction
+written down as a documentation-drift finding. The REMOTE manifest (`gh api …/contents/…`) lists
+**15**, including that plugin and `dev-browser`. **The local clone is stale; CLAUDE.md was right
+and my artifact was wrong.** Had I trusted the clone, the program would have carried a false
+finding against its own project doc AND an expected population two short — under-counting the
+denominator of the very box being measured. The governance overlay already says to read a project's
+state from its GitHub SSOT and never a possibly-stale local clone; this is that rule earning its
+keep on a file nobody thinks of as project state.
+
 ## Credential sweep — SECOND PASS 2026-08-21T15:1x+0200 — the population was wrong AGAIN
 
 The first pass got the population wrong by **depth** and fixed it. Twenty minutes later, measuring
@@ -431,6 +472,12 @@ it was false in the direction that makes a security box look bounded when it was
 **Re-run over the complete population — 15 clones plus this repo, and this time including untracked
 `reports*/` dirs. Every cell 0.** Positive control unchanged (1 hit in the file the needle came
 from). So box 9 stands, now on a population that was discovered rather than guessed.
+
+**THIRD pass, while measuring box 1 — three more repos, still 0.** Mapping the manifest to clones
+surfaced `ai-maestro-orchestrator-agent` (under `EMASOFT-ORCHESTRATOR-AGENT/`),
+`ai-maestro-web-scenario-tester`, and `visual-comunicator` — the last one invisible to a needle
+spelled `*visual-communicator*` because the directory carries a **typo**. All three: `tracked=0
+hist=0 reports=0`. The one plugin no sweep can cover is `dev-browser`, which has no clone here.
 
 **Why the population kept being wrong, stated once because it is one mistake wearing two costumes:**
 both passes defined the set by a NAME PATTERN I expected the repos to have. The fix that finally

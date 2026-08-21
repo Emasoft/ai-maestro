@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { requireAuth } from '@/lib/route-auth'
+import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 import { getAgentById, onQueueEnqueued } from '@/services/agents-core-service'
 import { enqueueCommand, listQueue } from '@/lib/command-queue'
@@ -15,6 +16,22 @@ import { enqueueCommand, listQueue } from '@/lib/command-queue'
  * command-send route — a USER caller needs a fresh sudo token, an AGENT caller
  * authorizes by AID + title (requireSudoToken R32 dual-path). Ordering mirrors
  * the strict-POST sibling ensure-core: sudo FIRST, then auth.
+ *
+ * TRDD-8RVDY7ND: sudo/auth alone proves WHO is calling, never WHAT they may
+ * target — sudoErr/authenticateFromRequest do not check `id` against the
+ * caller at all. Measured: this route called neither `authorize()` nor any
+ * cross-agent check, so ANY authenticated agent (any title, any target state)
+ * could enqueue an arbitrary command into ANY other agent's terminal — worse
+ * than the R42.8 unblock exception (which at least demands the target be
+ * blocked), and inconsistent with every sibling drive route (PATCH
+ * .../session, POST .../chat, and this route's own DELETE .../[entryId]
+ * sibling all gate cross-agent via the `send-command` matrix, whose doc
+ * comment on the DELETE sibling already — falsely — claimed "Enqueue is
+ * gated"). `send-command` sits in DRIVE_ACTIONS (lib/authorization.ts), so
+ * R42 refuses it for any cross-agent target unconditionally; SELF_DRIVE
+ * exempts an agent enqueuing for itself, and the system owner is unaffected
+ * (authorize() grants isSystemOwner outright). This is the SAME matrix the
+ * sibling routes use — no new authorization concept.
  */
 export async function POST(
   request: NextRequest,
@@ -31,6 +48,11 @@ export async function POST(
   const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
+  const authz = authorize(auth, 'send-command', id)
+  if (!authz.allowed) {
+    return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
   }
 
   const agentRes = getAgentById(id)

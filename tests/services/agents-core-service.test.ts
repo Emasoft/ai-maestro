@@ -1186,6 +1186,38 @@ describe('sendAgentSessionCommand — R42.8 blocked-only precondition (Gate 0b)'
     expect(mockRuntime.sendKeys).toHaveBeenCalled()
   })
 
+  it('ALLOWS an unblock when the PANE shows a tool-permission prompt (TRDD-8RVDY7ND)', async () => {
+    // The OTHER "asked" reason (`asked = … reason === 'ask_user' || reason === 'permission'`).
+    // The two AskUserQuestion tests above only ever drive the ask_user half; this is the
+    // ladder's second success rung, distinguished by lib/agent-block-state.ts's
+    // `looksPermission` regex (`Do you want|Allow|permission`), which a tool-permission
+    // prompt matches and a plain AskUserQuestion does not.
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/tmp/agent-1' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockSessionsService.readPendingPrompt.mockReturnValue(null)
+    mockRuntime.capturePane.mockResolvedValue(
+      [
+        'Do you want to allow Bash(rm -rf /tmp/scratch)?',
+        '',
+        '❯ 1. Yes',
+        '  2. No',
+        '',
+        'Enter to select · ↑/↓ to navigate · Esc to cancel',
+      ].join('\n'),
+    )
+
+    const result = await sendAgentSessionCommand(
+      'agent-1',
+      { command: '2', requireIdle: false, authAction: 'unblock-prompt' },
+      AGENT_CALLER,
+    )
+
+    expect(result.status).toBe(200)
+    expect(result.data?.success).toBe(true)
+    expect(mockRuntime.sendKeys).toHaveBeenCalled()
+  })
+
   it('REFUSES when the pane is STALLED but asked nothing (rate limit)', async () => {
     // A rate-limited agent is stuck and has raised no question. Injecting into it is
     // exactly the plain-injection case Gate 0b exists to refuse, so widening the gate

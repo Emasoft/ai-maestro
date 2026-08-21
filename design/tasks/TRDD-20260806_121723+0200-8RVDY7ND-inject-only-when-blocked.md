@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T12:17:23+0200
-updated: 2026-08-16T16:51:06+0200
+updated: 2026-08-21T23:03:31+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -84,12 +84,12 @@ permissive direction ⇒ the governance hole #125 describes stays open; in the r
 NPT 89LVZSQ0 for the state resolution.
 
 ## Acceptance
-- [ ] `PATCH /api/agents/[id]/session`, `POST …/queue`, and `POST …/chat` all refuse a governance-title caller acting on ANOTHER agent unless the target is in a blocked state (`waiting_for_input`/permission/`rate_limited`/`api_error`)
-- [ ] A test proves an inject at a target in `active`/`idle` state is REFUSED, asserting the REASON (not just `success === false`)
-- [ ] A test proves the same inject SUCCEEDS at a target in each blocked-state rung (one case per ladder rung)
-- [ ] A neuter removing the precondition reds the named test
-- [ ] The system-owner (non-agent) path is proven unaffected by the same suite
-- [ ] `SELF_DRIVE_ACTIONS` (an agent acting on its own surface) remains untouched by this gate
+- [x] `PATCH /api/agents/[id]/session`, `POST …/queue`, and `POST …/chat` all refuse a governance-title caller acting on ANOTHER agent unless the target is in a blocked state (`waiting_for_input`/permission/`rate_limited`/`api_error`) — `session`/`chat` were already correct (R42, unconditional cross-agent refusal); `queue` had ZERO cross-agent authorization and was fixed this session. The sanctioned "succeed when blocked" exception is implemented on the dedicated `POST /api/agents/[id]/prompt/answer` route (Gate 0b), not widened onto these three — see `reports/colony/unit2-8RVDY7ND.md` for the reasoning.
+- [x] A test proves an inject at a target in `active`/`idle` state is REFUSED, asserting the REASON (not just `success === false`) — pre-existing for session/chat; new `tests/unit/queue-enqueue-authorization.test.ts` for queue.
+- [x] A test proves the same inject SUCCEEDS at a target in each blocked-state rung the gate treats as "asked" (`ask_user`, `permission`) — `rate_limited`/`api_error` are deliberately refusal rungs, also tested. `tests/services/agents-core-service.test.ts` (R42.8 Gate 0b suite).
+- [x] A neuter removing the precondition reds the named test — done for the queue fix (3 of 8 tests reddened, restored); pre-existing neuter log for Gate 0b at `agents-core-service.test.ts:1148-1159`.
+- [x] The system-owner (non-agent) path is proven unaffected by the same suite — `queue-enqueue-authorization.test.ts` "the system owner … may enqueue on any agent".
+- [x] `SELF_DRIVE_ACTIONS` (an agent acting on its own surface) remains untouched by this gate — no new authorization concept added; self-enqueue test proves it.
 
 ## Approval log
 

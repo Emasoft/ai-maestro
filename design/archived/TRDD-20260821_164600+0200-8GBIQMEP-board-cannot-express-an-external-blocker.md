@@ -1,11 +1,12 @@
 ---
 trdd-id: 8GBIQMEP
 title: The board cannot express an external blocker so external waits go stale unwatched — 9 of 12 cited issues already closed
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-21T16:46:00+0200
-updated: 2026-08-21T23:25:16+0200
+updated: 2026-08-21T23:47:14+0200
+implementation-commits: [3d970ff6, 0a75e394, a6ff27e1]
 current-owner: ai-maestro-orchestrator-agent
 created-by: ai-maestro-orchestrator-agent
 assignee: unassigned
@@ -113,6 +114,23 @@ shapes already on the table, from [[5YRLA53W]]:
 Open sub-questions either way: what a "cited" issue is (any `owner/repo#N` in the body, or only one
 in a declared field); what the cadence is; and whether a closed blocker should auto-move the card or
 only flag it (auto-move is wrong when the closure is unrelated to why the card cited it).
+
+## Approval log
+
+- 2026-08-21T23:47:14+0200 — COMPLETED by ai-maestro (hub). `min-approval-requirement: none`;
+  `release-via` absent ⇒ `none` ⇒ terminal is `complete`. Gate satisfied: checklist exists and is
+  **5/5** `- [x]`; `npt`/`eht` both empty; `blocked-by` empty.
+  Delivered TWO detectors, because the two surfaces cannot see each other: `yarn trdd:extrefs`
+  (frontmatter `external-refs:`) and `yarn trdd:blockers` (blocking PROSE). Both exit 0/1/2 and
+  both re-derive live rather than trusting a dated claim.
+  Verified: prose sweep **exit 0** (`153 cards scanned`), controlled against a bad path (**2**) and
+  a seeded live wait (**1**); frontmatter tool has 3 subprocess tests whose guard, when neutered,
+  reds 2 of 3.
+  **What this card actually cost to close, recorded because it is the finding:** every one of the
+  sweep's original "CLOSED" results was a FALSE POSITIVE (a multi-line strike, two negations), the
+  non-vacuity guard was inverted so its own exit-0 criterion was unsatisfiable, and the fix for
+  that tripped a subshell bug shellcheck had to name. The instrument was wrong in four distinct
+  ways before the corpus was.
 
 ## Acceptance
 

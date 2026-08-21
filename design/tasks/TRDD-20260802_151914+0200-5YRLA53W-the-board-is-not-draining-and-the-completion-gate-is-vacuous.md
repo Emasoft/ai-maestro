@@ -1,12 +1,11 @@
 ---
 trdd-id: 5YRLA53W
 title: The board is not draining and the completion gate is vacuous on 71 percent of open cards
-column: blocked
-pre-block-column: todo
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:19:14+0200
-updated: 2026-08-21T22:56:58+0200
+updated: 2026-08-21T23:47:14+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -23,7 +22,7 @@ effort: large
 relevant-rules: []
 npt: []
 eht: []
-blocked-by: [8GBIQMEP]
+blocked-by: []
 release-via: none
 labels: [kanban, board-hygiene, trdd-corpus]
 ---

@@ -1,12 +1,13 @@
 ---
 trdd-id: 7UWQ92WK
 title: The continuity automaton went dark for two weeks and nothing could tell — a healthy pass logs nothing at all
-column: planned
+column: dev
+implementation-commits: [612e9853, c1f8b8c2]
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T14:06:30+0200
-updated: 2026-08-21T14:11:55+0200
+updated: 2026-08-21T14:26:34+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -153,6 +154,52 @@ renders as nothing at all. The subsystem has no state in which it says *"I ran a
    not a wrong runtime.
 4. Add a regression test that a live-shaped frame reaches `actuate`, so the automaton cannot go
    dark again behind a neutral-looking skip.
+
+## ✅ LIVE VERIFICATION 2026-08-21 14:26 — step 1 landed, deployed, and OBSERVED
+
+```
+2026-08-21 14:26:10 +02:00: [FleetContinuity] pass ok: scanned 2, fired 0, skipped 0
+```
+
+Shipped in `612e9853` (+ neuter pair recorded in `c1f8b8c2`), deployed by `pm2 restart` alone —
+`server.mjs:2033` imports `lib/fleet-liveness-watchdog.ts` at RUNTIME via tsx, and `.next` carries
+zero copies of the new string, so no build was involved. First tick of the new process landed at
+boot + ~7 min (bare `setInterval`, no immediate call).
+
+**That one line answers three questions at once, and none of them could be answered before it:**
+
+1. **The leg is running.** Silence is no longer ambiguous — the defect this card exists for is
+   closed.
+2. **`scanned 2`** matches an independent census of `~/.aimaestro/agents/registry.json` (2 sessions
+   `online`, 11 `offline`), so the leg is seeing exactly the agents it should.
+3. **`skipped 0`** — **not one `empty-frame`**. Had capture still been failing, both agents would
+   have come back as skips. So the two-week dark run is confirmed NOT reproducing, by effect rather
+   than by inference.
+
+**A near-miss worth recording, because it is the same trap twice in one hour:** I first read
+`[FleetLiveness]` lines at `14:18:57` as proof the new code had run and stayed silent. `pm_uptime`
+says the process started at **14:19:11** — those lines were the OLD process's last breath. A
+timestamp comparison, not a log grep, is what separated "my fix is inert" from "my fix has not run
+yet."
+
+**Instrument note for whoever greps next:** `[FleetContinuity]` writes to **stderr**
+(`logs/pm2-error.log`), not `pm2-out.log`. Grepping the wrong file returns a confident zero.
+
+## Acceptance
+
+- [x] The continuity leg emits a positive "I ran and I was fine" signal, so silence means NOT
+      RUNNING — landed `612e9853`, deployed, and OBSERVED live at 14:26:10 (above)
+- [x] The signal is throttled so it cannot become per-agent-per-tick spam — signature-keyed plus a
+      12-tick ceiling; pinned by the throttle test and a neuter pair (`c1f8b8c2`)
+- [x] The historical dark run is confirmed present-or-absent by EFFECT, not inference — absent:
+      `skipped 0` on a scan of 2 rendering agents
+- [ ] The empty case says WHY at the layer that knows (`empty-frame` vs a capture that failed),
+      scoped to `captureFrame` — NOT by changing the shared `capturePane` primitive
+- [ ] A regression test proves a live-shaped frame reaches `actuate`, so the automaton cannot go
+      dark again behind a neutral-looking skip
+
+The two open boxes are hardening, not repair: with the heartbeat in place a recurrence is now
+VISIBLE within one tick, which is what made the first one cost two weeks.
 
 ## Verification
 

@@ -3,7 +3,7 @@ trdd-id: A9335BZ6
 title: Unattended dev-mode login via an owner-minted, revocable dev token
 column: human_review
 created: 2026-08-21T17:48:24+0200
-updated: 2026-08-21T18:43:41+0200
+updated: 2026-08-21T18:49:10+0200
 implementation-commits: [ddf18bf7, 2b881dcf, 0f794535]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
@@ -123,6 +123,26 @@ Deployed at 18:43 (`cp -p`, byte-identical afterwards); the stale copy is preser
 `builds_dev/deployed-cli-backup/aimaestro-governance.sh.20260821_184306+0200` — it matched **no**
 committed blob of that path, so it was not recoverable from git and was backed up before the
 overwrite rather than trusted to history.
+
+**Then redone through the sanctioned installer** (owner directive: reinstall it properly, and
+check the installer's origin and branch). `./install-agent-cli.sh` — repo ROOT, not `scripts/`,
+which is why a `ls scripts/ | grep install` sweep missed it — deploys 11 CLIs + 1 helper and
+performs **zero** git operations: it copies from its own checkout, so there is no origin or
+branch for it to get wrong. Re-verified after: **0/11 byte-stale**, 5/5 `AI_MAESTRO_DEV_MODE_TOKEN`
+hits on `PATH`, `login` exit 0, `search` exit 0 / 492 records.
+
+**`install-agent-cli.sh --status` cannot detect this class of drift.** It printed
+`Status: OK` and `[OK]` on all 12 files — including the governance CLI that was 13 days stale and
+missing the feature entirely — because it tests **existence**, not content. Its manifest still
+read `Installed at: 2026-08-08T15:00:19Z` while reporting OK. `cmp` against the repo is the only
+honest check; `--status` is why the drift survived unnoticed.
+
+**A separate CRITICAL hazard was found while doing this and is filed as `TRDD-0N792LL5`:**
+`update-aimaestro.sh` — which `install-agent-cli.sh` itself recommends on completion — does
+`git checkout main`, then `git fetch`/`git pull origin main`, where `origin` is
+`23blocks-OS/ai-maestro`. It was NOT run. `aimaestro-trdd.sh` remains 16 lines drifted
+(commit `2071a7d7`); refreshing it needs `install-messaging.sh`, whose blast radius is the whole
+AMP layer, so it is reported rather than run unprompted.
 
 **`~/.local/bin/aimaestro-trdd.sh` is ALSO drifted** (Aug 20 vs the repo's Aug 21). It answers
 correctly today, so it is reported, not silently overwritten. `cmp`, never `grep`, is what

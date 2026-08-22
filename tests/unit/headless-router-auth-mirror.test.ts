@@ -620,6 +620,31 @@ describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8
    * `workingDirectory` is an absolute home path — so unauthenticated it enumerates the fleet and
    * leaks the owner's filesystem layout.
    */
+  // ── TRDD-R268J32X — POST /api/conversations/parse ─────────────────────────
+  /**
+   * This handler was a hand-rolled twin with NO auth call of any kind — two lines that read
+   * `body.filePath` and passed it to `parseConversationFile`, which returns the FULL conversation
+   * (every message, tool output and thinking block, plus the absolute `cwd`). The Next route
+   * carries five guards it had none of: `enforceAuth`, a NUL check, the `~/.claude/projects/`
+   * allowlist root, a `.jsonl` extension check, and a type check (API2-MAJ-14 / SF-016). The two
+   * had even drifted on the field NAME — `filePath` here, `conversationFile` there.
+   *
+   * Now delegated through `delegateNextRoute`, which forwards the caller's real credentials, so
+   * the same handler and the same validations run in both modes. This test pins the auth half of
+   * that: a forged token must not reach the transcript reader.
+   */
+  it('R268J32X: POST /api/conversations/parse rejects the forged token (no transcript leak)', async () => {
+    const res = await call('POST', '/api/conversations/parse', {
+      Authorization: FORGED_BEARER,
+      'Content-Type': 'application/json',
+    })
+    expect(res.statusCode).toBe(401)
+    // From the HANDLER, not the structural gate — the discrimination the controls above establish.
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    // And no transcript came back: `messages` is the success payload's field.
+    expect(res.bodyJson()?.messages).toBeUndefined()
+  })
+
   // ── TRDD-R268J32X — POST /api/agents/:id/install-skills ───────────────────
   /**
    * TRDD-D3RP7KQZ's fix was HALF-APPLIED. The Next route

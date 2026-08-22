@@ -318,7 +318,6 @@ import {
   getSubconsciousStatus,
   getPtyDebugInfo,
   getDockerInfo,
-  parseConversationFile,
   getExportJobStatus,
   deleteExportJob,
 } from '@/services/config-service'
@@ -769,9 +768,22 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/docker\/info$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, await getDockerInfo())
   }},
+  // TRDD-R268J32X — DELEGATED, was a hand-rolled twin with NO guard of any kind. It read a
+  // caller-supplied `body.filePath` and passed it straight to `parseConversationFile`, which
+  // returns the FULL conversation: every message, every tool output, every thinking block, plus
+  // the absolute `cwd`. The Next route carries five things this had none of — `enforceAuth`, a NUL
+  // check, the `~/.claude/projects/` allowlist root, a `.jsonl` extension check, and a type check
+  // (API2-MAJ-14 / SF-016). The two had even drifted on the FIELD NAME (`filePath` here vs
+  // `conversationFile` there), which is the tell that they were never going to stay in step.
+  //
+  // Delegating rather than re-implementing the five checks, because a second copy is what produced
+  // this: `delegateNextRoute` forwards the caller's real credentials via `forwardAuthHeaders`, so
+  // the SAME handler and the SAME validations run in both modes with nothing to keep in sync.
+  // This file's own comment at ~579 says that is the drift `delegateNextRoute` exists to prevent.
   { method: 'POST', pattern: /^\/api\/conversations\/parse$/, paramNames: [], handler: async (req, res) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, parseConversationFile(body.filePath))
+    const mod = await import('@/app/api/conversations/parse/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
+      '/api/conversations/parse', { method: 'POST', withBody: true })
   }},
   { method: 'GET', pattern: /^\/api\/export\/jobs\/([^/]+)$/, paramNames: ['jobId'], handler: async (_req, res, params) => {
     sendServiceResult(res, getExportJobStatus(params.jobId))

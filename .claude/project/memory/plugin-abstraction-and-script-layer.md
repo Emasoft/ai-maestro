@@ -1,8 +1,8 @@
 ---
 name: plugin-abstraction-and-script-layer
-description: "why can't a plugin call the ai-maestro API directly / a hook is calling fetch('/api/...') and breaking on updates / what is the script layer / aimaestro-*.sh amp-*.sh aid-*.sh boundary / decoupling invariant / a plugin element hardcodes an endpoint URL / the CLI says the API is not reachable but my command is simply wrong / a typo'd argument or an unknown verb is blamed on the server / --help asks for a credential / the API returns 401 auth_required with the server online / is auth broken or the server down / my agent cannot call the server / how do agents authenticate"
+description: "why can't a plugin call the ai-maestro API directly / a hook is calling fetch('/api/...') and breaking on updates / what is the script layer / aimaestro-*.sh amp-*.sh aid-*.sh boundary / decoupling invariant / a plugin element hardcodes an endpoint URL / the CLI says the API is not reachable but my command is simply wrong / a typo'd argument or an unknown verb is blamed on the server / --help asks for a credential / the API returns 401 auth_required with the server online / is auth broken or the server down / my agent cannot call the server / how do agents authenticate / where do the AMP and AID scripts live now / did the AMP AID transition into ai-maestro complete / are claude-plugin and agent-identity still separate plugins / who installs a new amp or aid script / do I have to register a new script anywhere / the drift checker says every script is identical but a family is missing / a scan set omission reports as clean / an inline regex predicate is pinned by no test / the compared count is smaller than the real count / where is the abstraction-layer diagram"
 ocd: 2026-08-02
-lmd: 2026-08-20
+lmd: 2026-08-22
 metadata:
   node_type: memory
   type: reference
@@ -140,6 +140,36 @@ Fixed in `51db1b8a` (verb half) + `f2abd10d` (argument half) under
 
 Do not try to diagnose an agent's AID by grepping `~/.aimaestro/agents/registry.json` for an `aid`/`aidToken`-shaped key — that record has no such field (checked: none of its ~29 keys name an identity/token concept), so any such grep returns a false "no AID" for every agent regardless of the truth. The AID recovery store is `~/.aimaestro/aid-recovery-cache.json`; active governance tokens are in `~/.aimaestro/governance-tokens/active-tokens.json`.
 
+
+^ATOM-DGJ6-1OJE [desc: "AMP and AID were ABSORBED into this repo (scripts + API) with their skills moved to the core plugin; the installer picks new scripts up BY GLOB, so nothing per-script is registered", keywords: where_do_the_amp_and_aid_scripts_live_now did_the_AMP_AID_transition_complete claude-plugin_agent-identity_repos_superseded who_installs_the_amp_aid_aimaestro_scripts scripts_in_repo_skills_in_plugin is_a_new_script_installed_automatically script-manifest_frozen_CLI_contract abstraction_layer_diagram_in_the_README, ocd: 2026-08-22, lmd: 2026-08-22]
+
+THE ABSORPTION (verified complete 2026-08-22). AMP messaging and AID identity are no longer
+separate plugins to integrate with: their **scripts and API endpoints live in THIS repo**, and
+their **skills moved into the core plugin** (`ai-maestro-plugin`). That is the general rule stated
+sharply — **ai-maestro installs the SCRIPTS, plugins install the SKILLS** — and it holds in both
+directions, checked both ways rather than assumed.
+
+The reason scripts belong here and not in a plugin: they are the ABSTRACTION LAYER, and a layer
+only absorbs API churn if it ships from the same repo as the API it wraps. A script in a plugin
+repo drifts the moment an endpoint changes. The full chain is diagrammed in the README
+(`docs/img/abstraction-layer.svg`): **SERVER (functions) ↔ API (endpoints) ↔ SCRIPTS (symlinked to
+PATH) ↔ PLUGINS (skills, hooks, agents)**. Plugins call the scripts; they never call the API.
+
+INSTALLATION IS BY GLOB, NOT BY NAME (`install-messaging.sh:630`, `:755`). A new `amp-*` / `aid-*`
+/ `aimaestro-*` script is installed with no registration step — which is why a survey that counts
+QUOTED script names in the installer reports a large false "not installed" set. Measure the
+DEPLOYED SURFACE instead of reading the installer.
+
+`scripts/script-manifest.json` is the separate, frozen-CLI CONTRACT — 50 skill-facing entries
+(amp 28 · aimaestro 16 · aid 6). Note there are TWO manifests and they answer different questions:
+that JSON is the machine contract, `docs/SCRIPT-MANIFEST.md` is the human doc with its own tier
+table and counts, and a new script must be announced in BOTH.
+
+CONSEQUENCE ALREADY BANKED: the `AMP_PLUGIN_NAME` / `AMP_PLUGIN_REPO` / `AID_PLUGIN_NAME` /
+`AID_PLUGIN_REPO` constants were DELETED from `lib/ecosystem-constants.ts` and its shell mirror.
+They had zero consumers — not because they were dead weight, but because the architecture change
+superseded them. `SKILL_PLUGIN_REPO` stays. [^1]
+
 ## See also
 
 - [[role-plugins]] — role-plugins are one of the two plugin categories this script-layer boundary governs
@@ -147,3 +177,5 @@ Do not try to diagnose an agent's AID by grepping `~/.aimaestro/agents/registry.
   behind this page; go there for detail beyond what fits here.
 
 ## Notes and lessons learned
+
+[^1]: [id: ATOM-NO2U-IWA5, status: valid, keywords: "drift_checker_reports_clean_but_a_whole_family_is_missing scan_set_omission_reports_as_clean inline_regex_predicate_pinned_by_no_test aid_scripts_invisible_to_the_checker detector_population_is_wrong compared_count_smaller_than_the_real_count", ocd: 2026-08-22, lmd: 2026-08-22] DO NOT inline the predicate that BUILDS a detector's scan set, BECAUSE an omission there reports as CLEAN and no test can see it: `check-script-drift.mjs` filtered on an inline `/^(amp|aimaestro)-.*\.sh$/`, so all six `aid-*` scripts were never in the compared population — it said "identical" about a set that silently excluded them, and went 47 → 54 compared the moment the family was admitted. A wrong POPULATION is invisible because every verdict it prints is true of the files it did look at. DO export the predicate (`isTrackedScriptName`, `lib/installed-script-drift.ts`), import it at the call site, and pin it with a test whose neuter drops one family and reddens.

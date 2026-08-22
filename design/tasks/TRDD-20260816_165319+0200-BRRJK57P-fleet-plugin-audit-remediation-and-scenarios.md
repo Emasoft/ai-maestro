@@ -1,12 +1,13 @@
 ---
 trdd-id: BRRJK57P
 title: USER fleet program — every plugin self-audits twice, remediates via TRDDs, and is proven by new scenario tests
-column: dev
+column: blocked
+pre-block-column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T04:26:21+0200
+updated: 2026-08-22T14:08:39+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -20,7 +21,7 @@ approval-datetime: 2026-08-16T16:53:19+0200
 derived: false
 npt: []
 eht: [5TELESBL, 9FBNRW29, GIONLYAF, 36RGLVYH, LXF16IXG]
-blocked-by: []
+blocked-by: [GIONLYAF, LXF16IXG]
 release-via: none
 priority: 0
 severity: high
@@ -32,6 +33,49 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T14:08 — COLUMN CORRECTED `dev` → `blocked`, and the two EHTs that gate it, MEASURED
+
+**This card was asserting `dev` while nobody was working it, with `blocked-by: []`.** Both halves
+were untrue, and the second is what made the stall invisible: the board's own exception column
+exists to surface exactly this, and an empty `blocked-by` kept a `priority: 0` owner mandate
+looking like work in progress. Corrected to `column: blocked`, `pre-block-column: dev`,
+`blocked-by: [GIONLYAF, LXF16IXG]`.
+
+**The `eht:` gate, measured per card — 3 of 5 terminal, 2 open:**
+
+| EHT | column | zone | open boxes |
+|---|---|---|---|
+| 5TELESBL | complete | archived | 0 |
+| 9FBNRW29 | completed | archived | 0 |
+| **GIONLYAF** | **human_review** | tasks | **3** |
+| 36RGLVYH | complete | archived | 0 |
+| **LXF16IXG** | **planned** | tasks | **4** |
+
+So `complete` is unreachable by construction until those two are terminal — the EHT gate is
+working as designed, not failing.
+
+**NEITHER OPEN EHT IS MINE TO ADVANCE, and the reason is a gate this card's own frontmatter does
+not express.** Measured first-hand rather than inherited:
+
+- **`GIONLYAF`** — frontmatter reads `min-approval-requirement: none`, `mandate: true`,
+  `approved: true`, `assignee: ai-maestro-hub-session`. An earlier plan file read that as *"I am
+  authorised to clear it myself"*. **That conflates two different gates.**
+  `min-approval-requirement` governs whether the card was approved to EXECUTE; `column:
+  human_review` is the ESCALATION gate, and `human_review → complete` is listed NON-EXEMPT in
+  `aimaestro-manager-approval-defaults.md` §Z — a USER decision the hub only relays. A card can be
+  fully approved to run and still be sitting on the owner's desk for its verdict. Advancing it on
+  the strength of the `none` floor would be self-approving an escalation.
+- **`LXF16IXG`** — `column: planned`, `min-approval-requirement: manager`, and its
+  `## Approval log` records a **cancel ATTEMPTED then REVERTED** on 2026-08-21: the withdrawal was
+  refused by `trddgrep validate` (`APPROVAL-UNAPPROVED-IN-WORK-ZONE`). Execution is handed to
+  another session. Not mine to move either.
+
+**NEXT ACTION — one owner decision, not a work item.** The two EHTs go into the owner's batch
+document as numbered rows: *GIONLYAF — verdict on the `human_review` escalation*, and *LXF16IXG —
+ruling on the reverted cancellation*. Nothing else on this card can move until one of them does.
+Do **not** re-read the two cards hoping the gate has changed; re-check the columns
+(`grep -H '^column:' design/tasks/*GIONLYAF* design/tasks/*LXF16IXG*`) and act only on a change.
 
 ### ⏹ 2026-08-22T02:4x — BOX 2 METHOD CORRECTION: check for a REMEDIATION CARD before re-verifying any finding
 

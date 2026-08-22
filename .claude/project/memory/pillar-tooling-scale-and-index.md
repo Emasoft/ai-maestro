@@ -1,8 +1,8 @@
 ---
 name: pillar-tooling-scale-and-index
-description: "trddgrep / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can trddgrep's search be served by FTS5 / the cold index build takes forever and eats gigabytes / the warm query is just over the one-second budget / where does the time in a warm index query actually go / my stage timings do not add up to the total / the probe stats every file and I want to skip it / --min-severity or --rule on trddgrep does nothing / an unknown CLI flag is silently ignored / cmp says the installed pillar CLI differs from the source but I didn't touch it / which file do I diff an installed trddgrep/prrdgrep/specgrep against"
+description: "trddgrep / trdd-doctor got slow or ran out of memory on a big corpus / the linter crashed with a heap error / my streaming reader still uses all the memory / memory grows with every markdown file parsed / the server's memory keeps climbing and never comes back / do we need a database for the TRDD corpus / why is validating references so expensive / how do I add PRRD or SPEC support to the corpus reader / where is the pillar SQLite index and what are its safety rules / the index is SLOWER than the walk it replaced / opening the index costs more than the query / should the tool refuse or fall back when the index is broken or missing / can trddgrep's search be served by FTS5 / the cold index build takes forever and eats gigabytes / the warm query is just over the one-second budget / where does the time in a warm index query actually go / my stage timings do not add up to the total / the probe stats every file and I want to skip it / --min-severity or --rule on trddgrep does nothing / an unknown CLI flag is silently ignored / cmp says the installed pillar CLI differs from the source but I didn't touch it / which file do I diff an installed trddgrep/prrdgrep/specgrep against / the pillar-index directory is huge and full of test litter / ~/.aimaestro/pillar-index has hundreds of sqlite files / an index whose corpus was deleted is still on disk / how do I find or remove orphaned pillar indexes / what does yarn pillar:reap do / a temp-dir corpus left a permanent index behind"
 ocd: 2026-07-28
-lmd: 2026-08-20
+lmd: 2026-08-22
 metadata:
   node_type: memory
   type: project
@@ -147,6 +147,40 @@ trddgrep silently ignores unknown CLI options (fixed 3a67e675, pinned 9b010fb8):
 ^ATOM-0WFB-7PLK [desc:"The installed pillar CLIs share one launcher (scripts/pillar-cli); cmp against scripts/<name>.mjs gives a false DIFFERS — verify against pillar-cli, not the tool-named file", keywords: cmp_reports_false_differs_on_pillar_cli wrong_cmp_target_scripts_trddgrep.mjs installed_cli_is_shared_launcher_not_per-tool_copy stale_install_false_positive verify_pillar_cli_against_pillar-cli_not_tool_name, ocd: 2026-08-16, lmd: 2026-08-16]
 
 The installed pillar CLIs (~/.local/bin/trddgrep, prrdgrep, specgrep) are byte-identical to EACH OTHER and to scripts/pillar-cli — comparing an installed CLI against scripts/<name>.mjs (e.g. scripts/trddgrep.mjs) with cmp reports a false DIFFERS, because that per-name .mjs is not what got installed. The correct cmp target for any of the three installed binaries is scripts/pillar-cli, which dispatches on basename $0.
+
+
+^ATOM-15KP-08BS [desc: "Host-global pillar indexes outlive their corpus; yarn pillar:reap classifies four states and is report-only — a two-state version DELETES what it could not read", keywords: pillar-index_directory_is_huge aimaestro_pillar-index_test_litter orphaned_sqlite_index index_for_a_corpus_that_no_longer_exists yarn_pillar:reap 70_MB_in_dot-aimaestro mkdtemp_corpus_left_an_index_behind, ocd: 2026-08-22, lmd: 2026-08-22]
+
+`~/.aimaestro/pillar-index/` is HOST-GLOBAL, so any repo on the machine writes into it and a
+corpus under `mkdtemp` leaves a permanent entry when that corpus is deleted. Measured 2026-08-22:
+**102 files / 70 MB — 97 ephemeral against 5 real corpora**, minted by a pytest suite in a repo we
+do not own. `yarn pillar:reap` (`scripts/reap-pillar-index.mjs`, logic in
+`lib/pillar/index-orphans.ts`) reports them; removal is behind an explicit `--reap`, because
+`never_free_space.md` reserves deleting-to-free-space to the owner.
+
+REAPING, NOT A WRITE-TIME PREDICATE. The alternative — refuse to persist an index whose corpus
+realpath is under `os.tmpdir()` — is contestable in both directions (a CI runner whose scratch root
+is not `$TMPDIR`; a corpus deliberately kept under `/tmp`) and its blast radius is every caller of
+the index-open path. Reaping needs NO predicate: `files.path` is stored ABSOLUTE, so "the corpus is
+gone" is a fact rather than a guess — and it bounds the directory regardless of WHO writes into it,
+including writers in repos we do not own, which is the case per-writer containment can never reach.
+
+FOUR STATES, AND THE EXTRA TWO ARE THE POINT. `[].every(gone)` is `true`, so a two-state classifier
+DELETES any index it merely FAILED TO READ — the lenient-reader failure with a delete on the end.
+`unreadable` (the read THREW) is split from `empty` (opens fine, holds zero rows) even though both
+are kept and no verdict depends on the split: the first draft conflated them and was therefore
+wrong about 26 of 102 real files, and a report that misnames the fault sends the next reader at a
+bug that does not exist.
+
+The observer opens each file `{readonly: true, fileMustExist: true}`. `readonly` avoids the
+persistent `journal_mode=WAL` write that the shared pragma helper would otherwise perform on a file
+being merely inspected; `fileMustExist` stops `new Database(p)` CREATING an empty db, which would
+have this auditor LITTER the very directory it audits on any typo'd path.
+
+Exit is the grep trichotomy — `0` clean · `1` findings · `2` COULD NOT RUN — and `2` is keyed on
+INPUT CONSUMED (`scanned === 0`), never on findings. A guard written over findings fires on
+SUCCESS: clearing the last orphan would move the exit `1 → 2` and "exits 0 once clean" could never
+be satisfied by any amount of correct work.
 
 ## See also
 

@@ -1,12 +1,12 @@
 ---
 trdd-id: IMCEYV9F
 title: The pillar-index state dir still collects test litter — YN8EQWYP fixed one suite, other writers were never contained
-column: dev
+column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T03:30:50+0200
-updated: 2026-08-22T14:02:40+0200
+updated: 2026-08-22T14:08:39+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -284,6 +284,29 @@ This card contains the *source*; it reports the residue and stops.
       to the owner the same day. Untouched is enforced by construction, not by intent: removal
       sits behind an explicit `--reap`, per `never_free_space.md` and the house pattern of
       `check-script-drift.mjs`.
+
+## Closing status — 2026-08-22T14:08, `dev` → `todo` (NOT `complete`)
+
+**The deliverable shipped; the card does not close, and the honest column is `todo`.**
+`yarn pillar:reap` exists (`ec2177f8`), is report-only, classifies four states, and carries 9
+tests with three recorded neuters (`93337a22`). The residue is reported and untouched. That is
+4 of 7 boxes, and it is the whole of what this card set out to build.
+
+**The completion gate blocks it, correctly.** A terminal column requires every `- [ ]` box under
+`## Acceptance` to be `- [x]`; three containment boxes are open. They are marked OPTIONAL because
+the fork resolution superseded per-writer containment — **and "no longer required" is not
+"done"**, so ticking them would claim work nobody did. The gate is doing its job: it counts boxes,
+not intentions, which is exactly the property that stops a card closing on a narrative.
+
+**Why `todo` and not `dev`.** `dev` asserts someone is working it right now; nobody is. Three
+real (if optional) items remain and are unblocked — that is what `todo` means. Leaving it at `dev`
+would have added one more card to a column whose population is the board's least honest number.
+
+**If anyone picks it up:** the remaining work is PREVENTION on top of the BOUNDING the reaper
+already provides — identify the `scratchpad-*` writer, contain each writer at its own layer, and
+add one run-level assertion that reddens for a writer it was not written for. At `severity: low`
+this is legitimately optional; a `trddgrep` guard is only worth adding if churn is measured to
+matter, which it has not been.
 
 ## Approval log
 

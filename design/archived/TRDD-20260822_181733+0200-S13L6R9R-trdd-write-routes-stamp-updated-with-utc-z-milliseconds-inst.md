@@ -94,6 +94,18 @@ mandates `%z` for every dated filename), and 481 cards already carry it.
 ## Approval log
 
 - 2026-08-22T18:17:33+0200 — MANDATE issued by user (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-22T21:22:47+0200 — **CORRECTION to this card's closing section, finding #2.** It states
+  *"the deployed `trddgrep` is 23 days stale"* and cites `TRDD-2P25M6AS`. **That is FALSE and
+  2P25M6AS is CANCELLED as retracted.** `~/.local/bin/trddgrep` is `pillar-cli.sh`, the shared
+  launcher for every pillar CLI, and it `exec`s `$ROOT/scripts/$TOOL.mjs` — the live repo source.
+  Positive control: with a `Z` date seeded, `trddgrep validate` and the repo doctor BOTH report
+  `DATE-NOT-LOCAL-OFFSET`, 1 hit each. The "0 hits" that produced the claim was measured AFTER the
+  backfill, i.e. over an already-clean corpus — a zero with no positive control, which is exactly
+  the failure this card's own prose warns about. Recorded here rather than in the body because a
+  terminal card's body is frozen (IND §12) and `## Approval log` is the append-only exemption.
+  **Finding #1 (the inverted `--fix` freeze behaviour) is unaffected and stands** — it is pinned by
+  a code change in `a04bafbf` and by the 27→24 blast-radius measurement, neither of which depends
+  on anything about `trddgrep`.
 
 ## Re-measured on pickup — 2026-08-22T20:25:02+0200
 

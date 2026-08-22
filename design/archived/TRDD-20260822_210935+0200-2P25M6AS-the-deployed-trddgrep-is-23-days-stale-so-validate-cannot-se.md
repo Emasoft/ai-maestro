@@ -1,9 +1,9 @@
 ---
 trdd-id: 2P25M6AS
 title: The deployed trddgrep is 23 days stale so validate cannot see new rules
-column: todo
+column: cancelled
 created: 2026-08-22T21:09:35+0200
-updated: 2026-08-22T21:09:35+0200
+updated: 2026-08-22T21:22:47+0200
 current-owner: main
 created-by: main
 task-type: infra
@@ -70,3 +70,51 @@ card's repo tree, and S13L6R9R was mid-close. Not silently absorbed.
 ## Approval log
 
 - 2026-08-22T21:09:35+0200 — MANDATE issued by main (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-22T21:22:47+0200 — CANCELLED by main. **The premise is FALSE. `trddgrep` is not stale
+  and never was.** Retraction below; the card is kept, not deleted, because the reasoning error is
+  worth more than the card was.
+
+## ⛔ RETRACTED — 2026-08-22T21:22:47+0200 — the defect does not exist
+
+**Everything above this line is WRONG.** `trddgrep` runs current code on every invocation.
+
+`~/.local/bin/trddgrep` is not a copy of `scripts/trddgrep.mjs` at all — it is **`pillar-cli.sh`,
+the ONE bash launcher** behind `memgrep` / `trddgrep` / `prrdgrep` / `specgrep` (TRDD-217AYEOT: one
+implementation, N entry points, dispatching on the name it was invoked as). Its last line is:
+
+    exec node --import "file://$TSX_ENTRY" "$ROOT/scripts/$TOOL.mjs" "$@" --design-dir "$PWD/design"
+
+It **execs the live repo source**. There is no copy to go stale, and its own `Jul 30` mtime is
+correct and expected — a launcher does not change when a rule is added to the tool it launches.
+
+**POSITIVE CONTROL, which is the check that should have been run before filing.** Seed one `Z`
+date into a card and ask both tools:
+
+    trddgrep validate            -> DATE-NOT-LOCAL-OFFSET  1 hit
+    scripts/trdd-doctor.mjs      -> DATE-NOT-LOCAL-OFFSET  1 hit
+
+Identical. The deployed gate sees the rule added minutes earlier.
+
+## Why three signals all pointed the wrong way
+
+Each was consistent with "stale binary" and **not one of them was evidence**:
+
+| signal | what I read | what it actually meant |
+|---|---|---|
+| `cmp` says DIFFERS | a stale copy | a *launcher* vs an *implementation* — two different files. 5428 vs 51370 bytes, and I never looked at the sizes I had already printed |
+| `trddgrep validate` → 0 hits for the new rule | the gate is blind | **the corpus was already clean.** I ran it AFTER the backfill, so there was nothing to find |
+| PATH file dated `Jul 30 07:51` | 23 days behind | the launcher's date, which correctly never moves |
+
+**The governing lesson, already written in `.claude/rules/lessons-verification.md`, violated while
+filing a card about verification discipline:** *a zero is not a result until a positive control
+proves the instrument can see something you KNOW is there.* The control here costs one `perl -pi`
+and one command. It converts "0 hits" from a finding into a measurement, and it is the ONLY thing
+that separates *the gate is blind* from *the corpus is clean* — two states with identical output.
+
+Second lesson, narrower and worth naming: **`cmp` answers "are these bytes the same", never "is
+this a stale version of that".** Reaching for it presupposes the two files are the same KIND of
+thing. Read the head of an unfamiliar executable before comparing it to anything — the first
+twenty lines said "the ONE launcher behind every pillar CLI" in plain English.
+
+Nothing was broken and nothing needed fixing. No commit reverted; the false finding never reached
+code, only this card and the two that cite it, both corrected via their append-only Approval logs.

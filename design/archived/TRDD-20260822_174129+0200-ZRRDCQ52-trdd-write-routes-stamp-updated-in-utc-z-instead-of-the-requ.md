@@ -58,6 +58,14 @@ reintroduce a third.
 ## Approval log
 
 - 2026-08-22T17:41:29+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-22T21:22:47+0200 — **CORRECTION to the SUPERSEDED section below, ask #2.** It says the
+  *"add the format check to `trddgrep validate`"* ask was not delivered because the PATH binary is
+  stale, citing `TRDD-2P25M6AS`. **That premise is FALSE; 2P25M6AS is CANCELLED as retracted.**
+  `trddgrep` execs the live repo source, and a seeded `Z` date makes `trddgrep validate` report
+  `DATE-NOT-LOCAL-OFFSET` — 1 hit, same as the repo doctor. **So ask #2 IS delivered**: the rule
+  landed in `lintCorpus` (`a04bafbf`) and `trddgrep validate` reaches it, which is precisely what
+  this card asked for. Ask #1 (the one-formatter invariant, `62782420`) was already delivered, so
+  both of this card's asks are met and the supersede stands on stronger ground, not weaker.
 - 2026-08-22T21:09:35+0200 — SUPERSEDED by `TRDD-S13L6R9R`, set by main under the owner's standing
   delegation to decide on their behalf on verified facts (recorded here rather than implied, because
   the supersede-authority check expects the editor to be the replacement's `created-by`).

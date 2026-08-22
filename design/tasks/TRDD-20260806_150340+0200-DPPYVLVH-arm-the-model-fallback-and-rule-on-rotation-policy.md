@@ -3,7 +3,7 @@ trdd-id: DPPYVLVH
 title: Arm the model-fallback leg and rule on the two rotation-policy questions it routes around
 column: human_review
 created: 2026-08-06T15:03:40+0200
-updated: 2026-08-20T21:52:35+0200
+updated: 2026-08-22T16:59:40+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -216,6 +216,14 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
 ## Acceptance
 
 - [ ] USER arms `AIM_FLEET_MODEL_FALLBACK=1` and observes one switch reach `confirmed=true`
+      **↳ THE CODE SIDE IS VERIFIED READY — 2026-08-22T16:59, independent hub pass.** The leg is
+      built, flag-gated, and its **default-OFF** property is PINNED, so arming it is a one-line act
+      with a test standing behind the safe state. `scripts/dev/neuter` (1 ins / 1 del, restore
+      verified by blob hash):
+      `s/const DEFAULT_MODEL_FALLBACK = process.env.AIM_FLEET_MODEL_FALLBACK === '1'/… = true/`
+      on `lib/fleet-liveness-watchdog.ts` → **1 red / 8 green**, the red being
+      *"is OFF by default: an exhausted Fable window produces NO keystroke"*. **Nothing in this box
+      is waiting on engineering** — it is waiting on the owner to set the var and watch one switch.
 - [ ] USER rules on `isSafeAlternate` (and, if changed, the janitor half is coordinated)
 - [ ] USER rules on the dead-refresh live account
 - [~] Parent `TRDD-IALQ43QP` unblocked once this is terminal — reshaped to a deferral 2026-08-20:

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T16:42:01+0200
+updated: 2026-08-22T16:44:27+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,35 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T16:44 — BOX 2: the hub-side record is 5 repos, not 1 — and the box still cannot close
+
+Box 2's state below reads *"1 repo fully covered (by an earlier hub pass, uncredited), 14 repos with
+no hub-side record."* **Measured over the 71-card union: 17 cards across 5 repos carry an EXPLICIT
+hub-verification claim** — `EMASOFT-CHIEF-OF-STAFF` 6, `EMASOFT-ORCHESTRATOR-AGENT` 4,
+`AI-MAESTRO-JANITOR` 4, `CLAUDE-PLUGIN-VALIDATION` 2, `PERFECT_SKILL_SUGGESTER` 1.
+
+**A 5× undercount, and the cause is the one this card keeps meeting: the record lives on the PEER's
+card, in prose, and the hub searched for its own.** The card already knew this for the COS
+(*"the record is on the PEER's card, not here"*) and treated it as a one-off; it is the norm.
+`0DSR6WT4` states it outright — *"Hub-verified finding C2 of the fleet plugin audit … re-verified
+first-hand 2026-08-18 in this tree."*
+
+**BUT BOX 2 STILL CANNOT CLOSE, and not for a needle reason.** 54 of 71 cards carry no such claim,
+so *"for EVERY confirmed finding"* is unmet on the evidence. And its population is not well-defined:
+this card's own box 3 established that **`CONFIRMED` in this corpus means BOTH "a real defect" AND
+"the code is correct"**, so *"every CONFIRMED finding"* does not denote a set anyone can enumerate.
+**A box cannot be closed over a population its own vocabulary cannot delimit** — that is a contract
+defect, not a measurement gap, and it is the same root as box 4's unfixed citation form.
+
+**⚠ FIRST PRECISION FAILURE OF THE DAY, and it is the mirror of the other six.** My first needle
+added `ledgered` and returned **21 cards / 7 repos**. Spot-checking ONE named result — an
+`EMASOFT-ARCHITECT-AGENT` card — found no hub claim in it at all: its 3 matched on `ledgered`
+alone, a weaker word that does not assert hub verification. Dropping it gives 17/5.
+**Six recall failures today were all found by a positive control or by reading the residue; this
+over-count was invisible to both** — the control passed (71/71) and the residue was empty by
+construction. **Only opening a single named hit caught it.** An aggregate cannot audit its own
+precision; one spot-read can.
 
 ### ⏹ 2026-08-22T16:42 — BOX 4 TICKED, and "unanswerable by any command" is too strong
 

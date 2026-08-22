@@ -633,6 +633,20 @@ describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8
    * the same handler and the same validations run in both modes. This test pins the auth half of
    * that: a forged token must not reach the transcript reader.
    */
+  /**
+   * NEUTER RUN (2026-08-22 — OBSERVED, restore verified by blob hash). The mutation is in the
+   * OTHER file, and that is the point:
+   *
+   *   app/api/conversations/parse/route.ts
+   *   s/if \(authErr\) return authErr/if (false) return authErr/ if $. == 18
+   *   → 1 red / 52 green: this test.
+   *
+   * Disabling the guard in the NEXT route reddens the HEADLESS test. That is stronger evidence
+   * than neutering the delegation would have been: it proves the two modes now run ONE shared
+   * guard rather than two copies that agree today. A first attempt — flipping the delegation's
+   * own `method`/`withBody` args — correctly reddened NOTHING, because the delegation still
+   * reached `enforceAuth` either way; that mutation was not aimed at the guard at all.
+   */
   it('R268J32X: POST /api/conversations/parse rejects the forged token (no transcript leak)', async () => {
     const res = await call('POST', '/api/conversations/parse', {
       Authorization: FORGED_BEARER,

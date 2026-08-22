@@ -93,3 +93,46 @@ mandates `%z` for every dated filename), and 481 cards already carry it.
 ## Approval log
 
 - 2026-08-22T18:17:33+0200 — MANDATE issued by user (min-approval-requirement: none). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## Re-measured on pickup — 2026-08-22T20:25:02+0200
+
+The card's own numbers had drifted, which is the card's thesis demonstrating itself.
+
+| the card says | re-measured now |
+|---|---|
+| 10 `Z`-form `updated:` stamps | **23** |
+| 481 offset-form | **478** |
+| 5 write sites | **5 confirmed** |
+
+**The Z count more than doubled in ~2 hours** — written by `promote`/`archive` calls between the
+card's authoring (18:17) and its pickup. That is the card's *"grows by one card per call,
+indefinitely"* claim, observed rather than predicted.
+
+**A sixth candidate site, checked and RULED OUT:** `app/api/trdd/kanban/route.ts:32` passes
+`new Date().toISOString()` to `getKanbanIndex` — a **GET** route using it as a read timestamp for
+the index. It never writes `updated:`. In scope for the grep, out of scope for the bug.
+
+**And the helper the card asks me to write ALREADY EXISTS.** `lib/trdd-create.ts:64` has a private
+`function isoNow(): { iso: string; stamp: string }` returning exactly both forms needed — the
+local-offset ISO string AND the `YYYYMMDD_HHMMSS±HHMM` filename stamp. It is simply not exported.
+So step 1 is **export the existing function**, not author `isoLocalStamp()`: fewer files, and it
+satisfies the card's own *"ONE definition rather than two that drift"* better than a new one would.
+
+(Noted, NOT actioned: ~5 further re-implementations of the `-d.getTimezoneOffset()` pattern exist
+across `lib/` — janitor-daemon-publisher, janitor-status-archive, oauth-rotator/slots and
+/decision-log, services/auto-update-service, lib/session-export. They serve unrelated subsystems;
+consolidating them is a separate, unmandated refactor and is deliberately out of this card's scope.)
+
+## Acceptance
+
+This card carried **zero checkboxes**, which makes the completion gate vacuous — a terminal column
+with no boxes passes having proven nothing (`lib/trdd-doctor.ts::countAcceptanceBoxes` counts
+boxes, and every box in an empty set is trivially checked). Adding the gate the card needs:
+
+- [ ] the local-offset stamp has exactly ONE definition, reached by all five write routes and by `lib/trdd-doctor.ts:1141`
+- [ ] `grep -cE '^updated: .*Z$'` over `design/{tasks,archived,proposals}` → **0**
+- [ ] a live write verb (`promote` or `archive`) produces an offset-form `updated:`, read back from the file on disk — not from the route's return value
+- [ ] a doctor rule flags a seeded `Z` stamp and is clean after `--fix` — with the positive control run recorded, since a rule that cannot be shown to fire is not a rule
+- [ ] the rule REFUSES to rewrite a terminal-column card's body (IND §12 freeze) — or its exemption is stated and justified
+- [ ] the 23 drifted cards are backfilled by `--fix`, never by hand
+- [ ] `updated:` is NOT bumped on the backfilled cards — a format repair changes no fact, and bumping it would silently reorder the whole board

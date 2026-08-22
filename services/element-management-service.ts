@@ -6185,30 +6185,57 @@ async function changeSimpleElement(
   // the 4 simple-element Change* pipelines (AgentDef, Command, Rule,
   // OutputStyle). Caller passes the specific LedgerOp + authContext so
   // one helper covers all four.
-  ledgerOp?: import('@/types/ledger').LedgerOp,
-  authContext?: AuthContext,
+  //
+  // BOTH are REQUIRED (TRDD-JWE3CFLV). They were optional, and the optional
+  // `authContext` was what let G00 be written as a scope-conditional check
+  // instead of an unconditional one — see G00 below. All four delegators
+  // already declare `authContext: AuthContext` (non-optional) and pass both,
+  // so requiring them here changed no call site; it only removes the shape
+  // that made a bypass expressible.
+  ledgerOp: import('@/types/ledger').LedgerOp,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization — UNCONDITIONAL, like every sibling pipeline ─
+    //
+    // TRDD-JWE3CFLV. This helper backs ChangeAgentDef/ChangeCommand/ChangeRule/
+    // ChangeOutputStyle, and until now it was the ONLY element pipeline in this
+    // file with no `gate0Auth` call at all — 18 siblings have one. The single
+    // production caller is POST /api/agents/[id]/remove-element, whose own
+    // comment asserts "the Change* pipelines run their own Gate 0 authorization
+    // on the resolved authContext". That was TRUE for the ChangeSkill and
+    // ChangeMCP arms of the same switch and FALSE for these four, so any
+    // AUTHENTICATED agent of ANY title could delete another agent's rules,
+    // commands, agent-definitions and output-styles — including the .claude/
+    // rules/ files that constrain that agent.
+    //
+    // WHY IT HID: G00b below (the IRON never-user-scope rule) reads like the
+    // gate. It is not. It is conditional on `scope === 'user'` AND a
+    // state-ADDING action, and the removal route always passes
+    // `scope: 'local', action: 'remove'` — so on the one live path G00b is a
+    // no-op and there was nothing else. A conditional gate next to no gate
+    // looks exactly like a gate.
+    //
+    // 'manage-skills' is the action the sibling element pipelines use
+    // (ChangeSkill, ChangeMCP, ChangeLSP, ChangeHook, InstallElement,
+    // ChangePlugin) — same kind of act, same authority, one vocabulary.
+    // Runs BEFORE G00b and before any mkdir/copyFile/writeFile/rm.
+    const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G00b: IRON rule — no agent may state-add at user scope ─
-    // (never-user-scope rule, TRDD-a6d93b9c). This helper backs ChangeAgentDef/
-    // ChangeCommand/ChangeRule/ChangeOutputStyle, which at scope 'user' write
+    // (never-user-scope rule, TRDD-a6d93b9c). At scope 'user' these four write
     // host-wide ~/.claude/{agents,commands,rules,output-styles}/<name>.md — the
-    // exact cross-project persistence the rule forbids for agents. Coverage gap:
-    // the gate was wired only into InstallElement/ChangePlugin/ChangeSkill, so
-    // these siblings were UNGATED. authContext is optional on this helper, so a
-    // user-scope state-add with NO verified system-owner context fails CLOSED
-    // (an agent-token caller always has isSystemOwner=false → denied). Runs
-    // BEFORE any mkdir/copyFile/writeFile/rm. Local scope and 'remove' are not
-    // gated (not host-wide / reduce reach), so callers that legitimately omit
-    // authContext for those are unaffected.
+    // exact cross-project persistence the rule forbids for agents. It is a
+    // SECOND, narrower belt on top of G00: G00 asks "may this caller configure
+    // this agent at all", G00b asks "may ANY agent reach host scope" (no), so a
+    // MANAGER that clears G00 is still refused here. Local scope and 'remove'
+    // are outside its remit — which is precisely why it could never stand in
+    // for G00.
     if (desired.scope === 'user' && USER_SCOPE_STATE_ADDING_ACTIONS.has(desired.action)) {
-      if (!authContext) {
-        result.error = 'authContext is mandatory for a user-scope element mutation (never-user-scope rule, TRDD-a6d93b9c)'
-        return result
-      }
       const ironErr = assertAgentMayNotUserScope(desired.scope, desired.action, authContext, ops)
       if (ironErr) { result.error = ironErr; return result }
     }

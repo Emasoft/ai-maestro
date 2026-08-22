@@ -180,12 +180,30 @@ property peculiar to test indexes.
 | the lint's weakest link: silently loses reference-integrity checking | does not arise — no skip is introduced, so `216FTVC9`'s invariant is untouched |
 | covers writers we never predict, incl. repos we do not own | yes, and see below — that case is now MEASURED, not hypothetical |
 
-**4. The source-fix is unavailable here, which independently confirms the card's reasoning.**
-`getStateDir()` is `join(homedir(), …)` with no env override, and `os.homedir()` honours `$HOME`
-on POSIX — so a leaking suite CAN contain itself, and this repo already uses `$HOME` redirection
-for exactly that. But the four leaking test families appear **nowhere in this tree** (searched;
-only this card names them), so they belong to a suite we do not own. The predicate would never
-have reached them. The reaper does.
+**4. The source-fix is unavailable here — already established ABOVE, not by me.**
+
+⚠ **Correction to my own working, recorded because the mistake is the instructive part.** I
+searched this tree, found the four families nowhere, and wrote this up as a fresh finding. The
+card had **already attributed them**, far more precisely, in §*"ATTRIBUTED 2026-08-22T03:4x"* —
+`~/Code/EMASOFT-ORCHESTRATOR-AGENT/tests/unit/test_trdd_link.py`, a pytest suite, with three
+slugs matched verbatim to test-function names and the trailing `0` explained as `tmp_path`'s
+numeric suffix. I measured before reading the card's own top sections, which is the exact
+failure `~/.claude/rules/lessons-verification.md` already records. My search also looked in the
+janitor and tldr-code and not in the orchestrator repo, so it could not have found it.
+
+What survives from that pass, and is new: `getStateDir()` is `join(homedir(), …)` with **no env
+override**, and `os.homedir()` honours `$HOME` on POSIX — so peer-side containment is possible,
+which is what makes the card's "prefer our side" a preference rather than a necessity.
+
+**5. Guard vs reaper are not exclusive, and only the reaper is unconditional.** The card's
+conclusion above favours a guard in `trddgrep` (do not persist a host-global index for a corpus
+under a temp root). That PREVENTS the write; the reaper BOUNDS the directory afterwards. Both
+sit on our side and cover peer callers. The difference is that the guard needs the contestable
+predicate — the one whose blast radius is every caller of two functions — and the reaper needs
+none, because absolute paths make an orphan a fact rather than a guess. At `severity: low` the
+reaper alone is sufficient and carries no design risk, so it goes first. A guard may follow if
+the churn (one index minted per peer suite run, reaped later) ever proves to matter; that is a
+measurement nobody has yet needed to take.
 
 **Constraint on the implementation — REPORT-ONLY by default.** `~/.claude/rules/never_free_space.md`
 reserves deleting-to-free-space to the owner, and this repo already has the matching house

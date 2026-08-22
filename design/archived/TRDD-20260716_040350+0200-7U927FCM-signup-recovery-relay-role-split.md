@@ -1,9 +1,9 @@
 ---
 trdd-id: 7U927FCM
 title: Signup recovery-relay role-split — MAESTRO required relay + normal-user 2FA email
-column: human_review
+column: completed
 created: 2026-07-16T04:03:50+0200
-updated: 2026-08-05T01:08:00+0200
+updated: 2026-08-22T15:49:13.336Z
 current-owner: opus-governance-rules-session
 task-type: feature
 parent-trdd: P7XKV3N9
@@ -244,6 +244,8 @@ conjunct reds the unverified case and the re-configure case, and nothing else.
 - 2026-07-16T04:03:50+0200 — MANDATE issued by USER (min-approval-requirement: user).
   Pre-approved: issuer authority >= required approver. Verbatim directives in the STATE block.
   No approval request was sent.
+- 2026-08-22T15:49:13.214Z — column → complete. human review under the owner's grant
+- 2026-08-22T15:49:13.336Z — COMPLETED by user. reviewed; live 2A descoped to U991KMFL.
 
 ## Notes and lessons learned
 

@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T00:41:16+0200
+updated: 2026-08-23T00:45:17+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -38,6 +38,16 @@ Measured 2026-08-23 over `services/headless-router.ts`, by enumerating every
 > `GET /api/settings/element-content`, appeared later when `9534cc0f` added a comment block naming
 > `delegateNextRoute` above `mcp-discover` — which is how the class was found. The ledger test
 > carries the corrected enumerator and a control that reds if the stripping is removed. **Use 142.**
+>
+> **Those three names are an IDENTIFICATION, not a subtraction.** They were first derived as an
+> arithmetic residue (`143 − 141 = 2`, and a set-diff returned 2 names) — which is consistent with
+> the claim AND with a 3-in/1-out miscount netting to the same number, so it was not yet evidence.
+> Re-derived per route by printing the MATCHED LINE: `docker/info` matches only at L773/L775,
+> `create-from-toml` only at L3647, `element-content` only at L3783/L3785 — every hit a `//` line,
+> zero code hits. Counts by that method: **2 at `41cc9983`, 3 at `6b40bfc7`**, agreeing with the
+> subtraction by a different instrument. Raised by an adversarial review of the commit that
+> published the names, which is the right time for a correction box to be audited: a correction
+> that inherits the defect it corrects is the worst possible artifact here.
 
 The only thing in front of those 141 is `_headlessHasCredential` (`headless-router.ts:4449`),
 and **its own comment states what it is**: *"a STRUCTURAL credential check ONLY … structural, not

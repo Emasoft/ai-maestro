@@ -20,6 +20,13 @@
  * do anything. That is TRDD-R268J32X's scope, and the ruling in TRDD-8Q5EVGV1 says so
  * explicitly, because "142 fixed" is exactly what someone will misread off this number.
  *
+ * AND IT DOES NOT PROVE THE GUARD'S RESULT IS ACTED ON. It sees that one of six strings is
+ * present in the handler's code; it cannot see an `enforceAuth(req)` whose return value is
+ * discarded, a needle inside a branch that never runs, or a guard reached on only one path
+ * through the handler. "Guarded" here means "asks", never "asks and obeys". This same file's
+ * sibling has the live instance: the headless `install-skills` authorize line is UNPINNED
+ * because a forged token already fails one line earlier, so nothing reds if it is removed.
+ *
  * COMMENTS ARE STRIPPED BEFORE MATCHING, and that is load-bearing. This file documents its
  * own guards in prose at length. Measured 2026-08-23: without stripping, the comment block
  * introduced above `mcp-discover` made the PRECEDING route (`element-content`) read as

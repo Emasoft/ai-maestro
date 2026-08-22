@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T04:02:37+0200
+updated: 2026-08-22T04:26:21+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -200,6 +200,44 @@ not required — the value is forward-looking, and without it the next sweep hit
 **Explicitly NOT established:** how many janitor findings are untracked. The gap is confirmed and
 **unsized**, and I would rather leave it unsized than publish another number whose population I
 had not defined — this card already carries one correction of exactly that kind.
+
+#### ⏹ 04:26 — RECALL FAILURE: two of tonight's "findings" were already written on this card
+
+Checked whether the audit skill was ours to fix (it is not — no `plugin-self-audit` skill exists
+in this repo, and the `amama-governance-self-audit` on disk is a different skill, so the
+"require the audit skill to emit a machine-readable line" recommendation above **has no
+addressee yet** and needs re-aiming at whatever dispatches these audits). While looking, I read
+the top of this card properly for the first time tonight, and found this at **lines 43-45**:
+
+> *"Note the population caveat: 101 counts FILES, and at least the integrator's dir mixes audit
+> reports with `DELEGATION.md` index files — its true audit-report count is **10**, not the 11
+> the file count implied."*
+
+and this at **lines 69-70**:
+
+> *"A `Confirmed: N` from these reports is not a defect count and must never be pasted forward
+> as one."*
+
+**Both were already here.** I re-derived the first at 03:48 and presented it as a correction —
+and my 03:44 table had used **11**, the exact number this card had already flagged as wrong.
+The knowledge was not missing; it was unread. That is worse than not knowing, because a card
+that records a caveat and is then contradicted by its own later section teaches the next reader
+to distrust the whole document.
+
+**What genuinely IS new from tonight, stated so the two are not confused:**
+
+- the corpus-wide count (32 cards citing the audit across 27 zones; 26 terminal, 6 open, 5 of
+  them one un-pulled batch),
+- `ai-maestro-janitor` **9 reports / 0 cards** and `ai-maestro-autonomous-agent` **8 / 0** — this
+  card previously had evidence only for the integrator,
+- that a `Confirmed:` line is **usually ABSENT** (1 of 9 reports carries one). The card knew that
+  header was *unreliable*; it did not know it is *mostly missing*, which is a stronger and worse
+  fact — a fleet tally built on it is counting the minority that happen to emit it.
+
+**Process note worth more than any of the three:** the card's own STATE and top sections are the
+first thing to read, not the last. I measured before reading and paid for it twice in one night,
+on the one card whose entire subject is *findings that were true when written and nobody
+re-read*.
 
 **NEXT on this box, revised:** the citation sweep is no longer the top item. Ask first *"which
 fleet repos have audit reports and no cards?"* — that set is where untracked findings live, and

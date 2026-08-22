@@ -328,3 +328,61 @@ message was quoted verbatim. That is behavioural evidence about what git EXECUTE
 stronger than any file inspection, and immune to every failure mode this card describes. A refused
 push proves *a* hook ran, not *which* file; `git config --get core.hooksPath` is what closes that
 last gap, and both halves together are the method.
+
+### CORRECTION 2 — 2026-08-22T19:59:42+0200 — "those repos ARE protected" was FALSE, and I read a proxy to say it
+
+MAINTAINER refuted the previous section by reading the file I had only listed. Verified
+first-hand before accepting; they are right.
+
+**`~/.config/git/hooks/pre-push` is the stock Git LFS hook — 388 bytes, and it gates nothing
+about pushing.** Its only refusal path fires when `git-lfs` is missing from PATH; otherwise it
+execs `git lfs pre-push`. So the sentence in CORRECTION 1 — *"it exists and it runs, so those
+repos ARE genuinely protected"* — is false in the half that matters. **The pre-push slot is
+occupied, not defended.**
+
+**The error was a PROXY read, the exact shape this repo's lessons file catalogues.** I ran `ls`
+on the directory, saw `pre-push` present, and read FILE EXISTENCE as a proxy for PROTECTION
+EXISTS. One `cat` settles it and I did not run it — then propagated the claim to two peers and
+into this card. MAINTAINER opened the file because of the size gap (388 B against this repo's
+2880 B guard); the size is what prompted the read, not what proved the point.
+
+**`core.hooksPath` REPLACES, it does not compose** (AMAMA, independently confirmed). Git takes
+the most specific setting outright. So the global hooks do not run for the repos that set their
+own, and a repo's own tracked guard does not run for the repos that inherit the global. Fixing
+either side fixes only its own side.
+
+**Corrected census — path-agnostic needle, classified by CONTENT.** The previous count keyed on
+three assumed directory names (`.githooks`/`git-hooks`/`githooks`). Re-run with
+`git ls-files | grep -E '(^|/)pre-push$'` — which cannot miss a location — over all 48 repos.
+**10 repos ship a tracked pre-push:**
+
+| state | repo | ships | what git actually executes |
+|---|---|---|---|
+| LIVE | ai-maestro | `.githooks/pre-push` | its own, 2880 B, real guard |
+| LIVE | ai-maestro-assistant-role-agent | `git-hooks/pre-push` | its own, 3847 B, ancestry + branch + publish |
+| LIVE | ai-maestro-web-scenario-tester | `git-hooks/pre-push` | its own, 384 B — delegates to `publish.py --gate` |
+| LIVE | PHARDENER | `.githooks/pre-push` | its own, 388 B — ruff + mypy under `set -euo pipefail` |
+| LIVE | visual-comunicator | `git-hooks/pre-push` | its own, 15936 B |
+| **DECORATIVE** | AI-MAESTRO-WEBDESIGN-AGENT | `.githooks/pre-push` | a **different** file — `hooksPath=git-hooks`. Two dirs, one reviewed, the other executed. |
+| **DECORATIVE** | rechecker-plugin | `git-hooks/pre-push` | an **untracked** 3285 B guard in `.git/hooks` — protected, by a file no PR can review |
+| **DECORATIVE — UNPROTECTED** | claude-menu-system | `git-hooks/pre-push` | the global LFS shim |
+| **DECORATIVE — UNPROTECTED** | claude-voice-loop | `git-hooks/pre-push` | the global LFS shim |
+| **DECORATIVE — UNPROTECTED** | SVG-BBOX | `scripts/hooks/pre-push` | the global LFS shim |
+
+**DECORATIVE is 5, not 3** — MAINTAINER's "3 is a floor" was right. Two of the additions are the
+name-keyed-needle failure again: `SVG-BBOX` ships at `scripts/hooks/`, a path my directory list did
+not contain, and `AI-MAESTRO-WEBDESIGN-AGENT` my earlier loop scored LIVE because
+`$hooksPath/pre-push` existed — I checked that *a* file was executable at the resolved path without
+checking it was the file the repo ships.
+
+**And a third proxy error I caught before propagating it.** Seeing 384/388 B against this repo's
+2880 B, I formed "size is the tell for an LFS shim" and was about to classify on it. Reading them
+refuted it: the 384 B file delegates to `publish.py --gate` and the 388 B one runs ruff + mypy
+under `set -euo pipefail` — both real guards, merely short. Size is a reason to OPEN a file, never
+a reason to classify it. That is the same move MAINTAINER made correctly one level up: the size gap
+prompted the read; the read is what proved the point.
+
+**Standing correction for anyone auditing hooks:** four cheap facts, in order, and none of the
+first three substitutes for the fourth — `git config --get core.hooksPath` (what git resolves),
+`git rev-parse --git-path hooks` (where it would look by default), `git ls-files | grep pre-push$`
+(what the repo ships, at any path), and **`cat` the file git resolves** (what it enforces).

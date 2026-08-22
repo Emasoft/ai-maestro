@@ -436,3 +436,44 @@ padded table, and `MLX SMART UNIVERSAL CONVERTER` has spaces in its directory na
 split across two phantom rows. Paths with spaces are routine on macOS; this repo's own reports rule
 mandates `--porcelain` over column-splitting for exactly this reason. The counts above are
 tab-delimited and do not split.
+
+### CORRECTION 4 — 2026-08-22T20:01:46+0200 — overriding `core.hooksPath` silently DROPS every other global hook
+
+AMAMA retracted their own unmeasured claim and then measured it properly — sandboxed via
+`GIT_CONFIG_GLOBAL` against a throwaway config, four cases with a control:
+
+| case | local `core.hooksPath` | result |
+|---|---|---|
+| A | unset | global hook ran |
+| B | set, dir **contains** the hook | local ran, global silent |
+| **C** | set, dir **lacks** the hook | **NOTHING ran — no fallback to global** |
+| D | unset again (control) | global hook ran |
+
+**C is the finding and D is what makes it interpretable** — D proves the global hook was still
+installed and functional, so C's silence is a real absence of fallback rather than a broken
+fixture. `core.hooksPath` REPLACES the hooks directory wholesale; git does not compose the two.
+
+**Measured here, and it is worse than a pre-push census can see.** Of the 9 repos with a local
+`core.hooksPath`, **7 provide only `pre-push` and have silently dropped `post-checkout`,
+`post-commit` and `post-merge`:**
+
+```
+ai-maestro                        post-checkout yes  post-commit yes  post-merge yes  pre-push yes
+SMART_MEDIA_MANAGER               post-checkout yes  post-commit —    post-merge yes  pre-push —
+ai-maestro-assistant-role-agent   —                  —                —               pre-push yes
+ai-maestro-web-scenario-tester    —                  —                —               pre-push yes
+AI-MAESTRO-WEBDESIGN-AGENT        —                  —                —               pre-push yes
+PHARDENER                         —                  —                —               pre-push yes
+rechecker-plugin                  —                  —                —               pre-push yes
+visual-comunicator                —                  —                —               pre-push yes
+claude-acct-switcher              —                  —                —               —
+```
+
+Only `ai-maestro` provides all four. **A repo that overrode `core.hooksPath` to ADD a push gate
+thereby REMOVED three unrelated hooks, and no pre-push census can see it** — which is why this
+column exists. `claude-acct-switcher` points at a hooks dir containing nothing at all, so it runs
+no hooks whatsoever while appearing configured.
+
+**Directional consequence, stated because both halves are counter-intuitive:** repairing the global
+`pre-push` does nothing for these 9, and repairing these 9 does nothing for the other 39. There is
+no single edit that fixes both populations.

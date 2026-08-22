@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T02:48:06+0200
+updated: 2026-08-22T02:51:19+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -577,6 +577,27 @@ them to.
       `--role` was not a flag on that subcommand; it is at `:501`, `required=True`. Whatever this
       box is worth, it is not worth assuming the hub's verification is the reliable half.
 - [ ] Refuted candidates are recorded with their refutation, not silently dropped.
+      **MEASURED 2026-08-22: no evidence of silent dropping. 78 of 101 audit files record
+      refutations**, and the 23 that do not are accounted for rather than assumed:
+      **11 are `pass1-*` / `*-candidates.md` discovery passes**, which by protocol produce
+      candidates and do not refute — legitimately zero; the remainder are summaries, fix-reports
+      and ai-review files rather than axis audits; and **2 are `pass2-*-refutation.md` files that
+      genuinely refuted nothing** (axis2: 0 `refut*` hits / 8 CONFIRMED · axis3: 1 / 5 CONFIRMED).
+      Not ticked only because this is a corpus-shape measurement, not a read of all 101.
+      **⚠ THE REAL FINDING IS THE WORD, NOT THE COUNT — and it explains the inflation.** In this
+      corpus `CONFIRMED` is doing TWO jobs: *"confirmed as a real defect"* and *"confirmed that the
+      code is correct."* A `pass2-refutation` file that returns **8 CONFIRMED / 0 refuted** is
+      unreadable without opening it — that is either an adversarial pass that survived every
+      candidate, or a pass that confirmed eight invariants HOLD. Those are opposite meanings under
+      one label.
+      This is the same defect my extraction workers measured from the other end (**~71 items
+      excluded as "confirmations that something holds"**, one unit finding ~40+ against 33 real
+      defects). It is not a counting mistake anyone made — **the vocabulary cannot express the
+      distinction**, so every `Confirmed: N` in this program is ambiguous by construction.
+      **Consequence for Phase 2: never dispatch remediation off a `Confirmed: N`.** The number does
+      not mean what its name says. And note the protocol these passes were given says *"Default to
+      REFUTED when uncertain"* — a refutation pass refuting nothing is worth a second look on
+      adversarial strength, separately from this box.
 - [ ] Phase 2 TRDDs exist in the OWNING repos, not here, and each cites its audit finding.
       **MEASURED 2026-08-22T02:4x — satisfied on 13 of 15 repos; the other 2 cannot satisfy it as
       written.** Swept every peer repo's `design/` for cards citing their own audit: **52 cards

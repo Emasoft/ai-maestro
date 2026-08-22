@@ -81,8 +81,11 @@ primitives they will call. Building the callers now would be speculative UI (out
 
 **NEXT ACTION:** none required for this TRDD's shipped scope — 2A + 2B core are in `testing`.
 The remaining items above are future work that belongs to the normal-user-signup feature when
-it is built. Human step to fully exercise 2A live: owner resets password (Settings → Revoke)
-to re-enter first-run and type the MAESTRO relay creds (R16 — human-only).
+it is built. ~~Human step to fully exercise 2A live: owner resets password (Settings → Revoke)
+to re-enter first-run and type the MAESTRO relay creds (R16 — human-only).~~
+**⏹ That human step is now OWNED by [[U991KMFL]] (descoped 2026-08-22) — do not perform or
+re-file it from here.** It sat in this card's acceptance AND in `P7XKV3N9`'s simultaneously, each
+deferring to the other, so the act had no owner and both cards were held open by it.
 
 **Load-bearing facts:**
 - Reuse Phase 1 wholesale: `/api/governance/email/{autodetect,configure,verify}` +

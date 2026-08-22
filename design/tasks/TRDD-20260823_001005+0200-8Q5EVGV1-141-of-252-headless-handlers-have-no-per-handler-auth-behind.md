@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T00:10:05+0200
+updated: 2026-08-23T00:19:02+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -123,10 +123,60 @@ the scale of the whole file.
 
 - 2026-08-23T00:10:05+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
 
+## RULING 2026-08-23 — the default, decided on verified facts (implementation NOT started)
+
+Ruled under the USER's standing grant to decide from verified facts. **The two options are not
+alternatives — they answer different questions**, and reading them as a choice is what makes this
+look like a large decision.
+
+**RULE: make the structural gate SEMANTIC. That is the floor, and it is small.**
+`_headlessHasCredential(req, pathname)` already receives everything `authenticateAgent(authHeader,
+agentIdHeader, cookieHeader)` needs; the swap is mechanical. It closes the forged-token bypass for
+**all 252 handlers at once** rather than one at a time, which is the only property that actually
+changes the shape of this problem.
+
+**It is safe because the whitelist already isolates what must stay anonymous.**
+`HEADLESS_AUTH_WHITELIST` bypasses the gate entirely and is a short, deliberate list: `auth/login`,
+`auth/logout`, `auth/session`, `auth/setup-init`, `auth/setup-verify`, `v1/health`, `v1/info`,
+`v1/register`, `v1/auth/challenge` (anonymous AID bootstrap, mirroring `middleware.ts`), and the
+statusline ingest — whose own comment explains that Claude Code runs the statusline with no cookie
+and no token, and that a route anonymous in full mode and 401 in headless would be "a forked gate,
+which is the bug class this whole file's delegation pattern exists to avoid". Every entry is either
+the authentication surface itself (which cannot require prior authentication) or carries a written
+justification. So a semantic gate breaks exactly one class of caller: **one holding a forged token**.
+
+**DIRECTION (not the fix): delegate-by-default, incrementally.** Delegation removes the TWINS, which
+is a different defect from the missing gate — it is why `conversations/parse`, `sessions/restore`,
+`install-skills`, four `plugin-builder/*` handlers and `mcp-discover` each drifted from their Next
+counterparts. But it is a migration, not a floor: some headless routes have no Next counterpart, and
+delegation has real edges (a `params` Promise mismatch broke one delegated route at compile time
+this session). Convert opportunistically, whenever a handler is touched.
+
+**WHAT THIS RULING EXPLICITLY DOES NOT BUY — state it, because the number is seductive.**
+A semantic gate gives **AUTHENTICATION, not AUTHORIZATION.** After it lands, all 252 handlers know
+*who* the caller is; the 141 still perform no title check, no ownership check, no `authorize()`
+call. `POST /api/agents/docker/create` would go from "any forged token" to "any authenticated agent
+of any title" — a real improvement and NOT the end. The per-route authorization work stays exactly
+as scoped in TRDD-R268J32X. Anyone reading "141 fixed" off this ruling has misread it.
+
+**THE COST, named rather than discovered later.** The structural check is a regex; a semantic one
+validates a token per request. That cost is likely why it was written structurally. It is already
+paid on the 111 guarded handlers, which call `authenticateAgent` themselves — so implementing this
+without refactoring those means they validate **twice per request**. The implementer should either
+thread the gate's result down to the handlers or accept the duplication deliberately; discovering
+it mid-migration is how a performance objection kills a security fix.
+
+**NOT IMPLEMENTED.** The card's own MEDIUM-HIGH blast-radius warning stands, and the resume
+directive for this session says to rule it and stop. The ruling exists so the decision is not
+re-litigated and the default is not invented under time pressure later.
+
 ## Acceptance
 
-- [ ] the DEFAULT is ruled: semantic structural gate, or delegate-by-default. One decision, not a
-      per-route patch — and recorded here with the reason
+- [x] the DEFAULT is ruled: **semantic structural gate as the floor** (closes the forged-token
+      bypass for all 252 at once; safe because `HEADLESS_AUTH_WHITELIST` already isolates the
+      bootstrap routes), with **delegate-by-default as the incremental DIRECTION** for removing the
+      twins. Full reasoning, the named cost, and what the ruling explicitly does NOT buy
+      (authorization) are in `## RULING 2026-08-23`
 - [ ] whichever is chosen, a NEW handler added afterwards inherits the guard rather than needing
       one remembered
 - [ ] a conformance test fails on a newly-added unguarded handler, seeded with the current count as

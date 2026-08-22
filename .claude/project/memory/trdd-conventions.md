@@ -38,7 +38,7 @@ ISO=$(date +%Y-%m-%dT%H:%M:%S%z)      # frontmatter created:/updated:
 - `design/refused/` — proposals never approved.
 - `design/archived/` — once-approved TRDDs now terminal (`completed`/`cancelled`/`superseded`).
 
-Trivial in-session work uses a TaskCreate entry, not a TRDD. Every TaskCreate that references a TRDD carries its `TRDD-<id8>` id.
+Trivial in-session work is tracked in the session, not as a TRDD. Whatever tracks it names the `TRDD-<id8>` id when it references one.[^8]
 
 ## A TRDD states its pipeline position exactly ONCE — in `column:`
 
@@ -151,3 +151,16 @@ A terminal-column card with NO acceptance checkboxes at all makes the completion
   verified its blocker OPEN on 2026-08-02; on resume it had CLOSED hours earlier. DO re-check an
   EXTERNAL blocker before re-reading the card — a card can only ever report what was true when
   someone last looked, and for a GitHub blocker that is one `gh issue view` call.
+[^8]: [id:ATOM-TRDC-0008, status:valid, keywords:"TaskCreate_tool_does_not_exist TodoWrite_missing_from_tool_list rule_names_a_tool_the_runtime_removed todo_tools_removed_2.1.233 CLAUDE_CODE_ENABLE_TODO_TOOLS prose_mandate_calls_absent_tool", ocd:2026-08-22, lmd:2026-08-22]
+  DO NOT state a project rule in terms of the TOOL that happens to implement it, BECAUSE the tool
+  is a runtime surface that upstream can withdraw and the rule then reads as an instruction to call
+  something that does not exist. This line said "trivial in-session work uses a TaskCreate entry";
+  Claude Code 2.1.233 removed TaskCreate/TaskGet/TaskUpdate/TaskList/TodoWrite by default on Opus
+  4.8, Sonnet 5, Fable 5 and Mythos 5+ (restorable only with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`,
+  which this fleet sets nowhere — measured 0 hits). DO name the OUTCOME the rule wants ("tracked in
+  the session", "carries the id") and let each runtime supply its own mechanism. The falsifiable
+  claim is "default-off on these models", not "impossible" — an env-flagged session refutes nothing.
+  Corollary from the same sweep: 12 files matched the todo-tool names and only 2 were mandates —
+  the rest are ai-maestro's OWN `TaskCreateForm`/`TaskKanbanBoard` React components, a
+  `CachedTaskList` interface, `TaskCreated` event names, and transcript analysis that stays true of
+  the transcripts it measured. Read every hit at its source line before counting it.

@@ -1,6 +1,9 @@
-# Claude Code 2.1.113 - 2.1.224 Compatibility Audit
+# Claude Code 2.1.113 - 2.1.240 Compatibility Audit
 
-**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178), extended 2026-06-24 (2.1.179–2.1.187), extended 2026-07-08 (2.1.190–2.1.204), extended 2026-07-14 (2.1.205–2.1.209), extended 2026-08-04 (2.1.210–2.1.221), extended 2026-08-07 (2.1.222–2.1.224)
+**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178), extended 2026-06-24 (2.1.179–2.1.187), extended 2026-07-08 (2.1.190–2.1.204), extended 2026-07-14 (2.1.205–2.1.209), extended 2026-08-04 (2.1.210–2.1.221), extended 2026-08-07 (2.1.222–2.1.224), extended 2026-08-22 (2.1.232–2.1.240)
+
+**Remaining / not audited:** 2.1.225–2.1.231. The ninth pass covered the range supplied to it; this
+gap has never been audited and is recorded here rather than covered over by the "up to 2.1.240" title.
 **Branch:** `governance-rules`
 **Server version:** v0.29.x
 
@@ -32,6 +35,34 @@ for 2.1.154.
                     integration, OAuth refinements not on our path)
 
 ## Per-entry verdicts
+
+### 2.1.232–2.1.240 — August 22, 2026 (ninth pass)
+
+`claude --version` reports **2.1.240**; nothing here is speculative. **206 entries audited across
+9 releases, 2 APPLIED — both the same defect, both fixed in this pass.** Run as five parallel
+audits (`reports/cc-align/u{1..5}-*.md`, gitignored, janitor-archived after 48 h), every unit
+re-verified by the coordinator against the tree; the ledger with the commands is
+`reports/cc-align/DELEGATION.md`. **The unaudited gap 2.1.225–2.1.231 is recorded under Remaining
+below — this pass covers only the range that was supplied.**
+
+| Entry | Verdict | Notes |
+|---|---|---|
+| **2.1.233 — todo tools (`TaskCreate`/`Get`/`Update`/`List`, `TodoWrite`) removed by default on Opus 4.8, Sonnet 5, Fable 5, Mythos 5+; `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` restores** | **APPLIED ×2** | The only real breakage in the whole range. Two files instructed an agent to CALL a tool that no longer exists by default, and `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set **nowhere** in this repo (measured 0). Fixed **tool-free rather than by exporting the flag** — reviving a withdrawn surface fleet-wide to keep two sentences literally true is the wrong direction. (a) `.claude/project/memory/trdd-conventions.md:41` "uses a TaskCreate entry" → states the outcome, correction demoted to lesson `[^8]`. (b) `.claude/agents/scenario-improvement-implementer.md:65` "Emit a TodoWrite list…" → "Work them in `priority:` ascending order"; that agent pins `model: opus[1m]`, one of the four named models. **12 files match the tool names; only these 2 are mandates** — the rest are ai-maestro's own `TaskCreateForm`/`TaskKanbanBoard`/`TaskPanel` React components, `github-project.ts`'s `CachedTaskList`, `converter/types.ts`'s `TaskCreated` events, `converter/rewrite/tools.ts:25`'s `'TodoWrite': 'todo_write'` mapping (must stay — historical transcripts still convert through it), and transcript analysis that remains true of the transcripts it measured. |
+| 2.1.232 — subagent forking on by default; non-teammate spawns background by default | ALREADY-ALIGNED | `lib/claude-settings-enforcer.ts:44` force-sets `CLAUDE_CODE_FORK_SUBAGENT: '1'` — now redundant, not wrong. The backgrounding half was already handled at 2.1.218 (TRDD-9X2STNL2): `services/role-plugin-service.ts:115-136,188` pins `background: false` on the one case that breaks, and Rule 15 (THE-RUNNER-NEVER-WAITS) already assumes async completion. |
+| 2.1.232 — `SendMessage` delivers to a bare name; `@`-mention another session; unique session names | AWARENESS | Same verdict as the eighth pass's cross-session row: a candidate transport, never an AMP replacement. `git grep '\[ref\]'` → **0** — this repo never authored guidance for the superseded confirm-first UX, so there is nothing to unwind. CC's *session* naming is not our registry; uniqueness is enforced independently at `element-management-service.ts:9803-9815` (G01b) and `agents-core-service.ts:870`. |
+| 2.1.232 — `additionalMarketplaces`/`allowedMarketplaces` accepted as aliases for `extraKnownMarketplaces`/`strictKnownMarketplaces` | AWARENESS — residual risk | This repo reads AND writes the canonical key by name through raw `settings.json` parsing at 16 files, and `git grep 'additionalMarketplaces\|allowedMarketplaces'` → **0**: no read site falls back to the alias. Our own writes are safe. An entry added via the alias by anything outside AI Maestro (hand-edit, or a future CC write path) would be invisible to every read site. Not APPLIED because the changelog states only that CC *accepts* the alias on read; whether anything ever *writes* it is unconfirmed. |
+| 2.1.232 — nested git repos need their own trust confirmation | AWARENESS — plausible gap | `handleTrustAutoAccept()` (`services/agents-core-service.ts:1961`, fired once at `:2530`) polls ~10.5 s after launch and stops. It is not a watcher. `isolation: worktree` (`.claude/agents/parallel-worker-agent.md`, `scenario-improvement-implementer.md`) creates a nested working tree *mid-session*, potentially hours later. If CC's Agent-tool worktree creation is subject to the per-repo trust prompt, nothing here polls for a second dialog. Unconfirmed without a live spawn; recorded rather than guessed at. |
+| 2.1.238 — `claude plugin install/update` gates on a `[y/N]` `headersHelper` confirmation | AWARENESS — inactive | `headersHelper` appears in **0** code files, so no marketplace we install from declares one and the gate is unreachable today. **Nine** non-interactive call sites would be affected if that changes — `services/element-management-service.ts:978,1170,1908,2210,4769,4834`, `lib/client-plugin-adapters/claude-adapter.ts:84,101`, `lib/fleet-plugins-update.ts:196`. (The unit-4 report named only 5; it enumerated `install` while the entry gates `install` **and** `update`. Corrected here.) Each already fails gracefully rather than corrupting. Revisit with `-y` if a marketplace adopts it. |
+| 2.1.239 — UTF-8 BOM in `.md` agent/skill/command files | N/A — measured | Byte-level scan (positive-controlled against a synthetic BOM file) over **all 2904 tracked files**: **zero**. Broader than the surface the entry names. |
+| 2.1.232 GitLab marketplace URLs · 2.1.236 `ANTHROPIC_DEFAULT_MODEL` · `notify_when_idle` · Fable 5 in `/advisor` · 2.1.240 `pluginRoot`/`claudeMdExcludes` | AWARENESS | GitLab is already supported more strictly than the CC feature: `services/plugin-builder-service.ts:129-134` allows `gitlab.com`/`bitbucket.org`/`codeberg.org` but requires an explicit scheme, so bare-URL shorthand was never accepted here. `pluginRoot`/`claudeMdExcludes` surface at 3 files, all emission-side. |
+| Gateway/enterprise policy · Remote Control · Cowork · PowerShell & Windows path fixes · Linux sandbox · self-hosted runners · TUI cosmetics | N/A | No surface in this repo. `.claude/settings.json` carries no `sandbox.*` key (**0**), no managed-policy file, no `blockedMarketplaces`. |
+| 2.1.235 — directory removed under a live session · 2.1.238 — subagent tool-result memory release | N/A — favourable | Confirmations that existing invariants hold: `DeleteAgent` already kills the tmux session before removing the folder (`element-management-service.ts:9232`), and `lib/memory-guard.ts:8`'s hard SAFELIST protects claude processes from the OOM guard. Both are strictly-better upstream, nothing to change. |
+
+**What verification changed.** Three worker claims did not survive the coordinator's own re-run,
+and none would have been caught by reading the reports: unit 2's *return line* said 1 APPLIED while
+its body named 2 (the body was right); unit 4 undercounted the affected call sites 5 vs 9; and the
+coordinator's own verdict-tally needle returned empty against every report because the reports bold
+and suffix their verdicts — a broken instrument that reads exactly like a clean result.
 
 ### 2.1.222–2.1.224 — August 7, 2026 (eighth pass)
 

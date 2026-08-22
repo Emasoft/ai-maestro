@@ -62,7 +62,7 @@ Your task prompt contains one of:
 
 ### Step 1 — Discover approved proposal TRDDs
 
-Grep `design/tasks/*.md` frontmatter: `grep -l "^labels:.*scenario-improvement" design/tasks/*.md`, then filter by the batch label / scen-NNN label / explicit ids from your input, and keep only `column: planned`. Emit a TodoWrite list, one task per TRDD, ordered by `priority:` ascending (0 first).
+Grep `design/tasks/*.md` frontmatter: `grep -l "^labels:.*scenario-improvement" design/tasks/*.md`, then filter by the batch label / scen-NNN label / explicit ids from your input, and keep only `column: planned`. Work them in `priority:` ascending order (0 first). (Do not reach for a todo tool to hold the list — Claude Code 2.1.233 removed `TodoWrite`/`TaskCreate` by default on the models this agent runs on, this one included: its own frontmatter pins `model: opus[1m]`.)
 
 ### Step 2 — Parse each proposal TRDD
 

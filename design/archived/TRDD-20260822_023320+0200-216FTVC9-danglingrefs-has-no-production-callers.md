@@ -1,12 +1,12 @@
 ---
 trdd-id: 216FTVC9
 title: Nothing checks whether a cited TRDD target exists — danglingRefs has tests and zero production callers
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T02:33:20+0200
-updated: 2026-08-22T03:04:55+0200
+updated: 2026-08-22T03:10:55+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -129,8 +129,15 @@ choosing.** If it is small, fail. If it is large, report-only with a stated ratc
       deliberately NOT caught: the file's existing `uncaughtException` handler maps it to
       **exit 2**. Catching it would print *"the reference DAG holds"* over a check that never
       executed — the exact shape of defect this card exists to remove.
-- [ ] `TRDD-L55IYKL4` box 2's scope-leak item is revisited, since this card is what makes its
+- [x] `TRDD-L55IYKL4` box 2's scope-leak item is revisited, since this card is what makes its
       "already subsumed" rationale available or not.
+      → **Revisited and DECIDED: REJECTED as subsumed** (`29df5532`), and `L55IYKL4` closed with
+      it — all 5 of its boxes ticked, all 18 flock members terminal. The rationale is exact
+      rather than approximate: a LOCAL card is outside this corpus by construction and ids
+      cannot collide (mint-time uniqueness scans every scope root), so PROJECT→LOCAL citations
+      are a **strict subset** of dangling references. Measured population: 15 LOCAL TRDDs across
+      7 LOCAL design trees. The one thing subsumption does not buy is recorded on that card —
+      the finding reads *"resolves to no TRDD"*, not *"cites a LOCAL card"*.
 - [x] `bash scripts/with-node.sh npx tsc --noEmit` clean; suite green.
       → tsc **exit 0**; `pillar-index-open` 4/4, and `pillar-lint` + `pillar-index-build` +
       `pillar-graph-cli` 49/49 unchanged.
@@ -147,3 +154,8 @@ worse than no lint, because it teaches everyone to ignore it.
   reversible, no cross-repo or governance surface. Found while verifying `TRDD-L55IYKL4` box 2
   during the 2026-08-22 board triage — the "already covered" rationale was checked rather than
   assumed, and did not survive.
+- 2026-08-22T03:10:55+0200 — COMPLETED by ai-maestro-hub (min-approval-requirement: none). All 6 boxes ticked.
+  The wiring landed (`20d0bbfa`), is pinned by a neuter that went from **0 red / 49 green** to
+  **2 red / 4** once `tests/unit/pillar-index-open.test.ts` existed (`b6ae9693`), and unblocked
+  `L55IYKL4`'s last decision (`29df5532`). Filed and closed the same night, which is the point:
+  the defect was found by CHECKING a rationale instead of accepting it.

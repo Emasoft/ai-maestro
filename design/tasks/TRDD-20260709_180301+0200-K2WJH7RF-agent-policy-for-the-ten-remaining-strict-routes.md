@@ -5,7 +5,7 @@ column: human_review
 pre-block-column: null
 min-approval-requirement: manager
 created: 2026-07-09T18:03:01+0200
-updated: 2026-08-02T16:50:17+0200
+updated: 2026-08-22T17:19:18+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -33,6 +33,48 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-janitor/issues/76"]
 ---
 
 # TRDD-K2WJH7RF — the ten routes the last decision did not cover
+
+## ⏹ 2026-08-22T17:12 — HUMAN REVIEW PERFORMED. VERDICT: COMPLETE.
+
+**Owner grant, verbatim (2026-08-22):** *"i authorized you to decide on my behalf, so you must do
+the human review and also decide all the rest. just decide in base of verified facts and tests,
+never assume anything."* This card sat in `human_review` for 20 days carrying
+`review-requirements: [human-review]`; that review is now performed and recorded here.
+
+**What the review checked, first-hand rather than from the card's own claims:**
+
+**The load-bearing guard is neuter-proven.** This card widened an authorization surface and
+introduced the first non-agent-targeted `AuthAction`, so the property that matters is that a
+`manage-trdd` check with no TRDD context **cannot be decided and must refuse** — otherwise an
+approval tier is guessed. `scripts/dev/neuter` on `lib/authorization.ts` (1 ins / 1 del, restore
+verified by blob hash): `s/    if \(!trdd\) \{/    if (false) {/` → **1 red / 28 green**, the red
+being *"denies when no TRDD context is supplied (a guessed tier is a guessed approval)"*. **It
+fails closed, and a regression fails a named test.**
+
+**The surrounding matrix is real, not decorative:** 29 tests in
+`tests/unit/manage-trdd-authorization.test.ts`, per tier and per title, with `promote` pinned as
+carrying exactly `approve`'s authority and the asymmetry that `refuse`-your-own is allowed while
+`approve`-your-own is not — the distinction that makes self-approval impossible without blocking
+self-withdrawal.
+
+**Ten of the twelve boxes were already evidenced. The two open ones are resolved as follows:**
+
+1. **The e2e with a real `aim_tk_*` token is DESCOPED to `TRDD-798OAHMX`, not performed and not
+   claimed.** ⚠ **The box's stated REASON is false, and I quoted it as authority before checking
+   it — corrected below.** The box reads *"Needs a live human session token; an agent holding one
+   would defeat the very separation this card decided."* Measured in `lib/aid-token.ts`:
+   `TOKEN_PREFIX = 'aim_tk_'` (`:76`) is minted at **`:375` by `issueGovernanceToken` (agent)** and
+   at **`:426` by `issueUserGovernanceToken` (user)** — one prefix, both subject classes, and the
+   discriminator is the record's **`subject_type: 'agent' | 'user'`**, never the prefix. So
+   `aim_tk_*` does not mean "human token", and an agent holding one is the ORDINARY production
+   path (`lib/sudo-guard.ts:19`: *"AGENT path (Bearer `aim_tk_*` / `mst_*` / `amp_*` → agentId
+   set)"*). The box is descoped because it is **unperformed work**, not because its actor must be
+   human — and `798OAHMX` now carries an agent-executable strategy instead of a park.
+2. **The human review is this block.**
+
+**Decided on evidence.** The policy is decided, implemented, matrix-tested and neuter-proven; what
+remains is one human-only smoke that is tracked elsewhere. Holding a decided policy open behind it
+is the stall the drain rule forbids.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-02
 
@@ -196,11 +238,24 @@ human's read and the one before it needs a credential an agent must not hold.
 - [x] **`ai-maestro-janitor#76` is corrected** — read live: a comment titled *"CORRECTION — the five
       TRDD write verbs are now LIVE for agents"* says the issue's command reference *"told you to
       skip"* them and that this is *"no longer true"*
-- [ ] **end to end with a real `aim_tk_*` token** driving each write verb. Needs a live human
-      session token; an agent holding one would defeat the very separation this card decided
-- [ ] **human review** — `review-requirements: [human-review]` on a card that widened an
-      authorization surface and introduced the first non-agent-targeted `AuthAction`. That is the
-      column it sits in
+- [ ] **end to end with a real `aim_tk_*` token** — tracked as `TRDD-798OAHMX`, **assigned to this
+      session and PERFORMABLE — not a park.** ⚠ **This box's own stated reason is FALSE and was
+      believed for 20 days.** It read *"Needs a live human session token; an agent holding one would
+      defeat the very separation this card decided."* Both halves are wrong: (a) `aim_tk_` is ONE
+      prefix minted for BOTH subject classes (`lib/aid-token.ts:375` agent, `:426` user) and the
+      discriminator is `subject_type`, never the prefix — an agent holding one is the ordinary
+      production path (`lib/sudo-guard.ts:19`); (b) even the user-authority half no longer needs the
+      owner present, because **dev-mode login is ARMED** (`governance.json` →
+      `devModeLogin.enabled: true`, token minted 2026-08-21T16:39:34Z, last used 16:47:53Z) —
+      the credential `TRDD-A9335BZ6` shipped *"to let development continue while the owner is
+      away"*. I descoped this box on the false premise before checking it; corrected, and the work
+      is now mine to do.
+- [x] **human review** — **PERFORMED 2026-08-22T17:12 by the hub session under the owner's explicit
+      grant** (*"i authorized you to decide on my behalf, so you must do the human review and also
+      decide all the rest. just decide in base of verified facts and tests, never assume
+      anything."*). The review is recorded in the VERDICT block near the top of this card: the
+      widened surface was re-derived first-hand, and the fail-closed branch that makes the whole
+      `manage-trdd` rule safe is **neuter-proven** (1 red / 28 green), not taken on the card's word.
 
 ## ⏱ VERIFIED 2026-08-02 — Part 3 was DONE and the doc still said it was not
 
@@ -226,3 +281,24 @@ yet" item, delete the paragraph in the same commit.
   TRDD-YEE33F3A: both extend the same `AuthAction` union and the same
   `authorize()` matrix, so landing them concurrently would conflict on every
   shared file. `blocked-by: [TRDD-YEE33F3A]` set accordingly.
+- 2026-08-22T17:12:48+0200 — HUMAN REVIEW PERFORMED, verdict **COMPLETE**, by
+  `ai-maestro-session` under the owner's explicit grant of 2026-08-22: *"i authorized you to
+  decide on my behalf, so you must do the human review and also decide all the rest. just decide
+  in base of verified facts and tests, never assume anything."* Decided on measurement, not on the
+  card's own claims: `scripts/dev/neuter` on `lib/authorization.ts`
+  (`s/    if \(!trdd\) \{/    if (false) {/`, 1 ins / 1 del, restore verified by blob hash) →
+  **1 red / 28 green**, the red being *"denies when no TRDD context is supplied (a guessed tier is
+  a guessed approval)"*. The one box needing a physical act nobody performed — an e2e with a real
+  `aim_tk_*` human session token — was **NOT ticked**; it is descoped to `TRDD-798OAHMX`, which
+  carries `assignee: null` because an agent holding that token would defeat the separation this
+  card decided.
+- 2026-08-22T17:2x — **`798OAHMX` is registered as an INDEPENDENT card, deliberately NOT as this
+  card's `eht:`.** Two verified facts, either sufficient: (a) this card is itself `derived: true`
+  (`derived-kind: eht` of `TRDD-SCLSRS6E`), and the depth-1 invariant in
+  `rules/aimaestro/aimaestro-trdd-approval.md` is explicit — *"`derived: true` ⇒ `npt: []` and
+  `eht: []`; no TRDD may name a `derived: true` TRDD as its `parent-trdd:`"* — so a D-TRDD cannot
+  carry an EHT at all; (b) an EHT is a post-condition closing a hole the change OPENED, and a
+  human-only assurance smoke is not that. Registering it as an EHT would also have made this card
+  permanently `blocked` on an act only a human can perform, which is the stall the drain rule
+  forbids. My first pass wrote `eht: [798OAHMX]`; it was wrong on both counts and is corrected
+  here rather than silently.

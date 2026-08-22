@@ -1,11 +1,11 @@
 ---
 trdd-id: IBKR7F74
 title: CLI verbs for the three DECOUPLE-BLOCKED COS operations
-column: blocked
+column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-08-19T04:32:22+0200
-updated: 2026-08-19T04:32:22+0200
+updated: 2026-08-22T17:19:18+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -16,8 +16,8 @@ mandated-by: self
 derived: false
 npt: []
 eht: []
-blocked-by: [K2WJH7RF]
-pre-block-column: todo
+blocked-by: []
+pre-block-column: null
 release-via: none
 relevant-rules: []
 labels: [cli-surface, decoupling, cos, fleet-reported, owner-ours]

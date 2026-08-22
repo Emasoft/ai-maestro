@@ -1,9 +1,9 @@
 ---
 trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
-column: blocked
+column: todo
 created: 2026-07-09T10:23:21+0200
-updated: 2026-08-21T17:23:49+0200
+updated: 2026-08-22T17:19:18+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -18,8 +18,8 @@ mandated-by: self
 min-approval-requirement: none
 npt: [TRDD-41FJM8A8, TRDD-TDFSELI1, TRDD-OOCL7ABZ, TRDD-229CJGYH, TRDD-KJQZEYXW, TRDD-GT0TAJFL]
 eht: [TRDD-280DF70U, TRDD-D3RP7KQZ, TRDD-4Q7WMPZK, TRDD-YEE33F3A, TRDD-K2WJH7RF, TRDD-WNZ72SFO, TRDD-QC8R79G5, TRDD-XV4ANN4P]
-blocked-by: [TRDD-K2WJH7RF]
-pre-block-column: complete
+blocked-by: []
+pre-block-column: null
 relevant-rules: []
 labels: [api, janitor, terminal-control, side-panel, task-api, script-layer, dev-browser, fleet]
 test-requirements: [unit, integration, e2e, dev-browser-headless]

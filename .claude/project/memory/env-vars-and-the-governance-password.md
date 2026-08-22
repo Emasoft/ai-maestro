@@ -1,13 +1,14 @@
 ---
 name: env-vars-and-the-governance-password
-description: "which env vars does ai-maestro actually read / I set an env var and nothing happened / where is the governance password stored / can I put the password in a scenario file or a shell command / why does a test need AIM_GOVERNANCE_PASSWORD / is .example.env safe to commit"
+description: "which env vars does ai-maestro actually read / I set an env var and nothing happened / where is the governance password stored / can I put the password in a scenario file or a shell command / why does a test need AIM_GOVERNANCE_PASSWORD / is .example.env safe to commit / how do I run tests while the owner is AWAY or absent / I set AI_MAESTRO_DEV_MODE=true and nothing happened / how do I enable dev mode / where does the dev-mode login token live"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-08-22
 metadata:
   node_type: memory
   type: reference
   tier: component
   topic: security-and-auth
+publish-globally: false
 ---
 
 # env-vars-and-the-governance-password
@@ -52,6 +53,39 @@ committed file.
 step, or a commit. Write the variable NAME, never the literal. A scenario's frontmatter says
 `governance_password: "$AIM_GOVERNANCE_PASSWORD"`; a step says *"call `aim_sudo_modal`"*, never
 *"type the password"*. A step that instructs anyone to type it is a bug in that step.[^2]
+
+
+^ATOM-M5K8-POQ1 [desc: "Dev mode is TWO halves with DIFFERENT homes: the ENABLE switch is dashboard-only in governance.json (no env var exists, deliberately); only the TOKEN is an env var, and the SHELL CLI reads it, never t", keywords: dev_mode AI_MAESTRO_DEV_MODE set_the_env_var_to_true_and_nothing_happened test_while_the_owner_is_away test_without_the_owner_present unattended_testing dev_mode_token AI_MAESTRO_DEV_MODE_TOKEN am-_prefix devModeLogin enable_dev_mode, type: reference, ocd: 2026-08-22, lmd: 2026-08-22]
+
+**Dev-mode login (`TRDD-A9335BZ6`) is split across two homes, and setting an env var to enable it
+does nothing.** Measured in `lib/dev-mode-token.ts` + `lib/dev-mode-token-constants.ts`:
+
+| half | where it lives | how it is set |
+|---|---|---|
+| the **ENABLE switch** | `governance.json` → `devModeLogin.enabled` | **dashboard only** — Settings → Security, behind the governance password AND a verified passkey |
+| the **TOKEN** | `.env.local` → `AI_MAESTRO_DEV_MODE_TOKEN` (value prefixed `am-`) | pasted by the owner; read **by the SHELL CLI only, never by this server** |
+
+**There is no `AI_MAESTRO_DEV_MODE` env var and you must not add one** — the file says so in its
+own header, citing the USER-ratified rule of `TRDD-CC9PY337` that a security-weakening setting
+WITH a dashboard equivalent is DELETED rather than gated, because *"a dev box is NOT a safe host:
+agents run under the SAME UID as the server, so a prompt-injected agent appends one `export` to
+~/.zshrc and the next restart picks it up"*. A `process.env` read there also trips the regression
+fence in `tests/unit/test-only-env.test.ts`.
+
+**The token is a CREDENTIAL, not a weakening setting** — which is why it is allowed in
+`.env.local` at all: possessing it *is* the authentication, the same category as the governance
+password. It stands in for that password at `POST /api/auth/login`, so it yields a **user-authority
+session**, and it is minted once (`mintDevToken()` is the only place it exists in cleartext),
+revocable (`revokeDevToken()`), and stored only as a SHA-256 hash.
+
+**What this buys, and it is the whole point of the feature: an agent can obtain user authority and
+run end-to-end tests with the owner ABSENT.** Treat the value exactly like the governance password
+— the shell resolves it from the environment, it never passes through a model, and no file names
+it. Check whether it is armed by reading `governance.json` → `devModeLogin.enabled` /
+`tokenHash` (booleans only; never print the hash).
+
+Related: [[env-var-security-delete-not-gate]] (the delete-not-gate rule this obeys),
+[[sudo-r32-agents-never-sudo]] (the agent-vs-human authority split it crosses).
 
 ## See also
 

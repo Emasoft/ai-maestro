@@ -66,7 +66,9 @@ const fs = await import('fs')
 // be this literal, and the moment prrdgrep/specgrep needed the same answer that literal
 // became one of two copies — where a CLI pointed at the wrong root does not fail, it
 // reports a confident "0 records" about a corpus it never read.
-const { PILLAR_KINDS, corpusRootFor } = await import('../lib/pillar/kinds.ts')
+const { PILLAR_KINDS, corpusRootFor, TRDD_KIND } = await import('../lib/pillar/kinds.ts')
+const { danglingTrddRefs } = await import('../lib/pillar/index-open.ts')
+const TRDD_NAME = TRDD_KIND.name
 const candidateRoots = Object.fromEntries(
   Object.values(PILLAR_KINDS).map((k) => [k.name, corpusRootFor(designDir, k)]),
 )
@@ -93,9 +95,22 @@ if (report.scanned === 0) {
   process.exit(2)
 }
 
+// Reference EXISTENCE — the half `dag.ts` delegates away and nothing used to run
+// (TRDD-216FTVC9). `danglingTrddRefs` THROWS on any fault rather than returning [],
+// and that throw is deliberately NOT caught here: the `uncaughtException` handler above
+// maps it to exit 2 (could not run). Swallowing it would print "the reference DAG
+// holds" over a check that never executed, which is the exact shape of defect this
+// call site exists to remove.
+//
+// FAIL on findings, not advisory: measured 2026-08-22 the corpus is CLEAN (0 dangling
+// across 252 edges / 140 targets / 501 cards), so there is no pre-existing backlog for
+// a failing lint to redden against — it can only ever fire on NEW breakage. A lint that
+// reddens on day one against a large legacy set is the one that gets routed around.
+const dangling = roots[TRDD_NAME] ? danglingTrddRefs(designDir) : []
+
 if (asJson) {
-  console.log(JSON.stringify({ ...report, designDir, skipped }, null, 2))
-  process.exit(report.findings.length > 0 ? 1 : 0)
+  console.log(JSON.stringify({ ...report, dangling, designDir, skipped }, null, 2))
+  process.exit(report.findings.length > 0 || dangling.length > 0 ? 1 : 0)
 }
 
 const counts = Object.entries(report.perPillar)
@@ -108,15 +123,23 @@ for (const f of report.findings) {
   console.log(`      ${f.detail}`)
 }
 
-if (report.findings.length === 0) {
-  console.log(C.g(`✓ ${report.scanned} documents (${counts}) — the reference DAG holds`))
+for (const d of dangling) {
+  console.log(`${C.r('ERROR')}\tDANGLING-REF\t${path.relative(process.cwd(), d.path)}`)
+  console.log(`      ${d.srcId} \`${d.field}\` cites ${d.dstId}, which resolves to no TRDD`)
+}
+
+if (report.findings.length === 0 && dangling.length === 0) {
+  console.log(
+    C.g(`✓ ${report.scanned} documents (${counts}) — the reference DAG holds, and every citation resolves`),
+  )
   console.log(
     C.d(`  fields checked: ${DEPENDENCY_FIELDS.join(', ')}` + (skipped.length ? `\n  not scanned: ${skipped.join(', ')}` : '')),
   )
   process.exit(0)
 }
 
-console.log(
-  C.b(`\n${report.scanned} scanned (${counts}) · ${C.r(`${report.findings.length} illegal edge(s)`)}\n`),
-)
+const parts = []
+if (report.findings.length) parts.push(C.r(`${report.findings.length} illegal edge(s)`))
+if (dangling.length) parts.push(C.r(`${dangling.length} dangling reference(s)`))
+console.log(C.b(`\n${report.scanned} scanned (${counts}) · ${parts.join(' · ')}\n`))
 process.exit(1)

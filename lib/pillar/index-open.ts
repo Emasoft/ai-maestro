@@ -25,7 +25,7 @@ import { statePath } from '../ecosystem-constants'
 import { BLOCKER_FIELDS } from '../trdd-graph'
 import { TRDD_KIND, TRDD_ZONES } from './kinds'
 import { openIndex, indexPath, corpusKeyFor } from './index-db'
-import { syncIndex } from './index-build'
+import { syncIndex, danglingRefs, type DanglingRef } from './index-build'
 
 /** Exactly the fields the graph subcommands read. Not a general card. */
 export interface GraphCard {
@@ -134,6 +134,38 @@ export function loadTrddGraphViaIndex(designDir: string): GraphCard[] {
   try {
     syncIndex(db, designDir, TRDD_KIND)
     return cardsFromIndex(db, TRDD_KIND.name)
+  } finally {
+    db.close()
+  }
+}
+
+/**
+ * Every TRDD reference that resolves to nothing (TRDD-216FTVC9).
+ *
+ * `dag.ts` checks edge DIRECTION and says so explicitly: *"NOT THIS LINT'S JOB: whether
+ * a cited target EXISTS. That is `danglingRefs` in `index-build.ts`."* That delegation
+ * was correct and unwired — `danglingRefs` had four test references and ZERO production
+ * callers, so nothing checked existence and `pillars-lint`'s "the reference DAG holds"
+ * was true about direction alone. This is the missing call site; the query itself is
+ * unchanged.
+ *
+ * Deliberately a SIBLING of `loadTrddGraphViaIndex` rather than a widening of it: the
+ * open/sync/close dance is identical and already proven, and the two callers want
+ * different rows. Same THROWS contract for the same reason — a fault must not read as
+ * "no dangling references", because a lint that cannot run and a lint that found
+ * nothing must never look the same. The caller maps the throw to could-not-run.
+ *
+ * TRDD-ONLY, and that is a real limit rather than an oversight: a SPEC citing a
+ * nonexistent TRDD would also be dangling, but `spec` carries no dependency fields
+ * today (see `dag.ts` — SPECS→TRDD is structurally unexpressible), so there is no
+ * second corpus to join yet.
+ */
+export function danglingTrddRefs(designDir: string): DanglingRef[] {
+  const file = indexPath(statePath('pillar-index'), corpusKeyFor(designDir))
+  const db = openIndex(file)
+  try {
+    syncIndex(db, designDir, TRDD_KIND)
+    return danglingRefs(db, TRDD_KIND.name)
   } finally {
     db.close()
   }

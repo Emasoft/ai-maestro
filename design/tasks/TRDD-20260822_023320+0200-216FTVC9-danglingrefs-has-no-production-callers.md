@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T02:33:20+0200
-updated: 2026-08-22T02:35:18+0200
+updated: 2026-08-22T03:04:55+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -105,15 +105,35 @@ choosing.** If it is small, fail. If it is large, report-only with a stated ratc
       for the measurement precisely because a lint that reddens against a large pre-existing
       backlog gets routed around rather than fixed. There is no backlog, so a failing lint can
       only ever redden on NEW breakage — the case where failing is right.
-- [ ] `danglingRefs` has at least one production caller, and `grep -rn danglingRefs` outside its
+- [x] `danglingRefs` has at least one production caller, and `grep -rn danglingRefs` outside its
       own file and its test returns a non-zero count.
-- [ ] A seeded dangling reference is FLAGGED — proven by mutation via `scripts/dev/neuter`, not by
+      → `lib/pillar/index-open.ts` exports `danglingTrddRefs(designDir)` (a SIBLING of
+      `loadTrddGraphViaIndex`, identical open/sync/close, different query), called from
+      `scripts/pillars-lint.mjs`. Commit `20d0bbfa`.
+- [x] A seeded dangling reference is FLAGGED — proven by mutation via `scripts/dev/neuter`, not by
       reading. (The existing test proves the function works; this proves the WIRING does.)
-- [ ] The exit-code contract is stated wherever the lint is documented, and follows the repo's
+      → **Proven twice, at two altitudes.** (a) CLI, on a scratch corpus so no real card was
+      touched: clean fixture → **exit 0** *"the reference DAG holds, and every citation
+      resolves"*; same fixture with `blocked-by` repointed at a nonexistent id → **exit 1**,
+      `ERROR DANGLING-REF`, naming source card, field and unresolvable target.
+      (b) **NEUTER, and this is the one that mattered.** Before the test existed,
+      `s|return danglingRefs(db, TRDD_KIND.name)|return []|` reddened **0 of 49** across the
+      three pillar suites — the call site I had just added was unpinned, so the next edit
+      would remove it silently. That is the same defect the wiring fixes, one layer up.
+      With `tests/unit/pillar-index-open.test.ts` (`b6ae9693`) the identical mutation reddens
+      **2 of 4** — exactly the two seeded assertions, while the clean-corpus and containment
+      tests correctly stay green.
+- [x] The exit-code contract is stated wherever the lint is documented, and follows the repo's
       trichotomy: `0` clean · `1` findings · `2` could not run.
+      → Stated at the call site in `pillars-lint.mjs`. The throw from `danglingTrddRefs` is
+      deliberately NOT caught: the file's existing `uncaughtException` handler maps it to
+      **exit 2**. Catching it would print *"the reference DAG holds"* over a check that never
+      executed — the exact shape of defect this card exists to remove.
 - [ ] `TRDD-L55IYKL4` box 2's scope-leak item is revisited, since this card is what makes its
       "already subsumed" rationale available or not.
-- [ ] `bash scripts/with-node.sh npx tsc --noEmit` clean; suite green.
+- [x] `bash scripts/with-node.sh npx tsc --noEmit` clean; suite green.
+      → tsc **exit 0**; `pillar-index-open` 4/4, and `pillar-lint` + `pillar-index-build` +
+      `pillar-graph-cli` 49/49 unchanged.
 
 ## Estimated risk
 

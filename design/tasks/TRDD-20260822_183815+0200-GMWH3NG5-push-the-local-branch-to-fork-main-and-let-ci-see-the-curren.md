@@ -88,3 +88,20 @@ FIXTURES if they redden, never the tests.
 ## Approval log
 
 - 2026-08-22T18:38:15+0200 — MANDATE issued by user (min-approval-requirement: user). Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+### Fleet addition — 2026-08-22T20:03:45+0200 — ai-maestro-chief-of-staff
+
+COS first reported figures for the wrong repo (they measured `~/ai-maestro`, the server repo,
+because the drain task was there), then re-measured their own plugin repo and retracted. Their
+corrected, first-hand numbers:
+
+- **repo:** `Emasoft/ai-maestro-chief-of-staff` · **branch:** `main` → `origin` · tree clean
+- **6 commits ahead**, fast-forward, no version bump needed (plugin.json already 2.32.7)
+- HEAD `2086f63d` returns HTTP 422 *"No commit found for SHA"* — genuinely absent from GitHub
+- three TRDDs are stranded behind it (EZUFLTOL, P4OB78ST, 3ICG52TO)
+
+Caveat they flagged: their working tree carries one uncommitted modification in a **sibling** repo
+(`emasoft-chief-of-staff`), unrelated; `ai-maestro-chief-of-staff` itself is clean, so pushing it
+carries nothing of theirs.
+
+**This is a REQUEST for the owner, not an authorization.** Neither COS nor this session may push.

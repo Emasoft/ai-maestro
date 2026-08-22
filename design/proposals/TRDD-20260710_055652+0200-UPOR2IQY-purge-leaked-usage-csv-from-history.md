@@ -3,7 +3,7 @@ trdd-id: UPOR2IQY
 title: Decide how to purge the leaked usage-export CSV from public git history
 column: proposal
 created: 2026-07-10T05:56:52+0200
-updated: 2026-07-10T05:56:52+0200
+updated: 2026-08-22T15:01:54+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: null
@@ -115,3 +115,32 @@ on the record, not the default that happens by not deciding.
   public-facing, and touching shared identity. Standing by.
 
 ## Notes and lessons learned
+
+## RE-MEASURED 2026-08-22T15:0x — the "not on main" premise is STALE, and it understates severity
+
+Verified first-hand, metadata only — the blob's CONTENT was never read, printed, or copied:
+
+```
+git cat-file -t 0b72a0d2        → blob
+git cat-file -s 0b72a0d2        → 1525763              (~1.5 MB)
+path in history                 → logs_dev/usage-export-2026-03-22.csv
+git branch -r --contains <c>    → fork/main, fork/HEAD, fork/governance-rules
+git check-ignore -v <path>      → .gitignore:134  logs_dev/
+```
+
+**It is reachable from `fork/main`, and `fork` is `Emasoft/ai-maestro` — a PUBLIC repo.** Any
+statement in this card that the blob sits only on side branches is superseded: it is on the
+default branch of a public repository.
+
+**The recurrence is closed; the blob was never purged.** The path is gitignored today, and one of
+the commits touching it is titled *"fix(gitignore): a _dev folder was tracked, and it published
+private data"* — so the leak was stopped going forward and the history was left as it was. That is
+the ordinary shape of this bug, and it is why a card like this goes stale in the SAFE-sounding
+direction: everything visible looks fixed.
+
+**Still OWNER-ONLY, and nothing was attempted.** A history purge is irreversible and rewrites a
+published branch — Tier 3 by any reading, and doubly forbidden to this session (no push, no
+history rewrite). Recorded here rather than acted on.
+
+**Re-derive rather than trust these lines** — a reachability fact has a silent timestamp:
+`git branch -r --contains $(git log --all --format=%H --find-object=0b72a0d2 | head -1)`

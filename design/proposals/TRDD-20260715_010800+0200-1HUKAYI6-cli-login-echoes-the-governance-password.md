@@ -8,7 +8,7 @@ severity: critical
 effort: small
 task-type: security
 created: 2026-07-15T01:08:00+0200
-updated: 2026-07-15T01:08:00+0200
+updated: 2026-08-22T15:01:54+0200
 scope: project
 labels: [scenario-improvement, scen-029]
 current-owner: scenario-runner
@@ -82,3 +82,27 @@ was invoked through a pty should be rotated
 (`POST /api/governance/password/invalidate`, Settings → Revoke).
 
 ## Approval log
+
+## VERIFIED STALE 2026-08-22T15:0x — no live defect. Do not spend an owner decision here.
+
+The claim under test is *"echoes the governance password when stdin is NOT a keyboard."* Read
+first-hand in `scripts/aimaestro-governance.sh`; **both non-TTY paths refute it:**
+
+- `:321` `cmd_invalidate_password` — `if [ ! -t 0 ]; then … exit 1`. It **REFUSES** a non-TTY
+  outright, with an explicit error saying the password is never taken as an argument or env var.
+- `:372` `cmd_login` — the TTY branch prompts and uses `read -rs`. The **non-TTY branch no longer
+  reads a password at all**: it takes an env var or the gitignored `.env.local`, and passes the
+  secret to `jq` **via stdin, not `--arg`** (fixed 2026-08-21, `2b881dcf` — *"unattended dev-mode
+  login"*), precisely so it never enters any process's argv.
+
+**A false positive worth recording, because it will be re-proposed otherwise.** A verification
+pass on this card returned CONFIRMED on the ground that `read -rs` appears "with no `stty -echo`".
+That is not a defect: **`read -s` IS bash's echo suppression.** `stty -echo` is an ALTERNATIVE
+mechanism, not a required addition, and this file's own comment at `:312` states the design —
+*"The password is read with `read -s` from the terminal. NEVER an argument, never an env var on
+the command line."* Anyone re-auditing this should check what `-s` does before treating its
+presence-without-`stty` as a finding.
+
+**Recommended disposition: REFUSE as superseded by measurement, or close it.** Keeping it open
+costs an owner decision on a non-issue — and, worse, it sits in a batch beside three CONFIRMED
+security items where one stale entry is what lets a reader discount the rest.

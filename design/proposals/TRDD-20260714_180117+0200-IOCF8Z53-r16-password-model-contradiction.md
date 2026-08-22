@@ -3,7 +3,7 @@ trdd-id: IOCF8Z53
 title: R16 says agents never hold the governance password — the shipped product requires them to
 column: proposal
 created: 2026-07-14T18:01:17+0200
-updated: 2026-07-14T18:01:17+0200
+updated: 2026-08-22T15:01:54+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -122,3 +122,32 @@ privilege-escalation substrate, and closing individual routes (as `a5256fd8` did
 the premise.
 
 ## Approval log
+
+## RE-VERIFIED 2026-08-22T15:0x — CONFIRMED, and NARROWER than filed
+
+Read `services/element-management-service.ts:8324-8345` first-hand — `DeleteTeam` gate **G00b**:
+
+```ts
+if (config.passwordHash) {
+  if (!options?.password) {
+    result.error = 'Team deletion requires governance password'
+    ops.push('G00b: DENIED — governance password not provided'); return result
+  }
+  … const valid = await verifyPassword(options.password)
+```
+
+When a governance password is configured, team deletion **unconditionally demands the RAW
+password** — from a caller that has ALREADY passed AID + title authorization. Reached via
+`DELETE /api/teams/[id]` and `aimaestro-teams.sh delete --password`. An agent cannot satisfy that
+without holding the secret, which is what R16 (*Password Never Shared with Agents*) forbids. The
+contradiction is live at this site.
+
+**NARROWER than this card filed.** A verification pass reports that the card's other two facts —
+the create-team CLI and the COS route — were already fixed under `TRDD-1LX5LMBD` / `RIFM4UXN`,
+leaving `DeleteTeam` as the sole surviving site. **That scope claim was NOT re-derived here**; the
+surviving site was. Anyone acting on this should re-check the other two rather than assume either
+that they are fixed or that they are not.
+
+**Why the narrowing matters for the decision:** a three-site contradiction reads as an
+architectural problem; a one-site contradiction reads as a bug in one gate. The remedy differs
+accordingly — and the second is what the measurement supports today.

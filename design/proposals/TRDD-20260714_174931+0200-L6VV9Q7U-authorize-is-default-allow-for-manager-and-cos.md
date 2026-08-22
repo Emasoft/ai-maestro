@@ -3,7 +3,7 @@ trdd-id: L6VV9Q7U
 title: authorize() is default-ALLOW for MANAGER and COS — every new AuthAction is a silent grant
 column: proposal
 created: 2026-07-14T17:49:31+0200
-updated: 2026-07-14T17:49:31+0200
+updated: 2026-08-22T15:01:54+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -173,3 +173,33 @@ change individual rows afterwards. That sequencing is recommended: it removes th
 defect immediately without pretending an engineer may settle a governance question.
 
 ## Approval log
+
+## RE-VERIFIED 2026-08-22T15:0x — the claim HOLDS against live code
+
+Read `lib/authorization.ts:624-640` first-hand. After the per-action gates fall through:
+
+```ts
+// MANAGER → always allowed (for actions on OTHER agents)
+if (title === 'manager') { return { allowed: true } }
+
+// CHIEF-OF-STAFF → own team agents only (target required for agent-scoped actions)
+if (title === 'chief-of-staff') { … if (cosTeamId === targetTeamId) return { allowed: true } … }
+
+// All other titles → denied (no agent can modify other agents)
+```
+
+MANAGER is an **unconditional allow** on the fall-through path; COS is a team-scoped allow on the
+same path; every other title is denied. So an `AuthAction` that has no dedicated branch above is
+granted to MANAGER and COS **by default**, and adding a new action grants it silently — which is
+this card's claim, unchanged.
+
+**Scope note — what was and was NOT re-derived.** A verification pass reported *"9 of 18
+AuthActions have no dedicated gate."* That tally is **not** re-derived here; only the STRUCTURE is
+verified. Treat the count as needing its own measurement before it is quoted as a number — the
+default-allow shape is the part that is measured.
+
+**The fix direction this implies (not decided here):** the safe default for a new enum value is
+DENY, so the fall-through should refuse an action it does not recognise rather than admit it. That
+is a behaviour change with real blast radius — every MANAGER/COS action that currently relies on
+the fall-through would need an explicit branch first, or it breaks. Sequence it that way round:
+enumerate and gate the actions that legitimately pass today, THEN invert the default.

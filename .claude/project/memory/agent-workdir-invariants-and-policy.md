@@ -1,13 +1,14 @@
 ---
 name: agent-workdir-invariants-and-policy
-description: "why did my agent's shipped rule file come back / why is aimaestro-rules.md read-only / where are agent workdir guarantees declared / why can't this agent use this directory / can an agent adopt an existing project folder / what does checkAuthorizedAgentWorkdir do / is the workdir policy a security sandbox / why is core-plugin invariant wake-only"
+description: "why did my agent's shipped rule file come back / why is aimaestro-rules.md read-only / where are agent workdir guarantees declared / why can't this agent use this directory / can an agent adopt an existing project folder / what does checkAuthorizedAgentWorkdir do / is the workdir policy a security sandbox / why is core-plugin invariant wake-only / which workdir check do I use when creating an agent / checkAdoptableWorkdir vs checkAuthorizedAgentWorkdir / creation-time vs runtime workdir gate / an agent got created outside the agents folder / why does element-management hand-roll its own agentsRoot check"
 ocd: 2026-08-02
-lmd: 2026-08-02
+lmd: 2026-08-22
 metadata:
   node_type: memory
   type: reference
   tier: component
   topic: agents
+publish-globally: false
 ---
 
 # agent-workdir-invariants-and-policy
@@ -90,6 +91,45 @@ workdirs are now sandboxed".
 - **Folders route** (`GET /api/agents/folders`): soft-deleted agents' folders are no longer marked taken (tombstone filter), and the browsed path is enriched with `githubRepo` (pure-fs read of `.git/config`).
 - **Maintainer wizard order** is `title → folder → github-repo → summary`, with `githubRepo` prefilled from the browsed folder's origin (Gate 9a requires it for MAINTAINER, R19.3).
 - Deletion semantics: SOFT delete keeps the folder and the registry tombstone (re-adoption over a tombstone works); HARD delete (`?hard=true&deleteFolder=true`) honors `deleteFolder` and removes both — folder removal only ever applies under `~/agents/` (G03-SAFETY guard).
+
+
+^ATOM-P185-1V0S [desc: "TWO workdir questions, not one: checkAdoptableWorkdir is CREATION (path policy only), checkAuthorizedAgentWorkdir is RUNTIME and ALLOWS an external dir a live agent already owns", keywords: which_workdir_check_do_I_use checkAdoptableWorkdir_vs_checkAuthorizedAgentWorkdir creation_time_vs_runtime_workdir_gate agent_created_outside_the_agents_folder routing_a_creation_gate_through_the_runtime_verb hand-rolled_agentsRoot_prefix_check wizard_containment_gate, ocd: 2026-08-22, lmd: 2026-08-22]
+
+`lib/agent-workdir-policy.ts` answers TWO DIFFERENT QUESTIONS and picking the wrong one is a
+security regression, not a style choice:
+
+- **`checkAdoptableWorkdir(dir, allowExternal)` — CREATION.** The agent does not exist yet, so
+  there is nothing to check it against; only the path policy applies.
+- **`checkAuthorizedAgentWorkdir(cwd, agentName?)` — RUNTIME.** The agent exists, so it verifies
+  the directory against the REGISTRY — and therefore **ALLOWS an external directory when that
+  directory is the registered workdir of a live agent.**
+
+**Route a CREATION gate through the RUNTIME verb and the wizard's containment weakens: an existing
+agent's adopted external folder would authorize a NEW agent there.** Pick the verb per CALLER,
+never per file — the same shape as a function that is both an operation and a compensation, where
+a verdict correct for one caller is catastrophic for the other.
+
+**Measured 2026-08-22** (production callers only, `.test.` and the defining file excluded;
+positive control: a widely-used symbol returns 14 files, so a zero here is real absence):
+the RUNTIME verb has **7** importers (`boot-restore-service`, `browse-dir/route`, `agent-runtime`,
+`fleet-restart-fanout`, `agent-registry`, `tmux-server-keychain-watchdog`, `workdir-path-policy`).
+The CREATION verb has **ZERO**. It was built and nothing calls it.
+
+Meanwhile `services/element-management-service.ts` hand-rolls the same rule in FIVE places, with
+three different path builders (`resolve(HOME,'agents')`, `resolveG08c(HOME,'agents')`,
+`join(HOME,'agents')`) and four subtly different predicates at `:7341`, `:9428`, `:9553`,
+`:10043`. `agents-core-service.ts`, `element-management-service.ts` and `agents-transfer-service.ts`
+import the policy module **zero** times between them — so `createSession`, `ChangeFolder` and
+`importAgent` are all still on hand-rolled checks.
+
+⚠ **`TRDD-WLWHVMKT`'s box 1 is WRONG as written** — it says route every call site through "the
+authority" as if there were one question. Following it literally causes the regression above. The
+correct remaining work is: route the CREATION sites through `checkAdoptableWorkdir`, one site at a
+time, with a neuter per site and a full suite between.
+
+**Not a containment boundary, and the module says so:** on a shared UID a same-UID process can
+write anywhere the kernel allows. What this provides is an AUTHORIZATION check — the system
+agreeing with itself about which directory it handed an agent.
 
 ## See also
 

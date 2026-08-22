@@ -238,8 +238,15 @@ human's read and the one before it needs a credential an agent must not hold.
 - [x] **`ai-maestro-janitor#76` is corrected** — read live: a comment titled *"CORRECTION — the five
       TRDD write verbs are now LIVE for agents"* says the issue's command reference *"told you to
       skip"* them and that this is *"no longer true"*
-- [ ] **end to end with a real `aim_tk_*` token** — tracked as `TRDD-798OAHMX`, **assigned to this
-      session and PERFORMABLE — not a park.** ⚠ **This box's own stated reason is FALSE and was
+- [x] **end to end with a real `aim_tk_*` token** — **RUN 2026-08-22T17:31**, unattended, and it
+      found two real bugs (`TRDD-MWKCBLQN`, `TRDD-P6MSMQ2I`). All five write verbs PASS against the
+      real routes with four controls, including the one that closes this card's own body worry:
+      `--state failed` is refused by the raw route (`HTTP 400`), so the wrapper is NOT the only
+      guard. **Scope actually covered: the USER subject class.** The AGENT-subject half needs an
+      `aim_tk_` from Ed25519 PoP against a REGISTERED agent's keypair — `AID_AUTH` is unset in this
+      session, so obtaining one would mean borrowing another agent's identity. That half stays open
+      on `TRDD-798OAHMX`, which names it explicitly. Full run table on that card.
+      Original box, and the premise that was wrong for 20 days: ⚠ **This box's own stated reason is FALSE and was
       believed for 20 days.** It read *"Needs a live human session token; an agent holding one would
       defeat the very separation this card decided."* Both halves are wrong: (a) `aim_tk_` is ONE
       prefix minted for BOTH subject classes (`lib/aid-token.ts:375` agent, `:426` user) and the

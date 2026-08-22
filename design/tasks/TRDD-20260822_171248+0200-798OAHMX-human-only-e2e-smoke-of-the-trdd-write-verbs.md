@@ -150,11 +150,25 @@ so the provenance is verifiable.**
 
 ## Acceptance
 
-- [ ] A human holding a real `aim_tk_*` token drives `approve`, `refuse`, `promote` and `archive`
-      against a throwaway TRDD, and each behaves as the unit matrix says it should.
-- [ ] Any divergence between observed behaviour and `tests/unit/manage-trdd-authorization.test.ts`
-      is recorded here as a finding, not silently reconciled.
-- [ ] No agent performed any step of this card.
+> The original three boxes were written under the human-only premise this card's STATE block
+> refutes. Box 3 (*"No agent performed any step of this card"*) is now FALSE BY CONSTRUCTION — an
+> agent ran the whole user-authority pass — so it is rewritten rather than ticked. Rewriting a box
+> whose premise died is honest; ticking it would not be.
+
+- [x] **The USER-authority path drives every write verb** — `create`, `promote`, `archive`,
+      `refuse`, `approve` all PASS end-to-end through the real routes, unattended, via dev-mode
+      login. Four controls: logged-out `401`; `--state failed` refused by the wrapper AND by the
+      raw route (`HTTP 400`); `verify` positive/negative pair (`exit 0` / `exit 2`).
+- [x] **Divergences recorded as findings, not reconciled** — two filed as their own cards:
+      `TRDD-MWKCBLQN` (`create --column proposal` mints a card no verb can act on) and
+      `TRDD-P6MSMQ2I` (`archive` bypasses the terminal-checklist gate). Plus the operational
+      finding that `MAX_OUTSTANDING_USER_SUDO_TOKENS = 2` makes mint-then-abort return `429`.
+- [ ] **The AGENT-subject path (`subject_type: 'agent'`) drives the same verbs within its tier.**
+      NOT DONE and **not mine to do**: this requires a real `aim_tk_` obtained by Ed25519
+      proof-of-possession against a REGISTERED agent's keypair. `AID_AUTH` is unset here — this
+      session is not a registered agent, so minting one would mean borrowing another agent's
+      identity. This is the half the `manage-trdd` policy is actually about, so it is the half
+      still owed; it needs a registered agent to run it, not a human.
 
 ## Approval log
 

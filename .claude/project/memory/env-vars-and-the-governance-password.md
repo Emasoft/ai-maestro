@@ -86,8 +86,10 @@ it. Check whether it is armed by reading `governance.json` → `devModeLogin.ena
 
 Part of [[password-and-credential-system]] — the hub that inventories every credential class.
 
-Related: [[env-var-security-delete-not-gate]] (the delete-not-gate rule this obeys),
-[[sudo-r32-agents-never-sudo]] (the agent-vs-human authority split it crosses).
+Related: [[env-var-security-delete-not-gate]] (the delete-not-gate rule this obeys). The
+agent-vs-human authority split it crosses is summarised on the hub above — deliberately NOT linked
+to the LOCAL page that details it, because this page is PROJECT-scope and PUSHED, so a downward
+link would dangle for every other cloner.
 
 ## See also
 

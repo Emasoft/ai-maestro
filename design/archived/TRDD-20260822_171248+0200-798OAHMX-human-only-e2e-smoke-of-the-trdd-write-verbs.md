@@ -1,12 +1,12 @@
 ---
 trdd-id: 798OAHMX
 title: End-to-end smoke of the TRDD write verbs with a real aim_tk token via dev-mode login
-column: dev
+column: completed
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T17:12:48+0200
-updated: 2026-08-22T17:12:48+0200
+updated: 2026-08-22T17:11:26.787Z
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: ai-maestro-session
@@ -181,15 +181,66 @@ hand-editing `column:`, including `OX5TT5OT` earlier today.
       `TRDD-MWKCBLQN` (`create --column proposal` mints a card no verb can act on) and
       `TRDD-P6MSMQ2I` (`archive` bypasses the terminal-checklist gate). Plus the operational
       finding that `MAX_OUTSTANDING_USER_SUDO_TOKENS = 2` makes mint-then-abort return `429`.
-- [ ] **The AGENT-subject path (`subject_type: 'agent'`) drives the same verbs within its tier.**
-      NOT DONE and **not mine to do**: this requires a real `aim_tk_` obtained by Ed25519
-      proof-of-possession against a REGISTERED agent's keypair. `AID_AUTH` is unset here — this
-      session is not a registered agent, so minting one would mean borrowing another agent's
-      identity. This is the half the `manage-trdd` policy is actually about, so it is the half
-      still owed; it needs a registered agent to run it, not a human.
+- [~] **The AGENT-subject path (`subject_type: 'agent'`) drives the same verbs within its tier.**
+      **DESCOPED to TRDD-N6V7WB69.** NOT DONE and **not mine to do**: it requires a real `aim_tk_`
+      obtained by Ed25519 proof-of-possession against a REGISTERED agent's keypair. `AID_AUTH` is
+      unset here — this session is an owner console, not a registered agent (`isSystemOwner` is
+      derived from the ABSENCE of an `agentId`), so minting one would mean borrowing another
+      agent's identity, which `403 aid_no_ledger_history` exists to prevent. This is the half the
+      `manage-trdd` policy is actually about, so it is the half still owed; it needs a registered
+      agent to run it, not a human.
+      **Measured while descoping:** `GET /api/agents` returns 11 registered agents, of which
+      exactly two are `active` with a governance title (`frank`/autonomous, `testbot`/manager) —
+      so a runner EXISTS. It was deliberately not dispatched: steering a live fleet agent
+      unattended is a fleet action, and neither agent's provenance was established.
 
 ## Approval log
 
 - 2026-08-22T17:12:48+0200 — MANDATE (self, Tier-0): a derived EHT descoped from `K2WJH7RF` to let
   that card close on its decided-and-implemented policy. Creating the card is in-scope and
   reversible; performing it is not mine and never will be.
+- 2026-08-22T17:11:21.385Z — column → complete. Human review under the owner's standing grant. The user-authority half is delivered (5 verbs, 4 controls, 2 bugs filed as MWKCBLQN and P6MSMQ2I). The agent-subject box is unreachable from an owner console BY CONSTRUCTION - isSystemOwner is derived from the ABSENCE of an agentId, and an agent token needs Ed25519 PoP against a registered record - so it is descoped to TRDD-N6V7WB69. Measured while descoping: 11 registered agents, 2 active with a title (frank, testbot), so a runner exists and was deliberately NOT dispatched - steering a live fleet agent unattended is a fleet action and neither agent's provenance was established. This was the board's only dev card; dev now reads zero honestly.
+- 2026-08-22T17:11:26.787Z — COMPLETED by user. User-authority half delivered; agent-subject half descoped to TRDD-N6V7WB69 as structurally unreachable from an owner console..
+
+## ⏹ 2026-08-22T19:1x+0200 — REVIEW VERDICT: COMPLETE (agent half descoped); `dev` goes to ZERO
+
+Reviewed under the owner's standing grant. This was the board's **only** `dev` card, and `dev`
+asserts someone is working it right now. Nobody was, and nobody could: its one open box is
+unreachable from an owner console by construction, not by effort. A column that claims active
+work on a card that cannot proceed is the failure the pipeline rule names — *an untrue column is
+worse than an unstarted card, because it hides the stall from the only view anyone checks.*
+
+### The descope is structural, and the check that proves it
+
+The box needs a token this session cannot legitimately hold. Two complementary gates say so, and
+they are complements on purpose:
+
+```
+app/api/v1/auth/token/route.ts   agent token → registered record + Ed25519 PoP + signed-ledger
+                                 association, else 403 aid_no_ledger_history
+lib/agent-auth.ts:373            isSystemOwner is derived from the ABSENCE of an agentId
+/api/auth/sudo-password          403 sudo_user_only — refuses agents
+```
+
+An owner console is defined by NOT being an agent, so it cannot become one to test the agent path.
+Minting a token for an existing agent would be identity borrowing, which is the thing the ledger
+gate is there to stop.
+
+### A runner exists, and it was deliberately not used
+
+`GET /api/agents` (authenticated) → **11** registered agents. Two are `active` with a governance
+title: `frank` (autonomous), `testbot` (manager). The other nine are `offline` with **no** title —
+the structural signature of the owner's pre-fork agents, which are never to be driven and never to
+be identified by a name list.
+
+So the box was not blocked for want of a runner; it was blocked because dispatching one is a
+**fleet action** taken unattended on an agent whose provenance nobody has established. Manufacturing
+a route around a correctly-stated limit is not delivery. `TRDD-N6V7WB69` carries the run with its
+precondition, the tier-boundary cases, and the do-nots.
+
+### What this card DID deliver, and it is the larger half
+
+Five verbs end-to-end through the real routes, unattended, with four controls — and it found two
+real defects (`MWKCBLQN`, `P6MSMQ2I`) plus the operational `MAX_OUTSTANDING_USER_SUDO_TOKENS = 2`
+behaviour that makes mint-then-abort return `429`. Both defects were **recorded, not reconciled**,
+which is what makes them survive as findings instead of dissolving into a green run.

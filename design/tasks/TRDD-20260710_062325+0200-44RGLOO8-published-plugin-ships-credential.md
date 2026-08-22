@@ -6,9 +6,10 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-08-22T15:12:13+0200
+updated: 2026-08-22T19:14:02+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
+assignee: ai-maestro-hub
 priority: 1
 severity: major
 effort: S
@@ -397,9 +398,23 @@ why it could be written at all (a checklist invented from a title is fabrication
 
 **Yours alone:**
 
-- [ ] **USER DECISION — tags `v0.1.1`–`v0.1.3`: deleted, or left standing?** Now that the string is
-      dead, *left standing* is defensible and avoids a history rewrite. The issue proposes neither,
-      deliberately. This is the box that keeps the card in `human_review`.
+- [x] **USER DECISION — tags `v0.1.1`–`v0.1.3`: deleted, or left standing? RULED 2026-08-22:
+      LEFT STANDING.** Decided under the owner's standing grant, and it is the one box here that a
+      ruling can close, because *left standing* requires **no act at all** — deleting a published
+      tag on a PUBLIC repo is an irreversible history-affecting write, which the grant does not
+      cover, while keeping it is the safe direction the card itself already called defensible.
+      **The evidence had to be re-taken, because this card's own proof instrument rotted.** The
+      box above proved the published value pre-dates the rotation using the repo's `pushedAt`
+      (then `2026-07-08T16:48Z`). That field has since moved to **`2026-08-16T08:13:10Z`** — the
+      PR branch push — so the original proof now *fails*, while the fact it proved is unchanged.
+      The durable instrument is the TAG dates, which cannot move:
+      `v0.1.1` 2026-07-08T16:34:31Z · `v0.1.2` 16:42:46Z · `v0.1.3` 16:48:08Z — all **nine days
+      before** the 2026-07-17 rotation (`TRDD-E9BZ5P7S`). So every tagged artifact carries a
+      superseded string, proved by a date comparison, with neither value read, printed, or
+      compared. A dead string in a public tag is hygiene and a false signal; a tag deletion is a
+      public history rewrite that buys nothing against a value that is already spent.
+      **The owner may overrule this** — it costs one `git push --delete`; the ruling is recorded
+      so the card stops asserting an open question it had already answered in its own prose.
 
 ## Notes and lessons learned
 
@@ -441,3 +456,66 @@ search for its value at any point here (every probe above is a structural string
 **NEXT ACTION (owner):** merge `Emasoft/ai-maestro-web-scenario-tester#4` and cut a release, or say
 why not. Re-derive rather than trust this block:
 `gh pr view 4 --repo Emasoft/ai-maestro-web-scenario-tester --json state,mergedAt`
+
+## ⏹ 2026-08-22T19:1x+0200 — REVIEWED AND **HELD** in `human_review`, deliberately
+
+Reviewed under the owner's standing decide-on-my-behalf grant. **The verdict is to HOLD, not to
+close** — recorded so that this card's stillness is a decision with a reason, not a stall.
+
+### Why this one does not get the descope-and-close treatment
+
+Two other cards were closed today by reshaping owner-gated boxes to `[~]`, descoping them, and
+archiving the parent. **That would be wrong here, and the difference is worth stating** so the
+next reviewer does not "tidy" it:
+
+- Those cards' defects were **already fixed**; only a shipping act remained.
+- This card's defect is **LIVE on a PUBLIC repo right now.** The fix exists only in an unmerged
+  branch, so `master` — and every consumer of the latest release — still carries the guidance
+  that mandates writing a literal credential into a committed file.
+
+Archiving a security card while its defect is public would make the board assert the exposure is
+handled. That is the *"a stalled card is worse than an unstarted one, because it looks handled"*
+failure, inverted: closing it would look like resolution and would BE concealment. The card stays
+where a human sees it until the act happens.
+
+### Re-derived today — nothing moved in 6 days
+
+```
+$ gh pr view 4 --repo Emasoft/ai-maestro-web-scenario-tester \
+      --json state,mergedAt,mergeable,reviewDecision,createdAt
+    state OPEN · mergedAt null · mergeable MERGEABLE · reviewDecision "" (none)
+    createdAt 2026-08-16T08:07:58Z          → 6 days open, no reviewer, no blocker
+$ gh repo view … --json visibility,defaultBranchRef,pushedAt
+    PUBLIC · master · pushedAt 2026-08-16T08:13:10Z
+$ gh release list …
+    v0.1.3  Latest  2026-07-08T16:48:08Z    → a month older than the fix
+```
+
+`mergeable: MERGEABLE` with `reviewDecision` empty is the important pair: **nothing is blocking
+the merge except the decision to make it.** There is no conflict, no failing check, no pending
+review to wait on.
+
+### What is left, in one sentence
+
+**One act:** merge `Emasoft/ai-maestro-web-scenario-tester#4` and cut a release. It closes the
+two remaining boxes together — the literals leave `master` and the marketplace resolves a clean
+version. It is a release transition into a PUBLIC repo (NON-EXEMPT,
+`aimaestro-manager-approval-defaults.md` §Y) in ANOTHER project, so
+`~/.claude/rules/how-to-fix-issues-of-other-projects.md` forbids this session from performing it
+— *"do NOT push to PROJECT B's master … do NOT run PROJECT B's publish pipeline from this
+session"*. The gate is the RULE, not the tooling: the ratified baseline sets
+`required_approving_review_count: 0`, so the button is mechanically available, which is exactly
+why the restraint has to come from the rule.
+
+### One box DID close, and only because it needed no act
+
+The tag question is ruled **LEFT STANDING** (see the box). It is the shape worth generalising
+from today: *a ruling and an act are different things, and a box that reads as an owner act may
+only need an owner RULING* — the same mis-framing found on `GIONLYAF`'s disposal box an hour
+earlier, where "dispose?" was answerable KEEP without touching anything.
+
+### What was NOT done, and will not be
+
+The credential was not read, printed, searched for, or compared at any point. Every probe above
+is a structural string or a date. **An agent must never rotate a credential**, and proving a
+secret is safe by handling the secret is the shape this whole card exists to stop.

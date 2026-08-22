@@ -3,7 +3,7 @@ trdd-id: CAVCTULL
 title: The agent-route authorization coverage guard misses the whole collection subtree
 column: todo
 created: 2026-08-22T21:34:26+0200
-updated: 2026-08-22T22:13:49+0200
+updated: 2026-08-22T22:20:46+0200
 current-owner: main
 created-by: main
 task-type: security
@@ -13,7 +13,7 @@ mandated-by: user
 approved: true
 approval-judge: main
 approval-datetime: 2026-08-22T21:34:26+0200
-external-refs: [TRDD-F1SL03CK]
+external-refs: [TRDD-F1SL03CK, TRDD-JWE3CFLV, TRDD-FRRJ80YQ]
 ---
 
 # The agent-route authorization coverage guard misses the whole collection subtree
@@ -126,7 +126,9 @@ loudly instead of reporting clean.
 - [x] `POST /api/agents` pinned BY NAME to `authorize(auth, 'create-agent')` — the one route whose
       missing authorization was a live hole should regress loudly, not as a ledger diff
 - [ ] the 19 decided one at a time, shrinking the ledger (each its own card if it turns out real)
-- [ ] the 12 forward-only routes verified against their pipelines' Gate 0
+- [x] the 12 forward-only routes verified against their pipelines' Gate 0 — **all 12 done**, see
+      the section below. 1 was a live hole (TRDD-JWE3CFLV, fixed), 11 are covered, and the sweep
+      turned up one latent finding one layer down (TRDD-FRRJ80YQ)
 
 ## 1 of the 12 forward-only routes VERIFIED — and it was a hole (TRDD-JWE3CFLV)
 
@@ -150,6 +152,41 @@ output-styles. Fixed and pinned under **TRDD-JWE3CFLV** (`6d66db22`).
 carries no STRONG needle of its own and remains forward-only — correctly. What changed is that ONE
 of the twelve is now VERIFIED. **11 remain**, and the first one checked was a defect, so the
 remaining eleven should not be assumed clean.
+
+## ALL 12 FORWARD-ONLY ROUTES VERIFIED — 2026-08-22T22:20+0200
+
+| route | forwards into | verdict |
+|---|---|---|
+| `[id]/remove-element` | `ChangeSkill`✓ `ChangeMCP`✓ + `ChangeAgentDef`/`Command`/`Rule`/`OutputStyle` | **WAS A HOLE** → TRDD-JWE3CFLV |
+| `[id]/local-plugins` | `ChangePlugin` — `gate0Auth` @4632 | COVERED |
+| `[id]/metadata` | `ChangeMetadata` — `gate0Auth` @7574 | COVERED |
+| `[id]/continuity/ensure-resume` | `wakeAgent` @2145 **+** a route-level R42 self-only check | COVERED (doubly) |
+| `[id]/hibernate` | `hibernateAgent` — `authorize('hibernate-agent')` @2590 | COVERED |
+| `[id]/wake` | `wakeAgent` — `authorize('wake-agent')` @2145 | COVERED |
+| `register` | `registerAgent` — `authorize('register-agent')` @1074 | COVERED |
+| `[id]/element-inventory` | ledger — target compared against caller | SELF-SCOPED-OK |
+| `[id]/messages` | `sendMessage` — `401` if no context @315, `forbidden_sender_mismatch` @318 | AUTHORIZED-ELSEWHERE |
+| `[id]/messages/[messageId]` | same service, mailbox owned by path `[id]` | SELF-SCOPED-OK |
+| `[id]/metrics` | `denyForeignMetrics` compares caller vs path id | SELF-SCOPED-OK |
+| `creation-helper/chat` | no `[id]` param; `isSystemOwner` gate | SELF-SCOPED-OK |
+
+**Score: 1 hole in 12.** The forward-only tier was worth pinning: the theory it encodes held for 11
+and failed for 1, and the 1 was the removal path for another agent's `.claude/rules/`.
+
+Nine of the twelve were measured by two sub-agents, each given a positive control so a broken
+needle could not report clean. **Every verdict acted on was re-checked first-hand** — which is how
+the second finding surfaced: a worker correctly reported the four `agents-core-service` routes
+COVERED (true, and the question I asked), and reading REACHABILITY rather than PRESENCE showed
+`wakeAgent`/`hibernateAgent` gate on `if (authContext)`, so an omitted context SKIPS the check.
+Not reachable today — all ~18 callers pass one — but it is the shape `element-management-service`
+abolished, with a comment still advertising it. Filed as **TRDD-FRRJ80YQ**.
+
+One instrument note, because it cost a reconciliation: my own count of authorization calls in
+`agents-core-service.ts` read **7** and the worker's read **6**. The worker was right — line 1493
+is a COMMENT (`// callers must satisfy authorize('link-session', agentId).`). Use-vs-mention, in my
+grep, on the same night I recorded that trap twice.
+
+Reports (gitignored): `reports/cavctull-forward-only/20260822_2216*`, `…_2217*`.
 
 ## Approval log
 

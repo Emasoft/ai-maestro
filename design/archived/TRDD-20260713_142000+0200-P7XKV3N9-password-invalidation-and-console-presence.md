@@ -1,7 +1,7 @@
 ---
 trdd-id: P7XKV3N9
 title: Invalidate a password with the password, and gate MAESTRO rotation on console presence
-column: human_review
+column: completed
 min-approval-requirement: user
 mandate: true
 mandated-by: user
@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:20:00+0200
 created: 2026-07-13T14:20:00+0200
-updated: 2026-08-22T16:55:00+0200
+updated: 2026-08-22T15:49:20.377Z
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -425,3 +425,5 @@ pinned by nothing until today.
   gating nothing; and the SMTP relay belongs to [[7U927FCM]], which owns it and is still open.
   Provenance caveat: closed via `promote` + `archive`, which anchor no token — only `approve`
   mints one, so `verify` will report this card UNVERIFIED by design (`TRDD-06G43RK2`).
+- 2026-08-22T15:49:20.231Z — column → complete. human review under the owner's grant; EHT 7U927FCM now terminal
+- 2026-08-22T15:49:20.377Z — COMPLETED by user. reviewed; rotation discharged; SMTP act owned by U991KMFL.

@@ -1,12 +1,13 @@
 ---
 trdd-id: X4RK1NUW
-title: Server absorbed oauth-rotator-tick but is not actually running it — slot keepalive fails, rotation becomes impossible
+title: oauth-rotator-tick beats but its verdict is not yet clean — one 48h observation window stands before the 2026-08-30 deadline
 column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-21T23:12:44+0200
+updated: 2026-08-22T14:26:30+0200
+review-after: 2026-08-24
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -140,3 +141,42 @@ pre-existing unrelated failure (`tests/governance/specs-in-sync.test.ts`, confir
 identically at HEAD with this change stashed). tsc clean on touched files.
 
 ## Approval log
+
+## Observation window — 2026-08-22T14:25+0200 (evidence for the one open box)
+
+**The tick BEATS. The card's TITLE is stale; its body already knew.** Status file written
+`12:24:59Z`, read 10 seconds later — so "absorbed but not actually run" is false as of today, and
+the body's own correction ("the tick beats but its verdict logic itself is wrong now — not merely
+absent") is the accurate statement. The title is the part that never caught up.
+
+```
+{"nextAction":"reauth-needed","at":"2026-08-22T12:24:59.383Z","reason":"refresh-dead",
+ "stuck":"all-maxed","windows":{"fiveHourPct":7,"sevenDayPct":96,"scopedModel":"Fable",
+ "scopedPct":100,"fiveHourResetsAtSec":1787416800}}
+```
+
+**`stuck: all-maxed` here is NOT the old false alarm — checked before reporting it as one.** I read
+this as a self-contradiction (`all-maxed` beside a 5h window at **7%**) and was about to file it.
+`lib/oauth-rotator/tick.ts:230-252` already fixed exactly that on 2026-08-07, with a
+neuter PAIR whose red sets are disjoint. Today's numbers are precisely the case that fix exists
+for: account windows healthy (5h 7%, 7d 96%), Fable scoped at 100% ⇒ the MODEL is spent, not the
+account, and the remedy is switch-the-model rather than wait. The raw `stuck` field still reads
+`all-maxed`; the human-facing message is what distinguishes them. Nothing to fix here.
+
+**What is genuinely open is narrower than the card's Problem section.** Boxes 1-3 and 5 are ticked
+and hold up; the single open box is a 48h+ clean observation, which cannot be ticked by effort —
+only by elapsed time — and **the window has not started, because the current state is not clean.**
+`reason: refresh-dead` / `nextAction: reauth-needed` is, per the fixed message at `tick.ts:226`,
+a report of what was OBSERVED (the OAuth rung is dead) and explicitly NOT a claim that a human is
+required: *"a live claude.ai cookie can still mint these with NO human; check the cookie layer
+before re-logging in."*
+
+**OWNER-FACING, and why I am not acting on it.** Restoring the OAuth rung touches stored
+credentials, which is the one category this session does not act on unilaterally — and the
+remaining verification is an elapsed-time observation regardless. Surfaced to the owner
+2026-08-22 with the **2026-08-30 deadline** named. Left at `column: todo` rather than `dev`: no
+one is working it, and the next honest move is a reading taken later, not a change made now.
+
+**NEXT ACTION** — re-read the status file and compare against the deadline:
+`cat ~/.aimaestro/oauth-rotator-tick-status.json`. Clean for 48h ⇒ tick the last box and close.
+Still `reauth-needed` ⇒ the cookie layer is the thing to check, per the message's own remedy.

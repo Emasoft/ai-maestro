@@ -3,7 +3,7 @@ trdd-id: WF0UE9BC
 title: Ship AgentlensPro as an official ai-maestro dependency (npm CLI, installed alongside the stack)
 column: human_review
 created: 2026-07-16T14:13:15+0200
-updated: 2026-08-02T16:01:02+0200
+updated: 2026-08-22T15:31:00+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -182,3 +182,31 @@ re-queried on 2026-08-02.
 ## Approval log
 - 2026-07-16T14:13:15+0200 — MANDATE issued by USER (min-approval-requirement: user).
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+
+## ⏹ 2026-08-22T15:3x — VERIFIED: the premise HOLDS. An UNDECLARED runtime dependency, today.
+
+| probe | result |
+|---|---|
+| `grep -ni agentlens package.json` | **absent** — not a dependency, dev or otherwise |
+| `command -v agentlenspro` | **on PATH** (installed by hand on this machine) |
+| production files referencing it (`lib services app scripts components`) | **12**, incl. a dedicated `lib/oauth-rotator/agentlens-usage.ts` and `lib/analytics-proxy.mjs` |
+| positive control (`tmux`, known-used) | 109 files — the search surface is sound, so the 12 is real |
+
+**That combination is the whole finding: the code depends on it, the manifest does not declare it,
+and it works here only because someone installed it manually.** A fresh clone runs `yarn install`
+and gets nothing, so those 12 files fail at the point they shell out — and they fail on a machine
+nobody can reproduce from, because the difference is invisible in the repo.
+
+**Why this hid.** It cannot surface locally: this box HAS the binary, so every local run is green.
+It also cannot surface in a type-check or a lint, since the dependency is a PROCESS the code
+spawns, not a module it imports — the same blind spot recorded elsewhere in this corpus for prose
+and for shelled-out tools. Only a clean environment sees it, and CI runs on a tree 102 commits
+behind (see `N4SDG0ML`).
+
+**Still `human_review` and correctly so.** Adding an npm dependency to the stack is a
+distribution decision — which package, pinned how, installed alongside what — and the card is
+titled as exactly that. This entry establishes that the need is real and current; it does not
+decide the shape.
+
+Re-derive rather than trust the table (both have silent timestamps):
+`grep -ni agentlens package.json ; grep -rl agentlens lib services app scripts components | wc -l`

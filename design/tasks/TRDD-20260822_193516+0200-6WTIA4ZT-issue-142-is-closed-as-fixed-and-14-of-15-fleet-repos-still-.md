@@ -534,3 +534,49 @@ exit non-zero — on an LFS transfer or configuration failure. The accurate stat
 **enforces no policy about WHAT is pushed**: no branch rule, no publish gate, no secret scan,
 nothing a push-protection hook exists to do. `GIT_LFS_SKIP_PUSH` turns even the transfer off.
 The card's conclusion is unchanged; the sentence was too strong.
+
+### CORRECTION 6 — 2026-08-22T20:07:14+0200 — "DROPPED three hooks" was a REGRESSION imputed from an ABSENCE. Withdrawn.
+
+An adversarial review named this the weakest claim of the correction turn and it was right. The
+settling measurement:
+
+```
+repos with a local core.hooksPath (9):   lfs-tracked=0  for ALL NINE
+control: repos on this machine whose .gitattributes contains filter=lfs:  ZERO
+```
+
+**The three "lost" hooks are `git lfs` plumbing** — `post-checkout`, `post-commit`,
+`post-merge` are installed by `git lfs install`, not by anyone's policy, and they sit in that
+directory beside the `pre-push` shim for the same reason. **No repo on this machine tracks LFS
+content**, so a repo that stops dispatching them has lost **nothing**.
+
+(`.git/lfs` exists in most of them and even holds files — 40 under `ai-maestro`, 2 under
+`visual-comunicator` — but those are `cache`/`tmp` residue from `git lfs install`, and with
+`filter=lfs` absent everywhere they are not tracked content. Directory existence is not usage:
+the same proxy trap, checked and set aside.)
+
+**What was wrong.** I measured `[ -x "$h/$k" ]` — *a file is not there now* — and wrote
+*"thereby REMOVED three unrelated hooks"* and *"silent breakage"*. Those are causal claims about a
+transition never observed, carrying an imputed harm never established. **Withdrawn.** The measured
+statement is: *7 of 9 repos with a local `core.hooksPath` no longer dispatch the global LFS hooks;
+none of them track LFS content, so nothing is lost.*
+
+**Why it was the worst one.** It left this session inside a RETRACTION — the moment a reader stops
+discounting — and I explicitly invited MAINTAINER to encode it as a state name in their guardian
+check. A severity inferred from a missing file was one message from becoming a check that flags
+seven healthy repos forever. **The generalizable rule: a missing hook is a LOSS only where the hook
+had work.** Any such check must report the matrix AND the usage signal together, or it files benign
+absences as breakage.
+
+Same shape as the classifier bug one layer up: there a program produced a number that meant
+nothing; here a **true observation carried a meaning I attached to it**.
+
+**MAINTAINER's own DEPRIVED finding does not inherit this** — they measured zero LFS patterns and
+zero LFS objects in their tree first, establishing the loss was benign. That is precisely the step
+this correction adds for the other eight.
+
+**And the LFS sentence, tightened once more.** `git lfs pre-push` uploads LFS objects and
+**aborts the push if that upload fails** — so the shim DOES gate pushing, on exactly one condition.
+Correct form: **it gates nothing about branch, ancestry, or publish policy; it gates only LFS
+object upload.** With no repo tracking LFS content, that condition cannot arise here — which is why
+the card's conclusion is unchanged and the absolute phrasing still had to go.

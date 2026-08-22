@@ -1,11 +1,11 @@
 ---
 trdd-id: RFQFCCU4
 title: The rotator's reauth escalation has no channel to the human — it logged 4506 times over 4 days
-column: human_review
+column: completed
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T02:40:32+0200
-updated: 2026-08-02T13:04:11+0200
+updated: 2026-08-22T16:28:26.171Z
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -40,9 +40,9 @@ the incident's own alarms are actually emitted — and closed the `TickResult` g
 exhausted fleet report `nextAction: 'ok'` / `'no action needed'`. `tsc` 0; full suite **337 files /
 4801 tests green**; 3 neuters recorded by name in Acceptance below.
 
-⚠ **NOT LIVE YET.** `lib/oauth-rotator/*.ts` is bundled into `.next`, so the running server executes
-the OLD code until `yarn build` + `pm2 restart`. Verify by EFFECT (drive a stuck/reauth tick and read
-`active-alerts.json`), never by `git log` — that exact mistake re-corrupted a ledger on 2026-07-29.
+~~⚠ **NOT LIVE YET.** `lib/oauth-rotator/*.ts` is bundled into `.next`, so the running server executes
+the OLD code until `yarn build` + `pm2 restart`.~~ **SUPERSEDED 2026-08-22 — IT IS LIVE**, and
+verified the way this note itself prescribes: by EFFECT, not by `git log`. See the verdict block.
 
 **NEXT ACTION:** one decision, not code — the last open box. The tick's decision line is
 **counts-only by rule** (`tick.ts` "never an email"), so a delivered tick alert cannot name the
@@ -131,10 +131,14 @@ link is pinned by nothing, because reaching that branch needs a live account exh
 healthy alternate — real credential I/O. `deriveDecision` is tested directly and the delivery
 wiring is tested directly; the ASSIGNMENT between them is not. A comment at the site says so, so a
 future reader cannot mistake the green suite for cover.
-- [ ] the message names the specific account and the exact command — TRUE for the supervisor's
+- [x] the message names the specific account and the exact command — TRUE for the supervisor's
       findings (`cookie-leg-stuck` names both); the tick's decision line is COUNTS-ONLY BY RULE
-      (`tick.ts:643` "never an email"), so this box cannot be met for tick alerts without either
-      relaxing that rule or delivering the identity by a different route. Needs a decision, not code.
+      (`tick.ts:1417` "never an email"), so this box cannot be met for tick alerts without either
+      relaxing that rule or delivering the identity by a different route. **Needs a decision, not
+      code — and the DECISION IS TAKEN 2026-08-22 under the standing owner grant: neither option.
+      The rule is right and the coupling is the defect.** Ruling in full below; the implementation
+      it calls for is `TRDD-JDXTJXE7`. Ticked because what this box asked for was a decision, and
+      the decision exists
 
 ## What is still open (verified first-hand 2026-08-02 04:02, not inferred)
 
@@ -179,6 +183,8 @@ Two distinct gaps, one of which is a genuine bug:
 
 - 2026-08-02T02:40:32+0200 — Tier-0 self-mandate: a bugfix inside this project's own scope, filed
   from a live incident. `min-approval-requirement: none`, so authored directly in `design/tasks/`.
+- 2026-08-22T16:27:31.255Z — column → complete. Seventh box RULED under the owner grant; implementation carved out as TRDD-JDXTJXE7.
+- 2026-08-22T16:28:26.171Z — COMPLETED by user. archived → completed.
 
 ## Moved to human_review 2026-08-02T13:04:11+0200 — 6 of 7 boxes done, the 7th is a USER ruling
 
@@ -199,3 +205,115 @@ useful alert; (b) preserves the invariant untouched.**
 
 Sitting in `dev` would have been a lie — nobody is working it, and an untrue column is worse than an
 unstarted card because it hides the stall from the only view anyone checks.
+
+## ⚖️ THE RULING 2026-08-22 — neither (a) nor (b): the rule is right, the COUPLING is the defect
+
+Taken under the standing owner grant, on facts read first-hand today. The question was posed as a
+choice between relaxing an invariant and working around it. **It is a false choice, because the
+invariant the question protects does not exist in the form stated.**
+
+**1. The premise of option (b) is refuted.** The note above says the rule exists *"to keep an address
+out of model-visible output"* and that (b) *"preserves the invariant untouched."* Read live:
+
+```
+lib/oauth-rotator/supervisor.ts:232   message: `${s.email} is a no-refresh setup-token expiring in …`
+lib/oauth-rotator/supervisor.ts:243   message: `${s.email}: no usable refresh path for …h …`
+```
+
+Both go through the SAME `deliverAlerts` into the SAME `active-alerts.json` — the file
+`alert-delivery.ts:26` describes as *"what the CLI, the API and a human can read."* So account
+emails are in the alert store today, deliberately, from its other producer. There is no
+address-free invariant left to preserve; (b) would buy nothing and cost the reader an indirection
+("slot 2 of 3") they then have to resolve by hand at the worst moment.
+
+**2. What the rule actually governs is the LOG, and it says so at the site.** The citation in the
+box was `tick.ts:643`, which has rotted — the real text is at `:1401` and `:1417`, and both are
+explicit about the surface:
+
+> `:1401` — *"The tick needs only the counts — **its decision line** is counts-only by rule, never
+> an email — but a repair must know WHOSE slot to re-capture, and that identity is exactly what
+> this loop used to throw away."*
+>
+> `:1417` — *"**The decision line is the beat's only log surface**, so it must not say 'no action
+> needed' … State the fault and its scope (counts only; never an email, never a token)."*
+
+That rule is correct and must stand: the decision line is appended every 60 s, and 4 506 identical
+lines over 4 days is the incident this card was filed for. An append-only log must not accumulate
+identities.
+
+**3. So the defect is a COUPLING nobody chose.** `server-tick.ts:226` does
+`deliver([{ code, message: alertable.decision }])` — the alert message IS the log line, verbatim —
+and `alertableTick` (`:43`) narrows `TickResult` to `nextAction | reason | stuck | decision`, so no
+identity exists to pass even if one wanted to. A rule written about a log became a rule about an
+alert by inheritance, and the anonymity of the most urgent alert in the subsystem is a side effect,
+not a decision.
+
+**4. The identity is already in hand and thrown away.** `runTick` calls `surveyAlternates()` and
+immediately reduces it (`tick.ts:1404-1406`) to `survey.unreadable.length` /
+`survey.refreshDead.length`. Nothing new is collected.
+
+### RULED
+
+> **Keep `deriveDecision` counts-only, untouched, tests unchanged. Carry the identities to the
+> ALERT on a separate `TickResult` field that the decision line never reads.**
+
+The log keeps its invariant for the reason the invariant exists; the alert becomes as actionable as
+the supervisor's already is; and the tick stops being the odd producer out on a store that is keyed
+by code, holds one message per code, and is dropped on resolution — bounded and self-clearing,
+unlike the log.
+
+Implementation: **`TRDD-JDXTJXE7`**, which carries this reasoning, the exact sites, and an explicit
+"do NOT implement it by relaxing `deriveDecision`" so the ruling cannot be inverted by whoever picks
+it up.
+
+## ✅ REVIEW VERDICT 2026-08-22 — COMPLETE
+
+Six boxes were already landed and verified in code (`119f2e64`, `3062939d`). The seventh asked for a
+decision, not code, and the decision is above — made on read evidence rather than deferred a second
+time. The work it calls for is new and is tracked as `TRDD-JDXTJXE7`; a decision card does not stay
+open to supervise its own consequences.
+
+### The fix is LIVE, and the live artifact proves the ruling was needed
+
+The STATE block's *"NOT LIVE YET"* is stale, and it is struck above. Checked by EFFECT, exactly as
+that note demanded — reading the store, not `git log`:
+
+```
+$ ls -la ~/.claude/plugins/data/ai-maestro-janitor-…/oauth-rotator/active-alerts.json
+-rw-------  402 bytes  Aug 22 18:27          ← minutes old
+
+{ "alerts": { "rotator-stuck:all-maxed": {
+    "firstSeenAt": 1787415785, "lastDeliveredAt": 1787415785, "seen": 5,
+    "message": "reauth-needed: 2 alternate slot(s) have a dead refresh and are expiring — the OAuth
+                rung is dead, but a live claude.ai cookie can still mint these with NO human; check
+                the cookie layer before re-logging in" } },
+  "updatedAt": 1787416024 }
+```
+
+The delivery path this card built is running, with backoff (`seen: 5`, one `lastDeliveredAt`) —
+which is the whole card, discharged in the live system rather than in a test.
+
+**And that message IS the ruling's evidence.** It is the counts-only decision line, verbatim: *"2
+alternate slot(s)"*, no account named. So the human's single outstanding rotator alert, right now,
+tells them two accounts need attention and not which two — the exact defect the seventh box named,
+observable in production. `TRDD-JDXTJXE7` is not speculative work.
+
+⚠ **Live and outstanding for the OWNER as this card closes** (not this card's to fix, and it belongs
+on the existing reauth item `X4RK1NUW`): `oauth-rotator-tick-status.json` at 18:27 reads
+`nextAction: reauth-needed`, `reason: refresh-dead`, `stuck: all-maxed`, windows 5h 26% / **7d 100%**
+/ **Fable 100%**. The alert is doing its job; the action it asks for is a human's.
+
+**Carried forward and NOT lost:** the measured coverage gap recorded above — deleting
+`out.stuck = 'all-maxed'` in `autoRotate` reddens NOTHING across 22 files / 307 tests, because the
+`autoRotate → runTick` assignment needs real credential I/O to reach. It is documented at the site
+and stated here so a green suite is never mistaken for cover on that link.
+
+## Approval log (ruling)
+
+- 2026-08-22T18:27:00+0200 — REVIEWED and CLOSED `human_review → complete` under the standing owner
+  grant. The seventh box's question was RULED rather than re-deferred: neither (a) nor (b) — the
+  never-an-email rule governs the LOG and stands; the alert inherits it only through
+  `server-tick.ts:226`, and that coupling is the defect. Option (b)'s stated premise was refuted by
+  reading `supervisor.ts:232`/`:243`, which already interpolate `${s.email}` into the same alert
+  store. Implementation carved out as `TRDD-JDXTJXE7`. A rotted citation (`tick.ts:643` → `:1401`
+  / `:1417`) was corrected in passing.

@@ -289,7 +289,53 @@ revocable, same rate-limit and kill-switch as the password path, and fail-closed
 - [x] `tests/unit/test-only-env.test.ts` green — no new security-weakening env read
 - [x] The master governance password can be removed from `.env.local` (the security win this buys) — **RESOLVED AS NOT ACHIEVABLE, and that is the finding.** `POST /api/auth/sudo-password` accepts `{ password: string }` only (one-field zod schema), so sudo step-up is password-only and `tests/e2e/helpers.ts:22-31` throws without it — deleting the password breaks every scenario that drives a destructive UI flow. The CLI itself no longer reads the env var (`aimaestro-governance.sh:374-418`), which is the win that WAS available. Box closed on the measurement, not on the outcome it hoped for; widening sudo or minting a test credential is separate work
 
+## ⏹ 2026-08-22T17:45 — HUMAN REVIEW PERFORMED. VERDICT: COMPLETE.
+
+Under the owner's grant of 2026-08-22, verbatim: *"i authorized you to decide on my behalf, so you
+must do the human review and also decide all the rest. just decide in base of verified facts and
+tests, never assume anything."*
+
+**This card did not need a test to review — the feature was EXERCISED IN PRODUCTION today, and
+that is stronger evidence than any test could be.** While running the `TRDD-798OAHMX` e2e, with the
+owner absent:
+
+- `aimaestro-governance.sh login` succeeded **with no TTY and no prompt**, resolving the token from
+  `.env.local` itself and `unset`ting it immediately after building the request body
+  (`:401-418`) — the session landed at `~/.aimaestro/cli-session`, mode `0600`. That is box 287,
+  re-confirmed live rather than from its own claim.
+- Authenticated CLI calls then worked as the owner: five `manage-trdd` write verbs driven end to
+  end. That is box 288, likewise re-confirmed live.
+- The guard was separately neuter-proven earlier this session: the dev-mode enable gate →
+  **2 red / 23 green**. It fails closed, and a regression fails a named test.
+
+**Box 290's negative finding is independently confirmed.** It concluded the master governance
+password CANNOT leave `.env.local` because sudo step-up is password-only — and today I minted sudo
+tokens by posting exactly `{password}` to `/api/auth/sudo-password`, from that file. The card was
+right, and right for the reason it stated.
+
+**One thing box 290 could not have seen, and it recovers PART of the win it wanted.** Auditing
+`.env.local`'s key names (values never read): `MAESTRO_USER_PASSWORD` has **zero** readers — repo-wide
+excluding `.env*`, and across the installed CLI surface, positive-controlled by the same search
+shape finding `AIM_GOVERNANCE_PASSWORD` in `aimaestro-governance.sh`. It is a dead credential whose
+value the owner reports is IDENTICAL to the live governance password, so that secret currently sits
+in the file twice under two names, one of which nothing consumes. Deleting the dead twin halves the
+exposure surface for free. That is **not** what box 290 asked for (the live password must stay), so
+the box's resolution stands — this is an additional, smaller win, and it is the owner's file to
+edit. Also inert there: `AI_MAESTRO_DEV_MODE=true`, which nothing reads — the enable switch is
+dashboard-owned in `governance.json`, exactly as this card built it.
+
+**Provenance caveat, stated because I got this wrong once today.** This verdict is closed via
+`promote` + `archive`, which execute server-side but anchor **no** token — only `approve` mints one.
+So `verify` will report this card UNVERIFIED, and that is expected, not a defect in the close. The
+gap is filed as `TRDD-06G43RK2`.
+
+**VERDICT: COMPLETE.** All nine boxes were evidenced before this review, and the two that mattered
+most were re-confirmed by using the feature for real.
+
 ## Approval log
 
 - 2026-08-21T17:48:24+0200 — MANDATE issued by USER (min-approval-requirement: user).
   Pre-approved: the owner directed the change directly. No approval request was sent.
+- 2026-08-22T17:45 — HUMAN REVIEW PERFORMED, verdict **COMPLETE**, by `ai-maestro-session` under
+  the owner's explicit 2026-08-22 grant. Decided on production evidence (the feature ran unattended
+  end-to-end today) plus a 2-red/23-green neuter of its enable gate, not on the card's own claims.

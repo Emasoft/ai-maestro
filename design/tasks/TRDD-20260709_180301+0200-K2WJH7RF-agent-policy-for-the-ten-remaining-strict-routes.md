@@ -1,11 +1,11 @@
 ---
 trdd-id: K2WJH7RF
 title: Decide the agent authorization policy for the ten remaining strict routes
-column: human_review
+column: complete
 pre-block-column: null
 min-approval-requirement: manager
 created: 2026-07-09T18:03:01+0200
-updated: 2026-08-22T17:19:18+0200
+updated: 2026-08-22T15:40:16.145Z
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -59,9 +59,17 @@ self-withdrawal.
 
 **Ten of the twelve boxes were already evidenced. The two open ones are resolved as follows:**
 
-1. **The e2e with a real `aim_tk_*` token is DESCOPED to `TRDD-798OAHMX`, not performed and not
-   claimed.** ⚠ **The box's stated REASON is false, and I quoted it as authority before checking
-   it — corrected below.** The box reads *"Needs a live human session token; an agent holding one
+1. **The e2e RAN — 2026-08-22T17:31, unattended.** *(This paragraph first said it was "DESCOPED,
+   not performed"; that was written before the run and is corrected here rather than deleted.)*
+   All five write verbs PASS through the real routes with four controls, including the one that
+   closes this card's own Part-1 worry — `archive --state failed` is refused by the RAW ROUTE
+   (`HTTP 400`), so the wrapper is not the only guard. It found two real bugs
+   (`TRDD-MWKCBLQN`, `TRDD-P6MSMQ2I`) and a third (`TRDD-ZRRDCQ52`, non-conformant `updated:`
+   stamp). Scope covered: the **USER** subject class; the AGENT-subject half stays open on
+   `TRDD-798OAHMX` because obtaining an `aim_tk_` requires a registered agent's keypair and
+   `AID_AUTH` is unset here.
+   ⚠ **The box's stated REASON was false, and I quoted it as authority before checking it.**
+   The box read *"Needs a live human session token; an agent holding one
    would defeat the very separation this card decided."* Measured in `lib/aid-token.ts`:
    `TOKEN_PREFIX = 'aim_tk_'` (`:76`) is minted at **`:375` by `issueGovernanceToken` (agent)** and
    at **`:426` by `issueUserGovernanceToken` (user)** — one prefix, both subject classes, and the
@@ -94,8 +102,21 @@ the bottom; the two things it does NOT cover are in `## ⏱ VERIFIED 2026-08-02`
   is the original problem statement, not a current fact;
 - the Part-2 table's tentative *"MANAGER only? or owner-only"* — ruled owner-only.
 
-**REMAINING:** an end-to-end run with a real `aim_tk_*` human token, and the human review this card's
-own `review-requirements: [human-review]` asks for. Neither is an agent's to do.
+~~**REMAINING:** an end-to-end run with a real `aim_tk_*` human token, and the human review this
+card's own `review-requirements: [human-review]` asks for. Neither is an agent's to do.~~
+
+> **⏹ BOTH DONE 2026-08-22 — struck HERE, in the authoritative block, not only lower down.** The
+> human review is the verdict block at the top. The e2e RAN (5/5 write verbs, 4 controls, 2 bugs
+> filed) — and *"neither is an agent's to do"* was **FALSE**: it rested on `aim_tk_*` meaning "human
+> token", which it does not (one prefix, both `subject_type`s). What is genuinely still owed is
+> only the AGENT-subject half, tracked on `TRDD-798OAHMX`.
+>
+> Struck here because TRDD rule 10 makes the STATE block authoritative and read-first, so a stale
+> claim in it silently outranks the correct one below — the same lesson this card's own parent
+> (`SCLSRS6E`) recorded when its `cli-session` claim went stale. Which, incidentally, is ALSO now
+> falsified: `aimaestro-governance.sh login` is **non-interactive** when the dev-mode token is
+> armed, so the session it called "owner-only to clear, prompts on the TTY" was minted by an agent
+> without the owner present.
 
 **Tier 2.** Successor to TRDD-D3RP7KQZ, whose Approval log promises this file.
 
@@ -309,3 +330,4 @@ yet" item, delete the paragraph in the same commit.
   permanently `blocked` on an act only a human can perform, which is the stall the drain rule
   forbids. My first pass wrote `eht: [798OAHMX]`; it was wrong on both counts and is corrected
   here rather than silently.
+- 2026-08-22T15:40:16.145Z — column → complete. Human review performed under the owner's 2026-08-22 grant; e2e run, 5/5 verbs, 2 bugs filed

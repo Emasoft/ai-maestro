@@ -290,9 +290,6 @@ resolution" failure, one column further along.
 - 2026-07-17T06:19:15+0200 — **MANDATE issued by USER** (min-approval-requirement: none —
   Tier 0, in-scope security work on this project's own source). Pre-approved: the USER's directive
   IS the authorization. No approval request was sent.
-
-## Approval log
-
 - 2026-08-22T17:56 — **HUMAN REVIEW PERFORMED, verdict COMPLETE**, by `ai-maestro-session` under
   the owner's explicit 2026-08-22 grant. This card is `min-approval-requirement: none` (a Tier-0
   self-mandate), so no gate ever blocked it — the review is the one the card asked of itself, and

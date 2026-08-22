@@ -1,9 +1,9 @@
 ---
 trdd-id: 9K33PHOZ
 title: install.sh rm -rfs the live fork checkout in non-interactive mode and reclones from upstream
-column: dev
+column: complete
 created: 2026-08-21T18:56:22+0200
-updated: 2026-08-22T11:18:43+0200
+updated: 2026-08-22T13:48:10+0200
 implementation-commits: [4d4b72c7, 8b7c7de5, e0e55244, 4a760eed]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
@@ -13,7 +13,9 @@ scope: project
 project-id: ai-maestro
 min-approval-requirement: user
 mandate: false
-approved: false
+approved: true
+approval-judge: owner-delegated
+approval-datetime: 2026-08-22T13:48:10+0200
 priority: 0
 severity: critical
 labels: [installer, git-safety, data-loss, fork, audit]
@@ -235,6 +237,36 @@ Landed: `4d4b72c7` (guard + both repo sources configurable), `8b7c7de5` (finding
       tsc clean, `bash -n` clean.
 - [x] FINDING 6: the false submodule comment is corrected or the no-op step removed — corrected,
       step kept so a future submodule needs no installer change (`8b7c7de5`)
-- [ ] FINDING 7: rename decided; if taken, all callers updated in the same commit — **owner ruling**
+- [x] FINDING 7: rename **DECIDED — DECLINED** (`a26166a6`). The box admitted "if taken", and
+      the survey says don't. **FOUR** executable sites invoke the name, not the two this card
+      listed: `install.sh`, `update-aimaestro.sh`, the CI job
+      `.github/workflows/test-installers.yml`, and `app/api/settings/host-tools/route.ts`,
+      which dispatches it BY NAME for a dashboard button. A rename delivers zero behaviour
+      change against a breakage surface spanning CI and a live UI action.
+      **The rename would not have fixed the actual defect.** The header was FALSE — it claimed
+      the script installs "aimaestro-agent.sh and the ai-maestro-agents-management skill"; it
+      installs ELEVEN files and installs NO skill (standalone skill install was removed at
+      ~:409; the surviving `skills/` reference is the uninstall path clearing a legacy dir).
+      A vague name is a nuisance; a false header is a lie, and prose is invisible to tsc, lint
+      and tests. Fixed there, plus the dashboard label that understated it the same way.
+      **Correction to the caller survey above:** it said THREE sites. It was wrong twice — the
+      grep passed `--include` filters with no `*.yml`, and was capped at `head -20`, which
+      returned exactly 20 lines. A truncated search read as complete, hiding CI and the route.
 
 ## Approval log
+
+- 2026-08-22T13:48:10+0200 — **COMPLETED**, `dev → complete`, archived. Judge recorded as
+  `owner-delegated`, on this card's `min-approval-requirement: user` and the owner's verbatim
+  delegation the same day: *"you can decide by yourself. base your decisions on verified facts
+  and tests. never assume anything."* Naming it `owner-delegated` rather than `user` is
+  deliberate — I am not the user, and a judge field that overstates its own authority is the
+  thing the D4 watchdog exists to catch.
+- Basis, all re-measured first-hand before closing: 7/7 acceptance boxes checked, `npt: []`,
+  `eht: []`, no `release-via:` (so `none`, and `complete` is the terminal). All seven findings
+  are addressed — F3, which has no box of its own, is covered by box 1's *"commits absent from
+  its push remote"* clause, pinned by `tests/unit/install-delete-guard.test.ts` with a measured
+  `rev-list`-branch neuter. I checked that rather than assuming the box list was exhaustive.
+- `trdd:doctor` baseline before this transition: 503 scanned · **1 error** · 244 warn, the one
+  error being the pre-existing `BODY-STATE-CLAIM` on archived `7123D51A`. Re-run after the
+  `git mv` so a ZONE-MISMATCH introduced by this very edit cannot hide — the failure I shipped
+  once before by verifying a working tree instead of the commit.

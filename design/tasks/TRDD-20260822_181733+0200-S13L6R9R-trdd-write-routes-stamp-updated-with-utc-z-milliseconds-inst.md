@@ -259,3 +259,34 @@ grep of two import blocks settled a question I had escalated to an advisor.
 
 - [ ] `isoNow()` lives in `lib/trdd-store.ts`, exported, with `trdd-create` importing it — no new module, no cycle
 - [ ] `npx tsc --noEmit` clean (a cycle is exactly what a type-check catches, so this box is the proof)
+
+## Write-side fix LANDED — 2026-08-22T20:46:57+0200 — `7cf75e37`
+
+`isoLocal()` is the single definition, in `lib/trdd-store.ts`; the 5 routes and the doctor's
+inline `+0000` `.replace` all route through it. `tsc --noEmit` clean (the cycle check), 5 new
+tests pass, and **two neuters prove they pin rather than pass vacuously**: inverting the offset sign
+reds 2, and making the function ignore its argument and read the clock reds *"PRESERVES the instant
+it is given"* — the exact bug this card warns about. Restored byte-identical to staged after each,
+verified by `git diff` rather than assumed.
+
+**The drift stops growing from here.** Boxes closed:
+
+- [x] the local-offset stamp has exactly ONE definition, reached by all five write routes and by `lib/trdd-doctor.ts`
+- [x] `isoNow()` lives in `lib/trdd-store.ts`, exported, with `trdd-create` importing it — no new module, no cycle
+- [x] `npx tsc --noEmit` clean
+
+**Still open, and now the whole remainder of the card — it is ONE owner ruling, not a work item:**
+
+> `## Approval log` is EXEMPT from the IND §12 terminal freeze. That exemption is written for
+> **APPENDING** a line. Does it cover **REWRITING** the timestamp token of a line already there,
+> when the rewrite changes no fact and only its notation?
+
+**YES** → backfill all 61 sites (24 + 1 + 36) across 24 cards, 18 of them terminal.
+**NO** → backfill only the 6 open cards; the 18 terminal ones keep the `Z` form permanently, and
+the doctor rule must EXCLUDE terminal cards or it reports a finding nobody is allowed to fix.
+
+Either answer is implementable in one pass; I cannot pick between them from the rules as written,
+and picking wrong either violates the freeze on 18 frozen cards or bakes a permanent unfixable
+finding into a new gate. Everything else on this card is done.
+
+- [x] the write-side fix and the doctor rule land INDEPENDENTLY of the backfill — *write-side done; the rule is gated on the same ruling, since its `--fix` semantics depend on the answer*

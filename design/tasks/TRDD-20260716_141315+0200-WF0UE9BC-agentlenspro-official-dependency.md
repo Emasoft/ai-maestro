@@ -170,9 +170,17 @@ re-queried on 2026-08-02.
       (an npm publish is a credential action), and it is done
 - [x] verification — `bash -n` clean on both scripts, **shellcheck clean**, and the dry
       idempotency run: with 2.21.0 present the installer skips and exits 0
-- [ ] close `ai-maestro#70` from our side, or say why it stays open. Deliberately NOT done
+- [x] close `ai-maestro#70` from our side, or say why it stays open. Deliberately NOT done
       unilaterally: it is an outward-facing action on a coordination thread the counterparty has
-      already answered, so it is the human's call, not a housekeeping side effect
+      already answered, so it is the human's call, not a housekeeping side effect.
+      **↳ RESOLVED 2026-08-22 — the box was STALE. `ai-maestro#70` is already `CLOSED`** (measured
+      first-hand: `gh issue view 70 --repo Emasoft/ai-maestro` → `[CLOSED]`, last updated
+      **2026-08-08T13:03:26Z**, 3 comments). It was closed a fortnight ago and this card never
+      learned about it, so the box held a finished card open on an act that had already happened.
+      The reservation above was CORRECT and is preserved: closing it was the human's call, and the
+      human made it. Nothing outward-facing was done here — the box's own second half (*"or say why
+      it stays open"*) needed only a measurement, and the measurement says it isn't open.
+      Its reciprocal `AgentlensPro#3` closed 2026-07-30, so both halves of the coordination are shut.
 - [~] the chat-history ENRICHMENT (the dedicated tab / token-accurate tracing per conversation)
       — explicitly a **follow-up UI TRDD**, not this card. Recorded so the next reader does not
       read its absence as an omission. The consumed surface and the LOCKED field paths are
@@ -210,3 +218,12 @@ decide the shape.
 
 Re-derive rather than trust the table (both have silent timestamps):
 `grep -ni agentlens package.json ; grep -rl agentlens lib services app scripts components | wc -l`
+
+- 2026-08-22T18:07 — **HUMAN REVIEW PERFORMED, verdict COMPLETE**, by `ai-maestro-session` under
+  the owner's explicit 2026-08-22 grant. Every engineering box was already evidenced with a commit;
+  the single open box turned out to be **stale rather than pending** — `ai-maestro#70` has been
+  CLOSED since 2026-08-08, verified first-hand rather than inferred. This is the sixth card today
+  whose remaining "blocker" had already resolved without the card being told, which is the measured
+  hazard of a parked box: parking is exactly what stops anyone re-reading it.
+  Provenance caveat: closed via `promote` + `archive`, which anchor no token, so `verify` reports
+  UNVERIFIED by design (`TRDD-06G43RK2`).

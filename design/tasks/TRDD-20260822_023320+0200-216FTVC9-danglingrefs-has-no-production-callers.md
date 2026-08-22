@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T02:33:20+0200
-updated: 2026-08-22T02:33:20+0200
+updated: 2026-08-22T02:35:18+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -86,8 +86,25 @@ choosing.** If it is small, fail. If it is large, report-only with a stated ratc
 
 ## Acceptance
 
-- [ ] The live dangling-reference count is measured and recorded here BEFORE the exit-code
+- [x] The live dangling-reference count is measured and recorded here BEFORE the exit-code
       decision is made — the number decides fail-vs-advisory, not a preference.
+      **MEASURED 2026-08-22T02:3x — the corpus is CLEAN: 0 dangling across 252 reference edges /
+      140 distinct targets over 501 cards.** Fields swept: `blocked-by`, `npt`, `eht`,
+      `parent-trdd`, `superseded-by` (`relevant-rules` correctly excluded — it cites PRRD numbers,
+      not TRDDs).
+      **Instrument proven in BOTH directions before the zero was believed**, because a zero is
+      otherwise indistinguishable from a broken needle:
+      - *negative control* — a seeded fake target `ZZZZ9999` **is** flagged, so the comparison can
+        detect a dangling ref;
+      - *coverage control* — **all 501 `trdd-id:` values are exactly 8 characters**
+        (`awk 'length!=8'` → 0), so the 8-char token filter in the extractor loses nothing. This
+        was the real risk: several cards have UUID-style FILENAMES
+        (`TRDD-d46b42e9-52fa-4f04-…`), and had their `trdd-id:` been the full UUID, every
+        reference to the short form would have read as dangling. It is not; they carry 8-char ids.
+      **⇒ THE EXIT-CODE DECISION IS SETTLED: fail on findings (exit 1).** The card reserved this
+      for the measurement precisely because a lint that reddens against a large pre-existing
+      backlog gets routed around rather than fixed. There is no backlog, so a failing lint can
+      only ever redden on NEW breakage — the case where failing is right.
 - [ ] `danglingRefs` has at least one production caller, and `grep -rn danglingRefs` outside its
       own file and its test returns a non-zero count.
 - [ ] A seeded dangling reference is FLAGGED — proven by mutation via `scripts/dev/neuter`, not by

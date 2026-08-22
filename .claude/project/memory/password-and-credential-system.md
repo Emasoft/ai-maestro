@@ -65,6 +65,39 @@ a wrapper-side validation failure, a typo, a dry run — and the slot stays occu
 outstanding confirmations"), which reads like a rate limit on YOU and is really your own unspent
 tokens. So: mint AFTER local validation passes, one per call, never in a loop that may not fire.
 
+
+^ATOM-B6AR-MQGE [desc: "A Claude developing ai-maestro is OUTSIDE the harness and can never hold an AID token; it authenticates as the OWNER's console, and that is the only path open to it.", keywords: why_cant_I_get_an_AID_token aid_no_ledger_history 403_on_the_token_exchange who_am_I_to_the_ai-maestro_server can_the_developer_session_authenticate_as_an_agent am_I_an_agent_or_the_owner sudo_user_only which_identity_does_the_CLI_session_carry, type: reference, ocd: 2026-08-22, lmd: 2026-08-22]
+
+**A Claude that DEVELOPS ai-maestro is not an agent OF ai-maestro, and there is no route by which
+it could become one mid-session.** Only three ways exist to register an agent — **created** inside
+the server, **imported** into it, or **migrated** from another host — and the server is the sole
+guarantor and notarizer of every identity and permission (USER ruling, 2026-08-22). A developer
+session took none of those three routes, *and rightfully so: to develop ai-maestro you must be
+outside it.*
+
+This is not merely policy — the token exchange enforces it, so an attempt fails rather than
+degrading into something ambiguous. `POST /api/v1/auth/token` (`app/api/v1/auth/token/route.ts`)
+requires, in order: a REGISTERED agent record (it passes `agent.id` / `agent.name` /
+`governanceTitle` / `teamId` straight into `issueGovernanceToken`, `lib/aid-token.ts:367`), an
+**Ed25519 proof-of-possession** against that agent's registered public key, and — under
+`ledger.enforceAidAssociation` — a **signed-ledger association on this host**, else
+`403 aid_no_ledger_history` (R34.1, `:205`). An unregistered caller fails at the first gate: it has
+no agent record to name.
+
+**So the developer session's identity is the OWNER's, never an agent's, and the code says which:**
+`buildAuthContext` (`lib/agent-auth.ts:373`) derives `isSystemOwner` from the ABSENCE of an
+`agentId` — legacy model `!agentId`; user-authority model ON, additionally
+`userTitle ∈ {maestro, maestro-delegate}`. A dev-mode CLI login yields a web-session-class caller
+with **no `agentId`**, hence the owner. Measured 2026-08-22: `GET /api/auth/session` →
+`{"authenticated":true,"recoverySetupComplete":true}` — no agent identity in it at all.
+
+**The two paths are complements, not alternatives, and R32 is why.** An agent authorizes by
+AID + title + portfolio token and is REFUSED a sudo token (`if (!ctx.isSystemOwner)` →
+`403 sudo_user_only`); the owner has no AID and uses exactly that sudo route. Neither can borrow
+the other's credential, which is the design working. Practically: when a strict verb needs
+authorization here, the answer is never *"get an AID"* — it is the owner's dev-mode session plus a
+per-call sudo token (see [[password-and-credential-system]] ATOM-G59T-8U0O).
+
 ## Notes and lessons learned
 
 [^1]: [id: ATOM-53G7-HJOV, status: valid, desc: "Why this hub exists: the credential system had no page and no spec, so its contract was being re-derived from code comments each time.", keywords: "no_wiki_page_for_the_topic the_knowledge_is_scattered I_learned_it_from_a_code_comment where_should_this_fact_live no_spec_exists topic-centred_wiki", ocd: 2026-08-22, lmd: 2026-08-22] DO NOT establish a security contract from CODE COMMENTS and file the result wherever recall happened to land, BECAUSE a comment is evidence about the line it sits on and nothing more, and a fact filed on a neighbouring page leaves the TOPIC itself absent — so the next session re-derives it from the same comments, at the same risk, and no one can tell the topic is missing because every individual page looks fine. Measured 2026-08-22: the credential contract was scattered across ~8 pages in 3 scopes with NO page owning it and NO spec in `design/specs/` (8 specs, none about auth), and the first version of this knowledge was written onto an ENV-VAR page because that is where `recall` ranked. DO ask "which page SHOULD own this?" before "which page came back?" — if the answer is a page that does not exist, that absence is the finding. Create the topic page, give it a `metadata.topic:` and regenerate the index (a page with no topic never appears in CLAUDE.md's index, so it is invisible even once written), and derive the contract from the CODE, citing file:line, with comments as corroboration only.

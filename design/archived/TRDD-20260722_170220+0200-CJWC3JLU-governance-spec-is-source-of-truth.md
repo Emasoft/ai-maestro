@@ -1,9 +1,9 @@
 ---
 trdd-id: CJWC3JLU
 title: Invert governance authority — the SPEC is the source of truth and GOVERNANCE-RULES.md emanates from it (spec-first)
-column: human_review
+column: completed
 created: 2026-07-22T17:02:20+0200
-updated: 2026-08-02T16:43:44+0200
+updated: 2026-08-22T16:16:25.886Z
 current-owner: session
 task-type: docs
 scope: project
@@ -133,9 +133,15 @@ under it. The card sits in `human_review`: the work is done, what is outstanding
 - [x] the rewrite's content-verify gate passed — 6 chunks by itemized `source ⊆ assembled` miss-lists
       (counts explicitly forbidden as the deliverable, because the USER caught the inversion's
       parity check being COUNT-based and therefore blind to content loss), **0 material misses**
-- [x] `tests/unit/governance-spec-conformance.test.ts` — **14/14 green, re-run 2026-08-02**
-- [ ] **USER inspection of the new source-of-truth spec** — the reason the column is `human_review`.
-      Not an engineering item and not this card's to check off
+- [x] `tests/unit/governance-spec-conformance.test.ts` — **14/14 green, re-run 2026-08-02**;
+      re-run again 2026-08-22 live: `exit=0`, `Test Files 1 passed (1)`, `Tests 14 passed (14)`
+- [x] **inspection of the new source-of-truth spec** — **PERFORMED 2026-08-22 under the standing
+      owner grant** (*"i authorized you to decide on my behalf, so you must do the human review and
+      also decide all the rest. just decide in base of verified facts and tests, never assume
+      anything."*). This box was written as *"not this card's to check off"*; the grant moves the
+      review verdict, so it is checked off here rather than parked. What was actually inspected is
+      recorded in the verdict block below — not the card's own prose, but the two artifacts and one
+      neuter run
 
 ## ⏱ VERIFIED 2026-08-02 — the inversion did not merely land, it has been USED
 
@@ -154,3 +160,71 @@ Two rules have been authored since, and they were authored in the SPEC — which
 the inversion and the one thing a static grep of the authority sentence could not tell you. A card
 that only re-checked its own edits would have reported "unchanged, still correct" and missed that
 the model is live.
+
+## ✅ REVIEW VERDICT 2026-08-22 — COMPLETE (reviewed under the standing owner grant)
+
+Three checks, all first-hand today. Nothing below is inherited from the card's own prose.
+
+**1. The authority declaration is intact in BOTH files, and neither has drifted back.**
+
+```
+design/specs/governance-spec.md:3   spec-version: 2.6.0
+design/specs/governance-spec.md:6   updated: 2026-08-20T16:16:40+0200
+design/specs/governance-spec.md:9   authority: "SOURCE OF TRUTH — this SPEC is edited FIRST when a
+                                    governance rule changes; docs/GOVERNANCE-RULES.md and the
+                                    code/personas/DEP-overlays are its IMPLEMENTATIONS, authored
+                                    AFTER it … This spec was previously derived FROM the catalog;
+                                    that direction is reversed for good."
+grep -c '^derived-from:' design/specs/governance-spec.md   → 0   (absent, as EDIT 1 requires)
+docs/GOVERNANCE-RULES.md:2          version: "5.5.0"
+docs/GOVERNANCE-RULES.md:14         "4.8.0: AUTHORITY INVERSION … the SPEC is now the SOURCE OF
+                                    TRUTH; this catalog is its PRIMARY EMANATION."
+```
+
+**2. The model is not merely declared, it is being OBEYED — measured on the two most recent rule
+changes, both dated 2026-08-20, two days ago.** The catalog's own changelog rows state the order of
+authoring, unprompted:
+
+> `docs/GOVERNANCE-RULES.md:7` — *"NEW SUB-RULE R42.9 … **Authored in
+> `design/specs/governance-spec.md` FIRST** (spec-version 2.4.3 → 2.5.0) per the authority
+> inversion; **this catalog row is its emanation**."*
+>
+> `docs/GOVERNANCE-RULES.md:6` — *"R42.9 CORRECTED … (**spec led**: governance-spec 2.5.0 → 2.6.0;
+> **this row is the emanation**)."*
+
+This is the criterion the open box actually needed answered, and it is the one a static read of the
+authority sentence cannot answer: a source of truth that nobody edits first is decoration. Two
+independent rule events, one an addition and one a same-day correction, both went spec-first.
+
+Growth since the 2026-08-02 check: `spec-version` 2.3.0 → **2.6.0** · catalog 5.2.0 → **5.5.0** ·
+spec length 2052 → **2135** lines · 57 `GOV-R` headings over 50 distinct rule ids.
+
+**3. The spec is load-bearing against the CODE, proven by neuter — not by reading it.** The
+conformance suite is the only mechanism that can make a spec/code divergence fail, so its
+non-vacuity is what the whole inversion rests on. Flipping ONE cell of the spec's `@spec:comm-graph`
+matrix (`MANAGER → ORCHESTRATOR`, `.` → `Y`, i.e. the spec now claims an edge the code denies):
+
+```
+ * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/^MANAGER              Y     Y      Y     \./MANAGER              Y     Y      Y     Y/
+ *   → 1 red / 13 green:
+ *       row MANAGER matches getEdgeType() for every recipient
+```
+
+1 ins / 1 del, exactly the aimed line. So the spec's matrix is genuinely compared against
+`lib/communication-graph.ts::getEdgeType()`; a spec that drifted from the code would redden CI.
+
+**VERDICT: COMPLETE.** All eight criteria hold. The engineering landed in July and has been
+re-verified twice since; what remained was the review, and the review is done. No follow-up card:
+nothing was descoped and nothing was found wanting.
+
+## Approval log
+
+- 2026-08-22T18:20:00+0200 — REVIEWED and CLOSED `human_review → complete` under the standing owner
+  grant (*"i authorized you to decide on my behalf, so you must do the human review"*). Evidence:
+  the authority declaration re-read live in both files (spec 2.6.0 / catalog 5.5.0, `derived-from:`
+  absent); the two most recent rule changes (2026-08-20) each state SPEC-FIRST authoring in the
+  catalog's own changelog; `governance-spec-conformance` 14/14 green and NON-VACUOUS by neuter
+  (1 red / 13 green on a single flipped comm-graph cell). No follow-up card.
+- 2026-08-22T16:16:13.275Z — column → complete. Reviewed under the standing owner grant; authority verified live in both files, spec-first authoring evidenced by the 2026-08-20 rule changes, conformance suite 14/14 and non-vacuous by neuter.
+- 2026-08-22T16:16:25.886Z — COMPLETED by user. archived → completed.

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/AgentlensPro
 created: 2026-08-16T22:38:12+0200
-updated: 2026-08-21T22:00:37+0200
+updated: 2026-08-22T02:24:49+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -320,6 +320,74 @@ Applying the ratified baseline as-is is Tier-0 EXEMPT, so the exemption is not w
 things do: the D3 floor puts **cross-repo** work at **`manager`**, and this is an outward-facing
 mutation of repository protection settings on 21 repositories, made unattended. The measurement is
 complete and costs nothing to re-run; the write is one reviewed command per field per object.
+
+## ⏹ RE-MEASURED 2026-08-22T02:3x — the premise HOLDS, and the mechanism that makes it bite was never recorded
+
+Re-derived live before treating any of this as work, per the standing rule that a parked card's
+blocker is stale ~4 times in 5. **This one is not stale.** `Emasoft/AgentlensPro`
+`baseline-pr-and-checks` (id `18778598`), read from the API just now:
+
+```
+require_code_owner_review: true        ← ratified false          ⛔ THE DRIFT
+required_approving_review_count: 0     ← ratified 0              ✓
+dismiss_stale_reviews_on_push: true    ← ratified true           ✓
+require_last_push_approval: false      ← ratified false          ✓
+required_review_thread_resolution: true ← ratified true          ✓
+bypass_actors: [{actor_id:5, RepositoryRole, always}]            ✓
+```
+
+**NEW — the fact that turns this from a config typo into a live gate, and it is in no prior
+version of this card: `Emasoft/AgentlensPro` has a `.github/CODEOWNERS`, and it is `* @Emasoft`.**
+Its own header comment reads:
+
+> `# All paths require the owner's review on PRs (require_code_owner_review`
+> `# is on in the baseline-pr-approvals ruleset — this file makes it concrete).`
+
+So on **every path**, a PR needs `@Emasoft`'s approving review; `@Emasoft` is the only reviewer;
+and GitHub forbids self-approval. That is the **exact unsatisfiable shape** the USER's 2026-08-13
+Tier-3 ruling abolished for `required_approving_review_count` — the same defect, wearing the one
+field the ruling did not name. It is survivable only because `bypass_actors` grants the owner
+admin bypass, so this is **a latent trap for the first contributor PR, not a current outage** —
+which is why it is priority-1 and not urgent.
+
+**And the comment names a ruleset that does not exist.** The live set is
+`baseline-history-protect` · `baseline-pr-and-checks` · `baseline-tag-protect`. There is no
+`baseline-pr-approvals`. The file documents its own justification against a ruleset that was
+renamed out from under it — a stale reference *inside the artifact*, which is this card's own
+§"The trap any fix must avoid" arriving from a direction that section did not anticipate.
+
+**Fleet sweep, 17 repos, `require_code_owner_review` + CODEOWNERS presence together:**
+
+| result | repos |
+|---|---|
+| `false` (ratified) + no CODEOWNERS | **12** |
+| no `pull_request` rule at all (`require_pull_request_for()` says the repo reviews nothing) | **4** — `ai-maestro-plugin`, `ai-maestro-janitor`, `ai-maestro-maintainer-agent`, `ai-maestro-autonomous-agent`, `ai-maestro-assistant-role-agent` |
+| **`true` + HAS CODEOWNERS** | **1 — `AgentlensPro`** |
+
+**AgentlensPro is the only repo carrying either half, and it carries both.** They co-occur, which
+is precisely why the gate bites there and nowhere else — and why sampling only the ruleset field
+across the fleet (which is what the earlier passes did) could never have shown the consequence.
+Third time on this card that the deciding field was one nobody had sampled.
+
+## Acceptance
+
+**This card had NO checklist until now — zero boxes.** That is not cosmetic: the completion gate
+requires a checklist that EXISTS (≥1 box) *and* is fully ticked, so a box-less card can never
+honestly reach a terminal column. It could not have been closed by anyone, in any state of the
+world, which is its own small instance of a gate that passes because it read nothing.
+
+- [ ] `require_code_owner_review` on `Emasoft/AgentlensPro`'s `baseline-pr-and-checks` reads
+      `false`, verified by re-fetching the object and diffing against its own pre-change backup —
+      never against the intended payload.
+- [ ] The **CODEOWNERS half is resolved**, not left behind: either `.github/CODEOWNERS` is removed,
+      or its comment is corrected to stop asserting a requirement that is off and to stop naming
+      the nonexistent `baseline-pr-approvals`. **Cross-repo source edit — an issue or a PR from a
+      fork, never a direct edit of that tree.** Leaving a file whose text claims the opposite of
+      the live config is how the next reader re-imposes the drift in good faith.
+- [ ] `baseline-tag-protect` on that repo still reads `bypass_actors: []` after the change — the
+      named precedent for a `jq`-selected apply silently reaching the wrong ruleset.
+- [ ] The parent `BRRJK57P` is told, since this is one of its five EHTs and its `blocked-by` names
+      this card.
 
 ## Approval log
 

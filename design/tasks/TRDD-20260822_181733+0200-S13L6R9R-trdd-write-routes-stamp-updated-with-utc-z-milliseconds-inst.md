@@ -227,3 +227,35 @@ frozen-card question; conflating them would hold a safe fix hostage to an unsett
 - [ ] the freeze question is ruled on before any backfill touches a terminal card
 - [ ] the approval-log repair rewrites ONLY the leading `- <ISO> — ` token, proved by asserting the post-em-dash remainder is byte-identical
 - [ ] the write-side fix and the doctor rule land INDEPENDENTLY of the backfill
+
+## Placement settled by the import graph — 2026-08-22T20:38:30+0200 — and my own proposal was WRONG
+
+I proposed *"export the existing `isoNow()` from `lib/trdd-create.ts`"* and asked the advisor to
+attack it. The dependency graph answers it without an opinion:
+
+```
+lib/trdd-create.ts:23   import { TRDD_ZONES, type TrddZone } from '@/lib/trdd-store'
+lib/trdd-store.ts       …imports pillar/*, trdd-edit-guard — NOT trdd-create
+consumers:              trdd-create → 1 (the create route) · trdd-store → 14
+```
+
+**The direction is already `create → store`.** So exporting `isoNow()` from `trdd-create` and
+importing it into `trdd-store` — which is what my plan required, since `trdd-store` is where all
+three write targets live — would **REVERSE that edge and create an import cycle**
+(`store → create → store`). My proposal was not merely stylistically off; it was structurally
+impossible in the direction it needed to go.
+
+**Correct placement: MOVE `isoNow()` into `lib/trdd-store.ts` and export it; `trdd-create`
+imports it from there.** That follows the existing edge, adds no file, puts the helper in the module
+that actually performs all three writes, and yields the ONE definition the card asks for. A third
+`lib/trdd-stamp.ts` would also work and costs an extra module for one function — rejected as
+unnecessary, not as wrong.
+
+**Why this is worth recording rather than just doing:** the ladder's *"reuse what already exists"*
+rung pointed at `trdd-create` because that is where the function IS, and reuse-in-place is normally
+the lazy correct answer. Here it would have produced a cycle. **The reuse rung tells you WHAT to
+reuse; the import graph tells you WHERE it may live, and only the second one is checkable.** One
+grep of two import blocks settled a question I had escalated to an advisor.
+
+- [ ] `isoNow()` lives in `lib/trdd-store.ts`, exported, with `trdd-create` importing it — no new module, no cycle
+- [ ] `npx tsc --noEmit` clean (a cycle is exactly what a type-check catches, so this box is the proof)

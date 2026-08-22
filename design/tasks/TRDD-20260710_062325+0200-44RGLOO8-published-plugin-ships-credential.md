@@ -6,7 +6,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-08-16T10:15:44+0200
+updated: 2026-08-22T15:12:13+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 priority: 1
@@ -402,3 +402,42 @@ why it could be written at all (a checklist invented from a title is fabrication
       deliberately. This is the box that keeps the card in `human_review`.
 
 ## Notes and lessons learned
+
+## ⏹ 2026-08-22T15:1x — THE FIX IS WRITTEN AND STILL NOT SHIPPED. 6 days OPEN.
+
+The 2026-08-16 entry above ends *"PR opened, awaiting review + release"*. Measured today —
+**nothing has landed, and the public repo still carries what this card was filed about.**
+
+| probe | result |
+|---|---|
+| `gh pr view 4 --repo Emasoft/ai-maestro-web-scenario-tester --json state,mergedAt` | **`OPEN`, `mergedAt: null`** |
+| repo visibility | **PUBLIC** |
+| default branch | `master` |
+| the PR's new safety heading present on `master`? | **0 hits** |
+| latest release | **v0.1.3, 2026-07-08** — a month BEFORE the fix was even written |
+
+**The zero is real, not an indexing artifact.** GitHub code search returns 0 for both a genuinely
+absent string and a repo it has not indexed, so it was positive-controlled against
+`governancePasswordRef` — a string this card's own body says the repo ALREADY ships — which
+returns **5**. The instrument works on this repo; the heading is absent because the fix is not
+there.
+
+**What that means for severity.** This card records that the literals were removed *in the PR*
+(*"WITHOUT reproducing them, by scripts anchored on SHAPE"*). The PR is unmerged, so whatever this
+card was originally filed about is **still on `master` of a PUBLIC repo**, and every consumer of
+the latest release gets the pre-fix guidance — the doc that scenario authors copy from, which is
+precisely why the card called this the dangerous one of the two conflicting docs.
+
+**A written fix is not a shipped fix, and this is the failure mode that hides it:** the card reads
+as resolved because the hard part (finding the conflict, writing the safe mechanism) is genuinely
+done, and the remaining step is a click. Six days of that step not happening is invisible to
+anyone reading the card top-down.
+
+**⚠ ONE THING I DID NOT AND WILL NOT CHECK: whether the credential is still LIVE.** If it was
+rotated since 2026-07-10 the literal is inert and this is documentation debt; if it was not, it is
+an active exposure. That question is the OWNER'S — I will not test a credential, and I did not
+search for its value at any point here (every probe above is a structural string).
+
+**NEXT ACTION (owner):** merge `Emasoft/ai-maestro-web-scenario-tester#4` and cut a release, or say
+why not. Re-derive rather than trust this block:
+`gh pr view 4 --repo Emasoft/ai-maestro-web-scenario-tester --json state,mergedAt`

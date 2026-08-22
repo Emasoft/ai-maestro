@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T03:44:27+0200
+updated: 2026-08-22T03:48:07+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -135,6 +135,39 @@ audit never ran.
 **Caveat, not a formality:** the needle is the literal `plugin-self-audit`. A repo citing its
 audit by report path or another phrase reads as zero here, and a zero from one needle is not a
 negative result. Confirm per repo before treating any row as an omission.
+
+#### ⚠ CORRECTED 03:48 — I ran that caveat against my own table, and it caught two of three rows
+
+The table above is **wrong in two cells and right in one.** Re-measured by listing the report
+directories instead of counting `*.md`, and by widening the card needle to `self.audit`:
+
+| repo | audit reports (corrected) | remediation card | verdict |
+|---|---|---|---|
+| `ai-maestro-janitor` | **9** (was 9 ✓) | 0 — its one `self-audit` hit is a June memory-curation card, unrelated | **gap CONFIRMED** |
+| `ai-maestro-integrator-agent` | **10** (was 11 ✗) | **≥1** — `ONCGHA1Q-tdd-gate-comparison-is-inverted`, archived/terminal, and a report `…-ai-review-t3clwn5y-oncgha1q.md` names it | **claim WITHDRAWN** |
+| `ai-maestro-autonomous-agent` | **8** (was 9 ✗) | 0 — its one hit (`4P2RZQFE`, archived) predates the 08-16 audit | **gap CONFIRMED** |
+
+Two distinct defects in my own measurement, worth naming separately:
+
+1. **The report counts were `find -name '*.md' | wc -l`, and those directories also hold a
+   `DELEGATION.md`** (a colony ledger, not an audit report). I counted a unit I had not defined —
+   the exact failure this program keeps finding in others' reports, committed here in the commit
+   that reported it.
+2. **The card needle was too narrow in the direction that flatters the finding.** The literal
+   `plugin-self-audit` returned 0 for all three; `self.audit` returns 1 each, and for the
+   integrator that one is a genuine remediation card for a real audit finding. **A needle that
+   only ever under-reports produces gaps that look larger than they are**, which is the shape a
+   reader will believe without checking.
+
+**What survives:** two fleet repos ran audits (9 and 8 reports) and converted **nothing** into
+tracked work. That is still the finding, and it is still upstream of the citation sweep. What
+does not survive is "three repos" and the specific counts.
+
+**What the integrator's row actually teaches**, and it is more useful than the row I withdrew:
+the audit→card path DID work there, once, for one finding out of ten reports. So the live
+question is not the binary *"did any card get filed?"* but *"what fraction of each audit's
+findings reached a board?"* — and 1-of-10 is a gap of the same kind, just measurable instead of
+absolute.
 
 **NEXT on this box, revised:** the citation sweep is no longer the top item. Ask first *"which
 fleet repos have audit reports and no cards?"* — that set is where untracked findings live, and

@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-22T23:01:16+0200
+updated: 2026-08-22T23:03:21+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -120,9 +120,10 @@ A substring check calls those a bleed and reds a correct walker. Now asserts the
 
 ## Decisions — the 17, one at a time
 
-Two decided 2026-08-22, both on the blast-radius pick this card named. **Both CLEAR.** Recording
-the reasoning, not just the verdict, because "we looked and it was fine" is the finding that
-otherwise gets re-litigated by the next reader.
+Three decided 2026-08-22 — the two blast-radius picks this card named, plus the highest-risk name
+the new forward-only tier exposed. **All three CLEAR.** Recording the reasoning, not just the
+verdict, because "we looked and it was fine" is the finding that otherwise gets re-litigated by
+the next reader.
 
 **`sessions/create` — CLEAR. Forward-and-authorize, not authentication-only.** The route runs
 `enforceAuth`, then ALSO `authenticateFromRequest` + `buildAuthContext`, and plumbs the context
@@ -164,7 +165,34 @@ strong one. There is also no action to authorize WITH: `authorize()`'s vocabular
 promote refuse register-agent unblock-prompt` — adding one is a governance-vocabulary change, and
 nothing here justifies it.
 
-### But the subtree sweep found a real hole the ledger cannot see
+**`teams/[id]/batch-create-agents` — CLEAR, and STRICTER than any ledger showed.** Picked next
+because it is the highest-blast-radius name the new forward-only tier exposed — a route that
+BATCH-mints agents, previously in no ledger at all, and DQVPODKW was 3-in-4 wrong on agent-minting
+routes. It forwards into `CreateAgent`, whose only auth gate is `G00f:
+assertForeignUserMayCall(authContext, 'create_agent')` — an R40 FOREIGN-USER check that returns
+`null` for any non-foreign caller, so it is not a title check and would not stop a MEMBER. That is
+the CAVCTULL false case exactly, and it is why `POST /api/agents` needed F1SL03CK. **But the route
+gates itself**, at lines 36-38: `if (auth.agentId) return 403 'Only system owner can
+batch-create agents'` — and `agentId` is undefined only for the cookie-session system owner. So it
+is owner-only, hand-rolled rather than via `enforceSystemOwner`.
+
+### Three separate blind spots in the needle, one of them unfixable
+
+1. **Forwarding** — fixed, commit `57560112` (the tier).
+2. **`checkTeamAccess(`** — a real authorization helper (`if (!access.allowed) return 403`) that
+   `STRONG_AUTHZ` did not know, covering three team-scoped routes. Added after reading the call
+   site; forward-only 18 → 15. Commit `31e87e80`.
+3. **Inline owner gates — MEASURED AND DELIBERATELY NOT SHIPPED.** A needle for
+   `if (auth.agentId)` / `isSystemOwner` matched 8 routes; reading four found **two false**.
+   `messages/route.ts` uses `auth.agentId` to OVERRIDE a client-supplied param, and `trdd/create`
+   uses `isSystemOwner` to compute an authority RANK — neither refuses anything. A 50%-wrong
+   needle that moves routes OUT of a debt ledger is worse than no needle, because its errors are
+   silent and in the reassuring direction. So the inline-gated routes stay counted and the number
+   overstates the debt safely. This is the same use-vs-mention failure as the ledger's other
+   blind spots, one layer down, and it is why `batch-create-agents` had to be read rather than
+   classified.
+
+### And the subtree sweep found a real hole the ledger cannot see
 
 `GET /api/plugin-builder/builds/[id]` had **no guard of any kind** — the only unauthenticated
 route in an otherwise-guarded subtree. Its sole protection was the entropy of the build id, minted
@@ -197,8 +225,10 @@ so that box stays open.
 - [x] PROVEN to fire on a seeded route, and to go green when it is removed
 - [x] walker control asserts a real scan set (>100 files) and no bleed into `app/api/agents/`
 - [x] non-vacuity: the needle must find >0, so a broken regex cannot read as "all decided"
-- [ ] the 17 decided one at a time, each real one its own card. **2 of 17 done** — `sessions/create`
-      and `plugin-builder/build`, both CLEAR, reasoning under `## Decisions`. 15 remain
+- [ ] the 17 decided one at a time, each real one its own card. **3 decided, all CLEAR** —
+      `sessions/create`, `plugin-builder/build`, `teams/[id]/batch-create-agents`. Reasoning under
+      `## Decisions`. The remaining debt is **11 authn-only + 15 forward-only** (one of the 15,
+      `sessions/create`, is verified and pinned by name), so ~25 assertions remain unchecked
 - [x] the third root needs a FORWARD-ONLY tier like the `agents/` root has — **done**, commit
       `57560112`. The needle was wrong in BOTH directions: 6 of the 17 were forwarders (the five
       `groups/*` + `sessions/create`), so the authn-only debt is **11**; and **18** mutating

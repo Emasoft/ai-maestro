@@ -26,6 +26,16 @@
  * guarded, and two more (`docker/info`, `agents/create-from-toml`) read as guarded off
  * neighbouring prose. The card's own headline 111/141 carries those two false positives;
  * the re-derived figures are 110 guarded / 142 unguarded.
+ *
+ * NEUTER RUNS (2026-08-23 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s|const isComment = .*|const isComment = (_l: string) => false|  if $. == 62
+ *   → 2 red / 2 green:
+ *       discriminates guarded from unguarded, and is not fooled by prose
+ *       the ledger carries no stale entries (a guarded handler must be deleted from it)
+ *   s|^  .GET .*config.*$|  // neutered|  if $. == 76      (simulates a NEW unguarded handler)
+ *   → 1 red / 3 green:
+ *       no handler is added without auth (the ledger only shrinks)
+ * Complementary: each mutation reds a different test, so neither half of the file is vacuous.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'

@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T00:19:02+0200
+updated: 2026-08-23T00:41:16+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -29,6 +29,15 @@ Measured 2026-08-23 over `services/headless-router.ts`, by enumerating every
 | route handlers total | 252 |
 | with per-handler auth | 111 |
 | **with none** | **141 (56%)** |
+
+> **⚠ CORRECTED 2026-08-23 — this table reads 2 too FAVOURABLY. The instrument counted a needle
+> appearing in a NEIGHBOURING COMMENT as a guard**, and this router explains its own guards in prose
+> at length. Re-derived with comment lines stripped: **109 guarded / 143 unguarded at `41cc9983`**
+> (the commit that filed this card) and **110 / 142 at `6b40bfc7`**. `GET /api/docker/info` and
+> `POST /api/agents/create-from-toml` are the two false positives here; a third,
+> `GET /api/settings/element-content`, appeared later when `9534cc0f` added a comment block naming
+> `delegateNextRoute` above `mcp-discover` — which is how the class was found. The ledger test
+> carries the corrected enumerator and a control that reds if the stripping is removed. **Use 142.**
 
 The only thing in front of those 141 is `_headlessHasCredential` (`headless-router.ts:4449`),
 and **its own comment states what it is**: *"a STRUCTURAL credential check ONLY … structural, not
@@ -179,9 +188,22 @@ re-litigated and the default is not invented under time pressure later.
       (authorization) are in `## RULING 2026-08-23`
 - [ ] whichever is chosen, a NEW handler added afterwards inherits the guard rather than needing
       one remembered
-- [ ] a conformance test fails on a newly-added unguarded handler, seeded with the current count as
-      a shrinking ledger — NOT shipped as 141 fresh failures
-- [ ] the counts are re-derived at fix time rather than taken from this card
+- [x] a conformance test fails on a newly-added unguarded handler, seeded with the current count as
+      a shrinking ledger — NOT shipped as 141 fresh failures.
+      `tests/unit/headless-handler-auth-ledger.test.ts` (2026-08-23). It enumerates the route table
+      from source, names the current unguarded set in `UNGUARDED_LEDGER`, and fails only on an
+      ADDITION; a handler that gets guarded must be DELETED from the ledger, so it cannot silently
+      stop shrinking. Two neuters, each reddening a different test, are recorded in its header
+- [x] the counts are re-derived at fix time rather than taken from this card — **and they MOVED,
+      which is why this box exists.** Re-derived 2026-08-23 with comments stripped before matching:
+      **252 total / 110 guarded / 142 unguarded** at `6b40bfc7`, and **109/143** at `41cc9983`, the
+      commit that filed this card. **The `111 / 141` in `## Problem` above is INFLATED BY 2 comment-
+      only false positives** — this router documents its own guards in prose, so an unstripped
+      handler body matches every needle aimed at its code. `GET /api/settings/element-content`,
+      `GET /api/docker/info` and `POST /api/agents/create-from-toml` each read as guarded off a
+      NEIGHBOURING comment; the first only after `9534cc0f` added the `delegateNextRoute` comment
+      block above `mcp-discover`, which is what exposed the class. Take 142, not 141, and re-derive
+      again at fix time rather than taking 142 from here
 - [ ] any route touched is verified in BOTH modes, since the same-night evidence is that a
       Next-only fix is the default failure
 

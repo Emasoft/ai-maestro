@@ -1,13 +1,12 @@
 ---
 trdd-id: BRRJK57P
 title: USER fleet program — every plugin self-audits twice, remediates via TRDDs, and is proven by new scenario tests
-column: blocked
-pre-block-column: dev
+column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T14:08:39+0200
+updated: 2026-08-22T15:43:59+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -21,7 +20,7 @@ approval-datetime: 2026-08-16T16:53:19+0200
 derived: false
 npt: []
 eht: [5TELESBL, 9FBNRW29, GIONLYAF, 36RGLVYH, LXF16IXG]
-blocked-by: [GIONLYAF, LXF16IXG]
+blocked-by: []
 release-via: none
 priority: 0
 severity: high
@@ -34,7 +33,48 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
 
+### ⏹ 2026-08-22T15:43 — THE 14:08 CORRECTION BELOW WENT ONE STEP TOO FAR. `blocked` → `todo`
+
+**Self-caught, and the error is mine (`26f1de2f`).** The 14:08 entry's measurement is sound and
+its table is correct: 3 of 5 EHTs terminal, `GIONLYAF` and `LXF16IXG` open, so **`complete` is
+unreachable by construction**. That much stands. What does not is the sentence it ends on:
+
+> *"Nothing else on this card can move until one of them does."*
+
+**That is false, and it is the whole defect.** `eht:` gates the parent's **`complete`** — it does
+not gate the parent's **work**; only `npt:` does that, and `npt:` here is `[]`. I took a true
+statement about closure and extended it into a claim about progress, which parked a `priority: 0`
+USER mandate on a blocker that blocks only its closure.
+
+**Measured against the two claimed blockers' actual subjects, not their ids:**
+
+| claimed blocker | what it is about |
+|---|---|
+| `GIONLYAF` | dispose of 2 superseded executables in `~/.local/bin` + one cross-repo install-gap issue |
+| `LXF16IXG` | a stale `require_code_owner_review` ruleset field on `Emasoft/AgentlensPro` |
+
+…against this card's four open boxes: (1) 3 NAMED peer sessions still owing Phase-1 reports,
+(2) hub-side re-verification of one citation per confirmed finding — **the 154-citation corpus is
+already built and the remediation-card-first method already corrected**, (3) recording refuted
+candidates, (4) Phase-2 TRDDs in the owning repos.
+
+**Two scripts in `~/.local/bin` and a GitHub ruleset field on one repo cannot prevent any of those
+four.** Box 2 in particular is workable right now and needs nothing from either card.
+
+So `blocked-by:` is cleared and the column is **`todo`**, not `dev`: nobody is working it this
+minute, and re-asserting `dev` would restore the exact lie the 14:08 pass corrected. The EHT gate
+is untouched and still does its job — `complete` stays unreachable until both are terminal, which
+is what `eht:` is for.
+
+**The general shape, because it is cheap to repeat:** `blocked` is the only licence to sit still
+and the claim must be true *of the work*, not merely of some gate. An EHT-gated parent whose own
+boxes are workable belongs in `todo`. Before writing `blocked-by:`, read the blocker's **subject**
+and ask which specific box it stops — an id looks like a blocker from any distance.
+
 ### ⏹ 2026-08-22T14:08 — COLUMN CORRECTED `dev` → `blocked`, and the two EHTs that gate it, MEASURED
+
+> **⚠ SUPERSEDED IN PART by the 15:43 entry above** — the measurement and the table below are
+> correct and still authoritative; the closing *"nothing else on this card can move"* is not.
 
 **This card was asserting `dev` while nobody was working it, with `blocked-by: []`.** Both halves
 were untrue, and the second is what made the stall invisible: the board's own exception column

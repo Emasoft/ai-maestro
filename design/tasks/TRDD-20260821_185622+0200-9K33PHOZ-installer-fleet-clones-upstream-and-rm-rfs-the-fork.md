@@ -3,7 +3,7 @@ trdd-id: 9K33PHOZ
 title: install.sh rm -rfs the live fork checkout in non-interactive mode and reclones from upstream
 column: dev
 created: 2026-08-21T18:56:22+0200
-updated: 2026-08-21T19:52:44+0200
+updated: 2026-08-22T11:03:54+0200
 implementation-commits: [4d4b72c7, 8b7c7de5, e0e55244, 4a760eed]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
@@ -194,7 +194,14 @@ Landed: `4d4b72c7` (guard + both repo sources configurable), `8b7c7de5` (finding
       repo is changed in one place — `AIMAESTRO_REPO` env → `AI_MAESTRO_REPO` → literal
 - [x] FINDING 4 resolved by an owner ruling recorded in this card, and applied to both call sites
       (`install.sh`, `scripts/remote-install.sh`) via `AIMAESTRO_GATEWAYS_REPO`
-- [ ] FINDING 5 resolved: the four constants are either consumed or deleted — **owner ruling**
+- [x] FINDING 5 resolved: DELETED in `9b3474a5`. Owner ruling 2026-08-22 supplied the third
+      option this card never considered — the constants are neither "abandoned" nor "unfinished"
+      but **superseded by an architecture change**: AMP and AID became in-repo scripts + API
+      inside ai-maestro, and their skills moved into the core plugin (`agent-messaging`,
+      `agent-identity`). Constants naming *external plugin repos to install from* therefore
+      describe a topology that no longer exists, which is exactly why nothing consumed them.
+      Verified before deleting: 0 consumers outside the two SSOTs; after: 0 hits repo-wide,
+      tsc clean, `bash -n` clean.
 - [x] FINDING 6: the false submodule comment is corrected or the no-op step removed — corrected,
       step kept so a future submodule needs no installer change (`8b7c7de5`)
 - [ ] FINDING 7: rename decided; if taken, all callers updated in the same commit — **owner ruling**

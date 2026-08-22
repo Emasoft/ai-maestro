@@ -75,9 +75,38 @@ that FIRST; this card does not restate it.
 - [x] scan discovers janitor-armed non-agent sessions (measured against the live machine: the plugin-dev Claudes appear) — 19/21 on 2026-08-19, see STATE
 - [x] origin tag threads through snapshot -> runner so actuation policy is per-population — `origin` on both populations; runner sees registry ids only (n4 pins the threading)
 - [x] detect-only first: no actuation on the new population until separately armed — watchdog log line only; n3 pins it
-- [ ] claim of 'session-liveness' proposed to USER only after this lands + FIRE armed — USER-gated (AIM_FLEET_RECOVERY_FIRE not armed)
+- [~] claim of 'session-liveness' proposed to USER only after this lands + FIRE armed — USER-gated (AIM_FLEET_RECOVERY_FIRE not armed)
+      **Reshaped to a deferral 2026-08-22.** This box is not this card's work: it is a DOWNSTREAM
+      PROPOSAL whose precondition (`AIM_FLEET_RECOVERY_FIRE=1`) is an arming decision owned
+      elsewhere and reserved to the owner. A cross-card dependency belongs in a pointer, never in
+      an acceptance box — the rule `TRDD-P7XKV3N9` established when it hit the same shape. As an
+      open box it held a finished, measured card open on somebody else's switch.
+      The arming is surfaced to the owner as one of three independent actuation flags (see the
+      verdict below); when FIRE is armed, the claim proposal is a fresh, cheap task.
 
 ## Approval log
 
 - 2026-08-19T15:01:29+0200 — MANDATE issued as Tier-0 self-mandate (derived NPT of [[KCRMSNL7]],
   server-internal, reversible, dark-shipped where destructive). No approval request sent.
+
+## ⏹ 2026-08-22T18:0x — HUMAN REVIEW PERFORMED. VERDICT: COMPLETE.
+
+Under the owner's 2026-08-22 grant. This card is `min-approval-requirement: none` — Tier 0, so no
+gate ever blocked it; what remained was one box belonging to another card's switch.
+
+**The safety property was re-verified in source, not read off the STATE block.** The new
+(non-agent) population is DETECT-ONLY by construction, and it is two separate structures rather
+than one flag: stale non-agent sessions land in `staleSessions` and produce a single log line
+(`lib/fleet-liveness-watchdog.ts:290`, whose text literally says *"detect-only, no actuation
+lane"*), while actuation reads `snap.recoveryTargets` behind `if (fireEnabled && …)` at `:298`.
+The populations never meet, so arming FIRE later cannot silently actuate on the new one — which is
+exactly the property the card promised.
+
+The card's own evidence is unusually strong and I am not restating it as mine: four recorded
+neuters (n1-n4), each naming the tests it reddened, plus verification BY EFFECT on the live server
+with the liveness sha matching HEAD. Its incidental finding is worth keeping — the neuter helper
+itself was broken under BSD `mktemp`, so n2-n4 first read *"0 red / 0 green"*, which is the
+instrument failing in the direction that looks like a passing test.
+
+**VERDICT: COMPLETE.** Three of four boxes are engineering, done and pinned; the fourth was a
+downstream proposal on an owner-gated flag and is deferred to that decision.

@@ -1,13 +1,14 @@
 ---
 name: governance-enforcement-ratchet
-description: "I added/edited a governance rule and the build went red — what is the enforcement map / how do I keep the governance ratchet green / how do I prove a rule is actually enforced, not just documented"
+description: "I added/edited a governance rule and the build went red — what is the enforcement map / how do I keep the governance ratchet green / how do I prove a rule is actually enforced, not just documented / my coverage guard is green but the route has no authorization / a guard whose scan root or needle is narrower than the class it names"
 ocd: 2026-07-14
-lmd: 2026-07-31
+lmd: 2026-08-22
 metadata:
   node_type: memory
   type: project
   tier: component
   topic: teams-and-governance
+publish-globally: false
 ---
 
 `docs/GOVERNANCE-RULES.md` is a FIXTURE, not just prose. The ratchet test
@@ -78,6 +79,33 @@ plus three ratified `~/.claude` settings keys). The CONTRADICTED column is the g
 of which rules conflict (rule-vs-code or rule-vs-rule); most need a USER ruling because they pit an
 IRON (user-set) rule against the code. Full per-rule detail is gitignored evidence under
 `reports/governance-audit/` (the map is the durable git-tracked half).
+
+
+^ATOM-VRQB-59EF [desc: "The ratchet does not cover ROUTE-level authorization coverage — a separate guard does, and it was blind twice: a scan root of `[id]/` only, and a needle counting `buildAuthContext(` as authorization", keywords: the_coverage_guard_is_green_but_the_route_has_no_authorization scan_root_too_narrow_so_the_guard_walked_a_subtree_that_was_already_clean buildAuthContext_counted_as_an_authorization_step POST_/api/agents_was_authenticated_and_never_authorized an_unauthorized_mutating_route_the_guard_could_never_have_seen, ocd: 2026-08-22, lmd: 2026-08-22]
+
+The ratchet above proves a RULE is enforced somewhere. It says nothing about whether every
+mutating API ROUTE performs an authorization step — that is
+`tests/unit/agent-route-authorization-coverage.test.ts`, and on 2026-08-22 it was blind twice, in
+ways that both read as green (TRDD-F1SL03CK, TRDD-CAVCTULL):
+
+1. **Its scan root was `app/api/agents/[id]/` only.** The COLLECTION subtree
+   (`app/api/agents/*/route.ts`) had never been under any guard: 26 mutating routes, **19 with no
+   authorization step at all**. A guard walking an already-clean subtree is indistinguishable from
+   a clean codebase.
+2. **Its `AUTHORIZES` needle counted `\bbuildAuthContext\(` as an authorization step,** on the
+   theory that the call forwards the caller into a `Change*` pipeline that authorizes at Gate 0.
+   `POST /api/agents` — the route that MINTS agents — already called it, and `CreateAgent`'s first
+   gate is `G00f`, an R40 foreign-user check, not an `authorize()` call. So a context CONSTRUCTION
+   read as an authorization DECISION.
+
+The instance it missed was a live hole: **any agent of any title could create agents.** Closed by
+`authorize(auth, 'create-agent')` in the route, gated to MANAGER and CHIEF-OF-STAFF (R30.1/R30.2).
+
+The guard now carries a SEPARATE collection root and ledger (the `[id]` ledger stays provably
+empty), the forward-only spelling is pinned in an UNVERIFIED tier rather than counted as covered,
+and a positive control asserts the walker reaches >=26 routes by name — plus the widened guard was
+PROVEN to red on a seeded unauthorized route, because a widened root that still matches nothing
+looks exactly like a clean one.
 
 ## See also
 

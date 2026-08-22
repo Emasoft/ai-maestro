@@ -1357,7 +1357,28 @@ const routes: Route[] = [
   }},
 
   // Cross-client skill installation (uses converter library)
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/install-skills$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/install-skills$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-R268J32X — TRDD-D3RP7KQZ's fix was HALF-APPLIED and this is the other half. The Next
+    // route (`app/api/agents/[id]/install-skills/route.ts:39-46`) authenticates and then calls
+    // `authorize(auth, 'manage-skills', id)`, with its comment stating why: "installing skills is
+    // CONFIGURATION, so no agent may do it to itself, and only a MANAGER (or the target's own COS)
+    // may do it to another … precisely the self-reconfiguration the invariant forbids."
+    //
+    // This handler took `_req` — no authentication and no authorization at all — while doing the
+    // same work: `convertElements(..., scope: 'user')` reaches `lib/converter/convert.ts:209-212`,
+    // which returns `process.env.HOME` as the write root. In headless mode the Next route never
+    // runs, so D3RP7KQZ's gate did not exist on this path. The structural credential gate is not a
+    // substitute: a SHAPE-VALID forged token passes it and lands here, which is the exact hole
+    // `tests/unit/headless-router-auth-mirror.test.ts` was written to close for its siblings.
+    //
+    // Mirroring the Next route's own decision rather than inventing a weaker one — the same
+    // drift-free pattern the `authorize` import at the top of this file already documents for the
+    // role-plugins handlers.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const authz = authorize(auth, 'manage-skills', params.id)
+    if (!authz.allowed) { sendJson(res, 403, { error: authz.reason || 'Forbidden' }); return }
+
     const { getAgent } = await import('@/lib/agent-registry')
     const { detectClientType } = await import('@/lib/client-capabilities')
     const { convertElements } = await import('@/services/cross-client-conversion-service')

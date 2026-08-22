@@ -15,12 +15,40 @@ import { NextRequest, NextResponse } from 'next/server'
 import { convertElements, getConversionCapabilities } from '@/services/cross-client-conversion-service'
 import { PROVIDER_IDS } from '@/lib/converter/registry'
 import type { ProviderId, ElementType } from '@/lib/converter/types'
-import { enforceAuth } from '@/lib/route-auth'
+import { enforceAuth, enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  const authErr = enforceAuth(request)
+  // TRDD-R268J32X — RAISED from enforceAuth to enforceSystemOwner. This is the widest-reaching
+  // route found while draining the authentication-only ledger, and `enforceAuth`'s own docstring
+  // ("any authenticated caller can call this") was plainly the wrong policy for it.
+  //
+  // WHAT ANY AUTHENTICATED AGENT COULD DO, traced end to end:
+  //   • `source` is documented as "path, URL, or scope path". `convertElements`
+  //     (`services/cross-client-conversion-service.ts:26`) parses it, and on a GitHub URL calls
+  //     `downloadGitHubRepo(...)` — so the SERVER fetches a repo the CALLER names.
+  //   • `scope: 'user'` reaches `lib/converter/convert.ts:209-212`, which returns
+  //     `process.env.HOME` as the write root; `:171` then writes the converted files under it.
+  //   • `force` overwrites, and `projectDir` is caller-supplied for the project scope.
+  // Converted skills/agents/instructions are PROMPT CONTENT that Claude Code loads, so the
+  // composition is remote-content → the owner's home directory → loaded as instructions.
+  //
+  // WHY enforceSystemOwner AND NOT an authorize() action: every other mutating route under
+  // `app/api/settings/**` is already enforceSystemOwner or requireSudoToken — including the
+  // sibling in THIS directory, `global-elements/install-skill`. Installing a skill globally
+  // required the owner while CONVERTING one into the same place did not. That is the
+  // TRDD-DQVPODKW shape (siblings hold the strong guard; the one that reaches furthest got the
+  // weak one), and matching the subtree needs no new governance vocabulary — `authorize()` has no
+  // verb for this and adding one would be a governance change, not a fix.
+  //
+  // Safe for the UI, verified empirically rather than assumed: `components/settings/ConvertButton.tsx`
+  // calls this with a plain same-origin fetch, and `components/settings/GlobalElementsSection.tsx`
+  // — the same settings UI — already calls `settings/global-plugins` (enforceSystemOwner) and
+  // `settings/marketplaces` (enforceSystemOwner + requireSudoToken) successfully. A cookie session
+  // resolves to the system owner (`lib/agent-auth`: "Valid session cookie (aim_session) → system
+  // owner (web UI)").
+  const authErr = enforceSystemOwner(request)
   if (authErr) return authErr
 
   const body = await request.json().catch(() => null)
@@ -60,6 +88,14 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  // TRDD-R268J32X: this had no guard at all. Only enforceAuth (not enforceSystemOwner) because it
+  // returns STATIC capability metadata — which element types convert between two known providers —
+  // with no user data, no paths and nothing to enumerate. The POST above is the owner-gated half.
+  // Still authenticated, because `lib/agent-auth` records the ruling: "SF-058 CLOSED: No auth
+  // headers AND no session cookie → rejected. There is no 'free' system-owner access anymore."
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   const { searchParams } = new URL(request.url)
   const sourceClient = searchParams.get('sourceClient')
   const targetClient = searchParams.get('targetClient')

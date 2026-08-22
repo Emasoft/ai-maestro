@@ -620,6 +620,33 @@ describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8
    * `workingDirectory` is an absolute home path — so unauthenticated it enumerates the fleet and
    * leaks the owner's filesystem layout.
    */
+  // ── TRDD-R268J32X — POST /api/agents/:id/install-skills ───────────────────
+  /**
+   * TRDD-D3RP7KQZ's fix was HALF-APPLIED. The Next route
+   * (`app/api/agents/[id]/install-skills/route.ts:39-46`) authenticates and then calls
+   * `authorize(auth, 'manage-skills', id)` — its comment: "installing skills is CONFIGURATION, so
+   * no agent may do it to itself, and only a MANAGER (or the target's own COS) may do it to
+   * another … precisely the self-reconfiguration the invariant forbids."
+   *
+   * The headless twin took `_req`: no authentication, no authorization, while doing the same work
+   * — `convertElements(..., scope: 'user')` writes rooted at `process.env.HOME`
+   * (`lib/converter/convert.ts:209-212`). In MAESTRO_MODE=headless the Next route never runs, so
+   * that gate simply did not exist on this path. This is precisely the failure class this whole
+   * file exists for, per its own header: several handlers "protected ONLY by the structural gate",
+   * which a shape-valid forged token passes.
+   */
+  it('R268J32X: POST /api/agents/:id/install-skills rejects the forged token (D3RP7KQZ parity)', async () => {
+    const res = await call('POST', '/api/agents/00000000-0000-4000-8000-000000000000/install-skills', {
+      Authorization: FORGED_BEARER,
+      'Content-Type': 'application/json',
+    })
+    expect(res.statusCode).toBe(401)
+    // From the HANDLER, not the structural gate — the discrimination the controls above establish.
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    // And nothing was written: `installed` is the success payload.
+    expect(res.bodyJson()?.installed).toBeUndefined()
+  })
+
   it('R268J32X: GET /api/sessions/restore rejects the forged token (no persisted-session leak)', async () => {
     const res = await call('GET', '/api/sessions/restore', { Authorization: FORGED_BEARER })
     expect(res.statusCode).toBe(401)

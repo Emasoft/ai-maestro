@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T02:46:29+0200
+updated: 2026-08-22T02:48:06+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -558,6 +558,24 @@ them to.
       instead of an unmeasured claim.
 - [ ] For every CONFIRMED finding, the hub has re-verified at least one cited `file:line` itself
       before it becomes a TRDD — no finding enters the plan on a peer's word alone.
+      **STATE 2026-08-22: recorded for 1 of 15 repos, and the record is on the PEER's card, not
+      here.** `ai-maestro-chief-of-staff` `DAESKVN9` (`column: complete`) box 4 reads *"Counts +
+      report paths sent to the hub (2026-08-16 23:27, ledgered; **hub re-verified one citation per
+      axis**)"* — four axes, so the box's requirement was met for that repo back on 2026-08-16 and
+      `BRRJK57P` never learned it. Swept every peer `design/` for the same claim: **exactly one
+      hit.** A deliberately looser needle (`re-verif|ledgered|sent to the hub`) returns 104 cards
+      across 12 repos, but it cannot distinguish WHO verified — most of those are peers verifying
+      their OWN findings, which is good practice and is **not** what this box asks. The box exists
+      precisely so nothing enters the plan on a peer's word alone.
+      **So the honest tally is not "3 of 154" — it is: 1 repo fully covered (by an earlier hub
+      pass, uncredited), 14 repos with no hub-side record, and a 154-citation corpus now built to
+      work them.** See the STATE entry above for the corrected method (remediation-card first) and
+      the measured 45-of-52-terminal result that makes most of those 154 cheap to close.
+      **⚠ And the peer caught the hub, not the other way round.** That same COS card's box 3
+      records re-verifying its own citations *"incl. catching the hub's own `--role` over-claim and
+      withdrawing my two null-payload citations."* The hub — this session, earlier — told them
+      `--role` was not a flag on that subcommand; it is at `:501`, `required=True`. Whatever this
+      box is worth, it is not worth assuming the hub's verification is the reliable half.
 - [ ] Refuted candidates are recorded with their refutation, not silently dropped.
 - [ ] Phase 2 TRDDs exist in the OWNING repos, not here, and each cites its audit finding.
       **MEASURED 2026-08-22T02:4x — satisfied on 13 of 15 repos; the other 2 cannot satisfy it as

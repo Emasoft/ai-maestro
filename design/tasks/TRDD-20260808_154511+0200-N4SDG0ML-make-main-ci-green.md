@@ -3,7 +3,7 @@ trdd-id: N4SDG0ML
 title: Make main CI green — the fast-forward exposed 3 pre-existing failure classes to GitHub CI
 column: human_review
 created: 2026-08-08T15:45:11+0200
-updated: 2026-08-21T18:24:10+0200
+updated: 2026-08-22T15:21:16+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -154,3 +154,36 @@ git show origin/main:tests/agent-dir-hint.test.ts | grep -n 'private/tmp'
 ## Approval log
 
 - 2026-08-08T15:45:11+0200 — MANDATE (self, Tier-0): hub CI hygiene, in-scope, reversible.
+
+## ⏹ 2026-08-22T15:2x — CI IS GREEN, AND THAT DOES NOT SATISFY THE LAST BOX
+
+Measured live: `gh run list --repo Emasoft/ai-maestro --branch main --limit 5` → the five most
+recent runs are **all `success`** (CI ×2, Test Installers, CI, CI), newest `2026-08-21T18:09Z` —
+minutes before this card's own `updated:` stamp. So the three failure classes are, as far as the
+runner is concerned, **not failing on `main` today.**
+
+**But the green is about a tree that is 101 commits behind.** `git rev-list --left-right --count
+fork/main...HEAD` → `0 101`. Nothing has been pushed since, so the newest CI result describes a
+`main` that lacks 101 commits of local work — including everything landed today.
+
+**That is exactly what the last box guards against, and it is why it is worded as it is:**
+
+> *A main push completes CI green end-to-end; the USER stops receiving failure mail*
+
+A green run on a stale `main` is a true statement about the wrong tree. It cannot close that box,
+because the box is about the push — the event that would put the 101 commits in front of the
+runner for the first time. Same shape as `44RGLOO8` measured earlier today: a real, passing,
+verifiable state that is nonetheless about something other than the thing being claimed.
+
+**Class 3 (`- [ ]` at :149) is likewise NOT closable from here.** It says *"green ON THE RUNNER
+(verified by a main CI run, not locally)"* — and the 4 files it names all pass locally already, so
+only a run of the CURRENT tree answers it. That run does not exist yet.
+
+**⛔ Not attempted: the push.** ~101 commits, two PUBLIC remotes, and *never push to a shared
+repository unless explicitly told* is a standing prohibition the owner's decide-for-yourself
+delegation does not revoke. This card is therefore **correctly parked in `human_review`** — its
+remaining boxes are gated on an act only the owner can authorize, not on effort.
+
+**Re-derive, do not trust the numbers above** — both have silent timestamps:
+`gh run list --repo Emasoft/ai-maestro --branch main --limit 5` ·
+`git rev-list --left-right --count fork/main...HEAD`

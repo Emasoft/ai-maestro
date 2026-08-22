@@ -195,6 +195,7 @@ Editing between the fences is pointless; the next run overwrites it.
 - **`env-vars-and-the-governance-password`** — which env vars does ai-maestro actually read
 - **`governance-password-invalidation`** — how does the user rotate / revoke
 - **`network-security-tailscale-bind`** — why does a LAN IP get dropped / 192.168.x.x cannot reach the dashboard
+- **`password-and-credential-system`** — which password or token do I need
 - **`public-repo-personal-data`** — this repo is PUBLIC and a personal email
 
 ### Design System
@@ -212,6 +213,7 @@ Editing between the fences is pointless; the next run overwrites it.
 - **`janitor-chore-absorbability`** — can the ai-maestro server take over this janitor chore
 - **`lenient-json-reader-destroys-the-file`** — my settings.json / registry / config got replaced by a nearly-empty object
 - **`model-scoped-window-fallback`** — the Fable window is exhausted but the account still has 5h
+- **`persistent-state-shaped-by-the-caller-oscillates`** — two tools keep overwriting each other's config and both report success
 - **`server-oauth-token-continuity-design`** — how does the ai-maestro server keep agents running across OAuth
 - **`settings-file-watcher-ledger`** — who changed my settings.json / a settings file changed and nothing recorded it
 

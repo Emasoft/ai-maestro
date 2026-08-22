@@ -7,6 +7,7 @@ metadata:
   node_type: memory
   type: project
   tier: aspect
+  topic: reliability-patterns
 publish-globally: false
 ---
 

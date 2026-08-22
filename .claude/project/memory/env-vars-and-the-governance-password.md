@@ -84,6 +84,8 @@ run end-to-end tests with the owner ABSENT.** Treat the value exactly like the g
 it. Check whether it is armed by reading `governance.json` → `devModeLogin.enabled` /
 `tokenHash` (booleans only; never print the hash).
 
+Part of [[password-and-credential-system]] — the hub that inventories every credential class.
+
 Related: [[env-var-security-delete-not-gate]] (the delete-not-gate rule this obeys),
 [[sudo-r32-agents-never-sudo]] (the agent-vs-human authority split it crosses).
 

@@ -121,6 +121,43 @@ describe('DATE-NOT-LOCAL-OFFSET', () => {
     expect(dateFindings(tmp)).toHaveLength(0)
   })
 
+  it('ONE FORMATTER — every TRDD write route takes its instant from isoLocal', () => {
+    // TRDD-ZRRDCQ52's actual ask: "one formatter, used by every writer... so a rename or a
+    // new verb cannot reintroduce a third". Three spellings existed (the local-offset stamp
+    // in trdd-create, `toISOString()` in trdd-store, and a `.replace(/\.\d+Z$/, '+0000')` in
+    // trdd-doctor) and the write path picked the wrong one.
+    //
+    // This is a CALL-SITE test on purpose. Every store verb takes `iso` as a REQUIRED
+    // parameter, so the store never chooses a format and a test driving those verbs would
+    // pin nothing — it would assert the value the test itself passed in. The decision lives
+    // entirely at the routes, so that is where the invariant has to be checked.
+    //
+    // Asserted POSITIVELY (this file DOES reach isoLocal), which fails safe: rename or delete
+    // `isoLocal` and this reddens. A negative "contains no toISOString" alone would go blind
+    // the moment someone spelled the drift a fourth way.
+    const routes = fs
+      .readdirSync(path.join(process.cwd(), 'app/api/trdd/[id]'), { withFileTypes: true })
+      .flatMap((e) =>
+        e.isDirectory()
+          ? [path.join('app/api/trdd/[id]', e.name, 'route.ts')]
+          : e.name === 'route.ts'
+            ? [path.join('app/api/trdd/[id]', e.name)]
+            : [],
+      )
+      .filter((p) => fs.existsSync(path.join(process.cwd(), p)))
+
+    const WRITE_VERB = /\b(editTrdd|promoteTrdd|refuseTrdd|archiveTrdd|advanceColumn)\b/
+    const writers = routes.filter((p) => WRITE_VERB.test(fs.readFileSync(path.join(process.cwd(), p), 'utf8')))
+    // Non-vacuity: a glob that matched nothing would make every assertion below `[] === []`.
+    expect(writers.length).toBeGreaterThanOrEqual(5)
+
+    const offenders = writers.filter((p) => {
+      const src = fs.readFileSync(path.join(process.cwd(), p), 'utf8')
+      return !/isoLocal\s*\(/.test(src) || /new Date\(\)\.toISOString\(\)/.test(src)
+    })
+    expect(offenders).toEqual([])
+  })
+
   it('CORPUS — design/ carries no off-format frontmatter datetime', () => {
     const report = lintCorpus(path.join(process.cwd(), 'design'))
     // Non-vacuity first: an empty corpus would make the assertion below `[] === []`.

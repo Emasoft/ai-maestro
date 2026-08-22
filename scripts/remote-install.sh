@@ -1177,6 +1177,23 @@ act3_clone_and_build() {
                 # there was nothing to stash (or stash failed for another reason).
                 # Comparing stash counts before/after is unreliable because another
                 # process could stash or pop concurrently between the two measurements.
+                # TRDD-0N792LL5: the stash below protects a DIRTY TREE and cannot see unpushed
+                # COMMITS, so on a checkout holding local-only work this pull would bury it with
+                # every visible safeguard reporting success. Unlike update-aimaestro.sh this
+                # script already pulls the CURRENT branch and never checks one out, so only the
+                # ahead-count half of the guard applies — remote-install.sh is deliberately
+                # upstream-capable (that is its job), and refusing `origin` here would break it.
+                if [ -f "$INSTALL_DIR/scripts/shell-helpers/update-remote-guard.sh" ]; then
+                    # shellcheck source=/dev/null
+                    source "$INSTALL_DIR/scripts/shell-helpers/update-remote-guard.sh"
+                    local ahead
+                    ahead="$(unpushed_vs_remote origin "$pull_branch")"
+                    if [ "$ahead" != "0" ]; then
+                        maestro_fail "Refusing update: ${ahead} commit(s) on '${pull_branch}' are not on origin/${pull_branch}."
+                        maestro_info "A pull would bury work that exists only in ${INSTALL_DIR}. Push it, or re-run with --install-dir elsewhere."
+                        exit 1
+                    fi
+                fi
                 local had_stash=false
                 if git stash --quiet 2>/dev/null; then
                     had_stash=true

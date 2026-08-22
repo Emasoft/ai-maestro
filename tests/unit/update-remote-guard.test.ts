@@ -12,21 +12,29 @@
  *
  * NEUTER RUNS (2026-08-22 — OBSERVED via scripts/dev/neuter, restores blob-verified). Three,
  * because the guard refuses for three independent reasons and one mutation certifies only the
- * branch it hits:
+ * branch it hits. Each reddens EXACTLY ONE, and each a different one — which is the property
+ * worth having: no test here is propped up by a neighbour's guard.
  *
- *   delete the `[ "$ahead" != "0" ]` refusal block            → 2 red / 7 green
+ *   s|if \[ "$ahead" != "0" \]; then|if false; then|                          → 1 red / 8 green
+ *       REFUSES when local commits are missing from the remote, and NAMES the count
  *       THE CORE HAZARD — an unpushed commit stops being a refusal
  *
- *   `remote_is_upstream`: `[ -n "$upstream" ] || return 0` → `|| return 1`   → 2 red / 7 green
- *       THE FAIL-CLOSED PROPERTY — an unknowable upstream must answer YES (refuse), because a
- *       "no" here AUTHORIZES a merge
+ *   s@\[ -n "$upstream" \] \|\| return 0@[ -n "$upstream" ] || return 1@      → 1 red / 8 green
+ *       FAILS CLOSED — an unknowable upstream answers YES, because NO would authorize a merge
  *
- *   `resolve_update_remote`: drop the `fork` branch          → 1 red / 8 green
- *       preference is load-bearing on its own — falling straight to `origin` is the old bug
+ *   s|        printf .fork\n.|        printf origin\n|                        → 1 red / 8 green
+ *       prefers fork over origin — falling straight to `origin` is the old bug
  *
- * The first two redden TWO by design: each refusal is asserted both by exit code and by the
- * reason text, and a guard that refuses for the WRONG stated reason sends the operator at a
- * problem they do not have.
+ * ⚠ THE BLOCK ABOVE FIRST SHIPPED AS A PREDICTION AND TWO THIRDS OF IT WAS WRONG. It claimed
+ * "2 red / 7 green" for the first two, reasoning that exit code and reason text would redden
+ * separately — they are asserted inside ONE test each, so the real answer is 1. A neuter block
+ * written before the run is a claim of coverage, not coverage, and it reads identically to a
+ * measured one. Run it, then paste the tool's own output; never retype the numbers.
+ *
+ * Also measured, and the reason two of these use `@` as the delimiter: a perl `s|…|…|` whose
+ * replacement contains `\|\|` matched every line-end and prepended the replacement to twelve
+ * lines. `--expect-lines 1` caught it and aborted with the diff — without that assertion it
+ * would have produced a plausible red count against a corrupted file.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { execFileSync } from 'child_process'

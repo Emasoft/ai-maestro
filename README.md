@@ -423,6 +423,28 @@ Skills are installed automatically with the AI Maestro plugin. Agents discover t
 
 ---
 
+## Architecture — The Abstraction Layer
+
+AI Maestro is built as four layers, and the boundary between the second and
+third pair is deliberate: **AI Maestro installs the Scripts, plugins install
+the Skills.** The Server exposes functions, the API exposes endpoints, and a
+frozen-CLI **Scripts** layer (symlinked to `PATH`, 50 skill-facing commands —
+see `scripts/script-manifest.json`) insulates every plugin's skills from API
+changes while the app iterates internally. Plugins never call the API
+directly; they call the scripts.
+
+<img src="docs/img/abstraction-layer.svg" alt="AI Maestro abstraction-layer architecture: Server, API, and Scripts inside the ai-maestro repo, with Scripts as the abstraction-layer boundary to Plugins in the ai-maestro-plugins repo" width="100%">
+
+The two repository boundaries move independently. The left-hand side —
+Server, API and Scripts — currently lives in the `Emasoft/ai-maestro` fork and
+is intended to return to its upstream repository once the PR lands. The
+plugins on the right stay under the `Emasoft` owner either way. This is
+precisely why the Scripts layer is a *frozen* CLI contract: it is the only
+surface the plugins bind to, so ownership of the app repo can change without
+any plugin having to follow it.
+
+---
+
 ## CLI Reference
 
 The `aimaestro-agent.sh` CLI manages agents from the terminal. All commands support `--help`.

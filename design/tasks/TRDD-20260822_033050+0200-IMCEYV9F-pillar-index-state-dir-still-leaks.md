@@ -1,12 +1,12 @@
 ---
 trdd-id: IMCEYV9F
 title: The pillar-index state dir still collects test litter — YN8EQWYP fixed one suite, other writers were never contained
-column: todo
+column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T03:30:50+0200
-updated: 2026-08-22T03:30:50+0200
+updated: 2026-08-22T03:39:31+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub

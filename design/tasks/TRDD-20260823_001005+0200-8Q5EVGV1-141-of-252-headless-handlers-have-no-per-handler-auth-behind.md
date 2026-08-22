@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T00:56:49+0200
+updated: 2026-08-23T01:02:35+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -148,10 +148,14 @@ including one whose Next half had been fixed hours earlier in the same session.
 `yarn test` reports **2 failed | 458 passed (460 files)** — `6180 passed | 2 skipped` of 6184 tests
 — and the two red files are `pillar-grep-cli` and `trdd-doctor`. Measured 2026-08-23T00:55, full
 run. **An earlier version of this line said "457 pass / 2 fail", a figure inherited across two
-sessions and never re-run; it was stale in BOTH halves** (a test file has been added since). Re-run
-it rather than quoting it — the numbers have a silent timestamp, the failing PAIR is the stable
-fact. Neither is caused by this card's work, but the story handed down for them was **WRONG**, and
-it is written here because a commit message is not searchable by the next session that sees 2 red.
+sessions and never re-run.** It differed in BOTH halves — and the cause is not aging, it is
+**self-attribution**: `git log --diff-filter=A --since=2026-08-21 -- tests/` names the added file as
+`tests/unit/headless-handler-auth-ledger.test.ts`, commit `6b40bfc7` (2026-08-23), **this card's own
+ledger test, added by this session**. Calling it "stale" asserted an aging nobody measured; I had
+moved the number myself. Re-run it rather than quoting it — the counts have a silent timestamp, the
+failing PAIR is the stable fact. Neither is caused by this card's work, but the story handed down
+for them was **WRONG**, and it is written here because a commit message is not searchable by the
+next session that sees 2 red.
 
 **The inherited claim was "2 frozen archived-TRDD corpus ERRORs, pre-existing, unfixable."** Two of
 its three parts are wrong; **the FROZEN part was right**, and this section relies on it below.
@@ -161,18 +165,23 @@ ERRORs, and only ONE of them causes the failures.
 | ERROR | card | entered the corpus | is it the cause? |
 |---|---|---|---|
 | `BODY-STATE-CLAIM` | `7123D51A` (`design/archived/`) | 2026-07-10, commit `124b4e26` | **no** — both tests already allow it: `pillar-grep-cli` asserts on it BY NAME as the expected single error, and `trdd-doctor` carries it in a `PERMANENTLY_EXCLUDED_BY_JANITOR_139` set |
-| `TERMINAL-WITHOUT-CHECKLIST` | `G6A54OYK` (`design/archived/`) | **created 2026-08-22 17:28:07, commit `b949b912`** _"throwaway card for the manage-trdd e2e smoke"_; moved to `design/archived/` (R077) at 17:30:49 by `b746c558` | **YES — this alone reds both files** |
+| `TERMINAL-WITHOUT-CHECKLIST` | `G6A54OYK` (`design/archived/`) | **file created** 2026-08-22 17:28:07 `b949b912` as `column: backburner` — **not yet an ERROR**. **The ERROR was introduced at 17:30:49 by `b746c558`**, which flipped `column: backburner → completed` AND renamed it into `design/archived/` (R077) | **YES — this alone reds both files** |
 
-> **The provenance cell above was WRONG in the first version of this section**, and the way it was
-> wrong is worth keeping. It cited `b746c558` and quoted that commit's subject — _"throwaway card
-> **B**"_ — as the origin of a file whose slug is card **A**. The letter mismatch was the visible
-> tell; the real defect is that `b746c558` only RENAMED card A into `design/archived/` while adding
-> a separate card B. The creating commit is `b949b912`.
-> **Cause: `git log -- <archived path>` cannot see a commit that touched the PRE-RENAME path.**
-> `--full-history` does not help (it returned the same two commits); `--follow` or
-> `git show --name-status` is what surfaces the `R077`. And `git show --stat` ELIDES the path prefix
-> (`...ke-of-the-…-798oahmx-a.md`), so the pre- and post-rename paths render identically and the
-> rename is invisible in that view. Use `--name-status` when provenance is the question.
+> **That cell has been wrong TWICE, in opposite directions, and both are worth keeping.**
+> v1 cited `b746c558` and quoted its subject — _"throwaway card **B**"_ — as the origin of a file
+> whose slug is card **A**. v2 "corrected" it to `b949b912` and thereby moved the citation OFF the
+> commit that actually caused the failure: `TERMINAL-WITHOUT-CHECKLIST` fires on `column: completed`,
+> and `git show b949b912` shows the card was born `column: backburner`. **So v1 was wrong about the
+> FILE and right about the FAILURE; v2 was the reverse.** Both facts belong in one cell, which is
+> what it now carries. A correction that fixes one fact and breaks another is the failure mode this
+> whole box exists to warn about, committed inside the box itself.
+> **Instrument cause: `git log -- <archived path>` cannot see a commit that touched the PRE-RENAME
+> path.** Measured, all four: plain `git log` → 2 commits (misses `b949b912`); `--full-history` →
+> **the same 2, it does not help**; `--follow` → **3, it does surface it**; `git show --name-status`
+> → the explicit `R077 <tasks path> <archived path>`. Note `git show --stat` ELIDES the path prefix
+> (`...ke-of-the-…-798oahmx-a.md`) so pre- and post-rename paths render IDENTICALLY and the rename is
+> invisible there. Use `--follow` or `--name-status` when provenance is the question; both are
+> verified, and an earlier version of this line recommended `--follow` **without having run it**.
 
 So the suite is designed to be GREEN on the frozen corpus. It fails because a **new, unexcluded**
 ERROR appeared **one day ago**: a throwaway card left behind by the TRDD-798OAHMX e2e smoke of the
@@ -180,15 +189,40 @@ manage-trdd write verbs. It is `column: completed` with **zero** acceptance boxe
 what `TERMINAL-WITHOUT-CHECKLIST` fires on. `pillar-grep-cli`'s own docstring census was last
 re-measured 2026-08-21 — the day before the card landed.
 
-That run left **three** throwaway cards in the live governance corpus (`G6A54OYK` archived,
-`W7B0TC9B` refused, `8I0JUCK9` in tasks) plus its parent `798OAHMX`. Only `G6A54OYK` trips an ERROR;
-all three are uncleaned test litter (Rule 1 CLEAN-AFTER-YOURSELF, owed by that run).
+> ## ⚠ RETRACTED — "uncleaned test litter" was WRONG, and it was the root of this whole section
+>
+> Three versions of this section called `G6A54OYK`, `W7B0TC9B` and `8I0JUCK9` *"uncleaned test
+> litter (Rule 1 CLEAN-AFTER-YOURSELF, owed by that run)"* and **recommended deleting them**. That
+> is false, and a citation sweep of all three — rather than the one card a reviewer happened to name
+> — refutes it. **They were retained DELIBERATELY, and the retention is documented in open cards
+> filed the same hour:**
+>
+> - **`G6A54OYK`** — `TRDD-P6MSMQ2I` (*"archive route bypasses the terminal checklist gate"*,
+>   `column: todo`, OPEN) says verbatim: *"That card is left in place **deliberately as the live
+>   reproduction**; it is terminal and therefore frozen, so it must not be 'repaired' by adding
+>   ticked boxes for work nobody did."* **The ERROR reddening both test files IS that bug's
+>   evidence.**
+> - **`W7B0TC9B`** — cited by `TRDD-MWKCBLQN` (*"create with column proposal mints a card no write
+>   verb can act on"*, `column: todo`, OPEN) as the measured artifact for a second bug.
+> - **`8I0JUCK9`** — cited at `.claude/rules/lessons-verification.md:558` as the measured control
+>   (*"closed via `approve` → exit 0 VERIFIED"*).
+>
+> The 798OAHMX run did the right thing end to end: ran the e2e, measured two bugs, filed
+> `MWKCBLQN` + `P6MSMQ2I` (commit `36669d7a`), and kept the reproductions. **I read "throwaway" in a
+> commit subject and inferred abandonment**, without checking whether anything cited them — the same
+> count-is-not-an-identification shape as everything else in this box. Deleting them would have
+> destroyed the live reproductions for two OPEN bug cards.
 
-**Do not "repair" `G6A54OYK`'s body** — it is terminal, hence frozen by IND rule 12. The fix is a
-decision for the owner, not a drive-by. **The two options are NOT equivalent**, and an earlier
+**Do not "repair" `G6A54OYK`'s body** — it is terminal, hence frozen by IND rule 12. And do not
+delete it: it is `P6MSMQ2I`'s reproduction. **The real fix is to fix `P6MSMQ2I`** (make the archive
+route enforce the checklist predicate the linter applies); the reproduction can be retired with it.
+
+Until then the two red files need their CENSUS updated to expect a known, deliberate reproduction —
+exactly the treatment `7123D51A` already has. **The two options are NOT equivalent**, and an earlier
 version of this section wrongly said "both failures clear either way":
 
-- **(a) delete the throwaway litter** (what its own commit message calls it) — clears **both** files.
+- **(a) ~~delete the throwaway litter~~ — RETRACTED, see the box above.** It would clear both files
+  and destroy two open bugs' evidence.
 - **(b) add `G6A54OYK` to the doctor test's exclusion set** — clears **ONE**. Measured:
   `grep -rn 'PERMANENTLY_EXCLUDED' tests/ scripts/ lib/` returns **3 hits, all in
   `tests/unit/trdd-doctor.test.ts`** (`PERMANENTLY_EXCLUDED_BY_JANITOR_139 = new Set(['7123D51A'])`,
@@ -203,12 +237,18 @@ property from the test that has one onto the test that does not — the same one
 error already recorded in `.claude/rules/lessons-verification.md`, committed two edits after the
 reading that refutes it.
 
-**⚠ Before choosing (a): one of the three cards is load-bearing evidence.** `8I0JUCK9` is cited in
-`.claude/rules/lessons-verification.md:558` as the measured control (_"closed via `approve` → exit 0
-VERIFIED"_) for the entry retracting the verifiable-provenance generalization. Deleting it removes
-the artifact that lesson cites — re-point the citation or retain that card.
+**There is no option (d) — the tool cannot suppress.** Checked, because "no hit for this NAME" does
+not answer "can it suppress AT ALL". `trddgrep help` shows `validate` takes only `--min-severity` and
+`--rule`, and both *narrow what is SHOWN*; a grep for suppression-shaped identifiers
+(`IGNORED|SUPPRESS|WAIVE|ALLOWLIST|KNOWN_ERRORS|EXCEPTIONS`) across `scripts/` and `lib/trdd-doctor.ts`
+returns nothing relevant. So the exclusion really is test-local and the option space is (b)/(c) plus
+"fix `P6MSMQ2I`".
 
-**Deleting governance cards is NOT authorized here.**
+**Recommended: fix `P6MSMQ2I`, and until then take (b)+census** — pin `G6A54OYK` in BOTH tests the
+way `7123D51A` is pinned, with a comment naming `P6MSMQ2I` so the pin retires with the bug. This
+keeps the reproduction, clears the red, and does not weaken the gate for anything unknown.
+
+**Deleting governance cards is NOT authorized here, and is now affirmatively contraindicated.**
 
 ## Estimated risk
 

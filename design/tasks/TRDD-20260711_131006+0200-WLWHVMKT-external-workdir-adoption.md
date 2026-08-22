@@ -3,7 +3,7 @@ trdd-id: WLWHVMKT
 title: External workdir adoption is broken — one authority for agent-workdir policy
 column: todo
 created: 2026-07-11T13:10:06+0200
-updated: 2026-08-16T16:43:00+0200
+updated: 2026-08-22T14:43:38+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 priority: 0
@@ -260,3 +260,60 @@ exact coverage whose absence caused this bug:
   test whose fixture cannot violate the invariant under test is not a test of that
   invariant — it is a test that cannot fail. When a feature's headline claim is "X
   now works outside Y", the fixture MUST live outside Y or the coverage is theatre.
+
+## Box 1 RE-MEASURED — half already done, and the other half is UNSAFE AS WRITTEN — 2026-08-22T14:5x
+
+**`lib/agent-workdir-policy.ts` EXISTS** (created 2026-08-21, after this card's last update), so
+the "create the single authority" half is done. The card names `isAuthorizedAgentWorkdir`; the
+shipped export is `checkAuthorizedAgentWorkdir` (returns a verdict) plus a throwing
+`assertAuthorizedAgentWorkdir`. A naming difference, not a gap.
+
+**⚠ THE REST OF BOX 1 WOULD INTRODUCE A SECURITY REGRESSION IF FOLLOWED LITERALLY.** It says route
+*"all 4+ call sites (createSession, boot-restore, browse-dir, ChangeFolder, importAgent)"* through
+the authority — as though there were ONE question. There are two, and the module says so itself:
+
+- `checkAdoptableWorkdir(dir, allowExternal)` — **CREATION**. The agent does not exist yet, so
+  there is nothing to check against; only the path policy applies.
+- `checkAuthorizedAgentWorkdir(cwd, agentName?)` — **RUNTIME**. The agent exists, so it verifies
+  the directory against the REGISTRY, and it therefore **ALLOWS an external dir** when that dir is
+  the registered workdir of a live agent.
+
+Route a CREATION gate through the runtime verb and the wizard's containment weakens: an existing
+agent's adopted external folder would authorize a NEW agent there. Same shape as the rule already
+recorded in this repo — the same function serving an operation and a compensation, where a verdict
+correct for one is catastrophic for the other. **Whoever does this must pick the verb per CALLER,
+never per file.**
+
+**MEASURED STATE (production callers only, `.test.` excluded; positive control: a widely-used
+symbol returns 14 files, so the search surface is sound):**
+
+| verb | production callers |
+|---|---|
+| `checkAuthorizedAgentWorkdir` (runtime) | 7 importers incl. `boot-restore-service`, `browse-dir/route`, `agent-runtime`, `fleet-restart-fanout` |
+| **`checkAdoptableWorkdir` (creation)** | **ZERO** |
+
+**The creation authority was BUILT AND IS CALLED BY NOTHING** — while `element-management-service.ts`
+hand-rolls the same rule in FIVE places, with three different path builders (`resolve(HOME,
+'agents')`, `resolveG08c(HOME, 'agents')`, `join(HOME, 'agents')`) and four subtly different
+predicates:
+
+```
+:7341  normalizedTarget !== agentsRoot && !normalizedTarget.startsWith(agentsRoot + '/')
+:9428  !(resolvedDir.startsWith(agentsRoot + '/') && resolvedDir !== agentsRoot)
+:9553  resolvedDir.startsWith(agentsRoot + '/') && resolvedDir !== agentsRoot
+:10043 !normalizedForCheck.startsWith(agentsRoot + '/') && normalizedForCheck !== agentsRoot
+```
+
+`agents-core-service.ts`, `element-management-service.ts` and `agents-transfer-service.ts` import
+the policy module **zero** times between them. That is the "one authority" the card's title asks
+for, still unmet — but the remaining work is *route the creation sites through
+`checkAdoptableWorkdir`*, which is a different and much better-specified job than box 1 states.
+
+**NOT ATTEMPTED HERE, deliberately.** These are the wizard's containment gates in a ~10k-line
+service; getting one predicate wrong lets an agent be created outside `~/agents/`. That is a
+focused change wanting a full-suite run and a neuter per site, not a tail-end edit. Left at
+`column: todo` — nobody is working it, and `dev` would be a lie.
+
+**NEXT ACTION** — one site at a time, creation verb only:
+`grep -n "agentsRoot" services/element-management-service.ts` → replace each with
+`checkAdoptableWorkdir(dir, allowExternal)`, neuter each site separately, full suite between.

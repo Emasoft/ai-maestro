@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T03:30:50+0200
-updated: 2026-08-22T04:07:11+0200
+updated: 2026-08-22T13:52:25+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -141,6 +141,58 @@ Shipping that unreviewed to save a night is the wrong trade.
 only option here that needs no predicate at all and bounds the directory regardless of who leaks
 into it — including callers in repos we do not own, which is precisely the case that produced
 this card.
+
+## ✅ FORK RESOLVED — REAPER, by measurement (2026-08-22, owner-delegated)
+
+Owner delegated the decision: *"you can decide by yourself. base your decisions on verified
+facts and tests. never assume anything."* Three measurements settled it; none of this was a
+judgement call in the end.
+
+**1. Composition of the leak — 97 of 102 are ephemeral, 5 are real.**
+
+| corpus key | count | what it is |
+|---|---|---|
+| `t` | 43 | `basename($TMPDIR)` — corpora made directly under `$TMPDIR` |
+| `test-find-trdd-across-zones-an0` · `…-does-not-mistak0` · `…-survives-a-nega0` · `test-issue-title-citation-roun0` | 12 **each** | four test families, twelve runs apiece |
+| `tmp` · `scratchpad` · `plainrepo-kfhw` · `pillar-0impact-xdmckp` · `aim-caller-i6tn` · `otherproj2` | 1 each | fixtures |
+| `ai-maestro` · `-plugin` · `-orchestrator-agent` · `-chief-of-staff` · `-assistant-manager-agent` | 1 each | **the 5 legitimate corpora** |
+
+Twelve of each test family means the same test ran twelve times, each run minting a permanent
+index because its temp root gets a fresh name and therefore a fresh `corpusKeyFor` hash.
+
+**2. Stored paths are ABSOLUTE — so an orphan is exactly detectable, not heuristically.**
+Read from a COPY of each file (never the original — opening a sqlite can create it, and
+`applyPragmas` sets a persistent `journal_mode`, so an observer must not touch the subject):
+
+- ephemeral: `/var/folders/…/T/pillar-graph-jMI1nR/tasks/TRDD-…-fixture.md` — root long gone
+- real (control): `/Users/…/ai-maestro/design/archived/TRDD-…-secure-auto-restore.md` — exists
+
+The control matters: it proves the schema is the same in both, so the test is not reading a
+property peculiar to test indexes.
+
+**3. Every worry the predicate carried dissolves under existence-testing.**
+
+| the fork's stated risk for the predicate | under a reaper |
+|---|---|
+| too narrow — a CI runner whose scratch root is not `$TMPDIR` | irrelevant: it tests EXISTENCE, not location |
+| too broad — a legitimate corpus deliberately under `/tmp` | irrelevant: if the root exists, it is kept |
+| blast radius = every caller of those two functions | **zero** — the reaper touches no read path |
+| the lint's weakest link: silently loses reference-integrity checking | does not arise — no skip is introduced, so `216FTVC9`'s invariant is untouched |
+| covers writers we never predict, incl. repos we do not own | yes, and see below — that case is now MEASURED, not hypothetical |
+
+**4. The source-fix is unavailable here, which independently confirms the card's reasoning.**
+`getStateDir()` is `join(homedir(), …)` with no env override, and `os.homedir()` honours `$HOME`
+on POSIX — so a leaking suite CAN contain itself, and this repo already uses `$HOME` redirection
+for exactly that. But the four leaking test families appear **nowhere in this tree** (searched;
+only this card names them), so they belong to a suite we do not own. The predicate would never
+have reached them. The reaper does.
+
+**Constraint on the implementation — REPORT-ONLY by default.** `~/.claude/rules/never_free_space.md`
+reserves deleting-to-free-space to the owner, and this repo already has the matching house
+pattern: `check-script-drift.mjs` *"REPORTS, it must never refresh … remediation stays manual
+and USER-gated"*. So the reaper reports orphans and exits `0` clean / `1` findings / `2` could
+not run, and only an explicit opt-in flag removes anything. **The 102 existing files are NOT
+deleted by this card** — clearing the standing backlog remains the owner's.
 
 ## Proposed fix
 

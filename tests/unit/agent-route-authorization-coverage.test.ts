@@ -168,3 +168,145 @@ describe('agent-scoped mutation routes authorize the caller (TRDD-D3RP7KQZ)', ()
     expect(src).toMatch(/authorize\(auth, 'manage-skills', id\)/)
   })
 })
+
+/**
+ * TRDD-CAVCTULL — the COLLECTION subtree, which no guard has ever covered.
+ *
+ * Everything above walks `app/api/agents/[id]/` only. `app/api/agents/route.ts` and its
+ * non-`[id]` siblings were outside the scan root, so the guard could not see the worst
+ * instance of the class it exists to catch: `POST /api/agents` — the route that MINTS
+ * AGENTS — authenticated and never authorized, letting any agent of any title create
+ * agents (TRDD-F1SL03CK).
+ *
+ * A SEPARATE root and ledger rather than one widened walk, deliberately: the `[id]` ledger
+ * above is EMPTY and that emptiness is a hard-won property (eight entries closed, each
+ * worse than the ledger's own guess). Folding 19 collection-subtree entries into it would
+ * destroy that signal — "the ledger is empty" would stop meaning anything.
+ */
+const collectionRoot = path.join(repoRoot, 'app', 'api', 'agents')
+
+/** Mutating routes directly under app/api/agents/, EXCLUDING the [id]/ subtree above. */
+function collectionRouteFiles(): string[] {
+  return findRouteFiles(collectionRoot)
+    .filter((f) => !f.startsWith(agentScopedRoot + path.sep))
+    .filter((f) => MUTATING.test(readFileSync(f, 'utf8')))
+    .sort()
+}
+
+const rel = (f: string) => path.relative(collectionRoot, f)
+
+/**
+ * Collection routes that mutate and perform NO authorization step, measured 2026-08-22.
+ *
+ * A DEBT LEDGER, on the same terms as the one above: not a list judged safe, a list nobody
+ * has reviewed. It may SHRINK; it must never grow without a deliberate edit here.
+ *
+ * Seeded rather than shipped as 19 failures on purpose — a wall of red on day one is how a
+ * linter gets routed around, and none of these is claimed to be a hole. Several are very
+ * likely fine (`health`, the `creation-helper/*` wizard endpoints). The claim is only that
+ * NOBODY HAS DECIDED, which is exactly what this ledger makes visible.
+ *
+ * Note what the `[id]` ledger's history says about guessing: of its eight closed entries,
+ * every one was WORSE than its original "several are probably fine".
+ */
+const COLLECTION_UNREVIEWED: string[] = [
+  'create-from-toml/route.ts',
+  'create-persona/route.ts',
+  'creation-helper/cleanup/route.ts',
+  'creation-helper/clear-banner/route.ts',
+  'creation-helper/element-descriptions/route.ts',
+  'creation-helper/ensure-persona/route.ts',
+  'creation-helper/file-picker/route.ts',
+  'creation-helper/heartbeat/route.ts',
+  'creation-helper/kill/route.ts',
+  'creation-helper/publish-plugin/route.ts',
+  'creation-helper/raw-materials/route.ts',
+  'creation-helper/session/route.ts',
+  'directory/sync/route.ts',
+  'docker/create/route.ts',
+  'health/route.ts',
+  'normalize-hosts/route.ts',
+  'role-plugins/inject-skill/route.ts',
+  'role-plugins/sync-defaults/route.ts',
+  'startup/route.ts',
+]
+
+describe('collection-scope mutation routes authorize the caller (TRDD-CAVCTULL)', () => {
+  it('the walker actually reaches the collection subtree', () => {
+    // POSITIVE CONTROL, and it is the whole reason this file can be trusted after the
+    // widening: a mis-joined root would return [] and every assertion below would pass
+    // while scanning nothing — which is precisely how the original blind spot read CLEAN.
+    const files = collectionRouteFiles()
+    expect(files.length).toBeGreaterThanOrEqual(26)
+    // And it must include the route that motivated the card, by name.
+    expect(files.map(rel)).toContain('route.ts')
+  })
+
+  it('every mutating collection route either authorizes or is a declared debt', () => {
+    const undeclared = collectionRouteFiles()
+      .filter((f) => !AUTHORIZES.test(readFileSync(f, 'utf8')))
+      .map(rel)
+      .filter((r) => !COLLECTION_UNREVIEWED.includes(r))
+
+    expect(
+      undeclared,
+      'These collection routes mutate but never authorize the caller:\n  ' +
+        `${undeclared.join('\n  ')}\n` +
+        'Add an authorization step, or declare it in COLLECTION_UNREVIEWED with a reason.',
+    ).toEqual([])
+  })
+
+  it('the collection ledger contains no route that has since been fixed', () => {
+    const unauthorized = collectionRouteFiles()
+      .filter((f) => !AUTHORIZES.test(readFileSync(f, 'utf8')))
+      .map(rel)
+      .sort()
+    expect(unauthorized).toEqual([...COLLECTION_UNREVIEWED].sort())
+  })
+
+  it('POST /api/agents authorizes with create-agent — the hole this card came from', () => {
+    // Pinned by NAME rather than left to the ledger: this is the one route whose absence
+    // of authorization was a live security hole, and a regression here must say so
+    // explicitly rather than showing up as a ledger diff.
+    const src = readFileSync(path.join(collectionRoot, 'route.ts'), 'utf8')
+    expect(src).toMatch(/authorize\(auth, 'create-agent'\)/)
+  })
+})
+
+/**
+ * The SECOND blind spot: `buildAuthContext(` is counted as an authorization step, on the
+ * stated theory that it forwards the caller into a Change* pipeline "whose Gate 0
+ * (`assertAuthorized`) calls authorize() for it".
+ *
+ * That theory is TRUE for some pipelines and FALSE for others, and it is not checked here.
+ * `metadata/route.ts` (above) is the true case — it authorizes at `ChangeMetadata` G00 all
+ * along. `POST /api/agents` was the false one: it already called `buildAuthContext(auth)`
+ * before TRDD-F1SL03CK, while `CreateAgent`'s first gate is `G00f`, an R40 foreign-user
+ * check (`assertForeignUserMayCall`) and not an `authorize()` call. So for that route the
+ * pattern read a context CONSTRUCTION as an authorization DECISION — a proxy standing in
+ * for the thing, which is the same shape as the bug it failed to catch.
+ *
+ * This does not fail the suite. It PINS THE SET so it cannot grow silently, and names it
+ * UNVERIFIED rather than covered. Verifying each one means reading its pipeline's Gate 0.
+ */
+const FORWARD_ONLY_UNVERIFIED_COUNT = 12
+
+describe('routes whose only authorization evidence is a pipeline forward (TRDD-CAVCTULL)', () => {
+  it('the forward-only set is pinned and does not grow unnoticed', () => {
+    const STRONG = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(/
+    const FORWARD = /\bbuildAuthContext\(|\bauth\.context\b|\bauthContext\b/
+    const all = [...findRouteFiles(agentScopedRoot), ...collectionRouteFiles()]
+    const forwardOnly = all.filter((f) => {
+      const src = readFileSync(f, 'utf8')
+      return MUTATING.test(src) && !STRONG.test(src) && FORWARD.test(src)
+    })
+    // Non-vacuity: a broken walk would report zero and read as "all verified".
+    expect(forwardOnly.length).toBeGreaterThan(0)
+    expect(
+      forwardOnly.length,
+      'A route matching only `buildAuthContext(`/`authContext` proves it FORWARDS the caller, ' +
+        'not that the receiving pipeline authorizes. Verify its Gate 0 and give it a real ' +
+        'authorize() call, or update this count deliberately with the reason.',
+    ).toBe(FORWARD_ONLY_UNVERIFIED_COUNT)
+  })
+})

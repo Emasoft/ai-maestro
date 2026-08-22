@@ -3,7 +3,7 @@ trdd-id: CAVCTULL
 title: The agent-route authorization coverage guard misses the whole collection subtree
 column: todo
 created: 2026-08-22T21:34:26+0200
-updated: 2026-08-22T21:34:26+0200
+updated: 2026-08-22T21:47:44+0200
 current-owner: main
 created-by: main
 task-type: security
@@ -85,6 +85,51 @@ this card only makes visible — it does not change their behaviour. Whether any
 per-route work, and each one that turns out to be should get its own card rather than being fixed
 in a sweep.
 
+## GUARD LANDED — 2026-08-22T21:47:44+0200
+
+**⚠ CORRECTION to the Problem section above: the count is 19, not 18.** Re-derived with an exact
+enumeration (both tiers separated) rather than the two-field grep the first pass used. The card,
+and the commit message that filed it, both said 18. The 19th is `creation-helper/session/route.ts`.
+Numbers published from a quick grep get re-derived before anyone builds on them; this one was.
+
+Measured, both subtrees, mutating routes only:
+
+| subtree | STRONG (`authorize`/`requireSudoToken`/`canIssue`) | FORWARD-ONLY (`buildAuthContext`) | NONE |
+|---|---|---|---|
+| `[id]/` | 21 | 10 | **0** (its ledger is empty and stays so) |
+| collection | 5 | 2 | **19** |
+
+**A SEPARATE root and ledger, not one widened walk.** The `[id]` ledger is EMPTY, and that
+emptiness is hard-won — eight entries closed, every one worse than the ledger's own "several are
+probably fine". Folding 19 collection entries into it would destroy that signal.
+
+**The forward-only tier is now PINNED at 12** (10 + 2) rather than counted as covered. It does not
+fail the suite — verifying an entry means reading its pipeline's Gate 0, one at a time — but it
+cannot grow silently, and it is named UNVERIFIED instead of passing as authorized.
+
+**The proof that matters, because a widened root that still matches nothing looks identical to a
+clean one:** seeding an unauthorized collection route makes the suite RED and NAMES the route
+(`zz-probe-unauthorized/route.ts`, 2 tests red). The probe was then moved to `scripts_dev/probes/`
+rather than deleted (RULE 0), and the app tree verified clean. A positive control also asserts the
+walker reaches ≥26 collection routes and contains `route.ts` by name, so a mis-joined path fails
+loudly instead of reporting clean.
+
+## Acceptance
+
+- [x] scan root widened to the collection subtree, as a parallel block that leaves the `[id]`
+      ledger provably empty
+- [x] the 19 seeded as a debt ledger rather than shipped as 19 failures — a wall of red is how a
+      linter gets routed around
+- [x] `buildAuthContext(` split into a FORWARD-ONLY tier, pinned at 12 and named unverified
+- [x] positive control: the walker reaches ≥26 routes and names `route.ts`; a broken root fails
+- [x] the widened guard PROVEN to fire on a seeded unauthorized route, not merely observed green
+- [x] `POST /api/agents` pinned BY NAME to `authorize(auth, 'create-agent')` — the one route whose
+      missing authorization was a live hole should regress loudly, not as a ledger diff
+- [ ] the 19 decided one at a time, shrinking the ledger (each its own card if it turns out real)
+- [ ] the 12 forward-only routes verified against their pipelines' Gate 0
+
 ## Approval log
 
+- 2026-08-22T21:47:44+0200 — Guard landed by main. Ledger seeded, not enforced-from-empty; the two
+  open boxes are per-route review work and are deliberately NOT swept.
 - 2026-08-22T21:34:26+0200 — MANDATE issued by main (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.

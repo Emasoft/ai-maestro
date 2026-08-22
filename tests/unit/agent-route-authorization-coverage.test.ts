@@ -381,10 +381,20 @@ const NON_AGENTS_AUTHN_ONLY: string[] = [
   // (`push`) is enforceSystemOwner. `authorize()` also has no verb for it.
   'plugin-builder/build/route.ts',
   'plugin-builder/scan-repo/route.ts',
+  // REMOVED 2026-08-22: 'settings/global-elements/convert-skill/route.ts'. It was RAISED to
+  // enforceSystemOwner (so STRONG_AUTHZ now matches it and the needle no longer returns it) —
+  // it let any authenticated agent name a GitHub URL the server would download and write under
+  // $HOME via scope:'user'. This is the ledger SHRINKING as a route is decided, which is the
+  // only direction it may move without a deliberate edit. Pinned by
+  // tests/unit/convert-skill-system-owner.test.ts.
+  //
+  // AND THE GUARD CAUGHT ME: I fixed the route, ran the three tests I had just written, and did
+  // NOT re-run this file — so a red suite sat committed for ~30 minutes. The lesson is the
+  // guard's, not mine to restate elsewhere: changing ANY route's guard changes this ledger's
+  // needle, so this file is part of the change, not a separate chore.
   'sessions/[id]/rename/route.ts',
   'sessions/activity/update/route.ts',
   'sessions/restore/route.ts',
-  'settings/global-elements/convert-skill/route.ts',
   'settings/mcp-discover/route.ts',
   'v1/mesh/chat/route.ts',
   'vpn-chat/block/route.ts',

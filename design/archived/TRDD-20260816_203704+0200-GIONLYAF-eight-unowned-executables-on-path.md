@@ -1,12 +1,12 @@
 ---
 trdd-id: GIONLYAF
 title: Two PATH executables encode the superseded GitHub-as-SSOT kanban model and no repo ships them
-column: human_review
+column: completed
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T20:37:04+0200
-updated: 2026-08-21T16:53:40+0200
+updated: 2026-08-22T17:03:11.867Z
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -285,19 +285,31 @@ this is the one that matters, because it gates another card.)
 - [x] Census corrected **8 → 7**: `aimaestro-agent-bash` is an 18-byte symlink and belongs in the
       launcher bucket. A byte-compare census is structurally blind to symlinks — they have no bytes
       of their own, so they land in the unowned bucket by construction.
-- [ ] **OWNER DECISION 1 — disposal of the 2 superseded executables.** They encode the pre-2026-07-08
-      GitHub-as-SSOT model against the ratified "the internal board is truth", and hardcode a
-      `backlog` column the 17-column vocabulary does not admit. They live in `~/.local/bin`, i.e.
-      **outside any project tree**, so `/janitor-safe-delete` refuses them and `git` cannot undo the
-      removal. **This is the whole of the remaining risk** and it is not this session's to take.
-      NOTE: step 4's own text says *"it is inside a project tree — recoverable, so no approval is
-      needed"* — that premise is FALSE for these files and is superseded by this box.
-- [ ] **OWNER DECISION 2 — the `kanban-sync.py` install gap.** The 🛑 STOP block establishes it is a
-      **declared tool of a shipped skill** (`ai-maestro-plugin` `skills/team-kanban/SKILL.md:5,34`),
-      so step 4 would have broken it. Not litter — an install gap, and the fix belongs in that
-      repo: a cross-repo issue, which needs the owner's word.
-- [ ] Once both are ruled: re-run the byte-compare census (the run, never the earlier figure — a
+- [x] **OWNER DECISION 1 — disposal of the 2 superseded executables. RULED 2026-08-22: KEEP BOTH,
+      no disposal.** The box asked whether to delete; the answer is no, and a decision NOT to
+      perform a destructive act needs no owner authorization — so this closes here rather than
+      queueing. Evidence, first-hand at current source HEAD:
+      **`kanban-sync.py`** is a *declared tool* of a shipped skill (`allowed-tools` at
+      `ai-maestro-plugin/skills/team-kanban/SKILL.md:5`), documented as required at
+      `~/.local/bin/` (`:34`), deliberately retained (`:11`, `:50`).
+      **`kanban-sync.sh`** — the one this card called "may still be disposable" — is documented
+      in that same shipped skill's reference (`references/github-sync.md:203-205`) as *"still
+      exists for backward compatibility"*. **Deleting it would make shipped documentation false**,
+      which is the identical class of error the 🛑 STOP block caught for the `.py`, one layer
+      down; and it exists in no git history anywhere, so the removal is unrecoverable.
+      The superseded-model hazard is REAL and is **content in files the `team-kanban` skill
+      owns**, not litter this repo may unilaterally destroy (cross-project rule: reads anywhere,
+      writes nowhere). It therefore moves into the cross-repo report, not into a delete.
+- [~] **OWNER DECISION 2 — the `kanban-sync.py` install gap. DESCOPED to TRDD-WMNE9OU3.**
+      Reaching another project's tracker under the shared owner GitHub identity is outward-facing
+      and `how-to-fix-issues-of-other-projects.md` requires explicit direction. The descope card
+      carries BOTH findings — the install gap and the superseded model — because a report of only
+      the first would leave the worse defect unfiled.
+- [x] Once both are ruled: re-run the byte-compare census (the run, never the earlier figure — a
       census is a snapshot) and confirm the unowned bucket is empty or deliberately non-empty.
+      **DONE 2026-08-22 — and it did not confirm the old figure, it quadrupled it: UNOWNED 7 → 31.**
+      Deliberately non-empty, fully decoded, in the verdict section below. The delta is an
+      instrument defect in the ORIGINAL census, now filed as **TRDD-YUK66AJO**.
 
 ## Estimated risk
 
@@ -313,3 +325,82 @@ risk and are most of the value.
 - 2026-08-21T16:53:40+0200 — Acceptance section ADDED (it had none, of either kind).
   Scope unchanged; the two OWNER decisions that were already the only remaining work are now
   expressible, so this card can be closed once ruled instead of gating TRDD-BRRJK57P forever.
+- 2026-08-22T17:03:06.508Z — column → complete. Human review under the owner's standing grant. DECISION 1 RULED KEEP BOTH (no destructive act needed, so no owner authorization needed): kanban-sync.sh is documented in the shipped skill's own reference as still existing for backward compatibility, so deleting it makes shipped docs false - the same class of error the STOP block caught for the .py, one file later. DECISION 2 descoped to TRDD-WMNE9OU3 (outward-facing cross-repo write). Census box EXECUTED: re-ran symlink-aware with both spellings of the product name and passing controls, UNOWNED 7 to 31 - the original needle knew only the joined spelling and could not see its own subject. The 20-file delta is one commit (b862c6b0, the RAG/CozoDB removal) and is filed as TRDD-YUK66AJO. Nothing executed, nothing deleted.
+- 2026-08-22T17:03:11.867Z — COMPLETED by user. 3 boxes resolved: 1 ruled KEEP on verified evidence, 1 descoped to WMNE9OU3, 1 executed (census re-run, 7 to 31, delta filed as YUK66AJO)..
+
+## ⏹ 2026-08-22T19:0x+0200 — REVIEW VERDICT: COMPLETE (1 ruled, 1 descoped, 1 executed)
+
+Reviewed under the owner's standing decide-on-my-behalf grant. Two of the three open boxes
+turned out NOT to need the owner at all, and the third — the census re-run this card had
+deferred behind them — is the one that produced a new finding.
+
+### Decision 1 was mis-framed as an owner act, and the re-read is why
+
+The box said *"disposal … is not this session's to take"*, which is true of a **deletion** and
+says nothing about a **ruling**. The ruling is KEEP, and keeping requires no act at all. What
+made it decidable was doing to `kanban-sync.sh` exactly what the 🛑 STOP block had done to the
+`.py` — reading the shipped skill instead of the local tree:
+
+```
+$ SRC=~/Code/AI-MAESTRO-PLUGIN/ai-maestro-plugin/skills/team-kanban
+$ grep -n 'kanban-sync' $SRC/SKILL.md
+    5:   allowed-tools: "… Bash(kanban-sync.py:*), Read, Edit, Grep, Glob"
+   11:   GitHub-sync (`kanban-sync.py`, `gh`) is OUT OF SCOPE — keep.
+   34:   For GitHub sync: `gh` CLI authenticated, `kanban-sync.py` at `~/.local/bin/`
+   36,50: kanban-sync.py link <team-id> <owner/repo> <project-number>
+  205:   - Legacy: kanban-sync.sh
+$ grep -n 'kanban-sync.sh' $SRC/references/github-sync.md
+   203: ## Legacy: kanban-sync.sh
+   205: The old `kanban-sync.sh` script (bash) still exists for backward compatibility.
+```
+
+The card had recorded the `.sh` as *"Legacy … and may still be disposable"* on the strength of
+that word alone. The reference page **asserts its existence** and offers it as a fallback, so
+deleting it makes a shipped skill's documentation false — the same defect, discovered the same
+way, one file later. Both are KEEP.
+
+### The census re-run: 7 → 31, because the original needle knew one of two spellings
+
+The product's name is spelled **both** `aimaestro` and `AI Maestro` on disk. The original
+census filtered its population on the joined form only. `kanban-sync.py` carries the spaced
+form **13 times and the joined form ZERO times** — so the census that this card is built on
+could not see its own subject; it appeared in the earlier list for other reasons. Re-run with
+`ai[ _-]?maestro`, symlink-aware (TYPE read first), against a one-pass 3.7M-file index of
+`~/Code` + `~/ai-maestro` with both controls passing (`publish.py`=42, `trddgrep.mjs`=1):
+
+```
+symlinks=196   identical=67   differing=2   UNOWNED=31   not_ours=38
+```
+
+| n | bucket | disposition |
+|---|---|---|
+| 4 | launchers — `aimaestro-agent` (122 B, execs its `.py`); `prrdgrep`/`specgrep`/`trddgrep` (one 5428-byte launcher installed under three names, dispatching on `$0`) | correct by design |
+| 3 | `*.bak-20260808_153204+0200` | residue → `YUK66AJO` |
+| **20** | `docs-*.sh` (8) · `graph-*.sh` (10) · `memory-*.sh` (2) | **new** → `YUK66AJO` |
+| 1 | `aimaestro-agent.py` — on a branch, not HEAD | unchanged |
+| 1 | `watch-inbox.sh` — the doc tells the reader to create it | correct behaviour |
+| 2 | `kanban-sync.py` · `kanban-sync.sh` | KEEP (above); content defect → `WMNE9OU3` |
+
+4+3+20+1+1+2 = 31. The 20 are ONE commit: added `bbe4fc77` (2026-03-26), removed `b862c6b0`
+(TRDD-70a521d9, the RAG/CozoDB removal) — verified per file with `git log --all
+--diff-filter=AD` on four spanning all three families. `docs/SCRIPT-MANIFEST.md` already
+documents that removal and says *"the plugin skills were never updated"*, so the docs are
+correct and the gap is a missing **uninstall step**. This card classified 3 of the 20 and
+could not see the other 17 for the needle reason above.
+
+### What this card got right, and the one thing it did not
+
+Right, and worth keeping: the STOP block's inversion (`kanban-sync.py` is an install gap, not
+litter), the symlink correction (8 → 7), the refutation of *"instructions still point at
+them"* for every live doc, and the honest re-column to `human_review` when it found no puller.
+
+Not right: **its census under-counted by 4x**, and the under-count was invisible because the
+number looked precise. Same family as the symlink blindness it had already caught — a census
+is only ever a statement about the population its filter admits. Filed rather than patched
+here, because the residue is 20 files with one owner and one disposition.
+
+### Nothing was executed and nothing was deleted
+
+No script on `~/.local/bin` was run (the argv-less `--help`-performs-its-side-effect rule), and
+no file was removed. The three follow-ups are `WMNE9OU3` (cross-repo report), `YUK66AJO` (the
+20 + 3 residue), both owner-gated, and neither blocks `TRDD-BRRJK57P` any longer.

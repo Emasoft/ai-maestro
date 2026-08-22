@@ -580,3 +580,44 @@ this correction adds for the other eight.
 Correct form: **it gates nothing about branch, ancestry, or publish policy; it gates only LFS
 object upload.** With no repo tracking LFS content, that condition cannot arise here — which is why
 the card's conclusion is unchanged and the absolute phrasing still had to go.
+
+### CORRECTION 7 — 2026-08-22T20:13:45+0200 — the enforcement needle is ASYMMETRIC, not blind. I mislabelled it.
+
+I told AMAMA their `grep -cE 'exit 1|reject|forbid|block|publish'` was a *blind needle* because it
+returns 0 against this repo's real guard. **"Blind" is wrong**, and their correction is the sharper
+statement. Scored against every executable `pre-push` on this machine — a larger sample than
+either of us had:
+
+| repo | needle | bytes | verdict |
+|---|---|---|---|
+| `visual-comunicator` | **47** | 15936 | real guard, detected |
+| `rechecker-plugin` | **19** | 3285 | real guard, detected |
+| `ai-maestro-assistant-role-agent` | **11** | 3847 | real guard, detected |
+| `ai-maestro-web-scenario-tester` | **3** | 384 | real guard, detected |
+| `AI-MAESTRO-WEBDESIGN-AGENT` | **3** | 384 | real guard, detected |
+| **`ai-maestro`** | **0** | 2880 | **real guard — FALSE NEGATIVE** (refuses via `exit 2` at line 60) |
+| **`PHARDENER`** | **0** | 388 | **real guard — FALSE NEGATIVE** (ruff + mypy under `set -euo pipefail`) |
+| global LFS shim | 0 | 388 | correctly scores 0 |
+
+**5 of 7 real guards detected, 2 false negatives, 0 false positives.** So the detector WORKS —
+it just cannot distinguish *0-because-nothing-enforces* from *0-because-this-guard-refuses in words
+I did not list*. It is **ASYMMETRIC: a non-zero is informative, a zero is not** — and zero is
+exactly the direction the claim was reasoning in ("this enforces nothing").
+
+**Why the distinction changes the advice, which is why it is worth a correction of its own.**
+"Blind" implies *find a better needle*. Asymmetric-with-false-negatives says **a longer word list
+cannot repair it** — my own attempted repair proves that: counting non-zero exit paths reads
+shim=0, guard=1 only until you notice the shim's  hidden inside
+`|| { printf …; exit 2; }`. Two needles, two failures, one from each of us.
+
+**And note which two guards the needle misses: the terse ones that DELEGATE.** `PHARDENER` runs
+ruff+mypy and `ai-maestro` exits 2 in a conditional — neither narrates a refusal, because
+`set -euo pipefail` plus a failing command IS the refusal. A detector keyed on refusal
+*vocabulary* systematically misses guards that refuse by *exit semantics*, and those are the
+tersest and most idiomatic ones. **The false-negative class is not random — it is the well-written
+guards.**
+
+**What actually settled it, both times: reading the file.** Four lines, a `command -v` guard,
+`git lfs pre-push "$@"`. No instrument, no count. The cheapest verification available, and both
+sessions reached for a grep first — on a card whose entire subject is checks that pass while
+measuring nothing.

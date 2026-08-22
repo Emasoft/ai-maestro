@@ -94,6 +94,11 @@ describe('compareInstalledScripts', () => {
  *
  * The lesson these tests encode is WHY it was unpinnable: the lib had a full test file, and the
  * one line deciding what gets tested sat outside it, in an untested `.mjs`.
+ *
+ * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s{\^\(amp\|aid\|aimaestro\)}{^(amp|aimaestro)}
+ *   → 1 red / 9 green:
+ *       REGRESSION — the aid-* family is tracked (it was silently omitted)
  */
 describe('isTrackedScriptName — the scan set', () => {
   it('REGRESSION — the aid-* family is tracked (it was silently omitted)', () => {

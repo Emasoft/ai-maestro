@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T04:16:16+0200
-updated: 2026-08-22T04:16:16+0200
+updated: 2026-08-22T04:30:42+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -30,6 +30,22 @@ external-refs: [TRDD-IMCEYV9F]
 ---
 
 # The agent-repos route shell-interpolates paths that were never metacharacter-validated
+
+> ## ⛔ DO NOT PUSH THIS CARD WHILE THE VECTOR IS UNPATCHED
+>
+> Measured 2026-08-22T04:30 — **both remotes are PUBLIC**:
+> `Emasoft/ai-maestro` (the fork we push to) and `23blocks-OS/ai-maestro` (upstream) each
+> report `visibility: PUBLIC, isPrivate: false`.
+>
+> This card describes a **live, unfixed** injection vector and spells out the payload
+> shape. Pushing it before the fix lands publishes a working recipe against a running
+> system, to anyone watching the repo, with no patch available. That is the one thing in
+> this whole batch worth being careful about.
+>
+> **Order of operations: land the fix, THEN push both together.** The card is the fix's
+> own record and should ship with it — not ahead of it.
+>
+> This is not a reason to delay the fix. It is a reason not to publish ahead of it.
 
 ## Problem
 

@@ -85,6 +85,31 @@ outside this repo's `tests/` at all.
 is host-global, any repo on this machine can fill it and this repo's tests can never
 contain it — attribution is task 1, not a prerequisite to filing.
 
+### ATTRIBUTED 2026-08-22T03:4x — `ai-maestro-orchestrator-agent/tests/unit/test_trdd_link.py`
+
+A **pytest** suite in `~/Code/EMASOFT-ORCHESTRATOR-AGENT/`. The slugs are pytest `tmp_path`
+directory names — the test function name truncated to 30 chars with a numeric suffix, which
+is where the otherwise inexplicable trailing `0` comes from. Three of four match verbatim:
+
+| index slug | test function |
+|---|---|
+| `test-find-trdd-across-zones-an0` | `test_find_trdd_across_zones_and_case` |
+| `test-find-trdd-does-not-mistak0` | `test_find_trdd_does_not_mistake_the_timestamp_for_the_id` |
+| `test-find-trdd-survives-a-nega0` | `test_find_trdd_survives_a_negative_utc_offset` |
+
+Mechanism closed end to end: that file's own comment says *"find_trdd shells to `trddgrep
+show --porcelain`"*, and `scripts/trddgrep.mjs:751` resolves `indexPath(statePath(...))`. A
+peer repo's pytest run spawns **our** CLI against a throwaway corpus, and **our** CLI writes
+a permanent entry into the shared host dir. 12 per family = one per suite run.
+
+This confirms the host-global claim rather than merely being consistent with it, and it
+moves the fix: **prefer our side.** Peer-side containment (`HOME` in the subprocess env)
+works but must be repeated by every repo that ever shells to a pillar CLI, and one that
+forgets fails silently into someone else's home. A guard in `trddgrep` — do not persist a
+host-global index for a corpus under a temp root — covers every caller, including callers
+in repos we do not own. **We must not edit the peer repo** (cross-project rule); peer-side
+work is an issue on `Emasoft/ai-maestro-orchestrator-agent`, not an edit here.
+
 ## Proposed fix
 
 1. **Attribute the 08-19 and tonight's writers.** Take the count before and after each
@@ -120,8 +145,15 @@ This card contains the *source*; it reports the residue and stops.
 
 ## Acceptance
 
-- [ ] The writer of the 48 `test-*` files (2026-08-19) is identified by measurement, and
+- [x] The writer of the 48 `test-*` files (2026-08-19) is identified by measurement, and
       named here — including which repo it lives in.
+      **TICKED 2026-08-22T03:4x** — `ai-maestro-orchestrator-agent/tests/unit/test_trdd_link.py`.
+      Evidence is a traced mechanism, not a name guess: 3 of 4 slugs match a test function
+      verbatim under pytest's `tmp_path` naming, that file's own comment names the CLI it
+      shells to, and `scripts/trddgrep.mjs:751` is the `statePath` call site that receives it.
+      **Not yet done, and deliberately separate:** the confirming BEFORE/AFTER count around a
+      run of that suite. The chain is decisive on its own, but a count is what would make it
+      unfalsifiable — leave it for whoever does the containment.
 - [ ] The writer of `scratchpad-*` (2026-08-22 02:59) is identified and contained.
 - [ ] Every writer reachable from this repo is contained at its own layer.
 - [ ] One run-level assertion exists that reddens for a writer it was not written for.

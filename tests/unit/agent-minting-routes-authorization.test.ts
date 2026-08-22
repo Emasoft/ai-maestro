@@ -116,9 +116,19 @@ describe('TRDD-DQVPODKW — agent-minting routes authorize, not merely authentic
 })
 
 /**
- * NEUTER RUN (2026-08-22 — OBSERVED, restore verified by blob hash): see the card
- * TRDD-DQVPODKW for the recorded red set. Deleting any one route's
- * `authorize(auth, 'create-agent')` call reds that route's denial test and leaves
- * the other two green, which is what proves the three gates are independent rather
- * than one shared guard being exercised three times.
+ * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(!authz.allowed\)/if (false)/ if $. == 41   [create-persona/route.ts]
+ *   → 1 red / 3 green:
+ *       create-persona refuses a MEMBER — an authenticated agent is not an authorized one
+ *
+ * Predicted 1, observed 1. The OTHER two routes stayed green, and that is the point of
+ * neutering one file rather than all three: it proves these are three INDEPENDENT gates,
+ * not one shared guard being exercised three times.
+ *
+ * FIRST ATTEMPT WAS A NO-OP AND THE TOOL CAUGHT IT — recorded because the mutation LOOKED
+ * right: `s/const authz = authorize/const authz = {allowed:true} && authorize/` reddened
+ * NOTHING, because `{allowed:true}` is truthy and `&&` therefore returns its RIGHT operand.
+ * The line changed; the behaviour did not. A textual diff plus a green suite is exactly what
+ * an unpinned guard looks like, which is why the tool treats 0-red as a finding to explain
+ * rather than a pass. Mutate the CHECK, not the call.
  */

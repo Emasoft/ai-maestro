@@ -78,7 +78,7 @@ MCP server. That rule has no element-level exception, including the core plugin.
 |---|---|
 | **A — frozen CLI** (§2, 50 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
-| **C — operator/dev** (§4, 28 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
+| **C — operator/dev** (§4, 29 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
 50 + 12 + 28 = **90**, the whole of `scripts/*.sh`. Every file is in exactly one tier.
@@ -531,7 +531,7 @@ API (`ChangePlugin`). It still works; do not build on it.
 
 ---
 
-## 4. Tier C — operator / dev scripts (28) — **not** a plugin API
+## 4. Tier C — operator / dev scripts (29) — **not** a plugin API
 
 `install-messaging.sh` copies `scripts/*.sh` by glob, so these land in `~/.local/bin` too.
 Being on `PATH` does **not** make them a contract. A plugin must never call them.
@@ -545,6 +545,7 @@ Being on `PATH` does **not** make them a contract. A plugin must never call them
 | `export-agent.sh` · `import-agent.sh` · `list-agents.sh` | operator equivalents of `aimaestro-agent.sh export/import/list` — **use the CLI subcommands instead** |
 | `test-amp-routing.sh` · `test-amp-cross-host.sh` · `test-amp-local-delivery-sig.sh` · `test-tailscale-access.sh` · `simulate-blackout.sh` | test suites |
 | `install-boot-persistence.sh` · `install-pillar-tooling.sh` · `setup-local-marketplaces.sh` · `distribute-tailscale-skill.sh` | installers / host setup (added 2026-08-05 — previously shipped and unannounced) |
+| `sweep-external-blockers.sh` | **the stale-external-blocker re-check** (TRDD-8GBIQMEP). The board has no field for an external blocker, so an external wait lives only in prose and nothing re-checks it — this is the re-check. Read-only: greps `design/tasks/*.md` for issue refs in a BLOCKING context, resolves each via `gh issue view`, prints `card \| issue \| STATE`. Exit `0` every cited blocker still OPEN · `1` at least one CLOSED (a card holds a dead claim) · **`2` a ref could not be resolved** and nothing is CLOSED |
 | `aimaestro-check-decoupling.sh` | **the R23 compliance gate, made runnable.** Scans a plugin tree for direct `/api/` calls — code *and* `.md` prompts, since a SKILL telling an agent to `curl` is a bypass. Self-tests its own needle each run. Exit `0` clean · `1` findings · **`2` COULD NOT RUN** |
 
 > **`aimaestro-check-decoupling.sh` is Tier C by AUDIENCE, not by importance.** It is an

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T02:41:30+0200
+updated: 2026-08-22T02:46:29+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -560,6 +560,28 @@ them to.
       before it becomes a TRDD — no finding enters the plan on a peer's word alone.
 - [ ] Refuted candidates are recorded with their refutation, not silently dropped.
 - [ ] Phase 2 TRDDs exist in the OWNING repos, not here, and each cites its audit finding.
+      **MEASURED 2026-08-22T02:4x — satisfied on 13 of 15 repos; the other 2 cannot satisfy it as
+      written.** Swept every peer repo's `design/` for cards citing their own audit: **52 cards
+      across 13 repos, all in the OWNING repo, none in the hub** — which is exactly the shape this
+      box demands.
+      *"Each cites its audit finding"* checked rigorously rather than by regex, because matching
+      the word `axis` would prove nothing. Spot-check, `perfect-skill-suggester` `AXZAXMDQ:15`:
+      *"Source: Phase-1 self-audit finding **AX4-2**, CONFIRMED by the refutation pass
+      (`reports/plugin-self-audit/20260816_190920+0200-refutation.md`, gitignored)"* — a named
+      finding id plus the exact report filename. That is a real citation.
+      **NOT TICKED, for one reason: `EMASOFT-ASSISTANT-MANAGER` and `llm-externalizer` have audit
+      reports and NO `design/` tree at all**, so their findings have nowhere to live. The box is
+      not failing on those two — it is *inexpressible* on them, which is a different and worse
+      state than unmet, because no sweep over cards can ever see it. **Ticking this needs those
+      two repos to either gain a `design/` tree or record why they are exempt.**
+      *(Correction to my own earlier framing, kept because it was wrong in a way worth seeing: I
+      had listed `perfect-skill-suggester`'s 5 `backburner` cards as "remaining work / exceptions".
+      They are the opposite — all 5 authored in the SAME MINUTE (2026-08-19T04:32:41) from the
+      audit, each citing its finding, carrying real defects (a subprocess with no timeout under a
+      "500 ms max" comment; a dead Rust schema drifted from the live Python one; a negation rule
+      whose only executing path has zero tests). That is **this box being satisfied**, and
+      `backburner` is a legitimate resting state the owning repo chose. I mistook Phase 2 working
+      for Phase 2 stalling because I read the column and not the cards.)*
 - [ ] Specs corrected/expanded BEFORE their dependent changes, with compliance re-verified after.
 - [ ] wikimem and documentation updated for every landed change.
 - [x] Every user-scope plugin that changed has PUBLISHED a new version — **MEASURED against

@@ -3,7 +3,7 @@ trdd-id: F1SL03CK
 title: Decide whether a portfolio token becomes MANDATORY for CreateAgent and CreateTeam
 column: planned
 created: 2026-07-14T13:57:21+0200
-updated: 2026-08-21T21:59:38+0200
+updated: 2026-08-22T21:34:57+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
@@ -168,6 +168,75 @@ for doing it without asking.
 **MEDIUM.** The code is proven and the revert is trivial, but the blast radius is every COS in
 the fleet, and the failure mode is a 403 in a flow someone depends on. Risk is dominated
 entirely by the operational question above, not by the code.
+
+## Progress — 2026-08-22T21:34:57+0200 — the AUTHORIZE half is LANDED; the FLIP is the owner's
+
+`c9a25084`. All four STATE-block claims re-derived first (the approval was ~24h old) and all four
+were unchanged.
+
+**The NEXT ACTION splits cleanly, and the split comes from this card's own risk section** — *"risk
+is dominated entirely by the operational question, not by the code"*:
+
+- **the `authorize()` gate** denies only titles that were never supposed to create agents. MANAGER
+  and COS stay allowed, so nothing in the fleet breaks. **Pure hardening — landed.**
+- **the `OPERATIONS_REQUIRING_TOKEN` flip** 403s every COS that lacks a minted mandate, and
+  verification step 4 requires minting standing mandates to existing COS agents BEFORE deploy — an
+  operational act on live agents. **Not done; not mine.**
+
+The STATE block argues the token gate alone is insufficient. It does not argue against the
+authorize gate alone, and indeed calls the missing authorize() the worse half (*"and it is worse
+than R30.1 alone"*). So landing this half first is faithful to the card, not a shortcut past it.
+
+`register-agent` was NOT reused: it is system-owner ONLY — *"not even MANAGER, because
+registerAgent is the bootstrap primitive"* — and its own comment says to use the in-band path
+instead. Reusing it would have denied the MANAGER.
+
+## Acceptance
+
+This card carried **ZERO checkboxes** — a priority-0 `severity: high` security card whose
+completion gate was therefore vacuous (every box in an empty set is trivially checked). Adding the
+gate it should have had:
+
+- [x] a `create-agent` AuthAction exists and its matrix encodes R30.1/R30.2 — MANAGER and COS
+      allowed, every other title denied
+- [x] `POST /api/agents` calls `authorize()` and returns 403 on denial, BEFORE any creation —
+      asserted as `CreateAgent` never called, since "refused after the fact" is not a refusal
+- [x] the guard is proven load-bearing by neuter, not by assertion — deleting the matrix rule reds
+      3 (MEMBER becomes ALLOWED, COS becomes DENIED); deleting the route gate reds exactly the 2
+      denials and leaves both grants green. Both restored byte-identical, `cmp`-verified
+- [x] `authorize` is NOT mocked in the route test — mocking a guard to prove the guard is a test
+      that survives the guard's deletion
+- [ ] **`OPERATIONS_REQUIRING_TOKEN` flipped to the v1 set** (`CreateAgent: 'agent:create'`,
+      `CreateTeam: 'team:create'`) — **OWNER DECISION, see below**
+- [ ] standing `agent:create` mandates minted to existing COS agents BEFORE the flip is deployed
+      (verification step 4; the answer to "does a COS create agents in normal operation" is YES per
+      R30.2, so this is required, not conditional)
+- [ ] `POST /api/agents` added to `security-registry.json` — still absent; belongs with the flip,
+      since that is when the route acquires a strict-path contract
+
+## NEXT ACTION — one decision for the OWNER
+
+**Flip `OPERATIONS_REQUIRING_TOKEN` to the v1 set, or leave it empty?**
+
+It is a one-line diff and a one-line revert. What makes it the owner's and not mine: at DEPLOY it
+403s every COS in the fleet that does not already hold a ledger-anchored `agent:create` mandate, so
+it must be sequenced with minting those mandates — an operational act on live agents. The code is
+proven (`tests/services/portfolio-create-agent-authz.test.ts` covers both sides); the risk is
+entirely operational.
+
+**Landing it while it cannot be deployed is its own hazard** — a breaking change sitting on the
+branch that someone else deploys. That is why it is not landed "ready to go".
+
+## Adjacent finding, filed separately as `TRDD-CAVCTULL`
+
+The guard that exists to catch this exact class — a mutating agent route with no authorization —
+could not see it, for two independent reasons: its scan root is `app/api/agents/[id]/` only (the
+collection subtree, **26 mutating routes, 18 with no authorization step at all**, has never been
+under any guard), and its `AUTHORIZES` needle counts `buildAuthContext(` as an authorization step,
+which this route already called. A context CONSTRUCTION read as an authorization DECISION — the
+same proxy-for-the-thing shape as the bug it missed. Not absorbed here; it is a pre-existing guard
+gap this card revealed, not a hole this card opened, so it is an independent card and deliberately
+NOT an EHT (a wrong lineage edge is worse than none).
 
 ## Approval log
 

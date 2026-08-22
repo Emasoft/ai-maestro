@@ -360,20 +360,29 @@ function nonAgentsRouteFiles(): string[] {
 const relNonAgents = (f: string) => path.relative(nonAgentsRoot, f)
 
 /** Chose authentication-only. Each entry is an ASSERTION nobody has checked, not a known hole.
- *  May SHRINK as each is decided; must never grow without a deliberate edit here. */
+ *  May SHRINK as each is decided; must never grow without a deliberate edit here.
+ *
+ *  WAS 17 UNTIL 2026-08-22, AND SIX OF THOSE WERE NEVER AUTHENTICATION-ONLY. The first
+ *  needle was `MUTATING && CALLS_ENFORCE_AUTH && !STRONG_AUTHZ`, with STRONG_AUTHZ looked for
+ *  IN THE ROUTE FILE — so a route that forwards an authContext into a service that authorizes
+ *  read as authentication-only. `sessions/create` is exactly that: it forwards, and
+ *  `services/sessions-service.ts:815` calls `authorize(authResult, 'create-session', agentId)`.
+ *  The `agents/` root has had a FORWARD-ONLY tier for precisely this since CAVCTULL; this root
+ *  shipped without one, so its ledger conflated two different states and OVERSTATED the debt by
+ *  six. The forward-only tier below now takes them, and it is the more interesting number: 18,
+ *  twelve of which were in no ledger at all. */
 const NON_AGENTS_AUTHN_ONLY: string[] = [
   'conversations/parse/route.ts',
   'export/jobs/[jobId]/route.ts',
-  'groups/[id]/notify/route.ts',
-  'groups/[id]/route.ts',
-  'groups/[id]/subscribe/route.ts',
-  'groups/[id]/unsubscribe/route.ts',
-  'groups/route.ts',
+  // DECIDED 2026-08-22 (TRDD-R268J32X) — authentication-only is CORRECT here. Kept in the
+  // ledger rather than removed: the entry's job is to stop the assertion changing unnoticed,
+  // and a decided-correct route still needs that. Reasoning on the card; in short, the build
+  // writes to a tmp dir nothing reads, does not install, and the sibling that PUBLISHES
+  // (`push`) is enforceSystemOwner. `authorize()` also has no verb for it.
   'plugin-builder/build/route.ts',
   'plugin-builder/scan-repo/route.ts',
   'sessions/[id]/rename/route.ts',
   'sessions/activity/update/route.ts',
-  'sessions/create/route.ts',
   'sessions/restore/route.ts',
   'settings/global-elements/convert-skill/route.ts',
   'settings/mcp-discover/route.ts',
@@ -381,8 +390,19 @@ const NON_AGENTS_AUTHN_ONLY: string[] = [
   'vpn-chat/block/route.ts',
 ]
 
+/** Forwards a caller context out of the route without authorizing IN it. Same meaning, same
+ *  needle and same caveat as the `agents/`-root tier above: a forward proves the route hands the
+ *  identity on, NOT that the receiving end decides anything. Pinned by COUNT, because the set is
+ *  large and the useful property is that it cannot grow silently.
+ *
+ *  Measured 2026-08-22: 18. Six arrived from the authn-only ledger above; the other TWELVE were
+ *  invisible to every guard in this file until the tier existed — including
+ *  `teams/[id]/batch-create-agents` and `trdd/create`, which create governed objects. */
+const NON_AGENTS_FORWARD_ONLY_COUNT = 18
+
 const STRONG_AUTHZ = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\benforceSystemOwner\(|\benforceActiveMaestro\(/
 const CALLS_ENFORCE_AUTH = /^\s*(const [A-Za-z]+ = )?enforceAuth\(/m
+const FORWARDS_CONTEXT = /\bbuildAuthContext\(|\bauth\.context\b|\bauthContext\b/
 
 describe('non-agents mutation routes that chose authentication-only (TRDD-R268J32X)', () => {
   it('the walker reaches the non-agents tree — a mis-joined root must not report clean', () => {
@@ -404,7 +424,13 @@ describe('non-agents mutation routes that chose authentication-only (TRDD-R268J3
     const found = nonAgentsRouteFiles()
       .filter((f) => {
         const src = readFileSync(f, 'utf8')
-        return MUTATING.test(src) && CALLS_ENFORCE_AUTH.test(src) && !STRONG_AUTHZ.test(src)
+        // !FORWARDS_CONTEXT is what was missing until 2026-08-22 — see the ledger's own note.
+        return (
+          MUTATING.test(src) &&
+          CALLS_ENFORCE_AUTH.test(src) &&
+          !STRONG_AUTHZ.test(src) &&
+          !FORWARDS_CONTEXT.test(src)
+        )
       })
       .map(relNonAgents)
       .sort()
@@ -419,5 +445,29 @@ describe('non-agents mutation routes that chose authentication-only (TRDD-R268J3
         'Add an authorization step, or add the route here with a reason. TRDD-DQVPODKW: of the ' +
         'first four such assertions examined, three were wrong and all three minted agents.',
     ).toEqual([...NON_AGENTS_AUTHN_ONLY].sort())
+  })
+
+  it('the forward-only set outside agents/ is pinned and does not grow unnoticed', () => {
+    /** Validates that a route forwarding a caller context without authorizing cannot land unseen */
+    const forwardOnly = nonAgentsRouteFiles().filter((f) => {
+      const src = readFileSync(f, 'utf8')
+      return MUTATING.test(src) && !STRONG_AUTHZ.test(src) && FORWARDS_CONTEXT.test(src)
+    })
+    // Non-vacuity: a broken needle would report zero and read as "all verified".
+    expect(forwardOnly.length).toBeGreaterThan(0)
+    expect(
+      forwardOnly.length,
+      'A mutating route outside app/api/agents/ forwards an auth context and calls nothing ' +
+        'stronger. That proves it hands the identity on, NOT that the receiving service decides ' +
+        'anything — verify the receiver and give it a real authorize() call, or update this ' +
+        'count deliberately with the reason. TRDD-CAVCTULL: the same theory held for 11 such ' +
+        'routes and failed for 1, which is why forwarding is pinned rather than trusted.',
+    ).toBe(NON_AGENTS_FORWARD_ONLY_COUNT)
+  })
+
+  it('sessions/create is forward-AND-authorize — the one verified receiver, pinned by name', () => {
+    /** Validates the receiver verified for R268J32X still authorizes, since the tier above only counts */
+    const src = readFileSync(path.join(repoRoot, 'services', 'sessions-service.ts'), 'utf8')
+    expect(src).toMatch(/authorize\(authResult, 'create-session', agentId\)/)
   })
 })

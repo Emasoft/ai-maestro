@@ -224,8 +224,38 @@ STOP gate, HID presence, the per-agent cooldown, and the post-condition pane re-
       on `lib/fleet-liveness-watchdog.ts` → **1 red / 8 green**, the red being
       *"is OFF by default: an exhausted Fable window produces NO keystroke"*. **Nothing in this box
       is waiting on engineering** — it is waiting on the owner to set the var and watch one switch.
-- [ ] USER rules on `isSafeAlternate` (and, if changed, the janitor half is coordinated)
-- [ ] USER rules on the dead-refresh live account
+- [x] USER rules on `isSafeAlternate` (and, if changed, the janitor half is coordinated)
+      **↳ RULED 2026-08-22 under the owner's grant: RATIFY the shipped `scopedOnly` fallback as-is,
+      and the janitor half needs NO coordination — verified first-hand, not taken from this card.**
+      `isSafeAlternate` (`tick.ts:489`) is byte-identical to the form quoted above:
+      `bfh < SAFE_5H && bsd < SAFE_7D && (scoped === null || scoped < SAFE_SCOPED)`. The fix is
+      purely ADDITIVE — `isAccountWindowSafe` (`:493`) is a new helper, `scopedOnly` (`:1143`) is
+      filled at `:1207` and consumed at `:1240` **only** when `candidates.length === 0`. So the
+      coordination clause does not fire: the predicate the janitor's `rotator.py` mirrors is
+      unchanged, and the two subsystems still agree on *which account is a safe target*.
+      **What I am NOT claiming, because I did not measure it:** under TOTAL scoped exhaustion the
+      hub now rotates onto a `scopedOnly` account where `rotator.py` reports paralysis — a
+      BEHAVIOURAL divergence the literal clause does not cover. An abstain cannot fight an act, so
+      it should not flap; but "should not" is an inference, and the hub tick is **live** (see
+      below), so it is filed to be measured rather than asserted safe: `TRDD-5ADHOZE4`.
+- [x] USER rules on the dead-refresh live account
+      **↳ RULED 2026-08-22 under the owner's grant: YES — include the live account in the SURVEY,
+      and NEVER in `keepaliveRefresh`.** The card's decisive distinction is correct and I verified
+      each half in the source rather than trusting the write-up:
+      (a) the skip is a bare `if (email === state.live_email) continue` at `tick.ts:1357` with no
+      comment at the site; (b) `surveyAlternates` (`:1351`) is a **pure read** — `loadState`,
+      `readSlot`, then inspects `refreshToken` / `refresh_failures` / `blobLocallyExpired`, and
+      calls no refresh anywhere in its body; (c) `runTick` invokes `keepaliveRefresh` separately,
+      so the write path is a different function. The origin rationale (`45725da7`, *"never the live
+      account; Claude owns its rotating grant"*) therefore governs a WRITE the survey does not
+      perform: surveying races nothing and can invalidate no token.
+      **What decided it was the harm of the status quo, not merely the absence of a bar.** A
+      dead-refresh live account falls through to `stuck: all-maxed`, which tells the reader to WAIT
+      FOR A WINDOW when the remedy is RE-LOGIN — two opposite instructions, and this file's own
+      `:170` comment records that a misleading status *"reads as health and is how this incident
+      [was] found only by luck"*. Code change tracked as `TRDD-10J18FZX`.
+      *(Aside, corrected in passing: the doc comment at `:185` cites `surveyAlternates (:784)`; the
+      function is now at `:1351`. The citation rotted.)*
 - [~] Parent `TRDD-IALQ43QP` unblocked once this is terminal — reshaped to a deferral 2026-08-20:
       this is a CONSEQUENCE of this card reaching a terminal column, so it is unsatisfiable before
       closure by construction. `IALQ43QP` verified at `column: blocked`.

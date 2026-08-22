@@ -5,7 +5,7 @@ column: completed
 pre-block-column: null
 min-approval-requirement: manager
 created: 2026-07-09T18:03:01+0200
-updated: 2026-08-22T15:41:46.152Z
+updated: 2026-08-22T17:41:46+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2

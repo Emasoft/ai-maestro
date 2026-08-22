@@ -3,7 +3,7 @@ trdd-id: L58QB3FR
 title: The capped throttled scenario batch — a cost decision the owner has never been asked
 column: todo
 created: 2026-08-22T19:06:50+0200
-updated: 2026-08-22T17:07:25.089Z
+updated: 2026-08-22T19:07:25+0200
 current-owner: user
 created-by: user
 task-type: spike

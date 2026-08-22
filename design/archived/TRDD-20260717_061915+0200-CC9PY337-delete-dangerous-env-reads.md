@@ -3,7 +3,7 @@ trdd-id: CC9PY337
 title: Delete every security-risk env read — dashboard-only settings, non-env test seams
 column: completed
 created: 2026-07-17T06:19:15+0200
-updated: 2026-08-22T15:55:23.997Z
+updated: 2026-08-22T17:55:23+0200
 current-owner: ai-maestro
 task-type: security
 parent-trdd: QZL828OD

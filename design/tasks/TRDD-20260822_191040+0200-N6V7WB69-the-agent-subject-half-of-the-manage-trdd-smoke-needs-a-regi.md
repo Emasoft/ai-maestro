@@ -3,7 +3,7 @@ trdd-id: N6V7WB69
 title: The agent-subject half of the manage-trdd smoke needs a registered agent
 column: todo
 created: 2026-08-22T19:10:40+0200
-updated: 2026-08-22T17:11:09.656Z
+updated: 2026-08-22T19:11:09+0200
 current-owner: user
 created-by: user
 task-type: security

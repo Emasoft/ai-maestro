@@ -3,7 +3,7 @@ trdd-id: WMNE9OU3
 title: ai-maestro-plugin kanban-sync install gap and the superseded model both scripts teach
 column: todo
 created: 2026-08-22T19:01:15+0200
-updated: 2026-08-22T17:02:52.199Z
+updated: 2026-08-22T19:02:52+0200
 current-owner: user
 created-by: user
 task-type: docs

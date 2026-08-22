@@ -3,7 +3,7 @@ trdd-id: 8I0JUCK9
 title: E2E smoke of manage-trdd write verbs 798OAHMX C
 column: planned
 created: 2026-08-22T17:31:23+0200
-updated: 2026-08-22T15:31:24.411Z
+updated: 2026-08-22T17:31:24+0200
 current-owner: user
 created-by: user
 task-type: infra
@@ -12,7 +12,7 @@ mandate: true
 mandated-by: user
 approved: true
 approval-judge: user
-approval-datetime: 2026-08-22T15:31:24.411Z
+approval-datetime: 2026-08-22T17:31:24+0200
 approval-token: 55de283f-a278-49b7-a168-2a210caaa324
 ---
 

@@ -3,7 +3,7 @@ trdd-id: N4SDG0ML
 title: Make main CI green — the fast-forward exposed 3 pre-existing failure classes to GitHub CI
 column: completed
 created: 2026-08-08T15:45:11+0200
-updated: 2026-08-22T16:39:54.092Z
+updated: 2026-08-22T18:39:54+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub

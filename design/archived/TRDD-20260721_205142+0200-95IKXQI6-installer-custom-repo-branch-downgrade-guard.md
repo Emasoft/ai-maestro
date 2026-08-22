@@ -3,7 +3,7 @@ trdd-id: 95IKXQI6
 title: Parameterize install/update scripts with a custom git repo+branch and a version-downgrade guard
 column: completed
 created: 2026-07-21T20:51:42+0200
-updated: 2026-08-22T16:20:24.101Z
+updated: 2026-08-22T18:20:24+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project

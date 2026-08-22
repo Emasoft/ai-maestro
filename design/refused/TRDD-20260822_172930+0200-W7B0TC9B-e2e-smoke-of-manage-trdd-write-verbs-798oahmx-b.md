@@ -3,7 +3,7 @@ trdd-id: W7B0TC9B
 title: E2E smoke of manage-trdd write verbs 798OAHMX B
 column: refused
 created: 2026-08-22T17:29:30+0200
-updated: 2026-08-22T15:31:04.479Z
+updated: 2026-08-22T17:31:04+0200
 current-owner: user
 created-by: user
 task-type: infra

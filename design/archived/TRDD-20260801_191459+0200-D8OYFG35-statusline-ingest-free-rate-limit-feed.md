@@ -3,7 +3,7 @@ trdd-id: D8OYFG35
 title: Statusline ingest — take the 5h/7d windows from Claude Code's own feed at zero API cost
 column: completed
 created: 2026-08-01T19:14:59+0200
-updated: 2026-08-22T16:23:27.480Z
+updated: 2026-08-22T18:23:27+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 created-by: ai-maestro-dev

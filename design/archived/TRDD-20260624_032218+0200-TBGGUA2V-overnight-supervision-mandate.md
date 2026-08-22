@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: completed
 created: 2026-06-24T03:22:18+0200
-updated: 2026-08-22T17:07:59.587Z
+updated: 2026-08-22T19:07:59+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session

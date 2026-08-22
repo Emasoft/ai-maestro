@@ -3,7 +3,7 @@ trdd-id: 99LV0U4I
 title: Extend the fleet liveness scan to janitor-armed non-agent sessions
 column: completed
 created: 2026-08-19T15:01:29+0200
-updated: 2026-08-22T15:57:49.449Z
+updated: 2026-08-22T17:57:49+0200
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2

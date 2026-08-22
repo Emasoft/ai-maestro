@@ -3,7 +3,7 @@ trdd-id: WF0UE9BC
 title: Ship AgentlensPro as an official ai-maestro dependency (npm CLI, installed alongside the stack)
 column: completed
 created: 2026-07-16T14:13:15+0200
-updated: 2026-08-22T16:02:57.842Z
+updated: 2026-08-22T18:02:57+0200
 current-owner: ai-maestro
 task-type: infra
 scope: project

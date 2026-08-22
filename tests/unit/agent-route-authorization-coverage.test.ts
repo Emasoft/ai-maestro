@@ -395,12 +395,26 @@ const NON_AGENTS_AUTHN_ONLY: string[] = [
  *  identity on, NOT that the receiving end decides anything. Pinned by COUNT, because the set is
  *  large and the useful property is that it cannot grow silently.
  *
- *  Measured 2026-08-22: 18. Six arrived from the authn-only ledger above; the other TWELVE were
- *  invisible to every guard in this file until the tier existed — including
- *  `teams/[id]/batch-create-agents` and `trdd/create`, which create governed objects. */
-const NON_AGENTS_FORWARD_ONLY_COUNT = 18
+ *  Measured 2026-08-22: 15. Six arrived from the authn-only ledger above; the rest were
+ *  invisible to every guard in this file until the tier existed.
+ *
+ *  IT READ 18 UNTIL `checkTeamAccess(` JOINED STRONG_AUTHZ. That is a real authorization helper
+ *  (`if (!access.allowed) return 403`) that the needle simply did not know, and it covered three
+ *  team-scoped routes. Verified by reading the call site, not inferred from the name.
+ *
+ *  A SECOND CANDIDATE WAS MEASURED AND DELIBERATELY NOT SHIPPED, recorded so nobody re-derives
+ *  it and trusts it. `if (auth.agentId) return 403` is a real inline owner gate —
+ *  `teams/[id]/batch-create-agents` uses exactly that, so it is STRICTER than this tier implies,
+ *  not weaker. But a needle for `if\s*\(\s*auth\.agentId\s*\)|isSystemOwner` matched 8 routes and
+ *  reading four of them found TWO false: `messages/route.ts` uses `auth.agentId` to OVERRIDE a
+ *  client-supplied param, and `trdd/create` uses `isSystemOwner` to compute an authority RANK.
+ *  Neither refuses anything. A 50%-wrong needle that moves routes OUT of a debt ledger is worse
+ *  than no needle, because its errors are silent and in the reassuring direction. The inline-gated
+ *  routes therefore stay counted here, and the count overstates the debt in a way that is safe. */
+const NON_AGENTS_FORWARD_ONLY_COUNT = 15
 
-const STRONG_AUTHZ = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\benforceSystemOwner\(|\benforceActiveMaestro\(/
+const STRONG_AUTHZ =
+  /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\benforceSystemOwner\(|\benforceActiveMaestro\(|\bcheckTeamAccess\(/
 const CALLS_ENFORCE_AUTH = /^\s*(const [A-Za-z]+ = )?enforceAuth\(/m
 const FORWARDS_CONTEXT = /\bbuildAuthContext\(|\bauth\.context\b|\bauthContext\b/
 

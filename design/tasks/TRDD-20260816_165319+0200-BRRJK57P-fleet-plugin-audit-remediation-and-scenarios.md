@@ -1,13 +1,12 @@
 ---
 trdd-id: BRRJK57P
 title: USER fleet program — every plugin self-audits twice, remediates via TRDDs, and is proven by new scenario tests
-column: blocked
-pre-block-column: dev
+column: dev
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-21T16:57:00+0200
+updated: 2026-08-22T02:26:47+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -21,7 +20,7 @@ approval-datetime: 2026-08-16T16:53:19+0200
 derived: false
 npt: []
 eht: [5TELESBL, 9FBNRW29, GIONLYAF, 36RGLVYH, LXF16IXG]
-blocked-by: [GIONLYAF, LXF16IXG]
+blocked-by: []
 release-via: none
 priority: 0
 severity: high
@@ -33,6 +32,51 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T02:2x — UNBLOCKED. `blocked` → `dev`. The P0 was sitting still behind two gates that never applied to it.
+
+**`blocked-by` named two EHTs, and an EHT does not gate `dev`.** The IND rule is explicit:
+`npt:` are Necessary Prerequisite Tasks that must finish **before `dev`**; `eht:` are Effects
+Handling Tasks — post-conditions the parent **cannot reach `complete`** without. This card's
+`npt:` is **`[]`**. Nothing gates its `dev` at all.
+
+Both named blockers are `derived-kind: eht` with `parent-trdd: BRRJK57P`, verified in their own
+frontmatter — so `blocked-by: [GIONLYAF, LXF16IXG]` was applying a completion gate as a start
+gate, and the USER's own P0 fleet program stopped moving because of it.
+
+**Neither blocker gates a single one of this card's 8 open acceptance boxes.** Read them against
+each other: the open boxes are Phase-1 audit returns, hub re-verification of a cited `file:line`,
+recording refuted candidates, Phase-2 TRDDs in owning repos, spec ordering, wikimem updates,
+Phase-3 scenario runs, and tooling shortcomings. `GIONLYAF` is about two superseded PATH
+executables; `LXF16IXG` is one ruleset field on one repo. There is no dependency in either
+direction.
+
+**Flock status: 3 of 5 EHTs are already terminal** — `5TELESBL` complete · `9FBNRW29` completed ·
+`36RGLVYH` complete. The two open ones are each gated on a party that is not this session:
+- `GIONLYAF` → **owner-gated, correctly.** Its three open boxes are literally two `OWNER DECISION`
+  items plus a re-run once both are ruled; a later session moved it `todo` → `human_review`
+  precisely because it *"touches identity and therefore the USER's call, not this session's."*
+  **The approved plan's line that I should "clear GIONLYAF myself" is superseded by that ruling
+  and must not be acted on.**
+- `LXF16IXG` → premise re-measured live 2026-08-22 and it **HOLDS**; its own approval log hands
+  execution to `AgentlensPro`'s session, and its CODEOWNERS half is a cross-repo source edit
+  needing an issue or a fork PR.
+
+**They still gate `complete`, and `eht:` is left untouched so they still do.** What changes is
+only that they stop pretending to gate the start. Restored to `pre-block-column: dev`.
+
+**Why this is worth spelling out rather than just doing:** the card was not mis-filed by anyone
+careless. `blocked-by` naming two genuinely-open cards is a *true* statement, and the kanban rule
+says a non-empty `blocked-by` is the one licence to sit still — so every local check passed while
+a `priority: 0` USER mandate went nowhere. The failure is that "blocked" was true of the card's
+*completion* and false of its *work*, and nothing in the board's vocabulary distinguishes those.
+`blocked` is for a parent whose own work is DONE and whose flock is not; this one is 2/10.
+
+**NEXT ACTION on this card, and it needs nobody's permission:** acceptance box 2 — *"For every
+CONFIRMED finding, the hub has re-verified at least one cited `file:line` itself."* The audit
+reports are on disk (`reports/plugin-self-audit/`, and a per-repo sweep found ~101 across 16
+repos, never consolidated). That is hub work, available now, and it is the box the whole Phase-2
+dispatch rests on.
 
 ### 2026-08-19 00:15–04:30 — post-midnight batch: AC6 pair landed, 4 fleet reports ledgered, 3 rulings issued
 

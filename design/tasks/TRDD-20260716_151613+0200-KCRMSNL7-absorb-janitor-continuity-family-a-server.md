@@ -3,9 +3,9 @@ trdd-id: KCRMSNL7
 title: Absorb the janitor daemon continuity family (Family A) into the ai-maestro server
 column: blocked
 pre-block-column: design
-blocked-by: [TRDD-H24DF6ZC, TRDD-DXJZM3BW, TRDD-1GGQ4HWY, TRDD-9ZIF82HI, TRDD-CHN16JXZ, TRDD-99LV0U4I]
+blocked-by: [TRDD-H24DF6ZC, TRDD-DXJZM3BW, TRDD-1GGQ4HWY, TRDD-9ZIF82HI, TRDD-CHN16JXZ]
 created: 2026-07-16T15:16:13+0200
-updated: 2026-08-20T22:01:57+0200
+updated: 2026-08-22T18:02:00+0200
 current-owner: ai-maestro
 task-type: feature
 scope: project

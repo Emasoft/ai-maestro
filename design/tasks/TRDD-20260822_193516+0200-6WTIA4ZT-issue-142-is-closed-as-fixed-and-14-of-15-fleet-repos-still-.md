@@ -525,3 +525,12 @@ They reproduced my own concatenation bug *in the command they wrote to check my 
 it failed a second way at the same time: `ls … 2>/dev/null | head -6 || echo "(cannot list)"`
 gates on `head`'s exit status, never `ls`'s, so the fallback could not fire. Correct instrument,
 wrong handling, twice, by two sessions, one of whom was reading the description of the defect.
+
+**Precision on "gates nothing about pushing".** That claim was made from reading the WRAPPER
+(the 388-byte shim) and asserting about the WRAPPEE (`git lfs pre-push`), which is the same
+proxy shape one level down. Read: `git lfs pre-push <remote> [url]` takes the ref range on stdin
+and **uploads any associated Git LFS objects to the LFS API**. So it is not a no-op and it CAN
+exit non-zero — on an LFS transfer or configuration failure. The accurate statement is that it
+**enforces no policy about WHAT is pushed**: no branch rule, no publish gate, no secret scan,
+nothing a push-protection hook exists to do. `GIT_LFS_SKIP_PUSH` turns even the transfer off.
+The card's conclusion is unchanged; the sentence was too strong.

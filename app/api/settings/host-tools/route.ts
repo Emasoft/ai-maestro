@@ -271,11 +271,14 @@ const TOOLS: ToolDef[] = [
   },
   {
     id: 'agent-cli',
-    name: 'Agent CLI (aimaestro-agent)',
-    description: 'CLI for creating, hibernating, waking, listing, and managing agents. Installed to ~/.local/bin/.',
+    name: 'Shell CLI layer (aimaestro-*)',
+    // The script's FILENAME says "agent-cli" and it installs the whole layer — 11 files,
+    // not just the agent CLI. This label is what the user reads before clicking, so it
+    // names what actually lands rather than echoing the filename (TRDD-9K33PHOZ F7).
+    description: 'Installs the aimaestro-* shell CLIs to ~/.local/bin/: agent (+6 modules), teams, governance, hook, and panel.',
     script: 'install-agent-cli.sh',
     runArgs: ['-y'],
-    confirmMessage: 'This will install/update the aimaestro-agent CLI tool and its modules to ~/.local/bin/.',
+    confirmMessage: 'This will install/update the aimaestro-* shell CLI layer — agent, teams, governance, hook, panel and the agent modules — to ~/.local/bin/.',
     diagnose: diagnoseAgentCli,
   },
 ]

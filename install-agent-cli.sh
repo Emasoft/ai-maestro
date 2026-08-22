@@ -1,8 +1,27 @@
 #!/usr/bin/env bash
 #
-# AI Maestro Agent CLI Installer
+# AI Maestro shell-CLI layer installer
 #
-# Installs aimaestro-agent.sh and the ai-maestro-agents-management skill
+# THE FILENAME UNDERSTATES THIS. It does not install "the agent CLI" — it installs the
+# whole shell-CLI layer to ~/.local/bin (11 files, see INSTALLED_FILES below):
+#
+#   aimaestro-agent.sh   + its 6 modules (agent-core/helper/commands/session/skill/plugin.sh)
+#   aimaestro-teams.sh · aimaestro-governance.sh · aimaestro-hook.sh · aimaestro-panel.sh
+#
+# plus the shared helper shell-helpers/common.sh, which goes to
+# ~/.local/share/aimaestro/shell-helpers/ (the CLIs' fallback lookup path), NOT to bin.
+#
+# A RENAME WAS CONSIDERED AND DECLINED (TRDD-9K33PHOZ FINDING 7, 2026-08-22). The name is
+# invoked from FOUR executable sites — install.sh, update-aimaestro.sh, the CI job
+# .github/workflows/test-installers.yml, and app/api/settings/host-tools/route.ts, which
+# dispatches it BY NAME for a dashboard button. Renaming buys no behaviour and risks
+# breaking CI and a live UI action, so the clarity problem is fixed here, in the prose,
+# where it actually lived.
+#
+# IT INSTALLS NO SKILL. Standalone skill installation was removed (see ~line 409) — skills
+# ship in the ai-maestro plugin. The header claimed otherwise for as long as that was
+# false: prose is invisible to tsc, lint and tests, so nothing caught it. The `skills/`
+# reference that remains is in the UNINSTALL path, clearing a legacy directory.
 #
 # Features:
 #   - Zero user interaction required
@@ -10,7 +29,6 @@
 #   - Complete uninstall option
 #   - Handles partial/corrupted installations
 #   - Signal-safe (SIGTERM, SIGINT)
-#   - Installs Claude Code skill for agent management
 #
 # Supported platforms: macOS, Linux (requires tmux)
 #

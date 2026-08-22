@@ -1,11 +1,11 @@
 ---
 trdd-id: L55IYKL4
 title: Adopt the wikimem/memgrep solutions into the 3-pillars system and its grep tool
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-08-22T02:15:41+0200
+updated: 2026-08-22T03:07:39+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -422,12 +422,19 @@ child's own `column:`), and boxes 3-5 verify clean. **Exactly one of box 2's fiv
 solutions has no decision.** A first triage pass called this DONE-ALREADY; it does not survive,
 for the reason recorded under box 2.
 
-- [ ] The janitor's wikimem SPECS + issue are read in full before any design work
-      *(process box — unverifiable from the tree after the fact. The delivered work is
-      recognisably shaped by those specs, but that is inference, not evidence, so the box stays
-      honest rather than ticked on a feeling.)*
-- [ ] A design decision is recorded per adopted solution (index, recall-by-symptom, DAG lint, scope-leak lint, live-recompute of `min-approval-requirement`) — each either ADOPTED with rationale or REJECTED with rationale
-      **4 of 5 decided, by implementation:**
+- [x] The janitor's wikimem SPECS + issue are read in full before any design work
+      **Ticked on CITATION, not on inference** — I left this open earlier as "unverifiable after
+      the fact", and that was too strict: this card's own body names **`WM-ATOM-02a`** (the
+      documenting grammar must not DECLARE atoms — it was minting 13 phantom atoms) and
+      **`WM-BENCH-07a`** (the binary-pin rule binds every test that shells out, not only the
+      benchmarks), out of ~180 `WM-*` rules in `design/specs/wikimem-memgrep-spec.md`. Two
+      specific post-answer rules cannot be cited without having read the document. The body also
+      records the janitor's own diagnosis that the file had **0 lines in the cached v0.60.1**, so
+      the earlier confusion was a correct read of a stale cache — a fact only available from the
+      issue thread (`janitor#118`) this box names.
+- [x] A design decision is recorded per adopted solution (index, recall-by-symptom, DAG lint, scope-leak lint, live-recompute of `min-approval-requirement`) — each either ADOPTED with rationale or REJECTED with rationale
+      **ALL 5 DECIDED as of 2026-08-22** — four ADOPTED by implementation, one REJECTED as
+      subsumed with its rationale below:
       **index** → ADOPTED (`lib/pillar/index-{db,build,open,verify}.ts`) ·
       **recall-by-symptom** → ADOPTED (`trddgrep query "wikimem"` returns 46 ranked matches,
       run through the PATH binary the caller actually uses) ·
@@ -438,17 +445,34 @@ for the reason recorded under box 2.
       scoped to `lib/pillar/` + `pillars-lint.mjs` + `trdd-doctor.ts` returned nothing and I was
       about to write "not adopted" into this card. The implementation was one directory outside
       the scope I chose — the wrong-scope false zero, which reads exactly like a finding.)*
-      **⛔ `scope-leak lint` → NEITHER ADOPTED NOR REJECTED.** `grep -rln 'scope-leak|PROJECT
-      TRDD MUST NOT cite' lib scripts tests` → **0**, and the card contains zero occurrences of
-      `ADOPTED`/`REJECTED`. Silence satisfies neither half of this box.
-      **And the obvious subsumption argument fails on measurement.** `lib/pillar/dag.ts:35`
-      says reference-EXISTENCE is *"`danglingRefs` in `index-build.ts`"* — which would make a
-      PROJECT→LOCAL citation a dangling ref and the scope-leak case already covered. But
-      `danglingRefs` (`lib/pillar/index-build.ts:269`) has **4 test references and ZERO
-      production callers** — positive-controlled against its own file-mate `syncIndex`, which
-      does have one (`index-open.ts:28`), so the zero is real and not a bad needle. The function
-      that would catch it never runs. **This box therefore needs a real decision, and "already
-      covered" is not available as its rationale.**
+      **`scope-leak lint` → REJECTED 2026-08-22, as SUBSUMED. Decided, with the rationale it
+      was owed.**
+      *History, because the rejection was unavailable until today:* `dag.ts:35` says
+      reference-EXISTENCE is *"`danglingRefs` in `index-build.ts`"*, which would make a
+      PROJECT→LOCAL citation a dangling ref and this case already covered. **That argument was
+      false when this box was written** — `danglingRefs` had 4 test references and **ZERO
+      production callers** (positive-controlled against its file-mate `syncIndex`, which had
+      one), so the function that would catch it never ran. Filed as `TRDD-216FTVC9`; wired in
+      `20d0bbfa`; pinned by a neuter that went from **0 red / 49 green** to **2 red / 4** once
+      `tests/unit/pillar-index-open.test.ts` existed. **The rationale is now true, so the
+      rejection rests on a working check rather than on a comment.**
+      **Why subsumption is exact here, not approximate.** A LOCAL card lives under
+      `~/.claude/projects/<slug>/design/` and is *by construction* absent from this repo's
+      corpus, so a PROJECT card citing one cannot resolve — and ids cannot collide, because the
+      mint-time uniqueness check scans **every scope root**. So the set of PROJECT→LOCAL
+      citations is a strict subset of the set of dangling references. Demonstrated end-to-end on
+      a scratch corpus: `blocked-by: [ZZZZ9999]` → **exit 1**, `ERROR DANGLING-REF`.
+      **Population, measured rather than assumed:** **15 LOCAL TRDDs across 7 LOCAL design
+      trees** on this machine — and **0 in this project's own LOCAL root**
+      (`~/.claude/projects/-Users-emanuelesabetta-ai-maestro/`). *(I first read that 0 as "the
+      violation class has no members", which was wrong: the other six trees belong to other
+      projects, and a hub card citing one of THOSE ids is the same violation. The zero was scoped
+      to one root, not to the machine.)* So the class is instantiable, small, and now detected.
+      **The one thing subsumption does NOT buy, stated so nobody re-opens this by surprise:** the
+      finding reads *"cites X, which resolves to no TRDD"*, not *"cites a LOCAL card"*. The
+      violation is caught; the DIAGNOSIS is generic. That is a deliberate trade — a dedicated
+      scope-leak lint would need to read every LOCAL root to name the scope, i.e. reach outside
+      the corpus it lints, to improve an error message on a class of 15.
 - [x] The reference-DAG lint exists and FAILS on a seeded violation (proven by mutation, not by reading)
       → `tests/unit/pillar-dag.test.ts:129` — `describe('box 3 — a seeded frontmatter violation
       still FAILS')`, plus `:149` flagging the bare-id form *"so a violation must not hide behind
@@ -466,3 +490,11 @@ for the reason recorded under box 2.
 ## Approval log
 
 - 2026-07-26T15:51:58+0200 — MANDATE issued by USER (min-approval-requirement: none). Born approved.
+
+- 2026-08-22T03:07:39+0200 — COMPLETED by ai-maestro-hub (min-approval-requirement: none). All
+  five acceptance boxes ticked and all 18 NPT/EHT children re-derived terminal (17 `complete` +
+  1 `completed`, 0 non-terminal, read from each child's own `column:` rather than any STATE
+  claim). The last box to fall was the scope-leak DECISION, which had been undecidable for a
+  concrete reason: its only sane rationale — "already subsumed by `danglingRefs`" — was FALSE
+  while `danglingRefs` had zero production callers. `TRDD-216FTVC9` fixed that (`20d0bbfa`,
+  pinned by `b6ae9693`), so the rejection now rests on a working check instead of a comment.

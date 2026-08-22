@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T01:02:35+0200
+updated: 2026-08-23T01:07:13+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -55,6 +55,19 @@ Measured 2026-08-23 over `services/headless-router.ts`, by enumerating every
 > `// this: \`delegateNextRoute\` forwards the caller's real credentials` at L773 is direct evidence
 > of the mechanism, which the residue could not give. A truly independent check would not share the
 > enumerator (strip comments with a different tool first, or parse the array with an AST reader).
+>
+> **Provenance of that claim, stated because it is now PERMANENTLY unverifiable.** The shared-
+> enumerator finding came from a reviewer's reading, and I struck the "different instrument" wording
+> on that reading without re-diffing the two scripts myself. It was disclosed as pending for three
+> turns; on the fourth I went to check and **both scripts are gone** — they were `/tmp` scratch,
+> erased by an intervening session clear. So this cannot be settled later by anyone: it is not
+> pending, it is closed as unverifiable. The direction is the safe one (striking an overclaim can
+> only under-claim), and the box above now describes what the re-derivation BUYS rather than
+> asserting what it proves, so nothing here rests on it. **The lesson is the disclosure pattern
+> itself: "unverified, but safe direction" repeated each turn is how a claim becomes permanent
+> furniture — it survived three reviews by being acknowledged instead of checked, and by the time I
+> reached for the evidence it no longer existed.** Scratch that supports a committed claim belongs
+> in `reports_dev/`, not `/tmp`.
 >
 > **One class is UNMEASURED, and it is bounded:** a trailing `code() // …delegateNextRoute…` would
 > be scored a comment by the shared predicate. An earlier grep aimed at this was itself broken (the
@@ -149,10 +162,25 @@ including one whose Next half had been fixed hours earlier in the same session.
 — and the two red files are `pillar-grep-cli` and `trdd-doctor`. Measured 2026-08-23T00:55, full
 run. **An earlier version of this line said "457 pass / 2 fail", a figure inherited across two
 sessions and never re-run.** It differed in BOTH halves — and the cause is not aging, it is
-**self-attribution**: `git log --diff-filter=A --since=2026-08-21 -- tests/` names the added file as
-`tests/unit/headless-handler-auth-ledger.test.ts`, commit `6b40bfc7` (2026-08-23), **this card's own
-ledger test, added by this session**. Calling it "stale" asserted an aging nobody measured; I had
-moved the number myself. Re-run it rather than quoting it — the counts have a silent timestamp, the
+**self-attribution**: since the 2026-08-23T00:20 handoff that recorded 457, **exactly ONE test file
+was added and ZERO removed** — `tests/unit/headless-handler-auth-ledger.test.ts`, added by commit
+`6b40bfc7` at 00:40:08, **this card's own ledger test, added by this session**. Calling it "stale"
+asserted an aging nobody measured; I had moved the number myself.
+
+> **Two instrument errors had to be fixed before that count meant anything, and both produced a
+> confident wrong number first.**
+> **(i) Wrong baseline date.** The first run used `--since=2026-08-22T00:20` and returned **16**
+> added files, which refutes a +1 delta. The handoff header reads **2026-08-23** ~00:20 — an
+> off-by-one-day that made the window 24× too wide. Read the baseline's own timestamp; do not
+> retype it.
+> **(ii) `git ls-files 'tests/**/*.test.ts'` returns 412; the same string in `vitest.config` matches
+> ~451.** In a git pathspec `*` CROSSES `/` (so `tests/*.test.ts` → 451, every depth) while `**/`
+> requires at least one intermediate directory (→ 412, silently dropping depth-1 files). picomatch,
+> which vitest uses, reads `**/` as *zero* or more. **The same glob string means different things to
+> git and to the test runner, and git's reading is the counter-intuitive one.** The corrected count
+> above was taken with NO pathspec at all, filtering the names afterwards.
+
+Re-run it rather than quoting it — the counts have a silent timestamp, the
 failing PAIR is the stable fact. Neither is caused by this card's work, but the story handed down
 for them was **WRONG**, and it is written here because a commit message is not searchable by the
 next session that sees 2 red.
@@ -207,11 +235,23 @@ re-measured 2026-08-21 — the day before the card landed.
 > - **`8I0JUCK9`** — cited at `.claude/rules/lessons-verification.md:558` as the measured control
 >   (*"closed via `approve` → exit 0 VERIFIED"*).
 >
-> The 798OAHMX run did the right thing end to end: ran the e2e, measured two bugs, filed
-> `MWKCBLQN` + `P6MSMQ2I` (commit `36669d7a`), and kept the reproductions. **I read "throwaway" in a
-> commit subject and inferred abandonment**, without checking whether anything cited them — the same
-> count-is-not-an-identification shape as everything else in this box. Deleting them would have
-> destroyed the live reproductions for two OPEN bug cards.
+> **The measured claim, and only it:** two OPEN cards cite these artifacts as their reproductions,
+> therefore they are not litter. That is sufficient for the retraction and it is all that was
+> checked. **I read "throwaway" in a commit subject and inferred abandonment**, without checking
+> whether anything cited them — the same count-is-not-an-identification shape as everything else in
+> this box. Deleting them would have destroyed the live reproductions for two OPEN bug cards.
+>
+> An earlier version of this retraction said the 798OAHMX run *"did the right thing end to end"*.
+> **That was the opposite overstatement, from the same evidence class** — a narrative read off commit
+> SUBJECTS, never measured. That run's own log contains `676a5030 "retract the verifiable-provenance
+> claim"` and `c824039e "record the e2e scope honestly"`, i.e. it made claims it had to retract too.
+> Swinging from "uncleaned litter" to the most flattering possible reading, neither measured, is one
+> defect wearing two faces.
+>
+> `P6MSMQ2I` has since been read IN FULL (43 lines), not excerpted: it carries no condition for
+> retiring the reproduction. Note one tension it owns, flagged and NOT resolved here — its
+> `## Verification` expects `trddgrep validate` **clean afterwards**, while its Problem section says
+> the card must never be repaired. Whoever fixes it has to reconcile those.
 
 **Do not "repair" `G6A54OYK`'s body** — it is terminal, hence frozen by IND rule 12. And do not
 delete it: it is `P6MSMQ2I`'s reproduction. **The real fix is to fix `P6MSMQ2I`** (make the archive
@@ -237,16 +277,31 @@ property from the test that has one onto the test that does not — the same one
 error already recorded in `.claude/rules/lessons-verification.md`, committed two edits after the
 reading that refutes it.
 
-**There is no option (d) — the tool cannot suppress.** Checked, because "no hit for this NAME" does
-not answer "can it suppress AT ALL". `trddgrep help` shows `validate` takes only `--min-severity` and
-`--rule`, and both *narrow what is SHOWN*; a grep for suppression-shaped identifiers
-(`IGNORED|SUPPRESS|WAIVE|ALLOWLIST|KNOWN_ERRORS|EXCEPTIONS`) across `scripts/` and `lib/trdd-doctor.ts`
-returns nothing relevant. So the exclusion really is test-local and the option space is (b)/(c) plus
-"fix `P6MSMQ2I`".
+**There is no option (d) — the tool cannot suppress.** The evidence is `trddgrep help`, which
+ENUMERATES the surface: `validate` takes only `--min-severity` and `--rule`, and both *narrow what is
+SHOWN*. That closes the option space regardless of what identifiers exist internally. (I also
+grepped six suppression-shaped names I invented — `IGNORED|SUPPRESS|WAIVE|…` — and got nothing.
+**That grep is not evidence and is recorded only to be dismissed**: a needle keyed on NAMES I guessed
+cannot answer a capability question, which is the blind-at-a-rename failure already in
+`.claude/rules/lessons-verification.md`. The help output was sufficient on its own.)
 
-**Recommended: fix `P6MSMQ2I`, and until then take (b)+census** — pin `G6A54OYK` in BOTH tests the
-way `7123D51A` is pinned, with a comment naming `P6MSMQ2I` so the pin retires with the bug. This
-keeps the reproduction, clears the red, and does not weaken the gate for anything unknown.
+**Recommended: fix `P6MSMQ2I`; until then pin `G6A54OYK` in BOTH tests** — with a comment naming
+`P6MSMQ2I` so the pin retires with the bug. This keeps the reproduction, clears the red, and weakens
+nothing unknown.
+
+**But the two pins are NOT the same edit, and the `7123D51A` precedent does not transfer.** Measured,
+not remembered — `trddgrep validate --min-severity error` currently prints, in this order:
+
+```
+ERROR   TERMINAL-WITHOUT-CHECKLIST   G6A54OYK
+ERROR   BODY-STATE-CLAIM             7123D51A
+```
+
+So `trdd-doctor` is a one-line set addition, while `pillar-grep-cli` needs **three** coordinated
+edits — the prose census, `toHaveLength(1)` → `(2)`, and the `lines[0]` matcher, which currently
+expects `7123D51A` and would now be handed `G6A54OYK`. Prefer making that assertion ORDER-INDEPENDENT
+over hardcoding the observed order; the sort is not part of any documented contract and I did not
+establish what governs it.
 
 **Deleting governance cards is NOT authorized here, and is now affirmatively contraindicated.**
 

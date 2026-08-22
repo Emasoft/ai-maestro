@@ -92,5 +92,23 @@ describe('TRDD-R268J32X — persisted-session reads are authenticated (Next rout
 })
 
 /**
- * NEUTER RUN (2026-08-22 — to be recorded below by scripts/dev/neuter).
+ * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash).
+ * BOTH halves were neutered SEPARATELY, which is the point — each guard is invisible to the
+ * other's test, so one run could not have certified both:
+ *
+ *   A) app/api/sessions/restore/route.ts
+ *      s/if \(authErr\) return authErr/if (false) return authErr/ if $. == 30
+ *      → 1 red / 1 green (this file): "refuses an unauthenticated caller, and discloses nothing"
+ *
+ *   B) services/headless-router.ts
+ *      s/if \(auth.error\)/if (false)/ if $. == 826
+ *      → 1 red / 50 green (headless-router-auth-mirror.test.ts):
+ *        "R268J32X: GET /api/sessions/restore rejects the forged token"
+ *
+ * THE LINE ANCHOR IS LOAD-BEARING, and the tool refused twice before it was right. Unanchored,
+ * `if (authErr) return authErr` matched THREE sites in the route file — GET, POST and DELETE all
+ * spell the guard identically — so the mutation would have disabled two guards this file does not
+ * test and produced a red count about code it does not cover. It also refused a first attempt at
+ * B whose expression spanned two lines (perl is line-scoped, so it matched nothing and would have
+ * reported a no-op "0 red" indistinguishable from an untested guard).
  */

@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-22T23:03:21+0200
+updated: 2026-08-22T23:18:46+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -192,6 +192,43 @@ is owner-only, hand-rolled rather than via `enforceSystemOwner`.
    blind spots, one layer down, and it is why `batch-create-agents` had to be read rather than
    classified.
 
+**`sessions/activity/update` — CLEAR, and the best outcome a ledger entry can have: the assertion
+was already checked, by whoever wrote it, in place.** Its comment states that any authenticated
+agent can broadcast a fake activity status, that the worst case is a misleading UI badge for a few
+seconds, that the route is fed by the Claude Code hook at high frequency, and that tightening to
+"sessionName must resolve to the same agent as auth.agentId" was **rejected on perf grounds** with
+a named O(1) upgrade path (cache the agent→session map). That is exactly the deliberate policy
+`enforceAuth` exists to encode. **This is the discriminator that decided the two entries below it:
+a decision leaves a record.**
+
+### A second unauthenticated route — and this one had to be fixed TWICE
+
+`GET /api/sessions/restore` took **no `request` parameter at all** — `export async function GET()`
+in the Next route, `async (_req, res)` in the headless router — so it could not have authenticated
+even in principle. Its POST and DELETE siblings ten lines away both do (SVC2-MAJ-12, 2026-05-06),
+and both of those comments say *"authenticate before re-spawning"* / *"before deleting"*: that pass
+reasoned about **side effects**, and a read that DISCLOSES was never in its scope.
+
+What it disclosed: `listRestorableSessions` returns whole `PersistedSession` records
+(`lib/session-persistence.ts:6-13`) — `id`, `name`, **`workingDirectory`** (an absolute home path),
+`createdAt`, `lastSavedAt`, `agentId`. Unauthenticated, that enumerates the fleet and leaks the
+owner's filesystem layout. No comment anywhere claims that is intended, which — against
+`activity/update` above — is why it reads as oversight rather than policy.
+
+**BOTH SERVER MODES, ONE COMMIT (`d6f78e2b`).** `services/headless-router.ts` REIMPLEMENTS this
+route, so a guard added only to `app/api/` is half-applied by construction: under
+`MAESTRO_MODE=headless` the Next route never runs. Pinned twice, because neither test can see the
+other's regression — `tests/unit/sessions-restore-get-auth.test.ts` drives the Next route, and a
+new case in `tests/unit/headless-router-auth-mirror.test.ts` drives the real router end-to-end with
+a forged token. Neutered SEPARATELY: 1 red each, each naming only its own test.
+
+**The neuter tool refused twice before the measurement was valid**, and both refusals were correct:
+the first expression spanned two lines (perl is line-scoped, so it matched nothing and would have
+reported a no-op "0 red" indistinguishable from an untested guard), and the second matched
+`if (authErr) return authErr` at THREE sites — GET, POST and DELETE spell the guard identically —
+which would have disabled two guards the test file does not cover and produced a red count about
+the wrong code.
+
 ### And the subtree sweep found a real hole the ledger cannot see
 
 `GET /api/plugin-builder/builds/[id]` had **no guard of any kind** — the only unauthenticated
@@ -225,10 +262,17 @@ so that box stays open.
 - [x] PROVEN to fire on a seeded route, and to go green when it is removed
 - [x] walker control asserts a real scan set (>100 files) and no bleed into `app/api/agents/`
 - [x] non-vacuity: the needle must find >0, so a broken regex cannot read as "all decided"
-- [ ] the 17 decided one at a time, each real one its own card. **3 decided, all CLEAR** —
-      `sessions/create`, `plugin-builder/build`, `teams/[id]/batch-create-agents`. Reasoning under
-      `## Decisions`. The remaining debt is **11 authn-only + 15 forward-only** (one of the 15,
-      `sessions/create`, is verified and pinned by name), so ~25 assertions remain unchecked
+- [ ] the 17 decided one at a time, each real one its own card. **6 decided** — `sessions/create`,
+      `plugin-builder/build`, `teams/[id]/batch-create-agents` and `sessions/activity/update` CLEAR;
+      `sessions/restore` GET FIXED (unauthenticated in BOTH modes, commit `d6f78e2b`);
+      `sessions/[id]/rename` **is a real hole → filed as TRDD-OYNUJRSB**, because the correct
+      policy is a ruling and not a one-liner. Reasoning under `## Decisions`. Remaining debt:
+      **~9 authn-only + 14 forward-only** unchecked
+- [ ] **the ledger's own entries are not equal in kind, and the discriminator is cheap.** Of the
+      four CLEAR verdicts, exactly one (`sessions/activity/update`) was *already decided* — it
+      carries a comment stating the policy, the worst case, and why tightening was rejected. The
+      others had to be traced. **A decision leaves a record; an oversight leaves silence.** Reading
+      for that comment first would have sorted this ledger faster than reading the code
 - [x] the third root needs a FORWARD-ONLY tier like the `agents/` root has — **done**, commit
       `57560112`. The needle was wrong in BOTH directions: 6 of the 17 were forwarders (the five
       `groups/*` + `sessions/create`), so the authn-only debt is **11**; and **18** mutating

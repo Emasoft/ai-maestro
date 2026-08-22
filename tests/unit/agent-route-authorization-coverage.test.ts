@@ -208,10 +208,20 @@ const rel = (f: string) => path.relative(collectionRoot, f)
  *
  * Note what the `[id]` ledger's history says about guessing: of its eight closed entries,
  * every one was WORSE than its original "several are probably fine".
+ *
+ * ── 19 → 16, TRDD-DQVPODKW (2026-08-22) ──────────────────────────────────────────────
+ * `create-persona`, `create-from-toml` and `docker/create` are gone from this list because
+ * they now call `authorize(auth, 'create-agent')`. All three MINT AGENTS and all three took
+ * `enforceAuth`, whose own docstring says it is for mutations where "any authenticated caller
+ * can call this" — so TRDD-F1SL03CK locked the front door (`POST /api/agents`) while three
+ * side doors stayed open. The ledger's history now says the same thing on BOTH sides: of the
+ * `[id]` ledger's eight closed entries every one was worse than expected, and of this one's
+ * first three, all three were live holes.
+ *
+ * The remaining 16 are measured, not assumed — see TRDD-DQVPODKW for the per-route verdicts,
+ * including which are still sub-agent-reported rather than verified first-hand.
  */
 const COLLECTION_UNREVIEWED: string[] = [
-  'create-from-toml/route.ts',
-  'create-persona/route.ts',
   'creation-helper/cleanup/route.ts',
   'creation-helper/clear-banner/route.ts',
   'creation-helper/element-descriptions/route.ts',
@@ -223,7 +233,6 @@ const COLLECTION_UNREVIEWED: string[] = [
   'creation-helper/raw-materials/route.ts',
   'creation-helper/session/route.ts',
   'directory/sync/route.ts',
-  'docker/create/route.ts',
   'health/route.ts',
   'normalize-hosts/route.ts',
   'role-plugins/inject-skill/route.ts',

@@ -621,3 +621,43 @@ guards.**
 `git lfs pre-push "$@"`. No instrument, no count. The cheapest verification available, and both
 sessions reached for a grep first — on a card whose entire subject is checks that pass while
 measuring nothing.
+
+### CORRECTION 8 — 2026-08-22T20:16:58+0200 — OWNER DIRECTIVE: the census was OUT OF SCOPE. Re-scoped.
+
+**USER, verbatim:** *"stop messing with projects that are not ai-maestro plugins or dependency
+plugins (cpv, pss, llm-externalizer, etc.) or dependency tools (agentlenspro)"*
+
+Every census in CORRECTIONS 1-7 swept **all ~152 git repos under `~/Code`** — the owner's
+unrelated projects included (`SVG_PLAYER`, `KEYBARD`, `PROCESS_KILLER`, `SKIA-BUILD-ARM64`,
+`flux.2-klein-pipeline`, …). Reads only; nothing outside this repo was modified. It was still the
+wrong population, and I widened it repeatedly — each widening chasing a measurement error — without
+ever asking whether the wider set was mine to audit. **Correcting an instrument is not a licence to
+enlarge its scope.**
+
+**RE-SCOPED to the ecosystem**, taken from this repo's own SSOT (`lib/ecosystem-constants.ts`
++ the CLAUDE.md repo table) plus the dependency plugins/tools the owner named:
+
+| state | repos |
+|---|---|
+| own pre-push guard | **16** — `ai-maestro`, `ai-maestro-plugin`, `ai-maestro-janitor`, the 8 role-plugins, `ai-maestro-assistant-role-agent`, `ai-maestro-web-scenario-tester`, `AI-MAESTRO-WEBDESIGN-AGENT`, `perfect-skill-suggester` |
+| **inherits the LFS shim — no push gate** | **2** — **`ai-maestro-plugins` (the MARKETPLACE repo)** and `AgentlensPro` |
+| not resolvable at a depth-3 path | 4 — `claude-plugin`, `agent-identity`, `claude-plugins-validation`, `llm-externalizer` |
+
+**The only in-scope finding that survives re-scoping:** `ai-maestro-plugins` — the marketplace
+every agent installs from — has **no push-policy gate**; it dispatches the global LFS shim. That is
+worth the owner's attention and it is the one row the earlier sweeps buried under 46 irrelevant
+ones. `AI-MAESTRO-WEBDESIGN-AGENT` remains the in-scope DECORATIVE case (ships
+`.githooks/pre-push`, `hooksPath=git-hooks` — the reviewed file is not the executed one).
+
+**WITHDRAWN as out of scope:** the three "genuinely unprotected" repos (`claude-menu-system`,
+`claude-voice-loop`, `SVG-BBOX`), the 39/48 and 46/48 headline ratios, the 9-repo hook-type
+matrix, and the "five sixths of this machine" framing. **The alarming half of this finding was
+about the owner's unrelated projects.**
+
+**And the population was wrong in the other direction too**, which is what surfaced the scope
+question at all: `~/Code/*/` is **depth 1**, and several repos — including
+`ai-maestro-assistant-manager-agent` at
+`~/Code/EMASOFT-ASSISTANT-MANAGER/ai-maestro-assistant-manager-agent` — are nested deeper. So the
+sweeps were simultaneously **too wide** (someone else's projects) and **too narrow** (missing
+in-scope repos). A glob is a claim about layout; this repo's lessons file already records that exact
+nesting from a previous session, and I re-derived it instead of recalling it.

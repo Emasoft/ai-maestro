@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T02:26:47+0200
+updated: 2026-08-22T02:38:09+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,66 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T02:4x — BOX 2 METHOD CORRECTION: check for a REMEDIATION CARD before re-verifying any finding
+
+Box 2 reads *"For every CONFIRMED finding, the hub has re-verified at least one cited `file:line`
+itself."* Started it, and the first three citations I checked **rewrote the method**.
+
+Corpus located and counted first — **`~/Code/*/reports/plugin-self-audit/*.md`, 101 files across
+15 repos** (they are in the PEER repos; this repo has no such directory, and an earlier note here
+claiming `reports/plugin-self-audit/` was wrong). Note the population caveat: 101 counts *files*,
+and at least the integrator's dir mixes audit reports with `DELEGATION.md` index files — its true
+audit-report count is **10**, not the 11 the file count implied.
+
+**Verified first-hand, integrator repo, three axis-1 citations:**
+
+| claim | line cited | by line | by CONTENT |
+|---|---|---|---|
+| `commands/` ships 0 files while `/create-issue-tasks` is documented | guide:45-49 | `find commands -type f` = **0** ✓ | only surviving mention is in an ARCHIVED card |
+| README lists `rules/`, workflow still triggers on `rules/**` | `validate.yml:13` | line 13 is `- '*.mcp.json'` ✗ | **no `rules` match anywhere in the workflow** |
+| `main-agent.md:299` calls a retired skill "allowed" | `:299` | line 299 is *"system, not a plugin reimplementation."* ✗ | **`amia-session-memory` = 0 hits in `agents/`** |
+
+**All three defects are GONE from the current tree**, and the reason is on disk:
+`TRDD-K3HJQG7U` — *"Align stale documentation claims with the shipped tree (audit axis-1
+findings)"* — is **`column: complete`, updated 2026-08-18T23:38**, and mentions the three
+defects 7 times. The audit reports are dated **2026-08-16**. **The findings were remediated two
+days after they were written, and the reports were never updated.**
+
+**⇒ THE METHOD, corrected:** for each finding, check the owning repo's `design/` for a
+remediation card FIRST, then verify against the tree. Verifying blind mostly re-discovers fixed
+work and — worse — a rotted line number makes a *remediated* finding look like a *fabricated* one.
+Two of my three line citations pointed at unrelated text, and the honest reading is not "the
+worker was sloppy" but "the file moved under a citation nobody re-resolved".
+
+**The inflation is measured and is larger than expected.** Worker1: **7 of 37** confirmed items
+were confirmations that an invariant HOLDS, not defects. Worker4: **~40+ inflation against 33
+defects** — i.e. plausibly *more* non-defects than defects in that group. A `Confirmed: N` from
+these reports is not a defect count and must never be pasted forward as one.
+
+**Extraction complete — the citation corpus box 2 needs now exists.** Four read-only workers over
+all 15 repos (ledger: `reports/colony/DELEGATION-20260822_023211+0200-brrjk57p-box2.md`, reports
+under `reports/board-triage/…-box2-worker{1,2,3,4}.md`):
+
+| unit | defects w/ `file:line` | uncited | inflation excluded |
+|---|---|---|---|
+| integrator · maintainer | 30 | 24 whole-file-only | 7 |
+| janitor · autonomous · CPV | 57 | 0 | ~16 |
+| COS · viscom · plugin · llm-ext | 34 | 0 | ~8 (+~85 refuted) |
+| programmer · AMAA · architect · webdesign · assistant-role · PSS | 33 | 1 | ~40+ |
+| **total** | **154** | **25** | **~71** |
+
+**BOX 2 IS NOT TICKED, and the honest reason is the reading of its own words.** *"For every
+CONFIRMED finding, the hub has re-verified at least one cited `file:line` itself"* means one
+verification **per finding** — 154 of them — not one verification overall. **I have done 3.** The
+box is genuinely started, its corpus is built, and its method is now known; claiming it on a
+3-of-154 sample would be exactly the "a tally is evidence about the items in the tally" failure
+this program keeps finding in others' reports.
+
+**NEXT on this box:** work the 154 in owning-repo batches, remediation-card-first. Expect a high
+already-fixed rate — the one repo sampled had its whole axis-1 set closed by `K3HJQG7U` two days
+after the audit — so the cheap first pass is *"which repos have a `complete` remediation card
+citing their audit?"*, not a citation-by-citation sweep.
 
 ### ⏹ 2026-08-22T02:2x — UNBLOCKED. `blocked` → `dev`. The P0 was sitting still behind two gates that never applied to it.
 

@@ -6,7 +6,7 @@ project-id: ai-maestro
 repo: Emasoft/ai-maestro
 column: human_review
 created: 2026-07-30T13:09:14+0200
-updated: 2026-08-22T21:41:58+0200
+updated: 2026-08-22T23:07:10+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -76,9 +76,37 @@ things the producer needs do not exist ANYWHERE in production:
 
 | Needed | Present in production? |
 |---|---|
-| which USER an assistant is bound to | **no** — `recipientIsOwnUser` / `boundUser` / `ownAssistant` have **zero** non-test references |
+| ~~which USER an assistant is bound to~~ | ~~**no** — `recipientIsOwnUser` / `boundUser` / `ownAssistant` have **zero** non-test references~~ **← WRONG, corrected 2026-08-22 (see below). It EXISTS: `UserRecord.assistantAgentId`.** |
 | `userPermitsManagerCollaboration` storage | **no** — the symbol lives ONLY in `lib/communication-graph.ts` (the type + the read) and in the test |
 | a surface for the user to GRANT it | **no** — no route, no setting, no UI |
+
+### ⚠ CORRECTION 2026-08-22 — one of the three "does not exist" rows was a FALSE ABSENCE
+
+**The assistant→user binding EXISTS in production and is already the SSOT.** `types/user.ts:69`
+declares `assistantAgentId: string | null` on `UserRecord`, and it is READ by four production
+sites — `lib/user-registry.ts:192` (the R39.6 ASSISTANT cascade-delete), `services/send-message-service.ts:97-128`,
+`services/amp-service.ts:1252-1262` (both messaging paths), and `app/api/governance/users/route.ts:47`,
+which exposes it on an API. Written non-null by **zero** sites; `lib/user-registry.ts:265` writes an
+explicit `null` for the MAESTRO with the comment *"MAESTRO uses the MANAGER agent — no ASSISTANT
+(R39.1)"*.
+
+So the binding is **defined, plumbed, consumed by the very messaging path this card is about, and
+merely never populated** — a materially different and much smaller problem than "design a
+persistence model for an assistant→user binding".
+
+**How the original measurement went wrong, because it is the session's third instance of one
+shape.** It searched `recipientIsOwnUser` / `boundUser` / `ownAssistant`. All three genuinely have
+zero non-test references — the needle was not broken, it was pointed at names the codebase does not
+use for this. A needle assembled from the names you expect can only confirm what you expect, and its
+blind spot is exactly the name that would refute you. (The other two instances today: a
+`createSession` sweep that hit a same-named login-session function, and an authorization needle that
+missed `checkTeamAccess(`.) The lesson for the row below it: `userPermitsManagerCollaboration` was
+re-measured by the SYMBOL, not by a guessed name, and it really is type-only + test-only — 2
+production references, both inside `lib/communication-graph.ts` itself.
+
+**What this leaves genuinely open** is one field, not a subsystem: where
+`userPermitsManagerCollaboration` is stored, what it defaults to, and how it is granted/revoked.
+Advisor consulted on exactly that, bounded to those three questions.
 
 `assistant` IS a real title (`types/agent.ts:486`), so the title half is fine; it is the RELATIONAL
 half that is absent. Wiring a producer therefore means designing a persistence model for an

@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-22T23:56:03+0200
+updated: 2026-08-23T00:10:31+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -117,6 +117,27 @@ file contains `/agents/`, and five legitimately do — `v1/agents/route.ts`,
 `sessions-browser/agents/[id]/`. They are NOT under `app/api/agents/` and do belong to this root.
 A substring check calls those a bleed and reds a correct walker. Now asserts the PRECISE property
 (path prefix), which is what "bleed" actually means.
+
+## ⚠ THE PER-ROUTE SWEEP FOUND A SYSTEMIC ONE — see TRDD-8Q5EVGV1
+
+Working this ledger route-by-route kept turning up the same shape: a guarded Next route beside an
+UNGUARDED headless twin. Six of them, one at a time — `conversations/parse` (full transcript
+disclosure), `sessions/restore` GET, `install-skills` (bypassing TRDD-D3RP7KQZ's own gate), and all
+four `plugin-builder/*`, one of which had had its Next half fixed hours earlier the same session.
+
+Enumerating the whole router instead of reading it route by route gave the real number:
+**141 of 252 handlers (56%) have no per-handler auth at all**, sitting behind
+`_headlessHasCredential`, whose own comment says it is *"a STRUCTURAL credential check ONLY …
+we still don't validate the token itself"* — a hand-typable `Bearer aim_tk_AAAA…` passes it, which
+the auth-mirror test already proves as its own control.
+
+**That is a design property, not 141 bugs**, and it means every per-route fix in this card is
+patching one instance of a 141-route surface. Filed as **TRDD-8Q5EVGV1** with the measurement, the
+bounded severity (loopback bind by default; headless not running here) and the proposal that the
+DEFAULT be ruled rather than the routes patched.
+
+This ledger stays valid and useful — it governs the Next-side surface and it is what surfaced the
+pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole picture.
 
 ## Decisions — the 17, one at a time
 

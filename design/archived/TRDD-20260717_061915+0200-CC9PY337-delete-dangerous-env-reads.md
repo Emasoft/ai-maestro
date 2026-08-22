@@ -1,9 +1,9 @@
 ---
 trdd-id: CC9PY337
 title: Delete every security-risk env read — dashboard-only settings, non-env test seams
-column: human_review
+column: completed
 created: 2026-07-17T06:19:15+0200
-updated: 2026-08-02T16:52:54+0200
+updated: 2026-08-22T15:55:23.997Z
 current-owner: ai-maestro
 task-type: security
 parent-trdd: QZL828OD
@@ -301,3 +301,5 @@ resolution" failure, one column further along.
   rule at `lib/dev-mode-token.ts:11`.
   Provenance caveat: closed via `promote` + `archive`, which anchor no token — only `approve`
   mints one, so `verify` reports UNVERIFIED by design (`TRDD-06G43RK2`).
+- 2026-08-22T15:55:23.871Z — column → complete. human review under the owner's grant; fence re-neutered
+- 2026-08-22T15:55:23.997Z — COMPLETED by user. reviewed; Tier-0 self-mandate, fence load-bearing, policy held in production.

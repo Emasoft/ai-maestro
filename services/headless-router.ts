@@ -3780,24 +3780,19 @@ const routes: Route[] = [
   // Settings: MCP Server Discovery
   // TODO: Extract to service layer for headless parity — currently imports Next.js route modules
   // =========================================================================
+  // TRDD-R268J32X — was a HAND-ROLLED copy of `delegateNextRoute` that forgot the headers. It
+  // built its `fakeReq` with only `Content-Type`, so the caller's Authorization / Cookie /
+  // X-Agent-Id never reached the real handler and its `enforceAuth(fakeReq)` saw no credentials:
+  // a guaranteed 401 for every caller, i.e. this route was DEAD in headless mode.
+  //
+  // It fails CLOSED, so unlike its neighbours this was a functionality bug rather than a hole —
+  // but it is the same root cause and the more instructive one: the helper already existed, thirty
+  // handlers already used it, and a second copy was written anyway and got the one detail wrong
+  // that the helper exists to get right (`forwardAuthHeaders`).
   { method: 'POST', pattern: /^\/api\/settings\/mcp-discover$/, paramNames: [], handler: async (req, res) => {
-    try {
-      const body = await readJsonBody(req)
-      const { NextRequest } = await import('next/server')
-      const mod = await import('@/app/api/settings/mcp-discover/route')
-      const fakeReq = new NextRequest('http://localhost/api/settings/mcp-discover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const response = await mod.POST(fakeReq)
-      const data = await response.json()
-      res.writeHead(response.status, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(data))
-    } catch {
-      res.writeHead(500, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'Failed to handle mcp-discover POST' }))
-    }
+    const mod = await import('@/app/api/settings/mcp-discover/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
+      '/api/settings/mcp-discover', { method: 'POST', withBody: true })
   }},
 
   // --- Host Tools ---

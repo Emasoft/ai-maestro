@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-23T00:10:31+0200
+updated: 2026-08-23T00:13:50+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -299,6 +299,45 @@ this file's test; neutering the `authorize` line reds NOTHING (0/52), because a 
 authentication one line earlier and never reaches it. That zero measures the FIXTURE, not the guard.
 Pinning it needs a genuinely issued token for a non-authorized agent, which the forged-credential
 harness cannot mint — and the unpinned half is the one carrying D3RP7KQZ's actual invariant.
+
+### The remaining four survey routes — verdicts, recorded rather than remembered
+
+Measured by a delegated read-only survey (report under gitignored `reports/route-authz-survey/`,
+positive control passed), every claim then verified first-hand before acting. Recording the CLEAR
+ones too, because this ledger's own lesson is that a decision leaves a record and an oversight
+leaves silence.
+
+**`v1/mesh/chat` — CLEAR, and the best-guarded route in the set.** `GET` uses `enforceAuth`;
+`POST` does its own `authenticateFromRequest` with the stated reason (`API2-MAJ-09`: *"full token
+verification (not just middleware) so we know the actual identity behind the call and can reject
+sender-spoofing"*) and binds behaviour to `auth.agentId`. Identity-scoped, not a blanket allow.
+
+**`vpn-chat/block` — CLEAR at the ledger's question.** All three verbs (`GET`/`POST`/`DELETE`)
+carry `enforceAuth`. Whether a blocking action should additionally be ownership-scoped is a
+separate question this card does not ask.
+
+**`export/jobs/[jobId]` — CLEAR, and unusually so: there is nothing behind it.** `GET` takes
+`_request` and therefore cannot authenticate, but both service functions are 501 STUBS —
+`getExportJobStatus` and `deleteExportJob` (`services/config-service.ts:727`, `:764`) return
+*"not implemented yet (no export-job store exists)"* unconditionally, with a comment recording
+"NO export-job store yet (Phase 5)". Nothing is read, written or disclosed. Worth `enforceAuth`
+for SF-058 consistency when the store lands; worth nothing before then, and adding a guard to a
+stub would only make the store's arrival look already-guarded.
+
+**`settings/mcp-discover` — a real bug, FIXED, and the most instructive one.** Its headless handler
+was a HAND-ROLLED copy of `delegateNextRoute` that built its `fakeReq` with only `Content-Type`,
+so the caller's Authorization/Cookie/X-Agent-Id never reached the real handler and its
+`enforceAuth(fakeReq)` saw no credentials — a guaranteed 401, i.e. the route was DEAD in headless
+mode. It fails CLOSED, so unlike its neighbours this was a functionality bug rather than a hole.
+The instructive part: the helper already existed, ~30 handlers already used it, and a second copy
+was written anyway and got wrong the single detail the helper exists to get right
+(`forwardAuthHeaders`). Now delegated.
+
+**One question this card deliberately does NOT answer.** The `conversations/parse` NEXT route
+authenticates and confines reads to `~/.claude/projects/`, but has **no ownership check** — any
+authenticated agent may read ANY transcript under that root, not merely its own. Whether that is
+intended is a policy question with the same shape as `sessions/[id]/rename` (TRDD-OYNUJRSB), and
+inventing a scoping rule here would be the error the HW72YBZW warning names.
 
 ### And the subtree sweep found a real hole the ledger cannot see
 

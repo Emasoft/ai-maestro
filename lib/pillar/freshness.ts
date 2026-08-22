@@ -106,7 +106,18 @@ function gitDirtyPaths(repoRoot: string): Set<string> {
   const out = new Set<string>()
   let raw: string
   try {
-    raw = execFileSync('git', ['status', '--porcelain', '-z', '--untracked-files=all'], {
+    // `--no-optional-locks`: a plain `git status` REFRESHES the index and takes
+    // `.git/index.lock` to do it. This probe runs on EVERY index sync — every
+    // `trddgrep`, every `pillars-lint`, every server-side freshness check — so without
+    // the flag a routine read contends with whatever else is committing in the same
+    // checkout, and an interrupted run leaves a 0-byte orphan lock that blocks every
+    // later commit until someone removes it by hand. Measured 2026-08-22 (TRDD-IMCEYV9F):
+    // three such locks in ten minutes while running the pillar CLIs alongside commits,
+    // each 0 bytes with no holder — the same signature `server-liveness.ts` already
+    // records for the boot probe on 2026-08-19. A FRESHNESS PROBE MUST NOT TAKE A WRITE
+    // LOCK ON THE REPO IT PROBES; the sibling in `server-liveness.ts` states the same
+    // rule for the liveness probe, and this was the one call site that never got it.
+    raw = execFileSync('git', ['--no-optional-locks', 'status', '--porcelain', '-z', '--untracked-files=all'], {
       cwd: repoRoot,
       encoding: 'utf-8',
       maxBuffer: 256 * 1024 * 1024,

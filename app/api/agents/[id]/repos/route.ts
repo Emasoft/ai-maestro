@@ -78,7 +78,13 @@ export async function GET(
         branch = execSync(`git -C "${resolvedRepoDir}" branch --show-current 2>/dev/null`, { encoding: 'utf-8' }).trim()
       } catch { /* detached */ }
       try {
-        dirty = execSync(`git -C "${resolvedRepoDir}" status --porcelain 2>/dev/null`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean).length
+        // `--no-optional-locks`: a plain `git status` refreshes the index and takes
+        // `.git/index.lock`. This runs on an AGENT'S OWN repo whenever the dashboard
+        // lists repos, so without it a read-only UI listing can contend with — or
+        // orphan a lock in front of — whatever that agent is committing. A probe must
+        // not take a write lock on the repo it probes (TRDD-IMCEYV9F; the same rule
+        // `server-liveness.ts` and `pillar/freshness.ts` already follow).
+        dirty = execSync(`git -C "${resolvedRepoDir}" --no-optional-locks status --porcelain 2>/dev/null`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean).length
       } catch { /* error */ }
       return { path: resolvedRepoDir, name, remote, branch, dirty }
     }).filter(Boolean)

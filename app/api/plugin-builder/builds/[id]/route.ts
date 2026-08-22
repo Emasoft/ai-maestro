@@ -12,7 +12,13 @@ import { enforceAuth } from '@/lib/route-auth'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  // TRDD-R268J32X: `Promise<…>` + `await` below, matching the repo majority (78 routes to 20) and
+  // — load-bearing — letting the headless router DELEGATE to this handler instead of keeping an
+  // unguarded hand-rolled twin. `delegateNextRoute` always passes `params: Promise.resolve(...)`,
+  // so with the synchronous signature the delegated call read `id` off a Promise and every request
+  // 400'd on "Invalid build ID". `await` on a non-promise is a no-op, so this is correct whichever
+  // shape Next itself passes.
+  { params }: { params: Promise<{ id: string }> }
 ) {
   // TRDD-R268J32X. This route had NO guard at all — the only unauthenticated one
   // in an otherwise-guarded subtree (`build` uses enforceAuth, `push` uses
@@ -33,7 +39,7 @@ export async function GET(
   const authErr = enforceAuth(request)
   if (authErr) return authErr
 
-  const { id } = params
+  const { id } = await params
 
   // Reject malformed build IDs before hitting the service layer
   if (!id || !isValidUuid(id)) {

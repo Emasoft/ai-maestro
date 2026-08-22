@@ -291,13 +291,6 @@ import {
 } from '@/services/creation-helper-service'
 
 import {
-  buildPlugin,
-  getBuildStatus,
-  scanRepo,
-  pushToGitHub,
-} from '@/services/plugin-builder-service'
-
-import {
   generatePluginFromToml,
   listRolePlugins,
   deleteRolePlugin,
@@ -3633,20 +3626,45 @@ const routes: Route[] = [
   // =========================================================================
   // Plugin Builder
   // =========================================================================
+  // TRDD-R268J32X — ALL FOUR plugin-builder handlers were hand-rolled twins with NO guard of any
+  // kind, while their Next routes carry three DIFFERENT policies between them. Enumerated rather
+  // than found one at a time, which is the only reason the set was seen as a set:
+  //
+  //   build       Next: enforceAuth                          headless: none
+  //   builds/:id  Next: enforceAuth (added earlier TODAY)    headless: none  ← took `_req`
+  //   scan-repo   Next: enforceAuth + validateExternalUrl    headless: none, AND no SSRF guard —
+  //               `validateExternalUrl` appears ZERO times in this whole file, so the "reject
+  //               non-HTTPS, localhost and private IP targets" check existed only on the Next
+  //               side while `scanRepo` runs `git clone` on the supplied URL
+  //   push        Next: enforceSystemOwner                   headless: none — and this is the one
+  //               that writes to GitHub under the owner's `gh` identity
+  //
+  // `builds/:id` is the pointed one: its Next half was fixed earlier in this same session and its
+  // headless twin was never checked, so that fix shipped half-applied for hours. Enumerating the
+  // subtree is what caught it; reading routes one at a time is what missed it.
+  //
+  // DELEGATED, not re-guarded. Re-implementing four different policies (plus an SSRF check) in a
+  // second file is precisely the drift that produced this, and `delegateNextRoute` — which
+  // forwards the caller's real credentials via `forwardAuthHeaders` — already exists for it.
   { method: 'POST', pattern: /^\/api\/plugin-builder\/build$/, paramNames: [], handler: async (req, res) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await buildPlugin(body))
+    const mod = await import('@/app/api/plugin-builder/build/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
+      '/api/plugin-builder/build', { method: 'POST', withBody: true })
   }},
-  { method: 'GET', pattern: /^\/api\/plugin-builder\/builds\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await getBuildStatus(params.id))
+  { method: 'GET', pattern: /^\/api\/plugin-builder\/builds\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/plugin-builder/builds/[id]/route')
+    await delegateNextRoute(req, res, mod.GET as NextRouteHandler,
+      `/api/plugin-builder/builds/${params.id}`, { method: 'GET', params: { id: params.id } })
   }},
   { method: 'POST', pattern: /^\/api\/plugin-builder\/scan-repo$/, paramNames: [], handler: async (req, res) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await scanRepo(body.url, body.ref))
+    const mod = await import('@/app/api/plugin-builder/scan-repo/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
+      '/api/plugin-builder/scan-repo', { method: 'POST', withBody: true })
   }},
   { method: 'POST', pattern: /^\/api\/plugin-builder\/push$/, paramNames: [], handler: async (req, res) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await pushToGitHub(body))
+    const mod = await import('@/app/api/plugin-builder/push/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
+      '/api/plugin-builder/push', { method: 'POST', withBody: true })
   }},
 
   // =========================================================================

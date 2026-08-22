@@ -63,7 +63,7 @@ describe('TRDD-R268J32X — build-status reads are authenticated', () => {
     /** Validates that knowing the randomUUID build id no longer substitutes for authentication */
     mockAuthenticate.mockReturnValue({ error: 'Authentication required', status: 401 })
     const { GET } = await import('@/app/api/plugin-builder/builds/[id]/route')
-    const res = await GET(req(), { params: { id: BUILD_ID } })
+    const res = await GET(req(), { params: Promise.resolve({ id: BUILD_ID }) })
 
     expect(res.status).toBe(401)
     // And prove nothing was read: a refusal that still called the service would be
@@ -75,7 +75,7 @@ describe('TRDD-R268J32X — build-status reads are authenticated', () => {
     /** Validates the guard can say yes, so the refusal above is a decision and not a blanket 401 */
     mockAuthenticate.mockReturnValue({ agentId: undefined, governanceTitle: undefined, teamId: null })
     const { GET } = await import('@/app/api/plugin-builder/builds/[id]/route')
-    const res = await GET(req(), { params: { id: BUILD_ID } })
+    const res = await GET(req(), { params: Promise.resolve({ id: BUILD_ID }) })
 
     expect(res.status).toBe(200)
     expect(mockGetBuildStatus).toHaveBeenCalledWith(BUILD_ID)
@@ -85,7 +85,7 @@ describe('TRDD-R268J32X — build-status reads are authenticated', () => {
     /** Validates the pre-existing uuid validation survived the guard being inserted above it */
     mockAuthenticate.mockReturnValue({ agentId: undefined, governanceTitle: undefined, teamId: null })
     const { GET } = await import('@/app/api/plugin-builder/builds/[id]/route')
-    const res = await GET(req(), { params: { id: 'not-a-uuid' } })
+    const res = await GET(req(), { params: Promise.resolve({ id: 'not-a-uuid' }) })
 
     expect(res.status).toBe(400)
     expect(mockGetBuildStatus).not.toHaveBeenCalled()

@@ -81,9 +81,24 @@ peer): an honest remote call gets `403 console_required`, and a call **forging**
 gets `403`. Curling from loopback proves nothing (the peer really is 127.0.0.1) —
 the spoof only becomes a test when the source is actually remote.
 
-**NEXT ACTION:** the owner rotates the leaked credential using this feature —
+~~**NEXT ACTION:** the owner rotates the leaked credential using this feature —
 Settings → Revoke, or `aimaestro-governance.sh invalidate-password` — which is
-what unblocks **TRDD-44RGLOO8**. An agent must never rotate a credential.
+what unblocks **TRDD-44RGLOO8**. An agent must never rotate a credential.~~
+
+> **⏹ DONE — struck 2026-08-22, HERE in the authoritative block.** The rotation happened
+> (`passwordSetAt: 2026-07-17T07:50:55Z`, read first-hand), and **TRDD-44RGLOO8** verified on
+> 2026-07-30 that the published literal is no longer live — blob at `v0.1.3` AND at `master`
+> compared against the current password in a boolean-only pipeline with a positive control:
+> **SUPERSEDED / no live credential**. So this card's P0 justification is discharged: the leak is
+> dead and 44RGLOO8 is unblocked.
+>
+> **NEXT ACTION is now:** nothing on this card. Its verdict is recorded in the Approval log; it
+> stays open only because its EHT **`7U927FCM`** is not yet terminal, which the completion gate
+> requires. Close that, and this closes.
+>
+> Struck here rather than only at the foot of the card because rule 10 makes the STATE block
+> authoritative and read-first — a stale NEXT ACTION here silently outranks the truth below, and
+> would keep sending each new session to perform a rotation that happened five weeks ago.
 
 **Two things this TRDD did NOT do** (both deliberate, both still open):
 - **MAESTRO *login* is not yet console-gated.** §2b binds the console rule to two

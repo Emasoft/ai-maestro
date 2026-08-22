@@ -108,5 +108,18 @@ describe('TRDD-R268J32X — convert-skill is owner-only', () => {
 })
 
 /**
- * NEUTER RUN (2026-08-22 — to be recorded below by scripts/dev/neuter).
+ * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(authErr\) return authErr/if (false) return authErr/ if $. == 52
+ *   → 2 red / 1 green:
+ *       refuses a MEMBER — an authenticated agent may not write converted elements under $HOME
+ *       refuses even a MANAGER — this is owner authority, not a governance title
+ *
+ * Predicted 2, observed 2, and the POSITIVE CONTROL correctly stayed green — which is the half
+ * that matters here. A gate that refuses everyone would satisfy both denials, so without a control
+ * proving the owner still gets through, "2 red" would be equally consistent with having broken the
+ * route for its only legitimate caller.
+ *
+ * The line anchor is required: this file spells `if (authErr) return authErr` in both POST and GET,
+ * so an unanchored mutation would disable the GET guard too and the red count would be about code
+ * these three tests do not exercise.
  */

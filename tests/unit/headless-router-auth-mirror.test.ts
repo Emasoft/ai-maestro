@@ -635,6 +635,24 @@ describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8
    * file exists for, per its own header: several handlers "protected ONLY by the structural gate",
    * which a shape-valid forged token passes.
    */
+  /**
+   * NEUTER RUN (2026-08-22 — OBSERVED, restore verified by blob hash). BOTH halves of the new
+   * gate were neutered, and the result is stated in full because HALF OF IT IS UNPINNED:
+   *
+   *   authentication  s/if \(auth.error\)/if (false)/ if $. == 1378   → 1 red / 51 green (this test)
+   *   authorization   s/if \(!authz.allowed\)/if (false)/ if $. == 1380 → 0 red / 52 green ← UNPINNED
+   *
+   * The zero is a measurement of THIS FIXTURE, not of the guard. A forged token fails
+   * `authenticateAgent` on the line ABOVE, so `authorize(auth, 'manage-skills', params.id)` is
+   * never reached and no assertion here can see it change. Pinning it needs a caller that
+   * AUTHENTICATES successfully and is then refused — i.e. a genuinely issued token for a
+   * non-authorized agent, which this file's forged-credential harness cannot mint.
+   *
+   * Recorded rather than quietly left, because a test that passes for a reason you have not
+   * established is the failure this whole file exists to prevent — and the `authorize` half is the
+   * half carrying TRDD-D3RP7KQZ's actual invariant ("no agent may do it to itself"). The Next
+   * route's own coverage pins the equivalent decision on its side; this router's does not yet.
+   */
   it('R268J32X: POST /api/agents/:id/install-skills rejects the forged token (D3RP7KQZ parity)', async () => {
     const res = await call('POST', '/api/agents/00000000-0000-4000-8000-000000000000/install-skills', {
       Authorization: FORGED_BEARER,

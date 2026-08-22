@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T16:00:35+0200
+updated: 2026-08-22T16:10:55+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,50 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T16:10 — BOX 4: the "2 repos that cannot satisfy it" BOTH CAN. Their `design/` tree is nested one level deeper
+
+**The third exception class recorded below — *"Two repos have audit reports and NO `design/` tree
+at all — `EMASOFT-ASSISTANT-MANAGER` and `llm-externalizer` — so their findings have nowhere to be
+tracked"* — is REFUTED. Both have trees, with 50+ cards each:**
+
+| repo | claimed | measured (`find -maxdepth 4 -type d -name design`) |
+|---|---|---|
+| `EMASOFT-ASSISTANT-MANAGER` | no `design/` tree | `…/ai-maestro-assistant-manager-agent/design` → **51 cards** |
+| `llm-externalizer` | no `design/` tree | `…/llm-externalizer-plugin/design` → **50 cards** |
+
+**Both also carry audit-citing cards** — assistant-manager 3 (id needle), llm-externalizer 5
+(phrase needle, all `design/archived/`, all stamped 2026-08-18). So box 4 is satisfiable on them,
+and the exception class has no members left.
+
+**The mechanism is a PATH SHAPE assumption, not a needle-content one — a different failure from the
+15:55 lesson.** A repo directory does not necessarily contain `design/` at its root: these two are
+`<repo>/<plugin-dir>/design/`. Testing `[ -d "$repo/design" ]` — or `find "$repo/design"` — encodes
+a layout guess, and returns a confident 0 for a repo holding 51 cards. Search for the DIRECTORY by
+name at depth, never by an assumed path.
+
+**Neither needle is a superset of the other, so both prior figures were partial:**
+
+| needle | cards | repos |
+|---|---|---|
+| `plugin-self-audit` (phrase — what 02:4x used) | 32 | 9 |
+| `BRRJK57P` (id — what 15:55 used) | 53 | 14 |
+| **union** | **71** | **16** |
+
+7 repos are id-visible only; **2 are phrase-visible only** (`llm-externalizer`,
+`ai-maestro-assistant-role-agent` — the latter a **16th** repo neither earlier figure counted, with
+4 archived citing cards). The recorded "52 cards across 13 repos" and my own "53 across 14" are
+each one needle's view of a 71-card population. **Report the union, and say which needles built
+it.**
+
+**Box 4's shape is unchanged and strengthened:** all 71 cards are in the OWNING repos and **none is
+in the hub** — exactly what the box demands. What changes is that the two repos recorded as unable
+to satisfy it are now among those satisfying it.
+
+**Re-checked my own 16:00 box-1 finding against this same bug, since it used the assumed-path
+form.** `web-scenario-tester` has **no `design/` at any depth** (`-maxdepth 4` → 0, positive-control
+on `llm-externalizer` returns its nested one), and its top level is a flat plugin layout. That
+finding survives.
 
 ### ⏹ 2026-08-22T16:00 — BOX 1: the "3 outstanding" are THREE DIFFERENT SITUATIONS, and one is not a fleet member
 
@@ -459,6 +503,12 @@ are a deliberate park rather than a stall and need only confirming as such.
 `llm-externalizer` — so their findings have nowhere to be tracked. That is a third exception
 class the column sweep cannot see, and it is why the sweep was run over the repo list rather than
 over the cards.
+
+> **⚠ REFUTED 2026-08-22T16:10 — see the STATE entry of that time.** Both repos DO have a
+> `design/` tree, with **51** and **50** cards, nested one level deeper
+> (`<repo>/<plugin-dir>/design/`). Both also carry audit-citing cards. The claim came from testing
+> an ASSUMED PATH (`$repo/design`) instead of searching for the directory by name at depth. **This
+> exception class has no members.**
 
 ### ⏹ 2026-08-22T02:2x — UNBLOCKED. `blocked` → `dev`. The P0 was sitting still behind two gates that never applied to it.
 

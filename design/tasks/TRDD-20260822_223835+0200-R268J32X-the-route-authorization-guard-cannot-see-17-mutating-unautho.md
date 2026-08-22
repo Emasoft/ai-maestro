@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-22T23:18:46+0200
+updated: 2026-08-22T23:56:03+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -229,6 +229,56 @@ reported a no-op "0 red" indistinguishable from an untested guard), and the seco
 which would have disabled two guards the test file does not cover and produced a red count about
 the wrong code.
 
+### The widest-reaching route in the ledger — `convert-skill` (FIXED, commit `1909b55d`)
+
+`POST /api/settings/global-elements/convert-skill` shipped with `enforceAuth`, whose docstring is
+for mutations where *"any authenticated caller can call this"*. Traced end to end, that let **any
+authenticated agent of any title**:
+
+- name a **GitHub URL** as `source` — `convertElements`
+  (`services/cross-client-conversion-service.ts:26`) parses it and calls `downloadGitHubRepo(...)`,
+  so the SERVER fetches a repo the CALLER chose;
+- pass `scope: 'user'` — `lib/converter/convert.ts:209-212` returns **`process.env.HOME`** as the
+  write root, and `:171` writes the converted files under it;
+- pass `force` to overwrite, plus an arbitrary `projectDir`.
+
+Converted skills/agents/instructions are **prompt content Claude Code loads**, so the composition is
+remote content → the owner's home directory → loaded as instructions.
+
+**Raised to `enforceSystemOwner`, not to a new `authorize()` action.** Every other mutating route
+under `app/api/settings/**` is already `enforceSystemOwner` or `requireSudoToken` — including the
+sibling in the SAME directory, `global-elements/install-skill`. Installing a skill globally required
+the owner; CONVERTING one into the same place did not. That is the DQVPODKW shape again, and
+matching the subtree needs no new governance vocabulary (`authorize()` has no verb for this, and
+adding one would be a governance change rather than a fix). Its GET had no guard at all and now has
+`enforceAuth` — only authentication, because it returns static capability metadata.
+
+UI safety was verified EMPIRICALLY, not inferred: `components/settings/GlobalElementsSection.tsx` —
+the same settings UI as the calling `ConvertButton.tsx` — already calls two `enforceSystemOwner`
+routes successfully, because a cookie session resolves to the system owner.
+
+### A PREVIOUSLY-CLOSED HOLE WAS HALF-APPLIED — headless `install-skills` (FIXED, same commit)
+
+Found by following `convertElements`' other callers. `POST /api/agents/:id/install-skills` exists in
+both modes. The **Next** route authenticates and then calls `authorize(auth, 'manage-skills', id)`
+under **TRDD-D3RP7KQZ**, whose comment states the invariant: *"installing skills is CONFIGURATION,
+so no agent may do it to itself, and only a MANAGER (or the target's own COS) may do it to
+another."* The **headless** twin took `_req` — no authentication, no authorization — while doing the
+same work through `convertElements(..., scope: 'user')`, i.e. writing under `$HOME`.
+
+Under `MAESTRO_MODE=headless` the Next route never runs, so D3RP7KQZ's gate **did not exist on that
+path**. The structural credential gate is not a substitute: a shape-valid FORGED token passes it and
+lands in the handler, which is the precise failure class
+`tests/unit/headless-router-auth-mirror.test.ts` was created for (its header: several handlers
+*"protected ONLY by the structural gate"*). Fixed by mirroring the Next route's own `authorize()`
+call — the drift-free pattern that file's `authorize` import already documents.
+
+**Half of that gate is UNPINNED and it is recorded as such.** Neutering the authentication line reds
+this file's test; neutering the `authorize` line reds NOTHING (0/52), because a forged token fails
+authentication one line earlier and never reaches it. That zero measures the FIXTURE, not the guard.
+Pinning it needs a genuinely issued token for a non-authorized agent, which the forged-credential
+harness cannot mint — and the unpinned half is the one carrying D3RP7KQZ's actual invariant.
+
 ### And the subtree sweep found a real hole the ledger cannot see
 
 `GET /api/plugin-builder/builds/[id]` had **no guard of any kind** — the only unauthenticated
@@ -262,6 +312,11 @@ so that box stays open.
 - [x] PROVEN to fire on a seeded route, and to go green when it is removed
 - [x] walker control asserts a real scan set (>100 files) and no bleed into `app/api/agents/`
 - [x] non-vacuity: the needle must find >0, so a broken regex cannot read as "all decided"
+- [ ] **the ledger is part of any route-guard change, not a separate chore.** Fixing `convert-skill`
+      made STRONG_AUTHZ match it, so the needle returned 10 against a ledger of 11 — the guard went
+      red and I did not notice for ~30 minutes, because I re-ran the three tests I had just written
+      and not this one. Shrinking the ledger IS the deliberate edit its contract requires
+      (commit `a255a521`); the lesson is that changing any route's guard changes this needle
 - [ ] the 17 decided one at a time, each real one its own card. **6 decided** — `sessions/create`,
       `plugin-builder/build`, `teams/[id]/batch-create-agents` and `sessions/activity/update` CLEAR;
       `sessions/restore` GET FIXED (unauthenticated in BOTH modes, commit `d6f78e2b`);

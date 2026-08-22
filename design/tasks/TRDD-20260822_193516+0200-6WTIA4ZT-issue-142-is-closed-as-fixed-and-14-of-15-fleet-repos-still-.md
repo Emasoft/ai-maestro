@@ -386,3 +386,53 @@ prompted the read; the read is what proved the point.
 first three substitutes for the fourth — `git config --get core.hooksPath` (what git resolves),
 `git rev-parse --git-path hooks` (where it would look by default), `git ls-files | grep pre-push$`
 (what the repo ships, at any path), and **`cat` the file git resolves** (what it enforces).
+
+### CORRECTION 3 — 2026-08-22T20:01:09+0200 — the CORRECTION-1 table was produced by a broken classifier
+
+An adversarial review of the turn found the bug and I verified it. **The `live=` column in
+CORRECTION 1 measured string concatenation, not repositories.**
+
+The loop tested `[ -x "$d/$hp/pre-push" ]`. `$hp` is **absolute** for 39 of 48 repos
+(`/Users/…/.config/git/hooks`), so `"$d/$hp"` concatenated to
+`/Users/…/Code/foo//Users/…/.config/git/hooks` — a path that cannot exist. POSIX does not re-root
+an embedded absolute path. All three branches then failed and those 39 rows printed `live=no` **by
+construction**, for any input whatsoever. Two further consequences: the `DECORATIVE` branch
+required `-z "$hp"` and `core.hooksPath` is SET on all 48, so **that branch fired zero times** —
+the "3 DECORATIVE" came entirely from a second, differently-predicated scan presented in the same
+table as if it were one measurement. And the loop computed
+`resolved=$(git rev-parse --git-path hooks)` — **the correct instrument** — into a variable it
+never used.
+
+**Why it survived: it was RIGHT FOR THE WRONG REASON.** `live=no` is a true sentence about those
+39 repos — they do not run their own hook — reached by a route that would print `no` regardless.
+Finding the global shim separately made the narrative come out correct, which retro-justified a
+column that had measured nothing. That is the proxy shape again, in its most durable form: an
+uncontrolled value that agrees with the truth, so nobody checks the instrument.
+
+**Corrected measurement** — ask git what it resolves, then ask the filesystem, no concatenation:
+
+```bash
+for d in ~/Code/*/ ~/ai-maestro/; do [ -d "$d.git" ] || continue
+  h=$(git -C "$d" rev-parse --path-format=absolute --git-path hooks)
+  [ -x "$h/pre-push" ] && echo "EXEC $h" || echo "none $h"; done
+```
+
+| | count |
+|---|---|
+| execute a pre-push, resolved to the **global LFS shim** | **39** |
+| execute a pre-push, resolved **repo-locally** | **7** |
+| execute nothing (hook absent at the resolved path) | **2** — `SMART_MEDIA_MANAGER`, `claude-acct-switcher` |
+
+**So 46 of 48 repos DO execute a pre-push, not the 6 the old table implied.** Anyone reading
+"6 LIVE / 48" as coverage got the inverse of reality. What stays true is the substance: for 39 of
+them the executed file is the LFS shim that gates nothing (CORRECTION 2), so *executing a hook* and
+*being protected* remain different facts — which is the whole point of the card.
+
+**CORRECTION 2's table is unaffected** — it computed the resolved path with a `case` that handles
+absolute values, and classified by reading each file. It stands as measured.
+
+**A fourth instrument bug, in the correction itself:** my clustering used `awk '{print $3}'` on a
+padded table, and `MLX SMART UNIVERSAL CONVERTER` has spaces in its directory name — so one repo
+split across two phantom rows. Paths with spaces are routine on macOS; this repo's own reports rule
+mandates `--porcelain` over column-splitting for exactly this reason. The counts above are
+tab-delimited and do not split.

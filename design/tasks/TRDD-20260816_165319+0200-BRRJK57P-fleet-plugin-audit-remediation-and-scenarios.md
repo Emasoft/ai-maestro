@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T03:48:07+0200
+updated: 2026-08-22T04:02:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -168,6 +168,38 @@ the audit→card path DID work there, once, for one finding out of ten reports. 
 question is not the binary *"did any card get filed?"* but *"what fraction of each audit's
 findings reached a board?"* — and 1-of-10 is a gap of the same kind, just measurable instead of
 absolute.
+
+#### ⏹ 04:02 — and that fraction CANNOT currently be computed. The reports have no common shape.
+
+I tried to size the one confirmed gap (janitor: 9 reports, 0 cards) and could not, which is a
+finding about the **program** rather than about the janitor.
+
+Attempt 1 — a heading needle (`### FINDING n` / `### Fn`) returned **0 across all 9 reports**.
+That was my needle, not the corpus. Attempt 2 — read one report first and take the needle from
+what it prints: it opens `## Confirmed: 1 / Refuted: 8`. Attempt 3 — apply that across the 9:
+**exactly 1 of 9 carries a counts line at all.** The other 8 are free-form.
+
+So there is **no machine-readable finding count in the audit corpus**, and three consequences
+follow that matter more than the number I failed to get:
+
+1. *"How much of this audit is untracked?"* cannot be answered cheaply for any repo — it needs a
+   human or a model to read every report. Across the fleet that is the whole corpus.
+2. **This program cannot measure its own output.** BRRJK57P asks every plugin to self-audit and
+   remediate; without a common report shape, "remediated" is unfalsifiable in aggregate, and the
+   only tractable question left is the binary one I already showed is too coarse (it produced,
+   and then withdrew, a wrong row).
+3. It explains the earlier `Confirmed: N` trap from a new angle. That header is not merely
+   ambiguous between *"real defect"* and *"invariant holds"* — **it is not even reliably
+   present**, so any fleet-wide tally built on it is counting the 1-in-9 that happen to emit it.
+
+**Recommendation, cheap and mechanical:** require the audit skill to emit ONE machine-readable
+line per report (`findings: N confirmed, M refuted, K uncertain`), and have it distinguish a
+CONFIRMED DEFECT from a CONFIRMED-CORRECT invariant. Retrofitting the existing ~29 reports is
+not required — the value is forward-looking, and without it the next sweep hits this same wall.
+
+**Explicitly NOT established:** how many janitor findings are untracked. The gap is confirmed and
+**unsized**, and I would rather leave it unsized than publish another number whose population I
+had not defined — this card already carries one correction of exactly that kind.
 
 **NEXT on this box, revised:** the citation sweep is no longer the top item. Ask first *"which
 fleet repos have audit reports and no cards?"* — that set is where untracked findings live, and

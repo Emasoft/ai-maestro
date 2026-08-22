@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T02:51:19+0200
+updated: 2026-08-22T02:56:03+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -634,6 +634,34 @@ them to.
       for the population it covers and the two gaps it does not).
 - [ ] `trddgrep` / `prrdgrep` / `specgrep` shortcomings found during the program are recorded and,
       where verified, improved.
+      **TWO PILLAR-TOOLING SHORTCOMINGS FOUND 2026-08-21/22, both VERIFIED, one already IMPROVED.**
+      Scope note so the box is not over-claimed: neither is literally one of the three named
+      binaries — they are `trdd-extrefs` and `pillars-lint`/`lib/pillar` — but both are the pillar
+      tooling this box exists to keep honest, and the standing instruction at
+      *"Keep observing `trddgrep`, `prrdgrep`, `specgrep`"* is what they answer.
+      1. **`trdd-extrefs` was blind by construction and reported clean anyway — FIXED (`dd736a06`).**
+         It reads the `external-refs:` FRONTMATTER FIELD, so a card citing an issue in body prose
+         was invisible to it. Verified live just now against the shipped tool:
+         `41 open cards cite 67 distinct issues` **plus** `NOT SCANNED: 27 open cards carry NO
+         external-refs: line yet cite an issue in body prose (plus 30 with neither)` — i.e. **57
+         of 168 open cards outside what the tool can see.** The fix does not scan prose (a bare
+         `#35` matches ordinary text and manufactures false positives); it **counts and prints the
+         unscanned population**, so a clean run now says *clean of what it can see*, not *clean*.
+         The cost of the old silence is on the record: `TRDD-903B7A20`, the board's largest
+         campaign card, had its sole blocker in prose — **closed 8 days, still gating.**
+      2. **`danglingRefs` has ZERO production callers — RECORDED as `TRDD-216FTVC9`, not yet fixed.**
+         `lib/pillar/dag.ts:35` delegates reference-EXISTENCE checking to it; nothing calls it
+         (4 test refs, 0 production, positive-controlled against file-mate `syncIndex` which has
+         one). So **nothing checks whether a cited target exists**, and `pillars-lint`'s
+         `✓ the reference DAG holds` is true about edge DIRECTION only. Its box 1 is already
+         measured — **0 dangling / 252 edges / 501 cards**, instrument controlled in both
+         directions — which settles the open design question as **fail on findings (exit 1)**,
+         since there is no pre-existing backlog for a failing lint to redden against.
+      **Not ticked: the box says "recorded AND, where verified, improved."** One is improved, one
+      is recorded-with-a-card-and-a-decision. It ticks when `216FTVC9` lands.
+      *(Both are the same shape, which is why the pair is worth stating together: a tool that
+      cannot see something reports CLEAN, and clean is indistinguishable from correct. That is the
+      exact failure the pillar work was built to kill, found inside the pillar tooling itself.)*
 
 ## Credential sweep — 2026-08-21T15:0x+0200 — acceptance box 9, measured
 

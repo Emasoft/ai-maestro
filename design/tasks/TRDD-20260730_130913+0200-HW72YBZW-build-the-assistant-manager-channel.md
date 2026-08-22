@@ -4,9 +4,9 @@ title: Build the ASSISTANT-MANAGER channel and drop the superseded MAESTRO grant
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
-column: todo
+column: human_review
 created: 2026-07-30T13:09:14+0200
-updated: 2026-08-16T17:46:11+0200
+updated: 2026-08-22T21:41:58+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -135,8 +135,34 @@ the change starts from deny-all rather than from a live edge.
 - [ ] The contradicted R39.5/R39.7 rows in `docs/GOVERNANCE-ENFORCEMENT-MAP.md` are re-upgraded with the new citation
 - [ ] A new test proves ASSISTANT → MANAGER is allowed only with the USER-gated flag set, denied without it, via a neuter of the gate (not the edge)
 
+## Column corrected — 2026-08-22T21:41:58+0200 — `todo` → `human_review`
+
+**The card was advertising itself as pullable while waiting on the USER**, and that is not a
+bookkeeping nit — I pulled it under the drain rule (highest-priority card on the critical path,
+`p=1`, blocking `SPS63XHA`), read it, and found its own NEXT ACTION is *"a DECISION, then a separate
+card… Ask the USER how the standing permission is stored and what it defaults to."* A card in
+`todo` claims a worker can start it; this one cannot be started by anyone but the USER.
+
+`human_review` is the ratified column for exactly this (*"escalating to USER"*), and it is where the
+USER looks. Nothing else changed; **half 1 is still landed and there is still NO live hole** — the
+`assistantSender` branch remains unreachable at runtime and the "NO PRODUCTION CALLER" lock test
+still pins that.
+
+Two smaller notes for whoever picks this up:
+
+- The STATE block says *"this one stays in `dev`"*. That was written when someone was actively on
+  it; it has not been touched since 2026-08-16, so `dev` would be the dishonest column (it asserts
+  work in progress). `human_review` is the honest one, and this line supersedes that phrase.
+- **The decision is genuinely two decisions**, and the card is right that defaulting either way is
+  a real error: *where* the standing `userPermitsManagerCollaboration` permission is stored, and
+  what it **defaults to**. Default-on grants a channel the USER never approved; default-off with no
+  UI makes R39.9 permanently dead letter.
+
 ## Approval log
 
+- 2026-08-22T21:41:58+0200 — Re-columned `todo` → `human_review` by main under the owner's standing
+  delegation, to stop the card asserting it was pullable. No code, no scope change; the six
+  acceptance boxes are untouched and all still open.
 - 2026-07-30T13:09:14+0200 — FILED, `min-approval-requirement: manager`. NOT a mandate: it changes
   the comm-graph's shape on a security boundary, which the parent ruling was careful to keep out of
   the agent's own hands. The ruling's open question is answered IN THIS CARD (above) rather than by

@@ -1,12 +1,12 @@
 ---
 trdd-id: JIHK7SWH
 title: The agent-repos route shell-interpolates paths that were never metacharacter-validated
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T04:16:16+0200
-updated: 2026-08-22T04:30:42+0200
+updated: 2026-08-22T05:27:03+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -31,21 +31,17 @@ external-refs: [TRDD-IMCEYV9F]
 
 # The agent-repos route shell-interpolates paths that were never metacharacter-validated
 
-> ## ⛔ DO NOT PUSH THIS CARD WHILE THE VECTOR IS UNPATCHED
+> ## ✅ PATCHED 2026-08-22T05:2x — the push block is LIFTED
 >
-> Measured 2026-08-22T04:30 — **both remotes are PUBLIC**:
-> `Emasoft/ai-maestro` (the fork we push to) and `23blocks-OS/ai-maestro` (upstream) each
-> report `visibility: PUBLIC, isPrivate: false`.
+> The vector is fixed in `cbf663b6` (no shell left in the route; `lib/find-git-dirs.ts`
+> replaces the `find` shell-out), pinned by `tests/unit/find-git-dirs-injection.test.ts`
+> (5 tests, positive control + recorded neuter). **This card may now ship WITH its fix.**
 >
-> This card describes a **live, unfixed** injection vector and spells out the payload
-> shape. Pushing it before the fix lands publishes a working recipe against a running
-> system, to anyone watching the repo, with no patch available. That is the one thing in
-> this whole batch worth being careful about.
->
-> **Order of operations: land the fix, THEN push both together.** The card is the fix's
-> own record and should ship with it — not ahead of it.
->
-> This is not a reason to delay the fix. It is a reason not to publish ahead of it.
+> The block that stood here is kept as the record: both remotes are **PUBLIC**
+> (`Emasoft/ai-maestro` and `23blocks-OS/ai-maestro`, `isPrivate: false`, measured
+> 04:30), and while the vector was live this card was a working recipe against a running
+> system with no patch available. **The ordering rule that produced it is general and
+> still applies to the next such card: land the fix, then push both together.**
 
 ## Problem
 
@@ -126,14 +122,33 @@ real, and none of them covers the value that actually reaches the shell.
 
 ## Acceptance
 
-- [ ] All three `git` calls use `execFileSync` with an argument array; no shell.
-- [ ] The `find` shell-out is replaced by a JS walk; `realpathSync` no longer feeds a shell.
-- [ ] Every pre-existing check (metacharacter, traversal, prefix, existence) is retained.
-- [ ] A test proves a crafted directory name under a workdir executes nothing.
-- [ ] The neuter is recorded: which mutation, which test reddened, how many.
+- [x] All three `git` calls use `execFileSync` with an argument array; no shell. (`cbf663b6`)
+- [x] The `find` shell-out is replaced by a JS walk; `realpathSync` no longer feeds a shell.
+      `lib/find-git-dirs.ts` — in `lib/` so it is testable, and it reproduces `find`'s own
+      quirks (depth from root, `.git` DIRECTORY only, no descent into a match, unreadable
+      dirs skipped, symlinks not followed) so this stays a security fix, not a behaviour change.
+- [x] Every pre-existing check (metacharacter, traversal, prefix, existence) is retained.
+      None was wrong; they answered *"is this inside the sandbox?"* and nothing answered
+      *"is this safe to paste into a shell?"* — which is the question that stopped existing.
+- [x] A test proves a crafted directory name under a workdir executes nothing.
+      `tests/unit/find-git-dirs-injection.test.ts`, 5 tests. **Its positive control is the
+      load-bearing one** — it proves the OLD shape DOES fire on this exact fixture, without
+      which "no sentinel appeared" is equally true of a fixture that was never hostile.
+      Writing it caught exactly that: the first draft put the ABSOLUTE sentinel path inside
+      the directory name, and its slashes made `mkdirSync` build a nested tree instead of one
+      hostile directory, so three assertions would have been vacuous.
+- [x] The neuter is recorded: which mutation, which test reddened, how many.
+      `s|execFileSync\('git'|execSync('git'|` → **1 red / 4 green**, restore verified by blob
+      hash. The red is `the ROUTE itself uses no shell`. **That the three BEHAVIOURAL tests
+      stay green is the finding**: they exercise the shapes, not the route, so a revert to
+      `execSync` is invisible to them. The source assertion is the only thing linking this
+      fix to the code it fixes — do not delete it as "just a text check".
 
 ## Approval log
 
 - 2026-08-22T04:16:16+0200 — MANDATE issued by ai-maestro-hub (min-approval-requirement:
   none). Pre-approved: Tier 0 — a local, reversible fix in this project's own source, no
   governance, baseline, or release surface. No approval request was sent.
+- 2026-08-22T05:27:03+0200 — COMPLETED by ai-maestro-hub. Vector patched in `cbf663b6`,
+  pinned by 5 tests with a positive control and a recorded neuter (1 red / 4 green). All 5
+  acceptance boxes measured, not asserted. Push block lifted — the card may ship with its fix.

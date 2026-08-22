@@ -17,6 +17,16 @@
  * hostile and the file certifies nothing.
  *
  * The injected command only ever writes a sentinel inside the test's own temp dir.
+ *
+ * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s|execFileSync\('git'|execSync('git'|
+ *   → 1 red / 4 green:
+ *       the ROUTE itself uses no shell — the link the behavioural tests above cannot make
+ *
+ * That result is the point, not a disappointment: reverting the route to a shell call
+ * leaves all THREE behavioural tests green, because they exercise the shapes rather than
+ * the route. Only the source assertion notices. Anyone tempted to delete it as "just a
+ * text check" should read that number first — without it this fix is pinned by nothing.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync, execSync } from 'child_process'

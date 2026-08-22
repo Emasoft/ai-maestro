@@ -1,11 +1,11 @@
 ---
 trdd-id: K2WJH7RF
 title: Decide the agent authorization policy for the ten remaining strict routes
-column: complete
+column: completed
 pre-block-column: null
 min-approval-requirement: manager
 created: 2026-07-09T18:03:01+0200
-updated: 2026-08-22T15:40:16.145Z
+updated: 2026-08-22T15:41:46.152Z
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -331,3 +331,4 @@ yet" item, delete the paragraph in the same commit.
   forbids. My first pass wrote `eht: [798OAHMX]`; it was wrong on both counts and is corrected
   here rather than silently.
 - 2026-08-22T15:40:16.145Z — column → complete. Human review performed under the owner's 2026-08-22 grant; e2e run, 5/5 verbs, 2 bugs filed
+- 2026-08-22T15:41:46.152Z — COMPLETED by user. Human review performed under the owner's grant; e2e run; agent-subject half tracked on TRDD-798OAHMX.

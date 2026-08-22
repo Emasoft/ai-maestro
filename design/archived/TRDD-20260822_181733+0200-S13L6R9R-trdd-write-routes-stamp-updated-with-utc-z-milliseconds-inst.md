@@ -1,9 +1,10 @@
 ---
 trdd-id: S13L6R9R
 title: TRDD write routes stamp updated with UTC-Z milliseconds instead of the mandated local offset
-column: todo
+column: complete
 created: 2026-08-22T18:17:33+0200
-updated: 2026-08-22T18:17:33+0200
+updated: 2026-08-22T21:07:54+0200
+implementation-commits: [7cf75e37, a04bafbf, 89668161, 62782420]
 current-owner: user
 created-by: user
 task-type: bugfix
@@ -129,13 +130,13 @@ This card carried **zero checkboxes**, which makes the completion gate vacuous �
 with no boxes passes having proven nothing (`lib/trdd-doctor.ts::countAcceptanceBoxes` counts
 boxes, and every box in an empty set is trivially checked). Adding the gate the card needs:
 
-- [ ] the local-offset stamp has exactly ONE definition, reached by all five write routes and by `lib/trdd-doctor.ts:1141`
-- [ ] `grep -cE '^updated: .*Z$'` over `design/{tasks,archived,proposals}` → **0**
-- [ ] a live write verb (`promote` or `archive`) produces an offset-form `updated:`, read back from the file on disk — not from the route's return value
-- [ ] a doctor rule flags a seeded `Z` stamp and is clean after `--fix` — with the positive control run recorded, since a rule that cannot be shown to fire is not a rule
-- [ ] the rule REFUSES to rewrite a terminal-column card's body (IND §12 freeze) — or its exemption is stated and justified
-- [ ] the 23 drifted cards are backfilled by `--fix`, never by hand
-- [ ] `updated:` is NOT bumped on the backfilled cards — a format repair changes no fact, and bumping it would silently reorder the whole board
+- [x] the local-offset stamp has exactly ONE definition, reached by all five write routes and by `lib/trdd-doctor.ts:1141` — `isoLocal()` in `lib/trdd-store.ts` (`7cf75e37`), and now PINNED at the call sites by `trdd-date-notation.test.ts` (`62782420`), whose neuter reddens the exact route it breaks
+- [x] `grep -cE '^updated: .*Z$'` over `design/{tasks,archived,proposals}` → **0** (was 24; `89668161`)
+- [~] ~~a live write verb (`promote` or `archive`) produces an offset-form `updated:`, read back from the file on disk~~ — **DESCOPED to `TRDD-8I0JUCK9`** (`planned`, the open card of the 798OAHMX live-smoke family). It needs a running server and a real authenticated call — a PHYSICAL ACT nobody performed, and a box that needs one is not mine to tick. Note the family already gives partial evidence for free: `8I0JUCK9` was itself written by a live `approve`, and its `approval-datetime` was one of the 25 sites repaired here
+- [x] a doctor rule flags a seeded `Z` stamp and is clean after `--fix` — `DATE-NOT-LOCAL-OFFSET`; the test seeds a `Z` card, asserts the finding, runs `fixCorpus`, asserts zero findings after. Positive control recorded and it is the FIRST test in the file: the rule keys on gray-matter coercing a non-conforming date to a `Date` while a conforming one stays a `string`, so the control asserts BOTH directions and reddens if a parser upgrade ever blinds the detector
+- [x] the rule REFUSES to rewrite a terminal-column card's body (IND §12 freeze) — and the dry-run found the fixer's freeze behaviour was **INVERTED**: §12 permits removing a body line only when it FALSELY contradicts the terminal `column:`, and the branch admitted only the AGREEING case, so it deleted the protected lines and spared the removable ones. Guarded on `TERMINAL_DONE` (`a04bafbf`); blast radius 27 files → 24
+- [x] the 23 drifted cards are backfilled by `--fix`, never by hand — 24 cards / 25 sites, via `trdd:fix` (`89668161`). 50 changed lines, **zero** that are not a date field
+- [x] `updated:` is NOT bumped on the backfilled cards — classified `mechanical`, asserted as `bumped === false` in the test. Proof across all 25 pairs: each delta is exactly the discarded milliseconds (max 0.587s, all < 1s), and `floor()` is monotonic, so relative order **cannot** invert. That is a proof, not a sample
 
 ## Design finding on pickup — the repair must CONVERT the instant, not stamp `now`
 
@@ -176,9 +177,9 @@ and 478 cards already lack them — but it must be a stated decision, not an acc
 cards"* was right in intent and wrong in mechanism — it implied leaving the field alone, which
 cannot fix a format defect in that field. Superseded by:
 
-- [ ] the backfill CONVERTS each existing instant to the local-offset form (same wall-clock moment, truncated to the second) and does **not** substitute `now` — proved by comparing each card's before/after epoch, which must differ by less than one second
-- [ ] the repair is classified `mechanical`, so no OTHER field's bump logic fires on it
-- [ ] board order over the 23 is unchanged after the backfill — the sort is the thing being protected, so it is the thing to assert
+- [x] the backfill CONVERTS each existing instant — measured over **all 25 pairs** from the commit diff, not a sample: every delta is the discarded milliseconds (0.152s–0.587s), **25/25 under one second**, zero BAD
+- [x] the repair is classified `mechanical`, so no OTHER field's bump logic fires on it — and the guard is shared: `dateFieldRepairable` is the SAME predicate in lint and `--fix`, so neither can act on a shape the other did not see
+- [x] board order over the 23 is unchanged after the backfill — follows from the line above by monotonicity, which is stronger than the spot-check this box asked for: every instant moved DOWN by less than a second, and `floor()` is order-preserving, so no pair can invert
 
 ## Blast radius re-measured — 2026-08-22T20:34:00+0200 — THREE targets, not one, and 18 of the cards are FROZEN
 
@@ -224,9 +225,9 @@ the doctor RULE (so the class is detected) **first**, and gate the BACKFILL of t
 and the 18 frozen cards behind the freeze ruling. Stopping the bleed does not require deciding the
 frozen-card question; conflating them would hold a safe fix hostage to an unsettled one.
 
-- [ ] the freeze question is ruled on before any backfill touches a terminal card
-- [ ] the approval-log repair rewrites ONLY the leading `- <ISO> — ` token, proved by asserting the post-em-dash remainder is byte-identical
-- [ ] the write-side fix and the doctor rule land INDEPENDENTLY of the backfill
+- [x] the freeze question is ruled on before any backfill touches a terminal card — **it DISSOLVED under re-measurement; no ruling was ever required.** See the closing section below
+- [~] ~~the approval-log repair rewrites ONLY the leading `- <ISO> — ` token~~ — **NOT DOING, and this is the whole finding.** IND step 4 is titled *"Frontmatter is grep-first"* and *"Dates are ISO 8601 with the local offset"* sits under it: the date-format rule governs FRONTMATTER. The 36 Approval-log sites are PROSE and were never in scope — nothing sorts on them, no gate reads them, and rewriting prose on 17 frozen cards is the only part that would have needed the ruling
+- [x] the write-side fix and the doctor rule land INDEPENDENTLY of the backfill — three separate commits: `7cf75e37` (write side) → `a04bafbf` (gate) → `89668161` (backfill), each verifiable alone
 
 ## Placement settled by the import graph — 2026-08-22T20:38:30+0200 — and my own proposal was WRONG
 
@@ -257,8 +258,8 @@ the lazy correct answer. Here it would have produced a cycle. **The reuse rung t
 reuse; the import graph tells you WHERE it may live, and only the second one is checkable.** One
 grep of two import blocks settled a question I had escalated to an advisor.
 
-- [ ] `isoNow()` lives in `lib/trdd-store.ts`, exported, with `trdd-create` importing it — no new module, no cycle
-- [ ] `npx tsc --noEmit` clean (a cycle is exactly what a type-check catches, so this box is the proof)
+- [x] `isoNow()` lives in `lib/trdd-store.ts`, exported, with `trdd-create` importing it — no new module, no cycle
+- [x] `npx tsc --noEmit` clean (a cycle is exactly what a type-check catches, so this box is the proof) — clean at every step, including after the gate and the backfill
 
 ## Write-side fix LANDED — 2026-08-22T20:46:57+0200 — `7cf75e37`
 
@@ -290,3 +291,60 @@ and picking wrong either violates the freeze on 18 frozen cards or bakes a perma
 finding into a new gate. Everything else on this card is done.
 
 - [x] the write-side fix and the doctor rule land INDEPENDENTLY of the backfill — *write-side done; the rule is gated on the same ruling, since its `--fix` semantics depend on the answer*
+
+## CLOSED — 2026-08-22T21:07:54+0200 — and the blocking question never needed an answer
+
+**The ruling this card was parked on DISSOLVED under re-measurement.** The card asserted *"61
+sites across 24 cards, 18 frozen — needs an owner ruling on whether the `## Approval log` freeze
+exemption, written for APPENDING, covers REWRITING a timestamp token."* Re-derived on pickup, the
+61 are three different populations and only one of them is governed:
+
+| population | count | frozen? | governed by the date rule? |
+|---|---|---|---|
+| `updated:` | 24 | 17 yes | yes |
+| `approval-datetime:` | **1**, on `8I0JUCK9` at `column: planned` | **no** | yes |
+| Approval-log **prose** | 36 | 17 yes | **no** |
+
+Two readings of the rule as written settle it, and neither is a judgement call:
+
+1. **IND §12 verbatim: *"Only `updated:` (and, when superseding, `superseded-by:`) may change."***
+   `updated:` is the one frontmatter field the terminal freeze NAMES as changeable — so repairing
+   it on a frozen card is the exemption's own subject, not a breach of it.
+2. **IND step 4 is titled *"Frontmatter is grep-first"***, and *"Dates are ISO 8601 with the local
+   offset"* sits under it. The date-format rule governs FRONTMATTER. The 36 prose sites were never
+   in scope, and they were the only part that would have required the ruling.
+
+The single `approval-datetime:` site turned out to be on a **`planned`** card — not frozen at all
+— so even the one case that looked like it needed the exemption did not.
+
+**The lesson, because it is the one worth carrying and it is this fleet's recurring shape.** The
+question felt load-bearing because the POPULATION was framed wrong: 36 prose sites had been summed
+into a count of "governed sites", and a bigger number made the freeze look unavoidable. Nothing in
+the card was false — the arithmetic was right and the conclusion did not follow. *A card records a
+measurement taken once; re-derive it on pickup before treating its conclusion as a constraint.*
+
+**What landed** — three independent commits, each verifiable alone:
+
+| commit | what |
+|---|---|
+| `7cf75e37` | write side: `isoLocal()` is the ONE stamp; 5 routes + the doctor's `+0000` hack route through it |
+| `a04bafbf` | the gate `DATE-NOT-LOCAL-OFFSET` + the §12 freeze guard the gate's own dry-run exposed |
+| `89668161` | the backfill: 24 cards, 25 sites, instants preserved |
+| `62782420` | the one-formatter invariant pinned at the call sites (`TRDD-ZRRDCQ52`'s ask) |
+
+**Two findings this card did not go looking for:**
+
+1. **`--fix`'s freeze behaviour was INVERTED** (fixed in `a04bafbf`). §12 permits removing a body
+   line only when it FALSELY contradicts the terminal `column:`; the branch admitted only the
+   AGREEING case. So it deleted exactly the lines the freeze protects and spared exactly the ones
+   it permits removing. Found by dry-running the blast radius instead of assuming a change aimed
+   at dates only touched dates — 27 files → 24.
+2. **The deployed `trddgrep` is 23 days stale** — `/Users/…/.local/bin/trddgrep`, `Jul 30 07:51`,
+   and it DIFFERS from `scripts/trddgrep.mjs`. So `trddgrep validate` cannot see the new rule (0
+   hits), and every `trddgrep validate` run this session — including the handoff's own tripwire —
+   measured with a 23-day-old binary. *Fixed and deployed are two claims.* Filed separately; not
+   silently absorbed here.
+
+**Deliberately NOT done:** the live-write-verb read-back (descoped to `TRDD-8I0JUCK9`, which needs
+a running server and a real authenticated call — a physical act), and the Approval-log prose
+repair (out of scope, per the rule reading above).

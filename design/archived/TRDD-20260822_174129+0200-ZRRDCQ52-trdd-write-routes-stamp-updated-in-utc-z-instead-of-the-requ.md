@@ -1,9 +1,10 @@
 ---
 trdd-id: ZRRDCQ52
 title: TRDD write routes stamp updated in UTC-Z instead of the required local offset
-column: todo
+column: superseded
+superseded-by: [S13L6R9R]
 created: 2026-08-22T17:41:29+0200
-updated: 2026-08-22T17:41:29+0200
+updated: 2026-08-22T21:09:35+0200
 current-owner: user
 created-by: user
 task-type: bugfix
@@ -57,3 +58,34 @@ reintroduce a third.
 ## Approval log
 
 - 2026-08-22T17:41:29+0200 — MANDATE issued by user (min-approval-requirement: manager). Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-22T21:09:35+0200 — SUPERSEDED by `TRDD-S13L6R9R`, set by main under the owner's standing
+  delegation to decide on their behalf on verified facts (recorded here rather than implied, because
+  the supersede-authority check expects the editor to be the replacement's `created-by`).
+
+## SUPERSEDED — 2026-08-22T21:09:35+0200 — by TRDD-S13L6R9R
+
+Two cards were minted for the SAME defect 36 minutes apart (`ZRRDCQ52` 17:41, `S13L6R9R` 18:17) and
+neither referenced the other. `S13L6R9R` is the one that was worked — 292 lines of findings against
+this card's 59 — so this one is superseded rather than duplicated forward.
+
+**This card was NOT a pure duplicate, and that mattered.** Read before superseding, it carried two
+asks `S13L6R9R` did not:
+
+1. *"One formatter, used by every writer... so a rename or a new verb cannot reintroduce a third."*
+   **DELIVERED** in `62782420`. Building it surfaced why it had to be a CALL-SITE test: every store
+   verb (`editTrdd`, `promoteTrdd`, `refuseTrdd`, `archiveTrdd`, `advanceColumn`) takes `iso` as a
+   REQUIRED PARAMETER, so the store never chooses a format — a conformance test driving those verbs
+   would assert the value the test itself passed in. The 5 routes are the whole decision surface.
+   Neuter recorded: breaking one route's `isoLocal` reddens the guard and NAMES that route.
+2. *"Add the format check to `trddgrep validate` so future drift is caught rather than counted."*
+   **NOT DELIVERED, and the reason is its own finding:** the `trddgrep` on PATH is dated
+   `Jul 30 07:51` and DIFFERS from `scripts/trddgrep.mjs`, so it cannot see a rule added today
+   (0 hits). Filed as **`TRDD-2P25M6AS`**. The rule itself IS live in `lintCorpus` and is pinned by
+   a corpus test, so the drift is gated — just not through that binary yet.
+
+Its third verification bullet (drive a live `promote`/`approve` and assert the resulting `updated:`)
+is descoped to **`TRDD-8I0JUCK9`**, which owns the live-write-verb smoke and needs a running server.
+
+Its measurement was also correct and is worth preserving: it caught the drift at **2 cards** the day
+it was filed. By the time `S13L6R9R` closed it was **24 cards / 25 sites** — the cost of the hours
+between filing and fixing, and the argument for the gate that now exists.

@@ -244,7 +244,7 @@ Run across all 15 repos carrying a `.githooks/pre-push`:
 
 | what git executes | n | repos |
 |---|---|---|
-| the tracked `.githooks/` file | **12** | orchestrator, autonomous, maintainer, chief-of-staff, janitor, integrator, architect, programmer, assistant-manager, plugin, llm-externalizer, PHARDENER |
+| the tracked `.githooks/` file | **12** | orchestrator, autonomous, maintainer, chief-of-staff, janitor, integrator, architect, programmer, assistant-manager, plugin, llm-externalizer, out-of-scope-repo-F |
 | a **global** dir outside the repo | **2** | `defuddle-skill`, `maestro-orchestrate` → `~/.config/git/hooks` |
 | `git-hooks` (hyphen) while shipping `.githooks` (dot) | **1** | `AI-MAESTRO-WEBDESIGN-AGENT` |
 
@@ -306,7 +306,7 @@ under `~/Code` plus `~/ai-maestro`:
 | `core.hooksPath` → a repo-relative dir (`git-hooks`/`.githooks`/`githooks`) | 7 |
 | `core.hooksPath` → an absolute per-repo `.git/hooks` | 2 |
 | repos running their OWN tracked pre-push (`LIVE`) | 6 |
-| repos shipping a tracked pre-push git will NEVER execute (`DECORATIVE`) | **3** — `claude-menu-system`, `claude-voice-loop`, `rechecker-plugin` |
+| repos shipping a tracked pre-push git will NEVER execute (`DECORATIVE`) | **3** — `out-of-scope-repo-A`, `out-of-scope-repo-B`, `out-of-scope-repo-D` |
 | repos carrying a stale ignored `.git/hooks/pre-push` (`SHADOWED`) | **9** (was 4 at the 15-repo scope) |
 
 The DECORATIVE count converges with the earlier one at 3, which is the one number that survived
@@ -361,16 +361,16 @@ three assumed directory names (`.githooks`/`git-hooks`/`githooks`). Re-run with
 | LIVE | ai-maestro | `.githooks/pre-push` | its own, 2880 B, real guard |
 | LIVE | ai-maestro-assistant-role-agent | `git-hooks/pre-push` | its own, 3847 B, ancestry + branch + publish |
 | LIVE | ai-maestro-web-scenario-tester | `git-hooks/pre-push` | its own, 384 B — delegates to `publish.py --gate` |
-| LIVE | PHARDENER | `.githooks/pre-push` | its own, 388 B — ruff + mypy under `set -euo pipefail` |
-| LIVE | visual-comunicator | `git-hooks/pre-push` | its own, 15936 B |
+| LIVE | out-of-scope-repo-F | `.githooks/pre-push` | its own, 388 B — ruff + mypy under `set -euo pipefail` |
+| LIVE | out-of-scope-repo-E | `git-hooks/pre-push` | its own, 15936 B |
 | **DECORATIVE** | AI-MAESTRO-WEBDESIGN-AGENT | `.githooks/pre-push` | a **different** file — `hooksPath=git-hooks`. Two dirs, one reviewed, the other executed. |
-| **DECORATIVE** | rechecker-plugin | `git-hooks/pre-push` | an **untracked** 3285 B guard in `.git/hooks` — protected, by a file no PR can review |
-| **DECORATIVE — UNPROTECTED** | claude-menu-system | `git-hooks/pre-push` | the global LFS shim |
-| **DECORATIVE — UNPROTECTED** | claude-voice-loop | `git-hooks/pre-push` | the global LFS shim |
-| **DECORATIVE — UNPROTECTED** | SVG-BBOX | `scripts/hooks/pre-push` | the global LFS shim |
+| **DECORATIVE** | out-of-scope-repo-D | `git-hooks/pre-push` | an **untracked** 3285 B guard in `.git/hooks` — protected, by a file no PR can review |
+| **DECORATIVE — UNPROTECTED** | out-of-scope-repo-A | `git-hooks/pre-push` | the global LFS shim |
+| **DECORATIVE — UNPROTECTED** | out-of-scope-repo-B | `git-hooks/pre-push` | the global LFS shim |
+| **DECORATIVE — UNPROTECTED** | out-of-scope-repo-C | `scripts/hooks/pre-push` | the global LFS shim |
 
 **DECORATIVE is 5, not 3** — MAINTAINER's "3 is a floor" was right. Two of the additions are the
-name-keyed-needle failure again: `SVG-BBOX` ships at `scripts/hooks/`, a path my directory list did
+name-keyed-needle failure again: `out-of-scope-repo-C` ships at `scripts/hooks/`, a path my directory list did
 not contain, and `AI-MAESTRO-WEBDESIGN-AGENT` my earlier loop scored LIVE because
 `$hooksPath/pre-push` existed — I checked that *a* file was executable at the resolved path without
 checking it was the file the repo ships.
@@ -421,7 +421,7 @@ for d in ~/Code/*/ ~/ai-maestro/; do [ -d "$d.git" ] || continue
 |---|---|
 | execute a pre-push, resolved to the **global LFS shim** | **39** |
 | execute a pre-push, resolved **repo-locally** | **7** |
-| execute nothing (hook absent at the resolved path) | **2** — `SMART_MEDIA_MANAGER`, `claude-acct-switcher` |
+| execute nothing (hook absent at the resolved path) | **2** — `out-of-scope-repo-G`, `out-of-scope-repo-H` |
 
 **So 46 of 48 repos DO execute a pre-push, not the 6 the old table implied.** Anyone reading
 "6 LIVE / 48" as coverage got the inverse of reality. What stays true is the substance: for 39 of
@@ -432,7 +432,7 @@ them the executed file is the LFS shim that gates nothing (CORRECTION 2), so *ex
 absolute values, and classified by reading each file. It stands as measured.
 
 **A fourth instrument bug, in the correction itself:** my clustering used `awk '{print $3}'` on a
-padded table, and `MLX SMART UNIVERSAL CONVERTER` has spaces in its directory name — so one repo
+padded table, and an out-of-scope repo has spaces in its directory name — so one repo
 split across two phantom rows. Paths with spaces are routine on macOS; this repo's own reports rule
 mandates `--porcelain` over column-splitting for exactly this reason. The counts above are
 tab-delimited and do not split.
@@ -459,19 +459,19 @@ fixture. `core.hooksPath` REPLACES the hooks directory wholesale; git does not c
 
 ```
 ai-maestro                        post-checkout yes  post-commit yes  post-merge yes  pre-push yes
-SMART_MEDIA_MANAGER               post-checkout yes  post-commit —    post-merge yes  pre-push —
+out-of-scope-repo-G               post-checkout yes  post-commit —    post-merge yes  pre-push —
 ai-maestro-assistant-role-agent   —                  —                —               pre-push yes
 ai-maestro-web-scenario-tester    —                  —                —               pre-push yes
 AI-MAESTRO-WEBDESIGN-AGENT        —                  —                —               pre-push yes
-PHARDENER                         —                  —                —               pre-push yes
-rechecker-plugin                  —                  —                —               pre-push yes
-visual-comunicator                —                  —                —               pre-push yes
-claude-acct-switcher              —                  —                —               —
+out-of-scope-repo-F                         —                  —                —               pre-push yes
+out-of-scope-repo-D                  —                  —                —               pre-push yes
+out-of-scope-repo-E                —                  —                —               pre-push yes
+out-of-scope-repo-H              —                  —                —               —
 ```
 
 Only `ai-maestro` provides all four. **A repo that overrode `core.hooksPath` to ADD a push gate
 thereby REMOVED three unrelated hooks, and no pre-push census can see it** — which is why this
-column exists. `claude-acct-switcher` points at a hooks dir containing nothing at all, so it runs
+column exists. `out-of-scope-repo-H` points at a hooks dir containing nothing at all, so it runs
 no hooks whatsoever while appearing configured.
 
 **Directional consequence, stated because both halves are counter-intuitive:** repairing the global
@@ -485,7 +485,7 @@ first-hand; they are right, and the defect is larger than the row.
 
 **CORRECTION 4 tested four hardcoded hook names** (`post-checkout`, `post-commit`,
 `post-merge`, `pre-push`) — the four the global dir happens to provide — and reported anything
-outside that list as nothing. It is the same name-keyed-needle failure as `SVG-BBOX`'s
+outside that list as nothing. It is the same name-keyed-needle failure as `out-of-scope-repo-C`'s
 `scripts/hooks/` path, one layer over. **Enumerate the directory; do not test a list.**
 
 ```bash
@@ -498,16 +498,16 @@ so a naive executable count over-reports by 14 for any repo using its default di
 | repo | hooks that actually run |
 |---|---|
 | `ai-maestro` | post-checkout, post-commit, post-merge, pre-push |
-| **`SMART_MEDIA_MANAGER`** | **post-checkout, post-merge, post-rewrite, pre-commit, pre-rebase** — five, not the two CORRECTION 4 showed |
-| **`claude-acct-switcher`** | **pre-commit** — NOT "nothing" |
+| **`out-of-scope-repo-G`** | **post-checkout, post-merge, post-rewrite, pre-commit, pre-rebase** — five, not the two CORRECTION 4 showed |
+| **`out-of-scope-repo-H`** | **pre-commit** — NOT "nothing" |
 | the other 6 | pre-push only |
 | *(control)* global dir | post-checkout, post-commit, post-merge, pre-push |
 
 **Two rows of CORRECTION 4 were wrong, both because the instrument could only see its own list.**
-`claude-acct-switcher` is not an empty shell that merely looks configured — it runs a real
+`out-of-scope-repo-H` is not an empty shell that merely looks configured — it runs a real
 `pre-commit` and has only `pre-push.sample`, which git never executes. The true statement is
 **"no push gate, but it does run a commit hook"** — a different finding with a different fix.
-`SMART_MEDIA_MANAGER` runs `post-rewrite`, `pre-commit` and `pre-rebase` that were invisible
+`out-of-scope-repo-G` runs `post-rewrite`, `pre-commit` and `pre-rebase` that were invisible
 to the list.
 
 **And CORRECTION 4 imputed a regression it did not establish.** It said these repos *"thereby
@@ -551,7 +551,7 @@ directory beside the `pre-push` shim for the same reason. **No repo on this mach
 content**, so a repo that stops dispatching them has lost **nothing**.
 
 (`.git/lfs` exists in most of them and even holds files — 40 under `ai-maestro`, 2 under
-`visual-comunicator` — but those are `cache`/`tmp` residue from `git lfs install`, and with
+`out-of-scope-repo-E` — but those are `cache`/`tmp` residue from `git lfs install`, and with
 `filter=lfs` absent everywhere they are not tracked content. Directory existence is not usage:
 the same proxy trap, checked and set aside.)
 
@@ -590,13 +590,13 @@ either of us had:
 
 | repo | needle | bytes | verdict |
 |---|---|---|---|
-| `visual-comunicator` | **47** | 15936 | real guard, detected |
-| `rechecker-plugin` | **19** | 3285 | real guard, detected |
+| `out-of-scope-repo-E` | **47** | 15936 | real guard, detected |
+| `out-of-scope-repo-D` | **19** | 3285 | real guard, detected |
 | `ai-maestro-assistant-role-agent` | **11** | 3847 | real guard, detected |
 | `ai-maestro-web-scenario-tester` | **3** | 384 | real guard, detected |
 | `AI-MAESTRO-WEBDESIGN-AGENT` | **3** | 384 | real guard, detected |
 | **`ai-maestro`** | **0** | 2880 | **real guard — FALSE NEGATIVE** (refuses via `exit 2` at line 60) |
-| **`PHARDENER`** | **0** | 388 | **real guard — FALSE NEGATIVE** (ruff + mypy under `set -euo pipefail`) |
+| **`out-of-scope-repo-F`** | **0** | 388 | **real guard — FALSE NEGATIVE** (ruff + mypy under `set -euo pipefail`) |
 | global LFS shim | 0 | 388 | correctly scores 0 |
 
 **5 of 7 real guards detected, 2 false negatives, 0 false positives.** So the detector WORKS —
@@ -610,7 +610,7 @@ cannot repair it** — my own attempted repair proves that: counting non-zero ex
 shim=0, guard=1 only until you notice the shim's  hidden inside
 `|| { printf …; exit 2; }`. Two needles, two failures, one from each of us.
 
-**And note which two guards the needle misses: the terse ones that DELEGATE.** `PHARDENER` runs
+**And note which two guards the needle misses: the terse ones that DELEGATE.** `out-of-scope-repo-F` runs
 ruff+mypy and `ai-maestro` exits 2 in a conditional — neither narrates a refusal, because
 `set -euo pipefail` plus a failing command IS the refusal. A detector keyed on refusal
 *vocabulary* systematically misses guards that refuse by *exit semantics*, and those are the
@@ -649,8 +649,8 @@ worth the owner's attention and it is the one row the earlier sweeps buried unde
 ones. `AI-MAESTRO-WEBDESIGN-AGENT` remains the in-scope DECORATIVE case (ships
 `.githooks/pre-push`, `hooksPath=git-hooks` — the reviewed file is not the executed one).
 
-**WITHDRAWN as out of scope:** the three "genuinely unprotected" repos (`claude-menu-system`,
-`claude-voice-loop`, `SVG-BBOX`), the 39/48 and 46/48 headline ratios, the 9-repo hook-type
+**WITHDRAWN as out of scope:** the three "genuinely unprotected" repos (`out-of-scope-repo-A`,
+`out-of-scope-repo-B`, `out-of-scope-repo-C`), the 39/48 and 46/48 headline ratios, the 9-repo hook-type
 matrix, and the "five sixths of this machine" framing. **The alarming half of this finding was
 about the owner's unrelated projects.**
 
@@ -661,3 +661,24 @@ question at all: `~/Code/*/` is **depth 1**, and several repos — including
 sweeps were simultaneously **too wide** (someone else's projects) and **too narrow** (missing
 in-scope repos). A glob is a claim about layout; this repo's lessons file already records that exact
 nesting from a previous session, and I re-derived it instead of recalling it.
+
+### REDACTION 2026-08-22T20:21:46+0200 — the out-of-scope names were staged for a PUBLIC repo
+
+`design/` is git-tracked and pushed to `Emasoft/ai-maestro`, which is **PUBLIC**. Corrections
+1-7 committed **8 of the owner's non-ecosystem project names together with their git hook
+configurations** into this card. Redacted above to `out-of-scope-repo-A..H`; the raw rows were
+moved to LOCAL memory (`out-of-scope-hook-census-2026-08-22`, machine-private, never pushed) so
+the knowledge is relocated rather than destroyed. The class findings — asymmetric detector,
+false-negative class, decorative-vs-live, proxy reads — are unchanged and need no names.
+
+**Nothing leaked, and not because I caught it.** The card sits unpushed; the standing prohibition
+on pushing is the only reason this was a near-miss. **The names remain in this branch's unpushed
+COMMIT HISTORY** (4 commits) — the working file is clean, the history is not, and rewriting it is
+neither permitted here nor mine to decide. Flagged for the owner.
+
+**Pre-existing, NOT created here and deliberately NOT swept:** 7 other cards (4 archived and
+therefore frozen) reference some of the same repos. Read in context, those are prior sessions
+discussing them as plugin/marketplace consumers — tag pins, CPV exposure, janitor-armed session
+scans — which is a different category from this census, and mass-editing 7 cards including 4 frozen
+ones on my own judgement is exactly the scripted-sweep-over-prose failure this corpus warns about.
+Owner's call.

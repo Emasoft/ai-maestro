@@ -1,9 +1,9 @@
 ---
 trdd-id: WF0UE9BC
 title: Ship AgentlensPro as an official ai-maestro dependency (npm CLI, installed alongside the stack)
-column: human_review
+column: completed
 created: 2026-07-16T14:13:15+0200
-updated: 2026-08-22T15:31:00+0200
+updated: 2026-08-22T16:02:57.842Z
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -190,6 +190,8 @@ re-queried on 2026-08-02.
 ## Approval log
 - 2026-07-16T14:13:15+0200 — MANDATE issued by USER (min-approval-requirement: user).
   Pre-approved: issuer authority >= required approver. No approval request was sent.
+- 2026-08-22T16:02:57.665Z — column → complete. human review under the owner's grant; last box was stale
+- 2026-08-22T16:02:57.842Z — COMPLETED by user. reviewed; ai-maestro#70 already closed 2026-08-08.
 
 ## ⏹ 2026-08-22T15:3x — VERIFIED: the premise HOLDS. An UNDECLARED runtime dependency, today.
 

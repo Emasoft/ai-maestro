@@ -465,6 +465,16 @@ describe('non-agents mutation routes that chose authentication-only (TRDD-R268J3
     ).toBe(NON_AGENTS_FORWARD_ONLY_COUNT)
   })
 
+  /**
+   * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+   *   s/authorize\(authResult, 'create-session', agentId\)/authorize(authResult, 'create-agent', agentId)/
+   *   → 1 red / 11 green: this test, alone.
+   *
+   * The mutation deliberately keeps `authorize(` PRESENT and changes only the ACTION. Every
+   * count-based tier above stayed green, because to them the route still matches STRONG_AUTHZ —
+   * which is the whole reason this pin exists. A receiver authorizing the WRONG action is
+   * indistinguishable from a correct one to any needle that asks "does it authorize at all".
+   */
   it('sessions/create is forward-AND-authorize — the one verified receiver, pinned by name', () => {
     /** Validates the receiver verified for R268J32X still authorizes, since the tier above only counts */
     const src = readFileSync(path.join(repoRoot, 'services', 'sessions-service.ts'), 'utf8')

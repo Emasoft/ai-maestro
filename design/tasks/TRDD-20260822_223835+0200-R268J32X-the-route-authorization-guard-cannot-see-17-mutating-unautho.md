@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-22T22:57:58+0200
+updated: 2026-08-22T23:01:16+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -199,10 +199,15 @@ so that box stays open.
 - [x] non-vacuity: the needle must find >0, so a broken regex cannot read as "all decided"
 - [ ] the 17 decided one at a time, each real one its own card. **2 of 17 done** — `sessions/create`
       and `plugin-builder/build`, both CLEAR, reasoning under `## Decisions`. 15 remain
-- [ ] the third root needs a FORWARD-ONLY tier like the `agents/` root has. `sessions/create` is
-      forward-AND-authorize and the needle read it as authentication-only, because it looks for
-      STRONG_AUTHZ in the route file. Until then the 17 conflates two different states and its
-      count overstates the debt
+- [x] the third root needs a FORWARD-ONLY tier like the `agents/` root has — **done**, commit
+      `57560112`. The needle was wrong in BOTH directions: 6 of the 17 were forwarders (the five
+      `groups/*` + `sessions/create`), so the authn-only debt is **11**; and **18** mutating
+      routes outside `agents/` forward a context while calling nothing stronger, **12 of them in
+      no ledger at all** — including `teams/[id]/batch-create-agents` and `trdd/create`, which
+      create governed objects. `sessions/create` is additionally pinned BY NAME, because a tier
+      that COUNTS cannot see a receiver that authorizes the WRONG action: the neuter changing
+      `'create-session'` to `'create-agent'` leaves `authorize(` present, so every count stayed
+      green and only the named pin went red
 - [ ] the 73-minus-17 remainder — routes with NO authentication at all — is a DIFFERENT question
       this guard deliberately does not ask. Worth its own card if anyone wants it asked.
       **One instance surfaced and was closed** (`GET plugin-builder/builds/[id]`, commit `70f9d67c`)

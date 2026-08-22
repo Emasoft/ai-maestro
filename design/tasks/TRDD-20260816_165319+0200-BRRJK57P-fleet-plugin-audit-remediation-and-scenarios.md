@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T16:17:21+0200
+updated: 2026-08-22T16:21:19+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,44 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T16:21 — BOX 3 TICKED. The residue was read, and the `refut*` needle was undercounting by vocabulary
+
+**Box 3 is the first box on this card to close.** Read all 21 files the narrow needle called silent,
+and the classification is now by CONTENT, not by filename.
+
+**The needle was undercounting, and the file that proves it is the one most likely to be a real
+finding:** `AI-MAESTRO-AUTONOMOUS-AGENT/…-pass2-axis2-refutation.md` — a 142-line pass titled
+***"Falsification of pass-1 candidates"***, with an explicit `ATTACK RUN` per candidate and every
+grep re-run first-hand. **It records refutation work and contains the string `refut` zero times.**
+A file named `…-refutation.md` reading as *"records no refutation"* is the tell that the needle,
+not the corpus, is at fault. (This card's earlier note that *"2 `pass2-*-refutation.md` files
+genuinely refuted nothing"* is explained by the same cause.)
+
+Widening to `refut|falsif|attack run|survive*|disproof`: **83 of 102** (from 81), **19 silent**
+(from 21).
+
+**All 19 opened and accounted for — none is an axis audit that dropped a candidate:**
+
+| class | n | evidence |
+|---|---|---|
+| discovery / candidate passes | **15** | 9 `pass1-*`, 4 `*-candidates.md`, 2 in maintainer's `candidates/` subdir; each self-describes (*"Discovery only"*, *"Read-only discovery"*, *"Discovery only, no files mutated"*) |
+| non-audit artifacts | 2 | COS `MJ6X0LN0-fix-report.md`, `trddgrep-frontmatter-normalization.md` |
+| different program | 1 | `code-auditor` June file (see the 16:17 entry) |
+| PSS axis2-3 | 1 | *"Discovery only, no files mutated"* in its own second line |
+
+By protocol a discovery pass PRODUCES candidates and does not refute them, so a zero there is
+correct rather than missing. **Nothing was silently dropped.**
+
+**Third instance today of one mechanism, now in three different disguises** — a phrase needle that
+missed cards citing by ID (15:55), an assumed path that missed nested `design/` trees (16:10), and
+now a needle that missed refutations written in a different VOCABULARY. Same lesson each time: the
+instrument's blind spot is invisible in its own output, and only the residue tells you.
+
+**What box 3 does NOT resolve, and it is a vocabulary problem rather than a counting one:**
+`CONFIRMED` in this corpus means BOTH *"confirmed a real defect"* and *"confirmed the code is
+correct"*. **Never dispatch remediation off a `Confirmed: N`** — unchanged, and unaffected by this
+tick.
 
 ### ⏹ 2026-08-22T16:17 — BOX 3 SURVIVES; the AUDIT-REPORT POPULATION does not, and the fleet ROSTER is wrong in both directions
 
@@ -247,10 +285,16 @@ USER mandate on a blocker that blocks only its closure.
 | `GIONLYAF` | dispose of 2 superseded executables in `~/.local/bin` + one cross-repo install-gap issue |
 | `LXF16IXG` | a stale `require_code_owner_review` ruleset field on `Emasoft/AgentlensPro` |
 
-…against this card's four open boxes: (1) 3 NAMED peer sessions still owing Phase-1 reports,
+…against this card's open boxes: (1) 3 NAMED peer sessions still owing Phase-1 reports,
 (2) hub-side re-verification of one citation per confirmed finding — **the 154-citation corpus is
 already built and the remediation-card-first method already corrected**, (3) recording refuted
 candidates, (4) Phase-2 TRDDs in the owning repos.
+
+> **⚠ COUNT CORRECTED 2026-08-22T16:21 — I wrote "four open boxes" and there are TEN** (3 already
+> ticked at the time, 6 open, +1 ticked since). The four above are the first four; I read the
+> Acceptance section through a `head -60` and took a truncated view for the whole — the
+> truncated-tool-result trap. **The argument is unaffected and strengthened**: two scripts in
+> `~/.local/bin` and one repo's ruleset field gate none of the ten either.
 
 **Two scripts in `~/.local/bin` and a GitHub ruleset field on one repo cannot prevent any of those
 four.** Box 2 in particular is workable right now and needs nothing from either card.
@@ -1024,7 +1068,14 @@ them to.
       withdrawing my two null-payload citations."* The hub — this session, earlier — told them
       `--role` was not a flag on that subcommand; it is at `:501`, `required=True`. Whatever this
       box is worth, it is not worth assuming the hub's verification is the reliable half.
-- [ ] Refuted candidates are recorded with their refutation, not silently dropped.
+- [x] Refuted candidates are recorded with their refutation, not silently dropped.
+      **TICKED 2026-08-22T16:21 — the residue was READ, not inferred.** Vocabulary-aware needle
+      (`refut|falsif|attack run|survive*|disproof`): **83 of 102** record refutation work; **all 19
+      that do not were opened and classified**: 15 discovery/candidates passes (9 `pass1-*`, 4
+      `*-candidates.md`, 2 in maintainer's `candidates/` subdir self-describing as *"Discovery
+      only"* / *"Read-only discovery"*, plus PSS's *"Discovery only, no files mutated"*), 2 COS
+      non-audit artifacts (a fix-report and a `trddgrep` normalization note), and 1 June file from
+      a different program (`code-auditor`). **No axis audit is silent.** Nothing was dropped.
       **RE-MEASURED 2026-08-22T16:17 on a CORRECTED population — the claim survives.** The figure
       below rests on a glob of an assumed path; searching for the directory by name at depth gives
       **17 dirs / 16 repos / 102 files**, on which **81 record a refutation and 21 do not** (vs

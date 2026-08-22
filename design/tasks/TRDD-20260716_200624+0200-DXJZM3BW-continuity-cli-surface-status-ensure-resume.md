@@ -1,7 +1,7 @@
 ---
 trdd-id: DXJZM3BW
 title: Continuity CLI surface — aimaestro-continuity.sh status + ensure-resume behind the frozen layer
-column: human_review
+column: todo
 created: 2026-07-16T20:06:24+0200
 updated: 2026-08-05T01:08:00+0200
 current-owner: ai-maestro
@@ -126,7 +126,20 @@ Transcribed from this card's own `## Verification` list plus its STATE's NEXT. R
 - [x] registered in `docs/SCRIPT-LAYER.md` so CORE can teach its skills against the surface
 - [x] `next_action` gains the cascade states once [[1GGQ4HWY]] lands — landed and wired
 - [ ] the LIVE end-to-end route test — needs an authenticated caller, deferred by this card to a
-      scenario or the USER. Unit-pinned only; that is the half that ships
+      scenario or the USER. Unit-pinned only; that is the half that ships.
+      **↳ RUN 2026-08-22 with an authenticated caller — and it FAILED. The box was right to exist.**
+      Dev-mode login gave this session a real authenticated caller, so the deferral no longer held.
+      Driving the BARE command on `PATH`:
+      `aimaestro-continuity.sh status <id>` → **`line 71: _api: command not found`, exit 127**, and
+      `ensure-resume` → the same at `:79`. `_api` is called at `:71`/`:79`/`:95` and **never defined**
+      in this script; `common.sh` (which it does source, successfully, via the `share` fallback)
+      does not provide it, while each sibling CLI defines a private copy (`aimaestro-trdd.sh:93`).
+      Repo and installed copies are byte-IDENTICAL, so this is the SOURCE, not drift. Control:
+      `aimaestro-trdd.sh search` reaches the server, exit 0, same shell and auth.
+      **So all three verbs of this CLI have never worked**, while `docs/SCRIPT-LAYER.md` registers
+      the surface "so CORE can teach its skills against" it. `shellcheck` cannot see a call to a
+      function it assumes exists at runtime, which is why "shellcheck clean" above is true and did
+      not help. Filed as **`TRDD-39OPYXQ9`**; this card returns to `todo` rather than closing.
 
 ## Approval log
 - 2026-08-05T01:08:00+0200 — `testing → human_review`. Column only; no work, no boxes, no scope changed.
@@ -139,3 +152,11 @@ Transcribed from this card's own `## Verification` list plus its STATE's NEXT. R
 
 - 2026-07-16T20:06:24+0200 — Tier-0 self-mandate (derived NPT of [[KCRMSNL7]], in-scope
   frozen-layer dev). Authored directly as `planned`.
+
+- 2026-08-22T18:07 — **HUMAN REVIEW PERFORMED under the owner's grant. VERDICT: NOT complete —
+  returned to `todo`.** The one open box was deferred as needing an authenticated caller; this
+  session now has one, so I ran it instead of parking it again, and the CLI is entirely
+  non-functional (`_api: command not found`, exit 127, all three verbs). The route half is genuinely
+  unit-pinned and fine; the SHELL surface this card ships has never worked. Recorded on the box and
+  filed as `TRDD-39OPYXQ9`. Closing this card would have shipped a documented, taught CLI that
+  cannot run — which is the exact failure the box was written to prevent.

@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-26T15:51:58+0200
-updated: 2026-08-02T16:02:59+0200
+updated: 2026-08-22T02:15:41+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -416,11 +416,52 @@ wikimem already paid for these lessons. Re-deriving them here would be waste.
 
 ## Acceptance
 
+**Triaged 2026-08-22 — NOT closable, but far closer than the board shows.** All 18 NPT/EHT
+children are terminal (17 `complete` + 1 `completed`, 0 non-terminal, checked against every
+child's own `column:`), and boxes 3-5 verify clean. **Exactly one of box 2's five named
+solutions has no decision.** A first triage pass called this DONE-ALREADY; it does not survive,
+for the reason recorded under box 2.
+
 - [ ] The janitor's wikimem SPECS + issue are read in full before any design work
+      *(process box — unverifiable from the tree after the fact. The delivered work is
+      recognisably shaped by those specs, but that is inference, not evidence, so the box stays
+      honest rather than ticked on a feeling.)*
 - [ ] A design decision is recorded per adopted solution (index, recall-by-symptom, DAG lint, scope-leak lint, live-recompute of `min-approval-requirement`) — each either ADOPTED with rationale or REJECTED with rationale
-- [ ] The reference-DAG lint exists and FAILS on a seeded violation (proven by mutation, not by reading)
-- [ ] Whatever replaces/extends `greptrdd.mjs` can answer "is there already a TRDD about X?"
-- [ ] `bash scripts/with-node.sh npx tsc --noEmit` clean; suite green
+      **4 of 5 decided, by implementation:**
+      **index** → ADOPTED (`lib/pillar/index-{db,build,open,verify}.ts`) ·
+      **recall-by-symptom** → ADOPTED (`trddgrep query "wikimem"` returns 46 ranked matches,
+      run through the PATH binary the caller actually uses) ·
+      **DAG lint** → ADOPTED (`scripts/pillars-lint.mjs` + `lib/pillar/dag.ts`) ·
+      **live-recompute of `min-approval-requirement`** → ADOPTED — `lib/trdd-watchdog.ts:118`
+      `objectiveFloor()`, compared against the declared floor at `:281-283`, driven by
+      `trdd-watchdog-scheduler.ts`. *(Recorded because I got this wrong first: an earlier grep
+      scoped to `lib/pillar/` + `pillars-lint.mjs` + `trdd-doctor.ts` returned nothing and I was
+      about to write "not adopted" into this card. The implementation was one directory outside
+      the scope I chose — the wrong-scope false zero, which reads exactly like a finding.)*
+      **⛔ `scope-leak lint` → NEITHER ADOPTED NOR REJECTED.** `grep -rln 'scope-leak|PROJECT
+      TRDD MUST NOT cite' lib scripts tests` → **0**, and the card contains zero occurrences of
+      `ADOPTED`/`REJECTED`. Silence satisfies neither half of this box.
+      **And the obvious subsumption argument fails on measurement.** `lib/pillar/dag.ts:35`
+      says reference-EXISTENCE is *"`danglingRefs` in `index-build.ts`"* — which would make a
+      PROJECT→LOCAL citation a dangling ref and the scope-leak case already covered. But
+      `danglingRefs` (`lib/pillar/index-build.ts:269`) has **4 test references and ZERO
+      production callers** — positive-controlled against its own file-mate `syncIndex`, which
+      does have one (`index-open.ts:28`), so the zero is real and not a bad needle. The function
+      that would catch it never runs. **This box therefore needs a real decision, and "already
+      covered" is not available as its rationale.**
+- [x] The reference-DAG lint exists and FAILS on a seeded violation (proven by mutation, not by reading)
+      → `tests/unit/pillar-dag.test.ts:129` — `describe('box 3 — a seeded frontmatter violation
+      still FAILS')`, plus `:149` flagging the bare-id form *"so a violation must not hide behind
+      the prefix"*. Live corpus: `yarn pillars:lint` → `✓ 508 documents (500 trdd · 8 spec) — the
+      reference DAG holds`, and `dag.ts:30-33` states outright that zero findings is the DESIGNED
+      outcome here *(SPECS→TRDD is structurally unexpressible)* — **which is exactly why the
+      seeded-violation test, not the clean run, is what this box rests on.**
+- [x] Whatever replaces/extends `greptrdd.mjs` can answer "is there already a TRDD about X?"
+      → `scripts/trddgrep.mjs`, invoked as `trddgrep query <term>` (`/Users/…/.local/bin/trddgrep`
+      is on PATH). Ranked, index-backed, exit 0.
+- [x] `bash scripts/with-node.sh npx tsc --noEmit` clean; suite green
+      → type-check **exit 0, zero output lines**, 2026-08-22. *(The `with-node.sh` wrapper is
+      load-bearing: this shell runs Node 26 against an `engines: <26` cap.)*
 
 ## Approval log
 

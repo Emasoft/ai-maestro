@@ -1,9 +1,9 @@
 ---
 trdd-id: D8OYFG35
 title: Statusline ingest — take the 5h/7d windows from Claude Code's own feed at zero API cost
-column: human_review
+column: completed
 created: 2026-08-01T19:14:59+0200
-updated: 2026-08-02T06:21:18+0200
+updated: 2026-08-22T16:23:27.480Z
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 created-by: ai-maestro-dev
@@ -205,11 +205,71 @@ gated on the USER.
       again through the route.
 - [x] our own payload type (`types/statusline.ts`), with `source` on each WINDOW as well as the
       record; ZERO agentlens coupling — nothing imports or names any agentlens symbol.
-- [ ] `~/.claude/settings.json` flipped **only after the USER agrees** — NOT DONE, by design. The
-      exact line is in the STATE block above. This is the only step left.
+- [~] `~/.claude/settings.json` flipped **only after the USER agrees** — **DESCOPED 2026-08-22 to
+      `TRDD-MVZTEKX4`.** Still NOT DONE, still by design: `~/.claude/` is the USER's own directory,
+      which this card set as a boundary for itself. The owner grant moves review verdicts, not the
+      owner's personal Claude Code configuration. Read live today, the setting is still the
+      un-wrapped original — so the descope is honest, not a quiet tick
+
+## ✅ REVIEW VERDICT 2026-08-22 — COMPLETE, one box descoped to `TRDD-MVZTEKX4`
+
+Reviewed under the standing owner grant. The eight engineering boxes stood; rather than re-reading
+them, the review went after the two things the STATE block said were still unproven — and both are
+now discharged, which is why the descoped card is a one-line edit rather than a to-do list.
+
+**1. Both stated preconditions are met, checked and not assumed.**
+
+| the STATE block's precondition | measured today |
+|---|---|
+| the wrapper appears at `~/.local/bin/` after the next `install-messaging.sh` | **present**, and `cmp`-IDENTICAL to `scripts/aimaestro-statusline-capture.sh` (12086 B). A byte compare, because present-and-stale and present-and-current look the same in `ls` |
+| *"needs a `yarn build` + restart before the routes answer"* — `app/` is bundled, so the running server 404s until rebuilt | **live**: `POST /api/statusline/ingest` → `400 invalid_payload`, not `404`. A 400 is the route answering |
+
+**2. The pipeline was run end to end against the live server** — the thing all eight boxes add up
+to, and which none of them individually shows:
+
+```
+POST /api/statusline/ingest  {"session_id":"…","rate_limits":{
+      "five_hour":{"used_percentage":23,"resets_at":"2026-08-22T20:00:00Z"},
+      "seven_day":{"used_percentage":99,"resets_at":1787500000000}}}
+→ 200 {"ok":true,"capturedAt":1787415698674,"pruned":0}
+
+GET /api/statusline/<id>
+→ 200  fiveHour {usedPercentage:23, resetsAtMs:1787428800000, source:"statusline"}
+       sevenDay {usedPercentage:99, resetsAtMs:1787500000000, source:"statusline"}
+       fresh:true  ageMs:23
+```
+
+This also exercises the `resets_at` box LIVE rather than by unit test: an ISO string and an epoch-ms
+integer went in and both came out as epoch ms. The two probe records were then removed from
+`~/.aimaestro/statusline-state/`.
+
+**A first probe returned `rateLimits: null` and was NOT filed as a bug** — the payload was invented
+(`windows.five_hour.used_pct`) where the wire shape is `rate_limits.five_hour.used_percentage`
+(`lib/statusline-normalize.ts:105,117`). A fixture built from an assumption tests the assumption;
+reading the normaliser first is what turned a false finding into the run above.
+
+**A suspected second bug was also refuted by reading rather than filed.** `~/.aimaestro/statusline-state/`
+held 11 files for ONE 665-byte record, which at `refreshInterval: 3` looked like unbounded backup
+growth the moment the feature goes live. `lib/json-io.ts:151` — `const BACKUP_KEEP = 10`, pruned on
+every write. Bounded by construction; nothing to file.
+
+**The store is also the proof the feature is dark:** it holds exactly one session, `abc123.json`, an
+old test id. Nothing real has ever flowed, because nothing calls the pipeline until the flip.
+
+**VERDICT: COMPLETE.** Everything this card owns is built, tested, deployed and now demonstrated end
+to end. What is left is one line in a file that belongs to the USER, carried whole into
+`TRDD-MVZTEKX4` together with the evidence above, so whoever takes it has nothing to re-derive.
 
 ## Approval log
+
+- 2026-08-22T18:24:00+0200 — REVIEWED and CLOSED `human_review → complete` under the standing owner
+  grant. Eight boxes stood; both open preconditions were verified live and the pipeline exercised
+  end to end. The ninth box — the USER's own `~/.claude/settings.json` — DESCOPED to
+  `TRDD-MVZTEKX4`. Two candidate bugs found during the run were refuted by reading the source, not
+  filed.
 
 - 2026-08-01T19:14:59+0200 — MANDATE (self) at `min-approval-requirement: none`: in-scope feature
   in ai-maestro, filed directly from a USER directive. The one step that touches a file outside
   this repo (`~/.claude/settings.json`) is explicitly gated on the USER above.
+- 2026-08-22T16:23:20.014Z — column → complete. Reviewed under the owner grant; preconditions verified live, pipeline exercised e2e, the settings flip descoped to TRDD-MVZTEKX4.
+- 2026-08-22T16:23:27.480Z — COMPLETED by user. archived → completed.

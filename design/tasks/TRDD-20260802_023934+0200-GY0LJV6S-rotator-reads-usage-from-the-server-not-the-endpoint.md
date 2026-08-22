@@ -22,7 +22,7 @@ relevant-rules: [R16]
 npt: [D8OYFG35, SIV45HOG]
 eht: []
 implementation-commits: [39bc5cad, 9fed4781, 18deb450]
-blocked-by: [D8OYFG35]
+blocked-by: [MVZTEKX4]
 pre-block-column: dev
 release-via: none
 labels: [oauth, rotator, statusline, continuity, incident-followup]
@@ -33,6 +33,16 @@ labels: [oauth, rotator, statusline, continuity, incident-followup]
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-08-02T15:1x+0200
 
 **ALL SIX ACCEPTANCE BOXES ARE CLOSED. Code is complete and unit-verified; it is NOT verified live.**
+
+> **RE-POINTED 2026-08-22 — the blocker did not clear, it MOVED.** `D8OYFG35` reached `completed`
+> today, and everything below still holds: its engineering is done, but the one thing this card
+> waits on — the USER wiring the statusline hook into `~/.claude/settings.json` — was DESCOPED out
+> of it into **`TRDD-MVZTEKX4`**, which is open. So `blocked-by:` now reads `[MVZTEKX4]` and the
+> column stays `blocked`. Clearing it to `[]` and restoring `dev` was the obvious move and would
+> have been wrong: it would make a card that genuinely cannot run assert that someone is working
+> it, which is the one thing an untrue column costs. Read `MVZTEKX4` for the exact line to paste;
+> every OTHER precondition named below (the wrapper installed, the routes rebuilt) was verified
+> live on 2026-08-22 and is no longer outstanding.
 
 **`column: blocked`, `blocked-by: [D8OYFG35]`, `pre-block-column: dev` — and the block is REAL, not
 bookkeeping.** This card was briefly moved to `testing` on 2026-08-02T15:1x and `trddgrep validate`

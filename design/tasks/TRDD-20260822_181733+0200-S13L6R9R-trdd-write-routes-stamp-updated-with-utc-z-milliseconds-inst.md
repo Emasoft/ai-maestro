@@ -136,3 +136,46 @@ boxes, and every box in an empty set is trivially checked). Adding the gate the 
 - [ ] the rule REFUSES to rewrite a terminal-column card's body (IND §12 freeze) — or its exemption is stated and justified
 - [ ] the 23 drifted cards are backfilled by `--fix`, never by hand
 - [ ] `updated:` is NOT bumped on the backfilled cards — a format repair changes no fact, and bumping it would silently reorder the whole board
+
+## Design finding on pickup — the repair must CONVERT the instant, not stamp `now`
+
+Read `lib/trdd-doctor.ts:1399-1421` before implementing. The doctor already carries the guard this
+card's acceptance box was reaching for, and it is sharper than "do not bump":
+
+```ts
+if (semantic) {                                   // MECHANICAL repairs leave updated: byte-identical
+  text = text.replace(/^updated:.*$/m, `updated: ${stamp}`)
+}
+```
+
+Its comment records that this line USED to bump on any repair, that a corpus-wide `yarn trdd:fix`
+therefore *"reordered the view every human and agent reads into an artefact of when someone last ran
+a formatter"*, and that keeping `updated:` byte-identical across a mechanical run is *"the only
+cheap proof, afterwards, that the run WAS mechanical."*
+
+**So the new rule cannot use that path at all, and the reason is the whole design.** An
+`UPDATED-FORMAT` repair must REWRITE `updated:` — that is its entire job — while being
+**MECHANICAL**, because it changes no fact. The existing `semantic` flag cannot express that: `false`
+means *do not touch `updated:`*, and this repair touches nothing else.
+
+**The rewrite must therefore happen inside the repair's own `changes`, and it must CONVERT the
+existing instant rather than stamp `now`:**
+
+| | |
+|---|---|
+| ❌ `updated: <now, offset form>` | destroys the original instant and reorders the board — the exact damage the comment above records, arriving by a new route |
+| ✅ `2026-08-22T16:16:25.886Z` → `2026-08-22T18:16:25+0200` | same instant, correct notation, board order preserved |
+
+**And it is not perfectly lossless — say so rather than discover it.** The live stamps carry
+milliseconds (`…T15:31:24.411Z`, `…T17:02:57.700Z`, `…T16:39:41.567Z`); the mandated format has
+no sub-second slot, so the conversion TRUNCATES to the second. That is a real, sub-second, one-way
+loss on 23 cards. It is acceptable — the format the corpus sorts on has never carried milliseconds,
+and 478 cards already lack them — but it must be a stated decision, not an accident.
+
+**Corrected acceptance box.** The one above reading *"`updated:` is NOT bumped on the backfilled
+cards"* was right in intent and wrong in mechanism — it implied leaving the field alone, which
+cannot fix a format defect in that field. Superseded by:
+
+- [ ] the backfill CONVERTS each existing instant to the local-offset form (same wall-clock moment, truncated to the second) and does **not** substitute `now` — proved by comparing each card's before/after epoch, which must differ by less than one second
+- [ ] the repair is classified `mechanical`, so no OTHER field's bump logic fires on it
+- [ ] board order over the 23 is unchanged after the backfill — the sort is the thing being protected, so it is the thing to assert

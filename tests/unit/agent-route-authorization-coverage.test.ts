@@ -319,3 +319,105 @@ describe('routes whose only authorization evidence is a pipeline forward (TRDD-C
     ).toBe(FORWARD_ONLY_UNVERIFIED_COUNT)
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// THIRD ROOT — app/api/ OUTSIDE agents/ (TRDD-R268J32X)
+// ══════════════════════════════════════════════════════════════════════════════════════════
+//
+// This file's history is the same finding at three widths. It walked `agents/[id]/` only, so the
+// whole COLLECTION subtree was unguarded (TRDD-CAVCTULL) — and the instance it missed was
+// `POST /api/agents`, which MINTS AGENTS. The collection root was added. Then TRDD-DQVPODKW found
+// three MORE minting routes in that new root, all reachable by any authenticated agent. And
+// `app/api/` outside `agents/` has still never been under anything.
+//
+// A THIRD PARALLEL BLOCK, not a widening of either existing one. The `[id]` ledger is provably
+// EMPTY and the collection ledger is SHRINKING (19 → 16); folding a new debt pile into either
+// destroys the signal both have earned.
+//
+// ── THE POPULATION IS THE DESIGN DECISION, and it was nearly got wrong ────────────────────
+// Measured 2026-08-22, outside `agents/`: **122** mutating routes, of which **73** carry no
+// `authorize(`/`requireSudoToken(`/`canIssue(`/`enforceSystemOwner(`. Seeding 73 would be
+// indefensible — that set includes `auth/login`, `auth/logout`, `v1/auth/token` and
+// `v1/auth/challenge`, i.e. THE AUTHENTICATION SURFACE ITSELF, which cannot require prior
+// authorization by definition. A ledger that large is the "wall of warnings" this file's own
+// collection block warns is how a linter gets routed around.
+//
+// So the needle is narrower and its claim is correspondingly sharper: a route that calls
+// `enforceAuth` has CHOSEN authentication-only, and `enforceAuth`'s own docstring says it is for
+// mutations where "any authenticated caller can call this". Every such use on a mutating route is
+// an unchecked ASSERTION that this policy is intended. That population is **17**, and unlike the
+// 73 it contains nothing that is correct by construction.
+//
+// DQVPODKW is why the assertion is worth checking rather than trusting: of the first four
+// examined in one subtree, THREE were wrong, and all three minted agents.
+const nonAgentsRoot = path.join(repoRoot, 'app', 'api')
+
+function nonAgentsRouteFiles(): string[] {
+  const agentsPrefix = path.join(repoRoot, 'app', 'api', 'agents') + path.sep
+  return findRouteFiles(nonAgentsRoot).filter((f) => !f.startsWith(agentsPrefix))
+}
+
+const relNonAgents = (f: string) => path.relative(nonAgentsRoot, f)
+
+/** Chose authentication-only. Each entry is an ASSERTION nobody has checked, not a known hole.
+ *  May SHRINK as each is decided; must never grow without a deliberate edit here. */
+const NON_AGENTS_AUTHN_ONLY: string[] = [
+  'conversations/parse/route.ts',
+  'export/jobs/[jobId]/route.ts',
+  'groups/[id]/notify/route.ts',
+  'groups/[id]/route.ts',
+  'groups/[id]/subscribe/route.ts',
+  'groups/[id]/unsubscribe/route.ts',
+  'groups/route.ts',
+  'plugin-builder/build/route.ts',
+  'plugin-builder/scan-repo/route.ts',
+  'sessions/[id]/rename/route.ts',
+  'sessions/activity/update/route.ts',
+  'sessions/create/route.ts',
+  'sessions/restore/route.ts',
+  'settings/global-elements/convert-skill/route.ts',
+  'settings/mcp-discover/route.ts',
+  'v1/mesh/chat/route.ts',
+  'vpn-chat/block/route.ts',
+]
+
+const STRONG_AUTHZ = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\benforceSystemOwner\(|\benforceActiveMaestro\(/
+const CALLS_ENFORCE_AUTH = /^\s*(const [A-Za-z]+ = )?enforceAuth\(/m
+
+describe('non-agents mutation routes that chose authentication-only (TRDD-R268J32X)', () => {
+  it('the walker reaches the non-agents tree — a mis-joined root must not report clean', () => {
+    /** Validates the scan set is real, since an empty walk is indistinguishable from a clean tree */
+    const files = nonAgentsRouteFiles()
+    expect(files.length).toBeGreaterThan(100)
+    expect(files.every((f) => f.endsWith('route.ts'))).toBe(true)
+    // It must NOT bleed into app/api/agents/, which the other two blocks own. Assert the
+    // PRECISE property (prefix), not a substring: `v1/agents/route.ts` and
+    // `sessions-browser/agents/[id]/…` legitimately contain "/agents/" deeper in their path and
+    // DO belong to this root. A substring check calls those a bleed and reds a correct walker —
+    // it did, on the first run.
+    const agentsPrefix = path.join(repoRoot, 'app', 'api', 'agents') + path.sep
+    expect(files.some((f) => f.startsWith(agentsPrefix))).toBe(false)
+  })
+
+  it('the authentication-only ledger neither grows nor silently keeps a fixed route', () => {
+    /** Validates that a new authn-only mutating route outside agents/ cannot land unnoticed */
+    const found = nonAgentsRouteFiles()
+      .filter((f) => {
+        const src = readFileSync(f, 'utf8')
+        return MUTATING.test(src) && CALLS_ENFORCE_AUTH.test(src) && !STRONG_AUTHZ.test(src)
+      })
+      .map(relNonAgents)
+      .sort()
+
+    // Non-vacuity: a broken needle would report zero and read as "all decided".
+    expect(found.length).toBeGreaterThan(0)
+    expect(
+      found,
+      'A mutating route outside app/api/agents/ calls enforceAuth and nothing stronger. ' +
+        "enforceAuth's own docstring is for mutations where \"any authenticated caller can call " +
+        'this\" — so this is an ASSERTION that the policy is intended, and nothing checks it. ' +
+        'Add an authorization step, or add the route here with a reason. TRDD-DQVPODKW: of the ' +
+        'first four such assertions examined, three were wrong and all three minted agents.',
+    ).toEqual([...NON_AGENTS_AUTHN_ONLY].sort())
+  })
+})

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T02:38:09+0200
+updated: 2026-08-22T02:41:30+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -92,6 +92,39 @@ this program keeps finding in others' reports.
 already-fixed rate — the one repo sampled had its whole axis-1 set closed by `K3HJQG7U` two days
 after the audit — so the cheap first pass is *"which repos have a `complete` remediation card
 citing their audit?"*, not a citation-by-citation sweep.
+
+### ⏹ That cheap first pass RAN — and the integrator was not special
+
+Swept all 15 peer repos for cards citing their own audit (`plugin-self-audit|self-audit|axis-N`)
+and read each card's `column:`. **52 cards cite the audit. 45 are TERMINAL (87%).**
+
+| column | count | repos |
+|---|---|---|
+| `complete` | 17 | COS 9 · integrator 4 · ai-maestro-plugin 4 |
+| `completed` | 21 | architect 5 · webdesign 5 · assistant-role 4 · maintainer 3 · programmer 2 · COS 1 · autonomous 1 |
+| `published` | 7 | programmer 5 · visual-communicator 1 · janitor 1 |
+| **`backburner`** | **5** | **perfect-skill-suggester** |
+| **no `column:` at all** | **2** | **claude-plugins-validation** |
+
+**So the remediation has overwhelmingly already happened**, and the `K3HJQG7U` finding
+generalizes rather than being one lucky repo. This is the honest population-level answer to what
+box 2 is really asking, and it cost one sweep instead of 154 lookups.
+
+**The 7 exceptions are the actual work, and one of them is a different defect than it looks.**
+The two CPV cards are not "missing a column" — they are **unmigrated v1 TRDDs**
+(`TRDD-…-a4260cc6-…`, `TRDD-…-ef3fc7d8-…`, both dated May 2026): full-UUID `trdd-id:`, and
+pipeline state parked in **`status:`** (`completed` / `in-progress`) instead of `column:`. That
+is precisely `STATUS-HOLDS-COLUMN-VALUE` — and note the field itself is legitimate (the pillar
+specs carry `status: normative`); the defect is a *column value* living in it. One reads
+`in-progress`, so it is genuinely open work invisible to every board query.
+
+**Both are in ANOTHER repo — report, never edit.** Same for the 5 PSS `backburner` cards, which
+are a deliberate park rather than a stall and need only confirming as such.
+
+**Two repos have audit reports and NO `design/` tree at all** — `EMASOFT-ASSISTANT-MANAGER` and
+`llm-externalizer` — so their findings have nowhere to be tracked. That is a third exception
+class the column sweep cannot see, and it is why the sweep was run over the repo list rather than
+over the cards.
 
 ### ⏹ 2026-08-22T02:2x — UNBLOCKED. `blocked` → `dev`. The P0 was sitting still behind two gates that never applied to it.
 

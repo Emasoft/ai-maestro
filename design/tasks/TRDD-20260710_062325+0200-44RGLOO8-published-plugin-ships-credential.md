@@ -6,7 +6,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-08-22T19:14:02+0200
+updated: 2026-08-22T20:10:51+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: ai-maestro-hub
@@ -519,3 +519,26 @@ earlier, where "dispose?" was answerable KEEP without touching anything.
 The credential was not read, printed, searched for, or compared at any point. Every probe above
 is a structural string or a date. **An agent must never rotate a credential**, and proving a
 secret is safe by handling the secret is the shape this whole card exists to stop.
+
+### Blocker re-measured 2026-08-22T20:10:48+0200 — nothing moved; card stays in `human_review`
+
+Resumed by the janitor heartbeat. Per this card's own lesson (*write the COMMAND that tests a
+blocker, never the state*), both blockers were re-run rather than re-read:
+
+| blocker | command | result |
+|---|---|---|
+| PR #4 | `gh pr view 4 --repo Emasoft/ai-maestro-web-scenario-tester --json state,mergeable` | **OPEN**, `MERGEABLE`, no review decision |
+| issue #3 | `gh issue view 3 --json state` | **OPEN** |
+| repo exposure | `gh repo view --json visibility` | **PUBLIC** |
+| the literal itself | `gh api …/contents/references/SCENARIOS_TESTS_RULES.md`, counted **by SHAPE** | `governance_password:` lines **1**, of which env-ref **0**; `AIM_GOVERNANCE_PASSWORD` **0**; `governancePasswordRef` **0** |
+
+Identical to the 2026-08-16 measurement — the value was never read or printed, only the field's
+presence and whether its RHS is an env reference.
+
+**Both open boxes remain owner-gated and neither is self-servable:**
+- the upstream literal is fixed *in PR #4*, and merging another repo's PR is not mine to do;
+- `publish.py --patch` is a **release transition — NON-EXEMPT** per
+  `aimaestro-manager-approval-defaults.md` §Y. The USER authorized fixing the mandate, not
+  shipping it.
+
+The fix is written, reviewed-ready and mergeable; what is missing is a decision, not work. **HOLD.**

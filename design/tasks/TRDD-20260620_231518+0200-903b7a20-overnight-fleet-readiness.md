@@ -3,7 +3,7 @@ trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: todo
 created: 2026-06-20T23:15:18+0200
-updated: 2026-08-22T01:13:55+0200
+updated: 2026-08-22T14:48:03+0200
 min-approval-requirement: none
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -709,3 +709,44 @@ Mixing the two silently is how a month-old ✅ becomes today's fact.
   stays `none` (auditing governance is read-only; §D3 gates EDITS — naming governance
   surfaces in an audit is not touching them). Explicit `min-approval-requirement: none`
   set. CONSTRAINT: any FIX this audit spawns is its own card at the proper floor.
+
+## G10 part 1 — MEASURED AND PASSING, and the sequencing note above is now FALSE — 2026-08-22T14:5x
+
+**Command (per this gate's own rule — record the command, never the count):**
+`bash scripts/with-node.sh node scripts/check-script-drift.mjs`
+
+**Result: exit 0 — `54 compared — 54 identical, 0 drifted, 0 missing`.** The pass criterion this
+gate states ("zero differing files", re-derived per file) is MET at the moment of writing.
+
+**The population is verified, not assumed.** Repo scripts matching the tracked predicate:
+`find scripts -maxdepth 1 -type f -name '*.sh' | grep -E '^(amp|aid|aimaestro)-' | wc -l` → **54**.
+Compared = 54, so the checker looked at all of them and nothing was silently outside its scan set.
+That check is not ceremony here: **until this morning the checker was BLIND to all six `aid-*`
+scripts** — an inline regex omitted the family, so it compared 47 and reported "identical" over a
+population missing a whole family. Fixed in `6ae81cde` (predicate exported as `isTrackedScriptName`
+and pinned; neuter 1 red / 9 green). A clean verdict from the pre-fix checker would have been
+worthless, which is exactly why the population is stated beside the result.
+
+**⚠ THE SEQUENCING NOTE ABOVE — *"G10 part 1 cannot pass while SBJRNYYY is unapproved"* — NO
+LONGER HOLDS, and [[SBJRNYYY]]'s standing defect list is STALE.** It names an undeployed
+`amp-helper.sh` safety fix and a never-deployed `aimaestro-groups.sh`. Both are in the repo, both
+are on PATH, and both sit inside the 54 that compared **identical**. The deploy that card exists
+to order has, for these scripts, already happened — partly this morning, when the two drifted
+files were brought into sync WITHOUT the disproportionate installer (`install-messaging.sh -y`
+reinstalls the core plugin, mutates marketplaces and touches npm; the drift was a comment-only
+diff in `aimaestro-trdd.sh` plus a byte-identical `common.sh`).
+
+**What that does NOT settle:** SBJRNYYY's third item, the `amp-kanban-*.sh` `|| true` bug, is a
+CODE defect and no byte-compare can see it — two copies agree perfectly while both are wrong.
+That item stands. **Someone must re-read SBJRNYYY against today's measurement before the owner
+acts on it**, or the owner will be asked to authorize a deploy for two files that are already
+deployed.
+
+**INSTRUMENT NOTE, because it nearly produced a false finding here.** I first tested whether those
+two scripts were in the population with `grep -c "<name>" <report>` and got **0** for both, which
+reads exactly like "excluded from the scan set". The report is a SINGLE SUMMARY LINE — it prints
+no per-file names when clean — so that zero was a fact about the report's FORMAT, not about the
+population. The population had to be counted from the source side instead. A zero is not a result
+until you know what the instrument prints when the answer is "nothing to report".
+
+**G10's parts 2 (skills) and 3 (API verbs) are untouched, so the gate stays `[ ]`.**

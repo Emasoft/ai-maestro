@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { enforceMaestro } from '@/lib/route-auth'
 import { expiresInH, loadState } from '@/lib/oauth-rotator/slots'
 import { MAX_REFRESH_FAILURES } from '@/lib/oauth-rotator/tick'
+import { readTickStatus } from '@/lib/oauth-rotator/tick-status'
 
 /** Read one optional numeric extra off an index entry without asserting the open shape. */
 function num(entry: Record<string, unknown>, key: string): number | null {
@@ -53,5 +54,19 @@ export async function GET(request: NextRequest) {
       }
     })
 
-  return NextResponse.json({ liveEmail: state.live_email ?? null, accounts })
+  // TRDD-CVQJNW3A box 3: the per-account `refreshDead` flags above say which SLOT is dead; they
+  // do not say what the TICK concluded about the host as a whole. `reauth-needed` is the verdict
+  // that means "no automatic path is left" — and until now it existed only in a file on disk, so
+  // it reached the owner only if a human read it out to them. That is the gap this closes.
+  //
+  // ⚠ `null` DOES NOT MEAN HEALTHY, and no derived boolean is exported here for exactly that
+  // reason. `readTickStatus` returns null when the stamp is absent OR older than 300 s — i.e.
+  // when the beat is not running — so a `needsHuman: false` collapsed out of it would report a
+  // DEAD rotator as a well one, which is the lenient-reader failure this codebase has been bitten
+  // by before. Three states reach the client and the client compares for itself:
+  //   'reauth-needed' → a human is required · 'ok'/'rotating'/'stuck' → the tick is deciding
+  //   null            → the tick is not beating, or its verdict is stale: UNKNOWN, not fine.
+  const tickNextAction = readTickStatus()
+
+  return NextResponse.json({ liveEmail: state.live_email ?? null, accounts, tickNextAction })
 }

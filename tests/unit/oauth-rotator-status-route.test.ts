@@ -3,10 +3,19 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const mockEnforceMaestro = vi.fn()
 const mockLoadState = vi.fn()
+const mockReadTickStatus = vi.fn()
 
 vi.mock('@/lib/route-auth', () => ({
   enforceMaestro: (...a: unknown[]) => mockEnforceMaestro(...a),
 }))
+vi.mock('@/lib/oauth-rotator/tick-status', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/oauth-rotator/tick-status')>(
+    '@/lib/oauth-rotator/tick-status',
+  )
+  // Only the READ is stubbed. Routed through an arrow so `vi.clearAllMocks()` cannot strip the
+  // implementation the way an inline `vi.fn(() => …)` in the factory would.
+  return { ...actual, readTickStatus: (...a: unknown[]) => mockReadTickStatus(...a) }
+})
 vi.mock('@/lib/oauth-rotator/slots', async () => {
   const actual = await vi.importActual<typeof import('@/lib/oauth-rotator/slots')>(
     '@/lib/oauth-rotator/slots',
@@ -23,6 +32,7 @@ const HOUR_MS = 3_600_000
 beforeEach(() => {
   vi.clearAllMocks()
   mockEnforceMaestro.mockImplementation(() => null)
+  mockReadTickStatus.mockImplementation(() => 'ok')
   mockLoadState.mockImplementation(() => ({
     live_email: 'live@example.com',
     live_fp: 'livefingerprint0',
@@ -91,6 +101,57 @@ describe('GET /api/oauth-rotator/status (TRDD-OX5TT5OT)', () => {
   it('reports an empty fleet as empty rather than throwing', async () => {
     mockLoadState.mockImplementation(() => ({ live_email: null, live_fp: null, slots: {} }))
     const data = (await (await GET(req())).json()) as { liveEmail: null; accounts: unknown[] }
-    expect(data).toEqual({ liveEmail: null, accounts: [] })
+    // Deliberately an EXACT shape, not a subset: this is the assertion that noticed
+    // `tickNextAction` being added (TRDD-CVQJNW3A) rather than letting the contract widen
+    // unremarked. Keep it exact — a `toMatchObject` here would stop doing that job.
+    expect(data).toEqual({ liveEmail: null, accounts: [], tickNextAction: 'ok' })
+  })
+})
+
+/**
+ * TRDD-CVQJNW3A box 3 — the tick's HOST-WIDE verdict, not just per-slot flags.
+ *
+ * The `refreshDead` flags above say which SLOT is dead. `reauth-needed` is the different claim
+ * that no automatic path is left for the host, and until this landed it lived only in a file on
+ * disk — so it reached the owner only when a human read it out to them. Measured live on
+ * 2026-08-22 the host sat at `reauth-needed` while every UI surface stayed silent.
+ *
+ * NEUTER RUNS (2026-08-22 — OBSERVED via scripts/dev/neuter, restores blob-verified):
+ *
+ *   drop `tickNextAction` from the response body        → 3 red / 8 green
+ *       all three below — the field simply is not served
+ *
+ *   `readTickStatus() ?? 'ok'`                          → 1 red / 10 green
+ *       ONLY "an absent verdict is UNKNOWN" reds, which is the point: collapsing null into a
+ *       healthy-looking value leaves the reauth-needed and ok cases passing, so that one test is
+ *       the sole thing standing between a dead rotator and a green-looking dashboard.
+ */
+describe('GET /api/oauth-rotator/status — the tick verdict (TRDD-CVQJNW3A)', () => {
+  it('surfaces reauth-needed, so a host with no automatic path left is visible', async () => {
+    mockReadTickStatus.mockImplementation(() => 'reauth-needed')
+    const body = await (await GET(req())).json()
+    expect(body.tickNextAction).toBe('reauth-needed')
+  })
+
+  it('an ABSENT verdict is surfaced as null — never collapsed into a healthy-looking value', async () => {
+    // `readTickStatus` returns null when the stamp is missing OR older than 300 s, i.e. when the
+    // beat is NOT RUNNING. That is the state most easily mistaken for health, and a route that
+    // defaulted it to 'ok' would report a dead rotator as a well one — the lenient-reader
+    // failure, pointed at the one signal that says a human is needed.
+    mockReadTickStatus.mockImplementation(() => null)
+    const body = await (await GET(req())).json()
+    expect(body.tickNextAction).toBeNull()
+    expect(body).toHaveProperty('tickNextAction')
+  })
+
+  it('passes a healthy verdict through unchanged — the field is read, not hardcoded', async () => {
+    // Positive control. Without it the two assertions above are satisfied by a route that always
+    // emits whatever the mock last returned, or by one wired to a constant.
+    mockReadTickStatus.mockImplementation(() => 'rotating')
+    const body = await (await GET(req())).json()
+    expect(body.tickNextAction).toBe('rotating')
+    // The verdict must not disturb what the route already promised.
+    expect(body.accounts).toHaveLength(2)
+    expect(body.liveEmail).toBe('live@example.com')
   })
 })

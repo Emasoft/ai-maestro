@@ -193,10 +193,18 @@ them would be a permanent false debt against a feature this card never owned.
       8 tests + 2 neuters, each reddening exactly 2. The load-bearing case is the UNVERIFIED email —
       see below
 - [x] `tsc --noEmit` clean; full vitest suite green; `yarn build` exit 0 — all re-run 2026-08-02
-- [ ] **live 2A** — owner resets password (Settings → Revoke) to re-enter first-run, types the
+- [~] **live 2A** — owner resets password (Settings → Revoke) to re-enter first-run, types the
       MAESTRO relay creds, verifies, and app entry unlocks; or takes the opt-out. **HUMAN-ONLY by
       R16** — the relay credentials are entered by the owner and never by an agent or a model. Not
-      an engineering item and not one an agent may do on the owner's behalf
+      an engineering item and not one an agent may do on the owner's behalf.
+      **DESCOPED 2026-08-22 to [[U991KMFL]], which now OWNS this act.** It was sitting in two cards'
+      acceptance at once — here, and as `P7XKV3N9`'s recovery-email SMTP box — each effectively
+      deferring to the other, so neither could close and nobody owned the act. One card now does.
+      **The constraint was re-checked, not assumed**, because the sibling case went the other way:
+      `K2WJH7RF`'s e2e was parked as "human-only" on a premise measurement later showed to be FALSE.
+      Here there are two independent bars and either is sufficient — the flow BEGINS with a password
+      reset (an agent must never rotate a credential, which the owner's decide-grant does not touch),
+      and it needs the owner's real relay credentials, which R16 names as never an agent's to enter.
 - [~] **live 2B** — admit a foreign user with an email, trigger their 2FA. **Unreachable, not
       unfinished:** it needs a normal-user admission UI and a per-user password/sudo-reset route,
       and neither exists yet. Deferred with its two design items below
@@ -235,3 +243,14 @@ conjunct reds the unverified case and the re-configure case, and nothing else.
   No approval request was sent.
 
 ## Notes and lessons learned
+
+- 2026-08-22T17:49 — **HUMAN REVIEW PERFORMED, verdict COMPLETE**, by `ai-maestro-session` under
+  the owner's explicit 2026-08-22 grant. The engineering is done and tested — 8 unit tests plus
+  2 neuters over the gate-flag logic (`ff648fa0`), each neuter reddening exactly 2, with the
+  UNVERIFIED-email case load-bearing; `tsc`, vitest and `yarn build` all re-run green 2026-08-02.
+  The single remaining `- [ ]` was **live 2A**, a physical act barred to an agent twice over (it
+  begins with a password reset, and needs the owner's real relay credentials — R16). It is
+  descoped to **`TRDD-U991KMFL`**, created to own it, because the same act was sitting in this
+  card's acceptance AND in `P7XKV3N9`'s, each deferring to the other so neither could close.
+  Provenance caveat: closed via `promote` + `archive`, which anchor no token — `verify` will report
+  UNVERIFIED by design (`TRDD-06G43RK2`).

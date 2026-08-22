@@ -46,6 +46,7 @@
     "fleet:asks": "node --import tsx scripts/fleet-asks.mjs",
     "pillars:lint": "node --import tsx scripts/pillars-lint.mjs",
     "scripts:drift": "node --import tsx scripts/check-script-drift.mjs",
+    "pillar:reap": "node --import tsx scripts/reap-pillar-index.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:services": "vitest run tests/services/",

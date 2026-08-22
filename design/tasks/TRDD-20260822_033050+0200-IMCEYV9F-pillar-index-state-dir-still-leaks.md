@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T03:30:50+0200
-updated: 2026-08-22T03:39:31+0200
+updated: 2026-08-22T04:07:11+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -109,6 +109,38 @@ forgets fails silently into someone else's home. A guard in `trddgrep` — do no
 host-global index for a corpus under a temp root — covers every caller, including callers
 in repos we do not own. **We must not edit the peer repo** (cross-project rule); peer-side
 work is an issue on `Emasoft/ai-maestro-orchestrator-agent`, not an edit here.
+
+## ⚠ ADVISOR PATH FAILED — the design fork below is OPEN, not decided (04:07)
+
+`~/.claude/rules/advisor-rules.md` forbids proceeding on a design decision without either an
+advisor verdict **or an explicit note that both advisor paths failed.** This is that note.
+
+- **Built-in advisor tool** — not present in this session's tool surface. Unavailable.
+- **`fable-advisor:advisor` agent** — dispatched **twice**, killed twice. #1 (read 4 files,
+  answer 4 questions) froze at 15,781 B; #2 (facts supplied inline, file reads FORBIDDEN, ≤400
+  words) froze at 14,931 B. **Both froze ~30 s after dispatch, at ~15 KB**, i.e. at the initial
+  context record, before any work. Two completely different prompts, one signature — so this is
+  the agent, not the prompting.
+
+I have therefore **not implemented the fix**, deliberately. It is Tier 0 and I am authorized to,
+but the severity is `low` (disk litter accumulated over three weeks) and the one genuinely
+contestable piece is a **predicate whose blast radius is every caller of these two functions**.
+Shipping that unreviewed to save a night is the wrong trade.
+
+**The fork, for whoever decides it:**
+
+| question | my leaning | why it is contestable |
+|---|---|---|
+| predicate = "corpus realpath is under `os.tmpdir()`"? | yes | may be **too narrow** (a CI runner or container whose scratch root is not `$TMPDIR`) and **too broad** (a legitimate long-lived corpus deliberately kept under `/tmp`) |
+| layer | a pure helper beside `corpusKeyFor` in `index-db.ts` | it must NOT go inside `index-open.ts`: both functions there hold an explicit never-silently-degrade contract, and a silent skip is exactly what that contract forbids |
+| CLI (`trddgrep`) | reuse the existing `--no-index` walk path | already built, already tested, already prints a loud message — no new mechanism |
+| lint (`pillars-lint`) | skip the dangling check, report it via the existing `skipped[]` | **weakest link.** It silently loses reference-integrity checking on a temp corpus, and the whole point of `216FTVC9` was that a check which cannot run must not look like a check that passed |
+| alternative framings not evaluated | — | should the index simply not be host-global? would reaping orphaned keys (a corpus root that no longer exists can never be valid) replace the guard entirely and cover writers we never predict? |
+
+**The reaping alternative deserves a real look before the predicate is built**, because it is the
+only option here that needs no predicate at all and bounds the directory regardless of who leaks
+into it — including callers in repos we do not own, which is precisely the case that produced
+this card.
 
 ## Proposed fix
 

@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T01:11:29+0200
+updated: 2026-08-23T01:16:49+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -188,8 +188,15 @@ asserted an aging nobody measured; I had moved the number myself.
 > the 16 adds can postdate the 457 measurement. Sorted by add-time, the latest is `6b40bfc7`
 > 00:40:08 (mine) and the second-latest is `1909b55d` 2026-08-22 23:26:40. **Therefore the baseline
 > lies in (23:26:40, 00:40:08)** — a ~74-minute window that needs no header at all, and inside which
-> the claimed ~00:20 happens to fall. The self-attribution stands on the arithmetic, not on the
-> handoff.
+> the claimed ~00:20 happens to fall.
+> **…and that argument STILL rested on the handoff, via a different field.** It rejected the
+> header's model-typed TIMESTAMP and then took `457` — a model-typed COUNT in the same gitignored
+> document, which this card says was never re-run — as its load-bearing input. If 457 was simply
+> wrong when written, `+1` constrains nothing. **Now corroborated from the repository alone, no
+> handoff involved:** `git ls-tree -r --name-only <commit> | grep -cE '\.test\.(ts|tsx)$'` gives
+> **459 at `1909b55d`** and **460 at `6b40bfc7`** (and 460 at HEAD). The tree count at the
+> second-latest add equals the inherited total, and it steps to 460 across exactly my commit. Only
+> now does "needs no header at all" become true; it was asserted one revision before it was earned.
 > **(ii) `git ls-files 'tests/**/*.test.ts'` returns 412; the same string in `vitest.config` matches
 > ~451.** MEASURED: `tests/**/*.test.ts` → **412**, `tests/*.test.ts` → **451**, and
 > `git ls-files 'tests/' | grep -c '\.test\.ts$'` → **451**. **The same glob string means different

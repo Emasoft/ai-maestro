@@ -1,12 +1,13 @@
 ---
 trdd-id: JWE3CFLV
 title: The four simple-element pipelines never authorized — changeSimpleElement had no Gate 0
-column: dev
+column: complete
 created: 2026-08-22T22:11:32+0200
-updated: 2026-08-22T22:11:32+0200
+updated: 2026-08-22T22:13:10+0200
 current-owner: user
 created-by: user
 task-type: security
+implementation-commits: [6d66db22]
 min-approval-requirement: manager
 mandate: true
 mandated-by: user
@@ -104,6 +105,27 @@ UNVERIFIED, and the verification found a hole. **11 remain unverified.**
 
 LOW to ship, HIGH had it stayed. The change only ADDS a refusal on a path that had none, its one
 production caller already supplies the context, and the deny path needs no registry lookup.
+
+## Acceptance
+
+- [x] `gate0Auth('manage-skills', …)` added as an UNCONDITIONAL G00 at the shared choke point
+      (`changeSimpleElement`), not four times at the delegators
+- [x] `ledgerOp` / `authContext` made REQUIRED — the optional `authContext` is what made a
+      scope-conditional gate expressible; verified all four delegators already declare it
+      non-optional, so no call site changed
+- [x] blast radius measured BEFORE editing: 4 callers of the helper, 1 production caller of the
+      delegators, and it already passes `auth.context`
+- [x] headless parity: `services/headless-router.ts:1340` imports the same route module, so one
+      fix covers both server modes
+- [x] denial test for each of the four pipelines, pinning the REASON and asserting the abort
+      happened AT G00 (no `G01:` in the ops trace) — `success === false` alone would be satisfied
+      by any later gate failing
+- [x] the self-reconfiguration case covered (a MANAGER may not strip its OWN elements via the API)
+- [x] a MANAGER positive control, so the denials are a decision and not a blanket refusal
+- [x] NEUTER via `scripts/dev/neuter`, line-anchored to site 6226 of six: **6 red / 0 green**,
+      restore verified by blob hash; the observed count (6) recorded over my predicted 5
+- [x] `tsc --noEmit` 0 lines; 117/117 green across the new file and the two suites this could
+      disturb
 
 ## Approval log
 

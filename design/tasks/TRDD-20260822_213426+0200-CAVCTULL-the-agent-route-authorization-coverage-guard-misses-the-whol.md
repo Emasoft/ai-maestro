@@ -3,7 +3,7 @@ trdd-id: CAVCTULL
 title: The agent-route authorization coverage guard misses the whole collection subtree
 column: todo
 created: 2026-08-22T21:34:26+0200
-updated: 2026-08-22T21:47:44+0200
+updated: 2026-08-22T22:13:49+0200
 current-owner: main
 created-by: main
 task-type: security
@@ -127,6 +127,29 @@ loudly instead of reporting clean.
       missing authorization was a live hole should regress loudly, not as a ledger diff
 - [ ] the 19 decided one at a time, shrinking the ledger (each its own card if it turns out real)
 - [ ] the 12 forward-only routes verified against their pipelines' Gate 0
+
+## 1 of the 12 forward-only routes VERIFIED — and it was a hole (TRDD-JWE3CFLV)
+
+`[id]/remove-element/route.ts` was the first of the 12 taken through the verification this card's
+last open box asks for. Its comment states the forward theory verbatim — *"The Change\* pipelines
+run their own Gate 0 authorization on the resolved authContext"* — and it forwards into SIX
+pipelines. Measured by attributing every `gate0Auth` call site in
+`services/element-management-service.ts` to its enclosing exported function:
+
+| forwarded pipeline | authorizes at Gate 0? |
+|---|---|
+| `ChangeSkill` | yes — `gate0Auth` at 6020 |
+| `ChangeMCP` | yes — `gate0Auth` at 6404 |
+| `ChangeAgentDef` · `ChangeCommand` · `ChangeRule` · `ChangeOutputStyle` | **NO** — all four are one-line delegators to `changeSimpleElement`, which had **zero** authorization needles in its whole 150-line body |
+
+So the theory held for 2 of 6 and failed for 4, and the failure was a live hole: any authenticated
+agent of any title could delete another agent's rules, commands, agent-definitions and
+output-styles. Fixed and pinned under **TRDD-JWE3CFLV** (`6d66db22`).
+
+**The count stays 12 and neither box is ticked.** The fix landed in the SERVICE, so the route still
+carries no STRONG needle of its own and remains forward-only — correctly. What changed is that ONE
+of the twelve is now VERIFIED. **11 remain**, and the first one checked was a defect, so the
+remaining eleven should not be assumed clean.
 
 ## Approval log
 

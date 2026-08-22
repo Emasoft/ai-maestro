@@ -144,9 +144,27 @@ mint-then-locally-refuse sequence burns a slot without consuming it, and four of
 
 C4's negative control was run against **`K2WJH7RF`**, and it came back `UNVERIFIED — its approval is
 prose only, which anyone with repo write can type`. That is true of every card I have closed by
-hand-editing `column:`, including `OX5TT5OT` earlier today. The API path produces a host-signed,
-ledger-anchored token; hand-editing produces prose. **Column transitions should go through the verbs
-so the provenance is verifiable.**
+hand-editing `column:`, including `OX5TT5OT` earlier today.
+
+> **⚠ CORRECTED 2026-08-22T17:43 — I drew the wrong conclusion from that, and then tested it.**
+> I wrote *"column transitions should go through the verbs so the provenance is verifiable"* and
+> acted on it, closing `K2WJH7RF` through `promote` + `archive` instead of by hand. Re-running
+> `verify` afterwards: **still `exit 2`, still UNVERIFIED**, with the control confirming the
+> instrument works (`8I0JUCK9`, closed via `approve`, returns `exit 0` VERIFIED).
+>
+> **Only `approve` mints an approval token.** `promote` and `archive` execute server-side and move
+> the zone correctly, but anchor nothing. So using the verbs buys correct execution — NOT
+> verifiable provenance — and my sentence above was false in the half that mattered.
+>
+> **The real finding is the gap it uncovered, and it is bigger than the wrong claim.** `verify`
+> exists to answer *"is this card's approval REAL?"*, and for any card whose authority is a REVIEW
+> VERDICT rather than a proposal `approve`, the answer is permanently "unverifiable" — there is no
+> verb that can anchor it. The provenance system covers the proposal gate and has a blind spot
+> exactly where a human review is the authority. Filed as `TRDD-06G43RK2`.
+>
+> Method note: my first check reported `exit=0` for an UNVERIFIED card — I had piped through
+> `head -3`, so `$?` was `head`'s status, not `verify`'s. That trap is already written in my own
+> lessons file. Re-run to a file, then read `$?`.
 
 ## Acceptance
 

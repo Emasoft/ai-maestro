@@ -3,7 +3,7 @@ trdd-id: D46B42E9
 title: JSONL Session Browser (Rust streaming reader + chat transcript UI)
 column: todo
 created: 2026-04-20T22:31:54+0200
-updated: 2026-08-16T16:51:06+0200
+updated: 2026-08-22T02:18:02+0200
 current-owner: main
 assignee: main
 priority: 3
@@ -17,7 +17,7 @@ parent-trdd: null
 npt: []
 eht: []
 blocked-by: []
-implementation-commits: []
+implementation-commits: [c003168f, 8f3677b3, b19b146b, d90da019, 462c9dd3, e86e5b16, 6462ec49]
 ---
 
 # TRDD-d46b42e9 — JSONL Session Browser (Rust streaming reader + chat transcript UI)
@@ -440,9 +440,44 @@ When all 4 phases are PASS, the orchestrator opens a draft PR from `feature/json
 
 **FLAG (see report): the code for all 4 phases appears already landed on this branch** — `rust-tools/aim-jsonl-reader`, `scripts/aim-jsonl-reader`, `app/api/sessions-browser/**` (agents/sessions, range, search, context-breakdown, timelines, lifeline), and `components/agent-profile/sessions/ChatTranscript.tsx` all exist, with commit history (`c003168f`..`f4d23bd9`) spanning Rust + API + UI + security hardening. Boxes below are left unchecked pending a from-scratch acceptance pass against the spec, since `implementation-commits:` is empty and `column:` is still `todo`.
 
+**Triaged 2026-08-22.** Every phase's ARTIFACT is present and the landing SHAs are now recorded
+(box 6 closed below). What is NOT present is a *run* of the checks the remaining boxes name —
+each says "passes `cargo test`", "passes `yarn test`", "the UI renders", "the RSS test proves".
+Those are verification runs, not construction, and one of them needs a browser. So this card is
+**built but unverified**, which is a different state from both "open" and "done" and is why it
+does not close today.
+
 - [ ] Phase 1: the Rust crate builds for arm64+x86_64 macOS and passes `cargo test`
+      Artifact ✓ — `rust-tools/aim-jsonl-reader/` is a real Cargo project (`Cargo.toml`,
+      `Cargo.lock`, `src/`, `tests/`), with built binaries including
+      `target/aarch64-apple-darwin/release/aim-jsonl-reader`. **`cargo test` not run** — that is
+      what this box asks for.
 - [ ] Phase 2: the 4 Node API routes (`sessions`, `range`, `search`, `context-breakdown`) pass `yarn test`
+      Artifact ✓ — all four exist under `app/api/sessions-browser/` (plus `lifeline`, `timeline`,
+      `context-at` beyond the four named). Tests exist: `tests/unit/sessions-browser-service.test.ts`,
+      `api-sessions-browser-timeline.test.ts`, `jsonl-reader.test.ts`, `useJsonlSession{,-phase1}.test.ts`.
+      **Suite not run for this box.**
+      *(Needle note, recorded because it nearly produced a false zero: searching `app/api` for
+      `*jsonl*` returns NOTHING — the routes are namespaced `sessions-browser`, not `jsonl`. The
+      zero was my needle, not the code. Reading `useJsonlSession.ts`'s own `fetch()` calls named
+      the real paths in one step.)*
 - [ ] Phase 3: the Sessions tab UI renders a session as a virtualized chat transcript with per-message token counts
+      Artifact ✓ — `components/agent-profile/sessions/`: `ChatTranscript.tsx`, `MessageBubble.tsx`,
+      `ContextBreakdownPanel.tsx`, `PseudoTerminal.tsx`, `SessionList.tsx`, `SessionSearchBar.tsx`,
+      `TimelineRuler.tsx`, `ToolUseRow.tsx`, `useJsonlSession.ts`. **"Renders" is a live-UI claim
+      — GATED on an operator run**, same gate as the other browser-dependent cards.
 - [ ] Phase 4: a new scenario + docs + README link exist, and the RSS integration test proves the Node process stays memory-bounded on a large `.jsonl`
+      Artifact ✓ — `tests/scenarios/SCEN-027_jsonl-session-browser.scen.md`, and it has RUN at
+      least once: `tests/scenarios/screenshots/SCEN-027_20260523T002735Z/` and a matching
+      `state-backups/` dir exist. **The RSS memory-bound assertion is the unverified half.**
 - [ ] The context-breakdown panel's 7 categories match Claude Code's own `/context` schema (per the fixture test in §7)
-- [ ] `implementation-commits:` in frontmatter is populated with the landing commit SHAs (currently empty despite apparent implementation)
+      Not checked this pass — it is a fixture-test claim and belongs with the Phase-2 suite run.
+- [x] `implementation-commits:` in frontmatter is populated with the landing commit SHAs (currently empty despite apparent implementation)
+      → **Populated, all seven verified reachable from HEAD** (`git merge-base --is-ancestor`):
+      `c003168f` Phase 1 (Rust streaming crate) · `8f3677b3` Phase 2 (Node wrapper + the 4 routes) ·
+      `b19b146b` + `d90da019` + `462c9dd3` + `e86e5b16` Phase 3 (hook, leaf components,
+      virtualized transcript, session list + breakdown + search) · `6462ec49` Phase 4 (SCEN-027 +
+      docs + README link). All landed 2026-04-21.
+      *(Three commits share the Phase-4 subject line across all refs — a rebase/cherry-pick
+      artifact. `6462ec49` is the one on this branch, which is why the branch-scoped log is the
+      one to trust here and `--all` is not.)*

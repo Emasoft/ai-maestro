@@ -5,7 +5,7 @@ column: todo
 scope: project
 project-id: ai-maestro
 created: 2026-07-31T17:41:08+0200
-updated: 2026-08-02T15:33:21+0200
+updated: 2026-08-22T14:41:00+0200
 implementation-commits: [994be6d6, 041a87f8, fde71e17, 511de445, d45e050b, dfa2cf06]
 created-by: ai-maestro
 current-owner: ai-maestro
@@ -486,3 +486,34 @@ trust the rendered identity, not the extraction count, when checking which accou
   Pre-approved: issuer authority >= required approver. No approval request was sent. The owner
   directed the design in-session ("unbrowse records a login route and can playback it … it just
   needs to learn the route once") after being told the blast-radius consequence.
+
+## Box 3 — the DATA half landed; the SURFACE half is named, not done — 2026-08-22T14:4x
+
+**`dc8ddf30`.** `GET /api/oauth-rotator/status` now serves the tick's host-wide verdict as
+`tickNextAction`. Until this, the route reported per-account `refreshDead` flags — which say
+which SLOT is dead — and nothing said what the tick concluded about the HOST. `reauth-needed`
+lived only in `~/.aimaestro/oauth-rotator-tick-status.json`.
+
+**Measured live today: the host sits at `reauth-needed` and every UI surface is silent.** The only
+reason the owner learned of it is that I read the file and told them in conversation. A human
+relay IS the gap this box names, so the condition was not hypothetical while the box sat open.
+
+**NO derived boolean, deliberately.** `readTickStatus` returns `null` when the stamp is absent OR
+older than 300 s — i.e. when the beat is not running — so a `needsHuman: false` collapsed out of
+it would report a DEAD rotator as a well one. Three states reach the client; the client compares
+for itself. Pinned by a neuter that reds EXACTLY ONE test (`?? "ok"` → 1 red / 6 green), which is
+the point: with null collapsed, the `reauth-needed` and `rotating` cases still pass, so that
+single test is the whole thing standing between a dead rotator and a green dashboard.
+
+**THE BOX STAYS OPEN, and here is precisely what is missing.** It asks for a **push/banner**, and
+this is only the data. Grepped: there is no global banner surface in this codebase — no
+`GlobalBanner`, `SystemBanner`, `AlertBar`, `TopBanner`, `Toaster`. The route's ONLY consumer is
+`components/settings/ClaudeAccountsSection.tsx`, a page the owner must navigate to, which is not
+materially better than reading the file. **Remaining work: an always-visible surface that polls
+this route and shows `tickNextAction === 'reauth-needed'`.** That is a UI feature, not a wiring
+change, which is why it is named here rather than half-built.
+
+The other two open boxes are unchanged and both are OWNER-gated by their own text: box 1 waits on
+the `auto_publish_checkpoints` decision (the owner's unbrowse config, outside this project —
+*"Do not arm the repair flag until this is decided"*), and the `driveConsent` box needs the owner
+present at a live consent page. Neither moved and neither is mine.

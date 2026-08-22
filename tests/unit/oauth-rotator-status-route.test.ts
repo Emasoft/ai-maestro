@@ -118,13 +118,22 @@ describe('GET /api/oauth-rotator/status (TRDD-OX5TT5OT)', () => {
  *
  * NEUTER RUNS (2026-08-22 — OBSERVED via scripts/dev/neuter, restores blob-verified):
  *
- *   drop `tickNextAction` from the response body        → 3 red / 8 green
- *       all three below — the field simply is not served
+ *   s@const tickNextAction = readTickStatus\(\)@… readTickStatus() ?? "ok"@   → 1 red / 6 green
+ *       an ABSENT verdict is surfaced as null — never collapsed into a healthy-looking value
+ *       EXACTLY ONE reds, and that is the finding: collapsing null into a healthy value leaves
+ *       the reauth-needed and rotating cases passing, so that single test is the whole thing
+ *       standing between a dead rotator and a green-looking dashboard.
  *
- *   `readTickStatus() ?? 'ok'`                          → 1 red / 10 green
- *       ONLY "an absent verdict is UNKNOWN" reds, which is the point: collapsing null into a
- *       healthy-looking value leaves the reauth-needed and ok cases passing, so that one test is
- *       the sole thing standing between a dead rotator and a green-looking dashboard.
+ *   s@, accounts, tickNextAction }\)@, accounts })@                            → 4 red / 3 green
+ *       the three below, PLUS the pre-existing "reports an empty fleet as empty" — which is the
+ *       useful signal: that assertion is an exact `toEqual`, so it notices the contract both
+ *       widening and narrowing, and it was never written for this feature.
+ *
+ * ⚠ THIS BLOCK FIRST SHIPPED AS A PREDICTION AND BOTH NUMBERS WERE WRONG — "3 red / 8 green" and
+ * "1 red / 10 green", against a file that holds 7 tests. I had written the counts before running
+ * anything, for the SECOND time in one session (see tests/unit/update-remote-guard.test.ts, same
+ * defect, same day). A predicted neuter block is a claim of coverage and reads exactly like a
+ * measured one. Run the tool, paste its output, never retype the numbers.
  */
 describe('GET /api/oauth-rotator/status — the tick verdict (TRDD-CVQJNW3A)', () => {
   it('surfaces reauth-needed, so a host with no automatic path left is visible', async () => {

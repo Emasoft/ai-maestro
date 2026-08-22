@@ -3,7 +3,7 @@ trdd-id: 9K33PHOZ
 title: install.sh rm -rfs the live fork checkout in non-interactive mode and reclones from upstream
 column: dev
 created: 2026-08-21T18:56:22+0200
-updated: 2026-08-22T11:03:54+0200
+updated: 2026-08-22T11:18:43+0200
 implementation-commits: [4d4b72c7, 8b7c7de5, e0e55244, 4a760eed]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
@@ -126,6 +126,37 @@ It installs the whole shell-CLI layer — `aimaestro-teams.sh`, `aimaestro-gover
 `aimaestro-hook.sh`, `aimaestro-panel.sh` and the agent CLI's 6 modules — not just the agent CLI.
 Owner reaction on being shown what it does: *"the name is not clear."* A rename touches its
 callers in `remote-install.sh` and `update-aimaestro.sh`.
+
+#### CALLER SURVEY (2026-08-22) — the blast radius is smaller than the line above claims
+
+Run because this card names the survey as the prerequisite to the ruling. It is a MEASUREMENT,
+not the decision, which remains the owner's.
+
+**`remote-install.sh` is NOT a caller.** It never invokes `install-agent-cli.sh` directly — it
+delegates through `./install.sh --from-remote -y` (`:1223`) and only *probes* the installed
+artifact to decide a flag (`[ ! -f "$HOME/.local/bin/aimaestro-agent.sh" ] && tool_flags+=(--skip-agent-cli)`,
+`:1221`). So the sentence above is half wrong, and correcting it is the point of surveying.
+
+| site | kind | count |
+|---|---|---|
+| `install.sh:1001,1003` | **executable call** | 2 |
+| `update-aimaestro.sh:260` | **executable call** | 1 |
+| `verify-installation.sh:61,96,102,201` | user-facing message text | 4 |
+| `install-agent-cli.sh` itself (usage/help/self-reference) | text | 11 |
+| **fleet (12 repos with local clones)** | **executable calls** | **0** |
+| fleet design docs — AMAMA (3), COS (1) | prose in TRDDs/handoffs | 4 |
+
+**3 executable call sites, all inside this repo.** The 4 fleet mentions are prose in
+`design/tasks/` and `design/handoffs/` — historical records, one already stale (*"`install-agent-cli.sh`
+hasn't run"*), and archived cards are frozen anyway. Nothing outside this repo executes the name.
+
+Method note, because a zero here would otherwise be worthless: the first sweep searched
+`~/Code ~/agents -maxdepth 2` and returned 0 across 30 repos — the WRONG POPULATION (the owner's
+other projects; the fleet nests one level deeper at `~/Code/EMASOFT-<ROLE>/…`). The corrected
+sweep carries a positive control (`aimaestro-agent.sh` → 103 files across 10 of 12 repos), which
+is what makes the 0 a finding rather than a broken instrument. Incidental corroboration for
+FINDING 5: **`claude-plugin` and `agent-identity` have no local clone at all** — consistent with
+those two external AMP/AID repos being dead, which is why their constants had no consumers.
 
 ### WHAT THE AUDIT REFUTES — skills, plugins and messaging are NOT upstream-sourced
 

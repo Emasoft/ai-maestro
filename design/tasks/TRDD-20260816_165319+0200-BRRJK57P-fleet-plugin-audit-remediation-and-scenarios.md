@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T03:11:25+0200
+updated: 2026-08-22T03:44:27+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -92,6 +92,53 @@ this program keeps finding in others' reports.
 already-fixed rate — the one repo sampled had its whole axis-1 set closed by `K3HJQG7U` two days
 after the audit — so the cheap first pass is *"which repos have a `complete` remediation card
 citing their audit?"*, not a citation-by-citation sweep.
+
+### ⏹ 2026-08-22T03:4x — first pass RE-RUN corpus-wide, and the real gap is upstream of citations
+
+**Population, stated because the last figure was scoped differently and disagrees:** every file
+under a peer `design/tasks` or `design/archived` containing the literal string
+`plugin-self-audit`, across the **27** `design/tasks` zones reachable at `find -maxdepth 4` under
+`~/Code` and `~/agents`. That yields **32 cards**, not the 52 recorded earlier — a different
+needle over a different set, so neither number refutes the other until both populations are
+stated.
+
+| column | n |
+|---|---|
+| `complete` | 13 |
+| `completed` | 12 |
+| `published` | 1 |
+| **terminal subtotal** | **26** |
+| `backburner` | 6 |
+
+The 6 open ones are **not** spread across the fleet — five are one batch in
+`perfect-skill-suggester`, all stamped the same second (2026-08-19T04:32:41): one audit run whose
+remediation cards were filed and never pulled. The sixth is a 2026-06-22 fleet-readiness card in
+`ai-maestro-assistant-manager-agent` that merely mentions the string.
+
+**The finding that matters is the one a citation sweep cannot see.** 18 zones hold no card
+containing that string, and for the fleet members among them the discriminator is whether the
+audit ran at all. Measured directly:
+
+| repo | audit reports | cards citing them |
+|---|---|---|
+| `ai-maestro-janitor` | **9** | **0** |
+| `ai-maestro-integrator-agent` | **11** | **0** |
+| `ai-maestro-autonomous-agent` | **9** | **0** |
+| `ai-maestro-orchestrator-agent` | 0 | 0 |
+
+For three fleet repos the audit RAN, produced 29 reports between them, and **not one finding was
+converted into a tracked card.** That is a different and worse failure than a rotted citation:
+those findings are not stale, they were never on a board, so no amount of verifying the 154
+citations would ever have surfaced them. The orchestrator is a fourth case — no reports, so its
+audit never ran.
+
+**Caveat, not a formality:** the needle is the literal `plugin-self-audit`. A repo citing its
+audit by report path or another phrase reads as zero here, and a zero from one needle is not a
+negative result. Confirm per repo before treating any row as an omission.
+
+**NEXT on this box, revised:** the citation sweep is no longer the top item. Ask first *"which
+fleet repos have audit reports and no cards?"* — that set is where untracked findings live, and
+it is three repos rather than 154 line numbers.
 
 ### ⏹ That cheap first pass RAN — and the integrator was not special
 

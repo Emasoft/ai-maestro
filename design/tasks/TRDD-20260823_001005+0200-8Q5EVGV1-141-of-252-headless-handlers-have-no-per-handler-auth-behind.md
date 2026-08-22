@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T00:45:17+0200
+updated: 2026-08-23T00:50:47+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -44,10 +44,28 @@ Measured 2026-08-23 over `services/headless-router.ts`, by enumerating every
 > the claim AND with a 3-in/1-out miscount netting to the same number, so it was not yet evidence.
 > Re-derived per route by printing the MATCHED LINE: `docker/info` matches only at L773/L775,
 > `create-from-toml` only at L3647, `element-content` only at L3783/L3785 — every hit a `//` line,
-> zero code hits. Counts by that method: **2 at `41cc9983`, 3 at `6b40bfc7`**, agreeing with the
-> subtraction by a different instrument. Raised by an adversarial review of the commit that
-> published the names, which is the right time for a correction box to be audited: a correction
-> that inherits the defect it corrects is the worst possible artifact here.
+> zero code hits. Counts by that method: **2 at `41cc9983`, 3 at `6b40bfc7`**.
+>
+> **That re-derivation is NOT independent corroboration, and an earlier draft of this box wrongly
+> called it "a different instrument".** The identifier is the ledger's own enumerator with the
+> reporting swapped: same start anchor, same entry regex, same next-entry bounding rule, same six
+> needles, same comment predicate. Only the AGGREGATION changed (per-route line printing instead of
+> a set subtraction), so the two cannot disagree about which routes are comment-only — it is one
+> computation printed twice. What it genuinely buys is the step from a NUMBER to the LINES: reading
+> `// this: \`delegateNextRoute\` forwards the caller's real credentials` at L773 is direct evidence
+> of the mechanism, which the residue could not give. A truly independent check would not share the
+> enumerator (strip comments with a different tool first, or parse the array with an AST reader).
+>
+> **One class is UNMEASURED, and it is bounded:** a trailing `code() // …delegateNextRoute…` would
+> be scored a comment by the shared predicate. An earlier grep aimed at this was itself broken (the
+> exclusion `^\s+[^/]` backtracks and matches ` //`), so the class is untested, not clean. The
+> exposure is one-directional — it can only make a genuinely UNGUARDED route read as guarded, i.e.
+> undercount 142. It cannot put a false entry in the ledger, so the ratchet is safe in the direction
+> that matters and the count may be slightly optimistic.
+>
+> Raised by an adversarial review of the commit that published the names, which is the right time
+> for a correction box to be audited: a correction that inherits the defect it corrects is the worst
+> possible artifact here.
 
 The only thing in front of those 141 is `_headlessHasCredential` (`headless-router.ts:4449`),
 and **its own comment states what it is**: *"a STRUCTURAL credential check ONLY … structural, not
@@ -124,6 +142,36 @@ including one whose Next half had been fixed hours earlier in the same session.
   `headless-router-auth-mirror.test.ts` already proves it.
 - Any fix must be checked in BOTH modes; the same-night evidence is that a Next-only fix is the
   default failure.
+
+### The 2 red test files you will see, and why they are NOT this card
+
+`yarn test` reports **457 pass / 2 fail**: `pillar-grep-cli` and `trdd-doctor`. Neither is caused by
+this card's work — but the story handed down for them was **WRONG**, and it is written here because
+a commit message is not searchable by the next session that runs the suite and sees 2 red.
+
+**The inherited claim was "2 frozen archived-TRDD corpus ERRORs, pre-existing, unfixable."**
+Measured 2026-08-23 (`yarn trdd:doctor`, full output read, not tailed): the corpus has exactly two
+ERRORs, and only ONE of them causes the failures.
+
+| ERROR | card | entered the corpus | is it the cause? |
+|---|---|---|---|
+| `BODY-STATE-CLAIM` | `7123D51A` (`design/archived/`) | 2026-07-10, commit `124b4e26` | **no** — both tests already allow it: `pillar-grep-cli` asserts on it BY NAME as the expected single error, and `trdd-doctor` carries it in a `PERMANENTLY_EXCLUDED` list |
+| `TERMINAL-WITHOUT-CHECKLIST` | `G6A54OYK` (`design/archived/`) | **2026-08-22 17:30, commit `b746c558`, subject: _"throwaway card B for the approve/refuse e2e"_** | **YES — this alone reds both files** |
+
+So the suite is designed to be GREEN on the frozen corpus. It fails because a **new, unexcluded**
+ERROR appeared **one day ago**: a throwaway card left behind by the TRDD-798OAHMX e2e smoke of the
+manage-trdd write verbs. It is `column: completed` with **zero** acceptance boxes, which is exactly
+what `TERMINAL-WITHOUT-CHECKLIST` fires on. `pillar-grep-cli`'s own docstring census was last
+re-measured 2026-08-21 — the day before the card landed.
+
+That run left **three** throwaway cards in the live governance corpus (`G6A54OYK` archived,
+`W7B0TC9B` refused, `8I0JUCK9` in tasks) plus its parent `798OAHMX`. Only `G6A54OYK` trips an ERROR;
+all three are uncleaned test litter (Rule 1 CLEAN-AFTER-YOURSELF, owed by that run).
+
+**Do not "repair" `G6A54OYK`'s body** — it is terminal, hence frozen by IND rule 12. The fix is a
+decision for the owner, not a drive-by: delete the throwaway litter (what its own commit message
+says it is), or add it to the doctor test's exclusion list (which weakens the gate to accommodate
+litter). Both failures clear either way. **Deleting governance cards is NOT authorized here.**
 
 ## Estimated risk
 

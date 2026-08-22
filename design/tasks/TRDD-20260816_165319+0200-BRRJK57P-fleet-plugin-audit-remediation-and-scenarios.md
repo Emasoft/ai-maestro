@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T02:56:03+0200
+updated: 2026-08-22T03:11:25+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -632,8 +632,9 @@ them to.
 - [x] No governance password literal appears anywhere in any artifact this program produced —
       **measured 2026-08-21T15:0x, 0 hits, positive control passing** (see the sweep ledger below
       for the population it covers and the two gaps it does not).
-- [ ] `trddgrep` / `prrdgrep` / `specgrep` shortcomings found during the program are recorded and,
+- [x] `trddgrep` / `prrdgrep` / `specgrep` shortcomings found during the program are recorded and,
       where verified, improved.
+      **TICKED 2026-08-22 — both found shortcomings are now recorded AND improved.**
       **TWO PILLAR-TOOLING SHORTCOMINGS FOUND 2026-08-21/22, both VERIFIED, one already IMPROVED.**
       Scope note so the box is not over-claimed: neither is literally one of the three named
       binaries — they are `trdd-extrefs` and `pillars-lint`/`lib/pillar` — but both are the pillar
@@ -657,8 +658,11 @@ them to.
          measured — **0 dangling / 252 edges / 501 cards**, instrument controlled in both
          directions — which settles the open design question as **fail on findings (exit 1)**,
          since there is no pre-existing backlog for a failing lint to redden against.
-      **Not ticked: the box says "recorded AND, where verified, improved."** One is improved, one
-      is recorded-with-a-card-and-a-decision. It ticks when `216FTVC9` lands.
+      **`216FTVC9` LANDED AND CLOSED** (`20d0bbfa` wiring · `b6ae9693` test · `52f329d9` close,
+      archived, 6/6 boxes) — so both shortcomings are recorded and improved, and the box ticks.
+      The second one also unblocked `L55IYKL4`, which closed on the repaired rationale
+      (`29df5532`): its scope-leak decision had been undecidable precisely BECAUSE the check its
+      only sane rationale appealed to did not run.
       *(Both are the same shape, which is why the pair is worth stating together: a tool that
       cannot see something reports CLEAN, and clean is indistinguishable from correct. That is the
       exact failure the pillar work was built to kill, found inside the pillar tooling itself.)*

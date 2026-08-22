@@ -1,11 +1,11 @@
 ---
 trdd-id: 89LVZSQ0
 title: The script layer cannot read terminal text, so three plugin-facing capabilities are unbuildable
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 created: 2026-08-06T12:04:01+0200
-updated: 2026-08-16T16:51:06+0200
+updated: 2026-08-22T02:11:23+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -143,13 +143,56 @@ MED. New route reaching a dangerous primitive (pane contents). Depends on no oth
 ai-maestro#110 and the janitor's injection-rule compliance.
 
 ## Acceptance
-- [ ] `AgentRuntime.capturePane` is reachable from at least one authorization-gated API route (verified by grep — no route calls it today)
-- [ ] The route returns the structured verdict `{blocked, reason, fieldVisible, fieldEmpty, fieldText, excerpt}`, not a raw buffer, as the default surface
-- [ ] A `--match <regex>` form evaluates server-side and returns only matching lines
-- [ ] The route is registered in `STRICT_AGENT_RULES` (or the human-only set), asserted by `tests/unit/sudo-guard-strict-agent-coverage.test.ts`
-- [ ] A neuter of the authorization gate reds a named test
-- [ ] The red-state classifier regex is reused from one shared module (not copied) between `scripts/ai-maestro-hook.cjs` and the new route
-- [ ] `aimaestro-session.sh` exposes the capability so a plugin-side skill answers "is the input field empty?" / "is there a red error on screen?" with zero `/api/*` calls
+
+**All seven verified 2026-08-22, first-hand, against the working tree.** The work landed on
+2026-08-21 (route, service and script all mtime `Aug 21 16:07`) and the card was never advanced —
+so this closes as a card that was DONE and still reading `todo`, not as work performed today.
+
+- [x] `AgentRuntime.capturePane` is reachable from at least one authorization-gated API route (verified by grep — no route calls it today)
+      → `app/api/agents/[id]/block-state/route.ts` (3173 B). Its own header names this card:
+      *"Until this route existed there was NO path to that at all — `capturePane` lived in
+      `lib/agent-runtime.ts` with zero API callers … (TRDD-89LVZSQ0)"*.
+- [x] The route returns the structured verdict `{blocked, reason, fieldVisible, fieldEmpty, fieldText, excerpt}`, not a raw buffer, as the default surface
+      → `lib/agent-block-state.ts` defines the verdict type: `blocked: boolean`, a `reason` enum
+      (`'idle'` = *"at an empty prompt, healthy, NOT blocked"*, etc.), and a nested `field`
+      carrying `visible` / `empty` / `text`. **Shape note, recorded rather than silently
+      accepted:** the delivered surface nests the three field members under `field{}` where this
+      box spelled them flat (`fieldVisible`/`fieldEmpty`/`fieldText`). Same information, one
+      level deeper — the requirement was *structured verdict, not a raw buffer*, and that holds.
+- [x] A `--match <regex>` form evaluates server-side and returns only matching lines
+      → route reads `request.nextUrl.searchParams.get('match')` and hands it to `getBlockState`;
+      `scripts/aimaestro-session.sh:56` documents `block-state <agent> [--match "<regex>"]` and
+      `cmd_block_state()` URL-encodes it (`jq -sRr @uri`) precisely so a regex full of `+ & #`
+      and spaces is not silently truncated into one that matches the WRONG lines.
+- [x] The route is registered in `STRICT_AGENT_RULES` (or the human-only set), asserted by `tests/unit/sudo-guard-strict-agent-coverage.test.ts`
+      → `lib/sudo-guard.ts:471` — `'GET /api/agents/[id]/block-state': { action: 'unblock-prompt',
+      targetFromPathId: true }`, and `security-registry.json:60` carries it as `"strict"`. The
+      test asserts **generically** (it iterates the strict-route ledger: *"every strict route is
+      DECLARED — mapped, owner-only, or explicitly pending"*), so `grep block-state` on the test
+      file returns 0 — the coverage is by construction, not by name. The neuter below is what
+      proves that assertion actually binds this route rather than merely being able to.
+- [x] A neuter of the authorization gate reds a named test
+      → **OBSERVED via `scripts/dev/neuter`, restore verified by blob hash, 2026-08-22:**
+      `s|'GET /api/agents/\[id\]/block-state'.*|// NEUTERED: mapping removed|` → **1 red / 9
+      green**, the red being *"every strict route is DECLARED — mapped, owner-only, or explicitly
+      pending"*. Exactly one, as predicted — the mutation changed 1 line (the tool aborts if it
+      hits more), so the red set is about the gate aimed at and nothing else.
+- [x] The red-state classifier regex is reused from one shared module (not copied) between `scripts/ai-maestro-hook.cjs` and the new route
+      → **The requirement is met and its named counterparty no longer exists.**
+      `scripts/ai-maestro-hook.cjs` is **absent from the repo** — `find . -name '*ai-maestro-hook*'`
+      returns nothing, positive-controlled (`find scripts -maxdepth 1 -type f` = 122, `-name
+      '*.sh'` = 91, and `.cjs` files do exist elsewhere, e.g. `lib/ecosystem-state-paths.cjs`), so
+      this is a verified absence and not a broken search. What the box asked for — ONE shared
+      classifier rather than a copy — is what shipped: the pure logic is `lib/agent-block-state.ts`,
+      wrapped by `services/block-state-service.ts`, and consumed from five sites
+      (`lib/fleet-askuser-autoanswer.ts:46`, `lib/oauth-rotator/model-fallback-deps.ts:18`,
+      `services/agents-core-service.ts:1609`, `services/sessions-service.ts:40`, and the route).
+      There is no second literal to drift.
+- [x] `aimaestro-session.sh` exposes the capability so a plugin-side skill answers "is the input field empty?" / "is there a red error on screen?" with zero `/api/*` calls
+      → `cmd_block_state()` wraps `_api GET /api/agents/${id}/block-state[?match=…]`, dispatched
+      as the `block-state` verb and documented at `:16`, `:56`, `:170-198`. The `/api/*` call is
+      the SCRIPT's, which is the whole point of the decoupling layer — the plugin caller makes
+      none.
 
 ## Approval log
 
@@ -157,3 +200,8 @@ ai-maestro#110 and the janitor's injection-rule compliance.
   and the plugins… be sure the functions are good enough to cover all the functionalities
   accessible to the plugins"). Tier 0 / `min-approval-requirement: none` — in-scope server work
   on our own tree.
+- 2026-08-22T02:11:23+0200 — COMPLETED by ai-maestro-hub (min-approval-requirement: none). All
+  seven acceptance boxes verified first-hand against the tree, including a `scripts/dev/neuter`
+  run on the authorization mapping (1 red / 9 green, restore blob-hash verified). The work itself
+  landed 2026-08-21; this card simply never advanced — found by the board triage of 2026-08-22,
+  which is the class of stale record that makes `todo` overstate the open board.

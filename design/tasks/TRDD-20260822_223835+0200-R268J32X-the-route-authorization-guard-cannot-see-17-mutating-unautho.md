@@ -7,7 +7,7 @@ updated: 2026-08-22T22:48:21+0200
 current-owner: user
 created-by: user
 task-type: security
-implementation-commits: [PENDING]
+implementation-commits: [a2e1f2d0]
 min-approval-requirement: manager
 mandate: true
 mandated-by: user

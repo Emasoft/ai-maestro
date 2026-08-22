@@ -8,6 +8,25 @@
  * The load-bearing case is `unreadable`, not `orphan`. `[].every(gone)` is `true`, so a
  * two-state classifier deletes any index it FAILED TO READ — the lenient-reader failure, with
  * a delete on the end of it.
+ *
+ * NEUTER RUNS (2026-08-22 — all OBSERVED via scripts/dev/neuter, each restore verified by blob
+ * hash). Three, because the classifier has three independent branches and one mutation can only
+ * certify the branch it hits:
+ *
+ *   s/targets\.some\(/targets.every(/                                        → 1 red / 8 green
+ *       ONE surviving target is enough — a partly-deleted corpus is not an orphan
+ *
+ *   s/if \(row\.targets\.length === 0\) return \{ \.\.\.row, state: 'empty' \}//   → 1 red / 8 green
+ *       EMPTY is a distinct state from UNREADABLE, and the report says which
+ *
+ *   s/if \(row\.readFailed\) return \{ \.\.\.row, state: 'unreadable' \}//         → 2 red / 7 green
+ *       EMPTY is a distinct state from UNREADABLE, and the report says which
+ *       THE SAFETY PROPERTY — an index whose read THREW is never an orphan
+ *
+ * The third reddens TWO by design: dropping the `readFailed` branch makes a thrown read fall
+ * through to `empty`, so both the safety test and the states-are-distinct test notice. That it
+ * still does NOT become an orphan is the point — the fail-closed property survives the
+ * mutation, and what breaks is the report's honesty about WHY the file was kept.
  */
 import { describe, it, expect } from 'vitest'
 import {

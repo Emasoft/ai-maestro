@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-22T03:30:50+0200
-updated: 2026-08-22T13:52:25+0200
+updated: 2026-08-22T14:02:40+0200
 current-owner: ai-maestro-hub
 created-by: ai-maestro-hub
 assignee: ai-maestro-hub
@@ -259,8 +259,31 @@ This card contains the *source*; it reports the residue and stops.
 - [ ] The writer of `scratchpad-*` (2026-08-22 02:59) is identified and contained.
 - [ ] Every writer reachable from this repo is contained at its own layer.
 - [ ] One run-level assertion exists that reddens for a writer it was not written for.
-- [ ] The neuter is recorded: which mutation, which test reddened, how many.
-- [ ] The residue is reported to the owner with its size, and left untouched.
+      **⚠ THESE THREE ARE CONTAINMENT-STRATEGY BOXES, AND THE FORK RESOLUTION SUPERSEDED THE
+      STRATEGY — but they are NOT ticked, because "no longer required" is not "done".** They
+      were written when the plan was to contain each writer at its own layer. The resolution
+      (see §FORK RESOLVED) is to REAP instead, which bounds the directory regardless of who
+      writes into it — including writers in repos we do not own, which is the case that
+      produced this card and which per-writer containment can never reach. At `severity: low`
+      the reaper alone is sufficient, so these are now OPTIONAL rather than blocking.
+      Ticking them would claim work nobody did; deleting them would erase why they existed.
+      Whoever wants prevention as well as bounding does them and adds the `trddgrep` guard.
+- [x] The neuter is recorded: which mutation, which test reddened, how many.
+      **THREE runs, all OBSERVED, restores blob-verified** — recorded verbatim in
+      `tests/unit/index-orphans.test.ts`. One per independent branch, because a single mutation
+      certifies only the branch it hits: `.some(`→`.every(` → 1 red/8 green; drop the
+      `targets.length === 0` branch → 1 red/8 green; drop the `readFailed` branch → **2** red/7
+      green. The third reddens two by design — a thrown read falls through to `empty`, so both
+      the safety test and the states-are-distinct test notice, and it still does NOT become an
+      orphan. The fail-closed property survives that mutation; what breaks is the report's
+      honesty about WHY the file was kept. This box was open for a real reason: the test file
+      NAMED a neuter that had never been run, which is a claim of coverage, not coverage.
+- [x] The residue is reported to the owner with its size, and left untouched.
+      `yarn pillar:reap` on the live dir: **102 scanned — 6 live, 70 orphaned, 26 empty, 0
+      unreadable, 66.8 MB reclaimable**, and **102 files before AND after** the run. Reported
+      to the owner the same day. Untouched is enforced by construction, not by intent: removal
+      sits behind an explicit `--reap`, per `never_free_space.md` and the house pattern of
+      `check-script-drift.mjs`.
 
 ## Approval log
 

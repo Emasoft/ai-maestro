@@ -6,7 +6,7 @@ project-id: ai-maestro
 repo: Emasoft/ai-maestro
 column: human_review
 created: 2026-07-30T13:09:14+0200
-updated: 2026-08-22T23:07:10+0200
+updated: 2026-08-22T23:52:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -79,6 +79,54 @@ things the producer needs do not exist ANYWHERE in production:
 | ~~which USER an assistant is bound to~~ | ~~**no** — `recipientIsOwnUser` / `boundUser` / `ownAssistant` have **zero** non-test references~~ **← WRONG, corrected 2026-08-22 (see below). It EXISTS: `UserRecord.assistantAgentId`.** |
 | `userPermitsManagerCollaboration` storage | **no** — the symbol lives ONLY in `lib/communication-graph.ts` (the type + the read) and in the test |
 | a surface for the user to GRANT it | **no** — no route, no setting, no UI |
+
+### RULING 2026-08-22 — storage and default, decided on verified facts
+
+The NEXT ACTION said to ask the USER. The USER's standing grant for this session is to decide on
+their behalf **from verified facts and tests, never assumptions**, so this rules the two answerable
+questions and leaves the one that is genuinely a build.
+
+**STORAGE: a field on `UserRecord`, beside `assistantAgentId`.** Not a new store, not a field on
+the agent. The permission is a property of the USER→ASSISTANT relation, and `UserRecord` already
+carries exactly that relation in `assistantAgentId` (`types/user.ts:69`). Putting it there means it
+shares three things it must share, none of which would hold elsewhere:
+- **the same lifecycle** — one record, written and read together, so a grant cannot outlive or
+  precede the binding it qualifies;
+- **the same cascade** — `lib/user-registry.ts:192` already cascade-deletes the ASSISTANT with the
+  user under R39.6, so revocation-by-deletion is inherited rather than reimplemented;
+- **the same consumers** — `services/send-message-service.ts:97-128` and
+  `services/amp-service.ts:1252-1262` already load the user record on the messaging path that needs
+  the answer, so the read costs nothing new. A separate store would add a second fetch on the hot
+  path and a second thing to keep consistent.
+
+**DEFAULT: `false`, for a record that predates the field.** Two independent reasons, both checkable:
+- The codebase already has this invariant — `lib/authorization.ts` ends in deny-by-default, and
+  `gate0Auth` records why a missing context must not read as permission ("Previously, a missing
+  authContext was silently treated as 'authorized'…").
+- The failure modes are **asymmetric**. Default-on grants a channel the user never approved — a
+  security error, and a silent one. Default-off leaves a feature gap — visible, and not an error.
+  When one direction is a security failure and the other is an inconvenience, the choice is not a
+  preference.
+
+An absent field must therefore read as `false`, never as unset-so-allow. That is the same defect
+the ASSISTANT branch already avoids by falling through to a fail-closed deny.
+
+**WHAT THIS RULING DOES NOT DECIDE, and must not:** the GRANT SURFACE. There is no route, no
+setting and no UI, and the card's own warning stands — default-off with no way to turn it on makes
+R39.9 a dead letter. Building that surface is a feature, and it is where the remaining work is. The
+ruling above only ensures that when it is built, the storage is not re-litigated and the migration
+default is not invented under time pressure.
+
+**ADVISOR NOT CONSULTED — THE PATH IS BROKEN, AND THAT IS ITSELF A FINDING.** `advisor-rules.md`
+mandates consultation before an architectural decision. Two `fable-advisor:advisor` agents were
+spawned for exactly this question and **both froze**: the first at 17,884 bytes with its transcript
+mtime flat for **62 minutes**, the second at 15,751 bytes flat for **44.8 minutes** — each measured
+with two samples before the kill, since a kill stamps mtime. The second carried a deliberately
+bounded brief (three named questions, an explicit four-file list, "answer in under 400 words"),
+so brief size is not the variable. The advisor is read-only (Read/Grep/Glob) and therefore cannot
+checkpoint a file, so a freeze loses everything it had reasoned. Recorded here because the next
+session that reaches for the mandated consultation should know it has failed twice today with the
+same signature, rather than spending another hour discovering it.
 
 ### ⚠ CORRECTION 2026-08-22 — one of the three "does not exist" rows was a FALSE ABSENCE
 

@@ -5,7 +5,7 @@ column: human_review
 scope: project
 project-id: ai-maestro
 created: 2026-07-29T10:15:45+0200
-updated: 2026-08-02T15:25:31+0200
+updated: 2026-08-22T17:04:06+0200
 implementation-commits: [7b3341ac, 17b55c24]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -30,6 +30,22 @@ external-refs: [https://github.com/Emasoft/ai-maestro/issues/95]
 ---
 
 # Re-login belongs in the dashboard, not in a CLI the user has to be told about
+
+## ⏹ 2026-08-22T17:04 — STRUCTURAL: this card has 11 boxes and NO `## Acceptance` section
+
+Flagged, deliberately NOT repaired here. All 11 checkboxes live under **`## Verification`**; the
+card has no `## Acceptance` heading at all. That is invisible today — the completion gate binds the
+transition INTO a terminal column, and this card is `human_review` — but it becomes load-bearing at
+the moment the USER closes it, because a gate reading "the bottom checklist" then reads a
+VERIFICATION list rather than an acceptance one. `~/.claude/rules/lessons-verification.md` records
+this class: *"One card, one gate — the boxes that gate live under `## Acceptance` and nowhere
+else"*, measured at 8 such cards on this board.
+
+**Not repaired because the fix is a judgment call the owner owns:** the 11 boxes are genuine
+verification criteria and 10 are ticked, so renaming the heading would silently promote them to
+acceptance criteria, and adding a separate `## Acceptance` would need someone to decide what this
+card's acceptance actually IS. Either is a content decision, not a mechanical repair. The single
+open box — the end-to-end on `ACCOUNT-A` — is the same human step in both readings.
 
 ## ⏹ TRIAGE 2026-08-02T15:2x+0200 — `dev` → `human_review`, the only step left is the USER's ([[5YRLA53W]])
 
@@ -194,6 +210,19 @@ it now.
 - [x] Unit: a successful exchange writes the slot AND zeroes `refresh_failures` + clears `refresh_dead_fp`
 - [x] Unit: the verifier is never present in any response body (assert the negative explicitly)
 - [x] Unit: BOTH routes refuse a non-console peer even with a valid MAESTRO session (the gate is the point; assert the refusal, not just the happy path)
+      **↳ RE-VERIFIED 2026-08-22T17:04, independent hub pass — and it pins MORE than this box
+      claims.** `scripts/dev/neuter` on the shared guard (1 ins / 1 del, restore verified by blob
+      hash): `s/if \(!isConsolePeer\(peer\)\)/if (false)/` on
+      `lib/oauth-rotator/reauth-guard.ts` over all four reauth suites → **4 red / 63 green**:
+      *"refuses a phone on the Tailscale VPN even with a perfectly valid MAESTRO session"* (this
+      box), plus *"checks the console BEFORE touching any credential, so the route is not an
+      oracle"*, *"fails CLOSED when the server could not determine the peer at all"*, and
+      *"refuses the Tailscale IPv6 ULA range and the LAN"*. **Both routes are covered by ONE
+      guard** (`guardReauthRoute` — console + MAESTRO + sudo), so a single neuter reaches both;
+      that factoring is why the refusal cannot drift apart between them.
+      (Finding it cost a wrong grep worth recording: `isConsolePeer|console_required` returns
+      **zero** in either `route.ts`, because the gate is factored into the helper. A zero against
+      a route file is not evidence the route is ungated — read its imports.)
 - [x] **The remote peer is genuinely remote** — MEASURED with a throwaway probe, not assumed: a connection to the host's own Tailscale IP presents `::ffff:100.99.233.43`, loopback presents `::ffff:127.0.0.1`. That was the one link unit tests cannot cover (an OS fact), and it is the premise the whole gate rests on. (Recorded lesson; this exact vacuity already bit the `x-aim-peer` spoof test.)
 - [x] Observe the route ITSELF answer `console_required` to an AUTHENTICATED remote caller — **DONE 2026-07-29 20:0x, live against the running server.** A MAESTRO session was minted at loopback and replayed to the host's own Tailscale IP as an explicit `Cookie:` header (a jar will NOT do it: the cookie is host-scoped to `127.0.0.1`, so curl silently drops it and every probe comes back 401 looking exactly like the middleware rejection this box was written about). Three probes, and it is the DISAGREEMENT between the two controls that makes it proof: **positive control** `GET /status` (not console-gated), remote + authenticated → **200**, which rules out "the cookie is bad" and "everything remote 401s"; **the test** `POST /reauth/start`, remote + authenticated → **403 `console_required`**; **negative control** the SAME route with the SAME cookie from loopback → **403 `sudo_required`** — a DIFFERENT slug, so it cleared the console gate and stopped at the next one. That rules out "this route always 403s" and independently confirms the console → MAESTRO → sudo ordering. (First attempt was inconclusive in two ways at once — cookie dropped by host-scoping, and GET on a POST route returning 405 — and the controls are what exposed both.)
 - [x] Unit: `::ffff:127.0.0.1` (the dual-stack form the `::` bind produces) is ACCEPTED — and the probe showed it is the ONLY form loopback takes on this host, so it is the load-bearing branch rather than an edge case

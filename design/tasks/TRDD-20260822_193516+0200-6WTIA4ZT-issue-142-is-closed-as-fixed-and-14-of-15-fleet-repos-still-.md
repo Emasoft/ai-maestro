@@ -3,7 +3,7 @@ trdd-id: 6WTIA4ZT
 title: Issue 142 is closed as fixed and 14 of 15 fleet repos still run the pre-fix pre-push hook
 column: todo
 created: 2026-08-22T19:35:16+0200
-updated: 2026-08-22T19:35:16+0200
+updated: 2026-08-22T19:55:58+0200
 current-owner: user
 created-by: user
 task-type: infra
@@ -283,3 +283,48 @@ A repo is adopted when the file **git executes** carries the branch-aware form. 
 was cut, not when the pin moved, not when the tracked file was updated, and not when
 `--install-hook` printed success. Three repos cannot become adopted by any release at all until
 their `core.hooksPath` is fixed first.
+
+### CORRECTION 2026-08-22T19:55 — the two counts are not a partition, and the population was too small
+
+Peer AMAMA refuted the framing of the census above, and re-measuring confirmed it. Two separate
+errors, one of which was mine and one of which was a scoping choice nobody had questioned.
+
+**1. "LIVE" and "orphaned" overlap; an orphan count is a FLOOR, not a partition.** The census
+reported "12 live / 4 orphaned" as if they described disjoint sets. They do not:
+`ai-maestro-assistant-role-agent` and `ai-maestro-web-scenario-tester` are each `live=LIVE`
+**and** `orphan=YES` — a working tracked hook with a stale ignored `.git/hooks/pre-push` sitting
+beside it. AMAMA's own repo is in both too. The two axes are independent and must be measured
+independently.
+
+**2. The population was the ~15 fleet repos; this machine has 48.** Re-run over every git repo
+under `~/Code` plus `~/ai-maestro`:
+
+| measure | value |
+|---|---|
+| git repos | 48 |
+| `core.hooksPath` → the GLOBAL `~/.config/git/hooks` | **39** |
+| `core.hooksPath` → a repo-relative dir (`git-hooks`/`.githooks`/`githooks`) | 7 |
+| `core.hooksPath` → an absolute per-repo `.git/hooks` | 2 |
+| repos running their OWN tracked pre-push (`LIVE`) | 6 |
+| repos shipping a tracked pre-push git will NEVER execute (`DECORATIVE`) | **3** — `claude-menu-system`, `claude-voice-loop`, `rechecker-plugin` |
+| repos carrying a stale ignored `.git/hooks/pre-push` (`SHADOWED`) | **9** (was 4 at the 15-repo scope) |
+
+The DECORATIVE count converges with the earlier one at 3, which is the one number that survived
+both scopes.
+
+**3. The finding the wider scope exposed, which the fleet-only scope could not see.** 39 of 48
+repos — five sixths of this machine — route every hook to ONE file, `~/.config/git/hooks/pre-push`.
+That file exists and executes, so those repos ARE push-protected; but it is tracked by no
+repository, reviewed in no PR, and versioned nowhere. Its own directory carries
+`.bak-20260413_202201` copies of all four hooks beside the live ones, which is the same
+trap-for-the-diligent shape as the shadowed `.git/hooks/pre-push`: a plausible file where a
+careful person looks, that git does not run. **Machine-wide push protection has a single point of
+failure that no repo's review can see, and no repo's git history records.** That is not this
+card's scope to fix — recorded here because the measurement that found it was this card's.
+
+**4. Credit where the earlier note was ungenerous.** The peer's original claim was called out as
+possibly a file read. It was not: they ran `git push`, it was REFUSED, and the strict-publish
+message was quoted verbatim. That is behavioural evidence about what git EXECUTED — strictly
+stronger than any file inspection, and immune to every failure mode this card describes. A refused
+push proves *a* hook ran, not *which* file; `git config --get core.hooksPath` is what closes that
+last gap, and both halves together are the method.

@@ -1,9 +1,9 @@
 ---
 trdd-id: 95IKXQI6
 title: Parameterize install/update scripts with a custom git repo+branch and a version-downgrade guard
-column: human_review
+column: completed
 created: 2026-07-21T20:51:42+0200
-updated: 2026-08-05T01:08:00+0200
+updated: 2026-08-22T16:20:24.101Z
 current-owner: ai-maestro
 task-type: infra
 scope: project
@@ -150,13 +150,64 @@ says so itself, and it is why `column: testing` is correct rather than `complete
       an ad-hoc run that left no trace**: 16 tests + 2 measured neuters (`93472eb4`, `eba494a9`)
 - [x] `--repo`/`--branch`/`--allow-downgrade` in remote-install `show_help`; `--repo`/`--branch` in
       install-messaging `-h`
-- [ ] **live install/update against a clean target** — DEFERRED to the human, deliberately and for a
-      good reason: running the installer needs a clean TARGET machine, and running it against
-      `~/ai-maestro` would have the update path's `git stash`/`pull` touch the live dev branch. The
-      guard would correctly refuse the main-over-governance-rules downgrade, which is not the same
-      as the run being safe. This box is the reason the card is `testing` and not `complete`
+- [~] **live install/update against a clean target** — **DESCOPED 2026-08-22 to `TRDD-MSLBWEDK`.**
+      It is a PHYSICAL act on a machine this session does not have, and the standing owner grant
+      moves review verdicts, not machines. Ticking it would be a lie; leaving it open would hold a
+      finished card hostage to a host nobody has provisioned. So it moves out whole, with its
+      reason SHARPENED — see the verdict block, which corrects this box's own stated rationale:
+      the binding constraint is the GLOBAL pm2 identity, not the update path's `git stash`
+
+## ✅ REVIEW VERDICT 2026-08-22 — COMPLETE, with one box descoped to `TRDD-MSLBWEDK`
+
+Reviewed under the standing owner grant. Eight of nine boxes were already verified; the ninth is a
+physical act. Two things were done rather than asserted.
+
+**1. Part of the deferred box WAS runnable here, and was run.** The box bundled "the flags work" with
+"a whole machine gets installed", and only the second half needs a host:
+
+```
+$ bash scripts/remote-install.sh --help
+  -d, --dir PATH      Install directory (default: ~/ai-maestro)
+  --repo SRC          Custom source: owner/repo, a full git URL, or a local repo
+  --branch NAME       Branch to install/update from (env: AIMAESTRO_BRANCH)
+  --allow-downgrade   Permit updating to an OLDER version than installed
+
+$ bash install-messaging.sh --branch governance-rules      # D5's guard, zero network I/O
+exit=1
+❌ --branch requires --repo (no source repo to clone)
+```
+
+The second is `install-messaging.sh:128` executing for real — D5's opt-in property demonstrated by
+its refusal path rather than by reading the source.
+
+**2. The box's stated reason for deferral is WRONG, and the right one is stronger.** It says the
+danger is *"the update path's `git stash`/`pull` touch[ing] the live dev branch"*. Read live:
+
+- An update here never REACHES `git stash`. Two pre-mutation guards fire first — the downgrade guard
+  (`scripts/remote-install.sh:1171`) and the unpushed-vs-remote guard (`:1186`, TRDD-0N792LL5), the
+  latter refusing outright because this checkout carries ~140 commits not on `origin`.
+- The real constraint applies to the INSTALL path too, so a fresh `--dir` does NOT escape it: `--dir`
+  parameterizes the directory (`:280`) while the pm2 app IDENTITY is hardcoded — `--only ai-maestro`
+  (`:1438`) / `--name ai-maestro` (`:1442`) then `pm2 save` (`:1444`). There is ONE `ai-maestro` pm2
+  app on this machine and it is the live server on `:23000`. A scratch install would re-point it and
+  persist that across reboot. It also runs `claude plugin uninstall` / `marketplace remove`
+  (`:524-525`). There is no `--dry-run` on either script.
+
+That correction is the substance of this review: had the deferral been left on its original
+rationale, a future tester could reasonably have concluded that a fresh `--dir` made the run safe
+here. It does not.
+
+**VERDICT: COMPLETE.** The card's own deliverables D1-D5 all landed, are unit-pinned with measured
+neuters, and their argument-parsing surface is now demonstrated live. The clean-target run leaves as
+`TRDD-MSLBWEDK` carrying the corrected reason and the two commands already discharged.
 
 ## Approval log
+
+- 2026-08-22T18:22:00+0200 — REVIEWED and CLOSED `human_review → complete` under the standing owner
+  grant. Eight boxes re-affirmed; the ninth DESCOPED to `TRDD-MSLBWEDK` (a physical act needing a
+  clean host — the grant moves verdicts, not machines). Two live runs discharged part of it here;
+  the deferral's rationale was corrected from the update-path stash to the global pm2 identity.
+
 - 2026-08-05T01:08:00+0200 — `testing → human_review`. Column only; no work, no boxes, no scope changed.
   `testing` asserts someone is actively working this card, and nobody is — its one box is marked *"DEFERRED to the human, deliberately and for a good reason"* — the installer needs a clean TARGET machine, and running it here would have the update path's `git stash`/`pull` touch the live dev branch.
   `blocked` would be the wrong move: it requires a non-empty `blocked-by:` naming an open
@@ -167,3 +218,5 @@ says so itself, and it is why `column: testing` is correct rather than `complete
 - 2026-07-21T20:51:42+0200 — MANDATE (Tier-0, self, in-scope infra). No approval request sent.
 - 2026-07-21T21:12:00+0200 — USER correction folded in: default reverted to 23blocks-OS;
   `--repo` extended to accept local repo paths (the dev-workflow source).
+- 2026-08-22T16:20:18.391Z — column → complete. Reviewed under the owner grant; 8 boxes re-affirmed, the live clean-target run descoped to TRDD-MSLBWEDK with a corrected rationale.
+- 2026-08-22T16:20:24.101Z — COMPLETED by user. archived → completed.

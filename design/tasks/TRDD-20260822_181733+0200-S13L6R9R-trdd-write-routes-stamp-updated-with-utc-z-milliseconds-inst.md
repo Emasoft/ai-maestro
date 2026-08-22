@@ -179,3 +179,51 @@ cannot fix a format defect in that field. Superseded by:
 - [ ] the backfill CONVERTS each existing instant to the local-offset form (same wall-clock moment, truncated to the second) and does **not** substitute `now` — proved by comparing each card's before/after epoch, which must differ by less than one second
 - [ ] the repair is classified `mechanical`, so no OTHER field's bump logic fires on it
 - [ ] board order over the 23 is unchanged after the backfill — the sort is the thing being protected, so it is the thing to assert
+
+## Blast radius re-measured — 2026-08-22T20:34:00+0200 — THREE targets, not one, and 18 of the cards are FROZEN
+
+The card measures `updated:` only. Reading `lib/trdd-store.ts` shows the same bad `iso` is
+written to **three** places per call:
+
+```
+:353,:363   { ...fields, updated: iso }         → the updated: frontmatter field
+:589,:592   ['updated', …], ['approval-datetime', …]
+:602,:632   `- ${opts.iso} — APPROVED by …`     → a PROSE line in ## Approval log
+```
+
+Measured across all four zones:
+
+| target | Z-form | offset-form (control) |
+|---|---|---|
+| `updated:` | **24** | 502 |
+| `created:` | 0 | — |
+| `approval-datetime:` | **1** | — |
+| `## Approval log` prose lines | **36** | 764 |
+
+**61 sites across 3 targets, not 23 across 1** — and the largest population is the one the card does
+not mention. (`updated:` also went 23 → 24 during this pickup: the drift is live.)
+
+**Two things this changes about the plan, both load-bearing:**
+
+1. **The approval-log lines are PROSE, not a field.** A frontmatter repair is a keyed replace; a
+   prose repair is a scripted bulk edit over text a regex cannot fully parse — this corpus's own
+   lesson (*"a scripted bulk edit over PROSE destroys what its regex cannot parse"*) was earned on
+   exactly that. The 36 must be repaired by an anchored, single-purpose rule that rewrites ONLY the
+   leading `- <ISO> — ` token and touches nothing after the em-dash, or not at all.
+
+2. **18 of the affected cards are TERMINAL and therefore FROZEN** (17 `completed`, 1 `refused`)
+   against 6 open ones. IND §12 freezes a terminal card's body — **but `## Approval log` is
+   explicitly EXEMPT (append-only)**, and a format repair of a line already in it is neither an
+   append nor a fact change. That exemption is written for ADDING lines, not REWRITING them, so it
+   does not obviously cover this. **This is the one question on the card I cannot settle from the
+   rules as written, and it must be settled before any `--fix` runs**, because the alternative
+   readings differ by 18 frozen cards.
+
+**Recommendation, pending that ruling:** land the WRITE-side fix (so the drift stops growing) and
+the doctor RULE (so the class is detected) **first**, and gate the BACKFILL of the 36 prose lines
+and the 18 frozen cards behind the freeze ruling. Stopping the bleed does not require deciding the
+frozen-card question; conflating them would hold a safe fix hostage to an unsettled one.
+
+- [ ] the freeze question is ruled on before any backfill touches a terminal card
+- [ ] the approval-log repair rewrites ONLY the leading `- <ISO> — ` token, proved by asserting the post-em-dash remainder is byte-identical
+- [ ] the write-side fix and the doctor rule land INDEPENDENTLY of the backfill

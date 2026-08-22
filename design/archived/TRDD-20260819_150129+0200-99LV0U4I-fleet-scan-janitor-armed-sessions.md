@@ -1,9 +1,9 @@
 ---
 trdd-id: 99LV0U4I
 title: Extend the fleet liveness scan to janitor-armed non-agent sessions
-column: human_review
+column: completed
 created: 2026-08-19T15:01:29+0200
-updated: 2026-08-19T19:36:39+0200
+updated: 2026-08-22T15:57:49.449Z
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2
 assignee: hub-session-brrjk57p-phase2
@@ -88,6 +88,8 @@ that FIRST; this card does not restate it.
 
 - 2026-08-19T15:01:29+0200 — MANDATE issued as Tier-0 self-mandate (derived NPT of [[KCRMSNL7]],
   server-internal, reversible, dark-shipped where destructive). No approval request sent.
+- 2026-08-22T15:57:49.330Z — column → complete. human review under the owner's grant
+- 2026-08-22T15:57:49.449Z — COMPLETED by user. detect-only property re-verified in source; downstream proposal deferred to the arming decision.
 
 ## ⏹ 2026-08-22T18:0x — HUMAN REVIEW PERFORMED. VERDICT: COMPLETE.
 

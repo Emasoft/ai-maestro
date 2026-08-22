@@ -347,6 +347,53 @@ export function removeBodyStateClaimLine(text: string): string | null {
 const asList = (v: unknown): string[] => refList(v)
 
 /**
+ * Is this parsed frontmatter value a DATETIME whose notation is NOT the mandated one?
+ * (TRDD-S13L6R9R)
+ *
+ * IND `trdd-design-tasks` step 4 is titled "Frontmatter is grep-first", and under it:
+ * *"Dates are ISO 8601 with the local offset (`%Y-%m-%dT%H:%M:%S%z`)"*. Five write
+ * routes stamped `toISOString()` instead, so the corpus carries a second, UTC-`Z`
+ * dialect of its own date format.
+ *
+ * The detector is a MEASURED property of the format, not a trick: the mandated `%z`
+ * offset is COLON-LESS, which YAML 1.1's timestamp grammar does not accept — so
+ * gray-matter leaves a CONFORMING value as a `string` and coerces every non-conforming
+ * one (`…Z`, `…+02:00`) to a `Date`. `tests/unit/trdd-date-notation.test.ts` pins both
+ * directions, so a parser upgrade that changed this reddens the control rather than
+ * letting the detector go silently blind.
+ *
+ * Keyed on the VALUE, never a field-name list — `STATUS-HOLDS-COLUMN-VALUE` below is
+ * written the way it is because name-keying once turned this tool into a deleter of a
+ * legitimate field.
+ *
+ * SCOPE: a value with NO time-of-day is a DATE, not a datetime (`review-after:
+ * YYYY-MM-DD`, which YAML also coerces), and the datetime-notation rule does not govern
+ * it. Rewriting one would corrupt a park field the IND rule requires to fail OPEN. The
+ * cost of that scope is that a `Z` datetime landing on exactly midnight UTC is missed —
+ * the safe direction: never corrupt, occasionally miss.
+ */
+function dateFieldRepairable(field: string, column: string): boolean {
+  // On a FROZEN card, exactly one dated field is in reach. IND step 12: *"Only `updated:`
+  // (and, when superseding, `superseded-by:`) may change"* — so `updated:` is the one
+  // frontmatter field the terminal freeze NAMES as changeable, and re-spelling its notation
+  // is the exemption's own subject rather than a breach of it. Every other dated field on a
+  // frozen card is out of reach.
+  //
+  // The LINT uses this too, deliberately: a rule that reported a frozen card's
+  // `approval-datetime:` would be a finding nobody is permitted to fix, and this repo has
+  // already shipped the mirror of that bug — a `--fix` repairing a shape the lint never
+  // reported. One predicate, both sides.
+  return field === 'updated' || !TERMINAL_DONE.includes(column)
+}
+
+function offFormatDatetime(v: unknown): Date | null {
+  if (!(v instanceof Date) || Number.isNaN(v.getTime())) return null
+  const noTimeOfDay =
+    v.getUTCHours() === 0 && v.getUTCMinutes() === 0 && v.getUTCSeconds() === 0 && v.getUTCMilliseconds() === 0
+  return noTimeOfDay ? null : v
+}
+
+/**
  * A STATE block that reads as finished. Hoisted to module scope so the reduction in
  * `loadCorpus` and the rule that reports it cannot drift into two different tests.
  * No `g` flag on purpose: a global regex carries `lastIndex` between `.test` calls and
@@ -551,6 +598,29 @@ export function lintCorpus(designDir: string): DoctorReport {
         id: c.id,
         filePath: c.filePath,
         message: `\`status: ${statusVal}\` holds a COLUMN value — the v1 field spelled the pipeline state, and v2 moved that to \`column:\`. Two state fields = two truths. (\`status:\` itself is legitimate for a different aspect; only a column value in it is wrong.)`,
+        autofixable: true,
+      })
+    }
+
+    // ---- frontmatter DATETIME notation (TRDD-S13L6R9R) ----
+    // The write side is fixed (`isoLocal()` is now the one stamp), but nothing PREVENTED
+    // the drift for the weeks it ran, and a sixth write path would repeat it in silence.
+    // This is that guard. Rationale + the review-after scope: `offFormatDatetime`.
+    //
+    // `warn`, not `error`: both dialects parse to a valid instant, and no `.sort()` keyed
+    // on `updated:` exists in this repo's tracked source (the "the board sorts on
+    // `updated:`" claim appears in a spec clause and three comments; the sort itself, if
+    // it exists, is in `trddgrep`, a separate binary). So this is a format split in a
+    // grep-first corpus, not a live ordering bug — and keeping it out of `error` keeps
+    // the zero-ERROR corpus gate meaningful.
+    for (const [field, value] of Object.entries(c.fm)) {
+      if (!offFormatDatetime(value) || !dateFieldRepairable(field, c.column)) continue
+      add({
+        rule: 'DATE-NOT-LOCAL-OFFSET',
+        severity: 'warn',
+        id: c.id,
+        filePath: c.filePath,
+        message: `\`${field}:\` carries a UTC-\`Z\` instant instead of the mandated \`%Y-%m-%dT%H:%M:%S%z\` local offset — two date dialects in one grep-first corpus. Auto-fix CONVERTS the instant it already holds; it never stamps \`now\``,
         autofixable: true,
       })
     }
@@ -1243,6 +1313,30 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       // so the bump below is a no-op replace on the line this branch just wrote.)
       record('semantic', 'added a full frontmatter (was: none) — column=todo per the uncertainty law')
     } else {
+      // ---- frontmatter DATETIME notation → the mandated local offset (TRDD-S13L6R9R) ----
+      //
+      // MECHANICAL, and the distinction is the entire point: this CONVERTS the instant the
+      // card already holds (`isoLocal` takes the parsed Date) rather than stamping `now`.
+      // The same instant, re-spelled — which is the canonical mechanical repair described
+      // in `record`'s own contract, and why the bump below stays off. Stamping `now` here
+      // would be TRDD-R6R9XHZI a second time: a format pass rewriting the board's sort key
+      // into an artefact of when someone last ran the fixer.
+      //
+      // Conversion truncates to the second (the mandated format has no sub-second slot).
+      // Accepted and stated rather than discovered — measured 2026-08-22, re-derive with
+      // the two greps in TRDD-S13L6R9R: of 1383 frontmatter datetime lines, exactly 25
+      // carry milliseconds, and they are precisely the off-format ones this repairs. So
+      // no conforming value loses precision, because none of them ever had any.
+      for (const [field, value] of Object.entries(c.fm)) {
+        const dt = offFormatDatetime(value)
+        if (!dt || !dateFieldRepairable(field, c.column)) continue
+        const line = new RegExp(`^${field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:.*$`, 'm')
+        if (!line.test(text)) continue
+        const converted = isoLocal(dt).iso
+        text = text.replace(line, `${field}: ${converted}`)
+        record('mechanical', `${field}: re-spelled from a UTC-\`Z\` instant to the mandated local offset (${converted}) — same instant`)
+      }
+
       // A COLUMN VALUE sitting in the `status:` field.
       //
       // USER ruling 2026-07-30: `status:` is NOT a retired duplicate of `column:` — it
@@ -1366,7 +1460,17 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       //
       // `bodyClaimAgreesWithColumn` is the SAME predicate the lint uses, so `--fix` can never
       // repair a shape the lint did not report (the drift the sibling rule shipped with).
-      if (c.bodyStateClaim && bodyClaimAgreesWithColumn(c.bodyStateClaim, c.column)) {
+      //
+      // ...AND NOT ON A FROZEN CARD (added TRDD-S13L6R9R, found by a blast-radius dry-run).
+      // IND `trdd-design-tasks` step 12 freezes a terminal card's BODY, and grants exactly
+      // one exception for a body line: it "MAY be removed" when it FALSELY, MACHINE-VERIFIABLY
+      // CONTRADICTS the terminal `column:`. This branch admits only the AGREEING case — so its
+      // freeze behaviour was precisely INVERTED: it deleted the lines the freeze protects and
+      // left alone the ones the freeze permits removing. Measured on this corpus: 3 archived
+      // cards would have had a body line dropped by a `--fix` run whose stated purpose was a
+      // date re-spelling. A frozen card's body is not ours to tidy; the lint still reports it.
+      const frozen = TERMINAL_DONE.includes(c.column)
+      if (!frozen && c.bodyStateClaim && bodyClaimAgreesWithColumn(c.bodyStateClaim, c.column)) {
         const stripped = removeBodyStateClaimLine(text)
         if (stripped !== null) {
           text = stripped

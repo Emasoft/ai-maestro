@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T16:10:55+0200
+updated: 2026-08-22T16:17:21+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,61 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T16:17 — BOX 3 SURVIVES; the AUDIT-REPORT POPULATION does not, and the fleet ROSTER is wrong in both directions
+
+Applied the 16:10 lesson forward before reading any sample: the *"101 audit files"* box 3 rests on
+came from globbing `~/Code/*/reports/plugin-self-audit/`, an **assumed path**. Searched for the
+directory BY NAME at depth instead — `find ~/Code ~/agents -maxdepth 5 -type d -name
+plugin-self-audit`:
+
+**17 dirs across 16 distinct repos, 102 `.md` files** (recursive under each dir), not 101 across 15.
+
+**Box 3's own claim SURVIVES the correction, which is the main result:** **81 of 102 record a
+refutation** (`refut*`), 21 do not — against the recorded 78 of 101 / 23. The corpus-shape
+conclusion (*no evidence of silent dropping*) is unchanged, and the 21 are the same accounted-for
+mix of discovery passes, summaries and fix-reports. **Positive control:** 89 of the 102 contain the
+word `audit`, so the needle reaches the corpus.
+
+**THREE path-shape variants, and no repo's layout can be inferred from another's:**
+
+| shape | example |
+|---|---|
+| `<repo>/reports/plugin-self-audit/` | `AI-MAESTRO-WEBDESIGN-AGENT`, `llm-externalizer` |
+| `<repo>/<plugin-dir>/reports/plugin-self-audit/` | `AI-MAESTRO-JANITOR`, `EMASOFT-INTEGRATOR-AGENT` |
+| `<repo>/<plugin-dir>/reports/<component>/plugin-self-audit/` | `EMASOFT-CODE-AUDITOR-AGENT` — the `agent-reports-location` convention |
+
+**`llm-externalizer` is MIXED**: reports at the repo ROOT, `design/` tree NESTED in the plugin dir.
+So a layout established for one artifact in a repo does not hold for the next — check each.
+
+**THE ROSTER IS WRONG IN BOTH DIRECTIONS.** Box 1 says *"12 of 15"*; measured by August-dated
+report files (the actual program — `202608*.md`), **15 repos returned Phase-1 reports, 81 files
+between them.**
+
+And **`EMASOFT-CODE-AUDITOR-AGENT` is a fleet repo no sweep has ever counted** — a real git repo
+with a **10-card `design/` tree**, **0** cards citing `BRRJK57P`, and exactly **one** file in its
+audit dir: `20260611_182105+0200-deep-audit-fix-improve.md`. **June — a different program.** So it
+has **no August self-audit at all**: a genuine, previously invisible gap. Combined with 16:00's
+finding that `dev-browser` is not a member, the denominator moves in both directions and *"15"* was
+never the roster.
+
+**Same false-lead shape as the orchestrator's `reports/fleet-audit-phase1/` two entries ago — a
+directory whose NAME matches the program and whose CONTENT is from another one, caught only by the
+DATE.** Twice in one session. When a directory name is the evidence, read a filename inside it.
+
+**`AI-MAESTRO-MAINTAINER-AGENT` is a fourth FORMAT variant**, not a thin audit: 1 `audit.md` plus
+`candidates/` and `falsify/` **subdirectories** (10 undated files). A flat count misreads it as
+1-of-11 — which is the divergence this card's own *"Report-format divergence"* section already
+predicts.
+
+**My own instrument slip, caught mid-table:** I built the per-repo table with `files` counted
+**recursively** and `aug` counted **top-level only**, so maintainer read 11/1 for reasons that were
+mine, not its. Two units in one table — the exact failure the table existed to fix. Re-run
+consistently before any figure above was written down.
+
+**NEXT on box 3:** it is now a read of a SAMPLE of the 21, not 23, and its blocker is unchanged and
+is a vocabulary problem, not a counting one — `CONFIRMED` means both *"a real defect"* and *"the
+code is correct"* in this corpus, so **never dispatch remediation off a `Confirmed: N`.**
 
 ### ⏹ 2026-08-22T16:10 — BOX 4: the "2 repos that cannot satisfy it" BOTH CAN. Their `design/` tree is nested one level deeper
 
@@ -970,6 +1025,11 @@ them to.
       `--role` was not a flag on that subcommand; it is at `:501`, `required=True`. Whatever this
       box is worth, it is not worth assuming the hub's verification is the reliable half.
 - [ ] Refuted candidates are recorded with their refutation, not silently dropped.
+      **RE-MEASURED 2026-08-22T16:17 on a CORRECTED population — the claim survives.** The figure
+      below rests on a glob of an assumed path; searching for the directory by name at depth gives
+      **17 dirs / 16 repos / 102 files**, on which **81 record a refutation and 21 do not** (vs
+      78/101 and 23). Same conclusion, better population. See that STATE entry for the three path
+      shapes and the two roster corrections it surfaced.
       **MEASURED 2026-08-22: no evidence of silent dropping. 78 of 101 audit files record
       refutations**, and the 23 that do not are accounted for rather than assumed:
       **11 are `pass1-*` / `*-candidates.md` discovery passes**, which by protocol produce

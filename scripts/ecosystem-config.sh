@@ -36,10 +36,6 @@ ABSTRACT_IR_DIR_NAME=".abstract"
 
 # ── User-Scope Plugins ──────────────────────────────────────
 MAIN_PLUGIN_NAME="ai-maestro-plugin"
-AMP_PLUGIN_NAME="claude-plugin"
-AMP_PLUGIN_REPO="https://github.com/Emasoft/claude-plugin.git"
-AID_PLUGIN_NAME="agent-identity"
-AID_PLUGIN_REPO="https://github.com/Emasoft/agent-identity.git"
 
 # ── Role Plugins ─────────────────────────────────────────────
 ROLE_PLUGIN_MANAGER="ai-maestro-assistant-manager-agent"

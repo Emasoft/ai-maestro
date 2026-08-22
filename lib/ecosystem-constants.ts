@@ -255,16 +255,8 @@ export function isCorePlugin(pluginName: string, marketplaceName?: string): bool
   return pluginName === MAIN_PLUGIN_NAME && (marketplaceName === undefined || marketplaceName === MARKETPLACE_NAME)
 }
 
-/** AMP messaging plugin */
-export const AMP_PLUGIN_NAME = 'claude-plugin'
-export const AMP_PLUGIN_REPO = 'https://github.com/Emasoft/claude-plugin.git'
-
 /** Cross-client skill repo (for non-Claude agents like Codex, Gemini, Aider) */
 export const SKILL_PLUGIN_REPO = 'https://github.com/Emasoft/ai-maestro-plugin.git'
-
-/** Agent Identity plugin */
-export const AID_PLUGIN_NAME = 'agent-identity'
-export const AID_PLUGIN_REPO = 'https://github.com/Emasoft/agent-identity.git'
 
 // ── Role Plugins (local scope) ──────────────────────────────
 

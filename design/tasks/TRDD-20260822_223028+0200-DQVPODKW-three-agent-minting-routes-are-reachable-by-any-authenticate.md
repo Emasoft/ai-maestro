@@ -3,10 +3,11 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-22T22:30:28+0200
+updated: 2026-08-22T22:37:10+0200
 current-owner: user
 created-by: user
 task-type: security
+implementation-commits: [7e044958, a65e06f9]
 min-approval-requirement: manager
 mandate: true
 mandated-by: user
@@ -147,6 +148,57 @@ correctly gated, and the rest are authenticated-only mutations whose intended po
 stated.** `role-plugins/sync-defaults` is NEEDS-DECISION: a fleet-wide settings rewrite with no
 authz but a deterministic payload, so the question is whether "any authenticated caller may
 re-assert defaults" is intended.
+
+## PRIORITY-0 HALF LANDED — 2026-08-22T22:37:10+0200 (`7e044958`, `a65e06f9`)
+
+All three minting routes now run `authorize(auth, 'create-agent')`, matching
+`app/api/agents/route.ts:61-74`. The coverage ledger shrinks **19 → 16**, which is its own
+contract working ("may SHRINK as each is decided; must never grow without a deliberate edit").
+`tsc --noEmit` 0 lines; **63/63** across the four affected suites.
+
+**THE POSITIVE CONTROL CAUGHT A REAL DEFECT IN THE FIX ITSELF.** My first cut used `requireAuth`,
+which returns `{ok, context, agentId}` — but `authorize()` reads `auth.governanceTitle` off an
+`AgentAuthResult`, and that field is `undefined` on `requireAuth`'s shape. **The gate denied EVERY
+caller, including a MANAGER.** All three MEMBER-denial tests passed anyway, because a gate that
+refuses everyone refuses a MEMBER too. Only the "a MANAGER is NOT refused" control failed — the
+one case a denial-only suite cannot see by construction. Corrected to `authenticateFromRequest`,
+the shape the landed route already uses.
+
+**NEUTER (observed, `scripts/dev/neuter`, restore blob-verified):**
+`s/if \(!authz.allowed\)/if (false)/ if $. == 41` on `create-persona/route.ts` → **1 red / 3
+green**, predicted 1. Only that route's denial reddens; the other two stay green, which is what
+proves these are three INDEPENDENT gates rather than one shared guard exercised three times.
+
+The FIRST neuter attempt reddened nothing and looked correct:
+`s/const authz = authorize/const authz = {allowed:true} && authorize/`. `{allowed:true}` is
+truthy, so `&&` returns its RIGHT operand — the line changed and the behaviour did not. A textual
+diff plus a green suite is indistinguishable from an unpinned guard. Mutate the CHECK, not the
+call.
+
+## Acceptance
+
+This card was filed with **zero checkboxes** — a `security` card with a vacuous completion gate,
+which is the exact defect repaired on TRDD-JWE3CFLV two hours earlier and then repeated here.
+Adding it:
+
+- [x] `create-persona` · `create-from-toml` · `docker/create` each run
+      `authorize(auth, 'create-agent')` before any mutation
+- [x] each uses `authenticateFromRequest` (not `requireAuth`) so `authorize()` receives an
+      `AgentAuthResult` and can read `governanceTitle` — the bug the positive control caught
+- [x] a MEMBER-title denial test per route, pinning the REASON and asserting the service was
+      never called (a 403 over a completed side effect is not a refusal)
+- [x] a MANAGER positive control, without which a deny-everyone gate passes every other test
+- [x] neuter observed and recorded with its predicted-vs-observed count, line-anchored
+- [x] the coverage ledger shrunk 19 → 16 rather than the guard being loosened
+- [ ] `role-plugins/inject-skill` — decide the authority (`'manage-skills'` is the vocabulary the
+      element pipelines use for install/remove of an element)
+- [ ] `health` — decide whether it should authenticate at all; establish first whether the
+      dashboard calls it pre-login, because that is a real constraint
+- [ ] the 7 sub-agent-reported `creation-helper` routes VERIFIED first-hand, not relayed
+- [ ] `role-plugins/sync-defaults` — a ruling on whether "any authenticated caller may re-assert
+      defaults" is intended
+- [ ] audit `enforceAuth`'s callers outside this subtree — 4 of its uses in one subtree were
+      wrong, and every use is an unchecked ASSERTION that "any authenticated caller" is intended
 
 ## Approval log
 

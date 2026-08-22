@@ -21,6 +21,17 @@
  * no guard, which is exactly how the sibling site went three days without it. A fix that
  * nothing pins is a fix the next edit removes silently.
  *
+ * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/'--no-optional-locks', //
+ *   → 1 red / 2 green:
+ *       every one of them passes --no-optional-locks
+ *
+ * The two that stayed green are the right two: the source-set check does not depend on
+ * the flag, and the positive control asserts only that the SITE is found — a site with
+ * the flag stripped is still a site. Had the control gone red too, the needle would be
+ * matching on the flag rather than on the invocation, and the guard would be unable to
+ * see the very violation it exists to catch.
+ *
  * KEYED ON THE HAZARD, NOT ON A HELPER NAME. The rule is "a git invocation that runs
  * `status`", not "a call to `gitDirtyPaths`" — a needle keyed on a symbol name goes
  * blind the moment someone renames it, and the two existing sites already use two

@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T00:50:47+0200
+updated: 2026-08-23T00:56:49+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -145,18 +145,34 @@ including one whose Next half had been fixed hours earlier in the same session.
 
 ### The 2 red test files you will see, and why they are NOT this card
 
-`yarn test` reports **457 pass / 2 fail**: `pillar-grep-cli` and `trdd-doctor`. Neither is caused by
-this card's work — but the story handed down for them was **WRONG**, and it is written here because
-a commit message is not searchable by the next session that runs the suite and sees 2 red.
+`yarn test` reports **2 failed | 458 passed (460 files)** — `6180 passed | 2 skipped` of 6184 tests
+— and the two red files are `pillar-grep-cli` and `trdd-doctor`. Measured 2026-08-23T00:55, full
+run. **An earlier version of this line said "457 pass / 2 fail", a figure inherited across two
+sessions and never re-run; it was stale in BOTH halves** (a test file has been added since). Re-run
+it rather than quoting it — the numbers have a silent timestamp, the failing PAIR is the stable
+fact. Neither is caused by this card's work, but the story handed down for them was **WRONG**, and
+it is written here because a commit message is not searchable by the next session that sees 2 red.
 
-**The inherited claim was "2 frozen archived-TRDD corpus ERRORs, pre-existing, unfixable."**
+**The inherited claim was "2 frozen archived-TRDD corpus ERRORs, pre-existing, unfixable."** Two of
+its three parts are wrong; **the FROZEN part was right**, and this section relies on it below.
 Measured 2026-08-23 (`yarn trdd:doctor`, full output read, not tailed): the corpus has exactly two
 ERRORs, and only ONE of them causes the failures.
 
 | ERROR | card | entered the corpus | is it the cause? |
 |---|---|---|---|
-| `BODY-STATE-CLAIM` | `7123D51A` (`design/archived/`) | 2026-07-10, commit `124b4e26` | **no** — both tests already allow it: `pillar-grep-cli` asserts on it BY NAME as the expected single error, and `trdd-doctor` carries it in a `PERMANENTLY_EXCLUDED` list |
-| `TERMINAL-WITHOUT-CHECKLIST` | `G6A54OYK` (`design/archived/`) | **2026-08-22 17:30, commit `b746c558`, subject: _"throwaway card B for the approve/refuse e2e"_** | **YES — this alone reds both files** |
+| `BODY-STATE-CLAIM` | `7123D51A` (`design/archived/`) | 2026-07-10, commit `124b4e26` | **no** — both tests already allow it: `pillar-grep-cli` asserts on it BY NAME as the expected single error, and `trdd-doctor` carries it in a `PERMANENTLY_EXCLUDED_BY_JANITOR_139` set |
+| `TERMINAL-WITHOUT-CHECKLIST` | `G6A54OYK` (`design/archived/`) | **created 2026-08-22 17:28:07, commit `b949b912`** _"throwaway card for the manage-trdd e2e smoke"_; moved to `design/archived/` (R077) at 17:30:49 by `b746c558` | **YES — this alone reds both files** |
+
+> **The provenance cell above was WRONG in the first version of this section**, and the way it was
+> wrong is worth keeping. It cited `b746c558` and quoted that commit's subject — _"throwaway card
+> **B**"_ — as the origin of a file whose slug is card **A**. The letter mismatch was the visible
+> tell; the real defect is that `b746c558` only RENAMED card A into `design/archived/` while adding
+> a separate card B. The creating commit is `b949b912`.
+> **Cause: `git log -- <archived path>` cannot see a commit that touched the PRE-RENAME path.**
+> `--full-history` does not help (it returned the same two commits); `--follow` or
+> `git show --name-status` is what surfaces the `R077`. And `git show --stat` ELIDES the path prefix
+> (`...ke-of-the-…-798oahmx-a.md`), so the pre- and post-rename paths render identically and the
+> rename is invisible in that view. Use `--name-status` when provenance is the question.
 
 So the suite is designed to be GREEN on the frozen corpus. It fails because a **new, unexcluded**
 ERROR appeared **one day ago**: a throwaway card left behind by the TRDD-798OAHMX e2e smoke of the
@@ -169,9 +185,30 @@ That run left **three** throwaway cards in the live governance corpus (`G6A54OYK
 all three are uncleaned test litter (Rule 1 CLEAN-AFTER-YOURSELF, owed by that run).
 
 **Do not "repair" `G6A54OYK`'s body** — it is terminal, hence frozen by IND rule 12. The fix is a
-decision for the owner, not a drive-by: delete the throwaway litter (what its own commit message
-says it is), or add it to the doctor test's exclusion list (which weakens the gate to accommodate
-litter). Both failures clear either way. **Deleting governance cards is NOT authorized here.**
+decision for the owner, not a drive-by. **The two options are NOT equivalent**, and an earlier
+version of this section wrongly said "both failures clear either way":
+
+- **(a) delete the throwaway litter** (what its own commit message calls it) — clears **both** files.
+- **(b) add `G6A54OYK` to the doctor test's exclusion set** — clears **ONE**. Measured:
+  `grep -rn 'PERMANENTLY_EXCLUDED' tests/ scripts/ lib/` returns **3 hits, all in
+  `tests/unit/trdd-doctor.test.ts`** (`PERMANENTLY_EXCLUDED_BY_JANITOR_139 = new Set(['7123D51A'])`,
+  line 1021). It is a constant inside one test file and has no reach into a SUBPROCESS.
+  `pillar-grep-cli` shells out to `trddgrep validate --min-severity error` and asserts on that
+  stdout — `toHaveLength(1)` plus `lines[0]` matching `/^ERROR\tBODY-STATE-CLAIM\t7123D51A\t/`. No
+  test-local set can change what the subprocess prints, so (b) leaves `pillar-grep-cli` red and
+  clearing it separately means editing the census, the length assertion AND the matcher.
+
+The false-equivalence came from reading BOTH mechanisms, then generalizing the exclusion-list
+property from the test that has one onto the test that does not — the same one-member-of-a-family
+error already recorded in `.claude/rules/lessons-verification.md`, committed two edits after the
+reading that refutes it.
+
+**⚠ Before choosing (a): one of the three cards is load-bearing evidence.** `8I0JUCK9` is cited in
+`.claude/rules/lessons-verification.md:558` as the measured control (_"closed via `approve` → exit 0
+VERIFIED"_) for the entry retracting the verifiable-provenance generalization. Deleting it removes
+the artifact that lesson cites — re-point the citation or retain that card.
+
+**Deleting governance cards is NOT authorized here.**
 
 ## Estimated risk
 

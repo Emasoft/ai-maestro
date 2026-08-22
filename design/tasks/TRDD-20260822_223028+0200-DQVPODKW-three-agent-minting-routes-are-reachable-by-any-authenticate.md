@@ -3,11 +3,12 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-22T22:37:10+0200
+updated: 2026-08-22T22:38:54+0200
 current-owner: user
 created-by: user
 task-type: security
 implementation-commits: [7e044958, a65e06f9]
+external-refs: [TRDD-F1SL03CK, TRDD-CAVCTULL, TRDD-R268J32X]
 min-approval-requirement: manager
 mandate: true
 mandated-by: user
@@ -197,8 +198,11 @@ Adding it:
 - [ ] the 7 sub-agent-reported `creation-helper` routes VERIFIED first-hand, not relayed
 - [ ] `role-plugins/sync-defaults` — a ruling on whether "any authenticated caller may re-assert
       defaults" is intended
-- [ ] audit `enforceAuth`'s callers outside this subtree — 4 of its uses in one subtree were
-      wrong, and every use is an unchecked ASSERTION that "any authenticated caller" is intended
+- [x] audit `enforceAuth`'s callers outside this subtree — DONE, and it found the guard's next
+      blind spot: **26 mutating routes call `enforceAuth` with no authorization, and 17 of them
+      are OUTSIDE `app/api/agents/`**, so no guard can see them. Filed as **TRDD-R268J32X**.
+      This card's own sample is why that matters: of the first four such assertions examined,
+      three were wrong.
 
 ## Approval log
 

@@ -3,7 +3,7 @@ trdd-id: A9335BZ6
 title: Unattended dev-mode login via an owner-minted, revocable dev token
 column: human_review
 created: 2026-08-21T17:48:24+0200
-updated: 2026-08-21T19:56:10+0200
+updated: 2026-08-22T16:50:27+0200
 implementation-commits: [ddf18bf7, 2b881dcf, 0f794535, f8a6a17f, 25e8ee67, 6f6cfef3, 83a50d31, 4a760eed]
 current-owner: hub-orchestrator
 created-by: hub-orchestrator
@@ -271,6 +271,18 @@ revocable, same rate-limit and kill-switch as the password path, and fail-closed
 - [x] `POST /api/auth/dev-token` refuses without BOTH a valid password and a verified passkey assertion, and a neuter dropping the passkey check reds its test — 9/9 green, neuter 1 red
 - [x] The plaintext token is returned exactly once and is unreadable afterwards through any route — asserted on the status object's exact key set, so a future field cannot leak one silently
 - [x] `POST /api/auth/login { devToken }` mints a session when enabled+issued, and is refused when the flag is off, when revoked, and on a wrong token — 5/5 + 9/9 green; neuters 1 red each
+      **RE-VERIFIED 2026-08-22T16:50 by an independent hub pass, because a prior session recorded
+      this exact gate as UNPINNED.** `~/.claude/rules/lessons-verification.md` carried *"the one
+      unit with no suite was `lib/dev-mode-token.ts`, and neutering its enable flag reddened 0 of
+      14 — so the refusal was decorative and a disabled host would have honoured a token anyway."*
+      **That is now false and the correction is dated in place.** Re-run through
+      `scripts/dev/neuter` (1 ins / 1 del, restore verified by blob hash):
+      `s/if \(!rec \|\| rec\.enabled !== true\) return false/if (!rec) return false/` over all four
+      dev-token suites → **2 red / 23 green**:
+      *"refuses a correct token while disabled, and honours it again when re-enabled"* and
+      *"mints a session from AI_MAESTRO_DEV_MODE_TOKEN, writes it 0600, and never puts the token in
+      a child process argv"*. **The gate is pinned; the security argument this card rests on is
+      load-bearing rather than decorative.**
 - [x] Settings → Security renders status, Generate (password+passkey), show-once + copy, Regenerate, Revoke, and the literal `AI_MAESTRO_DEV_MODE_TOKEN=am-…` line — built from the lib's exported const, so the UI and CLI cannot drift; 0 hits for localStorage/sessionStorage/logging
 - [x] `aimaestro-governance.sh login` succeeds with NO TTY given the token, fails closed without it, and never places the secret in argv — proven against a loopback stub with a curl shim that RECORDS argv, plus a delta-0 count of the real `~/.aimaestro` to prove containment
 - [x] `aimaestro-trdd.sh search` returns 0 (not 401) after that login — measured through the BARE command on `PATH`: login exit 0, search exit 0, 492 TRDDs / 162 148 bytes; the lone `401` substring is a path timestamp, verified in context. Required deploying the repo script over the Aug-8 copy on `PATH` first (see "THE DEPLOY GAP")

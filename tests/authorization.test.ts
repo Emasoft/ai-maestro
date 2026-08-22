@@ -401,3 +401,52 @@ describe('TRDD-D3RP7KQZ — an agent may never reconfigure itself', () => {
     expect(decision.reason).toMatch(/No agent can modify itself/i)
   })
 })
+
+/**
+ * TRDD-F1SL03CK — `create-agent`: R30.1/R30.2 enforcement that did not exist.
+ *
+ * `POST /api/agents` called `authenticateFromRequest` and NOTHING else. There was no
+ * `create-agent` action in the enum at all, so R30.1 ("the CHIEF-OF-STAFF requires the
+ * MANAGER's approval/mandate to create agents") was law with no enforcement, and any
+ * authenticated agent of ANY title could mint agents.
+ *
+ * The MEMBER case below is the hole itself: before this action existed it was ALLOWED.
+ */
+describe('TRDD-F1SL03CK — create-agent authorization (R30.1/R30.2)', () => {
+  const asManager = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${managerToken}` }))
+  const asCosA = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${cosAToken}` }))
+  const asMember = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${memberToken}` }))
+
+  it('MANAGER may create agents (R29 authority)', () => {
+    expect(authorize(asManager(), 'create-agent').allowed).toBe(true)
+  })
+
+  it('CHIEF-OF-STAFF may create agents — R30.2 makes it NORMAL team operation', () => {
+    // Deliberately allowed at THIS layer. A team-creation mandate authorizes the COS to
+    // create the 5 base members plus specialised MEMBERs, so denying it here would break
+    // team creation outright. Whether it holds a mandate for THIS act is a separate,
+    // per-act question owned by the portfolio-token gate (lib/portfolio-check.ts) —
+    // see tests/services/portfolio-create-agent-authz.test.ts.
+    expect(authorize(asCosA(), 'create-agent').allowed).toBe(true)
+  })
+
+  it('MEMBER may NOT create agents — this is the hole that was open', () => {
+    const decision = authorize(asMember(), 'create-agent')
+    expect(decision.allowed).toBe(false)
+    // Pin the REASON, not just the boolean: `allowed === false` is satisfied by ANY
+    // earlier refusal, so a bare falsy assertion would pass even if the denial came
+    // from an unrelated gate.
+    expect(decision.reason).toMatch(/Only MANAGER and CHIEF-OF-STAFF can create agents/)
+  })
+
+  it('the two gates are INDEPENDENT — a title check is not a mandate check', () => {
+    // The composition is the whole finding, so it gets an assertion rather than only a
+    // comment: this layer answers "is this caller allowed to HOLD the authority", and it
+    // says YES to a COS regardless of any mandate, because mandates are not its question.
+    // If this ever starts returning false for a COS, the token gate has been folded into
+    // the title gate and one of the two rules has silently stopped being enforced.
+    expect(authorize(asCosA(), 'create-agent').allowed).toBe(true)
+    expect(authorize(asManager(), 'create-agent').allowed).toBe(true)
+    expect(authorize(asMember(), 'create-agent').allowed).toBe(false)
+  })
+})

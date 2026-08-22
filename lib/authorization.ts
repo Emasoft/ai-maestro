@@ -57,6 +57,14 @@ export type AuthAction =
   | 'delete-session'    // Kill an agent's tmux session and/or unlink it (no agent delete)
   | 'create-session'    // SVC2-MAJ-01: createSession is a registry-write + tmux-spawn primitive
   | 'register-agent'    // Register/overwrite an agent record (filesystem write primitive)
+  // TRDD-F1SL03CK: the IN-BAND creation path (`POST /api/agents` → CreateAgent), as
+  // distinct from `register-agent` above — that one is the bootstrap primitive and is
+  // system-owner ONLY, and its own comment says to use this path instead. Until this
+  // action existed, `POST /api/agents` called `authenticateFromRequest` and NOTHING
+  // else: authentication standing in for authorization, so ANY authenticated agent of
+  // ANY title could create agents. R30.1 ("the CHIEF-OF-STAFF requires the MANAGER's
+  // approval/mandate to create agents") was law with no enforcement anywhere.
+  | 'create-agent'      // POST /api/agents — in-band agent creation (MANAGER + COS)
   | 'manage-team'       // Create/modify/delete teams
   | 'manage-skills'     // Install/remove skills on an agent
   | 'manage-group'      // SVC2-MAJ-07/08: create/update/delete groups + subscribe/notify
@@ -335,6 +343,36 @@ export function authorize(
       return { allowed: true }
     }
     return { allowed: false, reason: 'Only MANAGER can manage teams' }
+  }
+
+  // ── Special rule: create-agent (in-band creation) ──────────
+  // TRDD-F1SL03CK. Two rules compose here and NEITHER is sufficient alone — that is
+  // the whole finding, so it is worth stating where the code is:
+  //
+  //   R30.2 — a team-creation mandate authorizes the COS to create the 5 base members
+  //           plus specialised MEMBERs. So a COS creating agents IS normal operation,
+  //           and this layer must not deny it outright.
+  //   R30.1 — but the COS "requires the MANAGER's approval/mandate" to do so. That is
+  //           a per-act check, not a title check, and it is what the portfolio token
+  //           enforces (`OPERATIONS_REQUIRING_TOKEN`, lib/portfolio-check.ts).
+  //
+  // So: this gate answers "is this caller ALLOWED TO HOLD the authority" (a title
+  // question), and the token gate answers "does this caller HAVE a mandate right now"
+  // (a per-act question). Enforcing only the token would let any title present a
+  // mandate; enforcing only the title would let a COS create agents with no mandate
+  // at all. The card's own words: "the token gate alone is not sufficient — it
+  // enforces 'has a mandate', not 'is allowed to hold one'."
+  //
+  // The system-owner / web caller was already granted by the `!auth.agentId` branch
+  // far above, so by this line the caller is provably an agent.
+  if (action === 'create-agent') {
+    if (title === 'manager' || title === 'chief-of-staff') {
+      return { allowed: true }
+    }
+    return {
+      allowed: false,
+      reason: 'Only MANAGER and CHIEF-OF-STAFF can create agents (R30.1/R30.2); a COS additionally requires a MANAGER mandate',
+    }
   }
 
   // ── Special rule: register-agent ───────────────────────────

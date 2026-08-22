@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { listAgents, searchAgentsByQuery } from '@/services/agents-core-service'
 import { CreateAgent } from '@/services/element-management-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { internalError } from '@/lib/error-response'
 // Schema extracted to lib/ (TRDD-57EBNB72): Next.js route modules may only
 // export HTTP verbs/config, and the schema must be directly testable.
@@ -61,6 +62,18 @@ export async function POST(request: NextRequest) {
     const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+
+    // TRDD-F1SL03CK — AUTHORIZATION, not just authentication.
+    //
+    // The comment above calls creation "a privileged mutation" and the code then checked
+    // only WHO the caller is, never WHETHER they may. That is authentication standing in
+    // for authorization: every other privileged mutation in this codebase runs an
+    // authorize() gate, and this one — which MINTS AGENTS — did not, so any authenticated
+    // agent of any title could create them. R30.1 was law with no enforcement.
+    const authz = authorize(auth, 'create-agent')
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason }, { status: 403 })
     }
 
     let raw: unknown

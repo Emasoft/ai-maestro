@@ -817,7 +817,13 @@ const routes: Route[] = [
   // Static sub-path routes MUST come before the parameterized catch-all
   // to prevent /api/sessions/restore and /api/sessions/activity from being
   // swallowed by /api/sessions/([^/]+) (first-match-wins routing)
-  { method: 'GET', pattern: /^\/api\/sessions\/restore$/, paramNames: [], handler: async (_req, res) => {
+  { method: 'GET', pattern: /^\/api\/sessions\/restore$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-R268J32X: authenticate before disclosing persisted-session records. SVC2-MAJ-12 added
+    // this to the POST and DELETE handlers below and skipped GET — that pass was reasoning about
+    // side effects, and this read returns whole PersistedSession records (workingDirectory is an
+    // absolute home path). The signature took `_req`, so it could not have authenticated.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const result = await listRestorableSessions()
     sendServiceResult(res, { status: 200, data: result })
   }},

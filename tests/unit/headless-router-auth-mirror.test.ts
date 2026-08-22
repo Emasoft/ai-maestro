@@ -609,4 +609,24 @@ describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8
     expect(res.bodyJson()?.error).not.toBe('auth_required')
     expect(res.bodyJson()?.success).toBeUndefined()
   })
+
+  // ── TRDD-R268J32X — GET /api/sessions/restore ─────────────────────────────
+  /**
+   * This handler's signature was `async (_req, res)` — it took no request, so it COULD NOT
+   * authenticate, in BOTH server modes. SVC2-MAJ-12 added auth to the POST and DELETE siblings
+   * ten lines away and skipped GET; both of those comments say "before re-spawning" / "before
+   * deleting", i.e. that pass reasoned about SIDE EFFECTS and a read that discloses was never in
+   * scope. `listRestorableSessions` returns whole `PersistedSession` records —
+   * `workingDirectory` is an absolute home path — so unauthenticated it enumerates the fleet and
+   * leaks the owner's filesystem layout.
+   */
+  it('R268J32X: GET /api/sessions/restore rejects the forged token (no persisted-session leak)', async () => {
+    const res = await call('GET', '/api/sessions/restore', { Authorization: FORGED_BEARER })
+    expect(res.statusCode).toBe(401)
+    // From the HANDLER, not the structural gate — same discrimination the controls above make.
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    // And prove the payload never went out: workingDirectory is the field that matters.
+    expect(res.bodyJson()?.sessions).toBeUndefined()
+    expect(res.bodyText()).not.toMatch(/workingDirectory/)
+  })
 })

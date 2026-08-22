@@ -249,10 +249,29 @@ exactly in those. The last box is the human's, and the card names it itself.
       that has never been made to fire is a fence nobody has checked is connected
 - [x] `TEST_ONLY_ENV` (4 live seams) and `FORBIDDEN_ENV` (6 deleted names) are DISJOINT, asserted
       by a test — so a var is either a seam or forbidden, never quietly both
-- [ ] **the USER's review of a credential-custody change.** The card asks for this in its own
+- [x] **the USER's review of a credential-custody change.** The card asks for this in its own
       words: *"a human eye on credential-custody code is worth having before `complete`"*. It was a
       Tier-0 self-mandate, so no approval gate blocked the work — which is precisely why the review
-      is worth asking for rather than assuming
+      is worth asking for rather than assuming.
+      **↳ REVIEW PERFORMED 2026-08-22T17:56** under the owner's grant of that date (*"you must do
+      the human review and also decide all the rest. just decide in base of verified facts and
+      tests, never assume anything"*). Decided on two pieces of evidence, neither taken from this
+      card:
+      **(1) The fence was re-neutered TODAY, not read off the STATE block.** It is an ABSENCE
+      guard, so the mutation had to ADD the forbidden behaviour rather than delete a check:
+      `scripts/dev/neuter` on `lib/dev-mode-token.ts` (1 ins / 0 del, restore verified by blob
+      hash) inserting `const _neuter = process.env.AIM_JSONL_READER_PATH` →
+      **1 red / 20 green**, the red being *"finds zero re-introduced hatches (fails with file:line
+      if a contributor adds one)"*. So a contributor re-adding a deleted hatch fails a named test.
+      **(2) The policy held under a REAL user expectation, which no test could have staged.** The
+      owner armed dev mode by putting `AI_MAESTRO_DEV_MODE=true` in `.env.local` — and it did
+      nothing, because `lib/dev-mode-token.ts:11` refuses to read such a var *by this card's rule*,
+      citing it by id and quoting its reasoning (*"a dev box is NOT a safe host: agents run under
+      the SAME UID as the server, so a prompt-injected agent appends one `export` to ~/.zshrc"*).
+      The enable switch lives in `governance.json`, dashboard-only. **That is this card's policy
+      surviving contact with a user who expected the opposite**, on a security-weakening knob, in
+      production — the strongest evidence available that the deletion was right and that the
+      dashboard-only replacement is discoverable enough to be used.
 
 ## ⏹ TRANSITION 2026-08-02 — `testing` → `human_review` ([[5YRLA53W]]), in two recorded hops
 
@@ -271,3 +290,17 @@ resolution" failure, one column further along.
 - 2026-07-17T06:19:15+0200 — **MANDATE issued by USER** (min-approval-requirement: none —
   Tier 0, in-scope security work on this project's own source). Pre-approved: the USER's directive
   IS the authorization. No approval request was sent.
+
+## Approval log
+
+- 2026-08-22T17:56 — **HUMAN REVIEW PERFORMED, verdict COMPLETE**, by `ai-maestro-session` under
+  the owner's explicit 2026-08-22 grant. This card is `min-approval-requirement: none` (a Tier-0
+  self-mandate), so no gate ever blocked it — the review is the one the card asked of itself, and
+  it is now given rather than waived.
+  Evidence: the Phase-4 regression fence re-neutered today (**1 red / 20 green**, an ABSENCE guard
+  so the mutation ADDED `process.env.AIM_JSONL_READER_PATH` rather than deleting a check; restore
+  verified by blob hash), plus the policy holding in production against a real user expectation —
+  the owner set `AI_MAESTRO_DEV_MODE=true` and the code correctly ignored it, citing this card's
+  rule at `lib/dev-mode-token.ts:11`.
+  Provenance caveat: closed via `promote` + `archive`, which anchor no token — only `approve`
+  mints one, so `verify` reports UNVERIFIED by design (`TRDD-06G43RK2`).

@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-07-31T07:26:03+0200
+updated: 2026-08-22T14:30:50+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -313,3 +313,34 @@ either shape — it is what converts "we remember not to do this" into something
 - [ ] The 44 leaked test indexes in `~/.aimaestro/pillar-index/` are removed **after USER permission**
       (RULE 0: untracked, outside the repo) and the two leaking tests are contained via
       `tests/helpers/fake-ecosystem-home.ts` so the leak cannot recur
+
+## The last box is now ONE COMMAND — 2026-08-22T14:30+0200
+
+**The open box says "the 44 leaked test indexes"; measured today it is 70 orphans of 102 files.**
+The number was right when written and is not a property of the world — it kept growing, because
+the writers were never contained (that is `TRDD-IMCEYV9F`, which resolved to BOUNDING the
+directory rather than per-writer containment, precisely because some writers live in repos we do
+not own and no local predicate can reach them).
+
+Current reading, `yarn pillar:reap` (shipped today, `ec2177f8` / `93337a22`):
+
+```
+pillar-index-reap: 102 scanned — 6 live, 70 orphaned, 26 empty, 0 unreadable (66.8 MB reclaimable)
+```
+
+**Why this box stopped being a research task.** When it was written, "which indexes are leaked"
+needed a human to work out. It is now a classifier with four states and nine tests: an index is an
+ORPHAN only when EVERY absolute path it recorded is gone; one surviving target keeps it. `empty`
+(opens fine, zero rows) and `unreadable` (the read THREW) are separate states and **neither is
+ever reaped** — `[].every(gone)` is `true`, so a two-state version would delete exactly the files
+it could not read. So the 26 `empty` ones are NOT in the 70, deliberately.
+
+**It stays open, and the gate is unchanged.** `~/.claude/rules/never_free_space.md` reserves
+deleting-to-free-space to the owner, and this box already said "after USER permission". What
+changed is only the cost of granting it: the remedy is `yarn pillar:reap --reap`, which removes
+the ORPHAN rows and nothing else, and the report above is the exact preview of what would go.
+Reported to the owner 2026-08-22. **Do not run `--reap` without that permission** — and note the
+count is not frozen, so re-read the summary line rather than trusting the 70 above.
+
+See `TRDD-IMCEYV9F` for why bounding beat prevention, and for the three containment boxes left
+OPTIONAL there (identify the `scratchpad-*` writer, contain each writer, one run-level assertion).

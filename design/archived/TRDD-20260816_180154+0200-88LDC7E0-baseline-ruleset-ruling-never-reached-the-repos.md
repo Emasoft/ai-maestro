@@ -1,12 +1,12 @@
 ---
 trdd-id: 88LDC7E0
 title: The 2026-08-13 baseline-ruleset ruling is in the code and on ZERO repos — 8 of 9 still lock the owner out of history
-column: todo
+column: completed
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T18:01:54+0200
-updated: 2026-08-20T22:26:37+0200
+updated: 2026-08-22T17:15:09.479Z
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -254,12 +254,35 @@ weakens a repo it never meant to touch (recorded in `lessons-verification.md` �
       and silently decided a governance question. Caught by the maintainer session correcting
       its own earlier phrasing, which had made the same over-specification from the other side.)*
 - [x] A non-admin actor is confirmed still bound by `deletion` + `non_fast_forward`.
-- [ ] **The gate-6 short-circuit is fixed** — `baselines_present` compares PAYLOAD, not names,
+- [x] **The gate-6 short-circuit is fixed** — `baselines_present` compares PAYLOAD, not names,
       or the short-circuit is dropped so the already-correct PATCH path becomes reachable.
       Janitor-owned; deliberately left as a decision, not prescribed here.
-- [ ] **A test that FAILS on a name-present/content-stale repo exists** — the case that has
+      **DONE by the janitor, and it took a THIRD route this box left open — verified first-hand
+      in the installed 3.3.26, 15 versions after this card was written against 3.3.9/3.3.11.**
+      `baselines_present` still compares names (`branch_protection_lib.py:459-476`), and that is
+      now correct, because `branch_protection_apply.py:148-186` gates it behind a content check:
+      *"Gate 6: convergence short-circuit — by NAME **and CONTENT** (TRDD-DD0M4QL7) … Content
+      drift falls THROUGH to the apply."* The comment states this card's finding verbatim,
+      including *"the fleet's 8-of-9 staleness"*. The content half is
+      `ruleset_content_drift` / `baselines_content_current`, compared against
+      `baseline_ruleset_payloads` (the code SSOT, never prose) and deliberately SUBSET-shaped so
+      server response decoration cannot false-positive. It also closed this card's *silent
+      short-circuit* finding: the converged path now emits one honest `converged: …` log line, so
+      silence stops being ambiguous between "checked and converged" and "never checked".
+- [x] **A test that FAILS on a name-present/content-stale repo exists** — the case that has
       never been covered, and the reason a names-only check survived. Without it the next
       baseline ruling re-freezes exactly the same way.
+      **EXISTS, and it is the exact fixture this box describes.**
+      `tests/test_github_config_audit.py::test_content_stale_baseline_named_ruleset_is_flagged`
+      — *"baseline NAMES present, one payload hand-loosened (enforcement disabled) →
+      BASELINE_CONTENT_DRIFT. **FAILS on the pre-fix classifier**, whose every class keyed on
+      name/rule-type presence only — the measured 0/24 propagation."* It ships with its own
+      FALSIFICATION control (`test_converged_baseline_is_silent`) plus
+      `tests/test_branch_protection_content.py` (7 cases: faithful echo, loosened parameter,
+      missing rule, disabled enforcement, added bypass actor, narrowed exclude, and the
+      omitted-checks asymmetry). Run today from the janitor's own source tree — the cache copy
+      correctly refuses, its sandbox guard blocking writes into `~/.claude`:
+      `11 passed, 37 deselected`, exit 0, janitor tree still clean afterwards.
 - [x] `~/.claude/rules/manager-approval-defaults.md` no longer states `bypass_actors: []`.
       **USER-owned, not janitor-owned** (measured: shipped by no plugin — see above).
 - [x] The `branch_protection_lib` module docstring agrees with its own payload builder on both
@@ -308,3 +331,61 @@ weakens a repo it never meant to touch (recorded in `lessons-verification.md` �
   human gate. The work implements the USER's own 2026-08-13 Tier-3 ruling, so it is manifestly
   wanted; the alternative resolution — moving it back to proposals — would have halted a
   nearly-complete implementation of that ruling. Column unchanged at `todo`.
+- 2026-08-22T17:15:03.674Z — column → complete. Both remaining boxes were satisfied upstream and unnoticed. Verified first-hand in the INSTALLED janitor 3.3.26 - fifteen releases after the 3.3.9/3.3.11 this card measured. Gate 6 now checks NAME and CONTENT (branch_protection_apply.py:148-186, TRDD-DD0M4QL7): baselines_present stays names-only and is gated behind baselines_content_current, so drift falls THROUGH to the apply and the PATCH path is reachable - a third route the box explicitly left open. The name-present/content-stale test exists and says of itself that it FAILS on the pre-fix classifier, shipping with a falsification control. Ran them from the janitor's own source tree (the cache copy correctly refuses - its sandbox guard blocks writes into ~/.claude): 11 passed, exit 0, their tree clean before and after. Nothing applied to any repo.
+- 2026-08-22T17:15:09.479Z — COMPLETED by user. Both janitor-side boxes verified DONE in the installed 3.3.26 (gate-6 name+content check, and the name-present/content-stale test; 11 passed exit 0)..
+
+## ⏹ 2026-08-22T19:2x+0200 — CLOSED: both remaining boxes were satisfied upstream, unnoticed
+
+Pulled off `todo` under the owner's standing grant. Both open boxes were **janitor-owned** and
+both had already been delivered — under `TRDD-DD0M4QL7` / janitor#282, in versions released after
+this card was written. **Sixth instance today of a recorded blocker that had already been
+resolved and nobody re-read.**
+
+### The version gap is the whole story
+
+This card measured janitor **3.3.9**, and was independently re-verified against **3.3.11**. The
+installed version is **3.3.26** — fifteen releases later. Nothing about the card said to re-check;
+its boxes read as open work, and open work is not re-measured, it is scheduled.
+
+### What was verified, first-hand, in the installed copy
+
+```
+branch_protection_lib.py:459   baselines_present  → still NAMES only …
+branch_protection_apply.py:148 "Gate 6: convergence short-circuit — by NAME **and CONTENT**
+                                (TRDD-DD0M4QL7) … Content drift falls THROUGH to the apply."
+                          :160 present → baselines_content_current(slug, …) → drift ⇒ apply
+                          :172 converged: … one honest log line per pass
+```
+
+The fix takes a **third route** the box explicitly left open (*"Janitor-owned; deliberately left
+as a decision, not prescribed here"*): rather than making `baselines_present` compare payload, or
+dropping the short-circuit, it kept the cheap name check and gated it behind a separate content
+check. The PATCH path is reachable, which is what the box actually required.
+
+Two details worth keeping, because they are the difference between a check and a working check:
+the comparison runs against `baseline_ruleset_payloads` — **the code SSOT, never the prose** —
+and it is SUBSET-shaped, so GitHub's response decoration cannot false-positive. And it carries a
+deliberate asymmetry: a live `required_status_checks` rule the expected payload OMITS is **not**
+drift, because the payload omits it exactly when CI contexts cannot be detected from the current
+checkout — flagging it would make a foreign-cwd repair PUT strip a working checks gate.
+
+### The test box, and why its docstring is the evidence
+
+`test_content_stale_baseline_named_ruleset_is_flagged` says of itself that it **FAILS on the
+pre-fix classifier**. That is the discriminating claim the box asked for — not that a test
+exists, but that it fails on the case that had never been covered. It ships with a falsification
+control beside it, which is what stops the pair from passing vacuously.
+
+Run today: **11 passed, 37 deselected, exit 0.** Run from the janitor's OWN source tree, because
+the cache copy refuses — its sandbox guard blocks any write inside `~/.claude`, citing a
+2026-07-11 incident where an unsandboxed restage overwrote committed work. That refusal is the
+suite working; it was not defeated. The janitor's tree was clean before and after.
+
+### Nothing was applied, and nothing was filed
+
+No ruleset was written to any repo. This card's own lesson is that a **success line meant
+nothing**, and my lessons file records a live incident where a ruleset apply driven by a broken
+`jq` predicate silently WEAKENED three public repos — so an unattended fleet-wide apply is exactly
+the act to refuse. The card's remaining fleet question (are the live repos content-current TODAY?)
+is not this card's box: boxes 2, 3 and 9 already recorded the live state as verified after the
+janitor acted, and re-litigating it would be a fresh measurement, not this card's scope.

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAgent } from '@/lib/agent-registry'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
+import { findGitDirs } from '@/lib/find-git-dirs'
 import path from 'path'
 import { requireAuth } from '@/lib/route-auth'
 
@@ -51,11 +52,14 @@ export async function GET(
   }
 
   try {
-    // Find .git directories up to 3 levels deep
-    const gitDirs = execSync(
-      `find "${resolvedWorkDir}" -maxdepth 3 -name .git -type d 2>/dev/null`,
-      { encoding: 'utf-8', timeout: 5000 }
-    ).trim().split('\n').filter(Boolean)
+    // Find .git directories up to 3 levels deep.
+    //
+    // A JS WALK, NOT `find` THROUGH A SHELL (TRDD-JIHK7SWH). The previous form
+    // interpolated `resolvedWorkDir` into a shell string, and the metacharacter
+    // blocklist above runs on `workDir` BEFORE `realpathSync` — so a symlink whose
+    // TARGET contained a quote resolved straight past it. `readdirSync` takes a path,
+    // not a command, so there is nothing to quote and nothing to escape.
+    const gitDirs = findGitDirs(resolvedWorkDir, 3)
 
     const repos = gitDirs.map(gitDir => {
       const repoDir = gitDir.replace(/\/\.git$/, '')
@@ -69,22 +73,35 @@ export async function GET(
       let remote = ''
       let branch = ''
       let dirty = 0
-      // SEC: Use resolvedRepoDir in git commands to prevent shell injection
-      // via crafted directory names in find output.
+      // NO SHELL (TRDD-JIHK7SWH). `resolvedRepoDir` is a directory name DISCOVERED
+      // under the workdir, and nothing ever constrained it: the metacharacter blocklist
+      // guards `workDir`, and `path.resolve` normalises a path without escaping a single
+      // shell character. The `startsWith` check above answers "is this inside the
+      // sandbox?", never "is this safe to paste into a shell" — so an agent creating
+      //     mkdir 'x"; <command>; "'
+      // in its OWN workdir passed every check honestly and executed in the server.
+      // `execFileSync` with an argument array goes straight to execve, so metacharacters
+      // are inert and the question stops existing. `2>/dev/null` becomes the stdio entry.
+      //
+      // `--no-optional-locks`: a plain `git status` refreshes the index and takes
+      // `.git/index.lock`. This runs on an AGENT'S OWN repo whenever the dashboard lists
+      // repos, so without it a read-only UI listing can contend with — or orphan a lock
+      // in front of — whatever that agent is committing. A probe must not take a write
+      // lock on the repo it probes (TRDD-IMCEYV9F; `server-liveness.ts` and
+      // `pillar/freshness.ts` follow the same rule).
+      const git = (args: string[]): string =>
+        execFileSync('git', ['-C', resolvedRepoDir, ...args], {
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim()
       try {
-        remote = execSync(`git -C "${resolvedRepoDir}" remote get-url origin 2>/dev/null`, { encoding: 'utf-8' }).trim()
+        remote = git(['remote', 'get-url', 'origin'])
       } catch { /* no remote */ }
       try {
-        branch = execSync(`git -C "${resolvedRepoDir}" branch --show-current 2>/dev/null`, { encoding: 'utf-8' }).trim()
+        branch = git(['branch', '--show-current'])
       } catch { /* detached */ }
       try {
-        // `--no-optional-locks`: a plain `git status` refreshes the index and takes
-        // `.git/index.lock`. This runs on an AGENT'S OWN repo whenever the dashboard
-        // lists repos, so without it a read-only UI listing can contend with — or
-        // orphan a lock in front of — whatever that agent is committing. A probe must
-        // not take a write lock on the repo it probes (TRDD-IMCEYV9F; the same rule
-        // `server-liveness.ts` and `pillar/freshness.ts` already follow).
-        dirty = execSync(`git -C "${resolvedRepoDir}" --no-optional-locks status --porcelain 2>/dev/null`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean).length
+        dirty = git(['--no-optional-locks', 'status', '--porcelain']).split('\n').filter(Boolean).length
       } catch { /* error */ }
       return { path: resolvedRepoDir, name, remote, branch, dirty }
     }).filter(Boolean)

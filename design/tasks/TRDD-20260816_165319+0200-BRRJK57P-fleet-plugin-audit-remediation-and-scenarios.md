@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T16:21:19+0200
+updated: 2026-08-22T16:26:35+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,52 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T16:26 — BOX 6: the memory half IS measurable. It just cannot be answered by ATTRIBUTION
+
+The `## Docs and memory` section below concludes *"Memory: NOT answerable from the repos, by
+construction … no repo-side command can close it."* **True, and it is a statement about repo-side
+commands only** — the stores are on this disk and a non-repo-side command reads them. Measured:
+
+| scope | in the program window (since 2026-08-16) |
+|---|---|
+| **LOCAL** (`~/.claude/projects/<slug>/memory/`) | **155 notes** across 17 stores |
+| **PROJECT** (`<repo>/.claude/project/memory/`) | **59 notes** across 10 fleet repos |
+
+**Every fleet repo that ran the August audit wrote memory in the window. The single store with ZERO
+is `EMASOFT-CODE-AUDITOR-AGENT` — the repo the 16:17 entry found never ran the audit.** Coverage
+and audit-participation agree, which is a real corroboration rather than a coincidence.
+
+**But the box cannot be closed on that, and the reason is stronger than the one recorded below.**
+Attribution is near-absent: of the 155 LOCAL notes, **19 cite any TRDD id, 6 use audit vocabulary,
+and exactly 1 names `BRRJK57P`.** Corpus-wide, **71 of 600** notes cite a TRDD id and **20** carry a
+`trdd:` / `commits:`-shaped field.
+
+**That is by DESIGN, not by neglect.** The note schema is
+`name / description / ocd / lmd / metadata{node_type,type,tier,originSessionId,modified}` — **no
+provenance field exists**, and `markdown-memory-recall` indexes deliberately by SYMPTOM rather than
+by cause (*"index by the QUESTION, not the answer"*). A note recording an audit-derived lesson has
+no obligation to name the audit, so **a low attribution count is not evidence of low coverage** —
+the artifact simply does not carry the link the box wants.
+
+**Worth more than this box:** `commit-discipline` describes the provenance chain
+`memory.commits:` → `memory.trdd:` → `implementation-commits:` → `git show <sha>` as the substrate a
+memory maintainer reads to demote an obsolete fact *without inventing the reason*. **That chain's
+first link is present in 20 of 600 notes.** In practice it mostly does not exist, so an obsolete
+memory is un-prunable rather than merely unexplained — exactly the failure that rule predicts.
+
+**RESTATEMENT for box 6:** its docs half is satisfied (all 14 repos touched docs). Its memory half
+is answerable as *"memory was actively written fleet-wide in the window, and the one silent store is
+the one repo that did not audit"* — and is **NOT** answerable as *"every landed change has a memory
+note"*, because nothing links a note to a change. Closing it as written would require a schema
+change, not a measurement.
+
+**My own FIFTH needle failure today, in a fifth disguise — ANCHORING.** The first provenance check
+was `grep -E '^\s*(trdd|commits):'` and returned **0 of 600**, which I was about to record as *"the
+schema carries no provenance at all."* Atom props are **inline inside `[...]` blocks**, not at line
+start. Unanchored: 20. Positive control (`keywords:`, present in every atom) returns 435, which is
+what proved the corpus reachable rather than the field absent. **A zero from an anchored pattern is
+a claim about line position, not about content.**
 
 ### ⏹ 2026-08-22T16:21 — BOX 3 TICKED. The residue was read, and the `refut*` needle was undercounting by vocabulary
 
@@ -1287,6 +1333,12 @@ residual is named, and ticking it would certify coverage nothing here measured.
 
 **Docs: every repo touched them.** All 14 have `.md` commits under `docs/`/`README.md` since
 2026-08-16, from 2 to 21.
+
+> **⚠ AMENDED 2026-08-22T16:26 — see that STATE entry.** *"Not answerable from the repos"* is true
+> and is about REPO-SIDE commands only; the stores are on this disk and were measured (**155**
+> LOCAL + **59** PROJECT notes in the window, every auditing repo non-zero, the one zero being the
+> repo that never audited). The binding obstacle is not location but **ATTRIBUTION**: the note
+> schema has no provenance field, so nothing links a note to the change that caused it.
 
 **Memory: NOT answerable from the repos, by construction.** Six repos show **0** commits under
 `.claude/project/memory`, and that is not evidence memory went unwritten — of the three memory

@@ -3,7 +3,7 @@ trdd-id: FRRJ80YQ
 title: wakeAgent and hibernateAgent skip their gate when authContext is absent — the bypass element-management already abolished
 column: todo
 created: 2026-08-22T22:20:05+0200
-updated: 2026-08-22T22:20:05+0200
+updated: 2026-08-22T22:43:38+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -103,6 +103,47 @@ unconditional".
 
 LOW severity today (no reachable bypass), LOW to fix. Priority is prophylactic: it removes a shape
 that has already caused one measured incident in this repo.
+
+## GUARD LANDED — 2026-08-22T22:43:38+0200 — and my cost estimate was WRONG
+
+This card said the fix "should be a pure tightening with ZERO call-site changes … **Verify that
+claim before relying on it**." Verified, and it does not hold: **34 call sites omit `authContext`,
+32 of them TESTS** (`tests/services/agents-core-service.test.ts` alone has 27). True of
+production, false overall. The caveat earned its keep.
+
+That changes the right fix. Making the field required would churn 32 assertions that pin real
+behaviour, to close a bypass no production caller uses. **The risk this card actually names is
+"the NEXT caller" — so the fix is a guard against the next caller**, not a type change:
+`tests/unit/wake-hibernate-authcontext-required.test.ts`, 3 cases.
+
+PROVEN IN BOTH DIRECTIONS, because a source-scanning guard that passes proves nothing:
+seeding `lib/zz-probe-wake-no-ctx.ts` with a context-less `wakeAgent` call turned it RED and
+NAMED the file; moving the probe to `scripts_dev/probes/` (moved, not deleted — RULE 0) turned it
+green again. Plus a walker floor (>200 files, and `agents-core-service.ts` by name) so a mis-joined
+root cannot report clean by scanning nothing, and a >=6 call-site floor so a broken extractor
+cannot report clean by finding nothing.
+
+Two traps it had to handle, both of which produced false readings first:
+- **Comments.** `app/api/agents/[id]/ensure-core/route.ts:61` says *"it never calls wakeAgent"*
+  inside a doc comment; a naive needle counts it as a call. Sixth use-vs-mention this session.
+- **Multi-line calls.** Every real caller spans several lines, so a line-scoped needle reports
+  ALL of them as omitting the field. The extractor counts bracket depth.
+
+Its one known limit is stated in the file rather than hidden: stripping `//` also blanks that
+sequence inside a string literal, which can only make the guard MISS a call, never invent one.
+
+## Acceptance
+
+- [x] measure the real blast radius before editing — 34 omitting sites, 32 of them tests
+- [x] a guard that fails when a production caller omits `authContext`
+- [x] PROVEN to fire on a seeded violation, and to go green when it is removed
+- [x] positive controls on both the walker (scan set non-empty) and the extractor (finds >=6)
+- [x] comment-stripping, so the guard cannot report prose as a call
+- [ ] OPTIONAL, deliberately deferred: make `authContext` required on both param types and
+      migrate the 32 test call sites to `{ isSystemOwner: true }` — the shape the two internal
+      production callers already use. The guard above keeps working if this lands.
+- [ ] delete the "When absent (internal call), skip — backward compatible" comment, which
+      advertises an affordance nothing takes
 
 ## Approval log
 

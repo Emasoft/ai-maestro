@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:20:00+0200
 created: 2026-07-13T14:20:00+0200
-updated: 2026-08-20T21:52:35+0200
+updated: 2026-08-22T16:55:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -295,6 +295,19 @@ owner's, because **an agent must never rotate a credential**.
 - [x] from the console ⇒ a code goes to the DESKTOP and the operation completes only when it is
       echoed back; a wrong code leaves the password intact
 - [x] **from a Tailscale peer ⇒ denied, and no code is EVER emitted.** Pinned three ways, including
+      **↳ RE-VERIFIED 2026-08-22T16:55 by an independent hub pass — "three ways" is literally
+      exact.** `scripts/dev/neuter` on the gate itself (1 ins / 1 del, restore verified by blob
+      hash): `s/if \(!isConsolePeer\(peer\)\)/if (false)/` over both suites → **3 red / 12 green**,
+      and the three names map one-to-one onto the three claimed properties —
+      *"refuses a remote caller holding the CORRECT password — presence is not a formality"*,
+      *"refuses a remote caller with a WRONG password with the SAME 403 — never an oracle"*,
+      *"refuses a REMOTE peer with 403 and emits NO code"*. **The gate is load-bearing, the
+      anti-oracle ordering is pinned, and the no-code property is pinned separately** — so a
+      regression in any one of the three fails a named test rather than silently widening the
+      endpoint. (Locating it cost one wrong grep: the symbol is `isConsolePeer`, and a needle
+      assembled from guessed names — `isConsolePresent|consolePresent|isLoopback|requireConsole` —
+      returned a confident zero against a 306-file positive control. Take a symbol's name from the
+      code, never from your hypothesis about it.)
       that a remote caller with the CORRECT password and one with a WRONG password get a
       byte-identical 403 — the anti-oracle property, which is why the presence check sits ahead of
       the credential check. Also proven LIVE from this host's real Tailscale IP (STATE): an honest

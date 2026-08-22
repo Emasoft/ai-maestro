@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-22T22:48:21+0200
+updated: 2026-08-22T22:57:58+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -118,6 +118,76 @@ file contains `/agents/`, and five legitimately do — `v1/agents/route.ts`,
 A substring check calls those a bleed and reds a correct walker. Now asserts the PRECISE property
 (path prefix), which is what "bleed" actually means.
 
+## Decisions — the 17, one at a time
+
+Two decided 2026-08-22, both on the blast-radius pick this card named. **Both CLEAR.** Recording
+the reasoning, not just the verdict, because "we looked and it was fine" is the finding that
+otherwise gets re-litigated by the next reader.
+
+**`sessions/create` — CLEAR. Forward-and-authorize, not authentication-only.** The route runs
+`enforceAuth`, then ALSO `authenticateFromRequest` + `buildAuthContext`, and plumbs the context
+into `createSession` under a comment tagged `SVC2-MAJ-01 (2026-05-06)`. The receiving end
+authorizes on it — `services/sessions-service.ts:808` short-circuits a system owner and `:815`
+calls `authorize(authResult, 'create-session', agentId)`, returning 403 on denial. **The ledger
+mislabelled it**: this third root's needle is `MUTATING && CALLS_ENFORCE_AUTH && !STRONG_AUTHZ`,
+and STRONG_AUTHZ is looked for IN THE ROUTE FILE, so a route that forwards to a service that
+authorizes reads as authentication-only. The `agents/` root already separates a FORWARD-ONLY tier
+for exactly this; the third root has no such tier, so its 17 conflates "authenticates only" with
+"forwards to something that authorizes". That is a defect in the LEDGER's resolution, not in the
+route — and CAVCTULL is the reason to check rather than assume, since there the same theory held
+for 11 routes and failed for 1.
+
+*Nearly filed a false finding here.* A sweep for `createSession` callers that omit `authContext`
+returned 13, which looks like the FRRJ80YQ presence-gated-bypass shape. It is not: `lib/session-auth.ts:86`
+exports a same-named `createSession(ip?)` for BROWSER LOGIN sessions, and the four `auth/*` and
+`governance/password/reset` hits call THAT one — which legitimately has no authContext because it
+IS the authentication boundary. Others were a different signature again (three positional args).
+Discriminating by IMPORT rather than by name leaves **two** real callers: this route (passes it)
+and `element-management-service.ts:10671` (omits it). That omission is the case
+`sessions-service.ts:795` documents — EMS's CreateAgent pipeline already ran `gate0Auth('create-agent')`
+before reaching it — so it is legitimate, though it should pass an explicit
+`buildSystemAuthContext(...)` for audit traceability the way `fleet-hard-recovery-runner.ts:52`
+does, rather than relying on the fallback. Cosmetic; noted, not filed.
+
+**`plugin-builder/build` — CLEAR. `enforceAuth` follows blast radius here.** `buildPlugin(config: unknown)`
+takes no auth context and so cannot authorize internally, which is the shape that made
+DQVPODKW a hole — but the outcome differs because the *effect* differs. The build writes to
+`$TMPDIR/ai-maestro-plugin-builds/<uuid>` and **nothing reads that directory**: the only two
+references are its own declaration and use inside the service. It does not install, and it drives
+a build script already present in the user's marketplace cache via `execFile` (not a shell) with
+path segments validated against traversal, behind a concurrency slot. It mints no identity,
+mutates no governance state, and touches no other agent. The subtree's guards track exactly that:
+`push` — the one that PUBLISHES — is `enforceSystemOwner`. That is the opposite of the DQVPODKW
+pattern, where the three agent-MINTING routes got the weak guard while their siblings got the
+strong one. There is also no action to authorize WITH: `authorize()`'s vocabulary is
+`approve archive change-title create-agent delete-agent edit export-agent manage-team manage-trdd
+promote refuse register-agent unblock-prompt` — adding one is a governance-vocabulary change, and
+nothing here justifies it.
+
+### But the subtree sweep found a real hole the ledger cannot see
+
+`GET /api/plugin-builder/builds/[id]` had **no guard of any kind** — the only unauthenticated
+route in an otherwise-guarded subtree. Its sole protection was the entropy of the build id, minted
+by `buildPlugin` as `randomUUID()` and returned only to the authenticated POST caller: a
+capability URL, not an authorization decision. `lib/agent-auth`'s own header records the ruling it
+contradicted — *"SF-058 CLOSED: No auth headers AND no session cookie → rejected. There is no
+'free' system-owner access anymore."*
+
+Fixed with `enforceAuth` (not `enforceSystemOwner`: a build status is not a governance object, so
+there is no owner to compare against and no title that should widen or narrow the answer).
+Verified safe for the UI BEFORE editing — `components/plugin-builder/BuildAction.tsx:137` polls it
+with a plain same-origin fetch and no Bearer header, and `authenticateFromRequest` resolves the
+`aim_session` cookie to a system owner, which is already how that same component's POST at :97
+passes `enforceAuth`. `enforceAuth`'s write-block is a no-op on GET, so this adds authentication
+only. Commit `70f9d67c`; `tests/unit/plugin-builder-build-status-auth.test.ts`, 3 tests, neuter
+1 red / 2 green.
+
+**This is the second acceptance box's class, and it was invisible to the first's needle by
+construction** — a route that calls NO guard, on a NON-mutating verb, fails both conjuncts of
+`MUTATING && CALLS_ENFORCE_AUTH`. The ledger catches authentication standing in for authorization;
+it is blind to no-authentication-at-all. One instance found and closed does not sweep the class,
+so that box stays open.
+
 ## Acceptance
 
 - [x] third parallel root over `app/api/` excluding `agents/`, leaving the other two ledgers intact
@@ -127,10 +197,17 @@ A substring check calls those a bleed and reds a correct walker. Now asserts the
 - [x] PROVEN to fire on a seeded route, and to go green when it is removed
 - [x] walker control asserts a real scan set (>100 files) and no bleed into `app/api/agents/`
 - [x] non-vacuity: the needle must find >0, so a broken regex cannot read as "all decided"
-- [ ] the 17 decided one at a time, each real one its own card. `sessions/create` and
-      `plugin-builder/build` look worth reading first, on blast radius alone
+- [ ] the 17 decided one at a time, each real one its own card. **2 of 17 done** — `sessions/create`
+      and `plugin-builder/build`, both CLEAR, reasoning under `## Decisions`. 15 remain
+- [ ] the third root needs a FORWARD-ONLY tier like the `agents/` root has. `sessions/create` is
+      forward-AND-authorize and the needle read it as authentication-only, because it looks for
+      STRONG_AUTHZ in the route file. Until then the 17 conflates two different states and its
+      count overstates the debt
 - [ ] the 73-minus-17 remainder — routes with NO authentication at all — is a DIFFERENT question
       this guard deliberately does not ask. Worth its own card if anyone wants it asked.
+      **One instance surfaced and was closed** (`GET plugin-builder/builds/[id]`, commit `70f9d67c`)
+      while sweeping the subtree above — found by reading siblings, NOT by the needle, which cannot
+      see a non-mutating route that calls no guard. One instance is not a sweep, so this stays open.
 
 ## Approval log
 

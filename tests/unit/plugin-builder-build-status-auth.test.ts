@@ -93,6 +93,14 @@ describe('TRDD-R268J32X — build-status reads are authenticated', () => {
 })
 
 /**
- * NEUTER RUN (2026-08-22 — to be recorded below by scripts/dev/neuter, restore
- * verified by blob hash).
+ * NEUTER RUN (2026-08-22 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(authErr\) return authErr/if (false) return authErr/
+ *   → 1 red / 2 green:
+ *       refuses an unauthenticated caller — a valid build id is not a credential
+ *
+ * Predicted 1, observed 1. The other two staying GREEN is the informative half, not a
+ * shortfall: the positive control asserts the guard says YES (unchanged when it is
+ * disabled) and the malformed-id case is the pre-existing uuid validation below it, which
+ * the guard does not gate. A neuter that reddened all three would have meant the mutation
+ * hit something shared and the numbers were about the wrong thing.
  */

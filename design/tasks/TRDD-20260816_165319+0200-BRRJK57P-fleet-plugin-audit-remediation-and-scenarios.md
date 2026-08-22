@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T15:55:58+0200
+updated: 2026-08-22T16:00:35+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,55 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T16:00 — BOX 1: the "3 outstanding" are THREE DIFFERENT SITUATIONS, and one is not a fleet member
+
+Box 1 reads *"12 of 15, and the 3 outstanding are NAMED"* — `ai-maestro-orchestrator-agent`,
+`web-scenario-tester`, `dev-browser`. Measured each, and **not one of them is a peer that simply
+failed to report**:
+
+| named repo | git repo? | `design/` tree | cites `BRRJK57P` | what it actually is |
+|---|---|---|---|---|
+| `ai-maestro-orchestrator-agent` | yes | **18 cards** | **4** | **audited BY THE HUB, not self-audited** |
+| `ai-maestro-web-scenario-tester` | yes | **NONE** | 0 | nowhere to track a finding |
+| `dev-browser` | **NO — not a repo** | none | 0 | a third-party **marketplace plugin cache** |
+
+**`dev-browser` is not a fleet member.** It lives only at
+`~/.claude/plugins/cache/dev-browser-marketplace/dev-browser`; a positive-controlled search of
+`~` at depth 4 excluding the plugin cache returns **0** source repos for it while the same search
+shape finds `ai-maestro-janitor` in two places. It has no `.git`, no `design/`, and no session
+that could self-audit. **So the denominator is 14, not 15** — the "define the unit before stating
+the number" failure, in this card's own headline figure.
+
+**The orchestrator did not fail to report — it was never the auditing party.** Its
+`0DSR6WT4` (`column: published`, archived) says so in its own body:
+
+> *"Hub-verified finding C2 of the fleet plugin audit (ai-maestro TRDD-BRRJK57P, orchestrator
+> section), re-verified first-hand 2026-08-18 in this tree."*
+
+So the hub produced an **orchestrator section**, the orchestrator re-verified it **first-hand**,
+and remediated — 4 cards, 3 `published`. That is Phase 1 and box 2's own standard satisfied by a
+different route, and it is the reverse direction of what box 2 asks (the peer verified the hub's
+finding rather than the hub verifying the peer's). Its remaining card `8DH44UXH` is
+`human_review`.
+
+**`web-scenario-tester` is the real one, and it is a THIRD exception class this card already
+names elsewhere:** *"Two repos have audit reports and NO `design/` tree at all —
+`EMASOFT-ASSISTANT-MANAGER` and `llm-externalizer` — so their findings have nowhere to be
+tracked."* Add a third, worse case: web-scenario-tester has **neither** a `design/` tree **nor**
+any audit report (only `reports/security/`). Nothing ran, and there is nowhere to put it if it
+had.
+
+**A false lead worth recording, because the directory name was persuasive.** The orchestrator
+ships `reports/fleet-audit-phase1/` … `phase5/`, which reads exactly like the Phase-1 report this
+box wants. Its single file is `20260611_212529+0200-phase1-r6v3-docs.md` — **June, and a
+different program** (the R6 v3 docs rollout). Caught by reading the filename and date rather than
+trusting the directory. This is the same needle-form lesson as the 15:55 entry pointed the other
+way: there a phrase needle missed a real hit, here a directory name produced a false one.
+
+**NEXT on box 1:** the honest restatement is *13 of 14 covered by some route; 1 genuinely
+uncovered (`web-scenario-tester`), and it needs a `design/` tree before it can hold a finding.*
+That is a decision for that repo's owner, not a report anyone can chase.
 
 ### ⏹ 2026-08-22T15:55 — BOX 2: ALL THREE "CONFIRMED GAPS" INVERT. The needle could not see the primary citation form
 
@@ -841,6 +890,15 @@ them to.
       NAMED** (see `## Phase-1 coverage` below): `ai-maestro-orchestrator-agent`,
       `web-scenario-tester`, `dev-browser`. Stays open, but it is now a list of three parties
       instead of an unmeasured claim.
+      **⚠ SUPERSEDED 2026-08-22T16:00 — see the STATE entry of that time.** The three are three
+      DIFFERENT situations, not three delinquent peers: `dev-browser` is **not a fleet member at
+      all** (a third-party marketplace plugin cache — no `.git`, no `design/`, 0 source repos
+      found under a positive-controlled search), so **the denominator is 14, not 15**; the
+      orchestrator was **audited BY the hub** ("orchestrator section"), re-verified first-hand and
+      remediated — 4 cards, 3 `published`; only `web-scenario-tester` is genuinely uncovered, and
+      it has **neither** an audit report **nor** a `design/` tree to hold one. Honest restatement:
+      **13 of 14 covered by some route, 1 uncovered and blocked on that repo gaining a `design/`
+      tree.**
 - [ ] For every CONFIRMED finding, the hub has re-verified at least one cited `file:line` itself
       before it becomes a TRDD — no finding enters the plan on a peer's word alone.
       **STATE 2026-08-22: recorded for 1 of 15 repos, and the record is on the PEER's card, not

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T16:26:35+0200
+updated: 2026-08-22T16:42:01+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,41 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T16:42 — BOX 4 TICKED, and "unanswerable by any command" is too strong
+
+The `## Spec ordering` section concludes that boxes **1, 3, 4, 5** are *"unanswerable by any
+command … counting can prove a floor and can never prove *each*."* **The first half is right and
+the conclusion is too strong.** Counting cannot prove "each"; **exhaustively READING a bounded
+residue can** — and that is how box 3 closed at 16:21 (19 files opened) and how box 4 closes now.
+
+**Box 4, both halves, over the reconciled 71-card union / 16 repos:**
+
+- **Location:** all 71 in the OWNING repos, **none in the hub** — the shape the box demands.
+- **Citation:** **71 of 71** carry a finding/provenance marker; **the residue is empty.**
+
+**The single-form needle undercounted again — sixth time today.** `axis|AX\d|finding N|self-audit`
+returns **57**; the 14 it misses cite by prose instead — `TUWUB0SG`: *"## Why (hub-verified P2,
+ledgered in ai-maestro TRDD-BRRJK57P)"* with `external-refs: [ai-maestro TRDD-BRRJK57P @ 9562b2a4,
+janitor#245]`; `WC2GEDOC`: *"TRDD-BRRJK57P (hub dispatch, Phase 2)"*. Those are citations. Only
+**29 of 71** carry an `external-refs:` line at all, so for 42 the provenance lives in prose —
+**exactly this card's own diagnosis that the contract never fixed a form**, measured.
+
+**So the honest tick is qualified and worth stating:** every Phase-2 card traces to a finding; the
+FORM is not uniform, and no form-specific check can ever return 71. A future gate on this box must
+be form-agnostic or the contract must fix a form — not both.
+
+**METHOD NOTE — the reason two "unanswerable" boxes closed today.** Both had a residue small enough
+to read (19 files, 14 cards). The unanswerable ones that remain (**1** at 1 repo, **5** at 16
+commits) are *also* bounded — **5** is genuinely undecidable for a different reason (a commit graph
+carries no authoring order), but **1** is a decided fact awaiting an owner act, not an unanswerable
+question. "Unanswerable by counting" and "unanswerable" are different claims.
+
+**Two instrument failures this pass, both caught by the positive control:** (a) I re-ran the
+`~/Code` sweep three times inside one command and it **timed out at 8m20s** — cache the expensive
+list to a file ONCE, then operate on the file; (b) `xargs -a FILE` is a GNU extension and this
+box's `xargs` is BSD, so it silently read **stdin** instead — control (`column:`) returned **0 of
+71** where it must return 71. `cat FILE | tr '\n' '\0' | xargs -0` works.
 
 ### ⏹ 2026-08-22T16:26 — BOX 6: the memory half IS measurable. It just cannot be answered by ATTRIBUTION
 
@@ -1148,7 +1183,16 @@ them to.
       not mean what its name says. And note the protocol these passes were given says *"Default to
       REFUTED when uncertain"* — a refutation pass refuting nothing is worth a second look on
       adversarial strength, separately from this box.
-- [ ] Phase 2 TRDDs exist in the OWNING repos, not here, and each cites its audit finding.
+- [x] Phase 2 TRDDs exist in the OWNING repos, not here, and each cites its audit finding.
+      **TICKED 2026-08-22T16:42.** Both halves verified over the reconciled **71-card union / 16
+      repos**: all 71 are in OWNING repos and **none is in the hub**; and **71 of 71 carry a
+      finding/provenance marker — empty residue.** 57 use a finding-level identifier
+      (`axis-N` / `AXn-m` / `finding C2` / `self-audit`); the other 14 carry prose provenance
+      (*"hub-verified P2, ledgered in ai-maestro TRDD-BRRJK57P"*, *"hub dispatch, Phase 2"*),
+      29 of the 71 also carrying an `external-refs:` line. **The FORM varies because the contract
+      never fixed one** — which is this card's own diagnosis, and it is why a single-form needle
+      read 57 and a form-agnostic one reads 71. The "other 2 repos cannot satisfy it" premise was
+      separately refuted at 16:10 (their `design/` trees are nested, 51 and 50 cards).
       **MEASURED 2026-08-22T02:4x — satisfied on 13 of 15 repos; the other 2 cannot satisfy it as
       written.** Swept every peer repo's `design/` for cards citing their own audit: **52 cards
       across 13 repos, all in the OWNING repo, none in the hub** — which is exactly the shape this

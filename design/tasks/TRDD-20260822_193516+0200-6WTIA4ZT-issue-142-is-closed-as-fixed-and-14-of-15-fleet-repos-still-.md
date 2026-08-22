@@ -477,3 +477,51 @@ no hooks whatsoever while appearing configured.
 **Directional consequence, stated because both halves are counter-intuitive:** repairing the global
 `pre-push` does nothing for these 9, and repairing these 9 does nothing for the other 39. There is
 no single edit that fixes both populations.
+
+### CORRECTION 5 — 2026-08-22T20:05:40+0200 — CORRECTION 4's table tested an ASSUMED LIST, not the directory
+
+AMAMA spot-checked the corrected table rather than relaying it and found a wrong row. Verified
+first-hand; they are right, and the defect is larger than the row.
+
+**CORRECTION 4 tested four hardcoded hook names** (`post-checkout`, `post-commit`,
+`post-merge`, `pre-push`) — the four the global dir happens to provide — and reported anything
+outside that list as nothing. It is the same name-keyed-needle failure as `SVG-BBOX`'s
+`scripts/hooks/` path, one layer over. **Enumerate the directory; do not test a list.**
+
+```bash
+find "$h" -maxdepth 1 -type f -perm -u+x ! -name '*.sample'
+```
+
+The `! -name '*.sample'` is load-bearing: `.git/hooks` ships **14** executable `.sample` files,
+so a naive executable count over-reports by 14 for any repo using its default dir.
+
+| repo | hooks that actually run |
+|---|---|
+| `ai-maestro` | post-checkout, post-commit, post-merge, pre-push |
+| **`SMART_MEDIA_MANAGER`** | **post-checkout, post-merge, post-rewrite, pre-commit, pre-rebase** — five, not the two CORRECTION 4 showed |
+| **`claude-acct-switcher`** | **pre-commit** — NOT "nothing" |
+| the other 6 | pre-push only |
+| *(control)* global dir | post-checkout, post-commit, post-merge, pre-push |
+
+**Two rows of CORRECTION 4 were wrong, both because the instrument could only see its own list.**
+`claude-acct-switcher` is not an empty shell that merely looks configured — it runs a real
+`pre-commit` and has only `pre-push.sample`, which git never executes. The true statement is
+**"no push gate, but it does run a commit hook"** — a different finding with a different fix.
+`SMART_MEDIA_MANAGER` runs `post-rewrite`, `pre-commit` and `pre-rebase` that were invisible
+to the list.
+
+**And CORRECTION 4 imputed a regression it did not establish.** It said these repos *"thereby
+REMOVED three unrelated hooks"*. Measured, the claim is only that **7 of 9 repos with a local
+`core.hooksPath` do not provide the three non-push hooks the global dir provides**. Whether any
+of them ever had or wanted them is unmeasured — a repo that never used Git LFS is not missing
+anything. The operational point survives in the weaker form: `core.hooksPath` replaces rather
+than composes (AMAMA's sandboxed four-case test), so a repo overriding it to add a push gate gets
+no global hook of any type, and that is invisible to a pre-push census. Whether that is a loss is
+per-repo.
+
+**The fix is not "call `rev-parse`" — it is "call it and do not prefix its result"** (AMAMA).
+`git rev-parse --git-path hooks` returns an ABSOLUTE path when `core.hooksPath` is absolute.
+They reproduced my own concatenation bug *in the command they wrote to check my bug report*, and
+it failed a second way at the same time: `ls … 2>/dev/null | head -6 || echo "(cannot list)"`
+gates on `head`'s exit status, never `ls`'s, so the fallback could not fire. Correct instrument,
+wrong handling, twice, by two sessions, one of whom was reading the description of the defect.

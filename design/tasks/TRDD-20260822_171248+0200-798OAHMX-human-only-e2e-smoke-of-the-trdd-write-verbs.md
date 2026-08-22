@@ -89,6 +89,65 @@ cover is the real token traversing the real route, which is exactly the class of
 keeps finding: a faithful double of an interface cannot see that the real implementation of that
 interface is broken.
 
+## ⏹ 2026-08-22T17:31 — E2E RUN, UNATTENDED. 5/5 verbs exercised, 4 controls, 2 BUGS FOUND.
+
+Driven through the real CLI → real routes → real server, owner absent. The dev token was resolved
+from `.env.local` **by the shell**, never by me; no secret value was printed, logged or echoed.
+
+**Path proven:** `aimaestro-governance.sh login` is NON-INTERACTIVE when the dev token is armed —
+it sources `.env.local` itself (`:401-418`) and `unset`s the var immediately after building the
+request body. Session minted at `~/.aimaestro/cli-session`, mode `0600`.
+
+| # | verb / probe | result |
+|---|---|---|
+| 1 | `create --min-approval user` | **PASS** → `tasks / backburner` — the server routed on my VERIFIED authority, not on the flag |
+| 2 | `promote backburner → todo` | **PASS** (after minting a sudo token) |
+| 3 | `archive --state completed` | **PASS** → `tasks → archived` |
+| 4 | `refuse` (proposal → refused) | **PASS** |
+| 5 | `approve` (proposal → planned) | **PASS**, returned `approvalToken` + `verifiable: true` |
+| C1 | same create, LOGGED OUT | **PASS** — `401 auth_required`; identity IS consulted |
+| C2 | `archive --state failed` via wrapper | **PASS** — refused client-side |
+| C3 | `archive --state failed` via RAW ROUTE | **PASS** — `HTTP 400`. **This closes this card's parent's own open worry** (*"the wrapper already enforces this — the server must too, or the wrapper is the only thing standing between a lost task and a retried one"*). It does. |
+| C4 | `verify` positive/negative pair | **PASS** — API-approved card `exit 0 VERIFIED`; prose-only card `exit 2 UNVERIFIED` |
+
+**The gap the unit matrix could not reach is now closed positively.** The neuter proved
+`authorize()` REFUSES with no TRDD context; C1 + probe 1 together prove the ROUTE actually SUPPLIES
+caller identity and authority — a create routed on verified authority cannot happen if the context
+never arrives.
+
+### BUG 1 — `create --column proposal` mints a card NO verb can act on
+
+`create --column proposal --min-approval user` wrote `column: proposal` into **`design/tasks/`**:
+zone routing keys on AUTHORITY, the column keys on the FLAG, and nothing reconciles them. The
+validator flags `ZONE-MISMATCH` immediately, and worse — `refuse` then returns **`HTTP 409 — Only a
+proposal can be refused; W7B0TC9B is in tasks`**, because the write verbs key on ZONE. The card is
+inert: wrong by the linter, unreachable by the verbs. Repaired here with a `git mv`, which is the
+workaround, not the fix.
+
+### BUG 2 — `archive` bypasses the terminal-checklist gate
+
+`archive --state completed` moved a card with **no acceptance checklist at all** to
+`archived/completed`. The validator immediately reports `TERMINAL-WITHOUT-CHECKLIST`. So the API
+can mint exactly the false completion that gate exists to prevent — the gate is enforced by the
+LINTER and not by the route that performs the transition.
+
+### Operational finding — the sudo quota makes unattended runs fragile
+
+Strict verbs need a one-shot `X-Sudo-Token`; the CLI only INJECTS `AIMAESTRO_SUDO_TOKEN` and has no
+mint path, so the mint is `POST /api/auth/sudo-password`. Its R32.2 gate is `if (!ctx.isSystemOwner)`
+— it refuses AGENTS, and the "only via the UI" wording is prose, not the enforced predicate, so a
+CLI mint by the owner session succeeds. But tokens are one-shot with an OUTSTANDING cap: a
+mint-then-locally-refuse sequence burns a slot without consuming it, and four of those returned
+**`429 sudo_token_quota_exceeded`**, blocking further strict ops until expiry.
+
+### Consequence for how this fleet closes cards — worth more than either bug
+
+C4's negative control was run against **`K2WJH7RF`**, and it came back `UNVERIFIED — its approval is
+prose only, which anyone with repo write can type`. That is true of every card I have closed by
+hand-editing `column:`, including `OX5TT5OT` earlier today. The API path produces a host-signed,
+ledger-anchored token; hand-editing produces prose. **Column transitions should go through the verbs
+so the provenance is verifiable.**
+
 ## Acceptance
 
 - [ ] A human holding a real `aim_tk_*` token drives `approve`, `refuse`, `promote` and `archive`

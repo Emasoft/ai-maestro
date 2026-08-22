@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-16T16:53:19+0200
-updated: 2026-08-22T15:43:59+0200
+updated: 2026-08-22T15:55:58+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -32,6 +32,52 @@ external-refs: []
 # Fleet program — audit every plugin, remediate, prove it with scenarios
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-16
+
+### ⏹ 2026-08-22T15:55 — BOX 2: ALL THREE "CONFIRMED GAPS" INVERT. The needle could not see the primary citation form
+
+**The 03:4x finding below — *"three fleet repos ran the audit and converted not one finding into a
+tracked card"* — is REFUTED.** Every needle used to establish it (`plugin-self-audit`,
+`self.audit`, report-date stamps, report slugs) keys on a PHRASE. **The repos cite this program by
+its TRDD ID.** Swept `~/Code` + `~/agents` for `BRRJK57P` inside `design/{tasks,archived,proposals}`,
+excluding this repo:
+
+**53 cards across 14 repos**, including all three claimed gaps:
+
+| repo | claimed | measured | cards |
+|---|---|---|---|
+| `ai-maestro-janitor` | 9 reports / **0 cards** — "gap CONFIRMED" | **4 cards, ALL `complete`** | TUWUB0SG · LMLKF0JV · DD0M4QL7 · UWBXNJ76 |
+| `ai-maestro-autonomous-agent` | 8 reports / **0 cards** — "gap CONFIRMED" | **1 card, `completed`** | J48IO8F3 |
+| `ai-maestro-orchestrator-agent` | 0 reports — "its audit never ran" | **4 cards** — 3 `published`, 1 `human_review`, titles reading *"audit C2…"* | 8DH44UXH · 7I4OPLBA · 0DSR6WT4 · 73OGGN69 |
+
+`UWBXNJ76` settles it on its own: `column: complete`, `implementation-commits: [07bf1d16]`, and
+`external-refs: [ai-maestro TRDD-BRRJK57P @ 9562b2a4]` — a remediation card that names this
+program in frontmatter and contains the string `plugin-self-audit` **zero** times.
+
+**So the honest population answer strengthens rather than reverses.** The earlier sweep found 45 of
+52 audit-citing cards terminal (87%) and concluded remediation had overwhelmingly happened; the
+id-keyed sweep adds 53 more citing cards, and the three repos that looked like the exception are
+among the most completely remediated in the fleet. **The remaining exceptions are the 5 PSS
+`backburner` cards and the 2 unmigrated CPV v1 TRDDs — both already identified below, both in
+other repos, both report-never-edit.**
+
+**The mechanism, which is the reusable part:** the card's own caveat said *"a repo citing its audit
+by report path or another phrase reads as zero here, and a zero from one needle is not a negative
+result."* That caveat was correct and I applied it by adding MORE PHRASE needles — slugs, dates,
+loose `self.audit` — every one of them the same kind of needle. Widening within a category cannot
+escape the category. The citation form that mattered was an **identifier**, and it was the one form
+never tried.
+
+**Two instrument failures on the way here, both caught by the positive control, both worth the
+line:** (1) `D="$a $b $c"; find $D` — zsh does not word-split, so `find` got ONE nonexistent path,
+`2>/dev/null` ate the error, and the population read **0** while the control also read 0. Only the
+control's zero — a needle that MUST hit — said "instrument", not "finding". Fixed with an array.
+(2) The slug needle then returned 9 hits that looked like remediation and were mostly noise:
+`memory-scope-leak` is a **detector name** in that repo, not only a report slug, so the needle
+matched cards from June about the detector itself. A slug is only distinctive if it is not also a
+product name.
+
+**NEXT on this box:** the "repos with reports and no cards" line of inquiry is closed. What remains
+is the 7 exceptions already named below, all of them in other repos.
 
 ### ⏹ 2026-08-22T15:43 — THE 14:08 CORRECTION BELOW WENT ONE STEP TOO FAR. `blocked` → `todo`
 
@@ -178,6 +224,11 @@ after the audit — so the cheap first pass is *"which repos have a `complete` r
 citing their audit?"*, not a citation-by-citation sweep.
 
 ### ⏹ 2026-08-22T03:4x — first pass RE-RUN corpus-wide, and the real gap is upstream of citations
+
+> **⚠ SUPERSEDED by the 15:55 entry at the top — the three-repo "gap" is REFUTED.** All three
+> repos DO carry remediation cards; they cite this program by its **TRDD id**, which none of the
+> phrase needles below can see. The population figures and the method correction here remain
+> sound; the gap conclusion does not.
 
 **Population, stated because the last figure was scoped differently and disagrees:** every file
 under a peer `design/tasks` or `design/archived` containing the literal string

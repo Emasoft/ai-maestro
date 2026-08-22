@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
-import { refuseTrdd } from '@/lib/trdd-store'
+import { refuseTrdd, isoLocal } from '@/lib/trdd-store'
 import { withAuthorizedTrdd } from '@/lib/trdd-authz'
 
 /**
@@ -50,7 +50,7 @@ export async function POST(
     refuseTrdd(designDir, id, {
       approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
       reason: typeof body.reason === 'string' ? body.reason : undefined,
-      iso: new Date().toISOString(),
+      iso: isoLocal().iso,
     }),
   )
   if (outcome.denied) return outcome.denied

@@ -33,7 +33,7 @@
 import fs from 'fs'
 import path from 'path'
 import { execFileSync } from 'child_process'
-import { TRDD_ZONES, type TrddZone, listTrddFiles, parseTrddFile } from './trdd-store'
+import { TRDD_ZONES, type TrddZone, listTrddFiles, parseTrddFile, isoLocal } from './trdd-store'
 import {
   toGraphNode,
   type TrddNode,
@@ -1138,7 +1138,12 @@ export interface FixResult {
  */
 export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: string } = {}): FixResult[] {
   const { cards } = loadCorpus(designDir)
-  const stamp = opts.now ?? new Date().toISOString().replace(/\.\d+Z$/, '+0000')
+  // `isoLocal()` replaces an inline `toISOString().replace(/\.\d+Z$/, '+0000')`. That
+  // `.replace` existed BECAUSE the raw form is wrong here — it fixed the shape and left
+  // the zone as UTC, so the doctor wrote `+0000` while the corpus writes the local offset.
+  // Two definitions of one format, and this was the second (TRDD-S13L6R9R). The `opts.now`
+  // seam is unchanged: every test injects it, so nothing depended on the default's zone.
+  const stamp = opts.now ?? isoLocal().iso
   const results: FixResult[] = []
 
   // Who claims whom. The parent's own `npt:`/`eht:` is the EVIDENCE that makes the

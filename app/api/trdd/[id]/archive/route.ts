@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
-import { archiveTrdd } from '@/lib/trdd-store'
+import { archiveTrdd, isoLocal } from '@/lib/trdd-store'
 import { withAuthorizedTrdd, rejectUnarchivableState } from '@/lib/trdd-authz'
 
 const ARCHIVE_STATES = ['completed', 'cancelled', 'superseded'] as const
@@ -66,7 +66,7 @@ export async function POST(
       state: state as (typeof ARCHIVE_STATES)[number],
       reason: typeof body.reason === 'string' ? body.reason : undefined,
       supersededBy: typeof body.supersededBy === 'string' ? body.supersededBy : undefined,
-      iso: new Date().toISOString(),
+      iso: isoLocal().iso,
     }),
   )
   if (outcome.denied) return outcome.denied

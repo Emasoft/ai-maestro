@@ -3,7 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireAuth } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
-import { readTrdd, editTrdd } from '@/lib/trdd-store'
+import { readTrdd, editTrdd, isoLocal } from '@/lib/trdd-store'
 import { withAuthorizedTrdd } from '@/lib/trdd-authz'
 
 /**
@@ -85,7 +85,7 @@ export async function PATCH(
   // TRDD-6D6SQNI6: the decision and the write are ONE critical section on the card,
   // because ownership is read off the very frontmatter a racing peer would be editing.
   const outcome = await withAuthorizedTrdd(auth, designDir, id, 'edit', () =>
-    editTrdd(designDir, id, edits, new Date().toISOString()),
+    editTrdd(designDir, id, edits, isoLocal().iso),
   )
   if (outcome.denied) return outcome.denied
 

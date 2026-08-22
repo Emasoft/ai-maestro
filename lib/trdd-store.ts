@@ -29,6 +29,40 @@ import { validateTrddFieldEdits } from './trdd-edit-guard'
 import { withJsonLock } from './json-io'
 import { documentLockKey, atomicWriteSync } from './pillar/edit'
 
+/**
+ * The ONE local-offset stamp for the TRDD corpus: `%Y-%m-%dT%H:%M:%S±HHMM`.
+ *
+ * It lives HERE, in the module that performs every dated write (`updated:`,
+ * `approval-datetime:`, and the `## Approval log` prose line), rather than in
+ * `trdd-create.ts` where the implementation used to be private. That is not a
+ * preference — `trdd-create` already imports FROM this module, so exporting it the
+ * other way would close an import cycle (TRDD-S13L6R9R).
+ *
+ * It takes a Date so it is (a) unit-testable without mocking the clock and (b) usable
+ * to CONVERT an existing instant, which is what a format backfill needs: the repair
+ * must preserve the moment a card was written, never substitute `now`. The corpus
+ * sorts on `updated:`, so stamping `now` during a format pass would silently reorder
+ * the board — the exact damage `trdd-doctor.ts:1399-1421` records having already
+ * caused once.
+ *
+ * NOT `toISOString()`: that yields UTC `Z` with milliseconds, which the rule does not
+ * admit and the corpus does not use. Converting from `Z` truncates to the second; the
+ * format has no sub-second slot and never has.
+ */
+export function isoLocal(d: Date = new Date()): { iso: string; stamp: string } {
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  const offMin = -d.getTimezoneOffset() // getTimezoneOffset is inverted (UTC − local)
+  const sign = offMin >= 0 ? '+' : '-'
+  const abs = Math.abs(offMin)
+  const off = `${sign}${pad(Math.floor(abs / 60))}${pad(abs % 60)}`
+  const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+  const time = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  return {
+    iso: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${off}`,
+    stamp: `${date}_${time}${off}`,
+  }
+}
+
 // Re-exported so this module's PUBLIC API is unchanged by the move to lib/pillar/:
 // every existing caller imports TrddZone / TRDD_ZONES from here, and the proof the
 // shared seam fits is that trdd-store's own tests pass unchanged.

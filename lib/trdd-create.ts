@@ -20,7 +20,7 @@ import { randomBytes } from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { TRDD_ZONES, type TrddZone } from '@/lib/trdd-store'
+import { TRDD_ZONES, isoLocal, type TrddZone } from '@/lib/trdd-store'
 import { AUTHORITY_RANK, VALID_COLUMNS } from '@/lib/trdd-vocabulary'
 
 const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // 8-char UPPERCASE base36 — the canonical id
@@ -61,20 +61,10 @@ export function idTaken(id: string, roots: string[]): boolean {
   return false
 }
 
-function isoNow(): { iso: string; stamp: string } {
-  const d = new Date()
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
-  const offMin = -d.getTimezoneOffset()
-  const sign = offMin >= 0 ? '+' : '-'
-  const abs = Math.abs(offMin)
-  const off = `${sign}${pad(Math.floor(abs / 60))}${pad(abs % 60)}`
-  const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
-  const time = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
-  return {
-    iso: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${off}`,
-    stamp: `${date}_${time}${off}`,
-  }
-}
+// The local-offset stamp moved to `trdd-store` (TRDD-S13L6R9R) so the five write routes
+// and this module share ONE definition. It could not stay here: `trdd-store` writes every
+// dated field, and importing it from `trdd-create` would have closed an import cycle.
+const isoNow = () => isoLocal()
 
 const TASK_TYPES = new Set(['feature', 'bugfix', 'refactor', 'docs', 'infra', 'security', 'artifact', 'spike', 'audit'])
 

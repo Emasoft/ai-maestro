@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
-import { promoteTrdd } from '@/lib/trdd-store'
+import { promoteTrdd, isoLocal } from '@/lib/trdd-store'
 import { withAuthorizedTrdd } from '@/lib/trdd-authz'
 import { mintTrddDecisionToken } from '@/lib/trdd-approval-token'
 
@@ -69,7 +69,7 @@ export async function POST(
     const result = await promoteTrdd(designDir, id, {
       approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
       rationale: typeof body.rationale === 'string' ? body.rationale : undefined,
-      iso: new Date().toISOString(),
+      iso: isoLocal().iso,
       approvalToken,
     })
     return { approvalToken, result }

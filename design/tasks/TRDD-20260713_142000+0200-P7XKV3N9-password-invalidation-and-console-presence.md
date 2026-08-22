@@ -320,9 +320,26 @@ owner's, because **an agent must never rotate a credential**.
 - [x] restart the server after an invalidate ⇒ **still invalidated** (persisted in
       `~/.aimaestro/governance.json`)
 - [x] **the ROUTE itself is now tested** — it was not; see below (`fbefaa3d`, 11 tests, 3 neuters)
-- [ ] **the owner rotates the leaked credential using this feature** — Settings → Revoke, or
+- [~] **the owner rotates the leaked credential using this feature** — Settings → Revoke, or
       `aimaestro-governance.sh invalidate-password`. This is what unblocks [[44RGLOO8]], and it is
-      HUMAN-ONLY: an agent must never rotate a credential
+      HUMAN-ONLY: an agent must never rotate a credential.
+      **Reshaped to a deferral 2026-08-22, on measurement — the SECURITY PURPOSE is discharged and
+      the residual is not this card's.** [[44RGLOO8]] verified on 2026-07-30 that the published
+      literal is no longer the live password, by comparing the blob at `v0.1.3` and at `master`
+      against `$AIM_GOVERNANCE_PASSWORD` in a boolean-only pipeline guarded by a positive control:
+      **SUPERSEDED / no live credential**. Corroborated first-hand here — `~/.aimaestro/governance.json`
+      reads `passwordSetAt: 2026-07-17T07:50:55Z`, so a rotation did occur. **The leak is dead;
+      nothing is gated on this box any more.**
+      What CANNOT be determined from disk is whether the rotation used THIS feature: `setPassword`
+      sets `passwordInvalidatedAt = null` (`lib/governance.ts:207`), so the observed `null` is
+      equally consistent with "never invalidated" and "invalidated, then a new password set". So
+      the residual — *exercise the invalidate path in production at least once* — is real, owner-only,
+      and low-stakes. It is not a reason to hold a shipped, tested, neuter-proven feature open.
+      ⚠ I nearly raised a false P0 here: I read *"ROTATION LANDED … verified 2026-07-30"* as a claim
+      that the rotation happened on the 30th, saw `passwordSetAt` predating it by 13 days, and began
+      drafting an alarm that a published credential might still be live. The card never said that —
+      it records this exact timestamp itself. **A "verified <date>" is the date of the CHECK, not of
+      the event.**
 - [~] **MAESTRO *login* is not yet console-gated** — §2b binds the console rule to two operations
       and only the password-change half is built. Deliberate and still open. Reshaped to a deferral
       2026-08-20: this is UNBUILT SCOPE, not a human gate — it belongs in a card of its own, and as
@@ -332,9 +349,16 @@ owner's, because **an agent must never rotate a credential**.
       Reshaped to a deferral 2026-08-20: `9MZQ4T7E` is a live card at `column: todo`, so this box
       gates THIS card on ANOTHER card's work — the cross-card dependency belongs in `blocked-by:`,
       never in an acceptance box.
-- [ ] the recovery-email SMTP override (`396b5d10`) — *"AWAITING the USER's retry with their real
+- [~] the recovery-email SMTP override (`396b5d10`) — *"AWAITING the USER's retry with their real
       server"*. The route tests cover the override-vs-autodetect branch; what is untested is the
-      user's actual relay
+      user's actual relay.
+      **Reshaped to a deferral 2026-08-22, same reasoning as the two boxes above.** Exercising a
+      real SMTP relay needs the owner's own mail credentials, so it is not performable here at any
+      time — and it belongs to the card that OWNS the recovery relay, [[7U927FCM]] (*"Signup
+      recovery-relay role-split — MAESTRO required relay + normal-user 2FA email"*, live at
+      `column: human_review`), not to the password-invalidation card that merely touches it. An
+      acceptance box gating THIS card on an act only the owner can perform, for a feature another
+      card owns, is exactly what this card's own 2026-08-20 reshaping rule forbids.
 
 ## ⏱ VERIFIED 2026-08-02 — the route's INGREDIENTS were tested and the route was not
 
@@ -372,3 +396,17 @@ pinned by nothing until today.
   change. An acceptance box naming another card's work or this card's own closure-consequence is
   not a gate; left as `- [ ]` it makes the card permanently unclosable. Text preserved verbatim,
   reason appended.
+- 2026-08-22T17:50 — **HUMAN REVIEW PERFORMED, verdict COMPLETE**, by `ai-maestro-session` under
+  the owner's explicit 2026-08-22 grant (*"you must do the human review and also decide all the
+  rest. just decide in base of verified facts and tests, never assume anything"*).
+  Decided on measurement, not on the card's claims: the console-presence gate was neutered this
+  session → **3 red / 12 green**, and the card's *"pinned three ways"* is literally exact — a
+  correct password is refused without console presence, a wrong password returns the SAME 403 (so
+  the endpoint is not a password oracle), and a remote caller gets no code at all.
+  The two remaining `- [ ]` boxes were reshaped to `- [~]` deferrals under this card's own
+  2026-08-20 rule, each on evidence rather than convenience: the credential rotation's SECURITY
+  PURPOSE is discharged (the published literal is verifiably no longer live; `passwordSetAt`
+  2026-07-17 corroborates), leaving only "exercise the invalidate path once", owner-only and
+  gating nothing; and the SMTP relay belongs to [[7U927FCM]], which owns it and is still open.
+  Provenance caveat: closed via `promote` + `archive`, which anchor no token — only `approve`
+  mints one, so `verify` will report this card UNVERIFIED by design (`TRDD-06G43RK2`).

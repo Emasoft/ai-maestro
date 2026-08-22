@@ -3,7 +3,7 @@ trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
 column: todo
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T01:07:13+0200
+updated: 2026-08-23T01:11:29+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -158,6 +158,13 @@ including one whose Next half had been fixed hours earlier in the same session.
 
 ### The 2 red test files you will see, and why they are NOT this card
 
+> **ANSWER FIRST** (the rest of this section is the audit trail, and it is longer than the answer):
+> `pillar-grep-cli` and `trdd-doctor` are red because of **ONE** corpus ERROR,
+> `TERMINAL-WITHOUT-CHECKLIST` on `G6A54OYK`. That card is **not litter** — it is the deliberately
+> retained live reproduction for `TRDD-P6MSMQ2I`, an OPEN bug. **Do not delete it and do not repair
+> it.** Fix `P6MSMQ2I`; until then pin `G6A54OYK` in both tests. Everything below is why, and the
+> corrections are kept because each records a real error made while establishing it.
+
 `yarn test` reports **2 failed | 458 passed (460 files)** — `6180 passed | 2 skipped` of 6184 tests
 — and the two red files are `pillar-grep-cli` and `trdd-doctor`. Measured 2026-08-23T00:55, full
 run. **An earlier version of this line said "457 pass / 2 fail", a figure inherited across two
@@ -171,14 +178,30 @@ asserted an aging nobody measured; I had moved the number myself.
 > confident wrong number first.**
 > **(i) Wrong baseline date.** The first run used `--since=2026-08-22T00:20` and returned **16**
 > added files, which refutes a +1 delta. The handoff header reads **2026-08-23** ~00:20 — an
-> off-by-one-day that made the window 24× too wide. Read the baseline's own timestamp; do not
-> retype it.
+> off-by-one-day that made the window 24× too wide.
+> **…and the corrected date was itself a proxy, so the baseline is now pinned by ARITHMETIC
+> instead.** That header is a MODEL-TYPED string in a gitignored file (`.gitignore:230 .janitor/`,
+> untracked — so `git log -S'457'` on it cannot run), it says "~00:20" not 00:20, and it timestamps
+> when the handoff was WRITTEN, not when 457 was measured — which by this card's own account was
+> inherited across two sessions, i.e. earlier still. **A document's date read as a measurement's
+> date.** The independent pin: the suite TOTAL moved 459 → 460, exactly **+1**, so precisely ONE of
+> the 16 adds can postdate the 457 measurement. Sorted by add-time, the latest is `6b40bfc7`
+> 00:40:08 (mine) and the second-latest is `1909b55d` 2026-08-22 23:26:40. **Therefore the baseline
+> lies in (23:26:40, 00:40:08)** — a ~74-minute window that needs no header at all, and inside which
+> the claimed ~00:20 happens to fall. The self-attribution stands on the arithmetic, not on the
+> handoff.
 > **(ii) `git ls-files 'tests/**/*.test.ts'` returns 412; the same string in `vitest.config` matches
-> ~451.** In a git pathspec `*` CROSSES `/` (so `tests/*.test.ts` → 451, every depth) while `**/`
-> requires at least one intermediate directory (→ 412, silently dropping depth-1 files). picomatch,
-> which vitest uses, reads `**/` as *zero* or more. **The same glob string means different things to
-> git and to the test runner, and git's reading is the counter-intuitive one.** The corrected count
-> above was taken with NO pathspec at all, filtering the names afterwards.
+> ~451.** MEASURED: `tests/**/*.test.ts` → **412**, `tests/*.test.ts` → **451**, and
+> `git ls-files 'tests/' | grep -c '\.test\.ts$'` → **451**. **The same glob string means different
+> things to git and to the test runner** — that is the finding, and it is sufficient for the
+> operational rule: **when a count will be published, use NO pathspec and filter the names
+> afterwards**, which is how the corrected figure above was taken.
+> *Hypothesis, NOT verified — do not repeat it as fact:* that git's `*` crosses `/` while `**/`
+> requires an intermediate component, and picomatch reads `**/` as zero-or-more. Three counts are
+> consistent with that and with other explanations; I did not consult `gitglossary(7)` or
+> picomatch's README. An inferred mechanism published as a documented one is the `ps %cpu` failure,
+> which is the longest entry in `.claude/rules/lessons-verification.md` precisely because a
+> plausible mechanism travelled further than the measurement did.
 
 Re-run it rather than quoting it — the counts have a silent timestamp, the
 failing PAIR is the stable fact. Neither is caused by this card's work, but the story handed down
@@ -243,15 +266,21 @@ re-measured 2026-08-21 — the day before the card landed.
 >
 > An earlier version of this retraction said the 798OAHMX run *"did the right thing end to end"*.
 > **That was the opposite overstatement, from the same evidence class** — a narrative read off commit
-> SUBJECTS, never measured. That run's own log contains `676a5030 "retract the verifiable-provenance
-> claim"` and `c824039e "record the e2e scope honestly"`, i.e. it made claims it had to retract too.
-> Swinging from "uncleaned litter" to the most flattering possible reading, neither measured, is one
-> defect wearing two faces.
+> SUBJECTS, never measured. Swinging from "uncleaned litter" to the most flattering possible reading,
+> neither measured, is one defect wearing two faces. (Corrected once more: the first version of THIS
+> note fixed a subject-based claim by citing two more SUBJECTS. Now measured —
+> `git show 676a5030 --stat` shows it edited the `798OAHMX` card and added `TRDD-06G43RK2`, so that
+> run did retract a substantive finding of its own, and the narrow claim is evidenced.)
 >
-> `P6MSMQ2I` has since been read IN FULL (43 lines), not excerpted: it carries no condition for
-> retiring the reproduction. Note one tension it owns, flagged and NOT resolved here — its
-> `## Verification` expects `trddgrep validate` **clean afterwards**, while its Problem section says
-> the card must never be repaired. Whoever fixes it has to reconcile those.
+> **Both cited cards have now been read IN FULL**, not excerpted — `P6MSMQ2I` (43 lines) and
+> `MWKCBLQN` (44). Neither carries any condition for retiring its reproduction, and neither asks for
+> its card to be deleted; `MWKCBLQN`'s `## Verification` is about the create route's behaviour, not
+> about `W7B0TC9B`'s disposal. **`MWKCBLQN` was excerpts for one revision longer than `P6MSMQ2I`
+> purely because a reviewer named one and not the other** — it carries equal weight in this
+> retraction. Note one tension `P6MSMQ2I` owns, flagged and NOT resolved here: its `## Verification`
+> expects `trddgrep validate` **clean afterwards**, while its Problem section says the card must
+> never be repaired. Whoever fixes it has to reconcile those. (Both cards also carry a duplicated
+> `## Approval log` heading — cosmetic, theirs, not touched here.)
 
 **Do not "repair" `G6A54OYK`'s body** — it is terminal, hence frozen by IND rule 12. And do not
 delete it: it is `P6MSMQ2I`'s reproduction. **The real fix is to fix `P6MSMQ2I`** (make the archive

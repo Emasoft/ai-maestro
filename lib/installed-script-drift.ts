@@ -1,7 +1,7 @@
 /**
  * Installed-script drift — TRDD-GADPGOIR.
  *
- * Agents execute `amp-*` / `aimaestro-*` from `~/.local/bin`. The repo's `scripts/` is only the
+ * Agents execute `amp-*` / `aid-*` / `aimaestro-*` from `~/.local/bin`. The repo's `scripts/` is only the
  * SOURCE: nothing syncs them automatically, and until this existed nothing detected when they
  * disagreed. A commit is not an install, and no gate said so.
  *
@@ -51,6 +51,24 @@ export interface DriftInputs {
   readSource: (name: string) => Buffer | string
   /** Installed bytes by basename, or null when the file does not exist. */
   readInstalled: (name: string) => Buffer | string | null
+}
+
+/**
+ * Does this filename belong to the installed-script layer this detector governs?
+ *
+ * THE FAMILY LIST IS THE SCAN SET, so a family missing here is not under-reported — it is
+ * INVISIBLE, and the census prints a confident "clean" about scripts it never opened. `aid-*`
+ * was omitted from this predicate's original inline form and all SIX aid scripts went unchecked
+ * for as long as it existed; the drift report read `47 compared` and nobody could tell that the
+ * agent-identity family was simply not in the population. That is the same shape as the incident
+ * in this file's header — a claim about running code that the instrument cannot falsify.
+ *
+ * It lives HERE, exported and tested, rather than inline in `scripts/check-script-drift.mjs`,
+ * because a predicate in an untested `.mjs` is pinned by nothing: the lib had a full test file
+ * and the one line that decided WHAT GETS TESTED sat outside it.
+ */
+export function isTrackedScriptName(name: string): boolean {
+  return /^(amp|aid|aimaestro)-.*\.sh$/.test(name)
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   compareInstalledScripts,
   driftExitCode,
   formatDriftReport,
+  isTrackedScriptName,
 } from '@/lib/installed-script-drift'
 
 const src: Record<string, string> = {
@@ -80,5 +81,47 @@ describe('compareInstalledScripts', () => {
     // the agent's identity — across every affected agent.
     expect(out).toMatch(/never cherry-pick/)
     expect(out).toMatch(/install-messaging\.sh/)
+  })
+})
+
+/**
+ * THE FAMILY LIST IS THE SCAN SET, so this predicate decides what the whole detector can SEE.
+ * A family missing from it is not under-reported, it is invisible — and the census then prints a
+ * confident "N compared / all identical" about scripts it never opened. That is exactly what
+ * happened: the predicate lived inline in `scripts/check-script-drift.mjs` as
+ * /^(amp|aimaestro)-.*\.sh$/, omitting `aid-*`, and all SIX aid scripts went unchecked. The live
+ * scan read `47 compared`; with the family restored it reads `54`.
+ *
+ * The lesson these tests encode is WHY it was unpinnable: the lib had a full test file, and the
+ * one line deciding what gets tested sat outside it, in an untested `.mjs`.
+ */
+describe('isTrackedScriptName — the scan set', () => {
+  it('REGRESSION — the aid-* family is tracked (it was silently omitted)', () => {
+    // Neuter this by removing `aid` from the alternation in lib/installed-script-drift.ts:
+    // this test reds and no other does, which is what makes it the pin for that one character.
+    expect(isTrackedScriptName('aid-auth.sh')).toBe(true)
+    expect(isTrackedScriptName('aid-token.sh')).toBe(true)
+    expect(isTrackedScriptName('aid-helper.sh')).toBe(true)
+  })
+
+  it('POSITIVE CONTROL — the two families that always worked still do', () => {
+    // Without this, removing the WHOLE alternation would look like a single-family regression.
+    expect(isTrackedScriptName('amp-send.sh')).toBe(true)
+    expect(isTrackedScriptName('aimaestro-trdd.sh')).toBe(true)
+  })
+
+  it('does not track the extensionless convenience symlinks', () => {
+    // install-messaging.sh creates `amp-send -> amp-send.sh` beside every script. Tracking both
+    // would compare each file twice and inflate the census with duplicate rows.
+    expect(isTrackedScriptName('amp-send')).toBe(false)
+    expect(isTrackedScriptName('aid-auth')).toBe(false)
+  })
+
+  it('does not track sourced libraries or non-scripts', () => {
+    // `agent-*.sh` are sourced by aimaestro-agent.sh, never invoked from PATH as their own
+    // command, so they are outside the installed-command layer this detector governs.
+    expect(isTrackedScriptName('agent-core.sh')).toBe(false)
+    expect(isTrackedScriptName('README.md')).toBe(false)
+    expect(isTrackedScriptName('aimaestro-settings-cli.mjs')).toBe(false)
   })
 })

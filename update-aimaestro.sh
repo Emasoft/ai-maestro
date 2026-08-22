@@ -138,30 +138,42 @@ echo ""
 print_step "$DOWNLOAD" "Fetching latest changes from GitHub..."
 echo ""
 
-# SF-042: Verify we are on the main branch before pulling from origin/main.
-# Running `git pull origin main` on a feature branch would merge main into it.
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-if [ "$CURRENT_BRANCH" != "main" ]; then
-    print_warning "You are on branch '${CURRENT_BRANCH}', not 'main'."
-    echo "         This updater pulls from origin/main. Switching branches automatically."
-    echo ""
-    if [ "$NON_INTERACTIVE" = true ]; then
-        git checkout main
-    else
-        read -p "Switch to main and continue? (y/n): " SWITCH_CONFIRM
-        if [[ "$SWITCH_CONFIRM" =~ ^[Yy]$ ]]; then
-            git checkout main
-        else
-            print_warning "Update cancelled -- please switch to main manually."
-            exit 0
-        fi
-    fi
+# TRDD-0N792LL5: update the CURRENT branch, from a remote we actually publish to, and REFUSE
+# rather than guess.
+#
+# This replaces SF-042, which understood the branch hazard ("Running `git pull origin main` on a
+# feature branch would merge main into it") and answered it by running `git checkout main` —
+# trading a merge-into-feature for an abandon-the-feature, unprompted under NON_INTERACTIVE. Both
+# are wrong while `origin` is the upstream this checkout does not publish to: the pull then buries
+# local-only commits under a foreign history, and the stash prompt above cannot help because
+# unpushed work is COMMITTED, not dirty.
+#
+# Never `git checkout` on the operator's behalf: switching branches to make a pull legal discards
+# the very work the operator is trying to keep.
+if [ -f "$SCRIPT_DIR/scripts/shell-helpers/update-remote-guard.sh" ]; then
+    source "$SCRIPT_DIR/scripts/shell-helpers/update-remote-guard.sh"
+else
+    print_error "Missing scripts/shell-helpers/update-remote-guard.sh — refusing to update without the safety guard."
+    exit 1
 fi
 
-# Fetch and show what's new
-git fetch origin main
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+UPDATE_REMOTE="$(resolve_update_remote)"
 
-COMMITS_BEHIND=$(git rev-list HEAD..origin/main --count 2>/dev/null || echo "0")
+print_info "Updating branch '${CURRENT_BRANCH}' from remote '${UPDATE_REMOTE}'."
+
+# Fetch first: the guard's ahead-count is meaningless against a stale remote ref.
+git fetch "$UPDATE_REMOTE" "$CURRENT_BRANCH" || {
+    print_error "Could not fetch ${UPDATE_REMOTE}/${CURRENT_BRANCH}."
+    exit 1
+}
+
+if ! assert_update_safe "$UPDATE_REMOTE" "$CURRENT_BRANCH"; then
+    print_error "Update refused — see the reason above. Nothing was changed."
+    exit 1
+fi
+
+COMMITS_BEHIND=$(git rev-list "HEAD..${UPDATE_REMOTE}/${CURRENT_BRANCH}" --count 2>/dev/null || echo "0")
 
 if [ "$COMMITS_BEHIND" = "0" ]; then
     print_success "You're already on the latest version!"
@@ -181,7 +193,7 @@ else
     echo "New commits available: ${GREEN}${COMMITS_BEHIND}${NC}"
     echo ""
     echo "Recent changes:"
-    git log HEAD..origin/main --oneline | head -10
+    git log "HEAD..${UPDATE_REMOTE}/${CURRENT_BRANCH}" --oneline | head -10
     echo ""
 
     if [ "$NON_INTERACTIVE" = true ]; then
@@ -198,7 +210,10 @@ else
     echo ""
     print_step "$DOWNLOAD" "Pulling latest changes..."
     BEFORE_SHA=$(git rev-parse HEAD)
-    git pull origin main
+    # --ff-only: assert_update_safe already proved HEAD has nothing the remote lacks, so a
+    # fast-forward is the ONLY correct outcome here. If git still cannot fast-forward, the
+    # guard's premise no longer holds (someone committed mid-run) and stopping beats merging.
+    git pull --ff-only "$UPDATE_REMOTE" "$CURRENT_BRANCH"
     print_success "Code updated"
 
     # Detect ecosystem.config.js changes that require PM2 config reload

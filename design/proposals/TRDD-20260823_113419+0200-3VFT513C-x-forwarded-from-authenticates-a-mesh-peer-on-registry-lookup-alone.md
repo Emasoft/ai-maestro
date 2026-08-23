@@ -144,8 +144,21 @@ Candidate directions, cheapest first — none ruled in:
    peer that does not send one, so it needs a fleet measurement first.
 2. **Verify `X-AMP-Signature`** — the header already exists, is already plumbed to the function,
    and is already discarded. Whatever it was meant to prove, nothing proves it today.
-3. **Scope what a `mesh-*` identity may DO** — it currently becomes a normal authenticated caller.
-   Even with (1) or (2), a forwarded identity arguably should not be equivalent to a local one.
+3. **Scope what a `mesh-*` identity may DO.** Note the premise here was CORRECTED before filing:
+   an earlier draft said such a caller "becomes a normal authenticated caller", which is wrong.
+   Read at 856-862, `isMeshForwarded` is a CLASSIFIER and it RESTRICTS —
+   `const senderAgent = isMeshForwarded ? null : getAgent(auth.agentId!)`, so a mesh caller never
+   resolves to a registered agent, and the R36/R37 user-authority branch below is gated
+   `if (!isMeshForwarded && …)` and skipped entirely. So a forwarded identity is already
+   second-class in at least two ways. Whether that is ENOUGH is the open question, and it is a
+   narrower one than the earlier draft implied.
+
+> **This bounds SEVERITY, which is what an approver actually weighs, so it is stated here rather
+> than buried.** The hole is real (authentication granted on a caller-controlled header naming a
+> resolvable host id) and the blast radius is NOT "the caller becomes a local agent". What a
+> `mesh-*` subject can reach downstream is UNMEASURED — lines 875-1352 have not been read — and
+> that measurement, not more evidence for the hole itself, is what the next person on this card
+> should do first.
 
 ## Verification
 

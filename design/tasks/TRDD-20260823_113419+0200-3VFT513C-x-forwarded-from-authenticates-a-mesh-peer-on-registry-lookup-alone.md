@@ -49,6 +49,33 @@ Three facts, each verified first-hand:
 `POST /^\/api\/v1\/route$/` is correspondingly listed in `UNGUARDED_LEDGER`
 (`tests/unit/headless-handler-auth-ledger.test.ts:152`) — the ledger already knew.
 
+### Re-verified by CONTIGUOUS read (the first pass used grep-filtered views)
+
+The three facts above were first taken from grep-FILTERED listings of `routeMessage`, which is
+the same proxy-read shape that produced two errors earlier in the same session (an assumed
+escaping format; a route-table conclusion from a partial read). Re-read as a contiguous block,
+lines 770-812. All three hold, and two get STRONGER:
+
+- **Fact 2 was the load-bearing one and it is confirmed exactly.** The invalid-attestation branch
+  is `} else { console.warn('… Invalid role attestation … — ignoring') }` — **no return, no
+  throw** — and `auth = { authenticated: true, … }` is assigned BEFORE the attestation block, so
+  the subsequent `if (!auth.authenticated) return 401` is already false. The absence of a return
+  was INFERRED from a filtered view on the first pass; it is now observed.
+- **The code documents the hole itself.** The no-attestation path logs
+  `Accepting mesh-forwarded request from ${forwardedFrom} (no attestation)`. This is not a
+  subtle omission — it is a deliberate, logged accept.
+- **Fact 3 is broader than filed: TWO parameters are accepted and discarded, not one.** Counting
+  each parameter's occurrences inside the function body: `authHeader` 2, `forwardedFrom` 14,
+  `attestationHeaders` 3, `contentLength` 2 (a real payload-size cap) — but **`signatureHeader`
+  1 and `envelopeIdHeader` 1, each being its own declaration.** The caller supplies both
+  (`getHeader(req, 'X-AMP-Signature')`, `getHeader(req, 'X-AMP-Envelope-Id')`), so the AMP
+  envelope-integrity headers are plumbed end to end and verified nowhere on this path.
+
+> A needle in that same count read `contentLengthHeader` and returned 0, which would have made
+> the payload cap look dead too. The parameter is `contentLength`; re-run correctly it is used at
+> line 823. Recorded because it is the identical failure class the paragraph above is about, and
+> it occurred while measuring it.
+
 ## Why it surfaced now, and what is NOT claimed
 
 It surfaced while implementing TRDD-8Q5EVGV1's semantic credential gate, which must EXEMPT this

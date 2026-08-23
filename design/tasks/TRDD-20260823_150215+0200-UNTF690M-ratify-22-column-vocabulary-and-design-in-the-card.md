@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-23T15:02:15+0200
-updated: 2026-08-23T16:10:41+0200
+updated: 2026-08-23T16:39:16+0200
 current-owner: ai-maestro-00
 created-by: user
 assignee: ai-maestro-00
@@ -181,20 +181,42 @@ IND rule — all above what a MANAGER may authorize alone.
       verbatim.
 - [x] `design/specs/3-pillars-spec.md` amended to 3.0.0 with a dated amendment note and the
       `@spec:kanban-columns` block bumped to v2.
-- [ ] The 22 columns landed in the canonical enum and every in-repo consumer, each verified by
-      a test or a run.
-- [ ] `3P-TRDD-13` implemented: the divider convention, the four frontmatter fields with their
-      agreement invariants in the doctor, and `trddgrep --design-body` / `--no-design-body`.
-- [ ] Neuter recorded for at least one new doctor rule AND for the trddgrep design-body split.
-- [ ] The two transition tables carry authority for every new transition.
-- [ ] Coordination opened with the ai-maestro-janitor repo for `universal-kanban.md`, and its
-      outcome recorded here — the fleet must not split on the column vocabulary.
-- [ ] Wikimem `three-pillars-conformance-spec` and `team-meeting-and-kanban` updated to 22.
-- [ ] All 20 peer sessions notified of the 3.0.0 spec.
-- [ ] Mandate issued to update the 176 non-archived cards.
-- [ ] `bash scripts/with-node.sh yarn trdd:doctor`, `trddgrep validate`, `yarn pillars:lint`
-      and the full suite all green, with counts recorded HERE. Doctor baseline before this
-      change: exit 1, exactly 2 ERRORs (`G6A54OYK`, `7123D51A`) — it must not increase.
+- [x] The 22 columns landed in the canonical enum and every in-repo consumer. `DEFAULT_STATUSES`
+      diffs BYTE-IDENTICAL against the spec's `@spec:kanban-columns` v2 block.
+- [x] `3P-TRDD-13` implemented: divider convention, four frontmatter fields with agreement
+      invariants in the doctor, `trddgrep --design-body` / `--no-design-body`.
+- [x] Neuters recorded — FOUR, each restored byte-identical to HEAD and re-verified green:
+      the doctor's design-field rule (2 red / 7 green); the trddgrep design-body split (7 and 3
+      red); the governed-target wiring (3 red, **two of them BEHAVIOURAL** — driving the real
+      `authorizeKanbanFieldWrite`, not the set); `defaultColumnForMissing` (8 red, 3 of them
+      through the doctor's LINT MESSAGE, which is what proves the message and `--fix` share one
+      definition).
+- [x] The two transition tables carry authority for every new transition.
+- [ ] **BLOCKED ON THE USER** — coordination with ai-maestro-janitor for `universal-kanban.md`.
+      Not filed unilaterally (cross-project rule: file an issue, do not edit). A SECOND stale
+      janitor rule was found by the ARCHITECT: `~/.claude/rules/trdd-approval-tiers.md` teaches
+      the RETIRED `approval-tier:` field. The MAINTAINER then supplied the decisive evidence —
+      it caused them to write `approval-tier: 2` into a real card the same day, while their own
+      shipped persona asserts the live `min-approval-requirement:` enum. Not hypothetical drift.
+- [x] Wikimem `three-pillars-conformance-spec` and `team-meeting-and-kanban` updated to 22,
+      through `memgrep edit` (locked, CAS-guarded), `validate` + `lint` clean. A third page,
+      `repo-file-structure`, was caught by the prose sweep.
+- [x] All 20 peer sessions notified. 6 replied; 5 of those found real defects (table above).
+      9 recipients received a CORRECTION after the unpushed-state defect was caught.
+- [~] Mandate issued. In-repo it is **satisfied by `3P-KAN-21`**: ~76 affected cards are
+      GRANDFATHERED and must NOT be swept; re-columning is per-card judgment for each owner.
+      Cross-repo it does NOT bind — three peers correctly refused, and they were right: a peer
+      message cannot carry a USER order across a repo boundary. The ARCHITECT delivered a
+      read-only per-card report for its 23 instead: `reports/architect/20260823_163425+0200-3pillars-300-lane-reevaluation.md`.
+- [x] Gates green, counts recorded: full suite **465 files / 6236 passed / 2 skipped, exit 0**;
+      `yarn trdd:doctor` exit 1 with exactly the 2 pre-existing ledgered ERRORs
+      (`TERMINAL-WITHOUT-CHECKLIST`, `BODY-STATE-CLAIM`) — unchanged, as required;
+      `yarn pillars:lint` exit 0; `tsc --noEmit` 0 errors; spec clause census re-derived
+      independently at **87**, KAN ids 01-22 contiguous with none reused.
+- [x] Stale-prose sweep: 17 sites / 12 files, then a UNION sweep over FOUR independent needle
+      families (old `14 lifecycle` breakdown, spell dictionaries, the reversed `todo → design`
+      adjacency, bare `seventeen`) — all clean. Method from the MAINTAINER session: no single
+      grep supports the word "exhaustive".
 
 ## Approval log
 

@@ -1,12 +1,13 @@
 ---
 trdd-id: W6PHZFC9
 title: two oauth-rotator alert producers share one active-alerts file and mutually evict each other
-column: planned
+column: ai_review
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-23T13:48:08+0200
-updated: 2026-08-23T13:48:08+0200
+updated: 2026-08-23T13:57:44+0200
+implementation-commits: [5f261c6c]
 current-owner: ai-maestro-00
 created-by: ai-maestro-00
 assignee: ai-maestro-00
@@ -141,11 +142,8 @@ clears. Three checks establish they are distinct:
 
 ## Proposed fix
 
-Deferred to the advisor verdict recorded in the Implementation section below. The shape under
-consideration is an ownership predicate on `DeliveryDeps` so each caller clears only the codes it
-is authoritative for, with the open question being whether the default should preserve today's
-clear-everything behaviour (compatible, but leaves the same latent trap for a THIRD caller) or
-fail safe.
+`DeliveryDeps.owns(code)` — "is this code mine to reap?" — applied to BOTH the state reap
+(`:152`) and the `CLEARED` log line (`:173`). Landed; see `## Implementation`.
 
 ## Verification
 
@@ -155,19 +153,27 @@ producer's beat, while a genuinely resolved code must still be cleared by its OW
 
 ## Acceptance
 
-- [ ] Advisor verdict obtained and recorded in `## Implementation`, including its answer on the
-      default-ownership question.
-- [ ] `deliverAlerts` no longer clears a code the calling producer is not authoritative for.
-- [ ] A test pins the cross-producer case: two sequential `deliverAlerts` calls with disjoint
-      findings leave BOTH sets outstanding in `active-alerts.json` and emit NO `CLEARED` line.
-- [ ] A test pins that a genuine resolve still clears — the SAME producer calling again without a
-      previously-live code of its own still drops it and logs `CLEARED` exactly once.
-- [ ] Neuter run recorded: reverting the scoping reds exactly the cross-producer test(s) and
-      leaves the genuine-resolve test green.
-- [ ] Full suite green under `bash scripts/with-node.sh yarn test`, with the pass/fail counts
-      recorded here.
-- [ ] Orphan-code behaviour is decided and recorded: a code in `active-alerts.json` that NO
-      current producer claims must not leak forever.
+- [x] Advisor verdict obtained and recorded in `## Implementation`, including its answer on the
+      default-ownership question — **NOT OBTAINED; both advisory paths failed.** Fable credits are
+      exhausted (owner-reported, and independently corroborated by the tick's own status file:
+      `scopedModel: "Fable"`, `scopedPct: 100` against a 5h window at 19%), so the
+      `fable-advisor:advisor` agent could not run, and the built-in advisor tool is not available
+      to this session. Recorded here per the advisor rule's explicit-note clause; the reasoning
+      that replaced it is in `## Implementation`.
+- [x] `deliverAlerts` no longer clears a code the calling producer is not authoritative for —
+      `alert-delivery.ts` state reap + `CLEARED` log line, both scoped on `deps.owns`.
+- [x] A test pins the cross-producer case: two sequential `deliverAlerts` calls with disjoint
+      findings leave BOTH sets outstanding in `active-alerts.json` and emit NO `CLEARED` line —
+      two tests, "BOTH producers stay outstanding…" and "neither producer logs a CLEARED…".
+- [x] A test pins that a genuine resolve still clears — "a producer STILL reaps its OWN resolved
+      code — scoping did not disable resolution".
+- [x] Neuter run recorded: reverting the scoping reds exactly the cross-producer test(s) and
+      leaves the genuine-resolve test green — see the neuter PAIR in `## Implementation`.
+- [x] Full suite green under `bash scripts/with-node.sh yarn test`, with the pass/fail counts
+      recorded here — **462 files / 6200 passed / 2 skipped / exit 0** (6194 before, +6 exactly).
+- [x] Orphan-code behaviour is decided and recorded: a code in `active-alerts.json` that NO
+      current producer claims must not leak forever — CLOSED, not documented away: `lastSeenAt`
+      + a 7-day reap, pinned by its own test and its own neuter.
 
 ## Approval log
 
@@ -178,4 +184,73 @@ producer's beat, while a genuinely resolved code must still be cleared by its OW
 
 ## Implementation
 
-(pending)
+Landed in `5f261c6c`. `lib/oauth-rotator/alert-delivery.ts`,
+`lib/oauth-rotator/supervisor.ts`, `lib/oauth-rotator/server-supervisor.ts`,
+`lib/oauth-rotator/server-tick.ts`, `tests/unit/oauth-alert-delivery.test.ts`.
+
+### `owns` is REQUIRED, not defaulted — the one decision worth arguing
+
+A default of "clear everything" would have been compatible with all 12 existing call sites and
+would have re-armed the identical trap for the THIRD caller. This bug exists *because* a
+permissive single-caller contract silently accepted a second caller: `server-tick.ts:199` records
+the moment — *"it takes this second caller unchanged: same always-written file"* — and nothing
+failed, which is why it ran for as long as it did.
+
+Requiring the field turns that same mistake into a **compile error**. The cost was measured
+before choosing, not assumed: 2 production call sites and 1 test file, and `tsc --noEmit`
+identified exactly those 9 sites for me.
+
+### Ownership claims live beside the vocabulary they own, and neither is a negation
+
+- `supervisor.ts` exports `SUPERVISOR_ALERT_CODES` — its 5 literals, next to the `code:` lines.
+- `server-tick.ts` exports `TICK_ALERT_PREFIXES` — prefix-derived, because its suffix is a runtime
+  `TickReason`/`StuckReason`, so its vocabulary is open by construction.
+
+Neither is stated as "everything the other does not own". A negation would hand that producer
+every code a future third producer introduces — re-creating this exact eviction against a caller
+nobody has written yet.
+
+### The orphan leak scoping INTRODUCES, and why it is closed rather than noted
+
+The old over-broad clear reaped orphans as a side effect. Scoping removes that, so a code whose
+producer stopped emitting it (a rename, a removed check) would be claimed by nobody and sit in
+the file asserting a dead condition forever. `AlertRecord.lastSeenAt` is stamped on every beat —
+so a LIVE alert can never reach the bound — and an unclaimed record older than 7 days is dropped.
+A record written before the field existed has its clock STARTED rather than skipped, or the leak
+would survive precisely in the records that predate the bound.
+
+### The neuter PAIR — each new test falls to exactly one, so none is vacuous
+
+**Neuter A — revert the scoping** (`if (owns(code))` → `if (true)`, and drop `&& owns(code)` from
+the log loop): **5 red / 14 green**, and the 13 pre-existing tests all stayed green. The
+assertions are diagnostic rather than generic — the backoff test failed
+`expected 1300 to be 1000`, reproducing the measured clock reset, and the log test failed with 3
+false `CLEARED` lines against `[]`.
+
+| red under neuter A |
+|---|
+| BOTH producers stay outstanding when each reports only its own finding |
+| neither producer logs a CLEARED for the other one's code |
+| does not reset the other producer's backoff clock — the escalation survives |
+| a producer STILL reaps its OWN resolved code — scoping did not disable resolution |
+| a live alert is NOT reaped by the orphan bound, however long it stays outstanding |
+
+The orphan test stayed GREEN under A — correctly, because A makes clearing *more* aggressive, so
+the orphan is still reaped, by the wrong mechanism. A single neuter would therefore have
+certified it as pinned when it was not.
+
+**Neuter B — disable only the orphan bound** (`if (nowS - rec.lastSeenAt > …)` →
+`if (false && …)`): **exactly 1 red**, the orphan test, and only it.
+
+Both neuters were run against COMMITTED work and reverted with targeted edits; the tree was
+verified byte-identical to HEAD afterwards (`git status --short` empty), then `tsc --noEmit` 0
+errors and 19/19 green.
+
+### Not fixed here, and deliberately
+
+The two measurements in `## Also measured` — `1a4b8cdf` being landed-undeployed for 38h, and the
+restart that would deploy it — are the owner's call and are **not** required by this fix. This
+change is in `server-tick.ts` and `server-supervisor.ts`, both runtime-imported by `server.mjs`,
+so it reaches the running system on the same `pm2 restart` whenever the owner chooses to take it,
+with no rebuild. Until then the flapping continues; it is bounded log noise and a defeated
+backoff, not a credential risk.

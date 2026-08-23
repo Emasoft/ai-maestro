@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-23T13:48:08+0200
-updated: 2026-08-23T13:57:44+0200
+updated: 2026-08-23T14:16:04+0200
 implementation-commits: [5f261c6c]
 current-owner: ai-maestro-00
 created-by: ai-maestro-00
@@ -196,7 +196,10 @@ direction is **DOWN**.
 site supplies one (`server-supervisor.ts:110` and `server-tick.ts:234` both pass `{log, owns}`).
 So the desktop banner **never fires in production**. What does fire is the `log(…DELIVER…)` line
 at `:233`, which sits OUTSIDE that guard — and BOTH sites route it to **stderr**, so it lands in
-pm2-error.log rather than pm2-out.log: the tick passes `log: (m) => console.warn(m)`
+**`/Users/emanuelesabetta/ai-maestro/logs/pm2-error.log`** rather than pm2-out.log — that exact
+path read from `pm2 jlist`'s `pm_err_log_path` for the live pid, NOT assumed, because this
+project configures pm2 to a project-local `logs/` dir and the `~/.pm2/logs` default is wrong
+here. The tick passes `log: (m) => console.warn(m)`
 (`server-tick.ts:234`) and the supervisor defaults to the same
 (`server-supervisor.ts:84`, `deps.log ?? ((msg) => console.warn(msg))`). Any claim about
 "banners" here is vacuous; the real consumer is that log line.
@@ -233,11 +236,25 @@ shorter than even the post-fix ladder's SECOND rung, so post-fix is slower in th
 well as ~18× slower in steady state. The objection would invert the direction only if the
 eviction cycle exceeded ~3h; measured, it is ~10 minutes.
 
-**Scope, stated precisely:** the DIRECTION follows from the code and the measured cycle time. The
-absolute RATE was not measured on the running system — it still depends on how often each
-condition genuinely re-onsets, which nothing here observed. The per-beat CODE COUNT does go up
-(two candidates instead of one); reading that alone as "more deliveries" is the count-for-rate
-substitution that produced the inverted claim in the first place.
+**The `countDeliveries → 1` step, spelled out because two reviewers disagreed about it.** One
+argued `outstanding = 0` yields `n = 0`, hence rung 0, `ladder[0] = 0`, hence a re-delivery on
+the very NEXT beat (~60/hour, not ~6). Settled by reading `countDeliveries` (`:95-105`) rather
+than by picking a reviewer: the loop is `acc += step` over `[0, 900, 3600, 10800]`, so the FIRST
+iteration makes `acc = 0` and tests `0 >= 0`, which is **true** → `n = 1`; the second makes
+`acc = 900` and `0 >= 900` is false → break. So `n = 1`, rung 1, `ladder[1] = 900`, and the beat
+60s after an onset does NOT re-deliver. The ladder's leading `0` is the whole subtlety, and it is
+why the pre-fix regime is eviction-paced rather than beat-paced. (Had the other reading been
+right, the fix's improvement would be LARGER, not smaller — the direction was never at risk.)
+
+**Scope, stated precisely — these rates are DERIVED, not MEASURED.** No delivery was ever
+observed; zero were counted. What was measured is the ~600s eviction cadence in `rotator.log`
+(6 cycles/hour, each ONSETting both codes — hence ~12/hour, from the log rather than from an
+assumption of symmetry between the 60s tick and the 600s supervisor beat). Everything else is
+derived from the ladder by reading. The DIRECTION is solid; treat the absolute figures as
+arithmetic, not observation. The per-beat CODE COUNT does go up (two candidates instead of one);
+reading that alone as "more deliveries" is the count-for-rate substitution that produced the
+inverted claim in the first place — and "derived" being written up as "measured" is the same
+substitution one turn later, which is why it is labelled here.
 
 > **A PRIOR REVISION OF THIS SECTION SAID THE OPPOSITE** — that retaining more codes means "more
 > entries can reach `deps.notify`". That was asserted with no evidence, in a commit whose stated

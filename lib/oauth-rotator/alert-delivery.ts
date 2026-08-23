@@ -50,7 +50,21 @@ export interface AlertRecord {
   message: string
   /** How many beats have observed this code since firstSeenAt. */
   seen: number
+  /** Epoch seconds when a producer last reported this code as still outstanding. Distinct from
+   *  `lastDeliveredAt`, which only moves when the backoff is due — so this is the ONLY field that
+   *  tracks liveness on every beat. It exists because clears became SCOPED (TRDD-W6PHZFC9): a
+   *  producer only reaps its own codes, so a record whose producer stopped emitting that code
+   *  entirely — a rename, a removed check — is claimed by nobody and would otherwise sit in the
+   *  file forever, turning it back into "what has ever been wrong". Optional so a record written
+   *  before this field existed is not treated as instantly stale. */
+  lastSeenAt?: number
 }
+
+/** How long an UNCLAIMED record may sit before the next writer reaps it. Only reachable for a code
+ *  no current producer's `owns` matches, so a live alert can never hit it: a live one is re-stamped
+ *  every beat. Deliberately generous — reaping a real alert is far worse than carrying a dead one
+ *  for a week, and this path exists only to bound a leak, not to police freshness. */
+const ORPHAN_MAX_AGE_S = 7 * 24 * 3600
 
 /**
  * ESCALATING BACKOFF — the reason 4 506 identical lines is itself part of the failure.
@@ -107,6 +121,19 @@ export interface DeliveryDeps {
   notify?: (text: string) => Promise<void>
   /** The log channel — unchanged behaviour, every finding still goes here every beat. */
   log?: (msg: string) => void
+  /**
+   * REQUIRED, and deliberately not defaulted (TRDD-W6PHZFC9). Answers "is this code MINE to
+   * reap?" for the calling producer. `findings` is only ever that producer's own outstanding
+   * set, so without this the clear-loops below read a PARTIAL set as the COMPLETE one and each
+   * producer evicts every other producer's alerts.
+   *
+   * This module was written for one authoritative caller and a second was added "unchanged"
+   * (`server-tick.ts`) — the invariant broke silently and cost 508 flap transitions in one day,
+   * with each spurious CLEAR resetting the escalating backoff this module exists to provide.
+   * A defaulted `owns` would re-arm that trap for the THIRD caller; requiring it turns the same
+   * mistake into a compile error instead.
+   */
+  owns: (code: string) => boolean
 }
 
 /**
@@ -118,10 +145,11 @@ export interface DeliveryDeps {
  */
 export async function deliverAlerts(
   findings: ReadonlyArray<{ code: string; message: string }>,
-  deps: DeliveryDeps = {},
+  deps: DeliveryDeps,
 ): Promise<string[]> {
   const nowS = (deps.nowS ?? (() => Math.floor(Date.now() / 1000)))()
   const log = deps.log ?? ((m: string) => console.warn(m))
+  const owns = deps.owns
   const delivered: string[] = []
 
   try {
@@ -146,13 +174,34 @@ export async function deliverAlerts(
           lastDeliveredAt: due ? nowS : (rec?.lastDeliveredAt ?? nowS),
           message: f.message,
           seen: (rec?.seen ?? 0) + 1,
+          lastSeenAt: nowS,
         }
         if (due) toNotify.push([f.code, f.message, nowS - firstSeenAt])
       }
       // RESOLVED alerts are dropped, so the file answers "what is outstanding NOW" rather than
       // "what has ever been wrong". A cleared credential problem must stop being reported, or the
       // file becomes the same unreadable wall as the log.
-      for (const code of Object.keys(alerts)) if (!live.has(code)) delete alerts[code]
+      //
+      // ...but ONLY the ones this producer OWNS (TRDD-W6PHZFC9). `findings` is one producer's
+      // outstanding set, not the file's. Reaping on `!live.has(code)` alone made every beat
+      // delete every OTHER producer's alerts, so the two beats ONSET/CLEARED each other in
+      // antiphase forever — measured 2026-08-23 as 118/117 `rotator-stuck:all-maxed` against
+      // `cookie-leg-stuck` from the supervisor beat, with the file never holding more than ONE
+      // code at a time and `firstSeenAt` resetting every ~5 beats.
+      for (const code of Object.keys(alerts)) {
+        if (live.has(code)) continue
+        if (owns(code)) { delete alerts[code]; continue }
+        // Claimed by NOBODY: not ours to reap, and its own producer is no longer emitting it.
+        // Bound the leak scoping would otherwise introduce; a live alert cannot reach this branch
+        // because its producer re-stamps `lastSeenAt` every beat.
+        const rec = alerts[code]
+        if (rec === undefined) continue
+        // A record written before `lastSeenAt` existed has no clock: START it here rather than
+        // skipping, or a pre-upgrade orphan would be exempt from the reap forever — the leak this
+        // branch exists to bound, surviving precisely in the records that predate the bound.
+        if (rec.lastSeenAt === undefined) { rec.lastSeenAt = nowS; continue }
+        if (nowS - rec.lastSeenAt > ORPHAN_MAX_AGE_S) delete alerts[code]
+      }
       data.alerts = alerts
       data.updatedAt = nowS
     }, { createIfMissing: true })
@@ -172,7 +221,11 @@ export async function deliverAlerts(
       if (prior[f.code] === undefined) appendRotatorLog('alert', `ONSET ${f.code} — ${f.message}`)
     }
     for (const code of Object.keys(prior)) {
-      if (!live.has(code)) appendRotatorLog('alert', `CLEARED ${code}`)
+      // SAME scoping as the state reap above, and for the same reason (TRDD-W6PHZFC9): a CLEARED
+      // line for another producer's code is not merely noise, it is a false statement about a
+      // condition this producer never observed — and it is the half a reader sees, because the
+      // log is the shared timeline the state file is reconstructed from.
+      if (!live.has(code) && owns(code)) appendRotatorLog('alert', `CLEARED ${code}`)
     }
 
     for (const [code, message, outstandingS] of toNotify) {

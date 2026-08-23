@@ -40,6 +40,18 @@ import { stampChoreRun } from '../janitor-chore-stamp'
  * the other. A `null` (lock held by another process) and an unshaped stub both answer `null` here,
  * which reads as "nothing to deliver" rather than as an error.
  */
+/** The two namespaces every code this beat emits is built from — see the `const code` expression
+ *  in `runOneTick`. Kept beside `ownsTickAlert` so the builder and the ownership claim cannot
+ *  drift: a claim narrower than the vocabulary stops reaping a real code, and one wider evicts the
+ *  supervisor beat's alerts, which is the defect TRDD-W6PHZFC9 fixes. */
+export const TICK_ALERT_PREFIXES = ['rotator-stuck:', 'reauth-needed:'] as const
+
+/** Does the 60s rotation beat own `code`? Prefix-derived rather than a literal set because the
+ *  suffix is a runtime `TickReason` / `StuckReason`, so the vocabulary is open by construction. */
+export function ownsTickAlert(code: string): boolean {
+  return TICK_ALERT_PREFIXES.some(p => code.startsWith(p))
+}
+
 export function alertableTick(result: unknown): Pick<TickResult, 'nextAction' | 'reason' | 'stuck' | 'decision'> | null {
   if (result === null || typeof result !== 'object') return null
   const r = result as Partial<TickResult>
@@ -219,7 +231,7 @@ export async function runOneTick(deps: RunOneTickDeps = {}): Promise<void> {
       // channel's own dedup (per-code backoff, resolved-codes-dropped) is defeated by construction.
       const code = alertable.reason ? `reauth-needed:${alertable.reason}` : alertable.stuck ? `rotator-stuck:${alertable.stuck}` : 'reauth-needed:unknown'
       const deliver = deps.deliverImpl ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
-        void deliverAlerts(f, { log: (m: string) => console.warn(m) })
+        void deliverAlerts(f, { log: (m: string) => console.warn(m), owns: ownsTickAlert })
           .catch(() => { /* delivery swallows its own failures; never take the beat down */ })
       })
       try {

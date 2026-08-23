@@ -20,7 +20,7 @@
 // unref'd (never keeps the process alive nor delays shutdown), and a beat NEVER throws to its caller
 // — a governance loop that crashed the unattended server would be far worse than a skipped beat.
 
-import { gatherFacts, diagnose, apply, optInPresent } from './supervisor'
+import { gatherFacts, diagnose, apply, optInPresent, ownsSupervisorAlert } from './supervisor'
 import { oauthTickEnabled } from './server-tick'
 import { deliverAlerts } from './alert-delivery'
 import { stampChoreRun, readChoreStamp } from '../janitor-chore-stamp'
@@ -107,7 +107,7 @@ export function runOneSupervisorBeat(deps: RunSupervisorBeatDeps = {}): string[]
     // that "outstanding NOW" is true.
     {
       const deliver = deps.deliver ?? ((f: ReadonlyArray<{ code: string; message: string }>) => {
-        void deliverAlerts(f, { log }).catch(() => { /* never take the beat down */ })
+        void deliverAlerts(f, { log, owns: ownsSupervisorAlert }).catch(() => { /* never take the beat down */ })
       })
       // ITS OWN try/catch, NOT the outer one. A throwing deliver falling into the outer catch makes
       // the beat return [] — so a broken notifier would DISCARD the very alerts it failed to send,

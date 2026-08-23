@@ -183,6 +183,33 @@ function cookieLegCause(s: SlotFact): string {
  * pinning env var, an opted-in non-macOS host where the keychain swap cannot run), then the
  * per-slot credential alerts a human must act on.
  */
+/**
+ * The COMPLETE alert vocabulary `diagnose` can emit — the supervisor beat's ownership claim over
+ * the shared `active-alerts.json` (TRDD-W6PHZFC9).
+ *
+ * It lives HERE, beside the `code:` literals below, because a producer's vocabulary and its
+ * ownership claim drift apart the moment they live in different files — and a claim that has
+ * drifted NARROW silently stops reaping a real code, while one that has drifted WIDE resumes
+ * evicting another producer's alerts, which is the bug this exists to fix.
+ *
+ * Stated as a literal set rather than "everything the tick does not own": a negation would hand
+ * this producer every code a FUTURE third producer introduces, re-creating the same eviction
+ * against a caller nobody has written yet.
+ */
+export const SUPERVISOR_ALERT_CODES: ReadonlySet<string> = new Set([
+  'pinning-env',
+  'non-macos',
+  'tick-stalled',
+  'setup-token-expiring',
+  'cookie-leg-stuck',
+])
+
+/** Does the supervisor beat own `code`, i.e. is it this producer's to reap when it stops being
+ *  reported? See `SUPERVISOR_ALERT_CODES`. */
+export function ownsSupervisorAlert(code: string): boolean {
+  return SUPERVISOR_ALERT_CODES.has(code)
+}
+
 export function diagnose(facts: Facts): Finding[] {
   if (!facts.optIn) return [] // rotator not activated on this machine -> silent no-op
   const out: Finding[] = []

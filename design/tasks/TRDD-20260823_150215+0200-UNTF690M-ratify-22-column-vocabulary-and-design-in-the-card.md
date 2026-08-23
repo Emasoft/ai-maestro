@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-23T15:02:15+0200
-updated: 2026-08-23T16:39:16+0200
+updated: 2026-08-23T16:40:35+0200
 current-owner: ai-maestro-00
 created-by: user
 assignee: ai-maestro-00
@@ -201,8 +201,19 @@ IND rule — all above what a MANAGER may authorize alone.
 - [x] Wikimem `three-pillars-conformance-spec` and `team-meeting-and-kanban` updated to 22,
       through `memgrep edit` (locked, CAS-guarded), `validate` + `lint` clean. A third page,
       `repo-file-structure`, was caught by the prose sweep.
-- [x] All 20 peer sessions notified. 6 replied; 5 of those found real defects (table above).
-      9 recipients received a CORRECTION after the unpushed-state defect was caught.
+- [~] Peer notification: **18 of 20 DELIVERED, 2 REFUSED.** `TestBot` (pid 93123) and `Frank`
+      (pid 93604) are not accepting cross-session messages — both are `--dangerously-skip-permissions`
+      tmux test agents, and neither holds governance content, so nothing was lost. 6 sessions
+      replied; 5 of those found real defects (table above). 9 recipients received a CORRECTION
+      after the unpushed-state defect was caught.
+
+      **This box read `[x]` for one commit and that was a FALSE CLAIM**, on the strength of
+      `SendMessage` returning `success: true` for all 20. It does not mean delivered — it means
+      QUEUED; a refusal arrives asynchronously, minutes later, from the recipient's side. Same
+      shape as `$?` after a pipeline reporting the last command's status rather than the one you
+      care about: the call that reports success and the thing you want to be true are different
+      events. A send is not a delivery until the absence of a refusal has been waited for, and a
+      notification tally is a claim about RECEIPT, not about calls made.
 - [~] Mandate issued. In-repo it is **satisfied by `3P-KAN-21`**: ~76 affected cards are
       GRANDFATHERED and must NOT be swept; re-columning is per-card judgment for each owner.
       Cross-repo it does NOT bind — three peers correctly refused, and they were right: a peer

@@ -246,15 +246,35 @@ iteration makes `acc = 0` and tests `0 >= 0`, which is **true** → `n = 1`; the
 why the pre-fix regime is eviction-paced rather than beat-paced. (Had the other reading been
 right, the fix's improvement would be LARGER, not smaller — the direction was never at risk.)
 
-**Scope, stated precisely — these rates are DERIVED, not MEASURED.** No delivery was ever
-observed; zero were counted. What was measured is the ~600s eviction cadence in `rotator.log`
-(6 cycles/hour, each ONSETting both codes — hence ~12/hour, from the log rather than from an
-assumption of symmetry between the 60s tick and the 600s supervisor beat). Everything else is
-derived from the ladder by reading. The DIRECTION is solid; treat the absolute figures as
-arithmetic, not observation. The per-beat CODE COUNT does go up (two candidates instead of one);
-reading that alone as "more deliveries" is the count-for-rate substitution that produced the
-inverted claim in the first place — and "derived" being written up as "measured" is the same
-substitution one turn later, which is why it is labelled here.
+**The pre-fix rate is now MEASURED, and the derivation above was 2× LOW.** An earlier revision of
+this section said "no delivery was ever observed; zero were counted". That was true only because
+nobody had looked in the right file. `deliverAlerts` logs every delivery as
+`[oauth-supervisor] DELIVER …`, and those land in the pm2 stderr log named above — 9581
+rotator lines in it, so the bytes demonstrably arrive. Counting today's:
+
+| hour | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| DELIVER lines | 24 | 25 | 24 | 24 | 24 | 24 | 24 | 24 | 26 | 24 | 24 |
+
+**~24/hour, stable across eleven hours** — 349 today, split `cookie-leg-stuck` 258,
+`rotator-stuck:all-maxed` 88, `reauth-needed:refresh-dead` 3.
+
+My ladder derivation gave ~12/hour, i.e. **half the truth**. It modelled 2 onsets per ~600s
+cycle; the measured rate implies about 4. At least part of the gap is that `cookie-leg-stuck`
+ONSETs once per ACCOUNT (three of them — visible in the log excerpt above), and this is not fully
+reconciled. **Recorded rather than quietly replaced, because the lesson is the point: a
+derivation from correctly-read code was still 2× off, and the observation was one grep away in a
+file the card had already named.**
+
+**What is still DERIVED:** the post-fix ~0.67/hour, which cannot be measured because the fix is
+not deployed. So the honest comparison is **~24/hour MEASURED against ~0.67/hour DERIVED, ≈36×**
+— not the ≈18× stated above from two derived figures. The DIRECTION was never at risk in any of
+this; only the magnitude moved, and it moved in the fix's favour.
+
+The per-beat CODE COUNT does go up (two candidates instead of one); reading that alone as "more
+deliveries" is the count-for-rate substitution that produced the inverted claim originally — and
+writing "derived" up as "measured" was the same substitution one turn later. Both are labelled
+here so the next reader can tell which figures are which.
 
 > **A PRIOR REVISION OF THIS SECTION SAID THE OPPOSITE** — that retaining more codes means "more
 > entries can reach `deps.notify`". That was asserted with no evidence, in a commit whose stated

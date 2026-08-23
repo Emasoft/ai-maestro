@@ -64,15 +64,15 @@ export async function PATCH(
     // Resolve the GitHub Project's Status label from the CANONICAL column id.
     //
     // This used to be a hand-rolled 5-entry map (backlog/todo/in_progress/review/done) with an
-    // `|| status` fallthrough — a legacy vocabulary that predates the ratified 17 columns. It was
+    // `|| status` fallthrough — a legacy vocabulary that predates the ratified column vocabulary. It was
     // wrong in both directions: it ACCEPTED four ids that are not statuses at all, and for 16 of
     // the 17 real ids it fell through and sent GitHub the raw id ("human_review") instead of the
     // Status option's label ("Human Review"), so the mirror silently drifted from the board. Only
     // `todo` happened to map correctly. The kanban overlay is explicit that consumers — GitHub
-    // Project mirrors included — align TO the 17-column vocabulary, never the reverse.
+    // Project mirrors included — align TO the 22-column vocabulary, never the reverse.
     //
     // The team's own `kanbanConfig` wins when set (a custom board defines its own ids AND labels,
-    // exactly as `validStatusesForTeam` accepts only that team's ids); otherwise the 17 defaults.
+    // exactly as `validStatusesForTeam` accepts only that team's ids); otherwise the 22 defaults.
     const columns = team.kanbanConfig ?? DEFAULT_KANBAN_COLUMNS
     const column = columns.find(c => c.id === status)
     if (!column) {

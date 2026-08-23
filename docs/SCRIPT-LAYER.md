@@ -182,7 +182,7 @@ for `trddgrep validate`.
 `list` · `get` · `create-task` · `move` · `edit` · `archive`
 
 `move` is the narrow verb (status only). `edit` is the general one: every field
-the task PUT accepts. Both speak the ratified 17-column vocabulary, 1:1 with the
+the task PUT accepts. Both speak the ratified 22-column vocabulary, 1:1 with the
 TRDD `column:` field. Consumers align to that vocabulary; it never bends to them.
 
 ### The rest

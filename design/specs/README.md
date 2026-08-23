@@ -71,7 +71,7 @@ the working reference and `3-pillars-spec.md` is the reference SPEC that establi
 Each is a DETAILED capture of a rule file — read the whole rule file, one rule at a time; a spec is
 *more* detailed than its source, never a summary (the per-clause style is dry/greppable, not lossy).
 
-- **`3-pillars-spec.md`** — the reference SPEC. The 17-column kanban vocabulary, the TRDD/PRRD
+- **`3-pillars-spec.md`** — the reference SPEC. The 22-column kanban vocabulary, the TRDD/PRRD
   contracts, the IND/DEP boundary test. Conformance-tested against `types/task.ts`.
 - **`governance-spec.md`** — captures `docs/GOVERNANCE-RULES.md` (R1-R49 + 22 invariants + comm graph
   + the 8 titles + permission matrix), clause-for-clause. Tracks the catalog `version:`.

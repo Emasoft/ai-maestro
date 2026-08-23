@@ -1458,7 +1458,7 @@ ship **NO** per-plugin reimplementation. `R25.2` **mechanics-not-restated** [Exp
 those rules/skills and are NOT restated here: **PRRD** (`design/requirements/PRRD.md`) is the per-project constitution —
 ecosystem R-rules are the floor it may add to but never weaken; **TRDD** (`design/tasks/`) is the canonical work artifact
 with approval tiers + the proposal→planned lifecycle; **Kanban** is the canonical board (mechanical transitions exempt,
-release/escalation transitions non-exempt). This rule binds their proactive use as ecosystem governance. [17-column
+release/escalation transitions non-exempt). This rule binds their proactive use as ecosystem governance. [22-column
 kanban vocabulary defined at `design/specs/3-pillars-spec.md` `3P-KAN` — cited as data.]
 
 ### GOV-R26 — Identity Immutability — No Self-Mutation of Title / Role / Name / AID [CRITICAL · IRON · USER-set]
@@ -2109,7 +2109,7 @@ sudo — R32; the MAESTRO/DELEGATE + ASSISTANT + user model — R37/R39), R26-R4
 graph, `min-approval-requirement`, the server as notarizer, `$AID_AUTH`, the dashboard). By the IND/DEP boundary test
 (`design/specs/3-pillars-spec.md` `3P-BND`), it is DEP, not IND. `BND-02` **overlays-expand** — the DEP operating
 overlays `rules/aimaestro/aimaestro-*.md` EXPAND this catalog (approval tiers, transition authority, PRRD per-title
-matrix, the refusal Part B) and MUST NOT restate the IND base. `BND-03` **kanban-cited-as-data** — the 17-column kanban
+matrix, the refusal Part B) and MUST NOT restate the IND base. `BND-03` **kanban-cited-as-data** — the 22-column kanban
 vocabulary (R25) is defined by the IND 3-pillars spec (`3P-KAN`); this spec cites it, never redefines it.
 
 ## GOV-VAL — machine-checkable conformance (what a harness asserts against the code)

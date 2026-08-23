@@ -453,7 +453,7 @@ Every one accepts `--help`, and every one accepts the identity flags `--id <uuid
 | `amp-register.sh` | `--provider P (--user-key K \| --token T \| --tenant T) [--name N] [--api-url U] [--force] [--id]` |
 | `amp-statusline.sh` | `[--install \| --uninstall \| --test]` — else reads Claude Code's JSON on stdin |
 
-**Kanban** — all speak the ratified 17-column vocabulary (14 lifecycle + `blocked`,
+**Kanban** — all speak the ratified 22-column vocabulary (19 lifecycle + `blocked`,
 `failed`, `superseded`), 1:1 with the TRDD `column:` field. Consumers align to it; it
 never bends to them.
 

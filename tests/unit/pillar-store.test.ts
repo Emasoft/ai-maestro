@@ -57,7 +57,21 @@ describe('SPEC — N clauses per document, id in the body', () => {
     // 80 re-derived 2026-08-06 with the grep above (spec 1.5.0→1.7.0 added
     // 3P-KAN-10..16, 3P-VER-05, and the 3P-ZON family) — never copy the number
     // from a failure output; run the grep.
-    expect(threeP.length).toBe(80)
+    // 84 re-derived 2026-08-23 with the grep above: spec 3.0.0 added 3P-KAN-17/18/19
+    // (spelling, design-columns, verify-and-plan) and 3P-TRDD-13 (design-lives-in-the-card).
+    // This test EARNED its keep on that bump: the three KAN clauses were first written as
+    // `3P-KAN-04a/b/c`, and the census moved only 80→81 instead of 80→84 — because the id
+    // grammar below is `\d{2}` and a letter suffix matches NOTHING, so three ratified
+    // clauses were invisible to every pillar tool AND to `grep 3P-KAN`. Renumbered to the
+    // next free ids per 3P-MNT-03. A malformed clause id is not a cosmetic slip: an
+    // unfindable clause is an ungoverned one.
+    // 86 re-derived the same day: +3P-KAN-20 (the bracket values are legal `column:` values and
+    // are NOT board columns — the spec said "EXACTLY one of the N, no others" while the code has
+    // always accepted 27, so it forbade 70 of 176 live cards) and +3P-KAN-21 (pre-3.0.0 cards at
+    // `todo` are grandfathered, with the boundary stated). Both were found by PEER SESSIONS
+    // cross-reading the amendment against the corpus — no test compares the spec's prose to
+    // VALID_COLUMNS, which is why the older of the two survived every version bump.
+    expect(threeP.length).toBe(86)
     expect(threeP.every((r) => /^3P-[A-Z]+-\d{2}$/.test(r.id))).toBe(true)
     // Every record carries the line it was declared on — that is what a lint reports.
     expect(threeP.every((r) => typeof r.line === 'number' && r.line! > 0)).toBe(true)
@@ -80,7 +94,13 @@ describe('SPEC — N clauses per document, id in the body', () => {
     // citations double-counting:
     //   3-pillars 80, all-in-one 59, governance 48, scenario-tests 43, role-plugins 33
     //   (total 263). Biggest = 80.
-    expect(recs.length).toBeGreaterThan(80)
+    // Re-derived 2026-08-23: spec 3.0.0 took 3-pillars to 84, so the floor moved with it.
+    // It was ALREADY stale in the direction this comment warns about — at 80 a single-file
+    // read of the 84-clause spec would have satisfied `> 80`, i.e. the assertion had quietly
+    // stopped meaning "more than one file's worth" again, for the second time.
+    // 86 the same day (3P-KAN-20, 3P-KAN-21) — the floor tracks the biggest file or it stops
+    // meaning anything, which is exactly the failure this comment already records twice.
+    expect(recs.length).toBeGreaterThan(86)
   })
 
   it('DECLARATION is line-anchored — a citation inside prose is NOT a record', () => {

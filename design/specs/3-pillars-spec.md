@@ -96,8 +96,32 @@ signal must watch the served artifact, not the repository that produces it.
 
 ## 3P-KAN — Pillar 1: the kanban column vocabulary (22 columns)
 
-`3P-KAN-01` **enum** — `MUST`: a `column:` value is EXACTLY one of the 22 in the block
-below, these spellings, no others.
+`3P-KAN-01` **enum** — `MUST`: a `column:` value naming a position ON THE BOARD is EXACTLY one
+of the 22 in the block below, these spellings, no others.
+
+`3P-KAN-20` **bracket-values-are-legal-and-are-not-board-columns** — `MUST`: the BOARD
+vocabulary (22) and the LEGAL SET for a `column:` field (27) are different sets, and conflating
+them is a defect in both directions. Five BRACKET values sit OUTSIDE the board, at either end
+of it, and are legal `column:` values:
+
+```text
+proposal    planned    refused    completed    cancelled
+```
+
+`proposal`/`planned` are the intake antechamber ahead of `backburner`; `refused`/`completed`/
+`cancelled` are archival terminals. They are defined by the FOLDER LIFECYCLE (3P-ZON), not by
+3P-KAN, which is why they are absent from the block below — a card at one of them is not on the
+board at all.
+
+**This clause is a REPAIR of a defect that predates 3.0.0, surfaced by the 3.0.0 amendment.**
+3P-KAN-01 has said "EXACTLY one of the N … no others" since 1.0.0 while the enforcement code has
+always accepted `VALID_COLUMNS = DEFAULT_STATUSES + BRACKET_COLUMNS` (27). Measured on this
+corpus 2026-08-23: **70 of 176 non-archived cards** carry a bracket value (51 `planned`,
+19 `proposal`), i.e. the spec as literally written forbade 40% of the live board while the code,
+the doctor and the linter all correctly accepted it. Nothing was broken — the SPEC was wrong, and
+it was wrong in the direction that reads as fine, because the tool everyone actually runs
+disagreed with it silently. Found by the ARCHITECT session cross-reading the amendment against
+its own corpus, not by any test: no test compares the spec's prose count to `VALID_COLUMNS`.
 
 `3P-KAN-02` **user-ratified** — the vocabulary is USER-ratified (TRDD-YUGDER9D /
 GOVERNANCE-RULES R25; extended to 22 by `PRRD G2.1`, USER 2026-08-23, TRDD-UNTF690M):
@@ -139,14 +163,14 @@ design_ai_review → (design_human_review) → todo → verify_assumptions → p
 dev → testing → ai_review → (human_review) → complete`, then `publish → published`
 (`release-via: publish`) OR `deploy → live → (live_auditing)` (`release-via: deploy`).
 
-`3P-KAN-04a` **spelling** — the USER's ratifying directive spelled the five columns added in
+`3P-KAN-17` **spelling** — the USER's ratifying directive spelled the five columns added in
 3.0.0 with hyphens (`design-ai-review`, `design-human-review`, `verify-assumption`). The
 ENUM IDENTIFIERS are snake_case, because all three pre-existing multi-word columns are
 (`ai_review`, `human_review`, `live_auditing`) and a mixed enum invites typos no type-checker
 catches. Hyphenated forms are human-readable names and `MAY` appear in prose; only the
 snake_case forms are legal `column:` VALUES. (`PRRD G2.1`.)
 
-`3P-KAN-04b` **design-columns** — the four columns added ahead of `todo` in 3.0.0 carry these
+`3P-KAN-18` **design-columns** — the four columns added ahead of `todo` in 3.0.0 carry these
 meanings, normatively (`PRRD G3.1`–`G7.1`):
 - `approval` — the card is with the CHIEF-OF-STAFF or the MANAGER (per its
   `min-approval-requirement:`) awaiting approval. `backburner` now means only *not yet
@@ -157,7 +181,7 @@ meanings, normatively (`PRRD G3.1`–`G7.1`):
 - `design_human_review` — the human reviews it; a UI design `MUST` ship a visual artifact to
   annotate. **SKIPPED entirely when `min-approval-requirement: none`.**
 
-`3P-KAN-04c` **verify-and-plan** — the two columns added between `todo` and `dispatch` in
+`3P-KAN-19` **verify-and-plan** — the two columns added between `todo` and `dispatch` in
 3.0.0 are gates on FACT and on METHOD (`PRRD G8.1`, `G9.1`):
 - `verify_assumptions` — every claim in the card is verified; where a fact cannot be checked
   directly a TEST is created to verify it. Passes only when nothing in the card is still an
@@ -167,6 +191,23 @@ meanings, normatively (`PRRD G3.1`–`G7.1`):
   complete plan FILE exists.
 - `dev` gains one obligation (`PRRD G10.1`): the plan's steps are ENFORCED — executed and
   their execution verified — so they persist across sessions.
+
+`3P-KAN-21` **pre-3.0.0-cards-are-grandfathered** — `MUST NOT` be auto-migrated. Moving `design`
+ahead of `todo` changed what `todo` ASSERTS: from "approved and queued" to "approved AND
+designed". Every card that entered `todo` before 2026-08-23 did so under the old meaning, so it
+now over-claims through no fault of its author. Measured at the amendment: **62 of 176**
+non-archived cards sit at `todo`, and **1** carries any design field at all.
+
+The boundary is the amendment date. A card at `todo` on or before 2026-08-23 is CONFORMANT as it
+stands and `MUST NOT` be flagged; a card ENTERING `todo` after it asserts the new meaning and
+`MUST` have cleared `design`/`design_ai_review` first. Stating the boundary is the whole clause:
+an un-bounded retroactive rule produces a wall of warnings on 61 innocent cards, and a linter that
+cries wolf on the majority of its corpus gets routed around — which is how the checklist gate went
+vacuous on 87 of 108 cards once already.
+
+Re-columning a grandfathered card is a PER-CARD judgment for its owner, never a sweep. A scripted
+pass over prose it cannot parse destroys the audit trail it was meant to repair. This clause
+authorizes leaving them; it does not authorize a script that moves them.
 
 `3P-KAN-05` **return-edges** — `testing` may return to `dev` on failure; `ai_review` may
 return to `dev` on rejection; `design_ai_review` and `design_human_review` may return to
@@ -191,11 +232,21 @@ a direction of flow; it exists to ensure tasks are always being worked.
 
 `3P-KAN-10` **pipeline-not-cabinet** — `MUST`: the board is a PIPELINE. A card in a
 non-resting column that is not progressing is a DEFECT, not a neutral state. The resting
-columns are exactly `backburner`, the terminal set, and the two columns that wait on a
-DECISION BY ANOTHER PARTY — `approval` and `design_human_review` (3.0.0). Every other column
-from `design` through `human_review` is a WORKING column and asserts motion. A resting column
-is not a licence to forget: a card parked in `approval` or `design_human_review` `MUST` name
-the approver it is waiting on, and the wait itself is reportable.
+columns are exactly `backburner`, the terminal set, and the three columns that wait on a
+DECISION BY ANOTHER PARTY — `approval`, `design_human_review` and `human_review`. Every other
+column from `design` through `ai_review` is a WORKING column and asserts motion. A resting
+column is not a licence to forget: a card parked in one of the three `MUST` name the approver
+it is waiting on, and the wait itself is reportable.
+
+`human_review` joined that set in 3.0.0, and it is a REPAIR, not a new policy. Until then this
+clause read *"`todo` through `human_review` are WORKING columns"* while 3P-KAN-12's WIP list was
+`dev`/`testing`/`ai_review` — so the two clauses already disagreed about `human_review`, and the
+card correctly parked there awaiting a USER verdict read as a stall under 3P-KAN-11 with no
+`blocked-by:` it could honestly name, because its blocker is a PERSON and not a card. That is
+precisely the false signal 3P-KAN-12 calls worse than an unstarted card. Naming the principle in
+3.0.0 ("waits on a decision by another party") is what made the omission visible: `human_review`
+is the paradigm case of it. Found by the ORCHESTRATOR session, which also supplied the
+corroborating tension with 3P-KAN-12 rather than only the symptom.
 
 `3P-KAN-11` **blocked-is-the-only-stillness** — `MUST`: a card may sit still ONLY with a
 non-empty `blocked-by:` naming an OPEN card (3P-KAN-06). Stillness without one is a stall.

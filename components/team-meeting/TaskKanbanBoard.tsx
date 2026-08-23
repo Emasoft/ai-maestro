@@ -406,7 +406,7 @@ export default function TaskKanbanBoard({
 // ---------------------------------------------------------------------------
 interface EnhancedColumnProps {
   colId: string
-  /** Full column config — passed down to KanbanCard so it derives its status icon from the 17-column config. */
+  /** Full column config — passed down to KanbanCard so it derives its status icon from the 22-column config. */
   column: KanbanColumnConfig
   label: string
   dotColor: string

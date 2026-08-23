@@ -65,7 +65,7 @@ interface KanbanCardProps {
   /**
    * The column config this card's status belongs to. When provided, the card's
    * fallback status icon is derived from the column's configured lucide icon
-   * (so it stays in sync with the 17-column board). Optional + backward
+   * (so it stays in sync with the 22-column board). Optional + backward
    * compatible — without it the card falls back to a plain Circle.
    */
   column?: KanbanColumnConfig
@@ -82,7 +82,7 @@ function assigneeColor(name: string): string {
 }
 
 export default function KanbanCard({ task, onSelect, isSelected, agentStatus, column }: KanbanCardProps) {
-  // Derive the fallback status icon from the dynamic column config (17-column board),
+  // Derive the fallback status icon from the dynamic column config (22-column board),
   // not a hardcoded status->icon map that drifts when the column set changes.
   const Icon = resolveColumnIcon(column?.icon)
   const priorityDot = task.priority != null ? (PRIORITY_COLORS[task.priority] || 'bg-gray-500') : null

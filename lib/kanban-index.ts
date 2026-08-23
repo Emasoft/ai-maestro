@@ -31,7 +31,7 @@ import { TRDD_ZONES, listTrddFiles, parseTrddFile, type TrddZone } from '@/lib/t
 import { toGraphNode } from '@/lib/trdd-graph'
 
 /**
- * Column order for a rendered board. `DEFAULT_STATUSES` is the ratified 17-column
+ * Column order for a rendered board. `DEFAULT_STATUSES` is the ratified 22-column
  * vocabulary (TRDD-YUGDER9D) and is imported, never restated — consumers align TO
  * it. The folder lifecycle adds five more `column:` values that the board
  * vocabulary does not carry: the two entry states before `todo`, and the three

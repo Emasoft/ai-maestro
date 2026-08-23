@@ -67,7 +67,7 @@ const GOVERNED_BACKWARD_TO_DEV: ReadonlySet<string> = new Set(['human_review', '
 export const REVIEW_COLUMNS: ReadonlySet<string> = new Set(['ai_review', 'human_review'])
 
 /**
- * The DESIGN-stage review columns (3P-KAN-04b) — a separate concern from REVIEW_COLUMNS:
+ * The DESIGN-stage review columns (3P-KAN-18) — a separate concern from REVIEW_COLUMNS:
  * they gate a `design_ai_review`/`design_human_review` → `design` return-edge or a
  * → `todo` advance, never the `→ complete` verdict GATE 2 reasons about. Deliberately
  * NOT merged into REVIEW_COLUMNS so GATE 2's self-judgment ban stays scoped to the

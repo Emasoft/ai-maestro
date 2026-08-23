@@ -62,7 +62,7 @@ replace or relocate it. A SPEC and a RULE FILE are different artefacts (`design/
 client and must prove its own runner-agent, scenario files, batch scripts, and report paths satisfy
 this contract. STS-VAL is that checklist.
 
-`STS-META-04` **self-contained** — cites sibling specs as DATA (the 17-column kanban vocabulary at
+`STS-META-04` **self-contained** — cites sibling specs as DATA (the 22-column kanban vocabulary at
 `design/specs/3-pillars-spec.md` `3P-KAN`; governance rules at `design/specs/governance-spec.md`),
 never transcludes them.
 
@@ -209,7 +209,7 @@ deliverable; the test steps are the instrument. `STS-R11.2` **one-trdd-per-sugge
 OWN git-tracked TRDD-proposal file in `design/proposals/` (`column: proposal`, never a monolithic report).
 `STS-R11.3` **dedupe-first** — grep `design/proposals/` + `design/tasks/` for the symptom; if an open TRDD covers
 it, note it there instead of duplicating. `STS-R11.4` **kanban-conformance** — a suggestion touching kanban
-columns/statuses/GitHub-Projects/UI MUST conform to the ratified 17-column vocabulary (`3P-KAN`, cited as data);
+columns/statuses/GitHub-Projects/UI MUST conform to the ratified 22-column vocabulary (`3P-KAN`, cited as data);
 never a divergent column set or parallel kanban. `STS-R11.5` **frontmatter** — id = 8-char base36 (collision-checked),
 `column: proposal`, `approval-tier: 2` (or `3` for GOLDEN/owner-identity), `priority` 0-3, `labels:
 [scenario-improvement, scen-NNN, batch-<id>]`, `current-owner: scenario-runner`, `external-refs:` = the report path.
@@ -339,7 +339,7 @@ the two-commit cadence (STS-PROC-06). `STS-VAL-05` **reports-location** — ever
 (STS-R10); no worktree-local/`/tmp` report path. `STS-VAL-06` **password-safety** — NO scenario file, script, agent
 prompt, or report contains the governance-password LITERAL; only the env var name (STS-FILE-04 / STS-R12.4); a grep
 for the literal returns nothing. `STS-VAL-07` **kanban-conformance** — any proposal/status handling uses the ratified
-17-column vocabulary (`3P-KAN`, cited as data); no divergent column set or parallel kanban. `STS-VAL-08`
+22-column vocabulary (`3P-KAN`, cited as data); no divergent column set or parallel kanban. `STS-VAL-08`
 **no-bypass-tokens** — no step `Action` contains a forbidden MUTATION token (` rm `, `rm -`, ` mv `, `tmux
 kill-session`, `curl -X POST|PUT|DELETE|PATCH`, `echo … >`, `cat … >`); such a token is an authoring bug the runner
 rewrites to a UI-only action or marks DEFERRED. `STS-VAL-09` **implementer-agent** — a shipped proposal implementer

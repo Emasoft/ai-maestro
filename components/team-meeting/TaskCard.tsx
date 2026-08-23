@@ -12,7 +12,7 @@ interface TaskCardProps {
   onStatusChange: (taskId: string, status: TaskStatus) => void
   /**
    * The dynamic kanban columns for this task's team. The status-toggle icon and
-   * its next-status cycle are derived from this config (17-column board), not a
+   * its next-status cycle are derived from this config (22-column board), not a
    * hardcoded 5-status map. Optional + backward compatible — falls back to
    * DEFAULT_KANBAN_COLUMNS when omitted.
    */

@@ -2,7 +2,7 @@
 name: repo-file-structure
 description: "where should I put a new component or hook in this repo / what is the source repo directory layout / why is there no server directory / where do api routes live / project folder conventions app components hooks lib types services scripts"
 ocd: 2026-08-02
-lmd: 2026-08-20
+lmd: 2026-08-23
 metadata:
   node_type: memory
   type: reference
@@ -46,7 +46,7 @@ components/
     TaskCard.tsx              - Task card with status, assignee, dependencies
     TaskCreateForm.tsx        - Full task creation form with all fields
     TaskDetailView.tsx        - Detailed task view with edit capabilities
-    TaskKanbanBoard.tsx       - Full-screen kanban overlay (17-column ratified config) + drag-and-drop
+    TaskKanbanBoard.tsx       - Full-screen kanban overlay (22-column ratified config) + drag-and-drop
     KanbanColumn.tsx          - Single kanban column with drop zone
     KanbanCard.tsx            - Compact draggable task card for kanban
     DependencyPicker.tsx      - Dependency selection for task relationships

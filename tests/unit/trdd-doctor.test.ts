@@ -389,7 +389,10 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
     const out = fs.readFileSync(path.join(tmp, 'tasks', 'TRDD-abc12345-thing.md'), 'utf8')
     expect(out).toMatch(/^---\n/)
     expect(out).toContain('trdd-id: ABC12345')            // uppercased
-    expect(out).toContain('column: todo')                  // the uncertainty law
+    // 3.0.0 / PRRD G11.1: was `todo`. A card with NO frontmatter can prove nothing about
+    // its own approval, and since `design` moved BEFORE `todo` a `todo` here would assert
+    // both "approved" and "designed" about fields this very block is inventing.
+    expect(out).toContain('column: backburner')            // the uncertainty law
     expect(out).toContain('title: A thing that was never given frontmatter')
     expect(out).not.toContain('column: complete')          // NEVER guessed
   })
@@ -443,20 +446,22 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
   })
 
   // USER ruling 2026-07-30, TWO halves that must BOTH hold:
-  //   (1) `column: todo` for a MISSING column is a deliberate requirement — it forces the
+  //   (1) inserting a column for a MISSING one is a deliberate requirement — it forces the
   //       agent to evaluate the task before acting, for the extreme case of a card with no
-  //       column at all.
+  //       column at all. (The VALUE became three-way in 3.0.0 / PRRD G11.1: backburner
+  //       unless approved, then design, or design_ai_review when a design body exists.
+  //       This fixture is unapproved, so: backburner.)
   //   (2) it is ONLY for a missing column. It is NOT licence to repurpose another field:
   //       `status:` carries a different aspect and MUST survive the repair.
-  // The old fixer keyed on the field name and rewrote `status: X` into `column: todo`,
+  // The old fixer keyed on the field name and rewrote `status: X` into a column value,
   // satisfying (1) by violating (2) — the original value was unrecoverable and the card then
   // asserted a state nobody chose. Both assertions below, or the guard is half a guard.
-  it('an UNKNOWN status falls to `todo` — the missing column is ADDED and the status SURVIVES', () => {
+  it('an UNKNOWN status falls to the fallback column — it is ADDED and the status SURVIVES', () => {
     write('tasks', 'TRDD-20260101_000000+0100-RRRRRRRR-x.md',
       good('RRRRRRRR', { status: 'mostly-ish-done-probably' }).replace(/^column:.*$/m, ''))
     fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
     const out = fs.readFileSync(path.join(tmp, 'tasks', 'TRDD-20260101_000000+0100-RRRRRRRR-x.md'), 'utf8')
-    expect(out).toContain('column: todo')
+    expect(out).toContain('column: backburner')
     expect(out).toContain('status: mostly-ish-done-probably')
   })
 
@@ -573,12 +578,12 @@ describe('trdd-doctor — the `updated:` bump is conditional on the repair being
 
   // ---- SEMANTIC: the card now claims something it did not ----
 
-  it('SEMANTIC — inventing a missing `column: todo` MOVES `updated:` (nobody chose that state)', () => {
+  it('SEMANTIC — inventing a missing `column:` MOVES `updated:` (nobody chose that state)', () => {
     write('tasks', 'TRDD-20260101_000000+0100-SEMANOCO-x.md',
       good('SEMANOCO').replace(/^column:.*$/m, ''))
     const res = fixCorpus(tmp, { now: NOW })
     const out = read('TRDD-20260101_000000+0100-SEMANOCO-x.md')
-    expect(out).toContain('column: todo')
+    expect(out).toContain('column: backburner')
     expect(out).toContain(`updated: ${NOW}`)
     expect(out).not.toContain(ORIG)
     expect(res[0].bumped).toBe(true)
@@ -617,7 +622,7 @@ describe('trdd-doctor — the `updated:` bump is conditional on the repair being
     const res = fixCorpus(tmp, { now: NOW })
     const out = read('TRDD-20260101_000000+0100-MIXEDCAS-x.md')
     expect(out).toContain('trdd-id: MIXEDCAS')
-    expect(out).toContain('column: todo')
+    expect(out).toContain('column: backburner')
     expect(out).toContain(`updated: ${NOW}`)
     expect(res[0].bumped).toBe(true)
   })
@@ -1198,7 +1203,7 @@ describe('unparseable frontmatter is REPORTED, not "repaired" (TRDD-5XJWR473)', 
 
     fixCorpus(tmp)
 
-    expect(fs.readFileSync(path.join(tmp, 'tasks', NEEDS_FIX), 'utf8')).toMatch(/^column: todo$/m)
+    expect(fs.readFileSync(path.join(tmp, 'tasks', NEEDS_FIX), 'utf8')).toMatch(/^column: backburner$/m)
     expect(fs.readFileSync(brokenPath(), 'utf8')).toBe(BROKEN)
   })
 })

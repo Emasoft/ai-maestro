@@ -449,7 +449,7 @@ Row format is fixed so a regex parses each line:
   so this row stays BEHAVIOURAL rather than claiming a hole a checkbox could fill.
 
 - **R25.2 (ENFORCED, tested)** — only the vocab-equality half is test-enforced:
-  `tests/unit/trdd-doctor.test.ts` pins `DEFAULT_STATUSES` (the 17 columns) equal
+  `tests/unit/trdd-doctor.test.ts` pins `DEFAULT_STATUSES` (the 22 columns) equal
   to the TRDD-doctor's `VALID_COLUMNS`, and `tests/unit/kanban-index.test.ts` pins
   `KANBAN_INDEX_COLUMNS ⊇ DEFAULT_STATUSES`. The 1:1-with-team-config half
   (`types/team.ts DEFAULT_KANBAN_COLUMNS`) is not pinned by any test.

@@ -1,24 +1,27 @@
 ---
 name: three-pillars-conformance-spec
-description: "where is the 3-pillars (TRDD/PRRD/kanban) design actually decided / what is the arbiter when types/task.ts, the janitor rules, and GOVERNANCE-RULES disagree on a column name / does ai-maestro have a spec for the pillars / the IND vs DEP boundary test / what are the 17 columns authoritatively"
+description: "where is the 3-pillars (TRDD/PRRD/kanban) design actually decided / what is the arbiter when types/task.ts, the janitor rules, and GOVERNANCE-RULES disagree on a column name / does ai-maestro have a spec for the pillars / the IND vs DEP boundary test / what are the 22 columns authoritatively / when did the vocabulary go from 17 to 22 / where is the default column for a card with no column set"
 ocd: 2026-07-22
-lmd: 2026-07-30
+lmd: 2026-08-23
 metadata:
   node_type: memory
   type: reference
   tier: component
   topic: design-system
+publish-globally: false
 ---
 ai-maestro hosts the normative **3-pillars conformance SPEC** at
 `design/specs/3-pillars-spec.md` (ai-maestro#85, USER-directed, `spec-version` semver). It is
 the **ARBITER**: the janitor IND rules (`~/.claude/rules/{trdd-design-tasks,prrd-design-rules,universal-kanban}.md`),
 the ai-maestro DEP overlays (`rules/aimaestro/aimaestro-*.md`), and the enforcement code
 (`types/task.ts::DEFAULT_STATUSES`, `types/team.ts`) are all IMPLEMENTATIONS that conform to it.
-On any disagreement (the 17-column vocabulary alone was duplicated across five artefacts with no
-arbiter), the spec wins.
+On any disagreement (the column vocabulary alone was duplicated across five artefacts with no
+arbiter), the spec wins. It also ratifies the project PRRD at `design/requirements/PRRD.md`,
+created 2026-08-23 — golden rules there are what the spec must be AMENDED to match, never the
+reverse.
 
 It is a CONFORMANCE CONTRACT, not a re-narration of rule prose — a prose copy would revive the
-`design/rules-refactor/independent/` mirror retired in TRDD-TAFH4U0G. It pins: the 17-column
+`design/rules-refactor/independent/` mirror retired in TRDD-TAFH4U0G. It pins: the 22-column
 kanban vocabulary (`3P-KAN`), the TRDD id (`^[A-Z0-9]{8}$`, no UUID) / frontmatter / scope=path
 contract (`3P-TRDD`), the PRRD golden/silver tier + `<letter><number>.<version>` identity model
 (`3P-PRRD`), the **IND/DEP boundary test** (`3P-BND`: a statement is IND iff TRUE with the
@@ -32,7 +35,7 @@ stamp + semver bump rules (`3P-VER`).
 append-only so a conformance check may CITE a clause id.
 
 Enforced by `tests/unit/three-pillars-spec-conformance.test.ts` (asserts `types/task.ts`
-DEFAULT_STATUSES == the spec's 17-column block, read FROM the spec) + the #83 overlay-filename
+DEFAULT_STATUSES == the spec's 22-column block, read FROM the spec) + the #83 overlay-filename
 loop in `aimaestro-overlay-filename-contract.test.ts`. The spec lives in **`design/specs/`** — the
 standard SPEC home in the doc-type taxonomy (PRRD `design/requirements/` → SPEC `design/specs/` →
 TRDD `design/tasks/`, authority in that order) — not with the governance rules or the code; the

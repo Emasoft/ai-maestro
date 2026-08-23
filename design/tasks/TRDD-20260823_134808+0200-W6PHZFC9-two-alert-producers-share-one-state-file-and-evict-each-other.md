@@ -142,12 +142,28 @@ clears. Three checks establish they are distinct:
      `result` that the status file is written from.
   2. **Control flow, shown rather than assumed.** `:202 writeTickStatus(result)` →
      `:214 alertableTick(result)` → `:215 if (alertable)` → `:232 const code`, all in one
-     straight-line `try {` body of one function: no loop, no deferred callback, single pass.
-  3. **No feedback path.** Ordering within one beat would say nothing about a 60s beat that could
-     read its own prior output, so: `grep -rn "alertsFile\|active-alerts" lib/ services/` outside
-     `alert-delivery.ts` returns 3 hits and **all three are comments**. Nothing on the tick's
-     input path reads `active-alerts.json`, so beat N's alert selection cannot reach beat N+1's
-     `result`.
+     straight-line `try {` body: no loop, no deferred callback, single pass. (Stated as "one
+     `try` block", which is what was measured — an earlier revision said "one function", which
+     the same evidence does not establish.)
+  3. **No feedback path — established by READING the I/O, not by grepping for a filename.**
+     Ordering within one beat says nothing about a 60s beat that could consume its own prior
+     output, and a needle for `active-alerts` cannot see a reader that reaches the file through
+     `path.join(rotatorRoot(), …)` — a pattern this codebase actually uses (`decision-log.ts`
+     reaches `rotator.log` exactly that way). So the three writes/reads were enumerated instead:
+     - **`tick.ts` reads exactly ONE file from disk** — `live-identity.json` (`:667`, via
+       `liveIdentityPath()` at `:659`). Not the alerts file, not the log.
+     - **`rotator.log` is APPEND-ONLY.** Its only uses tree-wide are the basename constant, the
+       path builder, one `appendFileSync`, and `supervisor.ts:250`, which interpolates the path
+       *into an alert message* so a human knows where to look. No reader exists.
+     - **`active-alerts.json` is read only by `deliverAlerts` itself**, for its own prior state.
+       Widened to `lib services app scripts server.mjs` with no `--include` (the original
+       `--include=*.ts` over `lib/ services/` could not have seen a reader in `server.mjs`, which
+       is what runtime-imports the tick): same 3 hits, all comments.
+
+     So beat N's alert selection cannot reach beat N+1's `result` by any of the three routes.
+     This also disposes of a question about THIS card's own fix, which changes how many lines
+     reach `rotator.log`: nothing derives state from that log, so suppressing the spurious
+     `CLEARED` lines has no downstream effect beyond the log becoming readable again.
 
   **RETRACTED, and recorded rather than quietly rewritten:** an earlier revision of this bullet
   claimed the fix "cannot reach it whatever it says" on the strength of the two line numbers in

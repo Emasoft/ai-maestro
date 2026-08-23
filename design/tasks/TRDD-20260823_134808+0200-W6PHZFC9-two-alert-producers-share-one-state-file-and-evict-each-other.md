@@ -129,13 +129,15 @@ clears. Three checks establish they are distinct:
   `pm2 jlist` reports the `ai-maestro` instance (pid 4054, restarts=27, online) started
   2026-08-21 18:29:22 — **4h33m before its own fix**, and unchanged since. `server-tick.ts` is
   runtime-imported by `server.mjs`, so it goes live on `pm2 restart` alone with no rebuild.
-- **A restart would NOT unblock X4RK1NUW's open box.** Verified by reading the writer, not by
-  inference: `lib/oauth-rotator/tick-status.ts:130-139` builds the status payload from
-  `{nextAction, reason, stuck, windows}` on the tick result; the string `code` — the only thing
-  `1a4b8cdf` changes — appears ZERO times in that file and is used solely at
-  `server-tick.ts:226` for `deliver()`. So deploying it changes the alert channel, not
-  `reason: refresh-dead`. X4RK1NUW's 48h window is blocked by dead refresh tokens (a credential
-  condition), not by the undeployed fix.
+- **A restart would NOT unblock X4RK1NUW's open box.** The decisive evidence is ORDERING, not
+  absence: `server-tick.ts:202` calls `writeTickStatus(result)`, and the `const code` expression
+  that `1a4b8cdf` rewrites is at `:232` — **30 lines later**. The status file is already written
+  before the alert block runs, so that fix cannot reach it whatever it says. (Corroborating, and
+  weaker on its own: `tick-status.ts:130-139` builds the payload from
+  `{nextAction, reason, stuck, windows}` on the tick result, and the identifier `code` appears
+  ZERO times in that file. An identifier's absence is a needle result; the line ordering is a
+  structural fact, so the claim rests on the ordering.) X4RK1NUW's 48h window is blocked by dead
+  refresh tokens — a credential condition — not by the undeployed fix.
 - **The restart is the owner's call and its blast radius has shrunk.** The prior session declined
   it citing "~19 peers up"; measured today, `tmux list-sessions` reports **3** (`default`,
   `frank`, `testbot`). It remains disruptive to live PTY streams and is not required by this card.
@@ -245,6 +247,17 @@ certified it as pinned when it was not.
 Both neuters were run against COMMITTED work and reverted with targeted edits; the tree was
 verified byte-identical to HEAD afterwards (`git status --short` empty), then `tsc --noEmit` 0
 errors and 19/19 green.
+
+### This card's column history skips columns, on purpose — flagged so a watchdog need not guess
+
+`planned → ai_review` directly. That is NOT a listed edge in the transition table
+(`todo → design → dispatch → dev → testing → ai_review`), and a watchdog keying on legal
+transitions is right to notice it. The work genuinely passed through the `dev` and `testing`
+states inside one session; writing three intermediate commits to narrate columns nobody was
+occupying would have been fabricated history, and leaving it at `planned` would have been a
+false statement about a card whose code is committed and whose suite is green. `ai_review` is
+the only column that is true of it right now. Recorded here rather than argued away, because an
+unexplained skip and a mis-columned card look identical from the board.
 
 ### Not fixed here, and deliberately
 

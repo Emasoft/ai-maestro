@@ -344,17 +344,28 @@ describe('every pillar CLI refuses an unknown option rather than ignoring it', (
  * pushed that substring past the 1200-char cutoff, so the card legitimately stopped
  * qualifying; 979DBDAA is unchanged. The census is now ONE error and ONE STALE-COLUMN
  * warning (979DBDAA only).
+ * Re-measured 2026-08-23 (TRDD-P6MSMQ2I session): 247 findings and TWO errors. The new one is
+ * `TERMINAL-WITHOUT-CHECKLIST / G6A54OYK`, and it is neither drift nor a regression — it is the
+ * card TRDD-P6MSMQ2I deliberately RETAINS as its live reproduction (archived as `completed` with
+ * no acceptance checklist, by the very route bug that card fixes in `da7ec5e8`). It is terminal
+ * and frozen, so it cannot be repaired, and it must not be: ticking boxes for work nobody did
+ * would destroy the evidence. It sorts FIRST in the error output, which is why the `lines[0]`
+ * matcher below moved and a `lines[1]` was added — measured, not assumed.
  *
  * A fixture corpus would be safer against drift, but the whole point is to pin the LIVE
  * numbers the ledger cites — a fixture cannot fail if a future card silently breaks the
  * filter on the real thing.
  */
 describe('trddgrep validate — --min-severity and --rule actually filter', () => {
-  it('--min-severity error prints ONLY the one ERROR line, not all 265', () => {
+  it('--min-severity error prints ONLY the two ERROR lines, not all 247', () => {
     const r = runCli('trddgrep.mjs', ['validate', '--min-severity', 'error'])
     const lines = r.stdout.trim().split('\n')
-    expect(lines).toHaveLength(1)
-    expect(lines[0]).toMatch(/^ERROR\tBODY-STATE-CLAIM\t7123D51A\t/)
+    // The length is the FILTER assertion — 2 of 247 is what proves --min-severity filters at
+    // all. Both ids are then pinned individually, so a future third error cannot hide by
+    // arriving in a slot nobody names.
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatch(/^ERROR\tTERMINAL-WITHOUT-CHECKLIST\tG6A54OYK\t/)
+    expect(lines[1]).toMatch(/^ERROR\tBODY-STATE-CLAIM\t7123D51A\t/)
     expect(r.status).toBe(1)
   })
 

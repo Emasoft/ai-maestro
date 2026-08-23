@@ -1019,8 +1019,37 @@ describe('THE GATE — the real corpus lints clean', () => {
     // `implemented` — which the rule deliberately refuses (`done` is the one inflection allowed,
     // being the past participle of the terminal set itself, not a synonym guess).
     const PERMANENTLY_EXCLUDED_BY_JANITOR_139 = new Set(['7123D51A'])
+
+    // A SECOND exclusion, on a completely different justification — kept in its own set rather
+    // than appended to the one above, because merging them would let one entry's reasoning stand
+    // in for the other's when someone later asks whether either is still earned.
+    //
+    // G6A54OYK is the LIVE REPRODUCTION for TRDD-P6MSMQ2I, which says so verbatim in its own
+    // body: `POST /api/trdd/[id]/archive --state completed` archived a card with no acceptance
+    // checklist, and that card was deliberately LEFT IN PLACE as the evidence. It is terminal and
+    // therefore frozen (IND §12), and unlike 7123D51A it is not a false positive — the finding is
+    // entirely TRUE, which is precisely why it must not be "repaired" by ticking boxes for work
+    // nobody did.
+    //
+    // WHY EXCLUDE RATHER THAN LEAVE THE GATE RED. A permanently-red gate catches nothing: the
+    // third ERROR to appear would land in a suite that was already failing and nobody would look.
+    // Excluding a named, justified, self-retiring entry keeps the gate live for every finding
+    // that is NOT one of these two. That is the same trade the doctor's own comment names about
+    // its grandfather boundary — "a wall of red is how a linter gets routed around".
+    //
+    // THE BUG IT REPRODUCES IS NOW FIXED (`da7ec5e8`, TRDD-P6MSMQ2I): the archive route enforces
+    // the checklist gate, so no NEW card can be created this way. The reproduction is therefore
+    // historical evidence, not an open wound — but it is still the only in-corpus example of the
+    // shape, so deleting it would remove the one thing that makes the fix's motivation legible.
+    const PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION = new Set(['G6A54OYK'])
+
     const unexpected = errors.filter(
-      (e) => !(e.rule === 'BODY-STATE-CLAIM' && PERMANENTLY_EXCLUDED_BY_JANITOR_139.has(e.id)),
+      (e) =>
+        !(e.rule === 'BODY-STATE-CLAIM' && PERMANENTLY_EXCLUDED_BY_JANITOR_139.has(e.id)) &&
+        !(
+          e.rule === 'TERMINAL-WITHOUT-CHECKLIST' &&
+          PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION.has(e.id)
+        ),
     )
     expect(unexpected.map((e) => `${e.rule} ${e.id} — ${e.message.slice(0, 90)}`)).toEqual([])
 
@@ -1030,6 +1059,14 @@ describe('THE GATE — the real corpus lints clean', () => {
     // (someone edits it, or the predicate changes), the gate fails and the exclusion must be
     // re-justified rather than outliving its reason and starting to hide new findings.
     expect(errors.filter((e) => PERMANENTLY_EXCLUDED_BY_JANITOR_139.has(e.id))).toHaveLength(1)
+
+    // Same self-retiring property for the second entry, and it matters MORE here: G6A54OYK is
+    // retained by a card that is still open. If it ever stops erroring — someone edits the frozen
+    // card, or P6MSMQ2I closes and the reproduction is cleaned up — this fails and forces the
+    // exclusion to be re-justified rather than silently outliving its reason.
+    expect(
+      errors.filter((e) => PERMANENTLY_EXCLUDED_AS_P6MSMQ2I_REPRODUCTION.has(e.id)),
+    ).toHaveLength(1)
   })
 })
 

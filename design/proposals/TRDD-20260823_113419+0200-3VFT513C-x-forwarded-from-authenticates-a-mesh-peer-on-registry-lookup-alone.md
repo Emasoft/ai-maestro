@@ -153,12 +153,38 @@ Candidate directions, cheapest first — none ruled in:
    second-class in at least two ways. Whether that is ENOUGH is the open question, and it is a
    narrower one than the earlier draft implied.
 
-> **This bounds SEVERITY, which is what an approver actually weighs, so it is stated here rather
-> than buried.** The hole is real (authentication granted on a caller-controlled header naming a
-> resolvable host id) and the blast radius is NOT "the caller becomes a local agent". What a
-> `mesh-*` subject can reach downstream is UNMEASURED — lines 875-1352 have not been read — and
-> that measurement, not more evidence for the hole itself, is what the next person on this card
-> should do first.
+> **⚠ THE PARAGRAPH ABOVE WAS WRONG, AND WRONG IN THE DAMAGING DIRECTION. Read this instead.**
+> It argued from `senderAgent = isMeshForwarded ? null : getAgent(...)` that a mesh caller is
+> "second-class" and therefore that severity is NARROWER. That inferred a variable's MEANING from
+> its ASSIGNMENT without reading a single CONSUMER of it — the identical defect it was written to
+> correct, one level along, and it landed on the more comfortable answer.
+>
+> Measured by grepping every use of `senderAgent` and reading both gated sites contiguously,
+> `senderAgent === null` is **not a demotion — it is a BYPASS of two checks that constrain a
+> normal caller**:
+>
+> - **`:885` — the unknown-sender rejection is skipped.**
+>   `if (!senderAgent && !isMeshForwarded && !senderUserRecord) return 500 'Sender agent not found
+>   in registry'`. `isMeshForwarded` is true, so a mesh caller passes a gate that rejects any
+>   other unrecognised sender. The comment states the exemption outright: *"A non-mesh sender that
+>   is neither a known agent NOR a known user is an error."*
+> - **`:1116` — the sender title-graph check is skipped.**
+>   `if (senderAgent?.governanceTitle) { … return 403 title_communication_forbidden }` — the R6
+>   communication-graph enforcement. With `senderAgent` null the condition is falsy and the whole
+>   block does not run, so a mesh caller is not measured against the graph at all.
+>
+> That is the same phrase TRDD-8Q5EVGV1 used about the forged-token path — *every governance title
+> check is bypassed* — reached here by a different route.
+>
+> **One mitigation, and it is a CLAIM not a measurement:** `:1113`'s comment says this is only a
+> pre-check and *"the full graph check happens on the receiving host"*. If true, a second layer
+> exists remotely. **Not verified** — citing it as protection would repeat this card's own
+> recurring error, so it is recorded as an unverified claim by a comment.
+>
+> **Net: severity is NOT narrower than this card first implied.** The original framing was closer
+> to correct than the "correction" that replaced it. Still UNMEASURED: lines 875-1352 generally,
+> and specifically whether the receiving host's graph check exists. That measurement is what the
+> next person should do first.
 
 ## Verification
 

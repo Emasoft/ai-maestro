@@ -34,11 +34,17 @@
  *      line 21, `requireSudoToken` at 74 — so the strict rejection is reachable with auth
  *      mocked and nothing else.
  *
- * NEUTER RUNS — OBSERVED, not predicted (scripts/dev/neuter, restored by blob hash):
- *   replace the handler's `delegateNextRoute(...)` call with a direct
- *   `updateTeamById(params.id, {...body})` (re-adding the import `c909aa3f`-era code removed)
- *   → 2 red / 0 green in this file: BOTH guards fall, which is the point of keeping both.
- *   Recorded below after the run; see the commit message for the exact counts.
+ * NEUTER RUN (2026-08-23 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   $_ = ($. == 3102 ? q{    const svc = await import("@/services/teams-service"); sendServiceResult(res, await svc.updateTeamById(params.id, await readJsonBody(req)))} . "\n" : q{}) if $. >= 3102 && $. <= 3104;
+ *   → 2 red / 1 green:
+ *       BEHAVIOURAL: an unknown body key is rejected by the delegated route zod .strict()
+ *       STATIC: the handler delegates and does not call updateTeamById directly
+ *   The 1 green is the CONTROL, and it is green BY DESIGN: it asserts the response is NOT
+ *   'Validation failed', which a direct path also satisfies. A control that reddened under
+ *   this mutation would be discriminating nothing.
+ *   Aimed by LINE NUMBER, not code shape: `delegateNextRoute(` appears at ~20 sites in this
+ *   router, so a shape-matched expression would have rewritten every one of them and produced
+ *   a plausible red set belonging to other pipelines.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { EventEmitter } from 'events'

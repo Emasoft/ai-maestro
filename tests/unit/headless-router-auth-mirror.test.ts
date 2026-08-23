@@ -562,6 +562,16 @@ describe('headless-router auth mirror — team-update + session-restart parity (
     // stronger); the ARCHITECTURE guard is not, and needs a different vehicle —
     // tracked as an EHT of TRDD-8Q5EVGV1. Do not read this as still proving
     // delegation.
+    // RESTORED 2026-08-23 (TRDD-DYIGNVTI): the delegation guard now lives in
+    // tests/unit/headless-teams-put-delegation.test.ts — a static source check
+    // plus a behavioural zod-.strict() check, both OBSERVED red under a
+    // line-anchored neuter that replaces the delegation with a direct
+    // updateTeamById() call. Note the EHT card's OWN preferred fix was refuted
+    // while building it: it proposed asserting the malformed id still yields
+    // 400, and teams-service.ts:558 makes updateTeamById answer 400 on a
+    // malformed id too, so that test would have passed under the neuter — the
+    // same vacuity, rebuilt. This test keeps its (stronger) 401 assertion and
+    // is no longer load-bearing for delegation.
     const res = await call('PUT', '/api/teams/not-a-uuid', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
     expect(res.statusCode).toBe(401)
     expect(res.bodyJson()?.error).toBe('invalid_credential')

@@ -90,6 +90,13 @@ vi.mock('@/lib/agent-auth', async importOriginal => {
     // then returns a Promise and the test sees `null`. Match the real shape.
     authenticateAgent: () => ({ agentId: TEAM_AGENT.id, isSystemOwner: false }),
     authenticateFromRequest: () => ({ agentId: TEAM_AGENT.id, isSystemOwner: false }),
+    // TRDD-8Q5EVGV1: the headless router's semantic credential gate calls this.
+    // This factory spreads `...actual`, so leaving it out silently ran the REAL
+    // validator against the forged AUTH_HEADERS bearer and 401'd before the R10
+    // governance gate could answer — turning a parity test into an auth test.
+    // Unlike its two siblings above this one IS async in the real module, and the
+    // gate awaits it, so the stub must be async too.
+    authenticateFromRequestAsync: async () => ({ agentId: TEAM_AGENT.id, isSystemOwner: false }),
     buildAuthContext: (a: unknown) => a,
   }
 })

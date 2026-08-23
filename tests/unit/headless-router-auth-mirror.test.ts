@@ -108,7 +108,7 @@ describe('headless-router auth mirror — forged structural credential is reject
     // The rejection comes from the HANDLER (authenticateAgent), NOT the
     // structural gate — so the error is the token error, not 'auth_required'.
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
   })
 
   // ── H3 — GET /api/sessions ────────────────────────────────────────────────
@@ -225,7 +225,7 @@ describe('headless-router auth mirror — SF1/SF2 new gates (commit 9d7065c7)', 
     const res = await call('POST', '/api/agents/role-plugins/install', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
     expect(res.statusCode).toBe(401) // authenticateAgent rejects the invalid token before authorize/install
     expect(res.bodyJson()?.error).not.toBe('auth_required') // handler auth, not the structural gate
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
     expect(res.bodyJson()?.success).toBeUndefined()
   })
 
@@ -241,7 +241,7 @@ describe('headless-router auth mirror — SF1/SF2 new gates (commit 9d7065c7)', 
     const res = await call('DELETE', '/api/agents/role-plugins/install', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
     expect(res.statusCode).toBe(401)
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
     expect(res.bodyJson()?.success).toBeUndefined()
   })
 
@@ -257,7 +257,7 @@ describe('headless-router auth mirror — SF1/SF2 new gates (commit 9d7065c7)', 
     const res = await call('DELETE', '/api/agents/role-plugins?name=scen-test-plugin', { Authorization: FORGED_BEARER })
     expect(res.statusCode).toBe(401) // authenticateAgent rejects before the name guard / deleteRolePlugin
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
     expect(res.bodyJson()?.success).toBeUndefined()
   })
 
@@ -275,7 +275,7 @@ describe('headless-router auth mirror — SF1/SF2 new gates (commit 9d7065c7)', 
     const res = await call('POST', `/api/v1/governance/requests/${VALID_UUID}/approve`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
     expect(res.statusCode).toBe(401)
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
   })
 
   // ── SF1 — POST /api/v1/governance/requests/:id/reject (local path) ──────────
@@ -292,7 +292,7 @@ describe('headless-router auth mirror — SF1/SF2 new gates (commit 9d7065c7)', 
     const res = await call('POST', `/api/v1/governance/requests/${VALID_UUID}/reject`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
     expect(res.statusCode).toBe(401)
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
   })
 
   // ── SF1 — gate-ordering parity for the reject handler's TWO auth modes ──────
@@ -308,8 +308,14 @@ describe('headless-router auth mirror — SF1/SF2 new gates (commit 9d7065c7)', 
       'X-Host-Id': 'unknown-host',
       'Content-Type': 'application/json',
     })
-    expect(res.statusCode).toBe(400)
-    expect(res.bodyJson()?.error).toMatch(/Invalid request ID format/i)
+    // TRDD-8Q5EVGV1 (2026-08-23): WAS 400. The semantic credential gate now
+    // rejects the forged token before the handler runs, so the UUID gate is no
+    // longer reachable by an unauthenticated caller. The property this test
+    // protected — a forged host signature on a malformed id never reaches
+    // verifyHostAttestation / receiveRemoteRejection — now holds STRICTLY MORE
+    // STRONGLY: the request never reaches the handler at all.
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('invalid_credential')
   })
 
   it('SF1: POST /api/v1/governance/requests/:id/approve — forged token with a malformed id is still rejected (auth gate fires first; no vote, never 200)', async () => {
@@ -351,7 +357,7 @@ describe('headless-router auth mirror — info-leak GETs (TRDD-47a35ba2)', () =>
     const res = await call('GET', '/api/agents/role-plugins/status', { Authorization: FORGED_BEARER })
     expect(res.statusCode).toBe(401)
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
     expect(res.bodyJson()?.agents).toBeUndefined()
   })
 
@@ -374,7 +380,7 @@ describe('headless-router auth mirror — info-leak GETs (TRDD-47a35ba2)', () =>
     const res = await call('GET', '/api/governance/reachable?agentId=victim', { Authorization: FORGED_BEARER })
     expect(res.statusCode).toBe(401)
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
   })
 })
 
@@ -511,7 +517,7 @@ describe('headless-router auth mirror — team-update + session-restart parity (
     // The rejection comes from the delegated Next.js route's authenticateFromRequest,
     // not the structural gate — so it is the token error, not 'auth_required'.
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
     expect(res.bodyJson()?.team).toBeUndefined()
   })
 
@@ -522,9 +528,19 @@ describe('headless-router auth mirror — team-update + session-restart parity (
     // rejected at the UUID gate (400). The OLD headless handler authenticated
     // FIRST, so the same request would have returned 401 — the two gate orders
     // are distinguishable, and only the delegated (fixed) path yields 400 here.
+    // TRDD-8Q5EVGV1 (2026-08-23): WAS 400, and THIS ONE LOST REAL COVERAGE —
+    // recorded rather than quietly rewritten. The 400-vs-401 difference was the
+    // only thing distinguishing the delegated path from a direct
+    // updateTeamById() call, so this test WAS the regression guard against
+    // "simplify the delegation away". The semantic gate now rejects the forged
+    // token before either path runs, so both orders yield 401 and the
+    // discrimination is gone. The security property is unharmed (strictly
+    // stronger); the ARCHITECTURE guard is not, and needs a different vehicle —
+    // tracked as an EHT of TRDD-8Q5EVGV1. Do not read this as still proving
+    // delegation.
     const res = await call('PUT', '/api/teams/not-a-uuid', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
-    expect(res.statusCode).toBe(400)
-    expect(res.bodyJson()?.error).toMatch(/Invalid team ID format/i)
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('invalid_credential')
   })
 
   // ── session stop/restart — auth-layer parity the R10 gate builds on ────────
@@ -532,7 +548,7 @@ describe('headless-router auth mirror — team-update + session-restart parity (
     const res = await call('POST', '/api/sessions/victim-session/stop', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
     expect(res.statusCode).toBe(401)
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
     expect(res.bodyJson()?.success).toBeUndefined()
   })
 
@@ -547,7 +563,7 @@ describe('headless-router auth mirror — team-update + session-restart parity (
     const res = await call('POST', '/api/sessions/victim-session/restart', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
     expect(res.statusCode).toBe(401)
     expect(res.bodyJson()?.error).not.toBe('auth_required')
-    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required|invalid_credential/i)
     expect(res.bodyJson()?.success).toBeUndefined()
   })
 
@@ -583,16 +599,26 @@ describe('headless-router — CC-GOV-001 session-name injection gate (TRDD-4P1M8
   const EVIL = 'victim%24%28whoami%29'
 
   it('restart: a session name with shell metachars is rejected with 400 before reaching tmux', async () => {
+    // TRDD-8Q5EVGV1 (2026-08-23): WAS 400 from the name gate. The semantic
+    // credential gate now fires first, so a shell-metachar name from an
+    // unauthenticated caller never reaches the handler — the tmux-injection
+    // property this pins holds strictly more strongly. The name gate itself is
+    // unchanged in the handler and still runs for authenticated callers.
     const res = await call('POST', `/api/sessions/${EVIL}/restart`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
-    expect(res.statusCode).toBe(400)
-    expect(res.bodyJson()?.error).toMatch(/Invalid session name/i)
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('invalid_credential')
     expect(res.bodyJson()?.success).toBeUndefined() // never restarted
   })
 
   it('stop: a session name with shell metachars is rejected with 400 before reaching tmux', async () => {
+    // TRDD-8Q5EVGV1 (2026-08-23): WAS 400 from the name gate. The semantic
+    // credential gate now fires first, so a shell-metachar name from an
+    // unauthenticated caller never reaches the handler — the tmux-injection
+    // property this pins holds strictly more strongly. The name gate itself is
+    // unchanged in the handler and still runs for authenticated callers.
     const res = await call('POST', `/api/sessions/${EVIL}/stop`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
-    expect(res.statusCode).toBe(400)
-    expect(res.bodyJson()?.error).toMatch(/Invalid session name/i)
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('invalid_credential')
     expect(res.bodyJson()?.success).toBeUndefined() // never stopped
   })
 

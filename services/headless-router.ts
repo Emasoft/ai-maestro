@@ -10,7 +10,7 @@
 
 import { createHash } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
-import { authenticateAgent, buildAuthContext } from '../lib/agent-auth'
+import { authenticateAgent, authenticateFromRequestAsync, buildAuthContext } from '../lib/agent-auth'
 
 // ---------------------------------------------------------------------------
 // Service imports (all 24 service files)
@@ -4464,6 +4464,66 @@ function _headlessHasCredential(req: IncomingMessage, pathname: string): boolean
   return false
 }
 
+/**
+ * TRDD-8Q5EVGV1 (2026-08-23) — the SEMANTIC half of the gate.
+ *
+ * `_headlessHasCredential` above proves only that a credential-SHAPED header was
+ * present; `aim_tk_` + 24 arbitrary characters satisfies it. Measured 2026-08-23:
+ * 142 of 252 handlers in this file call no auth helper at all, so for those the
+ * structural gate WAS the only check and a hand-typed bearer reached the handler
+ * with its governance title read from a token nobody verified.
+ *
+ * This function closes that for all 252 at once by actually validating the
+ * credential at the gate. Three things it must NOT change, each verified:
+ *
+ *  1. It uses `authenticateFromRequestAsync`, NOT `authenticateAgent`. The sync
+ *     function does not know the `eyJ` (compact IBCT) prefix that
+ *     `_headlessHasCredential` deliberately accepts — it falls such a token
+ *     through to the legacy AMP-key branch, which returns 401. The async
+ *     variant validates IBCTs and delegates every other token type to the sync
+ *     one, so it is a strict superset. Swapping in the sync function instead
+ *     would have silently dropped IBCT support on every headless route.
+ *  2. The forwarded-peer path (`/api/v1/route` + `X-Forwarded-From`) carries no
+ *     bearer and no cookie — its identity is Ed25519-verified inside the
+ *     handler. It is exempted here, exactly as `_headlessHasCredential` exempts
+ *     it, or peer routing would break.
+ *  3. It FAILS CLOSED. `authenticateAgent` ends in a deliberate
+ *     `throw new Error('Unreachable: ...')`; an exception escaping into the gate
+ *     must not become a 500 that reveals the request reached routing, nor a
+ *     crash. An unexpected throw is treated as a rejected credential.
+ *
+ * This buys AUTHENTICATION, not AUTHORIZATION. After this gate the 142 still
+ * perform no title or ownership check — they merely now know the caller is who
+ * the token says. The per-route authorization work stays as scoped in
+ * TRDD-R268J32X.
+ */
+async function _headlessCredentialIsValid(
+  req: IncomingMessage,
+  pathname: string,
+): Promise<boolean> {
+  // (2) forwarded peer — no bearer to validate; the handler verifies Ed25519.
+  if (pathname === '/api/v1/route' && (req.headers['x-forwarded-from'] as string | undefined)) {
+    return true
+  }
+  const headers = {
+    get(name: string): string | null {
+      const v = req.headers[name.toLowerCase()]
+      if (v === undefined) return null
+      return Array.isArray(v) ? v.join(', ') : String(v)
+    },
+  }
+  try {
+    const result = await authenticateFromRequestAsync({ headers })
+    // A valid browser session resolves to `{}` (system owner) — success is the
+    // ABSENCE of an error, never the presence of an agentId.
+    return !result.error
+  } catch (err) {
+    // (3) fail closed.
+    console.warn('[headless-router] credential validation threw, denying:', err)
+    return false
+  }
+}
+
 export function createHeadlessRouter() {
   return {
     async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
@@ -4480,19 +4540,56 @@ export function createHeadlessRouter() {
       // Everything else requires at least one recognized credential shape.
       if (pathname.startsWith('/api/')) {
         const whitelisted = HEADLESS_AUTH_WHITELIST.some(rx => rx.test(pathname))
-        if (!whitelisted && !_headlessHasCredential(req, pathname)) {
-          sendJson(res, 401, {
-            error: 'auth_required',
-            message: 'Authentication required. Log in at /api/auth/login or provide a Bearer token.',
-            hint: 'No credentials found on the request (cookie or Authorization header).',
-          })
-          return true
+        if (!whitelisted) {
+          if (!_headlessHasCredential(req, pathname)) {
+            sendJson(res, 401, {
+              error: 'auth_required',
+              message: 'Authentication required. Log in at /api/auth/login or provide a Bearer token.',
+              hint: 'No credentials found on the request (cookie or Authorization header).',
+            })
+            return true
+          }
         }
       }
 
       const matched = matchRoute(method, pathname)
       if (!matched) {
         return false // Not handled — caller should return 404
+      }
+
+      // ── Semantic credential gate (TRDD-8Q5EVGV1) ──────────────
+      // The structural gate above proves only that a credential-SHAPED header
+      // was present. Validate it for real before any handler runs, so the 142
+      // handlers that call no auth helper of their own stop being reachable
+      // with a hand-typed bearer.
+      //
+      // Placed AFTER matchRoute deliberately, and the ordering is load-bearing
+      // in both directions:
+      //   - AFTER, so an UNREGISTERED path still returns `false` (unhandled)
+      //     rather than 401. Gating before the match would make `handled`
+      //     true for every /api/* path, which silently turns every
+      //     `expect(handled).toBe(true)` in the mirror suite into a tautology.
+      //     It would also change 404 behaviour for paths this router does not
+      //     own. Route existence was already observable to a shaped-credential
+      //     caller before this change; this keeps that exactly as it was
+      //     rather than trading a test's discriminating power for it.
+      //   - BEFORE the handler, so the guarantee covers all 252 at once.
+      //
+      // Whitelisted bootstrap routes are exempt for the same reason they are
+      // exempt above: they ARE the authentication surface, so they cannot
+      // require prior authentication.
+      if (pathname.startsWith('/api/') && !HEADLESS_AUTH_WHITELIST.some(rx => rx.test(pathname))) {
+        if (!(await _headlessCredentialIsValid(req, pathname))) {
+          // Distinct from `auth_required` on purpose: "you sent nothing" and
+          // "what you sent is not valid" are different diagnoses, and merging
+          // them would let the credential-less control pass for the wrong reason.
+          sendJson(res, 401, {
+            error: 'invalid_credential',
+            message: 'The supplied credential is not valid.',
+            hint: 'The request carried a credential-shaped header, but it failed verification.',
+          })
+          return true
+        }
       }
 
       try {

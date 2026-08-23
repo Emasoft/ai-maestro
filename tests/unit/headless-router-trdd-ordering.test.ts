@@ -35,6 +35,15 @@ import { Readable } from 'stream'
 // Hoisted by vitest above the router import, so the dynamically-imported Next.js
 // route modules resolve to this stub. Only the auth verdict is faked; every other
 // thing the handlers do (id validation, the kanban index build) runs for real.
+// TRDD-8Q5EVGV1: this file's subject is ROUTE ORDERING, not auth — the bearer
+// below exists only to clear the credential gate. That gate now validates for
+// real, so without this mock every ordering assertion 401s before a route is
+// ever matched.
+vi.mock('@/lib/agent-auth', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/agent-auth')>()),
+  authenticateFromRequestAsync: async () => ({ agentId: 'test-agent' }),
+}))
+
 vi.mock('@/lib/route-auth', () => ({
   requireAuth: () => ({ ok: true as const, agentId: null }),
 }))

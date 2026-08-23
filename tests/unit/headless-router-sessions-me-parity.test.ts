@@ -49,6 +49,12 @@ vi.mock('@/lib/agent-auth', () => ({
   // The sibling me/restart route reaches for this one. It is mocked only so the enumeration
   // test does not log a spurious module error — that test asserts MATCHED, not the outcome.
   authenticateAgent: () => AUTH_OK,
+  // TRDD-8Q5EVGV1: the router's semantic credential gate calls this one. Without
+  // it the factory returns `undefined`, the gate's fail-closed catch turns the
+  // resulting TypeError into a denial, and every test here 401s — a mock gap that
+  // is indistinguishable from a real auth regression. It is `async` because the
+  // gate awaits it.
+  authenticateFromRequestAsync: async () => AUTH_OK,
 }))
 
 vi.mock('@/lib/agent-registry', () => ({

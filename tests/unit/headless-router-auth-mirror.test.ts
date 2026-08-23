@@ -32,6 +32,16 @@
  * rejection happens BEFORE any service call — the test exercises the real
  * handler auth path end-to-end.
  *
+ * ⚠ IF YOU ARE WRITING A NEW TEST THAT DRIVES `createHeadlessRouter().handle()`, READ THIS.
+ * Since TRDD-8Q5EVGV1 the router validates the credential for real at the gate, BEFORE dispatch.
+ * A test whose subject is anything other than auth (route ordering, presence, a governance gate)
+ * must therefore mock `@/lib/agent-auth`'s `authenticateFromRequestAsync` to succeed, or every
+ * assertion 401s before its handler ever runs. Three existing files had to be fixed for exactly
+ * this when the gate landed, and the failure is deceptive in both directions: a factory that
+ * SPREADS the real module runs the REAL validator against a forged bearer, and one that does not
+ * spread leaves the export `undefined`, which the gate's fail-closed catch turns into a clean
+ * denial. Both look like an auth regression and neither is.
+ *
  * The forged token is 24 'A's after the prefix, which the tightened structural
  * gate regex `^Bearer\s+(aim_tk_|…)[A-Za-z0-9_\-\.]{24,}$` accepts, so the
  * request genuinely reaches the per-handler auth (it is NOT bounced by the

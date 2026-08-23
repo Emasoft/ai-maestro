@@ -92,6 +92,13 @@ count is indistinguishable from a measured one.
 
 ## Acceptance
 
+> **These 7 boxes were authored and ticked in ONE edit, after the work was finished.** That is
+> legal — the gate this card implements binds `complete|completed|published|live`, and this card
+> is `testing` — and it is precisely the shape the gate exists to discourage: a checklist that
+> RECORDED work instead of CONSTRAINING it. Noted rather than dressed up, because a card that
+> writes its own acceptance criteria from the diff can never fail them. The boxes are still true;
+> they are simply weaker evidence than boxes written before the work.
+
 - [x] the archive route refuses `--state completed` for a card with NO acceptance checklist
 - [x] it also refuses when a box is still open, naming the count so the caller knows what to fix
 - [x] `cancelled` and `superseded` are NOT gated, matching the linter's deliberate exclusion

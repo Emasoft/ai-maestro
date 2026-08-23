@@ -1,9 +1,9 @@
 ---
 trdd-id: DYIGNVTI
 title: restore the delegation regression guard the semantic credential gate cost
-column: testing
+column: ai_review
 created: 2026-08-23T11:14:29+0200
-updated: 2026-08-23T12:07:24+0200
+updated: 2026-08-23T13:42:14+0200
 current-owner: ai-maestro-00
 created-by: ai-maestro-00
 task-type: test

@@ -1,9 +1,9 @@
 ---
 trdd-id: P6MSMQ2I
 title: archive route bypasses the terminal checklist gate
-column: testing
+column: ai_review
 created: 2026-08-22T17:37:09+0200
-updated: 2026-08-23T11:14:29+0200
+updated: 2026-08-23T13:42:14+0200
 current-owner: user
 created-by: user
 task-type: bugfix

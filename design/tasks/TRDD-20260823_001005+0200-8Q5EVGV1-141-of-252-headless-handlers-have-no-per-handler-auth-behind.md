@@ -1,9 +1,9 @@
 ---
 trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
-column: testing
+column: ai_review
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T11:14:29+0200
+updated: 2026-08-23T13:42:14+0200
 current-owner: user
 created-by: user
 task-type: security

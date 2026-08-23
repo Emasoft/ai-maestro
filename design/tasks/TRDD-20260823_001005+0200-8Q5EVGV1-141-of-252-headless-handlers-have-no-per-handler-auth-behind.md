@@ -1,9 +1,9 @@
 ---
 trdd-id: 8Q5EVGV1
 title: 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
-column: todo
+column: testing
 created: 2026-08-23T00:10:05+0200
-updated: 2026-08-23T01:16:49+0200
+updated: 2026-08-23T11:14:29+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -13,6 +13,9 @@ mandated-by: user
 approved: true
 approval-judge: user
 approval-datetime: 2026-08-23T00:10:05+0200
+npt: []
+eht: [DYIGNVTI]
+implementation-commits: [c909aa3f]
 ---
 
 # 141 of 252 headless handlers have no per-handler auth behind a gate that does not validate tokens
@@ -405,6 +408,142 @@ it mid-migration is how a performance objection kills a security fix.
 directive for this session says to rule it and stop. The ruling exists so the decision is not
 re-litigated and the default is not invented under time pressure later.
 
+## IMPLEMENTATION 2026-08-23 — landed as `c909aa3f`, and one thing the RULING got wrong
+
+Implemented under the USER's standing grant to decide from verified facts. The ruling above
+stands in its conclusion — the floor is a semantic structural gate — and was **wrong in one
+load-bearing detail**, found by reading the code it named rather than trusting the sentence.
+
+### The correction: `authenticateAgent` is NOT the right function
+
+The ruling says *"`_headlessHasCredential` already receives everything `authenticateAgent` needs;
+the swap is mechanical."* The first half is true. The second is false, and following it literally
+would have shipped a silent regression:
+
+`_headlessHasCredential` deliberately accepts four Bearer prefixes — `aim_tk_`, `amp_live_sk_`,
+`mst_` and **`eyJ`** (a compact IBCT / JWT). The SYNC `authenticateAgent` handles the first three
+and has no branch for `eyJ`: such a token falls through to Case 3c, the legacy AMP-key branch,
+which returns `Invalid or expired API key`, 401. Only `authenticateFromRequestAsync`
+(`lib/agent-auth.ts:268`) validates IBCTs, and its own docstring says it *"falls back to the sync
+authenticateAgent for all non-IBCT token types"* — i.e. it is a strict superset.
+
+So the mechanical swap would have made every IBCT-bearing caller 401 on all 252 headless routes,
+as a side effect of a security fix. The gate calls the ASYNC variant. `handle()` was already
+`async`, so this cost nothing.
+
+**Why the ruling missed it:** it reasoned from the *signature* (`authenticateAgent` takes exactly
+the three headers the gate has) and never opened the function body. The signature matched; the
+capability did not.
+
+### Two further decisions the ruling did not reach
+
+**Placement — AFTER `matchRoute`, not before.** Gating before the match was the obvious reading
+and is wrong in a way that only a test could show: it makes `handled === true` for every `/api/*`
+path, which turns roughly twenty `expect(handled).toBe(true)` assertions in the mirror suite into
+tautologies, and it changes 404 behaviour for paths this router does not own. Route existence was
+already observable to a shaped-credential caller before this change, so gating after the match
+preserves that exactly rather than trading a suite's discriminating power for it. Measured: the
+before-match placement reddened the mirror file's own non-vacuity control, which is what surfaced
+this.
+
+**Fail closed.** `authenticateAgent` ends in a deliberate `throw new Error('Unreachable: ...')`;
+an exception reaching the gate must not become a 500 or a crash. This was not defensive
+theatre — it is what turned an incomplete test mock (below) into a clean denial instead of a
+stack trace.
+
+### The full-vs-headless asymmetry, addressed rather than left implicit
+
+`HEADLESS_AUTH_WHITELIST`'s own comment warns that *"an endpoint reachable without a credential in
+full mode and 401 in headless mode is a forked gate, which is the bug class this whole file's
+delegation pattern exists to avoid."* This change does make headless stricter than full, so it is
+worth saying why it is not that bug class:
+
+- The forked-gate hazard is about **anonymous** endpoints diverging. Those are exactly the
+  whitelist, which is untouched and now pinned by a test (below).
+- For everything else the two modes **agree on the verdict** and differ only in *where* it is
+  reached: full mode admits an invalid credential to the handler, which rejects it; headless now
+  rejects it at the gate. No request succeeds in one mode and fails in the other.
+- Where they differ observably is an invalid-credential caller sometimes seeing 401 instead of a
+  400 from input validation that used to run first. That is a strictly better answer: it stops an
+  unauthenticated caller probing input validators.
+
+The residual asymmetry is that full mode still relies on per-handler auth for the same 142
+equivalents. That is not this card's scope (its file is headless-only, mounted at
+`server.mjs:2575`), and it is the honest reason this closes the headless bypass rather than "the
+bypass".
+
+### What it does NOT buy — restated, because the number is seductive
+
+AUTHENTICATION, not AUTHORIZATION. All 252 now know *who* the caller is; the 142 still perform no
+title or ownership check. `POST /api/agents/docker/create` moved from "any forged token" to "any
+authenticated agent of any title". The per-route authorization work is unchanged in scope and
+stays in TRDD-R268J32X.
+
+### Cost, measured rather than discovered later
+
+The ruling flagged that the 110 already-guarded handlers would validate twice per request and left
+the choice open. **Measured, then decided: accept the duplication.** Both the agent registry
+(`lib/agent-registry.ts:180`, mtime-cached) and the AID token store (`validateGovernanceToken` →
+`loadTokens()` + an O(1) `_tokenIndex` hash lookup) are cached, so the second validation is a
+SHA256 plus a `Map.get`, not a file parse. Threading the gate's result through 91 call sites would
+be a far larger, riskier change buying performance rather than security.
+
+### Verification — both neuters OBSERVED, not predicted
+
+Run via `scripts/dev/neuter` (restore verified by blob hash) against
+`tests/unit/headless-router-auth-mirror.test.ts`:
+
+```
+s/return !result\.error/return true/              → 4 red / 49 green
+    restart / stop: a session name with shell metachars is rejected with 400 before reaching tmux
+    SF1: .../reject — host-signature path enforces UUID validation before the host-sig branch
+    team-update: DELEGATION proof — forged token + malformed id returns 400
+```
+
+The prediction was written before the run and matched exactly, which is what makes it a
+measurement. The complementary neuter found a genuine hole:
+
+```
+s/pathname.startsWith('/api/') && !HEADLESS_AUTH_WHITELIST.some(...)/pathname.startsWith('/api/')/
+    BEFORE: 0 red / 66 green across ALL FOUR files that drive this router — UNPINNED
+    AFTER:  1 red / 53 green — `whitelist: a CREDENTIAL-LESS request to a bootstrap route ...`
+```
+
+Nothing pinned the whitelist exemption, because none of the four files exercised a whitelisted
+route through the router. Deleting it would have made `/api/auth/login` itself require a
+credential in headless mode — a permanent host lockout, silently, with a green suite. A test was
+added and the neuter re-run to prove it catches it.
+
+### Test reconciliation — 15 assertions, split before any were touched
+
+11 asserted the rejection came from real verification rather than the you-sent-nothing gate; that
+property survives and only changed layer, so they now also accept `invalid_credential` while still
+discriminating against `auth_required`. 4 proved an ORDERING (input validation before auth) by
+expecting 400; three of those protected unauthenticated callers from reaching tmux or
+`verifyHostAttestation`, which now holds strictly more strongly since such callers reach no
+handler at all.
+
+**The fourth is a real coverage loss and is filed, not absorbed:** the `team-update` DELEGATION
+proof used the 400-vs-401 difference as the only signal separating the delegated path from a
+direct `updateTeamById()` call. Both orders now yield 401, so that regression guard is gone. The
+security property is unharmed; the architecture guard needs a different vehicle →
+**TRDD-DYIGNVTI** (EHT).
+
+Three further files failed for a reason that was NOT a behaviour change, and the distinction
+matters because it is invisible from outside: each mocks `@/lib/agent-auth` without defining
+`authenticateFromRequestAsync`. Two spread the real module, so the REAL validator ran against
+their forged bearer; one defines no spread, so the export was `undefined` and the gate's
+fail-closed catch denied. In every case a parity, ordering or governance test was silently
+converted into an auth test. The mocks were completed to match what each file already intends its
+caller to be.
+
+Per-handler coverage is unaffected: `tests/unit/headless-handler-auth-ledger.test.ts` checks that
+layer statically from source and passed untouched throughout.
+
+Full suite after the change: **460 files, 6172 passed**. The only reds are `pillar-grep-cli` and
+`trdd-doctor`, the pre-existing `TERMINAL-WITHOUT-CHECKLIST` corpus error on `G6A54OYK`
+(TRDD-P6MSMQ2I's own deliberately-retained reproduction), unrelated to this change.
+
 ## Acceptance
 
 - [x] the DEFAULT is ruled: **semantic structural gate as the floor** (closes the forged-token
@@ -412,8 +551,11 @@ re-litigated and the default is not invented under time pressure later.
       bootstrap routes), with **delegate-by-default as the incremental DIRECTION** for removing the
       twins. Full reasoning, the named cost, and what the ruling explicitly does NOT buy
       (authorization) are in `## RULING 2026-08-23`
-- [ ] whichever is chosen, a NEW handler added afterwards inherits the guard rather than needing
-      one remembered
+- [x] whichever is chosen, a NEW handler added afterwards inherits the guard rather than needing
+      one remembered — **satisfied by construction** as of `c909aa3f`. The semantic gate sits in
+      `handle()` between `matchRoute` and handler dispatch, so it covers every entry in the route
+      table including ones added tomorrow. Nothing has to be remembered; a new handler would have
+      to be added OUTSIDE the route table to escape it
 - [x] a conformance test fails on a newly-added unguarded handler, seeded with the current count as
       a shrinking ledger — NOT shipped as 141 fresh failures.
       `tests/unit/headless-handler-auth-ledger.test.ts` (2026-08-23). It enumerates the route table
@@ -430,7 +572,11 @@ re-litigated and the default is not invented under time pressure later.
       NEIGHBOURING comment; the first only after `9534cc0f` added the `delegateNextRoute` comment
       block above `mcp-discover`, which is what exposed the class. Take 142, not 141, and re-derive
       again at fix time rather than taking 142 from here
-- [ ] any route touched is verified in BOTH modes, since the same-night evidence is that a
-      Next-only fix is the default failure
+- [x] any route touched is verified in BOTH modes, since the same-night evidence is that a
+      Next-only fix is the default failure — **and this fix touches NO individual route.** It
+      changes only the headless router's own gate, a file that is mounted exclusively under
+      `MAESTRO_MODE=headless` (`server.mjs:2575`), so full mode is not merely unregressed but
+      untouched. The full-vs-headless asymmetry this creates is deliberate and is analysed under
+      `## IMPLEMENTATION` below rather than left implicit
 
 ## Approval log

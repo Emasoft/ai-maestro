@@ -23,6 +23,7 @@ import { NextResponse } from 'next/server'
 import type { AgentAuthResult } from './agent-auth'
 import { authorize, type TrddVerb, type TrddApprovalTitle } from './authorization'
 import { readTrdd, withTrddLock } from './trdd-store'
+import { countAcceptanceBoxes } from './trdd-doctor'
 import { getAgent, getAgentByNameAnyHost } from './agent-registry'
 
 /**
@@ -193,6 +194,75 @@ export async function withAuthorizedTrdd<T>(
  *
  * @returns a NextResponse the route must RETURN (400), or null to proceed.
  */
+/**
+ * TRDD-P6MSMQ2I — the terminal-column COMPLETION gate, enforced where the transition
+ * actually happens.
+ *
+ * The gate (aimaestro-trdd-approval.md §D4 step 5b) says a card may enter a terminal
+ * column only when its acceptance checklist EXISTS (>=1 box) and every box is ticked. It
+ * was enforced by the LINTER alone, so `POST /api/trdd/[id]/archive --state completed`
+ * happily minted exactly the false completion the gate exists to prevent — and then
+ * `trddgrep validate` reported a standing ERROR about a card the API had just created.
+ * Measured 2026-08-22 (TRDD-798OAHMX e2e): `G6A54OYK` was archived that way and is
+ * deliberately left in place as the live reproduction.
+ *
+ * It reuses `countAcceptanceBoxes`, the linter's OWN counter, rather than a lookalike
+ * regex. That is the whole point: two spellings of "an acceptance box" would drift, and
+ * the failure mode is silent — the route would admit a card the linter then rejects,
+ * which is the bug being fixed here, wearing a different hat. The counter already handles
+ * fenced blocks (a card documenting this rule contains example checkboxes) and treats
+ * `[~]` as a decision rather than an outstanding obligation.
+ *
+ * `cancelled` and `superseded` are NOT gated, matching the linter exactly. Open boxes are
+ * what those columns MEAN — abandoned and overtaken work is not required to be finished,
+ * and demanding a complete checklist from them would make the honest closure of a dead
+ * card impossible.
+ *
+ * There is no grandfather boundary here, deliberately. The linter needs one because it
+ * judges cards closed long ago; this runs only on a transition happening NOW, which is
+ * always past the boundary.
+ */
+export function rejectIncompleteChecklist(
+  designDir: string,
+  id: string,
+  state: unknown,
+): NextResponse | null {
+  if (str(state)?.toLowerCase() !== 'completed') return null
+
+  const trdd = readTrdd(designDir, id)
+  // Not found / unreadable is NOT this guard's business — `archiveTrdd` owns the 404, and
+  // answering it here would fork one condition across two layers.
+  if (!trdd) return null
+
+  const boxes = countAcceptanceBoxes(trdd.body)
+  if (boxes.total === 0) {
+    return NextResponse.json(
+      {
+        error: 'trdd_terminal_without_checklist',
+        message:
+          `${trdd.id} has NO acceptance checklist, so archiving it as 'completed' would ` +
+          `record a completion that proves nothing: nothing states what the card promised ` +
+          `or whether it delivered. Write the checklist first, then archive.`,
+      },
+      { status: 409 }
+    )
+  }
+  if (boxes.open > 0) {
+    return NextResponse.json(
+      {
+        error: 'trdd_terminal_with_open_box',
+        message:
+          `${trdd.id} has ${boxes.open} of ${boxes.total} acceptance box(es) still ` +
+          `unchecked — archiving it as 'completed' would be a false completion. Either the ` +
+          `work is not done, or an obsolete box must be struck through with its reason ` +
+          `(never silently ticked).`,
+      },
+      { status: 409 }
+    )
+  }
+  return null
+}
+
 export function rejectUnarchivableState(state: unknown): NextResponse | null {
   const s = str(state)?.toLowerCase() ?? ''
   if (ARCHIVABLE_STATES.has(s)) return null

@@ -3,7 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { archiveTrdd, isoLocal } from '@/lib/trdd-store'
-import { withAuthorizedTrdd, rejectUnarchivableState } from '@/lib/trdd-authz'
+import { withAuthorizedTrdd, rejectUnarchivableState, rejectIncompleteChecklist } from '@/lib/trdd-authz'
 
 const ARCHIVE_STATES = ['completed', 'cancelled', 'superseded'] as const
 
@@ -56,6 +56,16 @@ export async function POST(
   //     authorize(), which grants the system-owner unconditionally.
   const stateErr = rejectUnarchivableState((body as Record<string, unknown>).state)
   if (stateErr) return stateErr
+
+  //  1b. DATA invariant — TRDD-P6MSMQ2I. A terminal `completed` requires an acceptance
+  //     checklist that EXISTS and is fully ticked. This gate was enforced by the LINTER
+  //     only, so this route minted precisely the false completion the gate forbids and
+  //     `trddgrep validate` then reported a standing ERROR about a card the API had just
+  //     created. Placed with the other DATA invariant and BEFORE authorization on purpose:
+  //     an unfinished card is not archivable by anyone, the human owner included, so this
+  //     is not a permission that authorize() could grant.
+  const checklistErr = rejectIncompleteChecklist(designDir, id, state)
+  if (checklistErr) return checklistErr
 
   //  2. AUTHORIZATION — the owner or MANAGER. The sudo-guard deferred this route.
   //     TRDD-6D6SQNI6: decided and written under ONE hold on the card, so a peer cannot

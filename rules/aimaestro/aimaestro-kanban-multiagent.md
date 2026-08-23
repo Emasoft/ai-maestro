@@ -20,7 +20,10 @@ position and owner **are** two of that TRDD's frontmatter fields:
 | "this task is in column *blocked*" | the TRDD's `column: blocked` |
 | "this task is assigned to agent X" | the TRDD's `assignee: X` |
 
-`column:` is the kanban column (17 ratified values); `assignee:` is the
+`column:` is the kanban column (22 ratified board values; the legal
+`column:` set is 27, because the bracket values — `proposal`, `planned`,
+`refused`, `cancelled`, `completed`, `superseded` — are states of the same
+field that sit outside the board, per 3P-KAN-20); `assignee:` is the
 agent it is assigned to. Nothing else records either fact, so nothing
 else can disagree about it. To move a card you edit one line of one
 file; to render the board you `grep -H "^column:" design/**/*.md`.

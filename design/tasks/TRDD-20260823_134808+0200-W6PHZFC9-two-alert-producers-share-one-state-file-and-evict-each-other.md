@@ -150,8 +150,11 @@ clears. Three checks establish they are distinct:
      output, and a needle for `active-alerts` cannot see a reader that reaches the file through
      `path.join(rotatorRoot(), …)` — a pattern this codebase actually uses (`decision-log.ts`
      reaches `rotator.log` exactly that way). So the three writes/reads were enumerated instead:
-     - **`tick.ts` reads exactly ONE file from disk** — `live-identity.json` (`:667`, via
-       `liveIdentityPath()` at `:659`). Not the alerts file, not the log.
+     - **`tick.ts` contains exactly ONE direct disk read** — `live-identity.json` (`:667`, via
+       `liveIdentityPath()` at `:659`). That is a statement about ONE FILE, not about the tick:
+       its callees certainly read more (slot credentials via `slots.ts`, the throttled usage
+       cache in `usage-cooldown.ts`), and that call graph was never walked. It does not need to
+       be — see the note below on which ground actually carries this conclusion.
      - **`rotator.log` is APPEND-ONLY.** Its only uses tree-wide are the basename constant, the
        path builder, one `appendFileSync`, and `supervisor.ts:250`, which interpolates the path
        *into an alert message* so a human knows where to look. No reader exists.
@@ -160,10 +163,29 @@ clears. Three checks establish they are distinct:
        `--include=*.ts` over `lib/ services/` could not have seen a reader in `server.mjs`, which
        is what runtime-imports the tick): same 3 hits, all comments.
 
-     So beat N's alert selection cannot reach beat N+1's `result` by any of the three routes.
-     This also disposes of a question about THIS card's own fix, which changes how many lines
-     reach `rotator.log`: nothing derives state from that log, so suppressing the spurious
-     `CLEARED` lines has no downstream effect beyond the log becoming readable again.
+     So beat N's alert selection cannot reach beat N+1's `result` by any file route. The
+     in-memory route is closed too, and by the same code: `deliverAlerts` returns
+     `delivered: string[]`, and BOTH call sites invoke it as `void deliver(…)` — the return is
+     discarded, so nothing carries a beat's alert selection forward in memory either.
+
+  **WHICH GROUND ACTUALLY CARRIES THIS — read this before adding a fourth.** Ground 1 alone is
+  dispositive. `code` is a local string whose only consumer is `deliver([{code, message}])`, and
+  the diff shows it mutates nothing; so whatever else the tick reads is IRRELEVANT unless
+  alert-delivery WRITES it, and alert-delivery writes exactly two files. Grounds 2 and 3 are
+  corroboration, not load. This is recorded because the opposite mistake was actually made: the
+  diff was ranked first and then three successive revisions defended ground 3 as though the
+  conclusion rested on it. It never did, and every one of those revisions was negative-value.
+
+### What this fix DOES change downstream — "no state feedback" is not "no behaviour change"
+
+Nothing derives state from `rotator.log`, so suppressing the spurious `CLEARED` lines has no
+state effect beyond the log becoming readable again. But the fix changes `active-alerts.json`
+CONTENT — it adds `lastSeenAt` and, the point of the card, RETAINS both producers' codes instead
+of letting each evict the other. More retained codes means more entries can reach `deps.notify`,
+the desktop banner channel. That is a real, user-visible behaviour change, and it is the
+INTENDED one: a persistent alert now escalates through the backoff ladder instead of resetting
+its clock every time the other producer beats. Recorded so nobody later reads "no downstream
+effect" as "no behaviour change" and treats a correctly-escalating alert as a regression.
 
   **RETRACTED, and recorded rather than quietly rewritten:** an earlier revision of this bullet
   claimed the fix "cannot reach it whatever it says" on the strength of the two line numbers in

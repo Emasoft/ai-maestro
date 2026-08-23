@@ -1,9 +1,9 @@
 ---
 trdd-id: 3VFT513C
 title: X-Forwarded-From authenticates a mesh peer on registry lookup alone and the signature header is never read
-column: todo
+column: proposal
 created: 2026-08-23T11:34:19+0200
-updated: 2026-08-23T11:34:19+0200
+updated: 2026-08-23T11:40:00+0200
 current-owner: ai-maestro-00
 created-by: ai-maestro-00
 task-type: security
@@ -130,3 +130,12 @@ Then the mirror: a correctly-attested peer still routes, so the fix is not simpl
       updated to describe whatever the new trust model actually is
 
 ## Approval log
+
+- 2026-08-23T11:40:00+0200 — FILED AS A PROPOSAL, awaiting MANAGER. Authored 2026-08-23T11:34:19
+  with `min-approval-requirement: manager` and `approved: false`, which was right, but placed in
+  `design/tasks/`, which was not: `approved: false` holds only for `column ∈ {proposal,
+  superseded}`, and a Tier-2 card in `design/tasks/` is the overlay's named anti-pattern
+  ("authoring a Tier-2/Tier-3 task directly in design/tasks/ to skip approval"). Reached by
+  accident, not intent — I declined to self-approve and then filed it as though I had. Moved to
+  `design/proposals/` with `column: proposal`. Note `trddgrep validate` passed the bad state, so
+  that invariant is documented and UNENFORCED — worth its own card.

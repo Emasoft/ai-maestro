@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-23T13:48:08+0200
-updated: 2026-08-23T14:16:04+0200
+updated: 2026-08-23T15:03:40+0200
 implementation-commits: [5f261c6c]
 current-owner: ai-maestro-00
 created-by: ai-maestro-00
@@ -339,6 +339,32 @@ producer's beat, while a genuinely resolved code must still be cleared by its OW
   Pre-approved: Tier-0 self-mandate — in-scope bugfix in `lib/`, reversible and local, touching
   no credential material, no `.github/`, no governance file and no public API. No approval
   request was sent.
+
+## VERIFIED LIVE IN PRODUCTION — 2026-08-23T14:51 (owner authorised the restart)
+
+The owner directed `pm2 start ecosystem.config.js` (deliberately NOT `restart`, which would clear
+cookies and session data). Note the pre-state: the process was **already stopped** —
+`pid=0, status=stopped` — so the pid 4054 measured earlier had died on its own at some point. New
+process `pid=89321`.
+
+Both `server-tick.ts` and `server-supervisor.ts` are runtime-imported by `server.mjs`, so the fix
+went live on that start with no rebuild. Three independent observables confirm it, and the first
+is the one that could not be faked:
+
+| observable | pre-fix | after |
+|---|---|---|
+| `codes outstanding` in `active-alerts.json` | **1** — structurally could not hold both | **2** |
+| `lastSeenAt` on the records | absent | **present on both** — the field exists only in this fix |
+| `seen` on `reauth-needed:refresh-dead` | stuck at 5, reset by every eviction | **20**, accumulating |
+
+And the eviction visibly stops in `rotator.log`. At **14:51:28** the supervisor beat ONSET its
+three `cookie-leg-stuck` findings and did **NOT** clear `rotator-stuck:all-maxed` — pre-fix every
+supervisor beat cleared it. (The 14:42:29 `CLEARED rotator-stuck:all-maxed` beside an
+`ONSET reauth-needed:refresh-dead` is legitimate and is NOT the bug: that is the TICK swapping its
+OWN code, one producer reaping one of its own, which is exactly what `owns` still permits.)
+
+So the fix is no longer merely test-verified: the defect it targets is measurably absent from the
+running system, on the same instruments that measured it present.
 
 ## Implementation
 

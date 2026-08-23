@@ -195,9 +195,11 @@ direction is **DOWN**.
 `if (deps.notify)` at `:234`, **no default is applied anywhere**, and NEITHER production call
 site supplies one (`server-supervisor.ts:110` and `server-tick.ts:234` both pass `{log, owns}`).
 So the desktop banner **never fires in production**. What does fire is the `log(…DELIVER…)` line
-at `:233`, which sits OUTSIDE that guard — and at the tick site `log` is
-`(m) => console.warn(m)`, i.e. **stderr**, so it lands in pm2-error.log rather than pm2-out.log.
-Any claim about "banners" here is vacuous; the real consumer is that log line.
+at `:233`, which sits OUTSIDE that guard — and BOTH sites route it to **stderr**, so it lands in
+pm2-error.log rather than pm2-out.log: the tick passes `log: (m) => console.warn(m)`
+(`server-tick.ts:234`) and the supervisor defaults to the same
+(`server-supervisor.ts:84`, `deps.log ?? ((msg) => console.warn(msg))`). Any claim about
+"banners" here is vacuous; the real consumer is that log line.
 
 > Worth a separate card if anyone cares: `DeliveryDeps.notify`'s own doc comment says
 > *"Default: a macOS/Linux desktop banner"*. There is no such default. The comment describes an

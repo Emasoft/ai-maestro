@@ -173,8 +173,38 @@ Candidate directions, cheapest first — none ruled in:
 >   communication-graph enforcement. With `senderAgent` null the condition is falsy and the whole
 >   block does not run, so a mesh caller is not measured against the graph at all.
 >
-> That is the same phrase TRDD-8Q5EVGV1 used about the forged-token path — *every governance title
-> check is bypassed* — reached here by a different route.
+> **NEITHER of those is yet a severity claim, and an earlier draft of this box wrongly borrowed
+> TRDD-8Q5EVGV1's phrase "every governance title check is bypassed" for them. Struck:**
+> - `:1116` fires ONLY when `getAllowedRecipients(title).length === 0`, i.e. for a title with no
+>   permitted recipients at all. Skipping it is not skipping the graph; it is skipping a narrow
+>   pre-check that would fire for almost no sender.
+> - `:885`'s mesh exemption may simply be HOW MESH WORKS — a forwarded sender is legitimately
+>   absent from the local registry, so rejecting it would break the feature. Whether that is a
+>   hole or the design is not established by reading the branch.
+>
+> ### SEVERITY IS UNDETERMINED, and this card stops trying to determine it
+>
+> Three positions have been asserted here across three commits — "becomes a normal authenticated
+> caller", then "restricted and second-class", then "a bypass" — each stated with confidence and
+> each corrected by the next. The oscillation is the finding: every one was reached by reading a
+> little more code and generalising from it, which is the same defect three times, not
+> convergence.
+>
+> **What IS established, all by contiguous reads or whole-file greps:**
+> - authentication is granted on `X-Forwarded-From` naming a resolvable host id, with no
+>   signature check (`:770-796`)
+> - `signatureHeader` and `envelopeIdHeader` are declaration-only across the whole file
+> - `senderAgent` is `null` for a mesh caller (a ternary, not an inference)
+> - two `senderAgent`-gated branches (`:885`, `:1116`) therefore do not run for mesh
+>
+> **What is NOT established, and is the actual work:** whether those skips help or harm a mesh
+> caller; whether the receiving host's graph check exists (claimed only by the `:1113` comment);
+> what the remaining `senderAgent` consumers (`:892`, `:915-917`, `:1223-1226`, `:1307`, `:1323`)
+> do with null; and lines 875-1352 generally.
+>
+> A proposal's job is to carry an open question to an approver, not to close it. The
+> authentication fact is enough for a human to decide whether to look. **Severity is for whoever
+> takes the card.**
 >
 > **One mitigation, and it is a CLAIM not a measurement:** `:1113`'s comment says this is only a
 > pre-check and *"the full graph check happens on the receiving host"*. If true, a second layer

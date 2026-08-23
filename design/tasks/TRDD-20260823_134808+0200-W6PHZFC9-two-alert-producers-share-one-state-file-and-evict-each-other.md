@@ -173,19 +173,47 @@ clears. Three checks establish they are distinct:
   the diff shows it mutates nothing; so whatever else the tick reads is IRRELEVANT unless
   alert-delivery WRITES it, and alert-delivery writes exactly two files. Grounds 2 and 3 are
   corroboration, not load. This is recorded because the opposite mistake was actually made: the
-  diff was ranked first and then three successive revisions defended ground 3 as though the
-  conclusion rested on it. It never did, and every one of those revisions was negative-value.
+  diff was ranked first and then successive revisions hardened ground 3 as though the conclusion
+  rested on it. It never did.
+
+  **The lesson is NOT "corrections are waste" — be precise about which ones were.** The FIRST
+  revision retracted a real overstatement ("cannot reach it whatever it says", asserted off two
+  line numbers) and was worth making on its own terms. The LATER ones — closing scope, then
+  identifier, then direction on ground 3 — were the negative-value ones, because they hardened a
+  ground that was never carrying the conclusion. The transferable rule is: **establish which
+  ground carries the conclusion BEFORE hardening a corroborating one.**
 
 ### What this fix DOES change downstream — "no state feedback" is not "no behaviour change"
 
 Nothing derives state from `rotator.log`, so suppressing the spurious `CLEARED` lines has no
 state effect beyond the log becoming readable again. But the fix changes `active-alerts.json`
 CONTENT — it adds `lastSeenAt` and, the point of the card, RETAINS both producers' codes instead
-of letting each evict the other. More retained codes means more entries can reach `deps.notify`,
-the desktop banner channel. That is a real, user-visible behaviour change, and it is the
-INTENDED one: a persistent alert now escalates through the backoff ladder instead of resetting
-its clock every time the other producer beats. Recorded so nobody later reads "no downstream
-effect" as "no behaviour change" and treats a correctly-escalating alert as a regression.
+of letting each evict the other. That is a real, user-visible behaviour change on the
+`deps.notify` desktop-banner channel, and the direction is **DOWN**:
+
+`dueForDelivery` (`:83-90`) opens `if (rec === undefined) return true // never seen → the onset,
+always deliver`. Under eviction the other producer's beat DELETED this code's record, so on its
+next beat `rec` was `undefined` and it re-delivered **as a fresh onset every time**. With the
+record retained, `rec` is defined and the ladder `[0, 900, 3600, 10800]` applies, so a persistent
+alert settles to one delivery per 3h instead of one per eviction cycle.
+
+So the fix makes the banner channel QUIETER, and it does it by restoring the suppression the
+module was built for — the same mechanism, seen from the notify side, that the "Consequence
+beyond log noise" section above describes from the backoff side.
+
+**Scope of that claim, stated precisely:** the DIRECTION follows from the code above and is
+solid. The RATE was not measured on the running system — how often the banner actually fires
+still depends on how often each condition genuinely re-onsets, which nothing here observed. The
+per-beat CODE COUNT does go up (two candidates instead of one); reading that as "more banners"
+is the count-for-rate substitution that produced the inverted claim in the first place.
+
+> **A PRIOR REVISION OF THIS SECTION SAID THE OPPOSITE** — that retaining more codes means "more
+> entries can reach `deps.notify`". That was asserted with no evidence, in a commit whose stated
+> design was to add no new measurement, and it contradicted this card's own earlier section.
+> Retaining a record does not create deliveries; it is precisely what SUPPRESSES them, by giving
+> the backoff a clock to measure from. Corrected by reading `dueForDelivery`. Left visible rather
+> than silently rewritten, because a direction-of-effect claim is the easiest kind to assert
+> without evidence and the hardest to notice afterwards.
 
   **RETRACTED, and recorded rather than quietly rewritten:** an earlier revision of this bullet
   claimed the fix "cannot reach it whatever it says" on the strength of the two line numbers in

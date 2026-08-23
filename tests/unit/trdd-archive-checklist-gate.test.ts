@@ -23,11 +23,20 @@
  * reads them as real ones.
  *
  * NEUTER RUNS (2026-08-23 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
- *   s/if (boxes.total === 0)/if (false)/        → 2 red / 6 green  (the no-checklist half)
- *   s/if (boxes.open > 0)/if (false)/           → 2 red / 6 green  (the unfinished half)
- * Complementary: each mutation reds a DIFFERENT pair, so neither half of the guard is vacuous,
- * and the four green closures in each run are the ones that must stay green — `cancelled`,
- * `superseded`, the fully-ticked card, and the missing card.
+ *   s/if (boxes.total === 0)/if (false)/   → 2 red / 6 green   (the no-checklist half)
+ *       REFUSES completed when the card has no acceptance checklist at all
+ *       is not fooled by checkboxes inside a fenced block
+ *   s/if (boxes.open > 0)/if (false)/      → 1 red / 7 green   (the unfinished half)
+ *       REFUSES completed when a box is still open
+ *
+ * Complementary: each mutation reds a DISJOINT set, so neither half of the guard is vacuous.
+ *
+ * The second count was written here as "2 red" BEFORE the run and was wrong — only one closure
+ * drives the open-box branch, because the `[~]` card has zero OPEN boxes and so passes under
+ * both the guard and its neuter. Recorded rather than quietly corrected: a predicted neuter
+ * count reads exactly like a measured one, and this file would have shipped a number nobody
+ * had observed. The `[~]` closure pins the counter's `[~]`-is-not-open semantics, not this
+ * branch.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'

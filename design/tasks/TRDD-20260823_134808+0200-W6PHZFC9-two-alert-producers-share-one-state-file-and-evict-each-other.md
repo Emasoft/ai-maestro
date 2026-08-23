@@ -188,8 +188,22 @@ clears. Three checks establish they are distinct:
 Nothing derives state from `rotator.log`, so suppressing the spurious `CLEARED` lines has no
 state effect beyond the log becoming readable again. But the fix changes `active-alerts.json`
 CONTENT — it adds `lastSeenAt` and, the point of the card, RETAINS both producers' codes instead
-of letting each evict the other. That is a real, user-visible behaviour change on the
-`deps.notify` desktop-banner channel, and the direction is **DOWN**:
+of letting each evict the other. That changes how often the delivery path fires, and the
+direction is **DOWN**.
+
+**First, WHICH channel — because it is not the banner.** `deps.notify` is guarded by
+`if (deps.notify)` at `:234`, **no default is applied anywhere**, and NEITHER production call
+site supplies one (`server-supervisor.ts:110` and `server-tick.ts:234` both pass `{log, owns}`).
+So the desktop banner **never fires in production**. What does fire is the `log(…DELIVER…)` line
+at `:233`, which sits OUTSIDE that guard — and at the tick site `log` is
+`(m) => console.warn(m)`, i.e. **stderr**, so it lands in pm2-error.log rather than pm2-out.log.
+Any claim about "banners" here is vacuous; the real consumer is that log line.
+
+> Worth a separate card if anyone cares: `DeliveryDeps.notify`'s own doc comment says
+> *"Default: a macOS/Linux desktop banner"*. There is no such default. The comment describes an
+> intent that was never wired, which is exactly the sort of thing a reader trusts.
+
+**Now the direction, for the channel that does fire:**
 
 `dueForDelivery` (`:83-90`) opens `if (rec === undefined) return true // never seen → the onset,
 always deliver`. Under eviction the other producer's beat DELETED this code's record, so on its
@@ -197,15 +211,31 @@ next beat `rec` was `undefined` and it re-delivered **as a fresh onset every tim
 record retained, `rec` is defined and the ladder `[0, 900, 3600, 10800]` applies, so a persistent
 alert settles to one delivery per 3h instead of one per eviction cycle.
 
-So the fix makes the banner channel QUIETER, and it does it by restoring the suppression the
-module was built for — the same mechanism, seen from the notify side, that the "Consequence
-beyond log noise" section above describes from the backoff side.
+So the fix makes the DELIVER log line fire less, by restoring the suppression the module was
+built for — the same mechanism, seen from the delivery side, that the "Consequence beyond log
+noise" section above describes from the backoff side.
 
-**Scope of that claim, stated precisely:** the DIRECTION follows from the code above and is
-solid. The RATE was not measured on the running system — how often the banner actually fires
-still depends on how often each condition genuinely re-onsets, which nothing here observed. The
-per-beat CODE COUNT does go up (two candidates instead of one); reading that as "more banners"
-is the count-for-rate substitution that produced the inverted claim in the first place.
+**The two-codes objection, worked out rather than waved past** — and note the pre-fix regime is
+NOT "delivers every beat", which is the tempting wrong model:
+
+- **Pre-fix, per code:** the onset delivers (`rec` undefined). On the next tick beat 60s later
+  `rec` EXISTS, `outstanding = lastDeliveredAt - firstSeenAt = 0`, so `countDeliveries → 1`,
+  rung 1, `ladder[1] = 900`, and `60 >= 900` is **false** — it does NOT re-deliver per beat. It
+  re-delivers only when the other producer EVICTS it. At the measured ~600s antiphase cycle that
+  is ~6/hour per code, and BOTH codes were re-onsetting: **~12/hour**.
+- **Post-fix, per code:** onset at t=0; 2nd at +900; `outstanding = 900 → n=2 →` rung 2, 3rd at
+  +4500; then rung 3 forever, one per 10800s. Two codes: **~0.67/hour**.
+
+**≈18× fewer.** The decisive inequality is `600 < 900`: the pre-fix inter-delivery interval is
+shorter than even the post-fix ladder's SECOND rung, so post-fix is slower in the transient as
+well as ~18× slower in steady state. The objection would invert the direction only if the
+eviction cycle exceeded ~3h; measured, it is ~10 minutes.
+
+**Scope, stated precisely:** the DIRECTION follows from the code and the measured cycle time. The
+absolute RATE was not measured on the running system — it still depends on how often each
+condition genuinely re-onsets, which nothing here observed. The per-beat CODE COUNT does go up
+(two candidates instead of one); reading that alone as "more deliveries" is the count-for-rate
+substitution that produced the inverted claim in the first place.
 
 > **A PRIOR REVISION OF THIS SECTION SAID THE OPPOSITE** — that retaining more codes means "more
 > entries can reach `deps.notify`". That was asserted with no evidence, in a commit whose stated

@@ -99,6 +99,20 @@ describe('headless-router auth mirror — forged structural credential is reject
     expect(res.bodyJson()?.error).toBe('auth_required') // the structural gate, not a handler
   })
 
+  it('whitelist: a CREDENTIAL-LESS request to a bootstrap route is NOT rejected by either gate', async () => {
+    // TRDD-8Q5EVGV1. The semantic gate exempts HEADLESS_AUTH_WHITELIST for the
+    // same reason the structural one does: those routes ARE the authentication
+    // surface, so they cannot require prior authentication. Nothing pinned that
+    // exemption — measured via scripts/dev/neuter, deleting it from the semantic
+    // gate reddened 0 of 66 tests across all four files that drive this router,
+    // because none of them exercised a whitelisted route. Removing it would make
+    // `/api/auth/login` itself require a credential in headless mode, i.e. lock
+    // the host out permanently, silently and with a green suite.
+    const res = await call('GET', '/api/v1/health')
+    expect(res.statusCode).toBe(200)
+    expect(res.bodyJson()?.error).toBeUndefined()
+  })
+
   it('control: the FORGED token PASSES the structural gate but is rejected by handler auth (not auth_required)', async () => {
     // This is the load-bearing premise of the whole test: the forged token is
     // shape-valid, so it reaches the per-handler auth. If it were bounced by

@@ -192,18 +192,34 @@ meanings, normatively (`PRRD G3.1`–`G7.1`):
 - `dev` gains one obligation (`PRRD G10.1`): the plan's steps are ENFORCED — executed and
   their execution verified — so they persist across sessions.
 
-`3P-KAN-21` **pre-3.0.0-cards-are-grandfathered** — `MUST NOT` be auto-migrated. Moving `design`
-ahead of `todo` changed what `todo` ASSERTS: from "approved and queued" to "approved AND
-designed". Every card that entered `todo` before 2026-08-23 did so under the old meaning, so it
-now over-claims through no fault of its author. Measured at the amendment: **62 of 176**
-non-archived cards sit at `todo`, and **1** carries any design field at all.
+`3P-KAN-21` **pre-3.0.0-cards-are-grandfathered** — `MUST NOT` be auto-migrated. This covers
+**every card that entered, before 2026-08-23, a column whose MEANING the amendment changed** —
+not only `todo`. THREE columns changed meaning:
 
-The boundary is the amendment date. A card at `todo` on or before 2026-08-23 is CONFORMANT as it
-stands and `MUST NOT` be flagged; a card ENTERING `todo` after it asserts the new meaning and
-`MUST` have cleared `design`/`design_ai_review` first. Stating the boundary is the whole clause:
-an un-bounded retroactive rule produces a wall of warnings on 61 innocent cards, and a linter that
-cries wolf on the majority of its corpus gets routed around — which is how the checklist gate went
-vacuous on 87 of 108 cards once already.
+| column | meant, ≤2.x | asserts, 3.0.0 | measured drift |
+|---|---|---|---|
+| `todo` | approved and queued | approved **AND designed** | 62 of 176 cards; **1** carries any design field |
+| `design` | queued, being designed (it sat AFTER `todo`, so it made no approval claim) | approved, undesigned, not yet queueable | **5 of 8** carry no `approved:` at all |
+| `backburner` | deferred | **not yet approved** (`PRRD G3.1`) | **9 of 15** carry `approved: true` |
+
+Note the two design/backburner drifts run in OPPOSITE directions — under-approved and
+over-approved — which is precisely why no sweep can repair them and why each is a per-card
+judgment.
+
+The boundary is the amendment date. A card that entered one of those columns on or before
+2026-08-23 is CONFORMANT as it stands and `MUST NOT` be flagged; a card entering after it asserts
+the new meaning. Stating the boundary is the whole clause: un-bounded, this is a wall of warnings
+on ~76 cards whose authors did nothing wrong, and a linter that cries wolf on the majority of its
+corpus gets routed around — which is how the checklist gate went vacuous on 87 of 108 cards once
+already.
+
+**This clause was widened hours after it was written, and the reason is worth keeping.** It first
+named `todo` ALONE, because `todo` was the drift I had measured. The ARCHITECT session then
+measured `design` and `backburner` and found 14 more cards outside a boundary written for exactly
+their situation — *"a rule whose literal scope is narrower than the situation it was written for"*,
+which is the identical defect 3P-KAN-20 had just repaired one clause earlier. Two instances in one
+amendment: the failure is not carelessness about one column, it is writing a grandfather boundary
+from the drift you happened to measure instead of from the set of things that changed.
 
 Re-columning a grandfathered card is a PER-CARD judgment for its owner, never a sweep. A scripted
 pass over prose it cannot parse destroys the audit trail it was meant to repair. This clause
@@ -235,8 +251,36 @@ non-resting column that is not progressing is a DEFECT, not a neutral state. The
 columns are exactly `backburner`, the terminal set, and the three columns that wait on a
 DECISION BY ANOTHER PARTY — `approval`, `design_human_review` and `human_review`. Every other
 column from `design` through `ai_review` is a WORKING column and asserts motion. A resting
-column is not a licence to forget: a card parked in one of the three `MUST` name the approver
-it is waiting on, and the wait itself is reportable.
+column is not a licence to forget: for a card parked in one of the three, WHO it waits on `MUST`
+be DERIVABLE without reading the body, and the wait itself is reportable.
+
+`3P-KAN-22` **the-approver-is-derived-not-declared** — `MUST NOT` mint a field for it. The
+approver of a resting-decision card is already determined:
+
+| column | who it waits on | from |
+|---|---|---|
+| `human_review` | the USER | the COLUMN — `human_review → complete\|dev` is USER-only |
+| `design_human_review` | the USER (or the MANAGER, when the USER explicitly delegated acting on their behalf in their absence) | the COLUMN (`PRRD G6.1`) |
+| `approval` | the CHIEF-OF-STAFF or the MANAGER | **`min-approval-requirement:`**, which already names the authority |
+
+So the obligation in 3P-KAN-10 is satisfied by fields that exist, and a detector can evaluate it
+today with no back-fill: measured 2026-08-23, **166 of 176** non-archived cards already carry
+`min-approval-requirement:`, and all 4 cards at `human_review` do.
+
+**Why this clause exists rather than a new field.** 3P-KAN-10's "name the approver" was added in
+3.0.0 as prose and named no field, so as written it was a `MUST` that no card in the corpus
+satisfied and no detector could check — the exact shape that gets read literally by a future
+detector and reports the entire resting population as non-conformant. Two obvious fixes were
+proposed (mint `awaiting-approver:` and back-fill, or declare the obligation prose-only and
+un-checkable); both are worse than noticing that the fact is already recorded twice over. A field
+whose value is always derivable from another field is a second source of truth waiting to
+disagree with the first. Found by the ORCHESTRATOR session, which measured the absence across
+four candidate field names before reporting it rather than asserting the gap.
+
+One consequence worth stating: a card at `human_review` carrying `min-approval-requirement: none`
+is not a contradiction to auto-repair. The field records the APPROVAL-GATE tier the card needed to
+be authorized; the column records who owes the current verdict. They answer different questions
+and a tool `MUST NOT` reconcile them.
 
 `human_review` joined that set in 3.0.0, and it is a REPAIR, not a new policy. Until then this
 clause read *"`todo` through `human_review` are WORKING columns"* while 3P-KAN-12's WIP list was

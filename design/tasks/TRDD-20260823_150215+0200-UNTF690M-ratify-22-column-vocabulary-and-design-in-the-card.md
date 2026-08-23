@@ -44,13 +44,31 @@ The card was renamed to match; the id `UNTF690M` is unchanged.
   added). New/changed clauses: `3P-KAN-01/02/03/04/04a/04b/04c/05/10/12`, `3P-TRDD-13`, and
   the `@spec:kanban-columns` block bumped `v1 → v2`.
 
-**In flight** — five parallel workers on DISJOINT file sets: (1) `types/*` +
-`lib/kanban-field-authority.ts` + vocabulary tests, (2) `lib/trdd-doctor.ts` +
-`lib/trdd-create.ts`, (3) `scripts/amp-kanban-*.sh` + manifests, (4) `rules/aimaestro/*.md`,
-(5) `scripts/trddgrep.mjs` `--design-body`.
+**Landed since:** all six workers verified first-hand; the gate wiring; the three-way fallback
+(a SECOND USER directive, `PRRD G11.1`); and FOUR spec repairs that PEER SESSIONS found by
+cross-reading the amendment against the corpus — none of which any test could have caught.
 
-**NEXT ACTION.** Verify each worker's report first-hand (a `[DONE]` covers only the checks it
-was given), then run the four gates and record the counts in `## Acceptance`.
+**NEXT ACTION.** Put the two open decisions to the USER (push authorization for 283 commits;
+the two stale janitor-shipped global rules). Nothing else is blocked.
+
+**THE PEER FINDINGS, because they are the most valuable output of this card:**
+
+| # | Found by | Defect | Repair |
+|---|---|---|---|
+| 1 | ai-maestro-plugin | **Nothing is pushed.** I cited commit shas as though peers could fetch them; the branch is 283 ahead and the published state is 2026-08-21. Two peers had already "verified" against LOCAL trees, which would have made the error look confirmed. | Every later broadcast marks it unpushed; 9 earlier recipients corrected. |
+| 2 | ARCHITECT | **The spec forbade 40% of its own board.** 3P-KAN-01 said "EXACTLY one of the N … no others" since 1.0.0 while the code accepted `VALID_COLUMNS` = 27. 70 of 176 cards carry a bracket value. PRE-DATES 3.0.0 by every version. | `3P-KAN-20` — board vocabulary (22) and legal `column:` set (27) are different sets. |
+| 3 | ORCHESTRATOR | **`human_review` was a WORKING column that waits on a person.** 3P-KAN-10 and 3P-KAN-12 already disagreed about it pre-3.0.0; naming the resting principle made the omission visible. A correctly-parked card read as a stall with no `blocked-by:` it could honestly name. | `3P-KAN-10` — `human_review` joins the resting set. |
+| 4 | ORCHESTRATOR | **A MUST I wrote hours earlier was unsatisfiable.** "Name the approver" named no field; zero cards carried one; four candidate field names measured absent. | `3P-KAN-22` — the approver is DERIVED (from the column, or from `min-approval-requirement:`, on 166/176 cards). No field minted: a value always derivable from another field is a second source of truth. |
+| 5 | ARCHITECT | **My own grandfather clause had the SAME defect as #2** — `3P-KAN-21` named `todo` alone when THREE columns changed meaning. 14 more cards sat outside a boundary written for their situation. | `3P-KAN-21` widened to all three, with the opposite-direction drifts measured. |
+
+**SUPERSEDED — do NOT carry forward:**
+- ~~"insert TWO new columns"~~ — it is FIVE, and `design` also MOVES.
+- ~~"17 → 19 columns"~~ — it is **17 → 22** (board), and the legal `column:` set is **27**.
+- ~~the placement note asking which side of `design` the new columns go~~ — SETTLED by the
+  USER's second directive.
+- ~~`verify_assumptions` immediately precedes `dev`~~ — `dispatch` sits between them.
+- ~~"`3P-KAN-04a/b/c`"~~ — malformed ids, invisible to the pillar grammar; renumbered 17/18/19.
+- ~~"a card with no `column:` defaults to `todo`"~~ — three-way since `PRRD G11.1`.
 
 **SUPERSEDED — do NOT carry forward:**
 - ~~"insert TWO new columns"~~ — it is FIVE, and `design` also MOVES.

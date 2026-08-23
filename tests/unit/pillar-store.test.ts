@@ -71,7 +71,12 @@ describe('SPEC — N clauses per document, id in the body', () => {
     // `todo` are grandfathered, with the boundary stated). Both were found by PEER SESSIONS
     // cross-reading the amendment against the corpus — no test compares the spec's prose to
     // VALID_COLUMNS, which is why the older of the two survived every version bump.
-    expect(threeP.length).toBe(86)
+    // 87 the same day: +3P-KAN-22, which resolves a MUST added hours earlier in 3P-KAN-10 ("name
+    // the approver") that no card satisfied and no detector could check. The approver turned out
+    // to be already derivable — from the COLUMN for the two human ones, and from
+    // `min-approval-requirement:` for `approval` (166 of 176 cards carry it) — so the fix was to
+    // NOT mint a field. Raised by the ORCHESTRATOR session.
+    expect(threeP.length).toBe(87)
     expect(threeP.every((r) => /^3P-[A-Z]+-\d{2}$/.test(r.id))).toBe(true)
     // Every record carries the line it was declared on — that is what a lint reports.
     expect(threeP.every((r) => typeof r.line === 'number' && r.line! > 0)).toBe(true)
@@ -100,7 +105,7 @@ describe('SPEC — N clauses per document, id in the body', () => {
     // stopped meaning "more than one file's worth" again, for the second time.
     // 86 the same day (3P-KAN-20, 3P-KAN-21) — the floor tracks the biggest file or it stops
     // meaning anything, which is exactly the failure this comment already records twice.
-    expect(recs.length).toBeGreaterThan(86)
+    expect(recs.length).toBeGreaterThan(87)
   })
 
   it('DECLARATION is line-anchored — a citation inside prose is NOT a record', () => {

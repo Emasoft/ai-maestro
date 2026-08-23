@@ -1,6 +1,6 @@
 /**
  * The 3-pillars conformance SPEC (rules/aimaestro/3-pillars-spec.md, ai-maestro#85)
- * is the ARBITER of the 17-column kanban vocabulary. That vocabulary is duplicated
+ * is the ARBITER of the 22-column kanban vocabulary. That vocabulary is duplicated
  * across at least five artefacts (the spec, types/task.ts, types/team.ts,
  * GOVERNANCE-RULES R25, the janitor IND rule) with no shared source — exactly the
  * drift surface the spec exists to close.
@@ -46,10 +46,10 @@ function specKanbanColumns(): string[] {
 }
 
 describe('3-pillars SPEC conformance — kanban vocabulary (ai-maestro#85)', () => {
-  it('the spec pins exactly 17 columns, no duplicates', () => {
+  it('the spec pins exactly 22 columns, no duplicates', () => {
     const cols = specKanbanColumns()
-    expect(cols).toHaveLength(17)
-    expect(new Set(cols).size).toBe(17)
+    expect(cols).toHaveLength(22)
+    expect(new Set(cols).size).toBe(22)
   })
 
   it('types/task.ts DEFAULT_STATUSES conforms to the spec verbatim (order + spelling)', () => {

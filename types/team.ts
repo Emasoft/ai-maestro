@@ -30,14 +30,20 @@ export interface KanbanColumnConfig {
 
 /**
  * Default kanban — used when a team has no custom kanban config.
- * 14 TRDD-v2 lifecycle stages + 3 orthogonal exception states
+ * 19 TRDD-v2 lifecycle stages + 3 orthogonal exception states
  * (blocked / failed / superseded). The ids/order MUST stay in sync with
- * DEFAULT_STATUSES in types/task.ts.
+ * DEFAULT_STATUSES in types/task.ts. Per design/specs/3-pillars-spec.md
+ * clause 3P-KAN-01 (spec-version 3.0.0).
  */
 export const DEFAULT_KANBAN_COLUMNS: KanbanColumnConfig[] = [
   { id: 'backburner', label: 'Backburner', color: 'bg-gray-500', icon: 'Archive' },
-  { id: 'todo', label: 'To Do', color: 'bg-gray-400', icon: 'Circle' },
+  { id: 'approval', label: 'Approval', color: 'bg-fuchsia-400', icon: 'ShieldCheck' },
   { id: 'design', label: 'Design', color: 'bg-indigo-400', icon: 'PenTool' },
+  { id: 'design_ai_review', label: 'Design AI Review', color: 'bg-violet-400', icon: 'Bot' },
+  { id: 'design_human_review', label: 'Design Human Review', color: 'bg-rose-400', icon: 'UserCheck' },
+  { id: 'todo', label: 'To Do', color: 'bg-gray-400', icon: 'Circle' },
+  { id: 'verify_assumptions', label: 'Verify Assumptions', color: 'bg-sky-400', icon: 'BadgeCheck' },
+  { id: 'plan', label: 'Plan', color: 'bg-cyan-500', icon: 'ListTree' },
   { id: 'dispatch', label: 'Dispatch', color: 'bg-cyan-400', icon: 'Send' },
   { id: 'dev', label: 'Dev', color: 'bg-blue-400', icon: 'Code' },
   { id: 'testing', label: 'Testing', color: 'bg-amber-400', icon: 'FlaskConical' },

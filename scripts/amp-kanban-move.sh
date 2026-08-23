@@ -9,8 +9,9 @@
 # Usage:
 #   amp-kanban-move.sh <task-id> <status> [options]
 #
-# Status values (14 TRDD-v2 pipeline stages + 3 exception states):
-#   backburner, todo, design, dispatch, dev, testing, ai_review, human_review,
+# Status values (19 TRDD-v2 pipeline stages + 3 exception states):
+#   backburner, approval, design, design_ai_review, design_human_review, todo,
+#   verify_assumptions, plan, dispatch, dev, testing, ai_review, human_review,
 #   complete, publish, published, deploy, live, live_auditing
 #   blocked, failed, superseded
 #
@@ -70,8 +71,9 @@ show_help() {
     echo "  task-id    Task UUID or external reference"
     echo "  status     Target status column"
     echo ""
-    echo "Status values (14 TRDD-v2 pipeline stages):"
-    echo "  backburner, todo, design, dispatch, dev, testing, ai_review, human_review,"
+    echo "Status values (19 TRDD-v2 pipeline stages):"
+    echo "  backburner, approval, design, design_ai_review, design_human_review, todo,"
+    echo "  verify_assumptions, plan, dispatch, dev, testing, ai_review, human_review,"
     echo "  complete, publish, published, deploy, live, live_auditing"
     echo "Exception states:"
     echo "  blocked, failed, superseded"

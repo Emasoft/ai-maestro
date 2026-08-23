@@ -4,6 +4,7 @@ import {
   touchesGateField,
   GOVERNED_TARGET_COLUMNS,
   REVIEW_COLUMNS,
+  DESIGN_REVIEW_COLUMNS,
   GATE_CRITICAL_COLUMN_IDS,
   type KanbanFieldAuthzInput,
 } from '@/lib/kanban-field-authority'
@@ -78,6 +79,39 @@ describe('GATE 1 — governed transitions + release-evidence need MANAGER-by-AID
   it('allows any team member to make a mechanical move (dev)', () => {
     const r = authorizeKanbanFieldWrite(base({ requested: { status: 'dev' } }))
     expect(r).toBeNull()
+  })
+})
+
+// 3.0.0 (PRRD G4.1 / G7.1). These drive the REAL gate, not the set — a set-membership
+// assertion is satisfied by an unread set, and DESIGN_REVIEW_COLUMNS shipped exactly that way
+// (exported, asserted, read by nothing) until these landed.
+describe('GATE 1 — the design-stage approval gates (3.0.0)', () => {
+  it('refuses a non-manager approving its own card into design (approval → design)', () => {
+    const r = authorizeKanbanFieldWrite(base({ currentStatus: 'approval', requested: { status: 'design' } }))
+    expect(r?.status).toBe(403)
+    expect(r?.field).toBe('status')
+  })
+  it('allows a MANAGER to approve a card into design', () => {
+    const r = authorizeKanbanFieldWrite(base({
+      requesterAgentId: MANAGER, requesterIsManagerOrOwner: true, assigneeAgentId: OTHER,
+      currentStatus: 'approval', requested: { status: 'design' },
+    }))
+    expect(r).toBeNull()
+  })
+  it('refuses a non-manager escalating design_ai_review → design_human_review', () => {
+    const r = authorizeKanbanFieldWrite(base({
+      currentStatus: 'design_ai_review', requested: { status: 'design_human_review' },
+    }))
+    expect(r?.status).toBe(403)
+  })
+  it('still lets any member SUBMIT for approval and for design review (the asking is mechanical)', () => {
+    expect(authorizeKanbanFieldWrite(base({ currentStatus: 'backburner', requested: { status: 'approval' } }))).toBeNull()
+    expect(authorizeKanbanFieldWrite(base({ currentStatus: 'design', requested: { status: 'design_ai_review' } }))).toBeNull()
+  })
+  it('still lets any member walk the verify/plan gates (todo → verify_assumptions → plan → dispatch)', () => {
+    expect(authorizeKanbanFieldWrite(base({ currentStatus: 'todo', requested: { status: 'verify_assumptions' } }))).toBeNull()
+    expect(authorizeKanbanFieldWrite(base({ currentStatus: 'verify_assumptions', requested: { status: 'plan' } }))).toBeNull()
+    expect(authorizeKanbanFieldWrite(base({ currentStatus: 'plan', requested: { status: 'dispatch' } }))).toBeNull()
   })
 })
 
@@ -176,12 +210,22 @@ describe('GATE 2 — self-review ban', () => {
 
 describe('sanity — the ratified column sets', () => {
   it('governed set covers the NON-EXEMPT Y/Z targets, not the mechanical ones', () => {
-    for (const c of ['human_review', 'complete', 'publish', 'deploy', 'published', 'live', 'failed', 'superseded']) {
+    // `design` and `design_human_review` joined the governed set in 3.0.0: entering `design` IS
+    // the COS/MANAGER approval verdict (PRRD G4.1) and `design_human_review` is an escalation to
+    // the human (PRRD G7.1), structurally identical to `human_review`. Leaving either mechanical
+    // would make the approval column the USER ratified a label any member could move a card past.
+    for (const c of ['human_review', 'complete', 'publish', 'deploy', 'published', 'live', 'failed', 'superseded', 'design', 'design_human_review']) {
       expect(GOVERNED_TARGET_COLUMNS.has(c)).toBe(true)
     }
-    for (const c of ['todo', 'design', 'dispatch', 'dev', 'testing', 'ai_review', 'blocked', 'live_auditing', 'backburner']) {
+    // `approval` stays mechanical (the card's own owner SUBMITS it for approval — the governed act
+    // is the answer, not the asking) and so does `design_ai_review` (the designer submits into it).
+    for (const c of ['todo', 'dispatch', 'dev', 'testing', 'ai_review', 'blocked', 'live_auditing', 'backburner', 'approval', 'design_ai_review', 'verify_assumptions', 'plan']) {
       expect(GOVERNED_TARGET_COLUMNS.has(c)).toBe(false)
     }
+  })
+  it('design-review columns are design_ai_review and design_human_review, separate from REVIEW_COLUMNS', () => {
+    expect([...DESIGN_REVIEW_COLUMNS].sort()).toEqual(['design_ai_review', 'design_human_review'])
+    for (const c of DESIGN_REVIEW_COLUMNS) expect(REVIEW_COLUMNS.has(c)).toBe(false)
   })
   it('review columns are ai_review and human_review', () => {
     expect([...REVIEW_COLUMNS].sort()).toEqual(['ai_review', 'human_review'])
@@ -202,12 +246,16 @@ describe('GATE_CRITICAL_COLUMN_IDS — what a custom board may never rename away
   })
 
   it('leaves the purely mechanical columns free — teams may still rename or omit those', () => {
-    for (const c of ['backburner', 'todo', 'design', 'dispatch', 'testing', 'blocked']) {
+    for (const c of ['backburner', 'todo', 'dispatch', 'testing', 'blocked', 'approval', 'verify_assumptions', 'plan']) {
       expect(GATE_CRITICAL_COLUMN_IDS.has(c)).toBe(false)
     }
   })
 
-  it('every gate-critical id is a real column in the ratified 17-col vocabulary (catches a typo that would silently never match)', () => {
+  it('both design-review ids are gate-critical — a board that renamed them would leave the design-review predicates unmatchable', () => {
+    for (const c of DESIGN_REVIEW_COLUMNS) expect(GATE_CRITICAL_COLUMN_IDS.has(c)).toBe(true)
+  })
+
+  it('every gate-critical id is a real column in the ratified 22-col vocabulary (catches a typo that would silently never match)', () => {
     for (const c of GATE_CRITICAL_COLUMN_IDS) expect(DEFAULT_STATUSES).toContain(c)
   })
 })

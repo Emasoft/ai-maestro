@@ -1,0 +1,188 @@
+---
+trdd-id: UNTF690M
+title: ratify the 22-column kanban vocabulary and the design-in-the-card contract
+column: dev
+scope: project
+project-id: ai-maestro
+repo: Emasoft/ai-maestro
+created: 2026-08-23T15:02:15+0200
+updated: 2026-08-23T16:10:41+0200
+current-owner: ai-maestro-00
+created-by: user
+assignee: ai-maestro-00
+task-type: infra
+min-approval-requirement: user
+mandate: true
+mandated-by: user
+approved: true
+approval-judge: user
+approval-datetime: 2026-08-23T15:02:15+0200
+derived: false
+npt: []
+eht: []
+blocked-by: []
+release-via: none
+priority: 0
+severity: high
+effort: XL
+design-included: "false"
+labels: [governance, kanban, three-pillars, column-vocabulary, prrd]
+external-refs: []
+---
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-23
+
+**What this card is now.** It began as "add 2 columns between todo and dev". The USER then
+issued a SECOND directive the same day extending it to five new columns, a relocation of
+`design`, a new design-in-the-card contract, and the creation of the project's first PRRD.
+The card was renamed to match; the id `UNTF690M` is unchanged.
+
+**Landed so far (verify by reading the files, not this list):**
+- `design/requirements/PRRD.md` — CREATED. Golden rules `G1.1`–`G10.1`, carrying the USER's
+  two directives verbatim. This project had NO PRRD before today.
+- `design/specs/3-pillars-spec.md` — amended `2.0.0 → 3.0.0` (MAJOR, per 3P-VER-01: columns
+  added). New/changed clauses: `3P-KAN-01/02/03/04/04a/04b/04c/05/10/12`, `3P-TRDD-13`, and
+  the `@spec:kanban-columns` block bumped `v1 → v2`.
+
+**In flight** — five parallel workers on DISJOINT file sets: (1) `types/*` +
+`lib/kanban-field-authority.ts` + vocabulary tests, (2) `lib/trdd-doctor.ts` +
+`lib/trdd-create.ts`, (3) `scripts/amp-kanban-*.sh` + manifests, (4) `rules/aimaestro/*.md`,
+(5) `scripts/trddgrep.mjs` `--design-body`.
+
+**NEXT ACTION.** Verify each worker's report first-hand (a `[DONE]` covers only the checks it
+was given), then run the four gates and record the counts in `## Acceptance`.
+
+**SUPERSEDED — do NOT carry forward:**
+- ~~"insert TWO new columns"~~ — it is FIVE, and `design` also MOVES.
+- ~~"17 → 19 columns"~~ — it is **17 → 22**.
+- ~~the placement note asking which side of `design` the new columns go~~ — SETTLED by the
+  USER's second directive: `design` moves BEFORE `todo`; `verify_assumptions`/`plan` sit
+  AFTER `todo`.
+- ~~`verify_assumptions` immediately precedes `dev`~~ — `dispatch` sits between them.
+
+## Problem
+
+Two gaps, both demonstrated in this repo the same day:
+
+1. **Nothing forced a card's own claims to be CHECKED before they were built on.**
+   TRDD-W6PHZFC9's evidence was corrected NINE times across seven adversarial reviews, every
+   correction to a claim that had been asserted rather than measured — and in the last round a
+   derivation from correctly-read code was still 2× off when the observation was one grep away
+   in a file the card had already named.
+2. **Nothing forced an implementation to be PLANNED before it was executed**, and nothing
+   forced a plan to persist across sessions.
+
+The USER's second directive added a third: **`design` sat AFTER `todo`**, so a card was
+queued for work before anyone had designed it, and there was no approval column at all —
+`backburner` was doing double duty as "not approved" and "deferred".
+
+## The change
+
+### 1. The vocabulary: 17 → 22 columns
+
+```text
+backburner → approval → design → design_ai_review → (design_human_review) → todo
+  → verify_assumptions → plan → dispatch → dev → testing → ai_review → (human_review)
+  → complete → publish → published  |  deploy → live → (live_auditing)
+exception: blocked · failed · superseded
+```
+
+19 lifecycle + 3 exception. FIVE new (`approval`, `design_ai_review`, `design_human_review`,
+`verify_assumptions`, `plan`); `design` RELOCATED from after `todo` to before it; nothing
+removed. Ratified as `PRRD G2.1`, amended into the spec at 3.0.0.
+
+### 2. Design lives in the card (`PRRD G5.1`, spec `3P-TRDD-13`)
+
+No second file — the `ATRDD` sidecar idea is REVERTED (see the measurement below). The design
+body goes in the SAME card, after the divider `<!-- @trdd:design-body -->`, at most one per
+card. Four optional frontmatter fields carry the state: `design-included`, `design-approved`,
+`first-design-draft`, `last-design-revision`. `trddgrep` gains `--design-body` /
+`--no-design-body`.
+
+## Decisions I made, and why — each is overridable by the USER in one line
+
+These are recorded because the directive did not settle them and an unrecorded choice is
+indistinguishable from an oversight.
+
+| # | Decision | Ground |
+|---|---|---|
+| D1 | Enum identifiers are **snake_case** (`design_ai_review`), not the hyphens the directive spelled | MEASURED: all three pre-existing multi-word columns are snake_case (`ai_review`, `human_review`, `live_auditing`). A mixed enum invites typos no type-checker catches. The hyphenated forms are kept as the human-readable names in `PRRD G2.1`. |
+| D2 | **`dispatch` is RETAINED**, at `plan → dispatch → dev` | The directive listed `plan → dev` and closed with "the rest remain the same". `dispatch` was between `design` and `dev`; when `design` moved it was orphaned rather than removed. Dropping a ratified column is destructive and was not requested. It also still has a job — ORCHESTRATOR assignment — after the plan exists. Cheap to reverse: **0 cards currently sit in `dispatch`** (measured). |
+| D3 | `verify_assumptions` **plural** | The directive's list said `verify-assumption`, its own section heading said `VERIFY ASSUMPTIONS`. Plural matches the heading and the prose. |
+| D4 | `approval` and `design_human_review` are **RESTING** columns (3P-KAN-10) | Both wait on a decision by another party. Calling them WORKING would make the drift detector scream at every correctly-parked card, which is how a detector gets ignored. |
+
+## Verified before acting — the facts the directive asked me to check
+
+- **"those were already added after the todo, i think, check"** — **TRUE for `design`.**
+  `types/task.ts::DEFAULT_STATUSES` read `backburner, todo, design, dispatch, dev, …`, so
+  `design` WAS after `todo`. It moves, as instructed.
+- `verify_assumptions` / `plan` were **NOT** in any code enum — they existed only as this
+  card's own unimplemented proposal. Nothing to move.
+- **`approval`, `design_ai_review`, `design_human_review` did not exist** anywhere.
+- **"revert the decision about a ATRDD extra file"** — `grep -rln "ATRDD"` over the whole repo
+  returns **ZERO** files. There is no such decision recorded HERE to revert. `PRRD G5.1` and
+  `3P-TRDD-13` now state the no-second-file rule positively, so the outcome is the one the
+  directive asked for regardless of where that decision was made.
+- **No `PRRD.md` existed** anywhere in the repo before today.
+- `column: design` = 8 cards; `column: dispatch` = **0** cards (this is what makes D2 cheap).
+- 157 open task cards + 19 proposals = **176 non-archived** cards in scope for the update
+  mandate.
+
+## Consequences — every consumer of the vocabulary
+
+Measured with `grep -rln "live_auditing"` (a value unique to the enum):
+
+| consumer | owner |
+|---|---|
+| `types/task.ts`, `types/team.ts`, `lib/kanban-field-authority.ts`, `app/api/agents/[id]/full/route.ts`, 4 vocabulary tests | worker 1 |
+| `lib/trdd-doctor.ts`, `lib/trdd-create.ts` | worker 2 |
+| `scripts/amp-kanban-{create-task,list,move}.sh`, `scripts/script-manifest.json`, `docs/SCRIPT-MANIFEST.md` | worker 3 |
+| `rules/aimaestro/aimaestro-{trdd-approval,manager-approval-defaults,kanban-multiagent}.md` | worker 4 |
+| `scripts/trddgrep.mjs` | worker 5 |
+| `design/specs/3-pillars-spec.md`, `design/requirements/PRRD.md` | this session (DONE) |
+| `.claude/project/memory/{three-pillars-conformance-spec,team-meeting-and-kanban}.md` | this session |
+
+**NOT in this repo — the load-bearing external dependency.** The IND base
+`~/.claude/rules/universal-kanban.md` states the vocabulary and is shipped GLOBALLY by the
+**ai-maestro-janitor** plugin. It cannot be edited here; a project-local copy would be a
+divergent mirror. Until the janitor ships 22, every session on this machine loads a rule
+asserting 17 — and an agent "restoring the ratified baseline as-is" would read the stale
+number as current. This is tracked as the coordination item in `## Acceptance`.
+
+## Approval tier
+
+`min-approval-requirement: user`, issued directly BY the USER, so it is a **mandate** and
+needs no approval round-trip. `user` rather than `manager` because it amends a ratified
+cross-repo spec, creates the project's golden-rule document, and changes a globally-shipped
+IND rule — all above what a MANAGER may authorize alone.
+
+## Acceptance
+
+- [x] Column ORDER decided and written down before any consumer was edited.
+- [x] `design/requirements/PRRD.md` created with `G1.1`–`G10.1` carrying the USER's directives
+      verbatim.
+- [x] `design/specs/3-pillars-spec.md` amended to 3.0.0 with a dated amendment note and the
+      `@spec:kanban-columns` block bumped to v2.
+- [ ] The 22 columns landed in the canonical enum and every in-repo consumer, each verified by
+      a test or a run.
+- [ ] `3P-TRDD-13` implemented: the divider convention, the four frontmatter fields with their
+      agreement invariants in the doctor, and `trddgrep --design-body` / `--no-design-body`.
+- [ ] Neuter recorded for at least one new doctor rule AND for the trddgrep design-body split.
+- [ ] The two transition tables carry authority for every new transition.
+- [ ] Coordination opened with the ai-maestro-janitor repo for `universal-kanban.md`, and its
+      outcome recorded here — the fleet must not split on the column vocabulary.
+- [ ] Wikimem `three-pillars-conformance-spec` and `team-meeting-and-kanban` updated to 22.
+- [ ] All 20 peer sessions notified of the 3.0.0 spec.
+- [ ] Mandate issued to update the 176 non-archived cards.
+- [ ] `bash scripts/with-node.sh yarn trdd:doctor`, `trddgrep validate`, `yarn pillars:lint`
+      and the full suite all green, with counts recorded HERE. Doctor baseline before this
+      change: exit 1, exactly 2 ERRORs (`G6A54OYK`, `7123D51A`) — it must not increase.
+
+## Approval log
+
+- 2026-08-23T15:02:15+0200 — MANDATE issued by USER (min-approval-requirement: user).
+  Pre-approved: the issuer is the only authority above `manager`, and this amends a ratified
+  spec and a globally-shipped IND rule. No approval request was sent.
+- 2026-08-23T16:10:41+0200 — SCOPE EXTENDED by a second USER directive the same day: four more
+  columns, `design` relocated, the design-in-the-card contract, and the PRRD. Same mandate,
+  same authority; card renamed to match, id unchanged.

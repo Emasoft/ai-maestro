@@ -38,6 +38,10 @@ body, and AMP-broadcasts the status change up the chain for visibility
 
 | Transition | Trigger | Owner |
 |---|---|---|
+| `design → design_ai_review` | Design body drafted (PRRD G5.1) | DESIGNER (in a team) / implementer (outside a team) |
+| `todo → verify_assumptions` | Assignee begins verifying TRDD claims (PRRD G8.1) | assignee |
+| `verify_assumptions → plan` | All assumptions verified true (PRRD G8.1) | assignee |
+| `plan → dispatch` | Full implementation plan written (PRRD G9.1) | assignee |
 | `dispatch → dev` | ORCH sets `assignee:` after match-making | ORCHESTRATOR |
 | `dev → testing` | Assignee signals "code ready for tests" | MEMBER (assignee) |
 | `testing → ai_review` | All `test-requirements:` + `audit-requirements:` PASSED | test runner / MEMBER |
@@ -212,6 +216,8 @@ These are enforced by `caller_is_manager()` in `prrd_lib.py`.
 
 | Transition | Why non-exempt |
 |---|---|
+| `approval → design` | Approval decision (PRRD G4.1) — CHIEF-OF-STAFF or MANAGER, per `min-approval-requirement:` |
+| `design_ai_review → design_human_review` | Design approval decision (PRRD G6.1) — CHIEF-OF-STAFF or MANAGER |
 | `ai_review → human_review` | Escalating to USER; MANAGER relays per R6.6 / R6.10 |
 | `human_review → complete` | USER decision; MANAGER relays the verdict |
 | `human_review → dev` | USER decision; MANAGER relays the verdict |

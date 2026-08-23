@@ -1,9 +1,9 @@
 ---
 spec: 3-pillars
-spec-version: 2.0.0
+spec-version: 3.0.0
 status: normative
 created: 2026-07-22T07:54:21+0200
-updated: 2026-08-18T19:53:29+0200
+updated: 2026-08-23T16:10:00+0200
 maintainer: ai-maestro
 project-id: ai-maestro
 requested-by: Emasoft/ai-maestro#85
@@ -45,7 +45,7 @@ the `design/rules-refactor/independent/` mirror ai-maestro RETIRED in TRDD-TAFH4
 reborn as a third disagreeing copy). It states VALUES + `MUST`-assertions + the boundary
 test; the teaching prose stays in the rules, the executable logic in the code.
 
-`3P-META-03` **why-it-exists** — the 17-column vocabulary alone lives duplicated across
+`3P-META-03` **why-it-exists** — the column vocabulary alone lives duplicated across
 five artefacts (`universal-kanban.md`, `types/task.ts`, `types/team.ts`, GOVERNANCE-RULES
 R25, the DEP overlays) with no arbiter; two independently-authored halves with no shared
 source is how the IND/DEP split silently drifts (ai-maestro#83/#85, janitor#73, DE9757LJ).
@@ -94,25 +94,30 @@ The general form, worth stating because it outlives this instance: **an amendmen
 designated authority does not SERVE is not published, however correct its text** — so the
 signal must watch the served artifact, not the repository that produces it.
 
-## 3P-KAN — Pillar 1: the kanban column vocabulary (17 columns)
+## 3P-KAN — Pillar 1: the kanban column vocabulary (22 columns)
 
-`3P-KAN-01` **enum** — `MUST`: a `column:` value is EXACTLY one of the 17 in the block
+`3P-KAN-01` **enum** — `MUST`: a `column:` value is EXACTLY one of the 22 in the block
 below, these spellings, no others.
 
 `3P-KAN-02` **user-ratified** — the vocabulary is USER-ratified (TRDD-YUGDER9D /
-GOVERNANCE-RULES R25): immutable to MANAGER; only the USER may change it, and a change is a
-MAJOR bump.
+GOVERNANCE-RULES R25; extended to 22 by `PRRD G2.1`, USER 2026-08-23, TRDD-UNTF690M):
+immutable to MANAGER; only the USER may change it, and a change is a MAJOR bump.
 
 `3P-KAN-03` **align-to** — `MUST`: every consumer (UI boards, GitHub-Project mirrors,
-`amp-kanban-*.sh`, role-plugins, `types/task.ts`, `types/team.ts`) aligns TO this list,
-never the reverse. A coarser view MAY group columns for display but `MUST` round-trip
-mutations back to these 17.
+`amp-kanban-*.sh`, role-plugins, `types/task.ts`, `types/team.ts`, `trddgrep`,
+`lib/trdd-doctor.ts`) aligns TO this list, never the reverse. A coarser view MAY group
+columns for display but `MUST` round-trip mutations back to these 22.
 
-<!-- @spec:kanban-columns v1 — authoritative; the conformance test extracts the block below verbatim -->
+<!-- @spec:kanban-columns v2 — authoritative; the conformance test extracts the block below verbatim -->
 ```text
 backburner
-todo
+approval
 design
+design_ai_review
+design_human_review
+todo
+verify_assumptions
+plan
 dispatch
 dev
 testing
@@ -129,12 +134,43 @@ failed
 superseded
 ```
 
-`3P-KAN-04` **lifecycle** — happy-path order: `backburner → todo → design → dispatch → dev
-→ testing → ai_review → (human_review) → complete`, then `publish → published`
+`3P-KAN-04` **lifecycle** — happy-path order: `backburner → approval → design →
+design_ai_review → (design_human_review) → todo → verify_assumptions → plan → dispatch →
+dev → testing → ai_review → (human_review) → complete`, then `publish → published`
 (`release-via: publish`) OR `deploy → live → (live_auditing)` (`release-via: deploy`).
 
+`3P-KAN-04a` **spelling** — the USER's ratifying directive spelled the five columns added in
+3.0.0 with hyphens (`design-ai-review`, `design-human-review`, `verify-assumption`). The
+ENUM IDENTIFIERS are snake_case, because all three pre-existing multi-word columns are
+(`ai_review`, `human_review`, `live_auditing`) and a mixed enum invites typos no type-checker
+catches. Hyphenated forms are human-readable names and `MAY` appear in prose; only the
+snake_case forms are legal `column:` VALUES. (`PRRD G2.1`.)
+
+`3P-KAN-04b` **design-columns** — the four columns added ahead of `todo` in 3.0.0 carry these
+meanings, normatively (`PRRD G3.1`–`G7.1`):
+- `approval` — the card is with the CHIEF-OF-STAFF or the MANAGER (per its
+  `min-approval-requirement:`) awaiting approval. `backburner` now means only *not yet
+  approved*.
+- `design` — the card is expanded IN PLACE with detailed design and specs by the DESIGNER (in
+  a team) or by the implementer itself (outside one). See 3P-TRDD-13: **no second file**.
+- `design_ai_review` — the design body is reviewed by the COS or the MANAGER.
+- `design_human_review` — the human reviews it; a UI design `MUST` ship a visual artifact to
+  annotate. **SKIPPED entirely when `min-approval-requirement: none`.**
+
+`3P-KAN-04c` **verify-and-plan** — the two columns added between `todo` and `dispatch` in
+3.0.0 are gates on FACT and on METHOD (`PRRD G8.1`, `G9.1`):
+- `verify_assumptions` — every claim in the card is verified; where a fact cannot be checked
+  directly a TEST is created to verify it. Passes only when nothing in the card is still an
+  assumption.
+- `plan` — the implementation is planned by Claude Code's plan-mode steps run
+  NON-interactively, every choice made autonomously from verified facts. Passes only when a
+  complete plan FILE exists.
+- `dev` gains one obligation (`PRRD G10.1`): the plan's steps are ENFORCED — executed and
+  their execution verified — so they persist across sessions.
+
 `3P-KAN-05` **return-edges** — `testing` may return to `dev` on failure; `ai_review` may
-return to `dev` on rejection.
+return to `dev` on rejection; `design_ai_review` and `design_human_review` may return to
+`design` on rejection, which `MUST` bump `last-design-revision:` (3P-TRDD-13).
 
 `3P-KAN-06` **blocked** — entered from any working column whenever `blocked-by:` is
 non-empty; record `pre-block-column:` and restore to it when it clears.
@@ -155,15 +191,19 @@ a direction of flow; it exists to ensure tasks are always being worked.
 
 `3P-KAN-10` **pipeline-not-cabinet** — `MUST`: the board is a PIPELINE. A card in a
 non-resting column that is not progressing is a DEFECT, not a neutral state. The resting
-columns are exactly `backburner` and the terminal set; `todo` through `human_review` are
-WORKING columns and assert motion.
+columns are exactly `backburner`, the terminal set, and the two columns that wait on a
+DECISION BY ANOTHER PARTY — `approval` and `design_human_review` (3.0.0). Every other column
+from `design` through `human_review` is a WORKING column and asserts motion. A resting column
+is not a licence to forget: a card parked in `approval` or `design_human_review` `MUST` name
+the approver it is waiting on, and the wait itself is reportable.
 
 `3P-KAN-11` **blocked-is-the-only-stillness** — `MUST`: a card may sit still ONLY with a
 non-empty `blocked-by:` naming an OPEN card (3P-KAN-06). Stillness without one is a stall.
 Corollary: `blocked-by:` naming a TERMINAL card is not a licence — it is drift, and the card
 must resume.
 
-`3P-KAN-12` **wip-matches-capacity** — `MUST`: a WORK column (`dev`/`testing`/`ai_review`)
+`3P-KAN-12` **wip-matches-capacity** — `MUST`: a WORK column
+(`design`/`design_ai_review`/`verify_assumptions`/`plan`/`dev`/`testing`/`ai_review`)
 asserts that a worker is progressing that card NOW. The count of such cards `MUST NOT` exceed
 the number of workers able to progress them. **An untrue column is worse than an unstarted
 card**: it hides the stall from the one view anyone consults.
@@ -255,9 +295,39 @@ post-hoc linter is `NOT` a substitute: it reports corruption that already happen
 158 column-less cards this clause exists to prevent were every one of them written by a seam
 that checked only that each value was a string (TRDD-SCMPWF6R).
 
+`3P-TRDD-13` **design-lives-in-the-card** — `MUST` (`PRRD G5.1`, 3.0.0): a card's
+implementation design is written INTO THE SAME TRDD FILE. There is `NO` second document — no
+`ATRDD`, no sidecar spec, no design folder per card; a redundant file is a second source of
+truth that drifts from the card it describes. The card carries the ORIGINAL body plus the
+design text, separated by a machine-greppable DIVIDER so a tool can extract the design half
+alone:
+
+```text
+<!-- @trdd:design-body -->
+```
+
+- The divider `MUST` be that exact HTML comment on a line of its own. Everything AFTER it, to
+  end of file, is the DESIGN BODY; everything before it is the ORIGINAL body. At most ONE
+  divider per card — a second is an ERROR, because "the design half" would then be ambiguous.
+- `trddgrep` `MUST` expose a filter that greps ONLY the design body (`--design-body`), and its
+  complement (`--no-design-body`) for the original half. A design search that silently matches
+  the problem statement is the drift this divider exists to prevent.
+- Four frontmatter fields carry the design STATE, and they are the greppable half of it:
+  `design-included: "true|false"` (a design body is present), `design-approved: "true|false"`
+  (it cleared the design-review columns), `first-design-draft: "<DATETIME>"` (ISO 8601 with
+  offset, set ONCE when the design body first lands) and `last-design-revision: "<DATETIME>"`
+  (bumped on EVERY return to `design` from a design review).
+- The fields `MUST` agree with the file: `design-included: true` `IFF` a divider is present;
+  `design-approved: true` requires `design-included: true`; `first-design-draft` requires
+  `design-included: true`; `last-design-revision` `MUST NOT` precede `first-design-draft`. A
+  disagreement is an ERROR — the fields exist so a board query never has to open the body.
+- A design choice that touches a PRRD golden or silver rule `MUST` be escalated per the card's
+  `min-approval-requirement:` before it is written in, by the DESIGNER, by the design reviewer,
+  or by the implementer acting alone outside a team (`PRRD G5.1`, `G6.1`).
+
 ## 3P-ZON — the ZONE pipeline: proposals → tasks → archived
 
-A **ZONE** is the lifecycle FOLDER a card sits in. A **COLUMN** is its position on the 17-column
+A **ZONE** is the lifecycle FOLDER a card sits in. A **COLUMN** is its position on the 22-column
 board. They are orthogonal and are constantly confused: 3P-KAN governs the column, 3P-TRDD-06 the
 scope root, and until this family nothing governed the zone. The zone answers *"is this card
 authorized, open, or finished?"*; the column answers *"how far along is it?"*.
@@ -522,7 +592,7 @@ applied from memory until now — ai-maestro#85 item 4.)*
 | a statement that mentions… | layer |
 |---|---|
 | one Claude; the USER approves; a plain git repo; markdown + grep | **IND** |
-| the 17-column vocabulary, TRDD/PRRD file formats, folder lifecycle | **IND** (the contract; this spec) |
+| the 22-column vocabulary, TRDD/PRRD file formats, folder lifecycle | **IND** (the contract; this spec) |
 | governance TITLES (MANAGER/COS/ORCHESTRATOR/…); the comm graph | **DEP** |
 | `min-approval-requirement`, approval tiers, mandate authority, COS routing | **DEP** |
 | the ai-maestro server as notarizer/enforcer; `$AID_AUTH`; the dashboard | **DEP** |

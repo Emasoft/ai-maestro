@@ -25,9 +25,9 @@
  * Status columns whose ENTRY is a governed (NON-EXEMPT) transition — release,
  * escalation, and the terminal decisions. Moving a card INTO one of these, or
  * writing a release-confirmation field, requires MANAGER-by-AID or the human
- * owner. Every other column (todo, design, dispatch, dev, testing, ai_review,
- * blocked, live_auditing, backburner) is a mechanical (EXEMPT-A) move any team
- * member may make.
+ * owner. Every other column (backburner, approval, design_ai_review, todo,
+ * verify_assumptions, plan, dispatch, dev, testing, ai_review, blocked,
+ * live_auditing) is a mechanical (EXEMPT-A) move any team member may make.
  */
 export const GOVERNED_TARGET_COLUMNS: ReadonlySet<string> = new Set([
   'human_review', // escalation to USER (Z)
@@ -38,6 +38,17 @@ export const GOVERNED_TARGET_COLUMNS: ReadonlySet<string> = new Set([
   'live',         // release confirmed (Y)
   'failed',       // permanent-abandon decision (Y)
   'superseded',   // force-supersede (Y)
+  // --- 3.0.0 (PRRD G4.1 / G6.1 / G7.1) ---
+  // Entering `design` IS the approval verdict: `approval → design` is the COS/MANAGER saying
+  // yes (PRRD G4.1), and the only other way in is a design reviewer rejecting back down —
+  // also COS/MANAGER. Both hands are governed, so the target is. Without this the approval
+  // column the USER just ratified would be a label any member could move a card past, i.e.
+  // a gate that exists only in prose.
+  'design',
+  // Escalation to the human, structurally identical to `human_review` (PRRD G7.1) — and
+  // SKIPPED entirely when min-approval-requirement is none, which is a routing decision
+  // upstream of this gate, not a licence to enter it unauthorized.
+  'design_human_review',
 ])
 
 /**
@@ -56,6 +67,15 @@ const GOVERNED_BACKWARD_TO_DEV: ReadonlySet<string> = new Set(['human_review', '
 export const REVIEW_COLUMNS: ReadonlySet<string> = new Set(['ai_review', 'human_review'])
 
 /**
+ * The DESIGN-stage review columns (3P-KAN-04b) — a separate concern from REVIEW_COLUMNS:
+ * they gate a `design_ai_review`/`design_human_review` → `design` return-edge or a
+ * → `todo` advance, never the `→ complete` verdict GATE 2 reasons about. Deliberately
+ * NOT merged into REVIEW_COLUMNS so GATE 2's self-judgment ban stays scoped to the
+ * dev-stage review columns it was written for.
+ */
+export const DESIGN_REVIEW_COLUMNS: ReadonlySet<string> = new Set(['design_ai_review', 'design_human_review'])
+
+/**
  * The column ids BOTH gates structurally depend on (ai-maestro#74 — the enum hard-lock residual,
  * resolved as Option C).
  *
@@ -67,14 +87,20 @@ export const REVIEW_COLUMNS: ReadonlySet<string> = new Set(['ai_review', 'human_
  * GOVERNED_TARGET_COLUMNS any more. The gate would still "run"; it just could never fire.
  *
  * `setKanbanConfig` therefore REQUIRES a custom set to still contain every id here. Teams keep full
- * freedom to ADD columns and to rename/omit the NON-governed ones (backburner, todo, design,
- * dispatch, testing, blocked). This is derived from the gate's OWN sets rather than re-listed, so a
- * future change to what is governed updates the config check automatically — the two cannot drift.
+ * freedom to ADD columns and to rename/omit the NON-governed ones (backburner, approval, todo,
+ * verify_assumptions, plan, dispatch, testing, blocked).
+ * This is derived from the gate's OWN sets rather than re-listed, so a future change to what is
+ * governed updates the config check automatically — the two cannot drift.
  */
 export const GATE_CRITICAL_COLUMN_IDS: ReadonlySet<string> = new Set<string>([
   ...Array.from(GOVERNED_TARGET_COLUMNS),
   ...Array.from(GOVERNED_BACKWARD_TO_DEV),
   ...Array.from(REVIEW_COLUMNS),
+  // `design_ai_review` is not a governed TARGET (the designer submits into it, mechanically),
+  // but the design-review return-edge and escalation predicates key on the id, so a board that
+  // renamed it would leave them unmatchable — the same hole ai-maestro#74 closed for the
+  // dev-stage review columns. Spread the set rather than re-listing, so the two cannot drift.
+  ...Array.from(DESIGN_REVIEW_COLUMNS),
   'dev', // the TARGET half of the governed backward moves (human_review|live_auditing → dev)
 ])
 

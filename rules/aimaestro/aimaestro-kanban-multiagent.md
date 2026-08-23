@@ -4,7 +4,7 @@
 
 > **DEP overlay — installed by the ai-maestro server** into each
 > registered agent workdir's `.claude/rules/`. It EXPANDS the IND base
-> `universal-kanban.md` (the mono-agent 17-column board over the TRDD
+> `universal-kanban.md` (the mono-agent 22-column board over the TRDD
 > corpus — shipped globally by the ai-maestro-janitor and assumed
 > present); base content is NOT restated here. This overlay turns the
 > same board multi-agent: shared per project, many assignees, edited
@@ -123,7 +123,7 @@ internal universal kanban (TRDD column: over design/)   ← SSOT
         │     server task registry) — the USER's live management view
         │
         └──▶ GitHub Project kanban — a MIRROR of the internal board
-              (Status field options = the 17 ratified labels)
+              (Status field options = the 22 ratified labels)
 ```
 
 - Sync is **one-way authoritative**: the internal board is truth; the
@@ -131,7 +131,7 @@ internal universal kanban (TRDD column: over design/)   ← SSOT
   mirror (a user dragging a card in the UI, a Status change on the
   GitHub Project) is applied by writing it BACK to the TRDD (`column:`
   edit + folder `git mv`) — never by letting the mirror diverge.
-- The server `TaskStatus` vocabulary is 1:1 with the 17 columns; every
+- The server `TaskStatus` vocabulary is 1:1 with the 22 columns; every
   consumer (dashboard boards, GitHub Project mirrors, `amp-kanban-*.sh`,
   role-plugins) aligns TO the ratified vocabulary, never the reverse.
 
@@ -141,13 +141,13 @@ Agents mutate the board via the `amp-kanban-*.sh` scripts (the
 decoupling layer — never the server API directly). Task creation
 carries the full TRDD field contract (`--parent`, `--npt`, `--eht`,
 `--supersedes`, `--relevant-rules`, `--severity`, `--effort`,
-`--release-via`, `--status` with the 17-column vocabulary).
+`--release-via`, `--status` with the 22-column vocabulary).
 
 ## Orchestrator-plugin alignment (the contract downstream tools must satisfy)
 
 The ORCHESTRATOR role-plugin's kanban scripts MUST:
 
-- use the ratified 17-column vocabulary verbatim (no renames, no
+- use the ratified 22-column vocabulary verbatim (no renames, no
   divergent column sets, no parallel task stores);
 - treat the TRDD corpus as the SSOT — every board mutation lands in the
   TRDD file (and its folder), not only in a mirror;

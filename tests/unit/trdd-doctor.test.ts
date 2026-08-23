@@ -647,8 +647,8 @@ describe('trdd-doctor — the `updated:` bump is conditional on the repair being
 })
 
 describe('the vocabulary is the ratified one', () => {
-  it('carries all 17 ratified columns', () => {
-    expect(DEFAULT_STATUSES).toHaveLength(17)
+  it('carries all 22 ratified columns', () => {
+    expect(DEFAULT_STATUSES).toHaveLength(22)
     for (const c of DEFAULT_STATUSES) expect(VALID_COLUMNS).toContain(c)
   })
 

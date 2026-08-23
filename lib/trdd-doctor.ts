@@ -133,6 +133,31 @@ export interface Card {
    * reason as the two fields above: two numbers per card instead of a document.
    */
   boxes: { total: number; open: number }
+  /**
+   * Count of `<!-- @trdd:design-body -->` divider lines in the body (3P-TRDD-13). Reduced
+   * to an integer IN THE STREAM, same reason as the fields above. 0 = no design body.
+   */
+  designDividers: number
+}
+
+/** Counts `<!-- @trdd:design-body -->` occurrences that sit alone on their own line (3P-TRDD-13). */
+export function countDesignDividers(body: string): number {
+  return body.split('\n').filter((l) => l.trim() === '<!-- @trdd:design-body -->').length
+}
+
+/** A grep-first bool field is written `true`/`false` (bare or quoted). Anything else is undefined. */
+export function boolFieldValue(v: unknown): boolean | undefined {
+  if (v === true || v === 'true') return true
+  if (v === false || v === 'false') return false
+  return undefined
+}
+
+/** Parses an ISO-8601 datetime (with or without a colon in the offset) to epoch ms, or null. */
+export function parseIsoMs(v: unknown): number | null {
+  const s = String(v ?? '').trim()
+  if (!s) return null
+  const ms = Date.parse(s)
+  return Number.isNaN(ms) ? null : ms
 }
 
 /**
@@ -458,6 +483,7 @@ function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[]; nod
         h1: body.match(/^#\s+(.+)$/m)?.[1] ?? '',
         bodyStateClaim: findBodyStateClaim(body),
         boxes: countAcceptanceBoxes(body),
+        designDividers: countDesignDividers(body),
       })
       const node = toGraphNode(parsed)
       if (node) nodes.push(node)
@@ -648,6 +674,70 @@ export function lintCorpus(designDir: string): DoctorReport {
         // never be auto-resolved — picking one silently is how a tool loses work.
         autofixable: agrees,
       })
+    }
+
+    // ---- 3P-TRDD-13 design-lives-in-the-card: the divider + its four state fields ----
+    // The divider is the machine-greppable split point between the original body and the
+    // design body; the four fields let a board query answer "does this card have a design,
+    // and has it been approved" without opening the file. All four are OPTIONAL — a card
+    // with none of them and no divider is CONFORMANT and raises nothing here.
+    if (c.designDividers > 1) {
+      add({
+        rule: 'DESIGN-BODY-DIVIDER-DUPLICATE',
+        severity: 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: `body contains ${c.designDividers} \`<!-- @trdd:design-body -->\` dividers — at most ONE is allowed, else "the design half" is ambiguous (3P-TRDD-13)`,
+        autofixable: false,
+      })
+    }
+    const hasDivider = c.designDividers > 0
+    const designIncluded = boolFieldValue(c.fm['design-included'])
+    if (hasDivider !== (designIncluded === true)) {
+      add({
+        rule: 'DESIGN-INCLUDED-MISMATCH',
+        severity: 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: hasDivider
+          ? '`<!-- @trdd:design-body -->` divider is present but `design-included:` is not `true` — the fields exist so a board query never has to open the body (3P-TRDD-13)'
+          : `\`design-included: ${c.fm['design-included']}\` but the body carries no \`<!-- @trdd:design-body -->\` divider — nothing to include`,
+        autofixable: false,
+      })
+    }
+    if (boolFieldValue(c.fm['design-approved']) === true && designIncluded !== true) {
+      add({
+        rule: 'DESIGN-APPROVED-WITHOUT-INCLUDED',
+        severity: 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: '`design-approved: true` but `design-included:` is not `true` — a design cannot be approved before it exists (3P-TRDD-13)',
+        autofixable: false,
+      })
+    }
+    if (fmHas('first-design-draft') && designIncluded !== true) {
+      add({
+        rule: 'DESIGN-DRAFT-WITHOUT-INCLUDED',
+        severity: 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: '`first-design-draft:` is set but `design-included:` is not `true` — the draft timestamp names a design body that the card does not declare (3P-TRDD-13)',
+        autofixable: false,
+      })
+    }
+    if (fmHas('first-design-draft') && fmHas('last-design-revision')) {
+      const first = parseIsoMs(c.fm['first-design-draft'])
+      const last = parseIsoMs(c.fm['last-design-revision'])
+      if (first !== null && last !== null && last < first) {
+        add({
+          rule: 'DESIGN-REVISION-BEFORE-DRAFT',
+          severity: 'error',
+          id: c.id,
+          filePath: c.filePath,
+          message: `\`last-design-revision: ${c.fm['last-design-revision']}\` precedes \`first-design-draft: ${c.fm['first-design-draft']}\` — a revision cannot happen before the design existed (3P-TRDD-13)`,
+          autofixable: false,
+        })
+      }
     }
 
     // ---- the approval requirement: one rung, one spelling ----

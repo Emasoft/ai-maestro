@@ -23,15 +23,21 @@ export const TASK_TYPES = [
 export type TaskType = (typeof TASK_TYPES)[number]
 
 /**
- * The 17 default statuses — used when a team has no custom kanban config.
- * 14 TRDD-v2 lifecycle stages followed by 3 orthogonal exception states
+ * The 22 default statuses — used when a team has no custom kanban config.
+ * 19 TRDD-v2 lifecycle stages followed by 3 orthogonal exception states
  * (blocked / failed / superseded). Order matches DEFAULT_KANBAN_COLUMNS in
- * types/team.ts so the two sources stay aligned.
+ * types/team.ts so the two sources stay aligned. Per design/specs/3-pillars-spec.md
+ * clause 3P-KAN-01 (spec-version 3.0.0).
  */
 export const DEFAULT_STATUSES: string[] = [
   'backburner',
-  'todo',
+  'approval',
   'design',
+  'design_ai_review',
+  'design_human_review',
+  'todo',
+  'verify_assumptions',
+  'plan',
   'dispatch',
   'dev',
   'testing',

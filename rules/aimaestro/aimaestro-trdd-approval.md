@@ -52,10 +52,14 @@ baseline-deviation gate), this rule governs.
  │ design/proposals/ │   (T1 COS · T2 MANAGER · T3 USER)         │  design/tasks/         │
  │  column: proposal │ ───────────────────────────────────────▶ │  = OPEN WORK           │
  │   (PENDING)       │                                          │                        │
- └───────────────────┘                                          │  planned→todo→dispatch │
-       │                                                        │  →dev→testing→ai_review│
-       │ refuse  (NEVER approved)                               │  →human_review         │
-       ▼                                                        │  →complete→publish|deploy
+ └───────────────────┘                                          │  planned→approval→design│
+       │                                                        │  →design_ai_review→     │
+       │ refuse  (NEVER approved)                               │  design_human_review→   │
+       ▼                                                        │  todo→verify_assumptions│
+                                                                  │  →plan→dispatch→dev→   │
+                                                                  │  testing→ai_review→    │
+                                                                  │  human_review→complete  │
+                                                                  │  →publish|deploy
  ┌───────────────────┐                                          │                        │
  │ design/refused/   │                                          │  • blocked  (lists its │
  │  column: refused  │                                          │    blocked-by:)        │
@@ -642,9 +646,17 @@ multi-agent system, WHO may trigger each transition:
 
 | Transition | Who can trigger | Multi-agent side effects |
 |---|---|---|
-| `backburner → todo` | MANAGER | none |
-| `todo → design` | ORCHESTRATOR | assigns ARCHITECT via AMP |
-| `design → dispatch` | ARCHITECT | may 1→N split / N→1 group |
+| `backburner → approval` | card owner | submitted for approval (PRRD G3.1/G4.1) |
+| `approval → design` | CHIEF-OF-STAFF or MANAGER, per `min-approval-requirement:` | approval granted (PRRD G4.1) |
+| `approval → refused` | CHIEF-OF-STAFF or MANAGER, per `min-approval-requirement:` | approval declined |
+| `design → design_ai_review` | DESIGNER (in a team) or the implementer (outside a team) | design body drafted; PRRD-affecting choices require COS/MANAGER permission first (PRRD G5.1) |
+| `design_ai_review → design` (rejection) | CHIEF-OF-STAFF or MANAGER | design sent back for revision; bumps `last-design-revision:` (PRRD G6.1) |
+| `design_ai_review → design_human_review` | CHIEF-OF-STAFF or MANAGER | design AI-approved; skipped entirely when `min-approval-requirement: none` (PRRD G6.1) |
+| `design_human_review → design` (rejection) | USER (or MANAGER, only when the USER explicitly delegated acting on their behalf) | design sent back for revision (PRRD G7.1) |
+| `design_human_review → todo` | USER (or MANAGER, only when the USER explicitly delegated acting on their behalf) | design human-approved; column is SKIPPED when `min-approval-requirement: none` (PRRD G7.1) |
+| `todo → verify_assumptions` | assignee | mechanical; verifies every claim in the TRDD (PRRD G8.1) |
+| `verify_assumptions → plan` | assignee | mechanical; all assumptions verified true (PRRD G8.1) |
+| `plan → dispatch` | assignee | mechanical; full implementation plan written (PRRD G9.1) |
 | `dispatch → dev` | ORCHESTRATOR | sets `assignee:` |
 | `dev → testing` | assignee | — |
 | `testing → ai_review` / `testing → dev` | test runner | — |
@@ -795,7 +807,7 @@ heartbeat cadence / MANAGER idle sweep) — **never** on every creation:
    `assignee` its owner; none stands in for another, and all are kept
    current at every edit:
    - **Fields present + consistent:** `assignee` is set; `blocked-by` is
-     non-empty ⟺ `column: blocked`; `column` ∈ the ratified 17-column enum.
+     non-empty ⟺ `column: blocked`; `column` ∈ the ratified 22-column enum.
      A `column: blocked` with empty `blocked-by`, or a non-empty `blocked-by`
      with `column ≠ blocked`, is drift → flag.
    - **Checklist-gated completion (the hard gate):** a TRDD may sit in a

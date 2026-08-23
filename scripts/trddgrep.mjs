@@ -120,6 +120,52 @@ const porcelainIdx = rest.indexOf('--porcelain')
 const porcelain = porcelainIdx !== -1
 if (porcelain) rest = [...rest.slice(0, porcelainIdx), ...rest.slice(porcelainIdx + 1)]
 
+// `--design-body` / `--no-design-body` — which HALF of a card's body this run reads.
+//
+// 3P-TRDD-13: the implementation design lives in the SAME file, after the exact divider
+// line below, at most once per card. So a card's prose is two documents in one, and a
+// question asked of the whole file cannot tell "the original body says X" from "the
+// design says X". These narrow WHAT IS READ; neither flag reproduces the current
+// behaviour byte-for-byte (the whole body).
+//
+// Valueless, so they are stripped here rather than through `takeFlag` (which would eat
+// the next token as a value) — the same treatment `--porcelain` gets, and the same
+// reason. They are ALSO in KNOWN_FLAGS: stripping means the unknown-option check never
+// sees them, and a flag whose acceptance depends on the order two filters run in is the
+// index-arithmetic hazard `takeFlag`'s own comment records.
+const DESIGN_DIVIDER = '<!-- @trdd:design-body -->'
+const designBodyIdx = rest.indexOf('--design-body')
+const noDesignBodyIdx = rest.indexOf('--no-design-body')
+// BOTH is a could-not-run, never a silent pick. They ask opposite questions, so choosing
+// one would answer a question the caller did not ask — with an exit code that looks like
+// a verdict (the `--min-severity` defect this file already carries the scar of).
+if (designBodyIdx !== -1 && noDesignBodyIdx !== -1) {
+  console.error('trddgrep: --design-body and --no-design-body are mutually exclusive — pass one')
+  process.exit(2)
+}
+const bodyScope = designBodyIdx !== -1 ? 'design' : noDesignBodyIdx !== -1 ? 'original' : 'all'
+rest = rest.filter((t) => t !== '--design-body' && t !== '--no-design-body')
+
+/**
+ * The half of `body` this run is asking about — or `null` for "this card has none".
+ *
+ * `null` is the load-bearing return. A card with NO divider has no design body, and the
+ * ONE thing it must never do is answer `--design-body` with its whole prose: that is the
+ * "unread reads as clean" inversion pointed the other way — a card that carries no design
+ * at all would answer every design question with its original body, and confidently.
+ *
+ * The FIRST divider splits. 3P-TRDD-13 allows at most one; a second is a lint finding, not
+ * this reader's to adjudicate, and taking the first keeps the original body correct (it is
+ * bounded by the first divider under either interpretation).
+ */
+function bodySlice(body) {
+  if (bodyScope === 'all') return body
+  const lines = body.split('\n')
+  const i = lines.findIndex((l) => l.trim() === DESIGN_DIVIDER)
+  if (i < 0) return bodyScope === 'design' ? null : body
+  return bodyScope === 'design' ? lines.slice(i + 1).join('\n') : lines.slice(0, i).join('\n')
+}
+
 const designDir = path.resolve(designDirVal ?? path.join(process.cwd(), 'design'))
 const argv = rest
 const cmd = argv[0] ?? 'board'
@@ -165,6 +211,8 @@ const KNOWN_FLAGS = new Set([
   '--all',         // index-verify
   '--repair',      // index-verify
   '--dry-run',     // fix
+  '--design-body',    // show | search — stripped above; listed so acceptance is not
+  '--no-design-body', // a function of which filter ran first
 ])
 if (cmd !== 'edit') {
   const unknownFlag = argv.find((t) => t.startsWith('--') && !KNOWN_FLAGS.has(t))
@@ -172,6 +220,27 @@ if (cmd !== 'edit') {
     console.error(`trddgrep: could not run — unknown option ${unknownFlag} — see \`trddgrep help\``)
     process.exit(2)
   }
+}
+
+// A body-scope flag on a verb that reads NO body is a could-not-run, not a no-op.
+//
+// `show` and the default search are the only two commands that read prose at all (the walk
+// is body-free by design — see its comment below), so `board --design-body` cannot narrow
+// anything. Accepting it silently would be the `--min-severity` defect exactly: the tool
+// answers the unfiltered question with an exit code the caller reads as a verdict. The
+// default search is the FALL-THROUGH, so only the named verbs are refused — an unknown
+// token is a search pattern, and `trddgrep --design-body <pattern>` must work.
+const BODY_READING_VERBS = new Set(['show'])
+const CORPUS_VERBS = new Set([
+  'why', 'unblocks', 'roots', 'next', 'show', 'board', 'doctor', 'lint', 'validate',
+  'index-verify', 'fix', 'edit', 'env', 'help', '--help', '-h',
+])
+if (bodyScope !== 'all' && CORPUS_VERBS.has(cmd) && !BODY_READING_VERBS.has(cmd)) {
+  console.error(
+    `trddgrep: --${bodyScope === 'design' ? '' : 'no-'}design-body reads a card's prose, and \`${cmd}\` reads none —` +
+      ' it applies to `show` and to the ranked search',
+  )
+  process.exit(2)
 }
 
 // Rows a list-shaped answer prints before it STOPS AND SAYS SO.
@@ -549,6 +618,23 @@ switch (cmd) {
 
   case 'show': {
     const c = need(arg)
+    // Under a body-scope flag the BODY decides whether this card answers AT ALL, so it is
+    // read before anything is printed — the porcelain record included. A card with no
+    // design body is not a match for a design question, and exiting 1 is the answer the
+    // trichotomy already gives an empty search.
+    let scoped = null
+    if (bodyScope !== 'all') {
+      const pre = parseTrddFile(c.filePath, c.zone)
+      if (!pre) {
+        console.log(C.r('\n  the file moved mid-command (a concurrent git mv) — re-run\n'))
+        break
+      }
+      scoped = bodySlice(pre.body ?? '')
+      if (scoped === null) {
+        console.error(`trddgrep: ${c.id} has no design body — the file carries no ${DESIGN_DIVIDER} divider`)
+        process.exit(1)
+      }
+    }
     if (porcelain) {
       // `path<TAB>id<TAB>column<TAB>zone<TAB>title` — path ABSOLUTE (a consumer's cwd is
       // anywhere), title LAST so a rogue tab in it cannot shift the machine fields. The
@@ -564,9 +650,18 @@ switch (cmd) {
     // the same store, so the semantics are the walk's: null means the file was
     // `git mv`d between the walk and now (benign, and worth saying out loud), while
     // every other read fault throws instead of reading as "no STATE block".
-    const fresh = parseTrddFile(c.filePath, c.zone)
+    const fresh = bodyScope === 'all' ? parseTrddFile(c.filePath, c.zone) : { body: scoped }
     if (!fresh) {
       console.log(C.r('\n  the file moved mid-command (a concurrent git mv) — re-run\n'))
+      break
+    }
+    if (bodyScope === 'design') {
+      // The design body is what was ASKED for — print it, not a STATE block extracted
+      // from it. (A STATE block belongs to the original body; 3P-TRDD-13 puts the design
+      // after the divider.)
+      console.log(C.b(`\n  ⏵ DESIGN BODY (after ${DESIGN_DIVIDER})\n`))
+      for (const l of fresh.body.trim().split('\n')) console.log(`  ${l}`)
+      console.log()
       break
     }
     // The STATE block is AUTHORITATIVE on resume — it supersedes the body, so it is the
@@ -935,6 +1030,15 @@ ${C.b('trddgrep')} — query AND validate the TRDD corpus (offline; no server)
   ${C.d('             search has always had its own stated cap of 25 and is unaffected.')}
   ${C.d('--column C   board only — list just column C (its heading still shows the true size)')}
 
+  ${C.d('--design-body / --no-design-body   which HALF of the body show and the search read.')}
+  ${C.d('             A card\'s design lives in the SAME file, after the exact divider line')}
+  ${C.d('             ' + DESIGN_DIVIDER + ' (3P-TRDD-13). --design-body reads only what')}
+  ${C.d('             follows it, --no-design-body only what precedes it; neither together.')}
+  ${C.d('             A card with NO divider has no design body: it is SKIPPED entirely under')}
+  ${C.d('             --design-body (show exits 1), and is all original body under the other.')}
+  ${C.d('             Neither flag = the whole body, unchanged. Other verbs read no prose and')}
+  ${C.d('             REFUSE these (exit 2) rather than ignore them.')}
+
   ${C.d('--no-index   answer the graph from the corpus WALK, not the SQLite index.')}
   ${C.d('             The index serves why/unblocks/roots/board/next; search is walk-only')}
   ${C.d('             by design, and `show` re-reads its one file for freshness.')}
@@ -952,7 +1056,14 @@ Repair of the mechanically-derivable findings: ${C.c('yarn trdd:fix')}
     // the count of matches, never the prose that produced it. Streaming here also
     // means an unmatched corpus costs no more memory than a matched one.
     const hits = []
-    for (const [c, body] of walkCards()) {
+    for (const [c, fullBody] of walkCards()) {
+      // The scoped half, computed and dropped in the same iteration as the body it came
+      // from — the streaming property this loop's comment above is about.
+      const body = bodySlice(fullBody)
+      // `null` = this card has no design body, so under `--design-body` it contributes
+      // NOTHING — not even a title hit. Scoring its title here would put a card carrying
+      // no design at all into the answer to a question about design.
+      if (body === null) continue
       let score = 0
       if (rx.test(c.id)) score += 10
       if (rx.test(c.title)) score += 5

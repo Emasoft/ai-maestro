@@ -44,7 +44,12 @@ alerts:
 
 with `live = new Set(findings.map(f => f.code))`.
 
-**There are TWO independent callers passing DISJOINT, PARTIAL findings sets into that one file:**
+**There are TWO independent callers passing DISJOINT, PARTIAL findings sets into that one file**
+— and the "only two" half rests on **grep + tsc together**, not on either alone. The grep covered
+`lib/ services/ app/ server.mjs` for `.ts/.tsx/.mjs`, so it misses `.js`, `scripts/`, and any
+dynamically-constructed call; `tsc` closes those for anything inside the TS project but does NOT
+type-check `server.mjs`, and an `as any` cast would defeat it. The two instruments have
+complementary blind spots, which is the only reason the claim holds:
 
 | caller | codes |
 |---|---|
@@ -129,15 +134,31 @@ clears. Three checks establish they are distinct:
   `pm2 jlist` reports the `ai-maestro` instance (pid 4054, restarts=27, online) started
   2026-08-21 18:29:22 — **4h33m before its own fix**, and unchanged since. `server-tick.ts` is
   runtime-imported by `server.mjs`, so it goes live on `pm2 restart` alone with no rebuild.
-- **A restart would NOT unblock X4RK1NUW's open box.** The decisive evidence is ORDERING, not
-  absence: `server-tick.ts:202` calls `writeTickStatus(result)`, and the `const code` expression
-  that `1a4b8cdf` rewrites is at `:232` — **30 lines later**. The status file is already written
-  before the alert block runs, so that fix cannot reach it whatever it says. (Corroborating, and
-  weaker on its own: `tick-status.ts:130-139` builds the payload from
-  `{nextAction, reason, stuck, windows}` on the tick result, and the identifier `code` appears
-  ZERO times in that file. An identifier's absence is a needle result; the line ordering is a
-  structural fact, so the claim rests on the ordering.) X4RK1NUW's 48h window is blocked by dead
-  refresh tokens — a credential condition — not by the undeployed fix.
+- **A restart would NOT unblock X4RK1NUW's open box.** Established on THREE independent grounds,
+  strongest first — and see the retraction below for why it is stated this way:
+  1. **The diff.** `1a4b8cdf` is `14 +/1 -` on `server-tick.ts`, of which 13 added lines are its
+     comment block. The entire behavioural change is one expression — `const code = …` — a PURE
+     READ of `alertable` producing a LOCAL string. It mutates nothing and cannot alter the
+     `result` that the status file is written from.
+  2. **Control flow, shown rather than assumed.** `:202 writeTickStatus(result)` →
+     `:214 alertableTick(result)` → `:215 if (alertable)` → `:232 const code`, all in one
+     straight-line `try {` body of one function: no loop, no deferred callback, single pass.
+  3. **No feedback path.** Ordering within one beat would say nothing about a 60s beat that could
+     read its own prior output, so: `grep -rn "alertsFile\|active-alerts" lib/ services/` outside
+     `alert-delivery.ts` returns 3 hits and **all three are comments**. Nothing on the tick's
+     input path reads `active-alerts.json`, so beat N's alert selection cannot reach beat N+1's
+     `result`.
+
+  **RETRACTED, and recorded rather than quietly rewritten:** an earlier revision of this bullet
+  claimed the fix "cannot reach it whatever it says" on the strength of the two line numbers in
+  (2) alone — a grep that printed no enclosing scope and no control flow, and which is silent
+  about (3) entirely. The conclusion was right and the evidence could not carry it; raising the
+  confidence while swapping in weaker support is the same defect this card is about, one level
+  up. (The original support — the identifier `code` appearing zero times in `tick-status.ts` —
+  is true and is the weakest of the four, because a needle result dies to a rename.)
+
+  X4RK1NUW's 48h window is blocked by dead refresh tokens — a credential condition — not by the
+  undeployed fix.
 - **The restart is the owner's call and its blast radius has shrunk.** The prior session declined
   it citing "~19 peers up"; measured today, `tmux list-sessions` reports **3** (`default`,
   `frank`, `testbot`). It remains disruptive to live PTY streams and is not required by this card.
@@ -252,7 +273,10 @@ errors and 19/19 green.
 
 `planned → ai_review` directly. That is NOT a listed edge in the transition table
 (`todo → design → dispatch → dev → testing → ai_review`), and a watchdog keying on legal
-transitions is right to notice it. The work genuinely passed through the `dev` and `testing`
+transitions is right to notice it. **There is no such watchdog:** `trdd-doctor` has no
+transition-legality rule (`grep -niE "transition|illegal.*column"` over `lib/trdd-doctor.ts` and
+`scripts/trdd-doctor.mjs` returns only prose about the terminal-checklist gate). So this
+paragraph is not courtesy — it is the ONLY guard on this skip, and no tool will ever enforce it. The work genuinely passed through the `dev` and `testing`
 states inside one session; writing three intermediate commits to narrate columns nobody was
 occupying would have been fabricated history, and leaving it at `planned` would have been a
 false statement about a card whose code is committed and whose suite is green. `ai_review` is

@@ -76,6 +76,29 @@ lines 770-812. All three hold, and two get STRONGER:
 > line 823. Recorded because it is the identical failure class the paragraph above is about, and
 > it occurred while measuring it.
 
+> **⚠ AND THE PARAMETER COUNT ITSELF WAS TAKEN OVER THE WRONG WINDOW.** It was computed across
+> lines **754-1100**, chosen because it "looked like enough". `routeMessage` actually ends at
+> **1352** (`awk 'NR>754 && /^}/{print NR; exit}'`, corroborated by the next top-level export at
+> 1358) — so the count covered ~63% of the function and proved nothing about the remaining 252
+> lines. **Re-run over 754-1352 the conclusion is unchanged** (`signatureHeader` 1,
+> `envelopeIdHeader` 1, both their own declarations; `forwardedFrom` rises 14 → 16, two uses that
+> were outside the old window).
+>
+> **The conclusion was right and the measurement supporting it was invalid — which is luck, not
+> evidence.** Worse, it was a REGRESSION dressed as a rigour upgrade: the ORIGINAL check was
+> `grep -n 'signatureHeader' services/amp-service.ts` over the WHOLE FILE returning one line, and
+> that is the authoritative test for a named positional parameter (it cannot be referenced outside
+> its own function, so a whole-file count of 1 settles it). Replacing a whole-file grep with a
+> guessed-window count, in a commit whose message boasts about replacing filtered views with
+> contiguous ones, is the same failure shape at one more level of self-congratulation.
+>
+> **Still not done, stated rather than implied:** lines 812-1352 have not been read CONTIGUOUSLY,
+> only through a `return|throw|401|403|verif` filter that displayed six `return {` without their
+> guards. That leaves open whether some later gate denies this caller for an unrelated reason. It
+> does NOT reopen the finding — the finding is that authentication is GRANTED at 770-796, and no
+> signature-based denial can exist anywhere given `signatureHeader` is provably unreferenced
+> file-wide — but a reader should know which part of this function has actually been read.
+
 ## Why it surfaced now, and what is NOT claimed
 
 It surfaced while implementing TRDD-8Q5EVGV1's semantic credential gate, which must EXEMPT this

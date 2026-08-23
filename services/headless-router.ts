@@ -4484,9 +4484,31 @@ function _headlessHasCredential(req: IncomingMessage, pathname: string): boolean
  *     one, so it is a strict superset. Swapping in the sync function instead
  *     would have silently dropped IBCT support on every headless route.
  *  2. The forwarded-peer path (`/api/v1/route` + `X-Forwarded-From`) carries no
- *     bearer and no cookie — its identity is Ed25519-verified inside the
- *     handler. It is exempted here, exactly as `_headlessHasCredential` exempts
- *     it, or peer routing would break.
+ *     bearer and no cookie, so it is exempted here, exactly as
+ *     `_headlessHasCredential` exempts it — removing the exemption would break
+ *     peer routing outright.
+ *
+ *     ⚠ AN EARLIER VERSION OF THIS COMMENT SAID "its identity is Ed25519-verified
+ *     inside the handler". THAT IS FALSE, and it was inherited from the comment
+ *     on `_headlessHasCredential`'s own copy of this branch rather than measured.
+ *     Read 2026-08-23 in `services/amp-service.ts::routeMessage`:
+ *       - `if (!auth.authenticated && forwardedFrom)` grants
+ *         `authenticated: true` when `getHostById(forwardedFrom)` merely RESOLVES.
+ *         Registry membership, not a signature.
+ *       - the Ed25519 `verifyRoleAttestation` is OPTIONAL and only upgrades the
+ *         sender ROLE; when it is absent or invalid the code warns and continues
+ *         authenticated.
+ *       - `X-AMP-Signature` is threaded in as `signatureHeader` and NEVER READ —
+ *         one reference in the entire file, its own parameter declaration.
+ *     So this exemption admits an unauthenticated caller that knows any valid
+ *     host id, and `X-Forwarded-From` is caller-controlled.
+ *
+ *     THIS PREDATES THE SEMANTIC GATE and is unchanged by it — the structural
+ *     gate exempted the same path identically. It is NOT introduced here and is
+ *     not fixed here either: repairing the mesh trust model has federation blast
+ *     radius and belongs on its own card, TRDD-3VFT513C. What IS fixed here is
+ *     this comment, which told the next reader the path was verified when it is
+ *     not — the most dangerous artifact of the two.
  *  3. It FAILS CLOSED. `authenticateAgent` ends in a deliberate
  *     `throw new Error('Unreachable: ...')`; an exception escaping into the gate
  *     must not become a 500 that reveals the request reached routing, nor a

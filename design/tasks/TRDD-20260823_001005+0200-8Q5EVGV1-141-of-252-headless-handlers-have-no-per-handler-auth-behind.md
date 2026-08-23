@@ -544,6 +544,57 @@ Full suite after the change: **460 files, 6172 passed**. The only reds are `pill
 `trdd-doctor`, the pre-existing `TERMINAL-WITHOUT-CHECKLIST` corpus error on `G6A54OYK`
 (TRDD-P6MSMQ2I's own deliberately-retained reproduction), unrelated to this change.
 
+### ⚠ CORRECTIONS 2026-08-23, from an adversarial review of the implementation commits
+
+Four claims made above and in the commit messages were overstated or wrong. Recorded here
+because the commit messages are immutable and this card is what people actually read.
+
+**1. "All 252 at once" is FALSE as written — the exemptions are the point.** The gate covers all
+252 EXCEPT (a) the 10 `HEADLESS_AUTH_WHITELIST` bootstrap routes, which are in the same route
+table (`GET /api/v1/health` is entry 1922, so whitelisted routes ARE part of the 252), and
+(b) the forwarded-peer path. The CODE comment states both; the commit message, this card's
+IMPLEMENTATION section and the handoff said "all 252 at once" unqualified. The honest claim is
+**"every handler except the whitelist and the forwarded-peer path"** — and the second exemption
+is now known to matter (see 2).
+
+**2. The forwarded-peer exemption was justified by a comment that is FALSE, and the path is in
+the UNGUARDED_LEDGER.** The exemption's stated reason — "its identity is Ed25519-verified inside
+the handler" — was inherited from `_headlessHasCredential`'s own comment and never checked
+against `routeMessage`. Measured 2026-08-23: `X-Forwarded-From` naming any resolvable host id
+yields `authenticated: true` with no signature check; the Ed25519 attestation is optional and
+only upgrades the ROLE; and `X-AMP-Signature` is threaded in as `signatureHeader` and referenced
+exactly once in the whole file — its own declaration. `POST /^\/api\/v1\/route$/` is
+correspondingly listed in `UNGUARDED_LEDGER` at line 152.
+
+The behaviour is UNCHANGED by this card (the structural gate exempted the identical path), so
+this is not a regression introduced here — but the comment asserting safety was, and it is
+corrected in place. The trust model itself is filed as **TRDD-3VFT513C**; it has federation blast
+radius and is not a drive-by.
+
+Worth naming the mechanism, because it is this file's recurring failure shape: the settling grep
+`grep -n "v1/route" … headless-handler-auth-ledger.test.ts` returned NOTHING and read as
+"absent, therefore guarded". The ledger stores ESCAPED REGEX SOURCE (`v1\\/route`), so that
+needle could never match. **An assumed format standing in for the real one** — and it was
+committed while executing the settling command for exactly that class of error.
+
+**3. `c909aa3f`'s message states a number combination no run ever produced.** It says
+*"460 files, 6172 passed. The only reds are pillar-grep-cli and trdd-doctor."* The 6172 came from
+the run with **10 failed across 5 red files** — BEFORE the three mock gaps were fixed. After the
+mocks the true figure was ~6182 passed / 2 red, and the final suite is 6191 + 2 skipped = 6193,
+i.e. exactly the 9 tests added since. A stale passed-count fused with a later, predicted red-set,
+in an immutable artifact. The arithmetic is the tell: 10 + 6172 + 2 = 6184.
+
+**4. The 11 widened assertions pin NOTHING about the semantic gate.** Neuter 1 reddened only the
+4 ordering tests. `/token|Authentication required|invalid_credential/` matches under both the
+gate AND its neuter, because the neutered path reaches the handler, which answers with a token
+error. They retain the `.not.toBe('auth_required')` half, so they still discriminate the
+you-sent-nothing gate — but they are not evidence for this change. Recorded because the OTHER
+coverage loss (TRDD-DYIGNVTI) was recorded scrupulously and this one was not, which is the
+asymmetry that makes a suite look better-covered than it is.
+
+**Not corrected, because it holds:** the IBCT finding (read first-hand), the cycle argument, the
+mtime-cache reasoning (framed as accepted duplication, stakes near zero), and both neuter pairs.
+
 ## Acceptance
 
 - [x] the DEFAULT is ruled: **semantic structural gate as the floor** (closes the forged-token

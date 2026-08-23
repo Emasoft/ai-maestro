@@ -175,20 +175,31 @@ Candidate directions, cheapest first — none ruled in:
 >
 > **NEITHER of those is yet a severity claim, and an earlier draft of this box wrongly borrowed
 > TRDD-8Q5EVGV1's phrase "every governance title check is bypassed" for them. Struck:**
-> - `:1116` fires ONLY when `getAllowedRecipients(title).length === 0`, i.e. for a title with no
->   permitted recipients at all. Skipping it is not skipping the graph; it is skipping a narrow
->   pre-check that would fire for almost no sender.
-> - `:885`'s mesh exemption may simply be HOW MESH WORKS — a forwarded sender is legitimately
->   absent from the local registry, so rejecting it would break the feature. Whether that is a
->   hole or the design is not established by reading the branch.
+> Both were then SETTLED by adversarial review, from code already read — they are not open
+> questions and the assignee should not re-spend effort on them:
+>
+> - **`:885` is NOT a bypass. It is the feature.** It returns **500 `internal_error`**, not
+>   401/403 — a "this state should be impossible" handler, since the caller already passed the
+>   401 at `:797` and `getAgent()` still returned null. And `senderAgent` is null for mesh **by
+>   construction** (the ternary), so without the `!isMeshForwarded` clause EVERY mesh request
+>   would 500. The clause is what makes mesh work. The comment *"A non-mesh sender that is
+>   neither a known agent NOR a known user is an error"* states the error's SCOPE; it was
+>   misread as an exemption granted to mesh.
+> - **`:1116` has no mesh-specific bypass at all.** `if (senderAgent?.governanceTitle)` is falsy
+>   for ANY title-less sender, a local one exactly as much as a mesh one. It is additionally an
+>   explicit *"Pre-check … for remote delivery"*, fires only on the degenerate
+>   `senderAllowed.length === 0` case (the comment names subagents with no title), and a mesh
+>   caller has no title to check BECAUSE it has no local registry entry. Inapplicable, not evaded.
 >
 > ### SEVERITY IS UNDETERMINED, and this card stops trying to determine it
 >
 > Three positions have been asserted here across three commits — "becomes a normal authenticated
 > caller", then "restricted and second-class", then "a bypass" — each stated with confidence and
-> each corrected by the next. The oscillation is the finding: every one was reached by reading a
-> little more code and generalising from it, which is the same defect three times, not
-> convergence.
+> each corrected by the next. **All three were wrong**, including the third's claim that the
+> first was "closer to right": `senderAgent = null` genuinely does differentiate a mesh caller, so
+> "becomes a normal authenticated caller" was false too. The oscillation is the finding: every
+> position was reached by reading a different fragment and generalising, which is one defect three
+> times, not convergence.
 >
 > **What IS established, all by contiguous reads or whole-file greps:**
 > - authentication is granted on `X-Forwarded-From` naming a resolvable host id, with no
@@ -201,6 +212,11 @@ Candidate directions, cheapest first — none ruled in:
 > caller; whether the receiving host's graph check exists (claimed only by the `:1113` comment);
 > what the remaining `senderAgent` consumers (`:892`, `:915-917`, `:1223-1226`, `:1307`, `:1323`)
 > do with null; and lines 875-1352 generally.
+>
+> **The command that would actually settle severity — for the assignee, not the proposer:**
+> `grep -n 'isMeshForwarded' services/amp-service.ts`, which ENUMERATES every site where mesh
+> status changes behaviour. Every wrong position above came from reading ONE site and inferring
+> the class; enumerating the class first is the fix.
 >
 > A proposal's job is to carry an open question to an approver, not to close it. The
 > authentication fact is enough for a human to decide whether to look. **Severity is for whoever

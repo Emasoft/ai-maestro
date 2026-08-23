@@ -300,9 +300,14 @@ The team PUT deliberately **strips `chiefOfStaffId`**, so moving the COS slot al
 this verb rather than through a generic field update.
 
 `kanban-config --set` **rejects a custom board that drops any governance column id** (`06e8ffe6`).
-The 11 that must survive: `dev` `ai_review` `human_review` `complete` `publish` `deploy` `published`
-`live` `live_auditing` `failed` `superseded`. Freely renameable/omittable: `backburner` `todo`
-`design` `dispatch` `testing` `blocked`. A board that renamed `human_review` left the self-review
+The 14 that must survive: `ai_review` `complete` `deploy` `design` `design_ai_review`
+`design_human_review` `dev` `failed` `human_review` `live` `live_auditing` `publish` `published`
+`superseded`. Freely renameable/omittable: `backburner` `approval` `todo` `verify_assumptions`
+`plan` `dispatch` `testing` `blocked`.
+**This prose is a MIRROR, not the source** — `GATE_CRITICAL_COLUMN_IDS` is DERIVED in
+`lib/kanban-field-authority.ts` by spreading the gate's own sets, precisely so a future change to
+what is governed updates the config check automatically. If this list and that constant ever
+disagree, the constant is right and this line is stale. A board that renamed `human_review` left the self-review
 ban's predicates unmatchable — the gate still ran, it just could never fire.
 
 `create --type T` is vestigial: `TeamType` is the single-valued union `'closed'`, so there is

@@ -45,9 +45,38 @@ export const TERMINAL_DONE: ReadonlySet<string> = new Set([
   'superseded',
 ])
 
-/** The 17 ratified kanban columns, plus the lifecycle values that bracket them. */
+/** The 22 ratified kanban columns, plus the lifecycle values that bracket them. */
 export const BRACKET_COLUMNS = ['proposal', 'planned', 'refused', 'completed', 'cancelled'] as const
 export const VALID_COLUMNS: readonly string[] = [...DEFAULT_STATUSES, ...BRACKET_COLUMNS]
+
+/**
+ * Where a card with NO `column:` lands (spec 3P-TRDD-11, `PRRD G11.1`, USER 2026-08-23).
+ *
+ * It used to be a flat `todo`. That was correct while `design` sat AFTER `todo` — the card
+ * landed at the head of the work queue and the next agent had to evaluate it. In 3.0.0
+ * `design` moved BEFORE `todo`, so `todo` now asserts *approved AND designed*, and inserting
+ * it would have the repairer manufacture two claims nobody made. Hence three-way, keyed on
+ * what the card can actually prove about itself:
+ *
+ *   not approved            → `backburner`          (G3.1: backburner IS "not yet approved")
+ *   approved, no design yet → `design`              (it needs designing before it can queue)
+ *   approved, design present→ `design_ai_review`    (the design exists; it needs reviewing)
+ *
+ * ONE definition, called by every insertion site. The lint message and the two `--fix` sites
+ * each used to spell `todo` by hand, which is three copies of a rule and two chances to drift
+ * — and a `--fix` that repairs a shape the lint never described is the worst asymmetry a fix
+ * pipeline can have, because the report is the only thing a human reads before running it.
+ *
+ * DELIBERATELY conservative on `approved:`: only a literal `true` counts. `false`, `rejected`,
+ * absent, or unparseable all mean "cannot prove approval", and the safe landing for that is
+ * `backburner` — a card parked one column early costs a move, a card queued as approved when
+ * it was not is a false claim on the board.
+ */
+export function defaultColumnForMissing(fm: Record<string, unknown>): string {
+  const truthy = (v: unknown) => v === true || String(v ?? '').trim().toLowerCase() === 'true'
+  if (!truthy(fm['approved'])) return 'backburner'
+  return truthy(fm['design-included']) ? 'design_ai_review' : 'design'
+}
 
 /**
  * Does this value name a point in the PIPELINE — in either the v2 or the v1 spelling?

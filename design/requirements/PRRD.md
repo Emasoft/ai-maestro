@@ -137,6 +137,12 @@ spec disagree, the golden rule is what must be amended into the spec — never t
   and their execution verified as instructed by the original `plan mode` prompt of Claude
   Code, so they persist across sessions.
 
+- **G11.1** — A TRDD card with no `column:` specified was previously defaulted to the `todo`
+  column. Now that the design and design-review columns sit BEFORE `todo`, the default is
+  three-way: **`backburner`** if not approved yet; **`design`** if approved but with
+  `design-included: "false"`; **`design_ai_review`** if approved and `design-included:
+  "true"`.
+
 ---
 
 ## 🥈 SILVER rules

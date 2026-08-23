@@ -57,8 +57,9 @@ import {
   WORKING_COLUMNS,
   AUTHORITY_RANK,
   TIER_TO_REQUIREMENT,
+  defaultColumnForMissing,
 } from './trdd-vocabulary'
-export { BRACKET_COLUMNS, VALID_COLUMNS, isPipelineStateValue, WORKING_COLUMNS, AUTHORITY_RANK, TIER_TO_REQUIREMENT }
+export { BRACKET_COLUMNS, VALID_COLUMNS, isPipelineStateValue, WORKING_COLUMNS, AUTHORITY_RANK, TIER_TO_REQUIREMENT, defaultColumnForMissing }
 
 /**
  * Columns that mean "this work is finished and leaves the board".
@@ -592,7 +593,7 @@ export function lintCorpus(designDir: string): DoctorReport {
         severity: 'error',
         id: c.id,
         filePath: c.filePath,
-        message: 'no `column:` — the card cannot be placed on the board, so it appears in NO count and NO column (it is invisible, not broken). Auto-fix sets `todo` per the uncertainty law',
+        message: `no \`column:\` — the card cannot be placed on the board, so it appears in NO count and NO column (it is invisible, not broken). Auto-fix sets \`${defaultColumnForMissing(c.fm)}\` per the uncertainty law (3P-TRDD-11: backburner unless approved; design, or design_ai_review when a design body is already present)`,
         autofixable: true,
       })
     } else if (!VALID_COLUMNS.includes(c.column)) {
@@ -601,7 +602,7 @@ export function lintCorpus(designDir: string): DoctorReport {
         severity: 'error',
         id: c.id,
         filePath: c.filePath,
-        message: `column '${c.column}' is not one of the ratified 17 (+ bracket) values — every consumer aligns TO this vocabulary, never the reverse`,
+        message: `column '${c.column}' is not one of the ratified 22 (+ bracket) values — every consumer aligns TO this vocabulary, never the reverse`,
         autofixable: false,
       })
     }
@@ -1380,7 +1381,11 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         '---',
         `trdd-id: ${id}`,
         `title: ${title.replace(/:/g, ' —')}`,
-        'column: todo',
+        // A card with NO frontmatter can prove nothing about its own approval, so the
+        // helper lands it at `backburner` (3P-TRDD-11). It used to be hard-coded `todo`,
+        // which since 3.0.0 would assert both "approved" and "designed" about a file whose
+        // fields we are inventing in this very block.
+        `column: ${defaultColumnForMissing(c.fm)}`,
         `created: ${created}`,
         `updated: ${stamp}`,
         'current-owner: main',
@@ -1399,9 +1404,9 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       ].join('\n')
       text = fm + text
       // SEMANTIC: the card asserted nothing structured before and now asserts a whole field
-      // set, `column: todo` among them. (The generated block stamps `updated:` itself above,
+      // set, a `column:` among them. (The generated block stamps `updated:` itself above,
       // so the bump below is a no-op replace on the line this branch just wrote.)
-      record('semantic', 'added a full frontmatter (was: none) — column=todo per the uncertainty law')
+      record('semantic', `added a full frontmatter (was: none) — column=${defaultColumnForMissing(c.fm)} per the uncertainty law`)
     } else {
       // ---- frontmatter DATETIME notation → the mandated local offset (TRDD-S13L6R9R) ----
       //
@@ -1497,9 +1502,12 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         // keys on the PRE-fix state and so can never see damage this pass just caused.
         // A repairer that manufactures the corruption it screens for is the worst case.
         const hasColumnKey = /^column:/m.test(text)
+        // 3P-TRDD-11 / PRRD G11.1 — ONE definition of the fallback, shared with the lint
+        // message above so `--fix` can never repair a shape the report did not describe.
+        const fallbackColumn = defaultColumnForMissing(c.fm)
         const next = hasColumnKey
-          ? text.replace(/^column:.*$/m, 'column: todo')
-          : text.replace(/^(trdd-id:.*)$/m, `$1\ncolumn: todo`)
+          ? text.replace(/^column:.*$/m, `column: ${fallbackColumn}`)
+          : text.replace(/^(trdd-id:.*)$/m, `$1\ncolumn: ${fallbackColumn}`)
         // Report only a repair that ACTUALLY LANDED. The push used to be unconditional,
         // so a card whose frontmatter carries no `trdd-id:` line (the anchor) had its
         // replace no-op while `--fix` still claimed the repair, still bumped `updated:`,
@@ -1508,8 +1516,8 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
         if (next !== text) {
           text = next
           // SEMANTIC, and the clearest case: this INVENTS a pipeline state nobody chose. The
-          // card now claims `todo` on the doctor's authority, and that must be visible.
-          record('semantic', 'column: todo (was missing — the uncertainty law)')
+          // card now claims a column on the doctor's authority, and that must be visible.
+          record('semantic', `column: ${fallbackColumn} (was missing — the uncertainty law)`)
         }
       }
       // uppercase the id

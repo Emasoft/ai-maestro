@@ -280,7 +280,28 @@ it merely duplicates it. A disagreeing pair `MUST NOT` be auto-resolved — whic
 is a judgment, and a tool that picks one silently loses work.
 
 `3P-TRDD-11` **missing-column-fallback** — when `column:` is ABSENT a repair tool `MAY`
-insert `column: todo`, deliberately, so the next agent must evaluate the task before acting.
+insert one, deliberately, so the next agent must evaluate the task before acting. Since 3.0.0
+(`PRRD G11.1`, USER 2026-08-23) the value is THREE-WAY, keyed on what the card can prove
+about itself:
+
+| the card | inserted column | why |
+|---|---|---|
+| `approved:` is not literally `true` | `backburner` | `G3.1` — backburner IS "not yet approved" |
+| approved, `design-included` not `true` | `design` | approved but undesigned; it cannot queue yet |
+| approved, `design-included: "true"` | `design_ai_review` | the design exists and needs reviewing |
+
+It was a flat `todo` until 3.0.0, and that was correct only while `design` sat AFTER `todo`.
+Now `todo` asserts *approved AND designed*, so inserting it would have the repairer
+manufacture two claims nobody made. The `approved:` test is deliberately strict — `false`,
+`rejected`, absent and unparseable all mean *cannot prove approval*, and a card parked one
+column early costs a move while a card queued as approved when it was not is a false claim on
+the board.
+
+There `MUST` be exactly ONE implementation of this rule, shared by the lint MESSAGE and every
+`--fix` insertion site. A `--fix` that repairs a shape the report did not describe is the
+worst asymmetry a fix pipeline can have, because the report is the only thing a human reads
+before running it. (`lib/trdd-vocabulary.ts::defaultColumnForMissing`.)
+
 This fallback applies `ONLY` to a genuinely missing field. It is `NOT` licence to repurpose
 another field: any other frontmatter field, `status:` included, `MUST` survive the repair with
 its value intact.

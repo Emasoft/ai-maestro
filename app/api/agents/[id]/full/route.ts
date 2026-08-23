@@ -10,10 +10,12 @@ import { statePath } from '@/lib/ecosystem-constants'
 import type { Task } from '@/types/task'
 
 // Kanban columns that mean the task is DONE/dead — a task in any of these is NOT
-// pending. Mirrors the TERMINAL columns of the ratified 17-status TRDD `column:`
+// pending. Mirrors the TERMINAL columns of the ratified 22-status TRDD `column:`
 // vocabulary (types/task.ts DEFAULT_STATUSES). The in-flight ship states
 // (publish/deploy/live_auditing) and `blocked` all remain "pending" — they are
-// work that still needs attention.
+// work that still needs attention, and so do the six pre-`dev` columns added in
+// 3.0.0 (approval/design/design_ai_review/design_human_review/verify_assumptions/
+// plan): the terminal set itself is UNCHANGED by that amendment.
 const TERMINAL_TASK_STATUSES = new Set(['complete', 'published', 'live', 'superseded', 'failed'])
 
 // GET /api/agents/[id]/full — the consolidated operating context for ONE agent:

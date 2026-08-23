@@ -92,12 +92,27 @@ lines 770-812. All three hold, and two get STRONGER:
 > guessed-window count, in a commit whose message boasts about replacing filtered views with
 > contiguous ones, is the same failure shape at one more level of self-congratulation.
 >
-> **Still not done, stated rather than implied:** lines 812-1352 have not been read CONTIGUOUSLY,
-> only through a `return|throw|401|403|verif` filter that displayed six `return {` without their
-> guards. That leaves open whether some later gate denies this caller for an unrelated reason. It
-> does NOT reopen the finding — the finding is that authentication is GRANTED at 770-796, and no
-> signature-based denial can exist anywhere given `signatureHeader` is provably unreferenced
-> file-wide — but a reader should know which part of this function has actually been read.
+> **BOTH discarded parameters now rest on WHOLE-FILE greps, which is the settling form.**
+> `grep -c` over `services/amp-service.ts`: `signatureHeader` **1** (line 759),
+> `envelopeIdHeader` **1** (line 758) — each its own declaration. This is authoritative
+> independently of where `routeMessage` ends, because a function-local positional parameter
+> cannot be referenced from outside the function, and any same-named identifier elsewhere in the
+> file could only INFLATE the count. The window question is therefore moot for both.
+>
+> That grep existed for `signatureHeader` from the first pass and was NOT applied to
+> `envelopeIdHeader` when the claim was widened from one parameter to two — so for one commit the
+> upgrade was half-evidenced, against this project's own rule that *a correction which widens
+> scope needs evidence that widens too*. The claim survives; the gap in its support did not.
+>
+> **What is still unread, stated precisely rather than alarmingly:** lines 812-1352 have not been
+> read contiguously, only through a `return|throw|401|403|verif` filter. That filter is better
+> than it first appeared: `routeMessage` returns a `ServiceResult`, so a denial inside it MUST be
+> spelled `return { … status: 4xx }` — which the `return` needle matched, all six times
+> (`sendServiceResult` lives in the router, not here, so that spelling cannot occur). The gap is
+> therefore **six visible returns whose GUARDS were not read**, not a denial that could hide. It
+> cannot touch the authentication finding, which is settled contiguously at 770-802 and sits
+> BEFORE all six. It could refine EXPLOITABILITY — which this card already declares
+> unestablished, so no claim here depends on it.
 
 ## Why it surfaced now, and what is NOT claimed
 

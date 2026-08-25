@@ -28,7 +28,7 @@ anchor and a bold key-phrase, so you grep to the clause instead of reading throu
 ```text
 3P-GREP  all clauses of a family:   grep '3P-KAN'  (or META TRDD ZON PRRD DAG IDX BND VER CHK MNT)
 3P-GREP  one clause by id:          grep '3P-KAN-01'
-3P-GREP  the authoritative columns: grep -A20 '@spec:kanban-columns'
+3P-GREP  the authoritative columns: grep -A25 '@spec:kanban-columns'
 3P-GREP  the version stamp:         grep '^spec-version:'
 3P-GREP  families: META=arbiter KAN=kanban TRDD=trdd ZON=zone-pipeline PRRD=prrd DAG=reference-dag
 3P-GREP            IDX=index-safety BND=ind/dep-boundary VER=versioning

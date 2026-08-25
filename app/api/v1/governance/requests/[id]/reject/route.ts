@@ -83,12 +83,14 @@ export async function POST(
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
 
-    if (!body?.password) {
-      return NextResponse.json({ error: 'Missing required field: password' }, { status: 400 })
-    }
-
-    if (typeof body.password !== 'string') {
+    // Password is OPTIONAL for an AID-authenticated agent (R32 / RIFM4UXN
+    // Option A — TRDD-IBKR7F74; mirrors the approve route). Self-reject stays
+    // allowed in the service: it is a withdrawal, not a self-approval.
+    if (body?.password !== undefined && typeof body.password !== 'string') {
       return NextResponse.json({ error: 'password must be a string' }, { status: 400 })
+    }
+    if (!body?.password && !auth.agentId) {
+      return NextResponse.json({ error: 'Missing required field: password' }, { status: 400 })
     }
 
     // SECURITY: Use only authenticated agent ID — never fall back to untrusted body field
@@ -97,7 +99,9 @@ export async function POST(
       return NextResponse.json({ error: 'Could not determine rejector agent ID from auth' }, { status: 401 })
     }
 
-    const result = await rejectCrossHostRequest(id, rejectorAgentId, body.password, body.reason)
+    // null selects the service's AID path — only reachable with auth.agentId set
+    // (checked above), so null is always route-vouched.
+    const result = await rejectCrossHostRequest(id, rejectorAgentId, body?.password ? body.password : null, body.reason)
     // MF-004 (P8): Explicit error branching instead of fragile nullish coalescing
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

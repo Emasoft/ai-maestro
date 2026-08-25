@@ -2429,8 +2429,28 @@ const routes: Route[] = [
         console.error('[Governance Requests] POST remote-receive error:', err)
         sendJson(res, 500, { error: 'Internal server error processing remote governance request' })
       }
+    } else if (!body?.password) {
+      // AID path mirror (R32 / RIFM4UXN Option A — TRDD-IBKR7F74): an
+      // authenticated agent files WITHOUT the governance password. The
+      // requester is FORCED to the authenticated identity, and the service is
+      // told out-of-band via opts — the raw-body passthrough below can never
+      // select the passwordless path on its own (missing password fails 401
+      // inside the service).
+      const auth = authenticateAgent(
+        getHeader(req, 'Authorization'),
+        getHeader(req, 'X-Agent-Id'),
+        getHeader(req, 'Cookie')
+      )
+      if (auth.error || !auth.agentId) {
+        sendJson(res, 400, { error: 'Missing required field: password' })
+        return
+      }
+      sendServiceResult(res, await submitCrossHostRequest(
+        { ...body, requestedBy: auth.agentId },
+        { aidVerifiedRequester: auth.agentId },
+      ))
     } else {
-      // Local agent submitting a cross-host request
+      // Local agent submitting a cross-host request (password path — unchanged)
       sendServiceResult(res, await submitCrossHostRequest(body))
     }
   }},
@@ -2466,7 +2486,14 @@ const routes: Route[] = [
       return
     }
     const body = await readJsonBody(req)
-    if (!body?.password) {
+    // Password is OPTIONAL for an AID-authenticated agent (R32 / RIFM4UXN
+    // Option A — TRDD-IBKR7F74; mirrors the Next.js route). null selects the
+    // service's AID path, which the auth.agentId gate below makes route-vouched.
+    if (body?.password !== undefined && typeof body.password !== 'string') {
+      sendJson(res, 400, { error: 'password must be a string' })
+      return
+    }
+    if (!body?.password && !auth.agentId) {
       sendJson(res, 400, { error: 'Missing required field: password' })
       return
     }
@@ -2476,7 +2503,7 @@ const routes: Route[] = [
       sendJson(res, 401, { error: 'Could not determine approver agent ID from auth' })
       return
     }
-    sendServiceResult(res, await approveCrossHostRequest(params.id, approverAgentId, body.password))
+    sendServiceResult(res, await approveCrossHostRequest(params.id, approverAgentId, body?.password ? body.password : null))
   }},
   { method: 'POST', pattern: /^\/api\/v1\/governance\/requests\/([^/]+)\/reject$/, paramNames: ['id'], handler: async (req, res, params) => {
     // SF1 drift-fix — mirror app/api/v1/governance/requests/[id]/reject/route.ts.
@@ -2529,12 +2556,15 @@ const routes: Route[] = [
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    if (!body?.password) {
-      sendJson(res, 400, { error: 'Missing required field: password' })
+    // Password is OPTIONAL for an AID-authenticated agent (R32 / RIFM4UXN
+    // Option A — TRDD-IBKR7F74; mirrors the Next.js route). Self-reject stays
+    // allowed in the service: it is a withdrawal, not a self-approval.
+    if (body?.password !== undefined && typeof body.password !== 'string') {
+      sendJson(res, 400, { error: 'password must be a string' })
       return
     }
-    if (typeof body.password !== 'string') {
-      sendJson(res, 400, { error: 'password must be a string' })
+    if (!body?.password && !auth.agentId) {
+      sendJson(res, 400, { error: 'Missing required field: password' })
       return
     }
     // Use ONLY the authenticated agent id — never fall back to body.rejectorAgentId.
@@ -2543,7 +2573,7 @@ const routes: Route[] = [
       sendJson(res, 401, { error: 'Could not determine rejector agent ID from auth' })
       return
     }
-    sendServiceResult(res, await rejectCrossHostRequest(params.id, rejectorAgentId, body.password, body.reason))
+    sendServiceResult(res, await rejectCrossHostRequest(params.id, rejectorAgentId, body?.password ? body.password : null, body.reason))
   }},
 
   // ── Manager Trust (Layer 4: host-scoped manager authority) ──────────────

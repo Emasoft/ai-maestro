@@ -32,7 +32,15 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    if (!body?.password) {
+    // Password is OPTIONAL for an AID-authenticated agent (R32 / RIFM4UXN
+    // Option A — an agent never faces a password gate; TRDD-IBKR7F74). The
+    // service's title matrix (isManager / isChiefOfStaffAnywhere) authorizes,
+    // and its AID path adds the self-approval ban. A caller with neither an
+    // agent identity nor a password keeps the old 400.
+    if (body?.password !== undefined && typeof body.password !== 'string') {
+      return NextResponse.json({ error: 'password must be a string' }, { status: 400 })
+    }
+    if (!body?.password && !auth.agentId) {
       return NextResponse.json({ error: 'Missing required field: password' }, { status: 400 })
     }
 
@@ -53,7 +61,9 @@ export async function POST(
       return NextResponse.json({ error: 'Could not determine approver agent ID from auth' }, { status: 401 })
     }
 
-    const result = await approveCrossHostRequest(id, approverAgentId, body.password)
+    // null selects the service's AID path — only reachable with auth.agentId set
+    // (checked above), so null is always route-vouched.
+    const result = await approveCrossHostRequest(id, approverAgentId, body?.password ? body.password : null)
     // MF-004 (P8): Explicit error branching instead of fragile nullish coalescing
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

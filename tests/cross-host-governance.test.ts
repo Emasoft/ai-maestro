@@ -594,6 +594,121 @@ describe('rejectCrossHostRequest', () => {
 // listCrossHostRequests
 // ============================================================================
 
+// ============================================================================
+// AID path (TRDD-IBKR7F74 — R32 / RIFM4UXN Option A: password-less agent verbs)
+// ============================================================================
+
+describe('AID path (password === null / opts.aidVerifiedRequester)', () => {
+  it('approves without a password when the route vouches the caller by AID', async () => {
+    /** Verifies password === null skips verifyPassword entirely and the title matrix authorizes */
+    const request = makeGovernanceRequest({ requestedBy: 'member-agent' })
+    mockGetGovernanceRequest.mockReturnValue(request)
+    mockApproveGovernanceRequest.mockResolvedValue({ ...request, status: 'remote-approved' })
+
+    const result = await approveCrossHostRequest('req-001', 'manager-agent', null)
+
+    expect(result.status).toBe(200)
+    expect(mockVerifyPassword).not.toHaveBeenCalled()
+    expect(mockApproveGovernanceRequest).toHaveBeenCalledWith('req-001', 'manager-agent', 'sourceManager')
+  })
+
+  it('refuses an agent approving its own request on the AID path (self-approval ban)', async () => {
+    /** Verifies requestedBy === approver is 403 when password is null (K2WJH7RF) */
+    const request = makeGovernanceRequest({ requestedBy: 'manager-agent' })
+    mockGetGovernanceRequest.mockReturnValue(request)
+
+    const result = await approveCrossHostRequest('req-001', 'manager-agent', null)
+
+    expect(result.status).toBe(403)
+    expect(result.error).toContain('cannot approve its own')
+    expect(mockApproveGovernanceRequest).not.toHaveBeenCalled()
+  })
+
+  it('keeps the human password path exempt from the self-approval ban', async () => {
+    /** Verifies the ban binds ONLY the AID path — the password is the owner's own confirmation */
+    const request = makeGovernanceRequest({ requestedBy: 'manager-agent' })
+    mockGetGovernanceRequest.mockReturnValue(request)
+    mockApproveGovernanceRequest.mockResolvedValue({ ...request, status: 'remote-approved' })
+
+    const result = await approveCrossHostRequest('req-001', 'manager-agent', 'correct')
+
+    expect(result.status).toBe(200)
+    expect(mockApproveGovernanceRequest).toHaveBeenCalled()
+  })
+
+  it('still refuses a non-titled agent on the AID path (the matrix is the gate, not the password)', async () => {
+    /** Verifies removing the password gate did not widen WHO may approve */
+    const request = makeGovernanceRequest({ requestedBy: 'member-agent' })
+    mockGetGovernanceRequest.mockReturnValue(request)
+
+    const result = await approveCrossHostRequest('req-001', 'regular-agent', null)
+
+    expect(result.status).toBe(403)
+    expect(result.error).toContain('Only MANAGER or Chief of Staff')
+    expect(mockApproveGovernanceRequest).not.toHaveBeenCalled()
+  })
+
+  it('rejects without a password on the AID path, and self-reject (withdrawal) is allowed', async () => {
+    /** Verifies the reject AID path works and deliberately carries NO self-ban */
+    const request = makeGovernanceRequest({ requestedBy: 'cos-agent' })
+    mockGetGovernanceRequest.mockReturnValue(request)
+    mockRejectGovernanceRequest.mockResolvedValue({ ...request, status: 'rejected' })
+
+    const result = await rejectCrossHostRequest('req-001', 'cos-agent', null, 'withdrawing')
+
+    expect(result.status).toBe(200)
+    expect(mockVerifyPassword).not.toHaveBeenCalled()
+    expect(mockRejectGovernanceRequest).toHaveBeenCalledWith('req-001', 'cos-agent', 'withdrawing')
+  })
+
+  it('submits without a password when opts.aidVerifiedRequester matches requestedBy', async () => {
+    /** Verifies the out-of-band opts vouching skips the password gate on submit */
+    const result = await submitCrossHostRequest({
+      type: 'add-to-team',
+      targetHostId: 'host-remote',
+      requestedBy: 'manager-agent',
+      requestedByRole: 'manager',
+      payload: { agentId: 'agent-target-001', teamId: 'team-backend-001' },
+    }, { aidVerifiedRequester: 'manager-agent' })
+
+    expect(result.status).toBe(201)
+    expect(mockVerifyPassword).not.toHaveBeenCalled()
+  })
+
+  it('refuses an AID submission whose requestedBy is not the authenticated agent', async () => {
+    /** Verifies the IDOR double-lock: an agent cannot file AS someone else */
+    const result = await submitCrossHostRequest({
+      type: 'add-to-team',
+      targetHostId: 'host-remote',
+      requestedBy: 'someone-else',
+      requestedByRole: 'member',
+      payload: { agentId: 'agent-target-001' },
+    }, { aidVerifiedRequester: 'manager-agent' })
+
+    expect(result.status).toBe(403)
+    expect(result.error).toContain('requestedBy must be the authenticated agent')
+    expect(mockCreateGovernanceRequest).not.toHaveBeenCalled()
+  })
+
+  it('FORGERY CONTROL: a raw body with a null/missing password and NO opts fails 401, never the AID skip', async () => {
+    /** The headless router passes the raw request body as params — this pins that an
+     *  in-band `password: null` cannot select the passwordless path (the vouching is
+     *  a separate argument a JSON body cannot populate). */
+    const result = await submitCrossHostRequest({
+      type: 'add-to-team',
+      targetHostId: 'host-remote',
+      requestedBy: 'manager-agent',
+      requestedByRole: 'manager',
+      payload: { agentId: 'agent-target-001' },
+      password: null,
+    } as unknown as Parameters<typeof submitCrossHostRequest>[0])
+
+    expect(result.status).toBe(401)
+    expect(result.error).toContain('Invalid governance password')
+    expect(mockCreateGovernanceRequest).not.toHaveBeenCalled()
+  })
+})
+
 describe('listCrossHostRequests', () => {
   const req1 = makeGovernanceRequest({ id: 'req-1', status: 'pending', sourceHostId: 'host-local' })
   const req2 = makeGovernanceRequest({ id: 'req-2', status: 'executed', sourceHostId: 'host-remote' })

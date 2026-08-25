@@ -14,6 +14,7 @@ import {
 import { verifyHostAttestation } from '@/lib/host-keys'
 import { getHosts } from '@/lib/hosts-config'
 import { isValidUuid } from '@/lib/validation'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,7 +93,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!body.type || typeof body.type !== 'string') {
       return NextResponse.json({ error: 'Missing required field: type' }, { status: 400 })
     }
-    if (!body.password || typeof body.password !== 'string') {
+    // Password is OPTIONAL for an AID-authenticated agent (R32 / RIFM4UXN
+    // Option A — an agent files a governance request by identity, never by
+    // holding the governance password; TRDD-IBKR7F74). On the AID path the
+    // requester is FORCED to the authenticated identity (the same IDOR rule as
+    // approve/reject: never a self-asserted body field), and the service is told
+    // out-of-band via opts so a raw body cannot forge the path. A caller with
+    // neither identity nor password keeps the old 400.
+    let aidRequester: string | undefined
+    if (!body.password) {
+      const auth = authenticateFromRequest(request)
+      if (auth.error || !auth.agentId) {
+        return NextResponse.json({ error: 'Missing required field: password' }, { status: 400 })
+      }
+      aidRequester = auth.agentId
+      body.requestedBy = auth.agentId
+    } else if (typeof body.password !== 'string') {
       return NextResponse.json({ error: 'Missing required field: password' }, { status: 400 })
     }
     if (!body.targetHostId || typeof body.targetHostId !== 'string') {
@@ -118,7 +134,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // NT-034: body fields validated above (type, password, targetHostId, requestedBy, requestedByRole, payload);
     // submitCrossHostRequest performs additional domain-level validation internally.
-    const result = await submitCrossHostRequest(body)
+    const result = await submitCrossHostRequest(
+      body,
+      aidRequester !== undefined ? { aidVerifiedRequester: aidRequester } : undefined,
+    )
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

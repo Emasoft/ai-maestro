@@ -62,25 +62,45 @@ export async function submitCrossHostRequest(params: {
   requestedBy: string
   requestedByRole: AgentRole
   payload: GovernanceRequestPayload
-  password: string
+  password?: string
   note?: string
-}): Promise<ServiceResult<GovernanceRequest>> {
-  // Rate-limit governance password attempts to prevent brute-force attacks.
-  // Per-agent keys so one agent's failures don't lock out all others.
-  // Use atomic checkAndRecordAttempt to eliminate TOCTOU window.
-  //              between separate check/record calls
-  const submitRateLimitKey = `cross-host-gov-submit:${params.requestedBy}`
-  const rateCheck = checkAndRecordAttempt(submitRateLimitKey)
-  if (!rateCheck.allowed) {
-    const retryAfterSeconds = Math.ceil(rateCheck.retryAfterMs / 1000)
-    return { error: `Too many failed attempts. Try again in ${retryAfterSeconds}s`, status: 429 }
-  }
+// IBKR7F74 (R32 / RIFM4UXN Option A): `opts.aidVerifiedRequester` is set ONLY by a
+// transport handler that verified the caller's AID token — it enables the
+// passwordless agent path. It is a SEPARATE argument (not a params field) on
+// purpose: the headless router passes the raw request body as `params`, so any
+// in-band sentinel (password: null, aidPath: true, …) would be forgeable by a
+// caller who simply puts it in the JSON. A second positional argument cannot be
+// populated from a body passthrough.
+}, opts?: { aidVerifiedRequester?: string }): Promise<ServiceResult<GovernanceRequest>> {
+  if (opts?.aidVerifiedRequester !== undefined) {
+    // AID path: the transport verified the caller's identity token. The password
+    // gate and its brute-force rate limit are password-path concerns and are
+    // skipped (there is no password to brute-force). Double-lock: the request
+    // must be filed AS the authenticated agent, never as someone else.
+    if (params.requestedBy !== opts.aidVerifiedRequester) {
+      return { error: 'requestedBy must be the authenticated agent', status: 403 }
+    }
+  } else {
+    // Password path (USER/UI) — unchanged. A missing/null/non-string password
+    // fails verifyPassword, so a raw body passthrough can never skip this gate.
+    // Rate-limit governance password attempts to prevent brute-force attacks.
+    // Per-agent keys so one agent's failures don't lock out all others.
+    // Use atomic checkAndRecordAttempt to eliminate TOCTOU window.
+    const submitRateLimitKey = `cross-host-gov-submit:${params.requestedBy}`
+    const rateCheck = checkAndRecordAttempt(submitRateLimitKey)
+    if (!rateCheck.allowed) {
+      const retryAfterSeconds = Math.ceil(rateCheck.retryAfterMs / 1000)
+      return { error: `Too many failed attempts. Try again in ${retryAfterSeconds}s`, status: 429 }
+    }
 
-  // Verify governance password -- reset rate limit on success
-  if (!(await verifyPassword(params.password))) {
-    return { error: 'Invalid governance password', status: 401 }
+    // Verify governance password -- reset rate limit on success. `?? ''` is the
+    // forgery control: a raw body passthrough with a missing/null password lands
+    // on this path and fails 401 — it can never reach the AID skip above.
+    if (!(await verifyPassword(params.password ?? ''))) {
+      return { error: 'Invalid governance password', status: 401 }
+    }
+    resetRateLimit(submitRateLimitKey)
   }
-  resetRateLimit(submitRateLimitKey)
 
   // Validate that the requesting agent exists locally
   const agent = getAgent(params.requestedBy)
@@ -261,28 +281,45 @@ export async function receiveCrossHostRequest(
 export async function approveCrossHostRequest(
   requestId: string,
   approverAgentId: string,
-  password: string,
+  /** Governance password, or null when the ROUTE has already authenticated the
+   *  caller by AID token as `approverAgentId` (R32 / RIFM4UXN Option A — an
+   *  agent never faces a password gate; TRDD-IBKR7F74). null is ROUTE-vouched:
+   *  pass it ONLY after verifying the caller's identity token. Handlers that
+   *  forward a body field never produce null here (they 400 or pass a string),
+   *  so a JSON body cannot select this path on its own. */
+  password: string | null,
 ): Promise<ServiceResult<GovernanceRequest>> {
-  // Rate-limit governance password attempts to prevent brute-force attacks.
-  // Per-agent keys so one agent's failures don't lock out all others.
-  // Use atomic checkAndRecordAttempt to eliminate TOCTOU window.
-  const approveRateLimitKey = `cross-host-gov-approve:${approverAgentId}`
-  const rateCheck = checkAndRecordAttempt(approveRateLimitKey)
-  if (!rateCheck.allowed) {
-    const retryAfterSeconds = Math.ceil(rateCheck.retryAfterMs / 1000)
-    return { error: `Too many failed attempts. Try again in ${retryAfterSeconds}s`, status: 429 }
-  }
+  if (password !== null) {
+    // Rate-limit governance password attempts to prevent brute-force attacks.
+    // Per-agent keys so one agent's failures don't lock out all others.
+    // Use atomic checkAndRecordAttempt to eliminate TOCTOU window.
+    const approveRateLimitKey = `cross-host-gov-approve:${approverAgentId}`
+    const rateCheck = checkAndRecordAttempt(approveRateLimitKey)
+    if (!rateCheck.allowed) {
+      const retryAfterSeconds = Math.ceil(rateCheck.retryAfterMs / 1000)
+      return { error: `Too many failed attempts. Try again in ${retryAfterSeconds}s`, status: 429 }
+    }
 
-  // Verify governance password -- reset rate limit on success
-  if (!(await verifyPassword(password))) {
-    return { error: 'Invalid governance password', status: 401 }
+    // Verify governance password -- reset rate limit on success
+    if (!(await verifyPassword(password))) {
+      return { error: 'Invalid governance password', status: 401 }
+    }
+    resetRateLimit(approveRateLimitKey)
   }
-  resetRateLimit(approveRateLimitKey)
 
   // Load the request
   const request = getGovernanceRequest(requestId)
   if (!request) {
     return { error: `Governance request '${requestId}' not found`, status: 404 }
+  }
+
+  // Self-approval ban, AID path only (K2WJH7RF / the CORE #69 takeover class):
+  // an agent must not approve the request it itself filed — that defeats the
+  // approval system entirely. The password path stays exempt: the governance
+  // password is the human owner's own confirmation, and the human may approve
+  // anything (RIFM4UXN Option A symmetry with the COS-assign route).
+  if (password === null && request.requestedBy === approverAgentId) {
+    return { error: 'An agent cannot approve its own governance request', status: 403 }
   }
 
   // Determine approverType based on the approver's role and which host they are on
@@ -345,24 +382,30 @@ export async function approveCrossHostRequest(
 export async function rejectCrossHostRequest(
   requestId: string,
   rejectorAgentId: string,
-  password: string,
+  /** Governance password, or null when the ROUTE has already authenticated the
+   *  caller by AID token as `rejectorAgentId` (same contract as approve —
+   *  TRDD-IBKR7F74). Unlike approve there is NO self-ban here: a titled agent
+   *  rejecting its own request is a WITHDRAWAL, which is legitimate. */
+  password: string | null,
   reason?: string,
 ): Promise<ServiceResult<GovernanceRequest>> {
-  // Rate-limit governance password attempts to prevent brute-force attacks.
-  // Per-agent keys so one agent's failures don't lock out all others.
-  // Use atomic checkAndRecordAttempt to eliminate TOCTOU window.
-  const rejectRateLimitKey = `cross-host-gov-reject:${rejectorAgentId}`
-  const rateCheck = checkAndRecordAttempt(rejectRateLimitKey)
-  if (!rateCheck.allowed) {
-    const retryAfterSeconds = Math.ceil(rateCheck.retryAfterMs / 1000)
-    return { error: `Too many failed attempts. Try again in ${retryAfterSeconds}s`, status: 429 }
-  }
+  if (password !== null) {
+    // Rate-limit governance password attempts to prevent brute-force attacks.
+    // Per-agent keys so one agent's failures don't lock out all others.
+    // Use atomic checkAndRecordAttempt to eliminate TOCTOU window.
+    const rejectRateLimitKey = `cross-host-gov-reject:${rejectorAgentId}`
+    const rateCheck = checkAndRecordAttempt(rejectRateLimitKey)
+    if (!rateCheck.allowed) {
+      const retryAfterSeconds = Math.ceil(rateCheck.retryAfterMs / 1000)
+      return { error: `Too many failed attempts. Try again in ${retryAfterSeconds}s`, status: 429 }
+    }
 
-  // Verify governance password -- reset rate limit on success
-  if (!(await verifyPassword(password))) {
-    return { error: 'Invalid governance password', status: 401 }
+    // Verify governance password -- reset rate limit on success
+    if (!(await verifyPassword(password))) {
+      return { error: 'Invalid governance password', status: 401 }
+    }
+    resetRateLimit(rejectRateLimitKey)
   }
-  resetRateLimit(rejectRateLimitKey)
 
   // Validate rejector is MANAGER or COS
   if (!isManager(rejectorAgentId) && !isChiefOfStaffAnywhere(rejectorAgentId)) {

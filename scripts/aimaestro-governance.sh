@@ -120,14 +120,22 @@ Commands:
       --agent A    filter by agent id (UUID)
   request <flags>              Create a governance request
       --type T              request type (required)
-      --password P          governance password (required)
+      --password P          governance password (USER/UI path; agents omit it —
+                            with AID_AUTH exported the server authenticates by
+                            identity and forces requestedBy to the caller. R32)
       --target-host H       target host id (required)
-      --requested-by RB     requesting agent id/name (required)
+      --requested-by RB     requesting agent id/name (password path only; the
+                            AID path derives it from the authenticated identity)
       --role R              requester governance role (required)
       --agent A             subject agent id (builds payload {agentId:A})
       --payload-json '{…}'  full payload object (overrides --agent)
-  approve <id> --password P [--approver UUID]
-  reject  <id> --password P [--rejector UUID] [--reason R]
+  approve <id> [--password P] [--approver UUID]
+                               MANAGER/COS agents approve by AID_AUTH alone (no
+                               password; self-approval refused). The password
+                               form stays for the USER/UI. (TRDD-IBKR7F74)
+  reject  <id> [--password P] [--rejector UUID] [--reason R]
+                               Same AID path as approve; self-reject (withdrawal)
+                               is allowed.
   transfer list [--team ID] [--agent ID] [--status S]   List team-transfer requests
   transfer create --agent ID --from-team ID --to-team ID [--note TEXT]
   transfer resolve <transferId> --action approve|reject [--reject-reason TEXT]
@@ -175,9 +183,15 @@ cmd_request() {
             *) echo "Error: unknown flag for 'request': $1" >&2; return 1 ;;
         esac
     done
-    if [ -z "$type" ] || [ -z "$password" ] || [ -z "$target_host" ] || \
-       [ -z "$requested_by" ] || [ -z "$role" ]; then
-        echo "Error: --type, --password, --target-host, --requested-by and --role are required" >&2
+    if [ -z "$type" ] || [ -z "$target_host" ] || [ -z "$role" ]; then
+        echo "Error: --type, --target-host and --role are required" >&2
+        return 1
+    fi
+    # TRDD-IBKR7F74 (R32 / RIFM4UXN Option A): with AID_AUTH exported, an agent
+    # files WITHOUT the governance password and the server forces requestedBy to
+    # the authenticated identity — both flags bind only the password (USER/UI) path.
+    if [ -z "${AID_AUTH:-}" ] && { [ -z "$password" ] || [ -z "$requested_by" ]; }; then
+        echo "Error: --password and --requested-by are required without AID_AUTH" >&2
         return 1
     fi
     local payload
@@ -193,7 +207,9 @@ cmd_request() {
     body="$(jq -nc \
         --arg type "$type" --arg password "$password" --arg host "$target_host" \
         --arg rb "$requested_by" --arg role "$role" --argjson payload "$payload" \
-        '{type:$type, password:$password, targetHostId:$host, requestedBy:$rb, requestedByRole:$role, payload:$payload}')"
+        '{type:$type, targetHostId:$host, requestedByRole:$role, payload:$payload}
+         + (if $password != "" then {password:$password} else {} end)
+         + (if $rb != "" then {requestedBy:$rb} else {} end)')"
     _api POST "/api/v1/governance/requests" "$body"
 }
 
@@ -208,13 +224,15 @@ cmd_approve() {
             *) echo "Error: unknown flag for 'approve': $1" >&2; return 1 ;;
         esac
     done
-    [ -z "$password" ] && { echo "Error: --password required" >&2; return 1; }
-    local body
-    if [ -n "$approver" ]; then
-        body="$(jq -nc --arg p "$password" --arg a "$approver" '{password:$p, approverAgentId:$a}')"
-    else
-        body="$(jq -nc --arg p "$password" '{password:$p}')"
+    # TRDD-IBKR7F74: --password only binds the USER/UI path; an agent with
+    # AID_AUTH approves by identity (the server's title matrix + self-ban rule).
+    if [ -z "$password" ] && [ -z "${AID_AUTH:-}" ]; then
+        echo "Error: --password required (or export AID_AUTH for the agent path)" >&2; return 1
     fi
+    local body
+    body="$(jq -nc --arg p "$password" --arg a "$approver" \
+        '(if $p != "" then {password:$p} else {} end)
+         + (if $a != "" then {approverAgentId:$a} else {} end)')"
     _api POST "/api/v1/governance/requests/${id}/approve" "$body"
 }
 
@@ -230,10 +248,15 @@ cmd_reject() {
             *) echo "Error: unknown flag for 'reject': $1" >&2; return 1 ;;
         esac
     done
-    [ -z "$password" ] && { echo "Error: --password required" >&2; return 1; }
+    # TRDD-IBKR7F74: same AID path as approve; self-reject (withdrawal) allowed.
+    if [ -z "$password" ] && [ -z "${AID_AUTH:-}" ]; then
+        echo "Error: --password required (or export AID_AUTH for the agent path)" >&2; return 1
+    fi
     local body
     body="$(jq -nc --arg p "$password" --arg r "$rejector" --arg reason "$reason" \
-        '{password:$p} + (if $r != "" then {rejectorAgentId:$r} else {} end) + (if $reason != "" then {reason:$reason} else {} end)')"
+        '(if $p != "" then {password:$p} else {} end)
+         + (if $r != "" then {rejectorAgentId:$r} else {} end)
+         + (if $reason != "" then {reason:$reason} else {} end)')"
     _api POST "/api/v1/governance/requests/${id}/reject" "$body"
 }
 

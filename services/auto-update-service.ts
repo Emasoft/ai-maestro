@@ -65,7 +65,7 @@ import {
 import { isDependencyPlugin } from '@/lib/dependency-plugins'
 import { withMarketplaceLock } from '@/lib/marketplace-lock'
 import { isJanitorInstalledAndArmed as realIsJanitorInstalledAndArmed } from '@/lib/janitor-presence'
-import { stampChoreRun } from '@/lib/janitor-chore-stamp'
+import { stampChoreRun, declareChoreBounds } from '@/lib/janitor-chore-stamp'
 import { consumeWorkRequest } from '@/lib/janitor-work-request'
 import { readSettings, editSettings, type SettingsOp } from '@/lib/settings-gate'
 
@@ -262,6 +262,15 @@ export function startAbsorbedDutyScheduler(notifier?: FleetRestartNotifier): voi
     })
   }, ABSORBED_DUTY_POLL_MS)
   if (typeof absorbedTimerHandle.unref === 'function') absorbedTimerHandle.unref()
+  // Rev-8 §9.2 (TRDD-4WERSFAG): declare OUR bound for the chores THIS lane runs,
+  // derived from the one cadence constant — never a second hardcoded copy. Formula
+  // is the contract's max(3×c, c+600). Declaring below a janitor default is
+  // harmless (widen-only ignores it), so declare unconditionally.
+  {
+    const cadenceS = Math.floor(ABSORBED_DUTY_INTERVAL_MS / 1000)
+    const boundS = Math.max(3 * cadenceS, cadenceS + 600)
+    declareChoreBounds({ 'marketplace-refresh': boundS, 'github-config-audit': boundS })
+  }
   scheduleAbsorbedDutyCatchUp()
 }
 

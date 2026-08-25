@@ -122,6 +122,48 @@ export function choreStampPath(chore: AbsorbedChore): string {
   return path.join(janitorControlDir(), `${chore}.last-run.ts`)
 }
 
+/** Absolute path of the executor-declared staleness-bounds file (rev-8 §9.2). */
+export function claimBoundsPath(): string {
+  return path.join(janitorControlDir(), 'claim-bounds.json')
+}
+
+/**
+ * Declare THIS executor's staleness bound for the chores it runs, in
+ * `claim-bounds.json` (`{"<chore>": <bound_s>}`) — the rev-8 §9.2 contract
+ * (ai-maestro#126; mirror: docs/claimed-chores-contract.md). The janitor's
+ * claimed-chore watchdog reads it widen-only + fail-open, so without this file
+ * it derives bounds from ITS OWN roster cadence — which fired a deterministic
+ * false "marketplace-refresh stale" alarm in the last hour of every healthy 4h
+ * cycle (TRDD-4WERSFAG). Merge-preserving: keys this writer does not own (a
+ * different executor's chores) survive a rewrite. Best-effort and NEVER throws
+ * — a lost declaration degrades to the janitor's defaults, same as absent.
+ */
+export function declareChoreBounds(bounds: Record<string, number>): void {
+  try {
+    const p = claimBoundsPath()
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    let existing: Record<string, number> = {}
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(p, 'utf8'))
+      // Keep only sane rows — a corrupt file must not be re-emitted verbatim.
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'number' && Number.isFinite(v) && v > 0) existing[k] = v
+        }
+      }
+    } catch {
+      // absent or unreadable — start fresh (fail-open on the reader side too)
+    }
+    const merged = { ...existing, ...bounds }
+    // Atomic write (tmp + rename) so the janitor can never read a half-written file.
+    const tmp = `${p}.tmp.${process.pid}`
+    fs.writeFileSync(tmp, JSON.stringify(merged, null, 2) + '\n', 'utf8')
+    fs.renameSync(tmp, p)
+  } catch {
+    // Best-effort: a telemetry declaration must never fail the scheduler that calls it.
+  }
+}
+
 /**
  * Record that `chore` has just been attempted. Best-effort and NEVER throws: a telemetry write
  * must not be able to fail the chore it is reporting on. A lost stamp degrades to exactly the

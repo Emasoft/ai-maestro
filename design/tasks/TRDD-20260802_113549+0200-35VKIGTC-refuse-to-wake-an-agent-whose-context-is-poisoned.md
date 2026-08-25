@@ -1,11 +1,11 @@
 ---
 trdd-id: 35VKIGTC
 title: Refuse to wake an agent whose auto-loaded context is poisoned
-column: backburner
+column: design
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T11:35:49+0200
-updated: 2026-08-21T17:02:00+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

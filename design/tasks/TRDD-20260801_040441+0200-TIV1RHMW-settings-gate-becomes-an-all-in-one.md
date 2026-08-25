@@ -1,11 +1,11 @@
 ---
 trdd-id: TIV1RHMW
 title: convert the settings-gate API into a true all-in-one function
-column: backburner
+column: design
 scope: project
 project-id: ai-maestro
 created: 2026-08-01T04:04:41+0200
-updated: 2026-08-02T01:40:00+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

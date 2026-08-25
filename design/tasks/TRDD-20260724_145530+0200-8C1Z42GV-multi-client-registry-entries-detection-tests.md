@@ -1,10 +1,10 @@
 ---
 trdd-id: 8C1Z42GV
 title: Multi-client registry entries and detection tests
-column: backburner
+column: design
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-05T18:33:00+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

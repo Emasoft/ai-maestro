@@ -1,9 +1,9 @@
 ---
 trdd-id: ZKQ38TSG
 title: Publish per-chore last-run stamps so either side can answer is chore X alive with a stat
-column: backburner
+column: design
 created: 2026-08-04T15:40:05+0200
-updated: 2026-08-16T16:52:01+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session

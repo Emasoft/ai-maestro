@@ -1,9 +1,9 @@
 ---
 trdd-id: P9H0Q7SZ
 title: USER-escalation script verb with acknowledgment state
-column: design
+column: approval
 created: 2026-08-19T14:01:56+0200
-updated: 2026-08-21T18:12:19+0200
+updated: 2026-08-25T17:28:11+0200
 implementation-commits: []
 current-owner: hub-session-brrjk57p-phase2
 created-by: hub-session-brrjk57p-phase2

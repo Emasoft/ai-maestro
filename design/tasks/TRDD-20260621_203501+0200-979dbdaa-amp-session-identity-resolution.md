@@ -1,9 +1,9 @@
 ---
 trdd-id: 979DBDAA
 title: AMP sessions self-resolve identity from CWD — fix #46 (keystone, unblocks all amp-* coordination)
-column: design
+column: approval
 created: 2026-06-21T20:35:01+0200
-updated: 2026-08-16T16:40:46+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1

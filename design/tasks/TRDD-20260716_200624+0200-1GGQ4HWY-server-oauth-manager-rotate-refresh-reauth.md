@@ -1,9 +1,10 @@
 ---
 trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
-column: backburner
+column: blocked
+pre-block-column: backburner
 created: 2026-07-16T20:06:24+0200
-updated: 2026-08-16T16:47:37+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -21,7 +22,7 @@ derived: true
 derived-kind: npt
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [TRDD-H24DF6ZC]
 release-via: none
 implementation-commits: [ddec060f, 59ebd182, 69ce68cb, 699e5f06, 67650e06, e963487f, 45725da7, 1e65a9b3, 2b325a11]
 ---

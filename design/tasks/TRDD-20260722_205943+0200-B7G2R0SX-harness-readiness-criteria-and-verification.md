@@ -1,9 +1,9 @@
 ---
 trdd-id: B7G2R0SX
 title: Harness-readiness acceptance criteria + un-gated verification pass (make the spec-first authority trustworthy)
-column: design
+column: approval
 created: 2026-07-22T20:59:43+0200
-updated: 2026-08-16T10:58:10+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: session
 task-type: audit
 scope: project

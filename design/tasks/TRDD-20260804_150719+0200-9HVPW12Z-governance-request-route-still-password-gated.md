@@ -1,9 +1,9 @@
 ---
 trdd-id: 9HVPW12Z
 title: The agent-facing governance-request route still demands the governance password after R32 superseded it
-column: backburner
+column: design
 created: 2026-08-04T15:07:19+0200
-updated: 2026-08-16T16:50:04+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 assignee: claude-opus-session

@@ -1,9 +1,9 @@
 ---
 trdd-id: ZUAFN6PB
 title: Central fleet re-sweep for postable-body handles with the context-scoped classifier
-column: backburner
+column: design
 created: 2026-08-08T16:39:23+0200
-updated: 2026-08-16T17:46:11+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

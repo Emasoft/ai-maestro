@@ -1,11 +1,11 @@
 ---
 trdd-id: PL2QGW18
 title: Adopt the Agent Client Protocol for every non-Claude client
-column: backburner
+column: design
 scope: project
 project-id: ai-maestro
 created: 2026-07-27T10:13:47+0200
-updated: 2026-07-27T10:13:47+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

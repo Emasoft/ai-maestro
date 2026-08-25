@@ -1,11 +1,11 @@
 ---
 trdd-id: 7FTV9MTY
 title: Re-land the endpoint-unreachable statusline rotation behind a debounce and a statusline-specific dwell
-column: backburner
+column: design
 scope: project
 project-id: ai-maestro
 created: 2026-08-02T15:14:30+0200
-updated: 2026-08-02T15:14:30+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro

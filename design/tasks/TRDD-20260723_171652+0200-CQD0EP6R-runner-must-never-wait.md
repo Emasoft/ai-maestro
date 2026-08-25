@@ -1,9 +1,9 @@
 ---
 trdd-id: CQD0EP6R
 title: A scenario runner must never wait — the orchestrator owns the clock, the runner owns bounded UI bursts
-column: design
+column: approval
 created: 2026-07-23T17:16:52+0200
-updated: 2026-08-16T10:52:12+0200
+updated: 2026-08-25T17:28:11+0200
 current-owner: ai-maestro-dev-session
 task-type: infra
 scope: project

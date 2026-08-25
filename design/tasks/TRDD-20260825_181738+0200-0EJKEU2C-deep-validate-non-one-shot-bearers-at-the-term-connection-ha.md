@@ -3,7 +3,7 @@ trdd-id: 0EJKEU2C
 title: Deep-validate non-one-shot bearers at the term connection handler without consuming one-shot AID tokens
 column: backburner
 created: 2026-08-25T18:17:38+0200
-updated: 2026-08-25T18:17:38+0200
+updated: 2026-08-25T18:23:34+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -14,6 +14,8 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-08-25T18:17:38+0200
 parent-trdd: 47A35BA2
+derived: true
+derived-kind: eht
 ---
 
 # Deep-validate non-one-shot bearers at the term connection handler without consuming one-shot AID tokens

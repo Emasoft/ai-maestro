@@ -3,7 +3,7 @@ trdd-id: ACA7013M
 title: Decide and apply the auth policy for the GET role-plugins status and governance reachable info-leak endpoints
 column: backburner
 created: 2026-08-25T18:17:40+0200
-updated: 2026-08-25T18:17:40+0200
+updated: 2026-08-25T18:23:34+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -14,6 +14,8 @@ approved: true
 approval-judge: user
 approval-datetime: 2026-08-25T18:17:40+0200
 parent-trdd: 47A35BA2
+derived: true
+derived-kind: eht
 ---
 
 # Decide and apply the auth policy for the GET role-plugins status and governance reachable info-leak endpoints

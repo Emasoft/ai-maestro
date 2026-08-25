@@ -1,9 +1,9 @@
 ---
 trdd-id: 4WERSFAG
 title: Server declares its claimed-chore staleness bounds in claim-bounds.json
-column: todo
+column: complete
 created: 2026-08-25T18:39:02+0200
-updated: 2026-08-25T18:39:02+0200
+updated: 2026-08-25T23:09:00+0200
 current-owner: ai-maestro-e5
 created-by: ai-maestro-e5
 assignee: ai-maestro-e5
@@ -55,14 +55,14 @@ value derives from the same constant):
 
 ## Acceptance
 
-- [ ] `declareChoreBounds` exists, atomic write, merge-preserves foreign keys; unit test seeded
+- [x] `declareChoreBounds` exists, atomic write, merge-preserves foreign keys; unit test seeded
       both directions (fresh file created with the map; pre-existing foreign key survives a
       rewrite).
-- [ ] Scheduler start declares `marketplace-refresh: 43200` (and github-config-audit), derived
+- [x] Scheduler start declares `marketplace-refresh: 43200` (and github-config-audit), derived
       from `ABSORBED_DUTY_INTERVAL_MS` — not a second hardcoded copy of the cadence.
-- [ ] After `yarn build` + pm2 restart, `~/.claude/janitor-control/claim-bounds.json` exists on
+- [x] After `yarn build` + pm2 restart, `~/.claude/janitor-control/claim-bounds.json` exists on
       disk with `marketplace-refresh >= 43200` (run: `cat ~/.claude/janitor-control/claim-bounds.json`).
-- [ ] Verification command recorded for the janitor half (their observation, not this card's
+- [x] Verification command recorded for the janitor half (their observation, not this card's
       gate): the next `claimed-chore-stale` fire after a >180m stamp age should NOT name
       marketplace-refresh.
 

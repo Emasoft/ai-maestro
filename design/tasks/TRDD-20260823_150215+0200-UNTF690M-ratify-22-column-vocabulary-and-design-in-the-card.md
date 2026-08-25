@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-23T15:02:15+0200
-updated: 2026-08-23T16:40:35+0200
+updated: 2026-08-25T17:24:55+0200
 current-owner: ai-maestro-00
 created-by: user
 assignee: ai-maestro-00
@@ -48,8 +48,21 @@ The card was renamed to match; the id `UNTF690M` is unchanged.
 (a SECOND USER directive, `PRRD G11.1`); and FOUR spec repairs that PEER SESSIONS found by
 cross-reading the amendment against the corpus — none of which any test could have caught.
 
-**NEXT ACTION.** Put the two open decisions to the USER (push authorization for 283 commits;
-the two stale janitor-shipped global rules). Nothing else is blocked.
+**2026-08-25 — BOTH USER DECISIONS EXECUTED.** (1) Push AUTHORIZED and done:
+`f75f72fa..c8b0e9cb` → `fork/governance-rules` (287 commits; peers verified the head the same
+hour). (2) Janitor coordination AUTHORIZED: filed **janitor#286** (universal-kanban.md 17→22 +
+trdd-approval-tiers.md retired-field), janitor session directed to fold it into its expedited
+safety release; architect's overlapping #287 left to the janitor to dedupe. Same session:
+found the hub SERVER WEDGED (43h process, TCP accepted / HTTP timed out) — restarted; rebuilt
+`.next` (the running bundle predated this card, so the harness lacked the 22-column enum) and
+redeployed — `verify_assumptions` verified present in 3 server chunks, /api/sessions answers
+<0.1s. Fleet-wide 3.0.0 prep directive broadcast to all live plugin sessions; replies logged.
+
+**NEXT ACTION.** Await the janitor release for the #286 half; remaining hub docket (separate
+from this card): the ai-maestro#145 RP-CITATION-01 ruling, TRDD-IBKR7F74, programmer #40/#27
+bookkeeping, and the USER design question — should fleet repo sessions get registered titled
+identities (registry holds NO architect/orchestrator/COS agents; only 2 test agents carry
+titles, so title-gated board writes are hub-only today).
 
 **THE PEER FINDINGS, because they are the most valuable output of this card:**
 
@@ -192,12 +205,13 @@ IND rule — all above what a MANAGER may authorize alone.
       through the doctor's LINT MESSAGE, which is what proves the message and `--fix` share one
       definition).
 - [x] The two transition tables carry authority for every new transition.
-- [ ] **BLOCKED ON THE USER** — coordination with ai-maestro-janitor for `universal-kanban.md`.
-      Not filed unilaterally (cross-project rule: file an issue, do not edit). A SECOND stale
-      janitor rule was found by the ARCHITECT: `~/.claude/rules/trdd-approval-tiers.md` teaches
-      the RETIRED `approval-tier:` field. The MAINTAINER then supplied the decisive evidence —
-      it caused them to write `approval-tier: 2` into a real card the same day, while their own
-      shipped persona asserts the live `min-approval-requirement:` enum. Not hypothetical drift.
+- [x] Coordination with ai-maestro-janitor — USER authorized 2026-08-25; **janitor#286 filed**
+      covering BOTH stale rules (`universal-kanban.md` 17→22 and `trdd-approval-tiers.md`
+      teaching the RETIRED `approval-tier:` field — the MAINTAINER's decisive evidence: it
+      caused them to write `approval-tier: 2` into a real card while their shipped persona
+      asserts the live `min-approval-requirement:` enum). Janitor session directed the same
+      hour to fold it into its expedited safety release. The janitor SHIPPING the fix is the
+      janitor's own act, tracked by #286 — not a box this card can hold open.
 - [x] Wikimem `three-pillars-conformance-spec` and `team-meeting-and-kanban` updated to 22,
       through `memgrep edit` (locked, CAS-guarded), `validate` + `lint` clean. A third page,
       `repo-file-structure`, was caught by the prose sweep.

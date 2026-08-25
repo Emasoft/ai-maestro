@@ -16,9 +16,10 @@ const KanbanColumnSchema = z.object({
 }).strict()
 
 const UpdateKanbanConfigSchema = z.object({
-  // Widened to 20 columns to fit the 17-stage default set (14 lifecycle + 3
-  // exception states) plus headroom for a few custom columns.
-  columns: z.array(KanbanColumnSchema).min(1).max(20),
+  // Cap 27 = the legal column: value set of 3-pillars 3.0.0 (22-column board,
+  // 3P-KAN-20's 5 bracket values as intake/done lanes). At 20 the route 422'd
+  // the server's OWN 22-entry DEFAULT_KANBAN_COLUMNS (COS defect, 2026-08-25).
+  columns: z.array(KanbanColumnSchema).min(1).max(27),
 }).strict()
 
 // GET /api/teams/[id]/kanban-config - Get team's kanban column configuration

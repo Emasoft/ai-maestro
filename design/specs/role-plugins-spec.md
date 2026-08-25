@@ -1,6 +1,6 @@
 # SPEC — AI Maestro ROLE-PLUGINS (on-disk structure, `.agent.toml`, quad-identity)
 
-- **spec-version:** 1.1.0
+- **spec-version:** 1.2.0
 - **status:** authoritative
 - **authority:** PRRD ▶ SPEC ▶ TRDD. This SPEC governs the on-disk shape of every role-plugin.
 - **scope:** what makes a Claude Code plugin a *role-plugin*, its file tree, the `.agent.toml`
@@ -315,3 +315,81 @@ STRUCTURE.
 `RP-VAL-05` no prompt-element embeds `/api/...` / a `:23000` URL / a raw server HTTP call (plugin-abstraction).
 `RP-VAL-06` subagents carry NO `model:` and NO `hooks:`.
 `RP-VAL-07` do NOT run `pss_validate_agent_toml.py` against a shipped role-plugin toml (RP-TOML-PSS).
+
+---
+
+## RP-CITATION — PRRD citation + rule-version integrity (ratified ai-maestro#145, 2026-08-21)
+
+`RP-CITATION-01` **MANDATORY** for every role-plugin repo whose PRRD carries at least one
+pinned citation (`G<n>.<v>` / `S<n>.<v>`): the repo MUST carry a committed citation-integrity
+gate implementing the four points below. A repo whose PRRD has no pinned citations is
+**vacuously satisfied — not opted out** (the gate has nothing to check; that is not a licence
+to remove it). Authority: SILVER (MANAGER-revisable). The derivation — three trees, both
+defect directions (dangling pin / silent mutation), every constraint below a measured defect —
+is on ai-maestro#145; this section is the ratified shape.
+
+1. **Stable coordinate in prose.** Living prose (skills, scripts, tests, personas) cites by
+   NUMBER (`PRRD G1`) — the number is the identity and never rots. A version pin (`G1.2`) is
+   a CLAIM about the rule's text and belongs only where the version itself is load-bearing.
+2. **Citation→version gate.** Every pinned citation must resolve against the repo's own PRRD:
+   number exists, tier letter matches, version current. A pin to a superseded version is a
+   finding unless exempt per RP-CITATION-02.
+3. **Text→version hash gate.** Each rule's body is hashed against its version, so a text edit
+   without a version bump reds. This is the half a resolution check cannot see: a stale
+   pointer announces itself on the first lookup; a pointer to silently-mutated content never
+   does.
+4. **Exempt by PROPERTY, never by a path list.** Archived terminal cards are exempt by
+   `column:` — a property of the card; a path list either over-covers or goes stale on the
+   next archival.
+
+`RP-CITATION-02` Site classification — the action is decided by what the sentence DOES with
+the version, never by where the file lives:
+
+| shape | property | action |
+|---|---|---|
+| rule definition | the version IS the claim | bump with the text |
+| living prose | the version is incidental | float to the bare number |
+| archived terminal card | `column:` terminal | exempt (a frozen card must not lie about what it was written against) |
+| grammar example | the version is the subject being demonstrated | exempt, KEEP pinned |
+| historical narration | names the successor in the same sentence (`G1.1 → G1.2`, "fixed:") | exempt |
+| synthetic fixture | the PRRD is constructed by the test | exempt (the format under test, not a citation) |
+
+The last three have no frontmatter to key on and need heuristics, and heuristics produce false
+negatives. **Take the checker that misses a real dangle over one that reds on a grammar
+example** — the first fails at the hand-measured rate, the second gets deleted, after which
+both defect directions run free.
+
+`RP-CITATION-03` Implementation constraints — each one a defect measured in a shipped gate:
+
+- **Capture the whole rule block** (bullet → next bullet / next heading / EOF). A one-line
+  regex under `re.M` silently truncates wrapped rules, so an edit to a continuation line
+  hashes identically — the gate's own defect class, reproduced inside the gate.
+- **Normalize whitespace before hashing.** A reflow is not a revision; a gate that reds on
+  reflow trains the author to regenerate the fixture without reading it.
+- **Scope the corpus.** The checker excludes itself, AND excludes test fixtures that
+  construct their own PRRD — the corpus is part of the selector.
+- **Non-vacuity keys on INPUT CONSUMED.** Count and print the scanned population; zero files
+  scanned is exit 2 (could-not-run), never a pass. Zero citations over a real scan is the
+  legitimate vacuous green of RP-CITATION-01.
+- **Failure messages point at the likely repair.** A hash mismatch reads as "the fixture is
+  stale"; the correct response is usually the opposite — say "bump the rule, THEN set the
+  hash". Where a red has two candidate culprits, name both and state what was ruled out.
+- **Scope statement.** A green run asserts citations and rule versions ONLY. Container-level
+  stamps (`prrd-version:`, `updated:`) have no citation pointing at them and are invisible to
+  this gate by construction; they need their own independent witness (recorded open on
+  ai-maestro#145).
+
+`RP-CITATION-04` Acceptance is **"seeded both directions and observed"** — never "a check
+exists" (every failure the derivation thread found was a check that existed). Minimum control
+set, each pinning ONE direction with its own named input, as COMMITTED tests over synthetic
+text (never mutate-and-restore of the live PRRD — an interrupted run corrupts the repo):
+
+| control | seeded input | expectation |
+|---|---|---|
+| A | word changed on a continuation line | REDS (no silent under-coverage) |
+| B | pure reflow, no wording change | GREEN (no false positive) |
+| C | a fixture that distinguishes the correct parser from the naive one-line one | REDS if it cannot |
+| D | the naive parser installed | A and C observed red before any control is trusted |
+
+The acceptance record names the INPUT each direction was seeded with and the TREE it was
+measured in — a guard's coverage is a property of a repository, not of a design.

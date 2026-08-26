@@ -28,7 +28,7 @@ severity: critical
 effort: M
 labels: [fleet-ask]
 blocker-probe: bash /Users/emanuelesabetta/.claude/plugins/cache/ai-maestro-plugins/ai-maestro-janitor/3.3.26/scripts/oauth_rotator/lifetime-status.sh
-blocker-holds-if: match:(reauth-needed|refresh-dead|expired|no session)
+blocker-holds-if: match:ACTION DUE
 external-refs: [Emasoft/ai-maestro#95, TRDD-1GGQ4HWY, TRDD-DPPYVLVH]
 ---
 
@@ -97,7 +97,31 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 > | cookies expire **2026-08-30**, 3.1 days left | `lifetime-status.sh` → **27.4 d** on all 3 (≈ 2026-09-23) | **REFUTED** |
 > | all three refresh tokens **dead (`invalid_grant`)** | access tokens minted **23:34 / 00:05 / 00:41**, staggered ~30 min, expiring 07:34 / 08:05 / 08:41 | **REFUTED** |
 > | live account exhausted / Fable window spent | `tick` → live `ipazia`, **5h=6% 7d=11%**, "within limits" | **REFUTED** (and already withdrawn below) |
-> | the server never runs the absorbed chore | pm2 `ai-maestro` **online 21 h**, `/api/sessions` → 401 (serving); janitor `tick.last-run` still 2026-07-25, i.e. correctly yielded | **the server IS running it** |
+> | the server never runs the absorbed chore | janitor `tick.last-run` still 2026-07-25, i.e. correctly yielded. pm2 `ai-maestro` online 21 h and `/api/sessions` → 401 — which proves only that **an HTTP server answers**, not that the rotator tick runs | **UNVERIFIED — see the caveat below** |
+>
+> **⚠ TWO CORRECTIONS TO THIS BLOCK, from an adversarial review of the turn that wrote it.**
+>
+> **(1) "The server IS running the absorbed chore" was a PROXY read and is withdrawn.** A 401 on
+> `/api/sessions` proves an HTTP server answers and demands auth — it is silent on the rotator
+> tick. Worse, the contradiction was *observed and left*: `rotator.log`'s last entry is
+> **2026-08-26T17:13:34**, an 8-hour gap at read time. Either it logs only on state change
+> (plausible, unverified) or the tick is not running. **This card's box 1 is therefore NOT
+> re-openable on this evidence and NOT closeable on it either — it is unmeasured.** The
+> settling measurement is a tick-attributable artifact that moves: a `tick.last-run` stamp the
+> SERVER writes, or a log line with a timestamp inside the last cadence.
+>
+> **(2) "Staggered mints prove a scheduled refresh loop" — the CONCLUSION survives, the
+> MECHANISM does not.** A refresh *preserves* stagger, so stagger alone dates nothing, and
+> three tokens minted ~31 and ~36 min apart is equally what a human logging into three accounts
+> in sequence looks like — which is exactly what the owner did on 08-26. Both hypotheses
+> predict the observation identically. The 8h token lifetime used in that arithmetic was also
+> taken from the Problem section of the very card being refuted, not measured.
+>
+> **What actually establishes "the refresh tokens are alive" is the janitor's independent
+> measurement, not this one:** `refresh_failures` **0 on all three slots, previously
+> 572 / 224 / 776**. That is a direct observation of the refresh path succeeding. Recorded
+> because *wrong mechanism, right answer* is the failure class that meets no resistance and
+> therefore spreads furthest.
 >
 > **Why the mint times are the decisive evidence and the other readings are not.** Three
 > accounts minting **~30 minutes apart inside a 2-hour span** is the signature of a *scheduled

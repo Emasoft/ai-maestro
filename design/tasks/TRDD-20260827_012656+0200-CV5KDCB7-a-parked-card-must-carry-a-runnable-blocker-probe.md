@@ -86,6 +86,41 @@ blocker-holds-if: match:invalid_grant
 | `exit-0` | the probe exits 0 |
 | `exit-nonzero` | the probe exits non-zero |
 | `match:<regex>` | the probe's stdout+stderr matches `<regex>` |
+| `not-match:<regex>` | the probe's output does **not** match `<regex>` |
+
+**`not-match:` is not symmetry, it is the fail-closed form, and omitting it biased the whole
+convention toward fail-open.** With only `match:`, a probe author must enumerate **failure**
+vocabulary — open-ended, unbounded, and unverifiable, because you cannot prove you listed every
+way a thing can break. Asserting the **success sentinel** and holding the blocker when it is
+ABSENT is closed: one string, verifiable against the emitter's source. Prefer `not-match:` on a
+success sentinel; use `match:` only where the emitter has a single aggregate FAILURE sentinel
+that all failure branches provably feed.
+
+### The blind-needle rule, learned by shipping one in this convention's own first instance
+
+**Take the needle from the EMITTER's source, never from vocabulary you saw somewhere else.**
+X4RK1NUW's first probe used `match:(reauth-needed|refresh-dead|expired|no session)`. Measured
+against `lifetime-status.sh`: **3 of the 4 tokens do not occur in it at all**, and `expired`
+occurs only inside the cookie-column value `none/expired`. That needle caught `LOGIN NEEDED` and
+was blind to `REFRESH SOON` and `RE-CAPTURE` — fail-open on two of three blocker states. The
+vocabulary was real, and came from `rotator.log`'s **alert names**: tokens lifted from emitter X
+and pointed at emitter Y.
+
+It was replaced with `match:ACTION DUE`, which is closed *by construction* rather than by
+enumeration: all three blocker branches `action.append(email)`, and `ACTION DUE` prints iff
+`action` is non-empty (`lifetime-status.sh:131,133,135,145,146`).
+
+**Every probe therefore needs a SOURCE positive control, and it is a different check from a
+behavioural one:**
+
+```bash
+grep -nE '<the needle>' <the emitter>     # 0 hits  => blind needle, reject the probe
+```
+
+Testing the regex against a string you typed yourself (`echo "reauth-needed" | grep -qE ...`)
+proves only that the regex is syntactically valid and matches its own literal. That is a
+**degenerate** control; it passed for the blind needle above. Also: match case-insensitively, or
+declare the case explicitly — a needle for `expired` misses `EXPIRED`.
 
 **The lint rule (`BLOCKED-WITHOUT-PROBE`), in `trddgrep validate`:** a card that claims to be
 parked MUST carry both fields. "Claims to be parked" = any of `column: blocked`, a non-empty
@@ -132,6 +167,31 @@ seconds instead of being taken on trust.
 - Neuter: delete the `BLOCKED-WITHOUT-PROBE` rule → a seeded parked card with no probe must
   stop being flagged. If nothing reddens, the rule is unreachable and the gate is decorative.
 
+## The janitor's five conditions — ACCEPTED (2026-08-27, their reply)
+
+They accept in principle and set a bar before their detector executes anything. All five are
+adopted here as binding on the design:
+
+1. **No shell.** Fixed argv split, no expansion, no metacharacters. *This kills my own first
+   draft's "a single shell command" — a probe is an argv vector.*
+2. **Hard timeout, output to a file, never to context.** Non-zero exit and timeout are both
+   verdict 2.
+3. **Three verdicts; could-not-run is NEVER "cleared".**
+4. **The probe's root must not be agent-writable, VERIFIED at run time, not assumed.**
+5. **A red test** that writes a probe into a writable root and asserts it is refused, not run.
+
+**Condition 4 is strengthened here, because this repo shipped its exact inverse an hour ago.**
+The writability check must be on the **realpath'd** containing directory, not the configured
+one. TRDD-NB70FKKT was precisely this shape: containment checked on a realpath'd path, then the
+**lexical** path used — so a symlinked directory inside a trusted base passes the check while
+the derived root points into agent-writable space. A lexical condition-4 check would pass while
+the probe came from a writable tree: their defence with our bug inside it.
+
+**Condition 3 needs the neuter that makes it non-vacuous:** point a probe at a nonexistent
+binary, assert verdict 2, then mutate could-not-run to fall through to "cleared" and confirm
+exactly one named test reddens. Without the recorded neuter, the third verdict is two verdicts
+wearing a third's name.
+
 ## Estimated risk
 
 LOW for Part 1 (a lint rule + two optional fields; no existing card changes meaning).
@@ -146,7 +206,12 @@ plainly rather than discovering later — it is the same class as TRDD-NB70FKKT.
 - [ ] `BLOCKED-WITHOUT-PROBE` lands in `trddgrep validate`, with the two false-fire directions
       covered by tests and a recorded neuter run naming which test each mutation reddens
 - [ ] TRDD-X4RK1NUW retrofitted with its probe (it already carries the three commands in prose)
-- [ ] Part 2 proposed to the janitor and their verdict recorded here (accept / refuse / counter)
+- [x] Part 2 proposed to the janitor and their verdict recorded here — **ACCEPTED in principle
+      with five conditions**, all adopted above; they ship DISABLED-by-default until their
+      roots satisfy condition 4
+- [ ] `not-match:` supported by the lint and the detector, with a probe using it
+- [ ] Every probe in the corpus carries a recorded SOURCE positive control
+      (`grep -nE '<needle>' <emitter>` returning non-zero)
 
 ## Approval log
 

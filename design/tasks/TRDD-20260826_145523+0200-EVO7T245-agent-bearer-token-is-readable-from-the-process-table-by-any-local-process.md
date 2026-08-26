@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T16:24:10+0200
+updated: 2026-08-26T16:41:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -451,6 +451,27 @@ A per-agent container gives, by construction rather than by policy:
 
 Inside a container the credential question also becomes easy: one agent per container means the
 container IS the identity boundary, and a token in that environment is readable only by that agent.
+
+### CONTAINER PLAN — STEPS 1-4 NOW MEASURED, and they PASS
+
+| # | question | result |
+|---|---|---|
+| 2 | Docker present? | **YES** — server 29.4.0 |
+| 1 | does the docker path RUN agents or just manage hosts? | **RUNS them.** `services/agents-docker-service.ts:43` *"Create a new agent running inside a Docker container"*, `docker run` via `execFileAsync` array args, container `aim-<name>`, and it already **blocks sensitive host paths from being mounted** |
+| 3 | is the PID namespace really separate? | **YES.** Host: 2 tmux servers, **31 claude processes**. Container: **1** process (`ps -e` itself). *Positive control is the host count — a low container number alone would prove nothing.* |
+| 4 | is the host tmux socket reachable from a container? | **NO.** `/tmp/tmux-*` → `No such file or directory` inside; control confirms `/tmp/tmux-501` exists on the host |
+
+**So the demonstrated `send-keys` impersonation has no path across a container boundary, and the
+three token exposures are not merely narrowed — they are INVISIBLE, because one agent cannot
+enumerate another's processes at all.** This is the first option in the whole card that removes the
+attack surface rather than guarding it, and it needs no OS accounts and no native code.
+
+**STILL UNVERIFIED — steps 5 and 6, and 5 can still kill it:**
+- **Does PTY streaming survive containerisation?** The dashboard's core feature is node-pty over
+  WebSocket. If a containerised agent cannot stream its terminal, the direction dies on product
+  grounds regardless of how good the security is. **This is the next thing to measure.**
+- Cost per agent (memory, startup) against a ~20-agent fleet.
+- Whether the existing docker path is complete enough to adopt, or is a stub with one entry point.
 
 **What I have NOT verified, and must be before this is a plan:** whether that docker path actually
 runs agents in containers today or only manages remote hosts; how complete it is; whether the

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T20:54:38+0200
+updated: 2026-08-27T01:25:33+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -78,10 +78,60 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 - [x] Server-side scheduled keepalive for oauth-rotator-tick actually executes (not just accepted via the absorption contract)
 - [x] The 2026-08-21 `refresh-dead` misdiagnosis root-caused and fixed
 - [x] Two janitor-side fixes referenced in the issue ported to the TS daemon
-- [ ] Verified clean across a 48h+ window before the 2026-08-30 deadline
+- [ ] Verified clean across a 48h+ window ~~before the 2026-08-30 deadline~~ (deadline struck 2026-08-27: the owner renewed all 3 accounts on 08-26; cookies read 27.4 d ≈ 2026-09-23, refresh tokens alive. Window start 2026-08-27T01:25:33+0200. Re-derive with the three commands in the STATE block; PASS = cookie days still >7 AND the three `expires_at` still staggered-and-recent after 48h)
 - [x] Comment posted on Emasoft/ai-maestro#95 confirming the card and status
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-26
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-27
+
+> **✅ 2026-08-27T01:30 — THE CREDENTIAL EMERGENCY BELOW IS OVER. THE OWNER RENEWED ALL THREE
+> ACCOUNTS ON 2026-08-26, AND EVERY CLAIM IN THE 08-26 BLOCK THAT FOLLOWS IS SUPERSEDED.**
+> Do NOT act on the "3.1 days left" block; it is kept verbatim below as the audit trail and as
+> the guardrail, never as current fact.
+>
+> **Measured here, first-hand, not taken on report:**
+>
+> | claim (08-26 block) | measured 08-27T01:23 | verdict |
+> |---|---|---|
+> | cookies expire **2026-08-30**, 3.1 days left | `lifetime-status.sh` → **27.4 d** on all 3 (≈ 2026-09-23) | **REFUTED** |
+> | all three refresh tokens **dead (`invalid_grant`)** | access tokens minted **23:34 / 00:05 / 00:41**, staggered ~30 min, expiring 07:34 / 08:05 / 08:41 | **REFUTED** |
+> | live account exhausted / Fable window spent | `tick` → live `ipazia`, **5h=6% 7d=11%**, "within limits" | **REFUTED** (and already withdrawn below) |
+> | the server never runs the absorbed chore | pm2 `ai-maestro` **online 21 h**, `/api/sessions` → 401 (serving); janitor `tick.last-run` still 2026-07-25, i.e. correctly yielded | **the server IS running it** |
+>
+> **Why the mint times are the decisive evidence and the other readings are not.** Three
+> accounts minting **~30 minutes apart inside a 2-hour span** is the signature of a *scheduled
+> refresh loop*; a dead refresh token cannot produce it at all, let alone staggered. By
+> contrast `oauth-health`'s `refresh=yes` is **PRESENCE of a refreshToken string, not its
+> validity** (`build_oauth_health` reads `bool(o.get("refreshToken"))`) — it is structurally
+> incapable of seeing an `invalid_grant`, so it was never evidence in either direction. And
+> `rotator.py tick` **returns before the candidate loop** while usage is within limits (6%
+> here), so a clean `tick` exit does not exercise the refresh path either. Two instruments that
+> look like they answer this question and do not.
+>
+> **The process failure worth keeping (it cost two false relays to the owner).** This session
+> read the 08-26 block and relayed "3 days left, owner-only" to the owner **twice** without
+> re-deriving a single number — while the owner had already renewed the accounts. That is the
+> stale-blocker pattern `lessons-verification.md` records at a measured 4-in-5 rate, and the
+> remedy it prescribes applies verbatim here: **a parked card must record the COMMAND that
+> re-derives its blocker, never the blocker's current VALUE.** Hence the box below now names
+> its own commands.
+>
+> **Re-derive this card's status in three commands (seconds, no browser, no human):**
+> ```bash
+> ROT="$CLAUDE_PLUGIN_ROOT/scripts/oauth_rotator"       # janitor plugin root
+> env -u CLAUDE_PLUGIN_DATA bash    "$ROT/lifetime-status.sh"        # cookie days per account
+> env -u CLAUDE_PLUGIN_DATA python3 "$ROT/rotator.py" oauth-health --json  # expires_at per account
+> pm2 jlist | python3 -c 'import json,sys; [print(p["name"],p["pm2_env"]["status"]) for p in json.load(sys.stdin)]'
+> ```
+> Read `expires_at`: if the three timestamps are **staggered and recent**, the refresh loop is
+> alive. If they are identical, or older than one token lifetime, it is not.
+>
+> **What is still genuinely open:** only the 48h clean-observation window (box 4). It is no
+> longer racing a deadline — it is ordinary verification. Window start: 2026-08-27T01:25:33+0200.
+> `/janitor-refresh-cc-logins` step 4 is **NOT needed** and must not be run on this evidence.
+
+<details><summary>SUPERSEDED 2026-08-27 — the 2026-08-26 emergency block, kept verbatim (do NOT act on it)</summary>
+
+
 
 > **⏳ 2026-08-26T20:46 — 3.1 DAYS LEFT, AND THE REMAINING ACTION IS THE OWNER'S ALONE.**
 > Relayed by the ai-maestro-janitor session and verified on this side where it touches us.
@@ -159,6 +209,8 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 > Surfaced to the USER 2026-08-26. Recorded here because the janitor's own finding was that the
 > deadline had lived only in a chat message: *"what was missing was nobody telling the USER the
 > clock exists"*. A fact that exists only in a session dies with it.
+
+</details>
 
 4/5 boxes closed. Evidence: `reports/colony/unit1-X4RK1NUW.md` (gitignored, not pushed) and
 GitHub comment https://github.com/Emasoft/ai-maestro/issues/95#issuecomment-5375378217.

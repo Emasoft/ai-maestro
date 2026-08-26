@@ -47,6 +47,12 @@ const LATCH_COOLDOWN_DEFAULT_S = 600.0
 
 const KEYCHAIN_LATCH_NAME = 'keychain-denied.latch'
 
+// TRDD-MFTDMSJY: log any `security` invocation at or past this duration, with its argv. Set at
+// ~40x the measured p95 (59ms, N=36) so a healthy box is silent and only a genuine block speaks.
+// Deliberately BELOW the 5000ms timeout: a call that stalls but recovers at 3s is the most
+// informative sample there is, and the timeout path throws it away.
+const SLOW_SECURITY_LOG_MS = 2_500
+
 // Substrings that mark a `security` result as a DENIAL worth latching on (case-insensitive).
 // Deliberately NARROW: an ACL/unlock/interaction denial or a user-canceled prompt — NEVER
 // "item could not be found" (a normal not-found must not latch and deny everything).
@@ -216,7 +222,31 @@ export function runSecurity(argv: string[], opts: { timeoutMs?: number } = {}): 
     })
   }
 
+  // TRDD-MFTDMSJY: time EVERY spawn, because the latch's own banner names a cause nobody has
+  // measured. Baseline reads are p50 25.9ms / p95 59.0ms / max 78.3ms (N=36) against a 5000ms
+  // budget, so a call that trips the timeout is BLOCKED, not slow — and the banner's guess (an
+  // ACL prompt hanging on an absent human) is only ever observable as a TIMEOUT, never as a
+  // denial string, because a prompt that hangs never returns. Without this line the two are
+  // indistinguishable: the latch fired 350 times in 46 days and every one is recorded as a bare
+  // "hung past 5s" with no argv and no duration. Threshold is 40x the measured p95, so a healthy
+  // box logs nothing.
+  const t0 = Date.now()
   const res = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: timeoutMs })
+  const elapsedMs = Date.now() - t0
+  if (elapsedMs >= SLOW_SECURITY_LOG_MS) {
+    try {
+      // argv[0] is always `security`; argv[1] is the verb and the rest are flags + the SERVICE
+      // and ACCOUNT names. No secret is on the command line (`-w` prints to stdout), so logging
+      // argv is safe — and it is the whole point: which item blocks is the question.
+      console.error(
+        `[safe-storage] SLOW \`security\` op: ${elapsedMs}ms (timeout ${timeoutMs}ms${
+          res.error ? ', TIMED OUT' : ''
+        }${halfOpen ? ', half-open probe' : ''}) argv=${argv.join(' ')}`,
+      )
+    } catch {
+      // never let a logging failure escape the credential path
+    }
+  }
 
   if (res.error) {
     const code = (res.error as NodeJS.ErrnoException).code

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -198,6 +198,59 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
     expect(run.spawned).toBe(false)
     expect(run.denied).toBe(true)
     expect(run.ok).toBe(false)
+  })
+
+  // TRDD-MFTDMSJY — the SLOW-op instrumentation. The latch fired 350 times in 46 days recording
+  // only "hung past 5s", with no duration and no argv, so nobody could tell a hanging ACL prompt
+  // from any other block. These pin that a slow spawn now names itself. They drive `sleep`/`true`
+  // rather than `security`: 0-IMPACT holds (no keychain is touched) and the timing is the subject.
+  it('runSecurity LOGS elapsed + argv for a spawn at/over the slow threshold', () => {
+    const seen: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((m?: unknown) => {
+      seen.push(String(m))
+    })
+    try {
+      const run = runSecurity(['sleep', '3'])
+      expect(run.spawned).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
+    const slow = seen.filter(l => l.includes('SLOW `security` op'))
+    expect(slow).toHaveLength(1)
+    expect(slow[0]).toMatch(/argv=sleep 3/)
+    expect(slow[0]).toMatch(/SLOW `security` op: \d{4,}ms/)
+    expect(slow[0]).not.toMatch(/TIMED OUT/)
+  })
+
+  it('runSecurity marks the log TIMED OUT when the spawn is killed by its own timeout', () => {
+    const seen: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((m?: unknown) => {
+      seen.push(String(m))
+    })
+    try {
+      // Killed at 2700ms > the 2500ms log threshold, so it both logs AND carries the timeout mark.
+      runSecurity(['sleep', '30'], { timeoutMs: 2700 })
+    } finally {
+      spy.mockRestore()
+    }
+    const slow = seen.filter(l => l.includes('SLOW `security` op'))
+    expect(slow).toHaveLength(1)
+    expect(slow[0]).toMatch(/TIMED OUT/)
+    expect(slow[0]).toMatch(/timeout 2700ms/)
+  })
+
+  it('runSecurity stays SILENT for a fast spawn (a healthy box logs nothing)', () => {
+    const seen: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((m?: unknown) => {
+      seen.push(String(m))
+    })
+    try {
+      const run = runSecurity(['true'])
+      expect(run.spawned).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(seen.filter(l => l.includes('SLOW `security` op'))).toHaveLength(0)
   })
 
   it('cooldown <= 0 keeps an OLD latch permanently CLOSED (auto-recovery disabled, no spawn)', () => {

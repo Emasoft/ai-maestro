@@ -139,7 +139,10 @@ describe('TRDD-U6AS2YWB — esc-then-command injector', () => {
 })
 
 /**
- * NEUTER RUN (recorded after first green run):
- *   mutation: in fleet-continuity.ts, s/if (!stillPresent) { dismissed = true; break }/if (false) {...}/
- *   predicted: test 1 reds (menu never "dismissed" → command never sent), tests 2-4 stay green.
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(!stillPresent\) \{ dismissed = true; break \}/if (false) { … }/   [fleet-continuity.ts]
+ *   → 1 red / 3 green, exactly as predicted:
+ *       RED: ESCs until the menu leaves the frame, then sends the curated directive at idle
+ *       green: the abort-direction tests (a loop that can never see "dismissed" aborts, which
+ *       is those tests' expected behavior — they pin the SAFE half)
  */

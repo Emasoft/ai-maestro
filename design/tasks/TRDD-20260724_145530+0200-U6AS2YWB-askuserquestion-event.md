@@ -4,7 +4,7 @@ title: AskUserQuestion event ESC-flood then cursor-ready then directive
 column: todo
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-26T09:27:06+0200
+updated: 2026-08-26T09:32:56+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -88,9 +88,18 @@ injection-proof); the verbatim directive is in the Spec below.
 
 ## Acceptance
 
-- [ ] A driven AskUserQuestion menu → ESC dismisses it → the directive lands
-- [ ] No 300 s timeout
-- [ ] The ESC count is bounded
+- [ ] A driven AskUserQuestion menu → ESC dismisses it → the directive lands — NEEDS (a) a
+      live-captured AskUserQuestion frame to write the event matcher from (do not guess TUI
+      copy), then (b) a driven end-to-end run (scenario-runner / operator territory). The
+      MACHINERY is landed and pinned (`770880b1`): union kind, allowlist gate on both
+      command-carrying kinds, injector loop with frame re-check, curated key
+      `continuity-decide-yourself` carrying the verbatim directive. Also open: the HID
+      decision (checkpoint item 6) binds at event-registration time.
+- [ ] No 300 s timeout — the requireIdle final send waits for the settled turn (mechanism in
+      place); proven only by the live run above.
+- [x] The ESC count is bounded — pinned 2026-08-26 by
+      tests/unit/continuity-esc-then-command.test.ts "BOUNDED" (exactly maxEsc ESCs, then abort
+      with the command NOT sent; neuter OBSERVED 1 red / 3 green on the dismissed-detection).
 
 ## Approval log
 

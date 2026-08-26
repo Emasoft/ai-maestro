@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T11:12:21+0200
+updated: 2026-08-26T11:18:48+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -221,7 +221,11 @@ IS UNPASSABLE BY CONSTRUCTION.** An adversarial review caught it and I re-measur
 first-hand: the server's keychain denied-latch fires **350× in the last month, 8 times today**
 (04:26:18, 04:36:58, 05:07:18, 05:21:12, 06:02:06, 06:29:24, 10:33:21, 11:03:30), each
 suppressing every `security` op for 600 s and publishing a FALSE `reauth-needed: slot-unreadable`
-throughout — **607 `reauth-needed` beats today alone**, one of them at 11:03:31, i.e. the window
+throughout — **79 latch-attributable `slot-unreadable` beats today** (CORRECTED same session from
+"607", which was every reauth beat of both reasons; 530 of those were the REAL `refresh-dead`
+population from before the slots were re-minted. 79 ≈ 8 latches × ~10 beats at the ~1 beat/min
+tick, which is what the 600 s cooldown predicts; by hour 04:18 / 05:20 / 06:21 pre-recovery,
+10:11 / 11:9 POST-recovery), one of them at 11:03:31, i.e. the window
 broke 4 minutes BEFORE the commit that opened it. At 7-8 latches/day no 48 h window can survive a
 break rule of "any `reauth-needed`". Carded as **TRDD-MFTDMSJY** (priority 0).
 

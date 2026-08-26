@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-26T11:12:21+0200
+updated: 2026-08-26T11:18:48+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -60,9 +60,30 @@ parenthetical "(a keychain unlock/ACL prompt)" is a guess printed as a diagnosis
 next debugger at an ACL problem that does not exist.
 
 **Frequency, measured:** 350 latches in the last month · **8 today** (04:26:18, 04:36:58,
-05:07:18, 05:21:12, 06:02:06, 06:29:24, 10:33:21, 11:03:30) · 51 on 2026-08-20 · **607
-`reauth-needed` beats today alone**. Six of today's eight fired BEFORE the janitor's 09:40-10:05
-browser capture, which is what refutes the capture-caused story (see the correction below).
+05:07:18, 05:21:12, 06:02:06, 06:29:24, 10:33:21, 11:03:30) · 51 on 2026-08-20. Six of today's
+eight fired BEFORE the janitor's 09:40-10:05 browser capture, which is what refutes the
+capture-caused story (see the correction below).
+
+> **⚠ CORRECTING MY OWN FIGURE, same session, before anyone builds on it.** The first draft of
+> this card — and the 11:1x comment on ai-maestro#95 — cited **"607 `reauth-needed` beats today"**
+> as the measure of latch noise. That number is real and it is the WRONG POPULATION: it is every
+> reauth beat, and splitting it by reason gives
+>
+> ```
+> 530  N alternate slot(s) have a dead refresh and are expiring …   ← REAL (slots were dead until ~09:5x)
+>  79  N alternate slot(s) UNREADABLE from this process …           ← the latch-attributable class
+> ```
+>
+> So the honest latch figure today is **79 beats, not 607** — and 79 ≈ 8 latches × ~10 beats at
+> the ~1 beat/min tick, which is exactly what a 600 s cooldown predicts, so the arithmetic now
+> corroborates the attribution instead of quietly contradicting it (8 × 600 s = 80 min could never
+> have produced 607). By hour: **04:18, 05:20, 06:21 (59 PRE-recovery) · 10:11, 11:9 (20
+> POST-recovery)**.
+>
+> **The conclusion is unchanged and the evidence for it is now smaller and correct:** 20 false
+> beats in the ~1.5 h since the slots went fresh is still far more than a 48 h window can absorb
+> under a break rule of "any `reauth-needed`". I caught this by checking my own arithmetic against
+> the tick cadence; a bare count of a mixed population is not a measurement of one class in it.
 
 `PROBE_TIMEOUT_MS = 5_000` (`lib/oauth-rotator/keychain.ts:30`) governs the read path. A
 `security find-generic-password` on a loaded box can exceed 5 s with no prompt involved, so the

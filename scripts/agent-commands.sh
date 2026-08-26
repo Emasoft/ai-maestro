@@ -298,8 +298,15 @@ cmd_probe() {
     api_base=$(get_api_base)
     local -a auth_args=()
     _build_auth_args auth_args
+    # GET /api/agents/[id]/probe is strict (TRDD-9MZQ4T7E): a human caller must
+    # sudo; an agent (AID_AUTH) passes through maestro_sudo_ensure untouched.
+    maestro_sudo_ensure || return 1
+    local -a sudo_args=()
+    if [ -n "${AIMAESTRO_SUDO_TOKEN:-}" ]; then
+        sudo_args=(-H "X-Sudo-Token: ${AIMAESTRO_SUDO_TOKEN}")
+    fi
     local response
-    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/agents/${agent_id}/probe" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]}" "${sudo_args[@]}" "${api_base}/api/agents/${agent_id}/probe" 2>/dev/null)
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch agent probe"
         return 1

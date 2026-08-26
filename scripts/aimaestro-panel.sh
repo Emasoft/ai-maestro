@@ -182,6 +182,7 @@ _panel_post() {
         {action: $a}
         + (if $h != "" then {html: $h} else {} end)
         + (if $u != "" then {url: $u} else {} end)')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api POST "/api/agents/${id}/panel" "$body"
 }
 

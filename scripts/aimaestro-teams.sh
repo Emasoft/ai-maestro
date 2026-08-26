@@ -231,6 +231,7 @@ cmd_create() {
         + (if $password != "" then {governancePassword: $password} else {} end)
         + (if $gho      != "" then {githubProject: ({owner: $gho, number: ($ghn | tonumber)}
                                     + (if $ghr != "" then {repo: $ghr} else {} end))} else {} end)')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api POST "/api/teams" "$body" 300  # auto-COS spawn + plugin install ~2 min (TRDD-ARY3NRFC)
 }
 
@@ -293,6 +294,7 @@ cmd_update() {
     # was the ONLY flag, the body is "{}" and the chief-of-staff POST above already
     # did the work — skip the redundant empty PUT.
     if [ "$body" != "{}" ]; then
+        maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
         _api PUT "/api/teams/${id}" "$body"
     fi
 }
@@ -314,6 +316,7 @@ cmd_delete() {
         + (if $p != "" then {password: $p} else {} end)
         + (if $da then {deleteAgents: true} else {} end)')"
     # Always send a body (even "{}") so the route's JSON parse is satisfied.
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api DELETE "/api/teams/${id}" "$body" 300  # cascade delete ~2 min (TRDD-ARY3NRFC)
 }
 
@@ -346,6 +349,7 @@ _edit_membership() {
     body="$(jq -nc --argjson agents "$next" --arg p "$password" '
         {agentIds: $agents}
         + (if $p != "" then {governancePassword: $p} else {} end)')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api PUT "/api/teams/${id}" "$body"
 }
 

@@ -194,6 +194,52 @@ _build_auth_args() {
     fi
 }
 
+# MAESTRO sudo gate for strict routes (TRDD-9MZQ4T7E). FAMILY COPY of
+# shell-helpers/common.sh::maestro_sudo_ensure — the aimaestro-agent.sh family
+# deliberately does not source common.sh (self-contained module set, same ruling
+# as the _api copy in aimaestro-continuity.sh, TRDD-39OPYXQ9), so the gate is
+# duplicated here with the family's own auth helper. Keep the CONTRACT identical
+# to the master copy: agent (AID_AUTH) → no-op; pre-set AIMAESTRO_SUDO_TOKEN →
+# honored; human → TTY prompt, password via stdin at every hop (jq -Rn 'input',
+# curl -d @-), fail-closed without a terminal.
+maestro_sudo_ensure() {
+    if [ -n "${AID_AUTH:-}" ]; then
+        return 0
+    fi
+    if [ -n "${AIMAESTRO_SUDO_TOKEN:-}" ]; then
+        return 0
+    fi
+    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+        echo "Error: this operation is strict (sudo-gated) and needs the MAESTRO password from a terminal." >&2
+        echo "       Non-interactive callers must pre-mint a token into AIMAESTRO_SUDO_TOKEN." >&2
+        echo "       The password itself is NEVER accepted as an argument or env var (argv is world-readable via ps)." >&2
+        return 1
+    fi
+    local _pw _body _resp _tok _base
+    printf 'MAESTRO password (sudo, one-shot): ' > /dev/tty
+    IFS= read -rs _pw < /dev/tty
+    printf '\n' > /dev/tty
+    if [ -z "$_pw" ]; then
+        echo "Error: empty password — strict operation refused (fail-closed)." >&2
+        return 1
+    fi
+    _body="$(printf '%s' "$_pw" | jq -Rnc '{password: input}')"
+    unset _pw
+    _base="$(get_api_base)" || return 1
+    _resp="$(printf '%s' "$_body" | curl -s --max-time 15 -X POST \
+        -H "Content-Type: application/json" -d @- "${_base}/api/auth/sudo-password")"
+    unset _body
+    _tok="$(printf '%s' "$_resp" | jq -r '.token // empty' 2>/dev/null)"
+    if [ -z "$_tok" ]; then
+        local _err
+        _err="$(printf '%s' "$_resp" | jq -r '.error // empty' 2>/dev/null)"
+        echo "Error: sudo exchange refused${_err:+ — ${_err}} — no token minted, nothing was performed." >&2
+        return 1
+    fi
+    export AIMAESTRO_SUDO_TOKEN="$_tok"
+    return 0
+}
+
 # ============================================================================
 # Agent API Functions
 # ============================================================================

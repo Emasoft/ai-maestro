@@ -228,6 +228,7 @@ cmd_inject() {
     id="$(_resolve_agent_id "$ref")" || return 1
     body="$(jq -nc --arg c "$text" --argjson nl "$newline" --argjson ri "$require_idle" \
         '{command: $c, addNewline: $nl, requireIdle: $ri}')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api PATCH "/api/agents/${id}/session" "$body"
 }
 
@@ -240,6 +241,7 @@ cmd_slash() {
     # literal command; an unknown key is a 400 there. We do NOT mirror the list
     # here — one source of truth (lib/agent-commands.ts).
     body="$(jq -nc --arg k "$key" '{commandKey: $k}')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api PATCH "/api/agents/${id}/session" "$body"
 }
 
@@ -302,8 +304,10 @@ cmd_block_state() {
         # truncated pattern matches the WRONG lines rather than erroring.
         local encoded
         encoded="$(printf '%s' "$match" | jq -sRr @uri)"
+        maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
         _api GET "/api/agents/${id}/block-state?match=${encoded}"
     else
+        maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
         _api GET "/api/agents/${id}/block-state"
     fi
 }
@@ -332,6 +336,7 @@ cmd_answer() {
     else
         body="$(jq -nc --arg t "$text" '{text: $t}')"
     fi
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api POST "/api/agents/${id}/prompt/answer" "$body"
 }
 
@@ -360,6 +365,7 @@ cmd_queue() {
         + (if $k != "" then {commandKey: $k} else {} end)
         + (if $w != "" then {when: $w} else {} end)
         + (if $wf then {wakeFirst: true} else {} end)')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api POST "/api/agents/${id}/queue" "$body"
 }
 

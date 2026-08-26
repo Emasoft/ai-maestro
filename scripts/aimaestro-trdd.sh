@@ -383,6 +383,7 @@ cmd_edit() {
     local body
     body="$(jq -nc --argjson f "$fields" --arg a "$agent" '
         {fields: $f} + (if $a != "" then {agentId: $a} else {} end)')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api PATCH "/api/trdd/${id}" "$body"
 }
 
@@ -505,6 +506,7 @@ MSG
         + (if $ap != "" then {approver: $ap} else {} end)
         + (if $r  != "" then {($rk): $r} else {} end)
         + (if $a  != "" then {agentId: $a} else {} end)')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api POST "/api/trdd/${id}/${verb}" "$body"
 }
 
@@ -528,6 +530,7 @@ cmd_promote() {
         + (if $n  != "" then {note: $n} else {} end)
         + (if $ap != "" then {approver: $ap} else {} end)
         + (if $a  != "" then {agentId: $a} else {} end)')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api POST "/api/trdd/${id}/promote" "$body"
 }
 
@@ -565,6 +568,7 @@ cmd_archive() {
         + (if $sb != "" then {supersededBy: $sb} else {} end)
         + (if $ap != "" then {approver: $ap} else {} end)
         + (if $a  != "" then {agentId: $a} else {} end)')"
+    maestro_sudo_ensure || return 1  # strict route (TRDD-9MZQ4T7E)
     _api POST "/api/trdd/${id}/archive" "$body"
 }
 

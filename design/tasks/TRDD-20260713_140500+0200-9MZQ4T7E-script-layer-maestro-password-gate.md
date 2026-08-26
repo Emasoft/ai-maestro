@@ -1,7 +1,7 @@
 ---
 trdd-id: 9MZQ4T7E
 title: A CLI script run by hand must prompt for the MAESTRO password
-column: todo
+column: dev
 min-approval-requirement: manager
 mandate: true
 mandated-by: user
@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-13T14:05:00+0200
-updated: 2026-08-16T16:43:00+0200
+updated: 2026-08-26T05:06:21+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1

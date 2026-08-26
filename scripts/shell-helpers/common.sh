@@ -646,6 +646,83 @@ api_query() {
     echo "$response"
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# MAESTRO sudo gate for strict routes (TRDD-9MZQ4T7E).
+#
+# The server classifies destructive routes "strict" (security-registry.json) and
+# refuses a human (cookie) caller without a fresh one-shot X-Sudo-Token. Agents
+# are exempt BY DESIGN (R32 dual-path: an AID bearer authorizes via the R28
+# three-check, never sudo), so this helper is a NO-OP whenever $AID_AUTH is set —
+# the agent path must stay byte-identical, and the human's password must never be
+# something an agent possesses.
+#
+# For the human there is exactly ONE principal, MAESTRO (USER ruling 2026-07-13:
+# "other non MAESTRO users are not contemplated"), and one flow:
+#   TTY prompt → POST /api/auth/sudo-password → AIMAESTRO_SUDO_TOKEN, which _api
+#   already forwards as X-Sudo-Token.
+#
+# FAIL-CLOSED, deliberately: no TTY and no pre-acquired token ⇒ return 1 and the
+# caller performs NOTHING. There is no dev-token fallback here on purpose — login
+# has one because a session cookie is a standing credential; sudo exists to prove
+# a human is AT THE KEYBOARD RIGHT NOW, which is exactly what an unattended path
+# cannot prove.
+#
+# THE PASSWORD NEVER TOUCHES ARGV OR THE ENVIRONMENT (TRDD-E9BZ5P7S): it is read
+# with `read -rs` from /dev/tty into a shell variable, serialized by jq READING
+# STDIN (`-Rn 'input'` — never `--arg`, which is world-readable via ps), sent by
+# curl READING STDIN (`-d @-`), and unset before this function returns. Only the
+# short-lived one-shot TOKEN is exported.
+#
+# Tokens are ONE-SHOT server-side: call this immediately before EACH strict
+# request. A pre-set AIMAESTRO_SUDO_TOKEN is honored untouched (tests / a caller
+# that minted its own); if the server already consumed it, the request's 403 is
+# the honest outcome.
+# Usage:  maestro_sudo_ensure || return 1
+maestro_sudo_ensure() {
+    # Agent path: AID authorizes, sudo does not apply. Must stay first — see above.
+    if [ -n "${AID_AUTH:-}" ]; then
+        return 0
+    fi
+    # Pre-acquired token (a test, or a wrapper that minted one): honored as-is.
+    if [ -n "${AIMAESTRO_SUDO_TOKEN:-}" ]; then
+        return 0
+    fi
+    # Fail closed without a real terminal: sudo proves keyboard presence.
+    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+        echo "Error: this operation is strict (sudo-gated) and needs the MAESTRO password from a terminal." >&2
+        echo "       Non-interactive callers must pre-mint a token into AIMAESTRO_SUDO_TOKEN." >&2
+        echo "       The password itself is NEVER accepted as an argument or env var (argv is world-readable via ps)." >&2
+        return 1
+    fi
+    local _pw _body _resp _tok
+    printf 'MAESTRO password (sudo, one-shot): ' > /dev/tty
+    IFS= read -rs _pw < /dev/tty
+    printf '\n' > /dev/tty
+    if [ -z "$_pw" ]; then
+        echo "Error: empty password — strict operation refused (fail-closed)." >&2
+        return 1
+    fi
+    # Secret via STDIN at every hop — jq -Rn 'input' and curl -d @- (see header).
+    _body="$(printf '%s' "$_pw" | jq -Rnc '{password: input}')"
+    unset _pw
+    local _base
+    _base="$(get_api_base)"
+    local -a _auth=()
+    get_auth_args _auth
+    _resp="$(printf '%s' "$_body" | curl -s --max-time 15 -X POST "${_auth[@]}" \
+        -H "Content-Type: application/json" -d @- "${_base}/api/auth/sudo-password")"
+    unset _body
+    _tok="$(printf '%s' "$_resp" | jq -r '.token // empty' 2>/dev/null)"
+    if [ -z "$_tok" ]; then
+        local _err
+        _err="$(printf '%s' "$_resp" | jq -r '.error // empty' 2>/dev/null)"
+        echo "Error: sudo exchange refused${_err:+ — ${_err}} — no token minted, nothing was performed." >&2
+        return 1
+    fi
+    export AIMAESTRO_SUDO_TOKEN="$_tok"
+    return 0
+}
+
 # Format and display JSON results nicely
 format_result() {
     local response="$1"

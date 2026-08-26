@@ -95,6 +95,13 @@ describe('script layer: every private helper a script calls is defined', () => {
    * only rise. MEASURED 2026-08-26 (not estimated): 80 call sites across 32 files, with the
    * widened extractor above; the narrow one yielded 71. Re-derive with the same reduce if you
    * ever need to move this floor.
+   *
+   * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+   *   s/_\[A-Za-z0-9_\]\+/_ZZZNOMATCH/
+   *   → 1 red / 92 green:
+   *       the call extractor actually sees calls across the layer (floor may only RISE)
+   * i.e. blinding the extractor reds THIS guard and nothing else — the per-file rows stay
+   * green on an empty call set, which is precisely why this guard has to exist.
    */
   it('the call extractor actually sees calls across the layer (floor may only RISE)', () => {
     const total = shells.reduce((n, f) => n + calledIn(srcOf.get(f)!).size, 0)

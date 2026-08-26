@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T04:47:18+0200
-updated: 2026-08-26T10:18:23+0200
+updated: 2026-08-26T10:37:03+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -61,7 +61,20 @@ the header mechanism, but the CLASS transfers (a re-mint leg that cannot START, 
 credential fault). This also answers the `cookie-leg-since.json == {}` anomaly line of inquiry:
 the capture leg could not even start.
 
-**NEW FINDING — our alert defect is now CONFIRMED by two first-hand reads taken minutes apart:**
+> **⚠ REFUTED 2026-08-26 10:3x — the "CONFIRMED defect" below was WRONG, my third reversal on
+> this thread, and the diagnosis grep settled it in two reads.** `all-maxed` is SET at
+> `tick.ts:1285` on `scopedWall && best === null` — "no alternate has headroom ON THAT MODEL" —
+> a MODEL-WINDOW verdict, not a credential one. The live decide() line (pm2-out.log 10:33:15)
+> measured `Fable=97%` and "no alternate has headroom on that model; staying put … the
+> model-fallback lane (/model switch) is the remedy". Fresh credentials do not create Fable
+> headroom, so the fresh store and the live alert are BOTH RIGHT about DIFFERENT quantities —
+> the same-label-different-noun trap (the alert's phrase "no alternate is healthy" reads as
+> credential health and means model headroom; at most a WORDING nit, and its own message body
+> already names the real remedy). There is NO onset defect, NOTHING to mirror from A8DPTDOU,
+> and the janitor has been told not to mirror one. The paragraph below is kept as the record
+> of the wrong conclusion and what refuted it.
+
+**~~NEW FINDING — our alert defect is now CONFIRMED~~ (REFUTED above) by two first-hand reads taken minutes apart:**
 the shared store shows all three slots FRESH (above) while `active-alerts.json` shows
 `rotator-stuck:all-maxed` with `seen: 10`, `lastSeenAt` seconds later — our side is asserting
 "no alternate is healthy" against a store that says three are. Precision (fork correction): the
@@ -80,7 +93,9 @@ not a clear-predicate gate (their A8DPTDOU was a wrong CLEAR; ours is a wrong ON
 directions, different fixes). `amp-service.ts:931`'s same-named `expires_at` was examined: AMP
 message-envelope TTL, unrelated to the slot schema.
 
-**NEXT ACTION:** (1) diagnose why the tick's alternate-health view lags an external re-mint
+**NEXT ACTION:** (1) RESOLVED by the refutation above — no diagnosis remains; the residual is a
+WORDING nit ("no alternate is healthy" should say "no alternate has model headroom") worth one
+line if the tick is ever touched. ~~diagnose why~~ (original text kept:) diagnose why the tick's alternate-health view lags an external re-mint
 (candidate: cooldown/failure store never cleared by fresh slot fp) and whether the next natural
 tick heals it — PRESCRIPTION SUPERSEDED IN PART by the write-set section above: if the
 predicate reads a TS-side cache, the fix is INVALIDATION at onset, NOT the A8DPTDOU

@@ -48,6 +48,8 @@ const CLI = path.join(REPO, 'scripts', 'aimaestro-teams.sh')
 
 function run(fn: string): { exit: number; out: string } {
   const harness = `
+    # Pre-minted sudo token — real gate, non-interactive branch (TRDD-9MZQ4T7E).
+    export AIMAESTRO_SUDO_TOKEN=test-premint
     source "${CLI}" >/dev/null 2>&1 || true
     _api() { echo "API-CALL method=\$1 path=\$2 body=\$3"; }
     ${fn}

@@ -56,6 +56,10 @@ const ID = 'K3QX9P2W'
  */
 function run(verb: 'refuse' | 'approve', args: string): { exit: number; requestMade: boolean; stderr: string } {
   const harness = `
+    # Pre-minted sudo token: the real maestro_sudo_ensure (TRDD-9MZQ4T7E) takes its
+    # non-interactive branch, so this harness keeps testing VERB semantics below the
+    # auth layer without mocking the gate (the gate has its own dedicated suite).
+    export AIMAESTRO_SUDO_TOKEN=test-premint
     _api() { echo "REQUEST-WAS-MADE" >&2; echo '{}'; }
     source "${CLI}" 2>/dev/null || true
     _api() { echo "REQUEST-WAS-MADE" >&2; echo '{}'; }

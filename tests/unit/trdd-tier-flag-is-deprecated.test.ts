@@ -77,6 +77,8 @@ interface Run {
 function run(verb: 'approve' | 'refuse', args: string): Run {
   const stub = `_api() { echo "REQUEST-WAS-MADE" >&2; echo "BODY:$3" >&2; echo '{}'; }`
   const harness = `
+    # Pre-minted sudo token — real gate, non-interactive branch (TRDD-9MZQ4T7E).
+    export AIMAESTRO_SUDO_TOKEN=test-premint
     ${stub}
     source "${CLI}" 2>/dev/null || true
     ${stub}

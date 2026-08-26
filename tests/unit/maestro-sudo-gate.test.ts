@@ -56,6 +56,13 @@ beforeEach(async () => {
       sudo: req.headers['x-sudo-token'] as string | undefined,
     })
     res.setHeader('Content-Type', 'application/json')
+    if ((req.url ?? '').startsWith('/api/agents?q=')) {
+      // resolve_agent must SUCCEED, or the probe verb returns before ever
+      // reaching the sudo gate and T5 passes vacuously (measured: the first
+      // family-copy neuter reddened NOTHING because resolution failed here).
+      res.end(JSON.stringify({ agents: [{ id: TEAM_ID, name: 'probe-target' }] }))
+      return
+    }
     // Generic happy body — enough for _api's success check and jq consumers.
     res.end(JSON.stringify({ success: true, teams: [], agents: [], status: { s: 'ok' } }))
   })

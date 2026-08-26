@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { proxyHealthCheck } from '@/services/agents-core-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,7 +8,17 @@ export const dynamic = 'force-dynamic'
  * POST /api/agents/health
  * Proxy health check to a remote agent (avoids CORS).
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // TRDD-DQVPODKW. This route carried ZERO authentication and proxies an outbound
+  // request to a caller-supplied URL. The open question was whether the dashboard
+  // calls it pre-login — measured 2026-08-26: it has NO callers at all (the
+  // dashboard's host checks use /api/hosts/health), so no pre-login constraint
+  // exists and "unauthenticated" was never a requirement, just an omission.
+  // Authenticated-only ("any authenticated caller may probe") is the decided
+  // policy; the SSRF denylist below is the second, independent layer and stays.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     let body: { url?: string }
     try {

@@ -86,6 +86,12 @@ INSTALLED_FILES=(
     # discovery of the panel CLI failed everywhere by construction (TRDD-COOLOZ1N
     # ruling 1 — discovery is PATH-based only, nothing else advertises it).
     "aimaestro-panel.sh"
+    # Same defect as the panel CLI one line up, found by TRDD-39OPYXQ9 while
+    # closing TRDD-DXJZM3BW: the continuity card recorded itself as
+    # "auto-installed by the scripts/*.sh glob", but this manifest is an
+    # EXPLICIT LIST — there is no glob — so the shipped CLI was never deployed
+    # by any install, and the stale copy on PATH predated its own fix.
+    "aimaestro-continuity.sh"
 )
 
 # Shared helper sourced by the aimaestro-*.sh CLIs — installed to HELPERS_DIR

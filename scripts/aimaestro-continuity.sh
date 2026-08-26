@@ -61,6 +61,57 @@ fi
 check_jq || exit 1
 
 # _resolve_agent_id() is now shared — see scripts/shell-helpers/common.sh
+
+# TRDD-39OPYXQ9: `_api` is defined HERE, not in common.sh. All three verbs of this CLI
+# called it while nothing defined it, so every invocation died `_api: command not found`
+# (exit 127) — shellcheck cannot see a call to a function it assumes exists at runtime,
+# which is why "shellcheck clean" was true and useless. Copied verbatim from
+# aimaestro-trdd.sh rather than promoting it into common.sh: three scripts already carry
+# private copies that may have diverged, so consolidating them is its own task with its
+# own regression surface (that card's explicit ruling).
+_api() {
+    local method="$1" path="$2" body="${3:-}"
+    local base
+    base="$(get_api_base)"
+    local -a auth_args=()
+    get_auth_args auth_args
+    local -a sudo_args=()
+    if [ -n "${AIMAESTRO_SUDO_TOKEN:-}" ]; then
+        sudo_args=(-H "X-Sudo-Token: ${AIMAESTRO_SUDO_TOKEN}")
+    fi
+
+    local resp code out
+    if [ -n "$body" ]; then
+        resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
+            "${auth_args[@]}" "${sudo_args[@]}" \
+            -H "Content-Type: application/json" -d "$body" "${base}${path}")" || {
+            echo "Error: request to ${path} failed (network)" >&2; return 1; }
+    else
+        resp="$(curl -s -w $'\n%{http_code}' --max-time 30 -X "$method" \
+            "${auth_args[@]}" "${sudo_args[@]}" "${base}${path}")" || {
+            echo "Error: request to ${path} failed (network)" >&2; return 1; }
+    fi
+
+    code="$(printf '%s' "$resp" | tail -n1)"
+    out="$(printf '%s' "$resp" | sed '$d')"
+
+    if ! [[ "$code" =~ ^[0-9]+$ ]]; then
+        echo "Error: malformed response from ${path} (no HTTP status code)" >&2
+        return 1
+    fi
+
+    if [ "$code" -ge 400 ]; then
+        local err
+        err="$(printf '%s' "$out" | jq -r '.error // .message // empty' 2>/dev/null)"
+        echo "Error: HTTP ${code}${err:+ — ${err}}" >&2
+        if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "Hint: agents authenticate with AID_AUTH (export AID_AUTH=\"\$(aid-auth.sh)\")." >&2
+            echo "      Humans: run 'aimaestro-governance.sh login' once. Strict routes also need AIMAESTRO_SUDO_TOKEN." >&2
+        fi
+        return 1
+    fi
+    printf '%s\n' "$out"
+}
 # (TRDD-17K0SHDQ; was duplicated byte-identical across 3 scripts).
 
 cmd_status() {

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:34:00+0200
+updated: 2026-08-26T19:28:04+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -83,7 +83,9 @@ a script, a config that names a command, an env var that selects a binary.
 
 - [ ] Exec-from-writable-tree sites enumerated across this repo and the fleet plugins, each
       with the executing process and whether it is sandboxed.
-- [ ] Env-var-selected exec paths (`$AIMAESTRO_CLI` and any sibling) included in that list.
+- [x] Env-var-selected exec paths (`$AIMAESTRO_CLI` and any sibling) included in that list.
+      DONE 2026-08-26: `$AIMAESTRO_CLI`, `$MEMGREP_BIN` (6 call sites / 5 modules),
+      `$CLAUDE_PLUGIN_OPTION_HEARTBEAT_COST_COMMAND` — every one READ in source, not grepped.
 - [ ] A stated remedy per site: relocate the artifact, or verify before exec.
 - [ ] TRDD-O0RHX7K6 does not ship its profile as a claimed boundary until this list is empty
       or every remaining entry is documented as an accepted hole.
@@ -139,8 +141,36 @@ owner, not something to inherit by leaving the earlier sentence unchallenged.
 
 `reports/impersonation-audit/20260826_185951+0200-exec-from-writable-tree.md` (gitignored):
 2 seeds confirmed, +5 Class-A, +4 Class-B, 1 Class-C. **The janitor's 656 subprocess sites were
-only partly reviewed.** Not yet verified hit-by-hit here — a worker's hit is a hypothesis until
-the line is read.
+only partly reviewed.**
+
+### VERIFIED hit-by-hit 2026-08-26T19:28 — every reported hit is REAL; one NEGATIVE is not
+
+`reports/impersonation-audit/20260826_192745+0200-exec-from-writable-tree-VERIFICATION.md`.
+Every cited line read in its source file. **10/10 positives CONFIRMED** (A1-A5, B1-B4, C1) —
+the worker inflated nothing. Lead item re-measured here: `which memgrep` →
+`~/.cargo/bin/memgrep`, file W_OK **True**, dir W_OK **True**.
+
+Three corrections, all pushing the same direction the report did not look:
+
+1. **A claimed-CONTAINED gate is not contained.** The report marked `mcp-discover` `configPath`
+   mode *"CONTAINED, not a hit — Verified correct"*. The 403 prefix check IS correct about the
+   file it READS, and the line below it derives `pluginRoot = dirname(resolved)` from the
+   **pre-`realpath`** path, never containment-checked. That value replaces
+   `${CLAUDE_PLUGIN_ROOT}` in the temp `.mcp.json`, which becomes `argv` at
+   `mcp_discovery.py:147` (`Popen(args=command)`). A real host `.mcp.json` uses it in argv
+   (`node ${CLAUDE_PLUGIN_ROOT}/dist/index.js`), so a symlink from anywhere → a legitimate
+   plugin `.mcp.json` passes the gate and picks the attacker's directory as the exec root.
+   Grants nothing under single-uid, and it is a gate the sandbox would be resting on.
+   Remedy: use `realResolved` for BOTH the read and the `pluginRoot`.
+2. **The unattended reach is UNDERSTATED.** "Two run with nobody present" measures as four, and
+   the widest is every PROMPT: `hooks/on-prompt-submit-autorecall.py` → `user_mem_lib:524` →
+   `$MEMGREP_BIN`. Plus `hooks/post-edit-wikimem-lint.py` (every edit), `memory-librarian`
+   (every beat), `detectors/wikimem-syntax.py`.
+3. **"Read by 6 modules" is 6 CALL SITES across 5 modules** (`user_mem_lib` holds two).
+   Not load-bearing; recorded so the number is not re-quoted wrong.
+
+Also: A5's exec target lives in **gitignored `scripts_dev/`** — an exec'd script no review or
+CI gate ever sees. Coverage is unchanged by this pass (656 still partial), so box 1 stays open.
 
 Method note worth keeping: they tried to delegate their sweep and the worker wedged at 182 bytes
 with no output. They caught it and hand-audited instead. **A wedged agent's silence and a clean

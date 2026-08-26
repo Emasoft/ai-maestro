@@ -117,9 +117,24 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 > predict the observation identically. The 8h token lifetime used in that arithmetic was also
 > taken from the Problem section of the very card being refuted, not measured.
 >
-> **What actually establishes "the refresh tokens are alive" is the janitor's independent
-> measurement, not this one:** `refresh_failures` **0 on all three slots, previously
-> 572 / 224 / 776**. That is a direct observation of the refresh path succeeding. Recorded
+> **(3) ~~`refresh_failures` 0 establishes the tokens are alive.~~ WITHDRAWN — that counter is
+> a PROXY too, and it is the same trap a third time in one investigation.** The 08-26 recapture
+> wrote each slot fresh, which RESETS the counter; so `0` after a reset with no attempt since is
+> indistinguishable from `0` after successful attempts. Presence, not validity — one level up
+> from `refresh=yes`. The janitor withdrew this leg themselves.
+>
+> **The honest state, and it is narrower than any claim above: whether the refresh tokens still
+> work is UNPROVEN IN BOTH DIRECTIONS. Only a real token exchange settles it.**
+>
+> **What IS established, at source rather than by inference, is enough to void this card's
+> blocker on its own:** `cookie_days()` is a sqlite read of `expires_utc` for `sessionKey`
+> (`lifetime-status.sh:80`) — **the thing itself, not a proxy for it**. Cookies are alive to
+> ≈2026-09-23, so no re-login is due and the 2026-08-30 deadline is void **whatever the refresh
+> tokens turn out to be**. The blocker is cleared; the mechanism behind one of its numbers is not
+> known, and saying so is the difference between this card and the one it replaced.
+>
+> Three claims in this investigation were proxies read in place of the thing — `refresh=yes`,
+> `refresh_failures 0`, and a 401 on `/api/sessions`. Each looked like a measurement. Recorded
 > because *wrong mechanism, right answer* is the failure class that meets no resistance and
 > therefore spreads furthest.
 >

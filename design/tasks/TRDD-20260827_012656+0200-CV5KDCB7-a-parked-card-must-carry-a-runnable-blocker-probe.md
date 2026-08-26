@@ -96,6 +96,34 @@ ABSENT is closed: one string, verifiable against the emitter's source. Prefer `n
 success sentinel; use `match:` only where the emitter has a single aggregate FAILURE sentinel
 that all failure branches provably feed.
 
+### `blocker-probe-canary:` — because `match:` is TWO-VALUED and the spec needs THREE
+
+Found by the janitor against my grammar, and it is the defect that would have made the whole
+convention an auto-unparker. With only `blocker-holds-if: match:<regex>`, a **timeout**, a
+**non-zero exit**, a **missing script** and an **empty file** all produce no-match — which the
+spec reads as *"the blocker no longer holds"*. Fail-open, silently, forever. I wrote condition 3
+into this card and then shipped a grammar that cannot express it.
+
+```yaml
+blocker-probe:        <argv>
+blocker-probe-canary: match:cookie/session   # a string HEALTHY output always contains
+blocker-holds-if:     match:ACTION DUE
+```
+
+**Canary absent ⇒ the probe did not really run ⇒ verdict 2, never "cleared."**
+
+**It is NOT redundant with a runner-side trichotomy, and that is the argument for taking both.**
+A runner sees exit code, timeout and empty output directly, so it can raise verdict 2 for those
+by itself. What a runner **cannot** see is a probe that ran, exited 0, and produced plausible
+output the needle no longer fits — **emitter drift**. That is the blind-needle failure moved
+from authoring time to run time, and the canary is the only thing in the design that catches
+it. So: the **runner** owns verdict 2 for exit/timeout/empty; the **canary** owns it for drift.
+
+Convergence worth recording: the janitor and this session independently read
+`lifetime-status.sh` at source and both arrived at `ACTION DUE`, after both having invented
+regexes from a healthy run that could never match anything the tool emits. Two sessions, same
+defect, same fix, arrived at separately.
+
 ### The blind-needle rule, learned by shipping one in this convention's own first instance
 
 **Take the needle from the EMITTER's source, never from vocabulary you saw somewhere else.**

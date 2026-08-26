@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T16:04:20+0200
+updated: 2026-08-26T16:15:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -358,6 +358,59 @@ measurement — but inferred, not observed.
 **So the two are not equally proven.** (A) is verified in every link. (D) rests on one unobserved
 step plus an unmeasured operational cost (per-uid provisioning, the privileged spawn helper). If
 the ruling wants certainty today, (A) is the one that has it.
+
+### ⚠⚠ (A) IS VIABLE AND **NOT** IMPERSONATION-PROOF — attack executed 2026-08-26
+
+The USER's challenge: *"you only proved that A is viable, not that it is hack-proof."* Correct, and
+attacking it broke it. **The attacker does not need to defeat the peer-credential mechanism at
+all.**
+
+**The attack, executed:** acting as agent A, inject a command into agent B's pane with
+`tmux send-keys -t <B> …`. Then trace what runs:
+
+```
+victim pane_pid = 98120 ; injected sleep pid = 98511
+ancestry: 98511 -> 98120
+REACHES the victim pane: YES
+```
+
+A process **agent A caused to exist** has an ancestry that resolves to **agent B**. Under (A) the
+server would attribute it to B — *correctly, by its own logic*. The identity system works
+perfectly and the attacker still wins.
+
+**Root cause: all agents share ONE tmux server.** The socket is per-USER (`/tmp/tmux-501`, mode
+0700) and every agent is that user, so any agent can drive any other agent's pane. Agent A simply
+makes B run the CLI.
+
+**This defeats every scheme that binds identity to a process or session, including today's.** It is
+not a flaw in `LOCAL_PEERPID`; it is that "which agent is this process" has a true answer that the
+attacker controls. **And it cannot be fixed within one uid:** a per-agent tmux socket
+(`-S /path/agent-N`) does not help, because file permissions and ACLs cannot separate principals
+the kernel considers identical — the owner always has access.
+
+**So the comparison inverts:**
+
+| | (A) peer-cred | (D) per-uid |
+|---|---|---|
+| stops token theft | yes | yes |
+| **stops impersonation via `tmux send-keys`** | **NO — demonstrated** | yes — B's socket is another uid's, unreachable |
+
+**The USER's objection to (D) stands and is not answered by this.** Hundreds of accounts per day
+is a real operational mess, and per-uid is not cross-platform. **That tension is now the actual
+decision**, and it is a genuine one — not a case where the cheap option is also safe.
+
+**A third direction, NAMED AND UNVERIFIED, because I will not assert a mechanism I have not run:**
+macOS `sandbox-exec` / seatbelt profiles can restrict which paths a process may open, which could
+deny agent A access to the shared tmux socket without separate uids. Whether it survives tmux's
+client/server model, whether Claude Code runs under it, and whether an equivalent exists on Linux
+(seccomp/AppArmor/namespaces) are all **unmeasured**. It is a lead, not an option.
+
+**Method note:** this attack took FOUR attempts, and three of them produced a FALSE NEGATIVE that
+would have read as "the attack fails" — a payload broken by shell escaping, a `capture-pane` that
+showed an empty pane, and two ancestry scans looking at the wrong DEPTH (the pane shell forks a
+child shell, so the injected process is a grandchild). **A failed attack probe is the most
+dangerous false zero on this card**, because it licenses shipping the thing it was meant to test.
+Each was caught only by a positive control asking "did the injection land at all?".
 
 ### Q: can one user control another user's tmux? YES — mechanism verified
 

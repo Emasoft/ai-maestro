@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:12:00+0200
+updated: 2026-08-26T13:20:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -140,6 +140,40 @@ This ledger stays valid and useful — it governs the Next-side surface and it i
 pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole picture.
 
 ## Decisions — the 17, one at a time
+
+### The FORWARD-ONLY tier, enumerated 2026-08-26 — it was only ever a COUNT
+
+`NON_AGENTS_FORWARD_ONLY_COUNT = 15` is stored as a bare number, so nobody could see WHICH 15
+without re-deriving them. Derived here with the test's OWN predicate
+(`MUTATING && !STRONG_AUTHZ && FORWARDS_CONTEXT` — note it does **not** require
+`CALLS_ENFORCE_AUTH`) and it reproduces 15 exactly:
+
+| route (rel. `app/api/`) | calls `enforceAuth`? | status |
+|---|---|---|
+| `auth/sudo-password` | NO | undecided |
+| `governance/user` | NO | undecided |
+| `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` · `groups` | yes | undecided (5) |
+| `help/agent` | NO | undecided |
+| `messages/forward` | NO | undecided |
+| `messages` | NO | **already read — FALSE positive** (uses `auth.agentId` to OVERRIDE a client param) |
+| `sessions/create` | yes | **already DECIDED clear** |
+| `teams/[id]/batch-create-agents` | NO | **already DECIDED clear** |
+| `teams/[id]/kanban-config` | NO | undecided |
+| `teams/[id]/tasks` | NO | undecided |
+| `trdd/create` | NO | **already read — FALSE positive** (uses `isSystemOwner` for an authority RANK) |
+
+So **11 genuinely undecided**, not 15. Two are known false positives and two are decided clear.
+
+**The `NO-enforceAuth` column is new information and is where I would start.** A route that forwards
+an auth context WITHOUT calling `enforceAuth` is relying entirely on the receiving service to
+refuse — which is the exact theory TRDD-CAVCTULL found held for 11 routes and failed for 1.
+`auth/sudo-password` and `governance/user` are the two whose names suggest the highest stakes.
+
+**MY FIRST DERIVATION WAS WRONG AND SAID 6.** I added `CALLS_ENFORCE_AUTH` to the filter because
+the sibling ledger uses it — i.e. I derived from my idea of the predicate instead of from the
+code's. The 6-vs-15 mismatch is what exposed it; had I re-derived a number that happened to match,
+the wrong filter would have shipped silently. Re-run the derivation from the test file's own
+constants, never from the neighbouring block's.
 
 ### `vpn-chat/block` — DECIDED 2026-08-26: a REAL but MODERATE finding; recorded here, NOT filed yet
 

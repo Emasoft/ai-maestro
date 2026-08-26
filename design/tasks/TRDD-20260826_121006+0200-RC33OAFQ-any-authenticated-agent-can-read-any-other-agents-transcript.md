@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T12:10:06+0200
-updated: 2026-08-26T12:10:06+0200
+updated: 2026-08-26T12:24:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -92,8 +92,30 @@ first step and not an assumption.
 
 ## Acceptance
 
-- [ ] Enumerate every caller of `/api/conversations/parse` (this repo AND the plugin repos) — this
-      decides between option 1 and option 2 and must not be guessed
+- [x] **Enumerate every caller — DONE 2026-08-26T12:2x. Result: every caller is the OPERATOR UI;
+      there is NO agent-side caller.** So **option 1 (operator-only) breaks nothing** and is the
+      ruling to make.
+
+      ```
+      components/ConversationDetailPanel.tsx:84    `${hostUrl}/api/conversations/parse`
+      components/MobileConversationDetail.tsx:111  fetch('/api/conversations/parse', …)
+      services/headless-router.ts:778              the headless twin (forwards to the same route)
+      services/config-service.ts:15,546            the service's own doc comment
+      ```
+
+      Swept `ai-maestro` + `ai-maestro-assistant-role-agent` + `ai-maestro-web-scenario-tester` +
+      `claude-plugins-validation` + `~/.claude/plugins/cache` in three FORMS (literal path;
+      `conversationFile`/`parseConversationFile`; UI/client fetch), because one needle proves
+      nothing. Zero hits outside this repo. **NOTE the headless twin at
+      `services/headless-router.ts:778` — it forwards to the same route, so any guard must be
+      mirrored there or the fix is half a fix** (exactly the failure TRDD-8Q5EVGV1 documents).
+
+      > **⚠ I FIRST GOT THIS WRONG AND THE MECHANISM IS WORTH MORE THAN THE ANSWER.** My first
+      > sweep reported **zero callers**. Its `--include` list DID cover `*.tsx` — but I piped it
+      > through `head -20`, and both component hits sorted below the cut. A truncated list and an
+      > empty one are indistinguishable, and I was one step from ruling "dead code, delete it" on
+      > a route the dashboard actively uses. Never terminate a sweep whose result is an ABSENCE
+      > claim with `head`; count first (`| wc -l`), then look.
 - [ ] Ruling recorded here on which principal the route serves
 - [ ] Guard implemented per the ruling
 - [ ] Refusal test (agent A → agent B's transcript = 403) + neuter recorded

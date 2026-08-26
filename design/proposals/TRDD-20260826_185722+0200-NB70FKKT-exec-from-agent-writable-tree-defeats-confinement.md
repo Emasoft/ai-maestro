@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:08:30+0200
+updated: 2026-08-26T20:13:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -192,6 +192,26 @@ reporting a number about a set it cannot see.
 shape, not a finding — most of the 77 will resolve to `sys.executable`, a hardcoded `git`, or a
 PATH lookup. Classifying each against "is the resolved target agent-writable, and is the caller
 unconfined" is the remaining work, and it is per-site reading, not another sweep.
+
+### Triage pass — 19 of the 77 auto-classify, 58 need a human read
+
+`…-janitor-argv0-triage.md` (gitignored). A resolver follows a bare `NAME` back to its
+assignments in the enclosing function: **19** land in `sys.executable` / PATH-`which` / env-var /
+literal-via-assignment; **58 do not** and are enumerated for reading.
+
+Shapes worth reading FIRST, because they are the card's own rank-1 class (a string becoming
+argv) rather than a resolved binary:
+`handoff_clear_verify.py:349` (`cmd.split()`), `lib/agentlens_probe.py:199`
+(`shlex.split(command)`), `lib/fleet_inject.py:571` (`plan['argv']` — argv from a data
+structure), `oauth_rotator/safe_storage.py:519/532/548` (argv built by a helper).
+
+Two instrument caveats, stated because the numbers are the deliverable:
+- The triage script walks `Module` AND `FunctionDef`, so **its bucket counts are double-counted
+  and must not be quoted** — only the deduplicated unresolved list is sound. Authoritative totals
+  stay the AST census (194 / 117 / 77).
+- I nearly wrote "47" here, inferred from a `head -50`-truncated view of the same list. Counted
+  properly it is **58**. Estimating a count from a deliberately truncated screen is the same
+  defect as reading a `tee`-truncated file — and I introduced the truncation myself.
 
 ## Enumeration status — PARTIAL, and the worker said so
 

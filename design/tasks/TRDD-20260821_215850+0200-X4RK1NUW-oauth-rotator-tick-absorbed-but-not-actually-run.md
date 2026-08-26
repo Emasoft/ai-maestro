@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T20:48:28+0200
+updated: 2026-08-26T20:54:38+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -129,9 +129,32 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 > path.** So this card's `column: todo` currently overstates agent-actionability: read it as
 > *waiting on the human*, not as unclaimed work.
 >
-> **Separate and NOT a credential problem** (the janitor's split, worth keeping): the rotator
-> reports STUCK while the ACCOUNT is healthy — 5h at 2%, 7d at 67%. Only the **Fable window** is
-> spent at 100%. Moving work off Fable needs no owner decision and is the lever available today.
+> **~~Separate and NOT a credential problem: 5h at 2%, 7d at 67%, Fable window spent at 100%,
+> so move work off Fable.~~ WITHDRAWN 2026-08-26T20:54 — EVERY NUMBER IN THAT SENTENCE IS
+> UNSUBSTANTIATED, and I relayed all of them as measured.**
+> The janitor retracted the source (their `9d7819eb`): it came from a stored `active-alerts.json`
+> string whose `firstSeenAt` was **3.6 hours before it was read**, while the FILE's mtime was 6
+> minutes — delivery bookkeeping rewrites the file WITHOUT recomputing the message. They checked
+> the file's age and took it as the claim's age. The 5h/7d figures rode in on the same frozen
+> string, so they are withdrawn too — not disproved, simply never measured.
+> Independently on this side: **0 of 13 registered agents carry a Fable model**, so the proposed
+> remedy was empty here regardless. Their own probes show `seven_day_fable` NULL across all 16,
+> with `nimbus_quill` at 0.0% — i.e. there is no evidence a spent Fable window exists at all.
+>
+> **What SURVIVES is the frame, and it is the part worth keeping:** *window-spent* and
+> *credential-dead* are different failures, and the rotator can report STUCK while the account
+> is healthy. That distinction is real and is why the alert exists. What failed was reading a
+> stored alert's numbers as current.
+>
+> **The transferable trap, because their two artifacts fail in OPPOSITE directions:**
+> `findings-ledger.ndjsonl` is append-only, so a resolved HIGH stays maximally alarming forever;
+> `active-alerts.json` IS rewritten, but only its bookkeeping, so the file looks fresh while its
+> payload is frozen. **Recency is useless in both cases and misleads in opposite ways.**
+> Checked on our side: exactly ONE place reads mtime as an age —
+> `safe-storage.ts:169 latchAgeSeconds()` — and it is **safe by construction**, because the latch
+> file's only content IS its existence, so the mtime is the datum rather than a proxy for a
+> payload. That is the general rule the two artifacts bracket: **mtime is a sound age proxy
+> exactly when the file carries no computed payload, and unsound the moment it does.**
 >
 > Surfaced to the USER 2026-08-26. Recorded here because the janitor's own finding was that the
 > deadline had lived only in a chat message: *"what was missing was nobody telling the USER the

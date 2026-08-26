@@ -1,8 +1,8 @@
 ---
 name: plugin-abstraction-and-script-layer
-description: "why can't a plugin call the ai-maestro API directly / a hook is calling fetch('/api/...') and breaking on updates / what is the script layer / aimaestro-*.sh amp-*.sh aid-*.sh boundary / decoupling invariant / a plugin element hardcodes an endpoint URL / the CLI says the API is not reachable but my command is simply wrong / a typo'd argument or an unknown verb is blamed on the server / --help asks for a credential / the API returns 401 auth_required with the server online / is auth broken or the server down / my agent cannot call the server / how do agents authenticate / where do the AMP and AID scripts live now / did the AMP AID transition into ai-maestro complete / are claude-plugin and agent-identity still separate plugins / who installs a new amp or aid script / do I have to register a new script anywhere / the drift checker says every script is identical but a family is missing / a scan set omission reports as clean / an inline regex predicate is pinned by no test / the compared count is smaller than the real count / where is the abstraction-layer diagram"
+description: "why can't a plugin call the ai-maestro API directly / a hook is calling fetch('/api/...') and breaking on updates / what is the script layer / aimaestro-*.sh amp-*.sh aid-*.sh boundary / decoupling invariant / a plugin element hardcodes an endpoint URL / the CLI says the API is not reachable but my command is simply wrong / a typo'd argument or an unknown verb is blamed on the server / --help asks for a credential / the API returns 401 auth_required with the server online / is auth broken or the server down / my agent cannot call the server / how do agents authenticate / where do the AMP and AID scripts live now / did the AMP AID transition into ai-maestro complete / are claude-plugin and agent-identity still separate plugins / who installs a new amp or aid script / do I have to register a new script anywhere / the drift checker says every script is identical but a family is missing / a scan set omission reports as clean / an inline regex predicate is pinned by no test / the compared count is smaller than the real count / where is the abstraction-layer diagram / a new CLI is stale on PATH or exits 127 after shipping / which installer deploys a script — the INSTALLED_FILES list or the glob"
 ocd: 2026-08-02
-lmd: 2026-08-22
+lmd: 2026-08-26
 metadata:
   node_type: memory
   type: reference
@@ -168,7 +168,7 @@ table and counts, and a new script must be announced in BOTH.
 CONSEQUENCE ALREADY BANKED: the `AMP_PLUGIN_NAME` / `AMP_PLUGIN_REPO` / `AID_PLUGIN_NAME` /
 `AID_PLUGIN_REPO` constants were DELETED from `lib/ecosystem-constants.ts` and its shell mirror.
 They had zero consumers — not because they were dead weight, but because the architecture change
-superseded them. `SKILL_PLUGIN_REPO` stays. [^1]
+superseded them. `SKILL_PLUGIN_REPO` stays. [^1] [^2]
 
 ## See also
 
@@ -179,3 +179,4 @@ superseded them. `SKILL_PLUGIN_REPO` stays. [^1]
 ## Notes and lessons learned
 
 [^1]: [id: ATOM-NO2U-IWA5, status: valid, keywords: "drift_checker_reports_clean_but_a_whole_family_is_missing scan_set_omission_reports_as_clean inline_regex_predicate_pinned_by_no_test aid_scripts_invisible_to_the_checker detector_population_is_wrong compared_count_smaller_than_the_real_count", ocd: 2026-08-22, lmd: 2026-08-22] DO NOT inline the predicate that BUILDS a detector's scan set, BECAUSE an omission there reports as CLEAN and no test can see it: `check-script-drift.mjs` filtered on an inline `/^(amp|aimaestro)-.*\.sh$/`, so all six `aid-*` scripts were never in the compared population — it said "identical" about a set that silently excluded them, and went 47 → 54 compared the moment the family was admitted. A wrong POPULATION is invisible because every verdict it prints is true of the files it did look at. DO export the predicate (`isTrackedScriptName`, `lib/installed-script-drift.ts`), import it at the call site, and pin it with a test whose neuter drops one family and reddens.
+[^2]: [id: ATOM-CTFP-3AWL, status: valid, desc: "two installers, only one is glob-based", keywords: "which_installer_deploys_a_cli INSTALLED_FILES_explicit_list_vs_glob new_cli_stale_on_PATH_exit_127 install-agent-cli_vs_install-messaging auto-installed_by_glob_was_false", ocd: 2026-08-26, lmd: 2026-08-26] DO NOT assume one installer with one mechanism: install-messaging.sh copies ALL scripts/*.sh by GLOB (:630/:755), BUT install-agent-cli.sh deploys the agent/governance CLI layer from an EXPLICIT INSTALLED_FILES list with no glob, BECAUSE TRDD-DXJZM3BW recorded 'auto-installed by the scripts/*.sh glob' as if it covered every installer and aimaestro-continuity.sh then sat 5 weeks stale on PATH (exit 127) until named in the list (20f44bad). DO check BOTH installers before claiming a new CLI deploys automatically.

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:44:57+0200
+updated: 2026-08-26T19:47:45+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -112,7 +112,9 @@ a hook on every edit. Every project, every beat, no harness required.
 **Rank order for this card, corrected:**
 
 1. `$MEMGREP_BIN` → `which(memgrep)` → `~/.cargo/bin/memgrep` — unattended, fleet-wide.
-2. The harness CLI: `plugin_manage.py:55→175→194`, `terminal_trigger.py:1378`,
+2. The harness CLI: `plugin_manage.py:55→175→194`, `terminal_trigger.py:1350`
+   (grep-verified; this card said `:1378` and the source report said `:1357` — both wrong, both
+   propagated without anyone opening the file),
    `harness_backend.py:569`, and `$AIMAESTRO_CLI` → `~/.local/bin` → PATH.
 3. ~45 `shutil.which` sites for gh/uv/git/jq/npx/claude. Reported by them as a CLASS and
    deliberately NOT enumerated — it is the generic PATH story, identical for every program on
@@ -208,32 +210,40 @@ Three corrections, all pushing the same direction the report did not look:
    that behave that way. It adds nothing the absolute-path spelling does not already carry;
    kept only because it shows the unresolved `args` list is the durable half.
 
-   **A POTENTIAL second carrier of the same pre-`realpath` defect — `route.ts:145`
-   (DOWNGRADED, see below; first written as a confirmed second instance):**
+   `route.ts:145` also EXPORTS the same unchecked value as `CLAUDE_PLUGIN_ROOT` into the child
+   env (gated `if (configPath)`, so class C never carries it). **Nothing in this repo reads it on
+   the exec path** — `mcp_discovery.py` has zero references — so it is a POTENTIAL carrier only,
+   live iff the spawned third-party server reads that conventional var, which is not measured
+   here. Fix it anyway: same one-line mistake, same expression.
+   *(An earlier draft called it a confirmed second carrier and argued a `:95`-only fix would leave
+   it live — backwards, and retracted. Narrative in the report; the tell is in the report too.)*
 
-   ```ts
-   env: { ...process.env, ...(configPath ? { CLAUDE_PLUGIN_ROOT: dirname(resolve(configPath)) } : {}) },
+   **THE SAME DEFECT IS IN A SECOND ROUTE** — found only when the two-file grep behind that
+   retraction was widened repo-wide.
+   `app/api/settings/element-content/route.ts`, byte-for-byte:
+
+   ```
+   :42  const resolved = resolve(filePath)
+   :48  realResolved = await realpath(resolved)      // containment-checked
+   :52  if (!realResolved.startsWith(PLUGINS_BASE + '/')) 403
+   :73  const pluginRoot = dirname(resolved)          // <- PRE-realpath, unchecked
+   :78  mcpJsonContent.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginRoot)
+   :88  execFileSync('uv', ['run', scriptPath, tmpMcpJson, safeName, '--json'],
+                     { env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot } })
    ```
 
-   The attacker-chosen directory is not only substituted TEXTUALLY into the temp `.mcp.json`; it
-   is EXPORTED as `CLAUDE_PLUGIN_ROOT` to the child — again from `resolve()`, never
-   `realResolved`. `mcp_discovery.py` copies `os.environ` into `merged_env` and passes it to
-   `Popen(env=merged_env)`, so the spawned MCP server inherits it.
+   Same `mcp_discovery.py`, same temp-JSON hand-off, same `Popen`. So the remedy is **two sites,
+   not one** — and a fix to `mcp-discover` alone would read as complete while leaving an
+   identical hole one route over. A third candidate, **unaudited**: `scripts/mcp-discover.sh:154`
+   performs the same substitution with `sed`; its containment has not been read.
 
-   **DOWNGRADED IN THE SAME SESSION — INHERITING IS NOT CONSUMING, and my "fix both or it stays
-   live" line was BACKWARDS.** I promoted this to a confirmed carrier on the strength of the
-   value being PRESENT in the child env, never having found anything that READS it.
-   `grep -rn CLAUDE_PLUGIN_ROOT scripts_dev/mcp_discovery.py app/api/settings/mcp-discover/route.ts`
-   returns **three hits, all in the route, none in the script**: `:92` a comment, `:95` the
-   textual `.replace()`, `:145` this env export. **The only measured consumer is the route's own
-   substitution — carrier ONE.** So fixing `:95` closes the measured route; it does not, as I
-   wrote, leave a second one open.
-   The env export is worth fixing as the same one-line mistake (a third-party MCP server reading
-   `CLAUDE_PLUGIN_ROOT` is a real Claude-Code convention), but that consumer is **outside this
-   repo and unmeasured**, so it is a POTENTIAL carrier, not a second finding.
-   Scope note: the export is gated `if (configPath)`, so **class C / serverConfig mode never
-   carries it** — it applies only to the symlink escape, the mode where an attacker had to work
-   for it.
+   **Scope of the remedy, stated precisely because I twice overstated it:** using `realResolved`
+   at both sites closes the **`${CLAUDE_PLUGIN_ROOT}` SUBSTITUTION route**. It is NOT established
+   that it closes every route through the temp JSON — the other attacker-influenced fields of
+   that file were never enumerated, and at least one shape is visible without enumerating them:
+   `config_dir` is the TEMP DIR, so `_resolve_command_value` absolutises a relative
+   `command: "./x"` against `<tmpdir>`, which is same-uid writable. Not claimed as exploitable;
+   named so nobody reads "closes the route" as "closes the file".
 
    BOTH routes are uncontained — the `args` list is not *stronger*, only simpler to demonstrate,
    since the resolver hands back an absolute `command` unchanged. And `_build_client` (`:1442`,

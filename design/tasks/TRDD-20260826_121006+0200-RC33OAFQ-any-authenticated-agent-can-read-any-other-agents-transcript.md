@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T12:10:06+0200
-updated: 2026-08-26T12:24:00+0200
+updated: 2026-08-26T14:01:02+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -42,6 +42,12 @@ read first-hand rather than assumed:
 
 So a valid **agent** token satisfies the route. Agent A can POST a path naming agent B's
 transcript and receive its parsed contents.
+
+**The read is LIVE, not a stub — verified 2026-08-26 after `export/jobs/[jobId]` turned out to be
+two 501 stubs whose "disclosure" I had read off a return type.** `parseConversationFile`
+(`services/config-service.ts:552`) reaches `fs.readFileSync(conversationFile, 'utf-8')` in its
+body. The function does what its name says; this card's premise survives the check that killed the
+other one.
 
 **Why this is worse than an ordinary read hole.** A transcript is not one datum — it is everything
 that agent saw and did: file contents, command output, tool results, and any credential that

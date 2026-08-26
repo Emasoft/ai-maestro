@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T13:48:51+0200
-updated: 2026-08-26T13:57:24+0200
+updated: 2026-08-26T14:01:02+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -45,14 +45,33 @@ question — the file already decided the policy and two of its functions do not
    `group.subscriberIds?.includes(authContext.agentId)` (`:62`). The attacker put itself in the
    list in step 1, so it passes as a legitimate subscriber.
 4. **`lib/notification-service.ts:169`** — `await sendTmuxNotification(sessionName, notification)`.
-   The payload is **injected into the target agent's live tmux pane**.
+   The payload is **injected into the target agent's live tmux pane, and SUBMITTED**. The body
+   (`:55-71`) was read after `export/jobs` proved that a signature is not a behaviour:
+
+   ```ts
+   const sanitized   = message.replace(/[\x00-\x1F\x7F]/g, '')
+   const safeMessage = sanitized.replace(/'/g, "'\\''")
+   await runtime.sendKeys(target, `echo '${safeMessage}'`, { literal: true, enter: true })
+   ```
+
+   **`enter: true`.** It is not a message left on screen for a human to notice — the line is typed
+   and the return key is pressed. The function's own comment (NT-027) records the consequence:
+   *"If the session is running a non-shell program (vim, REPL, TUI), this echo command will be
+   typed as input to that program. Notifications are designed for idle shell prompts."* **Every
+   target here is a Claude Code session**, so the attacker's text is not echoed by a shell — it is
+   submitted to another agent's model as a turn.
+
+   The single-quote escaping and control-char strip are real and hold: this is **not** shell
+   injection. It does not need to be. The delivered payload is prose, and prose is the payload.
 
 ### Why this is worse than group spam
 
 - **It is cross-agent prompt injection.** The text lands in another Claude Code session's input.
-  Control characters ARE stripped (`[\x00-\x1F\x7F]` in `notifyGroupSubscribers`), so there is no
-  `send-keys` escape and no forced Enter — that guard holds. **Prompt injection needs no control
-  characters.**
+  Control characters ARE stripped (twice — in `notifyGroupSubscribers` and again in
+  `sendTmuxNotification`), so the PAYLOAD cannot escape `send-keys` and cannot smuggle its own
+  newline. That guard holds and must stay. **But the notifier presses Enter itself
+  (`enter: true`), so the payload never needed to** — and prompt injection needs no control
+  characters in the first place.
 - **It impersonates the system.** `notifyGroupSubscribers` passes a hardcoded
   `fromName: 'AI Maestro'`, and `formatNotification:76` renders exactly `{from}` + `{subject}`. The
   real sender's `agentId` appears **nowhere** in what the target sees. The target cannot tell an

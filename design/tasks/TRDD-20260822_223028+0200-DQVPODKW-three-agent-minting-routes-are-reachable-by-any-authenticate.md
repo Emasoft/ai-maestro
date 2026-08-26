@@ -3,7 +3,7 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-26T06:17:29+0200
+updated: 2026-08-26T06:24:17+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -199,8 +199,18 @@ Adding it:
       tests/unit/inject-skill-route-authorization.test.ts: MEMBER 403 pinning the reason +
       service-not-called, MANAGER positive control, neuter OBSERVED 1 red / 1 green exactly as
       predicted. Coverage ledger shrunk 16 → 15.
-- [ ] `health` — decide whether it should authenticate at all; establish first whether the
-      dashboard calls it pre-login, because that is a real constraint
+- [x] `health` — DONE 2026-08-26 (`1a88fe48`). The pre-login constraint was MEASURED and does
+      not exist: the route has NO callers anywhere — app/components/hooks use
+      `/api/hosts/health`, headless *.mjs, scripts/ and the fleet plugin repos carry zero hits
+      (the AMAMA report-formats reference even asserts "There is no separate /api/agents/health
+      endpoint"). So unauthenticated was an omission. Decided: `enforceAuth` (any authenticated
+      caller may probe); the SSRF denylist stays as the independent second layer. Pinned by
+      tests/unit/agents-health-route-authentication.test.ts (unauthenticated 401 +
+      proxy-never-called, authenticated positive control; neuter OBSERVED 1 red / 1 green).
+      The route stays in the collection ledger — it authenticates but does not AUTHORIZE, and
+      "any authenticated caller" is now its recorded, decided policy rather than an unreviewed
+      default. Zero-caller note: deleting the route outright would be a public-API removal
+      (Tier-3 floor) — flagged here rather than done.
 - [ ] the 7 sub-agent-reported `creation-helper` routes VERIFIED first-hand, not relayed
 - [ ] `role-plugins/sync-defaults` — a ruling on whether "any authenticated caller may re-assert
       defaults" is intended

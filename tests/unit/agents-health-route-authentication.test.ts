@@ -65,8 +65,9 @@ describe('TRDD-DQVPODKW — agents/health authenticates before proxying', () => 
 })
 
 /**
- * NEUTER RUN (recorded after first green run):
- *   mutation: s/if (authErr) return authErr/if (false) return authErr/
- *   predicted: the unauthenticated-refusal test reds (route proxies anyway),
- *   the positive control stays green.
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(authErr\) return authErr/if (false) return authErr/   [health/route.ts]
+ *   → 1 red / 1 green, exactly as predicted:
+ *       RED: refuses an unauthenticated caller and never proxies
+ *       green: the positive control (a disabled gate refuses nobody)
  */

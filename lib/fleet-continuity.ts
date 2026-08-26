@@ -23,7 +23,7 @@ import { fleetActuationBlocked } from '@/lib/janitor-control'
 import { sendAgentSessionCommand } from '@/services/agents-core-service'
 import { buildSystemAuthContext } from '@/lib/agent-auth'
 import { getAgentCommand } from '@/lib/agent-commands'
-import { ESC_KEYSTROKE, findClientEntry, type ContinuityEpisodes } from '@/lib/continuity-registry'
+import { ESC_KEYSTROKE, findClientEntry, normalizeProgram, type ContinuityEpisodes } from '@/lib/continuity-registry'
 import {
   actuateContinuity,
   type ContinuityAction,
@@ -243,7 +243,7 @@ export function continuityActuatorDeps(now: number): Omit<ContinuityActuatorDeps
         }
         const entry = findClientEntry(action.program)
         const event = entry?.events.find((e) => e.id === action.eventId)
-        if (!event) {
+        if (!entry || !event) {
           return { ok: false, status: 0, detail: `esc-then-command: event ${action.eventId} not found for re-check — refusing` }
         }
         let dismissed = false
@@ -276,15 +276,35 @@ export function continuityActuatorDeps(now: number): Omit<ContinuityActuatorDeps
         // a shell prompt, the exact class the curated boundary exists to prevent. So: the
         // foreground process must still BE the client program, else abort without sending. A
         // runtime without getForegroundCommand, a throw, or a mismatch all refuse.
-        const fgProbe = getRuntime().getForegroundCommand
-        const fg = fgProbe ? await fgProbe.call(getRuntime(), sessionName).catch(() => '') : ''
-        const fgBase = fg.trim().split('/').pop()?.toLowerCase() ?? ''
-        const wantBase = action.program.trim().split('/').pop()?.toLowerCase() ?? ''
-        if (!fgBase || !wantBase || fgBase !== wantBase) {
+        // MEASURED (2026-08-26), twice, because the first accept-set was wrong both times:
+        //  - tmux `#{pane_current_command}` returns a BARE process name ('zsh' — no path/args);
+        //  - a LIVE claude pane reported `2.1.246` — Claude Code renames its process to its
+        //    VERSION string, so no static name list ('claude', aliases, 'node') can accept it,
+        //    and the naive guard would have silently disabled the whole command half while the
+        //    suite stayed green (the mock fed the assumed value).
+        // So the guard asks the question the hazard actually poses — "did the pane fall back to
+        // a SHELL?" — and stays fail-closed everywhere else: accept only the registry entry's
+        // program/aliases (measured 'claude' installs) or a pure version string (the measured
+        // renamed form); abort on empty (probe failed), on any known shell name, and on any
+        // OTHER unknown foreground. An unknown non-shell may be a legitimate client form we have
+        // not measured — it still aborts, because a lost directive costs one poll cycle and a
+        // mistyped one acts in the agent's name.
+        const runtime = getRuntime()
+        const fg = runtime.getForegroundCommand
+          ? await runtime.getForegroundCommand(sessionName).catch(() => '')
+          : ''
+        const fgBase = normalizeProgram(fg) ?? ''
+        const SHELL_NAMES = new Set(['sh', 'bash', 'zsh', 'fish', 'tcsh', 'csh', 'dash', 'ksh', 'pwsh', 'login'])
+        const accepted = [entry.program, ...(entry.aliases ?? [])]
+          .map((p) => normalizeProgram(p))
+          .filter((p): p is string => p !== null)
+        const isVersionName = /^\d+(\.\d+)+$/.test(fgBase) // the measured renamed-client shape
+        const fgOk = fgBase !== '' && !SHELL_NAMES.has(fgBase) && (accepted.includes(fgBase) || isVersionName)
+        if (!fgOk) {
           return {
             ok: false,
             status: 0,
-            detail: `esc-then-command: foreground is '${fgBase || '(unknown)'}', not '${wantBase}' — client gone, command NOT sent`,
+            detail: `esc-then-command: foreground is '${fgBase || '(unknown)'}' (accepted: [${accepted.join(', ')}] or a version-named client) — client gone or unverifiable, command NOT sent`,
           }
         }
         const curatedDirective = getAgentCommand(commandKey)

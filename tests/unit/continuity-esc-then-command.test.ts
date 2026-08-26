@@ -145,8 +145,33 @@ describe('TRDD-U6AS2YWB — esc-then-command injector', () => {
     const r = await inject(action())
 
     expect(r.ok).toBe(false)
-    expect(String(r.detail)).toMatch(/client gone, command NOT sent/i)
+    expect(String(r.detail)).toMatch(/client gone or unverifiable, command NOT sent/i)
     // The one ESC that ran before the "gone" read is fine; the DIRECTIVE must be absent.
+    const sends = mockSend.mock.calls.map((c) => c[1]) as Array<{ command: string }>
+    expect(sends.every((s) => s.command === ESC_KEYSTROKE)).toBe(true)
+  })
+
+  it('VERSION-NAMED CLIENT: fg `2.1.246` passes the guard — the measured renamed-claude shape', async () => {
+    /** MEASURED 2026-08-26 on a live pane: Claude Code renames its process to its version
+     * string, so pane_current_command is e.g. '2.1.246'. A name-list guard would always-abort
+     * on real claude panes — a silent disable of the command half the mock could never show. */
+    mockCapture.mockResolvedValueOnce(CLEAN_FRAME)
+    mockForeground.mockResolvedValue('2.1.246')
+    const { inject } = continuityActuatorDeps(Date.now())
+    const r = await inject(action())
+    expect(r.ok).toBe(true)
+    const sends = mockSend.mock.calls.map((c) => c[1]) as Array<{ command: string }>
+    expect(sends[sends.length - 1]!.command).toBe(DIRECTIVE)
+  })
+
+  it('UNKNOWN NON-SHELL foreground aborts — fail-closed on the unmeasured', async () => {
+    /** 'node', a pager, anything unmeasured: abort costs one poll cycle; sending acts in the
+     * agent's name. Pins the fail direction the guard's comment promises. */
+    mockCapture.mockResolvedValueOnce(CLEAN_FRAME)
+    mockForeground.mockResolvedValue('node')
+    const { inject } = continuityActuatorDeps(Date.now())
+    const r = await inject(action())
+    expect(r.ok).toBe(false)
     const sends = mockSend.mock.calls.map((c) => c[1]) as Array<{ command: string }>
     expect(sends.every((s) => s.command === ESC_KEYSTROKE)).toBe(true)
   })

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T11:18:48+0200
+updated: 2026-08-26T11:22:49+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -229,16 +229,42 @@ tick, which is what the 600 s cooldown predicts; by hour 04:18 / 05:20 / 06:21 p
 broke 4 minutes BEFORE the commit that opened it. At 7-8 latches/day no 48 h window can survive a
 break rule of "any `reauth-needed`". Carded as **TRDD-MFTDMSJY** (priority 0).
 
-**NEXT ACTION**: the 48 h window's break criterion is now: **any `reauth-needed` beat NOT
-attributable to a denied-latch window breaks it; a latch-attributable one does not.** Attribute by
-timestamp — a beat is latch-attributable iff a `[safe-storage] KEYCHAIN DENIED-LATCH SET` line in
-`logs/pm2-error.log` precedes it by < 600 s. `stuck:all-maxed` remains CLEAN (a model-window
-verdict, not a credential one — 3GU9V70H's REFUTED blockquote). Sample with
-`grep -a "\[oauth-rotator\]" logs/pm2-out.log | tail -3`,
-`cat ~/.aimaestro/oauth-rotator-tick-status.json`, and
-`grep -a "DENIED-LATCH SET" logs/pm2-error.log | tail -5`.
-**Prefer landing MFTDMSJY first** — a window scored under a manual attribution rule is weaker
-evidence than one with no false beats in it, and the 2026-08-30 deadline still has room.
+~~**NEXT ACTION**: … Attribute by timestamp — a beat is latch-attributable iff a
+`[safe-storage] KEYCHAIN DENIED-LATCH SET` line in `logs/pm2-error.log` precedes it by
+< 600 s.~~ — **THAT RULE IS UNSOUND; REPLACED 2026-08-26T11:2x.** It scores from the LOGGED SET
+line, and `setKeychainDenied(reason, {quiet: true})` returns before its `console.error`, so the
+half-open **re-stamp is silent** — it does `fs.renameSync`, whose own comment says it "refreshes
+mtime, which is what `_latchAgeSeconds` reads", so the latch's real age moves with no log line.
+
+> **Narrowing this, measured at `safe-storage.ts:229-232`:** the sentence originally continued
+> "…so a keychain that keeps timing out stays latched for 1200 s, 1800 s, … behind a SINGLE logged
+> line." **That overstates it.** A half-open probe that ITSELF times out falls through to the
+> **non-quiet** `setKeychainDenied` at `:230`, so a persistently-failing keychain logs one fresh
+> SET per cooldown — visible in today's 04:26:18 → 04:36:58 pair, 640 s apart ≈ one cooldown plus
+> the probe. The residual hole is only the few seconds between the silent re-stamp at T+600 and
+> the noisy SET at T+600+timeout. **The rule is still the wrong instrument** — it reads a log line
+> as a PROXY for latch state, needs arithmetic nobody will redo the same way twice, and has a real
+> if small blind window — which is why it is replaced rather than patched.
+
+**NEXT ACTION — the break criterion, replaced with one the tick already computes:**
+**a `reauth-needed` beat with `reason: refresh-dead` BREAKS the window; a beat with
+`reason: slot-unreadable` does NOT.** No timestamp correlation, immune to the silent re-stamp,
+and one grep to score. Sound because `tick.ts:1407-1408` sets `refresh-dead` on `deadRefresh > 0`
+(a real credential fault) and `slot-unreadable` on `unreadable > 0` — and while the latch is set
+NO `security` op spawns at all, so every slot reads null and a `slot-unreadable` beat carries
+**zero** credential information either way. Excusing it costs nothing; it is unreadable, not
+healthy. `stuck:all-maxed` also remains CLEAN (a model-window verdict — 3GU9V70H's REFUTED
+blockquote). Score with:
+
+```bash
+grep -a "2026-08-2[6-9].*reauth-needed" logs/pm2-out.log \
+  | sed -E 's/.*reauth-needed: [0-9]+ alternate slot\(s\) //' | cut -c1-20 | sort | uniq -c
+```
+
+(today: 530 `have a dead refresh` — all PRE-recovery — and 79 `UNREADABLE`.) Spot-check the live
+verdict with `cat ~/.aimaestro/oauth-rotator-tick-status.json`.
+**Prefer landing MFTDMSJY first** — a window scored under any attribution rule is weaker evidence
+than one with no false beats in it, and the 2026-08-30 deadline still has room.
 
 **Resolved during 3GU9V70H, do NOT re-investigate as a `readSlot` fault:** the
 `slot-unreadable ↔ refresh-dead` flap noted above is the KEYCHAIN DENIED-LATCH. Mechanism

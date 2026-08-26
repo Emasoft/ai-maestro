@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-26T11:18:48+0200
+updated: 2026-08-26T11:22:49+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -53,13 +53,30 @@ $ grep -a "DENIED-LATCH SET" logs/pm2-error.log | sed 's/.*DENIED-LATCH SET: //'
    1  a `security` op hung past 10s (a keychain unlock/ACL prompt)…
 ```
 
-**350 of 350 are TIMEOUTS. Zero are denials.** Not one matched a `DENIAL_MARKERS` string
+**Zero denials among 350 LOGGED SETs.** Not one matched a `DENIAL_MARKERS` string
 (`user interaction is not allowed`, `errSecAuthFailed`, `errSecInteractionNotAllowed`,
 `errSecUserCanceled`, …) — the branch the latch was designed for has never fired here. The
 parenthetical "(a keychain unlock/ACL prompt)" is a guess printed as a diagnosis, and it aims the
 next debugger at an ACL problem that does not exist.
 
-**Frequency, measured:** 350 latches in the last month · **8 today** (04:26:18, 04:36:58,
+**Two limits on that population, both narrowing the claim rather than inverting it** (review-fork
+caveat, then verified first-hand at `safe-storage.ts:213-216` and `:229-232`): (a) the half-open
+re-stamp is `{quiet: true}` and writes NO log line, so 350 counts logged SETs, not latch-seconds —
+the true exposure is ≥ that, which strengthens the finding; (b) **while latched no op spawns at
+all**, so no denial is even OBSERVABLE during those windows — "zero denials" is true by
+construction for that ~13% slice and is real evidence only for the rest of the day, when ops did
+spawn and produced none. Also note the noisy/quiet split is not a blind spot for CHAINED latches:
+a half-open probe that itself times out falls through to the **non-quiet** `setKeychainDenied` at
+`:230`, so a persistently-failing keychain still logs one SET per cooldown (visible in today's
+04:26:18 → 04:36:58 pair, 640 s apart ≈ one cooldown plus the probe).
+
+**Window correction:** "350 in the last month" was MY window, not the file's. `head -1
+logs/pm2-error.log` reads **2026-07-11 17:17:25**, so the population spans **46 days**, i.e.
+~7.6 latches/day — today's 8 is an ordinary day, not a spike, and the "last month" phrasing
+overstated the rate by ~1.5×.
+
+**Frequency, measured:** 350 logged latches over the log's full 46-day span (~7.6/day) · **8
+today** (04:26:18, 04:36:58,
 05:07:18, 05:21:12, 06:02:06, 06:29:24, 10:33:21, 11:03:30) · 51 on 2026-08-20. Six of today's
 eight fired BEFORE the janitor's 09:40-10:05 browser capture, which is what refutes the
 capture-caused story (see the correction below).

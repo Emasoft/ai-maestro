@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T21:49:36+0200
+updated: 2026-08-26T21:52:49+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -162,9 +162,22 @@ listed two `user_mem_lib` sites on adjacent lines. (3) My exact needle
 `os.environ.get("MEMGREP_BIN")` silently missed `wikimem_bench.py:68`, which passes a DEFAULT
 (`, "memgrep")`) — a closing paren I had baked into the pattern. (4) Checking the peer's second
 transitive module I ran `grep … 2>/dev/null || echo "FILE ABSENT in cache"` and read the fallback
-as a finding: the file **is** in the cache, grep merely exited 1 on no-match. It has zero memgrep
-references at 3.3.26 and gains the delegation after — a real version difference I nearly reported
-as a missing file, from a fallback message I wrote myself.
+as a finding: the file **is** in the cache, grep merely exited 1 on no-match — a real version
+difference I nearly reported as a missing file, from a fallback message I wrote myself.
+
+**(5) Then I gave the right answer a reason that fails re-verification, which is worse than a
+wrong answer.** I wrote that `memory_content_precheck.py` "has zero memgrep references at
+3.3.26". It has **13**, all docstring prose about `memgrep lint` (`:560 :574 :576 :623 :625 :638
+:700 :798 :801 :817 :824 :867 :873`) — my needle was `find_memgrep\|MEMGREP`, case-sensitive, so
+every lowercase prose mention was invisible to it. What is genuinely absent is the **delegation**:
+`find_memgrep` / `user_mem_lib` / `MEMGREP_BIN` all exit 1 in that file. The population split is
+UNCHANGED and correct; only my reason for it was wrong. It matters because the next reader
+re-checking the claim greps the plain word, gets 13 hits, and "corrects" a right conclusion into
+error — a wrong reason under a right answer is the more fragile arrangement, because diligence is
+what breaks it. Dated: the delegation lands in the janitor's `6fa8b6c4` (2026-08-26 06:24), and
+`v3.3.26` was cut at `ce03b9cb` (2026-08-21 02:23) — verified not-an-ancestor, so the split has a
+cause and not merely a measurement. The peer who caught this listed 12 of the 13 lines, i.e. the
+same class one more time, in the correction itself.
 
 The `post-edit` hook's inline `except` fallback is the one leg with no env var at all:
 `shutil.which` → `~/.cargo/bin/memgrep`, reached only when the import dies.

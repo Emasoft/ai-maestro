@@ -1,12 +1,12 @@
 ---
 trdd-id: NWTTU0AQ
 title: mcp-discover accepts an arbitrary inline serverConfig and spawns its command — any authenticated agent gets code execution
-column: todo
+column: proposal
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T13:00:27+0200
-updated: 2026-08-26T13:56:07+0200
+updated: 2026-08-26T16:33:33+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -156,3 +156,8 @@ cannot express anything the sole caller does not already send.
   `settings/mcp-discover` for TRDD-R268J32X. The route was read because its ledger neighbour
   `plugin-builder/scan-repo` had just been cleared on the "where does the fetched thing land"
   question; here the answer is `subprocess.Popen`.
+- 2026-08-26T16:33:33+0200 — MOVED to `design/proposals/`, `column: proposal`. It was filed in
+  `design/tasks/` at `column: todo` while carrying `approved: false` — the authorized-work zone, on
+  a card saying nobody had ruled. Caught by `trdd:doctor`'s APPROVAL-UNAPPROVED-IN-WORK-ZONE run
+  against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
+  `design/proposals/`. Zone only — no content changed and nothing withdrawn.

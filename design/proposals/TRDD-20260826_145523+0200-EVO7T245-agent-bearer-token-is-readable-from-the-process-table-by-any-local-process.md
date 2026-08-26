@@ -1,12 +1,12 @@
 ---
 trdd-id: EVO7T245
 title: The agent bearer token AID_AUTH leaks at three of five lifecycle stages — delivery argv, session environment, and 47 curl call sites
-column: todo
+column: proposal
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T16:23:38+0200
+updated: 2026-08-26T16:33:33+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -701,3 +701,10 @@ removes the world-readable half; it is not a resolution.
   failed), the environment exposure with `ps eww`, and the `curl -K -` mitigation with a positive
   control. The USER's premise was corrected in one direction (identity is not on the SCRIPT's argv)
   and confirmed worse in another (it is on curl's argv AND permanently in the environment).
+- 2026-08-26T16:33:33+0200 — MOVED to `design/proposals/`, `column: proposal`. It was filed in
+  `design/tasks/` at `column: todo` while carrying `approved: false` — the authorized-work zone, on
+  a card saying nobody had ruled. Caught by `trdd:doctor`'s APPROVAL-UNAPPROVED-IN-WORK-ZONE run
+  against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
+  `design/proposals/`. Zone only — no content changed and nothing withdrawn. **This card's floor is
+  `user`, so the move is the honest one: it has been awaiting a USER ruling since it was filed, and
+  `design/tasks/` was asserting the opposite.**

@@ -1,12 +1,12 @@
 ---
 trdd-id: V2BLADSF
 title: Group creation lets any authenticated agent inject arbitrary text into any other agent's live session as AI Maestro
-column: todo
+column: proposal
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T13:48:51+0200
-updated: 2026-08-26T14:01:02+0200
+updated: 2026-08-26T16:33:33+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -171,3 +171,8 @@ must be **self-only for a plain agent, unrestricted for MANAGER and the system o
   five `groups/*` routes for TRDD-R268J32X. The routes are clean; the hole is two functions below
   them, and the file's own comment at `subscribeAgent:239` is what identifies it as a defect rather
   than a policy gap — the invariant was already chosen and two writers do not honour it.
+- 2026-08-26T16:33:33+0200 — MOVED to `design/proposals/`, `column: proposal`. It was filed in
+  `design/tasks/` at `column: todo` while carrying `approved: false` — the authorized-work zone, on
+  a card saying nobody had ruled. Caught by `trdd:doctor`'s APPROVAL-UNAPPROVED-IN-WORK-ZONE run
+  against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
+  `design/proposals/`. Zone only — no content changed and nothing withdrawn.

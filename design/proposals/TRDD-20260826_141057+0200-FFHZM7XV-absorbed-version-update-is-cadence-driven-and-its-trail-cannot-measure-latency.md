@@ -1,12 +1,12 @@
 ---
 trdd-id: FFHZM7XV
 title: The absorbed version-update lane is cadence-driven not detection-driven, and its trail cannot measure publish-to-installed latency
-column: todo
+column: proposal
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:10:57+0200
-updated: 2026-08-26T14:41:05+0200
+updated: 2026-08-26T16:33:33+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -228,3 +228,9 @@ path**, not as a speed-up of a slow one.
   **My own first read of that trail returned "0 janitor rows" because I keyed on `name` and the
   field is `target`** — a zero that would have inverted the whole answer, caught by a positive
   control asking what names the trail actually contains.
+- 2026-08-26T16:33:33+0200 — MOVED to `design/proposals/`, `column: proposal`. It was filed in
+  `design/tasks/` at `column: todo` while carrying `approved: false` — the authorized-work zone, on
+  a card saying nobody had ruled. Caught by `trdd:doctor`'s APPROVAL-UNAPPROVED-IN-WORK-ZONE run
+  against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
+  `design/proposals/`. Zone only — no content changed and nothing withdrawn. **The janitor session
+  is waiting on this card's reply (TRDD-A70YJLXN); the move does not change that owing.**

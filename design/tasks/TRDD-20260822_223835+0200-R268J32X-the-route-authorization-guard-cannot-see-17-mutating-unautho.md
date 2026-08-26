@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T12:06:30+0200
+updated: 2026-08-26T12:11:01+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -141,6 +141,25 @@ pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole pi
 
 ## Decisions — the 17, one at a time
 
+### `conversations/parse` — DECIDED 2026-08-26: a REAL HOLE, filed as TRDD-RC33OAFQ
+
+**Settled by the one check this entry named.** `enforceAuth` → `authenticateFromRequest`
+(`lib/route-auth.ts`) → `authenticateAgent(Authorization, X-Agent-Id, Cookie)`
+(`lib/agent-auth.ts:250`), whose success value is `{ agentId }` — so an **AGENT token satisfies
+this route**. That is the agent-admitting branch: agent A can read agent B's full transcript.
+Scale measured: **99 project dirs / 1841 `.jsonl`** under the allowlist root.
+
+Filed as **TRDD-RC33OAFQ** (`min-approval-requirement: manager`) rather than patched, on the same
+grounds as `sessions/[id]/rename` → TRDD-OYNUJRSB: the correct policy (operator-only vs
+own-transcript-only) is a ruling, and choosing it needs an enumeration of the route's callers
+across the plugin repos that has not been done. **The ledger entry stays** until that lands.
+
+**For whoever fixes it:** raising this route's guard CHANGES `NON_AGENTS_AUTHN_ONLY` in
+`tests/unit/agent-route-authorization-coverage.test.ts`. Shrink the ledger in the SAME commit —
+this card's own acceptance box records a 30-minute red suite from exactly that oversight.
+
+<details><summary>The original IN-PROGRESS note, kept — its framing named the check that settled it</summary>
+
 ### `conversations/parse` — IN PROGRESS, NOT decided (2026-08-26)
 
 Read the route in full; recording where the question actually sits rather than closing it, because
@@ -170,6 +189,8 @@ authentication ALONE. So the decision turns entirely on one thing:
 principals it accepts; if it accepts an agent, this is a real hole and gets its own card (the same
 disposition `sessions/[id]/rename` got as TRDD-OYNUJRSB, because the correct policy is a ruling and
 not a one-liner). Do NOT decide it from the route file — the route only calls the helper.
+
+</details>
 
 
 Three decided 2026-08-22 — the two blast-radius picks this card named, plus the highest-risk name

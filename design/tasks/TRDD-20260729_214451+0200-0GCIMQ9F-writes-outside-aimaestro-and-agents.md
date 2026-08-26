@@ -4,7 +4,7 @@ title: ai-maestro must write only inside ~/.aimaestro and ~/agents
 column: todo
 scope: project
 created: 2026-07-29T21:44:51+0200
-updated: 2026-08-22T14:30:50+0200
+updated: 2026-08-26T06:01:50+0200
 implementation-commits: [973de2fe, d6c3388b]
 current-owner: ai-maestro
 created-by: ai-maestro
@@ -21,6 +21,7 @@ npt: [OWO449MR]
 eht: [KO4TQCJ0, RCL2HC9Y]
 severity: critical
 priority: 0
+review-after: 2026-09-02
 release-via: none
 relevant-rules: [R20.20, R20.29, R20.30]
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/102]
@@ -344,3 +345,5 @@ count is not frozen, so re-read the summary line rather than trusting the 70 abo
 
 See `TRDD-IMCEYV9F` for why bounding beat prevention, and for the three containment boxes left
 OPTIONAL there (identify the `scratchpad-*` writer, contain each writer, one run-level assertion).
+
+**Parked 2026-08-26 (hub drain):** audited read-only (reports/hub-drain/20260826_060033+0200-0GCIMQ9F-audit.md, spot-verified): 9/10 boxes delivered and accurately ticked; the last box waits on the USER's reap permission — the leaked pillar-index count has grown to **144** files (`find ~/.aimaestro/pillar-index -type f | wc -l`). PENDING-USER: authorize `yarn pillar:reap` or decline. `review-after` set so drift stays quiet until then.

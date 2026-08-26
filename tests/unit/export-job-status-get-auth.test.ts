@@ -9,10 +9,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * shape as the `sessions/restore` GET (fixed in `d6f78e2b`, "unauthenticated in BOTH modes"),
  * which is why this is fixed directly rather than filed as a ruling.
  *
- * What the read discloses: `getExportJobStatus` returns the whole `ExportJob` (`types/export.ts`)
- * — `agentId`, `agentName`, `sessionId`, and `filePath`, the on-disk path of the completed export.
- * Unauthenticated, a caller who guesses or enumerates a job id learns which agents exist, what
- * they exported, and where the artifact sits.
+ * WHAT THIS GUARD IS FOR — corrected 2026-08-26, read the correction before trusting the claim it
+ * replaced. `getExportJobStatus` and `deleteExportJob` are **501 STUBS today**
+ * (`services/config-service.ts:727`, `:764` — "no export-job store exists"), so nothing is
+ * currently disclosed and this test pins the guard against the FUTURE Phase-5 store, not against a
+ * live leak. The earlier version of this comment asserted that the route leaks `agentId`,
+ * `agentName`, `sessionId` and `filePath` right now. It does not. That claim was read off the
+ * RETURN TYPE (`ServiceResult<{ job: ExportJob }>`) and never off the function body — a return
+ * type says what a function MAY return, never what it DOES.
+ *
+ * The guard is still correct: when the store lands, the shape above IS what a GET would return,
+ * and an unauthenticated caller enumerating job ids would learn which agents exist, what they
+ * exported, and where the artifact sits. Guarding before the store is cheaper than remembering to
+ * guard after it — which is exactly why the mock below returns a populated job.
  *
  * NO HEADLESS TWIN, verified rather than assumed: `grep -c 'export/jobs' services/headless-router.ts`
  * = 0, and a sweep of `services/ lib/ app/` found no reference outside the route's own directory.

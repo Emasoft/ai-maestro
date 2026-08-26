@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:51:25+0200
+updated: 2026-08-26T13:59:33+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -476,10 +476,35 @@ mis-classified in `NON_AGENTS_AUTHN_ONLY`: on the read path it is not authn-only
 *unauthenticated*. The needle keys on the FILE, and one file here carries two methods with two
 different postures — worth noting as a limit of the ledger's granularity, not just of this route.
 
-What leaks: `getExportJobStatus` returns the full `ExportJob` — `agentId`, `agentName`,
+~~What leaks: `getExportJobStatus` returns the full `ExportJob` — `agentId`, `agentName`,
 `sessionId`, and **`filePath`** (the on-disk path of the completed export). So an unauthenticated
 caller who can guess or enumerate a job id learns which agents exist, what they exported, and
-where the artifact sits on disk.
+where the artifact sits on disk.~~
+
+> **⚠ CORRECTED 2026-08-26T13:5x — THAT PARAGRAPH IS FALSE, AND THIS CARD ALREADY SAID SO 250
+> LINES BELOW.** `getExportJobStatus` (`services/config-service.ts:727`) returns **501
+> unconditionally** — *"Export job status is not implemented yet (no export-job store exists)"* —
+> and `deleteExportJob` (`:764`) does the same. **Nothing is read, nothing is disclosed, and
+> nothing can be deleted.** Both findings are real about the CODE SHAPE and hypothetical about
+> today's behaviour: they become live the moment the Phase-5 store lands.
+>
+> The line I wrote — *"what leaks… returns the full `ExportJob`"* — was read off the TYPE
+> SIGNATURE (`ServiceResult<{ job: ExportJob }>`) and never off the body. A return type describes
+> what a function MAY return, never what it DOES; the body was eleven lines further down.
+>
+> **The card contradicted itself for hours and neither half noticed.** An earlier pass got it right
+> at line 729 (*"CLEAR, and unusually so: there is nothing behind it… both service functions are
+> 501 STUBS"*) and even argued against guarding a stub. My later pass asserted a live leak, and I
+> built a fix, a test and a commit message on it. **A card is not one voice: two passes over the
+> same route can disagree, and the newer one is not automatically the better-informed one.**
+>
+> **The FIX (`c55f6f02`) STANDS, on a corrected justification.** It is defence-in-depth ahead of
+> the store, not a live leak closed. Line 729's objection — *"adding a guard to a stub would only
+> make the store's arrival look already-guarded"* — is answered by the guard being real and tested:
+> it IS guarded, and that is the point. What does NOT stand is the claim that anything was
+> disclosed. `tests/unit/export-job-status-get-auth.test.ts` mocks the service to return a job, so
+> it pins the guard against the FUTURE store — correct as a test, and its docstring has been
+> corrected to stop asserting a present-tense leak.
 
 **This class already has a precedent ON THIS CARD and it was FIXED, not filed:** `sessions/restore`
 GET was "unauthenticated in BOTH modes", closed by commit `d6f78e2b`. Same disposition applies —
@@ -489,10 +514,12 @@ so this route may have no twin — CONFIRM before assuming, because a Next-side-
 fix wherever a twin exists, per TRDD-8Q5EVGV1), a test, a neuter, and the ledger updated in the
 same commit.
 
-**FINDING 2 — the DELETE is authn-only with NO OWNERSHIP CHECK.** Any authenticated agent can
-cancel or delete ANY export job by id; `deleteExportJob(jobId)` takes the id alone and the route
-never compares the job's `agentId` to the caller. That is the `sessions/[id]/rename` shape
-(→ TRDD-OYNUJRSB): the correct policy is a ruling, not a one-liner.
+**FINDING 2 — the DELETE is authn-only with NO OWNERSHIP CHECK.** `deleteExportJob(jobId)` takes
+the id alone and the route never compares the job's `agentId` to the caller, so once a store exists
+any authenticated agent could cancel ANY agent's export job. That is the `sessions/[id]/rename`
+shape (→ TRDD-OYNUJRSB): the correct policy is a ruling, not a one-liner. **Same correction as
+above — `deleteExportJob` is also a 501 stub today (`:764`, "nothing is stored, so nothing can be
+deleted"), so this is a shape to fix WHEN the store lands, not damage happening now.**
 
 **NOT DECIDED — deliberately.** Both findings are recorded with the evidence rather than fixed,
 because the remaining context budget was not enough to land a security change with its twin check,

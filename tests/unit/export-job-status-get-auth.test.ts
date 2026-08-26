@@ -91,6 +91,15 @@ describe('TRDD-R268J32X — export job status reads are authenticated', () => {
 })
 
 /**
- * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash).
- * See the recorded result appended below after the run.
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(authErr\) return authErr/if (false) return authErr/ if $. == 22
+ *   → 1 red / 1 green:
+ *       refuses an unauthenticated caller, and discloses nothing
+ *
+ * THE LINE ANCHOR IS LOAD-BEARING — the same trap the sessions/restore neuter hit. `if (authErr)
+ * return authErr` appears TWICE in this route file (line 22 = GET, line 53 = DELETE), spelled
+ * identically, so an unanchored mutation would have disabled the DELETE guard too: a plausible
+ * red set produced by breaking a guard this file does not test, which is worse than breaking none.
+ * The positive control staying GREEN under the mutation is what proves the red is the guard and
+ * not a blanket failure.
  */

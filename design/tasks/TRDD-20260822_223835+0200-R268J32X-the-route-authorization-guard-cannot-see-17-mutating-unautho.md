@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T12:11:01+0200
+updated: 2026-08-26T12:35:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -140,6 +140,37 @@ This ledger stays valid and useful — it governs the Next-side surface and it i
 pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole picture.
 
 ## Decisions — the 17, one at a time
+
+### `export/jobs/[jobId]` — 2026-08-26: TWO findings, and the first is NOT an authz question
+
+**FINDING 1 — the GET has NO AUTH AT ALL.** Read in full: `DELETE` calls `enforceAuth` (with the
+comment `#114: Authenticate before any side effect`) and **`GET` calls nothing**. So this entry is
+mis-classified in `NON_AGENTS_AUTHN_ONLY`: on the read path it is not authn-only, it is
+*unauthenticated*. The needle keys on the FILE, and one file here carries two methods with two
+different postures — worth noting as a limit of the ledger's granularity, not just of this route.
+
+What leaks: `getExportJobStatus` returns the full `ExportJob` — `agentId`, `agentName`,
+`sessionId`, and **`filePath`** (the on-disk path of the completed export). So an unauthenticated
+caller who can guess or enumerate a job id learns which agents exist, what they exported, and
+where the artifact sits on disk.
+
+**This class already has a precedent ON THIS CARD and it was FIXED, not filed:** `sessions/restore`
+GET was "unauthenticated in BOTH modes", closed by commit `d6f78e2b`. Same disposition applies —
+add `enforceAuth` to the GET. It is a one-liner, but NOT a compaction-boundary one-liner: it needs
+the headless twin checked (a `grep -n "export/jobs" services/headless-router.ts` returned NOTHING,
+so this route may have no twin — CONFIRM before assuming, because a Next-side-only fix is half a
+fix wherever a twin exists, per TRDD-8Q5EVGV1), a test, a neuter, and the ledger updated in the
+same commit.
+
+**FINDING 2 — the DELETE is authn-only with NO OWNERSHIP CHECK.** Any authenticated agent can
+cancel or delete ANY export job by id; `deleteExportJob(jobId)` takes the id alone and the route
+never compares the job's `agentId` to the caller. That is the `sessions/[id]/rename` shape
+(→ TRDD-OYNUJRSB): the correct policy is a ruling, not a one-liner.
+
+**NOT DECIDED — deliberately.** Both findings are recorded with the evidence rather than fixed,
+because the remaining context budget was not enough to land a security change with its twin check,
+test, neuter and ledger edit — and a half-landed guard is worse than a recorded one. Next session:
+finding 1 first (precedented, cheap), then finding 2 as its own card if the ruling goes that way.
 
 ### `conversations/parse` — DECIDED 2026-08-26: a REAL HOLE, filed as TRDD-RC33OAFQ
 

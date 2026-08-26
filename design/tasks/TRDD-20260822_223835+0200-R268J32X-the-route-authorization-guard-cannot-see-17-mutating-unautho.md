@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:50:11+0200
+updated: 2026-08-26T13:51:25+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -360,7 +360,7 @@ without re-deriving them. Derived here with the test's OWN predicate
 | `auth/sudo-password` | NO | **DECIDED — FALSE positive** (`!ctx.isSystemOwner` → 403) |
 | `governance/user` | NO | **DECIDED — FALSE positive** (`!ctx.isSystemOwner` → 403) |
 | `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` · `groups` | yes | **CLEAR** as routes — hole below them filed as TRDD-V2BLADSF (2026-08-26) |
-| `help/agent` | NO | undecided |
+| `help/agent` | NO | **CLEAR** — `DeleteAgent` G00 → `gate0Auth` → `authorize()` (2026-08-26) |
 | `messages/forward` | NO | **CLEAR** — own-mailbox scoped lookup + R6 graph (2026-08-26) |
 | `messages` | NO | **already read — FALSE positive** (uses `auth.agentId` to OVERRIDE a client param) |
 | `sessions/create` | yes | **already DECIDED clear** |
@@ -370,6 +370,14 @@ without re-deriving them. Derived here with the test's OWN predicate
 | `trdd/create` | NO | **already read — FALSE positive** (uses `isSystemOwner` for an authority RANK) |
 
 So **7 genuinely undecided** (`auth/sudo-password` and `governance/user` both decided below), not 15. Two are known false positives and two are decided clear.
+
+> **CLOSED 2026-08-26 — the forward-only tier is now 0 undecided.** The remaining 7 were read in
+> one pass: `help/agent`, `messages/forward`, `teams/[id]/kanban-config`, `teams/[id]/tasks` and
+> the five `groups/*` all CLEAR at the route. **Every single one was gated in the RECEIVER, not
+> the route** — which is why the needle scored them 0 and why a forward-only row is a QUESTION,
+> never a finding. One real defect came out of the reading and is filed separately:
+> **TRDD-V2BLADSF** (group creation → cross-agent prompt injection), found below the `groups/*`
+> routes rather than in them.
 
 **The `NO-enforceAuth` column is new information and is where I would start.** A route that forwards
 an auth context WITHOUT calling `enforceAuth` is relying entirely on the receiving service to
@@ -783,8 +791,13 @@ so that box stays open.
       `plugin-builder/build`, `teams/[id]/batch-create-agents` and `sessions/activity/update` CLEAR;
       `sessions/restore` GET FIXED (unauthenticated in BOTH modes, commit `d6f78e2b`);
       `sessions/[id]/rename` **is a real hole → filed as TRDD-OYNUJRSB**, because the correct
-      policy is a ruling and not a one-liner. Reasoning under `## Decisions`. Remaining debt:
-      **~9 authn-only + 14 forward-only** unchecked
+      policy is a ruling and not a one-liner. Reasoning under `## Decisions`.
+      **UPDATED 2026-08-26 — both tiers are now fully decided: authn-only 11/11, forward-only
+      15/15.** Four real findings came out of it, each its own card: `sessions/[id]/rename`
+      (TRDD-OYNUJRSB), `conversations/parse` (TRDD-RC33OAFQ), `settings/mcp-discover`
+      (TRDD-NWTTU0AQ, RCE) and `groups/*` creation (TRDD-V2BLADSF); plus one fixed in place
+      (`export/jobs/[jobId]` GET, `c55f6f02`) and one recorded-not-filed (`vpn-chat/block`).
+      **The remaining debt is not "routes to read" — it is those cards' rulings**
 - [ ] **the ledger's own entries are not equal in kind, and the discriminator is cheap.** Of the
       four CLEAR verdicts, exactly one (`sessions/activity/update`) was *already decided* — it
       carries a comment stating the policy, the worst case, and why tightening was rejected. The

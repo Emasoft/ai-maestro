@@ -12,7 +12,7 @@
 // with certainty — even in a context that cannot read the primary back.
 
 import { writeLiveBlob, readLiveBlob } from './live'
-import { loadState, saveState, fingerprint, rotatorRoot, type CredentialBlob } from './slots'
+import { loadState, saveState, fingerprint, rotatorRoot, lastRootFallbackRefusal, type CredentialBlob } from './slots'
 import { atomicWriteBytes } from './integrity'
 import * as path from 'path'
 
@@ -29,6 +29,20 @@ function liveIdentityPath(): string {
  * credential without the R16 USER checkpoint.
  */
 export function switchLiveTo(email: string, blob: CredentialBlob, reason: string): void {
+  // PRECONDITION, BEFORE THE IRREVERSIBLE WRITE. `writeLiveBlob` below rotates the real
+  // `Claude Code-credentials` item; `saveState` further down records WHICH account is now live.
+  // If the state write cannot succeed, doing the credential write first produces exactly the
+  // split-brain the state guard exists to prevent — keychain live = B while state.json still
+  // says A — and it is unrecoverable by retry, because the next tick reads state.json and
+  // believes A. Checking persistability only at `saveState` (slots.ts) is too late: by then
+  // the credential has already moved. Order matters more than the guard does.
+  //
+  // Throwing here is safe: nothing has been mutated yet, `withTickLock` releases on throw
+  // (tick-lock.ts:51), and server-tick.ts:195-277 reports the failed beat.
+  rotatorRoot() // refresh lastRootFallbackRefusal
+  if (lastRootFallbackRefusal) {
+    throw new Error(`rotator-switch-refused (nothing was written): ${lastRootFallbackRefusal}`)
+  }
   const cred = (blob && typeof blob === 'object' ? (blob as Record<string, unknown>).claudeAiOauth : undefined)
   if (cred && typeof cred === 'object') {
     const live = readLiveBlob() ?? {}

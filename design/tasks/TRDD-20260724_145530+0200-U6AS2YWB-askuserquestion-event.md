@@ -4,7 +4,7 @@ title: AskUserQuestion event ESC-flood then cursor-ready then directive
 column: todo
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-26T09:32:56+0200
+updated: 2026-08-26T09:39:48+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -91,10 +91,17 @@ injection-proof); the verbatim directive is in the Spec below.
 - [ ] A driven AskUserQuestion menu → ESC dismisses it → the directive lands — NEEDS (a) a
       live-captured AskUserQuestion frame to write the event matcher from (do not guess TUI
       copy), then (b) a driven end-to-end run (scenario-runner / operator territory). The
-      MACHINERY is landed and pinned (`770880b1`): union kind, allowlist gate on both
-      command-carrying kinds, injector loop with frame re-check, curated key
-      `continuity-decide-yourself` carrying the verbatim directive. Also open: the HID
-      decision (checkpoint item 6) binds at event-registration time.
+      MACHINERY is landed and pinned (`770880b1`, then hardened `d530ec7b`+`80e927a6` by two
+      fork rounds): union kind, allowlist gate on both command-carrying kinds, injector loop
+      with frame re-check, curated key `continuity-decide-yourself`, AND a foreground pre-send
+      guard — "menu gone" cannot distinguish dismissed from client-DIED, isSessionIdle's
+      no-activity default is IDLE (a crashed pane passes requireIdle), so without the guard the
+      free-text directive would be typed+Enter'd into a shell. MEASURED twice: tmux
+      pane_current_command is a bare process name, and a LIVE claude pane reports its VERSION
+      string ('2.1.246') — Claude Code renames its process — so the guard accepts registry
+      program/aliases OR a pure version-string name and aborts on empty/shell-names/anything
+      else (fail-closed; 'node' aborts, pinned). 7 tests, 4 observed neuters. Also open: the
+      HID decision (checkpoint item 6) binds at event-registration time.
 - [ ] No 300 s timeout — the requireIdle final send waits for the settled turn (mechanism in
       place); proven only by the live run above.
 - [x] The ESC count is bounded — pinned 2026-08-26 by

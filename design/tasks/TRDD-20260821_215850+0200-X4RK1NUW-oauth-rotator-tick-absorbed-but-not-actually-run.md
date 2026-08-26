@@ -7,7 +7,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T04:47:18+0200
+updated: 2026-08-26T04:51:18+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -183,15 +183,21 @@ Still `reauth-needed` ⇒ the cookie layer is the thing to check, per the messag
 
 ### 2026-08-26T04:47 — box-2 deploy VERIFIED; card BLOCKED on credential recovery (TRDD-3GU9V70H)
 
-- **Box-2 fix is now RUNNING.** The fleet restart at ~00:05 deployed `server-tick.ts`
-  (runtime-imported, live on restart alone). Verified across beats: status file (04:42,
-  `reauth-needed`/`slot-unreadable`) and rotator.log's 04:26 ONSET carry the SAME code and
-  message, and the old `rotator-stuck:all-maxed ↔ reauth-needed:refresh-dead` code-flap is
-  absent from the post-restart log. The "landed, undeployed" ⛔ above is resolved.
+- **Box-2 fix is DEPLOYED** (review-fork-corrected wording): the live pm2 process started
+  **2026-08-26 04:27:34** (`pm2_env.pm_uptime`, read from the process — not the handoff), which
+  post-dates the fix by 5 days, and `server-tick.ts` is runtime-imported, so the code in memory
+  is the fixed one. The "landed, undeployed" ⛔ above is resolved. **The discriminating
+  BEHAVIOR is honestly unproven**: old and new code diverge only when `all-maxed` and a reason
+  BOTH hold, and the post-restart log has 0 `all-maxed` lines — so "code/message agree" and
+  "no flap" are equally true of the old build. Vacuous absence, not verification; it settles
+  only if an all-maxed beat is ever observed clean.
 - **The 48h window cannot start.** Ground truth in `state.json`: ALL THREE slots are
-  `credential-dead` (`invalid_grant` × 233/576/789), access tokens expired ~08-08..11,
-  `cookie-leg-since.json` = `{}` (the no-human rung has minted nothing), `cookie-leg-stuck`
-  cycling for all three accounts. Recovery is the janitor's cookie leg or a human
+  `credential-dead` (`invalid_grant` × 233/576/789), access tokens expired 08-11..08-14
+  (epoch-ms recomputed; an earlier draft said 08-08..11), `cookie-leg-stuck`
+  cycling for all three accounts. (`cookie-leg-since.json` = `{}` was earlier misread as "the
+  leg minted nothing" — supervisor.ts:288 shows it tracks cannot-self-renew ONSET, and `{}`
+  with three dead slots is itself an anomaly for 3GU9V70H to explain. The dead-slot conclusion
+  rests on `refresh_dead_fp == fp` in state.json, which was read first-hand.) Recovery is the janitor's cookie leg or a human
   `/janitor-refresh-cc-logins` — carded as **TRDD-3GU9V70H**, which now blocks this card.
 - **New observation, NOT the box-2 defect:** the REASON flaps `slot-unreadable ↔ refresh-dead`
   beat-to-beat (18:58→19:09→22:58→23:19→04:26), spanning pre- and post-restart. Code and

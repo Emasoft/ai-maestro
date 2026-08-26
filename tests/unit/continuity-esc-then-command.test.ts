@@ -20,8 +20,12 @@ vi.mock('@/services/agents-core-service', () => ({
 }))
 
 const mockCapture = vi.fn()
+const mockForeground = vi.fn()
 vi.mock('@/lib/agent-runtime', () => ({
-  getRuntime: () => ({ capturePane: (...a: unknown[]) => mockCapture(...a) }),
+  getRuntime: () => ({
+    capturePane: (...a: unknown[]) => mockCapture(...a),
+    getForegroundCommand: (...a: unknown[]) => mockForeground(...a),
+  }),
 }))
 
 // The injector resolves the event for its re-check via findClientEntry; feed it a fake client
@@ -85,7 +89,9 @@ describe('TRDD-U6AS2YWB — esc-then-command injector', () => {
   beforeEach(() => {
     mockSend.mockReset()
     mockCapture.mockReset()
+    mockForeground.mockReset()
     mockSend.mockResolvedValue({ error: undefined, status: 200 })
+    mockForeground.mockResolvedValue('claude') // healthy client unless a test says otherwise
   })
 
   it('ESCs until the menu leaves the frame, then sends the curated directive at idle', async () => {
@@ -125,6 +131,24 @@ describe('TRDD-U6AS2YWB — esc-then-command injector', () => {
     expect(r.ok).toBe(false)
     expect(String(r.detail)).toMatch(/no sessionName/i)
     expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  it('DEAD CLIENT: a menu-free frame with a shell foreground aborts — the directive never reaches a shell', async () => {
+    /** "Menu gone" cannot distinguish dismissed from died — a frame without the menu plus a
+     * non-client foreground means claude exited mid-flood, and typing the free-text directive
+     * would EXECUTE it at a shell prompt. requireIdle cannot catch this (isSessionIdle's
+     * no-activity default is IDLE, so a crashed pane passes). The foreground pre-send guard is
+     * the only thing between "dismissed" and "typed into zsh". */
+    mockCapture.mockResolvedValue(CLEAN_FRAME) // menu "gone" — because the client is gone
+    mockForeground.mockResolvedValue('zsh')
+    const { inject } = continuityActuatorDeps(Date.now())
+    const r = await inject(action())
+
+    expect(r.ok).toBe(false)
+    expect(String(r.detail)).toMatch(/client gone, command NOT sent/i)
+    // The one ESC that ran before the "gone" read is fine; the DIRECTIVE must be absent.
+    const sends = mockSend.mock.calls.map((c) => c[1]) as Array<{ command: string }>
+    expect(sends.every((s) => s.command === ESC_KEYSTROKE)).toBe(true)
   })
 
   it('a THROWING matcher counts as still-present — aborts without the command', async () => {

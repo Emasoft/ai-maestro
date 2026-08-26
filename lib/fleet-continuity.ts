@@ -233,8 +233,9 @@ export function continuityActuatorDeps(now: number): Omit<ContinuityActuatorDeps
         // an action taken in the agent's name). So: no sessionName → refuse; event not found for
         // the re-check → refuse; matcher throws → treat as STILL PRESENT; menu survives maxEsc →
         // refuse. NOTE for event authors: the re-check evaluates the event's own matcher against
-        // a fresh frame with `notification: null`, so an esc-then-command event MUST match on the
-        // frame alone — a notification-dependent matcher would read "gone" while the menu is up.
+        // a fresh frame with `notification: null` AND `bufferType: 'alternate'` hardcoded, so an
+        // esc-then-command event MUST match on the frame TEXT alone — a notification- or
+        // bufferType-keyed matcher would read "gone" while the menu is still up.
         const { commandKey, maxEsc } = action.response
         const sessionName = action.sessionName
         if (!sessionName) {
@@ -265,6 +266,26 @@ export function continuityActuatorDeps(now: number): Omit<ContinuityActuatorDeps
         }
         if (!dismissed) {
           return { ok: false, status: 0, detail: `esc-then-command: menu still present after ${maxEsc} ESC — command NOT sent` }
+        }
+        // FOREGROUND PRE-SEND GUARD (adversarial-review finding, and the card's own instrument
+        // aimed at the case it IS right for): "menu gone from the frame" cannot distinguish
+        // "dismissed" from "client DIED" — both show a frame without the menu, and requireIdle
+        // is no help (`isSessionIdle` is an activity clock whose no-activity default is IDLE, so
+        // a crashed pane passes it perfectly). If claude exited mid-flood, the send below would
+        // type the free-text directive into a SHELL with a newline — unattended text executed at
+        // a shell prompt, the exact class the curated boundary exists to prevent. So: the
+        // foreground process must still BE the client program, else abort without sending. A
+        // runtime without getForegroundCommand, a throw, or a mismatch all refuse.
+        const fgProbe = getRuntime().getForegroundCommand
+        const fg = fgProbe ? await fgProbe.call(getRuntime(), sessionName).catch(() => '') : ''
+        const fgBase = fg.trim().split('/').pop()?.toLowerCase() ?? ''
+        const wantBase = action.program.trim().split('/').pop()?.toLowerCase() ?? ''
+        if (!fgBase || !wantBase || fgBase !== wantBase) {
+          return {
+            ok: false,
+            status: 0,
+            detail: `esc-then-command: foreground is '${fgBase || '(unknown)'}', not '${wantBase}' — client gone, command NOT sent`,
+          }
         }
         const curatedDirective = getAgentCommand(commandKey)
         if (!curatedDirective) {

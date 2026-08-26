@@ -221,10 +221,25 @@ export function saveState(state: RotatorState): void {
   //
   // Guarded at the WRITE PRIMITIVE rather than at the ~8 saveState call sites in tick.ts,
   // because a per-call-site guard cannot cover the next call site anyone adds.
+  // THROWS, deliberately, rather than returning early. `saveState` is `void`, so a silent
+  // refusal is undetectable at EVERY call site by construction — and tick.ts:685 is explicit
+  // that "the caller MUST saveState BEFORE any switchLiveTo (which re-loads state from disk)".
+  // A silent no-op turns that mandatory barrier into a nop in exactly the state where the root
+  // is unresolved, which is TRANSIENT (a DATA dir being restored, a plugin reinstall mid-flight)
+  // — so the tick can hold slots loaded while the root was still good, refuse the write, and
+  // then rotate: keychain live = account B while state.json still says account A.
+  //
+  // That credential/state SPLIT-BRAIN is worse than the empty shadow this guard prevents,
+  // because the empty shadow is obviously broken (zero slots, the janitor's roots-agree
+  // detector fires) whereas a live/state disagreement is self-consistent to each reader alone
+  // and NOTHING in either side's tooling compares state.json against the live keychain item.
+  //
+  // Throwing aborts the beat instead: runTick's caller wraps it (server-tick.ts:195-277), so
+  // this surfaces as a reported tick failure, nothing rotates and nothing persists. Same
+  // trichotomy as the blocker probes — could-not-run must never masquerade as a result.
   rotatorRoot() // refresh lastRootFallbackRefusal for this call
   if (lastRootFallbackRefusal) {
-    console.warn(`rotator-state-write-refused: ${lastRootFallbackRefusal}`)
-    return
+    throw new Error(`rotator-state-write-refused: ${lastRootFallbackRefusal}`)
   }
   backupAndWrite(stateFilePath(), Buffer.from(JSON.stringify(state, null, 2), 'utf8'), 0o600)
 }

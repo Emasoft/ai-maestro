@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:10:57+0200
-updated: 2026-08-26T16:33:33+0200
+updated: 2026-08-26T18:54:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -234,3 +234,58 @@ path**, not as a speed-up of a slow one.
   against my own artifact: 7 hits, all 7 mine, against a 19-for-19 convention in
   `design/proposals/`. Zone only — no content changed and nothing withdrawn. **The janitor session
   is waiting on this card's reply (TRDD-A70YJLXN); the move does not change that owing.**
+
+## Cross-project update — 2026-08-26 (from the janitor session, recorded not adjudicated)
+
+**Cross-link: janitor TRDD-5ZVS1DDP** ("One daemon per host — the janitor daemon exits while an
+ai-maestro server is running"), currently `column: blocked`, `blocked-by: [publish-of-AWXK0RFT]`.
+Both sides read as the same shared-contract ruling seen from opposite ends. Adjacent on their
+board: TRDD-AM8JD9SG (harness preparedness), TRDD-2C8XFOW9 (restart after settings changes).
+
+**The option set narrowed, by an OWNER statement, not by anyone's reasoning.** Quoted by the
+janitor from the owner this session:
+
+> "is the janitor daemon (both this from the plugin and the one from ai-maestro when the
+> ai-maestro server is running) automatically updating the janitor plugin if a new version is
+> detected? … the ai-maestro plugin must be updated as soon a new version is detected on the
+> marketplace."
+
+That kills option 3 (relax to Claude Code's cadence) and any answer whose guarantee is a 4 h
+elapsed-time floor. **Live options are 1 (port the work), 2 (un-claim the chore), 4 (consume the
+detection flag in the overdue predicate) — all three are OURS.**
+
+The janitor's reading that option 4's shape matches the directive's wording is recorded as THEIR
+reading, not as an owner quote. The quoted text above is the quote; the inference is not.
+
+**What option 4 needs, verified live by them rather than recalled:**
+
+```
+~/.claude/janitor-control/version-update-requested.flag
+```
+canonical path (control_dir; dual-read against the older pre-control-dir location, prefer this
+one). Raised by `global_state.request_version_update()`, cleared by
+`clear_version_update_request()`, presence-tested by `version_update_requested_present()`.
+Written atomically with a provenance body.
+
+**Rider, and it is ours:** their flag is raised from a per-SESSION heartbeat, so a host with no
+armed janitor session never raises it and silently falls back to the 4 h floor. That degradation
+is OBSERVABLE, unlike the harness auto-update stopping (invisible by construction — TRDD-FXPV7L4D
+found that class 11 to 155 days deep). So option 4 must SAY OUT LOUD when its trigger degrades to
+cadence; an observable degradation nobody surfaces is the same failure class with a shorter fuse.
+
+**Deliberately NOT done on their side:** no janitor fallback that runs the update anyway while we
+hold the chore. TRDD-LU0C5KAR's binary rule removed exactly that guard and two writers on
+`claude plugin update` is the issue-#7 pile-up. **If we take none of 1/2/4, the correct outcome is
+that the directive goes UNMET and the owner is told — not that they quietly re-arm.**
+
+Also confirmed and not to be re-diagnosed: their `version-update.last-run.ts` frozen at 2026-07-25
+is CORRECT for an absorbed chore, not a dead lane. It has already misled one reader on this host.
+
+**Not adjudicated here.** This card is manager-tier and the owner is away; picking between 1/2/4
+would be self-approval. Recorded so the option set, the flag path and the rider survive to the
+ruling.
+
+## Acceptance — added by the option-4 rider
+
+- [ ] IF option 4 is chosen: the lane emits an explicit, surfaced signal when the detection
+      trigger is unavailable and it has fallen back to the cadence floor.

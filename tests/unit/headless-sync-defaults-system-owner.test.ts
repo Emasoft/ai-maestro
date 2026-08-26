@@ -102,10 +102,15 @@ describe('TRDD-DQVPODKW — headless sync-defaults is system-owner only (behavio
 })
 
 /**
- * NEUTER RUN (recorded after first green run):
- *   mutation: revert the handler's check to `if (auth.agentId)` — under this suite both
- *   fixtures behave identically to the buildAuthContext form (MEMBER has agentId, owner
- *   does not), so the settling mutation is instead DELETING the gate:
- *   s/if (!buildAuthContext(auth).isSystemOwner)/if (false)/ — predicted: the agent-403
- *   test reds, the positive control stays green.
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(!buildAuthContext\(auth\)\.isSystemOwner\)/if (false)/   [headless-router.ts]
+ *   → 1 red / 1 green, exactly as predicted:
+ *       RED: refuses an authenticated AGENT with 403 and never runs the service
+ *       green: the positive control (a deleted gate refuses nobody)
+ *   HONEST LIMIT: reverting the gate to the old `if (auth.agentId)` proxy would NOT redden
+ *   this suite — the MEMBER fixture has an agentId and the owner fixture does not, so both
+ *   forms agree on these two callers. The case that separates them (a logged-in non-maestro
+ *   web user under the R36/R37 model) needs the model ON, which buildAuthContext reads from
+ *   real governance state; pinning it requires mocking isUserAuthorityModelEnabled — left to
+ *   the router-wide class fix recorded on TRDD-DQVPODKW / TRDD-R268J32X.
  */

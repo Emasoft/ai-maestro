@@ -3,7 +3,7 @@ trdd-id: 9SEQ4QI9
 title: Workdir-containment hooks are SERVER-provisioned — no role plugin may own containment
 column: todo
 created: 2026-08-08T12:49:57+0200
-updated: 2026-08-26T05:31:10+0200
+updated: 2026-08-26T05:32:41+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: security
@@ -93,7 +93,13 @@ sentence (the ASSISTANT's own) decides the ownership question for workdir-contai
       it via `InstallElement` (local scope), exactly the R17-shape extension this box asked
       for. Wake-only by pinned design (TRDD-CNF1X3J7 Gate 2: the repair shells to a package
       manager, so it must never run unattended on the periodic loop — a test pins
-      `triggers === ['wake']`). Suite: tests/unit/agent-invariants.test.ts 22/22, including
+      `triggers === ['wake']`). Wake-only also matches the BOX'S OWN BENCHMARK: the R17
+      core-plugin self-heal this box says to extend is itself wake-only (`triggers:` at
+      lib/agent-invariants.ts:199 core vs :233 role, both `['wake']`; pinned by the suite's
+      "keeps the core-plugin repair OFF the periodic loop" test). A periodic DETECT-only
+      variant would exceed the ask — a future card if wanted. Residual, covered by box 2's
+      still-open server-side layer: an agent that uninstalls its role plugin and never
+      sleeps evades detection until its next wake, same as the benchmark. Suite: tests/unit/agent-invariants.test.ts 22/22, including
       "detects enabled-but-not-installed … repairs via a local-scope install". The fleet
       persona-grep rider stays a rider on the next fleet-wide notice.
 

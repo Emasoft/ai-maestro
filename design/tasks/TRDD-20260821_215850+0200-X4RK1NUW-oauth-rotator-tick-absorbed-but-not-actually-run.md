@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T20:46:42+0200
+updated: 2026-08-26T20:48:28+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -96,10 +96,34 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 > teach tick.ts to read cookies" now names files that no longer exist. There is nothing on our
 > side to wire up, deliberately.
 >
-> **Both remedies are owner-only and neither agent may take them:**
-> `/janitor-refresh-cc-logins` (a human re-login), or re-arming `reauth-repair` — which reverses
-> a deliberate owner call of 2026-08-07 (it opened disruptive headed browser windows) and is
-> credential-affecting.
+> **CORRECTED 2026-08-26T20:48 — THE OWNER'S ASK IS MUCH SMALLER THAN "RE-LOGIN THREE
+> ACCOUNTS", and I relayed the bigger version first.** `/janitor-refresh-cc-logins` is not one
+> indivisible re-login; it is FIVE steps, and **3 and 4 are separable**. Read in the skill's own
+> text (`skills/janitor-refresh-cc-logins/SKILL.md:64-90`, verified here, not taken on report):
+> - **step 3** = the human re-login per account (`open-login.sh`) — and the skill says outright
+>   *"The reauth above only saved COOKIES"*;
+> - **step 4** = mint OAuth tokens FROM cookies already on disk —
+>   `CLAUDE_ROTATOR_AUTO_BOOTSTRAP=1 python3 rotator.py tick` → `_bootstrap_seeded_slots`, which
+>   *"re-opens the REAL Chrome and `connect_over_cdp`-attaches to decrypt the cookies you just
+>   saved"*.
+>
+> **Our exact situation IS step 4's precondition** — cookies live until 08-30, refresh tokens
+> dead. So **step 4 ALONE may restore all three slots with no re-login at all.** That is what
+> `tick.ts:228` has been advising all along (*"check the cookie layer before re-logging in"*);
+> on this host it names a different and much smaller action, not just better phrasing.
+>
+> Two honest caveats, so this is not oversold: step 4 still opens a real Chrome window per
+> account (they flash and close), so it is not zero-interaction; and if capture keeps failing the
+> skill itself says to fall back to `check-login.sh` because the session may not have persisted.
+> Net: **try the small thing first, fall back to the re-login** — which is exactly the order
+> tick.ts recommends.
+>
+> **And it is a SMALLER DECISION than re-arming `reauth-repair`, which I had wrongly treated as
+> equivalent.** The 2026-08-07 call was about the DAEMON opening surprise windows unattended; the
+> skill states the daemon keeps auto-bootstrap OFF and per-slot capped (TRDD-5OJX3SCF), so a
+> command the owner types with `AUTO_BOOTSTRAP=1` authorizes the visible browser **for that run
+> only**. Still owner-only and still credential-affecting — no agent may run it — but it does not
+> reverse the 08-07 decision.
 >
 > **The 48h acceptance window below cannot even START until the owner restores a credential
 > path.** So this card's `column: todo` currently overstates agent-actionability: read it as

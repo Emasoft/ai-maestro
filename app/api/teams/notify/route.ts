@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { notifyTeamAgents } from '@/services/teams-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
-import { checkTeamAccess } from '@/lib/team-acl'
-import { loadTeams } from '@/lib/team-registry'
 
 const NotifyTeamSchema = z.object({
   agentIds: z.array(z.string().uuid()).min(1).max(50),
@@ -34,49 +32,25 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // ── TRDD-91TLL7DW fix — the caller was authenticated and then never checked ──
+  // ── TRDD-91TLL7DW — the caller was authenticated and then never checked ──
   // BUG: this route called `authenticateFromRequest` and never used `auth` again, so
-  // caller-supplied `agentIds[]` went straight to `notifyTeamAgents` -> `notifyAgent`,
-  // which terminates in a tmux send-keys primitive. The service sanitizes the MESSAGE
-  // (control-character strip) and never asked whether the CALLER may address those
-  // agents. Any authenticated agent, of any title, in or out of the team, could inject
-  // keystrokes into any other agent's pane THROUGH THE SERVER.
+  // caller-supplied `agentIds[]` reached `notifyTeamAgents` -> `notifyAgent`, which
+  // terminates in a tmux send-keys primitive. Any authenticated agent, of any title, in
+  // or out of the team, could inject keystrokes into any other agent's pane.
   //
-  // Why that matters beyond this route: the server holds the tmux socket, so an agent
-  // confined by a sandbox that denies the socket does not need it — it asks the server.
-  // Route authorization and process confinement are not alternatives; a missing check
-  // here voids the confinement layer for this capability.
+  // The authorization itself deliberately lives in the SERVICE, not here. The first
+  // version of this fix put both checks in this route and left the vulnerability fully
+  // live in headless mode, where `services/headless-router.ts` calls notifyTeamAgents
+  // directly and never executes this file. Guarding a route in a codebase whose second
+  // server mode reimplements routes protects exactly one of the two modes.
   //
-  // Two checks are required and neither is sufficient alone:
-  //   1. the caller may act on the named team at all, and
-  //   2. every target id is a MEMBER of that team — otherwise a legitimate member of
-  //      team A names team A and passes arbitrary agentIds, which is the same attack
-  //      wearing a valid team name.
-  const teams = loadTeams()
-  const team = teams.find(t => t.name === parsed.data.teamName)
-  if (!team) {
-    return NextResponse.json({ error: 'Team not found' }, { status: 404 })
-  }
-
-  const access = checkTeamAccess({
-    teamId: team.id,
+  // This route's only remaining job is to hand the service the caller's VERIFIED
+  // identity. Passing `auth.agentId` (never a body field) is what makes it verified.
+  const result = await notifyTeamAgents({
+    ...parsed.data,
     requestingAgentId: auth.agentId,
     authContext: buildAuthContext(auth),
   })
-  if (!access.allowed) {
-    return NextResponse.json({ error: access.reason || 'Access denied' }, { status: 403 })
-  }
-
-  const members = new Set(team.agentIds)
-  const foreign = parsed.data.agentIds.filter(id => !members.has(id))
-  if (foreign.length > 0) {
-    return NextResponse.json(
-      { error: `Access denied: ${foreign.length} target agent(s) are not members of team '${team.name}'` },
-      { status: 403 },
-    )
-  }
-
-  const result = await notifyTeamAgents(parsed.data)
 
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })

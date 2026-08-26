@@ -2619,8 +2619,28 @@ const routes: Route[] = [
     sendServiceResult(res, getTeamsBulkStats())
   }},
   { method: 'POST', pattern: /^\/api\/teams\/notify$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-91TLL7DW — this handler had NO auth of any kind, not even authenticateAgent,
+    // while the sibling three lines below does. notifyTeamAgents terminates in a tmux
+    // send-keys primitive, so an unauthenticated caller could inject keystrokes into any
+    // agent's pane in headless mode. The Next.js route was fixed first and did NOT cover
+    // this path: headless reimplements routes and never executes app/api/**.
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await notifyTeamAgents(body))
+    // Identity comes from the VERIFIED auth result, never from the body — spreading body
+    // last would let a caller supply its own requestingAgentId and authorize itself.
+    sendServiceResult(res, await notifyTeamAgents({
+      ...body,
+      requestingAgentId: auth.agentId,
+      authContext: buildAuthContext(auth),
+    }))
   }},
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/tasks\/([^/]+)$/, paramNames: ['id', 'taskId'], handler: async (req, res, params) => {
     const auth = authenticateAgent(

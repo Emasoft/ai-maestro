@@ -1,34 +1,27 @@
 /**
- * TRDD-91TLL7DW — `POST /api/teams/notify` must authorize the CALLER against the
- * named team, and must refuse target agents that are not members of it.
+ * TRDD-91TLL7DW — `notifyTeamAgents` must authorize the CALLER against the named team, and
+ * must refuse target agents that are not members of it.
  *
- * Why this file exists: the route authenticated the caller and then never used
- * `auth` again, so caller-supplied `agentIds[]` reached `notifyTeamAgents` ->
- * `notifyAgent`, which terminates in a tmux send-keys primitive. The service
- * sanitizes the MESSAGE and never asked whether the CALLER may address those
- * agents — cross-agent keystroke injection through the server, available to any
- * authenticated agent of any title.
+ * Why this file exists: `POST /api/teams/notify` authenticated the caller and then never used
+ * `auth` again, so caller-supplied `agentIds[]` reached `notifyTeamAgents` -> `notifyAgent`,
+ * which terminates in a tmux send-keys primitive. The service sanitizes the MESSAGE and never
+ * asked whether the CALLER may address those agents — cross-agent keystroke injection through
+ * the server, available to any authenticated agent of any title.
  *
- * NAMED NEUTERS — each must redden the test named beside it, or that test is
- * vacuous:
- *   1. delete the `checkTeamAccess` block   -> "refuses a caller with no access to the team"
- *   2. delete the `foreign.length` block    -> "refuses target agents outside the team"
- *   3. delete BOTH                          -> both of the above, and NOT the happy path
- * The happy-path test is the non-vacuity control: it must stay green under every
- * neuter, which is what proves the two refusals above are the guards talking and
- * not an unrelated failure.
+ * WHY THE GUARD IS IN THE SERVICE AND SO ARE THESE TESTS. The first version of this fix put
+ * both checks in the Next.js route. That left the vulnerability FULLY LIVE in headless mode:
+ * `services/headless-router.ts` calls notifyTeamAgents directly and never executes
+ * `app/api/**`. In a codebase whose second server mode reimplements routes, a route-level
+ * guard protects exactly one of the two modes — and a route-level TEST reports it as fixed.
+ * So the guards live in the service, and the route keeps one job these tests still cover:
+ * handing the service a VERIFIED identity rather than a body field.
  *
- * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
- *   s/if \(!access\.allowed\)/if (false)/
- *   → 1 red / 3 green:
- *       refuses a caller with no access to the team
- *
- *   s/if \(foreign\.length > 0\)/if (false)/
- *   → 1 red / 3 green:
- *       refuses target agents outside the team even when the caller is authorized
- *
- * Each neuter reddens EXACTLY the test named for it and nothing else, and the
- * control stays green under both — so the two guards are independently pinned.
+ * NAMED NEUTERS — each must redden the test beside it:
+ *   1. `if (!access.allowed)` -> `if (false)`      -> "refuses a caller with no access"
+ *   2. `if (foreign.length > 0)` -> `if (false)`   -> "refuses target agents outside the team"
+ *   3. in the route, spread `...parsed.data` AFTER requestingAgentId
+ *                                                  -> "identity comes from auth, not the body"
+ * The happy-path test is the non-vacuity control and must stay green under 1 and 2.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -37,71 +30,100 @@ const MEMBER_A = '22222222-2222-4222-8222-222222222222'
 const MEMBER_B = '33333333-3333-4333-8333-333333333333'
 const OUTSIDER = '44444444-4444-4444-8444-444444444444'
 
-let authResult: Record<string, unknown> = {}
 let accessResult: { allowed: boolean; reason?: string } = { allowed: true }
-const notifySpy = vi.fn(async () => ({ data: { results: [] } }))
-
-vi.mock('@/lib/agent-auth', () => ({
-  authenticateFromRequest: () => authResult,
-  buildAuthContext: (a: Record<string, unknown>) => ({ agentId: a.agentId, isSystemOwner: false }),
-}))
+let seenAccessInput: Record<string, unknown> = {}
+const notifyAgentSpy = vi.fn(async () => ({ success: true }))
 
 vi.mock('@/lib/team-acl', () => ({
-  checkTeamAccess: () => accessResult,
+  checkTeamAccess: (input: Record<string, unknown>) => {
+    seenAccessInput = input
+    return accessResult
+  },
 }))
 
-vi.mock('@/lib/team-registry', () => ({
+vi.mock('@/lib/team-registry', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
   loadTeams: () => [{ id: TEAM_ID, name: 'alpha', agentIds: [MEMBER_A, MEMBER_B] }],
 }))
 
-vi.mock('@/services/teams-service', () => ({
-  notifyTeamAgents: (...args: unknown[]) => notifySpy(...(args as [])),
+vi.mock('@/lib/notification-service', () => ({
+  notifyAgent: (...a: unknown[]) => notifyAgentSpy(...(a as [])),
 }))
 
-function req(body: unknown) {
-  return { json: async () => body } as unknown as import('next/server').NextRequest
-}
+vi.mock('@/lib/agent-registry', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  getAgent: (id: string) => ({ id, name: `agent-${id.slice(0, 4)}`, tmuxSession: 's' }),
+}))
 
-describe('POST /api/teams/notify — TRDD-91TLL7DW authorization', () => {
+describe('notifyTeamAgents — TRDD-91TLL7DW authorization (in the SERVICE, so both modes get it)', () => {
   beforeEach(() => {
-    authResult = { agentId: MEMBER_A }
     accessResult = { allowed: true }
-    notifySpy.mockClear()
+    seenAccessInput = {}
+    notifyAgentSpy.mockClear()
   })
 
-  it('NON-VACUITY CONTROL: a team member notifying fellow members succeeds and reaches the service', async () => {
-    const { POST } = await import('@/app/api/teams/notify/route')
-    const res = await POST(req({ agentIds: [MEMBER_B], teamName: 'alpha' }))
-    expect(res.status).toBe(200)
-    // The control must prove the service was REACHED — a 200 with no call would
-    // mean the happy path is short-circuiting somewhere and every refusal below
-    // would pass for the wrong reason.
-    expect(notifySpy).toHaveBeenCalledTimes(1)
+  it('NON-VACUITY CONTROL: a member notifying fellow members is allowed through to delivery', async () => {
+    const { notifyTeamAgents } = await import('@/services/teams-service')
+    const r = await notifyTeamAgents({
+      agentIds: [MEMBER_B],
+      teamName: 'alpha',
+      requestingAgentId: MEMBER_A,
+    })
+    expect(r.error).toBeUndefined()
+    // Must prove delivery was REACHED. A no-error result with zero notifyAgent calls would
+    // mean the happy path short-circuits, and every refusal below would pass for the wrong
+    // reason.
+    expect(notifyAgentSpy).toHaveBeenCalledTimes(1)
   })
 
   it('refuses a caller with no access to the team', async () => {
     accessResult = { allowed: false, reason: 'Access denied: not a member' }
-    const { POST } = await import('@/app/api/teams/notify/route')
-    const res = await POST(req({ agentIds: [MEMBER_B], teamName: 'alpha' }))
-    expect(res.status).toBe(403)
-    // Assert the REASON, not just the status: a bare 403 is equally satisfied by
-    // the membership guard below, so status alone cannot tell the two apart.
-    expect((await res.json()).error).toMatch(/not a member/i)
-    expect(notifySpy).not.toHaveBeenCalled()
+    const { notifyTeamAgents } = await import('@/services/teams-service')
+    const r = await notifyTeamAgents({
+      agentIds: [MEMBER_B],
+      teamName: 'alpha',
+      requestingAgentId: OUTSIDER,
+    })
+    expect(r.status).toBe(403)
+    // Assert the REASON, not just the status — a bare 403 is equally satisfied by the
+    // membership guard below, so status alone cannot tell the two guards apart.
+    expect(r.error).toMatch(/not a member/i)
+    expect(notifyAgentSpy).not.toHaveBeenCalled()
   })
 
   it('refuses target agents outside the team even when the caller is authorized', async () => {
-    const { POST } = await import('@/app/api/teams/notify/route')
-    const res = await POST(req({ agentIds: [MEMBER_B, OUTSIDER], teamName: 'alpha' }))
-    expect(res.status).toBe(403)
-    expect((await res.json()).error).toMatch(/not members of team/i)
-    expect(notifySpy).not.toHaveBeenCalled()
+    const { notifyTeamAgents } = await import('@/services/teams-service')
+    const r = await notifyTeamAgents({
+      agentIds: [MEMBER_B, OUTSIDER],
+      teamName: 'alpha',
+      requestingAgentId: MEMBER_A,
+    })
+    expect(r.status).toBe(403)
+    expect(r.error).toMatch(/not members of team/i)
+    expect(notifyAgentSpy).not.toHaveBeenCalled()
   })
 
   it('refuses an unknown team name rather than notifying on an unresolvable team', async () => {
-    const { POST } = await import('@/app/api/teams/notify/route')
-    const res = await POST(req({ agentIds: [MEMBER_B], teamName: 'does-not-exist' }))
-    expect(res.status).toBe(404)
-    expect(notifySpy).not.toHaveBeenCalled()
+    const { notifyTeamAgents } = await import('@/services/teams-service')
+    const r = await notifyTeamAgents({
+      agentIds: [MEMBER_B],
+      teamName: 'does-not-exist',
+      requestingAgentId: MEMBER_A,
+    })
+    expect(r.status).toBe(404)
+    expect(notifyAgentSpy).not.toHaveBeenCalled()
+  })
+
+  it('refuses an anonymous caller — a missing identity is never treated as system-owner', async () => {
+    // The failure this pins is specific and has bitten this repo before (LIB2-CRIT-02): a
+    // "no agentId means web UI, allow it" shortcut turns an omitted header into full access.
+    accessResult = { allowed: false, reason: 'Access denied: anonymous request' }
+    const { notifyTeamAgents } = await import('@/services/teams-service')
+    const r = await notifyTeamAgents({ agentIds: [MEMBER_B], teamName: 'alpha' })
+    expect(r.status).toBe(403)
+    expect(notifyAgentSpy).not.toHaveBeenCalled()
+    // And the service must actually have consulted the ACL with an undefined id, rather than
+    // silently skipping the check when there is no caller.
+    expect(seenAccessInput).toHaveProperty('requestingAgentId', undefined)
   })
 })

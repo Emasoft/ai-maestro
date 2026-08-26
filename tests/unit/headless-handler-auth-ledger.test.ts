@@ -183,7 +183,8 @@ const UNGUARDED_LEDGER: ReadonlySet<string> = new Set([
   'POST /^\\/api\\/governance\\/trust$/',
   'DELETE /^\\/api\\/governance\\/trust\\/([^/]+)$/',
   'GET /^\\/api\\/teams\\/stats$/',
-  'POST /^\\/api\\/teams\\/notify$/',
+  // 'POST /^\\/api\\/teams\\/notify$/'  — GUARDED 2026-08-26 (TRDD-91TLL7DW). Line removed per
+  // this ledger's own rule. It had NO auth at all while reaching a tmux send-keys primitive.
   'POST /^\\/api\\/teams\\/([^/]+)\\/chief-of-staff$/',
   'GET /^\\/api\\/teams$/',
   'GET /^\\/api\\/groups\\/([^/]+)$/',

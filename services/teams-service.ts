@@ -210,6 +210,22 @@ export interface UpdateDocumentParams {
 export interface NotifyTeamParams {
   agentIds: string[]
   teamName: string
+  /**
+   * TRDD-91TLL7DW — identity of the CALLER, required.
+   *
+   * The authorization for this operation lives in the SERVICE and not in the route, because
+   * this repo has two server modes and the headless router REIMPLEMENTS routes: a guard added
+   * to `app/api/teams/notify/route.ts` is simply not executed in headless mode, where
+   * `services/headless-router.ts` calls this function directly. That is not hypothetical — the
+   * first version of this fix guarded only the Next.js route and left headless wide open.
+   *
+   * Optional in the TYPE so both callers compile, enforced at RUNTIME below: a missing
+   * requestingAgentId is refused, never treated as a system-owner. `authContext.isSystemOwner`
+   * is the only path that skips the member check, and it is set exclusively from a verified
+   * web-UI session.
+   */
+  requestingAgentId?: string
+  authContext?: AuthContext
 }
 
 // SF-004: Concrete type for notification results (replaces any[])
@@ -1440,7 +1456,7 @@ export async function deleteTeamDocument(teamId: string, docId: string, requesti
  * Notify team agents about a meeting.
  */
 export async function notifyTeamAgents(params: NotifyTeamParams): Promise<ServiceResult<{ results: AgentNotifyResult[] }>> {
-  const { agentIds, teamName } = params
+  const { agentIds, teamName, requestingAgentId, authContext } = params
 
   if (!agentIds || !Array.isArray(agentIds)) {
     return { error: 'agentIds array is required', status: 400 }
@@ -1459,6 +1475,34 @@ export async function notifyTeamAgents(params: NotifyTeamParams): Promise<Servic
     return {
       error: `Cannot notify more than ${MAX_FANOUT} agents in one call (got ${agentIds.length})`,
       status: 400,
+    }
+  }
+
+  // ── TRDD-91TLL7DW — AUTHORIZE THE CALLER. This lives HERE, not in the route ──
+  // The control-character strip below sanitizes the MESSAGE. It never asked whether the
+  // CALLER may address these agents, and this function terminates in a tmux send-keys
+  // primitive — so without the block below, any caller could inject keystrokes into any
+  // agent's pane. It is in the SERVICE because both server modes reach it and the headless
+  // router reimplements routes: guarding only the Next.js route left headless wide open.
+  const team = loadTeams().find(t => t.name === teamName)
+  if (!team) {
+    return { error: 'Team not found', status: 404 }
+  }
+
+  const access = checkTeamAccess({ teamId: team.id, requestingAgentId, authContext })
+  if (!access.allowed) {
+    return { error: access.reason || 'Access denied', status: 403 }
+  }
+
+  // Second check, and it is not redundant: checkTeamAccess says the caller may act on THIS
+  // team. It says nothing about the target list. Without this, a legitimate member of team A
+  // names team A and passes arbitrary agentIds — the same attack wearing a valid team name.
+  const members = new Set(team.agentIds)
+  const foreign = agentIds.filter(id => !members.has(id))
+  if (foreign.length > 0) {
+    return {
+      error: `Access denied: ${foreign.length} target agent(s) are not members of team '${team.name}'`,
+      status: 403,
     }
   }
 

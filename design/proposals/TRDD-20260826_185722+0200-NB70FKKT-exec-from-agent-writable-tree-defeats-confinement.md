@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T21:52:49+0200
+updated: 2026-08-26T21:55:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -167,17 +167,36 @@ difference I nearly reported as a missing file, from a fallback message I wrote 
 
 **(5) Then I gave the right answer a reason that fails re-verification, which is worse than a
 wrong answer.** I wrote that `memory_content_precheck.py` "has zero memgrep references at
-3.3.26". It has **13**, all docstring prose about `memgrep lint` (`:560 :574 :576 :623 :625 :638
-:700 :798 :801 :817 :824 :867 :873`) — my needle was `find_memgrep\|MEMGREP`, case-sensitive, so
-every lowercase prose mention was invisible to it. What is genuinely absent is the **delegation**:
+3.3.26". It has **14 occurrences on 13 lines** (`:560 :574 :576 :623 :625 :638 :700 :798 :801
+:817 :824 :867 :873`, with `:867` carrying the word twice), all docstring prose about `memgrep
+lint` — my needle was `find_memgrep\|MEMGREP`, case-sensitive, so every lowercase prose mention
+was invisible to it. What is genuinely absent is the **delegation**:
 `find_memgrep` / `user_mem_lib` / `MEMGREP_BIN` all exit 1 in that file. The population split is
 UNCHANGED and correct; only my reason for it was wrong. It matters because the next reader
 re-checking the claim greps the plain word, gets 13 hits, and "corrects" a right conclusion into
 error — a wrong reason under a right answer is the more fragile arrangement, because diligence is
 what breaks it. Dated: the delegation lands in the janitor's `6fa8b6c4` (2026-08-26 06:24), and
-`v3.3.26` was cut at `ce03b9cb` (2026-08-21 02:23) — verified not-an-ancestor, so the split has a
-cause and not merely a measurement. The peer who caught this listed 12 of the 13 lines, i.e. the
-same class one more time, in the correction itself.
+`v3.3.26` was cut at `ce03b9cb` (2026-08-21 02:23) — verified not-an-ancestor (`merge-base
+--is-ancestor`, not a date compare: two dates can agree while the commit sits on an unmerged
+branch), so the split has a cause and not merely a measurement.
+
+**(6) and (7) — the count was then wrong twice more, and NEITHER was a needle error, which is
+what breaks the tidy taxonomy above.** The peer who caught (5) wrote **12**; their own grep had
+printed 13 lines and they counted them by eye — **no instrument at all**, and short output is
+exactly where the instrument gets skipped. I corrected them to **13** with `grep -c`, which
+counts LINES while the sentence said *occurrences* — **a correct instrument answering a different
+question than the words asked**, and my correction carried their wrong unit forward intact.
+`grep -o | wc -l` gives **14**: `:867` carries the word twice. Three wrong numbers, three
+different mechanisms, none of them a misreading of any line.
+
+So the honest form of the finding is: **seven of nine were needle-or-population errors, and
+"every error was an instrument error, never an eye error" does NOT survive** — once there was no
+instrument, and once the instrument was fine and the *noun* was wrong. Both of those landed
+inside the correction enumerating the first five. Knowing the four modes did not help, because
+these were the fifth and sixth. Residue, small enough to actually do: **`wc -l` even when the
+output is short enough to eyeball**, and **make the verb match the flag** — lines, matches,
+occurrences and files are four different numbers, and `grep` hands you any of them without ever
+saying which one you asked for.
 
 The `post-edit` hook's inline `except` fallback is the one leg with no env var at all:
 `shutil.which` → `~/.cargo/bin/memgrep`, reached only when the import dies.

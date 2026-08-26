@@ -3,7 +3,7 @@ trdd-id: 9SEQ4QI9
 title: Workdir-containment hooks are SERVER-provisioned — no role plugin may own containment
 column: todo
 created: 2026-08-08T12:49:57+0200
-updated: 2026-08-22T02:00:24+0200
+updated: 2026-08-26T05:31:10+0200
 current-owner: ai-maestro-hub
 assignee: ai-maestro-hub
 task-type: security
@@ -77,7 +77,7 @@ sentence (the ASSISTANT's own) decides the ownership question for workdir-contai
 - [ ] Record the ruling on ai-maestro#127 and #39 so the ownership question is closed on the
       durable channel too. (Comments posted 2026-08-08 — 5225782466 / 5225782538; box closes
       when the watchdog items above land.)
-- [ ] SAME PRINCIPLE, SECOND SURFACE (ASSISTANT finding, 2026-08-08): an agent can
+- [x] SAME PRINCIPLE, SECOND SURFACE (ASSISTANT finding, 2026-08-08): an agent can
       `claude plugin uninstall` its OWN role plugin locally — removing its own governance —
       and R9.13 guards only the registry side. Persona instructions forbidding it (the
       ASSISTANT shipped one as forbidden #12) are defense-in-depth, same status as workdir
@@ -86,6 +86,16 @@ sentence (the ASSISTANT's own) decides the ownership question for workdir-contai
       self-heal covers the core plugin; this extends the same mechanism to the ROLE plugin).
       Fleet check (each repo greps its persona for the instruction) rides the hub's next
       fleet-wide notice, never a dedicated wave.
+      **CLOSED BY MEASUREMENT (2026-08-26): the ask already exists.** The `role-plugin`
+      invariant (`lib/agent-invariants.ts:226-312`) detects a registered agent whose role
+      plugin is absent locally — ground truth `claude plugin list`, never the
+      settings.local.json that lies in the enabled-but-not-installed state — and re-asserts
+      it via `InstallElement` (local scope), exactly the R17-shape extension this box asked
+      for. Wake-only by pinned design (TRDD-CNF1X3J7 Gate 2: the repair shells to a package
+      manager, so it must never run unattended on the periodic loop — a test pins
+      `triggers === ['wake']`). Suite: tests/unit/agent-invariants.test.ts 22/22, including
+      "detects enabled-but-not-installed … repairs via a local-scope install". The fleet
+      persona-grep rider stays a rider on the next fleet-wide notice.
 
 ## Approval log
 

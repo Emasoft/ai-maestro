@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:58:37+0200
+updated: 2026-08-26T20:03:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -138,6 +138,32 @@ The narrow point that matters here: the verified walk is an **AVAILABILITY mecha
 confinement boundary**, and must not be cited as the pattern for a hard-fail exec gate. Building
 one means accepting the bricked-heartbeat risk this design explicitly refuses — a trade for the
 owner, not something to inherit by leaving the earlier sentence unchallenged.
+
+## Box 1: the "656 subprocess sites" figure does not reproduce, and a grep cannot triage them
+
+Measured first-hand in the installed janitor 3.3.26 (read-only slice, taken while the fix
+decision was pending):
+
+| what | count |
+|---|---|
+| `subprocess.` references, whole plugin tree | 1034 |
+| CALL SITES of `run\|Popen\|check_output\|check_call\|call`, whole tree | **604** |
+| the same, under `scripts/` only (excludes `tests/`) | **205** |
+
+So **656 is not reproducible** — it is near 604 and not equal to it, and it was inherited into
+this card without a population sentence. Use 604 tree-wide / 205 under `scripts/`, or re-derive.
+
+**More useful than the count: a line-oriented needle CANNOT triage this population.** Profiling
+the first argument of all 205 `scripts/` calls: **115 have nothing after the open paren** — the
+call wraps and argv begins on the next line — plus 26 `# noqa` comments and 24 matches that are
+the `subprocess.PIPE` kwarg of an outer call. Only a handful expose a first arg on the same line
+(`cmd`, `argv`, `["git"…]`). A single-line grep therefore reports a small number for the
+*dangerous* shape (mine said 6) that is an artifact of line-wrapping, not a measurement — the
+same shape as every other false zero on this card.
+
+**What box 1 actually needs is an AST pass** (`ast.parse` → walk `Call` nodes → classify argv[0]
+as literal / name / expression), not another grep. Recorded so the next session does not spend
+the slice discovering this a second time.
 
 ## Enumeration status — PARTIAL, and the worker said so
 

@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-13T14:05:00+0200
-updated: 2026-08-26T05:24:21+0200
+updated: 2026-08-26T05:27:11+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -118,6 +118,16 @@ in the trdd/teams verb harnesses) but wears the earlier feat commit's message �
 /tmp/commit-msg.txt survived a failed `git add` (index.lock) and the retry reused it. The real
 gate implementation is `e1a8988d`; the full triage text intended for d45df031: 3 red files were
 the gate working (fixtures now pre-mint), 4 are the load-timeout flake class (green isolated),
-5 fail identically with the gate stashed (pre-existing: continuity-cli-restart-self,
-headless-handler-auth-ledger, build-script-manifest, trdd-doctor, specs-in-sync). Already
-pushed, so documented here rather than rewritten.
+5 pre-existing (continuity-cli-restart-self, headless-handler-auth-ledger,
+build-script-manifest, trdd-doctor, specs-in-sync). Already pushed, so documented here
+rather than rewritten.
+
+**Correction (review fork, 2026-08-26):** the original "proven by stash A/B" was VACUOUS —
+the gate commits were already committed, so `git stash push -- scripts/` stashed nothing and
+both arms measured the SAME tree (the pop then resurrected a checkout-guard auto-backup of
+an old neuter, which was the mystery common.sh delta). Re-proven properly in a worktree at
+`e1a8988d^` (pre-gate): the SAME 5 files / SAME 6 tests fail there (continuity x2, headless
+ledger x1, manifest --check x1, trdd-doctor corpus x1, specs-in-sync x1) — genuinely
+pre-existing. Also settled by the same review: the strict matcher is EXACT anchored template
+match (lib/security-registry.ts::findBestMatch), so the portfolio-subpath and kanban-tasks
+rulings hold; amp-kanban-edit PUTs /api/teams/[id]/tasks/[taskId], not a strict template.

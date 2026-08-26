@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T11:12:21+0200
-updated: 2026-08-26T11:22:49+0200
+updated: 2026-08-26T11:28:38+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -67,8 +67,19 @@ all**, so no denial is even OBSERVABLE during those windows — "zero denials" i
 construction for that ~13% slice and is real evidence only for the rest of the day, when ops did
 spawn and produced none. Also note the noisy/quiet split is not a blind spot for CHAINED latches:
 a half-open probe that itself times out falls through to the **non-quiet** `setKeychainDenied` at
-`:230`, so a persistently-failing keychain still logs one SET per cooldown (visible in today's
-04:26:18 → 04:36:58 pair, 640 s apart ≈ one cooldown plus the probe).
+`:230`, so a persistently-failing keychain still logs one SET per cooldown — CONSISTENT WITH (not
+proof of) today's 04:26:18 → 04:36:58 pair, 640 s apart. **That pair does not discriminate** and
+is recorded here only as non-contradicting: clear-then-independently-re-fail predicts the same
+~640 s spacing as chaining. The claim rests on the CODE READ, which is sufficient; what would
+discriminate is whether any non-`UNREADABLE` beat falls in the gap.
+
+**And the "zero denials" grep is NOT structurally blind — verified by reading the branch, not by
+assuming it.** `safe-storage.ts:238-241`: `if (returncode !== 0 && isDenial(stderr))
+setKeychainDenied('`security` returned an ACL/auth/user-canceled denial')` — **non-quiet**, so a
+real denial WOULD emit a `DENIED-LATCH SET` line carrying that distinct string. The `uniq -c`
+above shows only the two "hung past Ns" variants, so the absence is observed rather than
+unobservable. (Recorded because I first made this claim having stopped my read at `:235`, one
+line short of the branch that decides it.)
 
 **Window correction:** "350 in the last month" was MY window, not the file's. `head -1
 logs/pm2-error.log` reads **2026-07-11 17:17:25**, so the population spans **46 days**, i.e.
@@ -165,6 +176,13 @@ contract moves; a purely server-side latch/classification change does not need t
       denial (whatever shape 1/2/3 the measurement selects), with a test pinning the distinction
 - [ ] A latch-suppressed slot read is NOT reported as `reauth-needed: slot-unreadable`
 - [ ] ≥24 h with zero false `reauth-needed` beats attributable to a latch, measured from the logs
+      **AND a coverage floor: ≥95 % of that window's beats non-`slot-unreadable`.** The floor is
+      not decoration — WITHOUT it this box has the same proxy defect the window criterion had:
+      **zero false beats is also what a fully-latched, fully-silent rotator produces**, so the box
+      would be satisfiable by the failure it exists to detect. Measured blindness fraction per day
+      (`UNREADABLE` beats ÷ `auto:` beats) over the last 12 days: **0.0 / 0.0 / 0.0 / 1.2 / 2.3 /
+      5.1 / 12.2 / 12.5 / 12.8 / 13.5 / 16.8 / 42.1 %** — so a blind-but-clean window is not
+      hypothetical here, it is what 2026-08-20 was.
 - [ ] X4RK1NUW's 48 h window criterion re-checked against the fix (it is amended in the meantime)
 - [ ] Correction posted on ai-maestro#95 (the capture-caused cause clause + the "no card needed"
       line)

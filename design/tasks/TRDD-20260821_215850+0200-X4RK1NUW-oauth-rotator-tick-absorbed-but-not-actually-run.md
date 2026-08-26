@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T11:22:49+0200
+updated: 2026-08-26T11:28:38+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -263,6 +263,39 @@ grep -a "2026-08-2[6-9].*reauth-needed" logs/pm2-out.log \
 
 (today: 530 `have a dead refresh` — all PRE-recovery — and 79 `UNREADABLE`.) Spot-check the live
 verdict with `cat ~/.aimaestro/oauth-rotator-tick-status.json`.
+
+> **⚠ THE REASON FILTER ALONE IS NOT ENOUGH — SECOND DEFECT IN THE SAME CRITERION, caught by the
+> next review fork and verified first-hand. A COVERAGE FLOOR IS MANDATORY.** `surveyAlternates`
+> does `const b = readSlot(email); if (!b) { unreadable.push(email); continue }` — the `continue`
+> is BEFORE the refresh check — and `tick.ts:1407-1408` gives `unreadable` PRECEDENCE over
+> `deadRefresh`. So **`refresh-dead` is structurally unpublishable while ANY slot is unreadable**,
+> and a criterion that breaks only on `refresh-dead` reads "no `refresh-dead` published" as a
+> proxy for "no `refresh-dead` condition existed". Under a latch the tick is *incapable of
+> emitting the signal being watched for*: absence is guaranteed, not observed — the third instance
+> today of a proxy read in place of the thing, this time load-bearing inside my own fix for the
+> previous one. Two aggravations: the gate is `unreadable > 0`, not *all* unreadable, so ONE flaky
+> slot masks a genuinely dead credential on every other account; and a sustained latch makes the
+> blindness unbounded rather than ≤600 s.
+>
+> **It already happened, 59 times, today, in my own data:** the slots were genuinely dead until
+> the ~09:47 re-mint, and 59 of the 79 `slot-unreadable` beats fall in 04-06h — INSIDE that dead
+> period. Those were real credential faults reported under the reason this criterion excuses.
+>
+> **THE FLOOR (both clauses, both one grep):** the window counts as clean only if, in addition to
+> no `refresh-dead` beat, **(i) ≥95 % of its beats are non-`slot-unreadable`** and **(ii) no
+> contiguous `slot-unreadable` run exceeds one cooldown (~12 beats)**. Clause (ii) exists because
+> a 5 % budget over 48 h is ~2.4 h, which could all be one blind block. Measure with:
+>
+> ```bash
+> grep -a "oauth-rotator\]" logs/pm2-out.log | awk '{d=$1} /UNREADABLE/{u[d]++} /auto:/{t[d]++} \
+>   END{for(k in t) printf "%s unreadable=%d/%d (%.1f%%)\n",k,u[k],t[k],100*u[k]/t[k]}' | sort | tail -14
+> ```
+>
+> **Measured now, last 12 days:** `0.0 · 0.0 · 0.0 · 1.2 · 2.3 · 5.1 · 12.2 · 12.5 · 12.8 · 13.5 ·
+> 16.8 · 42.1 %`. So **5 of the last 12 days would FAIL the floor** and 2026-08-20 ran 42 % blind —
+> a clean-but-blind window is not a hypothetical here, it is what most weeks look like. This is
+> also why *"prefer landing MFTDMSJY first"* below is now effectively *required*: until the latch
+> stops firing, the floor is what will fail, and correctly so.
 **Prefer landing MFTDMSJY first** — a window scored under any attribution rule is weaker evidence
 than one with no false beats in it, and the 2026-08-30 deadline still has room.
 

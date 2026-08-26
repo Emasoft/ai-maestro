@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:10:57+0200
-updated: 2026-08-26T14:22:10+0200
+updated: 2026-08-26T14:41:05+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -142,6 +142,22 @@ lane stands down because we claim the chore. The remaining actor is the harness 
 **Stated at the strength the evidence supports:** I have PROVEN my lane did not install it; I have
 not proven which actor did. Claude Code's own auto-update is the only remaining candidate I know
 of, and that is an inference, not a measurement.
+
+**The janitor supplied the other half, so the elimination is now complete rather than half-argued**
+(2026-08-26): their `version-update.last-run.ts` reads **2026-07-25T21:01Z — 26 days before** the
+install, their lane standing down exactly as designed because we claim the chore. They also tried
+to convert the remainder into positive evidence and could not (`~/.claude/logs` holds nothing for
+that window). So: **PROVEN neither lane installed 3.3.26; NOT PROVEN which actor did**, and both
+cards carry the inference labelled rather than promoted.
+
+**Their sentence for the guarantee is better than mine and is the one to put to the owner:**
+*"≤4 h, with two usually-faster paths that give no signal when they stop."* Defensible as a design;
+simply not the same sentence as *"updates as soon as a new version is detected"*.
+
+**One asymmetry worth wiring in if option 4 is taken:** the two silent failures are not equally
+silent. The harness stopping is invisible to both sides by construction (FXPV7L4D found it 11–155
+days deep). A host with **no armed janitor session** is observable — so the trigger degrading to the
+4 h floor should be something the lane SAYS, not something discovered later.
 
 ### What that does to the fix — it strengthens option 4's ARGUMENT and weakens its headline
 

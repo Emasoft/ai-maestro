@@ -3,7 +3,7 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-26T06:36:57+0200
+updated: 2026-08-26T06:39:43+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -263,7 +263,20 @@ Adding it:
       authenticates). Stale service docstring corrected in the same commit. Pinned by
       tests/unit/sync-defaults-route-authorization.test.ts (agent 403 + service-not-called,
       web-session positive control; neuter OBSERVED 1 red / 1 green). Headless
-      handler-auth ledger shrunk by the now-guarded handler.
+      handler-auth ledger shrunk by the now-guarded handler. Review-fork round 2
+      (`ff8e9016` + follow-up): the headless gate judges by
+      `buildAuthContext(auth).isSystemOwner`, NOT bare `!auth.agentId` — under the R36/R37
+      user-authority model a logged-in non-maestro web user has no agentId and is still not
+      the system owner. SYSTEMIC CLASS FLAGGED HERE: the bare `!auth.agentId`-as-isSystemOwner
+      proxy is services/headless-router.ts's pre-existing idiom at multiple handlers (e.g. the
+      DeleteTeam handler's `isSystemOwner: !auth.agentId`; `userTitle` = 0 hits file-wide), so
+      NO headless handler honored the authority model before this one. That class belongs to
+      TRDD-R268J32X's audit scope (router-wide auth-shape review) — recorded there-adjacent
+      here so the comment in the handler citing "flagged on the card" is true. The headless
+      gate is pinned BEHAVIORALLY by tests/unit/headless-sync-defaults-system-owner.test.ts
+      (drives the real router; agent 403 + service-not-called, maestro web session 200) —
+      before it, deleting the headless gate reddened zero tests (the UNGUARDED_LEDGER is a
+      source scan, text standing in for behavior).
 - [x] audit `enforceAuth`'s callers outside this subtree — DONE, and it found the guard's next
       blind spot: **26 mutating routes call `enforceAuth` with no authorization, and 17 of them
       are OUTSIDE `app/api/agents/`**, so no guard can see them. Filed as **TRDD-R268J32X**.

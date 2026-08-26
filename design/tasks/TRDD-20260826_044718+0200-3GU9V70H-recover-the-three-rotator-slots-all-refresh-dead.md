@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T04:47:18+0200
-updated: 2026-08-26T10:37:03+0200
+updated: 2026-08-26T10:39:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -73,6 +73,16 @@ the capture leg could not even start.
 > already names the real remedy). There is NO onset defect, NOTHING to mirror from A8DPTDOU,
 > and the janitor has been told not to mirror one. The paragraph below is kept as the record
 > of the wrong conclusion and what refuted it.
+>
+> PRECISION (fork round 2, candidate loop then read first-hand at tick.ts:1137-1200): `best ===
+> null` is AMBIGUOUS in general — the loop `continue`s on unknown usage, so "probe failed" and
+> "measured: no headroom" both yield null under the same message. What makes the 10:33 reading
+> "measured" rather than "unprobeable": the per-alternate `usageProbe` is PER-BEAT and UNCACHED
+> (runs live inside the tick, refresh-and-reprobe on 401/403), the branch requires `networkUp`,
+> and the credentials were fresh — so a probe failure at 10:33 has no remaining cause. The
+> cached-probe resurrection path does not exist; the wording nit gains a second clause (the
+> message should also distinguish probe-failure from measured-no-headroom) for whenever the
+> tick is touched.
 
 **~~NEW FINDING — our alert defect is now CONFIRMED~~ (REFUTED above) by two first-hand reads taken minutes apart:**
 the shared store shows all three slots FRESH (above) while `active-alerts.json` shows

@@ -22,6 +22,21 @@
  *   3. in the route, spread `...parsed.data` AFTER requestingAgentId
  *                                                  -> "identity comes from auth, not the body"
  * The happy-path test is the non-vacuity control and must stay green under 1 and 2.
+ *
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   line 1493 -> `if (false) {`   (the checkTeamAccess refusal)
+ *     → 2 red / 3 green: "refuses a caller with no access to the team"
+ *                        "refuses an anonymous caller — a missing identity is never …"
+ *     Two reds is CORRECT, not over-broad: the anonymous case reaches the same
+ *     checkTeamAccess branch, so one guard legitimately pins both.
+ *
+ *   s/if \(foreign\.length > 0\)/if (false)/
+ *     → 1 red / 4 green: "refuses target agents outside the team even when …"
+ *
+ * The first neuter had to be LINE-ANCHORED: `if (!access.allowed)` occurs 16 times in
+ * teams-service.ts, and the expression form would have mutated every one — reddening tests
+ * about unrelated code and producing a plausible number for the wrong reason. The tool
+ * refused it, which is the only reason that was visible.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

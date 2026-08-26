@@ -22,7 +22,7 @@ release-via: none
 priority: 0
 severity: critical
 labels: [security, credential-exposure, agent-identity, local-attacker]
-external-refs: [TRDD-R268J32X]
+external-refs: [TRDD-R268J32X, TRDD-1V7UZ38I]
 ---
 
 ## Problem — raised by the USER 2026-08-26, and CONFIRMED EMPIRICALLY, not by reading
@@ -536,6 +536,10 @@ zero isolation and costs a second agent process.**
    unauthenticated shell — strictly worse than the local exposure this card is about**, and it must
    be closed in the same change that wires the routing (bind `127.0.0.1:port:23000`, and require a
    credential on the container socket).
+
+**Those four defects are now their own card, TRDD-1V7UZ38I** — they are real in shipped code
+whether or not containers are chosen, and a finding that lives only in another card's prose is not
+on the board.
 
 **Verdict: step 5 does not kill containers. It converts the direction from "unknown" to "named
 work".** The isolation property still holds and is the reason to want it — a per-container tmux

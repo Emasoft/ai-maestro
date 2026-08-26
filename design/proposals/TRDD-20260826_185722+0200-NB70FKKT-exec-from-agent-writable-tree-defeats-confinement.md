@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:27:18+0200
+updated: 2026-08-26T20:32:15+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -265,6 +265,35 @@ before exec. Listing five instances would inflate the count and, per this card's
 note, **padding a security list with a class is how the specific entries get discounted.**
 
 **51 sites remain** for per-site reading.
+
+#### The 51 collapse into the classes ALREADY RANKED — no fourth class, and one counter-example
+
+Profiling what each unresolved name is actually ASSIGNED (rather than reading 51 sites one at a
+time) resolves the population:
+
+| assignment shape | maps to |
+|---|---|
+| `shutil.which('gh'\|'claude'\|'actionlint'\|'git-cliff')` ×11, nearly all in `publish.py` | the **generic PATH class**, rank 3 — and `publish.py` is a human-run release tool, not the unattended daemon |
+| `find_memgrep()` · `[binary, …]` · `[memgrep, …]` · `[MEMGREP, …]` | **rank 1**, `$MEMGREP_BIN` |
+| `harness_backend.continuity_cli()` | **rank 2**, the `$AIMAESTRO_CLI` chain |
+| literal-head lists — `['git',…]`, `['gh',…]`, `['uv',…]`, `[sys.executable,…]` | hardcoded; PATH class at most |
+
+**No fourth class appears.** Box 1's janitor half is not 51 novel findings; it is the three
+classes this card already ranks, plus the plugin-cache class above. That is what "documented as
+an accepted hole" needs in order to be true rather than asserted.
+
+Two sites were not in any class and both resolve favourably:
+
+- `slot_capture_browser.py:220` — `CHROME` is the absolute `/Applications/Google Chrome.app/…`,
+  outside every agent-writable root. Not a hit.
+- **`global_state.automation_python_path()` is the COUNTER-EXAMPLE and belongs in the remedy.**
+  It walks signed candidates, rejects any binary failing `_is_adhoc_signed`, and its docstring
+  says why in one line: a bare PATH lookup on this host resolves `python3.12` to a project
+  `.venv/bin/python3.12`, *"ad-hoc signed — a cwd-dependent, ungrantable identity"*. **It is the
+  only resolver in this entire audit that checks the INTEGRITY of what it is about to execute**,
+  and it was written for TCC durability rather than for confinement — the right behaviour arrived
+  from an unrelated requirement. Task step 3 (SAFEGUARD) should cite it as the in-tree pattern
+  instead of describing one in the abstract.
 
 Two instrument caveats, stated because the numbers are the deliverable:
 - The triage script walks `Module` AND `FunctionDef`, so **its bucket counts are double-counted

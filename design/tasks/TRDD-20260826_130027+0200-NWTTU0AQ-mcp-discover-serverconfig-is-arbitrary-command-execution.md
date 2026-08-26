@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T13:00:27+0200
-updated: 2026-08-26T13:00:27+0200
+updated: 2026-08-26T13:56:07+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -87,6 +87,15 @@ dev-mode deploy away from live. Treat the absence as luck, not as a boundary.
 3. Anything that only hardens `shellSafe` is NOT a fix — the payload never passes through
    `shellSafe`, and it is a JSON object, not a shell string.
 
+**What the enumeration below settles, and what it deliberately does not.** It settles the COST:
+fix 2 costs nothing (no agent caller), and fix 1's allowlist would be a two-key schema
+(`{command, args}`), not a research project. It does NOT settle the RULING, which is yours —
+the two differ in what they leave standing. Fix 2 keeps the primitive and moves it behind the
+operator, who owns the host anyway; fix 1 removes the arbitrary-command shape for everyone
+including the operator. My recommendation, offered as a recommendation: **fix 2 as the gate, plus
+fix 1's `.strict()` two-key schema as defence in depth** — the branch then requires the owner AND
+cannot express anything the sole caller does not already send.
+
 ## Verification
 
 - A test posting a `serverConfig` with a `command` must be REFUSED, with a neuter proving the test
@@ -102,8 +111,39 @@ dev-mode deploy away from live. Treat the absence as luck, not as a boundary.
 
 ## Acceptance
 
-- [ ] Enumerate callers of the `serverConfig` branch specifically (the UI's standalone-MCP flow
-      from `~/.claude.json`) — decides between fix 1 and fix 2, and must not be guessed
+- [x] **Enumerate callers of the `serverConfig` branch — DONE 2026-08-26T13:5x. Result: exactly
+      ONE caller, and it is the OPERATOR UI. There is NO agent-side caller, so fix 2
+      (`enforceSystemOwner` on that branch only) breaks nothing.**
+
+      Four call sites reach the route at all; only one carries `serverConfig`:
+
+      ```
+      components/agent-profile/McpTab.tsx:33      serverConfig  <-- THE ONLY ONE (operator UI)
+      components/settings/GlobalElementsSection.tsx:1114   configPath  (operator UI)
+      scripts/mcp-discover.sh:131                 configPath  (jq builder has NO serverConfig key)
+      services/headless-router.ts:3868            the headless twin — delegates to this same route
+      ```
+
+      **And the one caller's payload is narrower than the branch it uses.** `McpTab.tsx:85-89`
+      builds it from the agent's ALREADY-INSTALLED servers (`config.mcpServers`), two keys only:
+
+      ```ts
+      const cfg: Record<string, unknown> = {}
+      if (mcp.command) cfg.command = mcp.command
+      if (mcp.args)    cfg.args    = mcp.args
+      ```
+
+      Nothing the user typed, no `env`, no `cwd`. So the legitimate shape is a two-key echo of a
+      config the host already has — which makes fix 1 (allowlist/schema) narrow and cheap too, and
+      the two compose rather than compete.
+
+      **Out of scope, stated so it is not re-derived:** those values originate in the agent's own
+      `~/.claude.json`. An agent able to rewrite that file already has execution inside its own
+      session by definition, so that is a different path and not this route's defect.
+
+      Swept in three FORMS over `app components lib services scripts scripts_dev tests` (literal
+      endpoint; `serverConfig` as a key; the `discoverTools` helper), counted before reading — the
+      `head`-on-an-absence-sweep trap that cost RC33OAFQ a wrong "zero callers" is recorded there.
 - [ ] Ruling recorded here
 - [ ] Guard implemented per the ruling
 - [ ] Refusal test asserting NO spawn + neuter recorded

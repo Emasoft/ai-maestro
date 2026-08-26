@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:32:15+0200
+updated: 2026-08-26T20:36:48+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -294,6 +294,34 @@ Two sites were not in any class and both resolve favourably:
   and it was written for TCC durability rather than for confinement — the right behaviour arrived
   from an unrelated requirement. Task step 3 (SAFEGUARD) should cite it as the in-tree pattern
   instead of describing one in the abstract.
+
+### Box 1's FLEET half — the AST census run across the other 6 plugin caches
+
+The source report gave these only a generic grep. Latest cached version each:
+
+| plugin | LITERAL | which | sys.exec | ENV-VAR | unresolved |
+|---|---|---|---|---|---|
+| assistant-manager 2.19.0 | 19 | 1 | 7 | – | 5 |
+| autonomous 1.6.22 | 21 | – | – | – | 1 |
+| **chief-of-staff 2.32.5** | 33 | – | 1 | **5** | 10 |
+| ai-maestro-plugin 3.1.31 | 47 | 8 | 3 | – | 16 |
+
+**The chief-of-staff is the finding: SIX distinct env-var-selected CLI names**, a class the
+source report never swept for outside the janitor —
+`AIMAESTRO_CLI` (5 sites), `AIMAESTRO_GOVERNANCE_CLI`, `AIMAESTRO_TEAMS_CLI`,
+`AIMAESTRO_AGENT_CLI`, `AMP_KANBAN_LIST_CLI`.
+
+**Every one defaults to a bare script NAME, not a path** (`aimaestro-agent.sh`,
+`aimaestro-teams.sh`, `check-aimaestro-messages.sh`, `aimaestro-governance.sh`,
+`amp-kanban-list.sh`), so both legs are attacker-influenced: the env var, or PATH. This upgrades
+rank 2 from "a janitor site" to **a fleet-wide convention**.
+
+Non-security defect found in the same read, worth its own fix: **`AIMAESTRO_CLI` is used with
+THREE different defaults inside one plugin** — `aimaestro-agent.sh` at
+`amcos_heartbeat_check.py:271` / `amcos_notify_agent.py:37`, `check-aimaestro-messages.sh` at
+`amcos_notification_protocol.py:108`, `aimaestro-teams.sh` at
+`amcos_generate_team_report.py:67`. One variable overriding three semantically different CLIs
+means setting it correctly for one call site silently redirects the other two.
 
 Two instrument caveats, stated because the numbers are the deliverable:
 - The triage script walks `Module` AND `FunctionDef`, so **its bucket counts are double-counted

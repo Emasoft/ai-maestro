@@ -1,7 +1,7 @@
 ---
 trdd-id: 39OPYXQ9
 title: aimaestro-continuity.sh is entirely non-functional — _api is never defined
-column: todo
+column: complete
 created: 2026-08-22T18:07:14+0200
 updated: 2026-08-22T18:07:14+0200
 current-owner: user
@@ -60,6 +60,29 @@ that may have diverged, so consolidating them is its own task with its own regre
   not by a missing shell function.
 - A smoke test that invokes each verb through the BARE command on `PATH` and asserts the exit code
   is never 127 — the check that would have caught this class, for every CLI in the script layer.
+
+## Outcome — FIXED 2026-08-26, commit `20f44bad`
+
+`_api` copied verbatim from `aimaestro-trdd.sh` into `aimaestro-continuity.sh` (this card's
+own ruling: do NOT promote it into common.sh in the same change).
+
+**A SECOND defect surfaced while verifying the first, and it is why the fix alone was not
+enough:** the CLI is not in `install-agent-cli.sh`'s `INSTALLED_FILES` **at all**.
+TRDD-DXJZM3BW recorded it as *"auto-installed by the `scripts/*.sh` glob"* — there is no
+glob; the manifest is an explicit list — so no install had ever deployed it, and the copy on
+PATH was five weeks stale. The first post-fix run STILL exited 127 for exactly that reason.
+Same defect as `aimaestro-panel.sh` one line above it in that list (TRDD-COOLOZ1N ruling 1).
+
+Verified by effect, bare command on PATH after reinstall (`cmp` = identical):
+`status` and `ensure-resume` → **HTTP 401 auth, exit 1 — never 127**; help exits 0.
+
+The class-catching check the Verification section asked for shipped as
+`tests/unit/script-private-helpers-defined.test.ts`: it resolves every `_helper` CALL against
+own + common.sh + sourced + parent-module definitions (the runtime namespace a module actually
+sees), 92/92 across the script layer. It is offline and deterministic on purpose — a
+drive-every-verb-through-PATH smoke test needs a server, a credential and a deployed copy, and
+each of those can make it lie in the SAFE direction. Neuter: deleting `_api` reds exactly
+`aimaestro-continuity.sh`.
 
 ## Approval log
 

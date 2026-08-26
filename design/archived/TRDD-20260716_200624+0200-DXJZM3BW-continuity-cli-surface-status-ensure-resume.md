@@ -1,7 +1,7 @@
 ---
 trdd-id: DXJZM3BW
 title: Continuity CLI surface — aimaestro-continuity.sh status + ensure-resume behind the frozen layer
-column: todo
+column: complete
 created: 2026-07-16T20:06:24+0200
 updated: 2026-08-05T01:08:00+0200
 current-owner: ai-maestro
@@ -41,8 +41,11 @@ server-side, interim from observables until [[1GGQ4HWY]]) and `POST .../ensure-r
 (idempotent REAL actuation: `getAgentSessionStatus` → `wakeAgent`, no stub). Both enforce R42
 self-only. Registered in `docs/SCRIPT-LAYER.md`; 7 unit tests; tsc/lint/shellcheck clean.
 
-**NEXT:** `next_action` gains the cascade states once [[1GGQ4HWY]] lands; live end-to-end
-route test needs an authenticated caller (deferred to a scenario/USER).
+**SUPERSEDED — do NOT carry forward:** *"auto-installed by the `scripts/*.sh` glob"* (there is
+no glob — see the box below) and *"live end-to-end route test needs an authenticated caller
+(deferred)"* (it was run 2026-08-22, it FAILED, and the cause is fixed as of 2026-08-26).
+
+**NEXT (outside this card):** `next_action` gains the cascade states once [[1GGQ4HWY]] lands.
 
 ## Problem / Goal
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T04:47:18+0200
-updated: 2026-08-26T10:11:48+0200
+updated: 2026-08-26T10:14:31+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -47,25 +47,38 @@ card's diagnosis should explain (the tracker's condition should hold for all thr
 This is exactly the state TRDD-X4RK1NUW's 2026-08-30 deadline exists to prevent, and
 its 48h clean-window acceptance box cannot start while it stands.
 
-## ⏵ STATE UPDATE — 2026-08-26 ~10:1x (janitor cross-session report + first-hand verification)
+## ⏵ STATE UPDATE — 2026-08-26 ~10:1x-10:3x (janitor report; recovery + alert both then verified FIRST-HAND against the shared store)
 
 **The slots are RECOVERED — by the janitor, via real-Chrome login + capture** (their
-`41ccc80f`; oauth-health `ok`/`has_refresh:true` on all three at 09:43/09:56/10:00, per their
-cross-session message). Their root cause: `slot_capture_browser.py` had NO PEP-723 header, so
+`41ccc80f`; their oauth-health `ok`×3 at 09:43/09:56/10:00). **CONFIRMED FIRST-HAND 10:3x from
+the shared `state.json` itself** (the review fork correctly objected that the first draft of
+this section stated the recovery on the peer's word while our own live alert said the
+opposite): all three slots read a FUTURE `expires_at` (7.5/7.7/7.8 h), `via:
+slot_capture_browser(full-oauth)`, `fp != refresh_dead_fp`, `refresh_failures` cleared. Their root cause: `slot_capture_browser.py` had NO PEP-723 header, so
 `uv run --script` installed nothing and every capture died at import — BOTH re-mint legs down
 at once, presenting as "refresh dead" for ~19 days. Python-specific; our TS port does not share
 the header mechanism, but the CLASS transfers (a re-mint leg that cannot START, masked as a
 credential fault). This also answers the `cookie-leg-since.json == {}` anomaly line of inquiry:
 the capture leg could not even start.
 
-**NEW FINDING, verified first-hand at 10:1x — our side has the MIRROR of their TRDD-A8DPTDOU:**
-`active-alerts.json` shows `rotator-stuck:all-maxed` with `seen: 10`, `lastSeenAt` seconds ago —
-our tick is CURRENTLY re-asserting "no alternate is healthy" AFTER all three slots were
-re-minted. Not stale file replay: the alert is live-refreshing. Hypothesis to verify (their
-defect class at onset rather than clear): our alternate-health probe reads a per-slot
-failure/cooldown store that nothing invalidates on an EXTERNAL re-mint, so "dead until proven
-alive" persists until something re-attempts the credential. `rotation-stuck.json` in the shared
-DATA dir is separately 15.4h stale (first==last seen 2026-08-25 18:44).
+**NEW FINDING — our alert defect is now CONFIRMED by two first-hand reads taken minutes apart:**
+the shared store shows all three slots FRESH (above) while `active-alerts.json` shows
+`rotator-stuck:all-maxed` with `seen: 10`, `lastSeenAt` seconds later — our side is asserting
+"no alternate is healthy" against a store that says three are. Precision (fork correction): the
+alert LEDGER is live-updating (`seen` climbing); whether the underlying assertion re-derives
+from a fresh health probe or replays cached state is exactly the diagnosis, not a premise — the
+`seen`-bumper's code has not been read. `rotation-stuck.json` is separately 15.4h stale
+(first==last seen 2026-08-25 18:44).
+
+**The janitor's write-set localises the fault to OUR side of the seam** (their third message):
+between 09:40-10:05 their capture wrote ONLY `state.json` (+bak/sha256), `rotator.log`,
+`cookie-leg-since.json`, `capture-consent.png` — NOT `active-alerts.json`, and no TS-side
+store. So the diagnosis question is: WHICH store does our alternate-health predicate READ? If
+it reads a TS-side per-slot failure cache rather than `state.json`'s slot fields, no external
+re-mint can EVER clear it — a structural mirror break needing an INVALIDATION fix at onset,
+not a clear-predicate gate (their A8DPTDOU was a wrong CLEAR; ours is a wrong ONSET — opposite
+directions, different fixes). `amp-service.ts:931`'s same-named `expires_at` was examined: AMP
+message-envelope TTL, unrelated to the slot schema.
 
 **NEXT ACTION:** (1) diagnose why the tick's alternate-health view lags an external re-mint
 (candidate: cooldown/failure store never cleared by fresh slot fp) and whether the next natural
@@ -89,7 +102,10 @@ janitor data shows refresh chains survived 6-19 days per account before `invalid
 
 ## Acceptance
 
-- [ ] All three slots in `state.json` show a fresh `fp` with `refresh_failures` reset and a future `expires_at`
+- [x] All three slots in `state.json` show a fresh `fp` with `refresh_failures` reset and a
+      future `expires_at` — VERIFIED FIRST-HAND 2026-08-26 10:3x: expires in 7.5/7.7/7.8 h,
+      `fp != refresh_dead_fp`, failure fields cleared, `via: slot_capture_browser(full-oauth)`
+      (re-minted by the JANITOR, their `41ccc80f`; the measurement is ours, from the store)
 - [ ] `oauth-rotator-tick-status.json` reads a non-`reauth-needed` verdict across two consecutive beats
 - [ ] Cause of the cookie leg's inaction recorded (here or on ai-maestro#95) — "it minted" or "why it could not"
 

@@ -20,7 +20,7 @@ relevant-rules: [R6, R38]
 blocked-by: []
 npt: []
 eht: []
-implementation-commits: []
+implementation-commits: [41266cf1]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-26

@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:00:27+0200
+updated: 2026-08-26T13:06:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -140,6 +140,20 @@ This ledger stays valid and useful — it governs the Next-side surface and it i
 pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole picture.
 
 ## Decisions — the 17, one at a time
+
+### `v1/mesh/chat` — DECIDED 2026-08-26: authn-only is CORRECT on BOTH methods (CLEAR)
+
+**POST is the pattern done RIGHT, and is worth citing as the reference for the rest of this
+ledger.** It does not merely authenticate — it *derives* the sender from the authenticated
+identity and refuses any body that claims otherwise: `getAgent(auth.agentId)` → 401 if absent;
+`senderName !== agent.name` → **403 `sender_mismatch`**; `!isSelf(senderHostId)` → rejected
+(cross-host needs Ed25519 attestation, not yet wired). That is exactly the "uses `auth.agentId` to
+OVERRIDE a claimed field" shape this card's own note says makes an entry a FALSE positive.
+
+**GET is a shared broadcast log, so there is no partition to enforce.** `getMessages(limit,
+before)` takes no principal, and the file has no recipient / DM / private concept at all — mesh
+chat is one room every participant sees by design. Authn-only is the correct posture for reading
+it; an ownership check would have nothing to check against.
 
 ### `settings/mcp-discover` — DECIDED 2026-08-26: a CRITICAL hole, filed as TRDD-NWTTU0AQ
 

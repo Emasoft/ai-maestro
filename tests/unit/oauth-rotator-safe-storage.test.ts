@@ -257,6 +257,12 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
   //       describeSecurityArgv describes a RETRIEVE argv without the -w flag leaking a value
   //       runSecurity LOGS elapsed + argv for a spawn at/over the slow threshold
   // So these tests would have caught the original leak, which is the only property worth pinning.
+  // NEUTER #2 (2026-08-26 — scripts/dev/neuter, restore verified by blob hash). Restores the
+  // PII leak exactly as it shipped, rather than disabling anything:
+  //   s/const tag = acct === null ? null : crypto.../const tag = acct/   → 3 red / 20 green:
+  //       describeSecurityArgv NEVER emits an email address, and still discriminates accounts
+  //       describeSecurityArgv NEVER emits the secret from a STORE argv
+  //       describeSecurityArgv describes a RETRIEVE argv without the -w flag leaking a value
   // THE LEAK GUARD. The first draft of the slow-op log printed `argv.join(' ')`, which would have
   // written a live OAuth token to pm2-error.log on any slow WRITE: `macosStoreArgv` carries the
   // secret ON ARGV as `-w <secret>` (deliberately — the stdin form truncates at 128 bytes), while

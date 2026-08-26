@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:01:55+0200
-updated: 2026-08-26T14:01:55+0200
+updated: 2026-08-26T14:31:40+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -61,6 +61,50 @@ export function removeBlock(userId: string, stateDir?: string): void {
 
 `getBlocklist` reads the file (`:170-176`). The state is durable, host-wide, and shared.
 
+## ⚠ ENUMERATION DONE 2026-08-26 — AND IT INVERTS THIS CARD: **nothing enforces the blocklist**
+
+The acceptance box asked for a caller enumeration. It produced two answers, and the second one is
+larger than the finding this card was filed for.
+
+**1. Callers of the route: NONE outside the route itself.** No UI, no CLI, no headless twin —
+`grep -c vpn-chat services/headless-router.ts` = **0**, against a control of **2** for
+`conversations/parse`, so the needle can see a twin when one exists. Only `app/api/vpn-chat/block/
+route.ts`, `lib/vpn-chat-log.ts` and `tests/vpn-chat.test.ts`. Whatever ruling is made, it breaks
+nothing.
+
+**2. THE BLOCKLIST IS NEVER READ BY ANY ENFORCEMENT PATH.** Swept `getBlocklist` across
+`*.ts|*.mjs|*.js`, whole tree:
+
+```
+app/api/vpn-chat/block/route.ts:28   const blocked = getBlocklist()      <- the GET, listing it
+lib/vpn-chat-log.ts:197, :207        internal, inside addBlock/removeBlock
+tests/vpn-chat.test.ts               ×5
+```
+
+**One production reader, and it is the endpoint that displays the list.** The chat path exists and
+does not consult it — `app/api/v1/mesh/chat/route.ts:12` imports exactly
+`appendMessage, getMessages` from that same module, and **not** `getBlocklist`. An inbound mesh
+message from a blocked user is appended like any other.
+
+So the blocklist is **write-only state**. Blocking a user changes a JSON file and changes nothing
+else.
+
+**This is the third instance today of one class** — after `export/jobs`' 501 stubs and
+`lastRunSummary`'s unconditional `updated` (TRDD-FFHZM7XV): *a mechanism whose existence was read
+from its name and its storage, never from a consumer.* I filed this card having verified the
+WRITES were real and never asked who READS.
+
+### What that does to the severity
+
+**DOWN for the reported finding, UP for the system.** An unauthorized unblock removes a control
+that was not controlling anything, so the disclosure/abuse impact today is ~nil — the authz gap is
+real and currently inert. But **the operator has a Block button that does nothing**, and believes
+otherwise. A moderation control that silently fails open is worse than an absent one, because it
+is relied upon.
+
+`severity` accordingly stays `moderate` but the card's SUBJECT changes: the authz question is now
+secondary to *"is this feature finished, and if not, should the endpoint exist at all?"*
+
 ## Why this is NOT the `export/jobs` shape
 
 `export/jobs/[jobId]`'s DELETE lacks an **ownership** check — there is an owner to compare against
@@ -98,10 +142,18 @@ already (recorded on `RC33OAFQ`).
 
 ## Acceptance
 
-- [ ] Enumerate every caller of POST and DELETE (count before reading; never `head` an absence sweep)
-- [ ] Ruling recorded here on which principal may block, and which may unblock
+- [x] **Enumerate every caller — DONE 2026-08-26. ZERO outside the route (no UI, no CLI, no
+      headless twin; control: `conversations/parse` = 2 hits in the router, `vpn-chat` = 0). Any
+      ruling breaks nothing.** The same sweep found the larger thing — see the ENFORCEMENT section
+- [ ] **DECIDE FIRST: is the feature finished?** The blocklist has ONE production reader (its own
+      GET) and the chat path does not consult it. Ruling on the principal for a control that
+      enforces nothing may be the wrong order of business
+- [ ] Ruling recorded here on which principal may block, and which may unblock — **secondary to
+      the box above; an authz gap on an inert control is real but currently harmless**
 - [ ] Guard implemented per the ruling, mirrored in the headless twin if one exists
 - [ ] Refusal test + neuter recorded, asserting the FILE did not change
+- [ ] If the feature IS to be finished: an enforcement test proving a blocked sender is REJECTED by
+      `v1/mesh/chat`, with a neuter — the check that would have caught this at write time
 - [ ] Operator positive control still green
 - [ ] Ledger updated in the SAME commit if the guard becomes STRONG_AUTHZ
 

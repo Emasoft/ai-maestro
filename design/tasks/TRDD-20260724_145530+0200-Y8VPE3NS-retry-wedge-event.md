@@ -2,10 +2,11 @@
 trdd-id: Y8VPE3NS
 title: Retry-wedge event the ai-maestro 90 contract
 column: todo
+review-after: 2026-09-02
 blocked-by: []
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-26T06:01:50+0200
+updated: 2026-08-26T06:03:52+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -135,4 +136,4 @@ NEXT ACTION: build the poll site (sibling TRDD under E0), then observe one real 
   memory instead of from the card's current column silently promotes a card on unblock.**
 - 2026-07-25T22:18:19+0200 — PROGRESS (self-mandate). The POLL SITE landed (73c9b27c): lib/fleet-continuity.ts, watchdog leg 3, 13 tests. Box 5 SPLIT — the caller half is met; the two empirical PTY observations need a real wedged agent and stay open. Detection+classification had been complete and 0% reachable since 8e78c09b.
 
-**Parked 2026-08-26 (hub drain):** audited read-only (reports/hub-drain/20260826_060036+0200-Y8VPE3NS-audit.md): 5/6 boxes delivered; box 6 waits on a NATURAL wedge event — the FleetContinuity leg is live and scanning (`fired 0` through 05:56 today), so this is genuinely-waiting, not broken. Cannot be manufactured; `review-after` set. Side observation for whoever works agent `frank`: its tmux session errors on capture-pane at most polls (operational, out of this card's scope).
+**Parked 2026-08-26 (hub drain):** audited read-only (reports/hub-drain/20260826_060036+0200-Y8VPE3NS-audit.md): 5/6 boxes delivered; box 6 waits on a NATURAL wedge event — the FleetContinuity leg is live and scanning — verified FIRST-HAND in `logs/pm2-error.log` (the leg logs via stderr, NOT pm2-out.log as the audit report said): latest `pass ok: scanned 2, fired 0` at 05:36 today, and zero `fired [1-9]` lines in the whole log, so this is genuinely-waiting, not broken. Cannot be manufactured; `review-after` set. Side observation for whoever works agent `frank`: its tmux session errors on capture-pane at most polls (operational, out of this card's scope).

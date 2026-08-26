@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:59:33+0200
+updated: 2026-08-26T14:02:30+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -407,8 +407,14 @@ host policy, not per-agent state. So the fix shape is not an ownership check but
 question: blocking is a human moderation act, which argues `enforceSystemOwner` for POST/DELETE
 while leaving GET readable. That is a ruling.
 
-**NOT filed as its own card yet, deliberately, and this is triage rather than deferral — the
-evidence above is complete.** Three p0 security cards from this same ledger pass are already
+> **FILED 2026-08-26 as TRDD-F0NJBQ51.** The batching reason below stopped holding once the batch
+> grew anyway (TRDD-V2BLADSF became a fourth), and **a finding that lives only in another card's
+> prose is not on the board** — the stale-reference failure this corpus keeps catching. The new
+> card adds one thing this entry lacked: `addBlock`/`removeBlock` were confirmed to actually
+> PERSIST (`saveBlocklist`), after `export/jobs` proved a signature is not a behaviour.
+
+~~**NOT filed as its own card yet, deliberately, and this is triage rather than deferral — the
+evidence above is complete.**~~ Three p0 security cards from this same ledger pass are already
 waiting on the owner (TRDD-NWTTU0AQ arbitrary command execution, TRDD-RC33OAFQ cross-agent
 transcript read, TRDD-MFTDMSJY), and this one is materially less severe than any of them. Handing
 over a fourth in the same batch buys nothing. **File it the moment those clear, or immediately if
@@ -823,7 +829,8 @@ so that box stays open.
       15/15.** Four real findings came out of it, each its own card: `sessions/[id]/rename`
       (TRDD-OYNUJRSB), `conversations/parse` (TRDD-RC33OAFQ), `settings/mcp-discover`
       (TRDD-NWTTU0AQ, RCE) and `groups/*` creation (TRDD-V2BLADSF); plus one fixed in place
-      (`export/jobs/[jobId]` GET, `c55f6f02`) and one recorded-not-filed (`vpn-chat/block`).
+      (`export/jobs/[jobId]` GET, `c55f6f02`) and `vpn-chat/block` (TRDD-F0NJBQ51, filed
+      2026-08-26 — it is no longer "recorded not filed").
       **The remaining debt is not "routes to read" — it is those cards' rulings**
 - [ ] **the ledger's own entries are not equal in kind, and the discriminator is cheap.** Of the
       four CLEAR verdicts, exactly one (`sessions/activity/update`) was *already decided* — it

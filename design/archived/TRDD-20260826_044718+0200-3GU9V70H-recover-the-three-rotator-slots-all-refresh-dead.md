@@ -138,7 +138,7 @@ janitor data shows refresh chains survived 6-19 days per account before `invalid
       (re-minted by the JANITOR, their `41ccc80f`; the measurement is ours, from the store)
 - [x] `oauth-rotator-tick-status.json` reads a non-`reauth-needed` verdict across two consecutive beats
       — VERIFIED FIRST-HAND 2026-08-26 10:45: THREE consecutive non-reauth beats (10:43:50,
-      10:44:52, 10:45:53), each `auto: live fmuaddib@gmail.com … Fable=97-100% +SCOPED-WALL` +
+      10:44:52, 10:45:53), each `auto: live <ACCOUNT-B> … Fable=97-100% +SCOPED-WALL` +
       `STUCK: … the remedy is to move agents OFF Fable`; status file reads
       `{"nextAction":"stuck","stuck":"all-maxed",…}`. NOTE the intervening 10:33-10:42 window
       DID read `reauth-needed: slot-unreadable` — that was the server's KEYCHAIN DENIED-LATCH

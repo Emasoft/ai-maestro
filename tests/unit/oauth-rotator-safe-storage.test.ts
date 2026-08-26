@@ -250,6 +250,13 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
     expect(slow[0]).toMatch(/timeout 2700ms/)
   })
 
+  // NEUTER (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash). The
+  // mutation restores the EXACT shipped bug rather than merely disabling the guard:
+  //   s/  return `verb=${verb}...`/  return argv.join(" ")/   → 3 red / 19 green:
+  //       describeSecurityArgv NEVER emits the secret from a STORE argv
+  //       describeSecurityArgv describes a RETRIEVE argv without the -w flag leaking a value
+  //       runSecurity LOGS elapsed + argv for a spawn at/over the slow threshold
+  // So these tests would have caught the original leak, which is the only property worth pinning.
   // THE LEAK GUARD. The first draft of the slow-op log printed `argv.join(' ')`, which would have
   // written a live OAuth token to pm2-error.log on any slow WRITE: `macosStoreArgv` carries the
   // secret ON ARGV as `-w <secret>` (deliberately — the stdin form truncates at 128 bytes), while

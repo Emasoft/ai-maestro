@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:39:37+0200
+updated: 2026-08-26T19:42:26+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -189,7 +189,34 @@ Three corrections, all pushing the same direction the report did not look:
    `_resolve_path_like_value`, `env` type-checked; **no late containment guard**),
    `determine_secret` (`:1162-:1182` — secret prompting only), and
    `split_argv_for_server_command` (`no "--" in argv ⇒ server_command = []`, so the route cannot
-   reach `build_stdio_command`'s verbatim-passthrough branch).
+   reach `build_stdio_command`'s verbatim-passthrough branch). That last one rested on a PARTIAL
+   read of `execArgs`; read whole (`route.ts:109-144`) every push is a known flag with a
+   `shellSafe`-scrubbed value and **no `--` appears anywhere**, so the third route to `Popen` is
+   closed by measurement rather than by likelihood. All 7 pushes enumerated: `--format`,
+   `--dangerously-output-the-raw-response`, `--timeout`, `--no-prompt-key`, `--method`,
+   `--tool-name`, `--tool-arg`. **No `--command` and no `--transport`** — which is the half that
+   actually mattered: either would have made `merge_config_into_args`'s guard
+   (`if args.command is None and not args.server_command:`) FALSE and stopped `:1219-:1227`,
+   the block this whole finding rests on, from executing at all. Their absence is what makes the
+   measured branch the taken one.
+
+   Second spelling of the same landing, from `cwd`: `_resolve_command_value` absolutises any
+   `command` carrying a separator, but `args` are never resolved — so
+   `command: "node"`, `args: ["./payload.js"]`, `cwd: <attacker dir>` reaches the same place.
+   `cwd` is load-bearing for the write-up despite never being exec'd.
+
+   **SECOND INSTANCE of the same pre-`realpath` defect, found in that read** — `route.ts:143`:
+
+   ```ts
+   env: { ...process.env, ...(configPath ? { CLAUDE_PLUGIN_ROOT: dirname(resolve(configPath)) } : {}) },
+   ```
+
+   The attacker-chosen directory is not only substituted TEXTUALLY into the temp `.mcp.json`; it
+   is EXPORTED as `CLAUDE_PLUGIN_ROOT` to the child — again from `resolve()`, never
+   `realResolved`. `mcp_discovery.py:145` does `merged_env = os.environ.copy()` and passes it to
+   `Popen(env=merged_env)`, so the spawned MCP server and everything it spawns inherit it. One
+   defect, two carriers; **the remedy must fix both, and a fix applied only to the substitution
+   would look complete and leave the env route live.**
 
    BOTH routes are uncontained — the `args` list is not *stronger*, only simpler to demonstrate,
    since the resolver hands back an absolute `command` unchanged. And `_build_client` (`:1442`,

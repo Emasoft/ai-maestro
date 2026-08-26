@@ -2,7 +2,7 @@
 name: server-oauth-token-continuity-design
 description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom / the alert says 'rotation is effectively OFF' or 'the 60s rotator tick has not COMPLETED for N seconds' but the tick is running fine / tick-stalled false alarm / tick-completed.ts stamp frozen for days / an alert reading a stamp the server-side lane never writes"
 ocd: 2026-07-16
-lmd: 2026-08-20
+lmd: 2026-08-26
 metadata:
   node_type: memory
   type: project
@@ -187,6 +187,49 @@ spawns a subprocess whose output is definitionally discarded — and any test dr
 `statuslineNear` without injecting `readAgentlensRows` spawns the REAL `agentlenspro` per call
 (measured: the disjunct suite went 24.5s with a 5s per-test timeout; 0.36s after the gate).
 Suites about the store source stub `readAgentlensRows: async () => []` explicitly.
+
+
+^ATOM-OC11-WU2C [desc: "A guard placed on the RECORDING of an act does not guard the act — three consecutive fixes to the same rotator bug, each one layer too shallow", keywords: guard_on_the_recording_is_not_a_guard_on_the_act precondition_before_the_irreversible_write split_brain_keychain_vs_state_json rotator_root_fails_closed legacy_root_silently_adopted lenient_reader_materialises_emptiness void_function_cannot_report_refusal saveState_throws_unresolved_root, type: project, ocd: 2026-08-26, lmd: 2026-08-26]
+
+**A guard on the RECORDING of an act is not a guard on the ACT.** The rotator's root
+resolution took three passes to get right, and each failed fix was one layer shallower than
+the claim made for it. The sequence is the lesson:
+
+1. **`rotatorRoot()` silently fell through to the legacy standalone root** whenever the
+   canonical DATA-dir root lacked `state.json`. Safe only if the two agree; measured, they did
+   not (`live=ipazia/3 slots/2026-08-27` vs `live=fmuaddib/2 slots/2026-05-30`). The canonical
+   root lives in the janitor's plugin DATA dir, which a plain plugin reinstall removes — so the
+   daemon would have adopted a months-old state naming a DIFFERENT live account. Fixed: refuse,
+   with an operator opt-in preserving the genuine migration case.
+
+2. **That fix made it WORSE**, because `loadState()` is lenient: `readOrRestore` returns null on
+   a missing file → `defaultState()` → the tick proceeds on an empty state → `saveState()`
+   MATERIALISES the emptiness into canonical. A recoverable *absent* becomes an unrecoverable
+   *present-and-empty*, with the opt-in sealed behind it. **A fail-closed guard whose safety
+   rests on a read path nobody opened.** Fixed at the WRITE PRIMITIVE, not the ~8 call sites —
+   a per-call-site guard cannot cover the next caller anyone adds.
+
+3. **That fix had the wrong failure MODE**: it refused by returning early, and `saveState` is
+   `void`, so **a function that cannot report refusal has no failure mode, only a silent
+   branch** — undetectable at every call site by construction.
+
+4. **Switching it to `throw` was the right mode at the WRONG LAYER, and was briefly worse than
+   the bug.** `switchLiveTo` writes the live credential FIRST (`writeLiveBlob`), then
+   `loadState`/mutate, then `saveState`. So a throw there fired *after* the keychain had already
+   rotated — keychain=B while `state.json`=A — and made that split-brain DETERMINISTIC, where
+   the silent return had merely allowed it (returning let execution continue, so a later save on
+   a re-resolved root could still reconcile). Fixed by ORDER: the root check is now the FIRST
+   statement of `switchLiveTo`, before any mutation.
+
+**Why the split-brain is the worst of the four:** an empty store announces itself (zero slots,
+the janitor's DESYNC probe fires) while a live/state disagreement is *self-consistent to every
+reader in isolation*, and for a long time nothing in either tree compared `state.json` against
+the live credential's actual identity.
+
+**A reachability argument is only as good as the moment it assumes.** "Unresolved root ⇒
+`defaultState()` ⇒ zero slots ⇒ the candidate loop never runs ⇒ `switchLiveTo` unreachable" is
+true only when the root is unresolved AT LOAD. It says nothing about the root going unresolved
+MID-TICK, with slots already loaded — which is the reachable path.
 
 ## See also
 

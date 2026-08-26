@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:22:55+0200
+updated: 2026-08-26T20:27:18+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -244,6 +244,27 @@ returns still does not reach `os.environ`. **A resolver that had "resolved" it w
 the broken one.**
 
 Box 1's janitor half is therefore **56 sites of hand-reading**, from an inherited 656.
+
+#### 5 of the 56 are ONE class with ONE remedy — self-component exec from the plugin cache
+
+`dispatch.py:788` (a detector, `[str(script), "--one-shot"]`), `dispatch.py:2017`
+(`_HERE / "guard" / "branch_protection_apply.py"`), and three detectors re-invoking themselves
+via `str(Path(__file__).resolve())`. All execute a script that lives inside
+`~/.claude/plugins/cache/…/ai-maestro-janitor/<ver>/scripts/`.
+
+Measured, and it is the whole point: **that directory is agent-writable, and so is `dispatch.py`
+itself** (`os.access(..., W_OK)` → True for both). `dispatch.py` is the heartbeat entry point, so
+the statement worth recording is not five call sites but one fact — **an agent that can write the
+plugin cache owns the entire detector fleet before any of these five lines executes.**
+
+**Deliberately NOT enumerated as five findings.** This is the same shape as our own A3
+(`external_handoff_clear.py`, resolved out of the same cache) and the same generic story as the
+`shutil.which` class the source report was right to leave un-enumerated: one remedy covers all of
+it — the exec'd tree must not be agent-writable (TRDD-K4BEKT3L), or components must be verified
+before exec. Listing five instances would inflate the count and, per this card's own standing
+note, **padding a security list with a class is how the specific entries get discounted.**
+
+**51 sites remain** for per-site reading.
 
 Two instrument caveats, stated because the numbers are the deliverable:
 - The triage script walks `Module` AND `FunctionDef`, so **its bucket counts are double-counted

@@ -169,4 +169,12 @@ describe('TRDD-U6AS2YWB — esc-then-command injector', () => {
  *       RED: ESCs until the menu leaves the frame, then sends the curated directive at idle
  *       green: the abort-direction tests (a loop that can never see "dismissed" aborts, which
  *       is those tests' expected behavior — they pin the SAFE half)
+ *
+ * SECOND + THIRD NEUTERS (2026-08-26, OBSERVED, both restore-verified by blob hash):
+ *   s/if \(!fgBase \|\| !wantBase \|\| fgBase !== wantBase\) \{/if (false) {/
+ *   → 1 red / 4 green: exactly the DEAD CLIENT test — the foreground guard is pinned by it alone.
+ *   s/if \(action\.response\.kind === 'esc-then-command'\) \{/if (false) {/   [delete the branch]
+ *   → 5 red / 0 green: control falls through to the plain `command` branch, which resolves the
+ *   (real) key and SENDS — so the abort-direction tests are NOT vacuous: they red when the
+ *   branch that aborts is gone, proving they pin behavior and not merely "nothing happened".
  */

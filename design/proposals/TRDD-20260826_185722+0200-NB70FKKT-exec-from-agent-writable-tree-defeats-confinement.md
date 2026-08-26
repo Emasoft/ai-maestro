@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:41:38+0200
+updated: 2026-08-26T21:46:10+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -93,7 +93,7 @@ a script, a config that names a command, an env var that selects a binary.
       becomes a real question the day that profile is wired, which is the day this box must be
       re-answered rather than inherited.
 - [x] Env-var-selected exec paths (`$AIMAESTRO_CLI` and any sibling) included in that list.
-      DONE 2026-08-26: `$AIMAESTRO_CLI`, `$MEMGREP_BIN` (6 call sites / 5 modules),
+      DONE 2026-08-26: `$AIMAESTRO_CLI`, `$MEMGREP_BIN` (5 direct reads / 5 modules, +1 reaching it transitively),
       `$CLAUDE_PLUGIN_OPTION_HEARTBEAT_COST_COMMAND` — every one READ in source, not grepped.
 - [x] A stated remedy per site: relocate the artifact, or verify before exec.
       DONE 2026-08-26, stated per CLASS because the census showed the population IS classes —
@@ -108,7 +108,7 @@ Ordered by exposure. "Executing process" is the box-1 column; every row is UNSAN
 
 | # | class | executing process | remedy |
 |---|---|---|---|
-| 1 | **Env-var-selected CLI** — `$MEMGREP_BIN` (6 call sites / 5 modules), `$AIMAESTRO_CLI` + 5 siblings in the COS, `$CLAUDE_PLUGIN_OPTION_HEARTBEAT_COST_COMMAND`, `$CLAUDE_PLUGIN_OPTION_HANDOFF_VERIFY_CONTEXT_COMMAND` | the janitor daemon (every beat), a hook (every prompt / every edit), the COS plugin | **Resolve to an ABSOLUTE path under a non-agent-writable root, and verify before exec.** Where the var must stay (a test pin), require it to name a path that passes the same check. A bare NAME default is the worst case — it hands the decision to PATH. |
+| 1 | **Env-var-selected CLI** — `$MEMGREP_BIN` (5 direct reads / 5 modules, +1 reaching it transitively), `$AIMAESTRO_CLI` + 5 siblings in the COS, `$CLAUDE_PLUGIN_OPTION_HEARTBEAT_COST_COMMAND`, `$CLAUDE_PLUGIN_OPTION_HANDOFF_VERIFY_CONTEXT_COMMAND` | the janitor daemon (every beat), a hook (every prompt / every edit), the COS plugin | **Resolve to an ABSOLUTE path under a non-agent-writable root, and verify before exec.** Where the var must stay (a test pin), require it to name a path that passes the same check. A bare NAME default is the worst case — it hands the decision to PATH. |
 | 2 | **Self-component exec from the plugin cache** — 5 janitor sites, our `external_handoff_clear.py` (A3) | the daemon, and our server | **Make the exec'd tree non-agent-writable** (TRDD-K4BEKT3L) or digest-verify components. Note this class is *already* subsumed: an agent that can write the cache owns the fleet before any call site runs. |
 | 3 | **Pre-`realpath` `pluginRoot`** — `mcp-discover/route.ts:73/95/145`, `element-content/route.ts:73/78/88` | the ai-maestro server (unconfined) | **Derive `pluginRoot` from `realResolved`, and read `realResolved`** — both sites, both carriers (substitution + env). One line each. |
 | 4 | **Repo-tree exec** — `scripts/aim-jsonl-reader` (A1), `scripts_dev/mcp_discovery.py` (A5), the plugin-builder's copied `build-plugin.sh` (A2), `~/.aimaestro/agent-keychain-probe.sh` (A4) | the server | Same as 2 — relocate or verify. A4 additionally needs its **substring** integrity test replaced with a digest, and its module-level `installed` short-circuit reconsidered. |
@@ -135,8 +135,24 @@ shutil.which('memgrep')  -> /Users/<user>/.cargo/bin/memgrep
 ```
 
 All three legs are agent-writable and the first is a bare env var with no constraint at all.
-Read by 6 modules, **two of which run with nobody present**: a detector on every heartbeat, and
-a hook on every edit. Every project, every beat, no harness required.
+
+**Re-measured 2026-08-26 against cached 3.3.26 — "6 modules" was wrong in BOTH directions, and
+the correction cuts the other way.** Direct `os.environ.get("MEMGREP_BIN")` reads: **5, across 5
+modules** (`wikimem_syntax_lint.py:74`, `wikimem_bench.py:68`, `user_mem_lib.py:383` and `:524`,
+`detectors/memory-librarian.py:470`). `claudemd_migration_plan.py:434` only *documents* the var —
+it is a docstring, not a read, so a `grep -l` counts it and a call-site count must not. But a
+**sixth** module reaches the var TRANSITIVELY: `hooks/post-edit-wikimem-lint.py:95` delegates to
+`user_mem_lib.find_memgrep()`, i.e. **the every-edit hook does read `$MEMGREP_BIN`** — my first
+pass concluded the opposite from a `grep MEMGREP_BIN` returning nothing in that file, which is
+the standing trap (a grep answers *does this token appear here*, never *does this path reach
+it*). Its inline `except` fallback is the one leg with no env var at all: `shutil.which` →
+`~/.cargo/bin/memgrep`, reached only when the import dies.
+
+So the exposure claim stands and is slightly wider than stated — **two unattended readers** (the
+heartbeat detector, the every-edit hook) plus three attended ones, every project, no harness
+required — while the *call-site* number was inflated. Note `memory-librarian.py` is `:470` in
+cached 3.3.26 and `:478` at the janitor's repo HEAD: **version skew, not a wrong citation** —
+this card reads the CACHE (what actually executes here), their card reads the SOURCE.
 
 **Rank order for this card, corrected:**
 

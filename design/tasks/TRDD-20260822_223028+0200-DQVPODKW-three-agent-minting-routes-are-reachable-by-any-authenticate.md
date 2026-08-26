@@ -7,7 +7,7 @@ updated: 2026-08-26T06:33:19+0200
 current-owner: user
 created-by: user
 task-type: security
-implementation-commits: [7e044958, a65e06f9]
+implementation-commits: [7e044958, a65e06f9, da061b32, 1a88fe48, f221cdbd, 9530cc2a]
 external-refs: [TRDD-F1SL03CK, TRDD-CAVCTULL, TRDD-R268J32X]
 min-approval-requirement: manager
 mandate: true

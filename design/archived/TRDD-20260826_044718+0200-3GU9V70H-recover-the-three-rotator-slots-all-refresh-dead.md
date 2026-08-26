@@ -1,12 +1,12 @@
 ---
 trdd-id: 3GU9V70H
 title: Recover the three rotator slots — every refresh token is invalid_grant and the cookie leg has not recovered them
-column: todo
+column: complete
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T04:47:18+0200
-updated: 2026-08-26T10:39:18+0200
+updated: 2026-08-26T10:47:01+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -79,7 +79,9 @@ the capture leg could not even start.
 > "measured: no headroom" both yield null under the same message. What makes the 10:33 reading
 > "measured" rather than "unprobeable": the per-alternate `usageProbe` is PER-BEAT and UNCACHED
 > (runs live inside the tick, refresh-and-reprobe on 401/403), the branch requires `networkUp`,
-> and the credentials were fresh — so a probe failure at 10:33 has no remaining cause. The
+> and the credentials were fresh — so a probe failure at 10:33 has no PLAUSIBLE remaining cause
+> (transient network blips and per-account 429s exist, but the loop treats a 429 as
+> maxed-not-expired — itself evidence of spent — so materiality is near zero). The
 > cached-probe resurrection path does not exist; the wording nit gains a second clause (the
 > message should also distinguish probe-failure from measured-no-headroom) for whenever the
 > tick is touched.
@@ -134,8 +136,26 @@ janitor data shows refresh chains survived 6-19 days per account before `invalid
       future `expires_at` — VERIFIED FIRST-HAND 2026-08-26 10:3x: expires in 7.5/7.7/7.8 h,
       `fp != refresh_dead_fp`, failure fields ABSENT (dropped by the rewrite — functionally reset), `via: slot_capture_browser(full-oauth)`
       (re-minted by the JANITOR, their `41ccc80f`; the measurement is ours, from the store)
-- [ ] `oauth-rotator-tick-status.json` reads a non-`reauth-needed` verdict across two consecutive beats
-- [ ] Cause of the cookie leg's inaction recorded (here or on ai-maestro#95) — "it minted" or "why it could not"
+- [x] `oauth-rotator-tick-status.json` reads a non-`reauth-needed` verdict across two consecutive beats
+      — VERIFIED FIRST-HAND 2026-08-26 10:45: THREE consecutive non-reauth beats (10:43:50,
+      10:44:52, 10:45:53), each `auto: live fmuaddib@gmail.com … Fable=97-100% +SCOPED-WALL` +
+      `STUCK: … the remedy is to move agents OFF Fable`; status file reads
+      `{"nextAction":"stuck","stuck":"all-maxed",…}`. NOTE the intervening 10:33-10:42 window
+      DID read `reauth-needed: slot-unreadable` — that was the server's KEYCHAIN DENIED-LATCH
+      (`[safe-storage] KEYCHAIN DENIED-LATCH SET` at 10:33:21, pm2-error.log): a `security` op
+      hung past 5s exactly while the janitor's browser-capture was rewriting the keychain items,
+      so ALL server-side `security` ops were suppressed — the slots were readable the whole time
+      (verified from a shell: all 6 items, both services, rc=0). The latch's 600s half-open
+      (TRDD-EQJPPZ2L, safe-storage.ts) self-cleared it at the 10:43:50 beat, as designed. This
+      also explains #95's "readSlot intermittently returning null for slots that exist"
+      observation — that was the latch, not transient keychain reads; no card needed.
+- [x] Cause of the cookie leg's inaction recorded (here or on ai-maestro#95) — recorded HERE
+      (STATE UPDATE above, from the janitor's `41ccc80f` commit read first-hand): "why it could
+      not" — `slot_capture_browser.py` had NO PEP-723 dependency header, so `uv run --script`
+      installed nothing and every capture died at `from playwright.sync_api import …`
+      (ModuleNotFoundError) before reaching any work; the leg could not START. Fixed by copying
+      the sibling reauth.py's header; a real capture then filed full-OAuth slots for all three
+      accounts (the box-1 recovery).
 
 ## Units-hazard check on the shared slot schema (janitor coordination)
 
@@ -154,3 +174,8 @@ units across FIELDS already, which is the strongest argument for pinning).
 ## Approval log
 
 - 2026-08-26T04:47:18+0200 — MANDATE (self, min-approval-requirement: none).
+- 2026-08-26T10:47:01+0200 — COMPLETED by ai-maestro-hub-session. All 3 acceptance boxes
+  verified first-hand (recovery from the store; 3 consecutive non-reauth ticks from the log +
+  status file; cookie-leg cause from janitor 41ccc80f). Residual items live elsewhere: the
+  wording nit rides the tick's next touch; the capture dry-run is TRDD-CVQJNW3A (owner-gated);
+  the ms-pin schema change is joint via ai-maestro#95. Unblocks TRDD-X4RK1NUW's 48h window.

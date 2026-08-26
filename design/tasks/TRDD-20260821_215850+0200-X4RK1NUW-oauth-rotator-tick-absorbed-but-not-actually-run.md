@@ -1,13 +1,12 @@
 ---
 trdd-id: X4RK1NUW
 title: oauth-rotator-tick beats but its verdict is not yet clean — one 48h observation window stands before the 2026-08-30 deadline
-column: blocked
-pre-block-column: todo
+column: todo
 scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T04:51:18+0200
+updated: 2026-08-26T10:47:01+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -22,7 +21,7 @@ approval-datetime: 2026-08-21T21:58:50+0200
 derived: false
 npt: []
 eht: []
-blocked-by: [TRDD-3GU9V70H]
+blocked-by: []
 release-via: none
 priority: 0
 severity: critical
@@ -210,5 +209,21 @@ Still `reauth-needed` ⇒ the cookie layer is the thing to check, per the messag
   Alarm-noise defect in the READ layer; card it separately if it persists after 3GU9V70H's
   recovery (a healthy slot set may make it moot).
 
-**NEXT ACTION**: complete TRDD-3GU9V70H (cookie-leg check via ai-maestro#95, else the owner runs
-`/janitor-refresh-cc-logins`), then start the 48h observation window — deadline 2026-08-30.
+~~**NEXT ACTION**: complete TRDD-3GU9V70H (cookie-leg check via ai-maestro#95, else the owner runs
+`/janitor-refresh-cc-logins`), then start the 48h observation window~~ — **SUPERSEDED
+2026-08-26T10:47: 3GU9V70H is COMPLETE** (slots re-minted by the janitor's `41ccc80f` — the
+capture leg had no PEP-723 header and could never start; three consecutive non-`reauth-needed`
+ticks verified 10:43-10:45). This card is UNBLOCKED (`blocked-by: []`, back to `todo`).
+
+**NEXT ACTION**: start the 48h observation window NOW — deadline 2026-08-30. Window opens at the
+first clean beat after 2026-08-26T10:43:50+0200. Sample with
+`grep -a "\[oauth-rotator\]" logs/pm2-out.log | tail -3` plus
+`cat ~/.aimaestro/oauth-rotator-tick-status.json`; a `stuck:all-maxed` verdict is CLEAN for this
+box (it is a model-window verdict, not a credential one — 3GU9V70H's REFUTED blockquote), only a
+`reauth-needed` breaks the window.
+
+**Resolved during 3GU9V70H, do NOT re-investigate:** the `slot-unreadable ↔ refresh-dead` flap
+noted above was the server's KEYCHAIN DENIED-LATCH (`[safe-storage] KEYCHAIN DENIED-LATCH SET`,
+pm2-error.log 10:33:21) — a `security` op hung past 5s while the janitor's browser capture was
+rewriting the keychain items, suppressing every server-side `security` op until the latch's 600s
+half-open self-cleared it. Not a transient `readSlot` fault; no separate card needed.

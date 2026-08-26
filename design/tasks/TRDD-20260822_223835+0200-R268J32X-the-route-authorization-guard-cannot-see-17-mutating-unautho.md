@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:26:00+0200
+updated: 2026-08-26T13:33:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -141,6 +141,37 @@ pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole pi
 
 ## Decisions — the 17, one at a time
 
+### `governance/user` — DECIDED 2026-08-26: FALSE POSITIVE (same shape as `auth/sudo-password`)
+
+`authenticateFromRequest` → 401; `buildAuthContext` → `if (!ctx.isSystemOwner)` → **403 "only the
+system owner can edit the local user profile"** (`:23-24`). Refuses every agent. Same
+property-read gate, same needle gap described below.
+
+### TRIAGE of the 8 still-undecided forward-only routes (2026-08-26) — NOT verdicts
+
+Classified by shape so the next session has a sorted queue. **Every row still needs READING** —
+this card's own history is why: a needle over `isSystemOwner` was 50 % wrong, and
+`auth/sudo-password` + `governance/user` (refusals) vs `trdd/create` (a RANK) are the same token
+meaning opposite things. Treat the table as ordering, never as an answer.
+
+| route | `!isSystemOwner` refusal | owner compare | `enforceAuth` | read priority |
+|---|---|---|---|---|
+| `help/agent` | 0 | 0 | **0** | **1 — no local gate of any kind** |
+| `messages/forward` | 0 | 0 | **0** | **2 — forwards messages, no local gate** |
+| `teams/[id]/kanban-config` | 0 | 0 | **0** | **3** |
+| `teams/[id]/tasks` | 0 | 0 | **0** | **4** |
+| `groups` · `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` | 0 | 0 | 1-2 | 5 (authenticated at least) |
+
+The top four call **nothing** locally — they authenticate nowhere and rely entirely on the
+receiving service. That is precisely the theory TRDD-CAVCTULL found held for 11 routes and failed
+for 1, so it is where a real hole is most likely.
+
+> **INSTRUMENT NOTE, third glob failure of the session.** The first run of this classification
+> emitted **4 rows for 10 inputs** — the shell expanded `[id]` as a CHARACTER CLASS, so every
+> `teams/[id]/…` and `groups/[id]/…` path silently matched nothing and its row vanished. Only the
+> row-count mismatch exposed it. Re-run under `set -f` with an explicit `[ ! -f ] && MISSING FILE`
+> branch, so a path that does not resolve announces itself instead of disappearing.
+
 ### `auth/sudo-password` — DECIDED 2026-08-26: FALSE POSITIVE, and it exposes a NEEDLE GAP
 
 Read first because it is the highest-stakes name in the forward-only tier and calls no
@@ -177,7 +208,7 @@ without re-deriving them. Derived here with the test's OWN predicate
 | route (rel. `app/api/`) | calls `enforceAuth`? | status |
 |---|---|---|
 | `auth/sudo-password` | NO | **DECIDED — FALSE positive** (`!ctx.isSystemOwner` → 403) |
-| `governance/user` | NO | undecided |
+| `governance/user` | NO | **DECIDED — FALSE positive** (`!ctx.isSystemOwner` → 403) |
 | `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` · `groups` | yes | undecided (5) |
 | `help/agent` | NO | undecided |
 | `messages/forward` | NO | undecided |
@@ -188,7 +219,7 @@ without re-deriving them. Derived here with the test's OWN predicate
 | `teams/[id]/tasks` | NO | undecided |
 | `trdd/create` | NO | **already read — FALSE positive** (uses `isSystemOwner` for an authority RANK) |
 
-So **10 genuinely undecided** (was 11; `auth/sudo-password` decided below), not 15. Two are known false positives and two are decided clear.
+So **8 genuinely undecided** (`auth/sudo-password` and `governance/user` both decided below), not 15. Two are known false positives and two are decided clear.
 
 **The `NO-enforceAuth` column is new information and is where I would start.** A route that forwards
 an auth context WITHOUT calling `enforceAuth` is relying entirely on the receiving service to

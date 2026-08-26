@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T06:45:22+0200
+updated: 2026-08-26T12:06:30+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -140,6 +140,37 @@ This ledger stays valid and useful — it governs the Next-side surface and it i
 pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole picture.
 
 ## Decisions — the 17, one at a time
+
+### `conversations/parse` — IN PROGRESS, NOT decided (2026-08-26)
+
+Read the route in full; recording where the question actually sits rather than closing it, because
+the remaining budget was not enough to settle it and a half-read security verdict is worse than an
+open one.
+
+**What is already correct, and is NOT the question:** path traversal is properly closed —
+`enforceAuth` first, a NUL check, `path.resolve` BEFORE the prefix compare (the safe direction),
+an allowlist root of `~/.claude/projects`, `resolved !== allowedRoot && !resolved.startsWith(root
++ path.sep)`, and a `.jsonl` suffix requirement. API2-MAJ-14 did that job. Nothing to fix there.
+
+**The actual question is DISCLOSURE, not traversal.** The route reads ANY conversation transcript
+under `~/.claude/projects/` — i.e. any agent's full session history — and it is gated by
+authentication ALONE. So the decision turns entirely on one thing:
+
+> **Does `enforceAuth` admit an AGENT token, or only the human operator?**
+
+- If human-only: authn-only is CORRECT. The dashboard legitimately shows the operator any agent's
+  conversation, and there is no cross-tenant boundary to cross.
+- If it admits an agent token: agent A can read agent B's ENTIRE transcript. That is a materially
+  worse disclosure than anything else on this ledger — a transcript carries whatever the agent
+  saw, including credentials pasted into logs (this session established that pm2 log lines have
+  already been quoted into public issues, so "transcripts contain secrets" is not hypothetical
+  here).
+
+**THE ONE CHECK that settles it** — read `enforceAuth` in `lib/route-auth.ts` and determine which
+principals it accepts; if it accepts an agent, this is a real hole and gets its own card (the same
+disposition `sessions/[id]/rename` got as TRDD-OYNUJRSB, because the correct policy is a ruling and
+not a one-liner). Do NOT decide it from the route file — the route only calls the helper.
+
 
 Three decided 2026-08-22 — the two blast-radius picks this card named, plus the highest-risk name
 the new forward-only tier exposed. **All three CLEAR.** Recording the reasoning, not just the

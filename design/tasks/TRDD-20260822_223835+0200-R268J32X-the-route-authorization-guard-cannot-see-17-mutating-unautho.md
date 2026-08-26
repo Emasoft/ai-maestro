@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-23T00:13:50+0200
+updated: 2026-08-26T06:43:15+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -402,6 +402,17 @@ so that box stays open.
       **One instance surfaced and was closed** (`GET plugin-builder/builds/[id]`, commit `70f9d67c`)
       while sweeping the subtree above — found by reading siblings, NOT by the needle, which cannot
       see a non-mutating route that calls no guard. One instance is not a sweep, so this stays open.
+- [ ] INHERITED FROM DQVPODKW (2026-08-26, review-fork finding — the back-link that makes the
+      deferral bidirectional): the HEADLESS router carries a systemic auth-shape class this
+      card's audit is the natural home for. `services/headless-router.ts` uses bare
+      `!auth.agentId` as an isSystemOwner proxy at multiple handlers (`userTitle` = 0 hits
+      file-wide; the sync-defaults handler was converted to `buildAuthContext(auth).isSystemOwner`
+      under DQVPODKW, the rest were not) — under the R36/R37 user-authority model that proxy
+      grants a logged-in non-maestro web user whom enforceSystemOwner refuses. Riding with it:
+      the DISCRIMINATING test the sync-defaults suite cannot express (model-ON, mock
+      `isUserAuthorityModelEnabled`) — the existing suite pins gate-EXISTENCE only (observed:
+      reverting the swap reddened 0 of 2). Closing this card without these two leaves both
+      cards internally consistent and the gap unowned.
 
 ## Approval log
 

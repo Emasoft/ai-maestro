@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:42:26+0200
+updated: 2026-08-26T19:44:57+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -200,12 +200,16 @@ Three corrections, all pushing the same direction the report did not look:
    the block this whole finding rests on, from executing at all. Their absence is what makes the
    measured branch the taken one.
 
-   Second spelling of the same landing, from `cwd`: `_resolve_command_value` absolutises any
-   `command` carrying a separator, but `args` are never resolved — so
-   `command: "node"`, `args: ["./payload.js"]`, `cwd: <attacker dir>` reaches the same place.
-   `cwd` is load-bearing for the write-up despite never being exec'd.
+   Second spelling of the same landing: `_resolve_command_value` absolutises any `command`
+   carrying a separator, but **`args` are never resolved** — so `command: "node"`,
+   `args: ["./payload.js"]`, `cwd: <attacker dir>` reaches the same place. Precisely: `Popen`
+   chdirs the child, then NODE resolves the relative script arg against its own cwd — the
+   resolution is the interpreter's, not `exec`'s, so this spelling holds only for interpreters
+   that behave that way. It adds nothing the absolute-path spelling does not already carry;
+   kept only because it shows the unresolved `args` list is the durable half.
 
-   **SECOND INSTANCE of the same pre-`realpath` defect, found in that read** — `route.ts:143`:
+   **A POTENTIAL second carrier of the same pre-`realpath` defect — `route.ts:145`
+   (DOWNGRADED, see below; first written as a confirmed second instance):**
 
    ```ts
    env: { ...process.env, ...(configPath ? { CLAUDE_PLUGIN_ROOT: dirname(resolve(configPath)) } : {}) },
@@ -213,10 +217,23 @@ Three corrections, all pushing the same direction the report did not look:
 
    The attacker-chosen directory is not only substituted TEXTUALLY into the temp `.mcp.json`; it
    is EXPORTED as `CLAUDE_PLUGIN_ROOT` to the child — again from `resolve()`, never
-   `realResolved`. `mcp_discovery.py:145` does `merged_env = os.environ.copy()` and passes it to
-   `Popen(env=merged_env)`, so the spawned MCP server and everything it spawns inherit it. One
-   defect, two carriers; **the remedy must fix both, and a fix applied only to the substitution
-   would look complete and leave the env route live.**
+   `realResolved`. `mcp_discovery.py` copies `os.environ` into `merged_env` and passes it to
+   `Popen(env=merged_env)`, so the spawned MCP server inherits it.
+
+   **DOWNGRADED IN THE SAME SESSION — INHERITING IS NOT CONSUMING, and my "fix both or it stays
+   live" line was BACKWARDS.** I promoted this to a confirmed carrier on the strength of the
+   value being PRESENT in the child env, never having found anything that READS it.
+   `grep -rn CLAUDE_PLUGIN_ROOT scripts_dev/mcp_discovery.py app/api/settings/mcp-discover/route.ts`
+   returns **three hits, all in the route, none in the script**: `:92` a comment, `:95` the
+   textual `.replace()`, `:145` this env export. **The only measured consumer is the route's own
+   substitution — carrier ONE.** So fixing `:95` closes the measured route; it does not, as I
+   wrote, leave a second one open.
+   The env export is worth fixing as the same one-line mistake (a third-party MCP server reading
+   `CLAUDE_PLUGIN_ROOT` is a real Claude-Code convention), but that consumer is **outside this
+   repo and unmeasured**, so it is a POTENTIAL carrier, not a second finding.
+   Scope note: the export is gated `if (configPath)`, so **class C / serverConfig mode never
+   carries it** — it applies only to the symlink escape, the mode where an attacker had to work
+   for it.
 
    BOTH routes are uncontained — the `args` list is not *stronger*, only simpler to demonstrate,
    since the resolver hands back an absolute `command` unchanged. And `_build_client` (`:1442`,

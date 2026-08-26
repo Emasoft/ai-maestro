@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T06:43:15+0200
+updated: 2026-08-26T06:45:22+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -412,7 +412,13 @@ so that box stays open.
       the DISCRIMINATING test the sync-defaults suite cannot express (model-ON, mock
       `isUserAuthorityModelEnabled`) — the existing suite pins gate-EXISTENCE only (observed:
       reverting the swap reddened 0 of 2). Closing this card without these two leaves both
-      cards internally consistent and the gap unowned.
+      cards internally consistent and the gap unowned. DISTINCT FROM TRDD-8Q5EVGV1 (settling
+      grep 2026-08-26: `isSystemOwner|!auth.agentId` = 0 hits on that card): 8Q5EVGV1 is
+      "no per-handler AUTHENTICATION" (141 handlers); this class is "authenticates but derives
+      isSystemOwner with the wrong predicate". Same 252-handler surface though, so a router-wide
+      8Q5EVGV1 redesign may fix this as a side effect — close this bullet against WHICHEVER
+      card lands the fix, re-verified by the userTitle grep AND the 0-red revert-neuter
+      flipping red, never by the sibling card's closure alone (the stale-parked-blocker shape).
 
 ## Approval log
 

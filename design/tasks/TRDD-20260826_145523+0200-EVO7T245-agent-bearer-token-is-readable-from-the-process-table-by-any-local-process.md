@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T16:41:00+0200
+updated: 2026-08-26T16:23:38+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -467,17 +467,85 @@ enumerate another's processes at all.** This is the first option in the whole ca
 attack surface rather than guarding it, and it needs no OS accounts and no native code.
 
 **STILL UNVERIFIED — steps 5 and 6, and 5 can still kill it:**
-- **Does PTY streaming survive containerisation?** The dashboard's core feature is node-pty over
-  WebSocket. If a containerised agent cannot stream its terminal, the direction dies on product
-  grounds regardless of how good the security is. **This is the next thing to measure.**
-- Cost per agent (memory, startup) against a ~20-agent fleet.
-- Whether the existing docker path is complete enough to adopt, or is a stub with one entry point.
+- ~~**Does PTY streaming survive containerisation?** … **This is the next thing to measure.**~~
+  **ANSWERED 2026-08-26 — see STEP 5 below. YES on the container side (it is built and speaks this
+  protocol); the host-side routing was REMOVED and must be rebuilt.**
+- Cost per agent (memory, startup) against a ~20-agent fleet. **STILL UNMEASURED (step 6).**
+- ~~Whether the existing docker path is complete enough to adopt, or is a stub with one entry
+  point.~~ **ANSWERED: the container half is complete, the host half is absent, and the image is
+  not built. See STEP 5.**
 
-**What I have NOT verified, and must be before this is a plan:** whether that docker path actually
+**What I have NOT verified, and must be before this is a plan:** ~~whether that docker path actually
 runs agents in containers today or only manages remote hosts; how complete it is; whether the
-dashboard's PTY streaming works through it; and the performance cost of a container per agent.
-**Those are the next measurements** — I am naming a direction with an existing foothold, not
-claiming a finished answer.
+dashboard's PTY streaming works through it;~~ **all three answered below** — and the performance
+cost of a container per agent, **which remains the one open measurement**.
+
+### ⚠ STEP 5 ANSWERED 2026-08-26 — READ-ONLY, NO CONTAINER CREATED. It does **not** kill the direction.
+
+I deferred step 5 as a mutating step (creating a real containerised agent on the USER's machine).
+It turned out to be answerable **from the code**, which is the cheaper rung and needed no mutation.
+
+**The question was "does PTY streaming survive containerisation?" The answer has two halves and
+they point opposite ways.**
+
+**The CONTAINER half is BUILT, and it speaks this dashboard's protocol.** `agent-container/` is not
+a sketch — `agent-server.js` (11 444 bytes) runs a `ws` server on **`/term`**, spawns
+**`node-pty`** against `tmux attach-session -t <session>` (`:162`), fans one PTY out to multiple
+clients (`:190`), and handles `input` / `resize` / `ping` / **`set-logging`** (`:225-255`). That
+last one is a *host-side* concept, which is evidence it was written against this dashboard rather
+than adapted. `/health` is served (`:45`), the Dockerfile installs tmux + node 20 + the Claude Code
+CLI and `EXPOSE 23000`. **Nothing about a container prevents PTY streaming.**
+
+**The HOST half is the gap, and it was REMOVED rather than never built.** server.mjs says so twice,
+verbatim:
+
+```
+server.mjs:852   // NOTE: Container agent handling removed - not yet implemented
+server.mjs:853   // Future: Add handleContainerAgent() when cloud deployment is supported
+server.mjs:1276  // NOTE: Container/cloud agent routing is not yet implemented
+server.mjs:1277  // Future: Check agent metadata for cloud deployment and proxy to container WebSocket
+server.mjs:1278  // Currently all agents are local tmux sessions
+```
+
+Measured, not inferred: `agents-docker-service.ts:246` writes
+`websocketUrl: ws://localhost:${port}/term` into the agent record, and **that field has ZERO
+readers**. The only other hits are a type declaration and a *different* route's request body
+(`agents-core-service.ts:128, :1162`). The client builds its URL from `window.location.host`
+(`hooks/useWebSocket.ts:63`, `app/immersive/page.tsx:159`, `app/companion/page.tsx:279`), and
+`/term` routes on **hostId** only (`server.mjs:1264 handleRemoteWorker`) before falling through to
+the local tmux path.
+
+**So a "containerised" agent today is a DUPLICATE, and the half you can see is the unsafe half.**
+`agents-docker-service.ts:232` passes `createSession: true`, which reaches
+`element-management-service.ts:10669-10672` → `sessions-service.ts:1014` →
+`runtime.createSession` = **a HOST tmux session**. The container runs its own tmux that nothing
+streams; the host tmux session is what the dashboard attaches to — and it is exactly the
+`send-keys` impersonation surface this card demonstrated. **Containerising an agent today buys
+zero isolation and costs a second agent process.**
+
+**Two more facts before anyone builds on this:**
+
+1. **The image does not exist.** `docker images` → no `ai-maestro-agent` (control: 8 images
+   present). `agents-docker-service.ts:202` runs `ai-maestro-agent:latest`, so the path fails at
+   `docker run` today. `agent-container/Dockerfile` is what builds it.
+2. **The container's `/term` is UNAUTHENTICATED, and `-p ${port}:23000` binds 0.0.0.0.** Twelve
+   auth-vocabulary hits in `agent-server.js` are **all** git credential config; not one touches the
+   WebSocket handshake (control: `lib/ws-auth-gate.ts` has 12 hits of the same needles and they ARE
+   the auth). The host's `/term` deep-validates a credential; the container's accepts anyone who
+   can reach the port and hands them an interactive PTY on the agent's tmux. **That is a REMOTE
+   unauthenticated shell — strictly worse than the local exposure this card is about**, and it must
+   be closed in the same change that wires the routing (bind `127.0.0.1:port:23000`, and require a
+   credential on the container socket).
+
+**Verdict: step 5 does not kill containers. It converts the direction from "unknown" to "named
+work".** The isolation property still holds and is the reason to want it — a per-container tmux
+server makes cross-agent `send-keys` impossible **by construction**, which no credential scheme
+achieved. What is now known to be required: (i) `handleContainerAgent()` in `/term`, reading
+`deployment.cloud.websocketUrl`; (ii) **stop creating the host tmux session** for a container
+agent; (iii) authenticate + loopback-bind the container socket; (iv) build the image.
+
+Still unmeasured, and honestly so: **per-agent cost against a ~20-agent fleet** (step 6). A Debian
+image with node 20 + the Claude CLI per agent is not free, and I have not measured it.
 
 ### Q: can one user control another user's tmux? YES — mechanism verified
 
@@ -604,6 +672,22 @@ removes the world-readable half; it is not a resolution.
 - [ ] Live `ps`-during-call probe with its positive control
 - [ ] Stage 2 implemented; `AID_AUTH` removed from the agent environment
 - [ ] `ps eww` on a live agent shows no token
+- [x] **Container step 5 answered 2026-08-26, read-only** — PTY streaming is NOT blocked by
+      containerisation: `agent-container/agent-server.js` already serves `/term` over node-pty and
+      speaks this dashboard's exact message set. The gap is host-side routing, removed and
+      documented as such at `server.mjs:852` and `:1276`
+- [ ] **Container step 6 — the ONE open measurement:** per-agent container cost (memory, startup)
+      against a ~20-agent fleet. Needs a real container; a mutating step
+- [ ] If containers are chosen: `handleContainerAgent()` in `/term` reading
+      `deployment.cloud.websocketUrl` (currently a field with zero readers)
+- [ ] If containers are chosen: **stop creating the host tmux session** for a container agent
+      (`agents-docker-service.ts:232` `createSession: true`) — today it duplicates the agent and
+      re-exposes the exact `send-keys` surface this card is about
+- [ ] If containers are chosen: authenticate the container's `/term` and bind it to
+      `127.0.0.1` — today it is unauthenticated on 0.0.0.0, a REMOTE shell, worse than the local
+      exposure filed here
+- [ ] If containers are chosen: build `ai-maestro-agent:latest` (absent today, so `docker run`
+      fails at `agents-docker-service.ts:202`)
 
 ## Approval log
 

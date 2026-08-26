@@ -230,6 +230,30 @@ Two consequences for planning:
 Before shipping any confinement, enumerate: what does an unconfined process exec, source, or
 resolve-what-to-exec from, that the confined party can write?
 
+
+^ATOM-F8O3-0EVD [desc: "A guard in app/api/** protects ONE of this repo's two server modes — headless calls the service directly — and a route-level test reports the half-fix as fixed.", keywords: I_guarded_the_route_and_the_vulnerability_was_still_live headless_router_reimplements_routes my_fix_covered_one_of_two_server_modes route-level_test_reported_it_fixed, ocd: 2026-08-26, lmd: 2026-08-26]
+
+Measured on TRDD-91TLL7DW: `POST /api/teams/notify` was guarded in
+`app/api/teams/notify/route.ts`, tested at route level, 4/4 green, reported done. The
+vulnerability stayed FULLY LIVE — `services/headless-router.ts` calls `notifyTeamAgents()`
+directly and never executes `app/api/**`. That handler had **no auth at all**, not even
+`authenticateAgent`, while its sibling three lines below did.
+
+**Put the guard in the SERVICE both modes reach, and test it THERE.** A route-level test for a
+service-level property is what makes the half-fix look complete.
+
+What exposed it: `tests/unit/headless-handler-auth-ledger.test.ts` carries an
+`UNGUARDED_LEDGER` whose rule is *"Guard one → delete its line here. Never add a line."*
+`POST /^\/api\/teams\/notify$/` was in it, and following that line found the second code path.
+**Treat that ledger as the index of where the second implementation lives.**
+
+Passing identity: spread the body FIRST and the verified identity LAST
+(`{...body, requestingAgentId: auth.agentId}`) — the other order lets a caller supply its own
+`requestingAgentId` and authorize itself. Enforce a missing identity as a REFUSAL, never as
+system-owner (the LIB2-CRIT-02 shape this repo has already been bitten by).
+
+See also [[two-server-modes-the-headless-router-reimplements-routes]].
+
 ## Notes and lessons learned
 
 [^1]: [id: ATOM-R6ML-4HWR, status: valid, supersedes: ATOM-CQIV-P55N, desc: "The container-only conclusion was measured-refuted on 2026-08-26 and the named hole was not the deepest one.", keywords: "the_boundary_belongs_at_the_container is_a_container_required_to_isolate_agents shared_tmux_server_is_the_hole containers_are_the_only_fix", ocd: 2026-08-26, lmd: 2026-08-26] DO NOT conclude that a container is the only boundary, or that the shared tmux server is THE hole, BECAUSE both were refuted by measurement on 2026-08-26. A seatbelt profile confines agents under one uid and a shared tmux server (see the seatbelt atom on this page) — the earlier dismissal of sandboxing used the wrong operation class and an unresolved path. And the tmux socket is not the deepest hole: the shared same-uid key store and the writable server tree both defeat every channel-level control, so ranking tmux first mis-orders the work. DO say instead: the shared tmux server is ONE control channel among an enumerable set, closable without containers; the container's real advantage is that it is default-deny while seatbelt is a deny-list needing an owner and a suite. SUPERSEDED BODY: **NO CREDENTIAL DESIGN GIVES AGENT ISOLATION, BECAUSE ANY AGENT CAN DRIVE ANY OTHER AGENT'S PANE.** Demonstrated 2026-08-26 (TRDD-EVO7T245): `tmux send-keys -t <other-agent> …` injects a command, and the injected process's ancestry resolves to the VICTIM's `pane_pid`: ``` victim pane_pid = 98120 ; injected sleep pid = 98511 ancestry: 98511 -> 98120 REACHES the victim pane: YES ``` The tmux socket is per-USER (`/tmp/tmux-<uid>`, mode 0700) and every agent is that user, so the shared tmux server is the hole. **A peer-credential scheme (kernel-attested PID → pane → agent) is verified to WORK and is still defeated**, because the attacker does not forge identity — it makes the victim act. *"Which agent is this process"* has a true answer the attacker controls. **This is a PRE-EXISTING hole, independent of any credential work.** It is present today. **It cannot be closed within one uid.** Measured: POSIX permissions and ACLs cannot separate principals the kernel considers identical (the owner always has access, so a per-agent socket path buys nothing); and macOS `sandbox-exec` DOES enforce (`(deny default)` → `execvp failed`, exit 71) but the permissive `(allow default)` + targeted-`deny` shape **failed to deny** in two rule forms. **So the boundary must be a CONTAINER, not a credential** — a separate PID namespace means one agent cannot even `ps` another, which removes the exposures rather than mitigating them, needs no OS user accounts, and is cross-platform. `services/agents-docker-service.ts` already exists. Whether that path is complete is UNVERIFIED.

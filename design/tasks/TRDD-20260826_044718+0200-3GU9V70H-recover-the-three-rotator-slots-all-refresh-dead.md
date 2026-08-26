@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T04:47:18+0200
-updated: 2026-08-26T10:16:48+0200
+updated: 2026-08-26T10:18:23+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -84,8 +84,9 @@ message-envelope TTL, unrelated to the slot schema.
 (candidate: cooldown/failure store never cleared by fresh slot fp) and whether the next natural
 tick heals it — PRESCRIPTION SUPERSEDED IN PART by the write-set section above: if the
 predicate reads a TS-side cache, the fix is INVALIDATION at onset, NOT the A8DPTDOU
-clear-gate mirror this line originally prescribed (run `grep -n -A15 surveyAlternates
-lib/oauth-rotator/tick.ts` as the diagnosis first step — it decides which); (2) the janitor's check 1:
+clear-gate mirror this line originally prescribed (run
+`grep -n -A15 surveyAlternates lib/oauth-rotator/tick.ts` as the diagnosis first step —
+it decides which); (2) the janitor's check 1:
 prove OUR capture/re-mint leg can EXECUTE end-to-end (a can-it-start dry-run, not a credential
 check) — TRDD-CVQJNW3A's `driveConsent` has never run against the real consent page, so this is
 the same gap they had; owner-gated per that card. (3) Durability: do NOT quote "a month" —

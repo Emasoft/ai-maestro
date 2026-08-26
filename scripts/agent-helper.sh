@@ -209,7 +209,9 @@ maestro_sudo_ensure() {
     if [ -n "${AIMAESTRO_SUDO_TOKEN:-}" ]; then
         return 0
     fi
-    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+    # Real OPEN probe, not `[ -r /dev/tty ]` — access(2) answers true with no
+    # controlling terminal; only opening matches what the read/printf below do.
+    if ! { : < /dev/tty; } 2>/dev/null || ! { : > /dev/tty; } 2>/dev/null; then
         echo "Error: this operation is strict (sudo-gated) and needs the MAESTRO password from a terminal." >&2
         echo "       Non-interactive callers must pre-mint a token into AIMAESTRO_SUDO_TOKEN." >&2
         echo "       The password itself is NEVER accepted as an argument or env var (argv is world-readable via ps)." >&2

@@ -688,7 +688,11 @@ maestro_sudo_ensure() {
         return 0
     fi
     # Fail closed without a real terminal: sudo proves keyboard presence.
-    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+    # A real OPEN probe, not `[ -r /dev/tty ]`: access(2) answers true even for a
+    # process with NO controlling terminal (measured: a session-less spawn then
+    # died on the read with three bash "Device not configured" lines instead of
+    # this refusal). Opening it is the only test that matches what read/printf do.
+    if ! { : < /dev/tty; } 2>/dev/null || ! { : > /dev/tty; } 2>/dev/null; then
         echo "Error: this operation is strict (sudo-gated) and needs the MAESTRO password from a terminal." >&2
         echo "       Non-interactive callers must pre-mint a token into AIMAESTRO_SUDO_TOKEN." >&2
         echo "       The password itself is NEVER accepted as an argument or env var (argv is world-readable via ps)." >&2

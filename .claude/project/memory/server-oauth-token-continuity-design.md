@@ -1,6 +1,6 @@
 ---
 name: server-oauth-token-continuity-design
-description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom / the alert says 'rotation is effectively OFF' or 'the 60s rotator tick has not COMPLETED for N seconds' but the tick is running fine / tick-stalled false alarm / tick-completed.ts stamp frozen for days / an alert reading a stamp the server-side lane never writes"
+description: "how does the ai-maestro server keep agents running across OAuth/API token expiry — rotate / refresh / reauth; does the model or an agent EVER see the token; where is the token stored (keychain); how does the 3-tier fallback cascade work; the R16 token-handling design that was USER-signed-off; why did the rotator NOT rotate an expiring token / DRAIN-GUARD or HOLDING in the log / rotator-stuck:drain-guard-hold / is the rotator stalled or is it refusing on purpose / it rotated off an account that still had headroom / the alert says 'rotation is effectively OFF' or 'the 60s rotator tick has not COMPLETED for N seconds' but the tick is running fine / tick-stalled false alarm / tick-completed.ts stamp frozen for days / an alert reading a stamp the server-side lane never writes / did a guard land in front of the bookkeeping instead of the mutation / keychain says one account and state.json says another / split-brain after a rotation / the live-identity beacon disagrees with the state index / evidence answers only the question you point it at / I wrote a claim into memory that the source I had just read disproves / host state leaked into a pushed project memory page"
 ocd: 2026-07-16
 lmd: 2026-08-26
 metadata:
@@ -197,7 +197,8 @@ the claim made for it. The sequence is the lesson:
 
 1. **`rotatorRoot()` silently fell through to the legacy standalone root** whenever the
    canonical DATA-dir root lacked `state.json`. Safe only if the two agree; measured, they did
-   not (`live=ipazia/3 slots/2026-08-27` vs `live=fmuaddib/2 slots/2026-05-30`). The canonical
+   not — they named DIFFERENT live accounts, with different slot counts, three months apart
+   (the concrete values are host state and live in the LOCAL note, not here). The canonical
    root lives in the janitor's plugin DATA dir, which a plain plugin reinstall removes — so the
    daemon would have adopted a months-old state naming a DIFFERENT live account. Fixed: refuse,
    with an operator opt-in preserving the genuine migration case.
@@ -223,13 +224,23 @@ the claim made for it. The sequence is the lesson:
 
 **Why the split-brain is the worst of the four:** an empty store announces itself (zero slots,
 the janitor's DESYNC probe fires) while a live/state disagreement is *self-consistent to every
-reader in isolation*, and for a long time nothing in either tree compared `state.json` against
-the live credential's actual identity.
+reader in isolation*. **The DATUM to catch it already existed and nothing CONSUMED it**[^1]:
+`switchLiveTo` ends by stamping `live-identity.json` with `{email, fp}` — "the rotator authored
+this live write, so it knows the identity with certainty" — at the moment of the credential
+write. So a state-vs-reality record has been emitted all along; what was missing was any code
+that COMPARED it to `state.json`. The gap was in the reading, not the recording.
+
+Two caveats on that beacon, because a consumer keying on it inherits both: its write sits in a
+best-effort `try/catch` marked "never fail a switch over it", so a rotation whose beacon write
+fails leaves a stale beacon behind; and it is stamped from contexts that can read the primary
+credential (SessionStart), while `state.json` is rewritten every tick — so after any legitimate
+rotation the beacon lags, and a naive comparison reports disagreement on a HEALTHY system.
+Any consumer must abstain when `state` is newer than the beacon rather than cry wolf.
 
 **A reachability argument is only as good as the moment it assumes.** "Unresolved root ⇒
 `defaultState()` ⇒ zero slots ⇒ the candidate loop never runs ⇒ `switchLiveTo` unreachable" is
 true only when the root is unresolved AT LOAD. It says nothing about the root going unresolved
-MID-TICK, with slots already loaded — which is the reachable path.
+MID-TICK, with slots already loaded — which is the reachable path. [^3]
 
 ## See also
 
@@ -250,3 +261,4 @@ MID-TICK, with slots already loaded — which is the reachable path.
   a machine-wide WRITE MUTEX (copy the daemon's tested one), NOT the OS keychain lock — the
   keychain auto-locks and `SecKeychainUnlock` on an already-unlocked keychain false-succeeds. DO
   access keychain ITEMS only and leave the keychain lock STATE to the OS.
+[^3]: [id: ATOM-VC79-V2XG, status: valid, keywords: "evidence_answers_the_question_you_point_it_at read_the_thing_and_reported_the_prior_belief false_claim_written_into_durable_memory host_state_leaked_into_pushed_project_memory memory_atom_believed_without_re-derivation", ocd: 2026-08-26, lmd: 2026-08-26] DO NOT write a memory atom from the belief you held before you read the code, BECAUSE the read answers only the question you pointed it at and leaves every other prior belief untouched. I read `switchLiveTo` IN FULL to settle a write-ordering question, then wrote an atom asserting "nothing in either tree compares state.json against the live credential's identity" — which that same text disproves, four lines below the part I was looking at. DO re-read the source against the CLAIM you are about to durably record, not against the question that made you open it. DO NOT put concrete host state in a `.claude/project/memory/` atom, BECAUSE that store is git-tracked and PUSHED to every cloner. The same atom named two account identifiers derived from the owner's personal email accounts plus this host's slot counts — one commit after I had correctly split a machine-specific note out to LOCAL and told the owner the scope split was right. DO apply the write gate to EVERY atom, not just the obviously machine-specific one. It genericised with nothing lost, which is the tell that the host state never carried the argument. DO treat a memory atom as the HIGHEST evidentiary bar in the corpus, BECAUSE it is the one medium designed to be believed later WITHOUT re-derivation. Every other error this session was caught within the hour by someone re-measuring; these two would have outlived that.

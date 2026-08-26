@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-13T14:05:00+0200
-updated: 2026-08-26T05:16:46+0200
+updated: 2026-08-26T05:18:13+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -96,3 +96,19 @@ One principal, one secret, one prompt:
 - 2026-07-13T14:05:00+0200 — **MANDATE issued by the USER** (min-approval-requirement:
   manager; issuer authority ≥ required approver). Pre-approved: no approval request
   was sent. Born in `design/tasks/`, per the mandate rule.
+
+## ⏵ STATE UPDATE — 2026-08-26 (hub session)
+
+Built and DEPLOYED. `maestro_sudo_ensure` (common.sh + documented family copy in
+agent-helper.sh) fronts all 14 strict call sites; commits e1a8988d + 87459c47 + the TTY
+open-probe fix. Deployed via install-agent-cli.sh + the glob-mirror cp for session/trdd
+(cmp-identical), and verified BY EFFECT through the bare PATH command:
+`aimaestro-teams.sh delete <uuid>` with no TTY/token/AID → exit 1, clean strict refusal,
+zero requests sent. Tests: tests/unit/maestro-sudo-gate.test.ts 6/6; neuters N1 (1 red/5
+green, exactly T1) and N2 (1 red/46 green, exactly T5) — disjoint.
+
+**Open, honestly:** the wrong-password box and the history/ps/argv sweep box — both need a
+real pty/terminal (macOS/Linux `script(1)` divergence documented in the test header). The
+gate's fail-closed OUTCOME for those paths is already pinned; what is unproven is the
+prompt-path behavior under a live terminal. NEXT ACTION: an operator run at a real
+terminal (wrong password once, then `history`/`ps aux` sweep), or a pty harness card.

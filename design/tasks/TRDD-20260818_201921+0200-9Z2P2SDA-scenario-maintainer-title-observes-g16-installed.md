@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-18T20:19:21+0200
-updated: 2026-08-22T01:24:59+0200
+updated: 2026-08-26T05:36:41+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -71,6 +71,21 @@ folder deletion, purge cemetery, STATE-WIPE.
       installs via the Config tab. If the observation can be added as a step to one of those, that
       is a far smaller change than a 41st scenario file — this box's "a new SCEN file exists" was
       written before either was checked.
+      **PREMISE SETTLED (2026-08-26, hub): drive a title CHANGE, and verify from the SERVER LOG.**
+      Two measurements close the box's open questions: (1) the observation target — `ChangeTitle`
+      logs its whole outcome durably: the summary line at
+      `services/element-management-service.ts:4532` (`[ChangeTitle] Agent <id> "<name>": <old> ->
+      <new> (N gates, restart=...)`) and `logDegradedOps('ChangeTitle', ...)` right after it, which
+      is LOUD for any WARN gate — so the scenario's verify step is a read-only grep of the pm2 log
+      (`<project>/logs/pm2-out.log`; Rule 6 allows read-only verification), asserting the
+      `[ChangeTitle]` line exists (positive control) AND no degraded-ops WARN names G15/G16. No
+      dependency on whether the HTTP response surfaces `ops`. (2) the vehicle — extend
+      `SCEN-001_title-change-lifecycle` (which already drives a title change through the UI with
+      the Rule-12 sudo modal) with that one verify step; do NOT author a 41st file and do NOT use
+      wizard CREATION, which runs `CreateAgent`, not `ChangeTitle`.
+      **NEXT ACTION:** add the verify step to SCEN-001 and dispatch a scenario-runner against the
+      live server (a scheduled run — Rule 15: the orchestrator owns the clock; not improvised at
+      the tail of another card).
 - [ ] The scenario has RUN against the live server; the G15/G16 `installed` observation is
       recorded (report + screenshot), or the failure is a bug card.
 - [ ] TRDD-JT3U4ZVM's last box is ticked citing that run, and that card leaves `blocked`.

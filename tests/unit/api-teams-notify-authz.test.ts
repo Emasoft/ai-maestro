@@ -17,6 +17,18 @@
  * The happy-path test is the non-vacuity control: it must stay green under every
  * neuter, which is what proves the two refusals above are the guards talking and
  * not an unrelated failure.
+ *
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(!access\.allowed\)/if (false)/
+ *   → 1 red / 3 green:
+ *       refuses a caller with no access to the team
+ *
+ *   s/if \(foreign\.length > 0\)/if (false)/
+ *   → 1 red / 3 green:
+ *       refuses target agents outside the team even when the caller is authorized
+ *
+ * Each neuter reddens EXACTLY the test named for it and nothing else, and the
+ * control stays green under both — so the two guards are independently pinned.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

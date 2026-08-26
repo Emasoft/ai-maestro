@@ -3,7 +3,7 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-26T06:28:07+0200
+updated: 2026-08-26T06:33:19+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -243,8 +243,18 @@ Adding it:
       but `element-descriptions` (and `publish-plugin`, outside this card) must stay
       agent-callable because Haephestos curls them, and its curls carry no auth header, so
       the persona's auth story must be settled in the same change or the wizard breaks.
-- [ ] `role-plugins/sync-defaults` — a ruling on whether "any authenticated caller may re-assert
-      defaults" is intended
+- [x] `role-plugins/sync-defaults` — RULED and FIXED 2026-08-26 (`9530cc2a`): NOT intended.
+      Measured: `migrateDefaultPluginSettings` executes with implicit system authority (passes
+      `{isSystemOwner: true}` into DeleteMarketplace; rewrites USER_GLOBAL_SETTINGS + every
+      agent's settings.local.json), its own docstring says "Authority: implicit system-owner,
+      called only from … server startup" — and the claimed startup caller DOES NOT EXIST. The
+      only invokers are the Next route and the headless twin, both of which admitted any
+      authenticated agent — a forged-authority path. Fixed on BOTH surfaces: Next route →
+      `enforceSystemOwner`; headless handler → agent tokens 403 (its blanket gate only
+      authenticates). Stale service docstring corrected in the same commit. Pinned by
+      tests/unit/sync-defaults-route-authorization.test.ts (agent 403 + service-not-called,
+      web-session positive control; neuter OBSERVED 1 red / 1 green). Headless
+      handler-auth ledger shrunk by the now-guarded handler.
 - [x] audit `enforceAuth`'s callers outside this subtree — DONE, and it found the guard's next
       blind spot: **26 mutating routes call `enforceAuth` with no authorization, and 17 of them
       are OUTSIDE `app/api/agents/`**, so no guard can see them. Filed as **TRDD-R268J32X**.

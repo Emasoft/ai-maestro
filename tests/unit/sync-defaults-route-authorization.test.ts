@@ -78,8 +78,9 @@ describe('TRDD-DQVPODKW — sync-defaults is system-owner only', () => {
 })
 
 /**
- * NEUTER RUN (recorded after first green run):
- *   mutation: s/if (authErr) return authErr/if (false) return authErr/
- *   predicted: the agent-refusal test reds (service runs for a MEMBER),
- *   the positive control stays green.
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(authErr\) return authErr/if (false) return authErr/   [sync-defaults/route.ts]
+ *   → 1 red / 1 green, exactly as predicted:
+ *       RED: refuses an authenticated AGENT — the fleet-wide settings rewrite is not agent-callable
+ *       green: the positive control (a disabled gate refuses nobody)
  */

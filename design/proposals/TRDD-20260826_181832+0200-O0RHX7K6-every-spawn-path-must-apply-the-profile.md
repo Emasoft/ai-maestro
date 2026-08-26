@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T19:08:00+0200
+updated: 2026-08-26T19:36:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -17,7 +17,7 @@ approved: false
 derived: false
 npt: []
 eht: []
-blocked-by: [TRDD-NB70FKKT]
+blocked-by: []
 release-via: none
 priority: 1
 severity: high
@@ -62,6 +62,13 @@ card it now, while the count is one.
 - [ ] Restart / wake / recovery each demonstrated to produce a CONFINED agent.
 
 ## Prerequisite added 2026-08-26 — TRDD-NB70FKKT
+
+> **`blocked-by:` is deliberately EMPTY, and that is not an oversight.** This card is
+> `column: proposal` — it has not been approved, so it is not in the pipeline and cannot be
+> "blocked" in the pipeline sense. Setting `blocked-by` here produced a real ERROR
+> (`GRAPH-BLOCKED-NOT-BLOCKED`) from `trddgrep validate`. **On approval, this card must enter
+> the board as `blocked` with `blocked-by: [TRDD-NB70FKKT]` until that card is answered.**
+> The prerequisite is recorded below as prose precisely because the field cannot carry it yet.
 
 Do NOT ship this profile as a claimed boundary while an unconfined process executes scripts
 from the agent-writable tree. Found by the janitor session applying this card set's own

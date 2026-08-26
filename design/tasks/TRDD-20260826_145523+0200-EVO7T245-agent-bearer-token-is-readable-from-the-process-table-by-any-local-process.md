@@ -135,11 +135,13 @@ and not applied to the bearer token.**
   that process's argv. Measured as a builtin here — but that is a property of the shell, not of
   the technique.
 
-  **And none of it touches EXPOSURE 2.** Stdin says nothing about `ps eww` / `/proc/<pid>/environ`,
-  nor about a same-user debugger attaching to process memory. Resolve the stdin collision
-  with request bodies explicitly (a `--config` FIFO, or the body via `--data @file` with a 0600
-  temp — noting a 0600 temp is same-user-readable and therefore only acceptable for the BODY,
-  never the token).
+  **Resolve the stdin collision with request bodies explicitly** — some sites already pipe the
+  body, and both cannot naively use `-`. Options: a `--config` FIFO for the header, or the body via
+  `--data @file` with a 0600 temp — noting a 0600 temp is same-user-readable and therefore
+  acceptable for the BODY only, never for the token.
+
+  **And none of this touches EXPOSURE 2.** Stdin says nothing about `ps eww` /
+  `/proc/<pid>/environ`, nor about a same-user debugger attaching to process memory.
 - **STAGE 2 (closes EXPOSURE 2):** UDS + kernel peer credentials, with the server resolving PID →
   agent from the session tree it already owns. Retire `AID_AUTH` from the agent environment
   entirely once this lands — while it remains in the environment, stage 1 is cosmetic.

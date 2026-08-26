@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T15:53:40+0200
+updated: 2026-08-26T16:04:20+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -308,6 +308,56 @@ from same-uid `ps eww` by userspace (the kernel serves it; a process can scribbl
 `environ` after start, but the value is also held in the tmux SESSION environment, and racing that
 is a hack that fails open). **Delete the secret instead of concealing it** — which both (A) and (D)
 already do. A concealment that half-works is worse than none, because it reads as protection.
+
+### VIABILITY VERIFICATION — USER directive 2026-08-26: "verify that A and D are truly viable"
+
+**(A) — VERIFIED END-TO-END. Three links, each measured, none inferred.**
+
+1. **The kernel really does report the peer PID.** `getsockopt(SOL_LOCAL=0, LOCAL_PEERPID=0x002)`
+   over a UDS, exercised from Python (which can reach the syscall Node cannot):
+
+   ```
+   kernel says peer pid : 69080     client CLAIMS pid : 69080     kernel == claim : True
+   kernel != server pid : True
+   ```
+
+   My FIRST version of this test used a same-process thread as the client, so `pid == os.getpid()`
+   was trivially true and proved nothing. Redone with two real processes, which is the only shape
+   that discriminates.
+2. **A PID inside a pane walks up to that pane.** With a child spawned in a live tmux pane:
+   `74982 74485 sleep` — the child's ppid is exactly the `pane_pid` tmux independently reports.
+   Two failed attempts first: one `pgrep -P` chain that found nothing, and one that matched a
+   DIFFERENT session's process because I grepped a generic command name globally instead of
+   scoping to my own pane. Wrong-population, twice, in the same probe.
+3. The server already owns session → agent, so PID → pane → session → agent is complete.
+
+**And (A)'s cost is LOWER than I said.** I scored it as needing a compiled Node addon. It does not
+necessarily: **Python3 ships with macOS and reaches `LOCAL_PEERPID` directly** — that is how the
+test above ran. A small sidecar or helper can own the UDS listener and the peer lookup, so
+"compiled dependency" is one implementation of (A), not a requirement of it. That materially
+narrows the gap to (D).
+
+**PID-reuse is not an exploit here**, worth stating because it is the obvious objection: the
+credential is read from a LIVE connection, so the peer process necessarily still exists while the
+lookup happens. There is no window in which a recycled PID answers for a dead one.
+
+**(D) — VIABLE, WITH ONE CORE CLAIM I CANNOT VERIFY ON THIS MACHINE.**
+
+Verified: macOS enforces permissions on `connect(2)` (mode 0000 → EACCES); tmux sockets are
+relocatable, widenable, and take ACLs.
+
+**NOT verified, and not verifiable here: that a DIFFERENT uid is actually denied.** Every test ran
+as one user. Proving it needs a second account, and creating a system user is a privileged,
+hard-to-reverse change I will not make unasked.
+
+What the evidence supports is an INFERENCE, labelled as one: the EACCES at mode 0000 proves the
+kernel **evaluates file permissions at connect time**, and file permissions are uid-based, so a
+foreign uid lacking bits would be refused by the same check. Standard POSIX, consistent with the
+measurement — but inferred, not observed.
+
+**So the two are not equally proven.** (A) is verified in every link. (D) rests on one unobserved
+step plus an unmeasured operational cost (per-uid provisioning, the privileged spawn helper). If
+the ruling wants certainty today, (A) is the one that has it.
 
 ### Q: can one user control another user's tmux? YES — mechanism verified
 

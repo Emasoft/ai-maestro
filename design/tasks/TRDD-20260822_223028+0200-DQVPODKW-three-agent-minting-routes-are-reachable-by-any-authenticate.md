@@ -3,7 +3,7 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-26T06:33:19+0200
+updated: 2026-08-26T06:34:18+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -243,6 +243,14 @@ Adding it:
       but `element-descriptions` (and `publish-plugin`, outside this card) must stay
       agent-callable because Haephestos curls them, and its curls carry no auth header, so
       the persona's auth story must be settled in the same change or the wizard breaks.
+      MEASURED 2026-08-26: the persona's bare curls are ALREADY broken — authenticateAgent
+      with no header and no cookie refuses (BYPASS-2 closed), and creation-helper-service
+      injects NO credential into the Haephestos session (0 hits for
+      AID_AUTH|Bearer|Authorization|aim_tk). So the follow-up's real shape is: (a) give
+      Haephestos a credential (or move its two lookups to files/stdin like
+      raw-materials-state.json already does), THEN (b) enforceSystemOwner on the six
+      wizard-only routes. Both halves in one change; (b) alone breaks nothing further but
+      fixes only the griefing surface.
 - [x] `role-plugins/sync-defaults` — RULED and FIXED 2026-08-26 (`9530cc2a`): NOT intended.
       Measured: `migrateDefaultPluginSettings` executes with implicit system authority (passes
       `{isSystemOwner: true}` into DeleteMarketplace; rewrites USER_GLOBAL_SETTINGS + every

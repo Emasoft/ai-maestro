@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T20:13:37+0200
+updated: 2026-08-26T20:17:45+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -204,6 +204,25 @@ argv) rather than a resolved binary:
 `handoff_clear_verify.py:349` (`cmd.split()`), `lib/agentlens_probe.py:199`
 (`shlex.split(command)`), `lib/fleet_inject.py:571` (`plan['argv']` — argv from a data
 structure), `oauth_rotator/safe_storage.py:519/532/548` (argv built by a helper).
+
+#### The six, READ — 2 new class-B sites, 1 already covered, 3 false positives
+
+| site | what it is | verdict |
+|---|---|---|
+| `handoff_clear_verify.py:344-350` | `$CLAUDE_PLUGIN_OPTION_HANDOFF_VERIFY_CONTEXT_COMMAND`, `.split()` → argv | **NEW class B** |
+| `lib/agentlens_probe.py:185,199` | `probe_json(command)` → `shlex.split(command)`; its own noqa says "argv from config" | **NEW class B** (same agentlensPro-command family) |
+| `lib/fleet_inject.py:571` | `plan["argv"]`, a resolved CLI + validated session | already covered — this is a DOWNSTREAM consumer of the `$AIMAESTRO_CLI` chain the card already ranks at 2 |
+| `oauth_rotator/safe_storage.py:519/532/548` | helpers returning a hardcoded `["secret-tool", …]` | **NOT hits** — argv[0] is a literal; my resolver simply could not follow it through a function return |
+
+**The new site differs from the heartbeat-cost one in the way that matters: it is DEFAULT-ON.**
+`CLAUDE_PLUGIN_OPTION_HEARTBEAT_COST_COMMAND` returns early when unset (opt-in). This one
+defaults to a non-empty `agentlenspro get_burn_status`, so absent any config it runs and resolves
+`agentlenspro` through PATH on every verify. Same class, strictly wider exposure.
+
+**Instrument correction factor for the remaining 52:** 3 of these 6 were false positives from one
+blind spot — the resolver cannot follow argv through a helper's RETURN, only through assignments
+in the same function. Expect the same shape in the rest; a site whose argv comes from a
+`*_argv()`-style helper is probably literal.
 
 Two instrument caveats, stated because the numbers are the deliverable:
 - The triage script walks `Module` AND `FunctionDef`, so **its bucket counts are double-counted

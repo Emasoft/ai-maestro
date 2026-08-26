@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:47:00+0200
+updated: 2026-08-26T13:45:18+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -206,6 +206,44 @@ arbitrary agent id.
 system owner can edit the local user profile"** (`:23-24`). Refuses every agent. Same
 property-read gate, same needle gap described below.
 
+### `messages/forward` — DECIDED 2026-08-26: CLEAR, and the row was stale rather than wrong
+
+Read priority 2 said *"forwards messages, no local gate"*. The `enforceAuth` column was accurate —
+the route calls `authenticateFromRequest` directly, not `enforceAuth` — and the inference drawn
+from it was not. **Four refusals sit on this path, every one read first-hand:**
+
+1. `app/api/messages/forward/route.ts` — `authenticateFromRequest` → 401 on error.
+2. **The same route OVERRIDES the caller's claimed sender:** `if (auth.agentId) body.fromSession =
+   auth.agentId`. So an agent cannot forward AS another agent, whatever it posts.
+3. `services/messages-service.ts::forwardMessage` → `denyForeignMailbox(fromSession, authContext)`
+   (`:425`), a real gate and not a shape: `resolveAgentIdentifier(id).agentId !==
+   authContext.agentId` → **403 "you may only access your own mailbox"**, with an agent that has no
+   resolvable identity refused rather than fallen through (`:86-88`).
+4. `lib/message-send.ts::forwardFromUI` — a missing `authContext` throws
+   `MessageRouteDenied('forbidden_no_auth_context')` (the G04.AUTH precedent, never read as owner);
+   then `checkMessageAllowed` (team-governance filter) **and** `assertForwardRouteAllowed` (the R6
+   title graph, `:405`, fail-closed via `graph_check_unavailable`) both run.
+
+**The disclosure question this tier exists to ask is answered at `lib/message-send.ts:510`:**
+
+```ts
+originalMessage = await getMessage(fromResolved.agentId, originalMessageId)
+```
+
+The lookup is **scoped to the sender's own mailbox**, and the sender is the authenticated agent by
+(2). So the "forward to yourself to read someone else's mail" attack — the one that IS live on
+`conversations/parse` (TRDD-RC33OAFQ) — cannot reach anything here.
+
+**Noted and deliberately NOT filed:** `providedOriginalMessage` (body `originalMessage`) skips that
+lookup entirely. It is caller-supplied content, so it discloses nothing, and the forwarded wrapper's
+`from`/`fromAlias`/`fromSession` are all built from `fromResolved`, never from the body — so the
+quoted text can be forged while the attribution cannot. That is what a forward-note feature is.
+
+**Why the row read as debt:** every guard above was ADDED by TRDD-YEE33F3A, whose comments in both
+files record that this route *"authenticated and then discarded the result"*. The ledger row
+describes the route before that fix. **A forward-only row is a question, not a finding** — this is
+the second one (after `help/agent`) whose answer already lives on the receiving side.
+
 ### TRIAGE of the 8 still-undecided forward-only routes (2026-08-26) — NOT verdicts
 
 Classified by shape so the next session has a sorted queue. **Every row still needs READING** —
@@ -216,7 +254,7 @@ meaning opposite things. Treat the table as ordering, never as an answer.
 | route | `!isSystemOwner` refusal | owner compare | `enforceAuth` | read priority |
 |---|---|---|---|---|
 | `help/agent` | 0 | 0 | 0 (but DOES `authenticateFromRequest`) | **DECIDED — CLEAR** (forwards into `DeleteAgent` G00 → `authorize()`) |
-| `messages/forward` | 0 | 0 | **0** | **2 — forwards messages, no local gate** |
+| `messages/forward` | 0 | 0 | 0 (but DOES `authenticateFromRequest`) | **DECIDED — CLEAR** (own-mailbox scoped lookup + R6 gate) |
 | `teams/[id]/kanban-config` | 0 | 0 | **0** | **3** |
 | `teams/[id]/tasks` | 0 | 0 | **0** | **4** |
 | `groups` · `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` | 0 | 0 | 1-2 | 5 (authenticated at least) |
@@ -270,7 +308,7 @@ without re-deriving them. Derived here with the test's OWN predicate
 | `governance/user` | NO | **DECIDED — FALSE positive** (`!ctx.isSystemOwner` → 403) |
 | `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` · `groups` | yes | undecided (5) |
 | `help/agent` | NO | undecided |
-| `messages/forward` | NO | undecided |
+| `messages/forward` | NO | **CLEAR** — own-mailbox scoped lookup + R6 graph (2026-08-26) |
 | `messages` | NO | **already read — FALSE positive** (uses `auth.agentId` to OVERRIDE a client param) |
 | `sessions/create` | yes | **already DECIDED clear** |
 | `teams/[id]/batch-create-agents` | NO | **already DECIDED clear** |

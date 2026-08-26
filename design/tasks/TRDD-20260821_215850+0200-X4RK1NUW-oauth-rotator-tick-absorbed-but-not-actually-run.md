@@ -184,8 +184,11 @@ Still `reauth-needed` ⇒ the cookie layer is the thing to check, per the messag
 ### 2026-08-26T04:47 — box-2 deploy VERIFIED; card BLOCKED on credential recovery (TRDD-3GU9V70H)
 
 - **Box-2 fix is DEPLOYED** (review-fork-corrected wording): the live pm2 process was last (re)started
-  **2026-08-26 04:27:34** (`pm2_env`: created 04:27:32, restarts 5, unstable 0 — a deliberate
-  fresh start, not a crash loop; the whole fleet restarted ~04:2x), which
+  **2026-08-26 04:27:34** (`~/.pm2/pm2.log` events, the thing itself: every restart in the last
+  24h is `Stopping app` + SIGINT — deliberate operator restarts at 17:24 / 18:16 / 23:05 on
+  08-25 and 04:27 today, zero unexpected exits; note `pm2_env.created_at` re-stamps per
+  execution and `unstable_restarts` only sees sub-min_uptime deaths, so neither counter alone
+  proves this — the daemon log does. The handoff's "restart ~00:05" was off: it was 23:05:31), which
   post-dates the fix by 5 days, and `server-tick.ts` is runtime-imported, so the code in memory
   is the fixed one. The "landed, undeployed" ⛔ above is resolved. **The discriminating
   BEHAVIOR is honestly unproven**: old and new code diverge only when `all-maxed` and a reason

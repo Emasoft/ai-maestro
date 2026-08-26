@@ -196,6 +196,33 @@ export function isDenial(stderr: string): boolean {
 }
 
 /**
+ * A LEAK-PROOF one-line description of a `security` argv, for the slow-op log. ALLOWLIST by
+ * construction: it emits the verb plus the values of `-s` (service) and `-a` (account) and
+ * NOTHING else, so no future argv shape can leak through it.
+ *
+ * A blocklist here would be a live credential leak, and the first draft of this WAS one — it
+ * logged `argv.join(' ')`, reasoning that "`-w` prints to stdout so no secret is on the command
+ * line". That is true of `macosRetrieveArgv`, where `-w` is a valueless flag meaning "print the
+ * password", and FALSE of `macosStoreArgv`, where `-w <secret>` carries the token itself,
+ * deliberately (the stdin form truncates at 128 bytes — TRDD-5539cd6e). Same flag, opposite
+ * meaning, one function apart; a WRITE that stalls past the threshold would have written a live
+ * OAuth token into pm2-error.log. Caught by the commit security review, not by the author.
+ *
+ * Redacting "the token after `-w`" would also have worked TODAY and is exactly the fragile shape
+ * that broke: it depends on a per-verb fact about one flag. The allowlist depends on nothing.
+ */
+export function describeSecurityArgv(argv: string[]): string {
+  const verb = argv[1] ?? '<none>'
+  const valueOf = (flag: string): string | null => {
+    const i = argv.indexOf(flag)
+    return i >= 0 && i + 1 < argv.length ? argv[i + 1] : null
+  }
+  const svc = valueOf('-s')
+  const acct = valueOf('-a')
+  return `verb=${verb}${svc === null ? '' : ` service=${svc}`}${acct === null ? '' : ` account=${acct}`}`
+}
+
+/**
  * THE single gate EVERY `security` invocation routes through. Enforces, in order: denied-latch
  * short-circuit BEFORE spawning → hard timeout → latch-on-denial. Never throws. When the latch
  * is unset and no denial occurs this is a plain `spawnSync`.
@@ -235,13 +262,10 @@ export function runSecurity(argv: string[], opts: { timeoutMs?: number } = {}): 
   const elapsedMs = Date.now() - t0
   if (elapsedMs >= SLOW_SECURITY_LOG_MS) {
     try {
-      // argv[0] is always `security`; argv[1] is the verb and the rest are flags + the SERVICE
-      // and ACCOUNT names. No secret is on the command line (`-w` prints to stdout), so logging
-      // argv is safe — and it is the whole point: which item blocks is the question.
       console.error(
         `[safe-storage] SLOW \`security\` op: ${elapsedMs}ms (timeout ${timeoutMs}ms${
           res.error ? ', TIMED OUT' : ''
-        }${halfOpen ? ', half-open probe' : ''}) argv=${argv.join(' ')}`,
+        }${halfOpen ? ', half-open probe' : ''}) ${describeSecurityArgv(argv)}`,
       )
     } catch {
       // never let a logging failure escape the credential path

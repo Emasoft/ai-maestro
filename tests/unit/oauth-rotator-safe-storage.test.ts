@@ -14,6 +14,7 @@ import {
   isDenial,
   strictB64Utf8Decode,
   runSecurity,
+  describeSecurityArgv,
   setKeychainDenied,
   clearKeychainDenied,
   keychainDeniedLatched,
@@ -227,7 +228,7 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
     }
     const slow = seen.filter(l => l.includes('SLOW `security` op'))
     expect(slow).toHaveLength(1)
-    expect(slow[0]).toMatch(/argv=sleep 3/)
+    expect(slow[0]).toMatch(/verb=3/) // argv[1] of ['sleep','3']
     expect(slow[0]).toMatch(/SLOW `security` op: \d{4,}ms/)
     expect(slow[0]).not.toMatch(/TIMED OUT/)
   })
@@ -247,6 +248,27 @@ describe('denied-latch circuit breaker (isolated temp dir)', () => {
     expect(slow).toHaveLength(1)
     expect(slow[0]).toMatch(/TIMED OUT/)
     expect(slow[0]).toMatch(/timeout 2700ms/)
+  })
+
+  // THE LEAK GUARD. The first draft of the slow-op log printed `argv.join(' ')`, which would have
+  // written a live OAuth token to pm2-error.log on any slow WRITE: `macosStoreArgv` carries the
+  // secret ON ARGV as `-w <secret>` (deliberately — the stdin form truncates at 128 bytes), while
+  // `macosRetrieveArgv`'s `-w` is a valueless "print the password" flag. Same flag, opposite
+  // meaning. This asserts the description is an ALLOWLIST, so no argv shape can leak through it.
+  it('describeSecurityArgv NEVER emits the secret from a STORE argv', () => {
+    const secret = 'sk-ant-oat01-THIS-MUST-NEVER-BE-LOGGED'
+    const line = describeSecurityArgv(macosStoreArgv('svc-x', 'acct-y', secret))
+    expect(line).not.toContain(secret)
+    expect(line).not.toContain('sk-ant')
+    // ...and it still answers the question the log exists for: WHICH item blocked.
+    expect(line).toContain('verb=add-generic-password')
+    expect(line).toContain('service=svc-x')
+    expect(line).toContain('account=acct-y')
+  })
+
+  it('describeSecurityArgv describes a RETRIEVE argv without the -w flag leaking a value', () => {
+    const line = describeSecurityArgv(macosRetrieveArgv('svc-r', 'acct-r'))
+    expect(line).toBe('verb=find-generic-password service=svc-r account=acct-r')
   })
 
   it('runSecurity stays SILENT for a fast spawn (a healthy box logs nothing)', () => {

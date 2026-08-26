@@ -26,7 +26,9 @@ release-via: none
 priority: 0
 severity: critical
 effort: M
-labels: [fleet-ask, hub-blocked]
+labels: [fleet-ask]
+blocker-probe: bash /Users/emanuelesabetta/.claude/plugins/cache/ai-maestro-plugins/ai-maestro-janitor/3.3.26/scripts/oauth_rotator/lifetime-status.sh
+blocker-holds-if: match:(reauth-needed|refresh-dead|expired|no session)
 external-refs: [Emasoft/ai-maestro#95, TRDD-1GGQ4HWY, TRDD-DPPYVLVH]
 ---
 

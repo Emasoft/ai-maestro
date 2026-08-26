@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T12:35:00+0200
+updated: 2026-08-26T12:52:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -140,6 +140,25 @@ This ledger stays valid and useful — it governs the Next-side surface and it i
 pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole picture.
 
 ## Decisions — the 17, one at a time
+
+### `plugin-builder/scan-repo` — DECIDED 2026-08-26: authn-only is CORRECT (CLEAR)
+
+Read because its SIBLING was the one raise on this ledger: `settings/global-elements/convert-skill`
+let any authenticated agent name a GitHub URL the server downloaded and wrote under `$HOME` via
+`scope:'user'`. So the question was whether `scan-repo` shares that shape. **It does not**, and the
+discriminator is where the fetched repo LANDS:
+
+`services/plugin-builder-service.ts::scanRepo` — `fs.mkdtemp(path.join(os.tmpdir(), …))` per call,
+`git clone --depth 1 --branch <ref> -- <url> <scanDir>` (argv array, no shell; `--` guards the ref
+against flag injection), a 30 s timeout, and `fs.rm(scanDir, {recursive, force})` in a `finally`.
+Ephemeral tmp, cleaned up, **nothing installed and nothing written under `$HOME`** — materially
+unlike `convert-skill`, and the same reasoning that already cleared `plugin-builder/build`.
+
+The route itself is also in order: `enforceAuth` FIRST, then `validateExternalUrl` (rejects
+non-HTTPS, localhost and private IPs — SSRF closed), then type checks on `url` and `ref`.
+
+**Kept in the ledger rather than removed**, per this card's own convention: a decided-correct entry
+still needs to stop the assertion changing unnoticed.
 
 ### `export/jobs/[jobId]` — 2026-08-26: TWO findings, and the first is NOT an authz question
 

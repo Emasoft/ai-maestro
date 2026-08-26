@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T14:55:23+0200
-updated: 2026-08-26T15:31:20+0200
+updated: 2026-08-26T15:38:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -238,6 +238,42 @@ consumer). **Third instance, in my own proposed remedy.**
   If either answer is no, (B) is dead and (A) is the only secret-free route.
 - **(C) Anything that keeps a long-lived secret** — file, env, argv — fails to EXPOSURE 2 by
   construction, because every agent is the same Unix user.
+
+### (B) MEASURED AND DEAD — 2026-08-26, twice, for two independent reasons
+
+I said (B) must be measured before anyone commits. It was, immediately:
+
+```
+parent holds fd 9 → tmux new-session → pane sees:  0 1 2 3      (existing server)
+parent holds fd 9 → tmux -L fresh … → pane sees:   0 1 2 3      (BRAND NEW server)
+```
+
+**tmux daemonizes and closes inherited descriptors** — standard daemon behaviour, and the fresh
+server confirms it is tmux's doing rather than an artefact of connecting to a pre-existing one.
+
+**And it would have failed anyway, for a reason the fd test cannot see:** every pane is a child of
+ONE shared tmux server process. An fd the server holds is held for ALL panes, so a single
+descriptor is a shared capability, not a per-agent identity. Two independent kills.
+
+### THE ROOT CAUSE, which every candidate has been failing against
+
+Stepping back after (B): **every scheme here dies to the same fact — all agents run as the SAME
+UNIX USER.** That is what makes `ps eww` readable across agents, what makes a 0600 file useless as
+a separator, and what makes any at-rest secret stealable by a peer. No transport, token format, or
+handshake fixes it, because the OS is being asked to distinguish principals it considers identical.
+
+**The candidate that follows from that, and is UNVERIFIED:** give each agent its own **uid**, and
+give each agent a socket owned by that uid at mode 0600. The kernel then enforces who may connect,
+via ordinary file permissions — **no secret, no peer-credential API, and no native addon**, so it
+sidesteps the Node limitation entirely rather than working around it. `ps eww` also stops exposing
+one agent's environment to another, because that is a cross-user read.
+
+**Do NOT treat that as the answer yet.** Two things must be measured first, and I am recording
+them as open rather than asserting past them a fourth time:
+1. **Does macOS enforce filesystem permissions on connect(2) to a Unix socket?** Linux does; some
+   BSDs historically did not. If macOS does not, the whole idea collapses.
+2. What per-uid agents cost operationally — user creation, tmux under another uid, workdir
+   ownership, and whether the harness can spawn as a different user at all.
 
 ### What this does to the staging
 

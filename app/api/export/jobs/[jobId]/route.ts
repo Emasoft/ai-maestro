@@ -10,9 +10,17 @@ export const dynamic = 'force-dynamic'
  * Get status of a specific export job.
  */
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
+  // TRDD-R268J32X: the GET had NO auth while its own DELETE sibling below did, so an
+  // unauthenticated caller who guessed a job id learned agentId / agentName / sessionId and the
+  // on-disk `filePath` of the export. Same class as the `sessions/restore` GET (fixed in
+  // d6f78e2b, "unauthenticated in BOTH modes"). Authenticate the READ too: a status payload
+  // naming agents and disk paths is not public data.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { jobId } = await params
 

@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-21T21:58:50+0200
-updated: 2026-08-26T11:28:38+0200
+updated: 2026-08-26T20:46:42+0200
 review-after: 2026-08-24
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
@@ -81,7 +81,37 @@ per the 2026-08-21 recurrence, even when the tick DOES fire, its verdict computa
 - [ ] Verified clean across a 48h+ window before the 2026-08-30 deadline
 - [x] Comment posted on Emasoft/ai-maestro#95 confirming the card and status
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-21
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-08-26
+
+> **⏳ 2026-08-26T20:46 — 3.1 DAYS LEFT, AND THE REMAINING ACTION IS THE OWNER'S ALONE.**
+> Relayed by the ai-maestro-janitor session and verified on this side where it touches us.
+> **All three OAuth refresh tokens are dead (`invalid_grant`).** The claude.ai **session cookies
+> expire 2026-08-30** and are the ONLY remaining path that mints fresh tokens with no human.
+> After that date all three accounts are manual-login-only, which ends unattended operation for
+> every session on this host.
+>
+> **VERIFIED HERE, and it is the load-bearing part: nothing automated on EITHER side closes
+> this.** Cookie access is outside the server tick's reach *by absence, not by convention* —
+> `cascade.ts` and `cookie-vault.ts` were DELETED (`b50cf390`), so `tick.ts:155-158`'s "do not
+> teach tick.ts to read cookies" now names files that no longer exist. There is nothing on our
+> side to wire up, deliberately.
+>
+> **Both remedies are owner-only and neither agent may take them:**
+> `/janitor-refresh-cc-logins` (a human re-login), or re-arming `reauth-repair` — which reverses
+> a deliberate owner call of 2026-08-07 (it opened disruptive headed browser windows) and is
+> credential-affecting.
+>
+> **The 48h acceptance window below cannot even START until the owner restores a credential
+> path.** So this card's `column: todo` currently overstates agent-actionability: read it as
+> *waiting on the human*, not as unclaimed work.
+>
+> **Separate and NOT a credential problem** (the janitor's split, worth keeping): the rotator
+> reports STUCK while the ACCOUNT is healthy — 5h at 2%, 7d at 67%. Only the **Fable window** is
+> spent at 100%. Moving work off Fable needs no owner decision and is the lever available today.
+>
+> Surfaced to the USER 2026-08-26. Recorded here because the janitor's own finding was that the
+> deadline had lived only in a chat message: *"what was missing was nobody telling the USER the
+> clock exists"*. A fact that exists only in a session dies with it.
 
 4/5 boxes closed. Evidence: `reports/colony/unit1-X4RK1NUW.md` (gitignored, not pushed) and
 GitHub comment https://github.com/Emasoft/ai-maestro/issues/95#issuecomment-5375378217.

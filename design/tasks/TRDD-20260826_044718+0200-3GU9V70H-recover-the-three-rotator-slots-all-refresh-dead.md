@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T04:47:18+0200
-updated: 2026-08-26T10:14:31+0200
+updated: 2026-08-26T10:16:48+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -54,7 +54,7 @@ its 48h clean-window acceptance box cannot start while it stands.
 the shared `state.json` itself** (the review fork correctly objected that the first draft of
 this section stated the recovery on the peer's word while our own live alert said the
 opposite): all three slots read a FUTURE `expires_at` (7.5/7.7/7.8 h), `via:
-slot_capture_browser(full-oauth)`, `fp != refresh_dead_fp`, `refresh_failures` cleared. Their root cause: `slot_capture_browser.py` had NO PEP-723 header, so
+slot_capture_browser(full-oauth)`, `fp != refresh_dead_fp`, failure fields ABSENT (dropped by the rewrite — functionally reset). Their root cause: `slot_capture_browser.py` had NO PEP-723 header, so
 `uv run --script` installed nothing and every capture died at import — BOTH re-mint legs down
 at once, presenting as "refresh dead" for ~19 days. Python-specific; our TS port does not share
 the header mechanism, but the CLASS transfers (a re-mint leg that cannot START, masked as a
@@ -82,8 +82,10 @@ message-envelope TTL, unrelated to the slot schema.
 
 **NEXT ACTION:** (1) diagnose why the tick's alternate-health view lags an external re-mint
 (candidate: cooldown/failure store never cleared by fresh slot fp) and whether the next natural
-tick heals it — if it does not, that is our A8DPTDOU mirror and needs the same
-positive-mint-evidence shape in BOTH onset and clear predicates; (2) the janitor's check 1:
+tick heals it — PRESCRIPTION SUPERSEDED IN PART by the write-set section above: if the
+predicate reads a TS-side cache, the fix is INVALIDATION at onset, NOT the A8DPTDOU
+clear-gate mirror this line originally prescribed (run `grep -n -A15 surveyAlternates
+lib/oauth-rotator/tick.ts` as the diagnosis first step — it decides which); (2) the janitor's check 1:
 prove OUR capture/re-mint leg can EXECUTE end-to-end (a can-it-start dry-run, not a credential
 check) — TRDD-CVQJNW3A's `driveConsent` has never run against the real consent page, so this is
 the same gap they had; owner-gated per that card. (3) Durability: do NOT quote "a month" —
@@ -104,7 +106,7 @@ janitor data shows refresh chains survived 6-19 days per account before `invalid
 
 - [x] All three slots in `state.json` show a fresh `fp` with `refresh_failures` reset and a
       future `expires_at` — VERIFIED FIRST-HAND 2026-08-26 10:3x: expires in 7.5/7.7/7.8 h,
-      `fp != refresh_dead_fp`, failure fields cleared, `via: slot_capture_browser(full-oauth)`
+      `fp != refresh_dead_fp`, failure fields ABSENT (dropped by the rewrite — functionally reset), `via: slot_capture_browser(full-oauth)`
       (re-minted by the JANITOR, their `41ccc80f`; the measurement is ours, from the store)
 - [ ] `oauth-rotator-tick-status.json` reads a non-`reauth-needed` verdict across two consecutive beats
 - [ ] Cause of the cookie leg's inaction recorded (here or on ai-maestro#95) — "it minted" or "why it could not"

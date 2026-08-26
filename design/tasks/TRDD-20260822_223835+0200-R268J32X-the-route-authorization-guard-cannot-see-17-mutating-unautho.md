@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:06:00+0200
+updated: 2026-08-26T13:12:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -140,6 +140,30 @@ This ledger stays valid and useful — it governs the Next-side surface and it i
 pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole picture.
 
 ## Decisions — the 17, one at a time
+
+### `vpn-chat/block` — DECIDED 2026-08-26: a REAL but MODERATE finding; recorded here, NOT filed yet
+
+The route's hygiene is fine — all three methods call `enforceAuth` first, and the body is a
+`.strict()` zod schema with a bounded `userId`. The finding is the RESOURCE, not the route.
+
+`lib/vpn-chat-log.ts` — `getBlocklist(stateDir?)`, `addBlock(userId, stateDir?)`,
+`removeBlock(userId, stateDir?)` — takes **no principal**. There is ONE host-level blocklist, so
+**any authenticated agent can mutate the whole host's list**, and the dangerous direction is
+`DELETE`: an agent can **silently UNBLOCK** someone the operator blocked. The file header notes
+*"the blocked user is never notified"*; by the same design the OPERATOR is not notified of an
+unblock either, so a protective control can be removed with no signal.
+
+Unlike `export/jobs/[jobId]`'s DELETE, there is no owner field to compare against — a blocklist is
+host policy, not per-agent state. So the fix shape is not an ownership check but a PRINCIPAL
+question: blocking is a human moderation act, which argues `enforceSystemOwner` for POST/DELETE
+while leaving GET readable. That is a ruling.
+
+**NOT filed as its own card yet, deliberately, and this is triage rather than deferral — the
+evidence above is complete.** Three p0 security cards from this same ledger pass are already
+waiting on the owner (TRDD-NWTTU0AQ arbitrary command execution, TRDD-RC33OAFQ cross-agent
+transcript read, TRDD-MFTDMSJY), and this one is materially less severe than any of them. Handing
+over a fourth in the same batch buys nothing. **File it the moment those clear, or immediately if
+the owner would rather rule on all four at once.**
 
 ### `v1/mesh/chat` — DECIDED 2026-08-26: authn-only is CORRECT on BOTH methods (CLEAR)
 

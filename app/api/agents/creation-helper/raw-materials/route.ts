@@ -48,7 +48,14 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // TRDD-DQVPODKW item 9: the POST above authenticated and this GET did not — an
+  // anonymous read of the wizard's upload state. Haephestos reads the FILE
+  // directly (~/agents/haephestos/raw-materials-state.json), and the dashboard is
+  // an authenticated browser session, so no caller needs anonymity.
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
   try {
     const content = await readFile(STATE_FILE, 'utf-8')
     const state = JSON.parse(content)

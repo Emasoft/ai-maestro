@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T13:48:51+0200
-updated: 2026-08-26T13:48:51+0200
+updated: 2026-08-26T13:57:24+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -98,6 +98,28 @@ leaves this open.
 
 Anything that only tightens the rate limit is NOT a fix — the limit was never the boundary.
 
+## Caller enumeration — DONE 2026-08-26, and it SHARPENS fix 1 rather than complicating it
+
+Three call sites create a group. Measured over `app components lib services scripts tests`,
+counted before reading:
+
+| caller | `subscriberIds` it sends | affected by fix 1? |
+|---|---|---|
+| `components/sidebar/GroupListView.tsx:77` | operator-chosen list | **NO** — operator UI, the caller is system-owner and fix 1 exempts the owner |
+| `components/governance/GroupSubscriptionSection.tsx:120` | `[agentId]`, with the comment *"auto-subscribe the current agent"* | **NO** — already self-only, which IS the rule |
+| `scripts/aimaestro-groups.sh:185` | `--subscribers` CSV, arbitrary | **YES**, and deliberately — this is the abuse vector |
+
+**The agent-facing UI already does exactly what the fix would require.** So fix 1 does not impose a
+new discipline on agents; it makes the CLI agree with the panel. The only behaviour that changes is
+a non-MANAGER agent naming OTHER agents via `aimaestro-groups.sh create --subscribers a,b,c`, which
+is precisely the capability this card says must not exist. **A "breaking change" that breaks only
+the exploit is the fix, not a cost of it.**
+
+That also settles a question the fix would otherwise have to guess: the operator genuinely needs
+multi-subscriber creation (`GroupListView`), so the rule cannot be a blanket "creator only" — it
+must be **self-only for a plain agent, unrestricted for MANAGER and the system owner**, which is
+`subscribeAgent:257`'s existing predicate verbatim. One helper, lifted, not invented.
+
 ## Verification
 
 - Agent A creates a group naming agent B as a subscriber → **refused** (neuter: remove the check,
@@ -113,6 +135,10 @@ Anything that only tightens the rate limit is NOT a fix — the limit was never 
 
 ## Acceptance
 
+- [x] **Callers enumerated (2026-08-26) — fix 1 costs nothing at either UI caller; the only
+      affected path is the CLI's arbitrary `--subscribers`, which is the vector itself.** Section
+      above. It also fixes the rule's shape: self-only for a plain agent, unrestricted for
+      MANAGER/owner (the operator UI genuinely needs multi-subscriber creation)
 - [ ] Ruling recorded here (fix 1, fix 2, or both; fix 3 is independent and cheap)
 - [ ] Guard implemented in ONE helper shared by `createNewGroup` and `updateGroupById`
 - [ ] Refusal tests (create-with-foreign-subscriber, update-adds-foreign-subscriber) + neuter recorded

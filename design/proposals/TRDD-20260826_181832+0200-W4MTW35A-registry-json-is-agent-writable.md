@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T18:18:32+0200
+updated: 2026-08-26T18:29:10+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -58,8 +58,51 @@ its inputs are attacker-controlled.
 
 ## Acceptance
 
-- [ ] Every file consulted during identity resolution enumerated, with owner and mode.
-- [ ] For each, a statement of what mutating it does to an identity decision.
+- [x] Every file consulted during identity resolution enumerated, with owner and mode.
+- [x] For each, a statement of what mutating it does to an identity decision.
 - [ ] Safeguard applied so the agent uid cannot mutate them.
 - [ ] A probe run AS AN AGENT proving the write is no longer possible.
 - [ ] A regression check that fails if any identity-bearing file becomes agent-writable.
+
+## Investigation — 2026-08-26 (read-only, evidence only; no safeguard applied)
+
+**Files the identity path consults**, ranked by how many code sites read them:
+
+```
+12 sites  ~/.aimaestro/sessions.json          -rw-r--r--
+ 8 sites  ~/.aimaestro/agents/registry.json   -rw-r--r--
+ 3 sites  ~/.aimaestro/teams/teams.json       -rw-r--r--
+ 2 sites  ~/.aimaestro/amp-api-keys.json      -rw-------
+```
+
+**Full identity-bearing set and its mode split** (chat-state, backups and ledger archives
+excluded):
+
+| mode | files |
+|---|---|
+| `644` — world-readable, owner-writable | `agents/registry.json`, `agent-directory.json`, `teams/teams.json`, `teams/groups.json`, `sessions.json`, `governance.json`, `governance-requests.json`, `manager-trust.json`, `hosts.json`, `system-settings.json` |
+| `600` — owner-only | `amp-api-keys.json`, `governance-tokens/active-tokens.json`, `webauthn-credentials.json`, `aid-recovery-cache.json`, the `*.ledger.json` files |
+
+**What mutating them does to an identity decision:**
+
+- `registry.json` / `agent-directory.json` — the name/uuid/workdir map. Rewriting it re-points
+  an identity. This is the file a kernel-attested PID is resolved THROUGH, so it is the
+  weakest link in the peer-credential design.
+- `sessions.json` — the most-read file on the path (12 sites). A session→agent remap is an
+  identity remap.
+- `teams/teams.json`, `groups.json`, `manager-trust.json`, `governance.json` — decide title,
+  team and authority, i.e. what an identity is ALLOWED to do once resolved.
+
+**The 600/644 split buys nothing under this threat model, and that is the point.** Someone
+deliberately locked the sensitive stores to owner-only — but every agent IS the owner, so 600
+and 644 are the same permission here. Identical to the `private.pem` 0644→0600 fix recorded in
+`agent-isolation-is-not-enforced` (ATOM-UBMF-AWTG): a protection against other Unix users, on a
+system that has none.
+
+**Reachability from an agent** — established by uid identity, as in TRDD-K4BEKT3L: server, tmux
+server and all 21 agent processes run as `emanuelesabetta`. Not tested by driving a live agent
+(blacklist), and the uid identity is the stronger proof.
+
+**Not yet done:** the safeguard. Note it cannot be "chmod 600" — that is the fix already proven
+inert. It must be a different OWNER (root or a server service account), or authenticated records
+the server verifies on read.

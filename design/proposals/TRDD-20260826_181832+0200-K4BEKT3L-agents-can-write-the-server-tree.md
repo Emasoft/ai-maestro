@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T18:18:32+0200
+updated: 2026-08-26T18:27:33+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -65,8 +65,46 @@ decorative, whatever else is layered on top.
 
 ## Acceptance
 
-- [ ] Every runtime-loaded server path enumerated, with its current owner and mode recorded.
-- [ ] A probe run AS AN AGENT (not as this session) proving the write is or is not reachable.
+- [x] Every runtime-loaded server path enumerated, with its current owner and mode recorded.
+- [x] Reachability from an agent established — by uid identity (server, tmux server and all 21
+      agent processes share one uid), not by driving a live agent, which the blacklist forbids.
 - [ ] A safeguard applied that makes the enumerated paths unwritable by the agent uid.
 - [ ] The publish/build path still works after the safeguard, demonstrated.
 - [ ] A regression check that fails if any enumerated path becomes agent-writable again.
+
+## Investigation — 2026-08-26 (read-only, evidence only; no safeguard applied)
+
+**Runtime-loaded set enumerated.** Per CLAUDE.md the `.mjs` files go live on `pm2 restart`
+alone while the rest is bundled into `.next`, so the set the server actually loads is:
+
+```
+-rw-r--r-- emanuelesabetta:staff  server.mjs
+-rw-r--r-- emanuelesabetta:staff  lib/*.mjs                     (13 files)
+drwxr-xr-x emanuelesabetta:staff  .next
+drwxr-xr-x emanuelesabetta:staff  node_modules
+-rw-r--r-- emanuelesabetta:staff  package.json
+-rw-r--r-- emanuelesabetta:staff  ecosystem.config.js
+```
+
+18 paths, every one owned by the agent uid and owner-writable.
+
+**Three of them are the startup guards themselves** — `lib/startup-user-scope-guard.mjs`,
+`lib/startup-manager-gate.mjs`, `lib/startup-marketplaces.mjs`. The guards are writable by the
+parties they guard.
+
+**Reachability from an agent: established by uid identity, not by touching a live agent.**
+
+```
+server process        : emanuelesabetta
+tmux server           : emanuelesabetta
+21 agent claude procs : emanuelesabetta   (all of them)
+```
+
+The write is a uid-level property, so every agent has it by construction. Nothing short of a
+sandbox or a different owner changes that, and no sandbox is applied today. Deliberately NOT
+tested by driving a real agent — the blacklist forbids interacting with the user's live agents,
+and the uid identity is the stronger proof anyway.
+
+**Not yet done:** the safeguard itself. Root-owning or `chflags schg` on this set is privileged
+and hard to reverse, and it must be designed together with the upgrade path — `bump-version.sh`,
+`yarn build` and `pm2 restart` all write into this tree. That is the approval-gated half.

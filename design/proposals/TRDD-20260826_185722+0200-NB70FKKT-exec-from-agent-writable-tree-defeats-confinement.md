@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T18:57:22+0200
+updated: 2026-08-26T19:34:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -87,3 +87,62 @@ a script, a config that names a command, an env var that selects a binary.
 - [ ] A stated remedy per site: relocate the artifact, or verify before exec.
 - [ ] TRDD-O0RHX7K6 does not ship its profile as a claimed boundary until this list is empty
       or every remaining entry is documented as an accepted hole.
+
+## Re-ranked 2026-08-26 — the lead instance is NOT the one this card was filed on
+
+The janitor hand-audited their own tree (their TRDD-KHM8XOYN) and **corrected their own earlier
+report**: the harness-CLI exec this card was filed on is not the sharpest instance, because it
+only fires inside a harness agent (`backend == BACKEND_AIMAESTRO`).
+
+**The sharper class is an env var, and it is VERIFIED HERE, not taken on report:**
+
+```
+wikimem_syntax_lint.py:74   override = os.environ.get("MEMGREP_BIN")   <- read FIRST, no path constraint
+shutil.which('memgrep')  -> /Users/<user>/.cargo/bin/memgrep
+  writable by agent uid : True
+  its DIRECTORY writable: True
+```
+
+All three legs are agent-writable and the first is a bare env var with no constraint at all.
+Read by 6 modules, **two of which run with nobody present**: a detector on every heartbeat, and
+a hook on every edit. Every project, every beat, no harness required.
+
+**Rank order for this card, corrected:**
+
+1. `$MEMGREP_BIN` → `which(memgrep)` → `~/.cargo/bin/memgrep` — unattended, fleet-wide.
+2. The harness CLI: `plugin_manage.py:55→175→194`, `terminal_trigger.py:1378`,
+   `harness_backend.py:569`, and `$AIMAESTRO_CLI` → `~/.local/bin` → PATH.
+3. ~45 `shutil.which` sites for gh/uv/git/jq/npx/claude. Reported by them as a CLASS and
+   deliberately NOT enumerated — it is the generic PATH story, identical for every program on
+   the machine, and **padding a security list with it is how the real entries get discounted.**
+   Only relevant if the sandbox profile constrains PATH itself. `daemon_path.py:147` already
+   passes an explicit `path=` instead of inheriting, i.e. it does the constrained thing.
+4. Shell `source` / `sys.path.insert` from outside the repo — **EMPTY**, recorded as a negative
+   result rather than omitted, because importing IS executing and that shape was the one most
+   likely to be missed.
+
+## The dispatcher stub is NOT the pattern to copy
+
+They had told me the stub's verified-walk was "likely the ANSWER rather than a finding", then
+withdrew it on closer reading. It is **FAIL-OPEN by cardinal rule** — verbatim: *"Every
+uncertainty … is ACCEPTED — we never block what we cannot prove bad."* So an attacker need not
+forge a manifest; deleting one suffices.
+
+**That is correct for the problem the stub solves and is NOT a defect** — a bricked heartbeat
+needs a human to recover, which is strictly worse in the single-uid world we actually inhabit.
+The narrow point that matters here: the verified walk is an **AVAILABILITY mechanism, not a
+confinement boundary**, and must not be cited as the pattern for a hard-fail exec gate. Building
+one means accepting the bricked-heartbeat risk this design explicitly refuses — a trade for the
+owner, not something to inherit by leaving the earlier sentence unchallenged.
+
+## Enumeration status — PARTIAL, and the worker said so
+
+`reports/impersonation-audit/20260826_185951+0200-exec-from-writable-tree.md` (gitignored):
+2 seeds confirmed, +5 Class-A, +4 Class-B, 1 Class-C. **The janitor's 656 subprocess sites were
+only partly reviewed.** Not yet verified hit-by-hit here — a worker's hit is a hypothesis until
+the line is read.
+
+Method note worth keeping: they tried to delegate their sweep and the worker wedged at 182 bytes
+with no output. They caught it and hand-audited instead. **A wedged agent's silence and a clean
+sweep are indistinguishable**, so an unnoticed wedge would have produced an empty report written
+with total confidence.

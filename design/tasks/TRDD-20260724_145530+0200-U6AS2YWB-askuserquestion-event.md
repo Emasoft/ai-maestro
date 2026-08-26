@@ -4,7 +4,7 @@ title: AskUserQuestion event ESC-flood then cursor-ready then directive
 column: todo
 scope: project
 created: 2026-07-24T14:55:30+0200
-updated: 2026-08-26T09:40:32+0200
+updated: 2026-08-26T09:43:06+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -97,10 +97,13 @@ injection-proof); the verbatim directive is in the Spec below.
       guard — "menu gone" cannot distinguish dismissed from client-DIED, isSessionIdle's
       no-activity default is IDLE (a crashed pane passes requireIdle), so without the guard the
       free-text directive would be typed+Enter'd into a shell. MEASURED twice: tmux
-      pane_current_command is a bare process name, and a LIVE claude pane reports its VERSION
-      string ('2.1.246') — Claude Code renames its process — so the guard accepts registry
+      pane_current_command is a bare process name, and a LIVE claude pane PERSISTENTLY
+      PRESENTS a version-string fg ('2.1.246') — follow-up ps sweeps show it is a
+      fast-respawning, milliseconds-lived child (parenthesized comm, parent unpinnable at
+      snapshot cadence; 20 long-lived processes are plain 'claude', so the shape is what the
+      PANE presents, not a general claude rename) — so the guard accepts registry
       program/aliases OR a pure version-string name and aborts on empty/shell-names/anything
-      else (fail-closed; 'node' aborts, pinned). 7 tests; observed neuters: dismissed-detection (1 red), reshaped fg guard (2 red — its two abort tests), branch-entry deletion (7-file era: 5/5 red, non-vacuous). Also open: the
+      else (fail-closed; 'node' aborts, pinned). 7 tests; observed neuters: dismissed-detection (1 red), reshaped fg guard (2 red — its two abort tests), branch-entry deletion (observed at the 5-test era: 5/5 red, non-vacuous; re-run today would leave the VERSION-NAMED test green — control falls to the command branch, which sends). Also open: the
       HID decision (checkpoint item 6) binds at event-registration time.
 - [ ] No 300 s timeout — the requireIdle final send waits for the settled turn (mechanism in
       place); proven only by the live run above.

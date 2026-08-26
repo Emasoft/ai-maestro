@@ -4,7 +4,7 @@ title: DeleteAgent leaves the agent's local plugin records behind in installed_p
 column: todo
 scope: project
 created: 2026-07-29T21:30:09+0200
-updated: 2026-08-05T05:11:23+0200
+updated: 2026-08-26T05:04:25+0200
 current-owner: ai-maestro
 created-by: ai-maestro
 assignee: ai-maestro
@@ -20,6 +20,7 @@ npt: [FHBGF0WG]
 eht: []
 severity: major
 priority: 1
+review-after: 2026-09-02
 release-via: none
 relevant-rules: [R17, R20.30]
 implementation-commits: [c08e8303, 6c11bd7f, 34849d8d]

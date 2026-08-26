@@ -51,7 +51,11 @@ describe('TRDD-DQVPODKW — raw-materials GET authenticates', () => {
 })
 
 /**
- * NEUTER RUN (recorded after first green run):
- *   mutation: s/if (authErr) return authErr/if (false) return authErr/ in the GET
- *   predicted: the unauthenticated-refusal test reds, the positive control stays green.
+ * NEUTER RUN (2026-08-26 — OBSERVED via scripts/dev/neuter, restore verified by blob hash):
+ *   s/if \(authErr\) return authErr/if (false) return authErr/ if $. == 57   [GET guard only —
+ *   line-anchored because the POST guard is byte-identical and an unanchored expression would
+ *   hit both sites]
+ *   → 1 red / 1 green, exactly as predicted:
+ *       RED: refuses an unauthenticated GET
+ *       green: the positive control (a disabled gate refuses nobody)
  */

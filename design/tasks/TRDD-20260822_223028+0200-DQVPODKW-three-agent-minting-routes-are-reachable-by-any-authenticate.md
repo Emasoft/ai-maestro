@@ -3,7 +3,7 @@ trdd-id: DQVPODKW
 title: Three agent-minting routes are reachable by any authenticated agent — F1SL03CK locked one door of four
 column: todo
 created: 2026-08-22T22:30:28+0200
-updated: 2026-08-26T06:24:17+0200
+updated: 2026-08-26T06:28:07+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -211,7 +211,38 @@ Adding it:
       "any authenticated caller" is now its recorded, decided policy rather than an unreviewed
       default. Zero-caller note: deleting the route outright would be a public-API removal
       (Tier-3 floor) — flagged here rather than done.
-- [ ] the 7 sub-agent-reported `creation-helper` routes VERIFIED first-hand, not relayed
+- [x] the 7 sub-agent-reported `creation-helper` routes VERIFIED first-hand 2026-08-26 (every
+      file read in full; per-route verdicts):
+      - `cleanup` — auth'd; DESTRUCTIVE on a fixed path (rm -rf ~/agents/haephestos + its
+        Claude cache, kills the `_aim-creation-helper` tmux session). Any agent can grief the
+        wizard session. Bounded (fixed target), but wizard-only surface → candidate for
+        `enforceSystemOwner` (see follow-up box below).
+      - `file-picker` — auth'd; writes size/ext-limited, name-sanitized files into
+        haephestos/uploads. Any agent can plant .md/.toml content the Haephestos agent later
+        reads — an injection vector into the wizard agent. Same follow-up.
+      - `raw-materials` — POST auth'd (writes caller-shaped state JSON — same injection-vector
+        class); **GET was fully UNAUTHENTICATED** — an anonymous read the sub-agent's
+        POST-keyed sweep missed. FIXED (`f221cdbd`): enforceAuth on GET, pinned by
+        tests/unit/raw-materials-get-authentication.test.ts, neuter OBSERVED 1 red / 1 green
+        (line-anchored to the GET guard — the POST guard is byte-identical).
+      - `clear-banner` — auth'd; tmux send-keys of a FIXED string ('hi') to the helper
+        session. Nuisance-only blast radius.
+      - `element-descriptions` — auth'd; read-only PSS lookup, input validated against
+        argument injection. Fine as-is — and it MUST stay agent-callable: the Haephestos
+        persona itself curls it (agents/haephestos-creation-helper.md:133). NOTE: that curl
+        carries NO auth header, so the documented invocation likely 401s today — a
+        Haephestos-persona bug, not a route bug; flagged, not fixed here.
+      - `ensure-persona` — auth'd; copies a REPO-OWNED source file into the user's
+        ~/.claude/agents/ (content not attacker-controlled). Any agent can trigger the
+        overwrite. Bounded; same enforceSystemOwner candidate.
+      - `heartbeat` — auth'd; keeps the helper session alive. Nuisance-only.
+- [ ] FOLLOW-UP (carved from the verification above): decide the creation-helper subtree's
+      uniform policy. Recommendation: `enforceSystemOwner` on cleanup, clear-banner,
+      heartbeat, ensure-persona, file-picker, raw-materials (the wizard is a human-only
+      dashboard surface; siblings startup/normalize-hosts/directory-sync already use it) —
+      but `element-descriptions` (and `publish-plugin`, outside this card) must stay
+      agent-callable because Haephestos curls them, and its curls carry no auth header, so
+      the persona's auth story must be settled in the same change or the wizard breaks.
 - [ ] `role-plugins/sync-defaults` — a ruling on whether "any authenticated caller may re-assert
       defaults" is intended
 - [x] audit `enforceAuth`'s callers outside this subtree — DONE, and it found the guard's next

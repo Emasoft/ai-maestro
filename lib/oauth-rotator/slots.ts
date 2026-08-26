@@ -100,14 +100,48 @@ export function legacyRotatorRoot(): string {
   return path.join(os.homedir(), '.claude', 'account-rotator')
 }
 
-/** The ACTIVE state dir: prefer the canonical DATA-dir root; fall back to the legacy standalone
- * root ONLY when IT (and not the canonical one) holds state.json, so a not-yet-migrated install
- * never silently points at an empty dir and loses its slots. A fresh install writes canonical. */
+/** Set when `rotatorRoot()` refused a present-but-unvouched legacy state. Callers surface it;
+ * it is deliberately observable rather than a silent console line nobody reads. */
+export let lastRootFallbackRefusal: string | null = null
+
+/** Opt-in escape for a genuinely un-migrated install: the operator has looked at the legacy
+ * state and vouches that it is current. Never set this to work around a missing DATA dir. */
+const LEGACY_OPT_IN = 'AIM_ROTATOR_ALLOW_LEGACY_ROOT'
+
+/** The ACTIVE state dir: the canonical DATA-dir root, or — only with an explicit operator
+ * opt-in — the pre-TRDD-7100178d legacy root.
+ *
+ * FAILS CLOSED, and that is the whole point. This used to fall through to legacy whenever
+ * canonical lacked state.json, which is safe only if the two agree. Measured on this host
+ * 2026-08-27 they do NOT:
+ *
+ *   canonical  live=ipazia.emasoft   slots=3   2026-08-27
+ *   legacy     live=fmuaddib         slots=2   2026-05-30
+ *
+ * The canonical root lives in the janitor's plugin DATA dir, which `janitor-footprint.md`
+ * documents as removed by a plain plugin uninstall/reinstall. In that window the old code
+ * would have silently adopted a THREE-MONTH-OLD state naming a DIFFERENT live account with a
+ * slot missing, while the janitor rebuilt from the keychain — i.e. the two daemons rotating
+ * against different accounts, each believing it was correct. For credentials the safe failure
+ * is "I cannot determine the root", never "use whatever is lying around": a missing canonical
+ * is verdict-2 (could-not-run), the same trichotomy as the blocker probes (TRDD-CV5KDCB7).
+ *
+ * The legitimate migration case it used to serve is preserved behind the opt-in, because an
+ * un-migrated install is a real thing — it just must not be indistinguishable from a wiped one. */
 export function rotatorRoot(): string {
   const canonical = canonicalRotatorRoot()
-  if (isFile(path.join(canonical, 'state.json'))) return canonical
+  if (isFile(path.join(canonical, 'state.json'))) { lastRootFallbackRefusal = null; return canonical }
   const legacy = legacyRotatorRoot()
-  if (isFile(path.join(legacy, 'state.json'))) return legacy
+  if (isFile(path.join(legacy, 'state.json'))) {
+    if ((process.env[LEGACY_OPT_IN] ?? '').trim() === '1') { lastRootFallbackRefusal = null; return legacy }
+    lastRootFallbackRefusal =
+      `rotator-root-fallback: canonical state.json missing at ${canonical}, and the legacy root ` +
+      `${legacy} holds one. REFUSING it — legacy state may name a different live account. ` +
+      `Restore the janitor DATA dir, or set ${LEGACY_OPT_IN}=1 if the legacy state is genuinely current.`
+    console.warn(lastRootFallbackRefusal)
+    return canonical
+  }
+  lastRootFallbackRefusal = null
   return canonical
 }
 

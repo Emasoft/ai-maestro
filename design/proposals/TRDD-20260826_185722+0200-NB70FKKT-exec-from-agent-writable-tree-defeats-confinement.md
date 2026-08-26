@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:57:22+0200
-updated: 2026-08-26T19:47:45+0200
+updated: 2026-08-26T19:58:37+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -234,8 +234,20 @@ Three corrections, all pushing the same direction the report did not look:
 
    Same `mcp_discovery.py`, same temp-JSON hand-off, same `Popen`. So the remedy is **two sites,
    not one** — and a fix to `mcp-discover` alone would read as complete while leaving an
-   identical hole one route over. A third candidate, **unaudited**: `scripts/mcp-discover.sh:154`
-   performs the same substitution with `sed`; its containment has not been read.
+   identical hole one route over.
+
+   **The third candidate is NOT a hit — audited and ruled out.** `scripts/mcp-discover.sh` does
+   carry the same shape (`:155 PLUGIN_ROOT="$(dirname "$CONFIG_PATH")"` → `:157` a `sed`
+   substitution → `:167 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" uv run "$DISCOVER_SCRIPT"`), but it
+   has **no containment check to bypass**: `CONFIG_PATH` is a positional argument the operator
+   types, and `PLUGINS_CACHE` (`:39`) is used only to resolve a plugin NAME to a config path
+   (`:89`), never to constrain a path passed explicitly. Different trust model — a local CLI
+   doing what its caller asked is not the two ROUTES, which accept a path from an authenticated
+   HTTP caller AND implement the very check this defect walks around. **Remedy stays at two
+   sites**; recorded as a negative rather than dropped, because a candidate silently removed from
+   a list reads identically to one nobody checked.
+   Secondary, non-finding: `:157`'s `sed "s|…|$PLUGIN_ROOT|g"` breaks (or injects into the sed
+   expression) on a path containing `|`. Operator-supplied, so robustness rather than security.
 
    **Scope of the remedy, stated precisely because I twice overstated it:** using `realResolved`
    at both sites closes the **`${CLAUDE_PLUGIN_ROOT}` SUBSTITUTION route**. It is NOT established

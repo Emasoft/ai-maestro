@@ -3,7 +3,7 @@ trdd-id: R268J32X
 title: The route-authorization guard cannot see 17 mutating unauthorized routes outside app/api/agents
 column: todo
 created: 2026-08-22T22:38:35+0200
-updated: 2026-08-26T13:20:00+0200
+updated: 2026-08-26T13:26:00+0200
 current-owner: user
 created-by: user
 task-type: security
@@ -141,6 +141,32 @@ pattern — but it should be read alongside 8Q5EVGV1 rather than as the whole pi
 
 ## Decisions — the 17, one at a time
 
+### `auth/sudo-password` — DECIDED 2026-08-26: FALSE POSITIVE, and it exposes a NEEDLE GAP
+
+Read first because it is the highest-stakes name in the forward-only tier and calls no
+`enforceAuth`. It is not debt: it authenticates AND refuses.
+
+```ts
+const authResult = authenticateFromRequest(request)      // → 401 on error
+const ctx = buildAuthContext(authResult)
+if (!ctx.isSystemOwner) {                                 // R32.2 HARD GATE
+  return NextResponse.json({ error: 'sudo_user_only', … }, { status: 403 })
+}
+```
+
+Every authenticated AGENT is refused 403; only the operator can mint a sudo token. Its own comment
+records that this CLOSED a prior violation where the route minted for `(ctx.agentId ?? 'unknown')`.
+
+**THE NEEDLE GAP — this generalises past this route.** `STRONG_AUTHZ` matches
+`enforceSystemOwner(` (a call) but NOT `ctx.isSystemOwner` (a property read). So a route that
+refuses via the PROPERTY is invisible to the needle and lands in the debt tier no matter how hard
+it gates. That is the third false positive in this tier, and the ledger's own note already warned
+the mirror case: `trdd/create` uses `isSystemOwner` to compute an authority RANK, not to refuse.
+**So `isSystemOwner` cannot be added to `STRONG_AUTHZ` — it is genuinely ambiguous, and a needle
+that moves routes OUT of a debt ledger is worse than none when it is wrong.** The correct
+disposition is what the card already does: read each one and record the verdict. Recording the
+GAP here so the next reader does not attempt the tempting regex fix.
+
 ### The FORWARD-ONLY tier, enumerated 2026-08-26 — it was only ever a COUNT
 
 `NON_AGENTS_FORWARD_ONLY_COUNT = 15` is stored as a bare number, so nobody could see WHICH 15
@@ -150,7 +176,7 @@ without re-deriving them. Derived here with the test's OWN predicate
 
 | route (rel. `app/api/`) | calls `enforceAuth`? | status |
 |---|---|---|
-| `auth/sudo-password` | NO | undecided |
+| `auth/sudo-password` | NO | **DECIDED — FALSE positive** (`!ctx.isSystemOwner` → 403) |
 | `governance/user` | NO | undecided |
 | `groups/[id]` · `groups/[id]/notify` · `groups/[id]/subscribe` · `groups/[id]/unsubscribe` · `groups` | yes | undecided (5) |
 | `help/agent` | NO | undecided |
@@ -162,7 +188,7 @@ without re-deriving them. Derived here with the test's OWN predicate
 | `teams/[id]/tasks` | NO | undecided |
 | `trdd/create` | NO | **already read — FALSE positive** (uses `isSystemOwner` for an authority RANK) |
 
-So **11 genuinely undecided**, not 15. Two are known false positives and two are decided clear.
+So **10 genuinely undecided** (was 11; `auth/sudo-password` decided below), not 15. Two are known false positives and two are decided clear.
 
 **The `NO-enforceAuth` column is new information and is where I would start.** A route that forwards
 an auth context WITHOUT calling `enforceAuth` is relying entirely on the receiving service to

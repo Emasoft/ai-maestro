@@ -6,7 +6,7 @@ scope: project
 project-id: ai-maestro
 repo: Emasoft/ai-maestro
 created: 2026-08-26T18:18:32+0200
-updated: 2026-08-26T18:18:32+0200
+updated: 2026-08-26T19:08:00+0200
 current-owner: ai-maestro-hub-session
 created-by: ai-maestro-hub-session
 assignee: ai-maestro-hub-session
@@ -17,7 +17,7 @@ approved: false
 derived: false
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [TRDD-NB70FKKT]
 release-via: none
 priority: 1
 severity: high
@@ -60,3 +60,20 @@ card it now, while the count is one.
 - [ ] The profile is applied at the chokepoint.
 - [ ] A test asserts exactly one spawn site exists, and reddens when a second is added.
 - [ ] Restart / wake / recovery each demonstrated to produce a CONFINED agent.
+
+## Prerequisite added 2026-08-26 — TRDD-NB70FKKT
+
+Do NOT ship this profile as a claimed boundary while an unconfined process executes scripts
+from the agent-writable tree. Found by the janitor session applying this card set's own
+writable-guarantor predicate to their own tree, verified here: `scripts/aimaestro-agent.sh` is
+`-rwxr-xr-x`, agent-uid-owned, and `plugin_manage.py:194` subprocess.run()s it from OUTSIDE any
+agent sandbox.
+
+Today that grants nothing — under single-uid an agent that can write the script can already act
+as that uid directly. **It becomes live exactly when this card lands**, which is why it is a
+prerequisite and not a follow-up: a confined agent writes the script and waits for an unconfined
+process to run it.
+
+General form worth carrying: confinement is defeated by anything unconfined that consumes
+attacker-writable input — a script, a config naming a command, or an env var selecting a binary
+(`$AIMAESTRO_CLI` is a second instance).
